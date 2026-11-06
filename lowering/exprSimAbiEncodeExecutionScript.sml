@@ -2,7 +2,7 @@ Theory exprSimAbiEncodeExecution
 Ancestors
   exprSimAbiEncodeConcreteResources exprSimAbiEncodeOpenSetup
   exprSimAbiEncodeFinish abiDecoderGuards abiDecoderReentry venomState
-  exprSimAbiEncodeProducerAssembly exprSimAbiEncodeSourceRoom
+  exprSimAbiEncodeProducerAssembly exprSimAbiEncodeSourceRoom exprSimAbiEncodeWindowRoom
   abiEncoderWindowRun abiEncodeWindowBuiltin abiEncoderWindowContract
   abiEncoderWindow abiEncoderRegisteredEffect abiDecoderContract abiBuiltinEncodeCode
   abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderLoop compileEnv
@@ -278,4 +278,192 @@ Proof
      conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl [`prepared`, `body_state`, `actual`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_encode_bridge_phases_open:
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len m body_end = ((),final) /\
+  m = (case method_id of NONE => 0 | SOME mid => 4) /\
+  w = (case method_id of NONE => 0 | SOME mid => 32) /\
+  d = p+32+m /\ outsz = 32+32*word_size (maxlen+m) /\
+  fn_has_code st ready obs /\ fn_has_code ready body_end obs /\
+  fn_has_code body_end final obs /\ fn_inst_ids_distinct obs /\
+  obs.fn_name = func.fn_name /\
+  (!i. MEM i (fn_insts obs) /\ i.inst_opcode <> STOP /\
+       i.inst_opcode <> NOP ==> MEM i (fn_insts func)) /\
+  (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ p < dimword (:256) /\
+  (method_id <> NONE ==> p+32 < dimword (:256)) /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_admissible ei /\ abi_encoder_window_input ei at av sb cap initial.vs_memory /\
+  eval_operand src initial = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
+  (!x. src = Var x \/ SND ops = Var x ==> not_fresh_at ready x) /\
+  (!x. FST ops = Var x ==> not_fresh_at ready x) /\
+  abi_decoder_operand_live body_end.cs_next_var (FST ops) /\
+  alloca_inv (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  alloca_room ctx func (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  sb+cap <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  d+LENGTH (enc at av) <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (enc at av)) /\
+  (sb+cap <= p+32 \/ p+32+w <= sb) /\
+  venomMemDefs$regions_disjoint (p+32,m) (d,LENGTH (enc at av)) /\
+  (!inst b sz. MEM inst (fn_insts obs) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids ready body_end /\
+    FLOOKUP (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
+    venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
+    venomMemDefs$regions_disjoint (p+32,m) (b,sz)) ==>
+  ?prepared body actual.
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    mload p actual = n2w (LENGTH (enc at av)+m) /\
+    mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+    (case method_id of NONE => T | SOME mid =>
+      mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid) /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_decode_sim ctx obs initial actual /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p w initial prepared /\
+    window_strong_result (ctx with ctx_functions := [obs]) obs ready body_end len at av d prepared body /\
+    abi_decode_frame p 32 body actual /\
+    actual.vs_allocas = body.vs_allocas /\ actual.vs_alloca_next = body.vs_alloca_next /\
+    abi_encoder_registered_effect {} [(p,32)] body actual /\
+    (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
+      eval_operand op actual = SOME v)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `alloca_room (ctx with ctx_functions := [obs]) obs
+     (abi_builtin_allocate_state st.cs_next_id outsz initial)` by
+    (drule_all abi_encode_bridge_local_room >> simp_tac bool_ss []) >>
+  drule_all abi_encode_window_phases_open >> strip_tac >>
+  `abi_decode_sim ctx obs initial actual` by
+    (drule_all abi_decode_sim_ctx_no_invoke >> simp_tac bool_ss []) >>
+  qexistsl [`prepared`, `body'`, `actual`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_encode_empty_region[local]:
+  !q r. venomMemDefs$regions_disjoint (q,0) r
+Proof
+  rpt gen_tac >> Cases_on `r` >> simp[venomMemDefsTheory.regions_disjoint_def]
+QED
+
+Theorem abi_encode_window_none_phases_open:
+  abi_builtin_encode_setup NONE maxlen st = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len 0 body_end = ((),final) /\
+  outsz = 32+32*word_size maxlen /\
+  fn_has_code st ready func /\ fn_has_code ready body_end func /\
+  fn_has_code body_end final func /\ fn_inst_ids_distinct func /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ p < dimword (:256) /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_admissible ei /\ abi_encoder_window_input ei at av sb cap initial.vs_memory /\
+  eval_operand src initial = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
+  (!x. src = Var x \/ SND ops = Var x ==> not_fresh_at ready x) /\
+  abi_decoder_operand_live body_end.cs_next_var (FST ops) /\
+  alloca_inv (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  alloca_room ctx func (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  sb+cap <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  p+32+LENGTH (enc at av) <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  venomMemDefs$regions_disjoint (sb,cap) (p+32,LENGTH (enc at av)) /\
+  (sb+cap <= p+32 \/ p+32 <= sb) /\
+  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids ready body_end /\
+    FLOOKUP (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
+    venomMemDefs$regions_disjoint (p+32,LENGTH (enc at av)) (b,sz)) ==>
+  ?prepared body actual.
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    mload p actual = n2w (LENGTH (enc at av)) /\
+    mem_bytes_at (p+32) (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_decode_sim ctx func initial actual /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p 0 initial prepared /\
+    window_strong_result ctx func ready body_end len at av (p+32) prepared body /\
+    abi_decode_frame p 32 body actual /\
+    actual.vs_allocas = body.vs_allocas /\ actual.vs_alloca_next = body.vs_alloca_next /\
+    abi_encoder_registered_effect {} [(p,32)] body actual /\
+    (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
+      eval_operand op actual = SOME v)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encode_none_setup_buffer_old >> strip_tac >>
+  qpat_x_assum `outsz = _` SUBST_ALL_TAC >>
+  drule_all (SIMP_RULE (srw_ss()) [abi_encode_empty_region]
+    (Q.INST [`method_id` |-> `NONE`, `m` |-> `0`, `w` |-> `0`, `d` |-> `p+32`,
+        `outsz` |-> `32+32*word_size maxlen`]
+      (SPEC_ALL abi_encode_window_phases_open))) >>
+  simp_tac bool_ss []
+QED
+
+Theorem abi_encode_window_some_phases_open:
+  abi_builtin_encode_setup (SOME mid) maxlen st = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len 4 body_end = ((),final) /\
+  outsz = 32+32*word_size (maxlen+4) /\
+  fn_has_code st ready func /\ fn_has_code ready body_end func /\
+  fn_has_code body_end final func /\ fn_inst_ids_distinct func /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ p < dimword (:256) /\ p+32 < dimword (:256) /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_admissible ei /\ abi_encoder_window_input ei at av sb cap initial.vs_memory /\
+  eval_operand src initial = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
+  (!x. src = Var x \/ SND ops = Var x ==> not_fresh_at ready x) /\
+  (!x. FST ops = Var x ==> not_fresh_at ready x) /\
+  abi_decoder_operand_live body_end.cs_next_var (FST ops) /\
+  alloca_inv (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  alloca_room ctx func (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  sb+cap <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  p+36+LENGTH (enc at av) <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  venomMemDefs$regions_disjoint (sb,cap) (p+36,LENGTH (enc at av)) /\
+  (sb+cap <= p+32 \/ p+64 <= sb) /\
+  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids ready body_end /\
+    FLOOKUP (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
+    venomMemDefs$regions_disjoint (p+36,LENGTH (enc at av)) (b,sz) /\
+    venomMemDefs$regions_disjoint (p+32,4) (b,sz)) ==>
+  ?prepared body actual.
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    mload p actual = n2w (LENGTH (enc at av)+4) /\
+    mem_bytes_at (p+36) (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+    mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_decode_sim ctx func initial actual /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p 32 initial prepared /\
+    window_strong_result ctx func ready body_end len at av (p+36) prepared body /\
+    abi_decode_frame p 32 body actual /\
+    actual.vs_allocas = body.vs_allocas /\ actual.vs_alloca_next = body.vs_alloca_next /\
+    abi_encoder_registered_effect {} [(p,32)] body actual /\
+    (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
+      eval_operand op actual = SOME v)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `outsz = _` SUBST_ALL_TAC >>
+  `venomMemDefs$regions_disjoint (p+32,4) (p+36,LENGTH (enc at av))` by
+    (simp_tac std_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  mp_tac (SIMP_RULE (srw_ss()) [GSYM arithmeticTheory.ADD_ASSOC]
+    (Q.INST [`method_id` |-> `SOME mid`, `m` |-> `4`, `w` |-> `32`, `d` |-> `p+36`,
+        `outsz` |-> `32+32*word_size (maxlen+4)`]
+      (SPEC_ALL abi_encode_window_phases_open))) >>
+  (impl_tac >-
+    (rule_assum_tac (SIMP_RULE (srw_ss()) [GSYM arithmeticTheory.ADD_ASSOC]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp_tac bool_ss []
 QED
