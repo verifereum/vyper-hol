@@ -222,3 +222,80 @@ Theorem window_run_never_reverts:
 Proof
   rpt gen_tac >> qspec_then `fuel` strip_assume_tac window_run_halts >> simp[]
 QED
+
+(* A concrete instance of every antecedent of the frozen theorem, followed
+   by the negation of its entire success-or-revert conclusion.  The admitted
+   lower_abi_decode_outcome theorem is not used in this certificate. *)
+Theorem window_outcome_counterexample:
+  (lower_abi_decode (Lit 256w)
+    (type_to_abi_dec_info window_ce.ce_struct_fields window_ce window_probe_type)
+    (abi_static_size window_ce.ce_struct_fields window_probe_type)
+    (abi_size_bound window_ce.ce_struct_fields window_probe_type)
+    (type_memory_bytes window_ce window_probe_type) window_start =
+      (FST window_lower, SND window_lower) /\
+  abi_decoder_coherent window_ce FEMPTY window_ce.ce_struct_fields
+    window_probe_type window_probe_tv /\
+  assignable_type FEMPTY window_probe_type /\
+  abi_decode_bytes_widths FEMPTY window_probe_type /\
+  abi_decoder_operand_live window_start.cs_next_var (Lit 256w) /\
+  (SND window_lower).cs_next_var <= (SND window_lower).cs_next_var /\
+  eval_operand (Lit 256w) window_initial = SOME (n2w 256) /\
+  val_in_memory (BaseTV (BytesT (Dynamic 64)))
+    (BytesV (REPLICATE 64 (0w:word8))) 256 window_initial.vs_memory /\
+  abi_builtin_decode_site_resources window_ctx window_fn window_start
+    (SND window_lower).cs_next_id
+    (abi_static_size window_ce.ce_struct_fields window_probe_type)
+    (abi_size_bound window_ce.ce_struct_fields window_probe_type)
+    (type_memory_bytes window_ce window_probe_type)
+    (LENGTH (REPLICATE 64 (0w:word8))) 256 1024 window_initial /\
+  fresh_vars_wrt (SND window_lower) window_initial /\
+  fn_has_code window_start (SND window_lower) window_fn /\
+  fn_inst_ids_distinct window_fn /\
+  (!i. MEM i (fn_insts window_fn) /\ i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==>
+       MEM i (fn_insts window_fn)) /\
+  (window_start.cs_blocks = (SND window_lower).cs_blocks \/
+   (SND window_lower).cs_current_insts <> [] \/
+   !bb. lookup_block (SND window_lower).cs_current_bb window_fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+  ~window_initial.vs_halted /\
+  window_initial.vs_current_bb = window_start.cs_current_bb /\
+  window_initial.vs_inst_idx = LENGTH window_start.cs_current_insts) /\
+  ~((?t v. evaluate_abi_decode FEMPTY window_probe_type
+                (REPLICATE 64 (0w:word8)) = INL v /\
+       eval_operand (FST window_lower) t = SOME (n2w 1024) /\
+       val_in_memory window_probe_tv v 1024 t.vs_memory /\
+       fresh_vars_wrt (SND window_lower) t /\
+       decode_site_effect window_ctx window_fn window_start.cs_next_var
+         ({a | 1024 <= a /\ a < 1024 + type_memory_bytes window_ce window_probe_type} UNION
+          {a | window_initial.vs_alloca_next <= a} UNION
+          {a | ?id b sz. window_start.cs_next_id <= id /\
+                 id < (SND window_lower).cs_next_id /\
+                 FLOOKUP t.vs_allocas id = SOME (b,sz) /\ b <= a /\ a < b + sz})
+         window_initial t /\
+       (!id. id < window_start.cs_next_id \/ (SND window_lower).cs_next_id <= id ==>
+             FLOOKUP t.vs_allocas id = FLOOKUP window_initial.vs_allocas id) /\
+       ~t.vs_halted /\ t.vs_current_bb = (SND window_lower).cs_current_bb /\
+       t.vs_inst_idx = LENGTH (SND window_lower).cs_current_insts /\
+       !fuel r. run_from fuel window_ctx window_fn t = r /\ (!e. r <> Error e) ==>
+                ?fuel'. run_from fuel' window_ctx window_fn window_initial = r) \/
+    (?fuel r e u. run_from fuel window_ctx window_fn window_initial = r /\ exit_result r /\
+       r = Abort Revert_abort u /\
+       evaluate_abi_decode FEMPTY window_probe_type (REPLICATE 64 (0w:word8)) = INR e))
+Proof
+  conj_tac
+  >- simp[window_static_premises, window_input, window_resources,
+       GSYM window_lower_def] >>
+  simp[window_probe_source, window_run_never_reverts]
+QED
+
+(* Audit the certificate itself, not the admitted outcome in its parent theory. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then
+      print ("Checked oracle-free counterexample fact: " ^ name ^ "\n")
+    else raise Fail ("non-clean window counterexample: " ^ name)
+  end)
+  [("window_outcome_counterexample", window_outcome_counterexample),
+   ("window_run_halts", window_run_halts),
+   ("window_probe_source", window_probe_source)];
