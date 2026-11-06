@@ -14,6 +14,7 @@
  *)
 Theory makeSsaCurrentCutInv
 Ancestors
+  makeSsaCurrentCleanupTransparent
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
@@ -911,10 +912,6 @@ Resume current_cut_inv_block_entry_prefix[prefix_maps]:
   suspend "prefix_enter_runtime"
 QED
 
-Resume current_cut_inv_block_entry_prefix[prefix_phi_relation]:
-  cheat
-QED
-
 Resume current_cut_inv_block_entry_prefix[prefix_copy_chain]:
   `!k. phi_prefix_length b'.bb_instructions <= k /\
        k < LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) ==>
@@ -952,7 +949,6 @@ Resume current_cut_inv_block_entry_prefix[prefix_enter_runtime]:
   cheat
 QED
 
-Finalise current_cut_inv_block_entry_prefix
 
 Theorem current_cut_sg_unaffected_edge_lookup:
   current_wf_phi_context s fn renamed s' A H events /\
@@ -1992,3 +1988,38 @@ Proof
     (irule current_cut_prefix_semantic_endpoint >> metis_tac[]) >>
   gvs[] >> irule current_cut_semantic_endpoint_effect >> metis_tac[]
 QED
+
+Resume current_cut_inv_block_entry_prefix[prefix_phi_relation]:
+  irule current_prefix_map_phis >>
+  reverse conj_tac >- (first_x_assum irule >> simp[] >> decide_tac) >>
+  rpt strip_tac >>
+  `b' = if blocks_have_leading_phi fn.fn_blocks
+    then simplify_current_phi_block new else new` by
+    (gvs[current_cleanup_if_lookup]) >>
+  `block_insts fn h = old_h.bb_instructions /\
+   block_insts (fn with fn_blocks :=
+     simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed) h =
+     b'.bb_instructions` by simp[block_insts_def] >>
+  simp[] >>
+  Cases_on `blocks_have_leading_phi fn.fn_blocks`
+  >- (irule current_cut_prefix_phi_effect >> metis_tac[]) >>
+  gvs[current_prefix_back_def] >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==> simplify_current_phi inst = inst)
+    b'.bb_instructions` by (irule current_phi_free_context_fixed >> metis_tac[]) >>
+  `phi_eff (SOME p) z (simplify_current_phi_block b').bb_instructions =
+   phi_eff (SOME p) z b'.bb_instructions` by
+    (irule current_fixed_phi_cleanup_effect >> simp[]) >>
+  `phi_prefix_length (simplify_current_phi_block b').bb_instructions =
+   LENGTH pre + LENGTH (collect_phis old_h.bb_instructions)` by
+    (simp[current_fixed_phi_cleanup_prefix]) >>
+  `OPTREL (op_rename (current_cut_sg fn A renamed H events p
+      (LENGTH old_p.bb_instructions)))
+    (phi_eff (SOME p) x old_h.bb_instructions)
+    (phi_eff (SOME p) z (simplify_current_phi_block b').bb_instructions)` suffices_by metis_tac[] >>
+  irule current_cut_prefix_phi_effect >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  qexistsl_tac [`t.vs_current_bb`, `b'`, `pre`] >>
+  simp[current_prefix_back_def]
+QED
+
+Finalise current_cut_inv_block_entry_prefix
