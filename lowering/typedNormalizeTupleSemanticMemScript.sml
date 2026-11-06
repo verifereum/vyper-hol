@@ -42,9 +42,10 @@ Theorem normalize_tuple_semantic_cont:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    fn_has_code sd se fn /\ phi_prefix_length sd.cs_current_insts = 0 /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    fn_has_code sd se fn /\
+    (emitted_blocks sd se <> [] ==>
+      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -64,9 +65,9 @@ Theorem normalize_tuple_semantic_cont:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST 0 0 sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
+  (emitted_blocks sa sb <> [] ==>
+    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\

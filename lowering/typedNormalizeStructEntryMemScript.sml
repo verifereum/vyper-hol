@@ -24,9 +24,10 @@ Theorem typed_store_struct_mem_cont:
     compile_store_memory_typed ce dp ty sp ty sd = ((),se) /\
     eval_operand dp u = SOME dw /\ eval_operand sp u = SOME sw /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    fn_has_code sd se fn /\ phi_prefix_length sd.cs_current_insts = 0 /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    fn_has_code sd se fn /\
+    (emitted_blocks sd se <> [] ==>
+      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     w2n dw + type_memory_size tv <= u.vs_alloca_next /\
     w2n sw + type_memory_size tv <= u.vs_alloca_next /\
@@ -53,9 +54,9 @@ Theorem typed_store_struct_mem_cont:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
+  (emitted_blocks sa sb <> [] ==>
+    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
