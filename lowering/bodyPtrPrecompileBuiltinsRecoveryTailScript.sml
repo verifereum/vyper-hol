@@ -85,3 +85,99 @@ Proof
        vyperStateTheory.return_def, exprLoweringTheory.lowered_value_type_def,
        type_memory_bytes_def] >> strip_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem recovery_source_tail_ptr_path:
+  compile_ecrecover h v rr q sf = (res,sb) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
+  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
+  eval_operand rr s = SOME wr /\ eval_operand q s = SOME wq /\
+  EVERY (\x. op_taint tn x = {} /\ (!l. x <> Label l) /\
+    (!p. x = Var p ==> not_fresh_at sf p)) [h;v;rr;q] /\
+  allocas_from 0 s /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  value_has_type (BaseTV (BytesT (Fixed 32))) vh /\
+  value_has_type (BaseTV (UintT 256)) vv /\
+  value_has_type (BaseTV (UintT 256)) vr /\
+  value_has_type (BaseTV (UintT 256)) vq /\
+  typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) vh = wh /\
+  typed_val_to_w256 (BaseTV (UintT 256)) vv = wv /\
+  typed_val_to_w256 (BaseTV (UintT 256)) vr = wr /\
+  typed_val_to_w256 (BaseTV (UintT 256)) vq = wq /\
+  s.vs_current_bb = sf.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sf.cs_current_insts /\
+  ec_source_tail cx ann ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256);
+     BaseT (UintT 256); BaseT (UintT 256)] [vh;vv;vr;vq] es = (r,es') ==>
+  ?n result G' tn'. gas_path_ptr D 0 ctx fn PG G tn s n G' tn' result /\
+   ((?t value. result = OK t /\ r = INL (Value value) /\
+      vv_post ctx fn cenv cx (Builtin (BaseT AddressT) ECRecover args)
+        es sf sb s es' (Value value) (StackValue (BaseT AddressT) res) t /\
+      ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es sf G tn s G' tn' /\
+      ptr_val_ok cx (BaseT AddressT) value res G' tn' t /\
+      (~is_word_type (expr_type (Builtin (BaseT AddressT) ECRecover args)) ==>
+       ptr_buf_ok cenv (Builtin (BaseT AddressT) ECRecover args) res G' t) /\
+      ptr_vv_ok cx (BaseT AddressT) (Value value)
+        (StackValue (BaseT AddressT) res) es' G' tn' t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    \/ (exit_result result /\ expr_exit r result))
+Proof
+  strip_tac >>
+  `builtin_result cx es.accounts ann ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256);
+     BaseT (UintT 256); BaseT (UintT 256)] [vh;vv;vr;vq] =
+    INL (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
+      NONE => 0w | SOME addr => addr))` by
+    (irule recovery_source_value >> simp[]) >>
+  `es.outcomes = SOME s.vs_outcomes` by gvs[stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `ec_source_tail _ _ _ _ _ _ = _` mp_tac >>
+  simp[exprSimECArithTheory.ec_source_tail_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+       vyperInterpreterTheory.precompile_call_success_def,
+       vyperInterpreterTheory.precompile_builtin_def] >>
+  Cases_on `s.vs_outcomes`
+  >- (simp[vyperStateTheory.check_def, vyperStateTheory.assert_def,
+           vyperStateTheory.raise_def] >> strip_tac >> suspend "empty") >>
+  rename1 `s.vs_outcomes = co::rest` >> Cases_on `co.co_success` >>
+  simp[vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def]
+  >- (strip_tac >> suspend "success") >>
+  strip_tac >> suspend "failed"
+QED
+
+Resume recovery_source_tail_ptr_path[empty]:
+  `~(?co rest. s.vs_outcomes = co::rest /\ co.co_success)` by simp[] >>
+  drule_all recovery_residual_oracle_failure >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[expr_exit_def, fragExecTheory.exit_result_def]
+QED
+
+Resume recovery_source_tail_ptr_path[failed]:
+  `~(?co rest. s.vs_outcomes = co::rest /\ co.co_success)` by simp[] >>
+  drule_all recovery_residual_oracle_failure >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[expr_exit_def, fragExecTheory.exit_result_def]
+QED
+
+Resume recovery_source_tail_ptr_path[success]:
+  SUBGOAL_THEN ``?co rest. s.vs_outcomes = co::rest /\ co.co_success`` assume_tac
+  >- metis_tac[] >>
+  drule_all recovery_residual_success >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule recovery_compiler_append >> strip_tac >>
+  drule_all precompile_final_cursor >> strip_tac >>
+  drule_all recovery_result_posts >>
+  disch_then (qspecl_then [`sb`,`args`] strip_assume_tac) >>
+  goal_assum (drule_at Any) >> gvs[] >>
+  disj1_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+Finalise recovery_source_tail_ptr_path
