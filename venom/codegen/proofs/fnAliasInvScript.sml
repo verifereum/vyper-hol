@@ -8223,7 +8223,17 @@ Theorem alias_search_readiness:
   codegen_ready_fn (alias_search_fn T F F) /\
   codegen_ready_fn (alias_search_fn T F T)
 Proof
-  rpt conj_tac >> CONV_TAC (RAND_CONV EVAL) >> EVAL_TAC
+  rpt conj_tac >> CONV_TAC (RAND_CONV EVAL) >>
+  rewrite_tac[codegen_ready_fn_def] >> rpt conj_tac
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC
 QED
 
 Theorem alias_search_rejected:
@@ -8532,7 +8542,11 @@ Proof
       CONV_TAC (LHS_CONV (funpow 12 RAND_CONV computeLib.EVAL_CONV)) >>
       CONV_TAC (LHS_CONV (funpow 9 RAND_CONV computeLib.EVAL_CONV)) >>
       CONV_TAC (LHS_CONV (funpow 6 RAND_CONV computeLib.EVAL_CONV)) >>
-      CONV_TAC (LHS_CONV (funpow 3 RAND_CONV computeLib.EVAL_CONV)) >>
+      CONV_TAC (LHS_CONV (funpow 5 RAND_CONV
+        (REWR_CONV alias_buried_plan_def))) >>
+      CONV_TAC (LHS_CONV (funpow 5 RAND_CONV
+        (computeLib.RESTR_EVAL_CONV [``generate_block_plan``]))) >>
+      CONV_TAC (LHS_CONV (funpow 5 RAND_CONV computeLib.EVAL_CONV)) >>
       EVAL_TAC) >>
   Cases_on `b` >> Cases_on `phi` >>
   rewrite_tac[Ntimes alias_buried_path_def 2]
@@ -11075,7 +11089,11 @@ Theorem alias_dead_phi_steps_success:
     F (n = 2) "body" (alias_dead_phi_body_cut n))
 Proof
   rpt strip_tac >> `n = 0 \/ n = 1 \/ n = 2 \/ n = 3` by decide_tac >>
-  gvs[] >> EVAL_TAC
+  gvs[]
+  >- (CONV_TAC (RAND_CONV (computeLib.RESTR_EVAL_CONV [``generate_inst_plan``])) >> EVAL_TAC)
+  >- (CONV_TAC (RAND_CONV (computeLib.RESTR_EVAL_CONV [``generate_inst_plan``])) >> EVAL_TAC)
+  >- (CONV_TAC (RAND_CONV (computeLib.RESTR_EVAL_CONV [``generate_inst_plan``])) >> EVAL_TAC) >>
+  CONV_TAC (RAND_CONV (computeLib.RESTR_EVAL_CONV [``generate_inst_plan``])) >> EVAL_TAC
 QED
 
 Definition alias_dead_phi_phi_cut_def:
@@ -11119,6 +11137,120 @@ QED
    consuming/repairing transition. Neither the arbitrary cut above nor
    deadness, a singleton bound, or the neutral boundary establishes this.
    No actual-lineage destructive counterexample is asserted here. *)
+Theorem alias_shallow_singleton_reorder_counts:
+  !dfg op ps ops qs d at.
+  LENGTH ps.ps_stack <= 16 /\
+  stack_get_depth op ps.ps_stack = SOME d /\
+  reorder_plan dfg [op] ps = (ops,qs) ==>
+  LIST_ELEM_COUNT at qs.ps_stack = LIST_ELEM_COUNT at ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = op` by
+    metis_tac[stack_get_depth_props] >>
+  `~(d > 16) /\ 0 < LENGTH ps.ps_stack` by decide_tac >>
+  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
+  simp[reorder_plan_def, reorder_one_def, stack_get_unfixed_depth_empty_window] >>
+  Cases_on `d = 0` >- simp[] >>
+  Cases_on `operand_equiv dfg op (stack_peek 0 ps.ps_stack)` >> simp[]
+  >- (strip_tac >> gvs[] >>
+      irule doSwapSimTheory.stack_poke_exchange_multiplicity >> simp[]) >>
+  qspecl_then [`d`, `ps`, `at`] mp_tac doSwapSimTheory.do_swap_multiplicity >>
+  simp[do_swap_def] >> strip_tac >> strip_tac >> gvs[]
+QED
+
+Theorem alias_shallow_emit_one_shape:
+  !opc live x ps ops qs d.
+  ps.ps_spilled = FEMPTY /\ LENGTH ps.ps_stack <= 15 /\
+  stack_get_depth (Var x) ps.ps_stack = SOME d /\
+  emit_one_input opc live (Var x) ps = (ops,qs) ==>
+  qs.ps_stack = if MEM x live then ps.ps_stack ++ [Var x] else ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var x` by
+    metis_tac[stack_get_depth_props] >>
+  `d <= 15` by decide_tac >>
+  gvs[emit_one_input_def, is_var_operand_def, finite_mapTheory.FLOOKUP_EMPTY] >>
+  Cases_on `MEM x live` >>
+  gvs[do_dup_def, stack_dup_def, SNOC_APPEND]
+QED
+
+Theorem alias_shallow_singleton_consumption_counts:
+  !opc live x ps emit mid dfg ops qs d at.
+  ps.ps_spilled = FEMPTY /\ LENGTH ps.ps_stack <= 15 /\
+  stack_get_depth (Var x) ps.ps_stack = SOME d /\
+  emit_one_input opc live (Var x) ps = (emit,mid) /\
+  reorder_plan dfg [Var x] mid = (ops,qs) ==>
+  LIST_ELEM_COUNT at (stack_pop 1 qs.ps_stack) +
+    (if at = Var x then 1 else 0) =
+  LIST_ELEM_COUNT at ps.ps_stack +
+    (if MEM x live /\ at = Var x then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `mid.ps_stack = if MEM x live then ps.ps_stack ++ [Var x] else ps.ps_stack` by
+    metis_tac[alias_shallow_emit_one_shape] >>
+  `d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var x` by
+    metis_tac[stack_get_depth_props] >>
+  `LENGTH mid.ps_stack <= 16 /\ 0 < LENGTH mid.ps_stack` by
+    (Cases_on `MEM x live` >> gvs[] >> decide_tac) >>
+  `?e. stack_get_depth (Var x) mid.ps_stack = SOME e` by
+    (Cases_on `stack_get_depth (Var x) mid.ps_stack` >-
+      (gvs[stack_get_depth_NONE] >> Cases_on `MEM x live` >> gvs[]
+       >- (first_x_assum (qspec_then `0` mp_tac) >>
+           simp[stack_peek_def, EL_LENGTH_APPEND]) >> metis_tac[]) >>
+     metis_tac[]) >>
+  `LIST_ELEM_COUNT at qs.ps_stack = LIST_ELEM_COUNT at mid.ps_stack` by
+    metis_tac[alias_shallow_singleton_reorder_counts] >>
+  `reorder_one dfg [Var x] 0 (Var x) mid = (ops,qs)` by
+    (gvs[reorder_plan_def] >> pairarg_tac >> gvs[]) >>
+  `stack_peek 0 qs.ps_stack = Var x` by
+    (qspecl_then [`dfg`, `[Var x]`, `0`, `Var x`] mp_tac reorder_one_places >>
+     simp[stack_get_unfixed_depth_empty_window] >>
+     disch_then (qspec_then `mid` mp_tac) >>
+     `1 <= LENGTH mid.ps_stack` by decide_tac >> simp[]) >>
+  `MEM (Var x) mid.ps_stack` by
+    (qpat_assum `stack_get_depth _ _ = SOME e` (mp_tac o MATCH_MP stack_get_depth_props) >>
+     pure_rewrite_tac[stack_peek_def] >> strip_tac >>
+     pure_rewrite_tac[MEM_EL] >>
+     qexists `LENGTH mid.ps_stack - 1 - e` >>
+     conj_tac >- decide_tac >> metis_tac[]) >>
+  `qs.ps_stack <> []` by
+    (`LIST_ELEM_COUNT (Var x) qs.ps_stack = LIST_ELEM_COUNT (Var x) mid.ps_stack` by
+       metis_tac[alias_shallow_singleton_reorder_counts] >>
+     strip_tac >> fs[LIST_ELEM_COUNT_DEF, GSYM LIST_ELEM_COUNT_MEM]) >>
+  `?ys y. qs.ps_stack = SNOC y ys` by metis_tac[rich_listTheory.SNOC_CASES] >>
+  gvs[stack_pop_def, stack_peek_def,
+      rich_listTheory.TAKE_SNOC, EL_LENGTH_SNOC] >>
+  Cases_on `MEM x live` >> Cases_on `at = Var x` >>
+  gvs[SNOC_APPEND, elem_count_append, LIST_ELEM_COUNT_DEF,
+      FILTER_APPEND, TAKE_APPEND, EL_APPEND_EQN]
+QED
+
+Theorem alias_shallow_dead_singleton_consumed:
+  ps.ps_spilled = FEMPTY /\ LENGTH ps.ps_stack <= 15 /\
+  stack_get_depth (Var x) ps.ps_stack = SOME d /\
+  emit_one_input opc live (Var x) ps = (emit,mid) /\
+  reorder_plan dfg [Var x] mid = (ops,qs) /\
+  ~MEM x live /\ LIST_ELEM_COUNT (Var x) ps.ps_stack = 1 ==>
+  ~MEM (Var x) (stack_pop 1 qs.ps_stack)
+Proof
+  strip_tac >>
+  drule_all alias_shallow_singleton_consumption_counts >>
+  disch_then (qspec_then `Var x` mp_tac) >>
+  simp[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem alias_shallow_other_operand_consumed:
+  ps.ps_spilled = FEMPTY /\ LENGTH ps.ps_stack <= 15 /\
+  stack_get_depth (Var x) ps.ps_stack = SOME d /\
+  emit_one_input opc live (Var x) ps = (emit,mid) /\
+  reorder_plan dfg [Var x] mid = (ops,qs) /\ at <> Var x ==>
+  LIST_ELEM_COUNT at (stack_pop 1 qs.ps_stack) = LIST_ELEM_COUNT at ps.ps_stack
+Proof
+  strip_tac >>
+  drule_all alias_shallow_singleton_consumption_counts >>
+  disch_then (qspec_then `at` mp_tac) >> simp[]
+QED
+
 Theorem alias_eval_phis_neutral_lookup:
   !insts s t r.
     eval_phis s insts = OK t /\
