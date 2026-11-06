@@ -5517,3 +5517,20 @@ Proof
        sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
        sortingTheory.PART_DEF]
 QED
+
+(* Consumption debt is discharged only when the entire selected suffix is
+   removed. This pointwise fact needs neither global inventory support nor
+   uniqueness of unrelated names. *)
+Theorem selected_suffix_resource_extinction:
+  !ps prefix selected x.
+    ps.ps_stack = prefix ++ selected /\
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+        LIST_ELEM_COUNT x selected ==>
+    LIST_ELEM_COUNT x (stack_pop (LENGTH selected) ps.ps_stack) = 0 /\
+    x NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[elem_count_append, stack_pop_def, TAKE_APPEND, TAKE_TAKE] >>
+  Cases_on `x IN FDOM ps.ps_spilled` >> gvs[]
+QED

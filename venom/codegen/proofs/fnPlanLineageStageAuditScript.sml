@@ -1354,3 +1354,130 @@ QED
    follows from SSA alone or from an arbitrary equal suffix. These local
    observations do not certify reachability or refute the frozen theorem.
 *)
+
+(* Stable accounting coverage audit (C3.resources.producers.accounting).
+
+   R(x,p) = count x p.ps_stack + indicator(x IN FDOM p.ps_spilled).
+   Two DIFFERENT obligations are under review:
+     U: R(Var v,p)<=1 for demand-live v at a stable position;
+     Z: R(Var v,p)=0 immediately before v is defined again.
+   Neither is asserted universally by this ledger. All items below are
+   sufficient-premise interfaces or remaining proof obligations.
+
+   Transition             Sufficient premises / checked interface / gap
+   ----------------------------------------------------------------------
+   Ordinary non-JMP       Setup.native_regular_next_live_upper proves U at
+                          return given operand+next-live U at input, operand
+                          availability, <=16 operands, distinct fresh outputs.
+                          It does NOT produce its own output-absence premise.
+                          Internal input duplication spends consumption debt:
+                          Inventory.emit_input_plan_relevant_variable_upper
+                          bounds R(v) by count(v,operands)+indicator(v in nl).
+                          Bounded materialised reorder supplies an exact suffix.
+                          selected_suffix_resource_extinction now checks the
+                          arithmetic cancellation: R<=count(selected) plus
+                          exact suffix implies zero after consuming it, including
+                          spill absence. Thus last-use extinction requires
+                          v NOTIN nl, initial pointwise U, materialisation and
+                          a bounded successful reorder, not blanket live support.
+                          Subsequent output pushes must not recreate v; SSA can
+                          discharge this at a DIFFERENT definition position.
+                          regular_post_emit_tail_resource_nonincrease then
+                          preserves zero. If v was never an operand on this path,
+                          this last-use argument supplies no extinction event.
+
+   OFFSET                 generate_offset_plan pushes output unconditionally
+                          for a Label offset target; it does not consume inputs,
+                          pop a dead output, or release dead spills. U for the
+                          new output needs Z at entry. Other counts unchanged.
+                          offset_multiplicity_ledger already checks duplication
+                          from a stale output. offset_outputs_used guarantees a static
+                          use, NOT that a chosen runtime path executes that use
+                          before revisiting the definition. The unused-path case
+                          must instead cross a demand-killing branch/PHI event.
+
+   PHI                    NONE selection is identity. A present dead source is
+                          renamed in place; a live source is duplicated first.
+                          To derive U: selected-source availability, <=1 old
+                          source resource, fresh output, valid selected depth,
+                          and accounting for deep do_dup spill effects are needed.
+                          To derive Z for the source on its last PHI use: source
+                          not next-live and unique physical occurrence plus no
+                          spill occurrence. PhiTemporal's selected_extinction
+                          removes a UNIQUE selected ORIGIN in the keep=F branch;
+                          it does not erase arbitrary same-name lower cells.
+                          If keep=T the old selected origin explicitly survives.
+                          Sequential PHIs require evolving selection/liveness,
+                          not a simultaneous global renaming assumption.
+
+   spill / restore        do_spill_at_resource_nonincrease transports an upper
+                          bound (can overwrite an existing map binding).
+                          do_restore removes one map entry and pushes one cell:
+                          R is conserved, even if the stack already has copies.
+                          Neither operation proves Z; zero persists if no other
+                          stage creates the name. Selective spilling can remove
+                          the COMMON stack occurrence of an optimistic query;
+                          resource existence in spills is not query shielding.
+
+   JMP / join             Successful join_reached establishes a target suffix;
+                          analyzed_terminal_jmp_target_coverage supplies target
+                          availability from predecessor live-out coverage. It
+                          supplies no total count U for deep reorder and does not
+                          delete non-target residual names. For an entry-live
+                          name present in the target suffix, total U would exclude
+                          it from the prefix. Missing: reachable total U and
+                          PHI projection/count transport, NOT suffix existence.
+
+   cleanup (all branches) Zero and upper counts survive any stack-only pop or
+                          Var-to-marker change; spilled counts are unchanged.
+                          Extinction of a particular name additionally requires
+                          ALL its stack copies be popped/marked and spill absence.
+                          preds <> [pred]: identity, no strict decrease.
+                          single pred with <=1 succ: identity, no strict decrease.
+                          missing pred block: identity (unreachable under lookup
+                          premises still to be supplied globally).
+                          branch, NULL inputs and ok: all stack Vars marked;
+                          spilled copies are NOT erased by this operation.
+                          branch, nonempty inputs and ok: pop physical to_cleanup,
+                          mark retained; to_pop is drawn only from predecessor
+                          layout. Need v in layout and all-copy coverage.
+                          branch, not ok: pop MAP Var to_pop; one request per
+                          layout occurrence, not an all-copy eraser. U before
+                          cleanup would make one successful removal sufficient.
+                          A stale name outside layout need not be removed.
+
+   NOP / params /         Identity cases preserve established bounds but cannot
+   straight-line edges    manufacture Z. Entry parameter seeding is separate:
+                          initial_parameter_origins accounts for names, while
+                          count/distinctness still needs the parameter interface.
+                          A halting block may retain a dead singleton regular/PHI
+                          output; it has no runtime successor in a valid path.
+                          Do not claim intermediate exact live support there.
+
+   Path-induction gap and measure:
+   Trace a FIXED name from its previous dynamic definition to its next dynamic
+   definition along a finite execution-path segment. Induct on the number of
+   remaining instruction/edge events (strictly decreases at every transition),
+   not on R, which need not decrease across identities/spills/restores. Between
+   definitions the desired resource is nonincreasing except temporary input/PHI
+   debt, discharged at stable returns under the interfaces above. To get zero,
+   a separate demand-loss cut must prove that this segment contains either a
+   last-use consumption/rename event or branch cleanup covering the old name,
+   before redefinition. It must also cover paths that SKIP every static use.
+   No-cleanup edges have no deletion event and so cannot close that argument.
+   The cut needs liveness transport, SSA dominance, PHI edge demand and actual
+   path reachability together; static demand origin alone is insufficient.
+
+   Existing interval_live_origin / interval_computed_query_origin and their
+   prefix-exclusion corollaries in Callers split a query into entry-live or a
+   definition since the boundary. They do not prove that an old copy is absent
+   at that definition, and do not preserve stack query shielding after spilling.
+   Canonical DFS visited-event induction proves a different freshness question
+   (first compilation); runtime revisits cannot reuse that argument unchanged.
+
+   Audit outcome: local cancellation and preservation are compatible with the
+   candidate, but the first-surviving-copy cut, deep JMP count transport, PHI
+   resource accounting and query shielding remain unproved. This is neither a
+   certified universal invariant nor a frozen-theorem counterexample. No new
+   fixture enumeration or global invariant definition was used for this audit.
+*)
