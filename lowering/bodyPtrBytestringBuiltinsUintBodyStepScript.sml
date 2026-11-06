@@ -93,3 +93,11 @@ Proof
   simp[u2s_word_arithmetic, word_add_n2w, GSYM n2w_sub, w2n_n2w,
        arithmeticTheory.ADD1, WORD_ADD_COMM]
 QED
+
+Theorem u2s_safe_store_frame:
+  u2s_safe ctx fn cenv cx es a buf b sz inst sr s ==>
+  local_ptrs_rel fn cenv es.scopes s /\ alloca_inv s /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz)
+Proof
+  simp[u2s_safe_def, stmt_state_rel_def, compileEnvTheory.state_rel_def]
+QED
