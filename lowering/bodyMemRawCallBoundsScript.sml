@@ -3,6 +3,8 @@ Theory bodyMemRawCallBounds
 Ancestors
   bodyMemBiKeccakBounds exprSimMemDefs exprLoweringProps loweringPosts
   exprSimProps compileEnv words instMemFrontier venomInst venomMemDefs
+  builtinSystem context emitHelper emitHelperProps fragExecMem memSafeRun rich_list
+  allocaHistoryFragment venomExecSemantics fragExec venomMemProps venomState
 
 Theorem raw_call_input_bounds:
   expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
@@ -58,4 +60,88 @@ Proof
   simp[vfmConstantsTheory.word_size_def] >> strip_tac >>
   `b + 32 < dimword (:256)` by decide_tac >>
   simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w] >> decide_tac
+QED
+
+Theorem raw_call_outbuf_mem_ok:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> irule run_inst_seq_mem_ok_every >>
+  Cases_on `0 < cap` >>
+  qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
+  simp[compile_raw_call_outbuf_def, compile_alloc_buffer_def,
+    emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[below_frontier_no_ranges, inst_dload_in_section_other, mk_inst_def]
+QED
+
+Theorem raw_call_outbuf_history:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (Cases_on `0 < cap` >>
+     qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
+     simp[compile_raw_call_outbuf_def, compile_alloc_buffer_def,
+       emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[fn_has_code_def, IS_PREFIX_APPEND, emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     simp[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+  drule_all alloca_history_run_inst_seq >> simp[]
+QED
+
+Theorem raw_call_outbuf_frontier:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  Cases_on `0 < cap` >>
+  simp[compile_raw_call_outbuf_def, compile_alloc_buffer_def,
+    emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[emitted_insts_def] >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+       exec_alloca_def, eval_operand_def] >>
+  Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
+  simp[update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `step_inst_base ins allocated = OK t` >>
+  `t.vs_alloca_next = allocated.vs_alloca_next` by
+    (irule step_inst_base_preserves_alloca_next >>
+     qexists_tac `ins` >> simp[Abbr `ins`]) >>
+  gvs[Abbr `allocated`]
+QED
+
+Theorem raw_call_data_prefix_mem_ok:
+  emit_op MLOAD [ptr_op] sa = (len,sl) /\
+  emit_op ADD [ptr_op; Lit 32w] sl = (data,sm) /\
+  eval_operand ptr_op s = SOME p /\ w2n p + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sm) s
+Proof
+  strip_tac >>
+  qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  rewrite_tac[APPEND, run_inst_seq_mem_ok_cons] >>
+  conj_tac >- simp[below_frontier_MLOAD] >>
+  simp[inst_dload_in_section_other, mk_inst_def,
+       run_inst_seq_mem_ok_last, below_frontier_no_ranges] >>
+  CASE_TAC >> simp[]
 QED
