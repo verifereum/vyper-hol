@@ -1607,6 +1607,154 @@ Proof
   gvs[lineage_core_def, stackPlanTypesTheory.plan_state_component_equality]
 QED
 
+(* Physical cleanup replay does not require a normalized live inventory.
+   In particular the shared output core below may contain internal markers. *)
+Theorem clean_stack_plan_shared_core_replay:
+  !liveness cfg fn bb ps qs m n core.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    qs.ps_stack = REPLICATE n dead_stack_marker ++ core /\
+    ALL_DISTINCT core /\ ps.ps_alloc = qs.ps_alloc ==>
+    ?choice ops core' m' n' al pref pcand.
+      clean_stack_plan liveness cfg fn bb ps =
+        (ops, ps with <|ps_stack := REPLICATE m' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_promised := pref|>) /\
+      clean_stack_plan liveness cfg fn bb
+        (qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+        (ops, qs with <|ps_stack := REPLICATE n' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_height := NONE;
+                       ps_cleanup_promised := pcand|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?pred_lbl pred_bb.
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb`
+  >- (pop_assum strip_assume_tac >> suspend "active") >>
+  `!s. clean_stack_plan liveness cfg fn bb s = ([], s)` by
+    (gen_tac >>
+     Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[clean_stack_plan_def] >>
+     Cases_on `t` >> simp[clean_stack_plan_def] >>
+     Cases_on `LENGTH (cfg_succs_of cfg h) <= 1` >> simp[] >>
+     Cases_on `lookup_block h fn.fn_blocks` >> simp[] >>
+     metis_tac[arithmeticTheory.NOT_LESS_EQUAL]) >>
+  qexistsl_tac [`F`, `[]`, `core`, `m`, `n`, `ps.ps_alloc`,
+                `ps.ps_cleanup_promised`, `F`] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Resume clean_stack_plan_shared_core_replay[active]:
+  qabbrev_tac `inputs = input_vars_from pred_lbl bb.bb_instructions
+    (live_vars_at liveness bb.bb_label 0)` >>
+  qabbrev_tac `layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions)` >>
+  qabbrev_tac `to_pop = FILTER (\v. ~MEM v inputs) layout` >>
+  qabbrev_tac `physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop)` >>
+  qabbrev_tac `retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical` >>
+  qabbrev_tac `removed = FILTER (\op. ~MEM op retained) physical` >>
+  qabbrev_tac `ok = (ps.ps_cleanup_promised \/
+    cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb
+      (LENGTH ps.ps_stack - LENGTH removed))` >>
+  `!op. op <> dead_stack_marker ==>
+    stack_get_depth op ps.ps_stack = stack_get_depth op qs.ps_stack` by
+    simp[stack_get_depth_bottom_dead] >>
+  `physical = FILTER (\op. IS_SOME (stack_get_depth op qs.ps_stack)) (MAP Var to_pop)` by
+    (simp[Abbr `physical`, FILTER_MAP, combinTheory.o_DEF, stack_get_depth_bottom_dead, dead_stack_marker_def]) >>
+  `~MEM dead_stack_marker physical` by
+    simp[Abbr `physical`, MEM_FILTER, MEM_MAP, dead_stack_marker_def] >>
+  `retained = FILTER (\op. below_all_live op inputs qs.ps_stack) physical` by
+    (simp[Abbr `retained`, Abbr `physical`, FILTER_FILTER, FILTER_MAP,
+          below_all_live_def, combinTheory.o_DEF,
+          stack_get_depth_bottom_dead, dead_stack_marker_def]) >>
+  qabbrev_tac `pref0 = (ps.ps_cleanup_promised \/ (ok /\ ~NULL retained))` >>
+  `clean_stack_plan liveness cfg fn bb ps =
+    if NULL inputs /\ ok then
+      ([], ps with <|ps_stack := MAP (K dead_stack_marker) ps.ps_stack;
+                     ps_cleanup_promised := pref0|>)
+    else if ok then
+      (FST (popmany_plan removed ps),
+       (SND (popmany_plan removed ps)) with
+         <|ps_stack := mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack;
+           ps_cleanup_promised := pref0|>)
+    else popmany_plan (MAP Var to_pop) ps` by
+    (irule clean_stack_plan_active_payload >>
+     rpt (goal_assum (drule_at Any)) >>
+     simp[Abbr `inputs`, Abbr `layout`, Abbr `to_pop`, Abbr `physical`,
+          Abbr `retained`, Abbr `removed`, Abbr `ok`, Abbr `pref0`]) >>
+  qabbrev_tac `cs = qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := ok|>` >>
+  `clean_stack_plan liveness cfg fn bb cs =
+    if NULL inputs /\ ok then
+      ([], cs with <|ps_stack := MAP (K dead_stack_marker) cs.ps_stack;
+                     ps_cleanup_promised := ok|>)
+    else if ok then
+      (FST (popmany_plan removed cs),
+       (SND (popmany_plan removed cs)) with
+         <|ps_stack := mark_dead_stack retained (SND (popmany_plan removed cs)).ps_stack;
+           ps_cleanup_promised := ok|>)
+    else popmany_plan (MAP Var to_pop) cs` by
+    (irule clean_stack_plan_active_payload >>
+     rpt (goal_assum (drule_at Any)) >>
+     simp[Abbr `cs`, Abbr `inputs`, Abbr `layout`, Abbr `to_pop`, Abbr `removed`] >>
+     Cases_on `ok` >> simp[]) >>
+  qexists_tac `ok` >>
+  Cases_on `ok`
+  >- (Cases_on `NULL inputs`
+      >- suspend "empty"
+      >> suspend "marked") >>
+  suspend "popped"
+QED
+
+Resume clean_stack_plan_shared_core_replay[empty]:
+  qpat_x_assum `Abbrev (cs = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`[]`, `[]`, `LENGTH ps.ps_stack`, `LENGTH qs.ps_stack`,
+    `ps.ps_alloc`, `pref0`, `T`] >>
+  simp[] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality,
+       LIST_EQ_REWRITE, EL_APPEND_EQN, EL_MAP, EL_REPLICATE, combinTheory.K_DEF]
+QED
+
+Resume clean_stack_plan_shared_core_replay[marked]:
+  `~MEM dead_stack_marker removed` by
+    (simp[Abbr `removed`, MEM_FILTER] >> metis_tac[]) >>
+  `?ops live al.
+    popmany_plan removed ps =
+      (ops, ps with <|ps_stack := REPLICATE m dead_stack_marker ++ live; ps_alloc := al|>) /\
+    popmany_plan removed cs =
+      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>) /\
+    ALL_DISTINCT live /\ set live = set core DIFF set removed` by
+    (irule popmany_plan_prefix_frame >>
+     simp[Abbr `cs`, DISJOINT_ALT, MEM_REPLICATE] >> metis_tac[]) >>
+  `!k. mark_dead_stack retained (REPLICATE k dead_stack_marker ++ live) =
+    REPLICATE k dead_stack_marker ++ mark_dead_stack retained live` by
+    (Induct >> simp[mark_dead_stack_def]) >>
+  qpat_x_assum `Abbrev (cs = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`ops`, `mark_dead_stack retained live`, `m`, `n`, `al`, `pref0`, `T`] >>
+  rpt (qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac) >>
+  rpt (qpat_x_assum `popmany_plan _ _ = _` mp_tac) >>
+  qpat_x_assum `~NULL inputs` mp_tac >>
+  qpat_x_assum `!k. mark_dead_stack _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >> simp[]
+QED
+
+Resume clean_stack_plan_shared_core_replay[popped]:
+  `?ops live al.
+    popmany_plan (MAP Var to_pop) ps =
+      (ops, ps with <|ps_stack := REPLICATE m dead_stack_marker ++ live; ps_alloc := al|>) /\
+    popmany_plan (MAP Var to_pop) cs =
+      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>) /\
+    ALL_DISTINCT live /\ set live = set core DIFF set (MAP Var to_pop)` by
+    (irule popmany_plan_prefix_frame >>
+     simp[Abbr `cs`, DISJOINT_ALT, MEM_REPLICATE, MEM_MAP, dead_stack_marker_def]) >>
+  qpat_x_assum `Abbrev (cs = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`ops`, `live`, `m`, `n`, `al`, `ps.ps_cleanup_promised`, `F`] >>
+  rpt (qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac) >>
+  rpt (qpat_x_assum `popmany_plan _ _ = _` mp_tac) >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >> simp[]
+QED
+
+Finalise clean_stack_plan_shared_core_replay
+
 
 Theorem stack_dup_bottom_extension:
   !d prefix core. d < LENGTH core ==>
