@@ -5704,7 +5704,7 @@ Theorem compile_array_membership_loop_shape:
      (loader op) (\v st. plain_operand st v)) ==>
   shape_step internal compiler_label
     (\st. R st /\ EVERY (plain_operand st) [needle; arr_op; len_op])
-    (compile_array_membership_loop needle arr_op len_op elem_size offset_base loader is_in)
+    (compile_array_membership_loop needle arr_op len_op elem_size offset_base loader bound_opt is_in)
     (\v st. R st /\ plain_operand st v)
 Proof
   strip_tac >>
