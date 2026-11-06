@@ -829,3 +829,197 @@ QED
    decisions are a potential source for (iii), not an already established
    physical multiplicity theorem. No selective-spill replay invariant or
    frozen-theorem counterexample follows from these fixtures. *)
+
+(* Finite multiplicity ledger. This is the non-JMP, non-halting stage
+   sequence; ADD's two candidate orders coincide for [a;a]. No reachability
+   claim is made for the overlap input. *)
+Definition multiplicity_audit_stages_def:
+  multiplicity_audit_stages inst nl ps =
+    let operands = compute_operands inst in
+    let p1 = SND (emit_input_plan inst.inst_opcode operands nl ps) in
+    let p2 = SND (reorder_plan dfg_empty operands p1) in
+    let p3 = p2 with ps_stack := stack_pop (LENGTH operands) p2.ps_stack in
+    let p4 = FOLDL (\p out. p with ps_stack := stack_push (Var out) p.ps_stack)
+                   p3 inst.inst_outputs in
+    let p5 = SND (popmany_plan
+      (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) p4) in
+    let p6 = if FILTER (\out. MEM out nl) inst.inst_outputs = [] then p5
+             else SND (optimistic_swap_plan dfg_empty inst nl F p5) in
+    [ps; p1; p2; p3; p4; p5; p6; release_dead_spills nl p6]
+End
+
+Definition multiplicity_audit_counts_def:
+  multiplicity_audit_counts op states =
+    MAP (\p. (LIST_ELEM_COUNT op p.ps_stack,
+               IS_SOME (FLOOKUP p.ps_spilled op))) states
+End
+
+Theorem assign_multiplicity_ledger:
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ASSIGN [Var "a"] ["x"])
+      ["a"; "x"] ((init_plan_state 0) with ps_stack := [Var "a"])) =
+    [(1,F); (2,F); (2,F); (1,F); (1,F); (1,F); (1,F); (1,F)] /\
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ASSIGN [Var "a"] ["x"])
+      [] ((init_plan_state 0) with ps_stack := [Var "a"])) =
+    [(1,F); (1,F); (1,F); (0,F); (0,F); (0,F); (0,F); (0,F)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem add_repeated_multiplicity_ledger:
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ADD [Var "a"; Var "a"] ["x"])
+      ["a"; "x"] ((init_plan_state 0) with ps_stack := [Var "a"])) =
+    [(1,F); (3,F); (3,F); (1,F); (1,F); (1,F); (1,F); (1,F)] /\
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ADD [Var "a"; Var "a"] ["x"])
+      [] ((init_plan_state 0) with ps_stack := [Var "a"])) =
+    [(1,F); (2,F); (2,F); (0,F); (0,F); (0,F); (0,F); (0,F)]
+Proof
+  EVAL_TAC
+QED
+
+Definition multiplicity_overlap_state_def:
+  multiplicity_overlap_state = (init_plan_state 0) with
+    <| ps_stack := [Var "a"]; ps_spilled := FEMPTY |+ (Var "a",0) |>
+End
+
+Theorem overlap_restore_multiplicity_ledger:
+  multiplicity_audit_counts (Var "a")
+    [multiplicity_overlap_state;
+     SND (do_restore (Var "a") multiplicity_overlap_state)] =
+    [(1,T); (2,F)] /\
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ASSIGN [Var "a"] ["x"])
+      ["a"; "x"] multiplicity_overlap_state) =
+    [(1,T); (3,F); (3,F); (2,F); (2,F); (2,F); (2,F); (2,F)] /\
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ADD [Var "a"; Var "a"] ["x"])
+      [] multiplicity_overlap_state) =
+    [(1,T); (3,F); (3,F); (1,F); (1,F); (1,F); (1,F); (1,F)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem multiplicity_shapes_wf:
+  inst_wf (mk_inst 0 ASSIGN [Var "a"] ["x"]) /\
+  inst_wf (mk_inst 0 ADD [Var "a"; Var "a"] ["x"]) /\
+  inst_wf (mk_inst 0 OFFSET [Lit 0w; Label "L"] ["x"]) /\
+  ~inst_wf (mk_inst 0 OFFSET [Var "a"; Label "L"] ["x"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem offset_multiplicity_ledger:
+  multiplicity_audit_counts (Var "a")
+    [((init_plan_state 0) with ps_stack := [Var "a"]);
+     SND (generate_offset_plan
+       (mk_inst 0 OFFSET [Lit 0w; Label "L"] ["x"])
+       ((init_plan_state 0) with ps_stack := [Var "a"]))] =
+    [(1,F); (1,F)] /\
+  multiplicity_audit_counts (Var "x")
+    [((init_plan_state 0) with ps_stack := [Var "a"]);
+     SND (generate_offset_plan
+       (mk_inst 0 OFFSET [Lit 0w; Label "L"] ["x"])
+       ((init_plan_state 0) with ps_stack := [Var "a"]))] =
+    [(0,F); (1,F)]
+Proof
+  EVAL_TAC
+QED
+
+(* Cross-check the ledger endpoint against the native instruction planner,
+   including the commutative selection and post-emission stages. *)
+Theorem native_multiplicity_endpoints:
+  MAP (\(opc, operands, nl, ps).
+    (SND (generate_regular_inst_plan ARB dfg_empty ARB ARB
+      (mk_inst 0 opc operands ["x"]) nl F F "entry" ps)).ps_stack)
+    [(ASSIGN, [Var "a"], ["a";"x"],
+       (init_plan_state 0) with ps_stack := [Var "a"]);
+     (ASSIGN, [Var "a"], [],
+       (init_plan_state 0) with ps_stack := [Var "a"]);
+     (ADD, [Var "a"; Var "a"], ["a";"x"],
+       (init_plan_state 0) with ps_stack := [Var "a"]);
+     (ADD, [Var "a"; Var "a"], [],
+       (init_plan_state 0) with ps_stack := [Var "a"]);
+     (ASSIGN, [Var "a"], ["a";"x"], multiplicity_overlap_state)] =
+    [[Var "a"; Var "x"]; []; [Var "a"; Var "x"]; [];
+     [Var "a"; Var "a"; Var "x"]]
+Proof
+  EVAL_TAC
+QED
+
+(* Multiplicity audit conclusion / dependency ledger (bounded, not induction).
+
+   emit_input_plan_live_upper requires ALL_DISTINCT stack, disjoint stack and
+   spill domain, and inventory contained in operand_vars operands ++ nl.
+   It allows repetitions WITHIN operands: temporary count <= operand count
+   + the one live reserve. The ASSIGN and ADD ledgers above exhibit debts
+   1 and 2 respectively when a is live; consumption cancels exactly these.
+   With a dead, ADD's first a still duplicates because rest contains a.
+
+   emit_reorder_plan_core_live_upper performs that cancellation for a
+   materialised selected PERM of operands, LENGTH <=16, from an empty-pending
+   residual_budget_wf input, availability and live-inventory coverage.
+   reorder_plan_materialised_live_upper additionally exposes the pending
+   no-spill, count availability and pending length/stack length hypotheses.
+   These results are sufficient accounting interfaces for these two shapes;
+   no new variant is needed. emit_reorder_pop_marker_core_live_upper is the
+   existing marker-prefix version. They do NOT cover arbitrary deep demand.
+
+   fresh_outputs_residual_budget (Setup) needs ALL_DISTINCT outputs and
+   absence of EACH output from both physical stack and spill domain. Here x
+   is fresh; output count goes 0 -> 1; dead-output pop removes it, while
+   optimistic_swap_plan and release leave a's count unchanged in the ledger.
+   residual_budget_wf_optimistic_swap_plan is the existing general budget
+   interface. PhiTemporal's phi_origin_stage_count_le and
+   phi_origin_schedule_count_le count provenance cells, not a ready-made
+   whole-stack uniqueness theorem; this audit does not extend to PHI.
+
+   OFFSET: inst_wf_offset_shape rules out any variable operand, as checked
+   above. generate_offset_plan only pushes x and has NO liveness argument:
+   it retains x even if x is dead. A live-filtered bound allows that, but a
+   global inventory-subset-live claim does not. Freshness of x is necessary.
+
+   Candidate physical live-count<=1 with output freshness is FALSE from
+   physical uniqueness alone: overlap_restore_multiplicity_ledger starts
+   with ONE physical a plus a spill binding; native_multiplicity_endpoints
+   confirms TWO live a survive the complete ASSIGN. This is a fabricated
+   local input, NOT evidence of frozen-theorem falsehood or reachability.
+   residual_budget_wf base [] rejects it by
+   residual_budget_wf_empty_inventory (stack/spill disjointness).
+
+   Smallest next missing premise: establish, at actual reachable restore
+   entries, that restoring a live v cannot encounter another physical v
+   (and preserve live-count<=1 through the other stages, plus output
+   freshness). Stack-plus-spill uniqueness implies this premise and is
+   stronger than suffix-exclusion consumers need, but physical uniqueness
+   alone cannot be inductive across restore. No conclusion that such
+   disjointness holds at joins is licensed by this finite matrix.
+*)
+
+Theorem overlap_remaining_multiplicity_ledger:
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ASSIGN [Var "a"] ["x"])
+      [] multiplicity_overlap_state) =
+    [(1,T); (2,F); (2,F); (1,F); (1,F); (1,F); (1,F); (1,F)] /\
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ADD [Var "a"; Var "a"] ["x"])
+      ["a"; "x"] multiplicity_overlap_state) =
+    [(1,T); (4,F); (4,F); (2,F); (2,F); (2,F); (2,F); (2,F)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem spill_only_multiplicity_ledger:
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ADD [Var "a"; Var "a"] ["x"])
+      ["a"; "x"] (multiplicity_overlap_state with ps_stack := [])) =
+    [(0,T); (3,F); (3,F); (1,F); (1,F); (1,F); (1,F); (1,F)] /\
+  multiplicity_audit_counts (Var "a")
+    (multiplicity_audit_stages (mk_inst 0 ASSIGN [Var "a"] ["x"])
+      [] (multiplicity_overlap_state with ps_stack := [])) =
+    [(0,T); (1,F); (1,F); (0,F); (0,F); (0,F); (0,F); (0,F)]
+Proof
+  EVAL_TAC
+QED
