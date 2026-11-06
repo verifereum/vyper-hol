@@ -43,9 +43,10 @@
 Theory whitelistForIterMem
 Ancestors
   whitelistForIterDynFrag stmtSimForArrayFrame exprSimSubscriptMap exprSimDefs loweringPosts
-  stmtSimDefs gasOutcome supportedStmts vyperTypeSystem vyperState
+  stmtSimDefs gasOutcome gasSummary supportedStmts vyperTypeSystem vyperState
   vyperInterpreter valueEncoding valueEncodingProps valueEncodingProofs
-  stmtLowering exprLowering venomState list finite_map arithmetic words
+  stmtLowering exprLowering venomState exprSimPopImmutableTarget
+  compileEnv exprLoweringProps list finite_map arithmetic words
 
 (* A statement fragment as stmt_frag says, that also keeps Q: started in a
    state where Q holds, it ends where Q holds.  stmt_frag_keep (K T) is
@@ -163,13 +164,17 @@ Proof
 QED
 
 (* Source side for a place iterable: a body that writes nothing containing
-   the place p (iterator_unmodified) keeps, at every scope, the reads of
-   the root local below p's attribute path (the path up to its first
-   subscript, place_access).  typed_stmts_projection_frame is the case of
-   an empty attribute path, where the whole root is kept. *)
+   the place p (iterator_unmodified) keeps, at every scope, the root
+   local's type and its sub-value at p's attribute path (the path up to
+   p's first subscript, place_access).  The iterable is an array, so a
+   well-typed target can't extend that path by another attribute before a
+   subscript, which place_contains wouldn't see.
+   typed_stmts_projection_frame is the case of an empty attribute path,
+   where the whole root is kept. *)
 Theorem typed_stmts_place_frame:
   supported_stmts tops bindings stmts /\
   type_stmts env ret_ty stmts = SOME env' /\
+  well_typed_expr env arr_e /\ expr_type arr_e = ArrayT et bd /\
   expr_place arr_e = SOME p /\ place_access p [] = (NameTarget root, attrs) /\
   root IN FDOM env.var_types /\
   stmts_writes_ok (\w. ~place_contains w p) stmts /\
@@ -177,10 +182,12 @@ Theorem typed_stmts_place_frame:
   es.scopes <> [] /\ eval_stmts cx stmts es = (res,es') ==>
   LENGTH es'.scopes = LENGTH es.scopes /\
   MAP (\sc. OPTION_MAP
-          (\e rest. read_memory_path e (MAP AttrSubscript attrs ++ rest))
+          (\e. (e.type, evaluate_subscripts e.type e.value
+                           (MAP AttrSubscript attrs)))
           (FLOOKUP sc root)) es'.scopes =
   MAP (\sc. OPTION_MAP
-          (\e rest. read_memory_path e (MAP AttrSubscript attrs ++ rest))
+          (\e. (e.type, evaluate_subscripts e.type e.value
+                           (MAP AttrSubscript attrs)))
           (FLOOKUP sc root)) es.scopes
 Proof
   cheat
@@ -217,34 +224,167 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* A projection of one name's entries that two scope lists agree on
+   gives the same projection of its lookup. *)
+Theorem scope_projection_lookup_map[local]:
+  !a b n f.
+    MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) a =
+    MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) b ==>
+    OPTION_MAP f (lookup_scopes n a) = OPTION_MAP f (lookup_scopes n b)
+Proof
+  Induct >- (Cases >> simp[lookup_scopes_def]) >>
+  rpt gen_tac >> Cases_on `b` >> simp[lookup_scopes_def] >> strip_tac >>
+  Cases_on `FLOOKUP h n` >> Cases_on `FLOOKUP h' n` >> gvs[]
+QED
+
+(* The same, for a name bound below the top scope. *)
+Theorem scope_projection_lookup_below[local]:
+  !a sc0 rest0 n f e.
+    MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) a =
+    MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) (sc0 :: rest0) /\
+    n NOTIN FDOM sc0 /\ lookup_scopes n rest0 = SOME e ==>
+    ?sc rest e'. a = sc :: rest /\ lookup_scopes n rest = SOME e' /\
+      lookup_scopes n a = SOME e' /\ f e' = f e
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `a` >> gvs[] >>
+  `FLOOKUP sc0 n = NONE` by gvs[flookup_thm] >>
+  `FLOOKUP h n = NONE` by gvs[] >>
+  drule scope_projection_lookup_map >> simp[] >>
+  Cases_on `lookup_scopes n t` >> simp[lookup_scopes_def]
+QED
+
+(* A path read that succeeds reads its prefix. *)
+Theorem evaluate_subscripts_append_prefix[local]:
+  !p tv a sfx r.
+    evaluate_subscripts tv a (p ++ sfx) = INL r ==>
+    ?x. evaluate_subscripts tv a p = INL x
+Proof
+  Induct >- simp[evaluate_subscripts_def] >>
+  rpt gen_tac >> Cases_on `h`
+  >- (Cases_on `v` >> simp[evaluate_subscripts_def] >>
+      Cases_on `a` >> simp[evaluate_subscripts_def, AllCaseEqs()] >>
+      metis_tac[]) >>
+  Cases_on `a` >> simp[evaluate_subscripts_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* Two values with the same sub-value at a path read the same below it:
+   the types a read passes through depend on the path alone. *)
+Theorem sum_case_id[local]:
+  !X. (case X of INL vj => INL vj | INR err => INR err) = X
+Proof
+  Cases >> simp[]
+QED
+
+Theorem evaluate_subscripts_prefix_agree[local]:
+  !p tv a b sfx x.
+    evaluate_subscripts tv a p = INL x /\
+    evaluate_subscripts tv b p = INL x ==>
+    evaluate_subscripts tv a (p ++ sfx) = evaluate_subscripts tv b (p ++ sfx)
+Proof
+  Induct >- simp[evaluate_subscripts_def] >>
+  rpt gen_tac >> Cases_on `h`
+  >- (Cases_on `v` >> simp[evaluate_subscripts_def] >>
+      Cases_on `a` >> simp[evaluate_subscripts_def] >>
+      Cases_on `b` >> simp[evaluate_subscripts_def, sum_case_id] >>
+      rpt strip_tac >>
+      Cases_on `array_index tv a i` >> Cases_on `array_index tv a' i` >>
+      gvs[] >> metis_tac[]) >>
+  Cases_on `a` >> simp[evaluate_subscripts_def] >>
+  Cases_on `b` >> simp[evaluate_subscripts_def, sum_case_id] >>
+  rpt strip_tac >> BasicProvers.EVERY_CASE_TAC >> gvs[] >> metis_tac[]
+QED
+
 (* Hook for a place inside a local: the iterable's pointer is the place's,
    the root local's pointer bw (in its variable q) plus the byte offset k
-   of the place's path in the root's type (the vv_place_ptr clause of the
-   S1 interface piece on vv_post), and the body writes nothing containing
-   the place.  Then the body keeps q and the value v the place held at
-   entry. *)
+   of the place's path in the root's type tv0 (the vv_place_ptr clause of
+   the S1 interface piece on vv_post), and the body writes nothing
+   containing the place.  Then the body keeps q and the value v the place
+   held at entry.
+
+   The root is bound below the body's top scope (the loop variable's), and
+   its value is well typed after every run of the body (the caller's
+   state_well_typed).
+
+   v is read from the root's value (evaluate_subscripts), not through
+   read_memory_path's fallback to popped history: memory keeps only a
+   local's value (local_ptrs_rel), so a body's stmt_frag says nothing of
+   a popped element's bytes.  The checker gives the premise: it rejects a
+   pop at any depth of a For iterable (expr_writes_ok (\_. F) in
+   well_typed_iterator, the checker piece), and with no pop the place
+   reads the value. *)
 Theorem for_keep_place:
   !ctx func cx ex inc RetQ bc ty stmts ei tops bindings env ret_ty env' arr_e
-   p root attrs rest entry v q z bw t0 tv0 k atv.
+   et bd p root attrs rest sc0 rest0 entry v q z bw tv0 k atv.
     stmt_frag ctx func cx (InLoop ex inc) RetQ bc
       (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts) ei /\
     supported_stmts tops bindings stmts /\
     type_stmts env ret_ty stmts = SOME env' /\
+    well_typed_expr env arr_e /\ expr_type arr_e = ArrayT et bd /\
     expr_place arr_e = SOME p /\ place_access p [] = (NameTarget root, attrs) /\
     root IN FDOM env.var_types /\
     stmts_writes_ok (\w. ~place_contains w p) stmts /\
     ~supported_stmts_expr_exists expr_internal_call_root stmts /\
-    ei.scopes <> [] /\ lookup_scopes root ei.scopes = SOME entry /\
-    read_memory_path entry (MAP AttrSubscript attrs ++ rest) = INL v /\
+    ei.scopes = sc0 :: rest0 /\ root NOTIN FDOM sc0 /\
+    lookup_scopes root rest0 = SOME entry /\ entry.type = tv0 /\
+    well_formed_type_value tv0 /\
+    evaluate_subscripts tv0 entry.value (MAP AttrSubscript attrs ++ rest) =
+      INL v /\
     FLOOKUP bc.ce_vars root = SOME (PtrVar (Var q) z) /\
-    bc.ce_var_type root = SOME t0 /\
-    evaluate_type (get_tenv cx) t0 = SOME tv0 /\
-    mem_path_offset tv0 (MAP AttrSubscript attrs ++ rest) = SOME (k, atv) ==>
+    mem_path_offset tv0 (MAP AttrSubscript attrs ++ rest) = SOME (k, atv) /\
+    (!gs res ee e.
+       eval_stmts cx stmts (ei with gas_obs := gs) = (res, ee) /\
+       lookup_scopes root ee.scopes = SOME e ==>
+       value_has_type e.type e.value) ==>
     stmt_frag_keep
       (\s. lookup_var q s = SOME bw /\
            val_in_memory atv v (w2n bw + k) s.vs_memory)
       ctx func cx (InLoop ex inc) RetQ bc
       (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts) ei
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_keep_def] >>
+  map_every qx_gen_tac [`sa`, `sb`, `s0`, `cenv'`] >> strip_tac >>
+  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >> simp[] >>
+  simp[gas_outcome_def, gas_summary_at_def, gas_marked_exec_def] >>
+  strip_tac >> qexists_tac `marks`
+  >| [
+      disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
+      qabbrev_tac `gs = gas_explicit marks s0.vs_gas_readings` >>
+      qabbrev_tac `ee = es_end with gas_obs := []` >>
+      `eval_stmts cx stmts (ei with gas_obs := gs) = (res,ee)` by
+        (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+         simp[Abbr `ee`]) >>
+      qpat_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o SIMP_RULE std_ss [stmt_post_def]) >>
+      `not_fresh_at sa q` by metis_tac[local_ptrs_reserved_def] >>
+      `lookup_var q t = SOME bw` by metis_tac[] >>
+      simp[] >>
+      mp_tac (Q.INST [`es` |-> `ei with gas_obs := gs`, `es'` |-> `ee`]
+      typed_stmts_place_frame) >>
+      impl_tac >- simp[] >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `MAP (\sc. OPTION_MAP f (FLOOKUP sc root))` >>
+      `?sc rest' e'. ee.scopes = sc :: rest' /\ lookup_scopes root rest' = SOME e' /\
+      lookup_scopes root ee.scopes = SOME e' /\ f e' = f entry` by
+      (irule scope_projection_lookup_below >> gvs[] >> metis_tac[]) >>
+      fs[Abbr `f`] >>
+      `FLOOKUP cenv''.ce_vars root = SOME (PtrVar (Var q) z)` by
+      (qpat_x_assum `cenv_top_ext _ _ _` mp_tac >>
+      simp[cenv_top_ext_def] >> strip_tac >>
+      first_x_assum (qspec_then `root` mp_tac) >> CCONTR_TAC >> gvs[]) >>
+      `local_ptrs_rel func cenv'' ee.scopes t` by
+      gvs[stmt_state_rel_def, state_rel_def] >>
+      pop_assum mp_tac >> simp[local_ptrs_rel_def] >>
+      disch_then (qspecl_then [`root`, `e'`, `q`, `z`] mp_tac o CONJUNCT1) >>
+      simp[] >> strip_tac >> gvs[] >>
+      `value_has_type entry.type e'.value` by metis_tac[] >>
+      drule evaluate_subscripts_append_prefix >> strip_tac >>
+      `evaluate_subscripts entry.type e'.value (MAP AttrSubscript attrs ++ rest) =
+        INL v` by
+      metis_tac[evaluate_subscripts_prefix_agree] >>
+      disj1_tac >> once_rewrite_tac[ADD_COMM] >>
+      irule imm_typed_path_memory >> metis_tac[],
+      disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >> simp[],
+      disj2_tac >> metis_tac[]]
 QED
