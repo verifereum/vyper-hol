@@ -118,7 +118,8 @@ Proof
   rename1 `take_outcome rq' _ = (outcome', rest')` >>
   drule_all take_outcome_agree >> strip_tac >>
   `outcome'.co_success = outcome.co_success /\
-   outcome'.co_logs = outcome.co_logs` by
+   outcome'.co_logs = outcome.co_logs /\
+   outcome'.co_toDelete = outcome.co_toDelete` by
     (qpat_x_assum `_ = outcome'` (SUBST1_TAC o SYM) >> simp[]) >>
   `rq'.cr_static = rq.cr_static /\
    (computed_precompile rq' <=> computed_precompile rq)` by
@@ -138,6 +139,7 @@ Proof
      gvs[state_rel_def, adopt_call_outcome_equation, accounts_rel_def]) >>
   drule accounts_rel_storage_transient >> simp[] >> strip_tac >>
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
+      adopt_outcome_deletions_def,
       logs_rel_eq, record_request_def] >>
   Cases_on `outcome.co_success /\ ~rq.cr_static` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,

@@ -181,7 +181,7 @@ Proof
     (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
      qpat_x_assum `is_word_type _` mp_tac >>
      Cases_on `ty` >> simp[is_word_type_def, evaluate_type_def] >>
-     rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >> rw[] >> simp[]) >>
+     rw[AllCaseEqs()]) >>
   gvs[memory_value_rel_def]
 QED
 
