@@ -2,7 +2,7 @@ Theory exprSimAbiEncodeProducerExecution
 Ancestors
   exprSimAbiEncodePrefixWindow exprSimAbiEncodeExecution
   exprSimAbiEncodeEmptySource exprSimAbiEncodeNonwordResources
-  exprSimAbiEncodeCapacity exprSimAbiEncodeEmptyExecution
+  exprSimAbiEncodeCapacity exprSimAbiEncodeEmptyExecution exprSimAbiEncodeSourceRoom
   exprSimAbiEncodeBoundaryProbe exprSimAbiEncodeWindowRoom abiEncoderSourceInvoke
   abiBuiltinEncodeContext abiBuiltinEncodeCode abiDecoderContract abiDecoderReentry
   abiBuiltinAllocation abiEncodeWindowBuiltin abiEncoderCounters
@@ -374,3 +374,160 @@ Proof
   Cases_on `mid` >> simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac)
 QED
 
+
+local
+  (* Eliminate only reflexive aliases; the general simplifier is expensive here. *)
+  val bytes_phases = abi_encode_bridge_bytes_phases_open |> SPEC_ALL
+    |> Q.INST [`d` |-> `p+32+m`, `outsz` |-> `32+32*word_size(maxlen+m)`]
+    |> Q.INST [`m` |-> `(case method_id of NONE => 0 | SOME mid => 4)`,
+               `w` |-> `(case method_id of NONE => 0 | SOME mid => 32)`]
+    |> PURE_REWRITE_RULE [REFL_CLAUSE, IMP_CLAUSES, AND_CLAUSES];
+  val empty_phases = abi_encode_empty_phases_open |> SPEC_ALL
+    |> Q.INST [`d` |-> `p+32+m`, `outsz` |-> `32+32*word_size(maxlen+m)`]
+    |> Q.INST [`m` |-> `(case method_id of NONE => 0 | SOME mid => 4)`,
+               `w` |-> `(case method_id of NONE => 0 | SOME mid => 32)`]
+    |> PURE_REWRITE_RULE [REFL_CLAUSE, IMP_CLAUSES, AND_CLAUSES];
+in
+Theorem abi_encode_nonword_producer_phases:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_body_pre ce cx env e es /\
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
+  mid = OPTION_MAP bytes_method_id_word mid0 /\
+  ~is_word_type (expr_type e) /\
+  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+    sa = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) op ei ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len
+    (case mid of NONE => 0 | SOME _ => 4) body_end = ((),final) /\
+  fn_has_code sa ready func /\ fn_has_code sa ready obs /\
+  fn_has_code ready body_end obs /\ fn_has_code body_end final obs /\
+  fn_inst_ids_distinct obs /\ fn_inst_ids_distinct func /\
+  obs.fn_name = func.fn_name /\
+  (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\
+       j.inst_opcode <> NOP ==> MEM j (fn_insts func)) /\
+  (!j. MEM j (fn_insts obs) ==> j.inst_opcode <> INVOKE) /\
+  local_ptrs_reserved ce sa /\
+  (!x. op = Var x ==> not_fresh_at sa x) ==>
+  ?p. !limit_st.
+    ready.cs_next_var <= limit_st.cs_next_var /\
+    body_end.cs_next_var <= limit_st.cs_next_var /\
+    final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?actual.
+      let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+      let m = case mid of NONE => 0 | SOME _ => 4 in
+      eval_operand (FST ops) actual = SOME (n2w p) /\
+      mload p actual = n2w (LENGTH bytes+m) /\
+      mem_bytes_at (p+32+m) (LENGTH bytes) actual.vs_memory = bytes /\
+      (case mid of NONE => T | SOME selector =>
+        mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
+      ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+      actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+      abi_decode_sim ctx obs s actual
+Proof
+  strip_tac >> drule_all abi_encode_nonword_phase_resources >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (qx_choose_then `source_word` (qx_choose_then `ct` (qx_choose_then `rv`
+    (qx_choose_then `p` (MAP_EVERY assume_tac o CONJUNCTS))))) >>
+  qexists `p` >> rpt strip_tac >> simp_tac bool_ss [LET_THM] >>
+  `abi_encoder_admissible ei` by metis_tac[abi_enc_plan_admissible] >>
+  drule abi_builtin_encode_setup_live >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_encoder_counters >> strip_tac >>
+  `abi_decoder_operand_live sa.cs_next_var op` by
+    (qpat_assum `!x. op = Var x ==> _` mp_tac >> Cases_on `op` >>
+     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `abi_decoder_operand_live ready.cs_next_var op` by
+    (irule abi_decoder_operand_live_mono >> qexists `sa.cs_next_var` >>
+     conj_tac
+     >- (qpat_assum `ready.cs_next_var = _` (fn th => rewrite_tac[th]) >>
+         Cases_on `mid` >> simp_tac (srw_ss()) []) >>
+     first_assum ACCEPT_TAC) >>
+  `(!x. op = Var x \/ SND ops = Var x ==> not_fresh_at ready x) /\
+   (!x. FST ops = Var x ==> not_fresh_at ready x) /\
+   abi_decoder_operand_live body_end.cs_next_var (FST ops)` by
+    (conj_tac
+     >- (rpt strip_tac
+         >- (qpat_assum `abi_decoder_operand_live ready.cs_next_var op` mp_tac >>
+             qpat_assum `op = Var x` (fn th => rewrite_tac[th]) >>
+             simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+               not_fresh_at_def])
+         >> qpat_assum `abi_decoder_operand_live ready.cs_next_var (SND ops)` mp_tac >>
+         qpat_assum `SND ops = Var x` (fn th => rewrite_tac[th]) >>
+         simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_assum `abi_decoder_operand_live ready.cs_next_var (FST ops)` mp_tac >>
+         qpat_assum `FST ops = Var x` (fn th => rewrite_tac[th]) >>
+         simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+     irule abi_decoder_operand_live_mono >> qexists `ready.cs_next_var` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  Cases_on `val_footprint tv v = 0`
+  >- suspend "empty"
+  >> suspend "positive"
+QED
+
+Resume abi_encode_nonword_producer_phases[positive]:
+  `0 < val_footprint tv v` by decide_tac >>
+  qpat_assum `0 < val_footprint tv v ==> _` mp_tac >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`) bytes_phases >>
+  disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `alloca_room _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code body_end final _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (drule_at (Pat `enc _ _ = _`)) >>
+  disch_then (qspec_then `p` mp_tac) >>
+  impl_tac
+  >- (rewrite_tac[wordsTheory.n2w_w2n] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qexists `actual` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_nonword_producer_phases[empty]:
+  `ei = AbiCopy 0` by
+    (qpat_assum `val_footprint tv v = 0 /\ _ \/ _` mp_tac >>
+     qpat_assum `val_footprint tv v = 0` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) []) >>
+  qpat_x_assum `ei = AbiCopy 0` SUBST_ALL_TAC >>
+  qpat_assum `val_footprint tv v = 0` (fn zero =>
+    qpat_x_assum `abi_encoder_window_input _ _ _ _ _ _`
+      (assume_tac o PURE_REWRITE_RULE [zero])) >>
+  `alloca_room (ctx with ctx_functions := [obs]) obs
+    (abi_builtin_allocate_state sa.cs_next_id
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (expr_type e) +
+        (case mid of NONE => 0 | SOME _ => 4))) s)` by
+    (irule abi_encode_bridge_local_room >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `func` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`) empty_phases >>
+  disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `alloca_room _ _ _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspec_then `p` mp_tac) >>
+  disch_then (qspec_then `final` mp_tac) >>
+  qpat_assum `enc ct rv = _` (fn eq => rewrite_tac[eq]) >>
+  impl_tac
+  >- (reverse (rpt conj_tac)
+      >- (rpt strip_tac >>
+          qpat_assum `!inst b sz. MEM inst _ /\ _ ==> _`
+            (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          simp_tac bool_ss [] >> metis_tac[]) >>
+      first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  `abi_decode_sim ctx obs s actual` by
+    (irule abi_decode_sim_ctx_no_invoke >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `ctx with ctx_functions := [obs]` >> first_assum ACCEPT_TAC) >>
+  qexists `actual` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise abi_encode_nonword_producer_phases
+end
