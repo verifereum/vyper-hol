@@ -4,18 +4,7 @@ Ancestors
   exprSimSubscriptArraySource exprLowering vyperState vyperInterpreter
   vyperAST vyperValue vyperMisc pair vyperTypeContract vyperTypeSystem
   compileEnv finite_map context exprSafeOperandBuiltins
-
-Theorem extend_storage_place_not_memory:
-  extend_storage_place cx tr slot tv sb s = (INL p,t) ==>
-  !id path. p <> MemoryPlace id path
-Proof
-  Cases_on `tv` >> Cases_on `sb` >>
-  simp[oneline extend_storage_place_def, bind_def, ignore_bind_def,
-       raise_def, return_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[value_CASE_rator, AllCaseEqs(), raise_def, return_def,
-      bind_def, ignore_bind_def, UNCURRY]
-QED
+  vyperStoragePlaceProvenance stmtSimForArrayFrame
 
 Theorem extend_place_memory_origin:
   extend_place cx r sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>
@@ -26,7 +15,7 @@ Proof
       simp[extend_place_def, extend_memory_place_def, bind_def,
            ignore_bind_def, return_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >>
-      drule extend_storage_place_not_memory >> simp[]) >>
+      drule extend_storage_place_subregion >> simp[]) >>
   Cases_on `sb` >>
   simp[extend_place_def, bind_def, lift_option_type_def, return_def,
        raise_def, AllCaseEqs()] >>
@@ -44,16 +33,6 @@ Proof
   strip_tac >> drule extend_place_memory_origin >> simp[]
 QED
 
-Theorem lookup_global_not_memory:
-  lookup_global cx src id s = (INL r,t) ==>
-  !name path. r <> PlaceR (MemoryPlace name path)
-Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
-       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[option_CASE_rator, prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
-QED
-
 Theorem eval_base_place_memory_origin:
   !bt cx s id path t.
     eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),t) ==>
@@ -63,7 +42,7 @@ Proof
   Cases_on `bt` >> rpt strip_tac >>
   gvs[toplevel_target_def, Once evaluate_def, bind_def, AllCaseEqs()]
   >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
-      drule lookup_global_not_memory >> simp[]) >>
+      gvs[lookup_global_not_memory]) >>
   drule extend_place_memory_origin >> strip_tac >> gvs[] >>
   first_x_assum (qspec_then `base_assignment_target_size b` mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -119,7 +98,7 @@ Proof
   completeInduct_on `expr_size e` >> Cases_on `e` >> rpt strip_tac >>
   gvs[Once well_typed_expr_def, AllCaseEqs()]
   >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
-      drule lookup_global_not_memory >> simp[]) >>
+      gvs[lookup_global_not_memory]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   drule select_result_memory_origin >> strip_tac >> gvs[] >>
   rename1 `type_place_expr env obj = SOME obj_vt` >>
@@ -216,7 +195,7 @@ Proof
          comp_return_def, vv_location_def, mk_ptr_def, expr_type_def])
   >~ [`eval_expr cx (TopLevelName ann nsid) _ = _`] >-
     (PairCases_on `nsid` >> gvs[Once evaluate_def] >>
-     drule lookup_global_not_memory >> simp[])
+     gvs[lookup_global_not_memory])
   >~ [`eval_expr cx (Literal ann lit) _ = _`] >-
     gvs[Once evaluate_def, return_def]
   >~ [`eval_expr cx (Subscript ann obj idx) _ = _`] >- suspend "subscript"
