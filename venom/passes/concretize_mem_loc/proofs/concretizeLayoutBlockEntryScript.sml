@@ -20,16 +20,17 @@ Theorem phi_entry_filter_map[local]:
   (!i. MEM i insts /\ i.inst_opcode = PHI ==> f i = i /\ keep i) ==>
   eval_phis s (FILTER keep (MAP f insts)) = eval_phis s insts /\
   resolved_phis prev rv (FILTER keep (MAP f insts)) = resolved_phis prev rv insts /\
-  phis_taint prev tn (FILTER keep (MAP f insts)) = phis_taint prev tn insts
+  phis_taint prev tn (FILTER keep (MAP f insts)) = phis_taint prev tn insts /\
+  phi_prefix_length (FILTER keep (MAP f insts)) = phi_prefix_length insts
 Proof
-  Induct >- simp[eval_phis_def, resolved_phis_def, phis_taint_def] >>
+  Induct >- simp[eval_phis_def, resolved_phis_def, phis_taint_def, phi_prefix_length_def] >>
   gen_tac >> strip_tac >>
   `!i j. i < j /\ j < LENGTH insts /\
     (EL j insts).inst_opcode = PHI ==> (EL i insts).inst_opcode = PHI` by
     (rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
   Cases_on `h.inst_opcode = PHI`
   >- (gvs[] >> first_x_assum drule >> simp[] >> strip_tac >>
-      gvs[eval_phis_def, resolved_phis_def, phis_taint_def]) >>
+      gvs[eval_phis_def, resolved_phis_def, phis_taint_def, phi_prefix_length_def]) >>
   `EVERY (\i. i.inst_opcode <> PHI) insts` by
     (simp[EVERY_MEM, MEM_EL] >> rpt strip_tac >>
      qpat_x_assum `!i j. _ /\ j < LENGTH (h::insts) /\ _ ==> _`
@@ -37,7 +38,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> PHI) (FILTER keep (MAP f (h::insts)))` by
     (gvs[EVERY_MEM, MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
   Cases_on `FILTER keep (MAP f (h::insts))` >>
-  gvs[eval_phis_def, resolved_phis_def, phis_taint_def]
+  gvs[eval_phis_def, resolved_phis_def, phis_taint_def, phi_prefix_length_def]
 QED
 
 Theorem concretize_block_entry_phis[local]:
@@ -50,12 +51,28 @@ Theorem concretize_block_entry_phis[local]:
     resolved_phis prev rv bb.bb_instructions /\
   phis_taint prev tn (clear_nops_block (block_map_transform
     (concretize_inst_with_positions positions) bb)).bb_instructions =
-    phis_taint prev tn bb.bb_instructions
+    phis_taint prev tn bb.bb_instructions /\
+  phi_prefix_length (clear_nops_block (block_map_transform
+    (concretize_inst_with_positions positions) bb)).bb_instructions =
+    phi_prefix_length bb.bb_instructions
 Proof
   strip_tac >> simp[clear_nops_block_def, block_map_transform_def] >>
   irule phi_entry_filter_map >>
   gvs[bb_well_formed_def, concretize_positions_phi] >> rpt strip_tac >>
   simp[] >> metis_tac[]
+QED
+
+Theorem concretize_enters_block_exact:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb_well_formed bb /\ enters_block fn s post ==>
+  enters_block (concretize_function_with_positions positions fn) s post
+Proof
+  simp[enters_block_def] >> strip_tac >> gvs[] >>
+  qexistsl [`clear_nops_block (block_map_transform
+    (concretize_inst_with_positions positions) bb)`, `s_phi`] >>
+  simp[concretize_positions_blocks, lookup_block_map_proof,
+       concretize_positions_block_label] >>
+  metis_tac[concretize_block_entry_phis]
 QED
 
 Theorem concretize_enters_block_transport:
