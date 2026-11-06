@@ -259,3 +259,122 @@ Proof
   >- (first_x_assum ho_match_mp_tac >> metis_tac[MEM]) >>
   metis_tac[first_emission_return]
 QED
+
+Theorem first_emission_stage_intcall_args:
+  !ce vals flags tys a x b.
+  compile_stage_intcall_args ce vals flags tys a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
+  >- simp[compile_stage_intcall_args_def, comp_return_def, cs_extends_refl] >>
+  rpt gen_tac >> disch_tac >>
+  once_rewrite_tac[compile_stage_intcall_args_def] >> simp_tac (srw_ss()) [LET_THM] >>
+  ho_match_mp_tac first_emission_bind >>
+  (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac)
+  >~ [`compile_alloc_buffer`]
+  >- (ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- metis_tac[first_emission_alloc_buffer] >>
+      gen_tac >> simp[LET_THM, GSYM cs_appends_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule cs_appends_ignore_bind >> conj_tac
+      >- (IF_CASES_TAC >> simp[cs_appends_emit_helpers] >>
+          IF_CASES_TAC
+          >- (irule cs_appends_ignore_bind >> simp[cs_appends_return] >>
+              rw[cs_appends_def] >>
+              qspecl_then [`val_op`, `buf_alloc.buf_operand`, `st`] mp_tac
+                (cj 1 compile_store_bytestring_labels) >> simp[]) >>
+          rw[cs_appends_def] >>
+          qspecl_then [`ce`, `val_op`, `buf_alloc.buf_operand`, `ty`, `vv_type vv`, `st`]
+            mp_tac (cj 1 compile_store_memory_labels) >> simp[]) >>
+      irule cs_appends_bind >> simp[cs_appends_return] >>
+      rw[cs_appends_def] >>
+      qspecl_then [`ce`, `vals`, `flags`, `tys`, `st`] mp_tac
+        (cj 1 compile_stage_intcall_args_labels) >> simp[]) >>
+  ho_match_mp_tac first_emission_bind >>
+  (conj_tac >- metis_tac[] >> metis_tac[first_emission_return])
+QED
+
+Theorem first_emission_materialize_vv[local]:
+  !ce ty vv a x b. compile_materialize_vv ce ty vv a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_alloc_buffer] >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >>
+      qspecl_then [`ce`, `vv`, `st`] mp_tac (cj 1 unwrap_value_labels) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> simp[cs_appends_return] >>
+  rw[cs_appends_def] >>
+  qspecl_then [`ce`, `a`, `tmp.buf_operand`, `ty`, `ty`, `st`]
+    mp_tac (cj 1 compile_store_memory_labels) >> simp[]
+QED
+
+Theorem first_emission_ext_call_kwarg:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_ext_call_kwarg cfn ce rt k e a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rewrite_tac[compile_ext_call_kwarg_def] >>
+  IF_CASES_TAC >> simp_tac (srw_ss()) [LET_THM] >>
+  ho_match_mp_tac first_emission_bind
+  >- (conj_tac >- metis_tac[] >> gen_tac >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- metis_tac[first_emission_materialize_vv] >>
+      simp[comp_return_def, cs_extends_refl]) >>
+  conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_ext_call_kwargs:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ks es ce rt a x b. compile_ext_call_kwargs cfn ce rt ks es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Induct_on `ks` >> Cases_on `es` >> rpt gen_tac >>
+  once_rewrite_tac[compile_ext_call_kwargs_def] >>
+  simp_tac (srw_ss()) [comp_return_def, cs_extends_refl] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_ext_call_kwarg >> metis_tac[]) >>
+  gen_tac >> PairCases_on `x` >> simp_tac (srw_ss()) [] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[] >>
+  gen_tac >> PairCases_on `x` >> simp_tac (srw_ss()) [] >>
+  metis_tac[first_emission_return]
+QED
