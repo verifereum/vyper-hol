@@ -39,7 +39,7 @@ Theorem ecmul_framed_input:
   eval_operand scalar s = SOME w /\ op_taint tn scalar = {} /\
   (!l. scalar <> Label l) /\
   (!p. MEM (Var p) [point;scalar] ==> not_fresh_at sf p) ==>
-  ?sz src dst t Gf tnf b c.
+  ?sz src dst t Gf tnf b c aid.
     (do gas <- emit_op GAS [];
         success <- emit_op STATICCALL
           [gas; Lit 7w; Var src; Lit 96w; Var dst; Lit 64w];
@@ -54,6 +54,8 @@ Theorem ecmul_framed_input:
     sf.cs_next_var <= sz.cs_next_var /\ sf.cs_next_id <= sz.cs_next_id /\
     local_ptrs_reserved cenv sz /\
     lookup_var src t = SOME b /\ lookup_var dst t = SOME c /\
+    FLOOKUP t.vs_allocas aid = SOME (w2n c,64) /\
+    sf.cs_next_id <= aid /\ aid < sb.cs_next_id /\
     ptr_covers Gf tnf src t 96 /\ ptr_covers Gf tnf dst t 64 /\
     (!i. w2n b <= i /\ i < w2n b + 96 ==> i NOTIN tnf.t_mem) /\
     mem_bytes_at (w2n b) 96 t.vs_memory =
@@ -131,7 +133,10 @@ Resume ecmul_framed_input[pack]:
      imp_res_tac run_inst_seq_append >> asm_rewrite_tac[]) >>
   `s3.vs_memory = s2'.vs_memory` by
     (drule_all emitted_allocation_memory >> simp[]) >>
-  qexistsl [`sm`,`x`,`x'`,`s3`,`Gf`,`tnf`,`b`,`c`] >>
+  qpat_assum `compile_alloc_buffer 64 sp = _`
+    (mp_then Any strip_assume_tac loweringHaltTheory.compile_alloc_buffer_parts) >>
+  `sp.cs_next_id < sb.cs_next_id` by decide_tac >>
+  qexistsl [`sm`,`x`,`x'`,`s3`,`Gf`,`tnf`,`b`,`c`,`sp.cs_next_id`] >>
   gvs[venomStateTheory.eval_operand_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -154,7 +159,7 @@ Theorem ecadd_framed_input:
   eval_operand point s = SOME a1 /\ w2n a1 + 64 < dimword(:256) /\
   eval_operand other s = SOME a2 /\ w2n a2 + 64 < dimword(:256) /\
   (!p. MEM (Var p) [point;other] ==> not_fresh_at sf p) ==>
-  ?sz src dst t Gf tnf b c.
+  ?sz src dst t Gf tnf b c aid.
     (do gas <- emit_op GAS [];
         success <- emit_op STATICCALL
           [gas; Lit 6w; Var src; Lit 128w; Var dst; Lit 64w];
@@ -169,6 +174,8 @@ Theorem ecadd_framed_input:
     sf.cs_next_var <= sz.cs_next_var /\ sf.cs_next_id <= sz.cs_next_id /\
     local_ptrs_reserved cenv sz /\
     lookup_var src t = SOME b /\ lookup_var dst t = SOME c /\
+    FLOOKUP t.vs_allocas aid = SOME (w2n c,64) /\
+    sf.cs_next_id <= aid /\ aid < sb.cs_next_id /\
     ptr_covers Gf tnf src t 128 /\ ptr_covers Gf tnf dst t 64 /\
     (!i. w2n b <= i /\ i < w2n b + 128 ==> i NOTIN tnf.t_mem) /\
     mem_bytes_at (w2n b) 128 t.vs_memory =
@@ -263,7 +270,10 @@ Resume ecadd_framed_input[pack]:
      imp_res_tac run_inst_seq_append >> asm_rewrite_tac[]) >>
   `s3'.vs_memory = s2'.vs_memory` by
     (drule_all emitted_allocation_memory >> simp[]) >>
-  qexistsl [`sm`,`x`,`x'`,`s3'`,`Gf`,`tnf`,`b`,`c`] >>
+  qpat_assum `compile_alloc_buffer 64 sp = _`
+    (mp_then Any strip_assume_tac loweringHaltTheory.compile_alloc_buffer_parts) >>
+  `sp.cs_next_id < sb.cs_next_id` by decide_tac >>
+  qexistsl [`sm`,`x`,`x'`,`s3'`,`Gf`,`tnf`,`b`,`c`,`sp.cs_next_id`] >>
   gvs[venomStateTheory.eval_operand_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

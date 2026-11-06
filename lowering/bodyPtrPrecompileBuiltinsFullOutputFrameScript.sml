@@ -44,6 +44,7 @@ Theorem computed_full_output_framed_paths:
         gas_path_ptr D lo ctx fn PG G tn s 1 G2 tn2
           (OK (q with vs_inst_idx := s.vs_inst_idx + 3)) /\
         eval_operand (Var dst) q = SOME wo /\
+        q.vs_allocas = s.vs_allocas /\ 
         q.vs_memory = (write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) s).vs_memory /\
         ptr_covers G2 tn2 dst q (w2n outsz) /\
         (!i. w2n wo <= i /\ i < w2n wo + w2n outsz ==> i NOTIN tn2.t_mem) /\
@@ -64,7 +65,9 @@ Proof
   >- first_assum ACCEPT_TAC >>
   gen_tac >> strip_tac >>
   qpat_x_assum `!data. _` (qspec_then `data` mp_tac) >> simp[] >> strip_tac >>
-  qexists `q` >> simp[] >>
+  qpat_assum `_ sm = (Var dst,sl)` (mp_then Any mp_tac computed_suffix_output) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  simp[] >>
   qpat_assum `_ sm = (Var dst,sl)` (mp_then Any mp_tac computed_suffix_preserves) >>
   disch_then (drule_all o SRULE []) >> simp[]
 QED
