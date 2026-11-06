@@ -33,8 +33,8 @@ Ancestors
                                          ALL source gas schedules non-exempt;
                                          this is NOT a frozen frame premise.
    initial_ctx_rel                       deploy_entry_state_ok for shadow_root
-                                         needs unit shape and <=24576. Existing
-                                         deploy_bc_size_bounded supplies size.
+                                         needs unit shape and code <= dimword DIV 2,
+                                         from deploy_initcode_half_bounded.
                                          This is for the entry state, not every
                                          arbitrary gas_variant state.
 

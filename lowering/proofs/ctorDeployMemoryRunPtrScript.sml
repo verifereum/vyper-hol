@@ -15,7 +15,7 @@ Ancestors
   ctorDeployDefs gasSummary ptrSafeRun ptrDiscipline venomInst
   ctorDeployLoweringDefs ctorDeployLoweringCode ctorDeployLoweringEntry
   ctorDeployLoweringFrame e2eDeployDefs
-  ctorDeployMemoryRunPtrDefs ctorDeployMemoryRunPtrNoCtor
+  ctorDeployMemoryRunPtrDefs ctorDeployMemoryRunPtrNoCtor fragExecPtr
   ctorDeployMemoryRunPtrPrefix ctorDeployMemoryRunPtrEntry
   ctorDeployMemoryRunPtrBody ctorDeployMemoryRunPtrFrameRet
   ctorDeployMemoryRunPtrFallthrough
