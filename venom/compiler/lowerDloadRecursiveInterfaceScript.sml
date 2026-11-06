@@ -1051,8 +1051,11 @@ val ld_revert_entry_prospective = ``
   lower_dload_insts_supply a (TAKE c bb.bb_instructions) = (before,q) ==>
   revert_forward_pair gb (LENGTH before) (LENGTH before + (e-c))``;
 
-Theorem ld_recursive_configured_revert_anchor[local]:
-  !Q.
+val ld_recursive_exceptional =
+  let val (args,b) = strip_abs ld_recursive_candidate
+  in list_mk_abs(args,snd(dest_disj b)) end;
+
+Theorem ld_recursive_configured_revert_exceptional[local]:
   fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed fa fn out /\
   fn.fn_blocks = bpre ++ bb::bpost /\
   lower_dload_blocks_supply fa bpre = (qpre,a0) /\
@@ -1063,9 +1066,9 @@ Theorem ld_recursive_configured_revert_anchor[local]:
   lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
   t.vs_inst_idx = LENGTH p /\
   get_instruction gb t.vs_inst_idx = SOME j ==>
-  (^ld_recursive_post_anchor) vs0 CT stk un gn j t
+  (^ld_recursive_exceptional) vs0 CT stk un gn j t
 Proof
-  gen_tac >> strip_tac >>
+  strip_tac >>
   `MEM fn observed.cu_context.ctx_functions /\ ir_supply_covers_unit fa observed` by
     (fs[o1PassContractTheory.fn_pass_step_def,
         venomFnScheduleRunnerTheory.lookup_unique_function_def, AllCaseEqs()] >>
@@ -1081,8 +1084,32 @@ Proof
   `EVERY (\v. MEM v a0.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
     (drule ld_blocks_supply_used_vars_mono >> fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all ld_configured_revert_interval_entry >> strip_tac >>
-  BETA_TAC >> disj2_tac >>
+  BETA_TAC >>
   qexistsl_tac [`gb`, `copypos`, `endpos`] >> gvs[]
+QED
+
+Theorem ld_recursive_configured_revert_anchor[local]:
+  !Q.
+  fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed fa fn out /\
+  fn.fn_blocks = bpre ++ bb::bpost /\
+  lower_dload_blocks_supply fa bpre = (qpre,a0) /\
+  lower_dload_block_supply a0 bb = (gb,a3) /\
+  in_revert_forward fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lower_dload_insts_supply a0 (TAKE s.vs_inst_idx bb.bb_instructions) = (p,a1) /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+  t.vs_inst_idx = LENGTH p /\
+  get_instruction gb t.vs_inst_idx = SOME j ==>
+  (^ld_recursive_post_anchor) vs0 CT stk un gn j t
+Proof
+  gen_tac >> strip_tac >> BETA_TAC >> disj2_tac >>
+  irule (BETA_RULE ld_recursive_configured_revert_exceptional) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at (Pat `lower_dload_insts_supply _ (TAKE _ _) = _`)) >>
+  goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `lower_dload_blocks_supply _ _ = _`)) >>
+  goal_assum (drule_at (Pat `lower_dload_block_supply _ _ = _`)) >>
+  asm_rewrite_tac [] >> metis_tac[]
 QED
 
 Theorem ld_recursive_configured_revert_entry:
@@ -1159,19 +1186,37 @@ val ld_recursive_ordinary_zero =
   in list_mk_abs(args,restricted) end;
 
 
-Theorem ld_recursive_ordinary_next_anchor[local]:
-  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+(* R observes only the unchanged saved indices; Q observes the new anchor. *)
+fun ld_retain_saved_normal normal =
+  let
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val fixed = map named ["E","astk","gstk","savedkeys"]
+    val r = mk_var("R",type_of (list_mk_abs(fixed,``T``)))
+  in list_mk_exists(ws,mk_conj(b,list_mk_comb(r,fixed))) end;
+val ld_recursive_ordinary_witness_zero =
+  let val (args,b) = strip_abs ld_recursive_ordinary_zero
+  in list_mk_abs(args,ld_retain_saved_normal b) end;
+val ld_recursive_ordinary_witness_post =
+  let val (args,b) = strip_abs ld_recursive_candidate
+      val (normal,exceptional) = dest_disj b
+  in ld_retain_anchor
+       (list_mk_abs(args,mk_disj(ld_retain_saved_normal normal,exceptional)))
+       ``Q:venom_state -> bool`` end;
+
+Theorem ld_recursive_ordinary_next_witness[local]:
+  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
-  (^ld_recursive_ordinary_zero) vs0 CT stk un gn j t /\
+  (^ld_recursive_ordinary_witness_zero) vs0 CT stk un gn j t /\
   ~is_terminator j.inst_opcode /\ step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) /\
   Q (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  (^ld_recursive_post_anchor) vs0 CT stk (step_taint j t z un) gn j'
+  (^ld_recursive_ordinary_witness_post) vs0 CT stk (step_taint j t z un) gn j'
     (z with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  gen_tac >> BETA_TAC >> strip_tac >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >>
        qpat_x_assum `n = 0` SUBST1_TAC >> simp[] >> NO_TAC) >>
   qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved") >>
@@ -1275,6 +1320,7 @@ Proof
     `nexttail`, `bpre`, `bpost`, `qpre`, `qpost`, `supports`, `savedkeys`,
     `s0`, `0`] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   asm "saved" (fn th => asm_rewrite_tac [th]) >>
   conj_tac
   >- (qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
@@ -1283,7 +1329,7 @@ Proof
   metis_tac[]
 QED
 
-Resume ld_recursive_ordinary_next_anchor[revert_successor]:
+Resume ld_recursive_ordinary_next_witness[revert_successor]:
   `lookup_block (s' with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
      fn.fn_blocks = SOME bb /\
    lookup_block (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb
@@ -1301,7 +1347,8 @@ Resume ld_recursive_ordinary_next_anchor[revert_successor]:
   `get_instruction gb (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j'` by
     (simp[get_instruction_def, EL_APPEND2] >>
      Cases_on `nextcode` >- metis_tac[] >> simp[]) >>
-  irule (BETA_RULE (Q.SPEC `Q` ld_recursive_configured_revert_anchor)) >>
+  disj2_tac >>
+  irule (BETA_RULE ld_recursive_configured_revert_exceptional) >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at (Pat `lower_dload_insts_supply _ (TAKE _ _) = _`)) >>
   goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
@@ -1310,7 +1357,25 @@ Resume ld_recursive_ordinary_next_anchor[revert_successor]:
   asm_rewrite_tac [] >> metis_tac[]
 QED
 
-Finalise ld_recursive_ordinary_next_anchor
+Finalise ld_recursive_ordinary_next_witness
+
+Theorem ld_recursive_ordinary_next_anchor[local]:
+  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_recursive_ordinary_zero) vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) /\
+  Q (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_post_anchor) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  gen_tac >>
+  qspecl_then [`\E astk gstk savedkeys. T`,`Q`] mp_tac
+    ld_recursive_ordinary_next_witness >>
+  BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
+QED
 
 Theorem ld_recursive_ordinary_next:
   ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
@@ -3708,4 +3773,51 @@ Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
   irule ld_historical_combined_operational >>
   first_x_assum irule >> simp[]
+QED
+
+(* Restrict the operational combined candidate to the same ordinary opcodes.
+   Keep the zero/opcode facts beside the base normal data, so the producer's
+   fixed saved indices and changing anchor remain separate conjuncts. *)
+val ld_recursive_combined_ordinary_zero =
+  let
+    val (args,body) = strip_abs ld_recursive_combined_candidate
+    val [current,saved,alternatives] = strip_conj body
+    val (ws,b) = strip_exists (fst(dest_disj alternatives))
+    val (base_saved,anchor) = dest_conj b
+    val (base,slice) = dest_conj base_saved
+    val (_,ordinary) = strip_abs ld_recursive_ordinary_zero
+    val (_,ob) = strip_exists ordinary
+    val restriction = snd(dest_conj ob)
+  in list_mk_abs(args,list_mk_conj [current,saved,
+       list_mk_exists(ws,mk_conj(mk_conj(mk_conj(base,restriction),slice),anchor))]) end;
+
+Theorem ld_recursive_combined_ordinary_next:
+  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_recursive_combined_ordinary_zero) vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_combined_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  `alloca_inv (z with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule ld_step_next_alloca_inv >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any)) >>
+  qspecl_then [`\E astk gstk savedkeys.
+    (^ld_indexed_saved_geometry) lo E astk gstk savedkeys`, `alloca_inv`]
+    mp_tac ld_recursive_ordinary_next_witness >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  (impl_tac >-
+    (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `?astk gstk. _` mp_tac >>
+      rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      disch_then (ACCEPT_TAC o CONJUNCT1)])) >>
+  disch_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  pop_assum mp_tac >> pure_rewrite_tac [CONJ_ASSOC] >>
+  disch_then ACCEPT_TAC
 QED
