@@ -6802,6 +6802,106 @@ Proof
   simp[]
 QED
 
+Theorem alias_live_prefix_origin:
+  !n. wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ n <= LENGTH bb.bb_instructions /\
+  MEM x (live_vars_at (liveness_analyze fn) lbl n) ==>
+  (MEM x (live_vars_at (liveness_analyze fn) lbl 0) /\
+   (!i. i < n ==> MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)))) \/
+  (?j. j < n /\ MEM x (EL j bb.bb_instructions).inst_outputs /\
+   (!i. j <= i /\ i < n ==> MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i))))
+Proof
+  Induct >- simp[] >> strip_tac >>
+  Cases_on `MEM x (EL n bb.bb_instructions).inst_outputs`
+  >- (disj2_tac >> qexists_tac `n` >> simp[] >> rpt strip_tac >>
+      `i = n` by decide_tac >> gvs[]) >>
+  `n < LENGTH bb.bb_instructions` by decide_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl n)` by
+    metis_tac[alias_live_cut_origin] >>
+  qpat_x_assum `_ ==> _` mp_tac >> simp[] >> strip_tac
+  >- (disj1_tac >> simp[] >> rpt strip_tac >>
+      Cases_on `i = n` >- gvs[] >> first_x_assum irule >> decide_tac) >>
+  disj2_tac >> qexists_tac `j` >> simp[] >> rpt strip_tac >>
+  Cases_on `i = n` >- gvs[] >> first_x_assum irule >> decide_tac
+QED
+
+Theorem alias_lineage_join_phi_cut_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) /\
+  MEM x (live_vars_at liveness lbl (LENGTH (collect_phis bb.bb_instructions))) ==>
+  plan_holds (FOLDL (\s p.
+    SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+    (MAP (\i. (EL i (collect_phis bb.bb_instructions),
+              live_vars_at liveness lbl (SUC i)))
+      (COUNT_LIST (LENGTH (collect_phis bb.bb_instructions))))) (Var x)
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (`cfg_reachable_of (cfg_analyze fn) lbl` by
+       metis_tac[alias_lineage_reachable] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `?rest. bb.bb_instructions = collect_phis bb.bb_instructions ++ rest` by
+    metis_tac[alias_collect_phis_prefix] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qpat_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[]) >>
+  `!j. j < LENGTH (collect_phis bb.bb_instructions) ==>
+    EL j bb.bb_instructions = EL j (collect_phis bb.bb_instructions)` by
+    (rpt strip_tac >>
+     qpat_assum `bb.bb_instructions = _`
+       (fn th => CONV_TAC (LHS_CONV (RAND_CONV (REWR_CONV th)))) >>
+     simp[EL_APPEND_EQN]) >>
+  `((MEM x (live_vars_at (liveness_analyze fn) lbl 0) /\
+     (!i. i < LENGTH (collect_phis bb.bb_instructions) ==>
+       MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)))) \/
+    (?j. j < LENGTH (collect_phis bb.bb_instructions) /\
+     MEM x (EL j bb.bb_instructions).inst_outputs /\
+     (!i. j <= i /\ i < LENGTH (collect_phis bb.bb_instructions) ==>
+       MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)))))` by
+    (irule alias_live_prefix_origin >> simp[] >> metis_tac[])
+  >- (ho_match_mp_tac alias_lineage_join_phi_fold_lower_coverage >>
+      goal_assum (drule_at Any) >> simp[] >> disj1_tac >>
+      simp[plan_holds_def] >> disj1_tac >>
+      irule alias_lineage_join_ordinary_coverage >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `?out. (EL j (collect_phis bb.bb_instructions)).inst_outputs = [out]` by
+    (irule alias_ready_phi_single_output >> goal_assum (drule_at Any) >>
+     simp[EL_MEM]) >>
+  `out = x` by metis_tac[MEM] >>
+  ho_match_mp_tac alias_lineage_join_phi_fold_lower_coverage >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* Lower-inventory probe ledger (not a universal lineage inventory theorem).
+   Checked boundaries:
+   - alias_prepare_params_entry_demand anchors the actual post-parameter cut.
+   - alias_lineage_join_phi_cut_coverage anchors the post-PHI fold, using
+     lives i = live_vars_at liveness lbl (SUC i), not a constant end-live list.
+   - alias_body_plan_live_cut_coverage transports total cut coverage through
+     the actual non-PHI/non-parameter instruction suffix to block end.
+   - alias_clean_stack_holds_input preserves already-held selected inputs.
+   - alias_ready_nonjoin_input_liveout transports ordinary nonjoin entry
+     demand to its predecessor's block end.
+   Remaining assembly obligations before lineage_state_ind can be closed:
+   (1) decompose generate_block_plan at its exact post-param/post-PHI cut;
+       identify non_param_insts with the corresponding original-index suffix,
+       and identify its PHI recursion prefix with the checked indexed fold;
+   (2) use canonical_param_prefix/entry readiness to exclude parameters in
+       non-entry blocks and PHIs in the body, and exclude entry cleanup;
+   (3) for a non-entry nonjoin, infer the unique analyzed predecessor from
+       the actual lineage edge, so its selected input list is ordinary
+       live-in; use this both for edge transport and singleton cleanup;
+   (4) combine (1)-(3) into conditional block-end lower coverage, then use
+       lineage_state_ind: entry uses the parameter anchor, step uses the
+       predecessor block-end result and the stack/spill record update.
+   These are not supplied as hypotheses to an exported inventory claim.
+   No statement here constrains stale extra held names or root writes. *)
 Theorem alias_clean_stack_holds_input:
   cfg_preds_of cfg bb.bb_label = [pred] /\
   MEM x (input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0)) /\
