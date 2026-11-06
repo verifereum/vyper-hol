@@ -7,6 +7,7 @@
  *   cs_extends       — a compile state only appended to another;
  *                      cs_extends_* for the monad primitives
  *   state_rel        — cross-level simulation relation
+ *   state_rel_simple — legacy fixed-offset, vars_rel-based event relation
  *   result_rel       — maps Vyper exceptions to Venom exec_result
  *   is_word_type     — type fits in single EVM word (calling convention)
  *   is_signed_type   — signed integer or decimal
@@ -42,9 +43,9 @@
 
 Theory compileEnv
 Ancestors
-  immutableValue immutableEncoding vyperStorageLayoutSafety
-  venomExecSemantics venomInst venomPolicyTypes
-  vyperState vyperContext vyperValue vyperABI contractABI
+  valueEncoding memoryValueDefs immutableValue immutableEncoding
+  vyperStorageLayoutSafety venomExecSemantics venomInst venomPolicyTypes
+  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI
   byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
@@ -857,6 +858,24 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
+(* Compatibility helper for fixed-offset environments; state_rel below uses
+   local_ptrs_rel for allocation-backed locals instead. *)
+(* Local variables in Vyper scopes match Venom memory.
+   Only handles MemLoc (local memory variables) because:
+   - StorageLoc variables (self.x) are covered by storage_rel
+   - TransientLoc/ImmutableLoc are similar global state
+   - Scopes only contain local (stack-like) variables *)
+Definition vars_rel_def:
+  vars_rel cenv scopes ss =
+    ∀ name entry offset size.
+      lookup_scopes name scopes = SOME entry ∧
+      FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
+      ⇒
+      (* The complete layout includes defaults omitted by sparse fixed arrays;
+         entry.type also selects the correct address/fixed-bytes alignment. *)
+      memory_value_rel entry.type entry.value offset ss.vs_memory
+End
+
 (* ===== Locals held through allocations ===== *)
 (* After its declaration in an external or fallback body a local is
    PtrVar (Var p) sz: the ALLOCA emitted at its declaration binds p to the base
@@ -937,7 +956,7 @@ End
      it;
    - the value fits the region and is well formed (val_wf), which is what
      lets a write outside the region leave it unchanged;
-   - val_in_memory holds at the base.
+   - the complete typed memory layout holds at the base.
    And the regions of distinct live locals are disjoint, so writing one
    local leaves the others unchanged.
    Bump allocation alone gives this for ALLOCA, so it does not depend on the
@@ -956,7 +975,7 @@ Definition local_ptrs_rel_def:
          w2n w + sz ≤ ss.vs_alloca_next ∧
          type_memory_size entry.type ≤ sz ∧
          val_wf entry.type entry.value ∧
-         val_in_memory entry.type entry.value (w2n w) ss.vs_memory) ∧
+         memory_value_rel entry.type entry.value (w2n w) ss.vs_memory) ∧
     (∀n1 n2 b1 sz1 b2 sz2.
        n1 ≠ n2 ∧
        local_region cenv scopes ss n1 b1 sz1 ∧
@@ -1240,7 +1259,7 @@ Definition transient_vars_rel_def:
 End
 
 (* Check if a type is a bytestring (dynamic Bytes or String).
-   Used by log topics and bytestring-specific copy. *)
+   Used by bytestring-specific copy. *)
 Definition is_bytestring_type_def:
   is_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
   is_bytestring_type (BaseT (StringT _)) = T ∧
@@ -1264,7 +1283,7 @@ Definition indexed_values_def:
 End
 
 Definition indexed_topic_flags_def:
-  indexed_topic_flags [] [] = ([] : bool list) ∧
+  indexed_topic_flags [] [] = ([] : type list) ∧
   indexed_topic_flags (T :: flags) (b :: bs) =
     b :: indexed_topic_flags flags bs ∧
   indexed_topic_flags (F :: flags) (_ :: bs) =
@@ -1282,8 +1301,9 @@ Definition log_bytestring_topic_def:
 End
 
 Definition log_topic_equiv_def:
-  log_topic_equiv T v topic = (log_bytestring_topic v = SOME topic) ∧
-  log_topic_equiv F v topic = (topic = val_to_w256 v)
+  log_topic_equiv ty v topic =
+    (if is_event_bytestring_type ty then log_bytestring_topic v = SOME topic
+     else topic = event_topic_word ty v)
 End
 
 Definition log_indexed_topics_equiv_def:
@@ -1359,7 +1379,7 @@ End
      deletions, which the success case of the external result relation
      compares (storage_rel and transient_rel are its case for the running
      contract).
-   - immutables_rel: immutables (vs_immutables in a constructor, the data
+   - immutables_rel: immutables (staged memory in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
    - call_ctx_rel: transaction, call and block context.
@@ -1383,6 +1403,50 @@ Definition state_rel_def:
      ¬ss.vs_call_ctx.cc_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
      LIST_REL (request_agree cx) vs.requests ss.vs_requests)
+End
+
+(* Legacy event invariant: retain the word-indexed immutable bookkeeping
+   contract of the fixed-offset proofs. This is not the constructor memory
+   representation or deployment relation; those use immutables_rel above.
+   Neither legacy relation implies the current simulation relation. *)
+Definition immutables_rel_simple_def:
+  immutables_rel_simple cenv (addr:address) src_id_opt is_ctor
+      (vs:evaluation_state) ss <=>
+    let interp_imms = (case ALOOKUP vs.immutables addr of
+                         NONE => FEMPTY
+                       | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
+    if is_ctor then
+      !name tv v byte_offset.
+        FLOOKUP cenv.ce_module_vars (src_id_opt, name) =
+          SOME (ImmutableLoc byte_offset) /\
+        FLOOKUP interp_imms name = SOME (tv, v) ==>
+        FLOOKUP ss.vs_immutables (byte_offset DIV 32) =
+          SOME (typed_val_to_w256 tv v)
+    else
+      !name tv v byte_offset.
+        FLOOKUP cenv.ce_module_vars (src_id_opt, name) =
+          SOME (ImmutableLoc byte_offset) /\
+        FLOOKUP interp_imms name = SOME (tv, v) ==>
+        byte_offset + type_memory_size tv <= LENGTH ss.vs_data_section /\
+        val_in_memory tv v byte_offset ss.vs_data_section
+End
+
+(* Legacy fixed-offset oracle-mode relation used by the event proofs.
+   Unlike state_rel, it retains the legacy immutable bookkeeping contract
+   and does not relate allocation-backed local pointers; those proofs
+   maintain local_ptrs_rel separately. *)
+Definition state_rel_simple_def:
+  state_rel_simple cenv cx vs ss =
+    (vars_rel cenv vs.scopes ss ∧
+     storage_rel cx cx.txn.target vs ss ∧
+     storage_vars_rel cenv cx ∧
+     transient_rel cx cx.txn.target vs ss ∧
+     transient_vars_rel cenv cx ∧
+     immutables_rel_simple cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
+     logs_rel cenv cx.txn.target vs ss ∧
+     call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
+     vs.outcomes = SOME ss.vs_outcomes ∧
+     vs.requests = ss.vs_requests)
 End
 
 (* ===== Result Relation ===== *)

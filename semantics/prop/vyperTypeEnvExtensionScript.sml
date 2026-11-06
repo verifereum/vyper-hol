@@ -4,6 +4,7 @@
 
 Theory vyperTypeEnvExtension
 Ancestors
+  vyperEventArgCompat
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperABI vyperInterpreter vyperState
   vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeValues
@@ -191,4 +192,38 @@ Proof
   drule_all type_stmts_env_preserved_static >> strip_tac >>
   rw[env_extends_def] >>
   metis_tac[type_stmts_var_types_preserve, type_stmts_var_assignable_T_preserve]
+QED
+
+(* Event tables are static: local typing operations never change resolution. *)
+Theorem local_env_event_fields[simp]:
+  (extend_local env id ty a).event_fields = env.event_fields /\
+  (defaults_env env).event_fields = env.event_fields
+Proof
+  simp[extend_local_def, defaults_env_def]
+QED
+
+Theorem type_stmt_preserves_event_fields:
+  type_stmt env ret s = SOME env' ==> env'.event_fields = env.event_fields
+Proof
+  Cases_on `s` >> rw[type_stmt_def, AllCaseEqs(), extend_local_def] >>
+  gvs[oneline type_stmt_def, AllCaseEqs(), extend_local_def]
+QED
+
+Theorem type_stmts_preserves_event_fields:
+  type_stmts env ret ss = SOME env' ==> env'.event_fields = env.event_fields
+Proof
+  qid_spec_tac `env` >> Induct_on `ss` >>
+  rw[type_stmt_def] >> gvs[type_stmt_def, AllCaseEqs()] >>
+  drule type_stmt_preserves_event_fields >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem type_log_inversion:
+  type_stmt env ret (Log id es) = SOME env' <=>
+  env' = env /\ ?fields.
+    FLOOKUP env.event_fields id = SOME fields /\
+    well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
+    LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
+Proof
+  simp[type_stmt_def, AllCaseEqs(), event_arg_compatible_alias_def] >> metis_tac[]
 QED

@@ -63,13 +63,6 @@ Proof
   rw[FUN_EQ_THM, listTheory.MAP_EQ_f, abt_widen_eq_abt]
 QED
 
-Triviality df_widen_boundary_eq_df_boundary:
-  !bottom st lbl.
-    df_widen_boundary bottom st lbl = df_boundary bottom (widen_to_df st) lbl
-Proof
-  rw[df_widen_boundary_def, df_boundary_def, widen_to_df_def]
-QED
-
 Triviality valid_state_rel_R_ok_halted[local]:
   !R_ok R_term s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>

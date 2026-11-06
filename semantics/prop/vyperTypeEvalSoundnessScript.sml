@@ -3071,7 +3071,7 @@ Resume eval_scc_type_sound_results_mutual[Log]:
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qhdtm_x_assum `type_stmt` mp_tac >>
-  simp_tac(srw_ss())[type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  simp_tac(srw_ss())[type_stmt_def, AllCaseEqs()] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
   qhdtm_x_assum `eval_stmt` mp_tac >>
   simp_tac(srw_ss())[evaluate_def, bind_def, return_def, push_log_def,
        no_type_error_result_def, AllCaseEqs()] >>
@@ -7167,7 +7167,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_Send]:
        rw[]) >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     asm_simp_tac bool_ss [Once evaluate_def, bind_def, ignore_bind_def,
-                           type_check_def, assert_def, return_def] >>
+                          type_check_def, assert_def, return_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!s'' x t. type_check _ "Send args" s'' = (INL x,t) ==> _`

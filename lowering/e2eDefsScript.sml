@@ -17,7 +17,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv selectorDispatch immutableSectionRel
+  supportedProgram compileEnv context selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -30,8 +30,36 @@ Definition layouts_agree_def:
       (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
                      ALOOKUP tl (NONE, id) = SOME n) /\
       (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
-                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n)
+                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n) /\
+      (* The pinned frontend reserves this slot when a guard is present.
+         Ordinary contracts need not have a transient layout at all. *)
+      (!vis mut rr name args dflts ret body.
+         MEM (FunctionDecl vis mut T rr name args dflts ret body) tops ==>
+         ALOOKUP tl (NONE, "$.nonreentrant_key") =
+           SOME global_nonreentrant_slot)
 End
+
+Theorem layouts_agree_nonreentrant_slot:
+  layouts_agree tops am tx /\
+  MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops ==>
+  lookup_nonreentrant_slot am.layouts tx.target = SOME global_nonreentrant_slot
+Proof
+  strip_tac >> Cases_on `ALOOKUP am.layouts tx.target`
+  >- (fs[layouts_agree_def] >> metis_tac[]) >>
+  rename1 `ALOOKUP am.layouts tx.target = SOME lay` >>
+  PairCases_on `lay` >>
+  fs[layouts_agree_def, lookup_nonreentrant_slot_def] >> metis_tac[]
+QED
+
+Theorem layouts_agree_initial_nonreentrant_slot:
+  layouts_agree tops am tx /\
+  MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops ==>
+  (initial_evaluation_context am.sources am.layouts tx NONE).nonreentrant_slot =
+    SOME global_nonreentrant_slot
+Proof
+  simp[initial_evaluation_context_def] >>
+  metis_tac[layouts_agree_nonreentrant_slot]
+QED
 
 Definition source_deployment_rel_def:
   source_deployment_rel tops am tx <=>
@@ -227,13 +255,12 @@ Proof
 QED
 
 Theorem encode_event_topic_eq_log_topic_equiv:
-  encode_event_topic is_bytestring v = SOME topic <=>
-  log_topic_equiv is_bytestring v topic
+  encode_event_topic ty v = SOME topic <=>
+  log_topic_equiv ty v topic
 Proof
-  Cases_on `is_bytestring` >> Cases_on `v` >>
+  Cases_on `is_event_bytestring_type ty` >> Cases_on `v` >>
   simp[encode_event_topic_def, log_topic_equiv_def,
-       log_bytestring_topic_def, event_value_to_word_eq_val_to_w256,
-       byteTheory.word_of_bytes_be_def] >>
+       log_bytestring_topic_def, byteTheory.word_of_bytes_be_def] >>
   metis_tac[]
 QED
 
@@ -242,16 +269,9 @@ Theorem encode_indexed_event_topics_characterization:
   LENGTH flags = LENGTH tys /\
   LENGTH flags = LENGTH vals /\
   log_indexed_topics_equiv
-    (indexed_topic_flags flags (MAP is_bytestring_type tys))
+    (indexed_topic_flags flags tys)
     (indexed_values flags vals) topics
 Proof
-  `!ty. is_event_bytestring_type ty = is_bytestring_type ty` by
-    (gen_tac >> Cases_on `ty` >> simp[is_event_bytestring_type_def,
-                                      is_bytestring_type_def] >>
-     Cases_on `b` >> simp[is_event_bytestring_type_def,
-                          is_bytestring_type_def] >>
-     Cases_on `b'` >> simp[is_event_bytestring_type_def,
-                           is_bytestring_type_def]) >>
   qid_spec_tac `topics` >> qid_spec_tac `vals` >> qid_spec_tac `tys` >>
   Induct_on `flags`
   >- (Cases_on `tys` >> Cases_on `vals` >> Cases_on `topics` >>

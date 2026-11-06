@@ -5,30 +5,6 @@ Ancestors
   staticLayoutAllocatorProofs staticLayoutFoldProofs concretizeMemLocDefs
   staticLayoutDefs staticLayoutWf list finite_map arithmetic
 
-Theorem reserved_intervals_disjoint_sym_completion[local]:
-  !r1 r2.
-    reserved_intervals_disjoint r1 r2 <=>
-    reserved_intervals_disjoint r2 r1
-Proof
-  PairCases >> PairCases >>
-  simp[reserved_intervals_disjoint_def] >> metis_tac[]
-QED
-
-Theorem reserved_intervals_wf_insert_after[local]:
-  !prefix suffix r.
-    reserved_intervals_wf (prefix ++ suffix) /\
-    reserved_interval_wf r /\
-    EVERY (reserved_intervals_disjoint r) (prefix ++ suffix) ==>
-    reserved_intervals_wf (prefix ++ r::suffix)
-Proof
-  Induct_on `prefix`
-  >- simp[reserved_intervals_wf_def]
-  >> gen_tac >> rpt gen_tac >>
-  simp[reserved_intervals_wf_def] >> strip_tac >>
-  gvs[EVERY_APPEND] >>
-  metis_tac[reserved_intervals_disjoint_sym_completion]
-QED
-
 Theorem checked_preserved_intervals_aux_invariant:
   !items positions reserved occupied result.
     checked_preserved_intervals_aux items positions reserved occupied =
@@ -107,34 +83,6 @@ Theorem positive_preserved_item_intro[local]:
   positive_preserved_item items positions (alloc,sz) (pos,sz)
 Proof
   simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_elim[local]:
-  positive_preserved_item items positions (alloc,sz) interval ==>
-  MEM (alloc,sz) items /\ 0 < sz /\
-  ?pos. interval = (pos,sz) /\ FLOOKUP positions alloc = SOME pos
-Proof
-  simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_tail_mono[local]:
-  positive_preserved_item items positions item interval ==>
-  positive_preserved_item (h::items) positions item interval
-Proof
-  simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_lookup_NONE[local]:
-  FLOOKUP positions alloc = NONE ==>
-  ~positive_preserved_item items positions (alloc,sz) interval
-Proof
-  simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_zero[local]:
-  ~positive_preserved_item items positions (alloc,0) interval
-Proof
-  simp[positive_preserved_item_def]
 QED
 
 Theorem checked_preserved_intervals_aux_relational[local]:

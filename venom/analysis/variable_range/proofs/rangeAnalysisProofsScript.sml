@@ -356,27 +356,6 @@ QED
 
 (* ===== Transfer function soundness ===== *)
 
-(* in_range_state is preserved when the environment only changes at
-   variables not tracked by rs (or tracked with compatible ranges). *)
-Theorem in_range_state_env_equiv[local]:
-  ∀rs env env'.
-    in_range_state rs env ∧
-    (∀v. v ∈ FDOM rs ⇒ FLOOKUP env' v = FLOOKUP env v) ⇒
-    in_range_state rs env'
-Proof
-  rw[in_range_state_def] >>
-  `v ∈ FDOM rs` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-  `FLOOKUP env' v = FLOOKUP env v` by res_tac >>
-  gvs[] >> res_tac
-QED
-
-(* For eval_range returning VR_Top: trivially sound for any word value *)
-Theorem eval_range_top_sound[local]:
-  ∀w. in_range VR_Top w
-Proof
-  simp[in_range_top]
-QED
-
 (* rs_write is sound when env changes: non-output vars preserved,
    output variable gets a value in the new range. *)
 Theorem rs_write_transfer_sound[local]:
@@ -525,22 +504,6 @@ Proof
   intLib.ARITH_TAC
 QED
 
-(* vr_widen is absorptive *)
-Triviality vr_widen_absorb:
-  ∀a b. vr_widen (vr_widen a b) b = vr_widen a b
-Proof
-  Cases_on `a` >> Cases_on `b` >>
-  simp[vr_widen_def, integerTheory.int_gt] >>
-  rpt COND_CASES_TAC >> gvs[vr_widen_def, integerTheory.int_gt]
-QED
-
-(* vr_widen is idempotent *)
-Triviality vr_widen_idem:
-  ∀a. vr_widen a a = a
-Proof
-  Cases_on `a` >> simp[vr_widen_def, integerTheory.int_gt]
-QED
-
 (* range_normalize is idempotent *)
 Triviality range_normalize_idem:
   ∀rs. range_normalize (range_normalize rs) = range_normalize rs
@@ -630,20 +593,6 @@ Proof
   simp[range_normalize_idem]
 QED
 
-(* Instantiation helper for normalize_join_stable with idem *)
-Triviality normalize_join_self:
-  ∀x. range_normalize (range_join_two (range_normalize x) x) =
-      range_normalize x
-Proof
-  gen_tac >> irule normalize_join_stable >> simp[range_normalize_fdom] >>
-  rpt strip_tac >>
-  `(range_normalize x) ' k = x ' k` by
-    (irule range_normalize_value >> simp[]) >>
-  `k ∈ FDOM x` by
-    metis_tac[range_normalize_fdom, pred_setTheory.SUBSET_DEF] >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF, vr_union_idem]
-QED
-
 (* range_join_opt absorption *)
 Triviality range_join_opt_absorb:
   ∀a b. range_join_opt (range_join_opt a b) b = range_join_opt a b
@@ -683,138 +632,8 @@ Proof
        pred_setTheory.INTER_SUBSET]
 QED
 
-(* range_widen_states is idempotent: widen(x, x) = x *)
-Triviality range_widen_states_idem:
-  ∀x. range_widen_states x x = x
-Proof
-  gen_tac >> simp[range_widen_states_def] >>
-  `FINITE (FDOM x)` by simp[finite_mapTheory.FDOM_FINITE] >>
-  simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_FUN_FMAP] >>
-  rpt strip_tac >> Cases_on `x' ∈ FDOM x` >>
-  simp[finite_mapTheory.FLOOKUP_DEF] >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF,
-       vr_widen_def] >>
-  Cases_on `x ' x'` >> simp[vr_widen_def, integerTheory.int_gt]
-QED
-
-(* vr_widen VR_Top x = VR_Top *)
-Triviality vr_widen_top_l:
-  ∀x. vr_widen VR_Top x = VR_Top
-Proof
-  Cases_on `x` >> simp[vr_widen_def]
-QED
-
-(* Helper: rs_lookup through FUN_FMAP of vr_widen *)
-Triviality rs_lookup_fun_fmap_widen:
-  FINITE (FDOM b0) ∧ x ∈ FDOM b0 ⇒
-  rs_lookup (FUN_FMAP (λv. vr_widen (rs_lookup n0 v) (rs_lookup b0 v))
-     (FDOM b0)) x = vr_widen (rs_lookup n0 x) (rs_lookup b0 x)
-Proof
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_FUN_FMAP]
-QED
-
-(* Core helper: normalize(widen_states(n, b)) = n when n's entries absorb
-   under vr_widen and are not Top. *)
-Triviality normalize_widen_stable:
-  ∀n0 b0.
-    FINITE (FDOM b0) ∧ FDOM n0 ⊆ FDOM b0 ∧
-    (∀k. k ∈ FDOM n0 ⇒ vr_widen (n0 ' k) (rs_lookup b0 k) = n0 ' k) ∧
-    (∀k. k ∈ FDOM n0 ⇒ ¬vr_is_top (n0 ' k)) ⇒
-    range_normalize (range_widen_states n0 b0) = n0
-Proof
-  rpt strip_tac >>
-  simp[range_normalize_def, range_widen_states_def,
-       finite_mapTheory.fmap_eq_flookup,
-       finite_mapTheory.FLOOKUP_DRESTRICT,
-       finite_mapTheory.FLOOKUP_FUN_FMAP,
-       finite_mapTheory.FDOM_FMAP] >>
-  rpt strip_tac >>
-  Cases_on `x ∈ FDOM b0` >> simp[rs_lookup_fun_fmap_widen] >>
-  Cases_on `x ∈ FDOM n0`
-  >- (res_tac >>
-      sg `rs_lookup n0 x = n0 ' x`
-      >- simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF] >>
-      sg `rs_lookup b0 x = b0 ' x`
-      >- (simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF] >>
-          fs[pred_setTheory.SUBSET_DEF]) >>
-      fs[finite_mapTheory.FLOOKUP_DEF])
-  >- simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF,
-          vr_widen_top_l, vr_is_top_def]
-  >- (fs[pred_setTheory.SUBSET_DEF] >> res_tac)
-  >- simp[finite_mapTheory.FLOOKUP_DEF]
-QED
-
 (* normalize(widen_states(normalize(widen_states(a,b)), b)) =
    normalize(widen_states(a,b)) — absorption via normalize_widen_stable *)
-(* Helper: normalize entries are never vr_is_top *)
-Triviality normalize_not_top:
-  ∀rs k. k ∈ FDOM (range_normalize rs) ⇒
-    ¬vr_is_top ((range_normalize rs) ' k)
-Proof
-  simp[range_normalize_def, finite_mapTheory.FDOM_DRESTRICT,
-       finite_mapTheory.DRESTRICT_DEF,
-       pred_setTheory.IN_INTER, pred_setTheory.GSPECIFICATION] >>
-  rpt strip_tac >> rfs[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF]
-QED
-
-(* Helper: FDOM(normalize(widen_states a b)) ⊆ FDOM b *)
-Triviality normalize_widen_fdom_sub:
-  ∀a b. FDOM (range_normalize (range_widen_states a b)) ⊆ FDOM b
-Proof
-  rpt gen_tac >>
-  irule pred_setTheory.SUBSET_TRANS >>
-  qexists_tac `FDOM (range_widen_states a b)` >>
-  simp[range_normalize_fdom, range_widen_states_def,
-       finite_mapTheory.FDOM_FMAP]
-QED
-
-(* Helper: normalize value lookup for widen_states *)
-Triviality normalize_widen_states_value:
-  ∀a b k. k ∈ FDOM (range_normalize (range_widen_states a b)) ⇒
-    (range_normalize (range_widen_states a b)) ' k =
-    vr_widen (rs_lookup a k) (rs_lookup b k)
-Proof
-  rpt strip_tac >>
-  sg `(range_normalize (range_widen_states a b)) ' k =
-      (range_widen_states a b) ' k`
-  >- (irule range_normalize_value >> simp[]) >>
-  sg `k ∈ FDOM (range_widen_states a b)`
-  >- (mp_tac range_normalize_fdom >>
-      simp[pred_setTheory.SUBSET_DEF]) >>
-  fs[range_widen_states_def, finite_mapTheory.FUN_FMAP_DEF]
-QED
-
-(* normalize(widen_states(normalize(widen_states(a,b)), b)) =
-   normalize(widen_states(a,b)) — absorption via normalize_widen_stable *)
-Triviality normalize_widen_absorb:
-  ∀a b.
-    range_normalize (range_widen_states (range_normalize (range_widen_states a b)) b) =
-    range_normalize (range_widen_states a b)
-Proof
-  rpt gen_tac >>
-  irule normalize_widen_stable >>
-  simp[finite_mapTheory.FDOM_FINITE, normalize_widen_fdom_sub] >>
-  conj_tac >- metis_tac[normalize_not_top] >>
-  rpt strip_tac >> fs[normalize_widen_states_value, vr_widen_absorb]
-QED
-
-(* normalize(widen_states(normalize x, x)) = normalize x — self via stable *)
-Triviality normalize_widen_self:
-  ∀x. range_normalize (range_widen_states (range_normalize x) x) =
-      range_normalize x
-Proof
-  gen_tac >>
-  irule normalize_widen_stable >>
-  simp[finite_mapTheory.FDOM_FINITE, range_normalize_fdom] >>
-  conj_tac >- metis_tac[normalize_not_top] >>
-  rpt strip_tac >>
-  sg `(range_normalize x) ' k = x ' k`
-  >- (irule range_normalize_value >> simp[]) >>
-  sg `k ∈ FDOM x`
-  >- (mp_tac range_normalize_fdom >>
-      simp[pred_setTheory.SUBSET_DEF]) >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF, vr_widen_idem]
-QED
 
 (* range_widen_opt idempotent — with the equality guard, trivially true *)
 Triviality range_widen_opt_idem:
@@ -833,29 +652,6 @@ Proof
 QED
 
 (* ===== Fixpoint ===== *)
-
-(* Entry identity when entry is FEMPTY: widen_opt always returns FEMPTY *)
-Triviality widen_states_fempty_all_top:
-  ∀x v. v ∈ FDOM x ⇒
-    (range_widen_states FEMPTY x) ' v = VR_Top
-Proof
-  rpt strip_tac >>
-  simp[range_widen_states_def, finite_mapTheory.FUN_FMAP_DEF] >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_EMPTY, vr_widen_def] >>
-  CASE_TAC >> simp[vr_widen_def] >> CASE_TAC >> simp[]
-QED
-
-Triviality normalize_all_top_fempty:
-  ∀fm. (∀v. v ∈ FDOM fm ⇒ fm ' v = VR_Top) ⇒
-    range_normalize fm = FEMPTY
-Proof
-  rpt strip_tac >>
-  simp[range_normalize_def, finite_mapTheory.fmap_eq_flookup,
-       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_EMPTY] >>
-  rpt strip_tac >>
-  Cases_on `x ∈ FDOM fm` >> simp[] >>
-  res_tac >> simp[vr_is_top_def, rs_lookup_def, finite_mapTheory.FLOOKUP_DEF]
-QED
 
 Triviality widen_opt_fempty_stable:
   ∀x. range_widen_opt (SOME FEMPTY) x = SOME FEMPTY
@@ -888,19 +684,6 @@ Proof
         (CCONTR_TAC >>
          imp_res_tac cfgHelpersTheory.cfg_succs_of_not_in_labels >> fs[]) >>
       fs[listTheory.MEM_MAP] >> metis_tac[])
-QED
-
-(* Helper: dfs_post labels are in dfs_pre *)
-Triviality cfg_dfs_post_mem_pre_local:
-  ∀fn lbl.
-    MEM lbl (cfg_analyze fn).cfg_dfs_post ⇒
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rw[cfgHelpersTheory.cfg_analyze_dfs_post,
-     cfgHelpersTheory.cfg_analyze_dfs_pre] >>
-  Cases_on `entry_block fn` >> fs[] >>
-  metis_tac[cfgHelpersTheory.dfs_post_walk_sound_thm,
-            cfgHelpersTheory.dfs_pre_walk_complete]
 QED
 
 Triviality cfg_succs_closure[local]:
@@ -982,35 +765,6 @@ Proof
   rpt strip_tac >>
   fs[range_fixpoint_P_def, range_fold_result_def] >>
   first_x_assum (qspec_then `lbl` mp_tac) >> simp[]
-QED
-
-(* P at lbl when visits > WT: widen either gives SOME FEMPTY or
-   returns identity (old_entry), in which case process = st. *)
-Triviality range_P_entry_fempty[local]:
-  ∀fn lbl st entry joined final_val inst_map.
-    range_fixpoint_P fn st ⇒
-    df_widen_visits st lbl >= WIDEN_THRESHOLD ⇒
-    entry = range_widen_opt (df_widen_entry NONE st lbl) joined ⇒
-    df_fold_block Forward (range_transfer_opt (dfg_build_function fn, fn.fn_blocks))
-      lbl (case lookup_block lbl fn.fn_blocks of NONE => [] | SOME bb => bb.bb_instructions)
-      entry = (final_val, inst_map) ⇒
-    ¬(range_join_opt (df_widen_boundary NONE st lbl) final_val =
-        df_widen_boundary NONE st lbl ∧
-      entry = df_widen_entry NONE st lbl) ⇒
-    entry = SOME FEMPTY
-Proof
-  rpt strip_tac >>
-  `df_widen_visits st lbl > 0` by (
-    `WIDEN_THRESHOLD > 0` by simp[WIDEN_THRESHOLD_def] >> DECIDE_TAC) >>
-  `range_widen_opt (df_widen_entry NONE st lbl) joined = SOME FEMPTY ∨
-   range_widen_opt (df_widen_entry NONE st lbl) joined =
-     df_widen_entry NONE st lbl` by
-    simp[widen_opt_dichotomy] >>
-  gvs[] >>
-  (* Identity case: entry = old_entry → boundary absorbs → contradiction *)
-  mp_tac range_process_identity >>
-  disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`] mp_tac) >>
-  simp[]
 QED
 
 (* P is preserved by processing any block *)
@@ -1396,19 +1150,6 @@ QED
 
 (* ===== in_range_state monotonicity ===== *)
 
-Triviality in_range_state_weaken:
-  ∀rs1 rs2 env.
-    in_range_state rs1 env ∧ FDOM rs2 ⊆ FDOM rs1 ∧
-    (∀v. v ∈ FDOM rs2 ⇒ FLOOKUP rs2 v = FLOOKUP rs1 v) ⇒
-    in_range_state rs2 env
-Proof
-  rw[in_range_state_def] >>
-  `v ∈ FDOM rs2` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-  `v ∈ FDOM rs1` by fs[pred_setTheory.SUBSET_DEF] >>
-  `FLOOKUP rs2 v = FLOOKUP rs1 v` by res_tac >>
-  gvs[] >> res_tac
-QED
-
 (* join_two is sound from right argument alone *)
 Theorem range_join_two_sound_r:
   ∀s1 s2 env.
@@ -1522,37 +1263,6 @@ Triviality range_unwrap_transfer[local]:
 Proof
   rpt gen_tac >> Cases_on `rs` >>
   simp[range_transfer_opt_def, range_unwrap_def]
-QED
-
-(* bb_well_formed: if a later instruction is PHI, earlier ones are too *)
-Triviality wf_phi_earlier[local]:
-  ∀bb idx j.
-    bb_well_formed bb ∧ idx < j ∧
-    j < LENGTH bb.bb_instructions ∧
-    (EL j bb.bb_instructions).inst_opcode = PHI ⇒
-    (EL idx bb.bb_instructions).inst_opcode = PHI
-Proof
-  rpt strip_tac >> fs[bb_well_formed_def] >> res_tac
-QED
-
-(* MEM in DROP (SUC idx) with opcode = PHI ⇒ EL idx is also PHI *)
-Triviality wf_phi_from_drop_suc[local]:
-  ∀bb idx inst.
-    bb_well_formed bb ∧ idx < LENGTH bb.bb_instructions ∧
-    MEM inst (DROP (SUC idx) bb.bb_instructions) ∧
-    inst.inst_opcode = PHI ⇒
-    (EL idx bb.bb_instructions).inst_opcode = PHI
-Proof
-  rpt strip_tac
-  >> fs[listTheory.MEM_EL]
-  >> `n + SUC idx < LENGTH bb.bb_instructions` by DECIDE_TAC
-  >> `(DROP (SUC idx) bb.bb_instructions)❲n❳ =
-       bb.bb_instructions❲n + SUC idx❳` by
-       (irule listTheory.EL_DROP >> DECIDE_TAC)
-  >> `idx < n + SUC idx` by DECIDE_TAC
-  >> match_mp_tac wf_phi_earlier
-  >> qexists_tac `n + SUC idx`
-  >> gvs[]
 QED
 
 (* Core induction: fold over instructions preserves in_range_state.
@@ -1746,17 +1456,6 @@ Proof
   res_tac >> simp[] >>
   fs[finite_mapTheory.FLOOKUP_UPDATE] >>
   BasicProvers.every_case_tac >> fs[]
-QED
-
-Triviality init_boundary_none[local]:
-  ∀lbls lbl.
-    df_widen_boundary NONE (init_df_widen_state NONE lbls) lbl = NONE
-Proof
-  rpt gen_tac >>
-  simp[df_widen_boundary_def, init_df_widen_state_def] >>
-  CASE_TAC >> simp[] >>
-  imp_res_tac foldl_update_all_same >>
-  fs[finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 (* Specialize visits_inc to range analysis parameters *)

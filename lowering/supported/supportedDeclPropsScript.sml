@@ -29,13 +29,18 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_function_flags_defaults_reject:
-  ~supported_declaration_header []
+(* Internal-call default expansion remains owned by #546; raw-return support
+   remains owned by #567. External defaults and guarded functions are admitted. *)
+Theorem supported_function_flags_defaults_contract:
+  supported_declaration_header []
     (FunctionDecl External View T F "f" [] [] NoneT []) /\
   ~supported_declaration_header []
     (FunctionDecl Internal Pure F T "f" [] [] NoneT []) /\
-  ~supported_declaration_header []
+  supported_declaration_header []
     (FunctionDecl External View F F "f" [("x", BaseT BoolT)]
+      [Literal (BaseT BoolT) (BoolL T)] NoneT []) /\
+  ~supported_declaration_header []
+    (FunctionDecl Internal Pure F F "f" [("x", BaseT BoolT)]
       [Literal (BaseT BoolT) (BoolL T)] NoneT [])
 Proof
   EVAL_TAC
@@ -130,7 +135,7 @@ Theorem supported_event_fields_contract:
     (EventDecl "E" [(("bytes", BaseT (BytesT (Fixed 16))), T);
                     (("string", BaseT (StringT 16)), F);
                     (("data", BaseT (BytesT (Dynamic 16))), F)]) /\
-  EVERY (\top. ~supported_declaration_header [] top)
+  EVERY (supported_declaration_header [])
     [EventDecl "E" [(("address_like", BaseT (BytesT (Fixed 20))), T)];
      EventDecl "E" [(("pair", TupleT [BaseT BoolT]), T)];
      EventDecl "E" [(("array", ArrayT (BaseT (UintT 256)) (Fixed 1)), F)]]

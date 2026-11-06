@@ -488,7 +488,8 @@ Datatype:
     toplevel_vtypes         : (nsid |-> value_type);
     type_defs       : (nsid |-> type_args);
     fn_sigs         : (nsid |-> fn_sig);
-    flag_members    : (nsid |-> string list)
+    flag_members    : (nsid |-> string list);
+    event_fields    : (nsid |-> ((string # type) # bool) list)
   |>
 End
 
@@ -944,7 +945,12 @@ Definition type_stmt_def:
     (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
         well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
-    (if well_typed_exprs env es then SOME env else NONE) /\
+    (case FLOOKUP env.event_fields id of
+       NONE => NONE
+     | SOME fields =>
+         if well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
+            LIST_REL (\e ((_,fty),_). arg_type_fits (expr_type e) fty) es fields
+         then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
         type_widens_to env.type_defs (expr_type e) typ /\ id NOTIN FDOM env.var_types

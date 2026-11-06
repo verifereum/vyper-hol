@@ -108,14 +108,6 @@ Proof
   Cases_on `op` >> fs[eval_operand_def, lookup_var_def]
 QED
 
-Theorem copy_sound_opt_inst_idx_update[local]:
-  !v s k1 k2.
-    copy_sound_opt v (s with vs_inst_idx := k1) <=>
-    copy_sound_opt v (s with vs_inst_idx := k2)
-Proof
-  simp[GSYM copy_sound_opt_inst_idx]
-QED
-
 Triviality copy_prop_transfer_sound_wf[local]:
   !pv. transfer_sound_wf copy_sound_opt copy_prop_transfer pv
 Proof

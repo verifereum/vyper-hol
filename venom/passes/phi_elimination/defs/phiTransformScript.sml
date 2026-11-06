@@ -365,38 +365,6 @@ Proof
   gvs[is_terminator_def]
 QED
 
-Triviality transform_inst_pseudo_phi:
-  !dfg inst.
-    is_pseudo (transform_inst dfg inst).inst_opcode /\
-    inst.inst_opcode = PHI ==>
-    (transform_inst dfg inst).inst_opcode = PHI
-Proof
-  rpt strip_tac >>
-  fs[transform_inst_pseudo_iff, transform_inst_phi_iff]
-QED
-
-Triviality phi_prefix_tail:
-  !h t.
-    (!i j. i < j /\ j < LENGTH (h::t) /\ (EL j (h::t)).inst_opcode = PHI ==>
-           (EL i (h::t)).inst_opcode = PHI) ==>
-    (!i j. i < j /\ j < LENGTH t /\ (EL j t).inst_opcode = PHI ==>
-           (EL i t).inst_opcode = PHI)
-Proof
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]
-QED
-
-Triviality phi_prefix_non_phi_head_tail_no_phi:
-  !h t.
-    h.inst_opcode <> PHI /\
-    (!i j. i < j /\ j < LENGTH (h::t) /\ (EL j (h::t)).inst_opcode = PHI ==>
-           (EL i (h::t)).inst_opcode = PHI) ==>
-    EVERY (\inst. inst.inst_opcode <> PHI) t
-Proof
-  rpt strip_tac >> simp[EVERY_EL] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]
-QED
-
 Triviality filter_kept_phi_empty_when_no_phi:
   !dfg l.
     EVERY (\inst. inst.inst_opcode <> PHI) l ==>

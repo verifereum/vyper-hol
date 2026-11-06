@@ -604,4 +604,3 @@ Proof
   imp_res_tac alloc_buffer_not_label >>
   gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def]
 QED
-

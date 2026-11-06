@@ -425,6 +425,65 @@ QED
 
 (* ----- do_dup: wf + len ----- *)
 
+Theorem dup_restore_ops_wf[local]:
+  !idxs lo n offs single.
+    0 < n ==>
+    prefix_wf lo n
+      (FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if single then [] else [SOSwap 1]) idxs)) /\
+    prefix_end_len lo n
+      (FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if single then [] else [SOSwap 1]) idxs)) = n + LENGTH idxs
+Proof
+  rpt gen_tac >> Cases_on `single` >> qid_spec_tac `n` >>
+  Induct_on `idxs` >> simp[] >> gen_tac >> strip_tac >>
+  strip_tac >>
+  `0 < n + 1 /\ 1 < n + 1` by decide_tac >>
+  first_x_assum (qspec_then `n + 1` (fn ih =>
+    qpat_assum `0 < n + 1` (strip_assume_tac o SRULE [] o MATCH_MP ih))) >>
+  simp_tac std_ss [Once prefix_wf_def, Once prefix_end_len_def,
+                  stack_op_wf_def, LET_THM, pairTheory.pair_case_thm] >>
+  asm_rewrite_tac [] >>
+  simp_tac std_ss [Once prefix_wf_def, Once prefix_end_len_def,
+                  stack_op_wf_def, LET_THM, pairTheory.pair_case_thm] >>
+  asm_rewrite_tac [] >> decide_tac
+QED
+
+Theorem deep_dup_prefix_wf[local]:
+  !offs idxs lo n k.
+    LENGTH offs = k /\ LENGTH idxs = k /\ 0 < k /\ k + 16 <= n ==>
+    prefix_wf lo n (MAP SOSpill offs ++ [SODup 16] ++
+      FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if k <= 16 then [] else [SOSwap 1]) idxs) ++
+      if k <= 16 then [SOSwap k] else []) /\
+    prefix_end_len lo n (MAP SOSpill offs ++ [SODup 16] ++
+      FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if k <= 16 then [] else [SOSwap 1]) idxs) ++
+      if k <= 16 then [SOSwap k] else []) = n + 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k <= n /\ 16 <= n - k /\ n - k + 1 + k = n + 1 /\ k < n + 1`
+    by decide_tac >>
+  `prefix_wf lo n (MAP SOSpill offs) /\
+   prefix_end_len lo n (MAP SOSpill offs) = n - k` by
+    (mp_tac (Q.SPECL [`offs`,`lo`,`n`] prefix_wf_spills) >> simp[]) >>
+  qabbrev_tac `remaining = n - k` >>
+  qabbrev_tac `restores = FLAT (MAP (\i. [SORestore (EL i offs)] ++
+    if k <= 16 then [] else [SOSwap 1]) idxs)` >>
+  `prefix_wf lo (remaining + 1) restores /\
+   prefix_end_len lo (remaining + 1) restores = n + 1` by
+    (mp_tac (Q.SPECL [`idxs`,`lo`,`remaining + 1`,`offs`,`(k:num) <= 16`]
+       dup_restore_ops_wf) >> simp[Abbr `restores`]) >>
+  rewrite_tac [GSYM APPEND_ASSOC] >>
+  conj_tac
+  >- (irule prefix_wf_append >> conj_tac >- simp[] >>
+      simp[prefix_wf_def, stack_op_wf_def] >>
+      irule prefix_wf_append >> simp[] >>
+      Cases_on `k <= 16` >> simp[prefix_wf_def, stack_op_wf_def]) >>
+  simp[prefix_end_len_append, prefix_end_len_def, stack_op_wf_def] >>
+  Cases_on `k <= 16` >> simp[prefix_end_len_def, stack_op_wf_def]
+QED
+
 Theorem prefix_wf_append_iff[local]:
   !xs ys lo n.
     prefix_wf lo n (xs ++ ys) <=>
@@ -474,8 +533,11 @@ Proof
     simp[do_dup_def, stack_dup_length] >>
     simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
   ) >>
-  simp[do_dup_def] >>
-  qabbrev_tac `items = REVERSE (top_n (dist - 15) ps.ps_stack)` >>
+  (* The prefix spill leaves at least sixteen reachable stack items. *)
+  `0 < dist - 15 /\ dist - 15 + 16 <= LENGTH ps.ps_stack /\
+   dist - 15 <= LENGTH ps.ps_stack` by decide_tac >>
+  simp[do_dup_def, top_n_def] >>
+  qabbrev_tac `items = TAKE (dist - 15) (REVERSE ps.ps_stack)` >>
   qabbrev_tac `fres = FOLDL
     (\(ops,offs,al) (item:operand).
       (\(off,al'). (ops ++ [SOSpill off], SNOC off offs, al'))
@@ -486,16 +548,11 @@ Proof
        (strip_assume_tac o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      drule (SIMP_RULE bool_ss [LET_THM] spill_foldl_form_nil) >> simp[]) >>
   `LENGTH items = dist - 15` by
-    (simp[Abbr `items`, top_n_def, LENGTH_TAKE] >> decide_tac) >>
-  `LENGTH fres1 <= LENGTH ps.ps_stack` by decide_tac >>
-  drule_then (qspec_then `lo` strip_assume_tac) prefix_wf_spills >>
-  gvs[] >>
-  Cases_on `dist <= 31` >>
-  simp[prefix_wf_append_iff, prefix_end_len_append, MAP_APPEND,
-       flat_map_singleton, prefix_wf_indexed_restores,
-       prefix_wf_indexed_restore_swaps,
-       prefix_wf_def, prefix_end_len_def, stack_op_wf_def,
-       stack_dup_def, MAP_MAP_o, combinTheory.o_DEF]
+    simp[Abbr `items`, LENGTH_TAKE_EQ] >>
+  gvs[stack_dup_def] >>
+  mp_tac (Q.SPECL [`fres1`,`dup_restore_indices (dist - 15)`,`lo`,
+    `LENGTH ps.ps_stack`,`dist - 15`] deep_dup_prefix_wf) >>
+  simp[dup_restore_indices_length]
 QED
 
 (* ----- Composition helper ----- *)

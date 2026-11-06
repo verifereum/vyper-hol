@@ -157,22 +157,6 @@ QED
 
 (* Combined helpers: NOP-skip and non-NOP index correspondence.
    Pre-specialized to avoid beta-redex issues with irule/metis_tac. *)
-Triviality nop_skip_facts:
-  !bb s fuel ctx.
-    s.vs_inst_idx < LENGTH bb.bb_instructions /\
-    (EL s.vs_inst_idx bb.bb_instructions).inst_opcode = NOP ==>
-    (LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                    (TAKE (SUC s.vs_inst_idx) bb.bb_instructions)) =
-     LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                    (TAKE s.vs_inst_idx bb.bb_instructions))) /\
-    exec_block fuel ctx bb s =
-    exec_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx)
-Proof
-  rpt strip_tac
-  >- (irule filter_take_nop >> simp[])
-  >- (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-      simp[get_instruction_def, step_nop_identity] >> EVAL_TAC)
-QED
 
 Triviality non_nop_idx_facts:
   !bb s.
@@ -203,43 +187,6 @@ Triviality filter_take_all_nop:
     LENGTH (FILTER (\inst. inst.inst_opcode <> NOP) bb.bb_instructions)
 Proof
   rw[] >> AP_TERM_TAC >> irule filter_take_all >> simp[]
-QED
-
-(* Past-end case: both sides get NONE from get_instruction *)
-Triviality clear_nops_past_end:
-  !fuel ctx bb s.
-    ~(s.vs_inst_idx < LENGTH bb.bb_instructions) ==>
-    exec_block fuel ctx (clear_nops_block bb)
-      (s with vs_inst_idx :=
-        LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                       (TAKE s.vs_inst_idx bb.bb_instructions))) =
-    exec_block fuel ctx bb s
-Proof
-  rpt strip_tac >>
-  `LENGTH bb.bb_instructions <= s.vs_inst_idx` by DECIDE_TAC >>
-  imp_res_tac filter_take_all_nop >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  gvs[get_instruction_def, clear_nops_block_def]
-QED
-
-(* NOP case: skip in original, filtered index unchanged, apply IH *)
-Triviality clear_nops_nop_step:
-  !fuel ctx bb s.
-    s.vs_inst_idx < LENGTH bb.bb_instructions /\
-    (EL s.vs_inst_idx bb.bb_instructions).inst_opcode = NOP /\
-    exec_block fuel ctx (clear_nops_block bb)
-      ((s with vs_inst_idx := SUC s.vs_inst_idx) with vs_inst_idx :=
-        LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                       (TAKE (SUC s.vs_inst_idx) bb.bb_instructions))) =
-    exec_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx) ==>
-    exec_block fuel ctx (clear_nops_block bb)
-      (s with vs_inst_idx :=
-        LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                       (TAKE s.vs_inst_idx bb.bb_instructions))) =
-    exec_block fuel ctx bb s
-Proof
-  rpt strip_tac >>
-  imp_res_tac nop_skip_facts >> gvs[]
 QED
 
 (* NOP removal preserves execution up to vs_inst_idx.
@@ -483,36 +430,10 @@ Proof
   rw[] >> fs[lookup_block_def, clear_nops_block_def]
 QED
 
-Triviality exec_block_ok_inst_idx_0:
-  !fuel ctx bb s v.
-    exec_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  ho_match_mp_tac (cj 2 run_defs_ind) >>
-  qexists_tac `\fuel ctx inst s. T` >>
-  qexists_tac `\fuel ctx fn s. T` >> rw[] >>
-  pop_assum mp_tac >> simp[Once exec_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
-  rename1 `SOME inst` >>
-  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
-  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
-  rw[] >>
-  `inst.inst_opcode <> INVOKE` by
-    (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  fs[step_inst_non_invoke] >>
-  imp_res_tac terminator_OK_inst_idx_0
-QED
-
 Triviality state_equiv_empty_eq:
   !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
 Proof
   ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
-QED
-
-Triviality result_equiv_empty_ok:
-  !s1 s2.
-    result_equiv {} (OK s1) (OK s2) ==> s1 = s2
-Proof
-  simp[result_equiv_def, stateEquivPropsTheory.state_equiv_empty_eq]
 QED
 
 (* If no element in the list is PHI, phi_prefix_length = 0 *)
