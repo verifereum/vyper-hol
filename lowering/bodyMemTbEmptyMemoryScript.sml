@@ -11,7 +11,7 @@ Ancestors
   context valueEncodingProofs arithmetic exprSimVVFrame venomMemDefs
   gasOutcome venomInstProofs venomExecSemantics list fragGasMode exprSimMemUnwrap
 
-Theorem memory_value_post_gas_obs[local]:
+Theorem memory_value_post_gas_obs:
   p.ptr_location = LocMemory /\
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (LocatedValue ty p) t /\
   stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t ==>
@@ -23,7 +23,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem value_store_bound_gas_obs[local]:
+Theorem value_store_bound_gas_obs:
   vv_store_bound cx ty lt (ee with gas_obs := gs) (Value v) vv t <=>
   vv_store_bound cx ty lt ee (Value v) vv t
 Proof
