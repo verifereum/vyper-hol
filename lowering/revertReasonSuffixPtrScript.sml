@@ -369,7 +369,11 @@ Theorem mstore_clean_checks:
     (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnf.t_mem) /\
     tnf.t_mem SUBSET tn.t_mem /\
     (!x C. ptr_covers G tn x s C ==>
-      ptr_covers Gf tnf x (mstore (w2n a) w s) C)
+      ptr_covers Gf tnf x (mstore (w2n a) w s) C) /\
+    (!t. run_inst_seq [mk_inst id MSTORE [Var dst;value] []] s = OK t ==>
+      (!x. lookup_var x t = lookup_var x s /\
+        op_taint tnf (Var x) = op_taint tn (Var x) /\
+        (!C. ptr_covers G tn x s C ==> ptr_covers Gf tnf x t C)))
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id MSTORE [Var dst;value] []) s =
@@ -384,9 +388,24 @@ Proof
       tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}` by
     (irule (cj 5 mstore_ghost_frame) >> simp[]) >>
   simp[pred_setTheory.SUBSET_DEF] >>
+  conj_tac >-
+    (rpt strip_tac >> irule ptr_covers_step_frame >>
+     simp[mk_inst_def, mstore_def, lookup_var_def]) >>
+  suspend "endpoint"
+QED
+
+Resume mstore_clean_checks[endpoint]:
+  gen_tac >> strip_tac >>
+  `t = mstore (w2n a) w s` by
+    (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
+     rewrite_tac[run_inst_seq_def] >> asm_rewrite_tac[] >> simp[]) >>
+  gvs[] >> gen_tac >>
+  conj_tac >- simp[step_taint_other_output, mk_inst_def] >>
   rpt strip_tac >> irule ptr_covers_step_frame >>
   simp[mk_inst_def, mstore_def, lookup_var_def]
 QED
+
+Finalise mstore_clean_checks
 
 Theorem revert_operand_path_ptr:
   ~s.vs_halted /\
