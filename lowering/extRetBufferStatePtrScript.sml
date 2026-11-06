@@ -7,7 +7,45 @@ Ancestors
   fragExecPtr fragExec emitHelperProps compileEnv emitHelper context
   ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst venomExecSemantics
   codegenRel venomMemProps valueEncodingProps valueEncodingProofs
-  words finite_map pred_set arithmetic
+  loweringPosts words finite_map pred_set arithmetic
+
+Theorem expr_val_at_allocation_frame[local]:
+  (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+              FLOOKUP sf.vs_allocas aid = SOME site) /\
+  (!name b sz. local_region cenv es.scopes sf name b sz <=>
+               local_region cenv es.scopes s name b sz) ==>
+  !t ea eb v op. expr_val_at cenv cx t ea eb es v op s /\
+    eval_operand op sf = eval_operand op s ==>
+    expr_val_at cenv cx t ea eb es v op sf
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  simp[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> qexists_tac `w` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem buffer_allocation_placement_frame[local]:
+  not_local_ptr cenv es.scopes out ==>
+  (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+    FLOOKUP ((update_var out w (abi_builtin_allocate_state id n s)) with
+      vs_inst_idx := idx).vs_allocas aid = SOME site) /\
+  (!name b sz. local_region cenv es.scopes
+    ((update_var out w (abi_builtin_allocate_state id n s)) with
+      vs_inst_idx := idx) name b sz <=> local_region cenv es.scopes s name b sz)
+Proof
+  strip_tac >> conj_tac
+  >- (Cases_on `FLOOKUP s.vs_allocas id` >>
+      simp[abi_builtin_allocate_state_def, update_var_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> IF_CASES_TAC >> gvs[]) >>
+  `!p. p <> out ==>
+    lookup_var p ((update_var out w (abi_builtin_allocate_state id n s)) with
+      vs_inst_idx := idx) = lookup_var p s` by
+    (Cases_on `FLOOKUP s.vs_allocas id` >>
+     simp[abi_builtin_allocate_state_def, update_var_def, lookup_var_def,
+          FLOOKUP_UPDATE]) >>
+  fs[local_region_def, not_local_ptr_def] >> metis_tac[]
+QED
 
 Theorem compile_alloc_buffer_state_counted_ptr:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb fn /\
@@ -25,13 +63,21 @@ Theorem compile_alloc_buffer_state_counted_ptr:
     FLOOKUP sf.vs_allocas sa.cs_next_id = SOME (addr,n) /\
     addr+n < dimword(:256) /\ lookup_var ip sf = SOME (n2w addr) /\
     ptr_covers Gf tnf ip sf n /\ sf.vs_memory = s.vs_memory /\
+    sf.vs_labels = s.vs_labels /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!i. i < addr \/ addr+n <= i ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
-      op_taint tnf (Var v) = op_taint tn (Var v))
+      op_taint tnf (Var v) = op_taint tn (Var v)) /\
+    (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+                FLOOKUP sf.vs_allocas aid = SOME site) /\
+    (!name b sz. local_region cenv es.scopes sf name b sz <=>
+                 local_region cenv es.scopes s name b sz) /\
+    (!t ea eb v op. expr_val_at cenv cx t ea eb es v op s /\
+       eval_operand op sf = eval_operand op s ==>
+       expr_val_at cenv cx t ea eb es v op sf)
 Proof
   strip_tac >>
   qabbrev_tac `ip = STRING #"%" (toString sa.cs_next_var)` >>
@@ -69,6 +115,15 @@ Proof
      disch_then (qspecl_then [`inst`, `ip`, `n2w n`, `u`] mp_tac) >>
      simp[Abbr `inst`, mk_inst_def] >>
      gvs[mk_inst_def, step_inst_base_def]) >>
+  `(!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+       FLOOKUP (u with vs_inst_idx := SUC s.vs_inst_idx).vs_allocas aid = SOME site) /\
+   (!name b sz. local_region cenv es.scopes (u with vs_inst_idx := SUC s.vs_inst_idx) name b sz <=>
+      local_region cenv es.scopes s name b sz)` by
+    (qunabbrev_tac `u` >> irule buffer_allocation_placement_frame >> simp[]) >>
+  `!t ea eb v op. expr_val_at cenv cx t ea eb es v op s /\
+       eval_operand op (u with vs_inst_idx := SUC s.vs_inst_idx) = eval_operand op s ==>
+       expr_val_at cenv cx t ea eb es v op (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (match_mp_tac expr_val_at_allocation_frame >> simp[]) >>
   qabbrev_tac `Gf = step_prov PG G inst u` >>
   qabbrev_tac `tnf = step_taint inst s u tn` >>
   qexistsl_tac [`ip`, `addr`, `Gf`, `tnf`,

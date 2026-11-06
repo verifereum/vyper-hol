@@ -4,7 +4,7 @@ Ancestors
   extRetBufferStatePtr extRetCursorResourcePtr exprSimOperands loweringHalt
   exprLoweringProps abiBuiltinAllocation fragGasPathPtr ptrDiscipline
   bodyPtrDefs compileEnv venomState venomInst codegenRel
-  words finite_map arithmetic
+  extRetSourceAllocationPtr loweringPosts words finite_map arithmetic
 
 Theorem compile_alloc_buffer_cursor_state_counted_ptr:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb fn /\
@@ -30,11 +30,26 @@ Theorem compile_alloc_buffer_cursor_state_counted_ptr:
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
       op_taint tnf (Var v) = op_taint tn (Var v)) /\
+    (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+                FLOOKUP sf.vs_allocas aid = SOME site) /\
+    (!name b sz. local_region cenv es.scopes sf name b sz <=>
+                 local_region cenv es.scopes s name b sz) /\
+    (!t ea eb v op. expr_val_at cenv cx t ea eb es v op s /\
+       eval_operand op sf = eval_operand op s ==>
+       expr_val_at cenv cx t ea eb es v op sf) /\
     ?cursor.
       FLOOKUP (abi_builtin_allocate_state sb.cs_next_id 32 sf).vs_allocas
         sb.cs_next_id = SOME (cursor,32) /\
       cursor+32 < dimword(:256) /\
-      (cursor+32 <= addr \/ addr+used <= cursor)
+      (cursor+32 <= addr \/ addr+used <= cursor) /\
+      (!ty ea eb v op tv w.
+        expr_val_at cenv cx ty ea eb es v op s /\
+        evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+        eval_operand op s = SOME w /\
+        (!p. op = Var p ==> not_fresh_at sa p) /\
+        eb.cs_next_id <= sb.cs_next_id /\ 0 < val_footprint tv v /\
+        cout = STRING #"%" (toString sb.cs_next_var) ==>
+        cursor+32 <= w2n w \/ w2n w + val_footprint tv v <= cursor)
 Proof
   strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
@@ -43,5 +58,29 @@ Proof
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   `sa.cs_next_id <> sb.cs_next_id` by decide_tac >>
   drule_all return_cursor_allocation_resources >> strip_tac >>
-  qexistsl_tac [`ip`, `addr`, `Gf`, `tnf`, `sf`] >> simp[] >> metis_tac[]
+  `!ty ea eb v op tv w.
+    expr_val_at cenv cx ty ea eb es v op s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand op s = SOME w /\
+    (!p. op = Var p ==> not_fresh_at sa p) /\
+    eb.cs_next_id <= sb.cs_next_id /\ 0 < val_footprint tv v /\
+    cout = STRING #"%" (toString sb.cs_next_var) ==>
+    cursor+32 <= w2n w \/ w2n w + val_footprint tv v <= cursor` by
+    (rpt gen_tac >> strip_tac >>
+     `eval_operand op sf = eval_operand op s` by
+       (Cases_on `op` >> gvs[eval_operand_def] >>
+        qpat_x_assum `!v. not_fresh_at sa v ==> _` drule >> simp[]) >>
+     `expr_val_at cenv cx ty ea eb es v op sf` by
+       (qpat_x_assum `!t ea eb v op. _` irule >> simp[]) >>
+     `not_local_ptr cenv es.scopes cout` by
+       (irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[] >>
+        gvs[not_fresh_at_def]) >>
+     Q.SUBGOAL_THEN `sb.cs_next_id < ea.cs_next_id \/ eb.cs_next_id <= sb.cs_next_id`
+       assume_tac >- simp[] >>
+     `eval_operand op sf = SOME w` by simp[] >>
+     `32 < dimword(:256) /\ 0 < (32:num)` by simp[dimword_def] >>
+     drule_all prospective_alloca_expr_interval_disjoint >> simp[]) >>
+  qexistsl_tac [`ip`, `addr`, `Gf`, `tnf`, `sf`] >>
+  asm_rewrite_tac[] >> qexists_tac `cursor` >> gvs[] >>
+  first_assum MATCH_ACCEPT_TAC
 QED
