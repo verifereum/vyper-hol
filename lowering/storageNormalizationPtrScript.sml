@@ -6,7 +6,7 @@ Ancestors
   exprSimStorageCopy venomState ptrDiscipline words arithmetic
   reasonStoragePrefixPtr reasonPrefixPtr ghostPcTransportPtr allocationPtr
   exprSimAlloc exprLoweringProps loweringHalt venomExecSemantics venomInstProofs
-  context emitHelper compileEnv venomInst loweringPosts
+  context emitHelper compileEnv venomInst loweringPosts fragGasPathPtr
 
 Theorem storage_normalization_endpoint_resources:
   stmt_state_rel ctx func cenv cx es u /\
@@ -73,8 +73,8 @@ Theorem compile_storage_normalization_resources_path_ptr:
   ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
   u.vs_current_bb = sa.cs_current_bb /\ u.vs_inst_idx = LENGTH sa.cs_current_insts /\
   stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  FLOOKUP u.vs_allocas inst.inst_id = SOME (b,32*n) /\
+  MEM (mk_inst aid ALLOCA operands outputs) (fn_insts func) /\
+  FLOOKUP u.vs_allocas aid = SOME (b,32*n) /\
   (!name lb len. local_region cenv es.scopes u name lb len ==>
     regions_disjoint b (32*n) lb len) /\
   ptr_vv_ok cx ty tv (LocatedValue ann p) es G tn u /\
@@ -110,8 +110,8 @@ Proof
   `not_fresh_at sa root` by metis_tac[] >>
   `lookup_var root t = SOME (n2w b)` by metis_tac[] >>
   `stmt_state_rel ctx func cenv cx es t /\ t.vs_allocas = u.vs_allocas` by
-    (first_x_assum (qspecl_then [`cenv`, `cx`, `es`, `inst`] mp_tac) >>
-     simp[] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+    (first_x_assum (qspecl_then [`cenv`, `cx`, `es`, `mk_inst aid ALLOCA operands outputs`] mp_tac) >>
+     simp[mk_inst_def] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   `b < dimword(:256)` by decide_tac >>
   `copy_prefix p.ptr_location a b (type_slot_size (BaseTV (StringT max))) u
      (type_slot_size (BaseTV (StringT max))) t` by simp[] >>
@@ -227,3 +227,91 @@ Resume storage_normalization_alloc_path_ptr[old]:
 QED
 
 Finalise storage_normalization_alloc_path_ptr
+
+Theorem storage_normalization_alloc_copy_path_ptr:
+  compile_alloc_buffer (32*n) cc = (buf,ca) /\ buf.buf_operand = Var root /\
+  p.ptr_location = (if tr then LocTransient else LocStorage) /\
+  (if n = 1 then
+     do v <- emit_op (if p.ptr_location = LocStorage then SLOAD else TLOAD)
+               [p.ptr_operand]; emit_void MSTORE [Var root;v] od
+   else do compile_word_copy_loop p.ptr_operand (Var root) n p.ptr_location LocMemory F;
+           return () od) ca = (result,cb) /\
+  fn_has_code cc ca func /\ fn_has_code ca cb func /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  32*n < dimword(:256) /\ n < dimword(:256) /\
+  s.vs_current_bb = cc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at cc x) /\
+  ptr_vv_ok cx ty tv (LocatedValue ann p) es G tn s /\
+  eval_operand p.ptr_operand s = SOME a /\ storage_holds cx tr ty tv a es s /\
+  evaluate_type (get_tenv cx) ty = SOME (BaseTV (StringT max)) /\
+  read_result cx tv es = (INL (StringV str),es) /\
+  n = type_slot_size (BaseTV (StringT max)) ==>
+  ?Gf tnf z b.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK z) /\
+    z.vs_current_bb = cb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~z.vs_halted /\
+    stmt_state_rel ctx func cenv cx es z /\
+    lookup_var root z = SOME (n2w b) /\
+    ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf z /\
+    val_wf (BaseTV (StringT max)) (StringV str) /\
+    ptr_covers Gf tnf root z (32+32*word_size (LENGTH str)) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP z.vs_allocas aid = SOME entry) /\
+    (!old. not_fresh_at cc old ==>
+      lookup_var old z = lookup_var old s /\ FLOOKUP Gf old = FLOOKUP G old /\
+      op_taint tnf (Var old) = op_taint tn (Var old)) /\
+    (!old k. not_fresh_at cc old /\ ptr_covers G tn old s k ==>
+      ptr_covers Gf tnf old z k)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Q.SUBGOAL_THEN `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+    assume_tac >- (Cases_on `tr` >> gvs[]) >>
+  drule_all storage_normalization_alloc_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `root' = root` by metis_tac[operand_11] >>
+  qpat_x_assum `root' = root` SUBST_ALL_TAC >>
+  `(!x. p.ptr_operand = Var x \/ root = x ==> not_fresh_at ca x)` by
+    suspend "fresh" >>
+  `eval_operand p.ptr_operand u = SOME a /\ storage_holds cx tr ty tv a es u` by metis_tac[] >>
+  `op_taint tn1 p.ptr_operand = {}` by
+    (qpat_x_assum `ptr_vv_ok _ _ _ _ _ G1 tn1 u` mp_tac >> simp[ptr_vv_ok_def]) >>
+  drule_all compile_storage_normalization_resources_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `z`, `b`] >>
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- suspend "path" >- suspend "old" >> suspend "covers"
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[fresh]:
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`buf.buf_operand = Var root`, `buf.buf_operand = Var (STRING _ _)`,
+     `!y. not_fresh_at cc y ==> not_fresh_at ca y`,
+     `not_fresh_at ca (STRING _ _)`,
+     `!x. p.ptr_operand = Var x ==> not_fresh_at cc x`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[path]:
+  qpat_x_assum `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1 (OK u)` mp_tac >>
+  qpat_x_assum `gas_path_ptr D 0 ctx func PG G1 tn1 u 0 Gf tnf (OK z)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[gas_path_ptr_then, ADD_CLAUSES]
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[old]:
+  rpt strip_tac >>
+  `not_fresh_at ca old` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[covers]:
+  rpt strip_tac >>
+  `not_fresh_at ca old` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Finalise storage_normalization_alloc_copy_path_ptr
