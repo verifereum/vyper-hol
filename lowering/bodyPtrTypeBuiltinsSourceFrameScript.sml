@@ -67,7 +67,8 @@ Theorem bytestring_source_prefix_ghost_frame:
     ?G' tn' t.
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
       lookup_var len t = SOME (mload (w2n a) s) /\
-      op_taint tn' (Var len) = {} /\ lookup_var data t = SOME (a+32w) /\
+      op_taint tn' (Var len) = {} /\ op_prov G' (Var len) = NONE /\
+      lookup_var data t = SOME (a+32w) /\
       t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
       tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
       tn'.t_imm = tn.t_imm /\ t.vs_call_ctx = s.vs_call_ctx /\
