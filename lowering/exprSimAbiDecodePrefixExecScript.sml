@@ -47,7 +47,7 @@ Theorem abi_decode_run_prefix_inversion:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     (!v z. step_inst_base i v <> Halt z) /\
     (!v z. step_inst_base i v = OK z ==>
-      z.vs_current_bb = v.vs_current_bb /\ ~z.vs_halted)) xs /\
+      z.vs_current_bb = v.vs_current_bb)) xs /\
   run_from fuel ctx fn s = Halt h ==>
   ?a. run_inst_seq xs s = OK a /\
     run_from fuel ctx fn
@@ -79,7 +79,7 @@ Theorem abi_decode_setup_prefix_inversion:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     (!v z. step_inst_base i v <> Halt z) /\
     (!v z. step_inst_base i v = OK z ==>
-      z.vs_current_bb = v.vs_current_bb /\ ~z.vs_halted)) xs /\
+      z.vs_current_bb = v.vs_current_bb)) xs /\
   run_from fuel ctx fn s = Halt h ==>
   ?a. run_inst_seq xs s = OK a /\
     run_from fuel ctx fn (a with vs_inst_idx := LENGTH (pre ++ xs)) = Halt h
