@@ -9,13 +9,49 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Definition body_expr_mem_ok_def:
-  body_expr_mem_ok cx e <=>
-    !tops ctx func cenv env ty es.
+(* A literal array's elements are memory-safe too, since membership and
+   raw_log compile its elements without compiling the array; as
+   bodySim's body_expr_ok. *)
+Definition body_expr_mem_ok_mutual_def:
+  (body_expr_mem_ok cx e <=>
+    (!tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
       expr_sim_mem ctx func cenv cx ty e es /\
-      expr_vv_sim_mem ctx func cenv cx ty e es
+      expr_vv_sim_mem ctx func cenv cx ty e es) /\
+    (!a t n elems.
+      e = Builtin a (MakeArray t n) elems /\
+      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+      body_exprs_mem_ok cx elems)) /\
+  body_exprs_mem_ok cx [] = T /\
+  body_exprs_mem_ok cx (e::es) =
+    (body_expr_mem_ok cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      body_exprs_mem_ok cx es))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+      INL (_, e) => expr_size e
+    | INR (_, es) => list_size expr_size es)` >>
+  simp[expr_size_def]
 End
+
+Theorem body_expr_mem_ok_def = CONJUNCT1 body_expr_mem_ok_mutual_def;
+
+Theorem body_exprs_mem_ok_def = CONJUNCT2 body_expr_mem_ok_mutual_def;
+
+(* The elements of an array literal are memory-safe, by the literal's
+   clause. *)
+Theorem body_make_array_children_mem_ok:
+  !cx a t n elems.
+    body_expr_mem_ok cx (Builtin a (MakeArray t n) elems) /\
+    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+    body_exprs_mem_ok cx elems
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `body_expr_mem_ok _ _`
+    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_mem_ok_def]) >>
+  simp[]
+QED
 
 Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
@@ -48,15 +84,6 @@ Definition body_stmts_mem_ok_def:
       frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
       stmt_frag_mem d ctx func cx lctx RetQ cenv
         (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
-End
-
-Definition body_exprs_mem_ok_def:
-  body_exprs_mem_ok cx [] = T /\
-  body_exprs_mem_ok cx (e::es) =
-    (body_expr_mem_ok cx e /\
-     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
-                        read_result cx tv s1 = (INL v, t1)) ==>
-      body_exprs_mem_ok cx es))
 End
 
 Definition body_results_mem_ok_def:
