@@ -5,7 +5,7 @@ Ancestors
   bodyPtrHashBuiltinsKeccakFixedFrame bodyPtrHashBuiltinsKeccakBytesFrame
   bodyPtrHashBuiltinsShaEndpoint exprSimHash exprSimVVFrame exprSimAlloc
   exprLoweringProps exprOperandVar exprSimWordArgs bodyPtrDefs
-  gasSummaryComposePtr words list
+  gasSummaryComposePtr compileEnv venomState arithmetic words list
 
 Theorem hash_fixed_keccak_ptr_post:
   expr_post ctx fn cenv cx e es sa sm s0 ee (BytesV bs) x s /\
@@ -76,10 +76,19 @@ Proof
   strip_tac >> drule_all hash_dynamic_post_view >> strip_tac >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all hash_dynamic_bytes_operand >> strip_tac >>
-  gvs[ptr_covers_def, eval_operand_def] >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
+  gvs[ptr_covers_def, eval_operand_def] >>
   `b < dimword (:256)` by decide_tac >>
-  irule hash_bytes_keccak_ptr_post >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  `lower_value compile_expr cenv (expr_type e) e sa = (Var p,sm)` by
+    asm_rewrite_tac[] >>
+  `b + 32 + LENGTH bs <= b' + sz'` by decide_tac >>
+  `b + 32 + LENGTH bs = b + (LENGTH bs + 32)` by decide_tac >>
+  `!i. b <= i /\ i < b + 32 + LENGTH bs ==> i NOTIN tn.t_mem` by
+    asm_rewrite_tac[] >>
+  drule_all (SRULE [eval_operand_def] hash_bytes_keccak_ptr_post) >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  `LENGTH (emitted_insts sm sb) + s.vs_inst_idx =
+   s.vs_inst_idx + LENGTH (emitted_insts sm sb)` by decide_tac >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> asm_rewrite_tac[]
 QED

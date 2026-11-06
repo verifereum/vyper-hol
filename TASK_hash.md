@@ -77,3 +77,7 @@ All paths are relative to this directory (the vyper-hol project root).
 
 
 - The builtin-operand lemmas `expr_body_pre_builtin_arg`, `expr_sim_pre_builtin_arg` and `expr_body_pre_builtin_head` (exprSim*) take the premise `(!n. bi <> Slice n) \/ ~is_extcode e`: a slice's `.code` source (`is_extcode`) is not a lowered operand but is read through its address (`extcode_addr_expr`). For a builtin that isn't a slice, discharge it from the builtin; for word operands the typed forms `expr_body_pre_builtin_typed_arg` and `expr_sim_pre_builtin_typed_arg` avoid it. `rg` them in `lowering/` for their current statements.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
