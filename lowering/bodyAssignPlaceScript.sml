@@ -161,7 +161,7 @@ Theorem target_indices_body_pre[local]:
     call_evaluation_safe cx (int_calls_target t) /\
     ~supported_target_exists expr_evm_run_root t /\
     EVERY (\c. FST c = NONE) (int_calls_target t) /\
-    (?tops. supported_program tops /\ get_module_code cx NONE = SOME tops) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
        occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -178,6 +178,8 @@ Proof
   gvs[Once well_typed_expr_def, AllCaseEqs()]
   >>~- ([`expr_body_pre _ _ _ _ _`],
         irule stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
+        rpt conj_tac >>
+        TRY (strip_tac >> qexists_tac `tops` >> simp[] >> NO_TAC) >>
         qexists_tac `[]` >> simp[] >>
         metis_tac[call_evaluation_safe_append_right]) >>
   metis_tac[call_evaluation_safe_append_left, target_indices_pre_def]
