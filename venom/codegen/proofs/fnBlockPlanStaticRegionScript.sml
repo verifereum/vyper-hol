@@ -872,3 +872,149 @@ Proof
   qexists_tac `LENGTH bb.bb_instructions` >> simp[collect_phis_length_bound] >>
   metis_tac[regional_phi_output_no_suffix_def]
 QED
+
+Theorem regional_live_range[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  i <= j /\ j <= LENGTH bb.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl j) /\
+  (!p. i <= p /\ p < j ==> ~MEM v (inst_defs (EL p bb.bb_instructions))) ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl i)
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[ready_reachable_preorder] >>
+  drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem regional_live_edge[local]:
+  codegen_ready_fn fn /\ fn_reachable fn pred /\ fn_reachable fn lbl /\
+  fn_cfg_edge fn pred lbl /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions))) /\
+  (!p. p < LENGTH (collect_phis bb.bb_instructions) ==>
+    ~MEM v (inst_defs (EL p bb.bb_instructions))) ==>
+  MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))
+Proof
+  strip_tac >> irule input_vars_from_predecessor_exit >> simp[] >>
+  (conj_tac >- gvs[codegen_ready_fn_def]) >>
+  qexistsl_tac [`bb`, `lbl`] >> simp[] >>
+  irule ready_postprefix_edge >> simp[] >>
+  conj_tac >- metis_tac[lookup_block_label] >>
+  irule ready_reachable_preorder >> gvs[codegen_ready_fn_def]
+QED
+
+Theorem regional_live_clean_path[local]:
+  !path fn ub j v.
+    codegen_ready_fn fn /\ path <> [] /\ is_fn_path fn path /\
+    EVERY (fn_reachable fn) path /\
+    lookup_block (LAST path) fn.fn_blocks = SOME ub /\
+    LENGTH (collect_phis ub.bb_instructions) <= j /\
+    j <= LENGTH ub.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) (LAST path) j) /\
+    (!lbl bb p. MEM lbl path /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+       p < LENGTH bb.bb_instructions ==> ~MEM v (inst_defs (EL p bb.bb_instructions))) ==>
+    !bb. lookup_block (HD path) fn.fn_blocks = SOME bb ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD path)
+        (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `is_fn_path fn (lbl :: rest)` >> strip_tac >>
+  Cases_on `rest`
+  >- (gvs[] >> irule regional_live_range >> simp[] >>
+      qexists_tac `j` >> simp[] >> rpt strip_tac >>
+      first_x_assum irule >> decide_tac) >>
+  rename1 `is_fn_path fn (lbl :: succ :: tail)` >>
+  gvs[Once is_fn_path_def] >> rpt strip_tac >>
+  `?sb. lookup_block succ fn.fn_blocks = SOME sb` by
+    (`wf_function fn` by gvs[codegen_ready_fn_def] >>
+     `cfg_reachable_of (cfg_analyze fn) succ` by metis_tac[fn_reachable_cfg_analyze] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+     simp[fn_labels_def, MEM_MAP] >> strip_tac >>
+     irule_at Any MEM_lookup_block >> simp[] >>
+     gvs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) succ
+      (LENGTH (collect_phis sb.bb_instructions)))` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH bb.bb_instructions))` by
+    (irule regional_live_edge >> simp[] >>
+     qexistsl_tac [`sb`, `succ`] >> simp[] >>
+     qx_gen_tac `p` >> disch_tac >>
+     qpat_x_assum `!lbl' bb p. _` irule >> simp[] >>
+     (conj_tac >- (mp_tac (Q.SPEC `sb.bb_instructions` collect_phis_length_bound) >> decide_tac)) >>
+     qexists_tac `succ` >> simp[]) >>
+  irule regional_live_range >> simp[] >>
+  qexists_tac `LENGTH bb.bb_instructions` >> simp[collect_phis_length_bound] >>
+  metis_tac[]
+QED
+
+Theorem regional_phi_other_block_no_defs[local]:
+  codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+  MEM phi (collect_phis db.bb_instructions) /\ MEM v phi.inst_outputs /\
+  lbl <> db.bb_label /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  p < LENGTH bb.bb_instructions ==> ~MEM v (inst_defs (EL p bb.bb_instructions))
+Proof
+  strip_tac >> simp[inst_defs_def] >>
+  `?k. k < LENGTH (collect_phis db.bb_instructions) /\
+       EL k (collect_phis db.bb_instructions) = phi` by metis_tac[MEM_EL] >>
+  `EL k db.bb_instructions = phi` by metis_tac[collect_phis_index] >>
+  irule ready_output_other_location >> simp[] >>
+  qexistsl_tac [`db`, `fn`, `k`] >> simp[] >>
+  `k < LENGTH db.bb_instructions` by
+    (mp_tac (Q.SPEC `db.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  metis_tac[lookup_block_MEM, lookup_block_label]
+QED
+
+Theorem regional_phi_output_dominated_boundary_live:
+  codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+  MEM phi (collect_phis db.bb_instructions) /\ MEM v phi.inst_outputs /\
+  MEM ub fn.fn_blocks /\ fn_dominates fn db.bb_label ub.bb_label /\
+  LENGTH (collect_phis ub.bb_instructions) <= j /\
+  j <= LENGTH ub.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) ub.bb_label j) ==>
+  MEM v (live_vars_at (liveness_analyze fn) db.bb_label
+    (LENGTH (collect_phis db.bb_instructions)))
+Proof
+  strip_tac >>
+  `fn_reachable fn db.bb_label` by metis_tac[fn_dominates_dom_reachable] >>
+  `lookup_block db.bb_label fn.fn_blocks = SOME db /\
+   lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
+    (conj_tac >> irule MEM_lookup_block >> simp[] >>
+     gvs[codegen_ready_fn_def, wf_function_def, fn_labels_def]) >>
+  Cases_on `ub = db`
+  >- (gvs[] >> irule regional_live_range >> simp[] >>
+      qexists_tac `j` >> simp[] >>
+      qx_gen_tac `p` >> strip_tac >>
+      irule regional_phi_output_no_suffix_def >> simp[] >>
+      metis_tac[]) >>
+  drule fn_dominates_last_visit >> strip_tac >>
+  Cases_on `tail` >- (gvs[] >> metis_tac[]) >>
+  rename1 `is_fn_path fn (db.bb_label :: first :: rest)` >>
+  `?fb. lookup_block first fn.fn_blocks = SOME fb` by
+    (`wf_function fn` by gvs[codegen_ready_fn_def] >>
+     `cfg_reachable_of (cfg_analyze fn) first` by
+       (gvs[] >> metis_tac[fn_reachable_cfg_analyze]) >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+     simp[fn_labels_def, MEM_MAP] >> strip_tac >>
+     irule_at Any MEM_lookup_block >> simp[] >>
+     gvs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) first
+      (LENGTH (collect_phis fb.bb_instructions)))` by
+    (irule (SRULE [] (Q.SPEC `first :: rest` regional_live_clean_path)) >> simp[] >>
+     (conj_tac >- gvs[]) >> qexistsl_tac [`j`, `rest`, `ub`] >>
+     gvs[Once is_fn_path_def] >> rpt gen_tac >> strip_tac >>
+     irule regional_phi_other_block_no_defs >> simp[] >>
+     qexistsl_tac [`db`, `fn`, `lbl`, `phi`] >> simp[] >> metis_tac[]) >>
+  irule regional_phi_output_exit_live >> simp[] >>
+  (conj_tac >- (qexists_tac `phi` >> simp[])) >>
+  irule regional_live_edge >> simp[] >>
+  qexistsl_tac [`fb`, `first`] >> gvs[Once is_fn_path_def] >>
+  qx_gen_tac `p` >> disch_tac >>
+  irule regional_phi_other_block_no_defs >> simp[] >>
+  (conj_tac >- (mp_tac (Q.SPEC `fb.bb_instructions` collect_phis_length_bound) >> decide_tac)) >>
+  qexistsl_tac [`db`, `fn`, `first`, `phi`] >> simp[]
+QED
