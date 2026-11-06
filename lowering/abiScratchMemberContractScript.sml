@@ -33,7 +33,7 @@ Theorem abi_scratch_member_core_pre_def:
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts
 Proof
-  rewrite_tac[abi_scratch_member_core_pre_def]
+  rewrite_tac[abi_sites_scratch_member_core_pre_def]
 QED
 
 Definition abi_sites_scratch_member_core_post_def:
@@ -59,7 +59,7 @@ Theorem abi_scratch_member_core_post_def:
     t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func s t
 Proof
-  rewrite_tac[abi_scratch_member_core_post_def]
+  rewrite_tac[abi_sites_scratch_member_core_post_def]
 QED
 
 Theorem abi_scratch_member_core_run:
@@ -138,7 +138,7 @@ Theorem abi_scratch_member_dynamic_pre_def:
     abi_scratch_member_core_pre value resources c s /\
     abi_scratch_member_cursor_saved cursor resources c s
 Proof
-  rewrite_tac[abi_scratch_member_dynamic_pre_def]
+  rewrite_tac[abi_sites_scratch_member_dynamic_pre_def]
 QED
 
 (* Physical protection requires the entry budget and output disjointness.
@@ -158,7 +158,7 @@ Theorem abi_scratch_member_dynamic_post_def:
     abi_scratch_member_dynamic_pre value resources cursor c s /\
     abi_encoder_spine_core_code func c
 Proof
-  rewrite_tac[abi_scratch_member_dynamic_post_def]
+  rewrite_tac[abi_sites_scratch_member_dynamic_post_def]
 QED
 
 Theorem abi_scratch_member_dynamic_run:

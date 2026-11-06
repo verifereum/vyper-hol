@@ -36,7 +36,7 @@ Theorem abi_encoder_shared_input_def:
     abi_footprint_disjoint d output_size
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 Proof
-  rewrite_tac[abi_encoder_shared_input_def]
+  rewrite_tac[abi_sites_encoder_shared_input_def]
 QED
 
 Definition abi_sites_encoder_shared_endpoint_def:
@@ -68,7 +68,7 @@ Theorem abi_encoder_shared_endpoint_def:
     actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_encoder_extend_sim ctx func initial actual
 Proof
-  rewrite_tac[abi_encoder_shared_endpoint_def]
+  rewrite_tac[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Definition abi_sites_encoder_shared_def:
@@ -106,7 +106,7 @@ Theorem abi_encoder_shared_def:
     initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
     ?actual. abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual
 Proof
-  rewrite_tac[abi_encoder_shared_def]
+  rewrite_tac[abi_sites_encoder_shared_def]
 QED
 
 Theorem abi_scratch_input_shared:

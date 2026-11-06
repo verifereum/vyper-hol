@@ -117,7 +117,7 @@ Theorem abi_encoder_complex_prefix_post_def:
       (!id. id <> site ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
       actual.vs_halted = initial.vs_halted
 Proof
-  rewrite_tac[abi_encoder_complex_prefix_post_def]
+  rewrite_tac[abi_sites_encoder_complex_prefix_post_def]
 QED
 
 Theorem abi_encoder_complex_prefix_post_inst_idx[simp]:

@@ -38,7 +38,7 @@ Theorem abi_scratch_members_index_def:
     abi_scratch_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial s /\
     abi_decode_sim ctx func initial s
 Proof
-  rewrite_tac[abi_scratch_members_index_def]
+  rewrite_tac[abi_sites_scratch_members_index_def]
 QED
 
 Theorem abi_scratch_members_index_initial:

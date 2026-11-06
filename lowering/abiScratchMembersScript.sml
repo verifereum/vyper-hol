@@ -45,7 +45,7 @@ Theorem abi_scratch_members_pre_def:
     abi_footprint_disjoint d output_size
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 Proof
-  rewrite_tac[abi_scratch_members_pre_def]
+  rewrite_tac[abi_sites_scratch_members_pre_def]
 QED
 
 Theorem abi_scratch_members_pre_mono:
@@ -199,7 +199,7 @@ Theorem abi_scratch_members_inv_def:
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts
 Proof
-  rewrite_tac[abi_scratch_members_inv_def]
+  rewrite_tac[abi_sites_scratch_members_inv_def]
 QED
 
 Theorem abi_scratch_members_inv_layout:
@@ -384,7 +384,7 @@ Theorem abi_scratch_members_correct_def:
       abi_scratch_effect first last lo end_st.cs_next_id st.cs_next_var
         limit_st d output_size b cap initial t /\ abi_decode_sim ctx func initial t
 Proof
-  rewrite_tac[abi_scratch_members_correct_def]
+  rewrite_tac[abi_sites_scratch_members_correct_def]
 QED
 
 Theorem abi_scratch_members_correct_empty:

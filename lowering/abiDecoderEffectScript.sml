@@ -57,7 +57,7 @@ Theorem abi_decoder_effect_def:
     abi_decode_footprint_frame [(d,sz);(b,cap)] s t /\
     t.vs_halted = s.vs_halted /\ abi_decoder_scratch_frame first last lo hi s t
 Proof
-  rewrite_tac[abi_decoder_effect_def]
+  rewrite_tac[abi_sites_decoder_effect_def]
 QED
 
 Theorem abi_decoder_effect_refl:

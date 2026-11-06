@@ -18,7 +18,7 @@ Theorem abi_encoder_source_members_child_pre_def:
     if dyn then abi_encoder_member_dynamic_pre value resources cursor c s
     else abi_encoder_member_core_pre value resources c s
 Proof
-  rewrite_tac[abi_encoder_source_members_child_pre_def]
+  rewrite_tac[abi_sites_encoder_source_members_child_pre_def]
 QED
 
 Definition abi_sites_encoder_source_members_child_post_def:
@@ -34,7 +34,7 @@ Theorem abi_encoder_source_members_child_post_def:
     if dyn then abi_encoder_member_dynamic_post (ctx,func) value resources cursor c s t
     else abi_encoder_member_core_post (ctx,func) value resources c s t
 Proof
-  rewrite_tac[abi_encoder_source_members_child_post_def]
+  rewrite_tac[abi_sites_encoder_source_members_child_post_def]
 QED
 Theorem abi_encoder_source_members_child_dispatch:
   abi_encoder_source_members_child_pre resources (T,value,cursor) =
@@ -113,7 +113,7 @@ Theorem abi_encoder_source_members_entry_def:
          (FST ops,FST (SND ops),dp,d+ho,hl+LENGTH (FLAT (abi_tuple_tails pre pvs)),slot,site))
      else y = (F,(ty,av,sb+so,mz,d+ho),(dst,dst,dp,d+ho,0,slot,site)))
 Proof
-  rewrite_tac[abi_encoder_source_members_entry_def]
+  rewrite_tac[abi_sites_encoder_source_members_entry_def]
 QED
 
 Theorem abi_encoder_source_members_entry_input:

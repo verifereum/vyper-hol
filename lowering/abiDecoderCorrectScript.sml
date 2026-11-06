@@ -53,7 +53,7 @@ Theorem abi_decoder_correct_def:
       t.vs_current_bb = end_st.cs_current_bb /\ t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
       ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
-  rewrite_tac[abi_decoder_correct_def]
+  rewrite_tac[abi_sites_decoder_correct_def]
 QED
 
 Theorem abi_decoder_correct_run:

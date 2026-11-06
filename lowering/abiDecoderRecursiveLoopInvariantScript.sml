@@ -26,7 +26,7 @@ Theorem abi_decoder_recursive_loop_inv_def:
     FLOOKUP s.vs_allocas site = SOME (slot,32) /\ mload slot s = n2w j /\
     s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted
 Proof
-  rewrite_tac[abi_decoder_recursive_loop_inv_def]
+  rewrite_tac[abi_sites_decoder_recursive_loop_inv_def]
 QED
 
 Theorem abi_decoder_recursive_loop_inv_init:

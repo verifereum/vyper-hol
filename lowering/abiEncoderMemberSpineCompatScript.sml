@@ -43,7 +43,7 @@ Theorem abi_encoder_spine_shared_pre_def:
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts
 Proof
-  rewrite_tac[abi_encoder_spine_shared_pre_def]
+  rewrite_tac[abi_sites_encoder_spine_shared_pre_def]
 QED
 
 Definition abi_sites_encoder_spine_shared_post_def:
@@ -61,7 +61,7 @@ Theorem abi_encoder_spine_shared_post_def:
     abi_encoder_shared_endpoint (ctx,func) (st,en,out,limit_st)
       (first,last,b,cap) (at,av,d) s t
 Proof
-  rewrite_tac[abi_encoder_spine_shared_post_def]
+  rewrite_tac[abi_sites_encoder_spine_shared_post_def]
 QED
 
 Theorem abi_encoder_spine_shared_core_run:

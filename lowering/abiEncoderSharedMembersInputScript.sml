@@ -35,7 +35,7 @@ Theorem abi_encoder_shared_members_pre_def:
     abi_footprint_disjoint d sz
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 Proof
-  rewrite_tac[abi_encoder_shared_members_pre_def]
+  rewrite_tac[abi_sites_encoder_shared_members_pre_def]
 QED
 
 Theorem abi_encoder_shared_members_pre_mono:

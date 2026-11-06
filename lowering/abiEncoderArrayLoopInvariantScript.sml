@@ -32,7 +32,7 @@ Theorem abi_encoder_array_loop_inv_def:
     s.vs_current_bb = label /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     abi_decoder_effect first last site hi owner_st.cs_next_var limit_st d output_size b cap origin s
 Proof
-  rewrite_tac[abi_encoder_array_loop_inv_def]
+  rewrite_tac[abi_sites_encoder_array_loop_inv_def]
 QED
 
 Theorem abi_encoder_array_loop_inv_facts:

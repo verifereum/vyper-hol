@@ -38,7 +38,7 @@ Theorem abi_scratch_input_def:
     abi_footprint_disjoint d output_size
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 Proof
-  rewrite_tac[abi_scratch_input_def]
+  rewrite_tac[abi_sites_scratch_input_def]
 QED
 
 Definition abi_sites_scratch_effect_def:
@@ -66,7 +66,7 @@ Theorem abi_scratch_effect_def:
     (!id. id < lo \/ hi <= id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     t.vs_halted = s.vs_halted
 Proof
-  rewrite_tac[abi_scratch_effect_def]
+  rewrite_tac[abi_sites_scratch_effect_def]
 QED
 
 Definition abi_sites_scratch_encoder_def:
@@ -116,7 +116,7 @@ Theorem abi_scratch_encoder_def:
       actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
       ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
-  rewrite_tac[abi_scratch_encoder_def]
+  rewrite_tac[abi_sites_scratch_encoder_def]
 QED
 
 Theorem abi_scratch_effect_inst_idx[simp]:

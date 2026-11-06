@@ -44,7 +44,7 @@ Theorem abi_encoder_shared_array_index_def:
   abi_encoder_registered_effect (abi_decoder_ids site hi) [(d,sz)] origin s /\
   (alloca_inv origin ==> alloca_inv s) /\ abi_encoder_extend_sim ctx func origin s
 Proof
-  rewrite_tac[abi_encoder_shared_array_index_def]
+  rewrite_tac[abi_sites_encoder_shared_array_index_def]
 QED
 
 Theorem abi_encoder_shared_array_index_initial:
