@@ -517,7 +517,7 @@ Proof
          simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`
         (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-      ASM_REWRITE_TAC [expr_sim_inv_def]) >>
+      ASM_REWRITE_TAC [expr_sim_inv_def, extend_local_bare_globals]) >>
   drule_all declare_stmt_local_other >> strip_tac >>
   drule_all type_stmt_other >> strip_tac >> gvs[] >>
   qpat_x_assum `expr_sim_inv _ _ _ es`
