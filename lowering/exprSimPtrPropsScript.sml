@@ -29,8 +29,8 @@ Theorem expr_stack_outcome_ptr:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn u /\
-      ptr_val_ok cx (expr_type e) v op G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
@@ -39,8 +39,8 @@ Theorem expr_stack_outcome_ptr:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn u /\
-      ptr_vv_ok cx (expr_type e) tv (StackValue ty op) ee G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_vv_ok cx (post_value_type cenv e) tv (StackValue ty op) ee G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
