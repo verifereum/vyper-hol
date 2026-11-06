@@ -5278,6 +5278,33 @@ Proof
   metis_tac[EL_MEM]
 QED
 
+Theorem restore_reorder_release_residual_count:
+  !targets next dfg ps rOps psR qOps psQ x.
+    restore_spilled_plan targets ps = (rOps,psR) /\
+    reorder_plan dfg targets psR = (qOps,psQ) /\
+    stack_pop (LENGTH targets) psQ.ps_stack ++ targets = psQ.ps_stack ==>
+    LIST_ELEM_COUNT x
+      (stack_pop (LENGTH targets) (release_dead_spills next psQ).ps_stack) <=
+    (LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)) -
+    LIST_ELEM_COUNT x targets
+Proof
+  rpt gen_tac >> strip_tac >> simp[release_dead_spills_stack] >>
+  drule restore_spilled_plan_inventory_count >> strip_tac >>
+  Cases_on `LENGTH psR.ps_stack <= LENGTH targets`
+  >- (drule_all reorder_plan_short_residual_empty >>
+      strip_tac >> simp[LIST_ELEM_COUNT_DEF]) >>
+  `LENGTH targets <= LENGTH psR.ps_stack` by decide_tac >>
+  drule_all reorder_plan_resource_nonincrease >>
+  disch_then (qspec_then `x` mp_tac) >>
+  `LIST_ELEM_COUNT x psQ.ps_stack =
+   LIST_ELEM_COUNT x (stack_pop (LENGTH targets) psQ.ps_stack) +
+   LIST_ELEM_COUNT x targets` by metis_tac[elem_count_append] >>
+  qpat_x_assum `!x. LIST_ELEM_COUNT x psR.ps_stack + _ = _`
+    (qspec_then `x` mp_tac) >>
+  decide_tac
+QED
+
 Theorem emit_reorder_pop_next_live_upper:
   !opc operands selected nl dfg ps iops ps1 rops ps2.
     LENGTH operands <= 16 /\ PERM operands selected /\
