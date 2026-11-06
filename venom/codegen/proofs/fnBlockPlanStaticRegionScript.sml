@@ -3496,3 +3496,207 @@ Proof
   drule plan_state_residual_wf_marked_pop >>
   simp[generated_plan_state_wf_marked_def]
 QED
+
+Theorem regional_release_fold_stack[local]:
+  !xs ps stk.
+    FOLDL (\qs (op,off). qs with
+      <|ps_spilled := qs.ps_spilled \\ op;
+        ps_alloc := free_spill_slot off qs.ps_alloc|>)
+      (ps with ps_stack := stk) xs =
+    (FOLDL (\qs (op,off). qs with
+      <|ps_spilled := qs.ps_spilled \\ op;
+        ps_alloc := free_spill_slot off qs.ps_alloc|>) ps xs)
+      with ps_stack := stk
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[]
+QED
+
+Theorem regional_release_stack_update[local]:
+  release_dead_spills nl (ps with ps_stack := stk) =
+  (release_dead_spills nl ps) with ps_stack := stk
+Proof
+  simp[release_dead_spills_def, regional_release_fold_stack]
+QED
+
+Theorem regional_release_marked_wf[local]:
+  generated_plan_state_wf_marked sb ps ==>
+  generated_plan_state_wf_marked sb (release_dead_spills nl ps)
+Proof
+  strip_tac >>
+  `generated_plan_state_wf sb
+    (ps with ps_stack := FILTER (\op. op <> dead_stack_marker) ps.ps_stack)` by
+    (gvs[generated_plan_state_wf_def, generated_plan_state_wf_marked_def,
+         plan_slots_bounded_def, pred_setTheory.DISJOINT_DEF,
+         pred_setTheory.EXTENSION, MEM_FILTER] >> metis_tac[]) >>
+  drule generated_plan_state_wf_release_dead_spills >>
+  disch_then (qspec_then `nl` mp_tac) >>
+  simp[regional_release_stack_update, generated_plan_state_wf_def,
+       plan_slots_bounded_def] >> strip_tac >>
+  gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def,
+      release_dead_spills_stack, pred_setTheory.DISJOINT_DEF,
+      pred_setTheory.EXTENSION] >>
+  `!x. x IN FDOM (release_dead_spills nl ps).ps_spilled ==>
+       x IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >>
+     `?off. FLOOKUP (release_dead_spills nl ps).ps_spilled x = SOME off` by
+       simp[finite_mapTheory.FLOOKUP_DEF] >>
+     drule rf_release_spill_lookup >> simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  metis_tac[]
+QED
+
+Theorem regional_optimistic_marked_wf[local]:
+  generated_plan_state_wf_marked sb ps ==>
+  generated_plan_state_wf_marked sb
+    (SND (optimistic_swap_plan dfg inst nl next_term ps))
+Proof
+  strip_tac >> simp[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth _ _ = SOME dist` >>
+  drule stack_get_depth_props >> strip_tac >>
+  `plan_slots_bounded sb ps /\
+   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  drule_all do_swap_layout_wf >> strip_tac >>
+  `plan_slots_bounded sb (SND (do_swap dist ps))` by
+    (irule do_swap_plan_slots_bounded >> metis_tac[PAIR]) >>
+  `PERM (SND (do_swap dist ps)).ps_stack ps.ps_stack` by
+    metis_tac[do_swap_stack_perm] >>
+  gvs[generated_plan_state_wf_marked_def,
+      reorderSimTheory.do_swap_spilled_unchanged] >>
+  conj_tac >- metis_tac[PERM_FILTER, ALL_DISTINCT_PERM] >>
+  gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[PERM_MEM_EQ]
+QED
+
+Theorem regional_emit_marked_wf[local]:
+  generate_emit_ops inst topics ps = (ops,qs) /\
+  generated_plan_state_wf_marked sb ps ==>
+  generated_plan_state_wf_marked sb qs
+Proof
+  strip_tac >>
+  `qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled` by
+    metis_tac[fnBlockPlanStaticBalanceTheory.generate_emit_ops_stack,
+              inventory_emit_ops_spilled, SND] >>
+  drule allocMonoTheory.generate_emit_ops_alloc >> strip_tac >>
+  gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
+  metis_tac[]
+QED
+
+Theorem regional_push_marked_wf[local]:
+  generated_plan_state_wf_marked sb ps /\
+  ~MEM op ps.ps_stack /\ op NOTIN FDOM ps.ps_spilled ==>
+  generated_plan_state_wf_marked sb
+    (ps with ps_stack := stack_push op ps.ps_stack)
+Proof
+  strip_tac >>
+  `plan_slots_bounded sb (ps with ps_stack := stack_push op ps.ps_stack)` by
+    (gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
+     metis_tac[]) >>
+  gvs[generated_plan_state_wf_marked_def, stack_push_def,
+      FILTER_SNOC, ALL_DISTINCT_SNOC, MEM_FILTER,
+      pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  Cases_on `op = dead_stack_marker` >> gvs[]
+  >- (gen_tac >> Cases_on `x = dead_stack_marker` >> gvs[]) >>
+  conj_tac >- simp[ALL_DISTINCT_SNOC, MEM_FILTER] >>
+  gen_tac >> Cases_on `x = op` >> gvs[]
+QED
+
+Theorem regional_outputs_marked_wf[local]:
+  !outputs ps.
+    generated_plan_state_wf_marked sb ps /\ ALL_DISTINCT outputs /\
+    EVERY (\v. ~MEM (Var v) ps.ps_stack /\
+                Var v NOTIN FDOM ps.ps_spilled) outputs ==>
+    generated_plan_state_wf_marked sb
+      (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+        ps outputs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `generated_plan_state_wf_marked sb
+     (ps with ps_stack := stack_push (Var h) ps.ps_stack)` by
+    (irule regional_push_marked_wf >> simp[]) >>
+  first_x_assum irule >> simp[] >>
+  gvs[EVERY_MEM, stack_push_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem regional_regular_outputs_marked_wf[local]:
+  generated_plan_state_wf_marked sb ps /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  reorder_plan dfg pending mid = (rops,arranged) /\
+  ALL_DISTINCT outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled) outputs ==>
+  generated_plan_state_wf_marked sb
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack) outputs)
+Proof
+  strip_tac >>
+  `generated_plan_state_wf_marked sb
+    (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack)` by
+    (drule_all regional_regular_core_marked_wf >> simp[]) >>
+  irule regional_outputs_marked_wf >> simp[] >>
+  `LENGTH operands <= LENGTH mid.ps_stack` by
+    (drule_all available_input_plan_length >> simp[]) >>
+  `EVERY (\v. ~MEM (Var v) arranged.ps_stack /\
+      Var v NOTIN FDOM arranged.ps_spilled) outputs` by
+    (gvs[EVERY_MEM] >> gen_tac >> disch_tac >>
+     `~MEM (Var v) mid.ps_stack /\ Var v NOTIN FDOM mid.ps_spilled` by
+       metis_tac[generatedPrefixSimTheory.emit_input_plan_preserves_not_mem] >>
+     `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+     `LENGTH pending <= LENGTH mid.ps_stack /\ LENGTH pending <= 17` by simp[] >>
+     drule_all generatedPrefixSimTheory.reorder_plan_preserves_not_mem_reachable >> simp[]) >>
+  gvs[EVERY_MEM, stack_pop_def] >>
+  metis_tac[rich_listTheory.MEM_TAKE]
+QED
+
+Theorem regional_regular_marked_wf:
+  inst.inst_opcode <> JMP /\
+  generated_plan_state_wf_marked sb ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled) inst.inst_outputs /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = (ops,qs)
+  ==> generated_plan_state_wf_marked sb qs
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,mid)` >>
+  rename1 `_ = (rops,arranged)` >>
+  `?pending. PERM pending (compute_operands inst) /\
+    reorder_plan dfg pending mid = (rops,arranged)` by
+    (irule inventory_selected_reorder >> qexists_tac `inst.inst_opcode` >>
+     simp[LET_THM]) >>
+  qpat_x_assum `(if _ then _ else _) = (rops,arranged)` kall_tac >> fs[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics pushed` >>
+  `generated_plan_state_wf_marked sb pushed` by
+    (simp[Abbr `pushed`] >> irule regional_regular_outputs_marked_wf >> simp[] >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >> simp[]) >>
+  pairarg_tac >> simp[] >>
+  rename1 `generate_emit_ops _ _ _ = (eops,emitted)` >>
+  `generated_plan_state_wf_marked sb emitted` by
+    (drule_all regional_emit_marked_wf >> simp[]) >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  qpat_x_assum `Abbrev (pushed = _)` kall_tac >>
+  Cases_on `inst.inst_outputs = []`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      irule regional_release_marked_wf >> simp[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (pops,popped)` >>
+  `generated_plan_state_wf_marked sb popped` by
+    (Cases_on `~halting \/ 1 < LENGTH inst.inst_outputs` >> gvs[] >>
+     metis_tac[regional_popmany_marked_wf, SND]) >>
+  pairarg_tac >> simp[] >> rename1 `_ = (oopt,optimised)` >>
+  `generated_plan_state_wf_marked sb optimised` by
+    (Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> gvs[] >>
+     metis_tac[regional_optimistic_marked_wf, SND]) >>
+  strip_tac >> gvs[] >> irule regional_release_marked_wf >> simp[]
+QED
