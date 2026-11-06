@@ -229,7 +229,7 @@ Proof
 QED
 
 (* Common semantic boundary for an allocation followed by either copy. *)
-Theorem copy_buffer_post_transport_physical[local]:
+Theorem copy_buffer_post_transport_physical:
   !ctx func cenv cx e es sa sm mid sb s0 es' v vv s u z tv op w sz inst.
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     local_ptrs_reserved cenv sa /\
