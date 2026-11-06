@@ -1969,3 +1969,26 @@ Proof
   simp[] >>
   gvs[Abbr `n`, Abbr `q`, Abbr `is`] >> decide_tac
 QED
+
+Theorem current_cut_prefix_phi_effect:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\ A h = current_block_annotations old pre /\
+  bb = simplify_current_phi_block new /\
+  current_prefix_back
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) -
+       phi_prefix_length bb.bb_instructions)
+      (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions))
+    (current_cut_sg fn A renamed H events h
+      (LENGTH (collect_phis old.bb_instructions))) z x ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (phi_eff (SOME p) x old.bb_instructions)
+    (phi_eff (SOME p) z bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `current_cut_semantic_endpoint fn A renamed H events p h old new pred z x` by
+    (irule current_cut_prefix_semantic_endpoint >> metis_tac[]) >>
+  gvs[] >> irule current_cut_semantic_endpoint_effect >> metis_tac[]
+QED
