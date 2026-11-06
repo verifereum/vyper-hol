@@ -25,7 +25,7 @@ Ancestors
   emitHelperProps exprLoweringProps fragExec ptrSafeRun ptrDiscipline
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
   venomExecProofs stmtIfPtr exprSimSource supportedExprTraverse
-  supportedStmtTraverse
+  supportedStmtTraverse bodyForRangePtr bodyForArrayPtr
 
 val _ = Parse.hide "body";
 
@@ -268,7 +268,9 @@ Theorem body_for_case_ptr:
        body_iterator_ptr_ok cx it) ==>
     body_stmt_ptr_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `it`
+  >- (irule body_for_array_ptr >> simp[] >> metis_tac[])
+  >> irule body_for_range_ptr >> simp[] >> metis_tac[]
 QED
 
 Theorem body_expr_stmt_case_ptr:
