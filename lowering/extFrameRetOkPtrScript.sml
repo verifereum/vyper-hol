@@ -29,7 +29,7 @@ Ancestors
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
   extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr extRetRawFramePtr
-  extRetSignatureFramePtr extRetLoweredBytesFramePtr extRetSingletonFramePtr returnMetadataPtr
+  extRetSignatureFramePtr extRetLoweredBytesFramePtr extRetSingletonFramePtr returnMetadataPtr vyperTypeCallGraph
 
 val _ = Parse.hide "body";
 
@@ -139,5 +139,18 @@ Proof
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `assignable_type (type_env tops) ret /\
+            (?m. cenv'.ce_ret_enc_info = AbiCopy m) /\
+            expr_type x = ret /\ lowered_value_type cenv' x = ret`
+  >- (gvs[] >>
+      drule source_deployment_context >> strip_tac >>
+      `well_typed_expr env' x /\ expr_type x <> NoneT` by
+        fs[typedCopyPtrTheory.type_stmt_return_some_iff] >>
+      irule external_frame_equal_static_copy_stmt_frag_ptr_bounded >> simp[] >>
+      conj_tac >- fs[int_calls_stmt_def, int_calls_expr_def] >>
+      reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   cheat
 QED
