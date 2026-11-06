@@ -91,7 +91,7 @@ QED
 Definition abi_sites_encoder_complex_prefix_post_def:
   abi_sites_encoder_complex_prefix_post sites (infos:(abi_enc_info # num # num # bool) list)
     dyn_ptr next site limit_st first last b cap initial actual <=>
-    ?slot. eval_operand dyn_ptr actual = SOME (n2w slot) /\
+    ?slot. site IN sites /\ eval_operand dyn_ptr actual = SOME (n2w slot) /\
       mload slot actual = n2w (SUM (MAP (\(_,asz,_,_). asz) infos)) /\
       b <= slot /\ slot+32 <= b+cap /\
       abi_sites_decoder_budget sites first last b cap actual /\ fresh_vars_wrt limit_st actual /\
@@ -117,7 +117,7 @@ Theorem abi_encoder_complex_prefix_post_def:
       (!id. id <> site ==> FLOOKUP actual.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
       actual.vs_halted = initial.vs_halted
 Proof
-  rewrite_tac[abi_sites_encoder_complex_prefix_post_def]
+  simp[abi_sites_encoder_complex_prefix_post_def]
 QED
 
 Theorem abi_encoder_complex_prefix_post_inst_idx[simp]:
