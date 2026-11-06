@@ -6,18 +6,6 @@ Ancestors
   venomExecSemantics exprLoweringProps exprSimBopRestWordLoopPath
   fragGasMode fragGasPathMem allocaHistoryFragment
 
-Theorem u2s_control_mem_ok:
-  run_inst_seq_mem_ok (u2s_setup a op buf) s /\
-  run_inst_seq_mem_ok (u2s_check a) s /\
-  run_inst_seq_mem_ok (u2s_cond a) s
-Proof
-  rpt conj_tac >> irule run_inst_seq_mem_ok_every >>
-  simp[u2s_setup_def, u2s_check_def, u2s_cond_def, u2s_inst_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  simp[inst_dload_in_section_def, mk_inst_def] >>
-  irule below_frontier_no_ranges >> simp[mk_inst_def]
-QED
-
 Theorem u2s_body_nonstore_mem_ok[local]:
   run_inst_seq_mem_ok (TAKE 4 (u2s_body a buf n)) s /\
   run_inst_seq_mem_ok (TAKE 4 (DROP 5 (u2s_body a buf n))) s
@@ -29,7 +17,7 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
-Theorem u2s_body_mem_ok:
+Theorem u2s_body_mem_ok[local]:
   eval_operand (Var (u2s_var a 0)) s = SOME xw /\
   eval_operand (Var (u2s_var a 1)) s = SOME iw /\
   eval_operand buf s = SOME bw /\
@@ -83,7 +71,7 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
-Theorem u2s_final_mem_ok:
+Theorem u2s_final_mem_ok[local]:
   eval_operand buf s = SOME bw /\
   eval_operand (Var (u2s_var a 1)) s = SOME iw /\
   (!z. buf = Var z ==> not_fresh_at a z) /\
@@ -173,7 +161,7 @@ Proof
        eval_operands_def, eval_operand_def]
 QED
 
-Theorem u2s_zero_mem_ok:
+Theorem u2s_zero_mem_ok[local]:
   eval_operand buf s = SOME bw /\
   (!z. buf = Var z ==> not_fresh_at a z) /\
   w2n (bw+n2w n) + 32 <= s.vs_alloca_next /\
@@ -217,7 +205,7 @@ Proof
   Induct >> simp[]
 QED
 
-Theorem u2s_memory_block_path:
+Theorem u2s_memory_block_path[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = pre ++ code ++ [j] /\
   s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
@@ -261,7 +249,7 @@ Proof
   metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_fields]
 QED
 
-Theorem u2s_block_history:
+Theorem u2s_block_history[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = pre ++ code ++ [j] /\
@@ -286,7 +274,7 @@ Proof
   simp[jump_to_def]
 QED
 
-Theorem u2s_memory_block_history:
+Theorem u2s_memory_block_history[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = pre ++ code ++ [j] /\

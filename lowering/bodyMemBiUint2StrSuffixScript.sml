@@ -5,7 +5,7 @@ Ancestors
   exprSimAlloc exprSimHash loweringPosts compileEnv fragGasPathMem fragGasMode finite_map
   venomInst venomState venomExecSemantics arithmetic
 
-Theorem u2s_alloc_mem_ready:
+Theorem u2s_alloc_mem_ready[local]:
   compile_alloc_buffer sz sa = (ba,a) /\ fn_has_code sa a fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   stmt_state_rel ctx fn cenv cx es s /\ alloca_history fn s /\

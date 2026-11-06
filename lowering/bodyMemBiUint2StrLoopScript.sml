@@ -5,7 +5,7 @@ Ancestors
   venomInst venomState venomExecSemantics finite_map
   bodyMemBopRestWordPath fragGasPathMem arithmetic list
 
-Theorem u2s_cond_mem_transition:
+Theorem u2s_cond_mem_transition[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block (u2s_label a 1) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
@@ -61,7 +61,7 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem u2s_body_mem_transition:
+Theorem u2s_body_mem_transition[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block (u2s_label a 2) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
@@ -98,7 +98,7 @@ Proof
   simp[u2s_safe_jump, u2s_digits_jump] >> simp[jump_to_def]
 QED
 
-Theorem u2s_final_mem_exit:
+Theorem u2s_final_mem_exit[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block (u2s_label a 4) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a buf n|> /\
@@ -138,7 +138,7 @@ Proof
   simp[jump_to_def, eval_operand_def, lookup_var_def]
 QED
 
-Theorem u2s_loop_mem_path:
+Theorem u2s_loop_mem_path[local]:
   !x s str.
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
@@ -200,7 +200,7 @@ Proof
   metis_tac[gas_path_mem_then, ADD_CLAUSES]
 QED
 
-Theorem u2s_zero_mem_exit:
+Theorem u2s_zero_mem_exit[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block (u2s_label a 3) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|> /\
@@ -238,7 +238,7 @@ Proof
   simp[jump_to_def, eval_operand_def, lookup_var_def]
 QED
 
-Theorem u2s_check_mem_exit:
+Theorem u2s_check_mem_exit[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\

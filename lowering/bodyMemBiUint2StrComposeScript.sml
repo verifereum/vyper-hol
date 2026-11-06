@@ -6,7 +6,7 @@ Ancestors
   exprSimUint2Str exprSimHash exprSimMemDefs exprLoweringProps
   builtinStrings arithmetic words exprSafeOperand exprLowering compileEnv valueEncoding vyperValue loweringSlice context exprSimDefs gasSummary gasOutcome fragGasMode fragGasPath gasContext builtinSimple vyperAST vyperState fragExec vyperContext
 
-Theorem uint2str_typed_mem_path:
+Theorem uint2str_typed_mem_path[local]:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
   expr_type e = BaseT (UintT k) /\ 78 <= n /\
   lower_value compile_expr cenv ty e sa = (x,sm) /\

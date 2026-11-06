@@ -13,10 +13,3 @@ Proof
      fs[u2s_safe_def] >> metis_tac[]) >>
   decide_tac
 QED
-
-Theorem u2s_buffer_intervals:
-  i <= n /\ 32 <= sz /\ b+n+sz <= f ==>
-  b <= b+n-i /\ b+n-i+32 <= f /\ b+n-i+sz <= f
-Proof
-  decide_tac
-QED
