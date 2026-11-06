@@ -834,3 +834,206 @@ Proof
   dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
   conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[]
 QED
+
+Theorem splice_two_b_store_prefix:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops. generate_block_insts_prefix (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    "B" F 0 19 0 14
+    (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions q =
+    SOME (ops,q with ps_stack := splice_loop_e.ps_stack ++ [Var "r"])
+Proof
+  gen_tac >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[EVAL ``(THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions``] >>
+  pure_rewrite_tac[EVAL ``splice_loop_e``, EVAL ``dfg_build_function splice_two_fn``] >>
+  pure_once_rewrite_tac[GSYM (EVAL ``SUC 13``)] >>
+  simp[Once generate_block_insts_prefix_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_prefix``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  pure_once_rewrite_tac[GSYM (EVAL ``SUC 12``)] >>
+  simp[Once generate_block_insts_prefix_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_prefix``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  map_every (fn n =>
+    pure_once_rewrite_tac[GSYM (EVAL n)] >>
+    simp[Once generate_block_insts_prefix_def, splice_two_b_live] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``release_dead_spills``, ``generate_block_insts_prefix``, ``liveness_analyze``,
+       ``cfg_analyze``, ``splice_two_fn``]) >>
+    dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+    (conj_tac >- (simp[] >> rpt strip_tac >> gvs[])))
+    [``SUC 11``, ``SUC 10``, ``SUC 9``] >>
+  map_every (fn n =>
+    pure_once_rewrite_tac[GSYM (EVAL n)] >>
+    simp[Once generate_block_insts_prefix_def, splice_two_b_live] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``release_dead_spills``, ``generate_block_insts_prefix``, ``liveness_analyze``,
+       ``cfg_analyze``, ``splice_two_fn``]) >>
+    dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+    (conj_tac >- (simp[] >> rpt strip_tac >> gvs[])))
+    [``SUC 8``, ``SUC 7``, ``SUC 6``] >>
+  map_every (fn n =>
+    pure_once_rewrite_tac[GSYM (EVAL n)] >>
+    simp[Once generate_block_insts_prefix_def, splice_two_b_live] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``release_dead_spills``, ``generate_block_insts_prefix``, ``liveness_analyze``,
+       ``cfg_analyze``, ``splice_two_fn``]) >>
+    dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+    (conj_tac >- (simp[] >> rpt strip_tac >> gvs[])))
+    [``SUC 5``, ``SUC 4``, ``SUC 3``] >>
+  map_every (fn n =>
+    pure_once_rewrite_tac[GSYM (EVAL n)] >>
+    simp[Once generate_block_insts_prefix_def, splice_two_b_live] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``release_dead_spills``, ``generate_block_insts_prefix``, ``liveness_analyze``,
+       ``cfg_analyze``, ``splice_two_fn``]) >>
+    dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+    (conj_tac >- (simp[] >> rpt strip_tac >> gvs[])))
+    [``SUC 2``, ``SUC 1``, ``SUC 0``] >>
+  simp[Once generate_block_insts_prefix_def]
+QED
+
+Theorem splice_two_b_store_suffix:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ [Var "r"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops. generate_block_insts_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    "B" F 0 19 14
+    (DROP 14 (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions) q =
+    SOME (ops,splice_loop_e)
+Proof
+  gen_tac >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[EVAL ``DROP 14 (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions``] >>
+  pure_rewrite_tac[EVAL ``splice_loop_e``, EVAL ``dfg_build_function splice_two_fn``] >>
+  simp[Once generate_block_insts_plan_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_plan``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[Once generate_block_insts_plan_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_plan``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[Once generate_block_insts_plan_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_plan``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[Once generate_block_insts_plan_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_plan``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  `live_vars_at (liveness_analyze splice_two_fn) "B" 19 =
+   live_vars_at (liveness_analyze splice_two_fn) "B" 18` by EVAL_TAC >>
+  simp[Once generate_block_insts_plan_def, splice_two_b_live] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``generate_block_insts_plan``, ``liveness_analyze``,
+     ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- simp[] >>
+  simp[Once generate_block_insts_plan_def]
+QED
+
+Theorem splice_two_b_insts:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops. generate_block_insts_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    "B" F 0 19 0
+    (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions q =
+    SOME (ops,splice_loop_e)
+Proof
+  gen_tac >> strip_tac >> drule splice_two_b_store_prefix >> strip_tac >>
+  `?post. generate_block_insts_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    "B" F 0 19 14
+    (DROP 14 (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions)
+    (q with ps_stack := splice_loop_e.ps_stack ++ [Var "r"]) =
+    SOME (post,splice_loop_e)` by
+    (irule splice_two_b_store_suffix >> gvs[]) >>
+  `14 <= LENGTH (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions` by EVAL_TAC >>
+  simp[Q.SPEC `14` generate_block_insts_plan_split] >> gvs[] >> metis_tac[]
+QED
+
+Theorem splice_two_b_block:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops. generate_block_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    (THE (lookup_block "B" splice_two_fn.fn_blocks)) q = SOME (ops,splice_loop_e)
+Proof
+  gen_tac >> strip_tac >> drule splice_two_b_insts >> strip_tac >>
+  `q.ps_cleanup_height = NONE /\ ~q.ps_cleanup_promised` by
+    (gvs[] >> EVAL_TAC) >>
+  drule_all splice_two_b_cleanup >> strip_tac >>
+  qpat_x_assum `q = _` kall_tac >>
+  `!bb. bb = THE (lookup_block "B" splice_two_fn.fn_blocks) ==>
+     bb <> HD splice_two_fn.fn_blocks /\
+     LENGTH (cfg_preds_of (cfg_analyze splice_two_fn) bb.bb_label) = 1 /\
+     non_param_insts bb = bb.bb_instructions /\
+     ~bb_is_halting bb /\ LENGTH (get_params bb.bb_instructions) = 0 /\
+     LENGTH bb.bb_instructions = 19 /\ bb.bb_label = "B" /\
+     (!ops. ~revert_block_spills bb ops)` by (rw[] >> EVAL_TAC >> simp[]) >>
+  first_x_assum (qspec_then `THE (lookup_block "B" splice_two_fn.fn_blocks)` mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[generate_block_plan_def] >> qexists_tac `SOLabel "B" :: ops` >> simp[]
+QED
+
+Theorem splice_two_l_block:
+  ?ops. generate_block_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    (THE (lookup_block "L" splice_two_fn.fn_blocks)) splice_loop_e =
+    SOME (ops,splice_loop_e)
+Proof
+  pure_rewrite_tac[EVAL ``splice_loop_e``, EVAL ``dfg_build_function splice_two_fn``] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* The proposed collision is absent at the loop backedge in this fixture:
+   B consumes all three retained H spills and returns the original state;
+   L also returns that state.  This is not a global lineage theorem. *)
+Theorem splice_two_l_inventory_observe:
+  generated_plan_state_wf_marked 0 splice_loop_e /\
+  splice_loop_e.ps_spilled = FEMPTY /\
+  set splice_loop_e.ps_stack =
+    set (MAP Var (live_vars_at (liveness_analyze splice_two_fn) "L" 1))
+Proof
+  conj_tac
+  >- (EVAL_TAC >>
+      pure_rewrite_tac[FORALL_SIMP, AND_CLAUSES, pred_setTheory.DISJOINT_EMPTY] >>
+      conj_tac >- (rpt strip_tac >> gvs[]) >>
+      rewrite_tac[GSYM AND_IMP_INTRO, GSYM RIGHT_FORALL_IMP_THM] >>
+      CONV_TAC (BINDER_CONV FORALL_IMP_CONV) >>
+      CONV_TAC (TOP_DEPTH_CONV (numLib.BOUNDED_FORALL_CONV ALL_CONV)) >>
+      EVAL_TAC >> simp[]) >>
+  conj_tac >- EVAL_TAC >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``set``]) >> simp[]
+QED
