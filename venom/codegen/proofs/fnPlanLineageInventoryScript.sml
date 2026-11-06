@@ -5578,3 +5578,216 @@ Proof
   qexists_tac `stack_pop (LENGTH selected) ps2.ps_stack` >>
   metis_tac[emit_reorder_plan_bounded_core_suffix]
 QED
+
+(* Exact copy of reorderSim.elem_count_snoc (local there). *)
+Theorem elem_count_snoc[local]:
+  !x y (xs : 'a list).
+    LIST_ELEM_COUNT x (SNOC y xs) =
+    LIST_ELEM_COUNT x xs + LIST_ELEM_COUNT x [y]
+Proof
+  gen_tac >> gen_tac >> Induct >> simp[LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
+QED
+
+(* Exact copy of reorderSim.stack_pop_one_elem_count (local there).
+   Kept here to avoid importing frame-level simulation theories. *)
+Theorem stack_pop_one_elem_count[local]:
+  !x (xs : 'a list).
+    xs <> [] ==>
+    LIST_ELEM_COUNT x (stack_pop 1 xs) +
+    LIST_ELEM_COUNT x [stack_peek 0 xs] = LIST_ELEM_COUNT x xs
+Proof
+  rpt strip_tac >>
+  `?ys y. xs = SNOC y ys` by metis_tac[rich_listTheory.SNOC_CASES] >>
+  gvs[stack_pop_def, stack_peek_def, elem_count_snoc,
+      rich_listTheory.TAKE_SNOC, EL_LENGTH_SNOC]
+QED
+
+Theorem pop_unique_operand:
+  !x ps d.
+    stack_get_depth x ps.ps_stack = SOME d /\
+    LIST_ELEM_COUNT x ps.ps_stack <= 1 ==>
+    ~MEM x (stack_pop 1 (SND (do_swap d ps)).ps_stack)
+Proof
+  rpt strip_tac >> drule stack_get_depth_props >> strip_tac >>
+  `LIST_ELEM_COUNT x (SND (do_swap d ps)).ps_stack =
+    LIST_ELEM_COUNT x ps.ps_stack` by simp[do_swap_multiplicity] >>
+  `stack_peek 0 (SND (do_swap d ps)).ps_stack = x` by
+    (simp[do_swap_stack_result, stack_peek_def, stack_swap_def, EL_LUPDATE] >>
+     gvs[stack_peek_def]) >>
+  `(SND (do_swap d ps)).ps_stack <> []` by
+    (simp[do_swap_stack_result, stack_swap_def] >> strip_tac >> gvs[]) >>
+  drule stack_pop_one_elem_count >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[LIST_ELEM_COUNT_THM] >> strip_tac >>
+  `LIST_ELEM_COUNT x (stack_pop 1 (SND (do_swap d ps)).ps_stack) = 0` by decide_tac >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem popmany_individual_unique_absent:
+  !items ps ops qs x.
+    MEM x items /\ LIST_ELEM_COUNT x ps.ps_stack <= 1 /\
+    popmany_individual items ps = (ops,qs) ==>
+    ~MEM x qs.ps_stack
+Proof
+  rpt gen_tac >> simp[popmany_individual_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f acc sorted` >>
+  `MEM x sorted` by simp[Abbr `sorted`, sortingTheory.QSORT_MEM] >>
+  `!ys p a.
+    LIST_ELEM_COUNT x p.ps_stack <= 1 /\
+    (MEM x ys \/ ~MEM x p.ps_stack) ==>
+    ~MEM x (SND (FOLDL f (a,p) ys)).ps_stack` suffices_by
+    (disch_then (qspecl_then [`sorted`,`ps`,`[]`] mp_tac) >>
+     gvs[Abbr `acc`]) >>
+  Induct >- simp[] >> pure_rewrite_tac[FOLDL] >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  qmatch_goalsub_abbrev_tac `FOLDL f acc1 ys` >>
+  `LIST_ELEM_COUNT x (SND acc1).ps_stack <= LIST_ELEM_COUNT x p.ps_stack` by
+    (simp[Abbr `acc1`, Abbr `f`] >>
+     Cases_on `stack_get_depth h p.ps_stack` >> simp[] >>
+     drule stack_get_depth_props >> strip_tac >>
+     Cases_on `x' = 0` >> simp[stack_pop_elem_count_le] >>
+     pairarg_tac >> simp[] >>
+     qspecl_then [`1`,`ps'.ps_stack`,`x`] mp_tac stack_pop_elem_count_le >>
+     drule do_swap_multiplicity >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  `MEM x ys \/ ~MEM x (SND acc1).ps_stack` by
+    (Cases_on `MEM x ys` >> simp[] >>
+     Cases_on `MEM x p.ps_stack`
+     >- (`h = x` by fs[] >>
+         simp[Abbr `acc1`, Abbr `f`] >>
+         Cases_on `stack_get_depth x p.ps_stack` >> simp[]
+         >- metis_tac[stack_get_depth_is_some, optionTheory.IS_SOME_DEF] >>
+         Cases_on `x' = 0` >> simp[]
+         >- (drule_all pop_unique_operand >> simp[do_swap_def]) >>
+         pairarg_tac >> simp[] >> drule_all pop_unique_operand >> simp[]) >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  PairCases_on `acc1` >> first_x_assum irule >> gvs[] >> decide_tac
+QED
+
+Theorem popmany_plan_unique_absent:
+  !items ps ops qs x.
+    MEM x items /\ LIST_ELEM_COUNT x ps.ps_stack <= 1 /\
+    popmany_plan items ps = (ops,qs) ==>
+    ~MEM x qs.ps_stack
+Proof
+  Cases >- simp[] >> rpt gen_tac >>
+  simp[popmany_plan_def] >>
+  reverse IF_CASES_TAC >- metis_tac[popmany_individual_unique_absent, MEM] >>
+  reverse IF_CASES_TAC >- metis_tac[popmany_individual_unique_absent, MEM] >>
+  strip_tac >>
+  `set (h::t) SUBSET set ps.ps_stack` by
+    (gvs[SUBSET_DEF, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[stack_get_depth_is_some]) >>
+  `LENGTH (h::t) < LENGTH ps.ps_stack /\
+   set (h::t) = set (MAP (\d. stack_peek d ps.ps_stack)
+      (GENLIST SUC (LENGTH (h::t))))` by
+    (qspecl_then [`h::t`,`[]`,`ps.ps_stack`,`ps`] mp_tac contiguous_depths_core >> simp[]) >>
+  `ps.ps_stack <> []` by (strip_tac >> gvs[]) >>
+  `?rest top. ps.ps_stack = SNOC top rest` by metis_tac[SNOC_CASES] >>
+  `LENGTH (h::t) <= LENGTH rest` by gvs[] >>
+  `?base removed. ps.ps_stack = base ++ removed ++ [top] /\
+      LENGTH removed = LENGTH (h::t)` by
+    (qexistsl_tac [`TAKE (LENGTH rest - LENGTH (h::t)) rest`,
+                  `DROP (LENGTH rest - LENGTH (h::t)) rest`] >>
+     conj_tac
+     >- (pure_rewrite_tac[GSYM APPEND_ASSOC, TAKE_DROP] >> simp[SNOC_APPEND]) >>
+     gvs[LENGTH_DROP]) >>
+  `set (h::t) = set removed` by
+    (qpat_x_assum `LENGTH removed = _` (assume_tac o SYM) >>
+     gvs[stack_peek_contiguous]) >>
+  rename1 `ps.ps_stack = lower ++ removed ++ [top]` >>
+  `MEM x removed` by
+    (qpat_x_assum `set (h::t) = set removed` mp_tac >>
+     simp[EXTENSION] >> metis_tac[]) >>
+  `0 < LIST_ELEM_COUNT x removed` by gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  `~MEM x (lower ++ [top])` by
+    (Cases_on `x = top` >>
+     gvs[elem_count_append, LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM]) >>
+  pairarg_tac >> gvs[] >>
+  qspecl_then [`LENGTH removed`,`ps`] mp_tac do_swap_stack_result >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `LENGTH removed = _` (assume_tac o SYM) >>
+  gvs[stack_pop_contiguous]
+QED
+
+Theorem clean_stack_plan_spilled_unchanged:
+  !lv cfg fn bb ps ops qs.
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    qs.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[clean_stack_plan_def] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `lookup_block h fn.fn_blocks` >> simp[] >>
+  IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[popmany_plan_spilled_unchanged, pairTheory.SND]) >>
+  metis_tac[popmany_plan_spilled_unchanged, pairTheory.SND]
+QED
+
+Theorem clean_stack_plan_branch_unique_absent:
+  !lv cfg fn bb pred pred_bb v ps ops qs.
+    cfg_preds_of cfg bb.bb_label = [pred] /\
+    1 < LENGTH (cfg_succs_of cfg pred) /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)) /\
+    ~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at lv bb.bb_label 0)) /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    ~MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def] >>
+  qmatch_goalsub_abbrev_tac `NULL inputs` >>
+  qmatch_goalsub_abbrev_tac `NULL inputs /\ ok` >>
+  qmatch_goalsub_abbrev_tac `mark_dead_stack retained` >>
+  qmatch_goalsub_abbrev_tac `popmany_plan requests ps` >>
+  `MEM (Var v) (MAP Var
+    (FILTER (\w. ~MEM w inputs)
+      (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))))` by
+    simp[MEM_MAP, MEM_FILTER, Abbr `inputs`] >>
+  IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[MEM_MAP, dead_stack_marker_def]) >>
+  reverse IF_CASES_TAC >> simp[]
+  >- metis_tac[popmany_plan_unique_absent] >>
+  pairarg_tac >> simp[] >> disch_then (CONJUNCTS_THEN assume_tac) >> gnvs[] >>
+  Cases_on `MEM (Var v) retained`
+  >- (simp[mark_dead_stack_def, MEM_MAP, dead_stack_marker_def] >>
+      gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
+  `~MEM (Var v) ps'.ps_stack` by
+    (Cases_on `MEM (Var v) ps.ps_stack`
+     >- (`MEM (Var v) requests` by
+           simp[Abbr `requests`, MEM_FILTER, stack_get_depth_is_some] >>
+         metis_tac[popmany_plan_unique_absent]) >>
+     `ps'.ps_spilled = ps.ps_spilled` by
+       metis_tac[popmany_plan_spilled_unchanged, pairTheory.SND] >>
+     drule popmany_plan_resource_nonincrease >>
+     disch_then (qspec_then `Var v` mp_tac) >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  simp[mark_dead_stack_def, MEM_MAP, dead_stack_marker_def] >>
+  gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem clean_stack_plan_branch_resource_absent:
+  !lv cfg fn bb pred pred_bb v ps ops qs.
+    cfg_preds_of cfg bb.bb_label = [pred] /\
+    1 < LENGTH (cfg_succs_of cfg pred) /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)) /\
+    ~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at lv bb.bb_label 0)) /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 /\
+    Var v NOTIN FDOM ps.ps_spilled /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (irule clean_stack_plan_branch_unique_absent >> metis_tac[]) >>
+  drule clean_stack_plan_spilled_unchanged >> simp[]
+QED
