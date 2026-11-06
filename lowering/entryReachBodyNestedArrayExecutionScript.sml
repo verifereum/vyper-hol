@@ -848,3 +848,63 @@ Resume nested_array_prepared_endpoint[frames]:
   simp[] >> rpt strip_tac >> decide_tac
 QED
 Finalise nested_array_prepared_endpoint
+
+(* Initial resources identify the two actual emitted counter sites using
+   deterministic compiler computations, never an execution callback. *)
+Definition entry_nested_array_init_resources_def:
+  entry_nested_array_init_resources sf ce ty inner outer dst src st
+    (ctx,fn,site,d,b,cap,p,oid,root,extent,initial) cid iid <=>
+  ?pg ph pl ip cnt labels body ops middle ig ih icnt.
+    entry_array_init_resources dst src outer
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      (st,pg,ph,pl,ip,cnt)
+      (ctx,fn,site,d,type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)),
+       b,cap,p,initial) /\
+    abi_decode_loop_prefix ip src CALLDATALOAD pl = (labels,body) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      (type_memory_bytes ce (ArrayT ty (Dynamic inner))) body = (ops,middle) /\
+    abi_decode_dynarray_prefix (FST (SND ops)) CALLDATALOAD (Lit 0w) inner
+      (abi_embedded_static_size ce.ce_struct_fields ty) middle = ((),ig) /\
+    abi_decode_array_header (SND (SND ops)) (FST (SND ops)) CALLDATALOAD ig = (icnt,ih) /\
+    cid = ph.cs_next_id /\ iid = ih.cs_next_id /\
+    entry_owned_region oid root extent d
+      (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) initial /\
+    oid <> cid /\ oid <> iid /\ b <= initial.vs_alloca_next /\
+    (FLOOKUP initial.vs_allocas iid = NONE ==>
+      initial.vs_alloca_next + (if FLOOKUP initial.vs_allocas cid = NONE then 32 else 0) + 32 <= b+cap) /\
+    (!q. FLOOKUP initial.vs_allocas iid = SOME (q,32) ==> b <= q /\ q+32 <= b+cap)
+End
+
+Theorem nested_array_initial_site_alignment[local]:
+  entry_nested_array_init_resources sf ce ty inner outer dst src initial
+    (ctx,fn,site,d,b,cap,p,oid,root,extent,s) cid iid /\
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) outer
+    (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner))) initial =
+    ((ip,cnt),pl) /\
+  abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) outer
+    (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner))) initial = ((),pg) /\
+  abi_decode_array_header dst src CALLDATALOAD pg = (cnt,ph) /\
+  abi_decode_index_init ph = (ip,pl) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD pl = (labels,body_st) /\
+  nested_array_child_code sf ce ty inner ip src dst body_st ops middle last
+    ig ih il iip icnt fn limit_st iv nv hdr /\ ph.cs_next_id < ih.cs_next_id ==>
+  entry_array_init_resources dst src outer
+    (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+    (initial,pg,ph,pl,ip,cnt)
+    (ctx,fn,site,d,type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)),
+     b,cap,p,s) /\
+  cid = ph.cs_next_id /\ iid = ih.cs_next_id /\ cid <> iid /\
+  entry_owned_region oid root extent d
+    (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) s /\
+  oid <> cid /\ oid <> iid /\ b <= s.vs_alloca_next /\
+  (FLOOKUP s.vs_allocas iid = NONE ==>
+    s.vs_alloca_next + (if FLOOKUP s.vs_allocas cid = NONE then 32 else 0) + 32 <= b+cap) /\
+  (!q. FLOOKUP s.vs_allocas iid = SOME (q,32) ==> b <= q /\ q+32 <= b+cap)
+Proof
+  simp_tac bool_ss [entry_nested_array_init_resources_def,
+    entryReachBodyCanonicalBytesArrayTheory.entry_array_init_resources_def,
+    nested_array_child_code_def] >>
+  rpt strip_tac >> gvs[]
+QED
