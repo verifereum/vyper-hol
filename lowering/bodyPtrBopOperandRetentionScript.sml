@@ -44,6 +44,10 @@ Proof
   strip_tac >>
   `op_taint tn' op = op_taint tn op` by
     (Cases_on `op` >> gvs[op_taint_def, ghost_kept_def]) >>
+  `op_prov G' op = op_prov G op` by
+    (Cases_on `op` >> gvs[op_prov_def, ghost_kept_def]) >>
+  `is_word_type ty ==> op_prov G' op = NONE` by
+    metis_tac[ptr_val_ok_def] >>
   irule bop_ptr_val_ok_frame >> simp[] >>
   qexistsl_tac [`G`, `s`, `tn`, `tv`] >> simp[] >> strip_tac >> simp[] >>
   conj_tac >- metis_tac[expr_val_at_def] >>
