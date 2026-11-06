@@ -1,7 +1,7 @@
 (* Actual allocation-site ownership, including allocations reused in loops. *)
 Theory logTupleOwnershipPtr
 Ancestors
-  localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv exprLoweringProps
+  localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv exprLoweringProps abiBuiltinAllocation
   venomMemDefs venomState venomInst finite_map list arithmetic
 
 Theorem log_alloca_candidate_other_region:
@@ -42,4 +42,15 @@ Proof
     (irule local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
   fs[compileEnvTheory.regions_disjoint_def, abi_footprint_disjoint_def] >>
   metis_tac[]
+QED
+
+Theorem log_builtin_allocation_candidate:
+  t.vs_allocas = (abi_builtin_allocate_state site cap s).vs_allocas /\
+  FLOOKUP t.vs_allocas site = SOME (p,cap) ==>
+  ((FLOOKUP s.vs_allocas site = NONE /\ p = s.vs_alloca_next) \/
+   FLOOKUP s.vs_allocas site = SOME (p,cap))
+Proof
+  Cases_on `FLOOKUP s.vs_allocas site = NONE` >>
+  simp[abi_builtin_allocate_state_def, FLOOKUP_UPDATE] >>
+  strip_tac >> gvs[FLOOKUP_UPDATE]
 QED
