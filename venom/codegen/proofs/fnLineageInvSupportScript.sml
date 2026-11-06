@@ -305,3 +305,37 @@ Proof
   simp[generated_plan_state_wf_marked_def] >> strip_tac >>
   irule reorderSimTheory.residual_budget_wf_canonical >> simp[]
 QED
+
+Theorem native_active_cleanup_resources:
+  !S ps liveness cfg fn bb pred_lbl pred_bb inputs layout base ops qs.
+    lineage_inventory S ps /\
+    generated_plan_state_wf_marked base ps /\
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    inputs = input_vars_from pred_lbl bb.bb_instructions
+      (live_vars_at liveness bb.bb_label 0) /\
+    layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions) /\
+    set (MAP Var inputs) SUBSET S /\
+    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled /\
+    clean_stack_plan liveness cfg fn bb ps = (ops,qs) ==>
+    generated_plan_state_wf_marked base qs /\
+    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled) qs /\
+    ?m core. lineage_core m core qs /\
+      !pending. residual_budget_wf base pending (qs with ps_stack := core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `generated_plan_state_wf_marked bound ps` >>
+  `generated_plan_state_wf_marked bound qs` by
+    metis_tac[clean_stack_plan_wf_marked] >>
+  `lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled) qs` by
+    (drule_all clean_stack_plan_active_inventory >> simp[]) >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `lineage_inventory _ qs` mp_tac >>
+  simp[lineage_inventory_def] >> strip_tac >>
+  qexistsl_tac [`m`, `core`] >> asm_rewrite_tac[] >> gen_tac >>
+  irule reorderSimTheory.residual_budget_wf_canonical >>
+  gvs[generated_plan_state_wf_marked_def,
+      planSpillBoundsTheory.plan_slots_bounded_def] >>
+  metis_tac[]
+QED
