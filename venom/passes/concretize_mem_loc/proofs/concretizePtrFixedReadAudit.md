@@ -1,6 +1,49 @@
 # Fixed-byte recovery audit (.52)
 
-## Scope and result
+## Checked follow-up (.58)
+
+`concretizePtrFixedReadRecoveryTheory` now exports
+`ptr_paired_fixed_read_recovery`: the expanded endpoint candidate below
+with two additional premises, `~in_revert_forward endpoint.po_fn endpoint.po_state`
+and `endpoint.po_inst.inst_opcode <> ASSIGN`. This is conditional recovery
+on an existing paired prefix, not universal source-prefix coverage or the
+frozen static-memory theorem. The unrestricted quotation remains unproved.
+
+The installed supplier chain is:
+- `ptr_chrono_last_actual_or_none`: last actual writer or no writer, with
+  pure successor and actual-nonwrite suffix in the writer branch.
+- `ptr_paired_write_owner_fixed`: fixed relocation identity from active
+  ownership, birth slices and owner allocation floors.
+- `ptr_reachable_owner_allocas_from` (OwnerFloor): obtains every current or
+  saved owner floor from observation reachability and source discipline.
+  Saved states are realized by saved frame-history endpoints, not guessed
+  from the current history.
+- `ptr_paired_fixed_actual_write_reflection`: target actual membership
+  implies source actual membership **or source-event revert forwarding**.
+  It does not prove the stronger reflection quotation below.
+- `ptr_chrono_ordinary_non_revert`: the two endpoint restrictions give a
+  non-forwarding source history, eliminating the reflection disjunct at
+  every retained event.
+- `ptr_chrono_history_initial_memory` and
+  `ptr_chrono_history_no_actual_write_byte`: initial memory and no-writer
+  recovery. Both histories originate at the same `vs`.
+- The local retained-ordinary-write ledger helper packages event extraction;
+  immediate post-write equality uses identity relocation, then
+  `ptr_chrono_history_actual_interval_byte_frame` frames both suffixes.
+
+The sections below preserve the original diagnostic and its stronger
+quotations for comparison; their descriptions of missing suppliers are
+historical, superseded by the checked chain above. No invariant conjunct,
+positions-rewrite duplicate, executable-definition change, or frozen-target
+statement change was introduced. Remaining endpoint restrictions and
+universal prefix construction still need separate integration.
+
+Verification: `holbuild` passed for `concretizePtrOwnerFloorTheory`,
+`concretizePtrFixedReadRecoveryTheory` and `concretizePtrFixedReadAuditTheory`.
+The recovery theorem is explicitly `Finalise`d after its writer/frame
+suspensions.
+
+## Original scope and result (.52, historical)
 
 This is a bounded interface audit, NOT a proof of fixed recovery, universal
 prefix coverage, or the frozen static-memory theorem. The companion

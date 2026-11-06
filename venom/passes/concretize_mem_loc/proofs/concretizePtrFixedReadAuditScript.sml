@@ -6,7 +6,11 @@ Ancestors concretizePtrOwnedReadAudit concretizePtrStageReserved
   ptrDiscipline list pred_set arithmetic finite_map
 
 (* Diagnostic only. Each val is a parsed, typechecked HOL quotation, not
-   an assertion, definition, axiom, or exported theorem. *)
+   an assertion, definition, axiom, or exported theorem.
+   FixedReadRecovery now proves the endpoint candidate with the additional
+   restrictions ~in_revert_forward endpoint.po_fn endpoint.po_state and
+   endpoint.po_inst.inst_opcode <> ASSIGN. The unrestricted quote below
+   remains an audit obligation, not a checked theorem. *)
 val fixed_read_recovery_candidate = ``
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -51,9 +55,11 @@ val fixed_write_owner_identity_candidate = ``
      allocas_from lo (ptr_owner_view d post).cf_state) ==>
   reloc x = x``;
 
-(* Main missing bridge: all fixed target actual writes reflect to the
-   matching source event. This rules out extra target writes; the ledger
-   itself only gives the opposite (source-to-target) inclusion. *)
+(* FixedWriteReflection proves this conclusion with an additional disjunct:
+   in_revert_forward at the matching source event. The stronger quotation
+   below is not proved. FixedReadRecovery rules out that disjunct throughout
+   an ordinary non-revert history before using reflection contrapositively.
+   Ledger inclusion alone still does not give reflection. *)
 val fixed_actual_write_reflection_candidate = ``
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
