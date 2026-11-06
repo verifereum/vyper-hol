@@ -213,3 +213,50 @@ erasing Q's first index provides both required laws. No third candidate or
 replacement driver has been implemented; this is the bounded stopping
 point requested by C0.exception.scopeinterface. Probe sources are local
 validation artifacts and must not ship.
+
+## Interface decision after corridor and scope probes
+
+**Accepted shipping boundary:** concretizeLayoutPhaseCorridorTheory (commit
+e168ecfe5), with the following exact new entry (g is layout_terminal_phase):
+
+```
+layout_corridor_entry C g s t <=>
+  terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_end
+    (layout_phase_normalize g.ltp_pending s)
+    (layout_phase_normalize g.ltp_pending t) /\
+  (!u. ~finite_block C g.ltp_origin.lbo_source g.ltp_origin.lbo_entry (OK u)) /\
+  s.vs_halted = t.vs_halted
+```
+
+Checked exports are layout_corridor_origin_exclusion,
+layout_corridor_administrative, layout_corridor_assign,
+layout_corridor_revert and layout_corridor_copy_entry. The ASSIGN export
+provides target base success and a pending corridor successor below the
+endpoint; administration clears pending while normalizing both states.
+REVERT matches the Abort tag and dead_result_rel D at the endpoint. Copy
+entry consumes paired successful copies, domains/labels/halted agreement
+and an existing paired corridor, deriving the fixed no-normal origin fact
+from the source terminal_call_prefix/revert_forward_at. It does **not**
+assume that exclusion as an added TASK premise. Reachable paired copy
+execution and input facts remain producer-integration responsibilities.
+Old layout_phase_entry/Q0 are unchanged and need not embed unconditionally
+in this strengthened entry.
+
+**Unresolved scope boundary:** no full Q is selected. Checked failures of
+both scope candidates above leave this at Risk 3. A broader strategist
+scope-interface review is needed: either derive a compatible run/block
+scope link under the exact universal-prefix and independently quantified
+block-return laws, or authorize a genuinely different helper contract
+without editing frozen existing shared definitions. No impossibility of
+all possible Qs has been proved. Repeating ordinary opcode adapters does
+not supply this missing law.
+
+Ownership of residual integration remains unchanged: frames.instantiate
+owns actual pre-PHI Run initialization, successful INVOKE setup, return
+payloads/bindings and caller restoration; exceptional-copy certificate
+integration owns invocation of the checked producer plus copy-entry join;
+observationexit/externalowned own RETURN/final observation and external
+calls. Full Q must still establish indexed_halted/indexed_halt and all
+constructor/call/splice laws. The temporary scope probe was removed from
+the working tree into a local non-shipping stash after its checked evidence
+was recorded (TO_concretize_sim-20261105T171004Z_m14177_t001).
