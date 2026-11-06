@@ -1023,3 +1023,71 @@ Theorem spill_only_multiplicity_ledger:
 Proof
   EVAL_TAC
 QED
+
+(* Deep actual-origin candidate 1: distinct live-through targets. *)
+Definition deep_origin_names_def:
+  deep_origin_names = ["t0";"t1";"t2";"t3";"t4";"t5";"t6";"t7";
+    "t8";"t9";"t10";"t11";"t12";"t13";"t14";"t15";"t16"]
+End
+
+Definition deep_origin_fn_def:
+  deep_origin_fn = mk_raw_function "deep_origin"
+    [<| bb_label := "entry"; bb_instructions :=
+      MAPi (\i v. mk_inst (100+i) ASSIGN [Lit 1w] [v]) deep_origin_names ++
+      [mk_inst 0 JNZ [Lit 1w; Label "L"; Label "R"] []] |>;
+     <| bb_label := "L"; bb_instructions :=
+      [mk_inst 1 ASSIGN [Var "t0"] ["unusedL"];
+       mk_inst 2 JMP [Label "J"] []] |>;
+     <| bb_label := "R"; bb_instructions :=
+      [mk_inst 3 ASSIGN [Var "t16"] ["unusedR"];
+       mk_inst 4 JMP [Label "J"] []] |>;
+     <| bb_label := "J"; bb_instructions :=
+      MAPi (\i v. mk_inst (200+i) ASSIGN [Var v] [STRCAT "u" v]) deep_origin_names ++
+      [mk_inst 5 JMP [Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 6 STOP [] []] |>]
+End
+
+Theorem deep_origin_ready:
+  codegen_ready_fn deep_origin_fn /\
+  EVERY (\bb. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb.bb_instructions) deep_origin_fn.fn_blocks
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem deep_origin_plan_success:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze deep_origin_fn) (dfg_build_function deep_origin_fn)
+    (cfg_analyze deep_origin_fn) NONE [] deep_origin_fn 0 0)
+Proof
+  EVAL_TAC
+QED
+
+Definition deep_origin_pre_jump_def:
+  deep_origin_pre_jump fn n =
+    let bb = EL n fn.fn_blocks in
+    SND (THE (generate_inst_plan (liveness_analyze fn)
+      (dfg_build_function fn) (cfg_analyze fn) fn
+      (HD bb.bb_instructions) (live_vars_at (liveness_analyze fn) bb.bb_label 1)
+      F T bb.bb_label (residual_step fn 0 entry_probe_start)))
+End
+
+Definition deep_origin_target_def:
+  deep_origin_target fn pred = input_vars_from pred
+    (EL 3 fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze fn) "J" 0)
+End
+
+Theorem deep_origin_entry_stack:
+  (residual_step deep_origin_fn 0 entry_probe_start).ps_stack = MAP Var deep_origin_names
+Proof
+  EVAL_TAC
+QED
+
+Theorem deep_origin_entry_state:
+  residual_step deep_origin_fn 0 entry_probe_start =
+    entry_probe_start with ps_stack := MAP Var deep_origin_names
+Proof
+  EVAL_TAC
+QED
+
