@@ -2833,6 +2833,78 @@ Proof
   rpt strip_tac >> irule reorder_one_shielded_bottom_frame >> simp[]
 QED
 
+Theorem reorder_materialised_fold_bottom_frame[local]:
+  !m k dfg targets ps prefix acc ops qs.
+    k + m <= LENGTH targets /\ LENGTH targets <= 16 /\
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    (!x. MEM x targets ==>
+      LIST_ELEM_COUNT x targets <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!i. i < k ==> stack_peek (LENGTH targets - 1 - i) ps.ps_stack = EL i targets) /\
+    FOLDL (\(code,st) (idx,op).
+      (\(step,out). (code ++ step,out)) (reorder_one dfg targets idx op st))
+      (acc,ps) (GENLIST (\j. (k+j,EL (k+j) targets)) m) = (ops,qs) ==>
+    FOLDL (\(code,st) (idx,op).
+      (\(step,out). (code ++ step,out)) (reorder_one dfg targets idx op st))
+      (acc,ps with ps_stack := prefix ++ ps.ps_stack)
+      (GENLIST (\j. (k+j,EL (k+j) targets)) m) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct_on `m` >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < LENGTH targets` by decide_tac >>
+  `!x. LIST_ELEM_COUNT x targets <= LIST_ELEM_COUNT x ps.ps_stack` by
+    (gen_tac >> Cases_on `MEM x targets` >> simp[] >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  drule_all materialised_pending_next_on_stack_window >> strip_tac >>
+  Cases_on `reorder_one dfg targets k (EL k targets) ps` >>
+  rename1 `reorder_one _ _ _ _ _ = (step_ops,mid)` >>
+  `MEM (EL k targets) targets` by simp[EL_MEM] >>
+  `LENGTH targets - 1 - k = LENGTH targets - (k + 1)` by decide_tac >>
+  `reorder_one dfg targets k (EL k targets)
+     (ps with ps_stack := prefix ++ ps.ps_stack) =
+     (step_ops,mid with ps_stack := prefix ++ mid.ps_stack)` by
+    (irule reorder_one_shielded_bottom_frame >> fs[]) >>
+  `LENGTH targets <= LENGTH mid.ps_stack` by metis_tac[reorder_one_target_length] >>
+  `!x. MEM x targets ==>
+    LIST_ELEM_COUNT x targets <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (qpat_x_assum `reorder_one _ _ _ _ (ps with ps_stack := _) = _` kall_tac >>
+     drule_at (Pat `reorder_one _ _ _ _ _ = _`)
+       reorder_one_materialised_counts_unconditional >>
+     disch_then (qspec_then `d` mp_tac) >> fs[] >> metis_tac[]) >>
+  `!i. i < SUC k ==>
+    stack_peek (LENGTH targets - 1 - i) mid.ps_stack = EL i targets` by
+    (qpat_x_assum `reorder_one _ _ _ _ (ps with ps_stack := _) = _` kall_tac >>
+     drule_at (Pat `reorder_one _ _ _ _ _ = _`) reorder_one_advances_fixed_window >>
+     simp[]) >>
+  `GENLIST (\j. (k+j,EL (k+j) targets)) (SUC m) =
+     (k,EL k targets) :: GENLIST (\j. (SUC k+j,EL (SUC k+j) targets)) m` by
+    (simp[GENLIST_CONS, arithmeticTheory.ADD_CLAUSES, combinTheory.o_DEF] >>
+     AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, arithmeticTheory.ADD_COMM]) >>
+  qpat_x_assum `FOLDL _ _ _ = (ops,qs)` mp_tac >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!k dfg targets ps prefix acc ops qs. _`
+    (qspec_then `SUC k` mp_tac) >>
+  simp[] >> disch_then irule >> fs[]
+QED
+
+Theorem reorder_plan_materialised_bottom_frame:
+  !dfg targets ps prefix ops qs.
+    LENGTH targets <= 16 /\ LENGTH targets <= LENGTH ps.ps_stack /\
+    (!x. MEM x targets ==>
+      LIST_ELEM_COUNT x targets <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    reorder_plan dfg targets ps = (ops,qs) ==>
+    reorder_plan dfg targets (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MAPi (\i op. (i,op)) targets =
+   GENLIST (\j. (0+j,EL (0+j) targets)) (LENGTH targets)` by
+    simp[LIST_EQ_REWRITE, indexedListsTheory.EL_MAPi, EL_GENLIST] >>
+  gvs[reorder_plan_def] >>
+  qspecl_then [`LENGTH targets`, `0`] mp_tac reorder_materialised_fold_bottom_frame >>
+  simp[] >> disch_then irule >> simp[]
+QED
+
 Theorem reorder_fold_bottom_frame[local]:
   !steps dfg targets ps prefix acc ops qs.
     EVERY (\(idx,op). idx < LENGTH targets /\ ~MEM op prefix) steps /\
