@@ -44,6 +44,8 @@ Theorem unsigned_loader_fixed_frame_raw:
        mk_inst m MUL [Var sub;Lit 8w] [bits];
        mk_inst r SHR [Var bits;Var data] [dst]] (s with vs_inst_idx := q) H th) /\
     op_prov H (Var dst) = NONE /\ op_taint th (Var dst) = {} /\
+    op_prov H (Var bits) = NONE /\ op_taint th (Var bits) = {} /\
+    eval_operand (Var bits) t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
@@ -106,6 +108,8 @@ Theorem unsigned_loader_fixed_frame:
     (!q. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := q) H th) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
+    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    eval_operand bits t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
@@ -135,6 +139,8 @@ Theorem unsigned_loader_counted_frame:
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
+    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    eval_operand bits t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
@@ -175,6 +181,8 @@ Theorem unsigned_loader_counted_ghost_frame:
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
+    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    eval_operand bits t = SOME (n2w (8*(32-n))) /\
     ghost_inv d cenv cx es H th (t with vs_inst_idx := s.vs_inst_idx+6) /\
     ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
     (t with vs_inst_idx := s.vs_inst_idx+6) =

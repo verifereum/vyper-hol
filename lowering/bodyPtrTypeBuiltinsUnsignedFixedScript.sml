@@ -267,6 +267,8 @@ Theorem unsigned_suffix_fixed_frame:
        mk_inst k MUL [Var sub;Lit 8w] [bits];
        mk_inst l SHR [Var bits;Var data] [dst]] (s with vs_inst_idx := q) H th) /\
     op_prov H (Var dst) = NONE /\ op_taint th (Var dst) = {} /\
+    op_prov H (Var bits) = NONE /\ op_taint th (Var bits) = {} /\
+    eval_operand (Var bits) t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
@@ -286,6 +288,7 @@ Proof
       (sub,{}) |+ (bits,{}) |+ (dst,{})`] >>
   conj_tac >- metis_tac[] >>
   gvs[] >> simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def,
-    FLOOKUP_UPDATE, update_var_def, lookup_var_def] >>
+    FLOOKUP_UPDATE, update_var_def, lookup_var_def, eval_operand_def,
+    unsigned_shift_count_word] >>
   rpt strip_tac >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
