@@ -3,7 +3,8 @@ Ancestors
   fnPlanLineagePhiTemporal fnPlanLineagePhiClasses fnPlanLineageJoinEntry
   fnPlanLineagePhiRealization fnPlanLineagePhiSlots fnPlanLineageEdge
   fnPlanLineagePhiActivation fnPlanLineagePhiMaps venomExecProps venomWf stackPlanGen
-  codegenReadyCompute livenessTransferProofs
+  codegenReadyCompute livenessTransferProofs fnPlanLineageCallers
+  livenessDefs venomInst list fnPlanLineageLiveness
 
 Theorem reachable_native_phi_cells_coverage:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
@@ -431,4 +432,124 @@ Proof
   drule_all analyzed_native_slot_state_replay >>
   disch_then (qspec_then `halting` strip_assume_tac) >>
   qexistsl_tac [`prefixP`, `prefixQ`, `suffix`, `ops`, `al`] >> simp[]
+QED
+
+Theorem generate_block_insts_plan_phi_schedule:
+  !phis rest lv dfg cfg fn lbl halting np block_len i ps phi_ops ps_phi.
+  EVERY (\inst. inst.inst_opcode = PHI) phis /\ rest <> [] /\
+  phi_schedule_run
+    (MAPi (\j inst. (inst, live_vars_at lv lbl (i + j + np + 1), halting)) phis)
+    ps = (phi_ops, ps_phi) ==>
+  generate_block_insts_plan lv dfg cfg fn lbl halting np block_len i (phis ++ rest) ps =
+  case generate_block_insts_plan lv dfg cfg fn lbl halting np block_len
+      (i + LENGTH phis) rest ps_phi of
+    NONE => NONE
+  | SOME (tail_ops, out) => SOME (phi_ops ++ tail_ops, out)
+Proof
+  Induct_on `phis`
+  >- (simp[phi_schedule_run_def] >> rpt strip_tac >> gvs[] >>
+      Cases_on `generate_block_insts_plan lv dfg cfg fn lbl halting np block_len i rest ps` >> simp[] >>
+      PairCases_on `x` >> simp[]) >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  gvs[phi_schedule_run_def, combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[Once generate_block_insts_plan_def, generate_inst_plan_def,
+       is_pre_codegen_opcode_def] >>
+  simp[is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def] >>
+  simp[venomInstTheory.is_raw_fmp_opcode_def] >>
+  `generate_block_insts_plan lv dfg cfg fn lbl halting np block_len (i + 1) (phis ++ rest) ps1 =
+   case generate_block_insts_plan lv dfg cfg fn lbl halting np block_len
+       ((i + 1) + LENGTH phis) rest ps2 of
+     NONE => NONE
+   | SOME (tail_ops, out) => SOME (rest' ++ tail_ops, out)` by
+    (first_x_assum irule >> simp[] >>
+     `MAPi (\x inst. (inst, live_vars_at lv lbl (SUC (i + (np + (x + 1)))), halting)) phis =
+      MAPi (\j inst. (inst, live_vars_at lv lbl (i + (j + (np + 2))), halting)) phis` by
+       (AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM] >>
+        gen_tac >> AP_TERM_TAC >> decide_tac) >>
+     metis_tac[]) >>
+  `i + 1 + LENGTH phis = SUC (i + LENGTH phis)` by decide_tac >>
+  pure_asm_rewrite_tac[] >>
+  Cases_on `generate_block_insts_plan lv dfg cfg fn lbl halting np block_len
+    (SUC (i + LENGTH phis)) rest ps2` >> simp[] >>
+  PairCases_on `x` >> simp[]
+QED
+
+Theorem ready_phi_block_suffix:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  collect_phis bb.bb_instructions <> [] ==>
+  get_params bb.bb_instructions = [] /\
+  non_param_insts bb = bb.bb_instructions /\
+  ?rest. rest <> [] /\ bb.bb_instructions = collect_phis bb.bb_instructions ++ rest
+Proof
+  rpt strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `get_params bb.bb_instructions = []` by
+    (Cases_on `bb.bb_instructions` >>
+     gvs[livenessDefsTheory.collect_phis_def] >>
+     Cases_on `h.inst_opcode = PHI` >>
+     gvs[get_params_def, is_param_opcode_def]) >>
+  `non_param_insts bb = bb.bb_instructions` by
+    metis_tac[ready_block_parameter_suffix, APPEND] >>
+  simp[] >>
+  qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+  qexists_tac `rest` >> simp[] >>
+  strip_tac >> gvs[] >>
+  `bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM (LAST bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    (qpat_x_assum `bb.bb_instructions = _` (fn th => rewrite_tac[GSYM th]) >>
+     gvs[bb_well_formed_def] >> simp[rich_listTheory.MEM_LAST_NOT_NIL]) >>
+  drule livenessTransferProofsTheory.collect_phis_mem >> strip_tac >>
+  gvs[bb_well_formed_def, is_terminator_def]
+QED
+
+Theorem generate_join_block_plan_phi_schedule:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  fn_entry_label fn <> SOME lbl /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  collect_phis bb.bb_instructions <> [] /\
+  phi_schedule_run
+    (MAPi (\j inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC j),
+      bb_is_halting bb)) (collect_phis bb.bb_instructions)) ps = (phi_ops, ps_phi) ==>
+  get_params bb.bb_instructions = [] /\
+  ?rest. rest <> [] /\
+    bb.bb_instructions = collect_phis bb.bb_instructions ++ rest /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb ps =
+    case generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) 0 (LENGTH bb.bb_instructions)
+        (LENGTH (collect_phis bb.bb_instructions)) rest ps_phi of
+      NONE => NONE
+    | SOME (tail_ops, out) => SOME ([SOLabel lbl] ++ phi_ops ++ tail_ops, out)
+Proof
+  rpt strip_tac >>
+  drule_all ready_phi_block_suffix >> strip_tac >> simp[] >>
+  qexists_tac `rest` >> simp[] >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def, venomInstTheory.lookup_block_def,
+       listTheory.FIND_thm] >> metis_tac[]) >>
+  `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <> 1` by decide_tac >>
+  `EVERY (\inst. inst.inst_opcode = PHI) (collect_phis bb.bb_instructions)` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     drule livenessTransferProofsTheory.collect_phis_mem >> simp[]) >>
+  `generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) 0
+      (collect_phis bb.bb_instructions ++ rest) ps =
+   case generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions)
+      (0 + LENGTH (collect_phis bb.bb_instructions)) rest ps_phi of
+     NONE => NONE
+   | SOME (tail_ops, out) => SOME (phi_ops ++ tail_ops, out)` by
+    (irule generate_block_insts_plan_phi_schedule >>
+     fs[arithmeticTheory.ADD1]) >>
+  qpat_x_assum `bb.bb_instructions = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+  simp[generate_block_plan_def] >>
+  Cases_on `generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) 0 (LENGTH bb.bb_instructions)
+    (LENGTH (collect_phis bb.bb_instructions)) rest ps_phi` >> simp[] >>
+  PairCases_on `x` >> simp[]
 QED
