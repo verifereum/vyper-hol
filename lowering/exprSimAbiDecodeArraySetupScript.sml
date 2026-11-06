@@ -2,6 +2,7 @@
 Theory exprSimAbiDecodeArraySetup
 Ancestors
   exprSimAbiDecodeArrayPrefix exprSimAbiDecodeSiteOwnership
+  abiDecoderArrayLoopInit exprSimAbiDecodeArraySource fragExec
   abiDecoderSiteEffect abiDecoderBytestringOutcome abiDecoderWordOutcome
   abiDecoderReentryAddress actualDecoderSites abiDecoderDynarrayPrefix
   abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderGuards abiEncoder
@@ -316,4 +317,102 @@ Proof
   `run_inst_seq (emitted_insts st loop_st) s = OK t /\ inst_extends st loop_st` by
     (irule abi_decode_sequence_chain >> qexistsl [`prepared`, `header_st`] >> simp[]) >>
   qexistsl [`t`, `p`] >> simp[]
+QED
+
+Theorem abi_decode_array_setup_site_outcome:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn
+    (abi_member_head_size at) st = (addr,guard_st) /\
+  abi_decode_array_header dst addr opc guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  abi_decode_source_opcode opc /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w pos) /\
+  eval_operand base_op s = SOME(n2w b) /\
+  eval_operand hi s = SOME(n2w h) /\
+  eval_operand dst s = SOME(n2w d) /\ d < dimword(:256) /\
+  abi_decode_load opc (n2w (b+pos):bytes32) s = n2w n /\
+  n = w2n (mem_word_at (b+pos) s.vs_memory) /\
+  bs = mem_bytes_at (b+pos) (h-pos) s.vs_memory /\
+  pos < dimword(:256) /\ h < dimword(:256) /\ maxn < dimword(:256) /\
+  (n <= maxn ==> n * abi_member_head_size at < dimword(:256)) /\
+  fresh_vars_wrt st s /\ decode_site_resources ctx func s /\
+  fn_inst_ids_distinct func /\
+  FLOOKUP s.vs_allocas output = SOME(root,outsz) /\
+  d = root+off /\ off+32 <= outsz /\ output <> header_st.cs_next_id /\
+  q+len <= s.vs_alloca_next /\
+  venomMemDefs$regions_disjoint (q,len) (d,32) /\
+  (!b sz. FLOOKUP s.vs_allocas header_st.cs_next_id = SOME(b,sz) ==>
+    venomMemDefs$regions_disjoint (q,len) (b,sz)) /\
+  MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString header_st.cs_next_var)]) (fn_insts func) ==>
+  (n <= maxn /\ pos+32+n*abi_member_head_size at <= h /\
+   ?t p. run_inst_seq (emitted_insts st loop_st) s = OK t /\
+     eval_operand ip t = SOME(n2w p) /\ eval_operand cnt t = SOME(n2w n) /\
+     mload p t = 0w /\ mem_word_at d t.vs_memory = n2w n /\
+     fresh_vars_wrt loop_st t /\
+     decode_site_effect ctx func st.cs_next_var
+       ({a | d <= a /\ a < d+32} UNION {a | p <= a /\ a < p+32}) s t /\
+     FLOOKUP t.vs_allocas header_st.cs_next_id = SOME(p,32) /\
+     (!id. id <> header_st.cs_next_id ==>
+       FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+     mem_bytes_at q len t.vs_memory = mem_bytes_at q len s.vs_memory /\
+     venomMemDefs$regions_disjoint (root,outsz) (p,32) /\
+     t.vs_halted = s.vs_halted /\ inst_extends st loop_st) \/
+  (?t. run_inst_seq (emitted_insts st loop_st) s = Abort Revert_abort t /\
+    ~(vyper_decode_valid_enc (Array NONE at) bs /\
+      ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+        (dec (Array NONE at) bs) = SOME v))
+Proof
+  strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  `st.cs_next_var <= header_st.cs_next_var` by decide_tac >>
+  `n < dimword(:256)` by simp[wordsTheory.w2n_lt] >>
+  drule_all abi_decode_dynarray_prepare_site_outcome >>
+  disch_then (qspec_then `st.cs_next_var` mp_tac) >>
+  disch_then strip_assume_tac
+  >- (disj1_tac >> simp[] >>
+      `decode_site_resources ctx func t` by fs[decode_site_effect_def] >>
+      `mem_bytes_at q len t.vs_memory = mem_bytes_at q len s.vs_memory` by
+        (irule abi_decode_index_slot_source >> goal_assum (drule_at Any) >> simp[]) >>
+      `FLOOKUP t.vs_allocas output = SOME(root,outsz)` by simp[] >>
+      `q+len <= t.vs_alloca_next` by simp[] >>
+      `!b sz. FLOOKUP t.vs_allocas header_st.cs_next_id = SOME(b,sz) ==>
+         venomMemDefs$regions_disjoint (q,len) (b,sz)` by simp[] >>
+      drule_all abi_decode_array_prepared_site_init >>
+      strip_tac >> qexistsl [`t'`, `p`] >> gvs[]) >>
+  disj2_tac >>
+  `~(vyper_decode_valid_enc (Array NONE at) bs /\
+      ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+        (dec (Array NONE at) bs) = SOME v)` by
+    (irule abi_decode_dynarray_suffix_guard_reject >>
+     goal_assum (drule_at Any) >> qexists `n` >> simp[]) >>
+  `inst_extends st header_st` by
+    (irule inst_extends_trans >> qexists `guard_st` >> simp[]) >>
+  drule_all run_inst_seq_abort_extends >> strip_tac >>
+  qexists `t` >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_decode_index_init_registered_instruction:
+  abi_decode_index_init st = (ip,st') /\ fn_has_code st st' fn /\
+  (!i. MEM i (fn_insts fn) /\ i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==>
+    MEM i (fn_insts func)) ==>
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `MEM inst (fn_insts func)` >>
+  `MEM inst (emitted_insts st st')` by
+    (qpat_x_assum `abi_decode_index_init _ = _` mp_tac >>
+     simp[abi_decode_index_init_def, compile_alloc_buffer_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
+          fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, Abbr `inst`] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[DROP_LENGTH_APPEND]) >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
+     gvs[emitted_insts_def, MEM_APPEND] >>
+     metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  first_x_assum irule >> simp[Abbr `inst`, mk_inst_def]
 QED
