@@ -217,7 +217,7 @@ Theorem imm_target_post_trans[local]:
     imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s2
 Proof
   simp[imm_target_post_frame] >> rpt strip_tac >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`em`, `sm`, `s1`] >> simp[]) >>
   goal_assum $ drule_at Any
 QED
@@ -1579,7 +1579,7 @@ Proof
   >- fs[imm_target_post_frame]
   >- fs[imm_target_post_frame]
   >- (fs[imm_target_post_frame] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`em`, `sm`, `t`] >>
       fs[imm_target_post_frame] >>
       metis_tac[expr_post_frame]) >>

@@ -434,7 +434,7 @@ Proof
   gvs[typed_args_post_def] >> conj_tac
   >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
       simp[] >> metis_tac[wb_frame_vars]) >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
@@ -1294,7 +1294,7 @@ Proof
   drule_all alloc_buffer_frame_run >> strip_tac >> disch_tac >>
   `wb_frame cenv es es sf s t` by
     (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`es`,`sb`,`u`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`es`,`sb`,`u`] >> simp[]) >>
      qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
   `!old b sz. old < sf.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (b,sz) ==>
     regions_disjoint (w2n w) outsz b sz` by
@@ -1404,7 +1404,7 @@ Proof
      simp[]) >>
   `wb_frame cenv es es sf s u` by
     (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
      qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
   `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
@@ -1556,7 +1556,7 @@ Proof
     (irule scratch_mstore_frame >> conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es es sf s (mstore (w2n wo) 0w s3)` by
     (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`es`,`sf`,`s3`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s3`] >> simp[]) >>
      qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
   qexistsl_tac [`mstore (w2n wo) 0w s3`,`wi`,`wo`] >>
   conj_tac

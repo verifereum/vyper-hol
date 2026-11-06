@@ -190,7 +190,7 @@ Proof
   strip_tac >>
   `wb_frame cenv es1 es2 sm t u` by metis_tac[expr_post_frame] >>
   gvs[wb_args_post_def] >> conj_tac
-  >- (irule wb_frame_trans >> simp[] >> conj_tac
+  >- (irule wb_frame_trans >> simp[] >> reverse conj_tac
       >- (qexistsl_tac [`es1`, `sm`, `t`] >> simp[]) >>
       qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
