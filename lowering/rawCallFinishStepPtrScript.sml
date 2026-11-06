@@ -171,3 +171,62 @@ val _ = if List.all (null o hyp)
   [raw_call_emit_checked_full, raw_call_emit_suffix_ready,
    raw_call_extracted_checked_full] then ()
   else raise Fail "emitted oracle adapters have kernel hypotheses";
+
+(* The header and CALL output address refer to the same allocation witness.
+   Capacity is the whole allocated buffer, not just its returned prefix. *)
+Theorem raw_call_allocated_suffix_ready:
+  inst = mk_inst iid (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;addr_op;ao_op;az_op;ro_op;rz_op]
+     else [gas_op;addr_op;value_op;ao_op;az_op;ro_op;rz_op]) [out] /\
+  eval_operand gas_op s = SOME gas /\ eval_operand addr_op s = SOME aw /\
+  (~stat ==> eval_operand value_op s = SOME vw) /\
+  eval_operand ao_op s = SOME ao /\ eval_operand az_op s = SOME az /\
+  eval_operand ro_op s = SOME (n2w (ob+32)) /\
+  eval_operand rz_op s = SOME (n2w cap) /\
+  ob+capacity < dimword(:256) /\ 32 <= capacity /\ cap < dimword(:256) /\
+  src <> out /\ lookup_var src s = SOME (n2w ob) /\
+  ptr_covers G tn src s capacity /\
+  FLOOKUP s.vs_allocas aid = SOME (ob,capacity) /\ aid < sa.cs_next_id /\
+  ci_mono protected sa /\ ci_mono sa sc /\ not_fresh_at sa src /\
+  not_fresh_at sc out /\
+  t.vs_vars = s.vs_vars |+ (out,if flag then 1w else 0w) /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_memory = (write_memory_with_expansion (ob+32) (TAKE cap rd) s).vs_memory /\
+  t.vs_returndata = rd /\ H = step_prov PG G inst t /\
+  un = step_taint inst s t tn /\ u = t with vs_inst_idx := LENGTH sc.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
+  wb_frame cenv es protected s u /\ ee.scopes = es.scopes /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint ob capacity a len) /\
+  (!id a len. id < protected.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (a,len) ==>
+    regions_disjoint ob capacity a len) ==>
+  lookup_var src u = SOME (n2w ob) /\ ptr_covers H un src u capacity /\
+  local_ptrs_reserved cenv protected /\ ci_mono protected sc /\
+  not_fresh_at sc src /\ not_fresh_at sc out /\
+  FLOOKUP u.vs_allocas aid = SOME (ob,capacity) /\ aid < sc.cs_next_id /\
+  ob <= w2n (n2w ob : bytes32) /\ w2n (n2w ob : bytes32)+capacity <= ob+capacity /\
+  32 <= capacity /\ ob+capacity < dimword(:256) /\
+  mem_bytes_at (ob+32) (LENGTH (TAKE cap rd)) u.vs_memory = TAKE cap rd /\
+  (!i. ob+32 <= i /\ i < ob+32+LENGTH (TAKE cap rd) ==> i NOTIN un.t_mem) /\
+  eval_operand (Var out) u = SOME (val_to_w256 (BoolV flag)) /\ u.vs_returndata = rd /\
+  (!name a len. local_region cenv ee.scopes u name a len ==>
+    regions_disjoint ob 32 a len) /\
+  (!id a len. id < protected.cs_next_id /\ FLOOKUP u.vs_allocas id = SOME (a,len) ==>
+    regions_disjoint ob 32 a len)
+Proof
+  strip_tac >>
+  `ob < dimword(:256) /\ ob+32 < dimword(:256)` by decide_tac >>
+  mp_tac (raw_call_emit_suffix_ready |> Q.INST
+    [`a` |-> `n2w ob`, `ro` |-> `n2w (ob+32)`, `rz` |-> `n2w cap`,
+     `off` |-> `ob`, `len` |-> `capacity`]) >>
+  impl_tac >- simp[wordsTheory.w2n_n2w] >> strip_tac >>
+  `!name a len. local_region cenv es.scopes s name a len <=>
+    local_region cenv ee.scopes u name a len` by
+    (irule wordArgsPtrTheory.wb_frame_local_regions >> simp[] >> metis_tac[]) >>
+  `ci_mono protected sc /\ not_fresh_at sc src /\ aid < sc.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     conj_tac >- metis_tac[compileEnvTheory.cs_extends_trans] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  gvs[wordsTheory.w2n_n2w] >> rpt strip_tac >>
+  fs[compileEnvTheory.regions_disjoint_def] >> res_tac >> decide_tac
+QED
