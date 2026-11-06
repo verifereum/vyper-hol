@@ -4545,3 +4545,16 @@ val ld_proposed_combined_return_restore =
    configured successor are proof/packaging obligations, not missing invariant
    conjuncts. None has been asserted here. In particular do not start an omnibus
    restoration proof before review schedules these gaps. *)
+
+(* The return-root boundary consumes the current normal witness, not a saved
+   caller memory snapshot. No new normal-data witness is selected here. *)
+Theorem ld_normal_return_owner_subset:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    (sf::astail) live keys d A suspended gstk floor ==>
+  {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs)))
+      (owner,(bs,sz))} SUBSET live
+Proof
+  strip_tac >> irule ld_return_owner_subset >>
+  drule ld_normal_data_geometry >> simp[] >> metis_tac[]
+QED

@@ -3,7 +3,8 @@ Ancestors
   lowerDloadSharedState o1LowerDloadJointRestore venomExecSemantics
   venomState ptrDiscipline finite_map pred_set list
   o1LowerDloadRunnerBoundary lowerDloadOperationalClosure o1PassLift
-  lowerDloadReachability lowerDloadOwnership
+  lowerDloadReachability lowerDloadOwnership lowerDloadOwnerTransport
+  lowerDloadTableSupport lowerDloadFrameRepresentation
 
 (* Retained environment comes from the caller; global observations and masks
    come from the current callee, never from the saved memory snapshot. *)
@@ -103,4 +104,120 @@ Proof
   qpat_x_assum `ld_stack_origin _ _ _ _ _` mp_tac >>
   simp[ld_stack_origin_cons, ld_erase_frame_def] >> rpt strip_tac >>
   drule_all ld_callee_prefix_call_ctx >> simp[]
+QED
+
+(* A return only deletes head provenance roots and pops the saved head. *)
+Theorem ld_return_owner_subset:
+  (!owner bs sz. ld_live (sf::astail) L AP AG (owner,(bs,sz)) ==>
+    owner IN live) ==>
+  {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} SUBSET live
+Proof
+  strip_tac >> simp[SUBSET_DEF] >> rpt strip_tac >>
+  drule ld_live_restrict_shape >> strip_tac >>
+  first_x_assum irule >> qexistsl [`bs`, `sz`] >>
+  irule ld_live_saved_projection >> qexistsl [`sf`, `astail`] >>
+  simp[]
+QED
+
+(* The same table is retained for all roots, including parameters and older
+   saved frames. Consumers need not choose a fresh restriction witness. *)
+Theorem ld_return_owner_lookup:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} ==>
+  !owner bs sz.
+    ld_live astail sf.lf_local sf.lf_params
+      (DRESTRICT sf.lf_prov keep) (owner,(bs,sz)) ==>
+    FLOOKUP (DRESTRICT E owners) owner = FLOOKUP E owner
+Proof
+  rpt strip_tac >> simp[FLOOKUP_DRESTRICT] >> metis_tac[IN_GSPEC_IFF]
+QED
+
+Theorem ld_return_head_table:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  ld_frame_embedding E sf.lf_local H s t /\
+  LIST_REL (ld_owned_selection E) sf.lf_params BP /\
+  (!v. ld_owned_selection E (FLOOKUP (DRESTRICT sf.lf_prov keep) v)
+    (FLOOKUP BH v)) ==>
+  ld_frame_embedding (DRESTRICT E owners) sf.lf_local H s t /\
+  LIST_REL (ld_owned_selection (DRESTRICT E owners)) sf.lf_params BP /\
+  (!v. ld_owned_selection (DRESTRICT E owners)
+    (FLOOKUP (DRESTRICT sf.lf_prov keep) v) (FLOOKUP BH v))
+Proof
+  strip_tac >> drule ld_return_owner_lookup >>
+  disch_then (assume_tac o Q.ISPEC `(E : (num # num, num # num # num) fmap)`) >> gvs[] >>
+  conj_tac
+  >- (irule ld_frame_embedding_support >> qexists_tac `E` >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >>
+      simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule ld_owned_params_support >> qexists_tac `E` >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >>
+      simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+  gen_tac >> irule ld_owned_selection_support >> qexists_tac `E` >>
+  simp[] >> rpt strip_tac >> first_x_assum irule >>
+  simp[ld_live_def, ld_selected_def] >> metis_tac[]
+QED
+
+Theorem ld_return_tail_table:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  MEM f astail /\ ld_saved_embedded V E keys d A f g ==>
+  ld_saved_embedded V (DRESTRICT E owners) keys d A f g
+Proof
+  strip_tac >> irule ld_saved_embedded_restrict >> simp[] >>
+  rpt strip_tac >> gvs[] >> simp[] >>
+  qexistsl [`bs`, `sz`] >> simp[ld_live_def] >> metis_tac[]
+QED
+
+Theorem ld_return_stack_table:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g)
+    astail gtail ==>
+  LIST_REL (\f g. ?V keys d A.
+    ld_saved_embedded V (DRESTRICT E owners) keys d A f g) astail gtail
+Proof
+  strip_tac >> irule ld_saved_stack_restrict >> simp[] >>
+  rpt strip_tac >> gvs[] >> simp[] >>
+  qexistsl [`bs`, `sz`] >> simp[ld_live_def] >> metis_tac[]
+QED
+
+(* This transports actual parameter words, not merely parameter provenance.
+   One interface covers the resumed caller and every retained saved frame. *)
+Theorem ld_return_parameter_values:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  (ps = sf.lf_params \/ ?f. MEM f astail /\ ps = f.lf_params) /\
+  LENGTH ps = LENGTH xs /\
+  (!q. q < LENGTH xs ==>
+    ld_owned_value E (EL q ps) (EL q pt) Ms Mt (EL q xs) (EL q ys)) ==>
+  !q. q < LENGTH xs ==>
+    ld_owned_value (DRESTRICT E owners) (EL q ps) (EL q pt)
+      Ms Mt (EL q xs) (EL q ys)
+Proof
+  rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  irule ld_owned_value_support >> qexists_tac `E` >> simp[] >>
+  rpt strip_tac >>
+  `MEM (SOME (owner,(bs,sz))) ps` by metis_tac[EL_MEM] >>
+  `owner IN owners` by
+    (gvs[] >> simp[] >> qexistsl [`bs`, `sz`] >>
+     simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+  gvs[] >> simp[FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+Theorem ld_return_owned_vars_table:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  ld_owned_vars V E (DRESTRICT sf.lf_prov keep) BH tn un s t ==>
+  ld_owned_vars V (DRESTRICT E owners) (DRESTRICT sf.lf_prov keep)
+    BH tn un s t
+Proof
+  strip_tac >> irule ld_owned_vars_support >> qexists_tac `E` >> simp[] >>
+  rpt strip_tac >>
+  `owner IN owners` by
+    (gvs[] >> simp[] >> qexistsl [`bs`, `sz`] >>
+     simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+  gvs[] >> simp[FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
