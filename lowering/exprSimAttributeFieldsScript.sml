@@ -503,7 +503,7 @@ Proof
   drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
   gvs[popped_keys_indexed_def] >>
   qpat_x_assum `!id entry. FLOOKUP env id = _ ==> _` drule >> strip_tac >>
-  qpat_x_assum `EVERY _ (MAP FST _)`
+  qpat_x_assum `EVERY (\k. ?p i etv n. _) (MAP FST _)`
     (mp_tac o SIMP_RULE (srw_ss()) [EVERY_MEM, MEM_MAP, PULL_EXISTS]) >>
   disch_then drule >> simp[GSYM SNOC_APPEND, SNOC_11]
 QED
