@@ -9,6 +9,7 @@ Ancestors
   bodyMemTbConvertScalarFlags bodyMemTbConvertLoadMemory
   bodyMemTbConvertScalarDispatch
   bodyMemTbConvertDestMemory bodyMemTbConvertDestPath
+  bodyMemTbConvertCopyMemory
 
 Theorem body_type_builtin_convert_plain_mem_case:
   !cx v11 typ es.
