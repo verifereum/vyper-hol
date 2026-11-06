@@ -436,8 +436,10 @@ Proof
               ho_match_mp_tac membership_ignore_preserve,
               gen_tac] >>
        rpt conj_tac >> BETA_TAC) >>
-  simp[membership_primitive_next_var, comp_return_def] >>
-  metis_tac[emit_op_safe_operand, pairTheory.PAIR]
+  simp[membership_primitive_next_var, comp_return_def, comp_bind_def,
+       comp_ignore_bind_def, emit_op_def, emit_inst_def, fresh_var_def,
+       fresh_id_def, emit_def, safe_operand_def, not_fresh_at_def,
+       ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compile_var_array_membership_safe_operand:
