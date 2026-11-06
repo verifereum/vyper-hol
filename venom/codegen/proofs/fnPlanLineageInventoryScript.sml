@@ -1184,6 +1184,192 @@ Proof
   qpat_x_assum `qs.ps_stack = _` (SUBST1_TAC o SYM) >> simp[]
 QED
 
+(* Count-free physical replay: unlike the inventory interface above, this
+   makes no claim that popping one occurrence removes its value from the set. *)
+Theorem popmany_fold_shared_core_replay[local]:
+  !b c p q requests core al ops0.
+    DISJOINT (set p) (set requests) /\ DISJOINT (set q) (set requests) ==>
+    ?ops core' al'.
+      FOLDL (\(ops, ps) v.
+        case stack_get_depth v ps.ps_stack of
+          NONE => (ops, ps)
+        | SOME d =>
+          (ops ++ FST (do_swap d ps) ++ [SOPop 1],
+           (SND (do_swap d ps)) with ps_stack :=
+             stack_pop 1 (SND (do_swap d ps)).ps_stack))
+        (ops0, b with <|ps_stack := p ++ core; ps_alloc := al|>) requests =
+        (ops, b with <|ps_stack := p ++ core'; ps_alloc := al'|>) /\
+      FOLDL (\(ops, ps) v.
+        case stack_get_depth v ps.ps_stack of
+          NONE => (ops, ps)
+        | SOME d =>
+          (ops ++ FST (do_swap d ps) ++ [SOPop 1],
+           (SND (do_swap d ps)) with ps_stack :=
+             stack_pop 1 (SND (do_swap d ps)).ps_stack))
+        (ops0, c with <|ps_stack := q ++ core; ps_alloc := al|>) requests =
+        (ops, c with <|ps_stack := q ++ core'; ps_alloc := al'|>)
+Proof
+  ntac 4 gen_tac >> Induct_on `requests`
+  >- (rpt strip_tac >> qexistsl_tac [`ops0`, `core`, `al`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `~MEM h p /\ ~MEM h q` by (gvs[DISJOINT_ALT] >> metis_tac[]) >>
+  simp[stack_get_depth_bottom_excluded] >>
+  Cases_on `stack_get_depth h core`
+  >- (simp[] >> first_x_assum irule >> gvs[DISJOINT_ALT]) >>
+  rename1 `stack_get_depth h core = SOME d` >>
+  drule stackModelTheory.stack_get_depth_props >> strip_tac >>
+  `?ops al'.
+    do_swap d (b with <|ps_stack := p ++ core; ps_alloc := al|>) =
+      (ops, b with <|ps_stack := p ++ stack_swap d core; ps_alloc := al'|>) /\
+    do_swap d (c with <|ps_stack := q ++ core; ps_alloc := al|>) =
+      (ops, c with <|ps_stack := q ++ stack_swap d core; ps_alloc := al'|>)` by
+    (drule do_swap_prefix_replay >>
+     disch_then (qspecl_then
+       [`b with <|ps_stack := p ++ core; ps_alloc := al|>`,
+        `c with <|ps_stack := q ++ core; ps_alloc := al|>`, `p`, `q`] mp_tac) >>
+     simp[]) >>
+  `!r. stack_pop 1 (r ++ stack_swap d core) =
+    r ++ stack_pop 1 (stack_swap d core)` by
+    (gen_tac >> simp[stack_pop_def, TAKE_APPEND, stack_swap_def, LENGTH_TAKE]) >>
+  simp[] >> first_x_assum irule >> gvs[DISJOINT_ALT]
+QED
+
+Theorem popmany_individual_shared_core_replay[local]:
+  !b c p q core al requests.
+    DISJOINT (set p) (set requests) /\ DISJOINT (set q) (set requests) ==>
+    ?ops core' al'.
+      popmany_individual requests
+        (b with <|ps_stack := p ++ core; ps_alloc := al|>) =
+        (ops, b with <|ps_stack := p ++ core'; ps_alloc := al'|>) /\
+      popmany_individual requests
+        (c with <|ps_stack := q ++ core; ps_alloc := al|>) =
+        (ops, c with <|ps_stack := q ++ core'; ps_alloc := al'|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v requests ==>
+    stack_get_depth v (p ++ core) = stack_get_depth v core /\
+    stack_get_depth v (q ++ core) = stack_get_depth v core` by
+    (rpt strip_tac >> irule stack_get_depth_bottom_excluded >>
+     gvs[DISJOINT_ALT] >> metis_tac[]) >>
+  simp[popmany_individual_def, LET_THM, pairTheory.pair_CASE_def,
+       pairTheory.UNCURRY] >>
+  qmatch_goalsub_abbrev_tac `QSORT cmp1 requests` >>
+  qabbrev_tac `cmp2 = (\a b. case (stack_get_depth a (q ++ core),
+      stack_get_depth b (q ++ core)) of
+      (SOME da, SOME db) => da <= db | _ => T)` >>
+  `QSORT cmp1 requests = QSORT cmp2 requests` by
+    (irule qsort_relation_on >> simp[Abbr `cmp1`, Abbr `cmp2`]) >>
+  `!d ps. (if d = 0 then ([], ps) else do_swap d ps) = do_swap d ps` by
+    (rpt gen_tac >> Cases_on `d = 0` >> simp[do_swap_def]) >>
+  simp[] >>
+  qspec_then `b` mp_tac popmany_fold_shared_core_replay >>
+  disch_then (qspecl_then [`c`, `p`, `q`, `QSORT cmp2 requests`] mp_tac) >>
+  simp[sortingTheory.QSORT_MEM, EXTENSION] >>
+  disch_then (qspecl_then [`core`, `al`, `[]`] mp_tac) >>
+  simp[DISJOINT_ALT, sortingTheory.QSORT_MEM, Abbr `cmp2`,
+       pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
+  gvs[DISJOINT_ALT]
+QED
+
+Theorem contiguous_top_depth_floor[local]:
+  !requests core.
+    requests <> [] /\
+    EVERY IS_SOME (MAP (\v. stack_get_depth v core) requests) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v core) requests)) ==>
+    LENGTH requests < LENGTH core
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (LENGTH requests) (GENLIST SUC (LENGTH requests))` by
+    (simp[MEM_GENLIST] >> qexists_tac `PRE (LENGTH requests)` >>
+     Cases_on `requests` >> gvs[]) >>
+  `MEM (LENGTH requests) (MAP THE (MAP (\v. stack_get_depth v core) requests))` by
+    (gvs[is_contiguous_top_def] >> metis_tac[sortingTheory.QSORT_MEM]) >>
+  gvs[MEM_MAP, EVERY_MEM] >>
+  `IS_SOME (stack_get_depth v core)` by metis_tac[] >>
+  Cases_on `stack_get_depth v core` >> gvs[] >>
+  metis_tac[stackModelTheory.stack_get_depth_props]
+QED
+
+Theorem popmany_plan_shared_core_replay:
+  !requests ps qs p q core.
+    DISJOINT (set p) (set requests) /\ DISJOINT (set q) (set requests) /\
+    ps.ps_stack = p ++ core /\ qs.ps_stack = q ++ core /\
+    ps.ps_alloc = qs.ps_alloc ==>
+    ?ops core' al.
+      popmany_plan requests ps =
+        (ops, ps with <|ps_stack := p ++ core'; ps_alloc := al|>) /\
+      popmany_plan requests qs =
+        (ops, qs with <|ps_stack := q ++ core'; ps_alloc := al|>)
+Proof
+  Cases
+  >- (rpt strip_tac >> qexistsl_tac [`[]`, `core`, `ps.ps_alloc`] >>
+      simp[popmany_plan_def, stackPlanTypesTheory.plan_state_component_equality]) >>
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v (h::t) ==>
+    stack_get_depth v (p ++ core) = stack_get_depth v core /\
+    stack_get_depth v (q ++ core) = stack_get_depth v core` by
+    (rpt strip_tac >> irule stack_get_depth_bottom_excluded >>
+     gvs[DISJOINT_ALT] >> metis_tac[]) >>
+  `MAP (\v. stack_get_depth v (p ++ core)) (h::t) =
+   MAP (\v. stack_get_depth v core) (h::t) /\
+   MAP (\v. stack_get_depth v (q ++ core)) (h::t) =
+   MAP (\v. stack_get_depth v core) (h::t)` by
+    (conj_tac >> irule MAP_CONG >> simp[]) >>
+  gvs[] >> simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- suspend "contiguous"
+      >> suspend "noncontiguous") >>
+  suspend "missing"
+QED
+
+Resume popmany_plan_shared_core_replay[noncontiguous]:
+  simp[] >>
+  `ps = ps with <|ps_stack := p ++ core; ps_alloc := qs.ps_alloc|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  `qs = qs with <|ps_stack := q ++ core; ps_alloc := qs.ps_alloc|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  qspec_then `ps` mp_tac popmany_individual_shared_core_replay >>
+  disch_then (qspecl_then [`qs`, `p`, `q`, `core`, `qs.ps_alloc`, `h::t`] mp_tac) >>
+  simp[] >>
+  qpat_x_assum `ps.ps_stack = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `qs.ps_stack = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `ps.ps_alloc = _` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Resume popmany_plan_shared_core_replay[missing]:
+  simp[] >>
+  `ps = ps with <|ps_stack := p ++ core; ps_alloc := qs.ps_alloc|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  `qs = qs with <|ps_stack := q ++ core; ps_alloc := qs.ps_alloc|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  qspec_then `ps` mp_tac popmany_individual_shared_core_replay >>
+  disch_then (qspecl_then [`qs`, `p`, `q`, `core`, `qs.ps_alloc`, `h::t`] mp_tac) >>
+  simp[] >>
+  qpat_x_assum `ps.ps_stack = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `qs.ps_stack = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `ps.ps_alloc = _` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Resume popmany_plan_shared_core_replay[contiguous]:
+  `LENGTH (h::t) < LENGTH core` by
+    (irule contiguous_top_depth_floor >> simp[]) >>
+  `?ops al.
+    do_swap (LENGTH (h::t)) ps =
+      (ops, ps with <|ps_stack := p ++ stack_swap (LENGTH (h::t)) core; ps_alloc := al|>) /\
+    do_swap (LENGTH (h::t)) qs =
+      (ops, qs with <|ps_stack := q ++ stack_swap (LENGTH (h::t)) core; ps_alloc := al|>)` by
+    (drule do_swap_prefix_replay >>
+     disch_then (qspecl_then [`ps`, `qs`, `p`, `q`] mp_tac) >> simp[]) >>
+  `!r. stack_pop (LENGTH (h::t)) (r ++ stack_swap (LENGTH (h::t)) core) =
+    r ++ stack_pop (LENGTH (h::t)) (stack_swap (LENGTH (h::t)) core)` by
+    (gen_tac >> fs[stack_pop_def, TAKE_APPEND, stack_swap_def, LENGTH_TAKE] >> decide_tac) >>
+  qexistsl_tac [`ops ++ [SOPop (LENGTH (h::t))]`,
+    `stack_pop (LENGTH (h::t)) (stack_swap (LENGTH (h::t)) core)`, `al`] >> fs[]
+QED
+
+Finalise popmany_plan_shared_core_replay
+
 Theorem cleanup_retained_prefix_replay:
   !m n core ps qs inputs physical retained removed.
     lineage_core m core ps /\ lineage_core n core qs /\
@@ -1609,11 +1795,11 @@ QED
 
 (* Physical cleanup replay does not require a normalized live inventory.
    In particular the shared output core below may contain internal markers. *)
-Theorem clean_stack_plan_shared_core_replay:
+Theorem clean_stack_plan_arbitrary_core_replay:
   !liveness cfg fn bb ps qs m n core.
     ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
     qs.ps_stack = REPLICATE n dead_stack_marker ++ core /\
-    ALL_DISTINCT core /\ ps.ps_alloc = qs.ps_alloc ==>
+    ps.ps_alloc = qs.ps_alloc ==>
     ?choice ops core' m' n' al pref pcand.
       clean_stack_plan liveness cfg fn bb ps =
         (ops, ps with <|ps_stack := REPLICATE m' dead_stack_marker ++ core';
@@ -1642,7 +1828,7 @@ Proof
   simp[stackPlanTypesTheory.plan_state_component_equality]
 QED
 
-Resume clean_stack_plan_shared_core_replay[active]:
+Resume clean_stack_plan_arbitrary_core_replay[active]:
   qabbrev_tac `inputs = input_vars_from pred_lbl bb.bb_instructions
     (live_vars_at liveness bb.bb_label 0)` >>
   qabbrev_tac `layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions)` >>
@@ -1702,7 +1888,7 @@ Resume clean_stack_plan_shared_core_replay[active]:
   suspend "popped"
 QED
 
-Resume clean_stack_plan_shared_core_replay[empty]:
+Resume clean_stack_plan_arbitrary_core_replay[empty]:
   qpat_x_assum `Abbrev (cs = _)`
     (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
   qexistsl_tac [`[]`, `[]`, `LENGTH ps.ps_stack`, `LENGTH qs.ps_stack`,
@@ -1712,16 +1898,15 @@ Resume clean_stack_plan_shared_core_replay[empty]:
        LIST_EQ_REWRITE, EL_APPEND_EQN, EL_MAP, EL_REPLICATE, combinTheory.K_DEF]
 QED
 
-Resume clean_stack_plan_shared_core_replay[marked]:
+Resume clean_stack_plan_arbitrary_core_replay[marked]:
   `~MEM dead_stack_marker removed` by
     (simp[Abbr `removed`, MEM_FILTER] >> metis_tac[]) >>
   `?ops live al.
     popmany_plan removed ps =
       (ops, ps with <|ps_stack := REPLICATE m dead_stack_marker ++ live; ps_alloc := al|>) /\
     popmany_plan removed cs =
-      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>) /\
-    ALL_DISTINCT live /\ set live = set core DIFF set removed` by
-    (irule popmany_plan_prefix_frame >>
+      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>)` by
+    (irule popmany_plan_shared_core_replay >>
      simp[Abbr `cs`, DISJOINT_ALT, MEM_REPLICATE] >> metis_tac[]) >>
   `!k. mark_dead_stack retained (REPLICATE k dead_stack_marker ++ live) =
     REPLICATE k dead_stack_marker ++ mark_dead_stack retained live` by
@@ -1736,14 +1921,13 @@ Resume clean_stack_plan_shared_core_replay[marked]:
   rpt (pop_assum kall_tac) >> rpt strip_tac >> simp[]
 QED
 
-Resume clean_stack_plan_shared_core_replay[popped]:
+Resume clean_stack_plan_arbitrary_core_replay[popped]:
   `?ops live al.
     popmany_plan (MAP Var to_pop) ps =
       (ops, ps with <|ps_stack := REPLICATE m dead_stack_marker ++ live; ps_alloc := al|>) /\
     popmany_plan (MAP Var to_pop) cs =
-      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>) /\
-    ALL_DISTINCT live /\ set live = set core DIFF set (MAP Var to_pop)` by
-    (irule popmany_plan_prefix_frame >>
+      (ops, cs with <|ps_stack := REPLICATE n dead_stack_marker ++ live; ps_alloc := al|>)` by
+    (irule popmany_plan_shared_core_replay >>
      simp[Abbr `cs`, DISJOINT_ALT, MEM_REPLICATE, MEM_MAP, dead_stack_marker_def]) >>
   qpat_x_assum `Abbrev (cs = _)`
     (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
@@ -1753,7 +1937,27 @@ Resume clean_stack_plan_shared_core_replay[popped]:
   rpt (pop_assum kall_tac) >> rpt strip_tac >> simp[]
 QED
 
-Finalise clean_stack_plan_shared_core_replay
+Finalise clean_stack_plan_arbitrary_core_replay
+
+(* Compatibility corollary; the physical argument above needs no counts. *)
+Theorem clean_stack_plan_shared_core_replay:
+  !liveness cfg fn bb ps qs m n core.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    qs.ps_stack = REPLICATE n dead_stack_marker ++ core /\
+    ALL_DISTINCT core /\ ps.ps_alloc = qs.ps_alloc ==>
+    ?choice ops core' m' n' al pref pcand.
+      clean_stack_plan liveness cfg fn bb ps =
+        (ops, ps with <|ps_stack := REPLICATE m' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_promised := pref|>) /\
+      clean_stack_plan liveness cfg fn bb
+        (qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+        (ops, qs with <|ps_stack := REPLICATE n' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_height := NONE;
+                       ps_cleanup_promised := pcand|>)
+Proof
+  rpt strip_tac >> irule clean_stack_plan_arbitrary_core_replay >>
+  rpt (goal_assum (drule_at Any))
+QED
 
 
 Theorem stack_dup_bottom_extension:
