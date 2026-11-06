@@ -49,7 +49,10 @@ Proof
    u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
    u.vs_fmp = s.vs_fmp /\ u.vs_memory = s.vs_memory /\
    (!p. p <> STRING #"%" (toString sa.cs_next_var) ==> lookup_var p u = lookup_var p s)` by
-    (irule literal_alloca_static_frame >> gvs[Abbr `inst`] >> metis_tac[]) >>
+    (qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+     simp[Abbr `inst`] >> strip_tac >>
+     drule_then strip_assume_tac literal_alloca_static_frame >>
+     simp[]) >>
   `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
    (!p. p <> STRING #"%" (toString sa.cs_next_var) ==>
      FLOOKUP G1 p = FLOOKUP G p /\ op_taint tn1 (Var p) = op_taint tn (Var p))` by
