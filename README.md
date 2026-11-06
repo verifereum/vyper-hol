@@ -173,8 +173,8 @@ metadata disabled and decimals enabled by fixture pragmas. These profiles can
 evolve independently. At this pin NONE runs the O1 Venom passes but disables
 assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
 target the pin supports), whereas the HOL EVM semantics executes Osaka.
-Metadata need not match for behavioral replay. Bytecode parity is opt-in and
-is not implied by a passing semantics replay.
+Metadata need not match for behavioral replay. Bytecode parity (checked by
+`lowering/defs/bytecode/native/`) is not implied by a passing semantics replay.
 
 Use Python 3.11.17 in an isolated environment, then run from this repository:
 
