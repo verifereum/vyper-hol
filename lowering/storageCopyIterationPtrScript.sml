@@ -55,7 +55,7 @@ Theorem storage_copy_iterate_path_ptr:
      mk_inst (bid+4) MSTORE [Var dv; Var vv] [];
      mk_inst (bid+5) ADD [Var cv; Lit 1w] [nv];
      mk_inst (bid+6) ASSIGN [Var nv] [cv];
-     mk_inst (bid+7) JMP [Label hdr] []] ==>
+     mk_inst (backedge_id) JMP [Label hdr] []] ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase n G' tn' t /\
@@ -119,7 +119,7 @@ Resume storage_copy_iterate_path_ptr[body]:
   rename1 `gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0 G2 tn2 (OK s2)` >>
   `gas_path_ptr D 0 ctx fn PG G2 tn2 s2 0 G2 tn2 (OK (jump_to hdr s2))` by
     (irule storage_copy_jump_path_ptr >> simp[] >>
-     qexists_tac `bid+7` >> simp[get_instruction_def]) >>
+     qexists_tac `backedge_id` >> simp[get_instruction_def]) >>
   `storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase (k+1)
     G2 tn2 (jump_to hdr s2)` by simp[] >>
   `k+1+remaining = n` by decide_tac >>
