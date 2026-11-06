@@ -74,6 +74,7 @@ Proof
   drule_all supported_struct_submap_lookup >> strip_tac >>
   drule_all well_formed_struct_fields_deleted >> strip_tac >>
   simp[assignable_type_def] >> gvs[EVERY_MEM] >> rpt strip_tac >>
+  gvs[] >>
   qpat_x_assum `!m. m < fuel ==> _` (qspec_then `fuel - 1` mp_tac) >>
   simp[] >> disch_then irule >> simp[] >>
   qexists `tops` >> simp[] >>

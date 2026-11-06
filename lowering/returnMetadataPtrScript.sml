@@ -5,7 +5,8 @@ Ancestors
   supportedPlaceAssignable supportedDecls supportedProgram e2eDefs
   vyperTypeContractStaticMaps vyperTypeContract
   vyperInterpreter vyperTypeSystem
-  list option finite_map
+  list option finite_map entryDecodePlanProps abiEncoderProps
+  representationCleanPtr words arithmetic
 
 val _ = Parse.hide "body";
 
@@ -254,4 +255,18 @@ Proof
   gvs[source_typing_ok_def] >>
   drule_all typedCopyProducerTheory.supported_checked_struct_metadata_acyclic >>
   simp[]
+QED
+
+(* Copy plans expose the exact static size, not a machine-size bound. *)
+Theorem abi_copy_plan_size:
+  !tenv ty m.
+    abi_enc_plan tenv ty (AbiCopy m) ==>
+    ~is_dynamic (vyper_to_abi_type tenv ty) /\
+    m = vyper_abi_size_bound tenv ty /\
+    ?tv. evaluate_type tenv ty = SOME tv /\ m = type_memory_size tv
+Proof
+  rpt gen_tac >> simp[Once abi_enc_plan_cases] >> strip_tac >>
+  drule_all (cj 1 static_length_memory_size) >> strip_tac >>
+  drule (cj 1 vyper_to_abi_type_dynamic) >> strip_tac >>
+  drule_all (cj 1 vyper_to_abi_static_length) >> simp[]
 QED

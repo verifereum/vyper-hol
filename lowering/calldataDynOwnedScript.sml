@@ -2584,9 +2584,15 @@ Resume calldata_owned_header_step[ownership_frame]:
   qpat_assum `Abbrev (Own = _)` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   pure_rewrite_tac[markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >> BETA_TAC >>
   ntac 8 disch_tac >>
-  ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)) >>
-  qexistsl_tac [`u`,`st1.cs_next_id`,`middle.cs_next_id`] >>
-  asm_rewrite_tac[] >> decide_tac
+  rpt gen_tac >> strip_tac >>
+  Cases_on `middle.cs_next_id <= id /\ id < st1.cs_next_id`
+  >- metis_tac[] >>
+  `id < middle.cs_next_id \/ st1.cs_next_id <= id` by decide_tac >>
+  `FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id` by metis_tac[] >>
+  `k = 32 /\ q < dimword (:256) /\ q + 32 <= u.vs_alloca_next /\
+   ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+     ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by metis_tac[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 Resume calldata_owned_header_step[invariant_assembly]:
   `?scratch. abi_decode_footprint_frame ((d,bufsize)::scratch) initial v /\
