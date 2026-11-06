@@ -27,6 +27,17 @@ Theorem alloc_buffer_copy_start:
     u.vs_inst_idx = SUC s.vs_inst_idx /\ u.vs_memory = s.vs_memory /\
     u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
     tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\
+    tn1.t_imm = tn.t_imm /\
+    (!i. i < w2n w \/ w2n w+sz <= i ==>
+      (i IN tn1.t_mem <=> i IN tn.t_mem)) /\
+    u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+    u.vs_transient = s.vs_transient /\ u.vs_fmp = s.vs_fmp /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid a len. FLOOKUP s.vs_allocas aid = SOME (a,len) /\
+      aid < sa.cs_next_id ==> regions_disjoint (w2n w) sz a len) /\
+    (!name a len. local_region cenv es.scopes u name a len ==>
+      regions_disjoint (w2n w) sz a len) /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP G1 p = FLOOKUP G p /\
       op_taint tn1 (Var p) = op_taint tn (Var p)) /\
@@ -48,6 +59,8 @@ Proof
    u.vs_labels = s.vs_labels /\
    u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
    u.vs_fmp = s.vs_fmp /\ u.vs_memory = s.vs_memory /\
+   u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+   u.vs_transient = s.vs_transient /\
    (!p. p <> STRING #"%" (toString sa.cs_next_var) ==> lookup_var p u = lookup_var p s)` by
     (qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
      simp[Abbr `inst`] >> strip_tac >>
@@ -66,11 +79,21 @@ Proof
          `x <> STRING #"%" (toString sa.cs_next_var)` by
            (strip_tac >> gvs[]) >> simp[])
      >> gvs[eval_operand_def, op_taint_def]) >>
+  `tn1.t_imm = tn.t_imm /\
+   (!i. i < w2n w \/ w2n w+sz <= i ==>
+     (i IN tn1.t_mem <=> i IN tn.t_mem))` by
+    (unabbrev_all_tac >> drule_all literal_alloca_exterior_taint >> simp[]) >>
   qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`, `p`, `w`, `G1`, `tn1`] >>
   simp[stmt_state_rel_inst_idx, lookup_var_def, eval_op_inst_idx, allocas_from_def] >>
   `b < dimword (:256)` by decide_tac >>
   gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, wordsTheory.w2n_n2w] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac
+  >- (qpat_x_assum `!i. _ ==> (i IN _ <=> _)` irule >> simp[])
+  >- (qpat_x_assum `!i. _ ==> (i IN _ <=> _)` irule >> simp[])
+  >- (qpat_x_assum `!aid b len. aid < _ /\ _ ==> _` irule >> qexists_tac `aid` >> simp[])
+  >- (qpat_x_assum `!name b len. _` irule >>
+      gvs[local_region_def, lookup_var_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem alloc_buffer_installed_split:

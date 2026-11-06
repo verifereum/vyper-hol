@@ -155,3 +155,20 @@ Theorem alloc_buffer_root_fresh:
 Proof
   simp[not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
+
+Theorem literal_alloca_exterior_taint:
+  stmt_state_rel ctx func cenv cx es s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
+  FLOOKUP u.vs_allocas id = SOME (b,n) /\
+  tn1 = step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn ==>
+  tn1.t_imm = tn.t_imm /\
+  (!i. i < b \/ b+n <= i ==> (i IN tn1.t_mem <=> i IN tn.t_mem))
+Proof
+  strip_tac >> drule_all exprSimPtrLiteralBufferTheory.literal_ptr_alloca_ghost >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  gvs[] >> gvs[pred_setTheory.SUBSET_DEF] >>
+  rpt strip_tac >> simp[pred_setTheory.IN_UNION] >>
+  metis_tac[arithmeticTheory.NOT_LESS]
+QED
