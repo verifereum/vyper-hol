@@ -170,6 +170,65 @@ Proof
   >> metis_tac[MEM]
 QED
 
+Theorem dfs_aux_call_worklist_bound:
+  dfs_aux_call lv dfg cfg fn ps0 wl visited pg ==> LENGTH wl <= 1
+Proof
+  strip_tac >> Cases_on `wl` >> simp[] >>
+  drule (cj 1 dfs_lineage_mutual) >> simp[] >> metis_tac[]
+QED
+
+Theorem dfs_aux_call_inverse_origin_mutual[local]:
+  (!wl visited pg.
+    dfs_aux_call lv dfg cfg fn ps0 wl visited pg ==>
+    dfs_aux_call lv dfg cfg fn ps0 wl visited pg /\
+    !succ rest. wl = succ::rest ==>
+      (fn_entry_label fn = SOME succ /\ pg = ps0) \/
+      (?pred pin bb ops pout.
+        dfs_block_state lv dfg cfg fn ps0 pred pin /\
+        lookup_block pred fn.fn_blocks = SOME bb /\
+        generate_block_plan lv dfg cfg fn bb pin = SOME (ops,pout) /\
+        MEM succ (cfg_succs_of cfg pred) /\
+        pg.ps_stack = pout.ps_stack /\ pg.ps_spilled = pout.ps_spilled)) /\
+  (!ss sp succs visited pg.
+    dfs_succs_call lv dfg cfg fn ps0 ss sp succs visited pg ==>
+    dfs_succs_call lv dfg cfg fn ps0 ss sp succs visited pg)
+Proof
+  ho_match_mp_tac dfs_aux_call_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[dfs_aux_call_entry])
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[dfs_aux_call_visited]
+      >> drule dfs_aux_call_worklist_bound >> rpt strip_tac >> gvs[])
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[dfs_aux_call_missing]
+      >> drule dfs_aux_call_worklist_bound >> rpt strip_tac >> gvs[])
+  >- metis_tac[dfs_aux_call_succs]
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[dfs_aux_call_rest]
+      >> drule dfs_aux_call_worklist_bound >> rpt strip_tac >> gvs[])
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[dfs_aux_call_branch]
+      >> rpt strip_tac >> gvs[] >>
+      drule dfs_saved_parent_block_origin >> strip_tac >>
+      disj2_tac >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM])
+  >> metis_tac[dfs_aux_call_sibling]
+QED
+
+Theorem dfs_block_state_inverse_origin:
+  dfs_block_state lv dfg cfg fn ps0 succ ds ==>
+    (fn_entry_label fn = SOME succ /\ ds = ps0) \/
+    (?pred pin bb ops pout.
+      dfs_block_state lv dfg cfg fn ps0 pred pin /\
+      lookup_block pred fn.fn_blocks = SOME bb /\
+      generate_block_plan lv dfg cfg fn bb pin = SOME (ops,pout) /\
+      MEM succ (cfg_succs_of cfg pred) /\
+      ds.ps_stack = pout.ps_stack /\ ds.ps_spilled = pout.ps_spilled)
+Proof
+  rewrite_tac[dfs_block_state_def] >> rpt strip_tac >>
+  drule (cj 1 dfs_aux_call_inverse_origin_mutual) >>
+  simp[dfs_block_state_def]
+QED
+
 Theorem dfs_block_state_lineage_state:
   dfs_block_state lv dfg cfg fn ps0 lbl ps ==>
   lineage_state lv dfg cfg fn ps0 lbl ps
