@@ -155,3 +155,18 @@ Proof
   gvs[call_outcome_request_def, adopt_call_outcome_equation] >>
   IF_CASES_TAC >> simp[evaluation_state_component_equality]
 QED
+
+Theorem checked_delegate_outcome_success_frame:
+  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
+  rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
+  st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
+                 logs := st2.logs; outcomes := st2.outcomes;
+                 requests := st2.requests; pending_deletions := st2.pending_deletions|>
+Proof
+  rpt strip_tac >> drule take_delegate_outcome_success >> strip_tac >>
+  Cases_on `outcome.co_success` >>
+  gvs[delegate_outcome_request_def, call_outcome_request_def,
+      adopt_call_outcome_equation] >>
+  IF_CASES_TAC >> simp[evaluation_state_component_equality]
+QED

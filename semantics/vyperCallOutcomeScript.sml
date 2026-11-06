@@ -39,6 +39,32 @@ Definition take_call_outcome_def:
 End
 val () = take_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
+(* A DELEGATECALL observes the target's code address, the calldata, no value
+   and the caller's static flag: value_opt is SOME 0, or NONE in a static
+   frame. Its outcome's accounts carry its effects on self's storage. *)
+Definition delegate_outcome_request_def:
+  delegate_outcome_request target calldata value_opt st =
+    call_outcome_request target calldata value_opt st with
+      cr_kind := DelegateMessageCall
+End
+val () = cv_auto_trans delegate_outcome_request_def;
+
+Definition take_delegate_outcome_def:
+  take_delegate_outcome target calldata value_opt st =
+    case st.outcomes of
+      NONE => (INR (Error (RuntimeError "take_delegate_outcome")), st)
+    | SOME os =>
+      let rq = delegate_outcome_request target calldata value_opt st in
+      let (outcome, rest) = take_outcome rq os in
+      let st' = st with <| outcomes := SOME rest;
+                          requests := record_request rq st.requests |> in
+      if outcome.co_success /\ ~rq.cr_static /\
+         ~accounts_runtime_well_typed outcome.co_accounts
+      then (INR (Error (RuntimeError "call outcome accounts")), st')
+      else (INL (rq, outcome), st')
+End
+val () = take_delegate_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+
 Definition adopt_call_outcome_def:
   adopt_call_outcome rq outcome st =
     let (accounts, tStorage, logs) =
@@ -84,6 +110,15 @@ Proof
   pairarg_tac >> rw[] >> gvs[]
 QED
 
+Theorem take_delegate_outcome_frame:
+  take_delegate_outcome target calldata value_opt st = (res, st') ==>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+Proof
+  Cases_on `st.outcomes` >>
+  simp[take_delegate_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
 Theorem adopt_call_outcome_equation:
   adopt_call_outcome rq outcome st =
     (INL (), if rq.cr_static then st else
@@ -92,7 +127,7 @@ Theorem adopt_call_outcome_equation:
                    tStorage := outcome.co_tStorage;
                    logs := st.logs ++ outcome.co_logs;
                    pending_deletions := outcome.co_toDelete ++ st.pending_deletions|>
-       else if rq.cr_kind = MessageCall then st
+       else if rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall then st
        else st with <|accounts := outcome.co_accounts;
                      tStorage := outcome.co_tStorage|>)
 Proof
@@ -308,7 +343,7 @@ Proof
 QED
 
 Theorem adopt_create_outcome_equation:
-  kind <> MessageCall ==>
+  kind <> MessageCall /\ kind <> DelegateMessageCall ==>
   adopt_call_outcome (create_outcome_request kind value initcode st0) outcome st =
     (INL (), st with <|accounts := outcome.co_accounts;
                       tStorage := outcome.co_tStorage;
@@ -321,7 +356,7 @@ Proof
 QED
 
 Theorem take_adopt_create_outcome_typed:
-  kind <> MessageCall /\
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
   take_create_outcome kind value initcode st = (INL (rq,outcome),st') /\
   adopt_call_outcome rq outcome st' = (INL (),st'') ==>
   accounts_runtime_well_typed st''.accounts
@@ -374,7 +409,7 @@ Proof
 QED
 
 Theorem adopt_create_outcome_accounts:
-  kind <> MessageCall ==>
+  kind <> MessageCall /\ kind <> DelegateMessageCall ==>
   (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
            outcome st)).accounts = outcome.co_accounts /\
   (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)

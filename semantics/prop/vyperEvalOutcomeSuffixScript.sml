@@ -447,6 +447,17 @@ Proof
   simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
 QED
 
+Theorem outcomes_suffix_take_delegate:
+  outcomes_suffix (take_delegate_outcome target calldata value_opt)
+Proof
+  simp[outcomes_suffix_def] >> gen_tac >>
+  Cases_on `take_delegate_outcome target calldata value_opt st` >>
+  Cases_on `st.outcomes`
+  >- gvs[take_delegate_outcome_NONE] >>
+  drule_all take_delegate_outcome_suffix >> strip_tac >>
+  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+QED
+
 Theorem outcomes_frame_adopt:
   outcomes_frame (adopt_call_outcome rq co)
 Proof
@@ -553,7 +564,8 @@ fun outcomes_suffix_step facts =
   end;
 
 val outcomes_suffix_base_facts =
-  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
+  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take ::
+  outcomes_suffix_take_delegate :: outcomes_suffix_frame_simps;
 
 Theorem outcomes_suffix_ext_call:
   outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)

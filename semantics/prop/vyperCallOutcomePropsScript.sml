@@ -176,3 +176,62 @@ Proof
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
   gvs[adopt_call_outcome_equation, call_outcome_request_def]
 QED
+
+(* ===== Delegate calls: the same boundary under a delegate request ===== *)
+
+Theorem take_delegate_outcome_NONE:
+  st.outcomes = NONE ==>
+  take_delegate_outcome target calldata value_opt st =
+    (INR (Error (RuntimeError "take_delegate_outcome")), st)
+Proof
+  simp[take_delegate_outcome_def]
+QED
+
+Theorem take_delegate_outcome_suffix:
+  take_delegate_outcome target calldata value_opt st = (res,st') /\
+  st.outcomes = SOME os ==>
+  ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
+    LENGTH prefix <= 1
+Proof
+  rpt strip_tac >> gvs[take_delegate_outcome_def] >> pairarg_tac >>
+  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `os` >> simp[] >>
+  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
+QED
+
+Theorem take_delegate_outcome_error:
+  take_delegate_outcome target calldata value_opt st = (INR exc, st') ==>
+  exc = Error (RuntimeError "take_delegate_outcome") \/
+  exc = Error (RuntimeError "call outcome accounts")
+Proof
+  Cases_on `st.outcomes` >> simp[take_delegate_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
+Theorem take_delegate_outcome_success:
+  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome), st') ==>
+  ?os rest.
+    st.outcomes = SOME os /\
+    rq = delegate_outcome_request target calldata value_opt st /\
+    take_outcome rq os = (outcome,rest) /\
+    st' = st with <|outcomes := SOME rest;
+                   requests := record_request rq st.requests|> /\
+    (outcome.co_success /\ ~rq.cr_static ==>
+       accounts_runtime_well_typed outcome.co_accounts)
+Proof
+  Cases_on `st.outcomes` >> simp[take_delegate_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
+Theorem take_adopt_delegate_outcome_typed:
+  accounts_runtime_well_typed st.accounts /\
+  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st') /\
+  adopt_call_outcome rq outcome st' = (INL (),st'') ==>
+  accounts_runtime_well_typed st''.accounts
+Proof
+  rpt strip_tac >> drule take_delegate_outcome_success >> strip_tac >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[adopt_call_outcome_equation, delegate_outcome_request_def,
+      call_outcome_request_def]
+QED

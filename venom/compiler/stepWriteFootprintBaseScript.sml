@@ -130,10 +130,9 @@ Theorem exec_delegatecall_byte_frame:
   ~(w2n ro <= i /\ i < w2n ro + w2n rz) ==>
   read_byte i t.vs_memory = read_byte i s.vs_memory
 Proof
-  strip_tac >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def] >> metis_tac[extract_venom_result_byte_frame]
+  simp[exec_delegatecall_def, consume_call_outcome_eq] >>
+  strip_tac >> gvs[AllCaseEqs(), update_var_def] >>
+  irule write_memory_byte_frame >> qexists_tac `w2n rz` >> simp[listTheory.LENGTH_TAKE_EQ]
 QED
 
 Theorem exec_create_byte_frame:
