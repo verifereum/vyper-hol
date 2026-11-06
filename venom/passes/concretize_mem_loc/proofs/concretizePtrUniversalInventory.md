@@ -1498,3 +1498,124 @@ their original snapshots. Neither B nor TG' may replace historical witnesses.
 Normalization is a separate existing consumer. RET and other event families
 were not advanced in this diagnostic; universal coverage is still unproved.
 No positions-rewrite lemma or frozen contract file was added or edited.
+
+## RET reconstruction audit (C1.5.90.67.returnAudit)
+
+E0441 supersedes the preceding ALLOCA audit's unproved status: the exact
+`ptr_paired_prefix_alloca_immediate` is now Finalised and built. It does not
+establish universal coverage. `return_immediate_prefix_schema` in
+UniversalStepSchema is a quotation ONLY, built/typechecked independently of
+any proof. It repeats the production/static premises of
+`universal_normalized_step_schema`, specializes the source opcode to RET,
+and concludes actual source IntRet, successful caller binding, tagged return
+and a complete one-event prefix. No source success, returned-value equality,
+rebased caller mixedness or post-prefix is an antecedent.
+
+### Actual semantics and first missing implication
+
+* ChronologicalHistory lines 60–71 require a NONEMPTY stack, source IntRet,
+  successful bind_outputs and an active caller continuation. RET with an empty
+  stack has no chronological return successor. In step_inst_base lines 768–774,
+  RET evaluates all operands, rejects NONE and SOME [], and returns FRONT of
+  the nonempty value list with adopt_fmp=NONE and unchanged state. No comparison
+  of the last operand with a return-PC token is performed. Thus empty-stack
+  terminal return is not a new chronological-prefix event to simulate here.
+* The positions rewrite of RET is unchanged by the existing contract
+  `concretize_positions_unchanged`; contract structure/retpc/call-check/shape
+  theories are already ancestors of UniversalStepSchema. No new rewrite fact
+  is needed or introduced.
+* Endpoint mixedness is NOT equality of all operands. The first missing checked
+  semantic boundary is: from the production antecedent, current paired prefix,
+  source RET, matching target instruction and actual target return, construct
+  source `step_inst 0 C a.po_inst a.po_state = IntRet r a.po_state` with
+  `r.iret_values = rt.iret_values` and both adoption fields NONE. Here rt is
+  extracted from the actual target return, not supplied as a new assumption.
+  This is a backward-success/equal-FRONT boundary, not an application of
+  ptr_mixed_return_bind. It needs source discipline to forbid pointer-valued
+  ordinary return operands (fn_ptr_ok/ptr_use_ok), and taint_ok to give empty
+  operand taints. Tagged scalar provenance also needs to be discharged, not
+  silently assumed. retpc_shape_ok/opaque_use_ok isolate the final opaque
+  operand: its presence, rather than its value, must agree. Existing
+  ptr_mixed_vars_eval_presence supplies per-operand presence; the existing
+  ptr_mixed_vars_eval supplies transport of nonopaque operands, and
+  ptr_value_transport_scalar_empty gives equality after scalar/empty-mask
+  premises. Applying ptr_mixed_vars_eval_operands to the WHOLE RET list is
+  invalid when its final operand is opaque. No installed theorem yet combines
+  these facts into equal ordinary FRONT lists under these exact premises.
+  NONE adoption is a RET computation on both sides; fn_ptr_ok excludes
+  RETFMP/DRET elsewhere, but those opcodes are not this specialized schema.
+
+### SAME historical snapshot, not current callee mixedness
+
+Let `(n,j)=HD calls`, `f=HD a.po_stack`, `ft=HD at.po_stack` and
+`(RPT,RTG)=HD saved`. PairedFields lines 62–78 give j<LENGTH done,
+n=EL j done, saved caller frames equal to EL n h / EL j ht, INVOKE at both
+indices, and saved tags equal to the PT/TG fields of the SAME `EL n H`.
+Destructure that snapshot as `(tsn,rn,bn,PTn,TGn,sn,en)`. Then RPT=PTn and
+RTG=TGn; PairedPrefix samples give precisely
+
+```
+ptr_mixed_vars bn positions TGn (EL n h).po_taint
+  f.cf_fn ft.cf_fn f.cf_state ft.cf_state
+```
+
+at the saved call, NOT current callee mixedness. Caller cf_tvar is that
+historical observation's t_var. At return, the new source taint is current
+a.po_taint with t_var replaced by DRESTRICT f.cf_tvar outside the outputs.
+The old snapshot's t_mem is NOT equated with current t_mem. This does not by
+itself block mixed-variable restoration: ptr_mixed_vars_def uses only
+op_taint tn (Var x), hence only t_var, not t_mem. A field-local taint replacement
+is sufficient at this boundary. No memory equality or saved memory snapshot
+is required for return binding.
+
+The other required lift is bn -> current births (then the new overlay B).
+`ptr_transcript_birth_retained` supplies lookup retention from historical n
+to the last source index under no-DALLOCA. `ptr_value_transport_birth_extension`
+supplies pointwise monotonicity. There is no ready mixed-vars historical-return
+lift in the inspected interface: it must preserve opaque environments and
+presence and use lookup monotonicity for ordinary variables. This is a small
+precise boundary to prove, not permission to rewrite EL n H or map old H.
+It should conclude mixedness of the SAVED caller states at current births
+with caller t_var and current memory taint; it must retain exactly RPT/RTG.
+
+### Return consumer and six-field supplier ledger
+
+`ptr_mixed_return_bind` (OpaqueRetpc 691–714) consumes saved caller mixedness,
+EVERY non-retpc outputs, equal returned lists, and NONE adoption on both sides.
+It concludes equivalent binding failure and mixedness after successful binding
+with DRESTRICT RTG and DRESTRICT caller t_var outside outs. The output condition
+comes from `ptr_retpc_invoke_outputs`: caller retpc_shape_ok, historical INVOKE
+membership, opcode INVOKE. Frame/call certificates identify that same INVOKE;
+shape must come from caller context membership, not current callee shape.
+Target binding success then implies source binding success, once the two
+preceding semantic boundaries are proved.
+
+| Field | Exact proposed supplier / remaining match |
+| --- | --- |
+| transcript | tagged return rule (SourceOwnership 56–70), then transcript pair rule with both stacks decreasing by one; ptr_activation_tokens pops, registry unchanged, entries unchanged; birth overlay uses resumed head token and restored caller vs_allocas |
+| placements | retain historical stage placement witnesses and match caller code from its historical sample/context; do not invent fresh positions |
+| samples | historical saved-caller mixedness lift, equal-FRONT RET boundary, ptr_mixed_return_bind, and merge/adopt core-sharing boundaries; new snapshot only uses current B and restored tags |
+| alignment | saved INVOKE cursor and actual target successor must yield active source continuation after the saved index; an immediate NOP is allowed before common normalization. params come from saved caller vs_params, PTn and historical paired params lifted along retained births, not the callee's PT |
+| callers | pop calls and saved in lockstep with stacks; all remaining certificates use unchanged (n,j) and unchanged old EL n H. Append/list retention is sufficient; no snapshot rebasing of remaining callers |
+| writes | return is a terminator, not a memory-write event; keep ws and old certificates unchanged, discharge coverage using the terminator exclusion in paired_writes. No fictitious return write or new byte agreement |
+
+The precise first gap is equal-FRONT source RET success. The next independent
+interface gap is historical saved-caller mixedness at the new birth map; the
+above lookup/taint analysis explains its likely proof without claiming it.
+Caller continuation/cursor assembly and the other six fields remain unproved
+consumers, not consequences of quotation typechecking. tokens become TL tokens;
+PT becomes FST(HD saved), TG becomes DRESTRICT (SND(HD saved)) outside caller
+outputs; saved/calls pop, registry/entries persist, births retain completed
+activations. These transitions must be proved from the transcript semantics.
+
+### ALLOCA normalization signature check only
+
+The accepted immediate ALLOCA certificate matches the first premise of
+`ptr_paired_prefix_normalize` directly with a=b and at=zt and the appended
+histories/snapshot. The second premise is fn_inst_wf b.po_fn, obtained from
+b.po_fn=a.po_fn and the ALLOCA schema's fn_inst_wf a.po_fn. Normalization appends
+a source-only gap and snapshots, leaves target history/done and activation
+fields unchanged, and obtains a non-NOP matched endpoint. Combining list
+appends gives delta=[b]++gap and the analogous snapshot list, so delta is
+nonempty. This is a signature match, NOT a new proved allocation-normalization
+theorem. No extra allocation helper or universal claim was added in this audit.
