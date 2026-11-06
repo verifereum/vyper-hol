@@ -13,6 +13,7 @@ Theorem extract32_source_post_view:
   expr_store_bound cx (expr_type e) (BytesV bs) op s ==>
   ?b. eval_operand op s = SOME (n2w b) /\
       mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+      mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
       b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
       b + 32 + LENGTH bs <= s.vs_alloca_next
 Proof

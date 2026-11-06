@@ -5,7 +5,7 @@ Ancestors
   builtinBytes emitHelper emitHelperProps compileEnv venomInst rich_list
   exprLowering exprSimHyps exprCallbackContracts exprCallBounds
 
-Theorem extract32_snapshot_shape[local]:
+Theorem extract32_snapshot_shape:
   compile_bytestring_src src sa = ((len,data),sb) ==>
   LENGTH (emitted_insts sa sb) = 2 /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
