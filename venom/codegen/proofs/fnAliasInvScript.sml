@@ -6126,6 +6126,285 @@ Proof
   simp[GSYM alias_retired_plan_def, alias_retired_plans, alias_retired_dfs_left] >> EVAL_TAC
 QED
 
+(* Initialized diamond JMP producer stages. *)
+Definition alias_retired_left_mid_def:
+  alias_retired_left_mid = SND (generate_regular_inst_plan
+    (liveness_analyze alias_retired_fn) (dfg_build_function alias_retired_fn)
+    (cfg_analyze alias_retired_fn) alias_retired_fn
+    (HD (EL 1 alias_retired_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_retired_fn) "left" 1)
+    F T "left" (SND (clean_stack_plan (liveness_analyze alias_retired_fn)
+      (cfg_analyze alias_retired_fn) alias_retired_fn
+      (EL 1 alias_retired_fn.fn_blocks) (SND alias_retired_entry))))
+End
+
+Definition alias_retired_right_def:
+  alias_retired_right = THE (alias_retired_plan 2 (SND alias_retired_entry))
+End
+
+Theorem alias_retired_jmp_targets:
+  join_target_ops (liveness_analyze alias_retired_fn) alias_retired_fn "left"
+    (EL 1 (EL 1 alias_retired_fn.fn_blocks).bb_instructions) = SOME [Var "a"] /\
+  join_target_ops (liveness_analyze alias_retired_fn) alias_retired_fn "right"
+    (HD (EL 2 alias_retired_fn.fn_blocks).bb_instructions) = SOME [Var "b"]
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_retired_right_mid_def:
+  alias_retired_right_mid = SND (clean_stack_plan
+    (liveness_analyze alias_retired_fn) (cfg_analyze alias_retired_fn)
+    alias_retired_fn (EL 2 alias_retired_fn.fn_blocks) (SND alias_retired_entry))
+End
+
+Theorem alias_retired_jmp_restoration:
+  alias_retired_left_mid.ps_stack = [Var "a"] /\
+  restore_spilled_plan [Var "a"] alias_retired_left_mid = ([], alias_retired_left_mid) /\
+  restore_spilled_plan [Var "b"] alias_retired_right_mid = ([], alias_retired_right_mid)
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_retired_jmp_reorder_calls:
+  stack_get_unfixed_depth (Var "a") 0 1 alias_retired_left_mid.ps_stack = SOME 0 /\
+  stack_get_unfixed_depth (Var "b") 0 1 alias_retired_right_mid.ps_stack = SOME 0 /\
+  0 < LENGTH alias_retired_left_mid.ps_stack /\
+  0 < LENGTH alias_retired_right_mid.ps_stack /\
+  IS_SOME (alias_retired_plan 2 (SND alias_retired_entry))
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_retired_right_jmp_stages:
+  alias_retired_right_mid.ps_stack = [Var "b"] /\
+  reorder_plan (dfg_build_function alias_retired_fn) [Var "b"] alias_retired_right_mid =
+    ([], alias_retired_right_mid) /\
+  reorder_plan (dfg_build_function alias_retired_fn) [Var "a"] alias_retired_left_mid =
+    ([], alias_retired_left_mid) /\
+  (SND alias_retired_right).ps_stack = [Var "b"]
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_retired_left_tree_def:
+  alias_retired_left_tree = THE (generate_fn_plan_aux
+    (liveness_analyze alias_retired_fn) (dfg_build_function alias_retired_fn)
+    (cfg_analyze alias_retired_fn) alias_retired_fn
+    ["left"] ["entry"] (SND alias_retired_entry))
+End
+
+Theorem alias_retired_left_tree_success:
+  IS_SOME (generate_fn_plan_aux
+    (liveness_analyze alias_retired_fn) (dfg_build_function alias_retired_fn)
+    (cfg_analyze alias_retired_fn) alias_retired_fn
+    ["left"] ["entry"] (SND alias_retired_entry))
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_retired_left_tree_result:
+  generate_fn_plan_aux
+    (liveness_analyze alias_retired_fn) (dfg_build_function alias_retired_fn)
+    (cfg_analyze alias_retired_fn) alias_retired_fn
+    ["left"] ["entry"] (SND alias_retired_entry) = SOME alias_retired_left_tree
+Proof
+  mp_tac alias_retired_left_tree_success >>
+  Cases_on `generate_fn_plan_aux
+    (liveness_analyze alias_retired_fn) (dfg_build_function alias_retired_fn)
+    (cfg_analyze alias_retired_fn) alias_retired_fn
+    ["left"] ["entry"] (SND alias_retired_entry)` >>
+  simp[alias_retired_left_tree_def]
+QED
+
+Theorem alias_retired_left_tree_alloc:
+  (SND (SND alias_retired_left_tree)).ps_alloc =
+    (init_cleanup_plan_state NONE [] 0 0).ps_alloc
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_retired_left_tree_counter:
+  (SND (SND alias_retired_left_tree)).ps_label_counter = 0
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_retired_left_tree_fields:
+  FST (SND alias_retired_left_tree) = ["yes"; "no"; "join"; "left"; "entry"] /\
+  SND alias_retired_entry = (SND alias_retired_entry) with
+    <|ps_alloc := (SND (SND alias_retired_left_tree)).ps_alloc with
+        sa_free_slots := (SND alias_retired_entry).ps_alloc.sa_free_slots;
+      ps_label_counter := (SND (SND alias_retired_left_tree)).ps_label_counter|>
+Proof
+  conj_tac >- EVAL_TAC >>
+  rewrite_tac[alias_retired_left_tree_alloc, alias_retired_left_tree_counter] >>
+  EVAL_TAC
+QED
+
+Theorem alias_retired_dfs_right:
+  dfs_aux_call (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["right"]
+    ["yes"; "no"; "join"; "left"; "entry"] (SND alias_retired_entry)
+Proof
+  `SND alias_retired_entry = (SND alias_retired_entry) with
+    <|ps_stack := (SND alias_retired_entry).ps_stack;
+      ps_spilled := (SND alias_retired_entry).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  once_rewrite_tac[cj 2 alias_retired_left_tree_fields] >>
+  irule dfs_aux_call_sibling >>
+  qexistsl_tac [`FST alias_retired_left_tree`, `"left"`, `["entry"]`] >>
+  simp[GSYM (cj 1 alias_retired_left_tree_fields), alias_retired_left_tree_result] >>
+  `cfg_succs_of (cfg_analyze alias_retired_fn) "entry" = ["left"; "right"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 0 alias_retired_fn.fn_blocks`, `FST alias_retired_entry`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[GSYM alias_retired_plan_def, alias_retired_plans] >>
+  conj_tac >- EVAL_TAC >> irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_retired_dfs_edge_states:
+  dfs_block_state (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "entry" (init_cleanup_plan_state NONE [] 0 0) /\
+  dfs_block_state (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "left" (SND alias_retired_entry) /\
+  dfs_block_state (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "right" (SND alias_retired_entry)
+Proof
+  rewrite_tac[dfs_block_state_def] >> conj_tac
+  >- (qexistsl_tac [`[]`, `[]`] >> simp[] >> irule dfs_aux_call_entry >> EVAL_TAC) >>
+  conj_tac
+  >- (qexistsl_tac [`[]`, `["entry"]`] >> simp[alias_retired_dfs_left]) >>
+  qexistsl_tac [`[]`, `["yes"; "no"; "join"; "left"; "entry"]`] >>
+  simp[alias_retired_dfs_right]
+QED
+
+Theorem alias_retired_lineage_edges:
+  !lbl. MEM lbl ["left"; "right"] ==>
+  lineage_entry (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "entry" lbl (SND alias_retired_entry)
+Proof
+  rpt strip_tac >>
+  `dfs_block_state (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) lbl (SND alias_retired_entry)` by
+    (gvs[] >> simp[alias_retired_dfs_edge_states]) >>
+  simp[lineage_entry_def] >>
+  qexistsl_tac [`init_cleanup_plan_state NONE [] 0 0`, `EL 0 alias_retired_fn.fn_blocks`,
+    `init_cleanup_plan_state NONE [] 0 0`, `FST alias_retired_entry`, `SND alias_retired_entry`,
+    `NONE`, `F`, `SND alias_retired_entry`, `SND alias_retired_entry`] >>
+  simp[GSYM alias_retired_plan_def, alias_retired_plans, alias_retired_dfs_edge_states,
+       init_cleanup_plan_state_def] >>
+  conj_tac >- (irule lineage_state_entry >> EVAL_TAC) >>
+  conj_tac >- EVAL_TAC >>
+  `cfg_succs_of (cfg_analyze alias_retired_fn) "entry" = ["left"; "right"]` by EVAL_TAC >>
+  simp[GSYM init_cleanup_plan_state_def, alias_retired_plans] >> gvs[]
+QED
+
+Theorem alias_retired_right_plan:
+  alias_retired_plan 2 (SND alias_retired_entry) = SOME alias_retired_right
+Proof
+  mp_tac (cj 5 alias_retired_jmp_reorder_calls) >>
+  Cases_on `alias_retired_plan 2 (SND alias_retired_entry)` >>
+  simp[alias_retired_right_def]
+QED
+
+Theorem alias_retired_lineage_join_left:
+  lineage_entry (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "left" "join" (SND alias_retired_left)
+Proof
+  simp[lineage_entry_def] >>
+  qexistsl_tac [`SND alias_retired_entry`, `EL 1 alias_retired_fn.fn_blocks`,
+    `SND alias_retired_entry`, `FST alias_retired_left`, `SND alias_retired_left`,
+    `NONE`, `F`, `SND alias_retired_left`, `SND alias_retired_left`] >>
+  simp[GSYM alias_retired_plan_def, alias_retired_plans, alias_retired_dfs_edge_states,
+       alias_retired_dfs_join] >>
+  conj_tac >- (irule lineage_entry_lineage_state >> qexists_tac `"entry"` >>
+    irule alias_retired_lineage_edges >> simp[]) >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_retired_lineage_join_right:
+  lineage_entry (liveness_analyze alias_retired_fn)
+    (dfg_build_function alias_retired_fn) (cfg_analyze alias_retired_fn) alias_retired_fn
+    (init_cleanup_plan_state NONE [] 0 0) "right" "join"
+    ((SND alias_retired_left) with <|ps_stack := (SND alias_retired_right).ps_stack;
+                                  ps_spilled := (SND alias_retired_right).ps_spilled|>)
+Proof
+  simp[lineage_entry_def] >>
+  qexistsl_tac [`SND alias_retired_entry`, `EL 2 alias_retired_fn.fn_blocks`,
+    `SND alias_retired_entry`, `FST alias_retired_right`, `SND alias_retired_right`,
+    `NONE`, `F`, `SND alias_retired_right`, `SND alias_retired_left`] >>
+  simp[GSYM alias_retired_plan_def, alias_retired_right_plan, alias_retired_dfs_edge_states,
+       alias_retired_dfs_join] >>
+  conj_tac >- (irule lineage_entry_lineage_state >> qexists_tac `"entry"` >>
+    irule alias_retired_lineage_edges >> simp[]) >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+(* This concrete cleanup override still emits the DFS block operations. *)
+Theorem alias_retired_promised_replay:
+  IS_SOME (alias_retired_plan 1 ((SND alias_retired_entry) with
+    <|ps_cleanup_height := SOME 2; ps_cleanup_promised := T|>)) /\
+  FST (THE (alias_retired_plan 1 ((SND alias_retired_entry) with
+    <|ps_cleanup_height := SOME 2; ps_cleanup_promised := T|>))) =
+    FST alias_retired_left
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_retired_shared_fn_def:
+  alias_retired_shared_fn = alias_retired_fn with fn_blocks :=
+    LUPDATE ((EL 0 alias_retired_fn.fn_blocks) with bb_instructions :=
+      LUPDATE (mk_inst 1 ASSIGN [Var "a"] ["b"])
+        1 (EL 0 alias_retired_fn.fn_blocks).bb_instructions)
+      0 alias_retired_fn.fn_blocks
+End
+
+Theorem alias_retired_shared_ready:
+  codegen_ready_fn alias_retired_shared_fn /\
+  normalize_operand (dfg_build_function alias_retired_shared_fn) [] (Var "b") = Var "a"
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_retired_shared_plan_def:
+  alias_retired_shared_plan n ps = generate_block_plan
+    (liveness_analyze alias_retired_shared_fn) (dfg_build_function alias_retired_shared_fn)
+    (cfg_analyze alias_retired_shared_fn) alias_retired_shared_fn
+    (EL n alias_retired_shared_fn.fn_blocks) ps
+End
+
+Definition alias_retired_shared_entry_def:
+  alias_retired_shared_entry = THE (alias_retired_shared_plan 0
+    (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Theorem alias_retired_shared_plans:
+  IS_SOME (alias_retired_shared_plan 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+  IS_SOME (alias_retired_shared_plan 1 (SND alias_retired_shared_entry)) /\
+  IS_SOME (alias_retired_shared_plan 2 (SND alias_retired_shared_entry)) /\
+  (SND (THE (alias_retired_shared_plan 1 (SND alias_retired_shared_entry)))).ps_stack = [Var "a"] /\
+  (SND (THE (alias_retired_shared_plan 2 (SND alias_retired_shared_entry)))).ps_stack = [Var "b"]
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
 Definition alias_retired_phi_state_def:
   alias_retired_phi_state = SND (generate_phi_plan
     (EL 0 (EL 3 alias_retired_fn.fn_blocks).bb_instructions)
@@ -7115,7 +7394,12 @@ Proof
       CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
       CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC) >>
   Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
+      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
   >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
       CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
       CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
