@@ -98,7 +98,7 @@ Proof
   simp[init_cleanup_plan_state_def, init_plan_state_def]
 QED
 
-Theorem dominates_entry_label[local]:
+Theorem dominates_entry_label:
   fn_entry_label fn = SOME entry /\ fn_dominates fn dom entry ==>
   dom = entry
 Proof

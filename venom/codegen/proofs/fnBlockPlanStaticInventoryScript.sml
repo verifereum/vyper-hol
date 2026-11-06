@@ -4,6 +4,7 @@ Ancestors
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst venomWf
   fnBlockPlanStaticRetRegion genericInputReady
   fnBlockPlanStaticBalance fnFrameBoundaryGenRet generatedPrefixSim
+  fnFrameStepsPhi
 
 Theorem inventory_do_swap_promised:
   !d ps. (SND (do_swap d ps)).ps_cleanup_promised = ps.ps_cleanup_promised
@@ -1346,26 +1347,13 @@ Proof
   gvs[finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]
 QED
 
-Theorem inventory_restore_domain:
-  !requested ps ops qs.
-    restore_spilled_plan requested ps = (ops,qs) ==>
-    FDOM qs.ps_spilled = FDOM ps.ps_spilled DIFF set requested
-Proof
-  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
-  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled h` >> simp[]
-  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-      first_x_assum drule >> gvs[finite_mapTheory.FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  first_x_assum drule >> simp[finite_mapTheory.FDOM_DOMSUB, EXTENSION] >> metis_tac[]
-QED
-
 Theorem inventory_restore_disjoint:
   restore_spilled_plan requested ps = (ops,qs) /\
   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
   DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
 Proof
   strip_tac >> drule inventory_restore_membership >>
-  drule inventory_restore_domain >>
+  drule phi_restore_spilled_domain >>
   gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[]
 QED
 
@@ -2019,9 +2007,13 @@ Proof
   Cases_on `inst.inst_opcode = BUMP` >> gvs[] >>
   Cases_on `venom_to_evm_name inst.inst_opcode` >> gvs[] >>
   Cases_on `inst.inst_opcode = JNZ`
-  >- (gvs[] >> rpt CASE_TAC >> gvs[]) >>
+  >- (gvs[] >> BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[]) >>
   Cases_on `inst.inst_opcode = JMP`
-  >- (gvs[] >> rpt CASE_TAC >> gvs[]) >>
+  >- (gvs[] >> BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[]) >>
   Cases_on `inst.inst_opcode = DJMP` >> gvs[] >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (gvs[] >> Cases_on `HD inst.inst_operands` >> simp[stackPlanTypesTheory.fresh_label_def]) >>
@@ -2443,7 +2435,7 @@ Theorem inventory_restore_targets_not_spilled:
   restore_spilled_plan targets ps = (ops,qs) ==>
   !op. MEM op targets ==> FLOOKUP qs.ps_spilled op = NONE
 Proof
-  strip_tac >> drule inventory_restore_domain >>
+  strip_tac >> drule phi_restore_spilled_domain >>
   simp[finite_mapTheory.FLOOKUP_DEF, EXTENSION] >> metis_tac[]
 QED
 

@@ -4,6 +4,8 @@ Ancestors
   fnFrameStepsRevertForward venomExecProofs rich_list list stackPlanGen venomWf pair
   livenessConvergenceProofs livenessDefs livenessBlockProofs
   codegenReadyCompute pred_set livenessProofs venomInst basePtrProofs finite_map
+  fnFrameStepsPhi
+  removeUnusedSsaProofs
 
 Theorem ready_output_location_unique:
   !fn db k ub j v.
@@ -60,18 +62,6 @@ Proof
   `d = a` by gvs[] >> qexists_tac `rest` >> simp[]
 QED
 
-Theorem fn_path_member_reachable:
-  !fn path lbl. is_fn_path fn path /\ path <> [] /\
-    fn_reachable fn (HD path) /\ MEM lbl path ==>
-    fn_reachable fn lbl
-Proof
-  rpt strip_tac >> drule_all is_fn_path_prefix >> strip_tac >>
-  `RTC (fn_cfg_edge fn) (HD path) lbl` by
-    (drule is_fn_path_rtc >> simp[]) >>
-  gvs[fn_reachable_def] >>
-  metis_tac[relationTheory.RTC_RTC]
-QED
-
 Theorem fn_dominates_last_visit:
   !fn d n. fn_dominates fn d n ==>
     ?tail. is_fn_path fn (d :: tail) /\ LAST (d :: tail) = n /\
@@ -85,7 +75,7 @@ Proof
   `MEM d path` by (gvs[fn_dominates_def] >> metis_tac[]) >>
   drule_all fn_path_last_visit >> strip_tac >>
   qexists_tac `tail` >> simp[EVERY_MEM] >> rpt strip_tac >>
-  irule fn_path_member_reachable >>
+  irule is_fn_path_all_reachable >>
   qexists_tac `d :: tail` >> simp[] >>
   metis_tac[fn_dominates_dom_reachable]
 QED
@@ -122,6 +112,7 @@ Proof
        SUBSET_DEF, GSYM live_vars_at_def, GSYM liveness_analyze_def]
 QED
 
+(* Copy of makeSsaCurrentDemandDominance$current_collect_phis_length, kept until it moves below make_ssa. *)
 Theorem collect_phis_length_bound:
   !instrs. LENGTH (collect_phis instrs) <= LENGTH instrs
 Proof
@@ -300,15 +291,6 @@ Proof
   simp[FLOOKUP_UPDATE]
 QED
 
-Theorem phi_pairs_find_selected[local]:
-  !pairs pred v. ALL_DISTINCT (MAP FST pairs) /\ MEM (pred,v) pairs ==>
-    FIND (\(l,w). l = pred) pairs = SOME (pred,v)
-Proof
-  Induct >- simp[] >> rpt gen_tac >> Cases_on `h` >>
-  rename1 `(lbl,w) :: pairs` >> simp[NoAsms, FIND_thm] >> strip_tac >>
-  IF_CASES_TAC >> simp[NoAsms] >> metis_tac[MEM_MAP, FST, PAIR_EQ]
-QED
-
 Theorem phi_disjoint_source_index[local]:
   !phis i j v.
     phi_uses_disjoint phis /\ EVERY (\phi. phi.inst_opcode = PHI) phis /\
@@ -334,7 +316,7 @@ Theorem build_phi_maps_trigger:
 Proof
   rpt gen_tac >> strip_tac >>
   `FIND (\(l,w). l = pred) (phi_pairs (EL j phis).inst_operands) =
-     SOME (pred,src)` by (irule phi_pairs_find_selected >> simp[]) >>
+     SOME (pred,src)` by (irule phi_pair_find_selected >> simp[]) >>
   simp[NoAsms, build_phi_maps_def, LET_THM] >>
   irule phi_maps_fold_selected >> conj_tac
   >- (simp[EVERY_EL, indexedListsTheory.EL_MAPi,
@@ -391,17 +373,6 @@ Proof
   qexistsl_tac [`phi`, `v`] >> simp[MEM_MAP] >> metis_tac[SND]
 QED
 
-Theorem ready_reachable_preorder:
-  !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
-  simp[EXTENSION] >> strip_tac >>
-  `cfg_reachable_of (cfg_analyze fn) lbl` by
-    metis_tac[fn_reachable_cfg_analyze] >> metis_tac[]
-QED
-
 Theorem ready_live_range[local]:
   !fn lbl bb i j v.
     codegen_ready_fn fn /\ fn_reachable fn lbl /\
@@ -415,7 +386,7 @@ Proof
   rpt strip_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[ready_reachable_preorder] >>
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
   metis_tac[]
 QED
@@ -437,7 +408,7 @@ Proof
   qexistsl_tac [`bb`, `lbl`] >> simp[] >>
   irule ready_postprefix_edge >> simp[] >>
   conj_tac >- metis_tac[lookup_block_label] >>
-  irule ready_reachable_preorder >> gvs[codegen_ready_fn_def]
+  irule fn_reachable_in_cfg_dfs_pre >> gvs[codegen_ready_fn_def]
 QED
 
 Theorem ready_reachable_lookup[local]:
@@ -454,7 +425,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ready_live_path[local]:
+Theorem ready_live_path:
   !path fn ub j v.
     codegen_ready_fn fn /\ path <> [] /\ is_fn_path fn path /\
     EVERY (fn_reachable fn) path /\
@@ -575,6 +546,7 @@ Proof
   qexists_tac `LENGTH db.bb_instructions` >> simp[]
 QED
 
+(* Copy of makeSsaCurrentWfSsa$current_wf_nonphi_after_collect, kept until it moves below make_ssa. *)
 Theorem non_phi_after_collect_phis[local]:
   !instrs j. j < LENGTH instrs /\ (EL j instrs).inst_opcode <> PHI ==>
     LENGTH (collect_phis instrs) <= j
@@ -619,7 +591,7 @@ Proof
   `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label j)` by
     (drule live_vars_at_uses >> simp[] >> disch_then irule >> simp[] >>
      simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
-     irule ready_reachable_preorder >> simp[]) >>
+     irule fn_reachable_in_cfg_dfs_pre >> simp[]) >>
   irule ready_output_dominated_live >> simp[] >>
   qexistsl_tac [`j`, `ub`] >> simp[] >>
   irule non_phi_after_collect_phis >> simp[]
@@ -635,7 +607,7 @@ Proof
   Cases_on `j` >> simp[]
 QED
 
-Theorem phi_index_in_prefix[local]:
+Theorem phi_index_in_prefix:
   !instrs j. j < LENGTH instrs /\ (EL j instrs).inst_opcode = PHI /\
     (!i. i < j ==> (EL i instrs).inst_opcode = PHI) ==>
     j < LENGTH (collect_phis instrs)
@@ -698,7 +670,7 @@ Proof
   drule_all ready_phi_use_location >> strip_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `MEM ub.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[ready_reachable_preorder] >>
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   `lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
     (irule MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def]) >>
   `j < LENGTH ub.bb_instructions` by

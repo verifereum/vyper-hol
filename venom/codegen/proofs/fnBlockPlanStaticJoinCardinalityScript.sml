@@ -1,6 +1,7 @@
 Theory fnBlockPlanStaticJoinCardinality
 Ancestors
   fnBlockPlanStaticOffsetLive indexedLists finite_map livenessDefs list venomWf stackPlanGen venomInst
+  fnBlockPlanStaticDistinct
 
 (* Input selection inspects only the domain of the edge's matching map
    when deciding whether to append a slot.  The selected names are irrelevant. *)
@@ -68,12 +69,6 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> simp[])
 QED
 
-Theorem pair_first_projection[local]:
-  (\(x:'a,y:'b). x) = FST
-Proof
-  simp[FUN_EQ_THM, pairTheory.FORALL_PROD]
-QED
-
 (* Duplicate source names and overlap with ordinary live-in do not affect
    edge cardinality. Only existence of a selected source for each PHI matters. *)
 Theorem input_vars_from_edge_length:
@@ -97,7 +92,7 @@ Proof
   Cases_on `build_phi_maps pred2 (collect_phis instrs)` >> gvs[] >>
   simp[input_vars_from_def] >>
   Cases_on `NULL (collect_phis instrs)` >- simp[] >> simp[] >>
-  simp[pair_first_projection] >>
+  simp[distinct_pair_projection] >>
   irule phi_input_fold_length >> simp[]
 QED
 

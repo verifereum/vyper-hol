@@ -234,20 +234,6 @@ Proof
   gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem regional_phi_index_prefix[local]:
-  !instrs j. j < LENGTH instrs /\ (EL j instrs).inst_opcode = PHI /\
-    (!i. i < j ==> (EL i instrs).inst_opcode = PHI) ==>
-    j < LENGTH (collect_phis instrs)
-Proof
-  Induct >- simp[] >> rpt gen_tac >> Cases_on `j`
-  >- simp[collect_phis_def] >>
-  rename1 `SUC n < LENGTH (h::t)` >> strip_tac >>
-  `h.inst_opcode = PHI` by (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  simp[collect_phis_def] >> first_x_assum irule >> gvs[] >>
-  qx_gen_tac `i` >> strip_tac >>
-  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
-QED
-
 Theorem regional_phi_body_layout:
   codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
   collect_phis bb.bb_instructions <> [] /\
@@ -265,7 +251,7 @@ Proof
   conj_tac
   >- (strip_tac >>
       `i < LENGTH (collect_phis bb.bb_instructions)` by
-        (irule regional_phi_index_prefix >> simp[] >>
+        (irule fnBlockPlanStaticOffsetLiveTheory.phi_index_in_prefix >> simp[] >>
          gvs[bb_well_formed_def] >> metis_tac[LESS_TRANS]) >> decide_tac) >>
   conj_tac
   >- (strip_tac >>
@@ -349,7 +335,7 @@ Proof
   conj_tac
   >- (strip_tac >>
       `i < LENGTH (collect_phis bb.bb_instructions)` by
-        (irule regional_phi_index_prefix >> simp[] >>
+        (irule fnBlockPlanStaticOffsetLiveTheory.phi_index_in_prefix >> simp[] >>
          gvs[bb_well_formed_def] >> metis_tac[LESS_TRANS]) >> gvs[]) >>
   conj_tac
   >- (strip_tac >>

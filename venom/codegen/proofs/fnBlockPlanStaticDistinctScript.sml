@@ -2,6 +2,7 @@ Theory fnBlockPlanStaticDistinct
 Ancestors
   fnLineageStatic indexedLists finite_map livenessDefs stackPlanGen
   cfgNormSupplyProofs venomInst list livenessTerminationProofs dfAnalyzeDefs dfHelperDefs
+  fnFrameStepsPhi
 
 Definition distinct_phi_maps_acc_def:
   distinct_phi_maps_acc src n phis acc =
@@ -101,7 +102,7 @@ Proof
   metis_tac[optionTheory.SOME_11, optionTheory.NOT_SOME_NONE]
 QED
 
-Theorem distinct_pair_projection[local]:
+Theorem distinct_pair_projection:
   (\(x:'a,y:'b). x) = FST
 Proof
   simp[FUN_EQ_THM, pairTheory.FORALL_PROD]
@@ -119,20 +120,6 @@ Proof
   rewrite_tac[distinct_pair_projection] >>
   irule phi_input_fold_distinct >> simp[] >>
   metis_tac[build_phi_maps_matching_consistent]
-QED
-
-Theorem ready_phi_uses_disjoint:
-  codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
-  phi_uses_disjoint (collect_phis bb.bb_instructions)
-Proof
-  strip_tac >> `phi_operands_ready fn` by gvs[codegen_ready_fn_def] >>
-  qpat_x_assum `codegen_ready_fn _` kall_tac >>
-  gvs[phi_operands_ready_def] >>
-  Cases_on `EVERY (\bb. NULL (collect_phis bb.bb_instructions)) fn.fn_blocks`
-  >- (gvs[EVERY_MEM] >>
-      `NULL (collect_phis bb.bb_instructions)` by metis_tac[] >>
-      gvs[NULL_EQ, phi_uses_disjoint_def]) >>
-  gvs[EVERY_MEM, phi_block_ready_def] >> metis_tac[]
 QED
 
 Theorem distinct_list_union[local]:
@@ -232,7 +219,7 @@ Proof
     liveness_recompute_fuel_agreement >>
   simp[liveness_recompute_fuel_def] >> irule distinct_live_fuel >>
   simp[init_df_state_def, distinct_live_state_def, EVERY_MEM] >>
-  metis_tac[ready_phi_uses_disjoint]
+  metis_tac[phi_codegen_uses_disjoint]
 QED
 
 Theorem ready_edge_inputs_ALL_DISTINCT:
@@ -242,5 +229,5 @@ Theorem ready_edge_inputs_ALL_DISTINCT:
 Proof
   strip_tac >> irule input_vars_from_ALL_DISTINCT >>
   simp[analyzed_live_vars_ALL_DISTINCT] >>
-  irule ready_phi_uses_disjoint >> metis_tac[selected_block_mem]
+  irule phi_codegen_uses_disjoint >> metis_tac[selected_block_mem]
 QED

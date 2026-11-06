@@ -9,6 +9,8 @@ Ancestors
   reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
   deepResidualSim deepResidualBudget genericInputReady fnAliasStep fnBlockPlanStaticRetRegion
   livenessConvergenceProofs livenessBlockProofs livenessDefs
+  fnFrameStepsPhi
+  removeUnusedProofs
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -497,7 +499,7 @@ Proof
       (LENGTH (collect_phis bb.bb_instructions)))` by
     (gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
   irule regional_no_use_dead_range >> simp[] >>
-  reverse conj_tac >- metis_tac[ready_reachable_preorder] >>
+  reverse conj_tac >- metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   qexists_tac `LENGTH (collect_phis bb.bb_instructions) - (i + 1)` >>
   `i + 1 <= LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
   simp[] >> reverse conj_tac >- metis_tac[collect_phis_length_bound] >>
@@ -674,31 +676,6 @@ Proof
 QED
 
 
-Theorem regional_fn_path_first_visit[local]:
-  !path fn target. is_fn_path fn path /\ MEM target path ==>
-    ?pre. is_fn_path fn (pre ++ [target]) /\
-      HD (pre ++ [target]) = HD path /\ ~MEM target pre
-Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  rename1 `is_fn_path fn (head :: rest)` >> strip_tac >>
-  Cases_on `head = target`
-  >- (qexists_tac `[]` >> gvs[is_fn_path_def]) >>
-  `MEM target rest` by gvs[] >>
-  `is_fn_path fn rest` by (Cases_on `rest` >> gvs[is_fn_path_def]) >>
-  first_x_assum drule_all >> strip_tac >>
-  qexists_tac `head :: pre` >>
-  Cases_on `rest` >> Cases_on `pre` >> gvs[is_fn_path_def]
-QED
-
-Theorem regional_fn_path_unsnoc[local]:
-  !pre fn target. pre <> [] /\ is_fn_path fn (pre ++ [target]) ==>
-    is_fn_path fn pre /\ fn_cfg_edge fn (LAST pre) target
-Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  rename1 `is_fn_path fn ((head :: rest) ++ [target])` >>
-  Cases_on `rest` >> gvs[is_fn_path_def] >> metis_tac[]
-QED
-
 Theorem regional_first_entry_edge:
   !fn target. fn_reachable fn target /\ fn_entry_label fn <> SOME target ==>
     ?pred. fn_reachable fn pred /\ fn_cfg_edge fn pred target /\
@@ -709,10 +686,10 @@ Proof
      RTC (fn_cfg_edge fn) entry target` by gvs[fn_reachable_def] >>
   drule rtc_to_fn_path >> strip_tac >>
   `MEM target path` by metis_tac[MEM_LAST_NOT_NIL] >>
-  drule_all regional_fn_path_first_visit >> strip_tac >>
+  drule_all phi_path_first_prefix >> strip_tac >>
   `pre <> []` by (strip_tac >> gvs[]) >>
   `HD pre = entry` by (Cases_on `pre` >> gvs[]) >>
-  drule_all regional_fn_path_unsnoc >> strip_tac >>
+  drule_all phi_path_snoc_edge >> strip_tac >>
   qexists_tac `LAST pre` >> simp[] >> conj_tac
   >- (simp[fn_reachable_def] >>
       qspecl_then [`fn`, `pre`] mp_tac is_fn_path_rtc >> simp[]) >>
@@ -779,7 +756,7 @@ Proof
     metis_tac[MEM_EL] >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[ready_reachable_preorder] >>
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   `MEM w (inst_uses phi)` by
     metis_tac[MEM_phi_pairs_SND_operand_vars, inst_uses_def] >>
   `MEM w (live_vars_at (liveness_analyze fn) bb.bb_label idx)` by
@@ -961,7 +938,7 @@ Proof
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     (irule MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def]) >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[ready_reachable_preorder] >>
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
   qexists_tac `LENGTH bb.bb_instructions` >> simp[collect_phis_length_bound] >>
   metis_tac[regional_phi_output_no_suffix_def]
@@ -977,7 +954,7 @@ Theorem regional_live_range[local]:
 Proof
   strip_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
-  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[ready_reachable_preorder] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
   metis_tac[]
 QED
@@ -998,52 +975,7 @@ Proof
   qexistsl_tac [`bb`, `lbl`] >> simp[] >>
   irule ready_postprefix_edge >> simp[] >>
   conj_tac >- metis_tac[lookup_block_label] >>
-  irule ready_reachable_preorder >> gvs[codegen_ready_fn_def]
-QED
-
-Theorem regional_live_clean_path[local]:
-  !path fn ub j v.
-    codegen_ready_fn fn /\ path <> [] /\ is_fn_path fn path /\
-    EVERY (fn_reachable fn) path /\
-    lookup_block (LAST path) fn.fn_blocks = SOME ub /\
-    LENGTH (collect_phis ub.bb_instructions) <= j /\
-    j <= LENGTH ub.bb_instructions /\
-    MEM v (live_vars_at (liveness_analyze fn) (LAST path) j) /\
-    (!lbl bb p. MEM lbl path /\ lookup_block lbl fn.fn_blocks = SOME bb /\
-       p < LENGTH bb.bb_instructions ==> ~MEM v (inst_defs (EL p bb.bb_instructions))) ==>
-    !bb. lookup_block (HD path) fn.fn_blocks = SOME bb ==>
-      MEM v (live_vars_at (liveness_analyze fn) (HD path)
-        (LENGTH (collect_phis bb.bb_instructions)))
-Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  rename1 `is_fn_path fn (lbl :: rest)` >> strip_tac >>
-  Cases_on `rest`
-  >- (gvs[] >> irule regional_live_range >> simp[] >>
-      qexists_tac `j` >> simp[] >> rpt strip_tac >>
-      first_x_assum irule >> decide_tac) >>
-  rename1 `is_fn_path fn (lbl :: succ :: tail)` >>
-  gvs[Once is_fn_path_def] >> rpt strip_tac >>
-  `?sb. lookup_block succ fn.fn_blocks = SOME sb` by
-    (`wf_function fn` by gvs[codegen_ready_fn_def] >>
-     `cfg_reachable_of (cfg_analyze fn) succ` by metis_tac[fn_reachable_cfg_analyze] >>
-     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
-     simp[fn_labels_def, MEM_MAP] >> strip_tac >>
-     irule_at Any MEM_lookup_block >> simp[] >>
-     gvs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
-  `MEM v (live_vars_at (liveness_analyze fn) succ
-      (LENGTH (collect_phis sb.bb_instructions)))` by
-    (first_x_assum irule >> simp[] >> metis_tac[]) >>
-  `MEM v (live_vars_at (liveness_analyze fn) lbl
-      (LENGTH bb.bb_instructions))` by
-    (irule regional_live_edge >> simp[] >>
-     qexistsl_tac [`sb`, `succ`] >> simp[] >>
-     qx_gen_tac `p` >> disch_tac >>
-     qpat_x_assum `!lbl' bb p. _` irule >> simp[] >>
-     (conj_tac >- (mp_tac (Q.SPEC `sb.bb_instructions` collect_phis_length_bound) >> decide_tac)) >>
-     qexists_tac `succ` >> simp[]) >>
-  irule regional_live_range >> simp[] >>
-  qexists_tac `LENGTH bb.bb_instructions` >> simp[collect_phis_length_bound] >>
-  metis_tac[]
+  irule fn_reachable_in_cfg_dfs_pre >> gvs[codegen_ready_fn_def]
 QED
 
 Theorem regional_phi_other_block_no_defs[local]:
@@ -1098,7 +1030,7 @@ Proof
      gvs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
   `MEM v (live_vars_at (liveness_analyze fn) first
       (LENGTH (collect_phis fb.bb_instructions)))` by
-    (irule (SRULE [] (Q.SPEC `first :: rest` regional_live_clean_path)) >> simp[] >>
+    (irule (SRULE [] (Q.SPEC `first :: rest` ready_live_path)) >> simp[] >>
      (conj_tac >- gvs[]) >> qexistsl_tac [`j`, `rest`, `ub`] >>
      gvs[Once is_fn_path_def] >> rpt gen_tac >> strip_tac >>
      irule regional_phi_other_block_no_defs >> simp[] >>
@@ -1232,39 +1164,17 @@ Proof
   disj1_tac >> gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
 QED
 
-Theorem regional_block_outputs_distinct[local]:
-  !bbs bb. MEM bb bbs ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) (fn_insts_blocks bbs))) ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
-Proof
-  Induct >> rw[fn_insts_blocks_def] >>
-  gvs[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
-QED
-
-Theorem regional_outputs_unique_position[local]:
-  !insts v i j.
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) /\
-    i < LENGTH insts /\ j < LENGTH insts /\
-    MEM v (EL i insts).inst_outputs /\ MEM v (EL j insts).inst_outputs ==>
-    i = j
-Proof
-  Induct >> rw[] >> Cases_on `i` >> Cases_on `j` >> gvs[] >>
-  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL]
-QED
-
 Theorem regional_indexed_outputs_separate[local]:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
   i < j /\ j < LENGTH bb.bb_instructions /\
   MEM v (EL i bb.bb_instructions).inst_outputs ==>
   ~MEM v (EL j bb.bb_instructions).inst_outputs
 Proof
-  strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
-    (irule regional_block_outputs_distinct >> qexists_tac `fn.fn_blocks` >>
-     gvs[codegen_ready_fn_def, ssa_form_def, fn_insts_def]) >>
-  strip_tac >>
-  `i = j` by (irule regional_outputs_unique_position >>
-    qexistsl_tac [`bb.bb_instructions`, `v`] >> simp[]) >> gvs[]
+  rpt strip_tac >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  `i = j` by metis_tac[removeUnusedProofsTheory.ssa_form_no_dup_in_block] >>
+  gvs[]
 QED
 
 Theorem regional_nonvar_root[local]:
@@ -1614,7 +1524,7 @@ Proof
     (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
   `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
     (irule (SRULE [LET_THM] live_vars_at_propagate) >> simp[arithmeticTheory.ADD1] >>
-     metis_tac[ready_reachable_preorder, codegen_ready_fn_def]) >>
+     metis_tac[fn_reachable_in_cfg_dfs_pre, codegen_ready_fn_def]) >>
   `~MEM (Var v) (EL i bb.bb_instructions).inst_operands` by
     (strip_tac >>
      `MEM v (inst_uses (EL i bb.bb_instructions))` by
@@ -2034,53 +1944,6 @@ Proof
   simp[regional_selected_phi_inv_def] >> metis_tac[]
 QED
 
-(* Next-live variables retain a reserve beyond all materialized inputs. *)
-Theorem regional_emit_live_accumulation[local]:
-  !inputs ps opc nl iops mid v.
-    emit_input_plan opc inputs nl ps = (iops,mid) /\
-    MEM v nl /\ (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
-    LIST_ELEM_COUNT (Var v) ps.ps_stack +
-      (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
-      LIST_ELEM_COUNT (Var v) inputs <=
-    LIST_ELEM_COUNT (Var v) mid.ps_stack +
-      (if Var v IN FDOM mid.ps_spilled then 1 else 0)
-Proof
-  Induct_on `inputs`
-  >- simp[emit_input_plan_def, LIST_ELEM_COUNT_THM]
-  >> rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
-  rename1 `emit_one_input _ _ _ _ = (step_ops, step_state)` >>
-  Cases_on `emit_input_plan opc inputs nl step_state` >>
-  rename1 `emit_input_plan _ _ _ _ = (tail_ops, tail_state)` >>
-  gvs[emit_input_plan_cons] >>
-  qspecl_then [`opc`, `operand_vars inputs ++ nl`, `h`, `ps`, `Var v`]
-    mp_tac emit_one_input_inventory_mono_aux >> simp[] >> strip_tac >>
-  `MEM (Var v) step_state.ps_stack \/ Var v IN FDOM step_state.ps_spilled` by
-    (gvs[GSYM LIST_ELEM_COUNT_MEM] >>
-     Cases_on `Var v IN FDOM ps.ps_spilled` >>
-     Cases_on `Var v IN FDOM step_state.ps_spilled` >> gvs[] >> decide_tac) >>
-  `LIST_ELEM_COUNT (Var v) inputs +
-     (LIST_ELEM_COUNT (Var v) step_state.ps_stack +
-      (if Var v IN FDOM step_state.ps_spilled then 1 else 0)) <=
-   LIST_ELEM_COUNT (Var v) mid.ps_stack +
-     (if Var v IN FDOM mid.ps_spilled then 1 else 0)` by
-    (first_x_assum irule >> conj_tac
-     >- (qexistsl [`tail_ops`, `nl`, `opc`] >> simp[]) >> simp[]) >>
-  (Cases_on `h = Var v`
-  >- (gvs[] >>
-      qspecl_then [`opc`, `operand_vars inputs ++ nl`, `Var v`, `ps`]
-        mp_tac emit_one_input_inventory_inc >>
-      simp[is_var_operand_def] >> strip_tac >>
-      gvs[LIST_ELEM_COUNT_THM] >>
-      Cases_on `Var v IN FDOM ps.ps_spilled` >>
-      Cases_on `Var v IN FDOM step_state.ps_spilled` >>
-      Cases_on `Var v IN FDOM mid.ps_spilled` >> gvs[] >> decide_tac) >>
-  gvs[LIST_ELEM_COUNT_THM] >>
-      Cases_on `Var v IN FDOM ps.ps_spilled` >>
-      Cases_on `Var v IN FDOM step_state.ps_spilled` >>
-      Cases_on `Var v IN FDOM mid.ps_spilled` >> gvs[] >> decide_tac)
-QED
-
 Theorem regional_emit_live_reserve:
   !opc inputs nl ps iops mid v.
     emit_input_plan opc inputs nl ps = (iops,mid) /\
@@ -2091,8 +1954,9 @@ Theorem regional_emit_live_reserve:
       LIST_ELEM_COUNT (Var v) mid.ps_stack +
       (if Var v IN FDOM mid.ps_spilled then 1 else 0)
 Proof
-  rpt strip_tac >> drule regional_emit_live_accumulation >>
-  disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+  rpt strip_tac >>
+  qspecl_then [`inputs`,`opc`,`nl`,`ps`,`iops`,`mid`,`v`] mp_tac
+    rf_emit_live_reserve >> simp[] >> strip_tac >>
   gvs[GSYM LIST_ELEM_COUNT_MEM] >>
   Cases_on `Var v IN FDOM ps.ps_spilled` >>
   Cases_on `Var v IN FDOM mid.ps_spilled` >> gvs[] >> decide_tac
@@ -2825,13 +2689,6 @@ Proof
       block_entries_ready_def, NULL_EQ, fn_reachable_def, relationTheory.RTC_REFL]
 QED
 
-Theorem regional_entry_dominator[local]:
-  fn_entry_label fn = SOME entry /\ fn_dominates fn dom entry ==> dom = entry
-Proof
-  simp[fn_dominates_def] >> strip_tac >>
-  first_x_assum (qspec_then `[entry]` mp_tac) >> simp[is_fn_path_def]
-QED
-
 Theorem regional_entry_no_phi[local]:
   codegen_ready_fn fn /\ j < LENGTH (HD fn.fn_blocks).bb_instructions ==>
   (EL j (HD fn.fn_blocks).bb_instructions).inst_opcode <> PHI
@@ -2864,7 +2721,7 @@ Proof
     metis_tac[regional_entry_no_phi] >>
   drule_all fnLiveDefDomTheory.live_def_dominates >> strip_tac >>
   `def_bb.bb_label = (HD fn.fn_blocks).bb_label` by
-    metis_tac[regional_entry_dominator] >>
+    metis_tac[dominates_entry_label] >>
   first_x_assum (drule_then strip_assume_tac) >>
   `MEM def_inst (get_params (HD fn.fn_blocks).bb_instructions)` by
     metis_tac[EL_APPEND1, EL_MEM] >>
@@ -4567,7 +4424,7 @@ Proof
     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[ready_reachable_preorder] >>
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   `SUC i <= LENGTH bb.bb_instructions` by
     (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
   drule live_vars_at_transfer >> simp[] >>

@@ -643,7 +643,7 @@ QED
 
 (* Forward edge selection uses both maps, rather than reversing the exported
    input_vars_from membership theorem. *)
-Theorem phi_pair_find_selected[local]:
+Theorem phi_pair_find_selected:
   !pairs pred v.
     ALL_DISTINCT (MAP FST pairs) /\ MEM (pred,v) pairs ==>
     FIND (\(l,w). l = pred) pairs = SOME (pred,v)
@@ -1157,7 +1157,7 @@ Proof
   metis_tac[relationTheory.RTC_RULES_RIGHT1]
 QED
 
-Theorem phi_path_first_prefix[local]:
+Theorem phi_path_first_prefix:
   !path fn target.
     is_fn_path fn path /\ MEM target path ==>
     ?pre. is_fn_path fn (pre ++ [target]) /\
@@ -1175,7 +1175,7 @@ Proof
   Cases_on `pre` >> gvs[venomWfTheory.is_fn_path_def]
 QED
 
-Theorem phi_path_snoc_edge[local]:
+Theorem phi_path_snoc_edge:
   !path fn target.
     path <> [] /\ is_fn_path fn (path ++ [target]) ==>
     is_fn_path fn path /\ fn_cfg_edge fn (LAST path) target
