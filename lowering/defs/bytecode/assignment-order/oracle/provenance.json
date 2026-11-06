@@ -16,9 +16,9 @@
       "source_sha256": "4e6d700a985b762bc24593666864bc7723b2ca71bf311dd57a910e75349e2d36"
     },
     "assign_delayed_storage_read": {
-      "deploy_sha256": "3268e0e4d3fa94a43edcd8012feafd47dbc462ddfc24b08dfd5b6986ca2a521d",
+      "deploy_sha256": "0cfd0ec6a5f7b33b59941e96b545e680fd47755d4c3b9e361c1c5f0beb09378b",
       "frontend_sha256": "551af4c0f0c7c0e85693da10a5538e01da2aca2bd49516d5a82f457e59820f75",
-      "runtime_sha256": "74614b9abad984ab7738f7f245f502df63c27d6780629196a54e99423a73e4b7",
+      "runtime_sha256": "8fd19e380a416861f2a590bb8b6c44d0b4040da9ffd3c1f350e8a3b3ec97cf26",
       "source": "sources/assign_delayed_storage_read.vy",
       "source_sha256": "764a5546f63460716d163d08caa9966c6a20208e522cef09709ae3b57f4eddbf"
     },
