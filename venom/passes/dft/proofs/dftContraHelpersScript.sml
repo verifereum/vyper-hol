@@ -1,5 +1,6 @@
 Theory dftContraHelpers
 Ancestors
+  venomFnInstsProofs
   dftCanonicalDep dftFrontEquiv dftStructural dftPermSim
   venomInst venomWf stateEquiv stateEquivProps
   dftWf dftTopoSort dftDefs dftPipelineInvar arithmetic

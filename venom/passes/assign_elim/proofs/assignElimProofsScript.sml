@@ -204,7 +204,7 @@ Proof
     >- (rpt strip_tac >> fs[] >>
         metis_tac[copy_prop_measure_monotone])
     >- (rpt strip_tac >> fs[] >>
-        imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+        imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
         fs[EVERY_MEM])
     >- simp[EVERY_MEM]
     >- (mp_tac (SPEC_ALL copy_prop_measure_inv_initial) >>
@@ -556,7 +556,7 @@ Proof
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    (imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >> gvs[EVERY_MEM]) >>
+    (imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> gvs[EVERY_MEM]) >>
   `MEM bb.bb_label (cfg_preds_of (cfg_analyze fn) v.vs_current_bb)` by
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   (* Step 6: Successor entry via inter-block transfer (no lookup_block needed) *)
@@ -636,66 +636,6 @@ Proof
     simp_tac std_ss [copy_prop_analyze_def, LET_THM, th]) >>
   simp[copy_prop_joined_def, LET_THM] >>
   gvs[copy_prop_join_FEMPTY, copy_sound_opt_fempty]
-QED
-
-(* Index in PHI prefix has opcode PHI *)
-Triviality phi_prefix_length_el_phi[local]:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
-Triviality phi_prefix_length_lt_wf[local]:
-  !bb. bb_well_formed bb ==>
-       phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
-Proof
-  rpt strip_tac >> fs[bb_well_formed_def] >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
-    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
-  CCONTR_TAC >>
-  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by
-    decide_tac >>
-  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[]) >>
-  `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[phi_prefix_length_el_phi] >>
-  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
-  gvs[is_terminator_def]
-QED
-
-(* Direct indexed variant of eval_phis_flookup_not_phi_output.
-   Uses the indexed condition that df_at_phi_prefix_no_phi_output_at_end
-   already provides directly, avoiding the need for bb_well_formed bridge. *)
-Theorem eval_phis_flookup_idx[local]:
-  !s insts x.
-    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
-    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
-Proof
-  Induct_on `insts` >> simp[eval_phis_def] >>
-  rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
-  (* Derive IH hypothesis for recursive case *)
-  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
-    rpt strip_tac >>
-    first_x_assum (qspec_then `SUC i` mp_tac) >>
-    simp[phi_prefix_length_def]
-  ) >>
-  (* IH gives FLOOKUP preserved through recursive eval_phis *)
-  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by (
-    first_x_assum drule >> simp[]
-  ) >>
-  (* out is not x (not written by this PHI) *)
-  `~MEM x h.inst_outputs` by (
-    last_x_assum (fn th =>
-      mp_tac (Q.SPEC `0` th) >> simp[phi_prefix_length_def])
-  ) >>
-  `MEM out h.inst_outputs` by (
-    drule eval_one_phi_output_mem >> simp[]
-  ) >>
-  `out <> x` by (CCONTR_TAC >> fs[]) >>
-  gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 
 (* Corollary of eval_phis_flookup_idx for Var-valued copy map entries.
@@ -1136,7 +1076,7 @@ Proof
     metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
-  imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
   gvs[EVERY_MEM]
 QED
 
