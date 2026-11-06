@@ -568,3 +568,96 @@ Proof
   >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
   gen_tac >> simp[cs_extends_refl]
 QED
+
+Theorem cs_appends_ext_call_kwarg_callback[local]:
+  (!ce ty e. cs_appends (cfn ce ty e)) ==>
+  cs_appends (compile_ext_call_kwarg cfn ce rty k e)
+Proof
+  strip_tac >> simp_tac bool_ss [compile_ext_call_kwarg_def, LET_THM] >>
+  IF_CASES_TAC >> ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- simp[]
+  >- (gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac
+      >- (simp[cs_appends_def] >> metis_tac[first_emission_materialize_vv]) >>
+      simp[cs_appends_return])
+  >- (irule cs_appends_lower_value_callback >> simp[]) >>
+  simp[cs_appends_return]
+QED
+
+Theorem cs_appends_ext_call_kwargs_callback[local]:
+  (!ce ty e. cs_appends (cfn ce ty e)) ==>
+  !es ks. cs_appends (compile_ext_call_kwargs cfn ce rty ks es)
+Proof
+  strip_tac >> Induct >> Cases_on `ks` >>
+  simp_tac bool_ss [compile_ext_call_kwargs_def]
+  >- simp[cs_appends_return]
+  >- simp[cs_appends_return]
+  >- simp[cs_appends_return] >>
+  gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (irule cs_appends_ext_call_kwarg_callback >> simp[]) >>
+  simp_tac bool_ss [pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF] >>
+  rpt gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac >- simp[] >>
+  simp_tac bool_ss [pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF] >>
+  simp[cs_appends_return]
+QED
+
+fun raw_result_append_tac g =
+  (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+   ho_match_mp_tac cs_appends_bind >> conj_tac
+   >- (simp[cs_appends_def] >> metis_tac[first_emission_raw_call_outbuf]) >>
+   simp_tac bool_ss [pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF] >>
+   rpt gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac
+   >- (simp[cs_appends_def] >> metis_tac[first_emission_raw_call_finish]) >>
+   gen_tac >> Cases_on `rcf.rcf_max_outsize = 0` >>
+   asm_simp_tac bool_ss [] >> simp[cs_appends_def, cs_extends_refl]) g;
+
+Theorem first_emission_rawcall:
+  (!ce ty e. cs_appends (cfn ce ty e)) /\
+  (!e ty a x b. MEM e args /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rty ty (RawCallTarget rcf) args defret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Cases_on `args` >> simp_tac (srw_ss()) [compile_call_def, LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+      gen_tac >> simp[cs_extends_refl]) >>
+  Cases_on `t` >> simp_tac (srw_ss()) []
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+      gen_tac >> simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> rewrite_tac[state_pair_let_bind] >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- call_emit_tac >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `tail s = (y,c)` >>
+  `cs_appends tail` suffices_by metis_tac[cs_appends_def] >>
+  simp_tac bool_ss [Abbr `tail`] >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- simp[cs_appends_emit_helpers] >>
+  gen_tac >> CONV_TAC (RAND_CONV ETA_CONV) >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (irule cs_appends_ext_call_kwargs_callback >> simp[]) >>
+  simp_tac bool_ss [pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF] >>
+  rpt gen_tac >> Cases_on `p_1'` >>
+  simp_tac bool_ss [optionTheory.option_case_def, pairTheory.UNCURRY_DEF] >>
+  rewrite_tac[state_pair_let_bind] >> CONV_TAC (DEPTH_CONV ETA_CONV)
+  >- (ho_match_mp_tac cs_appends_bind >> conj_tac
+      >- simp[cs_appends_emit_helpers] >>
+      gen_tac >> raw_result_append_tac) >>
+  raw_result_append_tac
+QED
