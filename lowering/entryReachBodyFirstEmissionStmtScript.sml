@@ -479,3 +479,43 @@ Proof
   >- metis_tac[first_emission_store_memory] >>
   rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[] >> metis_tac[]
 QED
+
+Theorem first_emission_lit_byte_offset[local]:
+  !op off a x b. compile_lit_byte_offset op off a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_lit_byte_offset_def] >>
+  IF_CASES_TAC >- metis_tac[first_emission_return] >>
+  Cases_on `op` >> simp_tac (srw_ss()) []
+  >~ [`comp_return _ _ = _`] >- metis_tac[first_emission_return] >>
+  rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[]
+QED
+
+Theorem first_emission_imm_store_words[local]:
+  !imm src dst n off a x b. compile_imm_store_words imm src dst n off a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> Cases_on `n` >> pure_rewrite_tac[contextTheory.compile_imm_store_words_def]
+  >- metis_tac[first_emission_return] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[first_emission_lit_byte_offset] >>
+  gen_tac >> ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  match_mp_tac cs_appends_bind >> conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[compile_lit_byte_offset_labels, pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> match_mp_tac cs_appends_ignore_bind >> conj_tac >>
+  rw[cs_appends_def] >> metis_tac[compile_imm_store_word_labels, compile_imm_store_words_labels, pairTheory.SND]
+QED
