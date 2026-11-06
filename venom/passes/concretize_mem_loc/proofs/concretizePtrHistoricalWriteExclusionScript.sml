@@ -400,3 +400,30 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   metis_tac[]
 QED
+
+Theorem ptr_structural_trace_actual_writer_retained:
+  !R vs C Ct h a ht at done tokens registry births PT TG saved entries.
+  ptr_structural_trace R vs C Ct h a ht at done tokens registry births PT TG saved entries ==>
+  !w x. SUC w < LENGTH h /\
+    x IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+      (EL (SUC w) h).po_state) ==>
+    ?q. q < LENGTH done /\ EL q done = w
+Proof
+  ho_match_mp_tac ptr_structural_trace_strongind >> rpt conj_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- simp[]
+  >- (rpt strip_tac >> Cases_on `SUC w < LENGTH h`
+      >- (first_x_assum irule >> simp[] >> qexists `x` >> gvs[EL_APPEND_EQN]) >>
+      drule ptr_structural_trace_source >>
+      disch_then (mp_tac o MATCH_MP ptr_chrono_history_end) >> strip_tac >>
+      `0 < LENGTH h` by (Cases_on `h` >> fs[]) >>
+      `w = LENGTH h - 1 /\ w < LENGTH h` by fs[] >>
+      `EL w h = a` by metis_tac[LAST_EL, PRE_SUB1] >>
+      gvs[EL_APPEND_EQN, step_writes_def, source_memory_write_ranges_def,
+          range_bytes_def]) >>
+  rpt strip_tac >> Cases_on `SUC w < LENGTH h`
+  >- (`?q. q < LENGTH done /\ EL q done = w` by
+        (first_x_assum irule >> simp[] >> qexists `x` >> gvs[EL_APPEND_EQN]) >>
+      qexists `q` >> simp[EL_APPEND_EQN]) >>
+  qexists `LENGTH done` >> simp[EL_APPEND_EQN] >> fs[]
+QED
