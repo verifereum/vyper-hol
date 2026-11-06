@@ -8071,6 +8071,75 @@ Proof
   Cases_on `states` >> gvs[]
 QED
 
+Theorem alias_exec_assign_cut_certificate:
+  alias_execution_prefix states writes /\ LAST states = s /\
+  exec_block fuel ctx bb s = OK t /\ s.vs_inst_idx = i /\
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn lbl /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = ASSIGN /\
+  (EL i bb.bb_instructions).inst_outputs = [x] /\
+  (EL i bb.bb_instructions).inst_operands = [src] /\
+  (!l. FLOOKUP s.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  alias_certificate fn (dfg_build_function fn) lo ps states
+    (PRE (LENGTH states)) src ==>
+  ?u. step_inst fuel ctx (EL i bb.bb_instructions) s = OK u /\
+    alias_execution_prefix (states ++ [u; u with vs_inst_idx := SUC i])
+      (writes UNION {x}) /\
+    exec_block fuel ctx bb (u with vs_inst_idx := SUC i) = OK t /\
+    alias_certificate fn (dfg_build_function fn) lo ps
+      (states ++ [u; u with vs_inst_idx := SUC i])
+      (PRE (LENGTH (states ++ [u; u with vs_inst_idx := SUC i]))) (Var x)
+Proof
+  strip_tac >>
+  `states <> []` by metis_tac[alias_execution_prefix_nonempty] >>
+  `normalize_operand (dfg_build_function fn) [] (Var x) =
+   normalize_operand (dfg_build_function fn) [] src` by
+    (irule alias_local_assign_normalize >> metis_tac[]) >>
+  `!y. normalize_operand (dfg_build_function fn) [] src = Var y ==>
+     ~MEM y (EL i bb.bb_instructions).inst_outputs` by
+    (gen_tac >> disch_tac >>
+     irule alias_assign_source_root_suffix_not_output >>
+     simp[] >> qexistsl_tac [`src`, `fn`, `i`, `lbl`] >> simp[]) >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def, is_terminator_def] >>
+  Cases_on `step_inst fuel ctx (EL i bb.bb_instructions) s` >> simp[] >>
+  rename1 `step_inst _ _ _ _ = OK u` >> strip_tac >>
+  `alias_prefix_edge s u {x}` by
+    (simp[alias_prefix_edge_def] >> disj1_tac >>
+     qexistsl_tac [`fuel`, `ctx`, `EL i bb.bb_instructions`] >> simp[]) >>
+  `alias_prefix_edge u (u with vs_inst_idx := SUC i) {}` by
+    (simp[alias_prefix_edge_def] >> disj2_tac >> disj2_tac >>
+     qexists_tac `SUC i` >> simp[]) >>
+  conj_tac
+  >- (`alias_execution_prefix (states ++ [u]) (writes UNION {x})` by
+        metis_tac[alias_execution_prefix_extend_edge] >>
+      `alias_execution_prefix ((states ++ [u]) ++ [u with vs_inst_idx := SUC i])
+         (writes UNION {x})` by
+        (drule alias_execution_prefix_extend_edge >> simp[] >>
+         disch_then drule >> simp[]) >>
+      qpat_x_assum `alias_execution_prefix (_ ++ _ ++ _) _` mp_tac >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  `0 < LENGTH states` by (Cases_on `states` >> gvs[]) >>
+  `SUC (PRE (LENGTH states)) = LENGTH states` by decide_tac >>
+  `EL (PRE (LENGTH states)) (states ++ [u; u with vs_inst_idx := SUC i]) = s` by
+    (simp[EL_APPEND1] >> metis_tac[LAST_EL]) >>
+  `alias_certificate fn (dfg_build_function fn) lo ps
+     (states ++ [u; u with vs_inst_idx := SUC i])
+     (SUC (PRE (LENGTH states))) (Var x)` by
+    (irule (cj 5 alias_certificate_rules) >> simp[] >>
+     qexistsl_tac [`ctx`, `fuel`, `EL i bb.bb_instructions`, `src`] >>
+     simp[EL_APPEND2] >>
+     metis_tac[alias_certificate_prefix_extension, lookup_block_MEM,
+       MEM_fn_insts_blocks_iff, fn_insts_def, EL_MEM]) >>
+  `PRE (LENGTH states + 2) = SUC (LENGTH states)` by decide_tac >>
+  simp[] >> irule alias_certificate_admin_transport >>
+  simp[EL_APPEND2] >> conj_tac
+  >- (qexists_tac `SUC i` >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem alias_exec_block_suffix_prefix:
   alias_execution_prefix states writes /\ LAST states = s /\
   exec_block fuel ctx bb s = OK t ==>
