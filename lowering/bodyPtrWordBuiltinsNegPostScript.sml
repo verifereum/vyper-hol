@@ -19,13 +19,13 @@ Theorem word_neg_sub_normal_post:
     [mk_inst id SUB [Lit 0w; v] [y]] s G' tn' /\
   run_inst_seq [mk_inst id SUB [Lit 0w; v] [y]] s = OK t /\
   op_prov G v = NONE /\ ghost_inv d cenv cx es G tn s /\
-  ghost_kept cenv es sc G0 tn0 s0 G tn /\
+  ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> y) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> y) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> y) /\
   (!p. not_fresh_at sc p ==> p <> y) ==>
   ghost_inv d cenv cx es G' tn' t /\
-  ghost_kept cenv es sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var y) = {} /\ op_prov G' (Var y) = NONE
+  ghost_kept cenv e0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var y) = {} /\ op_prov G' (Var y) = NONE
 Proof
   strip_tac >>
   Cases_on `step_inst_base (mk_inst id SUB [Lit 0w; v] [y]) s` >>
@@ -46,13 +46,13 @@ Theorem word_neg_assert_sub_normal_post:
     [mk_inst ia ASSERT [a] []; mk_inst ib SUB [Lit 0w; v] [y]] s G' tn' /\
   run_inst_seq [mk_inst ia ASSERT [a] []; mk_inst ib SUB [Lit 0w; v] [y]] s = OK t /\
   op_prov G v = NONE /\ ghost_inv d cenv cx es G tn s /\
-  ghost_kept cenv es sc G0 tn0 s0 G tn /\
+  ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> y) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> y) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> y) /\
   (!p. not_fresh_at sc p ==> p <> y) ==>
   ghost_inv d cenv cx es G' tn' t /\
-  ghost_kept cenv es sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var y) = {} /\ op_prov G' (Var y) = NONE
+  ghost_kept cenv e0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var y) = {} /\ op_prov G' (Var y) = NONE
 Proof
   strip_tac >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
@@ -75,13 +75,13 @@ Theorem word_neg_sequence_normal_post:
   run_inst_seq [mk_inst ia SGT [v; Lit low] [x];
     mk_inst ib ASSERT [Var x] []; mk_inst ic SUB [Lit 0w; v] [y]] s = OK t /\
   op_prov G v = NONE /\ ghost_inv d cenv cx es G tn s /\
-  ghost_kept cenv es sc G0 tn0 s0 G tn /\
+  ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   (!z n p sz. MEM z [x;y] /\ FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> z) /\
   (!z p sz. MEM z [x;y] /\ d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> z) /\
   (!z p sz. MEM z [x;y] /\ cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> z) /\
   (!z p. MEM z [x;y] /\ not_fresh_at sc p ==> p <> z) ==>
   ghost_inv d cenv cx es G' tn' t /\
-  ghost_kept cenv es sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var y) = {} /\ op_prov G' (Var y) = NONE
+  ghost_kept cenv e0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var y) = {} /\ op_prov G' (Var y) = NONE
 Proof
   strip_tac >>
   Cases_on `step_inst_base (mk_inst ia SGT [v; Lit low] [x]) s` >>
@@ -95,7 +95,7 @@ Proof
   `ghost_inv d cenv cx es G1 tn1 s1` by
     (simp[Abbr `G1`, Abbr `tn1`, Abbr `s1`, word_interval_ghost_inv_index] >>
      irule word_neg_output_ghost_inv >> simp[] >> metis_tac[MEM]) >>
-  `ghost_kept cenv es sc G0 tn0 s0 G1 tn1` by
+  `ghost_kept cenv e0 sc G0 tn0 s0 G1 tn1` by
     (simp[Abbr `G1`, Abbr `tn1`] >>
      irule word_neg_output_ghost_kept >> simp[] >> metis_tac[MEM]) >>
   `op_prov G1 v = NONE` by
@@ -116,12 +116,12 @@ Theorem word_neg_compiled_normal_post:
   inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   op_prov G v = NONE /\ ghost_inv d cenv cx es G tn s /\
-  ghost_kept cenv es sc G0 tn0 s0 G tn /\
+  ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) ==>
   ghost_inv d cenv cx es G' tn' t /\
-  ghost_kept cenv es sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {} /\ op_prov G' op = NONE
+  ghost_kept cenv e0 sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {} /\ op_prov G' op = NONE
 Proof
   strip_tac >> drule word_neg_emitted_insts >> strip_tac >>
   qpat_x_assum `compile_neg _ _ _ = _` kall_tac >>
@@ -139,7 +139,7 @@ Theorem word_neg_counted_normal_post:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G v = NONE /\ ghost_inv d cenv cx es G tn s /\
-  ghost_kept cenv es sc G0 tn0 s0 G tn /\
+  ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
@@ -149,7 +149,7 @@ Theorem word_neg_counted_normal_post:
       (OK (t with vs_inst_idx := s.vs_inst_idx + 3)) /\
     eval_operand op t = SOME (0w - w) /\
     ghost_inv d cenv cx es G' tn' t /\
-    ghost_kept cenv es sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {} /\ op_prov G' op = NONE
+    ghost_kept cenv e0 sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {} /\ op_prov G' op = NONE
 Proof
   strip_tac >> drule_all compile_neg_run >> simp[] >> strip_tac >>
   drule_all word_neg_emitted_checked >>
