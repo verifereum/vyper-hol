@@ -137,6 +137,82 @@ QED
 
 Finalise ptr_paired_mload_endpoint_inputs
 
+Theorem ptr_paired_current_range_classification:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ((mem_read_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
+   (mem_write_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_write_ranges a.po_inst a.po_state))) /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\ n <> 0 /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\ w2n x + n <= lo) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP a.po_prov v = SOME (b,sz) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + n <= b+sz /\
+    pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
+Proof
+  strip_tac >> (
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
+    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  Cases_on `op_prov a.po_prov ops.iao_ofst = NONE /\ w2n x + n <= lo`
+  >- (disj1_tac >>
+      `op_prov TG ops.iao_ofst = NONE` by
+        (Cases_on `ops.iao_ofst` >> gvs[op_prov_def] >>
+         fs[ptr_ledger_erases_def] >>
+         Cases_on `FLOOKUP TG s` >> gvs[] >> metis_tac[flookup_thm]) >>
+      gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
+  disj2_tac >>
+  `?v b sz. ops.iao_ofst = Var v /\ FLOOKUP a.po_prov v = SOME (b,sz) /\
+     b <= w2n x /\ w2n x + n <= b+sz` by
+    (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+     simp[access_ok_def] >> strip_tac >>
+     `op_prov a.po_prov ops.iao_ofst = NONE ==> lo < w2n x+n` by
+       (rpt strip_tac >> gvs[] >> decide_tac) >>
+     Cases_on `mem_read_ops a.po_inst = SOME ops /\
+               MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)` >> gvs[]) >>
+  gvs[] >>
+  `?token aid. FLOOKUP TG v = SOME (token,aid)` by
+    (fs[ptr_ledger_erases_def] >>
+     Cases_on `FLOOKUP TG v` >> gvs[] >> PairCases_on `x'` >> metis_tac[]) >>
+  `FLOOKUP births (token,aid) = SOME (b,sz)` by
+    (fs[ptr_ledger_erases_def] >>
+     qpat_x_assum `!v. FLOOKUP a.po_prov v = _` (qspec_then `v` mp_tac) >> simp[]) >>
+  `?pa. FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    y = x - n2w b + n2w pa` by
+    gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
+  `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
+  drule_all ptr_stage_placements_strict_bound >> strip_tac >>
+  `w2n y = pa + (w2n x - b)` by
+    (irule ptr_closed_relocation_value >> simp[] >>
+     qexists_tac `sz` >> simp[]) >>
+  qexistsl_tac [`token`,`aid`,`pa`] >> simp[] >> decide_tac)
+QED
+
 Theorem ptr_paired_read_range_classification:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -164,49 +240,9 @@ Theorem ptr_paired_read_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_ownership >> strip_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
-  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
-    a.po_fn a.po_inst a.po_state` by
-    (drule ptr_gap_ownership_history >> strip_tac >>
-     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
-  Cases_on `op_prov a.po_prov ops.iao_ofst = NONE /\ w2n x + n <= lo`
-  >- (disj1_tac >>
-      `op_prov TG ops.iao_ofst = NONE` by
-        (Cases_on `ops.iao_ofst` >> gvs[op_prov_def] >>
-         fs[ptr_ledger_erases_def] >>
-         Cases_on `FLOOKUP TG s` >> gvs[] >> metis_tac[flookup_thm]) >>
-      gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
-  disj2_tac >>
-  qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
-  simp[access_ok_def] >> strip_tac >>
-  qpat_x_assum `!off len. MEM _ (source_memory_read_ranges _ _) /\ _ ==> _`
-    (qspecl_then [`w2n x`,`n`] mp_tac) >>
-  simp[] >>
-  (impl_tac >- (rpt strip_tac >> gvs[] >> decide_tac)) >> strip_tac >>
-  gvs[] >>
-  `?token aid. FLOOKUP TG v = SOME (token,aid)` by
-    (fs[ptr_ledger_erases_def] >>
-     Cases_on `FLOOKUP TG v` >> gvs[] >> PairCases_on `x'` >> metis_tac[]) >>
-  `FLOOKUP births (token,aid) = SOME (b,sz)` by
-    (fs[ptr_ledger_erases_def] >>
-     qpat_x_assum `!v. FLOOKUP a.po_prov v = _` (qspec_then `v` mp_tac) >> simp[]) >>
-  `?pa. FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
-    y = x - n2w b + n2w pa` by
-    gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
-  `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
-  drule_all ptr_stage_placements_strict_bound >> strip_tac >>
-  `w2n y = pa + (w2n x - b)` by
-    (irule ptr_closed_relocation_value >> simp[] >>
-     qexists_tac `sz` >> simp[]) >>
-  qexistsl_tac [`token`,`aid`,`pa`] >> simp[] >> decide_tac
+  strip_tac >> irule ptr_paired_current_range_classification >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem ptr_paired_mload_address_classification:
