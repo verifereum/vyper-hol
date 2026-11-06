@@ -359,6 +359,164 @@ Proof
   Cases_on `two` >> fs[vfmConstantsTheory.stack_limit_def]
 QED
 
+Theorem asm_create_success_prefix[local]:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  step_create two s = (INL (),t) ==>
+  ?u p gas abort collision sender address value code.
+    u.contexts = (p,rb)::rest /\ u.msdomain = Collect d /\
+    p.msgParams = c.msgParams /\ p.jumpDest = c.jumpDest /\ p.pc = c.pc /\
+    p.stack = DROP (if two then 4 else 3) c.stack /\
+    p.returnData = [] /\ p.logs = c.logs /\
+    buffer_to_list p.memory = asm_call_memory (w2n (EL 1 c.stack))
+      (w2n (EL 2 c.stack)) 0 0 (buffer_to_list c.memory) /\
+    u.rollback.tStorage = s.rollback.tStorage /\
+    u.rollback.toDelete = s.rollback.toDelete /\
+    (if abort then abort_unuse gas else do
+       access_address address; ensure_storage_in_domain address;
+       if collision then abort_create_exists sender
+       else proceed_create sender address value code gas
+     od) u = (INL (),t)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
+  simp[step_create_def, pop_stack_def, memory_expansion_info_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `consume_gas charge _` >>
+  qmatch_goalsub_abbrev_tac `expand_memory expansion _` >>
+  simp[Once consume_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def,
+       assert_def, return_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `if paid then _ else _` >>
+  Cases_on `paid` >> simp[] >>
+  simp[expand_memory_def, read_memory_def, get_callee_def, get_accounts_def,
+       get_gas_left_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `if size_ok then _ else _` >>
+  Cases_on `size_ok` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `consume_gas gas _` >>
+  simp[consume_gas_def, assert_not_static_def, get_static_def,
+       set_return_data_def, get_num_contexts_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `if paid2 then _ else _` >>
+  Cases_on `paid2` >> simp[] >>
+  strip_tac >> pure_rewrite_tac[ignore_bind_def] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  Cases_on `two` >> gvs[Abbr `expansion`, listTheory.EL_TAKE] >>
+  irule asm_call_memory_buffer_extend >>
+  simp[max_expansion_range_def] >>
+  Cases_on `w2n (EL 2 c.stack) = 0` >> simp[]
+QED
+
+Theorem asm_create_finish_view[local]:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  (if abort then abort_unuse gas else do
+     access_address address; ensure_storage_in_domain address;
+     if collision then abort_create_exists sender
+     else proceed_create sender address value code gas
+   od) s = (INL (),t) ==>
+  (?p. t.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
+    p.jumpDest = c.jumpDest /\ p.pc = SUC c.pc /\
+    p.stack = 0w::c.stack /\ p.returnData = c.returnData /\
+    p.logs = c.logs /\ p.memory = c.memory /\
+    t.rollback.tStorage = s.rollback.tStorage /\
+    t.rollback.toDelete = s.rollback.toDelete) \/
+  (?child crb. t.contexts = (child,crb)::(c,rb)::rest /\
+    child.msgParams.outputTo = Code address /\ child.logs = [] /\
+    crb.toDelete = s.rollback.toDelete /\
+    crb.tStorage = s.rollback.tStorage /\
+    t.rollback.toDelete = s.rollback.toDelete)
+Proof
+  strip_tac >> Cases_on `abort`
+  >- (gvs[abort_unuse_def, unuse_gas_def, push_stack_def, inc_pc_def,
+          get_current_context_def, set_current_context_def, bind_def,
+          ignore_bind_def, return_def, assert_def, fail_def, AllCaseEqs()] >>
+      simp[]) >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  simp[access_address_def, ensure_storage_in_domain_def,
+       domain_check_def, set_domain_def, bind_def, ignore_bind_def, return_def] >>
+  Cases_on `collision` >>
+  simp[abort_create_exists_def, proceed_create_def, update_accounts_def,
+       get_rollback_def, get_original_def, set_original_def, push_context_def,
+       push_stack_def, inc_pc_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, fail_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >> simp[vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem asm_create_raw_same_depth:
+  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  step_create two s = (INL (),t) /\
+  LENGTH t.contexts = LENGTH s.contexts ==>
+  ?p. t.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
+    p.jumpDest = c.jumpDest /\ p.pc = SUC c.pc /\
+    p.stack = 0w :: DROP (if two then 4 else 3) c.stack /\
+    p.returnData = [] /\ p.logs = c.logs /\
+    buffer_to_list p.memory = asm_call_memory (w2n (EL 1 c.stack))
+      (w2n (EL 2 c.stack)) 0 0 (buffer_to_list c.memory) /\
+    t.rollback.tStorage = s.rollback.tStorage /\
+    t.rollback.toDelete = s.rollback.toDelete
+Proof
+  strip_tac >> drule_all asm_create_success_prefix >> strip_tac >>
+  drule_at (Pat `_ = (INL (),t)`) asm_create_finish_view >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem asm_create_raw_child_entry:
+  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  step_create two s = (INL (),t) /\
+  LENGTH t.contexts = SUC (LENGTH s.contexts) ==>
+  ?child crb parent address.
+    t.contexts = (child,crb)::(parent,rb)::rest /\
+    parent.msgParams = c.msgParams /\ parent.jumpDest = c.jumpDest /\
+    parent.pc = c.pc /\ parent.stack = DROP (if two then 4 else 3) c.stack /\
+    parent.returnData = [] /\ parent.logs = c.logs /\
+    buffer_to_list parent.memory = asm_call_memory (w2n (EL 1 c.stack))
+      (w2n (EL 2 c.stack)) 0 0 (buffer_to_list c.memory) /\
+    child.msgParams.outputTo = Code address /\ child.logs = [] /\
+    crb.toDelete = s.rollback.toDelete /\
+    crb.tStorage = s.rollback.tStorage /\
+    t.rollback.toDelete = s.rollback.toDelete
+Proof
+  strip_tac >> drule_all asm_create_success_prefix >> strip_tac >>
+  drule_at (Pat `_ = (INL (),t)`) asm_create_finish_view >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+Theorem asm_create_code_pop_jumpDest:
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Code address /\
+  handle_exception ex s = (INL (),t) ==>
+  (FST (HD t.contexts)).jumpDest = parent.jumpDest
+Proof
+  strip_tac >> Cases_on `ex` >> Cases_on `x = Reverted` >>
+  gvs[handle_exception_def, bind_def, ignore_bind_def,
+      get_gas_left_def, get_current_context_def, return_def,
+      consume_gas_def, set_return_data_def, set_current_context_def,
+      get_num_contexts_def, get_return_data_def, get_output_to_def,
+      reraise_def, assert_def, fail_def, inc_pc_def, push_stack_def,
+      pop_and_incorporate_context_def, pop_context_def,
+      set_rollback_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
+      AllCaseEqs()]
+QED
+
+Theorem asm_create_run_code_jumpDest:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Code address /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  (FST (HD t.contexts)).jumpDest = parent.jumpDest
+Proof
+  strip_tac >>
+  drule_at (Pat `run_call _ = _`) asm_create_run_final_view >>
+  simp[] >> strip_tac >>
+  irule asm_create_code_pop_jumpDest >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+
 Theorem asm_frame_create_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
