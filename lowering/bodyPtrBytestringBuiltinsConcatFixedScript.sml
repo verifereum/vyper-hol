@@ -148,7 +148,7 @@ QED
 (* The first two actual edges, retaining the loaded scalar as well as the
    full-word destination capability. No erased execution is lifted here. *)
 Theorem concat_fixed_address_counted:
-  !D ctx fn PG G tn s bb id root off tmp dst a b k cap.
+  !D ctx fn PG G tn s bb id root off tmp dst a b k cap width.
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
@@ -159,14 +159,14 @@ Theorem concat_fixed_address_counted:
     ptr_covers G tn off s 32 /\ ptr_covers G tn root s cap /\
     mload (w2n b) s = n2w k /\
     (!i. w2n b <= i /\ i < w2n b + 32 ==> i NOTIN tn.t_mem) /\
-    k + 32 <= cap /\ w2n a + k < dimword(:256) /\
+    k + width <= cap /\ w2n a + k < dimword(:256) /\
     root <> tmp /\ tmp <> dst ==>
     ?Gf tnf t.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
       lookup_var dst t = SOME (a + n2w k) /\
       lookup_var tmp t = SOME (n2w k) /\
       op_prov Gf (Var tmp) = NONE /\ op_taint tnf (Var tmp) = {} /\
-      ptr_covers Gf tnf dst t 32 /\
+      ptr_covers Gf tnf dst t width /\
       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
       t.vs_labels = s.vs_labels /\
       t.vs_inst_idx = s.vs_inst_idx + 2 /\
@@ -233,7 +233,7 @@ Resume concat_fixed_address_counted[path]:
 QED
 
 Resume concat_fixed_address_counted[endpoint]:
-  `ptr_covers g2 tn2 dst s2 32` by
+  `ptr_covers g2 tn2 dst s2 width` by
     (qunabbrev_tac `g2` >> qunabbrev_tac `tn2` >>
      qunabbrev_tac `s2` >> qunabbrev_tac `v` >>
      `eval_operand (Var tmp) s1 = SOME (n2w k)` by
