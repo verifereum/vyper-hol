@@ -22,7 +22,9 @@ Theorem ptr_val_ok_exterior_frame:
   ptr_val_ok cx ty v op Gf tnf sf
 Proof
   strip_tac >> simp[ptr_val_ok_def] >>
-  (conj_tac >- gvs[ptr_val_ok_def]) >> strip_tac >>
+  (conj_tac >- gvs[ptr_val_ok_def]) >>
+  (conj_tac >- (strip_tac >> gvs[ptr_val_ok_def] >>
+    Cases_on `op` >> gvs[op_prov_def])) >> strip_tac >>
   simp[ptr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
   `eval_operand op s = SOME w` by metis_tac[] >>
   `val_wf tv v /\

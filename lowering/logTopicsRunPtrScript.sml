@@ -50,7 +50,7 @@ QED
 Resume log_readonly_ptr_args[head]:
   rename1 `ptr_val_ok cx (SND arg) v (FST arg) H tm t` >>
   PairCases_on `arg` >> Cases_on `arg0` >>
-  gvs[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def, op_taint_def] >>
+  gvs[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def, op_taint_def, op_prov_def] >>
   metis_tac[]
 QED
 Finalise log_readonly_ptr_args
