@@ -9,7 +9,7 @@ Ancestors concretizeLayoutLocalJump concretizeLayoutLocalOffset
   pointerConfinedDefs memLocDefs frameOriginReachable frameOriginHistory
   ptrDiscipline venomExecSemantics venomState venomWf codegenRel finite_map pred_set list
 
-Theorem conditional_jump_execution[local]:
+Theorem conditional_jump_execution:
   MEM inst.inst_opcode [JNZ; DJMP] /\
   (!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t) /\
   step_inst_base inst s = OK post ==>
@@ -39,6 +39,43 @@ Proof
        written_taint_def, range_bytes_def, store_taint_def, adopt_reset_def,
        imm_taint_def, out_taint_def, set_var_taint_def, taint_component_equality] >>
   rpt CASE_TAC >> simp[fmap_eq_flookup, FLOOKUP_DRESTRICT]
+QED
+
+Theorem conditional_jump_operands:
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  frame_reachable vs0 C stk PG G tn fn inst s /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\
+  MEM inst (fn_insts fn) /\ MEM inst.inst_opcode [JNZ; DJMP] /\
+  relocation_env s t /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn) R Obs s t ==>
+  !op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     rpt strip_tac >> irule reachable_resolved_support >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `!w. MEM (Var w) inst.inst_operands ==> clean_scalar (retpc_var fn) rv tn w` by
+    (rpt strip_tac >>
+     `~is_pointer_preserving_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+      ~MEM inst.inst_opcode [EQ; LT; GT; ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+      mem_write_ops inst = NONE /\ mem_read_ops inst = NONE` by
+       (gvs[MEM] >> simp[is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def]) >>
+     drule_all nonpointer_operand_clean >> simp[]) >>
+  rpt strip_tac >>
+  drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_scalar_operand >>
+  disch_then (qspec_then `op` mp_tac) >>
+  gvs[relocation_env_def] >> metis_tac[]
 QED
 
 Theorem concretize_conditional_jump_local_complete:
@@ -85,24 +122,8 @@ Proof
     (drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
      fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
-    (drule resolved_config_current >> simp[] >> strip_tac >>
-     rpt strip_tac >> irule reachable_resolved_support >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
-  `!w. MEM (Var w) inst.inst_operands ==> clean_scalar (retpc_var fn) rv tn w` by
-    (rpt strip_tac >>
-     `~is_pointer_preserving_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-      ~MEM inst.inst_opcode [EQ; LT; GT; ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
-      mem_write_ops inst = NONE /\ mem_read_ops inst = NONE` by
-       (gvs[MEM] >> simp[is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def]) >>
-     drule_all nonpointer_operand_clean >> simp[]) >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
-    (rpt strip_tac >>
-     drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_scalar_operand >>
-     disch_then (qspec_then `op` mp_tac) >>
-     gvs[relocation_env_def] >> metis_tac[]) >>
+    (metis_tac[conditional_jump_operands]) >>
   `inst_wf inst` by
     (fs[o1PassContractTheory.o1_fn_shape_def, fn_inst_wf_def,
         venomInstTheory.fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[]) >>
