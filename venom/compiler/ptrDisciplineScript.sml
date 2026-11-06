@@ -362,11 +362,8 @@ Definition out_taint_def:
          | NONE => {})
     | [n; a] =>
         if inst.inst_opcode = MUL then
-          if op_taint tn n = {} then
-            (if eval_operand n s = SOME 1w then op_taint tn a else {})
-          else
-            (if op_taint tn a = {} /\ eval_operand a s = SOME 1w
-             then op_taint tn n else {})
+          (if eval_operand n s = SOME 1w then op_taint tn a else {}) UNION
+          (if eval_operand a s = SOME 1w then op_taint tn n else {})
         else (case eval_operand n s of
            SOME k =>
              if inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/
