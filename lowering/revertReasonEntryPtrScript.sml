@@ -6,6 +6,8 @@ Ancestors
   revertReasonPrefixFramePtr revertReasonLayout exprLoweringProps exprSimCopy
   context compileEnv bodyPtrDefs loweringPosts venomInst venomState
   words arithmetic finite_map list ptrDiscipline fragGasPathPtr
+  revertReasonMemoryFramePtr valueEncoding venomMemDefs instIdxIndep
+  exprLowering revertReasonTailCodePtr
 
 Theorem revert_reason_prefix_old_operand_frame:
   copy_old_operand sa op /\
@@ -90,7 +92,7 @@ Proof
      drule_at (Pat `_ = _ ++ _`) revert_reason_storage_positive_unwrap_path_ptr >>
      disch_then drule_all >> simp[]) >>
   drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (OK _)`) gas_path_ptr_then >>
-  disch_then drule >> simp[] >> metis_tac[]
+  disch_then drule >> simp[NoAsms] >> metis_tac[]
 QED
 
 Theorem immutable_holds_runtime_state_independent:
@@ -144,5 +146,72 @@ Proof
     (drule_at (Pat `_ = _ ++ _`) revert_reason_runtime_immutable_unwrap_path_ptr >>
      disch_then drule_all >> simp[]) >>
   drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (OK _)`) gas_path_ptr_then >>
-  disch_then drule >> simp[] >> metis_tac[]
+  disch_then drule >> simp[NoAsms] >> metis_tac[]
+QED
+
+Theorem compile_revert_reason_memory_path_ptr:
+  compile_revert_with_reason cenv vv mt ms sa = ((),sb) /\
+  (vv = StackValue ty (Var src) \/
+   (vv = LocatedValue ty r /\ ~is_word_type ty /\
+    r.ptr_location = LocMemory /\ r.ptr_operand = Var src)) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\
+  (!k. k < 3 ==> not_local_ptr cenv es.scopes
+    (STRING #"%" (toString (sa.cs_next_var+k)))) /\
+  copy_old_operand sa (Var src) /\ lookup_var src s = SOME A /\
+  ptr_covers G tn src s (32+contractABI$ceil32 L) /\
+  mload (w2n A) s = n2w L /\
+  (!j. w2n A <= j /\ j < w2n A+32 ==> j NOTIN tn.t_mem) /\
+  ((?aid a sz. FLOOKUP s.vs_allocas aid = SOME (a,sz) /\ aid < sa.cs_next_id /\
+      a <= w2n A /\ w2n A+32 <= a+sz) \/
+   (?name a sz. local_region cenv es.scopes s name a sz /\
+      a <= w2n A /\ w2n A+32 <= a+sz)) /\
+  32+contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
+  64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?z Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (Abort Revert_abort z)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all compile_revert_reason_prefix_code >> strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\ sb.cs_current_bb = sn.cs_current_bb` by
+    fs[same_blocks_def] >>
+  drule_at (Pat `_ = _ ++ _`) revert_reason_prefix_at_compile_endpoint_ptr >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK u)` >>
+  `!k. k < 3 ==> src <> STRING #"%" (toString (sa.cs_next_var+k))` by
+    (fs[copy_old_operand_def, not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `sa.cs_next_var+k` mp_tac) >> simp[]) >>
+  drule_all revert_reason_prefix_lookup_frame >> strip_tac >>
+  drule_all revert_reason_prefix_old_ptr_covers >> strip_tac >>
+  drule_all revert_reason_prefix_code >> strip_tac >>
+  `alloca_inv t` by
+    (qpat_x_assum `alloca_inv u` mp_tac >>
+     simp[Abbr `u`, alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]) >>
+  drule_all revert_reason_prefix_head_frame >> strip_tac >>
+  `lookup_var src u = SOME A /\ ptr_covers Gf tnf src u (32+contractABI$ceil32 L) /\
+   mload (w2n A) u = n2w L` by
+    gvs[Abbr `u`, lookup_var_def, ptr_covers_def, mload_def] >>
+  `not_fresh_at sm src /\ not_fresh_at sm (STRING #"%" (toString sa.cs_next_var)) /\
+   not_fresh_at sm (STRING #"%" (toString (sa.cs_next_var+1))) /\
+   not_fresh_at sm (STRING #"%" (toString (sa.cs_next_var+2))) /\
+   sa.cs_next_id+3 <> sm.cs_next_id+5 /\
+   w2n B+64+ms < dimword(:256) /\ w2n P+32+ms < dimword(:256)` by
+    (fs[copy_old_operand_def, not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
+  `op = Var src /\ sn = sm` by
+    (qpat_x_assum `vv = _ \/ _` strip_assume_tac >>
+     qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+     asm_rewrite_tac[unwrap_value_def, comp_return_def] >>
+     simp[NoAsms, comp_return_def]) >>
+  qpat_x_assum `op = Var src` SUBST_ALL_TAC >>
+  qpat_x_assum `sn = sm` SUBST_ALL_TAC >>
+  drule_at (Pat `_ = _ ++ _`) revert_reason_tail_code >> disch_then drule_all >> strip_tac >>
+  `!a sz. FLOOKUP u.vs_allocas (sm.cs_next_id+5) = SOME (a,sz) ==> sz = 32` by
+    (rpt strip_tac >> qpat_x_assum `!i n a sz. _` drule >>
+     simp[NoAsms, mk_inst_def] >> disch_then drule >> simp[]) >>
+  `?z Gh th. gas_path_ptr D 0 ctx fn PG Gf tnf u 0 Gh th (Abort Revert_abort z)` by
+    (drule_at (Pat `_ = _ ++ _`) revert_reason_tail_at_compile_endpoint_ptr >>
+     disch_then drule_all >> disch_then MATCH_ACCEPT_TAC) >>
+  drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (OK _)`) gas_path_ptr_then >>
+  disch_then drule >> simp[NoAsms] >> metis_tac[]
 QED
