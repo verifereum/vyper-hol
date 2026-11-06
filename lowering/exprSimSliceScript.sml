@@ -54,10 +54,12 @@ Proof
      qid_spec_tac `src` >> recInduct is_extcode_ind >>
      simp[is_extcode_def]) >>
   gvs[] >>
-  `expr_body_pre cenv cx env (Builtin ct (Acc Code) [a]) es` by
-    (irule exprSimSourceTheory.expr_body_pre_builtin_arg >> conj_tac
-     >- fs[expr_body_pre_def] >> goal_assum (drule_at Any) >> simp[]) >>
-  `well_typed_expr env (Builtin ct (Acc Code) [a])` by fs[expr_body_pre_def] >>
+  `well_typed_expr env (Builtin ct (Acc Code) [a])` by
+    (qpat_x_assum `well_typed_expr env (Builtin _ (Slice _) _)` mp_tac >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
+  `!e. MEM e [start; len] ==> ~is_extcode e` by
+    (gvs[vyperTypeSystemTheory.well_typed_expr_def] >> rpt strip_tac >>
+     imp_res_tac exprSimSourceTheory.well_typed_extcode_type >> gvs[]) >>
   fs[Once vyperTypeSystemTheory.well_typed_expr_def,
      vyperTypeSystemTheory.well_typed_builtin_app_def,
      vyperTypeSystemTheory.account_item_type_def, vyperASTTheory.expr_type_def] >>
@@ -73,9 +75,9 @@ Proof
      >- fs[expr_body_pre_def] >>
      qpat_assum `expr_body_pre _ _ _ (Builtin _ (Slice _) _) _` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env a es` by
-    (irule exprSimSourceTheory.expr_body_pre_builtin_arg >> conj_tac
-     >- fs[expr_body_pre_def] >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ (Acc Code) _) _` (irule_at Any) >> simp[]) >>
+    (irule slice_code_address_body_pre >>
+     qpat_assum `expr_body_pre _ _ _ (Builtin _ (Slice _) _) _` (irule_at Any) >>
+     fs[expr_body_pre_def]) >>
   irule slice_extcode_typed_entry >> simp[] >>
   conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `nocalls` >>
