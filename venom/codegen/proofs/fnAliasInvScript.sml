@@ -1554,6 +1554,32 @@ Proof
   disj2_tac >> qexists_tac `j'` >> simp[]
 QED
 
+Theorem normalize_operand_closed_visited_cong:
+  !dfg visited at P other.
+    P at /\
+    (!a b. P a /\ alias_assign_step dfg a b ==> P b) /\
+    (!v. P (Var v) ==> (MEM v visited <=> MEM v other)) ==>
+    normalize_operand dfg visited at = normalize_operand dfg other at
+Proof
+  recInduct normalize_operand_ind >> rpt strip_tac
+  >- (Cases_on `MEM v visited` >>
+      `MEM v visited <=> MEM v other` by metis_tac[] >>
+      CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [normalize_operand_def])) >>
+      gvs[] >>
+      Cases_on `FLOOKUP dfg.dfg_defs v` >> gvs[] >>
+      rename1 `FLOOKUP dfg.dfg_defs v = SOME inst` >>
+      Cases_on `inst.inst_opcode = ASSIGN` >> simp[] >>
+      Cases_on `inst.inst_operands` >> simp[] >>
+      rename1 `inst.inst_operands = src::rest` >>
+      Cases_on `rest` >> simp[] >>
+      `alias_assign_step dfg (Var v) src` by
+        (simp[alias_assign_step_def] >> metis_tac[]) >>
+      `P src` by metis_tac[] >>
+      first_x_assum irule >> simp[] >>
+      qexists_tac `P` >> simp[] >> metis_tac[]) >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [normalize_operand_def])) >> simp[]
+QED
+
 Theorem normalize_operand_assign_chain:
   !dfg visited at.
     normalize_operand dfg visited at <> at ==>
