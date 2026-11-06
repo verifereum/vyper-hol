@@ -10,14 +10,14 @@
    payload, independently of whether its length fits either capacity.
 
    These are representation transfers, not pointer simulations.  The S1
-   expr_post carries expr_val_rel and expr_val_at at the annotation, not a
-   guarantee that an arbitrary AbiEncode annotation IS dynamic bytes.
-   evaluate_type_builtin's successful AbiEncode returns BytesV, whereas
-   compile_abi_encode_case alone does not state that annotation restriction.
-   This remaining annotation/typing interface must not be silently assumed.
-   Literal forms in the exhaustive split already have the required types. *)
+   expr_post carries expr_val_rel and expr_val_at at the annotation.
+   structlit_abi_encode_annotation below proves that current source typing
+   restricts AbiEncode annotations to dynamic bytes. Its successful source
+   result is BytesV; the transfer corollary concerns that constructor only.
+   Literal forms in the exhaustive split already have the required types.
+   Evaluated types must exist: evaluate_type also checks size bounds. *)
 Theory bodyPtrStructLitTypeBoundary
-Ancestors exprLowering valueEncoding bodyPtrDefs vyperAST
+Ancestors exprLowering valueEncoding bodyPtrDefs vyperAST vyperTypeSystem vyperValue
 
 Theorem robust_string_memory_type_irrelevant:
   !tn mem s a ty1 ty2.
@@ -58,4 +58,29 @@ Proof
   >~ [`TypeBuiltin t1 t0 t l`]
   >- (Cases_on `t0` >> simp[lowered_value_type_def, expr_type_def]) >>
   Cases_on `c` >> simp[lowered_value_type_def, expr_type_def]
+QED
+
+Theorem structlit_abi_encode_annotation:
+  well_typed_expr env (TypeBuiltin ty (AbiEncode ensure mid) target args) ==>
+  ?n. ty = BaseT (BytesT (Dynamic n))
+Proof
+  simp[well_typed_expr_def, type_builtin_result_ok_def] >> metis_tac[]
+QED
+
+(* Type evaluation is partial (including slot-size bounds). Transfer claims
+   representation equality when both evaluated types exist, not capacity. *)
+Theorem structlit_abi_encode_representation:
+  well_typed_expr env (TypeBuiltin ty (AbiEncode ensure mid) target args) /\
+  evaluate_type tenv ty = SOME source_ty /\
+  evaluate_type tenv
+    (lowered_value_type cenv (TypeBuiltin ty (AbiEncode ensure mid) target args)) =
+    SOME lowered_ty ==>
+  ((!m. mem_agree_outside tn.t_mem mem m ==>
+       val_in_memory source_ty (BytesV bs) a m) <=>
+   (!m. mem_agree_outside tn.t_mem mem m ==>
+       val_in_memory lowered_ty (BytesV bs) a m))
+Proof
+  strip_tac >> drule structlit_abi_encode_annotation >> strip_tac >>
+  gvs[lowered_value_type_def, evaluate_type_def, AllCaseEqs()] >>
+  simp[robust_dynamic_bytes_memory_bound_irrelevant]
 QED
