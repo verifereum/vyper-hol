@@ -1,6 +1,7 @@
 Theory fnPlanLineageStageAudit
 Ancestors
-  fnPlanLineageInventory fnPlanLineageReplay stackPlanGen stackPlanOps venomInst
+  fnPlanLineageInventory fnPlanLineageReplay fnPlanLineageSuffix planWf
+  stackPlanGen stackPlanOps stackModel venomInst
 
 (* These are local stage-interface tests, not reachable-ready-program claims. *)
 Theorem offset_retains_output:
@@ -479,3 +480,73 @@ QED
    global success could exclude the offending multiplicities, but no theorem
    establishing such exclusion is available. Frozen theorem is untouched.
 *)
+
+(* PHI lower-prefix audit: selection locality is already exported as
+   stack_get_phi_depth_suffix_hit in fnPlanLineageSuffix. No exclusion
+   premise is needed when the suffix search succeeds. *)
+Theorem stack_get_phi_depth_bound:
+  stack_get_phi_depth alternatives core = SOME d ==> d < LENGTH core
+Proof
+  simp[stack_get_phi_depth_def] >> strip_tac >>
+  drule stack_find_bound >> simp[]
+QED
+
+Theorem phi_colliding_prefix_selection:
+  stack_get_phi_depth [Var "a"] [Var "a"] = SOME 0 /\
+  stack_get_phi_depth [Var "a"] [Var "a"; Var "z"; Var "a"] = SOME 0
+Proof
+  EVAL_TAC
+QED
+
+Theorem phi_colliding_prefix_rename:
+  (generate_phi_plan (mk_inst 0 PHI [Var "a"] ["r"]) ["r"] F
+    ((init_plan_state 0) with ps_stack := [Var "a"; Var "z"; Var "a"])) =
+  ([SOPoke 0 (Var "r")],
+    (init_plan_state 0) with ps_stack := [Var "a"; Var "z"; Var "r"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem phi_colliding_prefix_duplicate:
+  (generate_phi_plan (mk_inst 0 PHI [Var "a"] ["r"]) ["a"; "r"] F
+    ((init_plan_state 0) with ps_stack := [Var "a"; Var "z"; Var "a"])) =
+  ([SODup 1; SOPoke 0 (Var "r")],
+    (init_plan_state 0) with ps_stack := [Var "a"; Var "z"; Var "a"; Var "r"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem phi_colliding_prefix_dead_output:
+  (generate_phi_plan (mk_inst 0 PHI [Var "a"] ["r"]) [] F
+    ((init_plan_state 0) with ps_stack := [Var "r"; Var "a"])) =
+  ([SOPoke 0 (Var "r"); SOPop 1],
+    (init_plan_state 0) with ps_stack := [Var "r"])
+Proof
+  EVAL_TAC
+QED
+
+(* Physical PHI consumer contract (not a reachable-state invariant):
+   - Incoming selection: stack_get_phi_depth_suffix_hit and the bound above
+     allow arbitrary lower prefixes, even colliding incoming names. A suffix
+     hit must still be produced for EACH stage; entry coverage alone does
+     not establish preservation after previous writes/pops.
+   - Selected-live test: with d inside the suffix, stack_peek is suffix-local;
+     paired executions need agreement of the selected values' live tests,
+     not absence of incoming values in their prefixes (phi_origin_selected).
+   - Rename: stack_poke at the selected in-suffix depth preserves the prefix.
+     No prefix exclusion is needed. The duplicate branch additionally needs
+     the do_dup physical window and paired allocator equality for deep d;
+     locality of the initial search is not an allocator replay theorem.
+   - Dead output: the write creates ret in the suffix, so its first search
+     cannot be displaced by a lower-prefix ret, as the checked example shows.
+     popmany_plan [ret] still needs a bounded do_swap/pop window. Its singleton
+     contiguous case has depth 1 and swaps 1, hence requires two suffix cells;
+     depth 0 uses the individual path. General multi-item popmany bounds must
+     not be inferred from this singleton PHI observation.
+   - optimistic_swap_plan is NOT called by generate_phi_plan. Subsequent block
+     cleanup/reordering has separate physical windows and query obligations.
+   Therefore blanket exclusion of incoming/output names from residual prefixes
+   is overstrong for a covered PHI selection/write. The next useful producer
+   is suffix hit/selected-live preservation through the native schedule, with
+   explicit bounded dead-output and deep-dup effects, NOT global exclusion.
+   None of these local tests is a counterexample to lineage_state_block_plan. *)
