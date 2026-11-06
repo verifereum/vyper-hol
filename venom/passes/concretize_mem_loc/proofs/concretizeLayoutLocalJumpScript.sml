@@ -15,7 +15,7 @@ Proof
        local_values_def, lookup_var_def, jump_to_def, dead_result_rel_def]
 QED
 
-Theorem jmp_execution[local]:
+Theorem jmp_execution:
   inst.inst_opcode = JMP /\ step_inst_base inst s = OK post ==>
   ?lbl. inst.inst_operands = [Label lbl] /\ post = jump_to lbl s
 Proof

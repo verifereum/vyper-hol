@@ -127,4 +127,21 @@ Proof
   irule layout_scoped_run_intro >> qexistsl [`b`, `sentry`, `tentry`] >> simp[]
 QED
 
+Theorem layout_completed_jmp:
+  ~a.lop_pending /\
+  layout_ordinary_entry D lo vs0 C C' q0 es qs q a s t /\
+  get_instruction a.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
+  get_instruction a.lop_origin.lbo_target t.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = JMP /\ ~s.vs_halted /\ ~t.vs_halted /\
+  step_inst_base inst s = OK post ==>
+  ?tpost. layout_completed_jump D lo vs0 C C' q0 es qs q a inst inst s t post tpost
+Proof
+  strip_tac >> drule_all jmp_execution >> strip_tac >>
+  qexists `jump_to lbl t` >>
+  simp[layout_completed_jump_def, jump_to_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[venomInstTheory.opcode_case_def, jump_to_def] >>
+  simp[venomInstTheory.is_terminator_def] >> qexists `lbl` >> simp[]
+QED
+
 val _ = export_theory();
