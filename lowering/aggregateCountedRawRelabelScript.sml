@@ -286,3 +286,50 @@ Proof
      frag_observer_halt_cut_prefix) >>
   simp[frag_observer_cut_def]
 QED
+
+
+Theorem exec_pure1_not_exit[local]:
+  !f inst s. ~exit_result (exec_pure1 f inst s)
+Proof
+  rpt gen_tac >>
+  simp[exec_pure1_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
+QED
+
+Theorem exec_pure2_not_exit[local]:
+  !f inst s. ~exit_result (exec_pure2 f inst s)
+Proof
+  rpt gen_tac >>
+  simp[exec_pure2_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
+QED
+
+Theorem exec_pure3_not_exit[local]:
+  !f inst s. ~exit_result (exec_pure3 f inst s)
+Proof
+  rpt gen_tac >>
+  simp[exec_pure3_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
+QED
+
+Theorem exec_read0_not_exit[local]:
+  !f inst s. ~exit_result (exec_read0 f inst s)
+Proof
+  rpt gen_tac >> simp[exec_read0_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
+QED
+
+Theorem exec_read1_not_exit[local]:
+  !f inst s. ~exit_result (exec_read1 f inst s)
+Proof
+  rpt gen_tac >> simp[exec_read1_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
+QED
+
+Theorem exec_write2_not_exit[local]:
+  !f inst s. ~exit_result (exec_write2 f inst s)
+Proof
+  rpt gen_tac >> simp[exec_write2_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[exit_result_def])
+QED
+
