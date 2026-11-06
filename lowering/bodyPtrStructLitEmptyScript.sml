@@ -2,6 +2,7 @@ Theory bodyPtrStructLitEmpty
 Ancestors
   vyperState vyperInterpreter vyperAST exprSimHypsDefs vyperTypeSystem vyperValue exprLowering context
   vyperTypeInvariants compileEnv bodyPtrDefs loweringPosts valueEncoding finite_map list
+  exprSimAlloc bodyPtrStructLitAlloc exprPtrUnwrap emitHelper emitHelperProps exprLoweringProps fragExec fragGasPathPtr venomInst venomState
 
 Theorem structlit_empty_typing:
   well_typed_expr env (StructLit ann sid []) ==>
@@ -104,4 +105,53 @@ Theorem structlit_empty_eval:
 Proof
   simp[Once evaluate_def, return_def, bind_def, ignore_bind_def] >>
   simp[Once evaluate_def, return_def, bind_def]
+QED
+
+Theorem structlit_empty_alloc_code:
+  compile_alloc_buffer 0 sa = (buf,sb) ==>
+  buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var)) /\
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+       [STRING #"%" (toString sa.cs_next_var)]]
+Proof
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_ignore_bind_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem structlit_empty_alloc_path:
+  compile_alloc_buffer 0 sa = (buf,sb) /\ fn_has_code sa sb fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+      [STRING #"%" (toString sa.cs_next_var)]) t)
+    (step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+      [STRING #"%" (toString sa.cs_next_var)]) s t tn)
+    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >> drule structlit_empty_alloc_code >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+       [STRING #"%" (toString sa.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+       [STRING #"%" (toString sa.cs_next_var)]) s = OK t` by
+    (gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def] >>
+     gvs[AllCaseEqs()]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+  drule_all structlit_alloca_counted_edge >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
+  `~t.vs_halted` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
+       venomExecSemanticsTheory.exec_alloca_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
+     simp[update_var_def] >> rpt strip_tac >> gvs[] >>
+     gvs[AllCaseEqs(), update_var_def]) >>
+  drule (cj 2 gas_path_ptr_rules) >>
+  simp[] >> disch_then irule >> simp[gas_path_ptr_rules]
 QED
