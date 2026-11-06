@@ -1,6 +1,6 @@
 Theory concretizeLayoutExternalRequests
 Ancestors concretizeLayoutSupplement ptrDiscipline extCallOracle
-  venomCallOracleDefs vfmState list pred_set
+  venomCallOracleDefs frameRelocationGuardedValues vfmState list pred_set
 
 (* Request snapshots use the final task mask, justified at the emitting step. *)
 Theorem concretize_request_observation:
@@ -86,6 +86,24 @@ Proof
   Cases_on `~rq'.cr_static /\ (h.co_success \/ rq'.cr_kind <> MessageCall)` >>
   gvs[request_agree_except_def, accounts_agree_except_def,
       transient_agree_except_def, storage_agree_except_def, word_agree_except_def]
+QED
+
+Theorem concretize_supplement_clean_accounts:
+  concretize_supplement D tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
+Proof
+  strip_tac >>
+  `!st st'. storage_agree_except {} st st' ==> st = st'` by
+    (simp[storage_agree_except_def, key_taint_def] >> rpt strip_tac >>
+     simp[FUN_EQ_THM] >> gen_tac >> irule word_agree_except_empty >>
+     first_x_assum (qspec_then `x` mp_tac) >> simp[]) >>
+  fs[concretize_supplement_def, accounts_agree_except_def,
+     transient_agree_except_def] >>
+  conj_tac >> simp[FUN_EQ_THM] >> gen_tac
+  >- (qpat_x_assum `!a. _ /\ _` (qspec_then `x` strip_assume_tac) >>
+      `(s.vs_accounts x).storage = (t.vs_accounts x).storage` by metis_tac[] >>
+      gvs[account_state_component_equality]) >>
+  metis_tac[]
 QED
 
 val _ = export_theory();
