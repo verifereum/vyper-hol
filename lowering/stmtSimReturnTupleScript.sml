@@ -1,7 +1,7 @@
 (* Tuple-return simulation, retained for counted migration. *)
 Theory stmtSimReturnTuple
 Ancestors
-  stmtSimReturn stmtSimProps stmtSimDefs exprSimProps exprSimDefs loweringPosts
+  stmtSimReturn stmtSimProps stmtSimDefs exprSimProps exprSimDefs loweringPosts exprSimTypedAlloc
   gasOutcome gasSummary gasSummaryCompose gasContext gasCount fragGasPath fragGasSeq gasExemptCert
   list rich_list arithmetic finite_map fragExec freshWrites vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -96,6 +96,7 @@ Theorem tuple_suffix_post:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_returns_count = LENGTH tys /\ 1 < LENGTH tys /\
   cenv.ce_return_buf = NONE /\ expr_type e = TupleT tys /\
+  post_value_type cenv e = TupleT tys /\
   EVERY is_word_type tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME ret_tv /\
   value_has_type ret_tv v /\
@@ -209,7 +210,8 @@ Theorem compile_return_tuple_int_frag:
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
     cenv.ce_returns_count = LENGTH tys /\ 1 < LENGTH tys /\
     cenv.ce_return_buf = NONE /\
-    expr_type e = TupleT tys /\ EVERY is_word_type tys /\
+    expr_type e = TupleT tys /\ post_value_type cenv e = expr_type e /\
+    EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME ret_tv /\
     (!gs v es1. (do raw <- eval_expr cx e; read_result cx raw od)
                  (es with gas_obs := gs) =

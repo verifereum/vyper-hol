@@ -60,6 +60,8 @@ Definition expr_sim_inv_def:
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              cenv.ce_var_type id = SOME ty) /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+               cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>

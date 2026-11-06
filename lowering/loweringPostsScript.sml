@@ -7,7 +7,7 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext vyperValue vyperAST
   valueEncoding valueEncodingProofs vyperTypeSystem
-  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps
+  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps supportedExprTraverse
 Libs
   monadsyntax
 
@@ -198,6 +198,77 @@ Definition expr_val_at_def:
            val_footprint tv v = 0)
 End
 
+(* expr_val_at without its local-region case: the value of type t held by
+   op sits in one of the expression's own allocations (clear of every live
+   local) or occupies no bytes.  An internal call whose value is laid out
+   at the callee's declared return type, not its annotation
+   (post_value_type), hands out its own return buffer, never a pointer
+   into a local. *)
+Definition expr_val_own_def:
+  expr_val_own cenv cx t sa sb es v op s <=>
+    !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
+      ?w. eval_operand op s = SOME w /\
+          ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+                       (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                   b + sz <= lb \/ lb + lsz <= b)) \/
+           val_footprint tv v = 0)
+End
+
+(* The type at which expr_post and vv_post describe e's value: the type its
+   lowered memory is laid out at.  An internal call's value is its callee's
+   return buffer, laid out at the callee's declared return type
+   (lowered_value_type), which a widening call site (a DynArray[Bytes[32], 2]
+   result used as DynArray[Bytes[64], 2]) annotates with a wider type of
+   another stride.  A word or bytestring value reads the same at either type,
+   so those stay at the annotation; every other expression's value is laid
+   out at its annotation. *)
+Definition post_value_type_def[simp]:
+  post_value_type cenv (Call ty (IntCall fid) args drv) =
+    (if is_word_type ty \/ is_bytestring_type ty then ty
+     else lowered_value_type cenv (Call ty (IntCall fid) args drv)) /\
+  post_value_type cenv e = expr_type e
+End
+
+Theorem post_value_type_word[simp]:
+  !cenv e. is_word_type (expr_type e) ==> post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `e` >> gvs[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def]
+QED
+
+Theorem post_value_type_bytestring[simp]:
+  !cenv e. is_bytestring_type (expr_type e) ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `e` >> gvs[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def]
+QED
+
+Theorem post_value_type_not_int_call[simp]:
+  !cenv e. (!ty fid args drv. e <> Call ty (IntCall fid) args drv) ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `e` >> simp[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> simp[post_value_type_def]
+QED
+
+Theorem post_value_type_lowered:
+  !cenv e. lowered_value_type cenv e = expr_type e ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  irule post_value_type_not_int_call >> metis_tac[]
+QED
+
+
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
    es', the operand op holding v (and, for a memory-backed value, placed as
@@ -217,8 +288,10 @@ End
 Definition expr_post_def:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
     stmt_state_rel ctx func cenv cx es' s /\
-    expr_val_rel cx (expr_type e) v op s /\
-    expr_val_at cenv cx (expr_type e) sa sb es' v op s /\
+    expr_val_rel cx (post_value_type cenv e) v op s /\
+    expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op s /\
+    (post_value_type cenv e <> expr_type e ==>
+     expr_val_own cenv cx (post_value_type cenv e) sa sb es' v op s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -292,14 +365,19 @@ Definition immutable_holds_def:
 End
 
 (* A compiled value holds the value read from the captured source result
-   at es.  Located values retain their expression type and location;
-   memory words also retain their typed encoding.  No current compiler
+   at es.  Located values retain their type and location: the type t the
+   value is described at, but for a bytestring in memory, whose layout does
+   not depend on its bound, which may carry another bytestring type (an
+   internal call's narrower declared return type); memory words also
+   retain their typed encoding.  No current compiler
    case returns a calldata pointer. *)
 Definition vv_holds_def:
   (vv_holds cenv cx t tv (StackValue t' op) es s <=>
      ?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
   (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
-     t' = t /\
+     (t' = t \/
+      p.ptr_location = LocMemory /\ is_bytestring_type t /\
+      is_bytestring_type t') /\
      ?w. eval_operand p.ptr_operand s = SOME w /\
          case p.ptr_location of
            LocMemory =>
@@ -339,12 +417,78 @@ Definition vv_at_def:
             val_footprint tvt v = 0))
 End
 
+(* vv_at without its local-region case (expr_val_own). *)
+Definition vv_own_def:
+  (vv_own cenv cx t sa sb es tv (StackValue t' op) s <=>
+     !v. read_result cx tv es = (INL v, es) ==> expr_val_own cenv cx t sa sb es v op s) /\
+  (vv_own cenv cx t sa sb es tv (LocatedValue t' p) s <=>
+     p.ptr_location = LocMemory ==>
+     !v tvt. read_result cx tv es = (INL v, es) /\
+             evaluate_type (get_tenv cx) t = SOME tvt ==>
+       ?w. eval_operand p.ptr_operand s = SOME w /\
+           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+                        (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                    b + sz <= lb \/ lb + lsz <= b)) \/
+            val_footprint tvt v = 0))
+End
+
+(* expr_has_effect by constructor, for the expressions whose posts the
+   simulation cases build. *)
+Theorem expr_has_effect_thm[simp]:
+  (expr_has_effect (Pop ty tgt) <=> T) /\
+  (expr_has_effect (Call ty ct es d) <=> T) /\
+  (expr_has_effect (Literal ty l) <=> F) /\
+  (expr_has_effect (Name ty n) <=> F) /\
+  (expr_has_effect (TopLevelName ty id) <=> F) /\
+  (expr_has_effect (FlagMember ty id f) <=> F) /\
+  (expr_has_effect (Attribute ty e1 f) <=> expr_has_effect e1) /\
+  (expr_has_effect (Subscript ty e1 e2) <=>
+     expr_has_effect e1 \/ expr_has_effect e2)
+Proof
+  simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def]
+QED
+
+(* A storage or transient pointer reads live slots at es: no byte of the
+   slots it reads is dead but those its own type leaves dead
+   (storage_read_live). *)
+Definition vv_storage_live_def[simp]:
+  (vv_storage_live cx (StackValue _ _) es s <=> T) /\
+  (vv_storage_live cx (LocatedValue t p) es s <=>
+     (p.ptr_location = LocStorage ==>
+      !w tvt. eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME tvt ==>
+        storage_read_live cx F (get_storage cx es F) w tvt) /\
+     (p.ptr_location = LocTransient ==>
+      !w tvt. eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME tvt ==>
+        storage_read_live cx T (get_storage cx es T) w tvt))
+End
+
+Theorem vv_storage_live_gas_obs[simp]:
+  vv_storage_live cx vv (es with gas_obs := gs) s <=> vv_storage_live cx vv es s
+Proof
+  Cases_on `vv` >> simp[get_storage_def]
+QED
+
+Theorem vv_storage_live_inst_idx[simp]:
+  vv_storage_live cx vv es (s with vs_inst_idx := n) <=> vv_storage_live cx vv es s
+Proof
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  Cases_on `vv` >> simp[]
+QED
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
     stmt_state_rel ctx func cenv cx es' s /\
-    vv_holds cenv cx (expr_type e) tv vv es' s /\
-    vv_at cenv cx (expr_type e) sa sb es' tv vv s /\
+    vv_holds cenv cx (post_value_type cenv e) tv vv es' s /\
+    vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
+    (post_value_type cenv e <> expr_type e ==>
+     vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
+    (~expr_has_effect e ==> vv_storage_live cx vv es' s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

@@ -19,6 +19,6 @@ Proof
      drule raw_revert_pre_arg >> strip_tac >> gvs[] >>
      irule raw_revert_vv_sim >>
      gvs[body_exprs_ok_def, body_expr_ok_def] >> metis_tac[]) >>
-  drule expr_sim_case_of_vv >> strip_tac >>
+  drule_at (Pos last) expr_sim_case_of_vv >> simp[] >> strip_tac >>
   fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED

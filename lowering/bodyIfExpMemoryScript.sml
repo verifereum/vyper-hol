@@ -5,7 +5,7 @@ Ancestors
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
-  bodyMemoryDefs exprSimDefs vyperAST vyperInterpreter memSafeRun allocaHistory
+  bodyMemoryDefs exprSimMemDefs exprSimDefs vyperAST vyperInterpreter memSafeRun allocaHistory
 
 Theorem frag_exec_assign_mem:
   !ctx st st' src out P Q R.
@@ -283,7 +283,8 @@ Theorem ifexp_jnz_arm_mem:
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= bs.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= bs.cs_next_id /\
     bm.cs_next_id <= sb.cs_next_id /\
-    expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
+    expr_type e = t /\ post_value_type cenv e = expr_type e /\
+    (!x. not_fresh_at sa x ==> x <> rv) /\
     local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     s0.vs_alloca_next <= tt.vs_alloca_next ==>
@@ -345,7 +346,7 @@ Theorem ifexp_branch_sim_mem:
     expr_sim_mem ctx func cenv cx ty e es1 /\
     (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV bv), es1) /\
     (do result <- eval_expr cx e; read_result cx result od) es1 = (res, es') /\
-    expr_res_ok res /\ expr_type e = t /\
+    expr_res_ok res /\ expr_type e = t /\ post_value_type cenv e = expr_type e /\
     res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
     lower_value compile_expr cenv (BaseT BoolT) c sa = (cond_op, s1) /\
     emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
@@ -433,6 +434,7 @@ QED
 Theorem compile_ifexp_forced_frag_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
@@ -525,6 +527,7 @@ QED
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
@@ -588,7 +591,8 @@ Proof
     s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s` >>
   qexists_tac `expr_exit res` >>
   simp[] >> reverse conj_tac
-  >- (irule compile_ifexp_forced_frag_mem >> simp[] >> qexists_tac `ty` >>
+  >- (irule compile_ifexp_forced_frag_mem >> simp[post_value_type_word] >>
+      qexists_tac `ty` >>
       simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >> rpt strip_tac >>
   drule exprSimUnwrapTheory.expr_post_of_vv_post_stack >> metis_tac[]

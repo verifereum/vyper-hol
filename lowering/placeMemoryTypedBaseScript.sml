@@ -2,7 +2,7 @@ Theory placeMemoryTypedBase
 Ancestors
   placeMemoryPrimitiveForward context exprLoweringProps compileEnv
   venomState venomInst venomExecSemantics emitHelper valueEncodingProps
-  entryDecodeProps immutableMemoryFrame list rich_list pair finite_map
+  entryDecodeProps exprSimProps immutableMemoryFrame list rich_list pair finite_map
   ASCIInumbers emitHelperProps exprSimAggregateEncoding vyperTypeArgFits
   valueEncodingProofs sorting vyperTypeDefaults valueEncodingTyping
   vyperTypeExprSoundness alist
