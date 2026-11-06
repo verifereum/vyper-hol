@@ -50,7 +50,7 @@ Proof
   Cases_on `vv` >> simp[vv_at_def, expr_val_at_def]
 QED
 
-Theorem vv_post_rebase_mem_src[local]:
+Theorem vv_post_rebase_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s ==>
   vv_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sm s ee tv vv s
@@ -58,7 +58,7 @@ Proof
   simp[vv_post_def, vv_at_start_var_mem_src, locals_kept_refl]
 QED
 
-Theorem expr_post_rebased_operand_mem_src[local]:
+Theorem expr_post_rebased_operand_mem_src:
   expr_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sb s ee v op u /\
   (?x. dst = Var x /\ not_fresh_at sm x) /\
