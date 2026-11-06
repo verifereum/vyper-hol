@@ -1,7 +1,7 @@
 (* Exceptional produced types are never returned at storage locations. *)
 Theory exprPtrUnwrapStorageShape
 Ancestors
-  exprLowering compileEnv context abiBuiltinDispatchCorrect
+  exprLowering compileEnv context abiBuiltinDispatchCorrect exprSimHypsDefs
 
 Theorem compile_literal_located_memory[local]:
   compile_literal_vv ty lit sa = (LocatedValue t p,sb) ==> p.ptr_location = LocMemory
@@ -27,6 +27,14 @@ Proof
   gvs[AllCaseEqs(), base_ptr_def, mk_ptr_def]
 QED
 
+Theorem names_builtin_concat[local]:
+  !n args. ~names_builtin (Concat n) args
+Proof
+  `!bt args. names_builtin bt args ==> !n. bt <> Concat n` suffices_by
+    metis_tac[] >>
+  ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
+QED
+
 Theorem compile_abiencode_located_memory[local]:
   compile_type_builtin_dispatch_body cfn cenv vt ty (AbiEncode ensure method)
     ret args sa = (LocatedValue t p,sb) ==> p.ptr_location = LocMemory
@@ -46,6 +54,13 @@ Proof
   Cases_on `e` >> simp[lowered_value_type_def]
   >- (simp[Once compile_expr_raw_def, compile_expr_body_def] >>
       rpt strip_tac >> drule compile_literal_located_memory >> simp[])
+  >- (rename1 `Builtin ann bt args` >> Cases_on `bt` >>
+      simp[lowered_value_type_def] >>
+      rpt strip_tac >>
+      `~names_builtin (Concat n) args` by simp[names_builtin_concat] >>
+      gvs[compile_expr_builtin_dispatch,
+          Once compile_builtin_dispatch_component_eq] >>
+      rpt (pairarg_tac >> gvs[]) >> gvs[base_ptr_def])
   >- (rename1 `TypeBuiltin ann tb ret args` >> Cases_on `tb` >>
       simp[lowered_value_type_def] >>
       simp[Once compile_expr_component_eq] >>
