@@ -1,6 +1,6 @@
 (* Joint count validation, count store and scratch-index initialization. *)
 Theory decoderArrayInitPtr
-Ancestors decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
+Ancestors decoderSetupStepPtr ptrSafetyTransport decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
   decoderNavigationPtr calldataClampPtr typedCopyPtr bodyPtrDefs
   compileEnv emitHelper venomInst venomExecSemantics venomState words list
   rich_list arithmetic finite_map ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
@@ -321,7 +321,7 @@ Proof
   qexistsl_tac [`H`,`u`] >> simp[] >> metis_tac[]
 QED
 
-Theorem calldata_array_header_endpoint_ptr:
+Theorem calldata_array_header_endpoint_ptr_core:
   !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
   abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
@@ -335,10 +335,16 @@ Theorem calldata_array_header_endpoint_ptr:
     ptr_covers H u root t totalbytes /\
     op_taint u cnt = {} /\ op_prov H cnt = NONE /\
     u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
-    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
@@ -355,7 +361,7 @@ Proof
   pure_asm_rewrite_tac [] >>
   disch_then (mp_then Any strip_assume_tac run_inst_seq_append_ok) >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
-  drule_all emit_count_load_endpoint_ptr >>
+  drule_all emit_count_load_endpoint_ptr_core >>
   disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `lookup_var root s1 = SOME (n2w d) /\ ptr_covers H u root s1 totalbytes` by
     (conj_tac >- metis_tac[] >> irule ptr_covers_frame >> metis_tac[]) >>
@@ -403,14 +409,23 @@ Proof
      `eval_operand cnt (s1 with vs_inst_idx := SUC s.vs_inst_idx) = SOME w` by
        (Cases_on `cnt` >> fs[eval_operand_def, lookup_var_def]) >>
      simp[Abbr `u2`, ADD1] >> fs[lookup_var_def] >> metis_tac[] ) >>
+  `u2.t_imm = tn.t_imm` by
+    simp[Abbr `u2`, step_taint_def, mk_inst_def, set_var_taint_def, imm_taint_def] >>
   suspend "header_finish"
 QED
 
-Resume calldata_array_header_endpoint_ptr[header_finish]:
+Resume calldata_array_header_endpoint_ptr_core[header_finish]:
   `same_blocks sa sm /\ same_blocks sm sb` by
     metis_tac[emit_op_same_blocks, emit_void_same_blocks] >>
   `cs_extends sa sm /\ cs_extends sm sb` by
     (conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def] >> metis_tac[]) >>
+  `!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u2
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
+    (suspend "header_continuation") >>
   qexistsl_tac [`H`,`u2`] >> conj_tac
   >- (irule frag_exec_ptr_seq >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
@@ -423,7 +438,62 @@ Resume calldata_array_header_endpoint_ptr[header_finish]:
   simp[]
 QED
 
-Finalise calldata_array_header_endpoint_ptr
+Resume calldata_array_header_endpoint_ptr_core[header_continuation]:
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\
+    LENGTH sm.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+    (drule emitted_insts_emit_op >> strip_tac >> fs[same_blocks_def]) >>
+  `!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx)` suffices_by
+    (strip_tac >> qpat_x_assum `!D lower ctx' func. _`
+      (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> gvs[]) >>
+  `!fuel. ptr_inst_ok D lower fuel ctx' func H u
+    (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
+     conj_tac >- (gvs[allocas_from_def] >> metis_tac[]) >>
+     qexists_tac `0` >> simp[] >>
+     irule ptr_inst_ok_mstore >> simp[] >>
+     gvs[ptr_covers_def, lookup_var_def]) >>
+  irule setup_instruction_continuation >>
+  qexistsl_tac [`H`, `mk_inst sm.cs_next_id MSTORE [Var root;cnt] []`,
+    `sm`, `sb`, `t with vs_inst_idx := SUC s.vs_inst_idx`, `u2`] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  conj_tac >- gvs[ADD1] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+    eval_operand_def, mstore_def, write_memory_with_expansion_def] >>
+  Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def, mstore_def,
+    write_memory_with_expansion_def, w2n_n2w]
+QED
+
+Finalise calldata_array_header_endpoint_ptr_core
+
+Theorem calldata_array_header_endpoint_ptr:
+  !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?H u. frag_exec_ptr cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = H /\ z = u /\
+      v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
+    ptr_covers H u root t totalbytes /\
+    op_taint u cnt = {} /\ op_prov H cnt = NONE /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >> drule_all calldata_array_header_endpoint_ptr_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[]
+QED
 
 Theorem calldata_array_init_endpoint_ptr:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
@@ -506,7 +576,7 @@ Proof
     ptr_covers H1 u1 root (s1 with vs_inst_idx := s.vs_inst_idx + 4) totalbytes /\
     ~(s1 with vs_inst_idx := s.vs_inst_idx + 4).vs_halted` by
     (gvs[ptr_covers_def, lookup_var_def]) >>
-  drule_all calldata_array_header_endpoint_ptr >>
+  drule_all calldata_array_header_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >>
   simp[NoAsms] >> strip_tac >>
   suspend "joint_index"
