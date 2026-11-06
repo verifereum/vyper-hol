@@ -52,6 +52,19 @@ Proof
   drule_all alloca_site_registered_below >> decide_tac
 QED
 
+Theorem normalize_alloc_other_sites[local]:
+  exec_alloca (mk_inst aid ALLOCA [Lit n] [out]) s n = OK t ==>
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!j. j <> aid ==> FLOOKUP t.vs_allocas j = FLOOKUP s.vs_allocas j)
+Proof
+  Cases_on `FLOOKUP s.vs_allocas aid`
+  >- (simp[exec_alloca_def, mk_inst_def, update_var_def] >>
+      rpt strip_tac >> gvs[FLOOKUP_UPDATE]) >>
+  PairCases_on `x` >>
+  simp[exec_alloca_def, mk_inst_def, update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* The terminal block certificate is supplied by the actual Return suffix. *)
 Theorem normalize_return_store_mem_cont:
   compile_alloc_buffer (type_memory_bytes cenv dty) sb = (buf,sc) /\
@@ -86,12 +99,16 @@ Theorem normalize_return_store_mem_cont:
     b + type_memory_size dtv <= t.vs_alloca_next /\
     b + type_memory_size dtv < dimword (:256) /\
     alloca_room ctx func t /\ alloca_inv t /\
-    FLOOKUP t.vs_allocas sb.cs_next_id = SOME (b,type_memory_bytes cenv dty)
+    FLOOKUP t.vs_allocas sb.cs_next_id = SOME (b,type_memory_bytes cenv dty) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!aid. aid <> sb.cs_next_id ==>
+      FLOOKUP t.vs_allocas aid = FLOOKUP s.vs_allocas aid)
 Proof
   strip_tac >> drule_all normalize_return_typed_windows >>
   disch_then (qx_choose_then `dtv` (qx_choose_then `t`
     (qx_choose_then `b` (map_every assume_tac o CONJUNCTS)))) >>
   `b < dimword (:256)` by decide_tac >>
+  drule_all normalize_alloc_other_sites >> strip_tac >>
   drule_all normalize_alloc_registered >> disch_tac >>
   drule_all normalize_alloc_mem_cont >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
