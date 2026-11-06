@@ -484,3 +484,147 @@ Proof
   irule scalar_seq_runtime_frame_trans >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem scalar_optional_check_decompose:
+  (if enabled then
+     comp_bind (emit_op opc [x;Lit w]) (\a.
+       comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+   else comp_return ()) sa = (res,sb) ==>
+  (if enabled then
+     ?a b. emitted_insts sa sb =
+       [mk_inst sa.cs_next_id opc [x;Lit w] [a];
+        mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+        mk_inst (sa.cs_next_id+2) ASSERT [Var b] []] /\
+       (!p. not_fresh_at sa p ==> p <> a /\ p <> b)
+   else sb = sa) /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  same_blocks sa sb /\
+  (!p. not_fresh_at sa p ==> not_fresh_at sb p)
+Proof
+  Cases_on `enabled` >> simp[comp_bind_def, comp_return_def]
+  >- (rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+      imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+      imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+      gvs[same_blocks_def] >>
+      simp[emitted_insts_def, DROP_LENGTH_APPEND] >> conj_tac
+      >- (qexistsl_tac [`STRING #"%" (toString sa.cs_next_var)`,
+                       `STRING #"%" (toString (sa.cs_next_var+1))`] >>
+          simp[not_fresh_at_def] >> rpt strip_tac >>
+          first_x_assum irule >> simp[]) >>
+      gvs[not_fresh_at_def] >> rpt strip_tac >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  simp[emitted_insts_def, same_blocks_def]
+QED
+
+Theorem scalar_two_checks_decompose:
+  comp_ignore_bind
+    (if c1 then comp_bind (emit_op op1 [x;Lit w1]) (\a.
+       comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+     else comp_return ())
+    (comp_ignore_bind
+      (if c2 then comp_bind (emit_op op2 [x;Lit w2]) (\a.
+         comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+       else comp_return ())
+      (emit_op opc [x;Lit scale])) sa = (out,sb) ==>
+  ?s1 s2.
+    emit_op opc [x;Lit scale] s2 = (out,sb) /\
+    emitted_insts sa sb = emitted_insts sa s1 ++ emitted_insts s1 s2 ++ emitted_insts s2 sb /\
+    (!p. not_fresh_at sa p ==> not_fresh_at s1 p) /\
+    (!p. not_fresh_at s1 p ==> not_fresh_at s2 p) /\
+    (if c1 then ?a b. emitted_insts sa s1 =
+       [mk_inst sa.cs_next_id op1 [x;Lit w1] [a];
+        mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+        mk_inst (sa.cs_next_id+2) ASSERT [Var b] []] /\
+        (!p. not_fresh_at sa p ==> p <> a /\ p <> b)
+     else s1 = sa) /\
+    (if c2 then ?a b. emitted_insts s1 s2 =
+       [mk_inst s1.cs_next_id op2 [x;Lit w2] [a];
+        mk_inst (s1.cs_next_id+1) ISZERO [Var a] [b];
+        mk_inst (s1.cs_next_id+2) ASSERT [Var b] []] /\
+        (!p. not_fresh_at s1 p ==> p <> a /\ p <> b)
+     else s2 = s1)
+Proof
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  qpat_assum `(if c1 then _ else _) sa = _`
+    (mp_then Any strip_assume_tac scalar_optional_check_decompose) >>
+  qpat_assum `(if c2 then _ else _) cs' = _`
+    (mp_then Any strip_assume_tac scalar_optional_check_decompose) >>
+  drule emit_op_extends >> strip_tac >>
+  qexistsl_tac [`cs'`,`cs''`] >> simp[] >>
+  `emitted_insts sa cs'' = emitted_insts sa cs' ++ emitted_insts cs' cs''` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sa sb = emitted_insts sa cs'' ++ emitted_insts cs'' sb` by
+    (irule emitted_insts_append >> simp[same_blocks_def] >> metis_tac[]) >>
+  simp[APPEND_ASSOC]
+QED
+
+Theorem scalar_optional_check_uniform_certificate:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  (if enabled then ?a b. emitted_insts sa sb =
+       [mk_inst sa.cs_next_id opc [x;Lit w] [a];
+        mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+        mk_inst (sa.cs_next_id+2) ASSERT [Var b] []] /\
+       (!p. not_fresh_at sa p ==> p <> a /\ p <> b)
+   else sb = sa) /\
+  (run_inst_seq (emitted_insts sa sb) s = OK t \/
+   run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
+  !k. ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) H th /\
+    (!op. op_prov G op = NONE /\ op_taint tn op = {} ==>
+      op_prov H op = NONE /\ op_taint th op = {}) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  Cases_on `enabled` >> pure_rewrite_tac[COND_CLAUSES] >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- (qpat_x_assum `?a b. _` strip_assume_tac >>
+      qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
+      `op_prov G (Lit w) = NONE /\ op_taint tn (Lit w) = {}` by
+        simp[op_prov_def, op_taint_def] >>
+      drule_all scalar_checked_pair_uniform_certificate >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+      strip_tac >> gen_tac >> first_x_assum (qspec_then `k` strip_assume_tac) >>
+      qexistsl_tac [`H`,`th`] >> simp[] >> metis_tac[]) >>
+  gvs[emitted_insts_def] >> gen_tac >> qexistsl_tac [`G`,`tn`] >>
+  simp[inst_seq_ptr_def]
+QED
+
+Theorem scalar_optional_check_instruction_filter:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  (if enabled then ?a b. emitted_insts sa sb =
+       [mk_inst sa.cs_next_id opc [x;Lit w] [a];
+        mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+        mk_inst (sa.cs_next_id+2) ASSERT [Var b] []] /\
+       (!p. not_fresh_at sa p ==> p <> a /\ p <> b)
+   else sb = sa) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
+Proof
+  Cases_on `enabled` >> pure_rewrite_tac[COND_CLAUSES] >> strip_tac
+  >- gvs[MEM, mk_inst_def, is_terminator_def] >>
+  gvs[emitted_insts_def]
+QED
+
+Theorem scalar_optional_check_runtime_frame:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  (if enabled then ?a b. emitted_insts sa sb =
+       [mk_inst sa.cs_next_id opc [x;Lit w] [a];
+        mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+        mk_inst (sa.cs_next_id+2) ASSERT [Var b] []] /\
+       (!p. not_fresh_at sa p ==> p <> a /\ p <> b)
+   else sb = sa) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s /\
+  (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s)
+Proof
+  Cases_on `enabled` >> pure_rewrite_tac[COND_CLAUSES] >> strip_tac
+  >- (qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
+      drule_all scalar_checked_pair_runtime_frame >> strip_tac >> simp[] >> metis_tac[]) >>
+  gvs[emitted_insts_def, run_inst_seq_def]
+QED
