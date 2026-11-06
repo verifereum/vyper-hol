@@ -87,4 +87,29 @@ Proof
       transient_agree_except_def, storage_agree_except_def, word_agree_except_def]
 QED
 
+Theorem call_completion_taint_masks:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  rq.cr_kind = MessageCall /\
+  rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+  rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
+  consume_call_outcome rq ro rs s = (w,post) /\
+  take_outcome rq s.vs_outcomes = (oc,rest) /\
+  adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs) = (ac,ts,lg) ==>
+  (step_taint inst s post tn).t_stor =
+    (if ~rq.cr_static /\ ~computed_precompile rq /\ s.vs_outcomes <> [] /\
+        (HD s.vs_outcomes).co_success then {} else tn.t_stor) /\
+  (step_taint inst s post tn).t_trans =
+    (if ~rq.cr_static /\ ~computed_precompile rq /\ s.vs_outcomes <> [] /\
+        (HD s.vs_outcomes).co_success then {} else tn.t_trans) /\
+  (step_taint inst s post tn).t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all call_completion_fields >> strip_tac >>
+  `adopt_outcome rq oc (rq.cr_accounts,rq.cr_tStorage,s.vs_logs) = (ac,ts,lg)` by
+    metis_tac[] >>
+  drule_all call_adoption_reset >>
+  disch_then (qspec_then `s.vs_requests` strip_assume_tac) >>
+  gvs[step_taint_def, adopt_reset_def, store_taint_def, imm_taint_def, MEM,
+      Excl "consume_call_outcome_eq"]
+QED
+
 val _ = export_theory();
