@@ -103,7 +103,7 @@ QED
    a nonempty no-SUB suffix ending non-ASSERT. No contract below is implied
    merely by an opcode observation or by a clean fragment in isolation.
 
-   Additional accepted whole-helper contracts (E0114-E0117):
+   Additional accepted whole-helper contracts (E0114-E0118):
    - compile_int_clamp: pop_compile_int_clamp_boundary in IntClampBoundary;
      load_bytestring_as_word: pop_load_bytestring_as_word_boundary in
      BytesWordBoundary (SAR/SHR only); compile_type_convert:
@@ -111,6 +111,10 @@ QED
    - SmallMathBoundary: pop_compile_addmod_boundary,
      pop_compile_mulmod_boundary, pop_compile_neg_boundary,
      pop_compile_builtin_abs_boundary, pop_compile_select_boundary.
+   - MiscGuardBoundary: pop_compile_as_wei_value_int_boundary (both signedness
+     branches), pop_compile_blockhash_boundary,
+     pop_compile_assert_slice_bounds_boundary. Slice allocation/copy and wei
+     dispatcher restrictions are NOT certified by these local contracts.
      These names refer to bodyPtrPop-prefixed theories. They are unconditional
      producer contracts, not compiler-wide containment or recursion results.
 
@@ -143,6 +147,7 @@ QED
       operand. Decimal helper (246,251) is source-excluded by that form.
       builtinMisc compile_blockhash (163,170/173): NUMBER/SUB then
       SLT/ISZERO/ASSERT and LT/ASSERT, ending BLOCKHASH.
+      Integer wei and blockhash are now certified in MiscGuardBoundary.
       compile_ecrecover (32,50), compile_ecadd_points (105,130),
       compile_ecmul_point (135,154): allocation/stores/STATICCALL/ASSERT;
       ecrecover ends MLOAD, point helpers return at ASSERT. No callbacks,
@@ -151,7 +156,8 @@ QED
       ECAdd/ECMul dispatch destinations (exprLowering 3176-3198).
       builtinBytes compile_assert_slice_bounds (26,35): ADD/LT/GT/OR/
       ISZERO/ASSERT; reachable via CalldataSlice -> compile_slice_calldata.
-      Its allocation preamble/copy suffix also need composition contracts.
+      The bounds helper is now certified in MiscGuardBoundary; its allocation
+      preamble/copy suffix still need composition contracts.
       Uint2Str uses compile_uint2str and block transitions; no direct ASSERT.
    C. External calls and ABI:
       exprLowering compile_extcodesize_check (883,886): EXTCODESIZE/ASSERT;
