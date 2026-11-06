@@ -141,7 +141,7 @@ Proof
      simp[Abbr `bb`, get_instruction_def,
           mk_inst_def, is_terminator_def, update_var_def] >>
      Cases_on `a = b` >>
-     gvs[step_inst_base_def, bool_to_word_def, eval_operand_def,
+     gvs[step_inst_base_opcode_eqs, bool_to_word_def, eval_operand_def,
           lookup_var_def, FLOOKUP_UPDATE, jump_to_def, update_var_def]) >>
   fs[]
 QED
@@ -388,8 +388,9 @@ Theorem dynarray_for_body_entry:
   ?s2. dynarray_entry_ready ctx func bc cx es id tv v sb0 sa ov tot ep st s s2
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[dynarray_entry_ready_def] >>
-  drule_all dynarray_for_body_entry_run >>
-  disch_then (qspecl_then [`j3`, `j4`, `j5`] strip_assume_tac) >>
+  mp_tac (SPEC_ALL dynarray_for_body_entry_run) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
   `run_inst_seq sb0.cs_current_insts s = OK t` by metis_tac[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     sb0.cs_current_insts` by
@@ -400,7 +401,10 @@ Proof
     simp[mk_inst_def] >>
   `sb0.cs_current_insts = sb0.cs_current_insts` by simp[] >>
   drule_all array_body_prefix_continuation >> strip_tac >>
-  `ret_pc_ok bc st t` by (irule dynarray_ret_pc_copy_frame >> metis_tac[]) >>
+  `ret_pc_ok bc st t` by
+    (mp_tac dynarray_ret_pc_copy_frame >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   qexists_tac `s2` >> simp[] >>
   `!x. lookup_var x s2 = lookup_var x t` by simp[lookup_var_def] >>
   conj_tac
@@ -469,8 +473,9 @@ Theorem dynarray_entry_ready_runtime:
 Proof
   strip_tac >>
   `ret_pc_ok cenv st s2` by
-    (irule dynarray_ret_pc_copy_frame >>
-     fs[dynarray_entry_ready_def, array_loop_inv_def] >> metis_tac[]) >>
+    (mp_tac (Q.INST [`bc` |-> `cenv`, `t` |-> `s2`] dynarray_ret_pc_copy_frame) >>
+     impl_tac >- fs[dynarray_entry_ready_def, array_loop_inv_def] >>
+     simp[]) >>
   fs[dynarray_entry_ready_def, array_loop_inv_def] >>
   irule array_saved_operand_frame >> metis_tac[]
 QED

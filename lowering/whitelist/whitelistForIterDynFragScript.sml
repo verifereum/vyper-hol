@@ -97,6 +97,9 @@ Proof
        vv_operand_def, mk_ptr_def, is_slot_addressed_def,
        compile_ptr_load_def, word_scale_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  (* ~30 nested binds; peel them in chunks so no single step is long *)
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   metis_tac[]
 QED
@@ -478,7 +481,7 @@ Proof
   strip_tac >> fs[ALL_DISTINCT] >>
   `step_inst_base (mk_inst i1 ASSIGN [Lit 0w] [idx]) s =
    OK (update_var idx 0w s)` by
-    simp[mk_inst_def, step_inst_base_def, eval_operand_def] >>
+    simp[mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def] >>
   qabbrev_tac `s1 = update_var idx 0w s` >>
   `L < dimword (:256)` by decide_tac >>
   `bool_to_word (w2n (n2w L : bytes32) > w2n (n2w c : bytes32)) = 0w` by
@@ -554,7 +557,7 @@ Proof
   rename1 `lookup_var p s1 = SOME dst` >>
   drule_all array_alloca_frame >> strip_tac >>
   `step_inst_base ainst sl = OK s1` by
-    simp[step_inst_base_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, eval_operand_def] >>
   `gas_marked_path F ctx func s0 0 (OK (jump_to entry s1))` by
     (qspecl_then [`[mk_inst mi MLOAD [saved_base] [lv]; ainst]`, `s0`, `s1`,
        `ctx`, `func`,
