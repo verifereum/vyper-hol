@@ -424,7 +424,7 @@ Proof
   simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
-Theorem imm_typed_path_memory[local]:
+Theorem imm_typed_path_memory:
   !path tv v k ptv pv b mem.
     value_has_type tv v /\ well_formed_type_value tv /\
     mem_path_offset tv path = SOME (k,ptv) /\
