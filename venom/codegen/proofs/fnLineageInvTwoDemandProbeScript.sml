@@ -472,3 +472,117 @@ Proof
   qexistsl_tac [`NONE`,`F`] >> gvs[init_cleanup_plan_state_def]
 QED
 
+
+Theorem splice_two_y_data:
+  lookup_block "Y" splice_two_fn.fn_blocks =
+    SOME <|bb_label := "Y"; bb_instructions := [mk_inst 84 STOP [] []]|> /\
+  cfg_preds_of (cfg_analyze splice_two_fn) "Y" = ["H"] /\
+  cfg_succs_of (cfg_analyze splice_two_fn) "Y" = [] /\
+  live_vars_at (liveness_analyze splice_two_fn) "Y" 0 = [] /\
+  live_vars_at (liveness_analyze splice_two_fn) "Y" 1 = [] /\
+  input_vars_from "H" [mk_inst 84 STOP [] []] [] = [] /\
+  (THE (lookup_block "Y" splice_two_fn.fn_blocks)) <> HD splice_two_fn.fn_blocks
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem splice_two_y_cleanup:
+  !q. q.ps_cleanup_height = NONE /\ ~q.ps_cleanup_promised ==>
+  clean_stack_plan (liveness_analyze splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn
+    (THE (lookup_block "Y" splice_two_fn.fn_blocks)) q =
+    popmany_plan (MAP Var (live_vars_at (liveness_analyze splice_two_fn) "H" 22)) q
+Proof
+  rpt strip_tac >>
+  `LENGTH (THE (lookup_block "H" splice_two_fn.fn_blocks)).bb_instructions = 22` by EVAL_TAC >>
+  simp[clean_stack_plan_def, splice_two_y_data, splice_two_schedule,
+       cleanup_elision_safe_without_height] >>
+  once_rewrite_tac[cj 5 splice_two_schedule] >> simp[]
+QED
+
+Theorem splice_two_h_end_live:
+  live_vars_at (liveness_analyze splice_two_fn) "H" 22 =
+  ["p_r";"p_q";"p_p";"p_o";"p_n";"p_m";"p_l";"p_k";"p_j";"p_i";"p_h";"p_g";"p_f";"p_e";"p_d";"p_c";"p_b";"p_a";"cond";
+   "r";"q";"p";"o";"n";"m";"l";"k";"j";"i";"h";"g";"f";"e";"d";"c";"b";"a"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem splice_two_y_pop:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops. popmany_plan (MAP Var (live_vars_at (liveness_analyze splice_two_fn) "H" 22)) q =
+    (ops,q with ps_stack := [])
+Proof
+  rpt strip_tac >> gvs[] >> rewrite_tac[splice_two_h_end_live] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem splice_two_y_block:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops r. generate_block_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    (THE (lookup_block "Y" splice_two_fn.fn_blocks)) q = SOME (ops,r) /\
+    r.ps_alloc.sa_next_offset = 608 /\ r.ps_alloc.sa_spill_base = 0 /\ r.ps_label_counter = 0
+Proof
+  gen_tac >> strip_tac >> drule splice_two_y_pop >> strip_tac >>
+  `q.ps_cleanup_height = NONE /\ ~q.ps_cleanup_promised` by
+    (gvs[] >> EVAL_TAC) >>
+  drule_all splice_two_y_cleanup >> strip_tac >>
+  `non_param_insts (THE (lookup_block "Y" splice_two_fn.fn_blocks)) = [mk_inst 84 STOP [] []] /\
+   bb_is_halting (THE (lookup_block "Y" splice_two_fn.fn_blocks)) /\
+   get_params (THE (lookup_block "Y" splice_two_fn.fn_blocks)).bb_instructions = [] /\
+   (!ops. ~revert_block_spills (THE (lookup_block "Y" splice_two_fn.fn_blocks)) ops)` by
+    (EVAL_TAC >> simp[]) >>
+  `<|bb_label := "Y"; bb_instructions := [mk_inst 84 STOP [] []]|> <> HD splice_two_fn.fn_blocks` by EVAL_TAC >>
+  gvs[splice_two_y_data] >>
+  qpat_x_assum `(ops,_) = popmany_plan _ _` (assume_tac o SYM) >>
+  simp[generate_block_plan_def, splice_two_y_data,
+       generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``, ``splice_two_fn``,
+     ``release_dead_spills``]) >>
+  simp[allocMonoTheory.release_dead_spills_next_offset,
+       allocMonoTheory.release_dead_spills_spill_base] >>
+  simp[stackPlanOpsTheory.release_dead_spills_def] >>
+  qmatch_goalsub_abbrev_tac `FOLDL f s xs` >>
+  `!ys ps. (FOLDL f ps ys).ps_label_counter = ps.ps_label_counter` by
+    (Induct >> simp[Abbr `f`] >> rpt gen_tac >>
+     Cases_on `h` >> simp[]) >>
+  simp[Abbr `s`]
+QED
+
+Theorem splice_two_y_return:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops r. generate_fn_plan_aux (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    ["Y"] ["H";"E"] q = SOME (ops,["Y";"H";"E"],r) /\
+    r.ps_alloc.sa_next_offset = 608 /\ r.ps_alloc.sa_spill_base = 0 /\ r.ps_label_counter = 0
+Proof
+  gen_tac >> strip_tac >> drule splice_two_y_block >> strip_tac >>
+  qpat_x_assum `q = _` kall_tac >>
+  gvs[splice_two_y_data] >>
+  simp[Once generate_fn_plan_aux_def, splice_two_y_data] >>
+  simp[Once generate_fn_plan_aux_def] >>
+  simp[Once generate_fn_plan_aux_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
