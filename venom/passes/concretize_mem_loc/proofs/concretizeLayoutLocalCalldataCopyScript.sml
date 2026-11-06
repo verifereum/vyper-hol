@@ -146,10 +146,8 @@ Theorem concretize_clean_write_geometry:
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
   eval_operand opd s = SOME dst /\ post.vs_allocas = s.vs_allocas /\
   mem_write_ops inst = SOME access /\ access.iao_ofst = opd /\
-  source_memory_write_ranges inst s = [(w2n dst,len)] /\
-  step_writes inst s post = [(w2n dst,len)] /\
-  (!dstT. eval_operand opd t = SOME dstT ==>
-    step_writes inst t t = [(w2n dstT,len)]) ==>
+  source_memory_write_ranges inst s = [(w2n dst,cap)] /\ len <= cap /\
+  step_writes inst s post = [(w2n dst,len)] ==>
   ?dstT. eval_operand opd t = SOME dstT /\
     (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+len ==>
@@ -170,10 +168,10 @@ Proof
       qexists_tac `dstT` >> simp[] >> rpt strip_tac >>
       irule joint_relocation_demand_retained >> simp[range_bytes_def] >> metis_tac[]) >>
   `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+len <= lo /\ w2n dstT = w2n dst) \/
+    ((w2n dst+cap <= lo /\ w2n dstT = w2n dst) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\ w2n dst+len <= b+sz /\
+         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\ w2n dst+cap <= b+sz /\
        w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
     (irule concretize_memory_access_geometry >> simp[] >>
      conj_tac >- (qexists_tac `access` >> simp[]) >>
@@ -183,8 +181,9 @@ Proof
   pop_assum strip_assume_tac >> qexists_tac `dstT` >> asm_rewrite_tac[] >>
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >>
-     qexists_tac `len` >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (rpt strip_tac >> `i < cap` by decide_tac >>
+     irule relocation_pair_range >>
+     qexists_tac `cap` >> asm_rewrite_tac[] >> metis_tac[]) >>
   (conj_tac >- suspend "written") >> suspend "retained"
 QED
 Resume concretize_clean_write_geometry[written]:
@@ -197,8 +196,7 @@ Resume concretize_clean_write_geometry[written]:
 QED
 Resume concretize_clean_write_geometry[retained]:
   markerLib.RESUME_TAC >> (
-  `step_writes inst t t = [(w2n dstT,len)]` by metis_tac[] >>
-  `!w. w IN range_bytes (step_writes inst t t) ==> ?byte.
+  `!w. w IN range_bytes [(w2n dstT,len)] ==> ?byte.
      byte IN joint_writes (EL c (q0::qs)) (EL c es) /\
      relocation_pair lo (concretize_positions C') (EL c (q0::qs)) byte w` by
     (rpt strip_tac >>
@@ -212,7 +210,7 @@ Resume concretize_clean_write_geometry[retained]:
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by
     (asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac) >>
   `joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
-   z NOTIN range_bytes (step_writes inst t t)` by
+   z NOTIN range_bytes [(w2n dstT,len)]` by
     (irule concretize_positions_demand_write_complement >>
      conj_tac >- metis_tac[] >> asm_rewrite_tac[] >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
