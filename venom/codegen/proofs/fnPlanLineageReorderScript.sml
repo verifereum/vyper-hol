@@ -545,3 +545,35 @@ Proof
   simp[listTheory.EVERY_EL, indexedListsTheory.LENGTH_MAPi,
        indexedListsTheory.EL_MAPi, listTheory.EL_MEM]
 QED
+
+Theorem reorder_plan_short_residual_empty:
+  !dfg targets ps ops qs.
+    (!x. MEM x targets ==> x NOTIN FDOM ps.ps_spilled) /\
+    LENGTH ps.ps_stack <= LENGTH targets /\
+    reorder_plan dfg targets ps = (ops,qs) /\
+    stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+    stack_pop (LENGTH targets) qs.ps_stack = []
+Proof
+  rpt strip_tac >>
+  drule_all reorder_plan_length_envelope >>
+  `MAX (LENGTH targets) (LENGTH ps.ps_stack) = LENGTH targets` by
+    simp[MAX_DEF] >>
+  strip_tac >>
+  `LENGTH (stack_pop (LENGTH targets) qs.ps_stack) + LENGTH targets =
+   LENGTH qs.ps_stack` by metis_tac[listTheory.LENGTH_APPEND] >>
+  gvs[MAX_DEF] >>
+  `LENGTH (stack_pop (LENGTH targets) qs.ps_stack) = 0` by decide_tac >>
+  gvs[]
+QED
+
+Theorem reorder_plan_short_reached_targets:
+  !dfg targets ps ops qs.
+    (!x. MEM x targets ==> x NOTIN FDOM ps.ps_spilled) /\
+    LENGTH ps.ps_stack <= LENGTH targets /\
+    reorder_plan dfg targets ps = (ops,qs) /\
+    stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+    qs.ps_stack = targets
+Proof
+  rpt strip_tac >> drule_all reorder_plan_short_residual_empty >>
+  strip_tac >> gvs[]
+QED
