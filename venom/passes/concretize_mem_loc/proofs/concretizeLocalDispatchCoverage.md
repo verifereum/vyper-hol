@@ -407,3 +407,108 @@ field-preservation lemma was added. `phis_taint_subset` and
 The actual OriginBlock event adapter (preceding terminator, next demand,
 index reset and transformed-prefix alignment) remains open; this checkpoint
 does not apply ordinary-event demand retention to a block event.
+
+## D0007 owned-interface checkpoint (2026-11-06)
+
+All formerly delegated LocalState/LocalExternal/LocalHaltAbort overlays are
+removed. No theorem from those theories is available or assumed. State OK,
+external calls/create, RETURNDATACOPY and RETURN remain **missing** concrete
+families; terminal Abort exports already listed remain reusable.
+
+### Checked composition, not a new permanent wrapper
+
+A temporary `nop_interface_probe` was checked by holbuild
+(TO_concretize_sim-20261105T171004Z_m12642_t001), then removed from the working
+sources. It takes the exact antecedent of `concretize_nop_local_complete`,
+replaces its observation by `concretize_local_obs`, and adds
+`concretize_supplement D tn s t`. It derives target execution, successor
+local_rel, actual provenance erasure, independent target taint order, both
+environments and successor supplement. The actual task D is independent of
+the universal local-observation mask. No family obligation is assumed.
+`concretizeLayoutBlockEntryTheory` also builds on the current base
+(TO_concretize_sim-20261105T171004Z_m12631_t001).
+
+The observation definition is *partially applied* in local_rel. Rewriting its
+pointwise equation with simp does not rewrite that argument. The checked
+specialization uses `rewrite_tac[lambdify (lambdify
+concretize_local_obs_def)]`, then `drule_all` on the existing producer with
+its free D instantiated to the fixed local mask. This is definitional
+specialization, not an additional lemma. NOP has post=s and unchanged actual
+taint, so supplement preservation is immediate. Nontrivial variable writers
+must use `concretize_supplement_fields` or its update_var/control corollaries;
+the NOP experiment does not certify those opcodes' supplement adapters.
+
+### Common certificate proposal
+
+Keep incoming source trace/resolved/lifetime/membership/shape and layout
+premises exactly as in the applicable accepted family. Carry, separately:
+
+- local_rel with fixed concretize_local_obs at current joint demand;
+- relocation_taint_le for independent source tn and target un;
+- concretize_supplement D tn s t (actual task mask);
+- relocation_env and relocation_reader_context;
+- code/data-section equality, initial-FMP equality, current/previous block and
+  instruction-index alignment where needed; indexed parameter_roots with
+  resolved rp and parameter-taint/length alignment, and PG erasure/support.
+
+An ordinary OK output constructs target success (never assumes it), actual
+resolved origin_step and step_prov erasure, local_rel at successor demand
+using actual source step_taint, independent target step_taint order,
+source-taint-indexed successor supplement, and preservation of each required
+administrative field. Output origins cannot uniformly be origin_set NONE:
+ASSIGN/affine preserve pointers, PARAM imports roots, ALLOCA introduces one.
+PHIs remain a block-entry certificate. RETURN/Halt/Abort use separate exits,
+not ordinary post local_rel.
+
+`frameIndexedCertificates.indexed_base_def:23-30` consumes every non-Error base
+result, not only OK. Its Q must preserve result shape and permit OK exit back
+into indexed_entry; indexed_push/pop/phi additionally consume callee lookup,
+argument/root setup, returned values, saved caller state and block-prefix
+alignment. No control/root field is supplied by local_rel itself. This
+checkpoint does not construct A/R/Q or prove indexed_base.
+
+### Exact missing semantic bridges, source backed
+
+1. **Masked SLOAD/TLOAD** (`venomState.sload_def/tload_def`,
+   `ptrDiscipline.out_taint_def:332-354`): at equal clean keys and equal call
+   address, supplement implies
+   `word_agree_except (key_taint tn.t_stor key) (sload key s) (sload key t)`
+   and the analogous t_trans/tload statement. This must feed paired masked
+   output writes and actual independent target out_taint, not equal-word
+   machinery. Need shared pointwise masked-store update algebra for
+   key_update and then full successor supplement. ISTORE additionally needs
+   memory-write geometry and imms domain/update agreement. No such complete
+   family is asserted here.
+2. **Request/outcome bridge** (`venomCallOracleDefs:11-44,76-98`): derive
+   `request_agree_except D rq rq'` for constructed requests from clean scalar
+   inputs, relocated equal clean input slices and the *request clause* of
+   taint_within. Equal incoming outcome streams must align take_outcome;
+   agreement of requests alone is not that stream equality. Transport
+   adopt_outcome, record_request, deletion/log append, exact returned oracle
+   bytes and ret-buffer writes; rebuild successor supplement with actual
+   adopt_reset taint. `exec_delegatecall_def:512-525` instead runs concrete
+   EVM semantics: it is NOT an oracle consumer. Its run/extract transport
+   requires a separate boundary under the actual taint_ok restrictions;
+   CALL/CREATE oracle proofs cannot silently cover DELEGATECALL.
+3. **Final observation** (`ptrDiscipline:862-883`): for final_taint vs0 C sh
+   tn R, taint_within provides current-address storage/transient, immutable
+   and return mask inclusion. Need a boundary combining supplement D tn sh th,
+   equal terminal logs/deletions/halted fields, equal return length and
+   lane equality outside R into `dead_result_rel D (Halt sh) (Halt th)`.
+   RETURN (`venomExecSemantics:808-817`) constructs its own padded slice and
+   sets returndata; prove length and clean-lane equality from demand geometry,
+   then use this boundary. Do NOT require concretize_local_obs sh th after
+   RETURN: its empty d_ret demands exact payload equality, too strong for
+   tainted return lanes. Incoming Obs0 remains appropriate before the halt.
+4. **ALLOCA still conditional**: local_rel_alloca_assign_step's pointer,
+   bytes and post-Obs premises are not generated by its execution equations.
+   Cached and fresh branches need activation_lookup/canonical position,
+   allocas_from lo, origin introduction/retention and independent target taint;
+   demand restriction must exclude newly born bytes and use lifetime/layout
+   separation for retained bytes, including zero size. Unchanged accounts,
+   transient, immutables, requests/outcomes give supplement; paired allocator
+   updates preserve Obs0 but must be proved from the concrete steps. No
+   positivity premise from the comparison proof licenses allocating zero size.
+
+These are interface findings for strategist refinement, not admitted HOL
+statements or completion claims. No executable/frozen source was changed.
