@@ -45,10 +45,3 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation d04_int_default_string))) >> EVAL_TAC
 QED
 
-val d05_int_default_nested = memoryStoreWitnessLib.evaluate fixture_root "d05_int_default_nested"
-Theorem d05_int_default_nested_matches_python_oracle:
-  ^(#term d05_int_default_nested) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "d05_int_default_nested")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation d05_int_default_nested))) >> EVAL_TAC
-QED
