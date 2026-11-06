@@ -5,7 +5,7 @@
    externalReturnWidenedCallMem's. *)
 Theory externalReturnValueMem
 Ancestors
-  returnValueTyped
+  returnValueTyped externalReturnDirectMem externalReturnNormalizedMem
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   externalReturnZeroLayout
   nonreentrantExit
@@ -82,5 +82,12 @@ Theorem external_frame_ret_value_run_mem:
        ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
                 mem_safe_run fuel unit.cu_context func t
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `~is_word_type ret /\
+    ~(is_bytestring_type (lowered_value_type cenv' e) /\ is_bytestring_type ret) /\
+    lowered_value_type cenv' e <> ret`
+  >- (qpat_x_assum `~is_word_type ret /\ _` strip_assume_tac >>
+      drule_all external_frame_ret_value_normalized_run_mem >> simp[]) >>
+  drule_all external_frame_ret_value_direct_run_mem >> simp[]
 QED
