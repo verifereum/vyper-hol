@@ -16,9 +16,9 @@ Ancestors
   unitMemInv unitShapeDefs contextCodegenRel venomExecSemantics
 
 (* The hypotheses before the last are dft_ctx_sim_gas's (dftContractGas).
-   o1_ctx_shape C gives inst_shape_ok for every instruction (no CREATE,
-   CREATE2, DELEGATECALL, SELFDESTRUCT, DJMP or OFFSET), so no memory
-   access moves past an instruction that can abort or stop. *)
+   o1_ctx_shape C gives inst_shape_ok for every instruction (no DJMP or
+   OFFSET); a memory access crosses only instructions that step OK
+   (dftGasInvCrossingProbe's inv_crossed_predecessor_total). *)
 Theorem dft_ev_lowered_inv:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
