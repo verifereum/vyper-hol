@@ -5957,11 +5957,12 @@ QED
 
 Theorem reorder_one_stack_support:
   !dfg tops idx op ps ops qs x.
-    idx < LENGTH tops /\ LENGTH tops <= LENGTH ps.ps_stack /\
+    idx < LENGTH tops /\
+    (LENGTH tops <= 17 \/ LENGTH tops <= LENGTH ps.ps_stack) /\
     reorder_one dfg tops idx op ps = (ops,qs) /\ MEM x qs.ps_stack ==>
     x = op \/ MEM x ps.ps_stack
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
   rewrite_tac[reorder_one_def, LET_THM] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gnvs[] >>
@@ -5973,23 +5974,37 @@ Proof
     (LENGTH tops) ps1.ps_stack` >> simp[] >>
   rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
   pairarg_tac >> simp[] >>
-  `LENGTH tops <= LENGTH ps2.ps_stack /\
+  `(17 < LENGTH tops ==> LENGTH tops <= LENGTH ps2.ps_stack) /\
    !a. MEM a ps2.ps_stack ==> MEM a ps1.ps_stack` by
-    (Cases_on `dist > 16` >> gvs[] >> conj_tac
-     >- (drule reduce_depth_plan_target_len_floor >> simp[]) >>
-     rpt strip_tac >> drule reduce_depth_plan_stack_support >> simp[]) >>
+    (reverse conj_tac
+     >- (Cases_on `dist > 16` >> gvs[] >> rpt strip_tac >>
+         drule reduce_depth_plan_stack_support >> simp[]) >>
+     Cases_on `LENGTH tops <= 17` >> simp[] >>
+     Cases_on `dist > 16` >> gvs[] >>
+     drule reduce_depth_plan_target_len_floor >> simp[]) >>
   Cases_on `stack_get_unfixed_depth op (LENGTH tops - (idx + 1))
     (LENGTH tops) ps2.ps_stack` >> simp[] >>
   rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
   `dist' < LENGTH ps2.ps_stack /\ stack_peek dist' ps2.ps_stack = op` by
     metis_tac[stack_get_unfixed_depth_props] >>
-  `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
-  Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[] >>
-  Cases_on `operand_equiv dfg op
-    (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[]
-  >- (`MEM (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack) ps2.ps_stack` by
-        (irule stack_peek_mem >> decide_tac) >>
-      strip_tac >> gvs[] >> metis_tac[stack_poke_mem_subset_nb]) >>
+  `LENGTH tops - (idx + 1) <= 16 \/
+   LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  (Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[] >>
+  Cases_on `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` >> simp[]
+  >- (Cases_on `operand_equiv dfg op
+        (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[]
+      >- (`MEM (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack) ps2.ps_stack` by
+            (irule stack_peek_mem >> simp[]) >>
+          strip_tac >> gvs[] >> metis_tac[stack_poke_mem_subset_nb]) >>
+      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
+        (qspecl_then [`dist'`, `ps2`] mp_tac planWfTheory.do_swap_length >> simp[]) >>
+      `MEM x ps3.ps_stack` by
+        (irule do_swap_safe_stack_support >> goal_assum (drule_at Any) >> simp[]) >>
+      `MEM x ps2.ps_stack` by
+        (irule do_swap_safe_stack_support >>
+         qexistsl [`dist'`, `swap1_ops`, `ps3`] >> simp[]) >>
+      metis_tac[]) >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
     (qspecl_then [`dist'`, `ps2`] mp_tac planWfTheory.do_swap_length >> simp[]) >>
@@ -5998,13 +6013,13 @@ Proof
   `MEM x ps2.ps_stack` by
     (irule do_swap_safe_stack_support >>
      qexistsl [`dist'`, `swap1_ops`, `ps3`] >> simp[]) >>
-  metis_tac[]
+  metis_tac[])
 QED
 
 Theorem plan_steps_reorder_stack_support[local]:
   !items dfg tops ps ops qs.
     EVERY (\(idx,op). idx < LENGTH tops /\ MEM op tops) items /\
-    LENGTH tops <= LENGTH ps.ps_stack /\
+    (LENGTH tops <= 17 \/ LENGTH tops <= LENGTH ps.ps_stack) /\
     plan_steps (\(idx,op) ps. reorder_one dfg tops idx op ps) items ps = (ops,qs) ==>
     !x. MEM x qs.ps_stack ==> MEM x tops \/ MEM x ps.ps_stack
 Proof
@@ -6012,7 +6027,7 @@ Proof
   Cases_on `h` >> rename1 `(idx,op)` >> simp[] >> strip_tac >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `reorder_one dfg tops idx op ps = (step_ops,ps1)` >>
-  `LENGTH tops <= LENGTH ps1.ps_stack` by
+  `LENGTH tops <= 17 \/ LENGTH tops <= LENGTH ps1.ps_stack` by
     metis_tac[reorder_one_length_floor] >>
   `!x. MEM x ps1.ps_stack ==> x = op \/ MEM x ps.ps_stack` by
     metis_tac[reorder_one_stack_support] >>
@@ -6025,7 +6040,7 @@ QED
 
 Theorem reorder_plan_stack_support:
   !dfg tops ps ops qs x.
-    LENGTH tops <= LENGTH ps.ps_stack /\
+    (LENGTH tops <= 17 \/ LENGTH tops <= LENGTH ps.ps_stack) /\
     reorder_plan dfg tops ps = (ops,qs) /\ MEM x qs.ps_stack ==>
     MEM x tops \/ MEM x ps.ps_stack
 Proof
@@ -6041,17 +6056,17 @@ QED
 
 Theorem restore_reorder_stack_support:
   !targets ps rops mid dfg ops qs x.
-    LENGTH targets <= LENGTH ps.ps_stack +
-      CARD (set targets INTER FDOM ps.ps_spilled) /\
+    (LENGTH targets <= 17 \/ LENGTH targets <= LENGTH ps.ps_stack +
+      CARD (set targets INTER FDOM ps.ps_spilled)) /\
     restore_spilled_plan targets ps = (rops,mid) /\
     reorder_plan dfg targets mid = (ops,qs) /\ MEM x qs.ps_stack ==>
     MEM x targets \/ MEM x ps.ps_stack
 Proof
   rpt gen_tac >> strip_tac >>
-  `LENGTH targets <= LENGTH mid.ps_stack` by
+  `LENGTH targets <= 17 \/ LENGTH targets <= LENGTH mid.ps_stack` by
     (drule restore_spilled_plan_length_exact >> simp[]) >>
   `MEM x targets \/ MEM x mid.ps_stack` by
-    (drule_all reorder_plan_stack_support >> simp[]) >>
+    metis_tac[reorder_plan_stack_support] >>
   metis_tac[restore_spilled_plan_stack_support]
 QED
 
