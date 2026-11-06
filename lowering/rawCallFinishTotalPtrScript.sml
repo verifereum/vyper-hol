@@ -83,7 +83,7 @@ Theorem raw_call_scalar_finish:
   stmt_state_rel ctx func cenv cx es s /\
   eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
   (~stat ==> eval_operand value_op s = SOME vw) /\
-  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand op s = SOME 0w /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand op s = SOME ro /\
   w2w aw = target /\ w2n (if stat then 0w else vw) =
     (case value_opt of NONE => 0 | SOME n => n) /\ stat = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
@@ -97,29 +97,36 @@ Theorem raw_call_scalar_finish:
   allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
   ~s.vs_halted /\ ~cenv.ce_is_ctor /\
   ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint (w2n ro) 0 a len) /\
+  (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint (w2n ro) 0 a len) /\
   is_word_type ty /\ type_memory_bytes cenv (lowered_value_type cenv e) = 0 ==>
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
     ptr_val_ok cx ty (BoolV outcome.co_success) result H un t /\ ptr_buf_ok cenv e result H t /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
     ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
-    ghost_kept cenv es sa G tn s H un /\ wb_frame cenv es sa s t /\
+    ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
 Proof
   strip_tac >> drule_all raw_call_nonrevert_code_groups >> strip_tac >>
   fs[compileEnvTheory.comp_return_def] >>
   drule_all raw_call_case_emit_facts >> strip_tac >> fs[] >>
   mp_tac (raw_call_extracted_checked_full |> Q.INST
-    [`protected` |-> `sa`, `d` |-> `dep`, `rz_op` |-> `Lit 0w`, `rz` |-> `0w`, `ro` |-> `0w`, `sc` |-> `sb`]) >>
-  (impl_tac >- (simp[venomStateTheory.eval_operand_def, compileEnvTheory.regions_disjoint_def] >>
-    metis_tac[fresh_not_local_ptr])) >> strip_tac >>
+    [`d` |-> `dep`, `rz_op` |-> `Lit 0w`, `rz` |-> `0w`, `sc` |-> `sb`]) >>
+  (impl_tac >- (simp[venomStateTheory.eval_operand_def] >>
+    fs[exprLoweringPropsTheory.ci_mono_def] >>
+    metis_tac[fresh_not_local_ptr, freshWritesTheory.not_fresh_at_mono])) >> strip_tac >>
   `eval_operand (Var out) u = SOME (val_to_w256 (BoolV outcome.co_success))` by
     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
       valueEncodingTheory.val_to_w256_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   `return (Var out) sb = (Var out,sb)` by simp[compileEnvTheory.comp_return_def] >>
-  drule_all (raw_call_scalar_suffix |> Q.INST [`protected` |-> `sa`]) >> strip_tac >>
-  qpat_x_assum `!PG. _` (qspec_then `PG` strip_assume_tac) >>
+  drule_all (raw_call_scalar_suffix |> Q.INST [`protected` |-> `protected`]) >> strip_tac >>
+  qpat_x_assum `!protected PG. _`
+    (qspecl_then [`protected`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`H`, `un`, `u`] >> simp[] >>
   drule_all (cj 2 gas_path_ptr_rules) >> simp[]
 QED
