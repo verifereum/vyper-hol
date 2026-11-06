@@ -154,3 +154,138 @@ Proof
   >~ [`inst.inst_opcode = MSTORE8`] >- fixed_tac
   >> sized_tac
 QED
+
+Theorem ptr_current_eval_operands_presence[local]:
+  (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) ==>
+  !ops. IS_SOME (eval_operands ops src) = IS_SOME (eval_operands ops tgt)
+Proof
+  strip_tac >> Induct >- simp[eval_operands_def] >>
+  gen_tac >> first_assum (qspec_then `h` mp_tac) >>
+  Cases_on `eval_operand h src` >> Cases_on `eval_operand h tgt` >>
+  simp[eval_operands_def] >>
+  Cases_on `eval_operands ops src` >>
+  Cases_on `eval_operands ops tgt` >> gvs[]
+QED
+
+Theorem ptr_current_log_range_reflection[local]:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
+  REVERSE rest = addr::sz::topics /\
+  (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
+  eval_operand sz src = eval_operand sz tgt /\
+  MEM (off,len) (source_memory_read_ranges inst tgt) ==>
+  ?x y. eval_operand addr src = SOME x /\
+    eval_operand addr tgt = SOME y /\ off = w2n y /\
+    MEM (w2n x,len) (source_memory_read_ranges inst src)
+Proof
+  strip_tac >>
+  `IS_SOME (eval_operands topics src) = IS_SOME (eval_operands topics tgt)` by
+    metis_tac[ptr_current_eval_operands_presence] >>
+  gvs[source_memory_read_ranges_def] >>
+  Cases_on `eval_operands topics tgt` >> gvs[] >>
+  `?zs. eval_operands topics src = SOME zs` by
+    metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  gvs[memory_range_of_operands_def] >>
+  Cases_on `eval_operand addr tgt` >> gvs[] >>
+  `?x. eval_operand addr src = SOME x` by
+    metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  Cases_on `eval_operand sz tgt` >> gvs[] >>
+  Cases_on `LENGTH rest = w2n tc + 2` >> gvs[]
+QED
+
+Theorem ptr_current_range_transport:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+  opaque_use_ok fn /\ label_positions_ok inst /\
+  ptr_ledger_erases births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_mixed_vars births positions TG tn fn ft src tgt /\
+  src.vs_labels = tgt.vs_labels /\ taint_ok fn tn inst src /\
+  ((mops = mem_read_ops inst /\
+    ranges_s = source_memory_read_ranges inst src /\
+    ranges_t = source_memory_read_ranges inst tgt) \/
+   (mops = mem_write_ops inst /\
+    ranges_s = source_memory_write_ranges inst src /\
+    ranges_t = source_memory_write_ranges inst tgt)) /\
+  MEM (off,len) ranges_t ==>
+  ?off_s. MEM (off_s,len) ranges_s /\
+    ((off = off_s /\
+      ~(?ops. mops = SOME ops /\ op_prov G ops.iao_ofst <> NONE)) \/
+     (?ops x y. mops = SOME ops /\
+       eval_operand ops.iao_ofst src = SOME x /\
+       eval_operand ops.iao_ofst tgt = SOME y /\
+       off_s = w2n x /\ off = w2n y /\
+       ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+         (SOME x) (SOME y)))
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> DRET` by (gvs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET]` by
+    (strip_tac >> gvs[source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  `EVERY (ptr_nonopaque_operand fn) inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> metis_tac[]) >>
+  `!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)` by
+    (drule_all ptr_mixed_vars_eval_presence >> simp[]) >>
+  `!ops sizeop. mops = SOME ops /\ ops.iao_max_size = SOME sizeop ==>
+     eval_operand sizeop src = eval_operand sizeop tgt` by
+    (rpt strip_tac >>
+     `op_taint tn sizeop = {}` by
+       metis_tac[ptr_read_max_size_untainted, ptr_write_max_size_untainted] >>
+     `!v. sizeop = Var v ==> v NOTIN fn_pv P fn` by
+       metis_tac[ptr_read_max_size_not_pointer, ptr_write_max_size_not_pointer] >>
+     `op_prov G sizeop = NONE` by
+       (Cases_on `sizeop` >> gvs[op_prov_def] >>
+        metis_tac[flookup_thm, SUBSET_DEF]) >>
+     `MEM sizeop inst.inst_operands \/ (?w. sizeop = Lit w)` by
+       (Cases_on `inst.inst_opcode` >>
+        gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+        metis_tac[MEM_REVERSE, MEM]) >>
+     `ptr_nonopaque_operand fn sizeop` by
+       metis_tac[EVERY_MEM, ptr_nonopaque_operand_def] >>
+     drule_all ptr_mixed_scalar_eval >> simp[]) >>
+  Cases_on `inst.inst_opcode = LOG` >>
+  TRY (qpat_assum `inst.inst_opcode = LOG` assume_tac >>
+       gvs[source_memory_write_ranges_def] >> suspend "log" >> NO_TAC) >>
+  `?ops x y. mops = SOME ops /\
+    eval_operand ops.iao_ofst src = SOME x /\
+    eval_operand ops.iao_ofst tgt = SOME y /\
+    off = w2n y /\ MEM (w2n x,len) ranges_s` by
+    (irule ptr_current_descriptor_range_reflection >> metis_tac[]) >>
+  `MEM ops.iao_ofst inst.inst_operands` by
+    (Cases_on `inst.inst_opcode` >>
+     gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]) >>
+  `ptr_nonopaque_operand fn ops.iao_ofst` by metis_tac[EVERY_MEM] >>
+  `op_taint tn ops.iao_ofst = {}` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     Cases_on `inst.inst_opcode` >>
+     gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+     simp[taint_ok_def] >> metis_tac[]) >>
+  drule_all ptr_mixed_vars_eval >> simp[] >> strip_tac >>
+  qexists_tac `w2n x` >> simp[] >> metis_tac[]
+QED
+
+Resume ptr_current_range_transport[log]:
+  gvs[venomWfTheory.inst_wf_def] >>
+  `LENGTH (REVERSE rest) = w2n tc + 2` by simp[] >>
+  Cases_on `REVERSE rest` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  rename1 `REVERSE rest = addr::sz::topics` >>
+  `MEM addr rest /\ MEM sz rest` by metis_tac[MEM_REVERSE, MEM] >>
+  `ptr_nonopaque_operand fn addr /\ ptr_nonopaque_operand fn sz` by
+    metis_tac[EVERY_MEM] >>
+  `op_taint tn addr = {} /\ op_taint tn sz = {}` by
+    (gvs[taint_ok_def] >> metis_tac[]) >>
+  `mem_read_ops inst = SOME
+     <|iao_ofst := addr; iao_size := SOME sz; iao_max_size := SOME sz|>` by
+    (simp[mem_read_ops_def] >> Cases_on `topics` >> simp[]) >>
+  `eval_operand sz src = eval_operand sz tgt` by
+    (qpat_x_assum `!ops sizeop. _`
+       (qspec_then `<|iao_ofst := addr; iao_size := SOME sz;
+                      iao_max_size := SOME sz|>` mp_tac) >> simp[]) >>
+  `?x y. eval_operand addr src = SOME x /\
+    eval_operand addr tgt = SOME y /\ off = w2n y /\
+    MEM (w2n x,len) (source_memory_read_ranges inst src)` by
+    (irule ptr_current_log_range_reflection >> metis_tac[]) >>
+  qpat_x_assum `ptr_nonopaque_operand fn sz` kall_tac >>
+  drule_all ptr_mixed_vars_eval >> simp[] >> strip_tac >>
+  qexists_tac `w2n x` >> simp[]
+QED
+
+Finalise ptr_current_range_transport
