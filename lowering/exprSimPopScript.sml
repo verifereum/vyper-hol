@@ -910,6 +910,7 @@ Theorem compile_pop_name_sim:
 Proof
   rw[expr_vv_sim_def] >>
   drule_all pop_name_facts >> strip_tac >>
+  `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Var p) 32 (type_memory_size etv)
               cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa` >>

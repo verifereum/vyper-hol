@@ -108,6 +108,14 @@ Resume pop_nested_local_live_case[normal]:
      strip_tac >> drule eval_target_place_preserves_scopes_dom >> simp[]) >>
   drule_all pop_array_element_layout >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `popped_keys_indexed tend.scopes` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[gas_marked_exec_def] >>
+     rpt strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
+     strip_tac >>
+     drule stmtPoppedKeysTheory.eval_target_place_popped_keys_indexed >>
+     fs[expr_sim_inv_def]) >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
   qpat_x_assum `target_root _ = _` kall_tac >>
   qpat_x_assum `!s path t entry err. _` kall_tac >>
@@ -220,10 +228,9 @@ Resume pop_nested_local_live_case[nonempty]:
   simp[] >> conj_tac >- metis_tac[] >>
   qpat_assum `mem_path_offset entry.type path = _` (irule_at Any) >>
   qpat_assum `FLOOKUP cenv.ce_vars id = _` (irule_at Any) >>
-  qpat_assum `wb_frame cenv es es sa s0 t` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es _ sa s0 t` (irule_at Any) >>
   qpat_assum `local_ptrs_reserved cenv sm` (irule_at Any) >>
-  simp[] >>
-  qexists_tac `record_pop path (ArrayV (DynArrayV vs)) (LAST vs) entry.popped` >>
+  fs[record_pop_def] >>
   gvs[Abbr `scopes'`] >>
   drule exprSimMemorySourceTheory.read_result_gas_obs >>
   disch_then (qspec_then `[]` mp_tac) >> simp[]
