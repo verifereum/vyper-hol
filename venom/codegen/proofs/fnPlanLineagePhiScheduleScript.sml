@@ -382,8 +382,8 @@ Proof
   simp[] >> metis_tac[analyzed_native_phi_endpoint_class_dead]
 QED
 
-Theorem successful_join_edges_phi_common_suffix:
-  !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ entry halting.
+Theorem successful_join_edges_phi_common_suffix_rebased:
+  !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ entry halting rsP rsQ.
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
   fn_reachable fn succ /\ succ <> entry /\ MEM succ (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block p fn.fn_blocks = SOME pb /\
@@ -395,16 +395,17 @@ Theorem successful_join_edges_phi_common_suffix:
   ~NULL (collect_phis sb.bb_instructions) /\
   generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb psP0 = SOME (opsP, psP) /\
   generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn qb psQ0 = SOME (opsQ, psQ) /\
-  psP.ps_alloc = psQ.ps_alloc ==>
+  rsP.ps_stack = psP.ps_stack /\ rsQ.ps_stack = psQ.ps_stack /\
+  rsP.ps_alloc = rsQ.ps_alloc ==>
   ?prefixP prefixQ suffix ops al.
     phi_schedule_run
       (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
-        (collect_phis sb.bb_instructions)) psP =
-      (ops, psP with <|ps_stack := prefixP ++ suffix; ps_alloc := al|>) /\
+        (collect_phis sb.bb_instructions)) rsP =
+      (ops, rsP with <|ps_stack := prefixP ++ suffix; ps_alloc := al|>) /\
     phi_schedule_run
       (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
-        (collect_phis sb.bb_instructions)) psQ =
-      (ops, psQ with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>)
+        (collect_phis sb.bb_instructions)) rsQ =
+      (ops, rsQ with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>)
 Proof
   rpt gen_tac >> strip_tac >>
   `?cells prefixP prefixQ.
@@ -429,9 +430,40 @@ Proof
     IS_SOME (FLOOKUP (SND (build_phi_maps p (collect_phis sb.bb_instructions))) i) /\
     IS_SOME (FLOOKUP (SND (build_phi_maps q (collect_phis sb.bb_instructions))) i)` by
     metis_tac[] >>
+  `rsP.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+   rsQ.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells` by simp[] >>
   drule_all analyzed_native_slot_state_replay >>
   disch_then (qspec_then `halting` strip_assume_tac) >>
   qexistsl_tac [`prefixP`, `prefixQ`, `suffix`, `ops`, `al`] >> simp[]
+QED
+
+(* The original execution-state interface is a specialization of rebasing. *)
+Theorem successful_join_edges_phi_common_suffix:
+  !fn p pb q qb succ sb dfg psP0 opsP psP psQ0 opsQ psQ entry halting.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn succ /\ succ <> entry /\ MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block q fn.fn_blocks = SOME qb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) p) /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) q) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb psP0 = SOME (opsP, psP) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn qb psQ0 = SOME (opsQ, psQ) /\
+  psP.ps_alloc = psQ.ps_alloc ==>
+  ?prefixP prefixQ suffix ops al.
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psP =
+      (ops, psP with <|ps_stack := prefixP ++ suffix; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psQ =
+      (ops, psQ with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>)
+Proof
+  rpt strip_tac >> irule successful_join_edges_phi_common_suffix_rebased >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
 QED
 
 Theorem generate_block_insts_plan_phi_schedule:
