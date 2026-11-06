@@ -565,7 +565,7 @@ Proof
   >> first_assum ACCEPT_TAC
 QED
 
-Theorem release_fold_stack_update[local]:
+Theorem release_fold_stack_update:
   !dead ps core.
     FOLDL (\ps' (op,off).
       ps' with <| ps_spilled := ps'.ps_spilled \\ op;

@@ -169,7 +169,7 @@ Definition pending_inventory_wf_def:
       (if op IN FDOM ps.ps_spilled then 1 else 0)
 End
 
-Theorem all_distinct_elem_count_le_one[local]:
+Theorem all_distinct_elem_count_le_one:
   !(xs : 'a list) x.
     ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1
 Proof
