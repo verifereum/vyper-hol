@@ -131,3 +131,26 @@ Proof
   goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
   qexists `sa` >> simp[] >> metis_tac[]
 QED
+
+(* Retained roots use the exterior frame directly; no intermediate taint
+   state is required by consumers of the common copy endpoint. *)
+Theorem unwrap_copy_retained_post:
+  compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
+  vv_post ctx func cenv cx e es sa sm s0 ee result vv s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sm /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  nb < dimword (:256) /\ sa.cs_next_id <= sm.cs_next_id /\
+  ghost_kept cenv es sa Gi ti s0 G tn /\
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  (d:bytes32) = n2w (buffer_allocation_base s sm.cs_next_id) /\
+  buffer_allocation_base s sm.cs_next_id < dimword (:256) /\
+  (!j. j < w2n d \/ w2n d+nb <= j ==> (j IN tf.t_mem <=> j IN tn.t_mem)) ==>
+  ghost_kept cenv es sa Gi ti s0 H tf
+Proof
+  strip_tac >> irule unwrap_copy_ghost_kept >> simp[] >>
+  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
+  qexistsl [`buf`, `mid`, `nb`, `tn`] >> simp[] >>
+  gvs[]
+QED
