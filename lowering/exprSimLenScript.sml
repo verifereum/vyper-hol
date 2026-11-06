@@ -954,7 +954,9 @@ Proof
 QED
 
 Theorem len_vv_path[local]:
-  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t.
+  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t pvt.
+    type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -977,9 +979,10 @@ Theorem len_vv_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' t /\
-   vv_holds cenv cx (expr_type e) tv vv es' t` by fs[vv_post_def] >>
-  drule_all vv_holds_sized_length_success >> strip_tac >>
-  drule_all vv_holds_len_header >> strip_tac >>
+   vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by fs[vv_post_def] >>
+  drule_all vv_holds_sized_length_success_widens >> strip_tac >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
+  drule_all vv_holds_len_header_widens >> strip_tac >>
   ` (case vv_location vv of SOME l => l | NONE => LocMemory) <> LocCalldata` by
     (Cases_on `vv` >> gvs[vv_location_def, vv_holds_def] >>
      Cases_on `p.ptr_location` >> gvs[]) >>
@@ -1044,7 +1047,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`e`, `es`] mp_tac) >> fs[expr_body_pre_def]) >>
-  drule post_type_evaluates >> strip_tac >>
+  drule post_type_evaluates >> disch_then (qx_choose_then `ptv` assume_tac) >>
   `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
     (irule post_value_type_widens >>
      fs[expr_body_pre_def] >> metis_tac[]) >>
@@ -1088,7 +1091,7 @@ Proof
                     `tv`,`fe with gas_obs := []`] expr_body_pre_runtime_typed) >>
           simp[] >> strip_tac >>
           mp_tac (Q.SPECL [`env`,`ctx`,`func`,`cenv`,`cx`,`e`,`es`,`sa`,`sm`,`lsb`,`s0`,
-                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`] len_vv_path) >>
+                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`,`ptv`] len_vv_path) >>
           (impl_tac >- simp[]) >> strip_tac >>
           `!tail. result_array_length cx tv (fe with gas_obs := tail) =
                   (INL n, fe with gas_obs := tail)` by
