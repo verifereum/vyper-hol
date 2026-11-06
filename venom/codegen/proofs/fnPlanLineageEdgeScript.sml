@@ -125,3 +125,31 @@ Proof
   simp[pred_setTheory.EXTENSION, pred_setTheory.SUBSET_DEF, MEM_MAP] >>
   metis_tac[]
 QED
+
+Theorem analyzed_join_edge_spilled_empty:
+  codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps =
+    SOME (ops,ps') ==>
+  ps'.ps_spilled = FEMPTY
+Proof
+  strip_tac >> drule_all ready_join_edge_terminator >> strip_tac >>
+  drule_all non_param_insts_final_jmp >> strip_tac >>
+  `pb.bb_label = pred` by metis_tac[lookup_block_label] >>
+  `inst_wf (LAST pb.bb_instructions)` by
+    ( `fn_inst_wf fn` by gvs[codegen_ready_fn_def] >>
+      gvs[fn_inst_wf_def, EVERY_MEM] >> first_x_assum irule >>
+      qexists_tac `pb` >> simp[LAST_MEM, NULL_EQ] >>
+      metis_tac[lookup_block_MEM]) >>
+  `(LAST pb.bb_instructions).inst_outputs = []` by gvs[inst_wf_def] >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all generate_block_insts_plan_final_call >> strip_tac >>
+  gvs[] >>
+  drule_at (Pos last) analyzed_terminal_jmp_spilled_empty >>
+  simp[] >> disch_then irule >> goal_assum (drule_at Any) >> simp[]
+QED
