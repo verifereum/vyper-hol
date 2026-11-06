@@ -1432,3 +1432,101 @@ Resume raw_call_forward_suffix_stage[revert]:
 QED
 
 Finalise raw_call_forward_suffix_stage
+
+Theorem raw_call_failure_block_stage:
+  (do rds <- emit_op RETURNDATASIZE [];
+      buf <- compile_alloc_buffer 0;
+      emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds];
+      emit_inst REVERT [buf.buf_operand;rds] [] od) sa = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  LENGTH s.vs_returndata < dimword(:256) ==>
+  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (Abort Revert_abort t) /\
+    t.vs_returndata = s.vs_returndata /\ t.vs_halted
+Proof
+  strip_tac >>
+  `?rds s1 buf s2 s3.
+    emit_op RETURNDATASIZE [] sa = (rds,s1) /\
+    compile_alloc_buffer 0 s1 = (buf,s2) /\
+    emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds] s2 = ((),s3) /\
+    emit_inst REVERT [buf.buf_operand;rds] [] s3 = ((),sb)` by
+    (qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `?out. rds = Var out` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `rds = _` SUBST_ALL_TAC >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
+      exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+      exprLoweringPropsTheory.ci_mono_emit_void,
+      exprLoweringPropsTheory.ci_mono_emit_inst, pairTheory.SND] >>
+  `cs_extends s1 sb /\ cs_extends s2 sb` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\ fn_has_code s2 sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split, exprLoweringPropsTheory.ci_mono_def] >>
+  `local_ptrs_reserved cenv s1 /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x)` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+       stmtFragPtrTheory.not_fresh_at_mono]) >>
+  drule_all raw_call_emit_returndatasize_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> suspend "allocate"
+QED
+
+Resume raw_call_failure_block_stage[allocate]:
+  `0 < dimword(:256)` by simp[] >>
+  drule_all rawCallAllocationProofPtrTheory.raw_call_alloc_buffer_stage >>
+  disch_then (qspecl_then [`un`, `PG`, `H`, `cx_dead cx`] strip_assume_tac) >>
+  `u.vs_returndata = t.vs_returndata /\ u.vs_current_bb = t.vs_current_bb /\
+   u.vs_halted = t.vs_halted` by
+    (qpat_x_assum `step_inst_base _ _ = OK u` mp_tac >>
+     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
+     Cases_on `FLOOKUP t.vs_allocas s1.cs_next_id` >> simp[]
+     >- (strip_tac >> gvs[venomStateTheory.update_var_def]) >>
+     rename1 `SOME site` >> PairCases_on `site` >>
+     strip_tac >> gvs[venomStateTheory.update_var_def]) >>
+  `s2.cs_current_bb = s1.cs_current_bb /\
+   buf.buf_operand = Var (STRING #"%" (toString s1.cs_next_var))` by
+    gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  `out <> STRING #"%" (toString s1.cs_next_var)` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ H un t _ Hout vn (OK v)` >>
+  `eval_operand buf.buf_operand v = SOME (n2w b) /\
+   eval_operand (Var out) v = SOME (n2w (LENGTH v.vs_returndata)) /\
+   op_taint vn buf.buf_operand = {} /\ op_taint vn (Var out) = {} /\
+   v.vs_current_bb = s2.cs_current_bb /\
+   v.vs_inst_idx = LENGTH s2.cs_current_insts /\ ~v.vs_halted /\
+   v.vs_returndata = s.vs_returndata` by
+    (simp[Abbr `v`, Abbr `vn`, venomStateTheory.eval_operand_def,
+       ptrDisciplineTheory.op_taint_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+     fs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  suspend "forward"
+QED
+
+Resume raw_call_failure_block_stage[forward]:
+  `LENGTH v.vs_returndata < dimword(:256)` by simp[] >>
+  drule_all raw_call_forward_suffix_stage >>
+  disch_then (qspecl_then [`PG`, `Hout`, `cx_dead cx`] strip_assume_tac) >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 Hout vn (OK v)` by
+    metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD] >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (Abort Revert_abort t')` by
+    metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise raw_call_failure_block_stage
