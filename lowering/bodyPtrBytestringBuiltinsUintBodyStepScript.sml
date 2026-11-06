@@ -59,3 +59,37 @@ Proof
   gvs[Abbr `stored`, update_var_def, jump_to_def] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
 QED
+
+Theorem u2s_body_front_safe:
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  local_ptrs_reserved cenv a /\ not_fresh_at a p ==>
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr
+    (update_var (u2s_var a 8) w8 (update_var (u2s_var a 7) w7
+      (update_var (u2s_var a 6) w6 (update_var (u2s_var a 5) w5 s)))
+      with vs_inst_idx := idx)
+Proof
+  strip_tac >> irule u2s_safe_index >>
+  ntac 4 (irule u2s_safe_update >> simp[])
+QED
+
+Theorem u2s_body_numeric_run:
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\
+  lookup_var (u2s_var a 1) s = SOME (n2w i) /\ lookup_var p s = SOME (n2w b) /\
+  not_fresh_at a p /\ i <= n /\ x < dimword(:256) /\
+  b+n-i < dimword(:256) ==>
+  run_inst_seq (TAKE 9 (u2s_body a (Var p) n)) s =
+    OK (update_var (u2s_var a 1) (n2w (SUC i))
+      (update_var (u2s_var a 10) (n2w (SUC i))
+        (update_var (u2s_var a 0) (n2w (x DIV 10))
+          (update_var (u2s_var a 9) (n2w (x DIV 10))
+            (mstore (b+n-i) (n2w (48+x MOD 10))
+              (update_var (u2s_var a 8) (n2w (b+n-i))
+                (update_var (u2s_var a 7) (n2w (b+n))
+                  (update_var (u2s_var a 6) (n2w (48+x MOD 10))
+                    (update_var (u2s_var a 5) (n2w (x MOD 10)) s)))))))))
+Proof
+  strip_tac >> irule u2s_body_run >> simp[eval_operand_def] >>
+  `i <= b+n` by decide_tac >>
+  simp[u2s_word_arithmetic, word_add_n2w, GSYM n2w_sub, w2n_n2w,
+       arithmeticTheory.ADD1, WORD_ADD_COMM]
+QED
