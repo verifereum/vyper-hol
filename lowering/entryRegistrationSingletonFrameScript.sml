@@ -30,7 +30,10 @@ Theorem entry_registration_singleton_prefix_frame:
     st.cs_next_var <= first.cs_next_var /\
     ~ready.vs_halted /\ ready.vs_current_bb = first.cs_current_bb /\
     ready.vs_inst_idx = LENGTH first.cs_current_insts /\
-    (?w. eval_operand src ready = SOME w) /\
+    eval_operand src ready = SOME
+      (if dyn /\ ~prim then n2w 4 + abi_decode_load CALLDATALOAD
+         (n2w 4 + n2w (off-4):bytes32) initial
+       else n2w 4 + n2w (off-4)) /\
     eval_operand dst ready = SOME (n2w p) /\
     abi_decoder_operand_live first.cs_next_var src /\
     abi_decoder_operand_live first.cs_next_var dst /\
@@ -84,7 +87,9 @@ Proof
   qpat_x_assum `alloca_inv initial` kall_tac >>
   qpat_x_assum `alloca_frontier_inv _ _ _ initial` kall_tac >>
   drule_all entry_registration_address_frame >> strip_tac >>
-  qexistsl [`buf.buf_operand`,`src`,`first`,`t`,`p`] >> simp[] >>
+  qexistsl [`buf.buf_operand`,`src`,`first`,`t`,`p`] >>
+  simp[abiDecoderContractTheory.abi_decode_load_def,
+    abiDecoderContractTheory.abi_decode_source_def] >>
   suspend "package"
 QED
 
