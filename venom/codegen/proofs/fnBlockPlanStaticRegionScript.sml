@@ -6,6 +6,7 @@ Ancestors
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
+  reorderSim stackPlanTypes
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -1808,4 +1809,68 @@ Theorem regional_selected_phi_exit_freshness:
       (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)))
 Proof
   simp[regional_selected_phi_inv_def] >> metis_tac[]
+QED
+
+(* Next-live variables retain a reserve beyond all materialized inputs. *)
+Theorem regional_emit_live_accumulation[local]:
+  !inputs ps opc nl iops mid v.
+    emit_input_plan opc inputs nl ps = (iops,mid) /\
+    MEM v nl /\ (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
+      LIST_ELEM_COUNT (Var v) inputs <=
+    LIST_ELEM_COUNT (Var v) mid.ps_stack +
+      (if Var v IN FDOM mid.ps_spilled then 1 else 0)
+Proof
+  Induct_on `inputs`
+  >- simp[emit_input_plan_def, LIST_ELEM_COUNT_THM]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (step_ops, step_state)` >>
+  Cases_on `emit_input_plan opc inputs nl step_state` >>
+  rename1 `emit_input_plan _ _ _ _ = (tail_ops, tail_state)` >>
+  gvs[emit_input_plan_cons] >>
+  qspecl_then [`opc`, `operand_vars inputs ++ nl`, `h`, `ps`, `Var v`]
+    mp_tac emit_one_input_inventory_mono_aux >> simp[] >> strip_tac >>
+  `MEM (Var v) step_state.ps_stack \/ Var v IN FDOM step_state.ps_spilled` by
+    (gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+     Cases_on `Var v IN FDOM ps.ps_spilled` >>
+     Cases_on `Var v IN FDOM step_state.ps_spilled` >> gvs[] >> decide_tac) >>
+  `LIST_ELEM_COUNT (Var v) inputs +
+     (LIST_ELEM_COUNT (Var v) step_state.ps_stack +
+      (if Var v IN FDOM step_state.ps_spilled then 1 else 0)) <=
+   LIST_ELEM_COUNT (Var v) mid.ps_stack +
+     (if Var v IN FDOM mid.ps_spilled then 1 else 0)` by
+    (first_x_assum irule >> conj_tac
+     >- (qexistsl [`tail_ops`, `nl`, `opc`] >> simp[]) >> simp[]) >>
+  (Cases_on `h = Var v`
+  >- (gvs[] >>
+      qspecl_then [`opc`, `operand_vars inputs ++ nl`, `Var v`, `ps`]
+        mp_tac emit_one_input_inventory_inc >>
+      simp[is_var_operand_def] >> strip_tac >>
+      gvs[LIST_ELEM_COUNT_THM] >>
+      Cases_on `Var v IN FDOM ps.ps_spilled` >>
+      Cases_on `Var v IN FDOM step_state.ps_spilled` >>
+      Cases_on `Var v IN FDOM mid.ps_spilled` >> gvs[] >> decide_tac) >>
+  gvs[LIST_ELEM_COUNT_THM] >>
+      Cases_on `Var v IN FDOM ps.ps_spilled` >>
+      Cases_on `Var v IN FDOM step_state.ps_spilled` >>
+      Cases_on `Var v IN FDOM mid.ps_spilled` >> gvs[] >> decide_tac)
+QED
+
+Theorem regional_emit_live_reserve:
+  !opc inputs nl ps iops mid v.
+    emit_input_plan opc inputs nl ps = (iops,mid) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    MEM v nl /\ (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    LIST_ELEM_COUNT (Var v) inputs + 1 <=
+      LIST_ELEM_COUNT (Var v) mid.ps_stack +
+      (if Var v IN FDOM mid.ps_spilled then 1 else 0)
+Proof
+  rpt strip_tac >> drule regional_emit_live_accumulation >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `Var v IN FDOM ps.ps_spilled` >>
+  Cases_on `Var v IN FDOM mid.ps_spilled` >> gvs[] >> decide_tac
 QED
