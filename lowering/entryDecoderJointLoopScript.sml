@@ -9,6 +9,7 @@ Ancestors
   fragExecMem instIdxIndep abiEncoder emitHelper exprLoweringProps
   list rich_list arithmetic venomInst venomMemDefs decoderPrefixEdges
   abiDecoderValidArrayEntry abiDecoderLoopRegisters calldataDynOwned
+  abiDecoderExecution venomExecSemantics
 
 Definition EntryLoopOwn_def:
   EntryLoopOwn fn lo hi s <=>
@@ -444,6 +445,104 @@ Proof
   qexistsl_tac [`entry`, `child`, `new`] >> asm_rewrite_tac[]
 QED
 
+Theorem entry_joint_chosen_successor:
+  EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
+    hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
+    p d iid oid base_addr cap /\
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial j u old /\
+  j < LENGTH vs /\ EntrySetupFrame next u entry /\
+  eval_operand (FST ops) entry = SOME (n2w j) /\
+  EntryChildResources ctx fn site ready st1 limit_st tv vs d j entry child new /\
+  EntryLoopSafe ctx fn u entry /\ EntryLoopPull ctx fn u entry /\
+  EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child /\
+  entry_decoder_obs initial u /\ entry_decoder_obs u entry /\
+  entry_decoder_obs entry child /\ alloca_history fn child ==>
+  ?v. EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+      src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial
+      (SUC j) v (old++new) /\
+    EntryLoopSafe ctx fn u v /\ EntryLoopPull ctx fn u v /\
+    entry_decoder_obs initial v /\ entry_decoder_obs u v /\ alloca_history fn v
+Proof
+  strip_tac >>
+  `~child.vs_halted /\ child.vs_current_bb = st1.cs_current_bb /\
+   child.vs_inst_idx = LENGTH st1.cs_current_insts /\
+   eval_operand (Var biv) child = SOME (n2w j) /\
+   eval_operand ip child = SOME (n2w p) /\
+   ip <> Var (STRING #"%" (toString nvar)) /\ p+32 <= child.vs_alloca_next` by
+    suspend "operands" >>
+  qabbrev_tac `bb = <|bb_label := st1.cs_current_bb; bb_instructions :=
+    st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id biv
+      (STRING #"%" (toString nvar)) ip hdr|>` >>
+  qabbrev_tac `v = jump_to hdr (mstore p (n2w (SUC j))
+    (update_var (STRING #"%" (toString nvar)) (n2w (SUC j)) child))` >>
+  `EntryLoopSafe ctx fn child v /\ EntryLoopPull ctx fn child v` by suspend "edge" >>
+  `bb.bb_instructions = st1.cs_current_insts ++
+    abi_decode_backedge_insts st1.cs_next_id biv (STRING #"%" (toString nvar)) ip hdr` by
+    simp[Abbr `bb`] >>
+  `v = jump_to hdr (mstore p (n2w (SUC j))
+    (update_var (STRING #"%" (toString nvar)) (n2w (SUC j)) child))` by
+    simp[Abbr `v`] >>
+  drule_all entry_joint_fixed_successor >> strip_tac >>
+  qexists_tac `v` >> asm_rewrite_tac[]
+QED
+Resume entry_joint_chosen_successor[operands]:
+  `FST ops = Var biv /\ abi_decoder_operand_live ready.cs_next_var (FST ops) /\
+   abi_decoder_operand_live next ip /\
+   (!op. abi_decoder_operand_live next op ==> abi_decoder_operand_live ready.cs_next_var op) /\
+   ip <> Var (STRING #"%" (toString nvar))` by
+    (qhdtm_assum `EntryLoopConfig` mp_tac >> rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [EntryLoopConfig_def] >> rpt strip_tac >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  `alloca_inv u /\ FLOOKUP u.vs_allocas iid = SOME (p,32) /\
+   eval_operand ip u = SOME (n2w p)` by
+    (qhdtm_assum `EntryLoopInv` mp_tac >> rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [EntryLoopInv_def, EntryLoopHeader_def] >>
+     rpt strip_tac >> asm_rewrite_tac[]) >>
+  `p+32 <= u.vs_alloca_next` by
+    (qhdtm_assum `alloca_inv` mp_tac >>
+     qpat_assum `FLOOKUP u.vs_allocas iid = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  qhdtm_x_assum `EntryLoopConfig` kall_tac >>
+  qhdtm_x_assum `EntryLoopInv` kall_tac >>
+  qhdtm_x_assum `alloca_inv` kall_tac >>
+  qhdtm_x_assum `EntrySetupFrame` mp_tac >>
+  qhdtm_x_assum `EntryChildResources` mp_tac >>
+  pure_rewrite_tac[EntrySetupFrame_def, EntryChildResources_def] >>
+  ntac 2 (disch_then (map_every assume_tac o CONJUNCTS)) >>
+  `eval_operand ip child = SOME (n2w p)` by metis_tac[] >>
+  `eval_operand (Var biv) child = SOME (n2w j)` by metis_tac[] >>
+  asm_rewrite_tac[] >> decide_tac
+QED
+Resume entry_joint_chosen_successor[edge]:
+  `p < dimword (:256) /\ LENGTH vs < dimword (:256) /\
+   lookup_block child.vs_current_bb fn.fn_blocks = SOME bb /\
+   ?hbb. lookup_block hdr fn.fn_blocks = SOME hbb /\
+     phi_prefix_length hbb.bb_instructions = 0` by
+    (qhdtm_assum `EntryLoopConfig` mp_tac >>
+     qpat_assum `child.vs_current_bb = _` mp_tac >>
+     qpat_assum `Abbrev (bb = _)` mp_tac >> rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [EntryLoopConfig_def, markerTheory.Abbrev_def] >>
+     ntac 2 strip_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     asm_rewrite_tac[] >>
+     simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def]) >>
+  `bb.bb_instructions = st1.cs_current_insts ++
+    abi_decode_backedge_insts st1.cs_next_id biv (STRING #"%" (toString nvar)) ip hdr` by
+    simp[Abbr `bb`] >>
+  `v = jump_to hdr (mstore p (n2w (SUC j))
+    (update_var (STRING #"%" (toString nvar)) (n2w (SUC j)) child))` by
+    simp[Abbr `v`] >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] entry_joint_backedge_transfer) >>
+  disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var biv) child = _`)) >>
+  disch_then (drule_at (Pat `eval_operand ip child = _`)) >>
+  disch_then (drule_at (Pat `lookup_block hdr fn.fn_blocks = _`)) >>
+  disch_then (qspecl_then [`v`, `LENGTH (vs:value list)`, `ctx`] mp_tac) >>
+  asm_rewrite_tac[]
+QED
+Finalise entry_joint_chosen_successor
+
 (* Finite closure hides scratch existentially; a successor must still supply
    all resources and observations jointly before this boundary can be used. *)
 Theorem entry_joint_loop_finite:
@@ -493,4 +592,5 @@ val () =
           entry_joint_child_control, entry_joint_loop_control,
           entry_joint_empty_setup_endpoint, entry_joint_loop_finite,
           entry_joint_backedge_transfer, entry_joint_setup_resources,
-          entry_joint_valid_setup, entry_joint_ordinary_child];
+          entry_joint_valid_setup, entry_joint_ordinary_child,
+          entry_joint_chosen_successor];
