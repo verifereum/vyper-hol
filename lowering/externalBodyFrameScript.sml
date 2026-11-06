@@ -1422,6 +1422,17 @@ Proof
         drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
   >- (rpt strip_tac >>
+      `cenv_module_pins tops cenv` by fs[body_inv_def] >>
+      `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+         NONE = SOME tops` by fs[body_inv_def] >>
+      `bare_globals_complete env_t.bare_globals
+         (initial_evaluation_context am.sources am.layouts tx NONE)` by
+        fs[env_context_consistent_def] >>
+      fs[cenv_module_pins_def] >>
+      drule add_immutable_locations_cases >> strip_tac
+      >- (drule add_module_var_locations_FLOOKUP >> simp[]) >>
+      gvs[bare_globals_complete_def] >> metis_tac[])
+  >- (rpt strip_tac >>
       gvs[env_consistent_def, env_context_consistent_def,
           bare_global_assignable_complete_def, initial_evaluation_context_def])
   >- (rpt strip_tac >> drule_all body_inv_bare_global_type >> simp[]) >>
