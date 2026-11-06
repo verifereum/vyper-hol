@@ -1415,7 +1415,7 @@ Proof
       gvs[] >>
       `read_result cx (Value v) es' = (INL v, es')` by
         simp[read_result_def, return_def] >>
-      `is_word_type t ==> ?w. eval_operand p.ptr_operand s = SOME w /\
+      `is_word_type (expr_type e) ==> ?w. eval_operand p.ptr_operand s = SOME w /\
                               w2n w + 32 <= s.vs_alloca_next` by
         (strip_tac >> gvs[] >>
          `?w. eval_operand p.ptr_operand s = SOME w` by
