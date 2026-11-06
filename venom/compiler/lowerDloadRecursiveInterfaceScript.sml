@@ -1,7 +1,8 @@
 Theory lowerDloadRecursiveInterface
 Ancestors
   lowerDloadProjectedReachability lowerDloadNormalData lowerDloadReachability
-  lowerDloadTargetValidity
+  lowerDloadTargetValidity lowerDloadConfiguredScratch lowerDloadCoverageReserve
+  lowerDloadCoverageLoad
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
   lowerDloadNormalJump lowerDloadNormalEntry lowerDloadReachableJump
   o1LowerDloadEntryFetch o1LowerDloadJointEntry lowerDloadNonhalted
@@ -1255,7 +1256,14 @@ QED
 
 Resume ld_recursive_alloca_next[saved_successor]:
   all_tac >>
-  rpt (conj_tac >- (simp[] >> metis_tac[lowerDloadProvenanceSupportTheory.ld_annotated_active_inst])) >>
+  drule lowerDloadProvenanceSupportTheory.ld_annotated_active_inst >> strip_tac >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- (qpat_x_assum `lookup_block s.vs_current_bb _ = SOME bb` mp_tac >> simp[]) >>
+  conj_tac >- (qpat_x_assum `lookup_block t.vs_current_bb _ = SOME gb` mp_tac >> simp[]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- (qpat_x_assum `active_inst fn i' _` mp_tac >> simp[]) >>
   qmatch_goalsub_abbrev_tac `ld_saved_embedded _ EN _ _ _ _ _` >>
   `!owner bs sz. ld_live astk L AP AG (owner,(bs,sz)) ==>
       FLOOKUP EN owner = FLOOKUP E owner` by
@@ -2021,3 +2029,368 @@ QED
    Observation consumers may forget geometry using the checked implication.
    No global induction or completed DLOAD assembly is authorized by this probe.
 *)
+
+(* Completion restriction keeps geometry of the old segment anchor. *)
+val ld_recursive_geometry_load_complete =
+  let
+    val (args,body) = strip_abs ld_recursive_geometry_candidate
+    val [current,saved,alternatives] = strip_conj body
+    val (normal,_) = dest_disj alternatives
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n"
+    val i = named "i"
+    val code = named "code"
+    val restricted = list_mk_exists(ws,
+      list_mk_conj [b, ``^i.inst_opcode = DLOAD``,
+                      ``SUC ^n = LENGTH ^code``])
+  in list_mk_abs(args,list_mk_conj [current,saved,restricted]) end;
+
+Theorem ld_recursive_geometry_load_next:
+  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_recursive_geometry_load_complete) vs0 CT stk un gn j t /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_geometry_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved") >>
+  `inst_wf i` by metis_tac[ld_annotated_inst_wf] >>
+  `?off out. i.inst_operands = [off] /\ i.inst_outputs = [out]` by
+    (qpat_assum `inst_wf i` mp_tac >>
+     qpat_assum `i.inst_opcode = DLOAD` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+     metis_tac[]) >>
+  `LENGTH code = 4` by
+    (qpat_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     qpat_assum `i.inst_opcode = DLOAD` mp_tac >>
+     qpat_assum `i.inst_operands = [off]` mp_tac >>
+     qpat_assum `i.inst_outputs = [out']` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lower_dload_inst_supply_def, LET_THM, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
+  `n = 3` by decide_tac >>
+  TRY (qpat_x_assum `n = 0` mp_tac >>
+       qpat_assum `n = 3` mp_tac >> simp[NoAsms] >> NO_TAC) >>
+  `?a b c d av bv. code = [a;b;c;d] /\
+      a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+      a.inst_outputs = [av] /\
+      b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+      b.inst_outputs = [bv] /\
+      c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] /\
+      c.inst_outputs = [] /\
+      d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\
+      d.inst_outputs = [out'] /\ av <> bv /\
+      av NOTIN set a1.irs_used_vars /\ bv NOTIN set a1.irs_used_vars` by
+    (qpat_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     qpat_assum `i.inst_opcode = DLOAD` mp_tac >>
+     qpat_assum `i.inst_operands = [off]` mp_tac >>
+     qpat_assum `i.inst_outputs = [out']` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac irSupplyTheory.fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  `ld_target_prefix CT code ta ua (SUC n)
+     (z with vs_inst_idx := SUC t.vs_inst_idx) (step_taint j t z un)` by
+    (qpat_assum `ld_target_prefix CT code ta ua n t un` mp_tac >>
+     qpat_assum `j = EL n code` mp_tac >>
+     qpat_assum `step_inst fuel CT j t = OK z` mp_tac >>
+     qpat_assum `n < LENGTH code` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     gvs[] >> metis_tac[ld_target_prefix_rules]) >>
+  `MEM i (fn_insts fn)` by
+    (qpat_assum `active_inst fn i s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `opaque_use_ok fn` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = cpre ++ fn::cpost` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+  `!v. off = Var v ==> v IN U` by
+    (rpt strip_tac >>
+     `MEM (Var v) i.inst_operands` by metis_tac[MEM] >>
+     `i.inst_opcode <> ASSIGN /\ i.inst_opcode <> PHI /\
+      ~MEM i.inst_opcode [RET;RETFMP;DRET]` by simp[] >>
+     drule_all ld_original_nonopaque_operand_support >> simp[] >> metis_tac[]) >>
+  `out' IN V` by
+    (qpat_assum `V = set (fn_ir_vars fn)` SUBST1_TAC >>
+     simp[] >> irule ld_original_output_support >>
+     qexists_tac `i` >> simp[]) >>
+  `retpc_shape_ok fn` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = cpre ++ fn::cpost` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+  `~retpc_var fn out'` by
+    (qpat_assum `retpc_shape_ok fn`
+       (mp_tac o Q.SPECL [`i`,`out'`] o cj 3 o
+        REWRITE_RULE [unitShapeDefsTheory.retpc_shape_ok_def]) >>
+     simp[]) >>
+  `out' IN U` by
+    (qpat_assum `out' IN V` mp_tac >>
+     qpat_assum `U = _` mp_tac >>
+     qpat_assum `~retpc_var fn out'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `MEM fn observed.cu_context.ctx_functions /\ ir_supply_covers_unit fa observed` by
+    (qpat_assum `fn_pass_step _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.fn_pass_step_def,
+       venomFnScheduleRunnerTheory.lookup_unique_function_def, AllCaseEqs()] >>
+     rpt strip_tac >>
+     `MEM fn (FILTER (\f. f.fn_name = fn.fn_name)
+        observed.cu_context.ctx_functions)` by simp[] >> gvs[MEM_FILTER]) >>
+  `ir_supply_covers_fn fa fn` by
+    (qpat_assum `ir_supply_covers_unit fa observed` mp_tac >>
+     qpat_assum `MEM fn observed.cu_context.ctx_functions` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomFnScheduleRunnerTheory.ir_supply_covers_unit_def,
+       venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
+       venomFnScheduleRunnerTheory.list_subset_def, irSupplyTheory.unit_ir_vars_def,
+       irSupplyTheory.unit_ir_inst_ids_def, irSupplyTheory.unit_ir_labels_def,
+       EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >> metis_tac[]) >>
+  `!v. v IN V ==> MEM v a1.irs_used_vars` by
+    (qpat_assum `lower_dload_blocks_supply fa bpre = _`
+       (mp_tac o MATCH_MP ld_blocks_supply_used_vars_mono) >>
+     qpat_assum `lower_dload_insts_supply a0 pre = _`
+       (mp_tac o MATCH_MP ld_insts_supply_used_vars_mono) >>
+     qpat_assum `ir_supply_covers_fn fa fn` mp_tac >>
+     qpat_assum `V = set (fn_ir_vars fn)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
+       venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM] >> metis_tac[]) >>
+  `av NOTIN V /\ bv NOTIN V` by metis_tac[] >>
+  `av NOTIN U /\ bv NOTIN U` by
+    (qpat_assum `av NOTIN V` mp_tac >>
+     qpat_assum `bv NOTIN V` mp_tac >>
+     qpat_assum `U = _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[] >> metis_tac[]) >>
+  `FDOM AG SUBSET V` by
+    (drule_all lowerDloadProvenanceSupportTheory.ld_annotated_prov_ir_vars >>
+     qpat_assum `V = set (fn_ir_vars fn)` SUBST1_TAC >> simp[]) >>
+  `!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)` by
+    (drule ld_normal_data_frame >>
+     metis_tac[lowerDloadCoverageInvariantTheory.ld_frame_data_provenance]) >>
+  `!v. v NOTIN V ==> v NOTIN FDOM BH` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!v. ld_owned_selection E _ _` (qspec_then `v` mp_tac) >>
+     qpat_assum `FDOM AG SUBSET V` mp_tac >>
+     qpat_assum `v NOTIN V` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lowerDloadPairedBoundaryTheory.ld_owned_selection_def, SUBSET_DEF, FLOOKUP_DEF] >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `av NOTIN FDOM BH /\ bv NOTIN FDOM BH` by metis_tac[] >>
+  `raw_reachable vs0 CS fn i s` by
+    (irule ld_frame_reachable_raw >> drule ld_annotated_erasure >> metis_tac[]) >>
+  `dload_offset_ok CS fn i s /\ dload_headroom_ok CS fn i s` by
+    (qpat_assum `mem_inv dload_offset_ok CS vs0` mp_tac >>
+     qpat_assum `mem_inv dload_headroom_ok CS vs0` mp_tac >>
+     qpat_assum `raw_reachable vs0 CS fn i s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[unitMemInvTheory.mem_inv_raw_reachable]) >>
+  `code_layout_valid s` by
+    (irule o1LowerDloadSuppliedSegmentResourcesTheory.ld_raw_code_layout >>
+     goal_assum (drule_at Any) >>
+     fs[o1PassContractTheory.o1_run_state_ok_def]) >>
+  `ld_shared_state tn ua s ta` by
+    (drule ld_normal_data_frame >>
+     metis_tac[lowerDloadCoverageInvariantTheory.ld_frame_data_shared]) >>
+  `eval_operand (Label "code_end") ta =
+     SOME (n2w (LENGTH s.vs_code - LENGTH s.vs_data_section))` by
+    (qpat_assum `ld_shared_state tn ua s ta` mp_tac >>
+     qpat_assum `code_layout_valid s` mp_tac >>
+     drule ld_normal_data_frame >>
+     disch_then (mp_tac o MATCH_MP lowerDloadCoverageInvariantTheory.ld_frame_data_vars) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lowerDloadSharedStateTheory.ld_shared_state_def,
+       lowerDloadPairedBoundaryTheory.ld_owned_vars_def,
+       lowerDloadDefsTheory.code_layout_valid_def, venomStateTheory.eval_operand_def] >>
+     metis_tac[]) >>
+  `a.inst_id IN keys` by
+    (drule_all lower_dload_configured_scratch_member >> simp[]) >>
+  drule ld_normal_data_geometry >> strip_tac >>
+  `LIST_REL (\a f. CARD a <= LENGTH (FILTER (\ii. ii.inst_opcode = DLOAD)
+      (fn_insts f.cf_fn))) suspended (MAP ld_erase_frame astk)` by
+    (qpat_assum `LIST_REL _ (A::suspended) _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[listTheory.LIST_REL_CONS1, listTheory.LIST_REL_EL_EQN,
+       listTheory.EL_MAP, lowerDloadOwnershipTheory.ld_erase_frame_def] >>
+     strip_tac >> gvs[listTheory.EL_MAP] >> metis_tac[]) >>
+  `ta.vs_alloca_next < dimword (:256) /\
+    (FLOOKUP ta.vs_allocas a.inst_id = NONE ==>
+      ta.vs_alloca_next + 32 < dimword (:256))` by
+    (drule_all ld_configured_scratch_headroom >> simp[]) >>
+  `a.inst_id NOTIN A ==> ta.vs_alloca_next + 32 < dimword (:256)` by
+    (drule_all lowerDloadAllocationTheory.ld_alloc_account_scratch_absent >> simp[]) >>
+  `allocas_non_overlapping ta /\ alloca_next_valid ta` by
+    (qpat_assum `alloca_inv ta` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[venomMemDefsTheory.alloca_inv_def]) >>
+  `post <> []` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = cpre ++ fn::cpost` mp_tac >>
+     qpat_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` mp_tac >>
+     qpat_assum `bb.bb_instructions = pre ++ i::post` mp_tac >>
+     qpat_assum `i.inst_opcode = DLOAD` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `wf_function fn` by fs[o1PassContractTheory.o1_ctx_shape_def,
+       o1PassContractTheory.o1_fn_shape_def, EVERY_MEM] >>
+     `bb_well_formed bb` by metis_tac[wf_function_def,lookup_block_MEM] >>
+     Cases_on `post` >> gvs[bb_well_formed_def,LAST_APPEND,is_terminator_def]) >>
+  Cases_on `post` >- gvs[] >>
+  rename1 `bb.bb_instructions = pre ++ i::i'::rest` >>
+  Cases_on `lower_dload_inst_supply a2 i'` >>
+  rename1 `lower_dload_inst_supply a2 i' = (nextcode,nexta)` >>
+  Cases_on `lower_dload_insts_supply nexta rest` >>
+  rename1 `lower_dload_insts_supply nexta rest = (nexttail,enda)` >>
+  `tail = nextcode ++ nexttail /\ enda = a3` by
+    (qpat_assum `lower_dload_insts_supply a2 (i'::rest) = _`
+       (mp_tac o PURE_REWRITE_RULE [Once lower_dload_insts_supply_def]) >>
+     simp[] >> strip_tac >> simp[]) >>
+  `lower_dload_insts_supply nexta rest = (nexttail,a3)` by metis_tac[] >>
+  `lower_dload_inst_supply a1 i = ([a;b;c;d],a2)` by metis_tac[] >>
+  `ld_target_prefix CT [a;b;c;d] ta ua (SUC (SUC (SUC (SUC 0))))
+     (z with vs_inst_idx := SUC t.vs_inst_idx) (step_taint j t z un)` by
+    (qpat_assum `ld_target_prefix CT code ta ua (SUC n) _ _` mp_tac >>
+     qpat_assum `code = [a;b;c;d]` mp_tac >> qpat_assum `n = 3` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  qpat_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ld_configured_load_next_backward) >>
+  disch_then (drule_at (Pat `ld_target_prefix _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `lower_dload_block_supply _ _ = _`)) >>
+  disch_then (drule_at (Pat `lower_dload_insts_supply _ pre = _`)) >>
+  disch_then (drule_at (Pat `lower_dload_inst_supply a1 i = _`)) >>
+  disch_then (drule_at (Pat `lower_dload_inst_supply a2 i' = _`)) >>
+  disch_then (fn th =>
+    qpat_assum `lower_dload_insts_supply a0 pre = (p,a1)`
+      (mp_then (Pat `lower_dload_insts_supply a0 _ = _`) mp_tac th)) >>
+  disch_then (drule_at (Pat `i.inst_operands = [_]`)) >>
+  disch_then (drule_at (Pat `i.inst_outputs = [_]`)) >>
+  disch_then (drule_at (Pat `a.inst_outputs = [_]`)) >>
+  disch_then (drule_at (Pat `b.inst_outputs = [_]`)) >>
+  disch_then (fn th =>
+    qpat_assum `lookup_block ta.vs_current_bb gn.fn_blocks = SOME gb`
+      (mp_then (Pat `lookup_block ta.vs_current_bb _ = SOME gb`) mp_tac th)) >>
+  disch_then (drule_at (Pat `!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok _ fn`)) >>
+  disch_then (fn th => qpat_assum `i.inst_operands = [off]`
+    (mp_then (Pat `i.inst_operands = [_]`) mp_tac th)) >>
+  disch_then (qspec_then `fuel` mp_tac) >>
+  (impl_tac >- (qpat_x_assum `saved :- _` kall_tac >> simp[])) >>
+  disch_then (qx_choose_then `zs` strip_assume_tac) >>
+  `alloca_inv (z with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (`alloca_inv z` by metis_tac[venomMemPropsTheory.alloca_inv_step_inst] >>
+     qpat_x_assum `alloca_inv z` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  `zs.vs_current_bb = s.vs_current_bb /\ zs.vs_prev_bb = s.vs_prev_bb` by
+    (qpat_assum `step_inst fuel CS i s = OK zs` mp_tac >>
+     qpat_assum `i.inst_opcode = DLOAD` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule step_preserves_control_flow >> simp[is_terminator_def]) >>
+  `z.vs_current_bb = ta.vs_current_bb /\ z.vs_prev_bb = ta.vs_prev_bb` by
+    (qpat_assum `ld_target_prefix CT [a;b;c;d] _ _ _ _ _`
+       (mp_then Any mp_tac ld_target_prefix_control) >>
+     (impl_tac >- simp[is_terminator_def]) >> simp[]) >>
+  `lookup_block (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb
+     gn.fn_blocks = SOME gb` by
+    (qpat_x_assum `lookup_block ta.vs_current_bb gn.fn_blocks = SOME gb` mp_tac >> simp[]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) gn.fn_blocks)` by
+    (drule o1_ctx_shape_distinct_block_labels >>
+     disch_then (mp_tac o SRULE [EVERY_MEM]) >>
+     disch_then (qspec_then `fn` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     pure_rewrite_tac [fn_labels_def] >>
+     disch_then SUBST1_TAC >> simp[]) >>
+  `j' = HD nextcode` by
+    (qpat_assum `active_inst gn j' _`
+       (mp_then (Pat `active_inst _ _ _`) mp_tac ld_active_lookup_el) >>
+     disch_then (qspec_then `gb` mp_tac) >>
+     (impl_tac >- (qpat_x_assum `saved :- _` kall_tac >> gvs[])) >>
+     qpat_assum `active_inst gn (HD nextcode) _`
+       (mp_then (Pat `active_inst _ _ _`) mp_tac ld_active_lookup_el) >>
+     disch_then (qspec_then `gb` mp_tac) >>
+     (impl_tac >- (qpat_x_assum `saved :- _` kall_tac >> gvs[])) >> metis_tac[]) >>
+  `nextcode <> []` by metis_tac[o1ContractLowerDloadTheory.lower_dload_inst_supply_nonempty] >>
+  `active_inst fn i' (zs with vs_inst_idx := SUC s.vs_inst_idx)` by
+    metis_tac[lowerDloadProvenanceSupportTheory.ld_annotated_active_inst] >>
+  Cases_on `in_revert_forward fn (zs with vs_inst_idx := SUC s.vs_inst_idx)`
+  >- suspend "revert_successor" >>
+  disj1_tac >>
+  qexistsl_tac [`astk`, `gstk`, `k`, `L`, `AP`, `ld_set_prov AG [out'] NONE`,
+    `step_taint i s zs tn`, `fn`, `i'`,
+    `zs with vs_inst_idx := SUC s.vs_inst_idx`,
+    `z with vs_inst_idx := SUC t.vs_inst_idx`, `step_taint j t z un`,
+    `V`, `U`, `E`, `H`, `BP`,
+    `ld_set_prov (ld_set_prov BH [bv] NONE) [out'] NONE`, `live`, `keys`,
+    `a.inst_id INSERT A`, `suspended`, `f`, `fa`, `fb`, `bb`, `gb`, `a0`, `a2`,
+    `nexta`, `a3`, `pre ++ [i]`, `rest`, `p ++ [a;b;c;d]`, `nextcode`,
+    `nexttail`, `bpre`, `bpost`, `qpre`, `qpost`, `supports`, `savedkeys`,
+    `s0`, `0`] >>
+  asm "saved" (fn th => asm_rewrite_tac [th]) >>
+  (conj_tac
+   >- (qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
+       asm_rewrite_tac [])) >>
+  simp[GSYM APPEND_ASSOC] >>
+  (conj_tac >- (qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` mp_tac >> simp[])) >>
+  qpat_x_assum `saved :- _` kall_tac >>
+  `FINITE A /\ LIST_REL (\a g. FINITE a /\
+      CARD a <= LENGTH (FILTER (\ii. ii.inst_opcode = DLOAD) (fn_insts g)))
+      suspended (MAP (\sf. sf.lf_fn) astk)` by
+    (qpat_assum `LIST_REL _ (A::suspended) _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  simp[] >>
+  drule_all lowerDloadConfiguredCapsTheory.lower_dload_configured_cap_bound >> strip_tac >>
+  `CARD (a.inst_id INSERT A) <= CARD keys` by
+    (irule CARD_SUBSET >>
+     qpat_assum `ld_alloc_account keys _ A s ta` mp_tac >>
+     qpat_assum `a.inst_id IN keys` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lowerDloadAllocationTheory.ld_alloc_account_def] >> SET_TAC[]) >>
+  gvs[] >>
+  qpat_x_assum `CARD _ <= _` mp_tac >>
+  qpat_x_assum `(if _ then _ else _) <= _` mp_tac >> decide_tac
+QED
+
+Resume ld_recursive_geometry_load_next[revert_successor]:
+  `lookup_block (zs with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
+     fn.fn_blocks = SOME bb` by
+    (qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` mp_tac >> simp[]) >>
+  `lower_dload_insts_supply a0
+     (TAKE (zs with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx
+        bb.bb_instructions) = (p ++ [a;b;c;d],a2)` by
+    (simp_tac (srw_ss()) [] >>
+     qpat_assum `bb.bb_instructions = _` SUBST1_TAC >>
+     qpat_assum `s.vs_inst_idx = _` SUBST1_TAC >>
+     simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]) >>
+  `get_instruction gb (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j'` by
+    (simp[get_instruction_def, EL_APPEND2] >>
+     Cases_on `nextcode` >- metis_tac[] >> simp[EL_APPEND2, EL_APPEND1]) >>
+  `EVERY (\v. MEM v fa.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
+    (fs[venomFnScheduleRunnerTheory.ir_supply_covers_unit_def,
+        venomFnScheduleRunnerTheory.list_subset_def, irSupplyTheory.unit_ir_vars_def,
+        irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
+        EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     fs[lambdify irSupplyTheory.block_ir_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[MEM_APPEND, MEM]) >>
+  `EVERY (\v. MEM v a0.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
+    (qpat_assum `lower_dload_blocks_supply fa bpre = (qpre,a0)`
+       (mp_then Any mp_tac ld_blocks_supply_used_vars_mono) >>
+     qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars bb.bb_instructions))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `saved :- _` kall_tac >>
+  drule_all ld_configured_revert_interval_entry >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`gb`, `copypos`, `endpos`] >> gvs[]
+QED
+
+Finalise ld_recursive_geometry_load_next

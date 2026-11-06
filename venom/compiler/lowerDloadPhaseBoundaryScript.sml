@@ -1,7 +1,7 @@
 Theory lowerDloadPhaseBoundary
 Ancestors
   lowerDloadPairedBoundary lowerDloadAllocation ptrDiscipline venomExecSemantics
-  venomState list arithmetic
+  venomState venomInstProps list arithmetic
 
 Inductive ld_target_prefix:
 [~zero:]
@@ -172,5 +172,21 @@ Theorem ld_saved_stack_shapes[local]:
     (?V keys d A. ld_saved_locals V E keys d A f g) /\
     LIST_REL (\f g. ?V keys d A. ld_saved_locals V E keys d A f g) fs gs)
 Proof
+  simp[]
+QED
+
+Theorem ld_target_prefix_control:
+  !C code t0 u0 n t u.
+    ld_target_prefix C code t0 u0 n t u /\
+    EVERY (\i. ~is_terminator i.inst_opcode) code ==>
+    t.vs_current_bb = t0.vs_current_bb /\ t.vs_prev_bb = t0.vs_prev_bb
+Proof
+  rewrite_tac[GSYM AND_IMP_INTRO] >>
+  ho_match_mp_tac ld_target_prefix_ind >> simp[] >>
+  rpt strip_tac >>
+  `~is_terminator (EL n code).inst_opcode` by
+    (qpat_x_assum `EVERY _ code` mp_tac >>
+     simp[listTheory.EVERY_EL] >> disch_then (qspec_then `n` mp_tac) >> simp[]) >>
+  drule_all venomInstPropsTheory.step_preserves_control_flow >>
   simp[]
 QED
