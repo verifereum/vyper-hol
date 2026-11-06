@@ -1,6 +1,6 @@
 Theory forPtrRangeChecked
 Ancestors
-  forPtrCheckedScalar exprSendPtr fragGasSeqPtr fragGasPathPtr
+  forPtrCheckedScalar forPtrRangeEntry exprSendPtr fragGasSeqPtr fragGasPathPtr
   exprSimOperands instIdxIndep emitHelperProps
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   exprLoweringProps rich_list finite_map pred_set list
@@ -244,3 +244,35 @@ Resume for_checked_order_assert_ptr[assert_paths]:
   simp[bool_to_word_def]
 QED
 Finalise for_checked_order_assert_ptr
+
+Theorem for_checked_add_jump_ptr:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst i ADD [left;right] [out]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst j JMP [Label lbl] []) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  op_prov G left = NONE /\ op_prov G right = NONE ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (DRESTRICT G (COMPL {out})) (tn with t_var := tn.t_var |+ (out,{}))
+    (OK (jump_to lbl (update_var out (a+b) s)))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst i ADD [left;right] [out]) s =
+     OK (update_var out (a+b) s)` by (irule step_ADD >> simp[]) >>
+  `new_site_bytes s (update_var out (a+b) s) = {}` by
+    simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
+  qabbrev_tac `Gf = DRESTRICT G (COMPL {out})` >>
+  qabbrev_tac `tf = tn with t_var := tn.t_var |+ (out,{})` >>
+  qabbrev_tac `u = (update_var out (a+b) s) with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u)` by
+    (simp[Abbr `Gf`, Abbr `tf`, Abbr `u`] >>
+     irule for_checked_scalar_clean_path_ptr >> simp[mk_inst_def] >>
+     simp[GSYM mk_inst_def] >> metis_tac[]) >>
+  `~u.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
+  `gas_path_ptr D 0 ctx fn PG Gf tf u 0 Gf tf (OK (jump_to lbl u))` by
+    (irule for_range_jump_path_ptr >> simp[Abbr `u`, update_var_def] >>
+     metis_tac[]) >>
+  rev_drule gas_path_ptr_then >> disch_then drule >>
+  simp[Abbr `u`, jump_to_def]
+QED
