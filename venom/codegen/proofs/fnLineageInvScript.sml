@@ -41,8 +41,11 @@ Ancestors
    on the stack or spilled at the JMP.  Distinctness comes from readiness,
    not from the reorder's result: shared incoming PHI operands are
    rejected, PHI slots are injective, phi_uses_disjoint keeps PHI inputs
-   apart from the other live-ins, and live_vars_at is duplicate free.  The
-   rest is the coverage half of this induction.
+   apart from the other live-ins, input_vars_from emits each PHI index at
+   most once, and live_vars_at is duplicate free (live_update dedupes like
+   Python's OrderedSet.update; livenessDefs$live_update_ALL_DISTINCT,
+   propagated through the liveness fixpoint).  The rest is the coverage
+   half of this induction.
 
    Spill layout: the lineage state takes ps_alloc from the successor's DFS
    state, which extends the alloc after pred's DFS plan
