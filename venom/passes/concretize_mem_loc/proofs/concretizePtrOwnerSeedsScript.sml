@@ -6,7 +6,7 @@ Ancestors
   concretizePtrChronologicalHistory ptrDiscipline venomInst venomState
   list rich_list finite_map
 
-Theorem ptr_owner_view_index[local]:
+Theorem ptr_owner_view_index:
   d <= LENGTH obs.po_stack ==>
   (ptr_owner_view d obs).cf_state =
     EL (LENGTH obs.po_stack - d)
@@ -19,7 +19,7 @@ Proof
   simp[EL_MAP]
 QED
 
-Theorem ptr_owner_overlap_unique[local]:
+Theorem ptr_owner_overlap_unique:
   ptr_active_alloc_geometry
     (obs.po_state :: MAP (\f. f.cf_state) obs.po_stack) /\
   d <= LENGTH obs.po_stack /\ e <= LENGTH obs.po_stack /\
