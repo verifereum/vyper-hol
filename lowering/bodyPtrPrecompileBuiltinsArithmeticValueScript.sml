@@ -240,3 +240,16 @@ Proof
   irule ec_result_buffer_ok >> simp[ec_builtin_buffer_size] >>
   qexists `tn` >> simp[]
 QED
+
+(* The memory-place returned by as_ptr_val uses the same pointer obligation
+   already established for the non-word value. *)
+Theorem ec_result_pointer_vv_ok:
+  ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v op G tn s ==>
+  ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value v)
+    (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (op,sb)))
+    es G tn s
+Proof
+  simp[ptr_val_ok_def, ptr_vv_ok_def, as_ptr_val_def,
+       contextTheory.mk_ptr_def, evaluate_type_def, is_word_type_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def]
+QED

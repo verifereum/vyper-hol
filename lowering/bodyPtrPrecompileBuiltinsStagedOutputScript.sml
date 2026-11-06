@@ -38,6 +38,13 @@ Proof
   drule_all staging_prefix_nonmemory_frames >> strip_tac >> gvs[]
 QED
 
+Theorem precompile_local_region_cursor[simp]:
+  local_region cenv scopes (s with vs_inst_idx := k) name b sz <=>
+  local_region cenv scopes s name b sz
+Proof
+  simp[local_region_def, lookup_var_def]
+QED
+
 (* All extent parameters remain in the same w2n normal form as the suffix
    interface.  u names the actual continuation, not an independent run. *)
 Theorem staged_full_output_paths:
@@ -92,7 +99,9 @@ Theorem staged_full_output_paths:
         ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
         ghost_kept cenv es sf G tn s G2 tn2 /\
         stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
-        wb_frame cenv es sf s q) /\
+        wb_frame cenv es sf s q /\
+        (!name b sz. local_region cenv es.scopes q name b sz ==>
+          regions_disjoint (w2n wo) (w2n outsz) b sz)) /\
     ((precompile_result (venom_call_request u target 0w wi insz T).cr_target
         (venom_call_request u target 0w wi insz T).cr_data = SOME NONE \/
       s.vs_outcomes = [] \/ ?co rest. s.vs_outcomes = co::rest /\ ~co.co_success) ==>
@@ -145,6 +154,11 @@ Resume staged_full_output_paths[compose]:
   `sf.cs_next_var <= sf.cs_next_var /\ sf.cs_next_id <= sf.cs_next_id /\
    MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
   drule_all ghost_kept_wb_trans >> strip_tac >>
+  qpat_assum `wb_frame cenv es sf u q`
+    (mp_then Any mp_tac (Q.INST [`es1` |-> `es`] wb_frame_local_regions)) >>
+  disch_then drule_all >> strip_tac >>
+  `!name b sz. local_region cenv es.scopes q name b sz ==>
+      regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
   drule_all wb_frame_trans >> strip_tac >>
   drule_all gas_path_ptr_then >> strip_tac >>
   qpat_assum `u.vs_outcomes = s.vs_outcomes` (fn eq =>

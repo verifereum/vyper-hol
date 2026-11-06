@@ -54,7 +54,13 @@ Theorem ecmul_residual_success:
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (mk_ec_result (x,y)) res G' tn' t /\
-    ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args) res G' t
+    ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args) res G' t /\
+    vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args)
+      es sf sb s (es with outcomes := SOME (DROP 1 s.vs_outcomes)) (Value (mk_ec_result (x,y)))
+      (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (res,sb))) t /\
+    ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value (mk_ec_result (x,y)))
+      (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (res,sb)))
+      (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t
 Proof
   strip_tac >> drule_all ec_point_pointer_bound >> strip_tac >>
   drule_all ecmul_framed_input >>
@@ -132,8 +138,22 @@ Resume ecmul_residual_success[result]:
      simp[NoAsms, LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``, TAKE_LENGTH_TOO_LONG]) >>
   qpat_x_assum `!cx cenv bt args. _`
     (qspecl_then [`cx`,`cenv`,`ECMul`,`args`] strip_assume_tac) >>
+  `FLOOKUP q.vs_allocas aid = SOME (w2n c,64)` by simp[] >>
+  `!name b sz. local_region cenv (es with outcomes := SOME (DROP 1 s.vs_outcomes)).scopes q name b sz ==>
+      regions_disjoint (w2n c) 64 b sz` by
+    (simp[NoAsms] >> qpat_assum `!name b sz. local_region _ _ q _ _ _ ==> _`
+      (ACCEPT_TAC o SRULE [wordsTheory.dimword_def])) >>
+  `vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args)
+      es sf sb s (es with outcomes := SOME (DROP 1 s.vs_outcomes)) (Value (mk_ec_result (x,y)))
+      (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (Var dst,sb))) q` by
+    (irule (SRULE [vyperASTTheory.expr_type_def] (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args`] ec_result_pointer_post)) >>
+     conj_tac
+     >- (qexistsl [`aid`,`c`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `ptr_val_ok _ _ (mk_ec_result _) _ _ _ q`
+    (mp_then Any strip_assume_tac ec_result_pointer_vv_ok) >>
   qexistsl [`q`,`G2`,`tn2`,`c`,`aid`] >>
   qpat_x_assum `res = Var dst` SUBST_ALL_TAC >>
-  simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  simp[] >> irule ec_result_pointer_vv_ok >> first_assum ACCEPT_TAC
 QED
 Finalise ecmul_residual_success
