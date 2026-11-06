@@ -157,24 +157,96 @@ Theorem splice_two_indexed_optimistic:
       splice_loop_e.ps_stack ++ [Var "u"] ++ MAP Var (TAKE (k+1) vs) ++ [Var "t"])
 Proof
   gen_tac >> disch_then SUBST1_TAC >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV (EVAL THENC SCONV [])) >> simp[]
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- (conj_tac >>
+    pure_rewrite_tac[EVAL ``liveness_analyze splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+    pure_rewrite_tac[EVAL ``splice_loop_e``] >> EVAL_TAC >> simp[]) >> simp[]
 QED
 
 Theorem splice_two_indexed_step:
@@ -269,6 +341,8 @@ Proof
   mp_tac splice_two_live_observe >> simp[] >> strip_tac >>
   asm_rewrite_tac[] >>
   CONV_TAC (RHS_CONV EVAL) >>
+  pure_rewrite_tac[EVAL ``splice_loop_e``] >> simp[] >>
+  pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``release_dead_spills``]) >>
   irule release_dead_spills_live_domain >> simp[] >> rpt strip_tac >> gvs[]
 QED
@@ -524,6 +598,41 @@ Theorem splice_two_y_pop:
     (ops,q with ps_stack := [])
 Proof
   rpt strip_tac >> gvs[] >> rewrite_tac[splice_two_h_end_live] >>
+  pure_rewrite_tac[EVAL ``splice_loop_e``] >> simp[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  pure_once_rewrite_tac[sortingTheory.QSORT_DEF] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``QSORT``, ``FOLDL``]) >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``FOLDL``]) >>
   EVAL_TAC >> simp[]
 QED
 
@@ -671,4 +780,57 @@ Proof
   `!xs:string list. FILTER (\v. ~MEM v xs) xs = []` by
     simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
   simp[stackPlanOpsTheory.popmany_plan_def]
+QED
+
+Theorem splice_two_b_live:
+  !k. k < 19 ==>
+  live_vars_at (liveness_analyze splice_two_fn) "B" k =
+    ["p_r";"p_q";"p_p";"p_o";"p_n";"p_m";"p_l";"p_k";
+     "p_j";"p_i";"p_h";"p_g";"p_f";"p_e";"p_d";"p_c";"p_b";"p_a";"cond"] ++
+    REVERSE (DROP k ["a";"b";"c";"d";"e";"f";"g";"h";"i";
+                    "j";"k";"l";"m";"n";"o";"p";"q";"r"])
+Proof
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV EVAL) >> simp[]
+QED
+
+
+Theorem splice_two_b_first_store:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  ?ops. generate_inst_plan (liveness_analyze splice_two_fn)
+    (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn) splice_two_fn
+    (mk_inst 43 MSTORE [Lit 0w; Var "a"] [])
+    (live_vars_at (liveness_analyze splice_two_fn) "B" 1) F F "B" q =
+    SOME (ops,q with ps_stack := splice_loop_e.ps_stack ++ MAP Var
+      ["r";"n";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m"])
+Proof
+  gen_tac >> strip_tac >> gvs[] >> simp[splice_two_b_live] >>
+  pure_rewrite_tac[EVAL ``splice_loop_e``] >>
+  pure_rewrite_tac[EVAL ``dfg_build_function splice_two_fn``] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``release_dead_spills``, ``liveness_analyze``, ``cfg_analyze``, ``splice_two_fn``]) >>
+  dep_rewrite.DEP_REWRITE_TAC[release_dead_spills_live_domain] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[]
 QED
