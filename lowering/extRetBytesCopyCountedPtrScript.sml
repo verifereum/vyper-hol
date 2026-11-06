@@ -35,7 +35,7 @@ Proof
   simp[] >> metis_tac[step_preserves_halted, step_inst_non_invoke]
 QED
 
-Theorem emit_copy_len_binop_counted_ptr:
+Theorem emit_copy_len_binop_ambient_counted_ptr:
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
   emit_op opc [left;right] sa = (Var out,sb) /\
   fn_has_code sa sb fn /\
@@ -50,6 +50,8 @@ Theorem emit_copy_len_binop_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\
@@ -81,6 +83,8 @@ Proof
         simp[mk_inst_def, exec_pure2_def, Abbr `t`]) >>
      conj_tac >- (qexistsl_tac [`sa`, `sb`] >> simp[mk_inst_def]) >>
      irule (SRULE [mk_inst_def] ptr_inst_ok_copy_len_binop) >> metis_tac[]) >>
+  `tnf.t_imm = tn.t_imm` by
+    (gvs[] >> simp[Abbr `tnf`, step_taint_def, imm_taint_def, mk_inst_def]) >>
   gvs[] >> simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[Abbr `tnf`, Abbr `Gf`,
        copy_len_binop_ghost_frame |> SPEC_ALL |> Q.INST [`opc` |-> `ADD`] |> SRULE [],
@@ -89,7 +93,34 @@ Proof
   simp[copy_len_binop_ghost_frame, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem emit_mload_clean_counted_ptr:
+Theorem emit_copy_len_binop_counted_ptr:
+  (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
+  emit_op opc [left;right] sa = (Var out,sb) /\
+  fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all emit_copy_len_binop_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
+QED
+
+Theorem emit_mload_clean_ambient_counted_ptr:
   emit_op MLOAD [Var src] sa = (Var out,sb) /\
   fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -104,6 +135,8 @@ Theorem emit_mload_clean_counted_ptr:
     lookup_var out sf = SOME (mload (w2n a) s) /\ op_taint tnf (Var out) = {} /\
     op_prov Gf (Var out) = NONE /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\
@@ -136,6 +169,8 @@ Proof
    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans` by
     (simp[Abbr `tnf`, Abbr `t`] >> irule mload_ghost_clean >>
      simp[eval_operand_def]) >>
+  `tnf.t_imm = tn.t_imm` by
+    simp[Abbr `tnf`, step_taint_def, imm_taint_def, mk_inst_def] >>
   simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   conj_tac >-
     simp[Abbr `Gf`, op_prov_def, step_prov_def, set_prov_def,
@@ -144,6 +179,32 @@ Proof
   simp[Abbr `Gf`, Abbr `tnf`, step_prov_def, set_prov_def,
        out_prov_def, step_taint_def, set_var_taint_def, mk_inst_def,
        op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
+Theorem emit_mload_clean_counted_ptr:
+  emit_op MLOAD [Var src] sa = (Var out,sb) /\
+  fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (mload (w2n a) s) /\ op_taint tnf (Var out) = {} /\
+    op_prov Gf (Var out) = NONE /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all emit_mload_clean_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
 
 Theorem compile_bytestring_copy_len_counted_ptr:
@@ -196,7 +257,7 @@ Proof
   `fn_has_code sa sc1 fn /\ fn_has_code sc1 sc2 fn /\
    fn_has_code sc2 sc3 fn /\ fn_has_code sc3 sb fn` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
-  drule_all emit_mload_clean_counted_ptr >>
+  drule_all emit_mload_clean_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand (Var v1) s1 = SOME (mload (w2n a) s) /\
    eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
@@ -234,7 +295,7 @@ Proof
   qpat_x_assum `!p. not_fresh_at sc3 p ==> _` (qspec_then `p` mp_tac) >> simp[]
 QED
 
-Theorem emit_mcopy_counted_ptr:
+Theorem emit_mcopy_ambient_counted_ptr:
   emit_void MCOPY [Var dst;Var src;count_op] sa = ((),sb) /\
   fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -250,6 +311,8 @@ Theorem emit_mcopy_counted_ptr:
     sf.vs_memory = (mcopy (w2n b) (w2n a) (w2n n) s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
       {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem} /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. lookup_var p sf = lookup_var p s /\
          op_taint tnf (Var p) = op_taint tn (Var p))
@@ -281,7 +344,33 @@ Proof
      conj_tac >- (qexistsl_tac [`sa`, `sb`] >> simp[mk_inst_def]) >>
      irule (SRULE [mk_inst_def] ptr_inst_ok_mcopy_operand) >> simp[eval_operand_def]) >>
   simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def,
+       Abbr `tnf`, Abbr `inst`, step_taint_def, imm_taint_def, mk_inst_def,
        lookup_var_def, op_taint_def]
+QED
+
+Theorem emit_mcopy_counted_ptr:
+  emit_void MCOPY [Var dst;Var src;count_op] sa = ((),sb) /\
+  fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
+  ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) ==>
+  ?tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_memory = (mcopy (w2n b) (w2n a) (w2n n) s).vs_memory /\
+    tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
+      {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. lookup_var p sf = lookup_var p s /\
+         op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all emit_mcopy_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`tnf`, `sf`] >> simp[]
 QED
 
 Theorem compile_store_bytestring_counted_ptr:

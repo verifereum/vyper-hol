@@ -8,7 +8,7 @@ Ancestors
   ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst venomExecSemantics
   codegenRel venomMemProps valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic
 
-Theorem emit_alloca_index_counted_ptr:
+Theorem emit_alloca_index_ambient_counted_ptr:
   emit_op ALLOCA [Lit 32w] sa = (Var ip,sb) /\ fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
@@ -21,6 +21,8 @@ Theorem emit_alloca_index_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var ip sf = SOME (n2w addr) /\ ptr_covers Gf tnf ip sf 32 /\
     sf.vs_memory = s.vs_memory /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!i. i < addr \/ addr+32 <= i ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     (!v. not_fresh_at sa v ==>
@@ -65,7 +67,7 @@ Proof
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE` >>
   (gvs[Abbr `Gf`, Abbr `tnf`, Abbr `inst`, step_prov_def, set_prov_def,
       out_prov_def, step_taint_def, set_var_taint_def, out_taint_def,
-      mk_inst_def, store_taint_def, adopt_reset_def, op_taint_def,
+      mk_inst_def, imm_taint_def, store_taint_def, adopt_reset_def, op_taint_def,
       abi_builtin_allocate_state_def, update_var_def, FLOOKUP_UPDATE] >>
   rpt gen_tac >> rpt disch_tac >>
   reverse conj_tac >-
@@ -80,6 +82,30 @@ Proof
     (strip_tac >> gvs[] >> decide_tac) >> simp[]))
 QED
 
+
+Theorem emit_alloca_index_counted_ptr:
+  emit_op ALLOCA [Lit 32w] sa = (Var ip,sb) /\ fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas sa.cs_next_id =
+    SOME (addr,32) /\ addr+32 < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var ip sf = SOME (n2w addr) /\ ptr_covers Gf tnf ip sf 32 /\
+    sf.vs_memory = s.vs_memory /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. i < addr \/ addr+32 <= i ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >> drule_all emit_alloca_index_ambient_counted_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >> metis_tac[]
+QED
 
 Theorem abi_decode_index_init_counted_ptr:
   abi_decode_index_init sa = (Var ip,sb) /\ fn_has_code sa sb fn /\
@@ -113,7 +139,7 @@ Proof
     metis_tac[cj 3 cs_appends_emit_helpers, cs_appends_def] >>
   `fn_has_code sa sc fn /\ fn_has_code sc sb fn` by
     (irule fn_has_code_split >> simp[]) >>
-  drule_all emit_alloca_index_counted_ptr >>
+  drule_all emit_alloca_index_ambient_counted_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   `eval_operand (Lit 0w) sf = SOME 0w /\ op_taint tnf (Lit 0w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
