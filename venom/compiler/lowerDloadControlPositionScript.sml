@@ -198,3 +198,34 @@ Proof
   simp[active_inst_def] >> qexists_tac `gb` >>
   Cases_on `next` >> gvs[] >> simp[EL_APPEND2, EL_APPEND1]
 QED
+
+Theorem lower_dload_insts_supply_unchanged[local]:
+  !ins a. EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) ins ==>
+    lower_dload_insts_supply a ins = (ins,a)
+Proof
+  Induct >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  `lower_dload_inst_supply a h = ([h],a)` by
+    (irule lower_dload_inst_supply_special >> gvs[]) >>
+  simp[lower_dload_insts_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_configured_segment_fetch:
+  lower_dload_block_supply a bb = (gb,b) /\
+  lower_dload_insts_supply a pre = (p,a1) /\
+  bb.bb_instructions = pre ++ ins ++ rest /\
+  EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) ins /\
+  n < LENGTH ins ==>
+  get_instruction gb (LENGTH p + n) = SOME (EL n ins)
+Proof
+  strip_tac >>
+  `lower_dload_insts_supply a1 ins = (ins,a1)` by
+    metis_tac[lower_dload_insts_supply_unchanged] >>
+  Cases_on `lower_dload_insts_supply a1 rest` >>
+  `lower_dload_insts_supply a1 (ins ++ rest) = (ins ++ q,r)` by
+    metis_tac[lower_dload_insts_supply_append_forward] >>
+  `lower_dload_insts_supply a (pre ++ (ins ++ rest)) = (p ++ (ins ++ q),r)` by
+    (irule lower_dload_insts_supply_append_forward >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  gvs[lower_dload_block_supply_def, get_instruction_def, EL_APPEND2, EL_APPEND1]
+QED
