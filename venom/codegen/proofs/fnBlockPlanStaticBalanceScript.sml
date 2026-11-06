@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
   stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec planWf
-  cleanOpsSim
+  cleanOpsSim fnAliasStep fnFrameBoundaryGenRet
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -443,7 +443,7 @@ Proof
 QED
 
 Theorem optimistic_swap_plan_signed_balance:
-  optimistic_swap_plan dfg inst nl nt ps = (ops, qs) ==>
+  optimistic_swap_plan dfg inst nl next_term ps = (ops, qs) ==>
   &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
 Proof
   simp[optimistic_swap_plan_def, LET_THM] >>
@@ -663,4 +663,129 @@ Proof
   rpt IF_CASES_TAC >> simp[] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[trace_weight_def] >>
   drule popmany_plan_signed_balance >> simp[mark_dead_stack_def]
+QED
+
+Definition source_topics_def:
+  source_topics inst =
+    if inst.inst_opcode = LOG then
+      (case HD inst.inst_operands of Lit v => w2n v | _ => 0)
+    else 0
+End
+
+Theorem reorder_fold_length_floor[local]:
+  !items acc ps ops qs.
+  EVERY (\(idx,op). idx < LENGTH target) items /\
+  LENGTH target <= LENGTH ps.ps_stack /\
+  FOLDL (\(ops,ps) (idx,op).
+    let (step,qs) = reorder_one dfg target idx op ps in
+    (ops ++ step,qs)) (acc,ps) items = (ops,qs) ==>
+  LENGTH target <= LENGTH qs.ps_stack
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  drule_all reorder_one_length_floor >> strip_tac >>
+  first_x_assum irule >> simp[LET_THM] >> metis_tac[]
+QED
+
+Theorem reorder_plan_length_floor:
+  LENGTH target <= LENGTH ps.ps_stack /\
+  reorder_plan dfg target ps = (ops,qs) ==>
+  LENGTH target <= LENGTH qs.ps_stack
+Proof
+  simp[reorder_plan_def] >> strip_tac >>
+  irule reorder_fold_length_floor >> simp[LET_THM] >>
+  goal_assum (drule_at Any) >>
+  simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi]
+QED
+
+Theorem selected_reorder_signed_balance[local]:
+  LENGTH operands <= LENGTH ps.ps_stack /\ LENGTH operands <= 16 /\
+  (if comm /\ 2 <= LENGTH operands then
+     let (oa,sa) = reorder_plan dfg operands ps;
+         swapped = TAKE (LENGTH operands - 2) operands ++
+           [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands];
+         (ob,sb) = reorder_plan dfg swapped ps
+     in if reorder_cost oa < reorder_cost ob then (oa,sa) else (ob,sb)
+   else reorder_plan dfg operands ps) = (ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops /\
+  LENGTH operands <= LENGTH qs.ps_stack
+Proof
+  Cases_on `comm /\ 2 <= LENGTH operands` >> simp[]
+  >- (strip_tac >>
+      `LENGTH (TAKE (LENGTH operands - 2) operands ++
+        [EL (LENGTH operands - 1) operands;
+         EL (LENGTH operands - 2) operands]) = LENGTH operands` by
+        (simp[listTheory.LENGTH_TAKE] >> decide_tac) >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `reorder_cost oa < reorder_cost ob` >> gvs[]
+      >- (drule_all reorder_plan_signed_balance >> strip_tac >>
+          conj_tac >- simp[] >> irule reorder_plan_length_floor >>
+          goal_assum (drule_at Any) >> simp[]) >>
+      qpat_x_assum `reorder_plan dfg operands ps = _` kall_tac >>
+      `LENGTH (TAKE (LENGTH operands - 2) operands ++
+        [EL (LENGTH operands - 1) operands;
+         EL (LENGTH operands - 2) operands]) = LENGTH operands` by
+        (simp[listTheory.LENGTH_TAKE] >> decide_tac) >>
+      drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_signed_balance >>
+      simp[] >> strip_tac >>
+      drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_length_floor >> simp[]) >>
+  strip_tac >> drule_all reorder_plan_signed_balance >> strip_tac >>
+  drule_all reorder_plan_length_floor >> simp[]
+QED
+
+Theorem source_topics_case[local]:
+  (case inst.inst_opcode of LOG =>
+    (case HD inst.inst_operands of Lit v => w2n v | _ => 0)
+   | _ => 0) = source_topics inst
+Proof
+  Cases_on `inst.inst_opcode` >> simp[source_topics_def]
+QED
+
+Theorem generate_regular_inst_plan_signed_balance:
+  inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+  (!l. inst.inst_opcode = INVOKE ==>
+    ~MEM (Label l) (compute_operands inst)) /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps =
+    (ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops +
+    regular_correction inst (source_topics inst)
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM, source_topics_case] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics core` >>
+  `LENGTH (compute_operands inst) <= LENGTH ps1.ps_stack` by gvs[] >>
+  drule_at (Pat `emit_input_plan _ _ _ _ = _`) emit_input_plan_signed_balance >>
+  simp[] >> strip_tac >>
+  fs[arithmeticTheory.GREATER_EQ] >>
+  drule_at (Pat `(if _ then _ else _) = _`)
+    (SRULE [LET_THM] selected_reorder_signed_balance) >>
+  simp[] >> strip_tac >>
+  pairarg_tac >> simp[] >>
+  `&(LENGTH ps7.ps_stack) = (&(LENGTH ps4.ps_stack):int) +
+    trace_weight emit_ops + regular_correction inst topics` by
+    (irule regular_silent_core_balance >>
+     goal_assum (drule_at Any) >> simp[Abbr `core`]) >>
+  qpat_x_assum `(if _ then _ else _) = _` kall_tac >>
+  qpat_x_assum `generate_emit_ops _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_input_plan _ _ _ _ = _` kall_tac >>
+  Cases_on `inst.inst_outputs = []` >> simp[]
+  >- (strip_tac >> gvs[release_dead_spills_stack, trace_weight_append] >>
+      intLib.ARITH_TAC) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  `&(LENGTH ps8.ps_stack) = (&(LENGTH ps7.ps_stack):int) + trace_weight pop_ops` by
+    (qpat_x_assum `(if _ then _ else _) = (pop_ops,ps8)` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- metis_tac[popmany_plan_signed_balance] >>
+     strip_tac >> gvs[trace_weight_def]) >>
+  `&(LENGTH ps9.ps_stack) = (&(LENGTH ps8.ps_stack):int) + trace_weight opt_ops` by
+    (qpat_x_assum `(if _ then _ else _) = (opt_ops,ps9)` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- (strip_tac >> gvs[trace_weight_def]) >>
+     metis_tac[optimistic_swap_plan_signed_balance]) >>
+  gvs[release_dead_spills_stack, trace_weight_append] >> intLib.ARITH_TAC
 QED
