@@ -234,7 +234,9 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
       disj2_tac >> qexists_tac `f1` >> asm_rewrite_tac[] >>
       first_x_assum irule >> asm_rewrite_tac[]) >>
   `C gh th sh ga0 ta0 u0` by
-    (simp_tac (srw_ss()) [Abbr `C`] >> metis_tac[]) >>
+    (qpat_x_assum `!fuel. (!e. run_from fuel ctx fn u0 <> Error e) ==> _` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `C`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `C G tn s ga0 ta0 u0` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`gh`, `th`, `sh`] >> asm_rewrite_tac[]) >>
@@ -253,7 +255,9 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
       disj2_tac >> qexists_tac `f1` >> asm_rewrite_tac[] >>
       first_x_assum irule >> asm_rewrite_tac[]) >>
   `C ga0 ta0 u0 gc0 tc0 v0` by
-    (simp_tac (srw_ss()) [Abbr `C`] >> metis_tac[]) >>
+    (qpat_x_assum `!fuel. (!e. run_from fuel ctx fn v0 <> Error e) ==> _` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `C`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `C G tn s gc0 tc0 v0` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`ga0`, `ta0`, `u0`] >> asm_rewrite_tac[]) >>
@@ -276,7 +280,9 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
       disj2_tac >> qexists_tac `f1` >> asm_rewrite_tac[] >>
       first_x_assum irule >> asm_rewrite_tac[]) >>
   `C gh1 th1 sh1 ga1 ta1 u1` by
-    (simp_tac (srw_ss()) [Abbr `C`] >> metis_tac[]) >>
+    (qpat_x_assum `!fuel. (!e. run_from fuel ctx fn u1 <> Error e) ==> _` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `C`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `C G tn s ga1 ta1 u1` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`gh1`, `th1`, `sh1`] >> asm_rewrite_tac[]) >>
