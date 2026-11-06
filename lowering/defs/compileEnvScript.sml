@@ -493,6 +493,13 @@ Datatype:
        func_name → arg types. Spells the INVOKE target (internal_fn_label).
        Mirrors Python: func_t.arguments in expr.py lower_Call *)
     ce_func_param_types : string -> type list;
+    (* Internal function default argument expressions: func_name → the
+       defaults of its trailing keyword parameters, first entry of a name
+       winning. A call that omits keyword arguments appends the omitted
+       ones' defaults. An association list, so the expression compiler's
+       recursion bound can count the defaults' total size.
+       Mirrors Python: kwarg.default_value in expr.py _lower_internal_call *)
+    ce_func_defaults : (string # expr list) list;
     (* Internal function declared return types: func_name → return type.
        The value of an internal call is its callee's return buffer, laid out
        at this type even where the call is used at a wider type.
