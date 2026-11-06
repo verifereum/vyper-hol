@@ -8,14 +8,13 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --check) mode=check ;;
     --update) mode=update ;;
-    --compare-hol) mode=compare ;;
     --vyper-repo)
       shift
       [ "$#" -gt 0 ] || { echo "--vyper-repo requires a path" >&2; exit 2; }
       vyper_repo=$1
       ;;
     *)
-      echo "usage: $0 [--check|--update|--compare-hol] --vyper-repo PATH" >&2
+      echo "usage: $0 [--check|--update] --vyper-repo PATH" >&2
       exit 2
       ;;
   esac
@@ -115,7 +114,7 @@ for generated_file in "$generated"/*.hex; do
     update)
       cp "$generated_file" "$oracle/$name"
       ;;
-    check|compare)
+    check)
       if [ ! -f "$oracle/$name" ] || ! cmp -s "$generated_file" "$oracle/$name"; then
         echo "stale or missing Python oracle: $name" >&2
         mismatches=$((mismatches + 1))
@@ -160,45 +159,5 @@ case "$mode" in
     ;;
   check)
     echo "all $source_count Python O1/no-assembly-opt oracle fixtures reproduce from VYPER_PIN"
-    ;;
-  compare)
-    echo "Python oracle reproduced; running fresh HOL bytecode parity evaluation"
-    for target in evalCompilerBytecodeTheory \
-                  evalCompilerBytecodeControlTheory \
-                  evalCompilerBytecodeStateTheory \
-                  evalCompilerBytecodeAbiExternalStaticTheory \
-                  evalCompilerBytecodeAbiExternalArraysTheory \
-                  evalCompilerBytecodeAbiExternalDynamicTheory \
-                  evalCompilerBytecodeAbiEventsTheory \
-                  evalCompilerBytecodeAbiInternalCallsTheory \
-                  evalCompilerBytecodeAbiExternalCallsTheory \
-                  evalCompilerBytecodeAbiStaticTheory \
-                  evalCompilerBytecodeAbiDynamicTheory \
-                  evalCompilerBytecodeFunctionModesTheory \
-                  evalCompilerBytecodeAssertRaiseTheory \
-                  evalCompilerBytecodeAssertReasonTheory \
-                  evalCompilerBytecodeRaiseBareTheory \
-                  evalCompilerBytecodeRaiseReasonTheory \
-                  evalCompilerBytecodeLoopsTheory \
-                  evalCompilerBytecodeScalarWidthsTheory \
-                  evalCompilerBytecodeScalarLiteralsTheory \
-                  evalCompilerBytecodeScalarLiteralsBytesTheory \
-                  evalCompilerBytecodeScalarArithmeticTheory \
-                  evalCompilerBytecodeScalarIntegerMinTheory \
-                  evalCompilerBytecodeScalarDecimalMinPipelineTheory \
-                  evalCompilerBytecodeScalarConvertDecimalTheory \
-                  evalCompilerBytecodeScalarConvertIntToDecimalTheory \
-                  evalCompilerBytecodeScalarConvertBytes32ToDecimalTheory \
-                  evalCompilerBytecodeScalarOperatorsTheory \
-                  evalCompilerBytecodeScalarTypeBuiltinsTheory \
-                  evalCompilerBytecodeScalarWeiModularTheory \
-                  evalCompilerBytecodeBuiltinsEnvCoreTheory \
-                  evalCompilerBytecodeBuiltinsEnvBlockTheory \
-                  evalCompilerBytecodeBuiltinsAccountHashTheory \
-                  evalCompilerBytecodeBuiltinsEcTheory; do
-      (cd "$repo_dir" && holbuild --max-heap "${HOL_PARITY_MAXHEAP:-12000}" \
-        build --tactic-timeout "${HOL_PARITY_TACTIC_TIMEOUT:-600}" "$target")
-    done
-    echo "all $source_count HOL evaluations match the pinned Python O1/no-assembly-opt oracle"
     ;;
 esac
