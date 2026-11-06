@@ -2060,3 +2060,189 @@ Proof
   >- MATCH_ACCEPT_TAC abiDecoderAppendTheory.cs_appends_abi_alloc_buffer >>
   irule concat_extension_only >> first_assum ACCEPT_TAC
 QED
+
+Theorem first_emission_slice_pairs[local]:
+  !m src sz.
+  (m = compile_bytestring_src src \/ m = compile_slice_out_buf sz) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[builtinBytesTheory.compile_bytestring_src_def,
+      builtinBytesTheory.compile_slice_out_buf_def] >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac >- (rpt strip_tac >>
+    imp_res_tac first_emission_alloc_buffer >>
+    imp_res_tac (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> gvs[] >>
+    metis_tac[])) >>
+  gen_tac >> simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (irule cs_appends_bind >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_return, GSYM cs_appends_def])
+QED
+
+Theorem first_emission_slice_bounds[local]:
+  !start len src a x b. compile_assert_slice_bounds start len src a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_assert_slice_bounds_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac >- (rpt strip_tac >> drule_at Any
+    (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[])) >>
+  gen_tac >> simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (irule cs_appends_bind >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, GSYM cs_appends_def])
+QED
+
+Theorem first_emission_slice_result[local]:
+  !m src data start len sz addr out.
+  (m = compile_slice_data src data start len sz \/
+   m = compile_slice_calldata start len sz \/
+   m = compile_slice_code start len sz \/
+   m = compile_slice_extcode addr start len out data) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[builtinBytesTheory.compile_slice_data_def,
+      builtinBytesTheory.compile_slice_calldata_def,
+      builtinBytesTheory.compile_slice_code_def,
+      builtinBytesTheory.compile_slice_extcode_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac >- (rpt strip_tac >>
+    imp_res_tac first_emission_slice_bounds >>
+    imp_res_tac (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> gvs[] >>
+    metis_tac[first_emission_slice_pairs])) >>
+  gen_tac >> simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_return, GSYM cs_appends_def,
+            abiDecoderAppendTheory.cs_appends_abi_alloc_buffer]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_return, GSYM cs_appends_def]) >>
+  rw[cs_appends_def] >>
+  metis_tac[cj 1 compile_assert_slice_bounds_labels, pairTheory.SND]
+QED
+
+Theorem first_emission_builtin_slice:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty n args a x b.
+  compile_builtin_dispatch_body cfn ce ret_ty ty (Slice n) args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt IF_CASES_TAC >> map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+  gen_tac
+  >~ [`compile_slice_calldata`] >- suspend "slice_simple"
+  >~ [`compile_slice_code`] >- suspend "slice_simple"
+  >~ [`compile_slice_extcode`] >- suspend "slice_extcode" >>
+  suspend "slice_memory"
+QED
+
+Resume first_emission_builtin_slice[slice_simple]:
+  markerLib.RESUME_TAC >> ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+  gen_tac >> rpt gen_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (m st2)` >>
+  Cases_on `m st2` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  qspec_then `m` mp_tac first_emission_slice_result >>
+  simp[Abbr `m`] >> metis_tac[]
+QED
+
+Resume first_emission_builtin_slice[slice_extcode]:
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_strong >>
+    ho_match_mp_tac first_emission_slice_pairs >> metis_tac[])) >>
+  PairCases >> simp[] >> ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+  gen_tac >> rpt gen_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (m st4)` >>
+  Cases_on `m st4` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  qspec_then `m` mp_tac first_emission_slice_result >>
+  simp[Abbr `m`] >> metis_tac[]
+QED
+
+Resume first_emission_builtin_slice[slice_memory]:
+  Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[]
+  >- (ho_match_mp_tac first_emission_pair_let >>
+      (conj_tac >- (ho_match_mp_tac first_emission_strong >>
+        ho_match_mp_tac first_emission_slice_pairs >> metis_tac[])) >>
+      PairCases >> simp[] >> suspend "slice_data_tail") >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_strong >>
+    metis_tac[first_emission_alloc_buffer])) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_strong >>
+    rpt strip_tac >> drule_at Any (CONJUNCT1 (CONJUNCT2 first_emission_emit_helpers)) >> simp[])) >>
+  gen_tac >> suspend "slice_data_tail"
+QED
+
+Resume first_emission_builtin_slice[slice_data_tail]:
+  markerLib.RESUME_TAC >>
+  ntac 2 (ho_match_mp_tac first_emission_pair_let >>
+    (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+    gen_tac) >>
+  rpt gen_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (m s)` >>
+  Cases_on `m s` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  qspec_then `m` mp_tac first_emission_slice_result >>
+  simp[Abbr `m`] >> metis_tac[]
+QED
+
+Finalise first_emission_builtin_slice
+
+Theorem first_emission_builtin_calldata_slice:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty n args a x b.
+  compile_builtin_dispatch_body cfn ce ret_ty ty (CalldataSlice n) args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+  gen_tac >> rpt gen_tac >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (m st1)` >>
+  Cases_on `m st1` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  qspec_then `m` mp_tac first_emission_slice_result >>
+  simp[Abbr `m`] >> metis_tac[]
+QED
