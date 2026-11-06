@@ -22,7 +22,7 @@ Ancestors
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
   extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr extRetAbiArrayBackedgePtr
   extRetAbiArrayStaticLoopPtr extRetAbiArrayStaticCountedPtr extRetAbiSourceInputPtr
-  extRetAbiWrappedSourcePtr
+  extRetAbiWrappedSourcePtr extRetAbiSingletonCountedPtr
 
 val _ = Parse.hide "body";
 

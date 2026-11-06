@@ -8,7 +8,7 @@ Ancestors
   ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst venomExecSemantics
   codegenRel venomMemProps valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic
 
-Theorem emit_alloca_index_counted_ptr[local]:
+Theorem emit_alloca_index_counted_ptr:
   emit_op ALLOCA [Lit 32w] sa = (Var ip,sb) /\ fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
