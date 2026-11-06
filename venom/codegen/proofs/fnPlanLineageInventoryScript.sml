@@ -2833,6 +2833,67 @@ Proof
   rpt strip_tac >> irule reorder_one_shielded_bottom_frame >> simp[]
 QED
 
+Theorem reduce_depth_plan_spilled_present:
+  !fuel targets op f n ps y.
+    y IN FDOM ps.ps_spilled ==>
+    y IN FDOM (SND (reduce_depth_plan fuel targets op f n ps)).ps_spilled
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < n` >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  Cases_on `x <= 16` >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets x n` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  `y IN FDOM ps'.ps_spilled` by
+    (Cases_on `alloc_spill_slot ps.ps_alloc` >>
+     qpat_x_assum `do_spill_at _ _ = _` mp_tac >>
+     simp[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+     Cases_on `x' = 0` >> simp[] >> strip_tac >> gvs[]) >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`targets`, `op`, `f`, `n`] mp_tac) >> simp[]
+QED
+
+Theorem do_spill_at_available_preserved:
+  !d ps ops qs x.
+    d < LENGTH ps.ps_stack /\ d <= 16 /\
+    do_spill_at d ps = (ops,qs) /\
+    (MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) ==>
+    MEM x qs.ps_stack \/ x IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all do_spill_at_spilled_update >> strip_tac >>
+  Cases_on `x = stack_peek d ps.ps_stack` >> simp[] >>
+  drule_all do_spill_at_other_stack_count >> strip_tac >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >> metis_tac[]
+QED
+
+Theorem reduce_depth_plan_available_preserved:
+  !fuel targets op f n ps x.
+    MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled ==>
+    MEM x (SND (reduce_depth_plan fuel targets op f n ps)).ps_stack \/
+    x IN FDOM (SND (reduce_depth_plan fuel targets op f n ps)).ps_spilled
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> disch_tac >>
+  Cases_on `f + 1 < n` >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
+  Cases_on `dist <= 16` >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> simp[] >>
+  rename1 `select_spill_candidate _ _ _ _ = SOME cand` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  `cand < LENGTH ps.ps_stack /\ cand <= 16` by
+    (drule stack_get_unfixed_depth_bound >> strip_tac >>
+     `1 <= LENGTH ps.ps_stack` by decide_tac >>
+     drule_all planWfTheory.select_spill_candidate_bound >> simp[]) >>
+  `MEM x ps'.ps_stack \/ x IN FDOM ps'.ps_spilled` by
+    metis_tac[do_spill_at_available_preserved] >>
+  qpat_x_assum `!targets op f n ps x. _`
+    (qspecl_then [`targets`, `op`, `f`, `n`] mp_tac) >>
+  disch_then (qspecl_then [`ps'`, `x`] mp_tac) >> simp[]
+QED
+
 Theorem reorder_materialised_fold_bottom_frame[local]:
   !m k dfg targets ps prefix acc ops qs.
     k + m <= LENGTH targets /\ LENGTH targets <= 16 /\
