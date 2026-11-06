@@ -42,9 +42,7 @@ on reference source compilation.
   `for_pass_source_result`, `for_accum_source_result`, `for_continue_source_result`,
   `for_break_source_result`, `storage_scalar_loop_source_result`.
 - [Original for_pass source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/for_pass.vy),
-  [original storage loop source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/storage_scalar_loop.vy),
-  [four byte endpoints](../../lowering/defs/bytecode/eval/evalCompilerBytecodeControlScript.sml)
-  and [storage byte endpoint](../../lowering/defs/bytecode/eval/evalCompilerBytecodeStateScript.sml).
+  [original storage loop source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/storage_scalar_loop.vy).
 
 Pinned `vyper/codegen/stmt.py:228–288`, `Stmt._parse_For_range`: without explicit
 bound, uses literal `end.int_value()-start.int_value()` for rounds and bound;
