@@ -39,6 +39,10 @@ Theorem abi_decode_struct_pure_rows:
     abi_tuple_rows_schema ce (env \\ nsid) rows /\
     MAP (\(ei,ty,tv,asz,msz). ty) rows = MAP (FST o SND) fields /\
     atv = StructTV (ZIP (MAP FST args,MAP (\(ei,ty,tv,asz,msz). tv) rows)) /\
+    LIST_REL (abi_decoder_coherent ce (env \\ nsid)
+      (ce.ce_struct_fields \\ nsid_to_string nsid))
+      (MAP (\(ei,ty,tv,asz,msz). ty) rows)
+      (MAP (\(ei,ty,tv,asz,msz). tv) rows) /\
     MAP abi_tuple_row_code rows = abi_decoder_member_infos
       (ce.ce_struct_fields \\ nsid_to_string nsid) ce (MAP (FST o SND) fields) /\
     SUM (MAP abi_tuple_row_abi_width rows) <= SUM (MAP abi_tuple_row_mem_width rows)
