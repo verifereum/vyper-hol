@@ -164,7 +164,8 @@ Theorem emit_field_load_path_ptr:
     sf.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    op_prov Gf (Var out) = NONE
 Proof
   strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var /\ not_fresh_at sm dst` by
@@ -251,7 +252,8 @@ Theorem augassign_field_load_ptr:
     ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ not_fresh_at sb dst /\ not_fresh_at sb out /\
-    (!rp. not_fresh_at sa rp ==> lookup_var rp sf = lookup_var rp s)
+    (!rp. not_fresh_at sa rp ==> lookup_var rp sf = lookup_var rp s) /\
+    op_prov Gf (Var out) = NONE
 Proof
   strip_tac >>
   drule_all emit_field_load_path_ptr >>

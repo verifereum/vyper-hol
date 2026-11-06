@@ -98,7 +98,8 @@ Theorem emit_mload_path_ptr:
     sf.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    op_prov Gf (Var out) = NONE
 Proof
   strip_tac >>
   `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -126,6 +127,10 @@ Proof
   `op_taint (step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
      (update_var out (mload (w2n a) s) s) tn) (Var out) = {}` by
     (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]) >>
+  `op_prov (step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+      (update_var out (mload (w2n a) s) s)) (Var out) = NONE` by
+    (irule step_prov_out_none >> simp[mk_inst_def] >>
+     irule out_prov_other_none >> simp[mk_inst_def]) >>
   simp[load_ambient_frame, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        arithmeticTheory.ADD1] >>
   irule (SRULE [update_var_def] load_ambient_frame) >> metis_tac[]
