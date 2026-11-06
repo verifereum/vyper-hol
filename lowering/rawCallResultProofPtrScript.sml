@@ -2,7 +2,7 @@
 Theory rawCallResultProofPtr
 Ancestors
   rawCallOracleProofPtr rawCallBufferPtr builtinSystem context emitHelper
-  compileEnv exprLoweringProps bodyPtrDefs builtinSimple builtinProps typedCopyPtr
+  compileEnv exprLoweringProps bodyPtrDefs builtinSimple builtinProps typedCopyPtr ifJumpPtr
 Libs
   monadsyntax
 
@@ -2262,3 +2262,110 @@ Resume raw_call_tuple_suffix_stage[compose]:
 QED
 
 Finalise raw_call_tuple_suffix_stage
+
+
+Theorem raw_call_emit_branch_stage:
+  emit_inst JNZ [ok;Label good;Label bad] [] sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ eval_operand ok s = SOME (val_to_w256 (BoolV flag)) /\
+  op_taint tn ok = {} /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s ==>
+  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn
+    (OK (jump_to (if flag then good else bad) s)) /\
+  stmt_state_rel ctx func cenv cx es (jump_to (if flag then good else bad) s) /\
+  ghost_inv dep cenv cx es G tn (jump_to (if flag then good else bad) s) /\
+  wb_frame cenv es sa s (jump_to (if flag then good else bad) s) /\
+  ghost_kept cenv es sa G tn s G tn
+Proof
+  strip_tac >>
+  `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id JNZ [ok;Label good;Label bad] []]` by
+    gvs[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+      emit_def, comp_return_def] >>
+  `eval_operand ok s = SOME (if flag then 1w else 0w)` by
+    (Cases_on `flag` >> fs[valueEncodingTheory.val_to_w256_def]) >>
+  conj_tac
+  >- (irule ifJumpPtrTheory.if_jnz_zero_path_ptr >>
+      first_assum (irule_at (Pat `fn_has_code _ _ _`)) >> simp[] >> metis_tac[]) >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_jump_to, stmtFragPtrTheory.ghost_inv_jump_to,
+    wordArgsPtrTheory.ghost_kept_refl, venomStateTheory.jump_to_def] >>
+  simp[loweringPostsTheory.wb_frame_def, venomStateTheory.lookup_var_def,
+    loweringPostsTheory.locals_kept_def, local_region_def]
+QED
+
+Theorem raw_call_failed_branch_stage:
+  emit_inst JNZ [ok;Label good;Label bad] [] sa = ((),sj) /\
+  new_block bad sj = (blockname,sf) /\
+  (do rds <- emit_op RETURNDATASIZE [];
+      buf <- compile_alloc_buffer 0;
+      emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds];
+      emit_inst REVERT [buf.buf_operand;rds] [] od) sf = ((),sb) /\
+  fn_has_code sa sj func /\ fn_has_code sf sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  eval_operand ok s = SOME 0w /\ op_taint tn ok = {} /\
+  LENGTH s.vs_returndata < dimword(:256) ==>
+  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (Abort Revert_abort t) /\
+    t.vs_returndata = s.vs_returndata /\ t.vs_halted
+Proof
+  strip_tac >>
+  `eval_operand ok s = SOME (val_to_w256 (BoolV F))` by
+    simp[valueEncodingTheory.val_to_w256_def] >>
+  drule_all raw_call_emit_branch_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `sf.cs_current_bb = bad /\ sf.cs_current_insts = [] /\
+   sf.cs_next_var = sa.cs_next_var` by
+    (qpat_x_assum `emit_inst JNZ _ _ _ = _` mp_tac >>
+     qpat_x_assum `new_block _ _ = _` mp_tac >>
+     simp[emit_inst_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  `local_ptrs_reserved cenv sf /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x)` by
+    (conj_tac
+     >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+         qexists_tac `sa` >> simp[]) >>
+     fs[not_fresh_at_def]) >>
+  `~(jump_to bad s).vs_halted /\
+   (jump_to bad s).vs_current_bb = sf.cs_current_bb /\
+   (jump_to bad s).vs_inst_idx = LENGTH sf.cs_current_insts /\
+   LENGTH (jump_to bad s).vs_returndata < dimword(:256)` by
+    simp[venomStateTheory.jump_to_def] >>
+  fs[] >> drule_all raw_call_failure_block_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (Abort Revert_abort t)` by
+    (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
+  qexistsl_tac [`H`, `un`, `t`] >> fs[venomStateTheory.jump_to_def]
+QED
+
+(* The successful branch skips the failure block; its compilation has no
+   runtime effect.  Keep the exact jumped state for the bytes/zero suffix. *)
+Theorem raw_call_success_branch_stage:
+  emit_inst JNZ [ok;Label good;Label bad] [] sa = ((),sj) /\
+  new_block good sk = (blockname,sn) /\
+  fn_has_code sa sj func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s ==>
+  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn (OK (jump_to good s)) /\
+  stmt_state_rel ctx func cenv cx es (jump_to good s) /\
+  ghost_inv dep cenv cx es G tn (jump_to good s) /\
+  wb_frame cenv es sa s (jump_to good s) /\ ghost_kept cenv es sa G tn s G tn /\
+  (jump_to good s).vs_current_bb = sn.cs_current_bb /\
+  (jump_to good s).vs_inst_idx = LENGTH sn.cs_current_insts /\ ~(jump_to good s).vs_halted
+Proof
+  strip_tac >>
+  `eval_operand ok s = SOME (val_to_w256 (BoolV T))` by
+    simp[valueEncodingTheory.val_to_w256_def] >>
+  drule_all raw_call_emit_branch_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> fs[] >>
+  `sn.cs_current_bb = good /\ sn.cs_current_insts = []` by
+    gvs[new_block_def] >>
+  simp[venomStateTheory.jump_to_def]
+QED
