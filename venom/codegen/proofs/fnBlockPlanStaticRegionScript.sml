@@ -3272,3 +3272,170 @@ Proof
   drule_all regional_param_output_normalize >> strip_tac >> gvs[] >>
   metis_tac[regional_param_suffix_freshness]
 QED
+
+Theorem regional_nonentry_initial_wf:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps_l /\
+  bb <> HD fn.fn_blocks /\
+  start = ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|> /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+     clean_stack_plan liveness cfg fn bb start else ([],start)) = (clean_ops,ps2) ==>
+  generated_plan_state_wf_marked sb ps2
+Proof
+  strip_tac >> drule_all lineage_state_static >> strip_tac >>
+  `generated_plan_state_wf_marked sb start` by
+    (gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
+     metis_tac[]) >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[] >>
+  metis_tac[regional_clean_stack_marked_wf]
+QED
+
+
+Theorem regional_nonentry_initial_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps_l /\
+  bb <> HD fn.fn_blocks /\
+  start = ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|> /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+     clean_stack_plan liveness cfg fn bb start else ([],start)) = (clean_ops,ps2) ==>
+  !v. MEM v (live_vars_at liveness lbl 0) /\
+    ~MEM (Var v) (FLAT (MAP (\inst. inst.inst_operands)
+       (collect_phis bb.bb_instructions))) ==>
+    MEM (Var v) ps2.ps_stack \/ Var v IN FDOM ps2.ps_spilled
+Proof
+  strip_tac >> drule_all lineage_state_static >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `generated_plan_state_wf_marked sb start` by
+    (gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
+     metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM (Var v) start.ps_stack \/ Var v IN FDOM start.ps_spilled` by
+    (simp[] >> metis_tac[]) >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[] >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _`
+    (mp_then (Pos (el 2)) mp_tac regional_clean_stack_protected_ownership) >>
+  disch_then (qspec_then `v` mp_tac) >>
+  simp[] >>
+  `!pred. MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+    (gen_tac >> irule regional_nonphi_input_boundary >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem regional_nonentry_initial_freshness:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps_l /\
+  bb <> HD fn.fn_blocks /\
+  start = ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|> /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+     clean_stack_plan liveness cfg fn bb start else ([],start)) = (clean_ops,ps2) ==>
+  !op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
+    ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+      (collect_phis bb.bb_instructions))) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  strip_tac >> drule_all lineage_state_static >> strip_tac >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[]
+  >- (`generated_plan_state_wf_marked sb
+         (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)` by
+        (gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
+         metis_tac[]) >>
+      rpt strip_tac >>
+      `op <> dead_stack_marker` by
+        (strip_tac >> gvs[dead_stack_marker_def, normalize_operand_def]) >>
+      `ps2.ps_spilled = ps_l.ps_spilled` by
+        (drule regional_clean_stack_spilled >> simp[]) >>
+      `!x. MEM x ps2.ps_stack /\ x <> dead_stack_marker ==>
+            MEM x ps_l.ps_stack` by
+        (rpt strip_tac >> drule_all regional_clean_stack_nonmarker_origin >> simp[]) >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem regional_nonentry_initial_single_freshness:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps_l /\
+  bb <> HD fn.fn_blocks /\
+  start = ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|> /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+     clean_stack_plan liveness cfg fn bb start else ([],start)) = (clean_ops,ps2) ==>
+  LENGTH (cfg_preds_of cfg lbl) <= 1 ==>
+  !op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  strip_tac >> drule_all lineage_state_static >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[]
+  >- (`generated_plan_state_wf_marked sb
+         (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)` by
+        (gvs[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
+         metis_tac[]) >>
+      rpt strip_tac >>
+      `op <> dead_stack_marker` by
+        (strip_tac >> gvs[dead_stack_marker_def, normalize_operand_def]) >>
+      `ps2.ps_spilled = ps_l.ps_spilled` by
+        (drule regional_clean_stack_spilled >> simp[]) >>
+      `!x. MEM x ps2.ps_stack /\ x <> dead_stack_marker ==>
+            MEM x ps_l.ps_stack` by
+        (rpt strip_tac >> drule_all regional_clean_stack_nonmarker_origin >> simp[]) >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem regional_nonentry_initial_phi_ownership:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps_l /\
+  bb <> HD fn.fn_blocks /\
+  start = ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|> /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+     clean_stack_plan liveness cfg fn bb start else ([],start)) = (clean_ops,ps2) ==>
+  EVERY (\phi. ?!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) ps2.ps_stack \/ Var v IN FDOM ps2.ps_spilled))
+    (collect_phis bb.bb_instructions)
+Proof
+  strip_tac >> drule_all lineage_state_static >> strip_tac >>
+  Cases_on `collect_phis bb.bb_instructions = []` >- simp[] >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  gvs[] >>
+  drule_all regional_phi_preparation_identity >>
+  disch_then (qspecl_then [`liveness_analyze fn`,
+    `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+QED
