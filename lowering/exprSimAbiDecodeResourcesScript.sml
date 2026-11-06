@@ -8,7 +8,7 @@ Ancestors
   abiDecoderAppend actualDecoderSites abiDecoderFrame loweringPosts fragExec venomExecProofs venomInst venomState venomMemDefs compileEnv
   list rich_list finite_map arithmetic words
 
-Theorem abi_decode_resources_code_member[local]:
+Theorem abi_decode_resources_code_member:
   cs_extends a z /\ fn_has_code a z fn ==>
   !i. MEM i (frag_code a z) ==> MEM i (fn_insts fn)
 Proof
