@@ -2316,3 +2316,32 @@ Proof
   goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `sb` >> simp[] >> metis_tac[]
 QED
+
+Theorem regional_indexed_special_live_coverage:
+  !fn bb i inst ps dfg cfg halting next_term ops qs.
+  wf_function fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  inst_wf inst /\ (inst.inst_opcode = NOP \/ inst.inst_opcode = OFFSET) /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+  generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halting next_term
+    bb.bb_label ps = SOME (ops,qs) ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> qx_gen_tac `v` >> disch_tac >>
+  `MEM v inst.inst_outputs \/
+   MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+    (Cases_on `MEM v inst.inst_outputs` >- simp[] >>
+     disj2_tac >> irule (SRULE[LET_THM, inst_defs_def] live_vars_at_propagate) >>
+     metis_tac[]) >>
+  (Cases_on `inst.inst_opcode = NOP`
+   >- (gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def] >>
+       gvs[inst_wf_def] >> metis_tac[]) >>
+   `inst.inst_opcode = OFFSET` by metis_tac[] >>
+   drule_all inst_wf_offset_shape >> strip_tac >>
+   gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+       generate_offset_plan_def, stack_push_def] >> metis_tac[])
+QED
