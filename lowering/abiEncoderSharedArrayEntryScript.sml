@@ -72,8 +72,8 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) t` by
     (drule_all abi_encoder_shared_input_address >> simp[]) >>
-  `abi_encoder_cursor T ip site slot first site owner_st j t /\
-   abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  `abi_sites_encoder_cursor sites T ip site slot first site owner_st j t /\
+   abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
      (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) t` by
     (conj_tac >> irule abi_encoder_cursor_address >> asm_simp_tac bool_ss [] >>
      qexistsl_tac [`s`,`owner_st`] >> full_simp_tac bool_ss [LESS_EQ_REFL]) >>
@@ -398,10 +398,10 @@ Proof
     mload cursor_slot initial = n2w (LENGTH (enc (Array NONE ty) (ListV avs))-32) /\
     cursor_slot < dimword (:256)` by
     (strip_tac >>
-     `abi_encoder_cursor T dp cursor_site cursor_slot first site owner_st
+     `abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site owner_st
        (LENGTH (enc (Array NONE ty) (ListV avs))-32) initial` by fs[] >>
      drule_all (Q.INST [`cursor_op` |-> `dp`] abi_encoder_cursor_bounds) >> strip_tac >>
-     fs[abi_encoder_cursor_def, Excl "enc_def"] >>
+     fs[abi_sites_encoder_cursor_def, Excl "enc_def"] >>
      irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[]) >>
   `32 <= LENGTH (enc (Array NONE ty) (ListV avs)) /\
    (active = F ==> LENGTH (enc (Array NONE ty) (ListV avs)) = 32+LENGTH avs*asz)` by
@@ -467,8 +467,8 @@ Theorem abi_encoder_shared_array_loop_enter:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   mem_word_at d initial.vs_memory = n2w (LENGTH avs) /\
-  abi_encoder_cursor T ip site slot first site owner_st 0 initial /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st 0 initial /\
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty) initial /\
   (active ==> site < cursor_site) /\ abi_decoder_operand_live owner_st.cs_next_var count_op /\
   eval_operand count_op initial = SOME (n2w (LENGTH avs)) /\

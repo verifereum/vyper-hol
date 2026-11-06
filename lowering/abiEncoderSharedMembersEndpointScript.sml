@@ -199,18 +199,18 @@ Proof
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial)` by
     (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`d`,`output_size`] >>
      gvs[Excl "enc_def"] >> decide_tac) >>
-  `abi_encoder_cursor active dyn_ptr site slot first lo st
+  `abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st
     (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) actual` by
-    (reverse (Cases_on `active`) >- simp[abi_encoder_cursor_def] >>
+    (reverse (Cases_on `active`) >- simp[abi_sites_encoder_cursor_def] >>
      mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`, `owned_lo` |-> `st.cs_next_id`,
        `owned_hi` |-> `end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
        `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`, `sz` |-> `LENGTH (enc ty av)`,
        `d` |-> `d+ho`]
        abi_scratch_cursor_protected) >>
-     impl_tac >- (fs[abi_encoder_cursor_def, abi_sites_encoder_shared_input_def] >> decide_tac) >> simp[]) >>
+     impl_tac >- (fs[abi_sites_encoder_cursor_def, abi_sites_encoder_shared_input_def] >> decide_tac) >> simp[]) >>
   drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
-  `abi_encoder_cursor active dyn_ptr site slot first lo end_st
+  `abi_sites_encoder_cursor sites active dyn_ptr site slot first lo end_st
     (hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))) actual` by
     gvs[abi_encoder_open_prefix_tail_advance, Excl "enc_def"] >>
   `abi_sites_scratch_effect sites first last lo end_st.cs_next_id st.cs_next_var
@@ -301,8 +301,8 @@ Proof
   drule (SIMP_RULE bool_ss [] (Q.INST [`dyn` |-> `T`, `active` |-> `T`]
     abi_encoder_shared_members_inv_layout)) >> strip_tac >>
   drule abi_encoder_child_bounds >> strip_tac >>
-  qpat_assum `abi_encoder_cursor _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  qpat_assum `abi_sites_encoder_cursor sites _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_sites_encoder_cursor_def]) >>
   `ho+32 <= off /\ off+LENGTH (enc ty av) <= output_size /\
     mload slot initial = n2w off` by fs[] >>
   drule_all abi_encoder_shared_member_dynamic_output >> strip_tac >>

@@ -23,7 +23,7 @@ Theorem abi_encoder_shared_array_index_prepare:
     abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
       (prepared,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
     abi_encoder_array_prefix ty avs j d actual.vs_memory /\
-    abi_encoder_cursor T ip st.cs_next_id slot first st.cs_next_id prepared 0 actual /\
+    abi_sites_encoder_cursor sites T ip st.cs_next_id slot first st.cs_next_id prepared 0 actual /\
     abi_sites_scratch_effect sites first last st.cs_next_id prepared.cs_next_id st.cs_next_var
       limit_st d sz b cap initial actual /\
     abi_encoder_registered_effect (abi_sites_decoder_ids sites st.cs_next_id prepared.cs_next_id) [(d,sz)] initial actual /\

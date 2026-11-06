@@ -160,8 +160,8 @@ Proof
     eval_operand dp r = SOME (n2w slot) /\ mload slot r = n2w off /\
     first <= site /\ site < p.cs_next_id /\ FLOOKUP r.vs_allocas site = SOME (slot,32)` by
     (qpat_assum `active` (fn ath =>
-       qpat_assum `abi_encoder_cursor _ _ _ _ _ _ _ _ _`
-         (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def,ath])) >>
+       qpat_assum `abi_sites_encoder_cursor sites _ _ _ _ _ _ _ _ _`
+         (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_sites_encoder_cursor_def,ath])) >>
      asm_rewrite_tac []) >>
   drule_all abi_encoder_shared_member_dynamic_input >> simp[]
 QED

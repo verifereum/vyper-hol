@@ -79,7 +79,7 @@ Proof
   `abi_decode_footprint_frame [(slot,32)] initial actual` by fs[abi_decode_frame_footprint] >>
   `actual.vs_halted = initial.vs_halted` by simp[] >>
   mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
-    abi_scratch_single_write) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
+    abi_scratch_single_write) >> impl_tac >- asm_simp_tac bool_ss [IN_UNIV] >> disch_tac >>
   `abi_footprint_disjoint d len [(slot,32)]` by (simp[abi_footprint_disjoint_def] >> decide_tac) >>
   mp_tac (Q.INST [`p` |-> `d:num`, `n` |-> `len:num`, `fp` |-> `[(slot:num,32:num)]`,
     `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`] abi_decode_footprint_frame_slice) >>

@@ -18,14 +18,27 @@ Definition abi_encoder_members_pre_def:
     (d+output_size <= b \/ b+cap <= d)
 End
 
-Definition abi_encoder_cursor_def:
+Definition abi_sites_encoder_cursor_def:
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st off s <=>
+    active ==>
+      abi_decoder_operand_live st.cs_next_var dyn_ptr /\
+      eval_operand dyn_ptr s = SOME (n2w slot) /\ mload slot s = n2w off /\
+      site IN sites /\ first <= site /\ site < st.cs_next_id /\ lo <= site /\
+      FLOOKUP s.vs_allocas site = SOME (slot,32)
+End
+
+Overload abi_encoder_cursor = “abi_sites_encoder_cursor UNIV”
+
+Theorem abi_encoder_cursor_def:
   abi_encoder_cursor active dyn_ptr site slot first lo st off s <=>
     active ==>
       abi_decoder_operand_live st.cs_next_var dyn_ptr /\
       eval_operand dyn_ptr s = SOME (n2w slot) /\ mload slot s = n2w off /\
       first <= site /\ site < st.cs_next_id /\ lo <= site /\
       FLOOKUP s.vs_allocas site = SOME (slot,32)
-End
+Proof
+  simp[abi_sites_encoder_cursor_def]
+QED
 
 Theorem abi_encoder_members_pre_mono:
   abi_encoder_members_pre infos tys avs st src dst sb so d output_size b cap s /\
@@ -69,12 +82,12 @@ Proof
 QED
 
 Theorem abi_encoder_cursor_address:
-  abi_encoder_cursor active dyn_ptr site slot first lo st off initial /\
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st off initial /\
   abi_decoder_address_frame st.cs_next_var initial actual /\
   st.cs_next_var <= prepared.cs_next_var /\ st.cs_next_id <= prepared.cs_next_id ==>
-  abi_encoder_cursor active dyn_ptr site slot first lo prepared off actual
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo prepared off actual
 Proof
-  Cases_on `active` >> simp_tac bool_ss [abi_encoder_cursor_def, abi_decoder_address_frame_def] >>
+  Cases_on `active` >> simp_tac bool_ss [abi_sites_encoder_cursor_def, abi_decoder_address_frame_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand dyn_ptr actual = SOME (n2w slot)` by (first_x_assum irule >> simp[]) >>
   `abi_decoder_operand_live prepared.cs_next_var dyn_ptr` by

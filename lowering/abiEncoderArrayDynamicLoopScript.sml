@@ -56,7 +56,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`next` |-> `st.cs_next_var`] abi_encoder_cursor_effect_protected) >>
   impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  mp_tac (Q.INST [`s` |-> `actual:venom_state`] abi_encoder_cursor_mono) >>
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`] abi_encoder_cursor_mono) >>
   impl_tac >- asm_simp_tac bool_ss [] >> asm_simp_tac bool_ss []
 QED
 

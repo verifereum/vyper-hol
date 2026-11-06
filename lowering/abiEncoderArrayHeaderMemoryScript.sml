@@ -47,11 +47,11 @@ QED
 
 (* Stable cursor observations at a loop's compiler entry, across recursive bodies. *)
 Theorem abi_encoder_cursor_bounds:
-  abi_encoder_cursor T cursor_op site slot first lo st off s /\
+  abi_sites_encoder_cursor sites T cursor_op site slot first lo st off s /\
   abi_sites_decoder_budget sites first last b cap s /\ st.cs_next_id <= last ==>
   first <= site /\ site < last /\ b <= slot /\ slot+32 <= b+cap /\ slot < dimword (:256)
 Proof
-  simp_tac bool_ss [abi_encoder_cursor_def] >>
+  simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `site < last` by decide_tac >> `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
@@ -61,11 +61,11 @@ Proof
 QED
 
 Theorem abi_encoder_cursor_mono:
-  abi_encoder_cursor active cursor_op site slot first lo st off s /\
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st off s /\
   st.cs_next_var <= prepared.cs_next_var /\ st.cs_next_id <= prepared.cs_next_id ==>
-  abi_encoder_cursor active cursor_op site slot first lo prepared off s
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo prepared off s
 Proof
-  Cases_on `active` >> simp_tac bool_ss [abi_encoder_cursor_def] >>
+  Cases_on `active` >> simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decoder_operand_live prepared.cs_next_var cursor_op` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
@@ -148,10 +148,10 @@ Proof
   mp_tac (Q.INST [`prepared` |-> `st`, `dyn` |-> `active:bool`, `j` |-> `k:num`,
     `actual` |-> `ready:venom_state`] abi_encoder_array_memory_address) >>
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
-  mp_tac (Q.INST [`prepared` |-> `st`, `active` |-> `T`, `dyn_ptr` |-> `ip:operand`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `prepared` |-> `st`, `active` |-> `T`, `dyn_ptr` |-> `ip:operand`,
     `off` |-> `j:num`, `actual` |-> `ready:venom_state`] abi_encoder_cursor_address) >>
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
-  mp_tac (Q.INST [`prepared` |-> `st`, `site` |-> `cursor_site:num`, `slot` |-> `cursor_slot:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `prepared` |-> `st`, `site` |-> `cursor_site:num`, `slot` |-> `cursor_slot:num`,
     `actual` |-> `ready:venom_state`] abi_encoder_cursor_address) >>
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
   `abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial ready` by

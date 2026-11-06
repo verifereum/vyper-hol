@@ -17,8 +17,8 @@ Theorem abi_encoder_shared_array_static_body_owner:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st j initial /\
-  abi_encoder_cursor F dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st j initial /\
+  abi_sites_encoder_cursor sites F dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial /\
   j < LENGTH avs /\ en.cs_next_id <= last /\
@@ -30,8 +30,8 @@ Theorem abi_encoder_shared_array_static_body_owner:
     abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
       (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
     abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
-    abi_encoder_cursor T ip site slot first site owner_st j actual /\
-    abi_encoder_cursor F dp cursor_site cursor_slot first site owner_st
+    abi_sites_encoder_cursor sites T ip site slot first site owner_st j actual /\
+    abi_sites_encoder_cursor sites F dp cursor_site cursor_slot first site owner_st
       (LENGTH avs*abi_member_head_size ty+
         SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual /\
     eval_operand out actual = SOME (n2w j) /\
@@ -47,9 +47,9 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
      (body_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial` by
     (irule abi_encoder_shared_input_mono >> goal_assum (drule_at Any) >> simp[]) >>
-  `abi_encoder_cursor T ip site slot first site body_st j initial` by
+  `abi_sites_encoder_cursor sites T ip site slot first site body_st j initial` by
     (irule abi_encoder_cursor_mono >> goal_assum (drule_at Any) >> simp[]) >>
-  `abi_encoder_cursor F dp cursor_site cursor_slot first site body_st
+  `abi_sites_encoder_cursor sites F dp cursor_site cursor_slot first site body_st
      (LENGTH avs*abi_member_head_size ty+
        SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial` by
     (irule abi_encoder_cursor_mono >> goal_assum (drule_at Any) >> simp[]) >>
@@ -58,9 +58,9 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
      (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual` by
     (irule abi_encoder_shared_input_owner >> metis_tac[]) >>
-  `abi_encoder_cursor T ip site slot first site owner_st j actual` by
+  `abi_sites_encoder_cursor sites T ip site slot first site owner_st j actual` by
     (irule abi_encoder_cursor_owner >> metis_tac[]) >>
-  `abi_encoder_cursor F dp cursor_site cursor_slot first site owner_st
+  `abi_sites_encoder_cursor sites F dp cursor_site cursor_slot first site owner_st
      (LENGTH avs*abi_member_head_size ty+
        SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual` by
     (irule abi_encoder_cursor_owner >> metis_tac[]) >>
@@ -76,8 +76,8 @@ Theorem abi_encoder_shared_array_dynamic_body_owner:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st j initial /\
-  abi_encoder_cursor T dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st j initial /\
+  abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial /\
   site < cursor_site /\ j < LENGTH avs /\ en.cs_next_id <= last /\
@@ -89,8 +89,8 @@ Theorem abi_encoder_shared_array_dynamic_body_owner:
     abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
       (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
     abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
-    abi_encoder_cursor T ip site slot first site owner_st j actual /\
-    abi_encoder_cursor T dp cursor_site cursor_slot first site owner_st
+    abi_sites_encoder_cursor sites T ip site slot first site owner_st j actual /\
+    abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site owner_st
       (LENGTH avs*abi_member_head_size ty+
         SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual /\
     eval_operand out actual = SOME (n2w j) /\
@@ -106,9 +106,9 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
      (body_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial` by
     (irule abi_encoder_shared_input_mono >> goal_assum (drule_at Any) >> simp[]) >>
-  `abi_encoder_cursor T ip site slot first site body_st j initial` by
+  `abi_sites_encoder_cursor sites T ip site slot first site body_st j initial` by
     (irule abi_encoder_cursor_mono >> goal_assum (drule_at Any) >> simp[]) >>
-  `abi_encoder_cursor T dp cursor_site cursor_slot first site body_st
+  `abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site body_st
      (LENGTH avs*abi_member_head_size ty+
        SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial` by
     (irule abi_encoder_cursor_mono >> goal_assum (drule_at Any) >> simp[]) >>
@@ -117,9 +117,9 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
      (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual` by
     (irule abi_encoder_shared_input_owner >> metis_tac[]) >>
-  `abi_encoder_cursor T ip site slot first site owner_st j actual` by
+  `abi_sites_encoder_cursor sites T ip site slot first site owner_st j actual` by
     (irule abi_encoder_cursor_owner >> metis_tac[]) >>
-  `abi_encoder_cursor T dp cursor_site cursor_slot first site owner_st
+  `abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site owner_st
      (LENGTH avs*abi_member_head_size ty+
        SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual` by
     (irule abi_encoder_cursor_owner >> metis_tac[]) >>
@@ -180,8 +180,8 @@ Theorem abi_encoder_shared_array_loop_round_finish:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) encoded /\
   abi_encoder_array_prefix ty avs (SUC j) d encoded.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st j encoded /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st j encoded /\
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) encoded /\
   abi_sites_scratch_effect sites first last site hi owner_st.cs_next_var limit_st d sz b cap initial encoded /\
@@ -248,12 +248,12 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
      (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) ready /\
    abi_encoder_array_prefix ty avs j d ready.vs_memory /\
-   abi_encoder_cursor T ip site slot first site owner_st j ready /\
-   abi_encoder_cursor F dp cursor_site cursor_slot first site owner_st
+   abi_sites_encoder_cursor sites T ip site slot first site owner_st j ready /\
+   abi_sites_encoder_cursor sites F dp cursor_site cursor_slot first site owner_st
      (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) ready /\
    ready.vs_current_bb = FST (SND labels) /\ ready.vs_inst_idx = 0 /\ ~ready.vs_halted` by
     fs[abi_sites_encoder_shared_array_index_def] >>
-  `site < owner_st.cs_next_id` by fs[abi_encoder_cursor_def] >>
+  `site < owner_st.cs_next_id` by fs[abi_sites_encoder_cursor_def] >>
   `owner_st.cs_next_var <= body_st.cs_next_var /\ owner_st.cs_next_id <= body_st.cs_next_id /\
    body_end.cs_next_id <= last /\ body_end.cs_next_var <= limit_st.cs_next_var /\
    ready.vs_current_bb = body_st.cs_current_bb /\
@@ -309,14 +309,14 @@ Proof
   `abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
      (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) ready /\
    abi_encoder_array_prefix ty avs j d ready.vs_memory /\
-   abi_encoder_cursor T ip site slot first site owner_st j ready /\
-   abi_encoder_cursor T dp cursor_site cursor_slot first site owner_st
+   abi_sites_encoder_cursor sites T ip site slot first site owner_st j ready /\
+   abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site owner_st
      (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) ready /\
    ready.vs_current_bb = FST (SND labels) /\ ready.vs_inst_idx = 0 /\ ~ready.vs_halted /\
    site < cursor_site` by
     fs[abi_sites_encoder_shared_array_index_def] >>
   `site < owner_st.cs_next_id /\ cursor_site < owner_st.cs_next_id` by
-    fs[abi_encoder_cursor_def] >>
+    fs[abi_sites_encoder_cursor_def] >>
   `owner_st.cs_next_var <= body_st.cs_next_var /\ owner_st.cs_next_id <= body_st.cs_next_id /\
    body_end.cs_next_id <= last /\ body_end.cs_next_var <= limit_st.cs_next_var /\
    ready.vs_current_bb = body_st.cs_current_bb /\

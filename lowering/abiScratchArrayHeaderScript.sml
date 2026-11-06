@@ -65,7 +65,7 @@ Proof
     abi_encoder_cursor act op cursor_site cursor_slot first cursor_lo st off actual` by
     (rpt gen_tac >> strip_tac >>
      drule_all (SIMP_RULE bool_ss [LESS_EQ_REFL]
-       (Q.INST [`prepared` |-> `st:compile_state`] abi_encoder_cursor_address)) >> simp[]) >>
+       (Q.INST [`sites` |-> `UNIV:num set`, `prepared` |-> `st:compile_state`] abi_encoder_cursor_address)) >> simp[]) >>
   mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `ids` |-> `abi_decoder_ids first last`,
     `fp` |-> `abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial`,
     `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`]

@@ -99,7 +99,7 @@ Theorem abi_scratch_prefix_cursor:
   abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
   abi_sites_encoder_complex_prefix_post sites infos dyn_ptr st.cs_next_var st.cs_next_id
     limit_st first last b cap initial actual /\ first <= st.cs_next_id ==>
-  ?slot. abi_encoder_cursor T dyn_ptr st.cs_next_id slot first st.cs_next_id st'
+  ?slot. abi_sites_encoder_cursor sites T dyn_ptr st.cs_next_id slot first st.cs_next_id st'
     (SUM (MAP (\(_,asz,_,_). asz) infos)) actual
 Proof
   strip_tac >> drule abi_encoder_complex_prefix_shape >> strip_tac >>
@@ -108,5 +108,5 @@ Proof
   `abi_decoder_operand_live st'.cs_next_var dyn_ptr` by
     (asm_simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> decide_tac) >>
-  qexists_tac `slot` >> gvs[abi_encoder_cursor_def]
+  qexists_tac `slot` >> gvs[abi_sites_encoder_cursor_def]
 QED

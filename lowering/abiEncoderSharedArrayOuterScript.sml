@@ -29,8 +29,8 @@ Theorem abi_encoder_shared_array_dynamic_init:
     abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
       (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
     abi_encoder_array_prefix ty avs 0 d actual.vs_memory /\
-    abi_encoder_cursor T (FST ptrs) start.cs_next_id index_slot first start.cs_next_id owner_st 0 actual /\
-    abi_encoder_cursor T (SND ptrs) (start.cs_next_id+2) tail_slot first start.cs_next_id owner_st
+    abi_sites_encoder_cursor sites T (FST ptrs) start.cs_next_id index_slot first start.cs_next_id owner_st 0 actual /\
+    abi_sites_encoder_cursor sites T (SND ptrs) (start.cs_next_id+2) tail_slot first start.cs_next_id owner_st
       (LENGTH avs*abi_member_head_size ty) actual /\
     abi_sites_scratch_effect sites first last start.cs_next_id hi start.cs_next_var limit_st d sz b cap initial actual /\
     abi_encoder_registered_effect (abi_sites_decoder_ids sites start.cs_next_id hi) [(d,sz)] initial actual /\
@@ -55,17 +55,17 @@ Proof
     fs[abi_sites_scratch_effect_def] >>
   drule_all abi_encoder_shared_array_tail_prepare >>
   disch_then (qspec_then `ctx` (qx_choose_then `actual` (qx_choose_then `tail_slot` strip_assume_tac))) >>
-  `abi_encoder_cursor T ip start.cs_next_id index_slot first start.cs_next_id after_index 0 actual` by
+  `abi_sites_encoder_cursor sites T ip start.cs_next_id index_slot first start.cs_next_id after_index 0 actual` by
     (qpat_assum `abi_sites_encoder_shared_input sites _ (after_index,_,_) _ _ _ indexed`
        (strip_assume_tac o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
      irule abi_scratch_cursor_protected >>
      goal_assum (drule_at (Pat `abi_sites_scratch_effect sites _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
-  `abi_encoder_cursor T ip start.cs_next_id index_slot first start.cs_next_id owner_st 0 actual` by
+  `abi_sites_encoder_cursor sites T ip start.cs_next_id index_slot first start.cs_next_id owner_st 0 actual` by
     (irule abi_encoder_cursor_mono >> qexists_tac `after_index` >> simp[]) >>
-  `abi_encoder_cursor T dyn_ptr (start.cs_next_id+2) tail_slot first start.cs_next_id owner_st
+  `abi_sites_encoder_cursor sites T dyn_ptr (start.cs_next_id+2) tail_slot first start.cs_next_id owner_st
     (LENGTH avs*abi_member_head_size ty) actual` by
-    (gvs[abi_encoder_cursor_def, Excl "enc_def"] >> decide_tac) >>
+    (gvs[abi_sites_encoder_cursor_def, Excl "enc_def"] >> decide_tac) >>
   `abi_sites_scratch_effect sites first last start.cs_next_id hi start.cs_next_var limit_st d sz b cap initial indexed` by
     (irule abi_scratch_effect_widen >> goal_assum (drule_at Any) >> simp[]) >>
   `abi_sites_scratch_effect sites first last start.cs_next_id hi start.cs_next_var limit_st d sz b cap indexed actual` by
@@ -392,7 +392,7 @@ QED
 
 (* Protect the parent cursor across the shared loop, then reuse scalar finish. *)
 Theorem abi_encoder_shared_array_finish_protected:
-  abi_encoder_cursor T parent_ptr site slot first site loop_st 0 ready /\
+  abi_sites_encoder_cursor sites T parent_ptr site slot first site loop_st 0 ready /\
   abi_sites_scratch_effect sites first last loop_st.cs_next_id loop_end.cs_next_id loop_st.cs_next_var
     limit_st d sz b cap ready encoded /\
   abi_sites_decoder_budget sites first last b cap ready /\
@@ -413,15 +413,15 @@ Theorem abi_encoder_shared_array_finish_protected:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `first <= loop_st.cs_next_id /\ site < last` by
-    (fs[abi_encoder_cursor_def] >> decide_tac) >>
-  `abi_encoder_cursor T parent_ptr site slot first site loop_st 0 encoded` by
+    (fs[abi_sites_encoder_cursor_def] >> decide_tac) >>
+  `abi_sites_encoder_cursor sites T parent_ptr site slot first site loop_st 0 encoded` by
     (irule abi_scratch_cursor_protected >>
      goal_assum (drule_at (Pat `abi_sites_scratch_effect sites _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
-  `abi_encoder_cursor T parent_ptr site slot first site loop_end 0 encoded` by
+  `abi_sites_encoder_cursor sites T parent_ptr site slot first site loop_end 0 encoded` by
     (irule abi_encoder_cursor_mono >> qexists_tac `loop_st` >> asm_rewrite_tac []) >>
-  qpat_assum `abi_encoder_cursor T _ _ _ _ _ loop_end _ encoded`
-    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  qpat_assum `abi_sites_encoder_cursor sites T _ _ _ _ _ loop_end _ encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_sites_encoder_cursor_def]) >>
   `fresh_vars_wrt limit_st encoded /\ abi_sites_decoder_budget sites first last b cap encoded` by
     fs[abi_sites_scratch_effect_def] >>
   `abi_footprint_disjoint d sz (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap encoded)` by

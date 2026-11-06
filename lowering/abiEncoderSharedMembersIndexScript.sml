@@ -16,7 +16,7 @@ Definition abi_sites_encoder_shared_members_inv_def:
     ho = SUM (MAP abi_member_head_size pre) /\
     LENGTH (enc (Tuple (pre++tys)) (ListV (pvs++avs))) <= sz /\
     abi_encoder_tuple_prefix hl pre pvs d s.vs_memory /\
-    abi_encoder_cursor active dp site slot first lo st
+    abi_sites_encoder_cursor sites active dp site slot first lo st
       (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) s /\
     (active \/ EVERY (\(_,_,_,dyn). ~dyn) infos) /\
     abi_sites_decoder_budget sites first last b cap s /\ first <= lo /\ lo <= st.cs_next_id /\
@@ -164,7 +164,7 @@ Theorem abi_encoder_shared_members_after_child:
   abi_sites_scratch_effect sites first last lo en.cs_next_id st.cs_next_var
     limit_st d sz b cap initial actual /\
   abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d actual.vs_memory /\
-  abi_encoder_cursor active dp site slot first lo en
+  abi_sites_encoder_cursor sites active dp site slot first lo en
     (hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))) actual /\
   st.cs_next_var <= en.cs_next_var /\ st.cs_next_id <= en.cs_next_id /\
   en.cs_next_id <= last /\ en.cs_next_var <= limit_st.cs_next_var /\

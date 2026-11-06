@@ -9,8 +9,8 @@ Definition abi_sites_encoder_array_loop_inv_def:
   abi_sites_encoder_array_loop_inv sites ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
       site slot cursor_site cursor_slot first last hi sb source_cap d output_size b cap count_op label j origin s <=>
     abi_encoder_array_memory ei asz msz active ty avs owner_st src dst sb source_cap d output_size b cap j s /\
-    abi_encoder_cursor T ip site slot first site owner_st j s /\
-    abi_encoder_cursor active dyn_ptr cursor_site cursor_slot first site owner_st
+    abi_sites_encoder_cursor sites T ip site slot first site owner_st j s /\
+    abi_sites_encoder_cursor sites active dyn_ptr cursor_site cursor_slot first site owner_st
       (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) s /\
     (active ==> site < cursor_site) /\ abi_decoder_operand_live owner_st.cs_next_var count_op /\
     eval_operand count_op s = SOME (n2w (LENGTH avs)) /\

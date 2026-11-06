@@ -61,10 +61,10 @@ Proof
 QED
 
 Theorem abi_encoder_cursor_owner:
-  abi_encoder_cursor active op site slot first lo owner_st old_off s /\
-  abi_encoder_cursor active op site slot first lo body_st new_off t ==>
-  abi_encoder_cursor active op site slot first lo owner_st new_off t
+  abi_sites_encoder_cursor sites active op site slot first lo owner_st old_off s /\
+  abi_sites_encoder_cursor sites active op site slot first lo body_st new_off t ==>
+  abi_sites_encoder_cursor sites active op site slot first lo owner_st new_off t
 Proof
-  Cases_on `active` >> simp_tac bool_ss [abi_encoder_cursor_def] >>
+  Cases_on `active` >> simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   strip_tac >> asm_simp_tac bool_ss []
 QED

@@ -14,7 +14,7 @@ Definition abi_sites_encoder_members_inv_def:
     ho = SUM (MAP abi_member_head_size pre) /\
     LENGTH (enc (Tuple (pre++tys)) (ListV (pvs++avs))) <= output_size /\
     abi_encoder_tuple_prefix hl pre pvs d s.vs_memory /\
-    abi_encoder_cursor active dyn_ptr site slot first lo st
+    abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st
       (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) s /\
     (active \/ EVERY (\(_,_,_,dyn). ~dyn) infos) /\
     abi_sites_decoder_budget sites first last b cap s /\ first <= st.cs_next_id /\ lo <= st.cs_next_id /\

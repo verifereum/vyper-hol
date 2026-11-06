@@ -70,10 +70,10 @@ Proof
 QED
 
 Theorem abi_encoder_cursor_jump[simp]:
-  abi_encoder_cursor active cursor_op site slot first lo st off (jump_to hdr s) <=>
-  abi_encoder_cursor active cursor_op site slot first lo st off s
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st off (jump_to hdr s) <=>
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st off s
 Proof
-  simp[abi_encoder_cursor_def, abi_decoder_operand_jump, jump_to_def, mload_def]
+  simp[abi_sites_encoder_cursor_def, abi_decoder_operand_jump, jump_to_def, mload_def]
 QED
 
 Theorem abi_encoder_array_loop_entry_sim:

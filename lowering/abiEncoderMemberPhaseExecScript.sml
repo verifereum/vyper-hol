@@ -43,7 +43,7 @@ Proof
     `tys` |-> `ty::tys`, `avs` |-> `av::avs`, `sz` |-> `output_size:num`]
     abi_scratch_members_pre_address) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`actual` |-> `ready:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `actual` |-> `ready:venom_state`,
     `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`] abi_encoder_cursor_address) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`st` |-> `prepared:compile_state`, `s` |-> `ready:venom_state`]

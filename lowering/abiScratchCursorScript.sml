@@ -8,13 +8,13 @@ Ancestors
   arithmetic
 
 Theorem abi_scratch_cursor_registered:
-  abi_encoder_cursor active cursor_op site slot first lo st off initial /\
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st off initial /\
   abi_sites_scratch_effect sites first last owned_lo owned_hi next limit_st d sz b cap initial actual /\
   st.cs_next_var <= next /\ FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
   mload slot actual = n2w next_off ==>
-  abi_encoder_cursor active cursor_op site slot first lo st next_off actual
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st next_off actual
 Proof
-  Cases_on `active` >> simp_tac bool_ss [abi_encoder_cursor_def] >>
+  Cases_on `active` >> simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decoder_operand_live next cursor_op` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
@@ -24,15 +24,15 @@ Proof
 QED
 
 Theorem abi_scratch_cursor_protected:
-  abi_encoder_cursor active cursor_op site slot first lo st off initial /\
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st off initial /\
   abi_sites_scratch_effect sites first last owned_lo owned_hi next limit_st d sz b cap initial actual /\
   abi_sites_decoder_budget sites first last b cap initial /\ first <= owned_lo /\ owned_hi <= last /\
   st.cs_next_var <= next /\ site < last /\ (site < owned_lo \/ owned_hi <= site) /\
   abi_footprint_disjoint d sz
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial) ==>
-  abi_encoder_cursor active cursor_op site slot first lo st off actual
+  abi_sites_encoder_cursor sites active cursor_op site slot first lo st off actual
 Proof
-  Cases_on `active` >> simp_tac bool_ss [abi_encoder_cursor_def] >>
+  Cases_on `active` >> simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `site IN abi_sites_decoder_ids sites first last /\ ~(site IN abi_sites_decoder_ids sites owned_lo owned_hi)` by
     (simp[abi_sites_decoder_ids_def] >> decide_tac) >>

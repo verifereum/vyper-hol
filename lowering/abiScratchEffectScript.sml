@@ -118,7 +118,7 @@ QED
 
 Theorem abi_scratch_single_write:
   abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
-  lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
+  lo <= site /\ site < hi /\ site IN sites /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
   actual.vs_halted = initial.vs_halted /\ fresh_vars_wrt limit_st actual /\
   (!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>

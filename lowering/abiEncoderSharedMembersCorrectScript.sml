@@ -48,7 +48,7 @@ Theorem abi_encoder_shared_members_initial_inv:
   abi_sites_encoder_shared_members_pre sites infos tys avs st src dst sb 0 d output_size first last b cap initial /\
   LIST_REL abi_encoder_structural_valid tys avs /\
   hl = head_lengths tys 0 /\ LENGTH (enc (Tuple tys) (ListV avs)) <= output_size /\
-  abi_encoder_cursor active dyn_ptr site slot first lo st hl initial /\
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st hl initial /\
   (active \/ EVERY (\(_,_,_,dyn). ~dyn) infos) /\
   abi_sites_decoder_budget sites first last b cap initial /\ first <= lo /\ lo <= st.cs_next_id /\
   st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
@@ -84,7 +84,7 @@ Theorem abi_encoder_shared_members_final_output:
     src dst sb so ho d hl output_size b cap actual ==>
   mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) actual.vs_memory =
     enc (Tuple tys) (ListV avs) /\
-  abi_encoder_cursor active dyn_ptr site slot first lo st
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st
     (LENGTH (enc (Tuple tys) (ListV avs))) actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS o

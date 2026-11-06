@@ -77,8 +77,8 @@ Proof
   drule abi_encoder_shared_members_final_output >> strip_tac >>
   qpat_x_assum `abi_sites_encoder_shared_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_members_inv_def]) >>
-  qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
-    (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [abi_encoder_cursor_def]) >>
+  qpat_x_assum `abi_sites_encoder_cursor sites T _ _ _ _ _ _ (LENGTH _) _`
+    (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [abi_sites_encoder_cursor_def]) >>
   drule_all abi_encoder_member_load_raw >> disch_then (qx_choose_then `ready` assume_tac) >>
   drule_all abi_encoder_member_load_transport >> strip_tac >>
   `abi_sites_scratch_effect sites first last lo final.cs_next_id st.cs_next_var limit_st d sz b cap initial ready` by

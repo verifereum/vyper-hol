@@ -137,16 +137,16 @@ Theorem abi_encoder_shared_array_backedge_memory:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs k d initial.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st j initial /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st off initial /\
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st j initial /\
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st off initial /\
   (active ==> site < cursor_site /\ cursor_site < last) /\
   owner_st.cs_next_var <= next /\ owner_st.cs_next_id <= last /\
   site < last /\ abi_sites_decoder_budget sites first last b cap initial ==>
   ?actual. abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
       (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
     abi_encoder_array_prefix ty avs k d actual.vs_memory /\
-    abi_encoder_cursor T ip site slot first site owner_st (SUC j) actual /\
-    abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st off actual /\
+    abi_sites_encoder_cursor sites T ip site slot first site owner_st (SUC j) actual /\
+    abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st off actual /\
     abi_sites_scratch_effect sites first last site (site+1) owner_st.cs_next_var limit_st d sz b cap initial actual /\
     abi_encoder_registered_effect (abi_sites_decoder_ids sites site (site+1)) [(d,sz)] initial actual /\
     (alloca_inv initial ==> alloca_inv actual) /\ abi_encoder_extend_sim ctx func initial actual /\
@@ -155,8 +155,8 @@ Proof
   strip_tac >> drule abi_encoder_shared_array_input_facts >> strip_tac >>
   qpat_x_assum `asz = abi_member_head_size ty` kall_tac >>
   qpat_x_assum `active = is_dynamic ty` kall_tac >>
-  qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  qpat_assum `abi_sites_encoder_cursor sites T ip _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_sites_encoder_cursor_def]) >>
   qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   `abi_decoder_operand_live next ip` by
@@ -187,10 +187,10 @@ Proof
     (irule abi_encoder_open_array_prefix_output_frame >>
      conj_tac >- (irule abi_encoder_structural_list_layout >> simp[]) >>
      qexistsl_tac [`[(slot,32)]`,`initial`,`sz`] >> asm_simp_tac bool_ss []) >>
-  `abi_encoder_cursor T ip site slot first site owner_st (SUC j) actual` by
-    (simp[abi_encoder_cursor_def]) >>
-  `abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st off actual` by
-    (reverse (Cases_on `active`) >- simp[abi_encoder_cursor_def] >>
+  `abi_sites_encoder_cursor sites T ip site slot first site owner_st (SUC j) actual` by
+    (simp[abi_sites_encoder_cursor_def]) >>
+  `abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st off actual` by
+    (reverse (Cases_on `active`) >- simp[abi_sites_encoder_cursor_def] >>
      irule abi_scratch_cursor_protected >>
      goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >>
      simp[] >> fs[] >> decide_tac) >>
@@ -206,8 +206,8 @@ Theorem abi_encoder_shared_array_round_finish:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) encoded /\
   abi_encoder_array_prefix ty avs (SUC j) d encoded.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st j encoded /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st j encoded /\
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) encoded /\
   abi_sites_scratch_effect sites first last site hi owner_st.cs_next_var limit_st d sz b cap initial encoded /\
@@ -233,7 +233,7 @@ Proof
   `site < last` by decide_tac >>
   drule_all abi_encoder_shared_array_backedge_memory >>
   disch_then (qspec_then `ctx` (qx_choose_then `actual` strip_assume_tac)) >>
-  `first <= site` by fs[abi_encoder_cursor_def] >>
+  `first <= site` by fs[abi_sites_encoder_cursor_def] >>
   `abi_sites_scratch_effect sites first last site hi owner_st.cs_next_var limit_st d sz b cap encoded actual` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`,`site+1`,`site`,`owner_st.cs_next_var`,`sz`] >> simp[]) >>

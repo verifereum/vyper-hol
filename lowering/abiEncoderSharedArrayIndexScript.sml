@@ -14,8 +14,8 @@ Definition abi_sites_encoder_shared_array_index_def:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) s /\
   abi_encoder_array_prefix ty avs j d s.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st j s /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st j s /\
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) s /\
   (active ==> site < cursor_site) /\ abi_decoder_operand_live owner_st.cs_next_var count_op /\
   eval_operand count_op s = SOME (n2w (LENGTH avs)) /\
@@ -91,8 +91,8 @@ Theorem abi_encoder_shared_array_index_advance:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
   abi_encoder_array_prefix ty avs k d actual.vs_memory /\
-  abi_encoder_cursor T ip site slot first site owner_st k actual /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites T ip site slot first site owner_st k actual /\
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
     (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE k avs))) actual /\
   hi <= last /\ actual.vs_current_bb = next_label /\ actual.vs_inst_idx = 0 /\ ~actual.vs_halted ==>
   abi_sites_encoder_shared_array_index sites (ctx,func) (ei,asz,msz,active,ty,avs)
@@ -103,7 +103,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand count_op actual = SOME (n2w (LENGTH avs))` by
     (drule_all abi_scratch_effect_operand >> simp[]) >>
-  `first <= site` by fs[abi_encoder_cursor_def] >>
+  `first <= site` by fs[abi_sites_encoder_cursor_def] >>
   `abi_sites_scratch_effect sites first last site hi owner_st.cs_next_var limit_st d sz b cap origin actual` by
     (irule abi_scratch_effect_trans >> asm_simp_tac bool_ss [] >> qexists_tac `initial` >> simp[]) >>
   `abi_encoder_registered_effect (abi_sites_decoder_ids sites site hi) [(d,sz)] origin actual` by
@@ -119,7 +119,7 @@ Theorem abi_encoder_shared_array_index_exit_facts:
     (first,last,hi,b,cap) (sb,source_cap,d,sz) label (LENGTH avs) origin s ==>
   mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) s.vs_memory =
     enc (Array NONE ty) (ListV avs) /\
-  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st
+  abi_sites_encoder_cursor sites active dp cursor_site cursor_slot first site owner_st
     (LENGTH (enc (Array NONE ty) (ListV avs))-32) s
 Proof
   strip_tac >> drule abi_encoder_shared_array_index_facts >> strip_tac >>

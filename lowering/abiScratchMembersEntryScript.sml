@@ -12,11 +12,11 @@ Ancestors
    TOP-LEVEL: static/dynamic advance use the child's precise effect to protect
    the remaining source, processed prefix and registered parent cursor. *)
 Theorem abi_scratch_cursor_mono:
-  abi_encoder_cursor active dyn_ptr site slot first lo st off s /\
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo st off s /\
   st.cs_next_var <= end_st.cs_next_var /\ st.cs_next_id <= end_st.cs_next_id ==>
-  abi_encoder_cursor active dyn_ptr site slot first lo end_st off s
+  abi_sites_encoder_cursor sites active dyn_ptr site slot first lo end_st off s
 Proof
-  Cases_on `active` >> simp_tac bool_ss [abi_encoder_cursor_def] >>
+  Cases_on `active` >> simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decoder_operand_live end_st.cs_next_var dyn_ptr` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
@@ -57,7 +57,7 @@ Proof
        `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`, `sz` |-> `output_size:num`]
        abi_scratch_cursor_protected) >>
      impl_tac >- (fs[abi_encoder_cursor_def, abi_scratch_input_def] >> decide_tac) >> simp[]) >>
-  drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
+  drule_all (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
   mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_encoder_cursor active dyn_ptr site slot first lo end_st
@@ -110,7 +110,7 @@ Proof
     `sz` |-> `output_size:num`, `owned_lo` |-> `lo:num`, `owned_hi` |-> `end_st.cs_next_id`,
     `next` |-> `st.cs_next_var`] abi_scratch_cursor_registered) >>
   impl_tac >- asm_simp_tac bool_ss [ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
-  drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
+  drule_all (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
   mp_tac (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_scratch_members_after_child) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
@@ -181,7 +181,7 @@ Proof
        `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`, `sz` |-> `output_size:num`]
        abi_scratch_cursor_protected) >>
      impl_tac >- (fs[abi_encoder_cursor_def, abi_scratch_input_def] >> decide_tac) >> simp[]) >>
-  drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
+  drule_all (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
   mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_encoder_cursor active dyn_ptr site slot first lo end_st
@@ -252,7 +252,7 @@ Proof
     `sz` |-> `output_size:num`, `owned_lo` |-> `lo:num`, `owned_hi` |-> `end_st.cs_next_id`,
     `next` |-> `st.cs_next_var`] abi_scratch_cursor_registered) >>
   impl_tac >- asm_simp_tac bool_ss [ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
-  drule_all (Q.INST [`s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
+  drule_all (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
   drule_all (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_scratch_members_after_child) >>
   strip_tac >> asm_rewrite_tac []
