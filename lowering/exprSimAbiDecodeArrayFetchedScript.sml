@@ -303,3 +303,60 @@ Proof
   drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
   drule_all run_inst_seq_abort_extends >> strip_tac >> qexists `t` >> gvs[]
 QED
+
+Theorem abi_decode_array_bulk_fetched_outcome:
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
+    (DecDynArray (type_to_abi_dec_info sf ce ty)
+      (abi_member_head_size (vyper_to_abi_type env ty))
+      (type_memory_bytes ce ty) F maxn) st = ((),st') /\
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty /\
+  abi_decode_bytes_widths env ty /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
+  ~is_abi_dynamic ce.ce_struct_fields ty /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w pos) /\ eval_operand dst s = SOME(n2w d) /\
+  eval_operand base_op s = SOME(n2w b) /\ eval_operand hi s = SOME(n2w h) /\
+  n = w2n (mem_word_at (b+pos) s.vs_memory) /\
+  bs = mem_bytes_at (b+pos) (h-pos) s.vs_memory /\
+  pos < dimword(:256) /\ h < dimword(:256) /\ b+h < dimword(:256) /\
+  maxn < dimword(:256) /\ type_memory_bytes ce ty < dimword(:256) /\
+  (n <= maxn ==> n*abi_member_head_size (vyper_to_abi_type env ty) < dimword(:256)) /\
+  d+32 < dimword(:256) /\
+  (b+h <= d \/ d+32 <= b+pos+32) /\
+  fresh_vars_wrt st s /\ decode_site_resources ctx func s /\
+  {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes /\
+  fn_has_code st st' fn /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  (?t v. decoder_straight_prefix fn s t /\
+    t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+    abi_to_vyper env (ArrayT ty (Dynamic maxn))
+      (dec (Array NONE (vyper_to_abi_type env ty)) bs) = SOME v /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) v d t.vs_memory /\
+    fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    decode_site_effect ctx func next writes s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next) \/
+  (?encoded ix. run_inst_seq (emitted_insts st st') s = Abort Revert_abort encoded /\
+    run_from 0 ctx fn s = Abort Revert_abort (encoded with vs_inst_idx := ix) /\
+    ~(vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+      ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+        (dec (Array NONE (vyper_to_abi_type env ty)) bs) = SOME v))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_bulk_shape >> strip_tac >>
+  `inst_extends st st'` by
+    (gvs[inst_extends_def, IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  drule_all abi_decode_array_bulk_source_outcome >>
+  disch_then (qspec_then `next` strip_assume_tac)
+  >- (disj1_tac >>
+      drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
+      `~t.vs_halted` by
+        fs[decode_site_effect_def, decode_static_frame_def, venom_state_component_equality] >>
+      qexistsl [`t'`, `v`] >>
+      gvs[fresh_vars_wrt_def, eval_op_inst_idx]) >>
+  disj2_tac >> drule_all abi_decoder_run_sequence_abort >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >> metis_tac[]
+QED
