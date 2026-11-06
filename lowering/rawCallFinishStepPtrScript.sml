@@ -95,3 +95,74 @@ Proof
     contextCodegenRelTheory.memory_range_of_operands_def]) >>
   gvs[valueEncodingTheory.val_to_w256_def]
 QED
+
+(* Extraction presents a calltype case.  Normalize it once here, keeping
+   instruction construction out of the consumer's witness bookkeeping. *)
+Theorem raw_call_extracted_checked_full:
+  (case (if stat then StaticCall else RegularCall) of
+     RegularCall => emit_op CALL [gas_op;addr;value_op;dp;dl;op;rz_op]
+   | DelegateCall => emit_op DELEGATECALL [gas_op;addr;dp;dl;op;rz_op]
+   | StaticCall => emit_op STATICCALL [gas_op;addr;dp;dl;op;rz_op]) sa = (Var out,sc) /\
+  fn_has_code sa sc func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
+  (~stat ==> eval_operand value_op s = SOME vw) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME ro /\ eval_operand rz_op s = SOME rz /\
+  w2w aw = target /\ w2n (if stat then 0w else vw) =
+    (case value_opt of NONE => 0 | SOME n => n) /\ stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+    (INL (rq,outcome),es1) /\
+  access_ok 0 G func (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;addr;dp;dl;op;rz_op]
+     else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) s /\
+  taint_ok func tn (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;addr;dp;dl;op;rz_op]
+     else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) s /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  ~s.vs_halted /\ ~cenv.ce_is_ctor /\ not_local_ptr cenv es.scopes out /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv protected /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x. not_fresh_at protected x ==> x <> out) /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint (w2n ro) (w2n rz) a len) /\
+  (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint (w2n ro) (w2n rz) a len) ==>
+  ?s' t H un u.
+    exec_ext_call (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;rz_op]
+       else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out])
+      s gas aw (if stat then 0w else vw) ao az ro rz stat = OK t /\
+    t = update_var out (if outcome.co_success then 1w else 0w) s' /\
+    s'.vs_memory = (write_memory_with_expansion (w2n ro)
+      (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
+    s'.vs_returndata = outcome.co_returnData /\
+    H = step_prov PG G (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;rz_op]
+       else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) t /\
+    un = step_taint (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;rz_op]
+       else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) s t tn /\
+    u = t with vs_inst_idx := LENGTH sc.cs_current_insts /\
+    gas_path_ptr_edge (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
+    stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    ghost_inv d cenv cx (SND (adopt_call_outcome rq outcome es1)) H un u /\
+    ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s u /\
+    op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
+    u.vs_allocas = s.vs_allocas /\
+    u.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
+    u.vs_fmp = s.vs_fmp /\
+    u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~u.vs_halted
+Proof
+  strip_tac >>
+  mp_tac (raw_call_emit_checked_full |> Q.INST
+    [`inst` |-> `mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr_op;ao_op;az_op;ro_op;rz_op]
+       else [gas_op;addr_op;value_op;ao_op;az_op;ro_op;rz_op]) [out]`]
+    |> Q.INST [`addr_op` |-> `addr`, `ao_op` |-> `dp`, `az_op` |-> `dl`, `ro_op` |-> `op`]) >>
+  impl_tac >- (Cases_on `stat` >> fs[] >> metis_tac[]) >>
+  simp[]
+
+QED
