@@ -1,6 +1,6 @@
 Theory lowerDloadRevertSuffix
 Ancestors
-  o1ContractLowerDload lowerDloadSupplySegment lowerDloadDefs stepWriteFootprintForward ptrDiscipline
+  o1ContractLowerDload lowerDloadSupplySegment lowerDloadDefs irSupply stepWriteFootprintForward ptrDiscipline
   venomExecSemantics venomInst venomState contextCodegenRel arithmetic list rich_list
 
 (* One-step observation boundary, independent of operand definedness. *)
@@ -244,4 +244,126 @@ Proof
   simp[] >> strip_tac >>
   `j.inst_opcode = ASSIGN` by metis_tac[ld_revert_suffix_step] >>
   fs[is_terminator_def, next_inst_def] >> metis_tac[]
+QED
+
+(* Only variable reservation is needed here; instruction-id wellformedness
+   is independent of assignment agreement. *)
+Theorem ld_inst_supply_used_vars_mono:
+  lower_dload_inst_supply a i = (out,b) ==>
+  !v. MEM v a.irs_used_vars ==> MEM v b.irs_used_vars
+Proof
+  simp[lower_dload_inst_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac fresh_ir_var_contract >>
+  gvs[fresh_inst_id_def] >> metis_tac[]
+QED
+
+Theorem ld_insts_supply_used_vars_mono:
+  !ins a out b. lower_dload_insts_supply a ins = (out,b) ==>
+  !v. MEM v a.irs_used_vars ==> MEM v b.irs_used_vars
+Proof
+  Induct >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `lower_dload_inst_supply a h` >>
+  Cases_on `lower_dload_insts_supply r ins` >>
+  simp[lower_dload_insts_supply_def] >> strip_tac >> gvs[] >>
+  metis_tac[ld_inst_supply_used_vars_mono]
+QED
+
+Theorem ld_same_after_assigns_refl:
+  !ins x. same_after_assigns ins x x
+Proof
+  Cases >> simp[same_after_assigns_def]
+QED
+
+Theorem ld_step_back_assign_support:
+  EVERY (\v. MEM v used) (inst_ir_vars i) /\
+  EVERY (\v. MEM v used) (venomInst$operand_vars [x]) /\
+  step_back_assign i x = SOME y ==>
+  EVERY (\v. MEM v used) (venomInst$operand_vars [y])
+Proof
+  Cases_on `x` >>
+  simp[step_back_assign_def, venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def, dfgDefsTheory.operand_var_def, dfgDefsTheory.operand_vars_def,
+       inst_ir_vars_def, inst_uses_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `i.inst_operands` >>
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+      dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+QED
+
+Theorem ld_reserved_not_fresh[local]:
+  ~MEM f used ==> !v. MEM v used ==> v <> f
+Proof
+  metis_tac[]
+QED
+
+Theorem ld_inst_supply_assign_continuation:
+  lower_dload_inst_supply a i = (out,b) /\
+  EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [x;y]) /\
+  step_back_assign i x = SOME x' /\
+  step_back_assign i y = SOME y' /\
+  same_after_assigns pre x' y' ==>
+  same_after_assigns (REVERSE out ++ pre) x y
+Proof
+  Cases_on `x = y` >- simp[ld_same_after_assigns_refl] >>
+  simp[lower_dload_inst_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac (cj 1 fresh_ir_var_contract) >>
+  imp_res_tac (cj 2 fresh_ir_var_contract) >>
+  gvs[fresh_inst_id_def] >>
+  simp[same_after_assigns_def] >>
+  Cases_on `x` >> Cases_on `y` >>
+  gvs[step_back_assign_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, same_after_assigns_def] >>
+  imp_res_tac ld_reserved_not_fresh >> simp[]
+QED
+
+Theorem ld_insts_supply_same_after_assigns:
+  !ins a out b x y.
+  EVERY (\v. MEM v a.irs_used_vars) (FLAT (MAP inst_ir_vars ins)) /\
+  EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [x;y]) /\
+  lower_dload_insts_supply a ins = (out,b) /\
+  same_after_assigns (REVERSE ins) x y ==>
+  same_after_assigns (REVERSE out) x y
+Proof
+  Induct using SNOC_INDUCT
+  >- simp[lower_dload_insts_supply_def, same_after_assigns_def] >>
+  rpt gen_tac >> rename1 `SNOC i ins` >>
+  rename1 `same_after_assigns (REVERSE out) x y` >>
+  Cases_on `x = y`
+  >- simp[ld_same_after_assigns_refl] >>
+  simp[SNOC_APPEND, MAP_APPEND, FLAT_APPEND, REVERSE_APPEND,
+       same_after_assigns_def] >>
+  strip_tac >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `lower_dload_insts_supply a ins` >>
+  rename1 `lower_dload_insts_supply a ins = (before,qi)` >>
+  Cases_on `lower_dload_inst_supply qi i` >>
+  rename1 `lower_dload_inst_supply qi i = (code,qn)` >>
+  `lower_dload_insts_supply a (ins ++ [i]) = (before ++ code,qn)` by
+    (irule lower_dload_insts_supply_append_forward >>
+     qexists_tac `qi` >> simp[lower_dload_insts_supply_def]) >>
+  gvs[] >>
+  Cases_on `step_back_assign i x` >> gvs[] >>
+  Cases_on `step_back_assign i y` >> gvs[] >>
+  rename1 `step_back_assign i x = SOME xx` >>
+  rename1 `step_back_assign i y = SOME yy` >>
+  `EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [x]) /\
+   EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [y])` by
+    (Cases_on `x` >> Cases_on `y` >>
+     gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  `EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [xx]) /\
+   EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [yy])` by
+    metis_tac[ld_step_back_assign_support] >>
+  `EVERY (\v. MEM v a.irs_used_vars) (venomInst$operand_vars [xx;yy])` by
+    (Cases_on `xx` >> Cases_on `yy` >>
+     gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  `same_after_assigns (REVERSE before) xx yy` by
+    (first_x_assum irule >> metis_tac[]) >>
+  `EVERY (\v. MEM v qi.irs_used_vars) (venomInst$operand_vars [x;y])` by
+    (qpat_assum `lower_dload_insts_supply a ins = _`
+       (mp_tac o MATCH_MP ld_insts_supply_used_vars_mono) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  simp[REVERSE_APPEND] >>
+  irule ld_inst_supply_assign_continuation >> metis_tac[]
 QED
