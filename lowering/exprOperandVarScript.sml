@@ -1227,8 +1227,6 @@ Resume compiler_builtin_var[slice]:
   IF_CASES_TAC
   >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
   IF_CASES_TAC
-  >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
-  IF_CASES_TAC
   >- (builtin_ptr_var_tac >>
       `!x. out_buf = Var x ==> not_fresh_at st3 x` by
         metis_tac[compiler_slice_var] >>
@@ -2157,8 +2155,6 @@ QED
 
 Resume compiler_builtin_reserved_cong[slice]:
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  IF_CASES_TAC >> simp[]
-  >- rpt compiler_reserved_pair_tac >>
   IF_CASES_TAC >> simp[]
   >- rpt compiler_reserved_pair_tac >>
   IF_CASES_TAC >> simp[]

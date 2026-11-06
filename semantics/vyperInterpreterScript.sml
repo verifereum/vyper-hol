@@ -1314,6 +1314,31 @@ Proof
   simp[FUN_EQ_THM, precompile_call_success_def]
 QED
 
+(* The x.code source of slice(x.code, start, len): its type and address x.
+   Such a slice evaluates start and len before x (see evaluate_def). *)
+Definition code_slice_source_def[simp]:
+  code_slice_source (Slice n) [Builtin ct (Acc Code) [addr]; start; len] =
+    SOME (ct, addr) ∧
+  code_slice_source _ _ = NONE
+End
+
+val () = cv_auto_trans code_slice_source_def;
+
+Theorem code_slice_source_SOME:
+  code_slice_source bt es = SOME (ct, addr) ⇔
+  ∃n start len. bt = Slice n ∧ es = [Builtin ct (Acc Code) [addr]; start; len]
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
+QED
+
+Theorem code_slice_source_NONE[simp]:
+  LENGTH es ≠ 3 ⇒ code_slice_source bt es = NONE
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
+QED
+
 Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
@@ -1575,7 +1600,16 @@ Definition evaluate_def:
       return $ IntV (&len)
     od else if bt = Env MsgGas then next_gas_reading
     else do
-      vs <- eval_exprs cx es;
+      vs <- (case code_slice_source bt es of
+        SOME (code_ty, addr) => do
+          tail_vs <- eval_exprs cx (TL es);
+          addr_vs <- eval_exprs cx [addr];
+          code_acc <- get_accounts;
+          code_v <- lift_sum $ evaluate_builtin cx code_acc code_ty (Acc Code)
+                                 [expr_type addr] addr_vs;
+          return (code_v :: tail_vs)
+        od
+      | NONE => eval_exprs cx es);
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
       precompile_call_success bt;
@@ -1810,6 +1844,8 @@ Termination
     >> irule LESS_EQ_LESS_TRANS
     >> qexists_tac `LENGTH vs + n * x + 1` >> simp[]
     >> PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
+  >>~- ([`code_slice_source _ _ = SOME _`],
+    gvs[code_slice_source_SOME, bound_def])
   >>~- ([`builtin_args_length_ok`],
     gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
         LENGTH_EQ_NUM_compute, bound_def])

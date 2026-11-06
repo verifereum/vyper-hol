@@ -1953,17 +1953,26 @@ Proof
     first_x_assum drule >> rw[]) >>
   (* Builtin *)
   conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply,
-        AllCaseEqs(), COND_RATOR, return_def] >>
-    imp_res_tac type_check_state >>
+    rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    simp[Once evaluate_def] >>
+    Cases_on `builtin_args_length_ok bt (LENGTH es)` >>
+    fs[type_check_def, assert_def, return_def, raise_def, ignore_bind_apply] >>
+    strip_tac >>
+    gvs[bind_apply, AllCaseEqs(), COND_RATOR, return_def] >>
     imp_res_tac lift_sum_state >>
     imp_res_tac read_result_state >>
     imp_res_tac result_array_length_state >>
     imp_res_tac next_gas_reading_state >>
-    imp_res_tac precompile_call_success_state >> gvs[] >>
-    rpt(first_x_assum drule >> rw[]) >>
-    gvs[get_accounts_def, return_def]) >>
+    imp_res_tac precompile_call_success_state >>
+    gvs[get_accounts_def, return_def]
+    >>~- ([`option_CASE (code_slice_source _ _) _ _ _ = _`],
+          drule_at (Pos last) builtin_operands_preserve >>
+          disch_then (qspec_then `preserves_tv cx` mp_tac) >>
+          impl_tac >- (simp[] >> metis_tac[preserves_tv_trans]) >>
+          gvs[ignore_bind_apply, return_def, AllCaseEqs()] >>
+          imp_res_tac precompile_call_success_state >>
+          gvs[preserves_tv_def])
+    >> rpt(first_x_assum drule >> rw[])) >>
   (* Pop *)
   conj_tac >- (
     rpt strip_tac >>

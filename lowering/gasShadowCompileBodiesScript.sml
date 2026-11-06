@@ -1008,7 +1008,6 @@ Proof
   Cases_on `sel_src` >> Cases_on `sel_start` >> Cases_on `sel_len` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
-  Cases_on `is_msg_data (HD args)` >> simp[] >>
   Cases_on `is_self_code (HD args)` >> simp[] >>
   Cases_on `is_extcode (HD args)` >> simp[] >>
   Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[] >>

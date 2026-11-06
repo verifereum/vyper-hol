@@ -3341,11 +3341,7 @@ Definition compile_builtin_dispatch_body_def:
      | Slice max_len =>
          (let src_e = HD args in let start_e = EL 1 args in let len_e = EL 2 args in
           let out_size = type_memory_bytes cenv ret_ty in
-          if is_msg_data src_e then
-            (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
-             let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
-             as_ptr_val ret_ty LocMemory (compile_slice_calldata start_op len_op out_size st2))
-          else if is_self_code src_e then
+          if is_self_code src_e then
             (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
              as_ptr_val ret_ty LocMemory (compile_slice_code start_op len_op out_size st2))

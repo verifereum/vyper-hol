@@ -811,15 +811,10 @@ fun d_json_expr () : term decoder = achoose "expr" [
                         tuple2 (array (delay d_json_expr),
                           sub 0 $ field "folded_value" $ check_ast_type "List" $
                             delay d_json_expr),
-                      (* Preserve folded integer lengths for the ad-hoc calldata
-                         slice. In particular, BinOp.folded_value is not a runtime
-                         expression; start remains decoded normally. *)
+                      (* Slice infers its result bound from the reduced length.
+                         Preserve that integer; start remains decoded normally. *)
                       check (field "func" $ field "id" string)
                         (fn s => s = "slice") "not slice" $
-                      check (field "args" $ sub 0 $ field "attr" string)
-                        (fn s => s = "data") "not data" $
-                      check (field "args" $ sub 0 $ field "value" $ field "id" string)
-                        (fn s => s = "msg") "not msg" $
                       field "args" $
                         JSONDecode.map (fn (args, folded) =>
                           case args of

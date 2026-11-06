@@ -8243,18 +8243,6 @@ val dispatch_member_literal_tac =
           shape_under_tac compile_list_membership_notin_shape `\st. T`] >>
    simp[shape_stable_def, Abbr `NeedleFrame`])
 ;
-val dispatch_slice_calldata_tac =
-  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
-  simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  shape_dispatch_lower_tac `\st. cenv_shape_ok st cenv` `start_op` all_tac >>
-  qabbrev_tac `StartFrame = \st. cenv_shape_ok st cenv /\ plain_operand st start_op` >>
-  `shape_stable StartFrame` by
-    (simp[Abbr `StartFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
-     mp_tac (Q.SPEC `[start_op]` shape_stable_plain_operands) >> simp[]) >>
-  shape_dispatch_lower_tac `StartFrame` `len_op` (simp[Abbr `StartFrame`]) >>
-  irule shape_step_as_memory_val >> shape_under_tac compile_slice_calldata_shape `\st. T` >>
-  simp[shape_stable_def, Abbr `StartFrame`]
-;
 val dispatch_slice_code_tac =
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -8524,7 +8512,6 @@ Resume compile_builtin_dispatch_body_shape[slice]:
   `~supported_expr_exists expr_shape_root (EL 2 args)` by
     (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable) >>
-  Cases_on `is_msg_data (HD args)` >- dispatch_slice_calldata_tac >>
   Cases_on `is_self_code (HD args)` >- dispatch_slice_code_tac >>
   Cases_on `is_extcode (HD args)` >- dispatch_slice_extcode_tac >>
   Cases_on `is_bytestring_type (expr_type (HD args))` >- dispatch_slice_bytes_tac >>
