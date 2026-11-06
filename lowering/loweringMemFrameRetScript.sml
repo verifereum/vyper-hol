@@ -75,6 +75,7 @@ Theorem return_value_summary_mem[local]:
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\
        expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+       expr_store_bound cx (expr_type e) v op t /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
