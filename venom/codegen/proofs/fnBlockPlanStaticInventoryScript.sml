@@ -79,7 +79,7 @@ Proof
   drule_all inventory_pop_top >> simp[EXTENSION]
 QED
 
-Theorem inventory_depth_none[local]:
+Theorem inventory_depth_none:
   stack_get_depth v stk = NONE <=> ~MEM v stk
 Proof
   simp[stack_get_depth_NONE, stack_peek_def, MEM_EL] >>

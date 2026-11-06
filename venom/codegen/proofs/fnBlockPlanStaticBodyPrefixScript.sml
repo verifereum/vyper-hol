@@ -26,6 +26,79 @@ Proof
   simp[passSharedDefsTheory.MEM_operand_vars_eq_Var]
 QED
 
+Theorem regional_body_lower_inv_wf:
+  regional_body_lower_inv lv dfg sb bb k ps ==>
+  generated_plan_state_wf_marked sb ps
+Proof
+  simp[regional_body_lower_inv_def]
+QED
+
+Theorem regional_body_lower_inv_operands:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions /\
+  regional_body_lower_inv (liveness_analyze fn) dfg sb bb k ps ==>
+  !op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  gvs[regional_body_lower_inv_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `op` >> gvs[is_var_operand_def] >>
+  rename1 `MEM (Var v) (compute_operands _)` >>
+  `MEM v (inst_uses (EL k bb.bb_instructions))` by metis_tac[regional_compute_var_use] >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k)` by
+    (drule live_vars_at_uses >> simp[LET_THM] >> disch_then irule >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem regional_body_lower_inv_operand_lookup:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions /\
+  regional_body_lower_inv (liveness_analyze fn) dfg sb bb k ps ==>
+  !op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)
+Proof
+  rpt strip_tac >>
+  `MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    metis_tac[regional_body_lower_inv_operands] >>
+  Cases_on `stack_get_depth op ps.ps_stack` >> simp[] >>
+  gvs[fnBlockPlanStaticInventoryTheory.inventory_depth_none] >>
+  `op IN FDOM ps.ps_spilled` by metis_tac[] >> simp[FLOOKUP_DEF]
+QED
+
+Theorem regional_body_lower_inv_output_roots:
+  regional_body_lower_inv lv dfg sb bb k ps /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions ==>
+  !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v inst.inst_outputs
+Proof
+  simp[regional_body_lower_inv_def] >> metis_tac[LESS_EQ_REFL]
+QED
+
+Theorem regional_body_lower_inv_stack_fresh:
+  regional_body_lower_inv lv dfg sb bb k ps /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions ==>
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    inst.inst_outputs) ps.ps_stack
+Proof
+  strip_tac >> simp[EVERY_MEM] >> qx_gen_tac `op` >> strip_tac >>
+  Cases_on `op` >> simp[] >> metis_tac[regional_body_lower_inv_output_roots]
+QED
+
+Theorem regional_body_lower_inv_spills_fresh:
+  regional_body_lower_inv lv dfg sb bb k ps /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions ==>
+  !op. op IN FDOM ps.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs
+Proof
+  strip_tac >> simp[EVERY_MEM] >> qx_gen_tac `op` >> strip_tac >>
+  Cases_on `op` >> simp[] >> metis_tac[regional_body_lower_inv_output_roots]
+QED
+
 Theorem regional_body_lower_inv_step:
   codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
