@@ -2,6 +2,7 @@ Theory bodyIfExpMemory
 Ancestors
   loweringPosts exprSimMemUnwrap bodyIfExpMemoryJoin bodyIfExpArmMemory
   bodyIfExpSelectedMemory bodyIfExpBytesCopy bodyIfExpDestination bodyIfExpBytesAdapter
+  bodyIfExpArmOutcome
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
@@ -259,27 +260,6 @@ Proof
                `s11`,`bv`,`s11a`,`bop`,`s12`,`s13`,`s14`] >> simp[]
 QED
 
-Theorem ifexp_outcome_suffix_mem[local]:
-  gas_outcome T tops (ctx,func) source (es,s0) Q R /\
-  (!res ee u. Q res ee u /\ ~u.vs_halted ==>
-     ?v. gas_path_mem ctx func u 0 (OK v) /\ Q' res ee v) ==>
-  gas_outcome T tops (ctx,func) source (es,s0) Q' R
-Proof
-  simp[gas_outcome_def] >> strip_tac >> qexists_tac `marks` >>
-  Cases_on `gas_summary_at T (ctx,func) marks source (es,s0) Q R`
-  >- (disj1_tac >>
-      fs[gas_summary_at_def] >>
-      Cases_on `?u. r = OK u /\ Q res (es_end with gas_obs := []) u`
-      >- (gvs[] >>
-          `~t.vs_halted` by
-            (fs[gas_marked_exec_def, gas_marked_path_def] >>
-             drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
-          first_x_assum drule_all >> strip_tac >>
-          qexistsl_tac [`res`,`es_end`,`OK v`] >> simp[] >>
-          gvs[gas_marked_exec_def, gas_marked_path_def] >>
-          metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
-      metis_tac[]) >> metis_tac[]
-QED
 
 Theorem ifexp_suffix_path_mem[local]:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
