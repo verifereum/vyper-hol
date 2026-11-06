@@ -1417,7 +1417,7 @@ Proof
 QED
 
 Theorem regional_selected_phi_slots_layout:
-  generate_phi_plan phi nl F ps = (ops,qs) /\
+  generate_phi_plan phi nl halting ps = (ops,qs) /\
   phi.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
   stack_peek d ps.ps_stack = Var src /\ ~MEM src nl /\
@@ -1428,7 +1428,7 @@ Proof
   strip_tac >>
   qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
   simp[generate_phi_plan_def, LET_THM, stackPlanTypesTheory.operand_to_string_def] >>
-  Cases_on `MEM out nl`
+  Cases_on `halting \/ MEM out nl`
   >- (simp[plan_slots_bounded_def] >> strip_tac >> gvs[plan_slots_bounded_def] >> metis_tac[]) >>
   simp[] >> pairarg_tac >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `popmany_plan [Var out] poked` >>
@@ -1441,7 +1441,7 @@ Proof
 QED
 
 Theorem regional_selected_phi_wf:
-  generate_phi_plan phi nl F ps = (ops,qs) /\
+  generate_phi_plan phi nl halting ps = (ops,qs) /\
   phi.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
   d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\

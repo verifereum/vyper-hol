@@ -2320,10 +2320,11 @@ Theorem inventory_marked_phi_transition[local]:
   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
   ~MEM (Var out) ps.ps_stack ==>
   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
-    (SND (generate_phi_plan inst nl F ps)).ps_stack) /\
-  (SND (generate_phi_plan inst nl F ps)).ps_spilled = ps.ps_spilled /\
-  (!x. MEM x (SND (generate_phi_plan inst nl F ps)).ps_stack <=>
-       (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl))
+    (SND (generate_phi_plan inst nl halting ps)).ps_stack) /\
+  (SND (generate_phi_plan inst nl halting ps)).ps_spilled = ps.ps_spilled /\
+  (!x. MEM x (SND (generate_phi_plan inst nl halting ps)).ps_stack <=>
+       (MEM x ps.ps_stack /\ x <> Var src) \/
+       (x = Var out /\ (halting \/ MEM out nl)))
 Proof
   strip_tac >>
   `Var src <> dead_stack_marker /\ Var out <> dead_stack_marker` by
@@ -2334,8 +2335,9 @@ Proof
   drule_all inventory_marked_poke_mem >>
   disch_then (qspec_then `Var out` assume_tac) >>
   simp[generate_phi_plan_def, LET_THM, stackPlanTypesTheory.operand_to_string_def] >>
-  Cases_on `MEM out nl` >> simp[]
-  >- metis_tac[] >>
+  Cases_on `halting \/ MEM out nl`
+  >- (`~(~halting /\ ~MEM out nl)` by metis_tac[] >> simp[] >> metis_tac[]) >>
+  gvs[] >>
   qmatch_goalsub_abbrev_tac `popmany_plan [Var out] poked` >>
   `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) poked.ps_stack)` by
     simp[Abbr `poked`] >>
@@ -2346,7 +2348,7 @@ Proof
 QED
 
 Theorem inventory_marked_phi_mem:
-  generate_phi_plan inst nl F ps = (ops, qs) /\
+  generate_phi_plan inst nl halting ps = (ops, qs) /\
   inst.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
   d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
@@ -2354,13 +2356,15 @@ Theorem inventory_marked_phi_mem:
   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
   ~MEM (Var out) ps.ps_stack ==>
   !x. MEM x qs.ps_stack <=>
-    (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl)
+    (MEM x ps.ps_stack /\ x <> Var src) \/
+    (x = Var out /\ (halting \/ MEM out nl))
 Proof
-  strip_tac >> drule_all inventory_marked_phi_transition >> gvs[]
+  strip_tac >> drule_all inventory_marked_phi_transition >>
+  disch_then (qspec_then `halting` mp_tac) >> gvs[]
 QED
 
 Theorem inventory_marked_phi_spilled:
-  generate_phi_plan inst nl F ps = (ops, qs) /\
+  generate_phi_plan inst nl halting ps = (ops, qs) /\
   inst.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
   d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
@@ -2369,11 +2373,12 @@ Theorem inventory_marked_phi_spilled:
   ~MEM (Var out) ps.ps_stack ==>
   qs.ps_spilled = ps.ps_spilled
 Proof
-  strip_tac >> drule_all inventory_marked_phi_transition >> gvs[]
+  strip_tac >> drule_all inventory_marked_phi_transition >>
+  disch_then (qspec_then `halting` mp_tac) >> gvs[]
 QED
 
 Theorem inventory_marked_phi_distinct:
-  generate_phi_plan inst nl F ps = (ops, qs) /\
+  generate_phi_plan inst nl halting ps = (ops, qs) /\
   inst.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
   d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
@@ -2382,6 +2387,7 @@ Theorem inventory_marked_phi_distinct:
   ~MEM (Var out) ps.ps_stack ==>
   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) qs.ps_stack)
 Proof
-  strip_tac >> drule_all inventory_marked_phi_transition >> gvs[]
+  strip_tac >> drule_all inventory_marked_phi_transition >>
+  disch_then (qspec_then `halting` mp_tac) >> gvs[]
 QED
 
