@@ -454,3 +454,151 @@ Proof
   qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
   disj1_tac >> metis_tac[expr_exit_INR_type]
 QED
+
+Theorem compile_external_return_zero_halt_ptr:
+  compile_external_return (SOME op) F F (AbiCopy 0) 0 nr nkey ut iv sa = (x,sb) /\
+  (nr ==> iv) /\ (!p. op = Var p ==> not_fresh_at sa p) /\
+  fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand op s = SOME w /\ op_taint tn op = {} /\
+  stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
+  !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s /\
+         ?ss. run_from fuel ctx func s = Halt ss
+Proof
+  strip_tac >> drule_all compile_external_return_copy_parts >> strip_tac >>
+  `op <> Var buf` by metis_tac[] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id ALLOCA [Lit 0w] [buf]) /\
+   get_instruction bb (s.vs_inst_idx+1) =
+     SOME (mk_inst (sa.cs_next_id+1) MCOPY [Var buf;op;Lit 0w] []) /\
+   get_instruction bb (s.vs_inst_idx+2) =
+     SOME (mk_inst (sa.cs_next_id+2) RETURN [Var buf;Lit 0w] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn j => mp_tac (Q.SPEC j th)) [`0`,`1`,`2`]) >> simp[]) >>
+  gen_tac >> reverse conj_tac
+  >- (`?ss. run_from fuel ctx func s = Halt ss /\
+         ss.vs_returndata = mem_bytes_at (w2n w) 0 s.vs_memory /\
+         ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
+         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+         ss.vs_pending_deletions = s.vs_pending_deletions` by
+        (irule return_copy_run >> simp[] >>
+         qexistsl [`buf`,`sa.cs_next_id`,`0`,`op`] >> gvs[]) >> metis_tac[]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w 0)] [buf]) (fn_insts func)` by
+    (irule lookup_block_fn_insts >> qexistsl [`bb`,`sa.cs_current_bb`] >>
+     simp[] >> gvs[get_instruction_def] >>
+     `LENGTH sa.cs_current_insts < LENGTH bb.bb_instructions` by decide_tac >>
+     metis_tac[EL_MEM]) >>
+  qspecl_then [`sa.cs_next_id`, `0w`, `buf`, `s`]
+    strip_assume_tac step_alloca_frame >>
+  qabbrev_tac `i = mk_inst sa.cs_next_id ALLOCA [Lit 0w] [buf]` >>
+  qabbrev_tac `G1 = step_prov PG G i s1` >>
+  qabbrev_tac `tn1 = step_taint i s s1 tn` >>
+  qabbrev_tac `s' = s1 with vs_inst_idx := s.vs_inst_idx + 1` >>
+  `eval_operand op s1 = SOME w` by
+    (Cases_on `op` >> gvs[eval_operand_def]) >>
+  `stor_taint_ok cx tn1 s1` by
+    (simp[Abbr `tn1`, Abbr `i`] >>
+     irule alloca_step_stor_taint_ok >> simp[] >> metis_tac[]) >>
+  `op_taint tn1 op = {} /\ op_taint tn1 (Var buf) = {}` by
+    (Cases_on `op` >>
+     gvs[Abbr `tn1`, Abbr `i`, step_taint_def, set_var_taint_def,
+         out_taint_def, mk_inst_def, op_taint_def, eval_operand_def,
+         FLOOKUP_UPDATE]) >>
+  `ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G1 tn1 s'` by
+    (irule ptr_safe_run_copy_return_zero >> simp[Abbr `s'`] >>
+     (reverse conj_tac >- gvs[stor_taint_ok_def]) >>
+     qexistsl [`a`, `w`, `Var buf`, `sa.cs_next_id+1`, `op`] >>
+     simp[eval_operand_def]) >>
+  `step_inst fuel ctx i s = OK s1` by
+    simp[step_inst_non_invoke, Abbr `i`] >>
+  `ptr_inst_ok (cx_dead cx) 0 fuel ctx func G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_alloca >> simp[]) >>
+  qunabbrev_tac `i` >> gvs[mk_inst_def] >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
+       is_terminator_def, ghost_step_def, ADD1] >>
+  gvs[ptr_safe_run_def, Abbr `s'`, Abbr `G1`, Abbr `tn1`]
+QED
+
+Theorem external_return_static_zero_stmt_frag_ptr:
+  !cenv nr nkey ut iv ret_ty d ctx PG func cx e es res es' lctx m tv env.
+    cenv.ce_return_pc = NONE /\ cenv.ce_raw_return = F /\
+    cenv.ce_nonreentrant = (nr,nkey,ut,iv) /\ (nr ==> iv) /\
+    expr_type e = ret_ty /\ ~is_word_type ret_ty /\
+    cenv.ce_ret_enc_info = AbiCopy m /\ cenv.ce_max_return_size = m /\
+    evaluate_type (get_tenv cx) ret_ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type (get_tenv cx) ret_ty) /\
+    m = type_memory_size tv /\ m = 0 /\
+    expr_sim_inv cenv cx env es /\
+    IS_SOME (type_stmt env ret_ty (Return (SOME e))) /\
+    call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+    expr_sim_ptr d ctx PG func cenv cx ret_ty e es /\
+    eval_stmt cx (Return (SOME e)) es = (res,es') ==>
+    stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
+      (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
+Proof
+  rpt gen_tac >> strip_tac >> simp[stmt_frag_ptr_def] >>
+  rpt gen_tac >> strip_tac >> disj2_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `lower_value compile_expr cenv ret_ty e sa` >>
+  rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `compile_external_return (SOME op) F F (AbiCopy 0)
+    0 nr nkey ut iv sm` >>
+  rename1 `_ = (u,sb')` >> gvs[] >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  `cs_extends sm sb` by
+    (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_external_return_def, optional_unlock_view,
+          compile_alloc_buffer_def, Once compile_abi_encode_child_def,
+          emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+          emit_def] >>
+     strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `eval_stmt cx (Return (SOME e)) es =
+     bind (do raw <- eval_expr cx e; read_result cx raw od)
+       (\v. raise (ReturnException v)) es` by
+    (simp[NoAsms, Once evaluate_def, bind_def] >>
+     Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,est)` >>
+     Cases_on `raw` >> simp[]) >>
+  qpat_x_assum `eval_stmt _ _ _ = (res,es')` mp_tac >>
+  asm_rewrite_tac[] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1,es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
+  `expr_res_ok r1` by
+    (Cases_on `r1` >- gvs[expr_res_ok_def] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     imp_res_tac read_result_no_control >>
+     imp_res_tac (cj 1 eval_expr_no_control) >>
+     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+  `r1 <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
+    (Cases_on `r1` >> gvs[]) >>
+  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
+  disch_then (qspecl_then [`sa`,`sm`,`op`,`r1`,`es1`,`s0`,`G0`,`tn0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  simp[frag_exec_ptr_def] >>
+  disch_then (qspec_then `func` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- (gvs[expr_post_def, expr_val_rel_def] >>
+      `stor_taint_ok cx tn' s''` by gvs[ghost_inv_def] >>
+      `!p. op = Var p ==> not_fresh_at sm p` by
+        metis_tac[compile_lower_value_var] >>
+      gvs[ptr_val_ok_def, ptr_mem_ok_def] >>
+      `ptr_safe_run (cx_dead cx) 0 0 ctx func PG G' tn' s'' /\
+       ?ss. run_from 0 ctx func s'' = Halt ss` by
+        (irule compile_external_return_zero_halt_ptr >> simp[] >>
+         reverse conj_tac >- metis_tac[] >>
+         goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
+         simp[]) >>
+      qpat_x_assum `!fuel. (!e. run_from fuel ctx func s'' <> Error e) ==> _`
+        (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+      qexists `fuel'` >> simp[exit_result_def, stmt_exit_ptr_def]) >>
+  qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
+  disj1_tac >> metis_tac[expr_exit_INR_type]
+QED
