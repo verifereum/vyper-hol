@@ -42,7 +42,7 @@ Theorem make_ssa_current_fn_fn_bisim:
   make_ssa_current_fn s fn = (fn',s') ==>
   fn_bisim fn fn'
 Proof
-  cheat
+  strip_tac >> suspend "assemble"
 QED
 
 (* Every state a frame of the output reaches corresponds to one a frame of
@@ -611,3 +611,20 @@ Proof
   qexistsl [`st.vs_labels`, `R`, `make_ssa_pos fn fn'`] >>
   simp[] >> rpt strip_tac >> drule lockstep_entry >> simp[]
 QED
+
+Resume make_ssa_current_fn_fn_bisim[assemble]:
+  simp[fn_bisim_def] >>
+  conj_tac
+  >- (drule makeSsaCurrentPropsTheory.make_ssa_current_fn_metadata >>
+      simp[fn_identity_metadata_eq_def]) >>
+  conj_tac
+  >- (irule (cj 2 makeSsaCurrentCfgTheory.make_ssa_current_fn_cfg) >>
+      conj_tac >- fs[wf_function_def] >>
+      qexistsl [`s`, `s'`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac >> rpt strip_tac
+  >- (qexists `fuel` >> irule current_entry_run_forward >> simp[] >>
+      qexistsl [`s`, `s'`] >> simp[]) >>
+  qexists `fuel'` >> irule current_entry_run_reverse >> simp[] >>
+  qexistsl [`s`, `s'`] >> simp[]
+QED
+Finalise make_ssa_current_fn_fn_bisim
