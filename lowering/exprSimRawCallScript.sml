@@ -4965,6 +4965,52 @@ Finalise raw_call_outbuf_positive_tail_vv_path
 val _ = if null (hyp raw_call_outbuf_positive_tail_vv_path) then ()
   else raise Fail "raw_call_outbuf_positive_tail_vv_path retained hypotheses";
 
+Theorem raw_call_outbuf_tail_vv_path[local]:
+  compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ci_mono initial sa /\ wb_frame cenv initial_es initial s0 s /\
+  stmt_state_rel ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
+  MAP FDOM initial_es.scopes = MAP FDOM es.scopes /\
+  eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand val_op s = SOME val_word /\
+  safe_operand sa to_op /\ safe_operand sa dp /\ safe_operand sa dl /\
+  safe_operand sa gas_op /\ safe_operand sa val_op /\
+  w2w aw = target /\
+  w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
+  stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
+  cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
+  (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
+  flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
+  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
+      vv_post ctx func cenv cx e initial_es initial sb s0
+        (SND (adopt_call_outcome rq outcome es1))
+        (Value (if flags.rcf_revert_on_failure then
+          if cap = 0 then NoneV else BytesV (TAKE cap outcome.co_returnData)
+         else if cap = 0 then BoolV outcome.co_success
+         else ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE cap outcome.co_returnData)])))
+        (if cap = 0 then StackValue ann result
+         else LocatedValue (expr_type e) (mk_ptr result LocMemory)) u)
+    (\r. ?u. flags.rcf_revert_on_failure /\ ~outcome.co_success /\
+      r = Abort Revert_abort u /\ u.vs_returndata = outcome.co_returnData)
+Proof
+  strip_tac >> Cases_on `cap = 0`
+  >- (drule_all raw_call_outbuf_zero_tail_vv_path >> simp[]) >>
+  `0 < cap` by decide_tac >>
+  drule_all raw_call_outbuf_positive_tail_vv_path >> simp[]
+QED
+
+val _ = if null (hyp raw_call_outbuf_tail_vv_path) then ()
+  else raise Fail "raw_call_outbuf_tail_vv_path retained hypotheses";
+
 Theorem raw_call_outbuf_tail_vv_frag[local]:
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
