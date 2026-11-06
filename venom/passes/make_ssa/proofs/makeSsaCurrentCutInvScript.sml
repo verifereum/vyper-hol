@@ -14,7 +14,8 @@
  *)
 Theory makeSsaCurrentCutInv
 Ancestors
-  makeSsaCurrentCleanupTransparent
+  makeSsaCurrentCleanupTransparent makeSsaCurrentSourceEntryRuntime
+  makeSsaCurrentPhiBatchRuntime venomState
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
@@ -907,7 +908,7 @@ Resume current_cut_inv_block_entry_prefix[prefix_maps]:
          (current_cut_sg fn A renamed H events h
            (LENGTH (collect_phis old_h.bb_instructions))))` by
     (rpt strip_tac >> irule (cj 2 current_cut_actual_suffix_owner) >> metis_tac[]) >>
-  conj_tac >- suspend "prefix_phi_relation" >>
+  conj_asm1_tac >- suspend "prefix_phi_relation" >>
   conj_tac >- suspend "prefix_copy_chain" >>
   suspend "prefix_enter_runtime"
 QED
@@ -946,7 +947,27 @@ Resume current_cut_inv_block_entry_prefix[prefix_copy_chain]:
 QED
 
 Resume current_cut_inv_block_entry_prefix[prefix_enter_runtime]:
-  cheat
+  `state_rel (current_cut_sg fn A renamed H events p
+     (LENGTH old_p.bb_instructions)) t t' /\
+   (!v. current_demand fn v p (LENGTH old_p.bb_instructions) ==>
+     IS_SOME (lookup_var v t))` by fs[current_cut_inv_def] >>
+  `?raw. eval_phis t old_h.bb_instructions = OK raw` by
+    (irule current_source_phi_entry_success >> metis_tac[]) >>
+  rpt strip_tac >>
+  fs[contextCodegenRelTheory.enters_block_def] >>
+  `t'.vs_current_bb = h /\ t'.vs_prev_bb = SOME p` by fs[state_rel_def] >>
+  `bb = b'` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+  simp[GSYM current_prefix_collect_length] >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `IS_SOME (lookup_var v raw)` by
+        (irule current_source_phi_post_defined >> metis_tac[]) >>
+      fs[lookup_var_def]) >>
+  qmatch_goalsub_abbrev_tac `state_rel sg` >>
+  `state_rel sg raw s_phi` by
+    (fs[block_insts_def, Abbr `sg`, GSYM current_prefix_collect_length] >>
+     gvs[] >> drule_all current_phi_batch_state_rel >> simp[]) >>
+  fs[state_rel_def]
 QED
 
 
