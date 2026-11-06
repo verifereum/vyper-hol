@@ -173,7 +173,7 @@ unless the cited conditional boundary's premises are derived from I.
 | N18 | ASSERT, ASSERT_UNREACHABLE | next when condition true; derive scalar untainted condition equality; false condition aborts |
 | J | JMP, JNZ, DJMP | block; successor/control/evaluation and PHI entry residual |
 | C | INVOKE | call only; next explicitly excludes, not a terminator, IntRet converted to OK |
-| R | RET | ret only with suspended caller; returned scalar values/bind/merge relation residual; root IntRet has no successor |
+| R | RET | `ptr_paired_ret_prefix_immediate` (concretizePtrReturnPrefix) now constructs the complete immediate paired prefix from the exact successor_births antecedent: historical caller parameters transported through retained births, both stacks/saved/calls popped, ledger unchanged. Deleted-NOP normalization and universal dispatch remain open; root IntRet has no successor |
 | X1 | MEMTOP, GETFMP, SETFMP, FMP_PARAM | raw next exists, source fn_ptr_ok excludes; transfer exclusion by actual stage preimage |
 | X2 | DALLOCA | raw next exists, frozen no-DALLOCA excludes; transfer to output |
 | X3 | DRET, RETFMP | raw ret exists, source fn_ptr_ok EXCLUDES; target preimage exclusion required |
