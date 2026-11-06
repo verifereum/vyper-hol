@@ -7,7 +7,7 @@ Ancestors
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
   reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
-  deepResidualSim deepResidualBudget genericInputReady fnAliasStep
+  deepResidualSim deepResidualBudget genericInputReady fnAliasStep fnBlockPlanStaticRetRegion
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -4036,4 +4036,65 @@ Proof
   Cases_on `insts` >> simp[generate_block_insts_prefix_def] >> rpt strip_tac >>
   gvs[generate_block_insts_prefix_def, LET_THM, AllCaseEqs()] >>
   metis_tac[inventory_inst_marker_free]
+QED
+
+Theorem regional_ret_reaching_nonhalting:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  cfg_path (cfg_analyze fn) lbl target ==>
+  ~bb_is_halting bb
+Proof
+  metis_tac[ready_halting_not_ret_reaching]
+QED
+
+Theorem regional_non_param_insts_ready:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  EVERY codegen_ready_inst (non_param_insts bb)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  gvs[codegen_ready_fn_def, non_param_insts_def, EVERY_MEM, MEM_FILTER] >>
+  metis_tac[]
+QED
+
+Theorem regional_non_param_insts_wf:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  EVERY inst_wf (non_param_insts bb)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  gvs[codegen_ready_fn_def, fn_inst_wf_def, non_param_insts_def,
+      EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem regional_dfs_params_marker_free:
+  codegen_ready_fn fn /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) bb.bb_label ps /\
+  ~MEM dead_stack_marker ps.ps_stack /\
+  (if bb = HD fn.fn_blocks then
+     prepare_params_plan (liveness_analyze fn) fn ps
+   else ([],ps)) = (ops,qs) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >> Cases_on `bb = HD fn.fn_blocks` >-
+    (gvs[] >>
+     `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth sb ctr)
+        (HD fn.fn_blocks).bb_label ps` by
+       metis_tac[dfs_block_state_lineage_state] >>
+     `ps = init_cleanup_plan_state ch growth sb ctr` by
+       metis_tac[regional_entry_lineage_initial] >>
+     gvs[] >>
+     `prepare_params_plan (liveness_analyze fn) fn
+        ((init_cleanup_plan_state ch growth sb ctr) with
+          <|ps_cleanup_height := (init_cleanup_plan_state ch growth sb ctr).ps_cleanup_height;
+            ps_cleanup_promised := (init_cleanup_plan_state ch growth sb ctr).ps_cleanup_promised|>) =
+        (ops,qs)` by
+       gvs[init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def] >>
+     drule_all regional_prepare_params_initial_membership >>
+     disch_then (qspec_then `dead_stack_marker` mp_tac) >>
+     simp[MEM_MAP, dead_stack_marker_def]) >>
+  gvs[]
 QED
