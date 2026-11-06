@@ -168,7 +168,8 @@ Theorem abi_array_bounded_pointer_revert:
   (w2n(n2w(data_base+child_off):bytes32) < data_base \/
    H < w2n(n2w(data_base+child_off):bytes32)+abi_sz) /\
   fresh_vars_wrt st s ==>
-  ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t
+  ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
+    inst_extends st last
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qhdtm_x_assum `compile_abi_decode_dyn_elem_ptr` mp_tac >>
@@ -189,5 +190,6 @@ Proof
     `w2n(n2w(data_base+child_off):bytes32)`,`H`] mp_tac) >>
   (impl_tac >- simp[w2n_n2w, ADD_COMM]) >> strip_tac >>
   drule_all abi_array_pointer_guard_extends >> strip_tac >>
-  drule_all run_inst_seq_emit_extend >> simp[]
+  drule_all run_inst_seq_emit_extend >> strip_tac >>
+  metis_tac[inst_extends_trans]
 QED
