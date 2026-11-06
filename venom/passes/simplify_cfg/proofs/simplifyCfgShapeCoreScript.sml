@@ -33,8 +33,7 @@ QED
 
 Definition scfg_inst_shape_def:
   scfg_inst_shape inst <=>
-    ~MEM inst.inst_opcode
-      [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET] /\
+    ~MEM inst.inst_opcode [DJMP; OFFSET] /\
     (is_read0_opcode inst.inst_opcode ==> inst.inst_operands = []) /\
     scfg_label_positions inst
 End
