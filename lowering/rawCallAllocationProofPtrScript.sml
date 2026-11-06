@@ -570,3 +570,89 @@ Proof
   qexistsl_tac [`un`, `G`, `H`] >> simp[] >>
   irule stmtSimLogArgsTheory.log_arg_clear_base >> goal_assum (drule_at Any)
 QED
+
+(* Preserve the prefix post at the predecessor, avoiding a second copy of
+   its semantic witnesses.  Allocation transports all old request operands. *)
+Theorem raw_call_outbuf_ready_outcome:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword(:256) /\
+  ~ctx_has_dalloca ctx /\
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) Q R /\
+  (!rr ee G tn t. Q rr ee G tn t ==>
+    stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee G tn t /\
+    t.vs_current_bb = sa.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~t.vs_halted /\
+    expr_sim_inv cenv cx env ee /\
+    ?sd lim bs b base sz.
+      expr_val_at cenv cx (BaseT (BytesT (Dynamic lim))) sd sa ee (BytesV bs) data t /\
+      evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic lim))) =
+        SOME (BaseTV (BytesT (Dynamic lim))) /\
+      eval_operand data t = SOME (n2w b) /\ b < dimword(:256) /\
+      (!z. data_op = Var z ==> not_fresh_at sa z) /\
+      op_prov G data_op = SOME (base,sz) /\
+      (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem)) ==>
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
+    (\rr ee H un u. ?G tn t x dx base sz b bs sd lim.
+      Q rr ee G tn t /\ ov = Var x /\ op = Var dx /\
+      expr_val_at cenv cx (BaseT (BytesT (Dynamic lim))) sd sa ee (BytesV bs) data t /\
+      ghost_inv dep cenv cx ee H un u /\ ghost_kept cenv ee sa G tn t H un /\
+      stmt_state_rel ctx func cenv cx ee u /\ wb_frame cenv ee sa t u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+      ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+      ptr_covers H un dx u cap /\ u.vs_memory = t.vs_memory /\
+      eval_operand data t = SOME (n2w b) /\
+      op_prov G data_op = SOME (base,sz) /\ op_prov H data_op = SOME (base,sz) /\
+      (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
+      (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
+      (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
+        eval_operand arg u = eval_operand arg t /\
+        op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg)) R
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def,
+    gasSummaryComposePtrTheory.gas_summary_ptr_at_marked] >>
+  strip_tac
+  >- suspend "normal"
+  >- (qexists_tac `marks` >> disj1_tac >> metis_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >> metis_tac[]
+QED
+
+Resume raw_call_outbuf_ready_outcome[normal]:
+  gvs[] >> first_assum drule >> strip_tac >>
+  `?H un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn t 0 H un (OK u) /\
+    ghost_inv dep cenv cx (es_end with gas_obs := []) H un u /\
+    ghost_kept cenv (es_end with gas_obs := []) sa G tn t H un /\
+    stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) u /\
+    wb_frame cenv (es_end with gas_obs := []) sa t u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+    ptr_covers H un dx u cap /\ u.vs_memory = t.vs_memory /\
+    op_prov H data_op = SOME (base',sz) /\
+    (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
+    (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
+      eval_operand arg u = eval_operand arg t /\
+      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg)` by
+    (irule raw_call_outbuf_ready_stage >> simp[] >> conj_tac
+     >- (qexists_tac `env` >> fs[]) >>
+     qexistsl_tac [`data`, `lim`, `sd`] >> simp[]) >>
+  suspend "package"
+QED
+
+Resume raw_call_outbuf_ready_outcome[package]:
+  qexists_tac `marks ++ REPLICATE 0 F` >> disj1_tac >>
+  qexistsl_tac [`res`, `es_end`, `H`, `un`, `OK u`] >> conj_tac
+  >- (irule gas_marked_exec_ptr_implicit_suffix >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  disj1_tac >> qexists_tac `u` >> simp[] >>
+  qexistsl_tac [`G`, `tn`, `t`, `b`, `bs`, `sd`, `lim`] >>
+  fs[]
+QED
+
+Finalise raw_call_outbuf_ready_outcome
