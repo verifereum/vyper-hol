@@ -1384,3 +1384,74 @@ Proof
                   `v` |-> `x`] popmany_plan_top_singleton) >>
   simp[stack_pop_def, TAKE_APPEND]
 QED
+
+Theorem native_regular_singleton_bottom_frame:
+  !liveness dfg cfg fn inst nl halting term lbl ps prefix ops qs.
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    LENGTH inst.inst_outputs <= 1 /\
+    (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    EVERY (\v. ~MEM (Var v) prefix) nl /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_outputs = []`
+  >- (irule native_regular_bottom_frame >> simp[]) >>
+  `?v. inst.inst_outputs = [v]` by
+    (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  Cases_on `MEM v nl`
+  >- (irule native_regular_bottom_frame >> simp[] >> gvs[EVERY_MEM]) >>
+  namedCases_on `emit_input_plan inst.inst_opcode (compute_operands inst) nl ps`
+    ["iops ps1"] >>
+  `!w. MEM (Var w) (compute_operands inst) ==>
+    ~MEM (Var w) prefix \/ MEM (Var w) ps.ps_stack \/
+    Var w IN FDOM ps.ps_spilled` by
+    (gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]) >>
+  drule_all emit_input_plan_shielded_bottom_frame >> strip_tac >>
+  qabbrev_tac `choice =
+    if is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) then
+      case reorder_plan dfg (compute_operands inst) ps1 of (oa,pa) =>
+      case reorder_plan dfg
+        (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+          [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+           EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) ps1 of (ob,pb) =>
+      if reorder_cost oa < reorder_cost ob then (oa,pa) else (ob,pb)
+    else reorder_plan dfg (compute_operands inst) ps1` >>
+  namedCases_on `choice` ["rops ps4"] >>
+  qpat_x_assum `Abbrev ((rops,ps4) = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all emitted_commutative_preparation_bottom_frame >>
+  disch_then (qspec_then `prefix` strip_assume_tac) >>
+  `stack_pop (LENGTH (compute_operands inst)) (prefix ++ ps4.ps_stack) =
+    prefix ++ stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` by
+    (irule stack_pop_bottom_extension >> simp[]) >>
+  rule_assum_tac (SIMP_RULE bool_ss [pairTheory.pair_CASE_def,
+    pairTheory.UNCURRY, pairTheory.PAIR]) >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM, parameter_push_fold,
+       arithmeticTheory.GREATER_EQ, APPEND_ASSOC, pairTheory.pair_CASE_def,
+       pairTheory.UNCURRY, pairTheory.PAIR] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic (ps4 with ps_stack := core ++ [Var v])` >>
+  namedCases_on `generate_emit_ops inst topic (ps4 with ps_stack := core ++ [Var v])`
+    ["eops ps7"] >>
+  qspecl_then [`inst`, `topic`, `ps4 with ps_stack := core ++ [Var v]`,
+    `prefix ++ (core ++ [Var v])`] mp_tac generate_emit_ops_stack_update >>
+  simp[] >> strip_tac >>
+  qpat_assum `generate_emit_ops inst topic (ps4 with ps_stack := core ++ [Var v]) = _`
+    (mp_then Any strip_assume_tac fnPlanLineageReorderTheory.generate_emit_ops_slots) >>
+  gvs[] >>
+  `popmany_plan [Var v] ps7 = ([SOPop 1], ps7 with ps_stack := core)` by
+    (`stack_get_depth (Var v) ps7.ps_stack = SOME 0` by
+       simp[stack_get_depth_def, REVERSE_APPEND, stack_find_def] >>
+     drule popmany_plan_top_singleton >>
+     simp[stack_pop_def, TAKE_APPEND]) >>
+  `popmany_plan [Var v] (ps7 with ps_stack := prefix ++ core ++ [Var v]) =
+     ([SOPop 1], ps7 with ps_stack := prefix ++ core)` by
+    (mp_tac (Q.SPECL [`Var v`, `ps7 with ps_stack := prefix ++ core`]
+       popmany_plan_appended_singleton) >> simp[]) >>
+  Cases_on `halting` >> simp[] >> strip_tac >>
+  gvs[release_dead_spills_stack_update, release_dead_spills_stack, APPEND_ASSOC]
+QED
