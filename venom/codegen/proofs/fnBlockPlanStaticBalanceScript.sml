@@ -1,6 +1,6 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
-  stackPlanGen stackPlanTypes stackModel asmIR integer prefixExec
+  stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -247,4 +247,53 @@ Proof
   `&(SND (stack_op_wf lo h n)) = (&n:int) + stack_op_weight h` by
     (irule stack_op_wf_signed_balance >> simp[] >> metis_tac[]) >>
   gvs[] >> intLib.ARITH_TAC
+QED
+
+Theorem spill_fold_no_push_var[local]:
+  !items acc_ops offsets al ops offsets' al'.
+  FOLDL (\(ops, offs, al) item.
+    (\(off, al'). (ops ++ [SOSpill off], SNOC off offs, al'))
+      (alloc_spill_slot al))
+    (acc_ops, offsets, al) items = (ops, offsets', al') /\
+  ~MEM (SOPush (Var v)) acc_ops ==>
+  ~MEM (SOPush (Var v)) ops
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `alloc_spill_slot al` >> simp[] >>
+  rename1 `alloc_spill_slot al = (off, alloc)` >> strip_tac >>
+  first_x_assum (qspec_then `acc_ops ++ [SOSpill off]` mp_tac) >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem do_dup_no_push_var[local]:
+  do_dup dist ps = (ops, ps') ==>
+  !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[do_dup_def] >> IF_CASES_TAC >- (rw[] >> simp[]) >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
+  rpt IF_CASES_TAC >> simp[] >> rpt gen_tac >>
+  drule spill_fold_no_push_var >> simp[]
+QED
+
+Theorem emit_one_input_no_push_var:
+  !opc nl op ps v.
+    ~MEM (SOPush (Var v)) (FST (emit_one_input opc nl op ps))
+Proof
+  `!dist st v. ~MEM (SOPush (Var v)) (FST (do_dup dist st))` by
+    (rpt gen_tac >> Cases_on `do_dup dist st` >>
+     metis_tac[do_dup_no_push_var, pairTheory.FST]) >>
+  rpt gen_tac >> Cases_on `op` >>
+  simp[emit_one_input_def, is_var_operand_def, do_restore_def] >>
+  rpt (CASE_TAC >> simp[]) >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[pairTheory.FST]
+QED
+
+Theorem emit_input_plan_no_push_var:
+  !operands opc nl ps v.
+    ~MEM (SOPush (Var v)) (FST (emit_input_plan opc operands nl ps))
+Proof
+  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> simp[] >>
+  metis_tac[emit_one_input_no_push_var, pairTheory.FST]
 QED
