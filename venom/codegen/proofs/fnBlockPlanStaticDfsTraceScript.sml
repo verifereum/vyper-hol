@@ -118,3 +118,33 @@ Proof
   rpt strip_tac >> drule_all aux_trace_block >>
   disch_then (fn th => fs[th]) >> gvs[]
 QED
+
+Theorem dfs_trace_exists:
+  (!lv dfg cfg fn wl visited ps.
+    !result. generate_fn_plan_aux lv dfg cfg fn wl visited ps = SOME result ==>
+      ?tr. aux_trace lv dfg cfg fn wl visited ps result tr) /\
+  (!lv dfg cfg fn ss sp succs visited pg.
+    !result. generate_succs_plan lv dfg cfg fn ss sp succs visited pg = SOME result ==>
+      ?tr. succ_trace lv dfg cfg fn ss sp succs visited pg result tr)
+Proof
+  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[Once generate_fn_plan_aux_def] >>
+      simp[aux_trace_nil])
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `MEM lbl visited`
+      >- (gvs[Once generate_fn_plan_aux_def] >>
+          metis_tac[aux_trace_visited]) >>
+      Cases_on `lookup_block lbl fn.fn_blocks`
+      >- (gvs[Once generate_fn_plan_aux_def] >>
+          metis_tac[aux_trace_missing]) >>
+      rpt strip_tac >>
+      qpat_x_assum `generate_fn_plan_aux _ _ _ _ (_::_) _ _ = _` mp_tac >>
+      simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> metis_tac[aux_trace_rules])
+  >- (rpt strip_tac >> gvs[Once generate_fn_plan_aux_def] >>
+      simp[succ_trace_nil])
+  >> rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  qpat_x_assum `generate_succs_plan _ _ _ _ _ _ (_::_) _ _ = _` mp_tac >>
+  simp[Once (cj 4 generate_fn_plan_aux_def), AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[aux_trace_rules]
+QED
