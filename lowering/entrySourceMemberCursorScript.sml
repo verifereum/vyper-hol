@@ -10,7 +10,7 @@ Ancestors
   abiEncoder compileEnv emitHelper emitHelperProps fragExec exprLoweringProps
   valueEncodingTyping venomState venomExecSemantics words list rich_list pair arithmetic
 
-Theorem entry_source_member_cursor_step:
+Theorem entry_source_member_cursor_step_local_success:
   calldata_source_member_cursor ce env sf ctx fn site limit_st
     xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
     0 0 first final initial ((ei,az,mz)::rest) ao vo a s /\
@@ -40,7 +40,11 @@ Theorem entry_source_member_cursor_step:
     calldata_source_member_cursor ce env sf ctx fn site limit_st
       xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
       0 0 first final initial rest (ao+az) (vo+mz) next t /\
-    calldata_member_transfers ctx fn s t /\ entry_decoder_obs s t /\ alloca_history fn t
+    calldata_member_transfers ctx fn s t /\ entry_decoder_obs s t /\ alloca_history fn t /\
+    ?scratch. calldata_member_success ctx fn site limit_st a next (d+vo)
+      (type_memory_size (EL (LENGTH xs - LENGTH ((ei,az,mz)::rest)) tvs))
+      (EL (LENGTH xs - LENGTH ((ei,az,mz)::rest)) tvs)
+      (EL (LENGTH xs - LENGTH ((ei,az,mz)::rest)) vs) s t scratch
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qhdtm_assum `calldata_source_member_cursor`
@@ -74,7 +78,7 @@ Proof
   suspend "phases_goal"
 QED
 
-Resume entry_source_member_cursor_step[phases_goal]:
+Resume entry_source_member_cursor_step_local_success[phases_goal]:
   `?ops ready.
     abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
       (dec_info_needs_offset ei) ao vo a = (ops,ready) /\
@@ -90,7 +94,7 @@ Resume entry_source_member_cursor_step[phases_goal]:
   suspend "child"
 QED
 
-Resume entry_source_member_cursor_step[phases]:
+Resume entry_source_member_cursor_step_local_success[phases]:
   qpat_assum `(do ep <- _; _ od) a = ((),next)` mp_tac >>
   qpat_assum `compile_abi_decode_complex_elems _ _ _ _ (_::rest) _ _ _ = _` mp_tac >>
   qpat_assum `fn_has_code a final fn` mp_tac >>
@@ -126,7 +130,7 @@ Resume entry_source_member_cursor_step[phases]:
   qexistsl_tac [`(ep,dp)`,`ready`] >> fs[ADD_COMM]
 QED
 
-Resume entry_source_member_cursor_step[child]:
+Resume entry_source_member_cursor_step_local_success[child]:
   markerLib.RESUME_TAC >>
   `vo + type_memory_size (EL n tvs) <= SUM (MAP type_memory_size tvs)` by
     (qpat_assum `vo = _` (fn th => rewrite_tac[th]) >>
@@ -144,7 +148,7 @@ Resume entry_source_member_cursor_step[child]:
   suspend "apply"
 QED
 
-Resume entry_source_member_cursor_step[apply]:
+Resume entry_source_member_cursor_step_local_success[apply]:
   markerLib.RESUME_TAC >>
   qhdtm_x_assum `calldata_source_member_cursor` kall_tac >>
   qpat_x_assum `(do ep <- _; _ od) a = _` kall_tac >>
@@ -177,7 +181,7 @@ Resume entry_source_member_cursor_step[apply]:
     (fn th => pure_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]
 QED
 
-Resume entry_source_member_cursor_step[advance]:
+Resume entry_source_member_cursor_step_local_success[advance]:
   markerLib.RESUME_TAC >> (
   drule calldata_member_success_observations >> strip_tac >>
   `a.cs_next_var <= ready.cs_next_var` by
@@ -188,11 +192,18 @@ Resume entry_source_member_cursor_step[advance]:
     (RULE_L_ASSUM_TAC (CONJUNCTS o REWRITE_RULE [ci_mono_def]) >>
      rewrite_tac[ci_mono_def] >> asm_simp_tac bool_ss [] >> decide_tac) >>
   `LENGTH tys = LENGTH xs /\ LENGTH tvs = LENGTH xs /\ LENGTH vs = LENGTH xs` by simp[] >>
+  `?scratch. calldata_member_success ctx fn site limit_st a next (d+vo)
+      (type_memory_size (EL (LENGTH xs - LENGTH ((ei,az,mz)::rest)) tvs))
+      (EL (LENGTH xs - LENGTH ((ei,az,mz)::rest)) tvs)
+      (EL (LENGTH xs - LENGTH ((ei,az,mz)::rest)) vs) s t scratch` by suspend "local_success" >>
   qexists_tac `t` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  reverse conj_tac >- simp[] >>
+  reverse conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `scratch''` >> first_assum ACCEPT_TAC) >>
   irule (SIMP_RULE bool_ss [LET_THM] calldata_source_member_cursor_advance) >>
   qhdtm_assum `calldata_source_member_cursor` (irule_at Any) >>
   qexists_tac `scratch'` >>
@@ -221,4 +232,46 @@ Resume entry_source_member_cursor_step[advance]:
   conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[] >> decide_tac) >>
   simp[] >> decide_tac)
 QED
-Finalise entry_source_member_cursor_step
+Resume entry_source_member_cursor_step_local_success[local_success]:
+  markerLib.RESUME_TAC >> qexists_tac `scratch'` >>
+  qpat_assum `n = LENGTH xs - _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  first_assum ACCEPT_TAC
+QED
+Finalise entry_source_member_cursor_step_local_success
+
+(* Compatibility projection: the cursor and frame share the producer's t. *)
+Theorem entry_source_member_cursor_step:
+  calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    0 0 first final initial ((ei,az,mz)::rest) ao vo a s /\
+  xs = abi_decoder_member_infos sf ce tys /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
+  LENGTH vs = LENGTH tys /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+      dp <- emit_op ADD [dst; Lit (n2w vo)];
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+  fn_has_code a final fn /\
+  (a.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  final.cs_next_var <= limit_st.cs_next_var /\
+  (oid < first.cs_next_id \/ final.cs_next_id <= oid) /\
+  base_addr <= d /\ d + SUM (MAP type_memory_size tvs) <= base_addr+cap /\
+  SUM (MAP type_memory_size tvs) <= outsz /\
+  d + SUM (MAP type_memory_size tvs) < dimword(:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (!i. i < LENGTH tys ==> entry_member_child_contract ce env sf ctx fn site limit_st
+    (EL i tys) (EL i tvs)) /\ fn_inst_ids_distinct fn /\ alloca_history fn s ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = next.cs_current_bb /\
+    t.vs_inst_idx = LENGTH next.cs_current_insts /\
+    calldata_source_member_cursor ce env sf ctx fn site limit_st
+      xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+      0 0 first final initial rest (ao+az) (vo+mz) next t /\
+    calldata_member_transfers ctx fn s t /\ entry_decoder_obs s t /\ alloca_history fn t
+Proof
+  disch_then (strip_assume_tac o MATCH_MP entry_source_member_cursor_step_local_success) >>
+  qexists_tac `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
