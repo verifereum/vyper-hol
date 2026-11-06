@@ -60,5 +60,6 @@ Proof
        entry_venom_state_fresh] >>
   conj_tac >- simp[entry_venom_state_def] >>
   simp[code_layout_valid_def, entry_venom_state_frame_fields, DROP_APPEND] >>
-  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
+  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  simp[entry_venom_state_def]
 QED
