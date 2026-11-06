@@ -38,10 +38,10 @@ Proof
   `st.cs_next_id < st'.cs_next_id /\ st.cs_next_var <= st'.cs_next_var` by decide_tac >>
   drule_all abi_scratch_owned_prefix_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  mp_tac (Q.INST [`infos` |-> `[]:(abi_enc_info # num # num # bool) list`, `dyn_ptr` |-> `index_ptr:operand`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `infos` |-> `[]:(abi_enc_info # num # num # bool) list`, `dyn_ptr` |-> `index_ptr:operand`,
     `next` |-> `st.cs_next_var`, `site` |-> `st.cs_next_id`, `stop` |-> `st'.cs_next_id`,
     `sz` |-> `output_size:num`] abi_scratch_prefix_effect) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
+  impl_tac >- asm_simp_tac bool_ss [pred_setTheory.IN_UNIV] >> disch_tac >>
   mp_tac (Q.INST [`ei` |-> `AbiDynArray ei asz msz active`, `at` |-> `Array NONE ty`, `av` |-> `ListV avs`,
     `lo` |-> `st.cs_next_id`, `hi` |-> `st'.cs_next_id`, `next` |-> `st.cs_next_var`,
     `sz` |-> `output_size:num`] abi_scratch_input_effect) >>
@@ -92,10 +92,10 @@ Proof
     (LENGTH avs*asz) actual` >>
   drule abi_encode_array_tail_init_shape >> strip_tac >>
   `st.cs_next_id < st'.cs_next_id /\ st.cs_next_var <= st'.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`infos` |-> `[(AbiPrimWord,LENGTH (avs:abi_value list)*asz,0,F)]`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `infos` |-> `[(AbiPrimWord,LENGTH (avs:abi_value list)*asz,0,F)]`,
     `next` |-> `st.cs_next_var`, `site` |-> `st.cs_next_id`, `stop` |-> `st'.cs_next_id`,
     `sz` |-> `output_size:num`] abi_scratch_prefix_effect) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
+  impl_tac >- asm_simp_tac bool_ss [pred_setTheory.IN_UNIV] >> disch_tac >>
   mp_tac (Q.INST [`ei` |-> `AbiDynArray ei asz msz active`, `at` |-> `Array NONE ty`, `av` |-> `ListV avs`,
     `lo` |-> `st.cs_next_id`, `hi` |-> `st'.cs_next_id`, `next` |-> `st.cs_next_var`,
     `sz` |-> `output_size:num`] abi_scratch_input_effect) >>

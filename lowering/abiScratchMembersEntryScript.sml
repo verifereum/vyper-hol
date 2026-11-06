@@ -104,12 +104,12 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`,
     `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`,
     `next_off` |-> `hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))`,
     `sz` |-> `output_size:num`, `owned_lo` |-> `lo:num`, `owned_hi` |-> `end_st.cs_next_id`,
     `next` |-> `st.cs_next_var`] abi_scratch_cursor_registered) >>
-  impl_tac >- asm_simp_tac bool_ss [ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
+  impl_tac >- asm_simp_tac bool_ss [pred_setTheory.IN_UNIV, ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
   drule_all (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
   mp_tac (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_scratch_members_after_child) >>
@@ -246,12 +246,12 @@ Proof
   mp_tac abi_encoder_members_prefix_advance >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   qpat_assum `mem_word_at slot actual.vs_memory = _`
     (assume_tac o PURE_REWRITE_RULE [mem_word_at_eq_mload]) >>
-  mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`,
     `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`,
     `next_off` |-> `hl+LENGTH (FLAT (abi_tuple_tails (pre++[ty]) (pvs++[av])))`,
     `sz` |-> `output_size:num`, `owned_lo` |-> `lo:num`, `owned_hi` |-> `end_st.cs_next_id`,
     `next` |-> `st.cs_next_var`] abi_scratch_cursor_registered) >>
-  impl_tac >- asm_simp_tac bool_ss [ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
+  impl_tac >- asm_simp_tac bool_ss [pred_setTheory.IN_UNIV, ADD_ASSOC, LESS_EQ_REFL] >> disch_tac >>
   drule_all (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `actual:venom_state`, `end_st` |-> `end_st:compile_state`]
     abi_scratch_cursor_mono) >> disch_tac >>
   drule_all (Q.INST [`dyn` |-> `T`, `active` |-> `T`] abi_scratch_members_after_child) >>

@@ -33,10 +33,10 @@ Proof
   rename1 `abi_decode_sim ctx func initial actual` >>
   drule_all abi_scratch_prefix_cursor >> strip_tac >>
   rename1 `abi_encoder_cursor T index_ptr st.cs_next_id slot first st.cs_next_id st' _ actual` >>
-  mp_tac (Q.INST [`infos` |-> `[]:(abi_enc_info # num # num # bool) list`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `infos` |-> `[]:(abi_enc_info # num # num # bool) list`,
     `dyn_ptr` |-> `index_ptr:operand`, `next` |-> `st.cs_next_var`,
     `site` |-> `st.cs_next_id`, `stop` |-> `st'.cs_next_id`]
     abi_scratch_prefix_effect) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  impl_tac >- asm_simp_tac bool_ss [pred_setTheory.IN_UNIV] >> strip_tac >>
   qexistsl_tac [`actual`, `slot`] >> fs[abi_encoder_cursor_def]
 QED
