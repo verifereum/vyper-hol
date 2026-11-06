@@ -1279,7 +1279,7 @@ Proof
 QED
 
 (* Key bridge: ALL_DISTINCT of FLAT(MAP f xs) means shared elements identify their source *)
-Triviality all_distinct_flat_map_unique:
+Theorem all_distinct_flat_map_unique:
   !f xs x y v.
     ALL_DISTINCT (FLAT (MAP f xs)) /\
     MEM x xs /\ MEM y xs /\ MEM v (f x) /\ MEM v (f y) ==>
