@@ -150,67 +150,6 @@ Proof
   drule_all calldata_static_valid_array_setup_sequence >> strip_tac >> gvs[]
 QED
 
-Theorem entry_sequence_nonoutput_lookup[local]:
-  !insts s t x.
-    EVERY (\i. ~is_terminator i.inst_opcode /\ ~MEM x i.inst_outputs) insts /\
-    run_inst_seq insts s = OK t ==> lookup_var x t = lookup_var x s
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  drule_all step_inst_base_preserves_all >> strip_tac >>
-  qpat_x_assum `!s t x. _` drule_all >> simp[]
-QED
-
-Theorem entry_element_setup_outputs[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
-    abi_sz mem_sz st = (ops,ready) /\ abi_decoder_older_vars st.cs_next_var x ==>
-  EVERY (\i. ~MEM x i.inst_outputs) (emitted_insts st ready)
-Proof
-  strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  Cases_on `dec_info_needs_offset di` >>
-  asm_simp_tac bool_ss [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
-    compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
-    comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  gvs[emitted_insts_def, mk_inst_def] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp_tac bool_ss [DROP_LENGTH_APPEND, APPEND, EVERY_DEF, MEM] >>
-  fs[abi_decoder_older_vars_def]
-QED
-
-Theorem entry_sequence_nonterminator_labels[local]:
-  !insts s t. EVERY (\i. ~is_terminator i.inst_opcode) insts /\
-    run_inst_seq insts s = OK t ==> t.vs_labels = s.vs_labels
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  drule_all step_inst_base_preserves_all >> strip_tac >>
-  qpat_x_assum `!s t. _` drule_all >> simp[]
-QED
-
-Theorem entry_element_setup_total_frame[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
-    abi_sz mem_sz st = (ops,ready) /\
-  run_inst_seq (emitted_insts st ready) s = OK t ==>
-  !op. abi_decoder_operand_live st.cs_next_var op ==>
-    eval_operand op t = eval_operand op s
-Proof
-  strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_array_element_setup_shape >> strip_tac >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready)` by
-    fs[EVERY_MEM] >>
-  drule_all entry_sequence_nonterminator_labels >> strip_tac >>
-  Cases >> simp[abi_decoder_operand_live_def, eval_operand_def] >> strip_tac >>
-  irule entry_sequence_nonoutput_lookup >>
-  goal_assum (drule_at Any) >>
-  qpat_x_assum `_ IN abi_decoder_older_vars _`
-    (assume_tac o REWRITE_RULE [IN_APP]) >>
-  drule_all entry_element_setup_outputs >> strip_tac >> fs[EVERY_MEM]
-QED
-
 Theorem entry_source_valid_element_setup_endpoint:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
@@ -413,7 +352,6 @@ val () =
           List.all (fn name => name = "DISK_THM") oracles
        then () else raise Fail "entry loop successor inherited admission"
     end) [entry_owned_fixed_successor_frame, entry_array_setup_chosen_valid,
-          entry_source_valid_element_setup_endpoint, entry_sequence_nonoutput_lookup,
-          entry_element_setup_outputs, entry_sequence_nonterminator_labels,
+          entry_source_valid_element_setup_endpoint,
           entry_element_setup_total_frame, entry_header_body_transfer_frame,
           entry_valid_header_child_frame];
