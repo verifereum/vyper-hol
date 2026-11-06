@@ -5,7 +5,7 @@ Ancestors
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
-  dfgAnalysisProps dfgDefs allocaRemapSSA
+  dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -1254,5 +1254,76 @@ Proof
     (simp[MEM_FLAT, MEM_MAP] >>
      qexists_tac `phi.inst_outputs` >> simp[] >>
      qexists_tac `phi` >> metis_tac[collect_phis_mem]) >>
+  metis_tac[]
+QED
+
+Theorem regional_pop_singleton_slots_layout:
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  plan_slots_bounded sb (SND (popmany_plan [v] ps)) /\
+  spill_alloc_layout_wf (SND (popmany_plan [v] ps)).ps_alloc
+    (SND (popmany_plan [v] ps)).ps_spilled
+Proof
+  strip_tac >> Cases_on `stack_get_depth v ps.ps_stack`
+  >- simp[popmany_plan_def, popmany_individual_def, sortingTheory.QSORT_DEF,
+          sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF] >>
+  rename1 `stack_get_depth v ps.ps_stack = SOME d` >>
+  drule stack_get_depth_props >> strip_tac >>
+  `plan_slots_bounded sb (SND (do_swap d ps))` by
+    (irule do_swap_plan_slots_bounded >> metis_tac[PAIR]) >>
+  drule_all do_swap_layout_wf >> strip_tac >>
+  simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF, LET_THM] >>
+  Cases_on `d = 1`
+  >- (gvs[do_swap_def, plan_slots_bounded_def] >> metis_tac[]) >>
+  Cases_on `d = 0`
+  >- (gvs[do_swap_def, plan_slots_bounded_def] >> metis_tac[]) >>
+  gvs[] >> pairarg_tac >> gvs[plan_slots_bounded_def] >> metis_tac[]
+QED
+
+Theorem regional_selected_phi_slots_layout:
+  generate_phi_plan phi nl F ps = (ops,qs) /\
+  phi.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
+  stack_peek d ps.ps_stack = Var src /\ ~MEM src nl /\
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  plan_slots_bounded sb qs /\ spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
+  simp[generate_phi_plan_def, LET_THM, stackPlanTypesTheory.operand_to_string_def] >>
+  Cases_on `MEM out nl`
+  >- (simp[plan_slots_bounded_def] >> strip_tac >> gvs[plan_slots_bounded_def] >> metis_tac[]) >>
+  simp[] >> pairarg_tac >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `popmany_plan [Var out] poked` >>
+  `plan_slots_bounded sb poked /\
+   spill_alloc_layout_wf poked.ps_alloc poked.ps_spilled` by
+    (simp[Abbr `poked`, plan_slots_bounded_def] >>
+     metis_tac[plan_slots_bounded_def]) >>
+  drule_all regional_pop_singleton_slots_layout >>
+  disch_then (qspec_then `Var out` mp_tac) >> gvs[]
+QED
+
+Theorem regional_selected_phi_wf:
+  generate_phi_plan phi nl F ps = (ops,qs) /\
+  phi.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ generated_plan_state_wf_marked sb ps /\
+  ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled ==>
+  generated_plan_state_wf_marked sb qs
+Proof
+  strip_tac >>
+  `plan_slots_bounded sb ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack)` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  drule_all regional_selected_phi_slots_layout >> strip_tac >>
+  drule_all inventory_marked_phi_distinct >> strip_tac >>
+  drule_all inventory_marked_phi_spilled >> strip_tac >>
+  drule_all inventory_marked_phi_mem >> strip_tac >>
+  gvs[generated_plan_state_wf_marked_def, pred_setTheory.IN_DISJOINT,
+      pred_setTheory.IN_INTER, pred_setTheory.EXTENSION] >>
   metis_tac[]
 QED
