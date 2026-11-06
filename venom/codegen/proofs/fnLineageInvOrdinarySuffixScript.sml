@@ -47,3 +47,21 @@ Proof
       EVAL_TAC >> simp[]) >>
   EVAL_TAC >> simp[] >> gen_tac >> IF_CASES_TAC >> simp[]
 QED
+
+(* The inventory witness is already distinct and disjoint from spills;
+   only the stack-independent resource clauses need transporting. *)
+Theorem lineage_inventory_canonical_budget:
+  !S ps m core base.
+    lineage_inventory S ps /\ lineage_core m core ps /\
+    residual_budget_wf base [] (ps with ps_stack := core) ==>
+    ?n tail. lineage_core n tail ps /\ EVERY is_var_operand tail /\
+      set tail UNION FDOM ps.ps_spilled = S /\
+      residual_budget_wf base [] (ps with ps_stack := tail)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+  simp[lineage_inventory_def] >> strip_tac >>
+  qexistsl_tac [`m'`, `core'`] >> simp[] >>
+  irule reorderSimTheory.residual_budget_wf_canonical >>
+  gvs[reorderSimTheory.residual_budget_wf_def]
+QED
