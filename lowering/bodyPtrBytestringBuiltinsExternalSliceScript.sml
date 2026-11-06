@@ -378,3 +378,17 @@ Resume compile_slice_extcode_bounds_abort[compose]:
   rpt strip_tac >> metis_tac[]
 QED
 Finalise compile_slice_extcode_bounds_abort
+
+Theorem external_copy_step:
+  ((opc = CALLDATACOPY /\ ops = [dst;start;len] /\ src = s.vs_call_ctx.cc_calldata) \/
+   (opc = CODECOPY /\ ops = [dst;start;len] /\ src = s.vs_code) \/
+   (opc = EXTCODECOPY /\ ops = [addr;dst;start;len] /\
+    eval_operand addr s = SOME a /\ src = (lookup_account (w2w a) s.vs_accounts).code)) /\
+  eval_operand dst s = SOME b /\ eval_operand start s = SOME wa /\
+  eval_operand len s = SOME wn ==>
+  step_inst_base (mk_inst id opc ops []) s =
+    OK (write_memory_with_expansion (w2n b)
+      (TAKE (w2n wn) (DROP (w2n wa) src ++ REPLICATE (w2n wn) 0w)) s)
+Proof
+  strip_tac >> gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def]
+QED
