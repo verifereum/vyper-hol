@@ -3467,6 +3467,68 @@ Proof
   gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
 QED
 
+Theorem emit_reorder_plan_bounded_core_suffix:
+  !ps operands selected opc nl dfg iops ps1 rops ps2.
+    LENGTH operands <= 16 /\
+    (!v. MEM (Var v) operands ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    ps2.ps_stack = stack_pop (LENGTH selected) ps2.ps_stack ++ selected
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  irule reorder_plan_bounded_materialised_suffix >> simp[] >>
+  qexistsl_tac [`dfg`, `rops`, `ps1`] >> simp[] >> metis_tac[]
+QED
+
+Theorem emit_reorder_plan_bounded_protected_consumption:
+  !ps operands selected opc nl keep dfg iops ps1 rops ps2.
+    LENGTH operands <= 16 /\ set keep SUBSET set nl /\
+    (!v. MEM (Var v) operands \/ MEM v keep ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    !v. MEM v keep ==> MEM (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) \/
+      Var v IN FDOM ps2.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM (Var v) operands ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+  drule_all emit_reorder_plan_bounded_core_suffix >> strip_tac >>
+  drule_all emit_input_plan_protected_live_reserve >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]) >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  match_mp_tac live_reserve_suffix_cancel >> qexists_tac `selected` >>
+  gen_tac >> Cases_on `MEM v keep`
+  >- (`LIST_ELEM_COUNT (Var v) selected + 1 <=
+         LIST_ELEM_COUNT (Var v) ps1.ps_stack +
+           (if Var v IN FDOM ps1.ps_spilled then 1 else 0)` by
+        (qpat_x_assum `!v. LIST_ELEM_COUNT (Var v) operands + _ <= _`
+           (qspec_then `v` mp_tac) >> simp[]) >>
+      `LIST_ELEM_COUNT (Var v) selected + 1 <=
+         LIST_ELEM_COUNT (Var v) ps2.ps_stack +
+           (if Var v IN FDOM ps2.ps_spilled then 1 else 0)` by
+        (irule reorder_plan_materialised_live_reserve >> simp[] >>
+         qexistsl_tac [`dfg`, `rops`, `ps1`] >> simp[] >> metis_tac[]) >>
+      simp[] >> qpat_x_assum `ps2.ps_stack = _`
+        (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+  simp[elem_count_append]
+QED
+
 Theorem emit_reorder_plan_core_suffix:
   !ps base operands selected opc nl dfg iops ps1 rops ps2.
     residual_budget_wf base [] ps /\ LENGTH operands <= 16 /\
@@ -3477,20 +3539,7 @@ Theorem emit_reorder_plan_core_suffix:
     reorder_plan dfg selected ps1 = (rops,ps2) ==>
     ps2.ps_stack = stack_pop (LENGTH selected) ps2.ps_stack ++ selected
 Proof
-  rpt gen_tac >> strip_tac >> rename1 `residual_budget_wf spillbase [] ps` >>
-  `!op. MEM op operands /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
-    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
-  drule_all emit_input_plan_materialised >> strip_tac >>
-  drule_all available_input_plan_length >> strip_tac >>
-  drule_all emit_input_plan_residual_budget_wf >> simp[] >> strip_tac >>
-  drule perm_operand_counts >> strip_tac >>
-  drule sortingTheory.PERM_LENGTH >> strip_tac >>
-  `residual_budget_wf spillbase selected ps1` by
-    metis_tac[residual_budget_wf_perm] >>
-  irule reorder_plan_materialised_suffix >> conj_tac >- simp[] >>
-  qexistsl_tac [`spillbase`, `dfg`, `rops`, `ps1`] >> simp[] >>
-  metis_tac[]
+  metis_tac[emit_reorder_plan_bounded_core_suffix]
 QED
 
 Theorem emit_reorder_plan_core_protected_consumption:
@@ -3523,17 +3572,10 @@ Proof
     metis_tac[residual_budget_wf_perm] >>
   `LENGTH selected <= LENGTH ps1.ps_stack /\ LENGTH selected <= 16` by simp[] >>
   drule_all reorder_plan_inventory_mono >> strip_tac >>
-  conj_tac
-  >- (irule residual_budget_wf_suffix_cancel >>
-      qexists_tac `selected` >> simp[]) >>
-  match_mp_tac live_reserve_suffix_cancel >> qexists_tac `selected` >>
-  gen_tac >> simp[GSYM elem_count_append] >>
-  qpat_x_assum `!x. LIST_ELEM_COUNT x ps1.ps_stack + _ <= _`
-    (qspec_then `Var v` mp_tac) >>
-  qpat_x_assum `!v. LIST_ELEM_COUNT (Var v) operands + _ <= _`
-    (qspec_then `v` mp_tac) >> simp[] >>
-  qpat_x_assum `ps2.ps_stack = _` (fn th => once_rewrite_tac[GSYM th]) >>
-  decide_tac
+  reverse conj_tac
+  >- metis_tac[emit_reorder_plan_bounded_protected_consumption] >>
+  irule residual_budget_wf_suffix_cancel >>
+  qexists_tac `selected` >> simp[]
 QED
 
 Theorem emit_reorder_plan_core_consumption:
