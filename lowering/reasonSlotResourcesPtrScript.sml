@@ -209,7 +209,8 @@ Theorem reason_slot_tuple_resources_ptr:
     lookup_var tuple sf = SOME (n2w b) /\ ptr_covers Gf tnf tuple sf capacity /\
     mload b sf = n2w len /\
     (!i. b <= i /\ i < b+32 ==> i NOTIN tnf.t_mem) /\
-    (!p k. p <> slot /\ ptr_covers G tn p s k ==> ptr_covers Gf tnf p sf k)
+    (!p k. p <> slot /\ ptr_covers G tn p s k ==> ptr_covers Gf tnf p sf k) /\
+    (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s)
 Proof
   strip_tac >> drule_all reason_slot_initialize_resources_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
@@ -226,8 +227,10 @@ Proof
   `lookup_var tuple t = lookup_var tuple s` by suspend "lookup" >>
   qexistsl_tac [`G1`, `tnf`, `sf`, `a`] >> simp[] >>
   conj_tac >- suspend "length" >>
-  rpt strip_tac >> gvs[regions_disjoint_def] >>
-  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+  conj_tac
+  >- (rpt strip_tac >> gvs[regions_disjoint_def] >>
+      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  suspend "oldlookup"
 QED
 
 Resume reason_slot_tuple_resources_ptr[lookup]:
@@ -241,6 +244,10 @@ Resume reason_slot_tuple_resources_ptr[length]:
     (irule venomMemProofsTheory.mload_mstore_disjoint_proof >>
      gvs[regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
   gvs[mload_def]
+QED
+
+Resume reason_slot_tuple_resources_ptr[oldlookup]:
+  drule_all reason_slot_alloc_run >> strip_tac >> gvs[]
 QED
 
 Finalise reason_slot_tuple_resources_ptr
