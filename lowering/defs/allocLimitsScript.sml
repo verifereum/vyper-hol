@@ -299,14 +299,13 @@ QED
 (* Vyper rejects an abi_decode whose input Bytes[n] is shorter than the
    decoded type's ABI size bound. *)
 Theorem alloc_limits_abi_decode_bound:
-  alloc_limits_expr ce (TypeBuiltin t (AbiDecode unwrap) ty es) ==>
-  ?e rest n. es = e :: rest /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
-    abi_size_bound ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <= n
+  alloc_limits_expr ce (TypeBuiltin t (AbiDecode unwrap) ty (e :: rest)) /\
+  expr_type e = BaseT (BytesT (Dynamic n)) ==>
+  abi_size_bound ce.ce_struct_fields
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <= n
 Proof
-  simp[Once alloc_limits_expr_def, LET_THM] >>
-  Cases_on `es` >> simp[] >>
-  every_case_tac >> simp[]
+  strip_tac >> qpat_x_assum `alloc_limits_expr _ _` mp_tac >>
+  simp[Once alloc_limits_expr_def, LET_THM]
 QED
 
 Theorem alloc_limits_abi_rounded_regressions:
