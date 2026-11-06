@@ -10,11 +10,6 @@ puts its fixtures back and removes them from this list.
 
 The changes, as they appear in the pinned Python compiler:
 
-- P2 calldata argument guard: dynamic external arguments assert that their
-  calldata offset isn't below 4 (`_get_abi_arg_ptr`).
-- P3 escaping allocas: comparisons don't make an allocation escape; escaping
-  static allocations stay live everywhere; allocation order sorts escaping ones
-  first.
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
 - P6 eager call arguments: internal- and external-call arguments are read as
@@ -22,15 +17,15 @@ The changes, as they appear in the pinned Python compiler:
 - P7 subscript overlap: a dynamic array's base is copied when the index
   expression can modify it (also a source-semantics change).
 
-P1 (ceil32: `and(add(x, 31), not 31)`) and P5 (a slice's output buffer
-allocated after its bounds check) are ported, so they no longer appear below.
+P1 (ceil32: `and(add(x, 31), not 31)`), P2 (dynamic external arguments
+assert that their calldata offset isn't below 4, `_get_abi_arg_ptr`), P5 (a
+slice's output buffer allocated after its bounds check) and P3 (escaping
+allocations: comparisons don't make an allocation escape, escaping static
+allocations stay live everywhere and are allocated first) are ported. P2 still
+heads a section below because those fixtures also need P4.
 A fixture listed under several changes needs all of them. The attribution
 comes from reverting one change at a time in the pinned compiler and
 recompiling.
-
-## P3 (escaping allocas)
-
-- `memory-stores/a11_local_string_from_intcall`
 
 ## P4 (direct ABI encoder)
 
@@ -64,17 +59,6 @@ recompiling.
 ## P7 (subscript overlap)
 
 - `load_timing/nested_retained_pop`
-
-## P2 (calldata argument guard) + P3 (escaping allocas)
-
-- `builtin-forms/p58_int_bytes_local`
-- `builtin-forms/p94_rbuf_bytes_ret_concat_arg`
-- `builtin-forms/p98_rbuf_mem_tuple_ret_concat_arg`
-- `builtin-forms/p99_rbuf_string_ret_concat_arg`
-- `internal-frames/p02_int_local_string`
-- `internal-frames/p47_len_of_string_call`
-- `main/internal_bytes_call`
-- `memory-stores/p64_string_annassign_call`
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 

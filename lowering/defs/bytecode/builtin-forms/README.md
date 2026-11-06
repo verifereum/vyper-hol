@@ -32,9 +32,13 @@ where vyperlang/vyper#5127 changed their bytes;
 | `ext_code_slice` | `slice(a.code, s, 10)`: the non-literal start, then the address, `EXTCODESIZE` and the bounds check before the output buffer, then `EXTCODECOPY` |
 | `struct_code_slice` | a struct member named `code` is an ordinary memory slice |
 | `struct_data_slice` | control: the same with a member named `data` |
-| `p97_rbuf_stack_tuple_ret_concat_arg` | internal call with a `concat` argument, stack tuple return |
+| `p94_rbuf_bytes_ret_concat_arg` | internal call with a `concat` argument, `Bytes` return |
+| `p97_rbuf_stack_tuple_ret_concat_arg` | the same, stack tuple return |
+| `p98_rbuf_mem_tuple_ret_concat_arg` | the same, memory tuple return |
+| `p99_rbuf_string_ret_concat_arg` | the same, `String` return |
 | `p102_rbuf_bytes_ret_word_arg` | `concat` of two `bytes32` in the callee |
 | `p103_rbuf_control_word_ret_concat_arg` | internal call with a `concat` argument, word return |
+| `p58_int_bytes_local` | `concat` into a local in the callee |
 
 `supported_builtin_form` does not yet admit `Concat`, `Slice`, `Ceil` or
 `Acc Code`, nor `supported_type_builtin_form` `Extract32`, so these programs
