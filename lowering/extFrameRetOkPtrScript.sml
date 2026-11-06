@@ -29,7 +29,7 @@ Ancestors
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
   extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr extRetRawFramePtr
-  extRetSignatureFramePtr
+  extRetSignatureFramePtr extRetLoweredBytesFramePtr
 
 val _ = Parse.hide "body";
 
@@ -87,5 +87,18 @@ Proof
          gvs[is_word_type_def]) >>
       irule external_return_word_frame_stmt_frag_ptr >> simp[] >>
       qexists_tac `env'` >> simp[] >> metis_tac[]) >>
+  Cases_on `cenv'.ce_raw_return`
+  >- (`lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by metis_tac[] >>
+      drule_all source_typing_raw_return_type >> strip_tac >> gvs[] >>
+      irule external_return_raw_frame_stmt_frag_ptr >> simp[] >>
+      reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
+      drule typed_dynamic_bytes_return_source >> strip_tac >>
+      irule typed_lowered_value_bytestring >> simp[] >>
+      qexists_tac `env'` >> simp[] >>
+      rpt strip_tac >> irule external_frame_signature_return_map >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[]) >>
   cheat
 QED
