@@ -151,3 +151,95 @@ protection across the extra clipped-request segment, or derive an
 actual-footprint-aware lifetime/no-kill interface. Neither revision has
 been implemented here; retained-birth identity and target actual framing
 remain separate gaps. No universal prefix-extension theorem is certified.
+
+## Retained-owner certificate audit (.37)
+
+Checked export `audit_retained_write_owner_ambiguity` in OwnedReadAuditTheory:
+lo=0, actual-byte set={0}, births {(0,10)->(0,1),(1,20)->(0,1)}, positions
+{Allocation 10->(100,1),Allocation 20->(200,1)}, rho=constant 200 satisfy
+`ptr_paired_write_owner` for arbitrary remaining snapshot fields. Yet the
+first birth covers byte 0 and has position 100, not rho 0. This is ONLY a
+predicate-level calculation. It supplies no chronological history, active
+geometry, stage fixture, or counterexample to the TASK. A search of helper
+sources found no equivalent checked calculation before this addition.
+
+### Candidate repair (NOT implemented)
+
+Keep the fixed branch unchanged. Replace the owned branch by
+```
+?token aid base sz pos k.
+  MEM token tokens /\ k < sz /\ x = base+k /\ rho x = pos+k /\
+  FLOOKUP births (token,aid) = SOME (base,sz) /\
+  FLOOKUP positions (Allocation aid) = SOME (pos,sz)
+```
+Here tokens and births must both be the immediate-successor snapshot fields
+`EL (SUC n) H`, as already selected by `ptr_paired_write_def`; not the endpoint
+or pre-write token list. No new contract or executable definition was edited.
+
+Candidate consumption boundary: given this certificate, `lo<=x`,
+`ptr_birth_slices post tokens births`, `LENGTH tokens=SUC(LENGTH post.po_stack)`,
+active allocation geometry for post, and a demand depth d with its live
+lookup `(aid,b,sz)` containing x, derive certificate aid=demand aid and
+`rho x=pa+(x-b)` from `FLOOKUP positions (Allocation aid)=SOME(pa,sz)`.
+To also identify the token, use ALL_DISTINCT tokens after identifying its index.
+
+Supplier chain: MEM_EL gives n with n<LENGTH tokens and EL n tokens=token;
+put e=LENGTH post.po_stack-n, prove e<=LENGTH stack and stacklen-e=n.
+`ptr_birth_slices_def` converts the retained birth to the live allocation
+lookup at depth e. `ptr_owner_view_index` exists only locally in OwnerSeeds;
+it or the public owner-view definition connects this to the states list.
+`ptr_active_alloc_unique_owner` (AllocationOwnership) then identifies depths
+and allocation ids for a positive byte; it cannot do so without this live
+lookup. The demanded and certificate table lookups subsequently identify
+base and size. The depth-to-token equation identifies token; distinctness is
+available from source activations when inversion needs it.
+
+Available suppliers: `ptr_source_ownership_caches` projects source ownership
+to birth caches; `ptr_source_birth_caches_slices` yields slices under no
+DALLOCA; `ptr_source_ownership_stack_length` and
+`ptr_source_activations_length` supply lengths; activation invariants supply
+ALL_DISTINCT tokens. Geometry is supplied by the frame allocation geometry
+boundary from reachability, initial empty tables and no DALLOCA. These must
+be instantiated at the actual initializer successor using the stored source
+snapshot/transcript; endpoint geometry alone does not identify a retained
+initializer witness.
+
+`ptr_birth_overlay_lookup` retains inactive entries and preferentially updates
+the current token from its table. `ptr_alloc_return_fields` explicitly proves
+post-return vs_allocas AND vs_alloca_next equal the saved caller's fields.
+Thus monotonicity of vs_alloca_next across returns is unavailable, and retained
+births may not be treated as one active disjoint table.
+
+### Complete direct use/producer inventory (source grep)
+
+- PairedFields: `ptr_paired_write_owner_def` -> `ptr_paired_write_def` ->
+  `ptr_paired_writes_def`; `ptr_paired_write_owner_byte` and
+  `ptr_paired_write_owned_byte` must expose active membership after a revision.
+- `ptr_paired_write_retained`, `ptr_paired_writes_retained`,
+  `ptr_paired_writes_gap` merely retain certificates at unchanged historical
+  snapshots; active membership at that snapshot should be preserved without
+  requiring the token to remain active at the new endpoint.
+- `ptr_paired_write_event` selects an existing certificate, not a producer.
+- `ptr_paired_writes_pair` accepts EVERY ptr_paired_write for extra events as
+  an explicit premise, plus event coverage. It does NOT derive any new
+  nonempty write certificate or active owner from execution. Its callers
+  still owe the stronger extra-event premise after repair.
+- PairedCallSchema `ptr_paired_invoke_prefix_normalize` and PairedJump
+  `ptr_paired_block_prefix_normalize` (local, used by jump/jnz normalizers)
+  call writes_pair with extra=[]; no new write membership is needed there.
+- PairedRoot establishes an empty write ledger by unfolding writes_def.
+- PairedPrefix: prefix definition contains writes; `ptr_paired_prefix_writes`
+  projects it; `ptr_paired_prefix_gap` uses writes_gap. No nonempty producer.
+- OwnedReadAudit now also directly uses owner_def for the predicate probe;
+  if the predicate changes, retain this evidence by recording the old
+  formula explicitly rather than misreporting the stronger predicate false.
+
+No other direct SML references to ptr_paired_write_owner, ptr_paired_write,
+or ptr_paired_writes_pair were found under venom. In particular there is no
+checked arbitrary-write prefix extension constructing nonempty extra
+certificates to repair locally. A coherent invariant revision must change the
+owned branch and projections, recheck retention/empty-ledger normalizers,
+then separately prove active certificate generation for future nonempty write
+extensions. Active membership alone does not prove production positions or
+paired bytes; those remain obligations of that producer. This audit authorizes
+no recovery theorem and changes no invariant.

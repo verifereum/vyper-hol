@@ -84,3 +84,19 @@ val actual_initializer_candidate = ``
     x IN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
       (EL (SUC k) h).po_state) /\
     x NOTIN (EL (SUC k) h).po_taint.t_mem``;
+
+(* Predicate-level ambiguity only; not a reachable history or TASK counterexample. *)
+Theorem audit_retained_write_owner_ambiguity:
+  ptr_paired_write_owner 0
+    (FEMPTY |+ (Allocation 10,(100,1)) |+ (Allocation 20,(200,1)))
+    (\x. 200) {0}
+    (tokens,registry,
+     FEMPTY |+ ((0,10),(0,1)) |+ ((1,20),(0,1)),PT,TG,saved,entries) /\
+  FLOOKUP (FEMPTY |+ ((0,10),(0,1)) |+ ((1,20),(0,1))) (0,10) = SOME (0,1) /\
+  FLOOKUP (FEMPTY |+ (Allocation 10,(100,1)) |+ (Allocation 20,(200,1)))
+    (Allocation 10) = SOME (100,1) /\
+  (\x:num. 200:num) 0 <> 100
+Proof
+  simp[ptr_paired_write_owner_def, FLOOKUP_UPDATE] >>
+  qexistsl [`1`,`20`,`1`] >> simp[]
+QED
