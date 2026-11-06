@@ -3,7 +3,8 @@ Theory decoderScratchLoopPtr
 Ancestors decoderScratchLoopCorePtr decoderLoopControlPtr decoderGhostFramePtr ptrDiscipline abiScratchDecoderLoopInvariant
   abiScratchDecoderLoopControl abiDecoderValidArrayMemory
   abiScratchEffect abiScratchEncoderContract abiDecoderExecution abiDecoderReentry
-  abiDecoderValidArrayBackedge abiDecoderContract venomState words arithmetic
+  abiDecoderValidArrayBackedge abiDecoderContract abiScratchDecoderContract
+  abiEncoderArrayFrame abiDecoderAllocation abiDecoderLoop venomState words arithmetic
 
 Theorem decoder_scratch_header_ptr:
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d outsz slot site
@@ -123,4 +124,78 @@ Proof
   simp[eval_operand_def, op_prov_def] >>
   fs[eval_operand_def, op_prov_def] >>
   ASM_SET_TAC[]
+QED
+
+(* The recursive child and the backedge share the supplied endpoint t. *)
+Theorem decoder_scratch_child_backedge_ptr:
+  abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d outsz slot site
+    first last lo hi next limit_st b cap initial body_lbl j s /\
+  j < LENGTH vs /\ all_have_type tv vs /\
+  val_in_memory tv (EL j vs) (d + 32 + j * type_memory_size tv) t.vs_memory /\
+  abi_scratch_effect first last child_lo child_hi start.cs_next_var limit_st
+    (d + 32 + j * type_memory_size tv) (type_memory_size tv) b cap s t /\
+  lo <= child_lo /\ child_hi <= hi /\ next <= start.cs_next_var /\
+  first <= site /\ site < last /\ (site < child_lo \/ child_hi <= site) /\
+  d + 32 + j * type_memory_size tv + type_memory_size tv <= d + outsz /\
+  first <= lo /\ hi <= last /\
+  abi_scratch_decoder_ranges CALLDATALOAD hi_op src dst sb (LENGTH bs) d outsz first last b cap s /\
+  not_fresh_at start q /\ not_fresh_at start iv /\
+  (!x. not_fresh_at start x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    op_taint u (Var x) = op_taint tn (Var x)) /\
+  ptr_covers G tn q s 32 /\ lookup_var q s = SOME (n2w slot) /\
+  eval_operand (Var iv) s = SOME (n2w j) /\
+  op_taint tn (Var iv) = {} /\ op_prov G (Var iv) = NONE /\
+  u.t_mem SUBSET tn.t_mem /\ DISJOINT {a | slot <= a /\ a < slot + 32} tn.t_mem /\
+  DISJOINT P tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv (Var q) hdr /\
+  nv = STRING #"%" (toString nv_counter) /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  t.vs_inst_idx = LENGTH prefix /\ lo <= site /\ site < hi /\
+  slot + 32 < dimword (:256) /\ LENGTH vs < dimword (:256) /\
+  (slot + 32 <= d \/ d + 32 + LENGTH vs * type_memory_size tv <= slot) /\
+  abi_decoder_operand_live next (Var q) /\ next <= nv_counter /\ nv_counter < limit_st.cs_next_var /\
+  allocas_from lower t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  abi_decode_sim ctx fn s t /\
+  ((!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
+    !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s) ==>
+  ?K v h.
+    abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d outsz slot site
+      first last lo hi next limit_st b cap initial hdr (SUC j) h /\
+    abi_decode_sim ctx fn s h /\
+    h.vs_allocas = t.vs_allocas /\ h.vs_initial_fmp = t.vs_initial_fmp /\ h.vs_fmp = t.vs_fmp /\
+    ptr_covers K v q h 32 /\ mload slot h = n2w (SUC j) /\
+    DISJOINT {a | slot <= a /\ a < slot + 32} v.t_mem /\
+    DISJOINT P v.t_mem /\ v.t_stor = tn.t_stor /\ v.t_trans = tn.t_trans /\
+    (!x. not_fresh_at start x /\ x <> nv ==>
+      lookup_var x h = lookup_var x s /\ FLOOKUP K x = FLOOKUP G x /\
+      op_taint v (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx fn PG K v h) ==>
+      !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_scratch_decoder_child_advance >> strip_tac >>
+  `abi_decoder_budget first last b cap s /\
+   FLOOKUP s.vs_allocas site = SOME (slot,32) /\ mload slot s = n2w j` by
+    fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
+  `first <= child_lo /\ child_hi <= last` by decide_tac >>
+  `abi_footprint_disjoint (d + 32 + j * type_memory_size tv) (type_memory_size tv)
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_ranges_def]) >>
+     irule abi_footprint_disjoint_subwindow >>
+     qexistsl_tac [`d`, `outsz`] >> asm_simp_tac bool_ss [] >> decide_tac) >>
+  `site IN abi_decoder_ids first last /\ ~(site IN abi_decoder_ids child_lo child_hi)` by
+    (simp[abi_decoder_ids_def] >> decide_tac) >>
+  drule_all decoder_child_cursor_frame_ptr >> strip_tac >>
+  `DISJOINT P u.t_mem` by ASM_SET_TAC[] >>
+  `eval_operand (Var q) t = SOME (n2w slot)` by simp[eval_operand_def] >>
+  drule_all decoder_scratch_backedge_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `abi_decode_sim ctx fn s h` by
+    (irule abi_decode_sim_trans >> qexists_tac `t` >> simp[]) >>
+  qpat_x_assum `h = _` kall_tac >>
+  qexistsl_tac [`H'`, `u'`, `h`] >>
+  asm_simp_tac bool_ss [] >> metis_tac[]
 QED
