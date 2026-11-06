@@ -1080,8 +1080,7 @@ Proof
 QED
 
 Theorem alias_ready_entry_path_member:
-  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME witness /\
-  MEM phi (collect_phis witness.bb_instructions) /\
+  codegen_ready_fn fn /\
   fn_entry_label fn = SOME entry /\ is_fn_path fn path /\ path <> [] /\
   HD path = entry /\ MEM l path ==>
   ?bb. lookup_block l fn.fn_blocks = SOME bb /\
@@ -1101,9 +1100,10 @@ Proof
      simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
   qexists_tac `bb` >> simp[] >> conj_tac
   >- (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
-  `MEM witness fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  gvs[codegen_ready_fn_def, phi_operands_ready_def, EVERY_MEM, NULL_EQ] >>
-  metis_tac[]
+  `phi_operands_ready fn` by gvs[codegen_ready_fn_def] >>
+  gvs[phi_operands_ready_def, EVERY_MEM] >>
+  `collect_phis bb.bb_instructions = []` by metis_tac[NULL_EQ] >>
+  simp[phi_block_ready_def, phi_uses_disjoint_def]
 QED
 
 Theorem alias_ready_selected_source_not_phi_output:
@@ -1417,6 +1417,128 @@ Proof
   >- (irule alias_build_phi_maps_matching_index >> simp[]) >>
   irule alias_build_phi_maps_op_index >> metis_tac[]
 QED
+
+Theorem alias_collect_phis_index:
+  !insts k. k < LENGTH insts /\
+    (!i. i <= k ==> (EL i insts).inst_opcode = PHI) ==>
+    k < LENGTH (collect_phis insts) /\
+    EL k (collect_phis insts) = EL k insts
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  `h.inst_opcode = PHI` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  Cases_on `k` >> gvs[collect_phis_def] >>
+  first_x_assum irule >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Theorem alias_offset_output_live_after:
+  codegen_ready_fn fn /\
+  lookup_block d fn.fn_blocks = SOME db /\
+  j < LENGTH db.bb_instructions /\
+  (EL j db.bb_instructions).inst_opcode = OFFSET /\
+  MEM v (EL j db.bb_instructions).inst_outputs ==>
+  MEM v (live_vars_at (liveness_analyze fn) d (SUC j))
+Proof
+  strip_tac >>
+  `wf_function fn /\ ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `MEM v (inst_defs (EL j db.bb_instructions))` by simp[inst_defs_def] >>
+  `MEM (EL j db.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+          MEM_FLAT, MEM_MAP] >>
+     metis_tac[lookup_block_MEM, EL_MEM]) >>
+  drule_all alias_offset_reachable_use_witness >>
+  disch_then (qx_choose_then `ub` (qx_choose_then `ui`
+    (qx_choose_then `endpoint` (qx_choose_then `use_opt`
+      (qx_choose_then `path` strip_assume_tac))))) >>
+  `?pre tail.
+    path = pre ++ d::tail /\ ~MEM d tail /\
+    is_fn_path fn (d::tail) /\ LAST (d::tail) = endpoint.bb_label /\
+    (!l bb k. MEM l tail /\ lookup_block l fn.fn_blocks = SOME bb /\
+      k < LENGTH bb.bb_instructions ==> ~MEM v (inst_defs (EL k bb.bb_instructions))) /\
+    (d = endpoint.bb_label ==> case use_opt of NONE => T | SOME ui =>
+      ?k. j < k /\ k < LENGTH endpoint.bb_instructions /\
+          EL k endpoint.bb_instructions = ui)` by
+    (irule alias_def_available_definition_suffix >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!l. MEM l (d::tail) ==> ?bb. lookup_block l fn.fn_blocks = SOME bb /\
+      MEM l (cfg_analyze fn).cfg_dfs_pre /\ phi_block_ready (liveness_analyze fn) bb` by
+    (rpt strip_tac >> irule alias_ready_entry_path_member >>
+     goal_assum (drule_at Any) >> metis_tac[MEM_APPEND]) >>
+  `!k. SUC j <= k /\ k < LENGTH db.bb_instructions ==>
+    ~MEM v (inst_defs (EL k db.bb_instructions))` by
+    (rpt gen_tac >> strip_tac >> `k <> j` by decide_tac >>
+     metis_tac[alias_definition_excludes_other_index]) >>
+  `MEM d (cfg_analyze fn).cfg_dfs_pre` by metis_tac[MEM, optionTheory.SOME_11] >>
+  `(?k. SUC j <= k /\ k <= LENGTH db.bb_instructions /\
+       MEM v (live_vars_at (liveness_analyze fn) d k))` suffices_by
+    (strip_tac >> drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+     simp[] >> disch_then irule >> simp[] >> qexists_tac `k` >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  FIRST [qpat_assum `use_opt = SOME _` (K (suspend "ordinary")),
+         qpat_assum `use_opt = NONE` (K (suspend "phi"))]
+QED
+
+Resume alias_offset_output_live_after[ordinary]:
+  gvs[] >>
+  `MEM endpoint.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[MEM, MEM_LAST] >>
+  `?k. k < LENGTH endpoint.bb_instructions /\ EL k endpoint.bb_instructions = ui` by
+    metis_tac[MEM_EL] >>
+  `LENGTH (collect_phis endpoint.bb_instructions) <= k` by
+    (spose_not_then assume_tac >>
+     `k < LENGTH (collect_phis endpoint.bb_instructions)` by decide_tac >>
+     qspec_then `endpoint.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+     `EL k (collect_phis endpoint.bb_instructions) = ui` by metis_tac[EL_APPEND1] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) endpoint.bb_label k)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >>
+     simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  Cases_on `tail = []`
+  >- (gvs[] >> qexists_tac `k'` >> simp[] >>
+      drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
+      disch_then irule >> goal_assum (drule_at Any) >>
+      simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  qexists_tac `LENGTH db.bb_instructions` >> simp[] >>
+  irule alias_path_cut_liveout_backward >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `k` >> simp[] >> metis_tac[]
+QED
+
+Resume alias_offset_output_live_after[phi]:
+  `fn_reachable fn endpoint.bb_label` by
+    gvs[def_available_at_def, fn_dominates_def] >>
+  `fn_reachable fn ub.bb_label` by metis_tac[fn_reachable_step] >>
+  `lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  `bb_well_formed ub` by metis_tac[wf_function_def] >>
+  `?m. m < LENGTH ub.bb_instructions /\ EL m ub.bb_instructions = ui` by
+    metis_tac[MEM_EL] >>
+  `!i. i <= m ==> (EL i ub.bb_instructions).inst_opcode = PHI` by
+    (rpt strip_tac >> Cases_on `i = m` >- gvs[] >>
+     `i < m` by decide_tac >> gvs[bb_well_formed_def] >> metis_tac[]) >>
+  drule_all alias_collect_phis_index >> strip_tac >>
+  `MEM v (input_vars_from endpoint.bb_label ub.bb_instructions
+    (live_vars_at (liveness_analyze fn) ub.bb_label 0))` by
+    (irule alias_ready_phi_input_member >> goal_assum (drule_at Any) >>
+     simp[] >> qexists_tac `m` >> simp[]) >>
+  `cfg_reachable_of (cfg_analyze fn) endpoint.bb_label` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  `MEM ub.bb_label (cfg_succs_of (cfg_analyze fn) endpoint.bb_label)` by
+    metis_tac[alias_fn_edge_succs] >>
+  `MEM v (live_vars_at (liveness_analyze fn) endpoint.bb_label
+    (LENGTH endpoint.bb_instructions))` by
+    metis_tac[alias_selected_input_liveout] >>
+  qexists_tac `LENGTH db.bb_instructions` >> simp[] >>
+  irule alias_path_liveout_backward >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise alias_offset_output_live_after
 
 Theorem alias_lineage_join_ordinary_coverage:
   liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
