@@ -182,6 +182,15 @@ Definition external_name_keys_toplevel_def:
   external_name_keys_toplevel _ _ = []
 End
 
+(* Every function visibility and variable kind shares Vyper's self namespace. *)
+Definition self_member_keys_toplevel_def:
+  self_member_keys_toplevel src (FunctionDecl _ _ _ _ name _ _ _ _) =
+    [(src,name)] /\
+  self_member_keys_toplevel src (VariableDecl _ _ name _ _) = [(src,name)] /\
+  self_member_keys_toplevel src (HashMapDecl _ _ name _ _ _) = [(src,name)] /\
+  self_member_keys_toplevel _ _ = []
+End
+
 Definition contract_namespaces_ok_def:
   contract_namespaces_ok in_deploy mods <=>
     ALL_DISTINCT (MAP FST mods) /\
@@ -192,6 +201,7 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys event_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
       ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
 End
