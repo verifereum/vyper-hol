@@ -298,7 +298,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dynamic_decimal_convert_op[local]:
+Theorem dynamic_decimal_convert_op:
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) =
     ConvBytestringToDecimal 10000000000
       (w2i (FST (type_bounds (BaseT DecimalT))))
@@ -307,7 +307,7 @@ Proof
   simp[mk_convert_op_def, is_bytestring_type_def] >> pairarg_tac >> simp[]
 QED
 
-Theorem dynamic_bytes_scalar_partition[local]:
+Theorem dynamic_bytes_scalar_partition:
   valid_conversion (BaseT (BytesT (Dynamic n))) dst /\
   ~is_bytestring_type dst ==>
   (dst = BaseT BoolT /\ n <= 32) \/
@@ -324,7 +324,7 @@ Proof
   simp[valid_conversion_def, is_bytestring_type_def]
 QED
 
-Theorem dynamic_string_scalar_partition[local]:
+Theorem dynamic_string_scalar_partition:
   valid_conversion (BaseT (StringT n)) dst /\
   ~is_bytestring_type dst ==>
   ?m. dst = BaseT (BytesT (Fixed m)) /\ n <= m
@@ -336,7 +336,7 @@ Proof
   simp[valid_conversion_def, is_bytestring_type_def]
 QED
 
-Theorem dynamic_scalar_convert_ops[local]:
+Theorem dynamic_scalar_convert_ops:
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT BoolT) =
     ConvBytestringToBool /\
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT AddressT) =
@@ -1925,7 +1925,7 @@ Proof
   metis_tac[])
 QED
 
-Theorem dynamic_read_fresh_safe[local]:
+Theorem dynamic_read_fresh_safe:
   fresh_write_op opc \/ opc = MLOAD ==>
   opc <> INVOKE /\ ~is_terminator opc /\ ~is_ext_call_op opc
 Proof
@@ -2135,7 +2135,7 @@ Proof
   simp[rich_listTheory.IS_PREFIX_APPEND3]
 QED
 
-Theorem dynamic_scalar_straight_read_fresh[local]:
+Theorem dynamic_scalar_straight_read_fresh:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
   valid_conversion src dst ==>
   dynamic_straight_fresh (compile_type_convert op (mk_convert_op src dst))

@@ -1,7 +1,7 @@
 (* Readable source windows for the nonempty bytestring conversion branch. *)
 Theory bodyMemTbConvertSourceDispatch
 Ancestors
-  bodyMemTbConvertSourceMemory bodyMemTbConvertLoadMemory
+  bodyMemTbConvertSourceMemory bodyMemTbConvertReadSuffix
   bodyMemTbConvertScalarDispatch exprSimHyps exprSimHypsDefs
   compileEnv vyperTypeSystem vyperValue valueEncoding valueCopyBytes exprSimMemDefs
 
