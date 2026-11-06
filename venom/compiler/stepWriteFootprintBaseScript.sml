@@ -145,6 +145,17 @@ Proof
   simp[write_memory_with_expansion_def]
 QED
 
+Theorem create_byte_frame:
+  (inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) /\
+  step_inst_base inst s = OK t ==>
+  read_byte i t.vs_memory = read_byte i s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  strip_tac >> gvs[AllCaseEqs()] >> metis_tac[exec_create_byte_frame]
+QED
+
 Theorem call_byte_frame:
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
    inst.inst_opcode = DELEGATECALL) /\
@@ -208,6 +219,7 @@ Proof
   FIRST [
     (irule direct_write_byte_frame >> qexists_tac `inst` >> simp[] >> NO_TAC),
     (irule call_byte_frame >> qexists_tac `inst` >> simp[] >> NO_TAC),
+    (irule create_byte_frame >> qexists_tac `inst` >> simp[] >> NO_TAC),
     all_tac] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
