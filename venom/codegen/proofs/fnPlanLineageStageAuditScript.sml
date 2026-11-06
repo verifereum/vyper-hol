@@ -309,3 +309,173 @@ QED
    Return these contracts to the strategist; no global equivalence or
    preservation theorem has been added by this audit.
 *)
+
+(* Consumer-minimal physical test: with a nonempty lower prefix, the
+   core-height bound is necessary as well as sufficient for pop framing.
+   The undersized case includes windows fitting the whole stack but
+   intersecting its marker prefix; no resource-count premise repairs it. *)
+Theorem stack_pop_nonempty_prefix_frame_iff:
+  !prefix core n.
+    prefix <> [] ==>
+    (stack_pop n (prefix ++ core) = prefix ++ stack_pop n core <=>
+     n <= LENGTH core)
+Proof
+  rpt gen_tac >> strip_tac >> eq_tac
+  >- (disch_then (mp_tac o AP_TERM ``LENGTH : 'a list -> num``) >>
+      simp[stackModelTheory.stack_pop_def, listTheory.LENGTH_TAKE] >>
+      `0 < LENGTH prefix` by (Cases_on `prefix` >> gvs[]) >> decide_tac) >>
+  strip_tac >> simp[stackModelTheory.stack_pop_def, rich_listTheory.TAKE_APPEND,
+    listTheory.TAKE_LENGTH_TOO_LONG]
+QED
+
+(* A target suffix is not an empty-pending certificate. This symbolic
+   obstruction allows arbitrary prefix, allocator, spills and demand list. *)
+Theorem repeated_suffix_excludes_empty_budget:
+  !base ps prefix targets op.
+    1 < LIST_ELEM_COUNT op targets /\ ps.ps_stack = prefix ++ targets ==>
+    ~residual_budget_wf base [] ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  disch_tac >>
+  qpat_x_assum `residual_budget_wf _ _ _`
+    (strip_assume_tac o REWRITE_RULE [reorderSimTheory.residual_budget_wf_def]) >>
+  qpat_x_assum `!x. LIST_ELEM_COUNT x _ <= SUC _`
+    (qspec_then `op` mp_tac) >>
+  simp[reorderSimTheory.elem_count_append, rich_listTheory.LIST_ELEM_COUNT_THM] >>
+  decide_tac
+QED
+
+(* C3.resources.producers.interface -- consumer-directed resource ledger.
+   This updates the earlier ledger above: several earlier open LOCAL frame
+   facts now exist in Inventory. It does not certify reachable producers.
+
+   Exact resource predicate (reorderSim.residual_budget_wf_def):
+     residual_budget_wf b pending p <=>
+       plan_slots_bounded b p /\
+       spill_alloc_layout_wf p.ps_alloc p.ps_spilled /\
+       (!x. LIST_ELEM_COUNT x p.ps_stack <= SUC (LIST_ELEM_COUNT x pending)) /\
+       (!x. x IN FDOM p.ps_spilled ==>
+            LIST_ELEM_COUNT x p.ps_stack <= LIST_ELEM_COUNT x pending).
+   These are FOUR independent requirements: slot bound, allocator layout,
+   multiplicity upper bound, and stack/spill overlap bound. There is no
+   physical lower bound in this predicate. In the table p[core] abbreviates
+   p with ps_stack := core (comment notation only).
+
+   Consumer family                 pending / actual use / existing boundary
+   ---------------------------------------------------------------------
+   Input emission resource         pending -> pending++operands. Inventory
+     emit_input_plan_marker_core_budget uses residual_budget_wf for count and
+     layout preservation. Coverage is a SEPARATE premise. It is not needed
+     by emit_input_plan_bottom_frame, which needs target exclusion from the
+     prefix and agrees exactly on all non-stack fields via the record frame.
+   Ordinary preparation            [] -> operands or PERM-selected operands.
+     emit_reorder_plan_marker_core_reserve and
+     emit_reorder_pop_marker_execution start with [] on p[core].
+     available_input_plan_length supplies the physical post-emission floor
+     from coverage, not residual_budget_wf. Reorder's protected consumption
+     additionally uses counts to reserve live values below consumed operands.
+   Reorder resource                 pending -> SAME pending.
+     reorder_plan_marker_core_inventory/reserve require the SEPARATE bounds
+     LENGTH pending<=LENGTH core and LENGTH pending<=16. Reserve additionally
+     requires count(pending,v)+live(v)<=count(core,v)+spilled(v).
+     For CODE framing only, reorder_plan_bottom_frame has the exact signature:
+       EVERY (\op. ~MEM op prefix) targets /\
+       LENGTH targets <= LENGTH p.ps_stack /\
+       reorder_plan dfg targets p = (ops,q) ==>
+       reorder_plan dfg targets (p with ps_stack := prefix++p.ps_stack) =
+         (ops,q with ps_stack := prefix++q.ps_stack).
+     No budget, target distinctness, or <=16 premise is needed here. Its
+     reduce_depth_plan_height_bottom_frame already handles unequal height
+     fuels; the earlier ledger's LOCAL fuel obstruction is now resolved.
+   Consumption cancellation        pending -> []. Exact existing signature:
+       p.ps_stack=rest++pending /\ residual_budget_wf b pending p ==>
+       residual_budget_wf b [] (p with ps_stack:=rest)
+     (Inventory.residual_budget_wf_suffix_cancel). This is a CONSUMED suffix,
+     not a license to replace pending by [] while leaving pending on stack.
+   Fresh output push               [] -> []. Setup.fresh_outputs_residual_budget
+     and output_push_marker_core require distinct outputs absent from both
+     stack and spills; counts and overlap matter, not just physical height.
+   Opcode emission                 arbitrary pending -> SAME pending.
+     Setup.generate_emit_ops_residual_budget_wf/core_resource use unchanged
+     slots and allocator; no count transformation. Code pairing additionally
+     needs equal label counters (native emitter can generate fresh labels).
+   Dead output pop / optimistic    [] -> []. Setup.popmany_plan_core_resource,
+     optimistic_swap_plan_core_resource and regular_post_emit_tail_core_resource
+     use distinct core and spill-disjointness from empty budget. Physical
+     versions popmany_plan_prefix_replay and do_swap_prefix_replay instead
+     require actual lookup/window confinement. No empty-pending PHI/JMP
+     certificate is established by these conditional ordinary boundaries.
+   Spill release                   arbitrary pending -> SAME pending.
+     Setup.residual_budget_wf_release_dead_spills/core preserve counts and
+     layout by deleting spill bindings and freeing matching offsets. Pairing
+     requires identical spill maps AND allocator, not stack suffix alone.
+   Whole ordinary stage            [] -> []. Setup.native_regular_core_resource
+     needs opcode<>JMP, operand length<=16, coverage, marker exclusion,
+     output freshness/distinctness. Callers.ordinary_position_invariant also
+     needs definition support to produce freshness and next-position support.
+   Cleanup                         NO residual_budget_wf premise.
+     Inventory.clean_stack_plan_prefix_replay needs common variable core,
+     ALL_DISTINCT core, equal allocators, and (in its active branch) core
+     subset of successor inputs UNION predecessor live-out. Existential
+     promise with height NONE coordinates the elision branch. It permits NEW
+     marker counts m',n'. Neither counts nor common core are produced by the
+     theorem. NULL inputs may mark the whole stack, not a fixed prefix.
+   PHI schedule                    NO residual_budget_wf premise.
+     PhiTemporal.phi_origin_schedule_state_replay needs
+       phi_origin_schedule_ready steps p q cells cells_end,
+       left.stack=p++MAP(phi_cell_value T)cells,
+       right.stack=q++MAP(phi_cell_value F)cells, left.alloc=right.alloc.
+     It returns equal ops and allocator and framed final cell projections.
+     It preserves the other state fields individually; equal spills must
+     therefore be supplied at entry. Origin extinction is not count<=1 for
+     every unmapped repeated base operand in the final cells.
+
+   Proposed separated stage interfaces (NOT claimed as produced invariants):
+   Ordinary paired entry: stacks REPLICATE m marker++core and
+     REPLICATE n marker++core; equal spills/allocator/label-counter; separate
+     slot/layout facts; current query coverage/exclusion and confined windows.
+     To reuse existing ordinary RESOURCE producers, also require [] budget on
+     each core state, live lower coverage and definition-supported freshness.
+     The code-frame part is weaker than this resource-preservation interface.
+   Post-JMP paired entry: stacks REPLICATE m marker++coreP and
+     REPLICATE n marker++coreQ with corresponding target/cell suffixes;
+     equal allocators, empty spills and equal label counter; separate slot/
+     layout facts. Keep the ACTUAL pending targets in any count certificate.
+     Allow new m,n. No [] budget on full coreP/coreQ is inferred. JoinEntry's
+     successful_join_edges_native_cells supplies cell projections/classes,
+     but NOT a marked-prefix decomposition or allocator equality.
+   Post-PHI paired entry: same non-stack equalities, projected final cells
+     become a common suffix after origin extinction. Require residual-prefix
+     query exclusion and physical windows separately. To call the existing
+     first ordinary resource theorem, a further []-budget common-core result
+     is needed; it does not follow merely by completing the PHI schedule.
+
+   Symbolic acceptance/rejection tests, arbitrary lists (no fold EVAL):
+   - stack_pop_nonempty_prefix_frame_iff above gives the EXACT minimum bound
+     n<=LENGTH core. If LENGTH core<n, framing fails, even when
+     n<=LENGTH prefix+LENGTH core. Thus a target window intersecting markers
+     cannot be justified by its fitting the whole stack. This tests both
+     undersized branches of the proposed physical interface at consumption.
+   - repeated_suffix_excludes_empty_budget above rejects [] budget whenever
+     any retained target has multiplicity>1, for ANY prefix/spills/allocator.
+     This is an interface obstruction, not a reachable counterexample.
+   - residual_budget_wf_suffix_cancel is the already checked positive test:
+     cancellation succeeds only after physically removing the pending suffix.
+     JMP does not remove its target suffix. PHI edits are not that pop.
+
+   Missing producers, stated at their use boundary:
+   (1) Actual paired JMP exits must produce common allocator/label fields,
+       empty spills and corresponding cell suffixes with residual-prefix
+       exclusion; pre-reorder core floor remains a separate question.
+   (2) Actual PHI exits must either produce a common []-budget core for the
+       existing ordinary producers, or ordinary producers must be generalized
+       to a reviewed allowance for retained repeated base values. Suffix plus
+       empty spills alone does NOT supply the existing consumer premises.
+   (3) Cleanup's common distinct variable core and active subset premise need
+       a producer, with coordinated override choices and new marker counts.
+   No new certificate definition is introduced: the candidate post-PHI-to-
+   ordinary bridge fails the sufficiency audit without (2). In particular,
+   this audit is not proof that native successful states violate that bridge;
+   global success could exclude the offending multiplicities, but no theorem
+   establishing such exclusion is available. Frozen theorem is untouched.
+*)
