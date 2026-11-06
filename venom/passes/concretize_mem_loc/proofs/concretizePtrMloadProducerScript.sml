@@ -130,7 +130,9 @@ QED
 Resume ptr_paired_prefix_mload[sample]:
   qpat_x_assum `step_inst 0 C _ _ = OK post` mp_tac >>
   qpat_x_assum `step_inst fuel C' _ _ = OK s'` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke] >>
+  PURE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
+  simp[exec_read1_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
   reverse conj_tac
