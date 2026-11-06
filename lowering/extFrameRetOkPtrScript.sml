@@ -16,7 +16,7 @@ Ancestors
   unitShapeDefs o1PassContract extRetScalarCopyCountedPtr extRetBytesCopyCountedPtr
   extRetBulkCopyCountedPtr extRetWordStmtPtr extRetCopySuffixPtr extRetCopyInputsPtr
   extRetOperandBoundaryPtr extRetDispatchProtectionPtr extRetDispatchResultPtr
-  extRetStaticStmtPtr extRetStaticReservedPtr
+  extRetStaticStmtPtr extRetStaticReservedPtr extRetStaticFrameMetadataPtr
 
 val _ = Parse.hide "body";
 
