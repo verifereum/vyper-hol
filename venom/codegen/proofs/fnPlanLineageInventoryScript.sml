@@ -4431,7 +4431,7 @@ Proof
   rw[] >> gvs[]
 QED
 
-Theorem restore_spilled_plan_inventory_count[local]:
+Theorem restore_spilled_plan_inventory_count:
   !targets ps ops ps'.
     restore_spilled_plan targets ps = (ops,ps') ==>
     (!x. LIST_ELEM_COUNT x ps'.ps_stack +
@@ -5146,9 +5146,8 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem reorder_restore_other_resource[local]:
+Theorem reorder_restore_resource[local]:
   !op f n ps ops qs x.
-    x <> op /\
     (case stack_get_unfixed_depth op f n ps.ps_stack of
        SOME _ => ([],ps)
      | NONE => case FLOOKUP ps.ps_spilled op of
@@ -5161,14 +5160,14 @@ Proof
   rpt gen_tac >>
   Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
   Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
-  strip_tac >> gvs[do_restore_def, stack_push_def, AllCaseEqs()] >>
-  simp[FDOM_DOMSUB, SNOC_APPEND, elem_count_append, LIST_ELEM_COUNT_THM]
+  strip_tac >> gvs[] >>
+  drule do_restore_inventory_count >> simp[]
 QED
 
-Theorem reorder_one_other_resource_nonincrease:
+Theorem reorder_one_resource_nonincrease:
   !dfg pending idx op ps ops qs x.
     idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
-    x <> op /\ reorder_one dfg pending idx op ps = (ops,qs) ==>
+    reorder_one dfg pending idx op ps = (ops,qs) ==>
     LIST_ELEM_COUNT x qs.ps_stack +
       (if x IN FDOM qs.ps_spilled then 1 else 0) <=
     LIST_ELEM_COUNT x ps.ps_stack +
@@ -5182,7 +5181,7 @@ Proof
     (if x IN FDOM ps1.ps_spilled then 1 else 0) =
    LIST_ELEM_COUNT x ps.ps_stack +
     (if x IN FDOM ps.ps_spilled then 1 else 0)` by
-    (drule_all reorder_restore_other_resource >> simp[]) >>
+    (drule_all reorder_restore_resource >> simp[]) >>
   `LENGTH pending <= LENGTH ps1.ps_stack` by
     (drule reorder_restore_length_mono >> decide_tac) >>
   Cases_on `stack_get_unfixed_depth op
@@ -5236,9 +5235,9 @@ Proof
   gvs[]
 QED
 
-Theorem plan_steps_reorder_other_resource_nonincrease[local]:
+Theorem plan_steps_reorder_resource_nonincrease[local]:
   !items dfg pending ps ops qs x.
-    EVERY (\(idx,op). idx < LENGTH pending /\ x <> op) items /\
+    EVERY (\(idx,op). idx < LENGTH pending) items /\
     LENGTH pending <= LENGTH ps.ps_stack /\
     plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps =
       (ops,qs) ==>
@@ -5257,14 +5256,14 @@ Proof
     (if x IN FDOM ps1.ps_spilled then 1 else 0) <=
    LIST_ELEM_COUNT x ps.ps_stack +
     (if x IN FDOM ps.ps_spilled then 1 else 0)` by
-    metis_tac[reorder_one_other_resource_nonincrease] >>
+    metis_tac[reorder_one_resource_nonincrease] >>
   first_x_assum drule >> disch_then drule_all >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem reorder_plan_other_resource_nonincrease:
+Theorem reorder_plan_resource_nonincrease:
   !dfg pending ps ops qs x.
-    ~MEM x pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
     reorder_plan dfg pending ps = (ops,qs) ==>
     LIST_ELEM_COUNT x qs.ps_stack +
       (if x IN FDOM qs.ps_spilled then 1 else 0) <=
@@ -5272,7 +5271,7 @@ Theorem reorder_plan_other_resource_nonincrease:
       (if x IN FDOM ps.ps_spilled then 1 else 0)
 Proof
   rpt gen_tac >> strip_tac >>
-  irule plan_steps_reorder_other_resource_nonincrease >>
+  irule plan_steps_reorder_resource_nonincrease >>
   qexistsl [`dfg`, `MAPi (\i op. (i,op)) pending`, `ops`, `pending`] >>
   simp[GSYM reorder_plan_eq_plan_steps, EVERY_EL,
        indexedListsTheory.EL_MAPi, indexedListsTheory.LENGTH_MAPi] >>
@@ -5327,7 +5326,7 @@ Proof
          `LIST_ELEM_COUNT (Var v) ps2.ps_stack =
           LIST_ELEM_COUNT (Var v) ps1.ps_stack` by
            metis_tac[reorder_plan_materialised_counts] >> gvs[]) >>
-     drule_all reorder_plan_other_resource_nonincrease >>
+     drule_all reorder_plan_resource_nonincrease >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   qpat_x_assum `ps2.ps_stack = _` (fn th =>
     qpat_x_assum `LIST_ELEM_COUNT (Var v) ps2.ps_stack + _ <= _`
