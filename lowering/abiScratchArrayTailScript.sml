@@ -136,7 +136,8 @@ Proof
   `site IN abi_decoder_ids first last /\ site IN abi_decoder_ids lo end_st.cs_next_id` by
     (simp[abi_decoder_ids_def] >> decide_tac) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  `b+cap < dimword (:256)` by fs[abi_decoder_budget_def] >>
+  `b+cap < dimword (:256)` by
+    (drule abiDecoderIndexInitTheory.abi_decoder_budget_word_bound >> simp[]) >>
   `slot < dimword (:256)` by decide_tac >>
   `abi_decoder_operand_live prepared.cs_next_var head /\
    abi_decoder_operand_live child_end.cs_next_var dyn_ptr` by

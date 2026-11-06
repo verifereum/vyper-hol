@@ -223,22 +223,6 @@ QED
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
 
-(* Helper: state_equiv {} implies equality *)
-Theorem state_equiv_empty_eq[local]:
-  !s1 s2. state_equiv {} s1 s2 ==> (s1 = s2)
-Proof
-  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
-QED
-
-(* Helper: phi_single_origin always gives an origin with singleton output *)
-Theorem phi_single_origin_has_output[local]:
-  !dfg inst origin.
-    phi_single_origin dfg inst = SOME origin ==>
-    ?v. origin.inst_outputs = [v] /\ dfg_lookup dfg v = SOME origin
-Proof
-  ACCEPT_TAC phiTransformTheory.phi_single_origin_has_output
-QED
-
 Triviality all_distinct_flat_mem:
   !ls (l:'a list). ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
 Proof
@@ -1338,13 +1322,6 @@ Proof
   Induct >> rw[phi_prefix_length_def]
 QED
 
-Triviality phi_prefix_all_phi_local:
-  !insts. EVERY (\inst. inst.inst_opcode = PHI) (TAKE (phi_prefix_length insts) insts)
-Proof
-  Induct >> simp[phi_prefix_length_def] >> rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
-QED
-
 Triviality eval_phis_take_phi_prefix_eq:
   !insts lbl s.
     bb_well_formed <|bb_label := lbl; bb_instructions := insts|> ==>
@@ -1353,7 +1330,7 @@ Proof
   rpt strip_tac >>
   `phi_prefix_length (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
     (`EVERY (\inst. inst.inst_opcode = PHI) (TAKE (phi_prefix_length insts) insts)` by
-       simp[phi_prefix_all_phi_local] >>
+       simp[analysisSimProofsBaseTheory.phi_prefix_all_phi] >>
      `LENGTH (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
        simp[venomExecProofsTheory.phi_prefix_length_le] >>
      simp[phi_prefix_length_every_phi]) >>
@@ -1370,7 +1347,7 @@ Proof
   rpt strip_tac >>
   `phi_prefix_length (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
     (`EVERY (\inst. inst.inst_opcode = PHI) (TAKE (phi_prefix_length insts) insts)` by
-       simp[phi_prefix_all_phi_local] >>
+       simp[analysisSimProofsBaseTheory.phi_prefix_all_phi] >>
      `LENGTH (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
        simp[venomExecProofsTheory.phi_prefix_length_le] >>
      simp[phi_prefix_length_every_phi]) >>
@@ -1426,7 +1403,7 @@ Proof
   `eval_phis s phis = Error e` by
     (qunabbrev_tac `phis` >> metis_tac[eval_phis_take_phi_prefix_eq]) >>
   `EVERY (\inst. inst.inst_opcode = PHI) phis` by
-    (simp[Abbr `phis`, phi_prefix_all_phi_local]) >>
+    (simp[Abbr `phis`, analysisSimProofsBaseTheory.phi_prefix_all_phi]) >>
   `kept = FILTER (\inst. phi_single_origin dfg inst = NONE) phis` by
     (qunabbrev_tac `phis` >> metis_tac[kept_eq_filter_prefix]) >>
   `eliminated = FILTER ($~ o (\inst. phi_single_origin dfg inst = NONE)) phis` by
@@ -1456,7 +1433,7 @@ Proof
   `eval_phis s phis = OK s_phi` by
     (qunabbrev_tac `phis` >> metis_tac[eval_phis_take_phi_prefix]) >>
   `EVERY (\inst. inst.inst_opcode = PHI) phis` by
-    (simp[Abbr `phis`, phi_prefix_all_phi_local]) >>
+    (simp[Abbr `phis`, analysisSimProofsBaseTheory.phi_prefix_all_phi]) >>
   `kept = FILTER (\inst. phi_single_origin dfg inst = NONE) phis` by
     (qunabbrev_tac `phis` >> metis_tac[kept_eq_filter_prefix]) >>
   `eliminated = FILTER ($~ o (\inst. phi_single_origin dfg inst = NONE)) phis` by

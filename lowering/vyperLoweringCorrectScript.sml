@@ -145,6 +145,7 @@ Definition initial_venom_state_rel_def:
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
     vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions /\
     immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
@@ -184,7 +185,8 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         return_bytes tops ret v ss.vs_returndata /\
-        accounts_agree cx am'.accounts ss.vs_accounts /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\

@@ -6,6 +6,7 @@ Ancestors
   affineFoldingDefs
   passSimulationDefs
   venomInst
+  execEquivProps passSharedDefs passSharedProps stateEquivProps venomExecProps venomExecSemantics venomInstProps venomState
 
 Libs
   BasicProvers
@@ -37,15 +38,6 @@ Theorem af_rewrite_inst_not_terminator[local]:
 Proof
   rw[af_rewrite_inst_def] >>
   gvs[AllCaseEqs(), is_terminator_def]
-QED
-
-Theorem af_rewrite_inst_not_phi[local]:
-  !dfg vi inst result.
-    af_rewrite_inst dfg vi inst = SOME result ==>
-    result.inst_opcode <> PHI
-Proof
-  rw[af_rewrite_inst_def] >>
-  gvs[AllCaseEqs()]
 QED
 
 (* ===== Per-instruction structural properties ===== *)
@@ -95,16 +87,6 @@ Theorem af_transform_inst_phi[local]:
     (af_transform_inst dfg vi inst).inst_opcode = PHI
 Proof
   rw[af_transform_inst_def]
-QED
-
-Theorem af_transform_inst_not_phi[local]:
-  !dfg vi inst.
-    inst.inst_opcode <> PHI ==>
-    (af_transform_inst dfg vi inst).inst_opcode <> PHI
-Proof
-  rw[af_transform_inst_def] >>
-  EVERY_CASE_TAC >> rw[] >>
-  imp_res_tac af_rewrite_inst_not_phi >> rw[]
 QED
 
 (* ===== Transform equals function_map_transform ===== *)
@@ -173,7 +155,8 @@ Theorem af_transform_function_correct:
     (!inst. MEM inst (fn_insts fn) ==>
        inst.inst_outputs = [] \/
        ?out_var. inst.inst_outputs = [out_var]) /\
-    (* Bidirectional operand reachability *)
+    (* Bidirectional operand reachability: original operands defined iff transform operands defined.
+       This ensures step equality holds even when operands are undefined (both sides error). *)
     (!inst st. MEM inst (fn_insts fn) ==>
        ((!v. MEM (Var v) inst.inst_operands ==> FLOOKUP st.vs_vars v <> NONE) <=>
         (!v. MEM (Var v) (af_transform_inst (dfg_build_function fn)
@@ -183,5 +166,26 @@ Theorem af_transform_function_correct:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (af_transform_function fn) s)
 Proof
-  ACCEPT_TAC af_transform_function_correct_proof
+  rpt strip_tac >>
+  `run_blocks fuel ctx (af_transform_function fn) s =
+   run_blocks fuel ctx fn s` suffices_by
+    (disch_then (fn th => REWRITE_TAC[th]) >>
+     irule lift_result_refl >> rw[state_equiv_refl, execution_equiv_refl]) >>
+  `af_transform_function fn =
+   function_map_transform
+     (af_transform_block (dfg_build_function fn)
+        (af_compute_fn_var_info fn)) fn` by
+    simp[af_transform_function_def, function_map_transform_def] >>
+  pop_assum (fn th => REWRITE_TAC[th]) >>
+  qspecl_then
+    [`vi_alist_sound (af_compute_fn_var_info fn)`,
+     `af_transform_block (dfg_build_function fn) (af_compute_fn_var_info fn)`,
+     `fn`, `fuel`, `ctx`, `s`]
+    mp_tac run_blocks_map_inv_eq >>
+  disch_then match_mp_tac >>
+  simp[af_transform_block_label] >>
+  conj_tac
+  >- (rpt strip_tac >> irule af_block_eq_helper >> simp[] >> metis_tac[])
+  >> rpt strip_tac >> irule af_P_preserved_helper >> simp[] >> metis_tac[]
 QED
+

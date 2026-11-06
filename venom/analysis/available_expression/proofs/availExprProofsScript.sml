@@ -1,8 +1,8 @@
 (*
  * Available Expression Analysis — Proofs (internal)
  *
- * Cheated proofs for safety properties. The externally-facing API
- * is in availExprAnalysisPropsScript.sml (ACCEPT_TAC wrappers).
+ * Cheated proofs for safety properties. Consumers import them
+ * through availExprAnalysisScript.sml.
  *)
 
 Theory availExprProofs

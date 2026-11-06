@@ -5,7 +5,7 @@ Ancestors
   stmtLowering nonreentrantEquiv transientLockProps
   emitHelperProps exprLoweringProps emitHelper compileEnv context
   venomExecSemantics venomState venomInst
-  vyperAST list rich_list
+  vyperAST list rich_list transientLockFrameProps
 
 Theorem compile_return_unlock_source_correct:
   state_rel func cenv cx vs ss /\
@@ -72,12 +72,6 @@ Proof
        emit_void_def, emit_inst_def, fresh_id_def, emit_def,
        emitted_insts_def, DROP_LENGTH_APPEND] >>
   strip_tac >> gvs[DROP_LENGTH_APPEND]
-QED
-
-Theorem eval_operand_tstore[simp]:
-  eval_operand op (tstore key value ss) = eval_operand op ss
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, tstore_def]
 QED
 
 Theorem eval_operands_tstore[simp]:

@@ -13,11 +13,25 @@ roots = ["vyperHolScript.sml",
          "tests/evalCompilerBaseDftLibTestScript.sml",
          "tests/evalCompilerPlanCacheLibTestScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
+         "tests/vyperCreateOracleTestScript.sml",
+         "tests/createOracleResultTestScript.sml",
+         "tests/createSourceSizeBoundaryTestScript.sml",
+         "tests/vyperCreateMemoryTestScript.sml",
+         "tests/createImmutableBytecodeTestScript.sml",
+         "tests/vyperCreateTypingTestScript.sml",
+         "tests/create/vyperCtorAliasTestScript.sml",
+         "tests/create/vyperCtorStorageAliasTestScript.sml",
+         "tests/createSemanticAuditScript.sml",
+         "tests/createLoweringAuditScript.sml",
+         "lowering/createOracleClosureAuditScript.sml",
+         "venom/codegen/proofs/asmCallActivationRegressionScript.sml",
+         "tests/vyperOracleInitialStateTestScript.sml",
          "tests/vyperExternalDefaultsTestScript.sml",
          "tests/vyperExternalEntryBehaviorScript.sml",
          "tests/vyperExternalEntrySourceBehaviorScript.sml",
          "tests/vyperExternalHeadersTestScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeExternalEntriesScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerBytecodeAsmOptScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantMultiScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPragmaScript.sml",
@@ -77,7 +91,7 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "f5562577de645f973144750d88223bce177b6a1b"
+rev = "837592d18c1ad4f9a040bd8dcc99cf35715803f3"
 
 # Functor parameter signatures are not inferred by HOL's module scanner.
 [actions.JsonASTDecodeFn]

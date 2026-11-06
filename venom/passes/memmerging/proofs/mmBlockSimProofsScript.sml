@@ -16,6 +16,8 @@ Ancestors
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
   mmCopy mmScan mmEntryProofs passSharedField passSharedDefs execEquivProps
+Libs
+  stepInstBaseLib
 
 (* apply_groups_inst on non-terminators produces non-terminators/non-INVOKE *)
 Theorem apply_groups_inst_non_term[local]:
@@ -106,8 +108,9 @@ Proof
     conj_tac >- (rpt strip_tac >> drule mode_inst_ok_non_term >> simp[]) >>
     simp[]) >>
   `apply_groups_inst mode nop_set rep_map term = [term]` by (
-    simp[Abbr `term`, Abbr `nop_set`, Abbr `rep_map`,
-         apply_groups_inst_def]) >>
+    qpat_x_assum `~MEM term.inst_id nop_set` (fn nop =>
+    qpat_x_assum `ALOOKUP rep_map term.inst_id = NONE` (fn rep =>
+      MATCH_ACCEPT_TAC (MATCH_MP apply_groups_unchanged (CONJ nop rep))))) >>
   `!x. MEM (Var x) term.inst_operands ==> x NOTIN fresh` by
     fs[Abbr `term`] >>
   suspend "bridge"
@@ -132,7 +135,8 @@ Resume mm_block_simulates_mode_proof[bridge]:
     match_mp_tac mode_run_insts_lift_result >>
     (conj_tac >- fs[]) >> fs[])) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
-  BETA_TAC >> rw[]
+  BETA_TAC >> disch_then match_mp_tac >>
+  qpat_x_assum `s.vs_inst_idx = 0` (fn th => simp_tac bool_ss [th])
 QED
 
 Finalise mm_block_simulates_mode_proof;
@@ -1356,7 +1360,9 @@ Proof
     (* 1: non-empty *)
     simp[apply_groups_inst_nonempty],
     (* 2: terminator identity *)
-    simp[apply_groups_inst_def],
+    qpat_x_assum `~MEM _ _` (fn nop =>
+    qpat_x_assum `ALOOKUP _ _ = NONE` (fn rep =>
+      MATCH_ACCEPT_TAC (MATCH_MP apply_groups_unchanged (CONJ nop rep)))),
     (* 3: non-term preservation, through the small structural interface. *)
     rpt strip_tac >> irule apply_groups_inst_non_terminator >> simp[]
   ]
@@ -1615,7 +1621,8 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  simp[Once step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+  stepInstBaseLib.with_opcode_clause
+    (fn ths => simp (ths @ [AllCaseEqs(), jump_to_def])) >>
   rpt strip_tac >> gvs[] >>
   (* The opaque DRET packing result still returns IntRet, never OK. *)
   pairarg_tac >> gvs[]

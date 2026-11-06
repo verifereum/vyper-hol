@@ -1,7 +1,7 @@
 (*
  * Properties of accounts_rel (#665): the state_rel component that relates
- * every address's accounts and transient storage, with no source pending
- * deletions.  The running contract's storage and transient storage agree
+ * every address's accounts and transient storage. The running contract's
+ * storage and transient storage agree
  * only on their live bytes (#637); everything else is equal.
  *
  * TOP-LEVEL:
@@ -45,8 +45,7 @@
  *   accounts_rel_storage_transient — storage_rel and transient_rel are
  *                             accounts_rel's case for the running contract
  *   accounts_rel_frame, accounts_rel_updates — accounts_rel reads only
- *                             the accounts, transient storage and pending
- *                             deletions
+ *                             the accounts and transient storage
  *)
 
 Theory accountsRelProps
@@ -68,6 +67,20 @@ Proof
   simp[accounts_agree_def]
 QED
 
+Theorem accounts_agree_process_deletions:
+  !cx ds a1 a2.
+    accounts_agree cx a1 a2 ==>
+    accounts_agree cx (process_deletions ds a1) (process_deletions ds a2)
+Proof
+  gen_tac >> Induct_on `ds` >>
+  simp[process_deletions_def] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  Cases_on `h = cx.txn.target` >>
+  gvs[accounts_agree_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM, storage_agree_def]
+QED
+
 Theorem transient_agree_refl[simp]:
   !cx t. transient_agree cx t t
 Proof
@@ -87,7 +100,7 @@ Theorem state_rel_accounts:
     state_rel func cenv cx es s ==>
     accounts_agree cx es.accounts s.vs_accounts /\
     transient_agree cx es.tStorage s.vs_transient /\
-    es.pending_deletions = []
+    es.pending_deletions = s.vs_pending_deletions
 Proof
   rw[state_rel_def, accounts_rel_def]
 QED
@@ -105,9 +118,7 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts, transient storage and pending
-   deletions of the source and the accounts and transient storage of
-   Venom. *)
+(* accounts_rel reads only the accounts and transient storage of both sides. *)
 Theorem accounts_rel_frame:
   !cx es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
@@ -277,7 +288,8 @@ Theorem take_outcome_agree:
     transient_agree cx o1.co_tStorage o2.co_tStorage
 Proof
   rw[request_agree_def] >>
-  `rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
+  `rq1.cr_kind = rq2.cr_kind /\
+   rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
    rq1.cr_value = rq2.cr_value` by
     (qpat_x_assum `_ = rq2` (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[take_outcome_def, computed_precompile_def, failed_outcome_def,
@@ -292,6 +304,7 @@ Theorem accounts_rel_adopt_call_outcome:
   !cx rq rq' outcome outcome' es es' s s' logs.
     accounts_rel cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
     rq'.cr_static = rq.cr_static /\
+    rq'.cr_kind = rq.cr_kind /\
     outcome with <| co_accounts := outcome'.co_accounts;
                     co_tStorage := outcome'.co_tStorage |> = outcome' /\
     accounts_agree cx outcome.co_accounts outcome'.co_accounts /\

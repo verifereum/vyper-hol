@@ -21,7 +21,7 @@ Libs
 (* If an invariant P holds on the initial state and is preserved by
    each block, and each block transforms identically when P holds,
    then run_function on the transformed function is identical. *)
-Triviality run_blocks_map_inv_eq:
+Theorem run_blocks_map_inv_eq:
   !P bt fn fuel ctx s.
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s. MEM bb fn.fn_blocks /\ P s ==>
@@ -154,7 +154,7 @@ QED
 
 (* ===== Transform Shape Preservation ===== *)
 
-Theorem af_transform_block_label[local]:
+Theorem af_transform_block_label:
   !dfg vi bb. (af_transform_block dfg vi bb).bb_label = bb.bb_label
 Proof
   rw[af_transform_block_def]
@@ -791,7 +791,7 @@ Proof
   drule af_rewrite_inst_cases >> strip_tac >> gvs[]
 QED
 
-Theorem af_transform_inst_not_phi[local]:
+Theorem af_transform_inst_not_phi:
   !dfg vi inst.
     inst.inst_opcode <> PHI ==>
     (af_transform_inst dfg vi inst).inst_opcode <> PHI
@@ -1239,7 +1239,7 @@ Proof
 QED
 
 (* Helper: transformed block equals original block under vi_alist_sound *)
-Triviality af_block_eq_helper:
+Theorem af_block_eq_helper:
   !fn bb fuel ctx s.
     (!inst. MEM inst (fn_insts fn) ==>
        vi_entry_consistent (af_compute_fn_var_info fn) inst) /\
@@ -1292,7 +1292,7 @@ Proof
 QED
 
 (* Helper: vi_alist_sound is preserved through block execution *)
-Triviality af_P_preserved_helper:
+Theorem af_P_preserved_helper:
   !fn bb fuel ctx s s'.
     fn_inst_wf fn /\
     (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
@@ -1330,63 +1330,3 @@ Proof
   drule_all vi_alist_sound_fn_step >> simp[Abbr `vi`]
 QED
 
-Theorem af_transform_function_correct_proof:
-  !fuel ctx fn s.
-    (* SSA uniqueness: each variable defined at most once *)
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    (* Structural well-formedness *)
-    fn_inst_wf fn /\
-    (* Lattice soundness for initial state *)
-    vi_alist_sound (af_compute_fn_var_info fn) s /\
-    (* Per-instruction lattice consistency (from FOLDL + SSA) *)
-    (!inst. MEM inst (fn_insts fn) ==>
-       vi_entry_consistent (af_compute_fn_var_info fn) inst) /\
-    (* SSA: output variable not in operands *)
-    (!inst out_var. MEM inst (fn_insts fn) /\
-       inst.inst_outputs = [out_var] ==>
-       ~MEM (Var out_var) inst.inst_operands) /\
-    (* SSA: no cross-variable base references to output *)
-    (!inst out_var v entry. MEM inst (fn_insts fn) /\
-       inst.inst_outputs = [out_var] /\
-       ALOOKUP (af_compute_fn_var_info fn) v = SOME entry /\
-       v <> out_var /\ vi_base entry = SOME (Var out_var) ==> F) /\
-    (* No INVOKE instructions (affine folding is intra-procedural) *)
-    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
-    (* Each instruction has 0 or 1 outputs *)
-    (!inst. MEM inst (fn_insts fn) ==>
-       inst.inst_outputs = [] \/
-       ?out_var. inst.inst_outputs = [out_var]) /\
-    (* Bidirectional operand reachability: original operands defined iff transform operands defined.
-       This ensures step equality holds even when operands are undefined (both sides error). *)
-    (!inst st. MEM inst (fn_insts fn) ==>
-       ((!v. MEM (Var v) inst.inst_operands ==> FLOOKUP st.vs_vars v <> NONE) <=>
-        (!v. MEM (Var v) (af_transform_inst (dfg_build_function fn)
-               (af_compute_fn_var_info fn) inst).inst_operands ==>
-             FLOOKUP st.vs_vars v <> NONE))) ==>
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (af_transform_function fn) s)
-Proof
-  rpt strip_tac >>
-  `run_blocks fuel ctx (af_transform_function fn) s =
-   run_blocks fuel ctx fn s` suffices_by
-    (disch_then (fn th => REWRITE_TAC[th]) >>
-     irule lift_result_refl >> rw[state_equiv_refl, execution_equiv_refl]) >>
-  `af_transform_function fn =
-   function_map_transform
-     (af_transform_block (dfg_build_function fn)
-        (af_compute_fn_var_info fn)) fn` by
-    simp[af_transform_function_def, function_map_transform_def] >>
-  pop_assum (fn th => REWRITE_TAC[th]) >>
-  qspecl_then
-    [`vi_alist_sound (af_compute_fn_var_info fn)`,
-     `af_transform_block (dfg_build_function fn) (af_compute_fn_var_info fn)`,
-     `fn`, `fuel`, `ctx`, `s`]
-    mp_tac run_blocks_map_inv_eq >>
-  disch_then match_mp_tac >>
-  simp[af_transform_block_label] >>
-  conj_tac
-  >- (rpt strip_tac >> irule af_block_eq_helper >> simp[] >> metis_tac[])
-  >> rpt strip_tac >> irule af_P_preserved_helper >> simp[] >> metis_tac[]
-QED

@@ -18,8 +18,7 @@
  *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   accounts_rel     — every address's accounts and transient storage match,
- *                      the running contract's storage up to dead bytes, and
- *                      no pending deletions
+ *                      the running contract's storage up to dead bytes
  *   dead_bytes       — the bytes of a stored value past a bytestring's
  *                      length (or a nested DynArray's)
  *   storage_dead     — dead_bytes of a declared storage region, which the
@@ -1132,22 +1131,16 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree, and the
-   source has no pending deletions.  Other addresses' accounts and
+(* The accounts and the transient storage of every address agree.
+   Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
-   them equal again.  The source's pending deletions come only from create
-   runs, which the supported subset leaves out; a transaction starts with
-   none, as call_external empties them on success.  Venom also adds the
-   callee's deletions (co_toDelete) on a successful call; the source does
-   not adopt them yet, so this relation says nothing about Venom's queue.
-   The success case of the external result relation, which compares the
-   accounts after the source processes its deletions, needs them empty. *)
+   them equal again. Pending deletion queues are related separately by
+   state_rel and finalized at the external transaction boundary. *)
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient ∧
-    vs.pending_deletions = []
+    transient_agree cx vs.tStorage ss.vs_transient
 End
 
 (* ===== Immutables Relation ===== *)
@@ -1375,10 +1368,8 @@ End
    - transient_rel, transient_vars_rel: transient storage up to dead bytes,
      and the slots of transient variables.
    - accounts_rel: the accounts and transient storage of every address (the
-     running contract's storage up to dead bytes), and no pending
-     deletions, which the success case of the external result relation
-     compares (storage_rel and transient_rel are its case for the running
-     contract).
+     running contract's storage up to dead bytes); storage_rel and
+     transient_rel are its case for the running contract.
    - immutables_rel: immutables (staged memory in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -1388,7 +1379,9 @@ End
      asks a static request exactly when the source does.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation; a request's
-     snapshot of the running contract's storage agrees up to dead bytes. *)
+     snapshot of the running contract's storage agrees up to dead bytes.
+   - pending_deletions: equality with vs_pending_deletions, including effects
+     accumulated from adopted external-call outcomes. *)
 Definition state_rel_def:
   state_rel func cenv cx (vs:evaluation_state) ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
@@ -1402,7 +1395,8 @@ Definition state_rel_def:
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     LIST_REL (request_agree cx) vs.requests ss.vs_requests)
+     LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
+     vs.pending_deletions = ss.vs_pending_deletions)
 End
 
 (* Legacy event invariant: retain the word-indexed immutable bookkeeping

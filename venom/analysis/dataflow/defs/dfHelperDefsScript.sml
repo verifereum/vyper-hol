@@ -36,3 +36,33 @@ End
 Definition list_union_def:
   list_union xs ys = xs ++ FILTER (λv. ¬MEM v xs) ys
 End
+
+Theorem sum_complement_mono:
+  !f g (n:num) ls.
+    (!x. MEM x ls ==> g x <= f x /\ f x <= n) ==>
+    SUM (MAP (\x. n - f x) ls) <= SUM (MAP (\x. n - g x) ls)
+Proof
+  Induct_on `ls` >> simp[] >> rpt strip_tac >>
+  `g h <= f h /\ f h <= n` by metis_tac[] >>
+  `!x. MEM x ls ==> g x <= f x /\ f x <= n` by metis_tac[] >>
+  res_tac >> DECIDE_TAC
+QED
+
+Theorem sum_complement_strict:
+  !f g (n:num) ls x.
+    MEM x ls /\ g x < f x /\ f x <= n /\
+    (!y. MEM y ls ==> g y <= f y /\ f y <= n) ==>
+    SUM (MAP (\y. n - f y) ls) < SUM (MAP (\y. n - g y) ls)
+Proof
+  Induct_on `ls` >> rw[] >> fs[] >> (
+    `g h <= f h /\ f h <= n` by metis_tac[] >>
+    `!y. MEM y ls ==> g y <= f y /\ f y <= n` by metis_tac[]
+  )
+  >- (`SUM (MAP (\y. n - f y) ls) <= SUM (MAP (\y. n - g y) ls)` by
+        (irule sum_complement_mono >> metis_tac[]) >>
+      DECIDE_TAC)
+  >> `SUM (MAP (\y. n - f y) ls) < SUM (MAP (\y. n - g y) ls)` by
+       (first_x_assum (qspecl_then [`f`, `g`, `n`, `x`] mp_tac) >> simp[] >>
+        metis_tac[]) >>
+     DECIDE_TAC
+QED
