@@ -5,8 +5,8 @@ Ancestors bodyPtrStructLitOwnershipSubscriptTails bodyPtrStructLitOwnershipMemor
   loweringShapeProps loweringShapeDefs loweringShapeRules exprLowering
   stackPlanTypes venomInst context compileEnv unitShapeDefs list
 
-Theorem target_scalar_op_shape[local]:
-  shape_stable R /\ MEM opc [ADD; MLOAD; SHA3] ==>
+Theorem target_scalar_op_shape:
+  shape_stable R /\ MEM opc [ADD; MLOAD; SHA3; SLT; LT; ISZERO; OR; MUL] ==>
   shape_step internal compiler_label
     (\s. R s /\ EVERY (plain_operand s) ops) (emit_op opc ops)
     (\v s. R s /\ plain_operand s v)
@@ -39,8 +39,8 @@ Proof
   metis_tac[is_label_operand_def]
 QED
 
-Theorem target_scalar_op_bind[local]:
-  shape_stable R /\ MEM opc [ADD; MLOAD; SHA3] /\
+Theorem target_scalar_op_bind:
+  shape_stable R /\ MEM opc [ADD; MLOAD; SHA3; SLT; LT; ISZERO; OR; MUL] /\
   (!s. R s ==> EVERY (plain_operand s) ops) /\
   (!v. shape_step internal compiler_label (\s. R s /\ plain_operand s v) (k v) Q) ==>
   shape_step internal compiler_label R (comp_bind (emit_op opc ops) k) Q
