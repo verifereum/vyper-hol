@@ -3343,3 +3343,67 @@ val ld_proposed_return_normal_restore =
    representation at INVOKE; use support transport under allocation extension
    and owner restriction. Do not save old bytes or global taints. This diagnostic
    does not authorize that change and proves no exact RETURN closure. *)
+
+(* Shared-witness saved geometry refinement. Old candidates and theorem
+   statements above are deliberately unchanged. *)
+val ld_indexed_saved_geometry = ``\lo E astk gstk savedkeys.
+  !q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry E owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))``;
+
+val ld_recursive_saved_candidate =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (normal,exceptional) = dest_disj body
+    val (ws,b) = strip_exists normal
+    fun named name =
+      case List.filter (fn v => fst(dest_var v) = name) ws of
+        [v] => v | _ => raise Fail ("missing unique normal witness: " ^ name)
+    val astk = named "astk" and gstk = named "gstk"
+    val E = named "E" and savedkeys = named "savedkeys"
+    val _ = if length args = 7 andalso length ws > 0 andalso is_conj b
+            then () else raise Fail "unexpected recursive candidate shape"
+    val slice = rhs (concl (DEPTH_CONV BETA_CONV
+      (list_mk_comb(ld_indexed_saved_geometry,
+        [``lo:num``,E,astk,gstk,savedkeys]))))
+    val refined = list_mk_abs(args,
+      mk_disj(list_mk_exists(ws,mk_conj(b,slice)),exceptional))
+    val (_,result) = strip_abs refined
+    val _ = if aconv (snd(dest_disj result)) exceptional then ()
+            else raise Fail "changed exceptional arm"
+  in refined end;
+
+Theorem ld_recursive_saved_forget:
+  !vs0 CT stk un gn j t.
+    (^ld_recursive_saved_candidate) vs0 CT stk un gn j t ==>
+    (^ld_recursive_candidate) vs0 CT stk un gn j t
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  disch_then (DISJ_CASES_THEN2 mp_tac mp_tac)
+  >- (rpt (disch_then (CHOOSE_THEN mp_tac)) >>
+      disch_then (assume_tac o CONJUNCT1) >> disj1_tac >>
+      qexistsl_tac [`astk`, `gstk`, `k`, `L`, `AP`, `AG`, `tn`, `fn`, `i`,
+        `s`, `ta`, `ua`, `V`, `U`, `E`, `H`, `BP`, `BH`, `live`, `keys`, `A`,
+        `suspended`, `f`, `fa`, `fb`, `bb`, `gb`, `a0`, `a1`, `a2`, `a3`,
+        `pre`, `post`, `p`, `code`, `tail`, `bpre`, `bpost`, `qpre`, `qpost`,
+        `supports`, `savedkeys`, `s0`, `n`] >> first_assum ACCEPT_TAC) >>
+  disch_then assume_tac >> disj2_tac >> first_assum ACCEPT_TAC
+QED
+
+val ld_recursive_saved_clause_goals =
+  let
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses,_) = dest_imp body
+    val originals = strip_conj clauses
+    val _ = if length originals = 5 then ()
+            else raise Fail "expected five projected constructor clauses"
+  in map (subst [p |-> ld_recursive_saved_candidate]) originals end;
+val [ld_recursive_saved_entry_goal,ld_recursive_saved_next_goal,
+     ld_recursive_saved_block_goal,ld_recursive_saved_call_goal,
+     ld_recursive_saved_return_goal] = ld_recursive_saved_clause_goals;
