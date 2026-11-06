@@ -242,15 +242,15 @@ Proof
 QED
 
 Theorem abi_encoder_window_input_suffix_mem_agree:
-  abi_encoder_window_input ei at av (sb+so) (rc-so) mem /\
-  mem_bytes_at sb rc mem = mem_bytes_at sb rc mem' ==>
-  abi_encoder_window_input ei at av (sb+so) (rc-so) mem'
+  abi_encoder_window_input ei at av (sb+k) (n-k) mem /\
+  mem_bytes_at sb n mem = mem_bytes_at sb n mem' ==>
+  abi_encoder_window_input ei at av (sb+k) (n-k) mem'
 Proof
-  strip_tac >> Cases_on `so <= rc`
+  strip_tac >> Cases_on `k <= n`
   >- (drule abi_encoder_window_input_mem_agree >> disch_then irule >>
       drule abi_encoder_window_slice >>
-      disch_then (qspecl_then [`so`,`rc-so`] mp_tac) >> simp[])
-  >> `rc - so = 0` by decide_tac >> fs[] >>
+      disch_then (qspecl_then [`k`,`n-k`] mp_tac) >> simp[])
+  >> `n - k = 0` by decide_tac >> pop_assum SUBST_ALL_TAC >>
   drule abi_encoder_window_input_empty_memory >> simp[]
 QED
 
@@ -271,13 +271,17 @@ Proof
   `abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
     (sb+mem_sz) (cap-mem_sz) mem` by
     (simp[abi_encoder_window_complex_iff, abi_encoder_tuple_type_def] >>
-     rpt strip_tac >> first_x_assum (qspec_then `SUC i` mp_tac) >>
+     rpt gen_tac >> strip_tac >>
+     first_x_assum (qspecl_then [`SUC i`,`ei'`,`abi_sz'`,`mem_sz'`,`dyn'`] mp_tac) >>
      simp_tac (srw_ss()) [abi_encoder_member_span_def, ADD_ASSOC] >>
-     strip_tac >> simp[] >> qexists_tac `child_cap` >> simp[]) >>
+     impl_tac >- fs[] >>
+     strip_tac >> asm_rewrite_tac [] >> qexists_tac `child_cap` >> fs[AC ADD_COMM ADD_ASSOC]) >>
   `infos <> [] ==> mem_sz <= cap` by
     (strip_tac >> Cases_on `infos` >- fs[] >> rename1 `h::rest` >>
      PairCases_on `h` >> first_x_assum (qspec_then `1` mp_tac) >>
-     simp[abi_encoder_member_span_def] >> strip_tac >> decide_tac) >>
+     simp[abi_encoder_member_span_def] >>
+     impl_tac >- (`LENGTH avs = SUC (LENGTH rest)` by fs[] >> decide_tac) >>
+     strip_tac >> decide_tac) >>
   first_x_assum (qspec_then `0` mp_tac) >>
   simp[abi_encoder_member_span_def] >> strip_tac >>
   asm_rewrite_tac [] >> qexists_tac `child_cap` >> asm_rewrite_tac []
