@@ -468,3 +468,164 @@ Proof
        (CONJUNCT1 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
   gen_tac >> Cases_on `return_buf` >> simp[cs_extends_refl]
 QED
+
+Theorem first_emission_send:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty hg args dr a x b.
+  compile_call cfn ce rt ty (Send hg) args dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `args` >>
+  simp[Once compile_call_def, LET_THM]
+  >- (map_every qid_spec_tac [`b`, `x`, `a`] >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]) >>
+  Cases_on `t` >> simp[Once compile_call_def, LET_THM]
+  >- (map_every qid_spec_tac [`b`, `x`, `a`] >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]) >>
+  IF_CASES_TAC
+  >- (map_every qid_spec_tac [`b`, `x`, `a`] >>
+      ntac 2 (ho_match_mp_tac first_emission_pair_let >> conj_tac
+        >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (Cases_on `t'` >> simp[cs_extends_refl] >>
+          Cases_on `t` >> simp[cs_extends_refl] >>
+          ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      simp[cs_extends_refl]) >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]
+QED
+
+Theorem first_emission_invalid_call:
+  !ct cfn ce rt ty args dr a x b.
+  MEM ct [RawLog; RawRevert; SelfDestructTarget] /\
+  compile_call cfn ce rt ty ct args dr a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> simp_tac (srw_ss()) [MEM] >> strip_tac >> gvs[] >>
+  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
+  Cases_on `emit_inst INVALID [] [] a` >> simp[] >> strip_tac >> gvs[] >>
+  drule_at Any (CONJUNCT1 first_emission_emit_helpers) >> simp[]
+QED
+
+Theorem first_emission_external_call_kwargs[local]:
+  !ce addr av ats ms az mid rz rmin rm stat cv gas skip hd dv rt dt ei di a x b.
+  compile_external_call_kwargs ce addr av ats ms az mid rz rmin rm stat cv gas
+    skip hd dv rt dt ei di a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> simp_tac (srw_ss()) [compile_external_call_kwargs_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_alloc_buffer] >>
+  gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  map_every qx_gen_tac [`a`, `x`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (x,b)` >>
+  `!s. cs_extends s (SND (tail s)) /\
+       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
+    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
+  rpt (FIRST [irule fresh_label_bind_labels >> rpt gen_tac >> disch_tac,
+              irule comp_bind_labels >> conj_tac >> rpt gen_tac,
+              irule comp_ignore_bind_labels >> conj_tac >> rpt gen_tac] >>
+       BETA_TAC >> simp[LET_THM, emit_op_labels, emit_inst_labels, emit_void_labels,
+         compile_alloc_buffer_labels, compile_extcall_store_values_labels,
+         compile_abi_encode_labels, compile_abi_decode_labels,
+         compile_return_value_decode_labels, comp_return_labels])
+  >~ [`new_block`] >- (irule new_block_action_labels >> simp[])
+  >~ [`new_block`] >- (irule new_block_action_labels >> simp[]) >>
+  IF_CASES_TAC >> simp[comp_return_labels, emit_op_labels,
+                       compile_extcodesize_check_labels] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[LET_THM, compile_alloc_buffer_labels,
+         compile_extcall_store_values_labels, emit_op_labels,
+         compile_abi_encode_labels, comp_return_labels]) >>
+  IF_CASES_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[compile_alloc_buffer_labels,
+         compile_default_return_path_labels, compile_return_value_decode_labels,
+         compile_abi_decode_labels, comp_return_labels])
+QED
+
+Theorem first_emission_extcall:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty stat skip sig opts args dr a x b.
+  compile_call cfn ce rt ty (ExtCall stat skip sig opts) args dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> PairCases_on `sig` >> Cases_on `args` >>
+  simp[Once compile_call_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (drule first_emission_ext_call_kwargs >> disch_then MATCH_ACCEPT_TAC) >>
+  gen_tac >> PairCases_on `v` >> simp_tac (srw_ss()) [LET_THM] >>
+  Cases_on `v2` >> simp_tac (srw_ss()) [LET_THM]
+  >- suspend "extcall_tail" >>
+  PairCases_on `x` >> simp_tac (srw_ss()) [LET_THM] >>
+  suspend "extcall_tail"
+QED
+
+Resume first_emission_extcall[extcall_tail]:
+  markerLib.RESUME_TAC >>
+  (Cases_on `v1` >> simp_tac (srw_ss()) [LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+            (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule first_emission_external_call_kwargs >> simp[]) >>
+      rpt gen_tac >> IF_CASES_TAC >> simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (rpt strip_tac >> drule first_emission_external_call_kwargs >> simp[]) >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[cs_extends_refl])
+QED
+
+Finalise first_emission_extcall
