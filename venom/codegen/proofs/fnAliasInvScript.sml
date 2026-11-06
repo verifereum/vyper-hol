@@ -7531,6 +7531,45 @@ Proof
   simp[] >> disch_then drule >> simp[] >> metis_tac[]
 QED
 
+Theorem alias_lineage_nonentry_use_origin:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ fn_entry_label fn <> SOME lbl /\
+  run_block fuel ctx bb s = OK s' /\
+  (!pred y. s.vs_prev_bb = SOME pred /\
+    MEM y (input_vars_from pred bb.bb_instructions (live_vars_at liveness lbl 0)) ==>
+      plan_holds ps (Var y)) /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) ==>
+  plan_holds ps (Var x) \/ ?k. k < i /\ MEM x (EL k bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  Cases_on `?k. k < i /\ MEM x (EL k bb.bb_instructions).inst_outputs`
+  >- metis_tac[] >>
+  disj1_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (`cfg_reachable_of (cfg_analyze fn) lbl` by
+       metis_tac[alias_lineage_reachable] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl 0)` by
+    (drule_all alias_use_entry_or_earlier_definition >>
+     simp[inst_defs_def] >> metis_tac[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl i)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >> simp[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions)))` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >>
+     qexistsl_tac [`bb`, `i`] >> simp[inst_defs_def] >> metis_tac[]) >>
+  drule_at (Pat `lineage_state _ _ _ _ _ _ _`) alias_lineage_ordinary_entry_held >>
+  simp[] >> disch_then drule >> simp[] >> metis_tac[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
