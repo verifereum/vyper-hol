@@ -989,15 +989,15 @@ End
 
 (* ===== Storage Relation up to Dead Bytes ===== *)
 (* The source writes a bytestring as its length and the slots its bytes use
-   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering copies
-   the value's whole storage block from its memory buffer
-   (compile_memory_to_storage, Python's _store_memory_to_storage), so the
-   bytes past the length, up to the capacity, hold whatever the buffer held
-   there.  A DynArray nested in another value is copied the same way, so its
-   elements past its length do too.  Nothing reads them: decoding reads a
-   length first and only the bytes or elements below it.  The relation on
-   the running contract's storage and transient storage therefore only
-   compares the bytes that are not dead.
+   (encode_dyn_bytes_slots), zero-padding the last one, and a DynArray as its
+   length and its elements below it; a pop zeroes the popped element.  The
+   lowering (compile_store_slots) writes the same slots, but copies the last
+   word of a bytestring from its memory buffer as it is, and leaves a popped
+   element in place.  So the bytes past a bytestring's length, and the
+   elements past a DynArray's, can differ.  Nothing reads them: decoding
+   reads a length first and only the bytes or elements below it.  The
+   relation on the running contract's storage and transient storage
+   therefore only compares the bytes that are not dead.
 
    dead_bytes st base tv j b: byte b (0 = most significant) of slot j is
    dead in a value of type tv stored at slot base of st, by the lengths
