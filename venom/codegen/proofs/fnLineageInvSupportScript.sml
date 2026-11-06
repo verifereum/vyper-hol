@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanLineagePhiMaps phiBlock fnLineageInvPhi fnPlanLineagePhiClasses cfgNormBase fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  fnPlanLineageDemandSupport fnPlanLineagePhiMaps phiBlock fnLineageInvPhi fnPlanLineagePhiClasses cfgNormBase fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
   stackPlanTypes stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -590,3 +590,106 @@ Resume analyzed_join_released_phi_prefix_preservation[incoming]:
 QED
 
 Finalise analyzed_join_released_phi_prefix_preservation
+
+Theorem analyzed_phi_output_dead_at_entry:
+ !fn entry lbl bb phi v.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn lbl /\ lbl <> entry /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs ==>
+ ~MEM v (live_vars_at (liveness_analyze fn) lbl 0)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `wf_function fn` by gvs[codegen_ready_fn_def] >>
+ `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+   (drule cfg_analyze_reachable_sets >> simp[pred_setTheory.EXTENSION] >>
+    metis_tac[fn_reachable_cfg_analyze]) >>
+ `?i. i < LENGTH (collect_phis bb.bb_instructions) /\
+      EL i (collect_phis bb.bb_instructions) = phi` by metis_tac[MEM_EL] >>
+ qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+ `i < LENGTH bb.bb_instructions /\ EL i bb.bb_instructions = phi` by
+   (qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
+    simp[EL_APPEND1]) >>
+ `!k. k <= i ==> ~MEM v (inst_uses (EL k bb.bb_instructions))` by
+   (gen_tac >> disch_tac >> irule reachable_phi_prefix_no_output_use_alias >>
+    goal_assum (drule_at Any) >> simp[] >>
+    qexistsl_tac [`bb`, `entry`, `fn`, `lbl`] >> simp[] >>
+    `k < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+    `EL k bb.bb_instructions = EL k (collect_phis bb.bb_instructions)` by
+      (qpat_assum `bb.bb_instructions = _` (mp_tac o Q.AP_TERM `\xs. EL k xs`) >>
+       simp[EL_APPEND1]) >> metis_tac[EL_MEM]) >>
+ `~MEM v (inst_uses phi)` by
+   (qpat_x_assum `!k. k <= i ==> _` (qspec_then `i` mp_tac) >> simp[]) >>
+ `~MEM v (live_vars_at (liveness_analyze fn) lbl i)` by
+   (drule livenessProofsTheory.live_vars_at_transfer >>
+    disch_then (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >> simp[] >>
+    simp[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
+         venomInstTheory.inst_defs_def, MEM_FILTER]) >>
+ irule analyzed_dead_before_use_free_interval >>
+ goal_assum (drule_at Any) >> simp[] >> qexists_tac `i` >> simp[]
+QED
+
+Theorem analyzed_phi_output_excluded_edge_input:
+ !fn entry pred lbl bb phi v.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn lbl /\ lbl <> entry /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs ==>
+ ~MEM v (input_vars_from pred bb.bb_instructions
+   (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `~MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
+   (irule analyzed_phi_output_dead_at_entry >> metis_tac[]) >>
+ strip_tac >> drule input_vars_from_projected_membership >> strip_tac >>
+ `~MEM v (inst_uses phi')` by
+   (irule reachable_phi_prefix_no_output_use_alias >> metis_tac[]) >>
+ `MEM (Var v) phi'.inst_operands` by metis_tac[cfgNormBaseTheory.phi_pairs_mem_var] >>
+ gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]
+QED
+
+Theorem analyzed_singleton_live_out_excludes_phi_output:
+ !fn entry pred pb succ sb phi v.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ MEM phi (collect_phis sb.bb_instructions) /\ MEM v phi.inst_outputs ==>
+ ~MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `wf_function fn` by gvs[codegen_ready_fn_def] >>
+ drule_all analyzed_live_out_singleton >>
+ simp[pred_setTheory.EXTENSION] >> strip_tac >>
+ `~MEM v (input_vars_from pred sb.bb_instructions
+   (live_vars_at (liveness_analyze fn) succ 0))` by
+   (irule analyzed_phi_output_excluded_edge_input >> metis_tac[]) >>
+ metis_tac[]
+QED
+
+Theorem analyzed_singleton_phi_outputs_fresh:
+ !fn entry pred pb succ sb ps.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions)))) ps ==>
+ EVERY (\phi. EVERY (\v. ~MEM (Var v) ps.ps_stack /\
+   Var v NOTIN FDOM ps.ps_spilled) phi.inst_outputs)
+   (collect_phis sb.bb_instructions)
+Proof
+ rpt gen_tac >> strip_tac >> simp[EVERY_MEM] >>
+ gen_tac >> disch_tac >> gen_tac >> disch_tac >>
+ `~MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+   (irule analyzed_singleton_live_out_excludes_phi_output >> metis_tac[]) >>
+ drule lineage_inventory_stack_subset >>
+ drule lineage_inventory_spilled_subset >>
+ simp[pred_setTheory.SUBSET_DEF, MEM_MAP, dead_stack_marker_def] >>
+ disch_then (qspec_then `Var v` mp_tac) >> simp[] >>
+ disch_tac >> disch_then (qspec_then `Var v` mp_tac) >> simp[]
+QED
