@@ -1114,3 +1114,14 @@ Proof
      metis_tac[ssa_unique_output]) >>
   gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
 QED
+
+Theorem regional_fresh_exemption_transfer:
+  (!op:operand. op IN old /\ ~(op IN C UNION R) ==>
+    fresh op /\ fresh (root op)) /\
+  (!op. op IN old /\ op IN C ==> op = removed) /\
+  (!op. op IN new ==> (op IN old /\ op <> removed) \/ op = added) /\
+  fresh added /\ root added = added ==>
+  (!op. op IN new /\ ~(op IN R) ==> fresh op /\ fresh (root op))
+Proof
+  simp[pred_setTheory.IN_UNION] >> metis_tac[]
+QED
