@@ -379,7 +379,7 @@ Proof
       irule stmt_state_rel_allocas_frame >> simp[] >>
       qexistsl_tac [`es1`, `s`] >> simp[]) >>
   irule wb_frame_readonly_tail >> qexists_tac `sm` >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame _ _ _ _ _ _` (irule_at Any) >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED

@@ -793,7 +793,7 @@ Theorem imm_array_ctor_counted[local]:
         (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
           lookup_var x t = SOME w) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
-        locals_kept cenv es s t
+        locals_kept cenv es es s t
     else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
@@ -938,7 +938,7 @@ Theorem imm_array_ctor_counted_optional[local]:
         (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
           lookup_var x t = SOME w) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
-        locals_kept cenv es s t
+        locals_kept cenv es es s t
     else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   rpt gen_tac >> Cases_on `imm` >> simp[] >> strip_tac
@@ -1118,7 +1118,7 @@ Proof
   simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >> rpt conj_tac
   >~ [`not_fresh_at sb _`]
   >- simp[Abbr `x`, not_fresh_at_def, ASCIInumbersTheory.toString_11]
-  >~ [`locals_kept _ _ _ (update_var _ _ _)`]
+  >~ [`locals_kept _ _ _ _ (update_var _ _ _)`]
   >- (irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >> simp[update_var_def]) >>
   simp[update_var_def] >> metis_tac[]
 QED

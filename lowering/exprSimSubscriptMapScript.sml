@@ -999,7 +999,7 @@ Proof
   gvs[vyperHashMapStorageTheory.select_result_hashmap_nested] >>
   drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
   simp[] >>
-  qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 
@@ -1083,7 +1083,7 @@ Proof
   drule_all mapping_leaf_vv_holds >> strip_tac >>
   simp[vv_post_def, expr_type_def, vv_at_def] >>
   conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
-  qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def] >> NO_TAC]

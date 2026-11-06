@@ -9,7 +9,7 @@ Ancestors
 
 Theorem log_allocation_wb_frame[local]:
   abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t ==>
-  wb_frame ce es st s t
+  wb_frame ce es es st s t
 Proof
   simp[abi_builtin_allocation_frame_def, wb_frame_def, locals_kept_def] >>
   strip_tac >> conj_tac

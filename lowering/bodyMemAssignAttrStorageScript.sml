@@ -129,7 +129,7 @@ Proof
      qexistsl_tac [`sa`, `ee.scopes`, `s`] >> simp[] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def]) >>
-  `locals_kept ce es s0 u` by
+  `locals_kept ce es ee s0 u` by
     (irule locals_kept_trans >> goal_assum (drule_at Any) >>
      qexistsl_tac [`sa`, `s`] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>

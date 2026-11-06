@@ -306,7 +306,7 @@ Proof
     (fs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
   `wb_frame cenv es ee sa s0 u` by
     (irule wb_frame_trans >> goal_assum drule >>
-     conj_tac >- (goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     conj_tac >- (goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
                   simp[]) >> metis_tac[]) >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   gvs[expr_post_def, wb_frame_def, expr_val_at_def] >> metis_tac[]
