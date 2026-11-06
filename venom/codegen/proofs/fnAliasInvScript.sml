@@ -10372,6 +10372,336 @@ Proof
   EVAL_TAC
 QED
 
+(* Single-PHI experiment: a is dead and is not a PHI input. *)
+Definition alias_dead_phi_fn_def:
+  alias_dead_phi_fn = mk_raw_function "dead_phi_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 100 CALLDATASIZE [] ["e"];
+          mk_inst 101 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 102 PHI [Label "entry"; Var "e"; Label "backedge"; Var "b"] ["r"];
+          mk_inst 103 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+         [mk_inst 104 ASSIGN [Var "r"] ["a"];
+          mk_inst 105 ASSIGN [Var "r"] ["b"];
+          mk_inst 106 CALLDATASIZE [] ["c"];
+          mk_inst 107 JNZ [Var "c"; Label "backedge"; Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 108 STOP [] []] |>;
+     <| bb_label := "backedge"; bb_instructions := [mk_inst 109 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_dead_phi_ready:
+  codegen_ready_fn alias_dead_phi_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_dead_phi_roots:
+  normalize_operand (dfg_build_function alias_dead_phi_fn) [] (Var "a") = Var "r" /\
+  normalize_operand (dfg_build_function alias_dead_phi_fn) [] (Var "b") = Var "r"
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_dead_phi_plan_def:
+  alias_dead_phi_plan n ps = generate_block_plan
+    (liveness_analyze alias_dead_phi_fn) (dfg_build_function alias_dead_phi_fn)
+    (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn (EL n alias_dead_phi_fn.fn_blocks) ps
+End
+
+Definition alias_dead_phi_entry_def:
+  alias_dead_phi_entry = THE (alias_dead_phi_plan 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Definition alias_dead_phi_header_def:
+  alias_dead_phi_header = THE (alias_dead_phi_plan 1 (SND alias_dead_phi_entry))
+End
+
+Definition alias_dead_phi_body_def:
+  alias_dead_phi_body = THE (alias_dead_phi_plan 2 (SND alias_dead_phi_header))
+End
+
+Definition alias_dead_phi_backedge_def:
+  alias_dead_phi_backedge = THE (alias_dead_phi_plan 4 (SND alias_dead_phi_body))
+End
+
+Definition alias_dead_phi_reentry_def:
+  alias_dead_phi_reentry = (SND alias_dead_phi_entry) with
+    <|ps_stack := (SND alias_dead_phi_backedge).ps_stack;
+      ps_spilled := (SND alias_dead_phi_backedge).ps_spilled|>
+End
+
+Theorem alias_dead_phi_plans_success:
+  IS_SOME (alias_dead_phi_plan 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+  IS_SOME (alias_dead_phi_plan 1 (SND alias_dead_phi_entry)) /\
+  IS_SOME (alias_dead_phi_plan 2 (SND alias_dead_phi_header)) /\
+  IS_SOME (alias_dead_phi_plan 4 (SND alias_dead_phi_body)) /\
+  IS_SOME (alias_dead_phi_plan 1 alias_dead_phi_reentry)
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_endpoint_inventory:
+  (SND alias_dead_phi_entry).ps_stack = [Var "e"] /\
+  (SND alias_dead_phi_header).ps_stack = [Var "r"] /\
+  (SND alias_dead_phi_body).ps_stack = [Var "b"] /\
+  (SND alias_dead_phi_body).ps_spilled = FEMPTY /\
+  (SND alias_dead_phi_backedge).ps_stack = [Var "b"] /\
+  (SND alias_dead_phi_backedge).ps_spilled = FEMPTY /\
+  (SND (THE (alias_dead_phi_plan 1 alias_dead_phi_reentry))).ps_stack = [Var "r"] /\
+  (SND (THE (alias_dead_phi_plan 1 alias_dead_phi_reentry))).ps_spilled = FEMPTY
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_dead_phi_body_cut_def:
+  (alias_dead_phi_body_cut 0 = SND (clean_stack_plan
+    (liveness_analyze alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn)
+    alias_dead_phi_fn (EL 2 alias_dead_phi_fn.fn_blocks) (SND alias_dead_phi_header))) /\
+  (alias_dead_phi_body_cut (SUC n) = SND (THE (generate_inst_plan
+    (liveness_analyze alias_dead_phi_fn) (dfg_build_function alias_dead_phi_fn)
+    (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (EL n (EL 2 alias_dead_phi_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_dead_phi_fn) "body" (SUC n))
+    F (n = 2) "body" (alias_dead_phi_body_cut n))))
+End
+
+Theorem alias_dead_phi_body_cuts:
+  (alias_dead_phi_body_cut 0).ps_stack = [Var "r"] /\
+  (alias_dead_phi_body_cut 1).ps_stack = [Var "r"] /\
+  (alias_dead_phi_body_cut 2).ps_stack = [Var "b"] /\
+  (alias_dead_phi_body_cut 3).ps_stack = [Var "b"; Var "c"] /\
+  (alias_dead_phi_body_cut 4).ps_stack = [Var "b"]
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_plans:
+  alias_dead_phi_plan 0 (init_cleanup_plan_state NONE [] 0 0) = SOME alias_dead_phi_entry /\
+  alias_dead_phi_plan 1 (SND alias_dead_phi_entry) = SOME alias_dead_phi_header /\
+  alias_dead_phi_plan 2 (SND alias_dead_phi_header) = SOME alias_dead_phi_body /\
+  alias_dead_phi_plan 4 (SND alias_dead_phi_body) = SOME alias_dead_phi_backedge
+Proof
+  mp_tac alias_dead_phi_plans_success >>
+  Cases_on `alias_dead_phi_plan 0 (init_cleanup_plan_state NONE [] 0 0)` >>
+  Cases_on `alias_dead_phi_plan 1 (SND alias_dead_phi_entry)` >>
+  Cases_on `alias_dead_phi_plan 2 (SND alias_dead_phi_header)` >>
+  Cases_on `alias_dead_phi_plan 4 (SND alias_dead_phi_body)` >>
+  simp[alias_dead_phi_entry_def, alias_dead_phi_header_def,
+       alias_dead_phi_body_def, alias_dead_phi_backedge_def]
+QED
+
+Theorem alias_dead_phi_dfs_header:
+  dfs_aux_call (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["header"] ["entry"] (SND alias_dead_phi_entry)
+Proof
+  `SND alias_dead_phi_entry = (SND alias_dead_phi_entry) with
+    <|ps_stack := (SND alias_dead_phi_entry).ps_stack;
+      ps_spilled := (SND alias_dead_phi_entry).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `cfg_succs_of (cfg_analyze alias_dead_phi_fn) "entry" = ["header"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 0 alias_dead_phi_fn.fn_blocks`, `FST alias_dead_phi_entry`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans] >>
+  conj_tac >- EVAL_TAC >> irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_dfs_body:
+  dfs_aux_call (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["body"] ["header"; "entry"] (SND alias_dead_phi_header)
+Proof
+  `SND alias_dead_phi_header = (SND alias_dead_phi_header) with
+    <|ps_stack := (SND alias_dead_phi_header).ps_stack;
+      ps_spilled := (SND alias_dead_phi_header).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `cfg_succs_of (cfg_analyze alias_dead_phi_fn) "header" = ["body"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 1 alias_dead_phi_fn.fn_blocks`, `FST alias_dead_phi_header`,
+    `SND alias_dead_phi_entry`, `[]`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans, alias_dead_phi_dfs_header] >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_exit_dfs_result:
+  generate_fn_plan_aux (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    ["exit"] ["body"; "header"; "entry"] (SND alias_dead_phi_body) =
+    SOME ([SOLabel "exit"; SOPop 1; SOEmit "STOP"],
+      ["exit"; "body"; "header"; "entry"], init_cleanup_plan_state NONE [] 0 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_dead_phi_dfs_backedge:
+  dfs_aux_call (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["backedge"]
+    ["exit"; "body"; "header"; "entry"] (SND alias_dead_phi_body)
+Proof
+  `SND alias_dead_phi_body = (SND alias_dead_phi_body) with
+    <|ps_stack := (SND alias_dead_phi_body).ps_stack;
+      ps_spilled := (SND alias_dead_phi_body).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `SND alias_dead_phi_body = (SND alias_dead_phi_body) with
+    <|ps_alloc := (init_cleanup_plan_state NONE [] 0 0).ps_alloc with
+        sa_free_slots := (SND alias_dead_phi_body).ps_alloc.sa_free_slots;
+      ps_label_counter := (init_cleanup_plan_state NONE [] 0 0).ps_label_counter|>` by EVAL_TAC >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_sibling >>
+  qexistsl_tac [`[SOLabel "exit"; SOPop 1; SOEmit "STOP"]`,
+    `"exit"`, `["body"; "header"; "entry"]`] >>
+  simp[alias_dead_phi_exit_dfs_result] >>
+  `cfg_succs_of (cfg_analyze alias_dead_phi_fn) "body" = ["exit"; "backedge"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 2 alias_dead_phi_fn.fn_blocks`, `FST alias_dead_phi_body`,
+    `SND alias_dead_phi_header`, `[]`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans, alias_dead_phi_dfs_body] >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_dfs_states:
+  dfs_block_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "entry" (init_cleanup_plan_state NONE [] 0 0) /\
+  dfs_block_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" (SND alias_dead_phi_entry) /\
+  dfs_block_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "body" (SND alias_dead_phi_header) /\
+  dfs_block_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" (SND alias_dead_phi_body)
+Proof
+  rewrite_tac[dfs_block_state_def] >> conj_tac
+  >- (qexistsl_tac [`[]`, `[]`] >> simp[] >> irule dfs_aux_call_entry >> EVAL_TAC) >>
+  conj_tac >- (qexistsl_tac [`[]`, `["entry"]`] >> simp[alias_dead_phi_dfs_header]) >>
+  conj_tac >- (qexistsl_tac [`[]`, `["header"; "entry"]`] >> simp[alias_dead_phi_dfs_body]) >>
+  qexistsl_tac [`[]`, `["exit"; "body"; "header"; "entry"]`] >> simp[alias_dead_phi_dfs_backedge]
+QED
+
+Theorem alias_dead_phi_lineage_header:
+  lineage_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" (SND alias_dead_phi_entry)
+Proof
+  `SND alias_dead_phi_entry = (SND alias_dead_phi_entry) with
+    <|ps_stack := (SND alias_dead_phi_entry).ps_stack;
+      ps_spilled := (SND alias_dead_phi_entry).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_dead_phi_dfs_states] >>
+  qexistsl_tac [`EL 0 alias_dead_phi_fn.fn_blocks`, `FST alias_dead_phi_entry`, `NONE`,
+    `"entry"`, `F`, `init_cleanup_plan_state NONE [] 0 0`,
+    `init_cleanup_plan_state NONE [] 0 0`, `SND alias_dead_phi_entry`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans, alias_dead_phi_dfs_states] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> irule lineage_state_entry >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_lineage_body:
+  lineage_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "body" (SND alias_dead_phi_header)
+Proof
+  `SND alias_dead_phi_header = (SND alias_dead_phi_header) with
+    <|ps_stack := (SND alias_dead_phi_header).ps_stack;
+      ps_spilled := (SND alias_dead_phi_header).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_dead_phi_dfs_states] >>
+  qexistsl_tac [`EL 1 alias_dead_phi_fn.fn_blocks`, `FST alias_dead_phi_header`, `NONE`,
+    `"header"`, `F`, `SND alias_dead_phi_entry`, `SND alias_dead_phi_entry`,
+    `SND alias_dead_phi_header`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans, alias_dead_phi_dfs_states,
+       alias_dead_phi_lineage_header] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_lineage_backedge:
+  lineage_state (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" (SND alias_dead_phi_body)
+Proof
+  `SND alias_dead_phi_body = (SND alias_dead_phi_body) with
+    <|ps_stack := (SND alias_dead_phi_body).ps_stack;
+      ps_spilled := (SND alias_dead_phi_body).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_dead_phi_dfs_states] >>
+  qexistsl_tac [`EL 2 alias_dead_phi_fn.fn_blocks`, `FST alias_dead_phi_body`, `NONE`,
+    `"body"`, `F`, `SND alias_dead_phi_header`, `SND alias_dead_phi_header`,
+    `SND alias_dead_phi_body`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans, alias_dead_phi_dfs_states,
+       alias_dead_phi_lineage_body] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_lineage_reentry:
+  lineage_entry (liveness_analyze alias_dead_phi_fn)
+    (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" "header" alias_dead_phi_reentry
+Proof
+  simp[lineage_entry_def] >>
+  qexistsl_tac [`SND alias_dead_phi_body`, `EL 4 alias_dead_phi_fn.fn_blocks`,
+    `SND alias_dead_phi_body`, `FST alias_dead_phi_backedge`, `SND alias_dead_phi_backedge`,
+    `NONE`, `F`, `SND alias_dead_phi_backedge`, `SND alias_dead_phi_entry`] >>
+  simp[GSYM alias_dead_phi_plan_def, alias_dead_phi_plans, alias_dead_phi_dfs_states,
+       alias_dead_phi_lineage_backedge, alias_dead_phi_reentry_def] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_cut_inventory:
+  (alias_dead_phi_body_cut 0).ps_spilled = FEMPTY /\
+  (alias_dead_phi_body_cut 1).ps_spilled = FEMPTY /\
+  (alias_dead_phi_body_cut 2).ps_spilled = FEMPTY /\
+  (alias_dead_phi_body_cut 3).ps_spilled = FEMPTY /\
+  alias_dead_phi_body_cut 4 = SND alias_dead_phi_body /\
+  ~MEM "a" (live_vars_at (liveness_analyze alias_dead_phi_fn) "body" 1)
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_steps_success:
+  !n. n < 4 ==>
+  IS_SOME (generate_inst_plan
+    (liveness_analyze alias_dead_phi_fn) (dfg_build_function alias_dead_phi_fn)
+    (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
+    (EL n (EL 2 alias_dead_phi_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_dead_phi_fn) "body" (SUC n))
+    F (n = 2) "body" (alias_dead_phi_body_cut n))
+Proof
+  rpt strip_tac >> `n = 0 \/ n = 1 \/ n = 2 \/ n = 3` by decide_tac >>
+  gvs[] >> EVAL_TAC
+QED
+
+Definition alias_dead_phi_phi_cut_def:
+  alias_dead_phi_phi_cut = SND (generate_phi_plan
+    (HD (EL 1 alias_dead_phi_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_dead_phi_fn) "header" 1) F
+    alias_dead_phi_reentry)
+End
+
+Theorem alias_dead_phi_reentry_inventory:
+  alias_dead_phi_reentry.ps_stack = [Var "b"] /\
+  alias_dead_phi_reentry.ps_spilled = FEMPTY /\
+  alias_dead_phi_phi_cut.ps_stack = [Var "r"] /\
+  alias_dead_phi_phi_cut.ps_spilled = FEMPTY /\
+  FST (THE (alias_dead_phi_plan 1 alias_dead_phi_reentry)) = FST alias_dead_phi_header
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+(* In this ready fixture the dead a disappears at its own regular ASSIGN
+   post-processing, before b is defined, not at the branch, backedge or PHI.
+   This finite deletion result does not establish universal root freshness. *)
 Theorem lineage_alias_successor:
   !fuel ctx lo liveness dfg cfg ch growth spill_base lbl_ctr fn lbl bb ps h
    promised block_ops ps_after ra vs vs'.
