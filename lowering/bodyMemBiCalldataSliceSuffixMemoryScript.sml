@@ -6,7 +6,7 @@ Ancestors
   fragExec compileEnv emitHelper emitHelperProps context loweringSlice
   words list builtinBytes exprLoweringProps freshWrites exprSimDefs arithmetic
   exprSimAlloc loweringPosts finite_map valueTypingMemoryProps builtinBytesMemory
-  venomMemProps venomMemProofs venomInstProps
+  venomMemProps venomMemProofs venomInstProps exprSimCalldataSlice
 
 Theorem calldata_slice_copy_store_mem:
   eval_operand dst s = SOME wd /\ eval_operand src s = SOME wa /\

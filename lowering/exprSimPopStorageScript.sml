@@ -653,7 +653,7 @@ Proof
       LET_THM, apply_writes_def, vfmStateTheory.lookup_account_def]
 QED
 
-Theorem pop_storage_gas_obs[local]:
+Theorem pop_storage_gas_obs:
   get_storage cx (es with gas_obs := g) tr = get_storage cx es tr /\
   set_storage cx (es with gas_obs := g) tr X =
     set_storage cx es tr X with gas_obs := g
@@ -661,7 +661,7 @@ Proof
   Cases_on `tr` >> simp[get_storage_def, set_storage_def]
 QED
 
-Theorem pop_storage_holds_gas_obs[local]:
+Theorem pop_storage_holds_gas_obs:
   storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w es s ==>
   storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w
     (es with gas_obs := g) s
@@ -670,7 +670,7 @@ Proof
   qexistsl_tac [`tvt`, `v`] >> simp[len_rss_obs, pop_storage_gas_obs]
 QED
 
-Theorem pop_ssr_gas_obs[local]:
+Theorem pop_ssr_gas_obs:
   stmt_state_rel ctx func cenv cx es s ==>
   stmt_state_rel ctx func cenv cx (es with gas_obs := g) s
 Proof
