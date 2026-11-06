@@ -1627,9 +1627,10 @@ Definition evaluate_def:
   eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
     target <- eval_exprs cx (TAKE 1 es);
     nargs <<- LENGTH (FST (SND sig));
-    results <- eval_expr_results cx (TAKE nargs (DROP 1 es));
+    (* Each argument is read as it is evaluated, before later arguments and
+       the keyword operands run (Vyper 0.5.0b1 snapshot_value_for_delayed_use). *)
+    vs <- eval_exprs cx (TAKE nargs (DROP 1 es));
     kwargs <- eval_exprs cx (DROP (1 + nargs) es);
-    vs <- read_results cx results;
     eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs)
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
@@ -1643,7 +1644,9 @@ Definition evaluate_def:
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
     type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
-    results <- eval_expr_results cx es;
+    (* Each argument is read as it is evaluated, before later arguments run
+       (Vyper 0.5.0b1 snapshot_value_for_delayed_use). *)
+    vs <- eval_exprs cx es;
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     prev <- get_scopes;
@@ -1652,7 +1655,6 @@ Definition evaluate_def:
           eval_exprs cxd needed_dflts
        od)
       (set_scopes prev);
-    vs <- read_results cx results;
     (* Use combined type env (may reference types from other modules) *)
     all_tenv <<- get_tenv cx;
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";

@@ -482,6 +482,21 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Internal functions that may modify state; the first non-external
+   declaration of a name wins, as in build_func_param_types.
+   Mirrors Python: ContractFunctionT.is_modifying *)
+Definition build_func_modifying_def:
+  build_func_modifying ([] : toplevel list) = (K F : string -> bool) ∧
+  build_func_modifying (top :: rest) =
+    let rest_map = build_func_modifying rest in
+    case top of
+      FunctionDecl vis mut _ _ fname _ _ _ _ =>
+        if vis = External then rest_map
+        else (λs. if s = fname then (mut = Nonpayable ∨ mut = Payable)
+                  else rest_map s)
+    | _ => rest_map
+End
+
 (* Function ids for internal labels (internal_fn_label): a function's
    position among the source's function declarations, counting from n, and
    the first non-external declaration of a name wins, as in
@@ -628,6 +643,7 @@ Definition build_compile_env_def:
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
        ce_func_ids := build_func_ids 0 tops;
+       ce_func_modifying := build_func_modifying tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
