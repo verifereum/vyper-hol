@@ -24,7 +24,7 @@
 
 Theory fnPlanPrefix
 Ancestors
-  fnPlanLineageReorder genBlockSim stackPlanGen stackPlanTypes venomInst rich_list list arithmetic cfgAnalysisProps venomWf simplifyCfgDefs
+  stackPlanOps alist fnPlanLineageReorder genBlockSim stackPlanGen stackPlanTypes venomInst rich_list list arithmetic cfgAnalysisProps venomWf simplifyCfgDefs
 
 Definition generate_block_insts_prefix_def:
   generate_block_insts_prefix liveness dfg cfg fn bb_label is_halting
@@ -334,4 +334,14 @@ Proof
   Cases_on `pb.bb_instructions` >>
   gvs[bb_succs_def, get_successors_def, is_terminator_def,
       venomStateTheory.get_label_def, nub_def]
+QED
+
+Theorem release_dead_spills_stack:
+  (release_dead_spills nl ps).ps_stack = ps.ps_stack
+Proof
+  simp[release_dead_spills_def] >>
+  qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v nl | Label v => T)
+    (fmap_to_alist ps.ps_spilled)`, `xs`) >>
+  qid_spec_tac `ps` >> Induct_on `xs` >> simp[] >>
+  Cases_on `h` >> simp[]
 QED
