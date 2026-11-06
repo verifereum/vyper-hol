@@ -392,11 +392,6 @@ val excluded_test_names = [
   (* Compiles with unbounded (INF-length) types, which are not modelled;
      stays excluded *)
   "test_json_abi_bytes_slice",
-  (* Python reads the subscript base before an index call that mutates it;
-     the interpreter reads it after. Back with the subscript-overlap port. *)
-  "test_array_index_overlap",
-  "test_array_index_overlap_extcall",
-  "test_array_index_overlap_attribute",
   (* raw_create evaluates value= after the positional args (source order);
      the interpreter evaluates it first. Back with the CREATE semantics
      change. *)

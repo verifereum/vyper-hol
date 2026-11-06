@@ -1581,6 +1581,12 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Subscript _ e1 e2) = do
     res <- eval_expr cx e1;
+    (* A base derived through a dynamic-array element is read before the
+       index, which could resize the array (Vyper 0.5.0b1). *)
+    res <- (if base_through_dynarray e1 then do
+              v <- read_result cx res;
+              return (Value v)
+            od else return res);
     idx <- eval_expr cx e2;
     v <- read_result cx idx;
     select_result cx (expr_type e1) res (ValueSubscript v)

@@ -85,6 +85,9 @@ Proof
       metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      rpt (qpat_x_assum `!s res t s' res' t'. _` drule_all >> strip_tac) >>
+      Cases_on `base_through_dynarray e` >>
+      gvs[bind_def, return_def, AllCaseEqs()] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >>
       gvs[] >> metis_tac[])
   >- (rpt strip_tac >>

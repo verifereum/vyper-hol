@@ -1380,7 +1380,11 @@ Proof
 QED
 
 Theorem eval_subscript_scope_effect[local]:
-  (!st tv middle. eval_expr cx e1 st = (INL tv,middle) ==>
+  (!st tv middle st1 tv1 middle1.
+    eval_expr cx e1 st = (INL tv,middle) /\
+    (if base_through_dynarray e1 then
+       bind (read_result cx tv) (\v. return (Value v))
+     else return tv) st1 = (INL tv1,middle1) ==>
     scope_pop_effect (eval_expr cx e2)) /\
   scope_pop_effect (eval_expr cx e1) ==>
   scope_pop_effect (eval_expr cx (Subscript ty e1 e2))
@@ -1388,8 +1392,12 @@ Proof
   strip_tac >> rewrite_tac[Once evaluate_def] >>
   ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
+  >- (IF_CASES_TAC >> simp[] >>
+      ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (first_x_assum irule >> goal_assum (drule_at Any)) >>
+  >- (first_x_assum irule >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
