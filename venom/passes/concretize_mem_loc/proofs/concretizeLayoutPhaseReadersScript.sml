@@ -1,6 +1,6 @@
 Theory concretizeLayoutPhaseReaders
 Ancestors concretizeLayoutPhaseBindings concretizeLayoutPhaseCompose
-  concretizeLayoutPhaseOrigin
+  concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutLocalCalldataReaders concretizeLayoutSupplement
   frameRelocationEnvironment venomExecSemantics venomState
   frameOriginUpdates frameResolvedTrace venomInst
@@ -71,14 +71,13 @@ Proof
      irule concretize_supplement_fields >>
      goal_assum (drule_at Any) >> simp[update_var_def]) >>
   `(update_var v z s).vs_inst_idx = s.vs_inst_idx` by simp[update_var_def] >>
-  drule_all layout_ordinary_bound_trace_advance >> strip_tac >>
-  qexistsl_tac [`k with lop_target_taint := step_taint inst t tpost g.lop_target_taint`, `tpost`] >>
-  simp[] >> irule layout_ordinary_pending_outcome >>
-  simp[layout_phase_origin_def] >> conj_tac
-  >- (drule_all layout_origin_successful_step >> simp[]) >>
-  simp[] >> irule layout_ordinary_state_intro >>
-  gvs[resolved_out_def, ETA_AX] >>
-  goal_assum (drule_at Any o GSYM) >> simp[update_var_def]
+  drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+    layout_ordinary_success_phase >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
+  simp[resolved_out_def, ETA_AX] >>
+  disch_then (qspec_then `tpost` mp_tac) >>
+  gvs[] >> simp[update_var_def] >> metis_tac[]
 QED
 
 Theorem layout_pending_calldata_reader_trace_step:
