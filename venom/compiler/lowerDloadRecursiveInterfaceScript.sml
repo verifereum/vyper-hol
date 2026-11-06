@@ -342,6 +342,31 @@ val ld_recursive_clause_goals =
 val _ = if length ld_recursive_clause_goals = 5 then ()
         else raise Fail "projected constructor inventory changed";
 
+(* Geometry refinement is shared by historical entry and operational consumers. *)
+fun ld_refine_geometry candidate =
+  let
+    val (args,body) = strip_abs candidate
+    val (normal,exceptional) = dest_disj body
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val ta = named "ta"
+    val stk = List.nth(args,2)
+    val t = List.last args
+    val refined = list_mk_exists(ws,mk_conj(b,``alloca_inv ^ta``))
+  in list_mk_abs(args,
+       list_mk_conj [``alloca_inv ^t``,
+         ``!f i st tv. MEM (f,i,st,tv) ^stk ==> alloca_inv st``,
+         mk_disj(refined,exceptional)]) end;
+val ld_entry_geometry_history = ld_refine_geometry ld_recursive_candidate;
+val ld_entry_geometry_history_goal =
+  let
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses, _) = dest_imp body
+    val clause = subst [p |-> ld_entry_geometry_history] (hd(strip_conj clauses))
+    val (v0::ct::rest, b) = strip_forall clause
+  in subst [v0 |-> mk_var("vs0", type_of v0),
+            ct |-> mk_var("CT", type_of ct)] (list_mk_forall(rest,b)) end;
+
 (* Specialize only the constructor's environment parameters. *)
 val ld_recursive_entry_goal =
   let val (v0::ct::rest, body) = strip_forall (hd ld_recursive_clause_goals)
@@ -350,12 +375,12 @@ val ld_recursive_entry_goal =
        (list_mk_forall (rest, body))
   end;
 
-Theorem ld_recursive_entry_clause:
+Theorem ld_entry_geometry_history_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
-  ^ld_recursive_entry_goal
+  ^ld_entry_geometry_history_goal
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all lower_dload_stage_lookup_indexed >> strip_tac >>
@@ -392,12 +417,23 @@ Proof
                   vs_inst_idx := 0|>` by simp[Abbr `z`] >>
   `lookup_block lbl fn.fn_blocks = SOME bb` by metis_tac[] >>
   drule_all lower_dload_top_entry_control >> strip_tac >>
-  BETA_TAC >> Cases_on `in_revert_forward f s1`
+  `alloca_inv s1` by
+    (qpat_x_assum `s1 = z` SUBST_ALL_TAC >>
+     qpat_x_assum `z = _` SUBST_ALL_TAC >>
+     qpat_x_assum `o1_run_state_ok vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_run_state_ok_def,
+          unitTransformDefsTheory.o1_initial_state_ok_def,
+          venomMemDefsTheory.alloca_inv_def,
+          venomMemDefsTheory.allocas_non_overlapping_def,
+          venomMemDefsTheory.alloca_next_valid_def]) >>
+  BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >> Cases_on `in_revert_forward f s1`
   >- suspend "revert"
   >> suspend "normal"
 QED
 
-Resume ld_recursive_entry_clause[normal]:
+Resume ld_entry_geometry_history_clause[normal]:
   disj1_tac >>
   qexistsl_tac [`[]`, `[]`, `0`, `FEMPTY`, `[]`, `FEMPTY`,
     `entry_taint`, `f`, `i`, `s1`, `s1`, `entry_taint`,
@@ -409,6 +445,7 @@ Resume ld_recursive_entry_clause[normal]:
     `a`, `a`, `amid`, `aend`, `[]`, `post'`, `[]`, `code`, `tail`,
     `[]`, `TL f.fn_blocks`, `[]`, `TL fn.fn_blocks`, `[]`, `[]`, `z`, `0`] >>
   simp[NoAsms, lower_dload_blocks_supply_def, lower_dload_insts_supply_def] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (irule ld_annotated_reachable_entry >>
       conj_tac
@@ -449,7 +486,7 @@ Resume ld_recursive_entry_clause[normal]:
   metis_tac[]
 QED
 
-Resume ld_recursive_entry_clause[revert]:
+Resume ld_entry_geometry_history_clause[revert]:
   `s1.vs_inst_idx = 0` by
     (qpat_x_assum `s1 = z` SUBST_ALL_TAC >> simp[Abbr `z`]) >>
   `?endpos. revert_forward_pair bb' 0 endpos` by
@@ -470,7 +507,7 @@ Resume ld_recursive_entry_clause[revert]:
   simp[get_instruction_def, NoAsms] >> metis_tac[]
 QED
 
-Resume ld_recursive_entry_clause[data]:
+Resume ld_entry_geometry_history_clause[data]:
   `CS.ctx_entry = SOME f.fn_name /\ entry_fn_no_params f` by
     (qpat_x_assum `o1_ctx_shape CS` mp_tac >>
      qpat_x_assum `lookup_function name CS.ctx_functions = SOME f` mp_tac >>
@@ -497,7 +534,27 @@ Resume ld_recursive_entry_clause[data]:
   simp[lowerDloadLifetimeTheory.ld_site_bytes_def, entry_taint_def, op_taint_def]
 QED
 
-Finalise ld_recursive_entry_clause
+Finalise ld_entry_geometry_history_clause
+
+Theorem ld_recursive_entry_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_entry_goal
+Proof
+  strip_tac >>
+  mp_tac ld_entry_geometry_history_clause >>
+  (impl_tac >- simp[]) >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!name fn lbl inst s1. _`
+    (qspecl_then [`name`, `fn`, `lbl`, `inst`, `s1`] mp_tac) >>
+  (impl_tac >- simp[]) >> BETA_TAC >>
+  disch_then (mp_tac o CONJUNCT2 o CONJUNCT2) >>
+  ho_match_mp_tac MONO_OR >> reverse conj_tac >- simp[] >>
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+  disch_then (ACCEPT_TAC o CONJUNCT1)
+QED
 
 (* Entry history only: the checked theorem above keeps its expanded statement.
    All subsequent operational clauses use the corrected single binding below.
@@ -1928,20 +1985,33 @@ Finalise ld_recursive_bytes_next
 
 (* Conservative refinement for the geometry probe. The old operational quote
    remains unchanged. Validity of ta is inside precisely its old witnesses. *)
-val ld_recursive_geometry_candidate =
+val ld_recursive_geometry_candidate = ld_refine_geometry ld_recursive_candidate;
+
+val ld_recursive_geometry_entry_goal =
   let
-    val (args,body) = strip_abs ld_recursive_candidate
-    val (normal,exceptional) = dest_disj body
-    val (ws,b) = strip_exists normal
-    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
-    val ta = named "ta"
-    val stk = List.nth(args,2)
-    val t = List.last args
-    val refined = list_mk_exists(ws,mk_conj(b,``alloca_inv ^ta``))
-  in list_mk_abs(args,
-       list_mk_conj [``alloca_inv ^t``,
-         ``!f i st tv. MEM (f,i,st,tv) ^stk ==> alloca_inv st``,
-         mk_disj(refined,exceptional)]) end;
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses, _) = dest_imp body
+    val clause = subst [p |-> ld_recursive_geometry_candidate] (hd(strip_conj clauses))
+    val (v0::ct::rest, b) = strip_forall clause
+  in subst [v0 |-> mk_var("vs0", type_of v0),
+            ct |-> mk_var("CT", type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_recursive_geometry_entry_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_geometry_entry_goal
+Proof
+  strip_tac >> mp_tac ld_entry_geometry_history_clause >>
+  (impl_tac >- simp[]) >> BETA_TAC >>
+  rpt (FIRST [disch_then ACCEPT_TAC,
+              disch_then (ACCEPT_TAC o CONJUNCT2),
+              ho_match_mp_tac MONO_OR, ho_match_mp_tac MONO_AND,
+              ho_match_mp_tac MONO_EXISTS, ho_match_mp_tac MONO_ALL,
+              ho_match_mp_tac MONO_IMP, conj_tac, gen_tac]) >>
+  simp[]
+QED
 
 Theorem ld_recursive_geometry_forget[local]:
   (^ld_recursive_geometry_candidate) vs0 CT stk un gn j t ==>
