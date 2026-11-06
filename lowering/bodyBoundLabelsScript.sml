@@ -723,6 +723,22 @@ Proof
     conj_tac, gen_tac, strip_tac])
 QED
 
+Theorem bound_labels_abi_encode_args:
+  !es s. (!ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_abi_encode_args cfn ce es s))))
+Proof
+  Induct >> simp[compile_abi_encode_args_def, comp_return_def] >>
+  rpt strip_tac >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_materialize_vv,
+                bound_labels_unwrap_value, comp_return_def]),
+              irule bound_labels_bind, conj_tac, gen_tac, strip_tac,
+              IF_CASES_TAC])
+QED
+
 Theorem bound_labels_ext_call_kwarg:
   (!ty t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
@@ -1193,6 +1209,9 @@ Theorem bound_labels_call:
   (!ty e t. MEM e args /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!ty e t. MEM e (FLAT (MAP raw_log_topic_exprs args)) /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
@@ -1207,7 +1226,34 @@ Proof
   >- (irule bound_labels_call_raw_calldata >> simp[])
   >~ [`CreateTarget`]
   >- (simp[compile_call_def, bound_labels_as_stack_val] >>
-      irule bound_labels_create_call >> simp[]) >>
+      irule bound_labels_create_call >> simp[])
+  >~ [`RawLog`]
+  >- (simp[compile_call_def] >> Cases_on `args` >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      Cases_on `t` >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      reverse (Cases_on `t'`) >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_multi_exprs >> simp[] >>
+          TRY (rpt strip_tac >>
+               qpat_x_assum `!ty e t. MEM e (FLAT _) /\ _ ==> _` irule >>
+               simp[])) >>
+      rpt gen_tac >> strip_tac >>
+      Cases_on `expr_type h' = BaseT (BytesT (Fixed 32))` >> simp[] >>
+      rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_inst, bound_labels_emit_op,
+                    bound_labels_emit_void, bound_labels_alloc_buffer]),
+                  irule pair_let_snd_preserves, irule bound_labels_lower_value,
+                  conj_tac, gen_tac, strip_tac]))
+  >~ [`RawRevert`]
+  >- (simp[compile_call_def] >> Cases_on `args` >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_lower_value >> simp[]) >>
+      rpt gen_tac >> strip_tac >> simp[] >> irule pair_let_snd_preserves >>
+      simp[bound_labels_raw_revert]) >>
   simp[compile_call_def] >> irule pair_let_snd_preserves >>
   simp[bound_labels_emit_inst]
 QED
@@ -1750,7 +1796,7 @@ Proof
       >- simp[bound_labels_unwrap_value] >> rpt strip_tac >>
       simp[bound_labels_as_ptr_val, bound_labels_lower_abi_encode]) >>
   irule pair_let_snd_preserves >> reverse conj_tac
-  >- (irule bound_labels_multi_exprs >> simp[]) >> rpt strip_tac >> simp[] >>
+  >- (irule bound_labels_abi_encode_args >> simp[]) >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_alloc_buffer] >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac

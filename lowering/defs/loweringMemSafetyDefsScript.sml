@@ -3,7 +3,7 @@
  *
  * Predicates connecting the Vyper→Venom lowering to memory safety.
  * These are the definitions needed by the memory safety theorem
- * statements in loweringMemSafetyProps.
+ * statements in loweringMemSafetyProofs.
  *
  * TOP-LEVEL:
  *   value_within_alloca_size — value's runtime structure fits ALLOCA size

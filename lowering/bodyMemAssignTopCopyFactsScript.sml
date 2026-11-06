@@ -223,20 +223,28 @@ Proof
   >- (simp[expr_type_def] >> metis_tac[topcopy_not_bytestring, is_bytestring_type_def])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+      simp[expr_body_pre_def, well_typed_expr_def, expr_type_def] >>
+      strip_tac >> gvs[expr_type_def] >>
+      drule topcopy_not_bytestring >>
+      gvs[vyperTypeSystemTheory.well_typed_builtin_app_def,
+          is_bytestring_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
       gvs[expr_type_def] >>
       drule topcopy_not_bytestring >> simp[is_bytestring_type_def])
   >- (rpt gen_tac >> strip_tac >>
+      rename1 `Call ct (IntCall func_id) cargs cdflt` >>
       `supported_program tops /\
        cenv.ce_func_return_type = build_func_return_type tops /\
        get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-      `well_typed_expr env (Call v4 (IntCall func_id) v5 v6)` by
+      `well_typed_expr env (Call ct (IntCall func_id) cargs cdflt)` by
         gvs[expr_body_pre_def] >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supportedExprsTheory.supported_expr_def, supported_pure_expr_def,
            supported_effect_expr_def] >> strip_tac >>
-      Cases_on `v6` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
+      Cases_on `cdflt` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
       PairCases_on `x` >>
       `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by
         (Cases_on `func_id` >>
@@ -249,7 +257,7 @@ Proof
       simp[well_typed_expr_def, expr_type_def] >> strip_tac >>
       gvs[exprLoweringTheory.lowered_value_type_def, expr_type_def] >>
       gvs[supported_return_type_def, type_widens_to_def]
-      >- (Cases_on `v4` >> gvs[arg_type_fits_def]) >>
+      >- (Cases_on `ct` >> gvs[arg_type_fits_def]) >>
       metis_tac[topcopy_value_fit_equal]) >>
   simp[exprLoweringTheory.lowered_value_type_def]
 QED

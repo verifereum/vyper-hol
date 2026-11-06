@@ -2687,6 +2687,7 @@ Theorem compile_typed_unary_builtin_vv_sim:
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
+  `!n. bt <> Slice n` by (rpt strip_tac >> gvs[builtin_args_length_ok_def]) >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then irule >> gvs[expr_body_pre_def]) >>
@@ -3030,6 +3031,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   Cases_on `code x sm` >> simp[as_stack_val_def] >> strip_tac >> gvs[] >>
+  `!n. bt <> Slice n` by (rpt strip_tac >> gvs[builtin_args_length_ok_def]) >>
   `expr_body_pre cenv cx env e es'` by
     (irule expr_body_pre_builtin_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
