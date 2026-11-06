@@ -5,7 +5,8 @@ Ancestors forPtrRangePrepare forPtrAddress forPtrWriteScope forPtrArraySnapshot
   forPtrWord forPtrBulk forPtrBytes forPtrCopyInterface stmtSimForArrayLoop
   fragExec emitHelperProps finite_map list forPtrControl venomState ptrDiscipline
   exprSimProps typedCopyAgreement context compileEnv valueEncoding stmtLowering
-  exprLoweringProps rich_list forPtrElementFrame bodyPtrDefs
+  exprLoweringProps rich_list forPtrElementFrame bodyPtrDefs forPtrScope
+  exprSimPtrLiteralBuffer
 
 Theorem for_array_header_test_path_ptr:
   lookup_block cond_lbl func.fn_blocks =
@@ -163,7 +164,7 @@ Theorem for_array_element_install_checked:
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [dst] /\ not_local_ptr cenv es.scopes dst /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,cap) /\
-  type_memory_size tv <= cap /\ local_ptrs_reserved cenv sa /\
+  type_memory_size tv <= cap /\ local_ptrs_reserved bc sa /\ 
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) \/
     cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\
@@ -193,9 +194,120 @@ Proof
     `{i | w2n b <= i /\ i < w2n b + type_memory_size tv}`] >>
   simp[] >> conj_tac >- (first_assum ACCEPT_TAC) >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
+      `FLOOKUP bc.ce_vars name = FLOOKUP cenv.ce_vars name` by
+        (drule_all cenv_top_ext_outer_lookup >> simp[]) >>
       `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
       simp[] >> drule_all for_alloca_scalar_write_separation >>
       simp[arithmeticTheory.ADD_COMM, arithmeticTheory.NOT_LESS_EQUAL,
            arithmeticTheory.NOT_LESS]) >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+(* Address arithmetic gives its temporary pointer provenance. No live local
+   or return-buffer pointer is changed by assigning that provenance. *)
+Theorem for_nonlocal_provenance_ghost:
+  ghost_inv d cenv cx es G tn s /\ not_local_ptr cenv es.scopes out /\
+  (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var out) sz)) /\
+  (!x. x <> out ==> FLOOKUP Gf x = FLOOKUP G x) ==>
+  ghost_inv d cenv cx es Gf tn s
+Proof
+  strip_tac >> fs[ghost_inv_def, not_local_ptr_def] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> `p <> out` by metis_tac[] >>
+      qpat_x_assum `!name entry p sz. _` drule_all >>
+      simp[ptr_covers_def]) >>
+  Cases_on `d` >> simp[return_buf_ptr_def] >> PairCases_on `x` >>
+  fs[return_buf_ptr_def] >>
+  rename1 `cenv.ce_return_buf = SOME (PtrVar (Var rp) slot_size)` >>
+  `rp <> out` by metis_tac[] >> gvs[ptr_covers_def]
+QED
+
+Theorem for_element_address_outer_ghost:
+  ghost_inv d cenv cx es G tn s /\
+  not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes ep /\
+  (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var ov) sz) /\
+    cenv.ce_return_buf <> SOME (PtrVar (Var ep) sz)) ==>
+  ghost_inv d cenv cx es
+    (set_prov (DRESTRICT G (COMPL {ov})) [ep] prov)
+    (tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{}))
+    ((update_var ep w (update_var ov delta s)) with vs_inst_idx := n)
+Proof
+  strip_tac >>
+  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {ov}))
+    (tn with t_var := tn.t_var |+ (ov,{})) (update_var ov delta s)` by
+    (irule for_scalar_overwrite_ghost >> simp[]) >>
+  `ghost_inv d cenv cx es (DRESTRICT (DRESTRICT G (COMPL {ov})) (COMPL {ep}))
+    (tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{}))
+    (update_var ep w (update_var ov delta s))` by
+    (irule (SRULE [] (Q.INST
+      [`tn` |-> `tn with t_var := tn.t_var |+ (ov,{})`]
+      for_scalar_overwrite_ghost)) >> simp[]) >>
+  simp[SRULE [] (Q.INST [`gs` |-> `es.gas_obs`] literal_ptr_ghost_inv_normalize)] >>
+  irule for_nonlocal_provenance_ghost >>
+  qexistsl_tac [`DRESTRICT (DRESTRICT G (COMPL {ov})) (COMPL {ep})`, `ep`] >>
+  simp[] >> Cases_on `prov` >>
+  simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
+Theorem for_element_address_slice_coverage:
+  ptr_covers G tn bp s ((k+1)*stride) /\ lookup_var bp s = SOME w /\
+  w2n w + k*stride < dimword (:256) /\
+  lookup_var ep sA = SOME (w + n2w k * n2w stride) /\
+  FLOOKUP GA ep = FLOOKUP G bp /\ op_taint tA (Var ep) = {} ==>
+  ptr_covers GA tA ep sA stride
+Proof
+  strip_tac >>
+  `w2n (w + n2w k * n2w stride) = w2n w + k*stride` by
+    (`k*stride < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.word_mul_n2w, wordsTheory.w2n_add_2, wordsTheory.w2n_n2w]) >>
+  gvs[ptr_covers_def, arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
+QED
+
+Theorem for_element_address_ready_ptr:
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes ep /\
+  (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var ov) sz) /\
+    cenv.ce_return_buf <> SOME (PtrVar (Var ep) sz)) /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]) /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst j4 ADD [Var bp; Var ov] [ep]) /\
+  lookup_var idx s = SOME (n2w k) /\ lookup_var bp s = SOME w /\
+  ptr_covers G tn bp s ((k+1)*stride) /\
+  w2n w + k*stride < dimword (:256) /\
+  op_taint tn (Var idx) = {} /\ bp <> ov /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  sA = ((update_var ep (w + n2w k * n2w stride)
+    (update_var ov (n2w k * n2w stride) s))
+      with vs_inst_idx := SUC (SUC s.vs_inst_idx)) /\
+  GA = set_prov (DRESTRICT G (COMPL {ov})) [ep] (FLOOKUP G bp) /\
+  tA = (tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{})) ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
+  stmt_state_rel ctx func cenv cx es sA /\ ghost_inv d cenv cx es GA tA sA /\
+  ptr_covers GA tA ep sA stride /\
+  lookup_var ep sA = SOME (w + n2w k * n2w stride) /\
+  sA.vs_memory = s.vs_memory /\ tA.t_mem = tn.t_mem /\
+  (!x. x <> ov /\ x <> ep ==>
+    lookup_var x sA = lookup_var x s /\ FLOOKUP GA x = FLOOKUP G x /\
+    op_taint tA (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `op_taint tn (Var bp) = {}` by fs[ptr_covers_def] >>
+  `lookup_var ep sA = SOME (w + n2w k * n2w stride) /\
+   FLOOKUP GA ep = FLOOKUP G bp /\ op_taint tA (Var ep) = {} /\
+   sA.vs_memory = s.vs_memory /\
+   tA.t_mem = tn.t_mem /\ tA.t_stor = tn.t_stor /\ tA.t_trans = tn.t_trans /\
+   (!x. x <> ov /\ x <> ep ==>
+     lookup_var x sA = lookup_var x s /\ FLOOKUP GA x = FLOOKUP G x /\
+     op_taint tA (Var x) = op_taint tn (Var x))` by
+    (irule for_element_address_frame >> simp[]) >>
+  simp[] >> conj_tac
+  >- (gvs[] >> irule for_element_address_path_ptr >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[] >> simp[stmt_state_rel_inst_idx] >>
+      irule stmt_state_rel_update_var >> simp[] >>
+      irule stmt_state_rel_update_var >> simp[]) >>
+  conj_tac
+  >- (gvs[] >> irule for_element_address_outer_ghost >> simp[]) >>
+  drule_all for_element_address_slice_coverage >> simp[]
 QED
