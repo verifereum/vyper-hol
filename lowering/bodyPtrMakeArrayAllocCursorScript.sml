@@ -31,7 +31,8 @@ Theorem literal_alloc_buffer_cursor_run:
       regions_disjoint (w2n w) sz b len) /\
     (!name b len. local_region cenv es.scopes a name b len ==>
       regions_disjoint (w2n w) sz b len) /\
-    (?p. buf.buf_operand = Var p /\ not_fresh_at sm p /\ ptr_covers H tm p a sz) /\
+    (?p. buf.buf_operand = Var p /\ not_fresh_at sm p /\ ptr_covers H tm p a sz /\
+      FLOOKUP H p = SOME (w2n w,sz)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!i. i < w2n w \/ w2n w+sz <= i ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
     a.vs_current_bb = s.vs_current_bb /\ a.vs_inst_idx = SUC s.vs_inst_idx /\
@@ -46,6 +47,9 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) s = OK u` by
     gvs[run_inst_seq_def, AllCaseEqs()] >>
+  drule_all literal_alloca_root_bound >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  `b < dimword(:256)` by decide_tac >>
   drule literal_alloca_static_frame >> strip_tac >>
   drule_all literal_alloca_old_ghost >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
@@ -54,6 +58,6 @@ Proof
     metis_tac[alloc_buffer_root_fresh] >>
   qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`, `w`, `G1`, `tn1`] >>
   gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
-      local_region_def, op_prov_def] >>
+      local_region_def, op_prov_def, FLOOKUP_UPDATE, wordsTheory.w2n_n2w] >>
   metis_tac[]
 QED
