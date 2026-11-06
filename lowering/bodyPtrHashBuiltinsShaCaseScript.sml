@@ -21,6 +21,7 @@ Theorem hash_fixed_sha256_ptr_post:
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   ?t Gf tf.
+    run_inst_seq (emitted_insts sm sb) s = OK t /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
@@ -44,7 +45,7 @@ Proof
   `TAKE m (word_to_bytes_be w) = bs` by metis_tac[] >>
   drule_all hash_sha256_bytesm_success_path >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
-  gvs[] >> qexistsl_tac [`t`, `Gf`, `tf`] >> simp[]
+  gvs[] >> qexistsl_tac [`Gf`, `tf`] >> simp[]
 QED
 
 Theorem hash_dynamic_sha256_ptr_post:
@@ -65,6 +66,7 @@ Theorem hash_dynamic_sha256_ptr_post:
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   ?t Gf tf.
+    run_inst_seq (emitted_insts sm sb) s = OK t /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
@@ -102,5 +104,5 @@ Proof
       (SPEC_ALL hash_sha256_bytes_success_path)))) >>
   simp[] >>
   disch_then (drule_all_then (qspecl_then [`PG`, `D`] strip_assume_tac)) >>
-  gvs[] >> qexistsl_tac [`t`, `Gf`, `tf`] >> simp[]
+  gvs[] >> qexistsl_tac [`Gf`, `tf`] >> simp[]
 QED
