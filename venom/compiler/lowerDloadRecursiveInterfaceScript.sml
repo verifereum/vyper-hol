@@ -3,6 +3,7 @@ Ancestors
   lowerDloadProjectedReachability lowerDloadNormalData lowerDloadReachability
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
   lowerDloadControlPosition lowerDloadOwnership lowerDloadDefs
+  lowerDloadCoverageAlloca lowerDloadNormalLive lowerDloadReachableFloor
   lowerDloadConfiguredSuccessor lowerDloadOrdinaryNext lowerDloadSourceInterface venomInstProps
   lowerDloadIndexedStageEntry lowerDloadTopEntryControl ctxLookupAgreeHelpers
   contextCodegenRel venomExecSemantics venomInst venomExecProofs venomWf
@@ -980,3 +981,15 @@ Resume ld_recursive_ordinary_next[revert_successor]:
 QED
 
 Finalise ld_recursive_ordinary_next
+
+val ld_recursive_alloca_zero =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (normal,_) = dest_disj body
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n"
+    val i = named "i"
+  in list_mk_abs(args,list_mk_exists(ws,
+       list_mk_conj [b, ``^n = 0``, ``^i.inst_opcode = ALLOCA``])) end;
+
