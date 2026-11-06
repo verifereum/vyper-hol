@@ -1,7 +1,7 @@
 (* Ordered nominal metadata for recursive normalization consumers. *)
 Theory typedNormalizeStructMetadata
 Ancestors
-  typedMemoryCopy typedCopyMetadata typedCopyDomain valueEncodingTyping
+  exprSimHyps typedMemoryCopy typedCopyMetadata typedCopyDomain valueEncodingTyping
   vyperTypeExprSoundness vyperTypeABI list rich_list alist finite_map
   compileEnv vyperTypeSystem vyperValue vyperTyping vyperTypeDefaults valueEncoding
 

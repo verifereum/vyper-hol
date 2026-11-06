@@ -10,63 +10,6 @@ Ancestors
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
   venomExecSemantics venomState venomInst words list pair finite_map arithmetic vfmConstants
 
-Theorem typed_copy_struct_size_list[local]:
-  !fields tvs.
-    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
-    EVERY (\(name, ty, sz). !tv. evaluate_type tenv ty = SOME tv ==>
-                                  sz = type_memory_size tv) fields ==>
-    SUM (MAP (SND o SND) fields) = type_memory_size_list tvs
-Proof
-  Induct >> simp[type_memory_size_def] >>
-  Cases >> rename1 `(name, info)` >> Cases_on `info` >>
-  simp[type_memory_size_def] >> rpt strip_tac >> gvs[type_memory_size_def]
-QED
-
-Theorem typed_copy_struct_size_zip[local]:
-  !names tvs. LENGTH names = LENGTH tvs ==>
-    type_memory_size_fields (ZIP (names, tvs)) = type_memory_size_list tvs
-Proof
-  Induct >> Cases_on `tvs` >> simp[type_memory_size_def]
-QED
-
-Theorem typed_copy_memory_size:
-  !cenv ty tenv tv.
-    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-      EVERY (\(fname, fty, sz). !tv.
-        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
-    evaluate_type tenv ty = SOME tv ==>
-    type_memory_bytes cenv ty = type_memory_size tv
-Proof
-  ho_match_mp_tac type_memory_bytes_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt strip_tac >>
-      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-          type_memory_bytes_def, type_memory_size_def] >>
-      qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-      simp[sfields_tenv_consistent_def] >> strip_tac >>
-      qpat_x_assum `!nsid args. _` drule >> strip_tac >>
-      gvs[get_struct_fields_def, evaluate_types_OPT_MMAP] >>
-      `LENGTH tvs = LENGTH (MAP FST args)` by
-        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
-      simp[typed_copy_struct_size_zip] >>
-      irule typed_copy_struct_size_list >>
-      qexists_tac `tenv \\ nsid` >> conj_tac >- gvs[] >>
-      qpat_x_assum `!name fields. _ ==> EVERY _ _` drule >>
-      simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
-      drule (cj 1 vyperTypeExprSoundnessTheory.evaluate_type_mono) >>
-      metis_tac[])
-  >~ [`TupleT tys`]
-  >- (rpt strip_tac >>
-      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-          type_memory_bytes_def, type_memory_size_def, evaluate_types_OPT_MMAP] >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule tuple_memory_bytes_size >>
-      qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-      type_memory_bytes_def, type_memory_size_def, word_size_def] >>
-  metis_tac[]
-QED
 
 Theorem typed_copy_static_fits:
   (!sty dty. arg_type_fits sty dty /\ ~is_abi_dynamic sf dty ==> sty = dty) /\
@@ -3407,9 +3350,9 @@ Proof
   disch_then (drule_at (Pat `compile_struct_typed_copy _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`tvs`, `vs`, `s`, `dw`, `sw`] mp_tac) >>
   simp[type_memory_size_def, val_in_memory_def,
-       typed_copy_struct_size_zip, typed_copy_fields_tuple_zip] >>
+       struct_layout_size_zip, typed_copy_fields_tuple_zip] >>
   (impl_tac >- (gvs[type_memory_size_def, val_in_memory_def,
-      typed_copy_struct_size_zip, typed_copy_fields_tuple_zip] >> decide_tac)) >> simp[]
+      struct_layout_size_zip, typed_copy_fields_tuple_zip] >> decide_tac)) >> simp[]
 QED
 
 Theorem typed_copy_rank_entry:
