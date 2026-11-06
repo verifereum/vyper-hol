@@ -8,6 +8,7 @@ Ancestors
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
   abiDecoderBytesBound abiDecoderCopy abiDecoderWordOutcome fragExec
   abiDecoderGuards abiDecoderComposition exprLoweringProps arithmetic pred_set
+  abiCanonicalHeadSize exprSimAbiDecodeArrayPrefix emitHelperProps
   abiDecoderIndexInit abiEncoder compileEnv emitHelper
   venomExecSemantics venomState venomInst valueEncoding
   vyperABI vyperValue contractABI words list rich_list
@@ -172,3 +173,43 @@ Proof
      pure_rewrite_tac[ADD_ASSOC] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists `t` >> simp[decode_site_effect_def, abi_decode_source_def]
 QED
+
+(* The copied window has its source meaning even when the bytes are not canonical. *)
+Theorem abi_decode_array_bulk_suffix_memory:
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty /\
+  abi_decode_bytes_widths env ty /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
+  ~is_abi_dynamic ce.ce_struct_fields ty /\
+  type_memory_bytes ce ty < dimword(:256) /\
+  bs = mem_bytes_at (b+pos) (h-pos) source /\
+  n = w2n (mem_word_at (b+pos) source) /\ n <= maxn /\
+  pos+32+n*type_memory_bytes ce ty <= h /\
+  mem_word_at d mem = n2w n /\
+  mem_bytes_at (d+32) (n*type_memory_bytes ce ty) mem =
+    mem_bytes_at (b+pos+32) (n*type_memory_bytes ce ty) source ==>
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+  ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+        (dec (Array NONE (vyper_to_abi_type env ty)) bs) = SOME v /\
+      val_in_memory (ArrayTV tv (Dynamic maxn)) v d mem
+Proof
+  strip_tac >>
+  `32 <= LENGTH bs /\
+   n*type_memory_bytes ce ty <= LENGTH (DROP 32 bs)` by
+    (simp[IgnAsm `n = _`, mem_bytes_at_def] >> decide_tac) >>
+  `TAKE 32 bs = mem_bytes_at (b+pos) 32 source` by
+    (gvs[] >>
+     `TAKE 32 (DROP 0 (mem_bytes_at (b+pos) (h-pos) source)) =
+       mem_bytes_at ((b+pos)+0) 32 source` by
+       (irule mem_bytes_at_window >> decide_tac) >> gvs[]) >>
+  `n = abi_head_word bs` by
+    simp[abi_head_word_def, mem_word_at_def, mem_bytes_at_def] >>
+  `TAKE (n*type_memory_bytes ce ty) (DROP 32 bs) =
+   mem_bytes_at (b+pos+32) (n*type_memory_bytes ce ty) source` by
+    (qpat_x_assum `bs = _` SUBST_ALL_TAC >>
+     irule mem_bytes_at_window >> decide_tac) >>
+  irule abi_decoder_static_dynarray_memory >> goal_assum (drule_at Any) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`ce`, `n`, `sf`] >> gvs[]
+QED
+
