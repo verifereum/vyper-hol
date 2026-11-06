@@ -4,6 +4,7 @@ Ancestors
   vyperInterpreter vyperSmallStep vyperContext vyperState vyperAST vyperValue
   vfmState vfmExecution finite_map list option pair While
   vyperCallOutcome extCallOracle venomCallOracleDefs asmSem callTrace vfmContext
+  vyperTestRunner
 Libs cv_transLib wordsLib
 
 Definition system_address_def:
@@ -353,6 +354,30 @@ val () = deletion_send_observation_def
 
 Theorem direct_send_transports_successful_effects_and_discards_failed_effects:
   deletion_send_observation F /\ deletion_send_observation T
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* A constructor that selfdestructs registers no sources, so a later call to
+   its address runs on the EVM against no code: it succeeds with no output. *)
+Definition codeless_call_def:
+  codeless_call expected = vyperTestRunner$Call
+    <|sender := 0x1000w; target := 0x2000w; callData := [1w; 2w; 3w; 4w]; value := 0;
+      timeStamp := 0; blockNumber := 0; blockHashes := []; blobHashes := [];
+      blobBaseFee := 0; gasLimit := 1000000; gasPrice := 0; chainId := 1;
+      static := F; expectedOutput := expected|>
+End
+val () = cv_auto_trans codeless_call_def;
+
+Definition codeless_call_observation_def:
+  codeless_call_observation =
+    (ISL (SND (run_trace [] initial_machine_state (codeless_call (SOME [])))) /\
+     ISR (SND (run_trace [] initial_machine_state (codeless_call NONE))))
+End
+val () = cv_auto_trans codeless_call_observation_def;
+
+Theorem codeless_call_succeeds_with_empty_output:
+  codeless_call_observation
 Proof
   CONV_TAC cv_eval
 QED

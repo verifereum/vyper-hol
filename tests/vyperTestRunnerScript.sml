@@ -582,8 +582,8 @@ Definition run_trace_def:
    | Call ct => (snss,
      case ALOOKUP snss ct.target
      of NONE => if is_transfer ct then do_transfer ct am
-                else if ¬NULL (lookup_account ct.target am.accounts).code then
-                  let rr = raw_call_evm am ct in
+                else
+                  (let rr = raw_call_evm am ct in
                   let res = FST rr; am' = SND rr in
                   case res of
                   | INR ex => if IS_NONE ct.expectedOutput then INL am'
@@ -593,9 +593,7 @@ Definition run_trace_def:
                        | NONE => INR (Error $ RuntimeError "error expected")
                        | SOME expected =>
                            if out = expected then INL am'
-                           else INR (Error $ RuntimeError "output mismatch"))
-                else if IS_NONE ct.expectedOutput then INL am
-                else INR (Error $ TypeError "sns not found")
+                           else INR (Error $ RuntimeError "output mismatch")))
       | SOME (reads_gas, sns) => let
         cr = run_call reads_gas sns am ct;
         call_res = FST cr;
