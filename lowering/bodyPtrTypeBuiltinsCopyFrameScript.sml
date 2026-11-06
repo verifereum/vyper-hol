@@ -10,18 +10,14 @@ Theorem copy_memory_destination_robust:
   n < dimword(:256) /\ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\ ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
+  th.t_mem = (tn.t_mem DIFF {j | w2n b <= j /\ j < w2n b+n}) UNION
+    {w2n b+j | j < n /\ w2n a+j IN tn.t_mem} /\
   val_wf tv v /\ val_footprint tv v <= n /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) ==>
-  ?th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G th /\
-    th.t_var = tn.t_var /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
-    (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv v (w2n b) m)
+  !m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv v (w2n b) m
 Proof
-  strip_tac >> drule_all copy_memory_counted_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  drule_all copy_memory_endpoint_frame >> strip_tac >>
-  qexists_tac `th` >> simp[] >> rpt strip_tac >>
-  irule robust_val_in_memory_copy_transport >> simp[] >>
+  strip_tac >> drule_all copy_memory_endpoint_frame >> strip_tac >>
+  rpt strip_tac >> irule robust_val_in_memory_copy_transport >> simp[] >>
   qexistsl_tac [`s.vs_memory`, `t.vs_memory`, `n`, `w2n a`, `tn.t_mem`, `th.t_mem`] >>
   simp[] >> rpt strip_tac >> simp[] >> decide_tac
 QED
