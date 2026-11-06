@@ -2,7 +2,7 @@
 Theory abiEncoderBytesCode
 Ancestors
   abiEncoder emitHelper context compileEnv abiDecoderContract
-  emitHelperProps exprLoweringProps venomInst words list rich_list arithmetic
+  emitHelperProps exprLoweringProps venomInst words list rich_list arithmetic abiBytestringCode
 Libs monadsyntax
 
 Definition abi_encode_round_def:
@@ -87,11 +87,9 @@ Theorem abi_encode_bytes_shape:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode)
     (emitted_insts st st')
 Proof
-  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[inst_extends_def, emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
+  strip_tac >> drule compile_abi_bytestring_code >>
+  simp[same_blocks_def, inst_extends_def, IS_PREFIX_APPEND,
+    bytestring_encoder_insts_def, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
 
 Theorem abi_encode_bytes_copy_shape:

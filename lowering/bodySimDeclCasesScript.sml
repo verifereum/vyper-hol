@@ -653,6 +653,9 @@ Proof
      res_tac >> gvs[FLOOKUP_DEF]) >>
   drule_all is_int_type_word >> strip_tac >>
   drule_all word_type_sizes >> disch_then (qspec_then `cenv` strip_assume_tac) >>
+  `word_memory_type tyv` by
+    (qspecl_then [`get_tenv cx`, `typ`, `tyv`] mp_tac
+       loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by

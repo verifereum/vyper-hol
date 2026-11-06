@@ -100,10 +100,10 @@ Proof
   `sb < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
   drule_all abi_encoder_word_input_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts start end_st) initial = OK raw` >>
-  `abi_encoder_sequence_post at av out start limit_st d initial raw` by
-    asm_simp_tac bool_ss [abi_encoder_sequence_post_def] >>
   drule abi_encoder_word_global_code >> strip_tac >>
   drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
+  `abi_encoder_sequence_post at av out start limit_st d initial raw` by
+    asm_simp_tac bool_ss [abi_encoder_sequence_post_def] >>
   mp_tac (Q.INST [`ei` |-> `AbiPrimWord`, `st` |-> `start`, `st'` |-> `end_st`]
     abi_encode_static_leaf_shape) >>
   (impl_tac >- simp[abi_encoder_static_leaf_def]) >> strip_tac >>
@@ -126,10 +126,10 @@ Proof
   `sb < dimword (:256) /\ d < dimword (:256) /\ sz < dimword (:256)` by decide_tac >>
   drule_all abi_encoder_copy_input_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts start end_st) initial = OK raw` >>
-  `abi_encoder_sequence_post at av out start limit_st d initial raw` by
-    asm_simp_tac bool_ss [abi_encoder_sequence_post_def] >>
   drule abi_encoder_copy_global_code >> strip_tac >>
   drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
+  `abi_encoder_sequence_post at av out start limit_st d initial raw` by
+    asm_simp_tac bool_ss [abi_encoder_sequence_post_def] >>
   mp_tac (Q.INST [`ei` |-> `AbiCopy sz`, `st` |-> `start`, `st'` |-> `end_st`]
     abi_encode_static_leaf_shape) >>
   (impl_tac >- simp[abi_encoder_static_leaf_def]) >> strip_tac >>
@@ -158,10 +158,10 @@ Proof
   disch_then (qspecl_then [`limit_st`, `d`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac []) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts start end_st) initial = OK raw` >>
-  `abi_encoder_sequence_post at av out start limit_st d initial raw` by
-    asm_simp_tac bool_ss [abi_encoder_sequence_post_def] >>
   drule abi_encoder_bytes_global_code >> strip_tac >>
   drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
+  `abi_encoder_sequence_post at av out start limit_st d initial raw` by
+    asm_simp_tac bool_ss [abi_encoder_sequence_post_def] >>
   drule abi_encode_bytes_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts start end_st)` by fs[EVERY_CONJ] >>

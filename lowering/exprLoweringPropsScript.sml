@@ -17,7 +17,7 @@
  *   alloca_room_callee       — a callee, entered at the caller's frontier,
  *                              has room
  *   compile_literal_vv_correct  — word literal case
- *   compile_name_correct     — variable lookup case
+ *   compile_name_correct     — allocation-backed word variable lookup
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
@@ -50,11 +50,11 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
+  exprLowering exprCallBounds emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
+  valueEncoding valueEncodingProofs valueLoadProps localPtrsProps venomMemDefs
   vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
@@ -933,48 +933,51 @@ Proof
          emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL]
 QED
 
-(* A well-typed word value held in memory is the word at its base. *)
-Theorem word_val_in_memory_mem_word_at[local]:
-  ∀bt v off mem.
-    val_in_memory (BaseTV bt) v off mem ∧ value_has_type (BaseTV bt) v ∧
-    is_word_type (BaseT bt) ⇒
-    mem_word_at off mem = typed_val_to_w256 (BaseTV bt) v
+(* --- Name (local variable load) --- *)
+Theorem lower_value_name_memloc:
+  !cenv id offset size ty ann cs.
+  FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ==>
+  lower_value compile_expr cenv ty (Name ann id) cs =
+    if is_word_type ann then emit_op MLOAD [Lit (n2w offset)] cs
+    else (Lit (n2w offset),cs)
 Proof
-  rpt strip_tac >> Cases_on `v` >> Cases_on `bt` >>
-  gvs[value_has_type_def, is_word_type_def]
-  >~ [`BytesT bd`]
-  >- (Cases_on `bd` >>
-      gvs[value_has_type_def, is_word_type_def,
-          valueEncodingPropsTheory.val_in_memory_fixed_bytes])
-  >~ [`BaseTV AddressT`]
-  >- gvs[valueEncodingPropsTheory.val_in_memory_address] >>
-  gvs[val_in_memory_def, typed_val_to_w256_def]
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [lower_value_def, comp_bind_def] >>
+  PURE_ONCE_REWRITE_TAC [compile_expr_raw_def] >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+    comp_return_def, unwrap_value_def, contextTheory.mk_ptr_def,
+    contextTheory.compile_ptr_load_def, LET_THM] >>
+  IF_CASES_TAC >> simp[comp_return_def]
 QED
 
-(* --- Name (local variable load) --- *)
+Theorem lower_value_name_ptrvar:
+  !cenv id ptr size ty ann cs.
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar ptr size) ==>
+  lower_value compile_expr cenv ty (Name ann id) cs =
+    if is_word_type ann then emit_op MLOAD [ptr] cs else (ptr,cs)
+Proof
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [lower_value_def, comp_bind_def] >>
+  PURE_ONCE_REWRITE_TAC [compile_expr_raw_def] >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+    comp_return_def, unwrap_value_def, contextTheory.mk_ptr_def,
+    contextTheory.compile_ptr_load_def, LET_THM] >>
+  IF_CASES_TAC >> simp[comp_return_def]
+QED
+
 (* v must be a primitive (word-sized) value.  The local is held through its
    pointer variable (PtrVar), which is what state_rel relates.
    Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
    The type_value tv from the scope correctly distinguishes address from bytesN. *)
-(* NOTE: original statement was FALSE for v = NoneV and for
-   type/value mismatches like entry.type=BaseTV BoolT with v=BytesV [1w]
-   (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
-   offset mem = T (vacuously true) but mload offset ss is unconstrained,
-   while typed_val_to_w256 NoneV = 0w.
-   Fix: added v ≠ NoneV and value_has_type entry.type v.
-   It was also false for a non-word annotation ann: compile_name_vv tags the
-   pointer with ann, and unwrap_value loads only if is_word_type ann, else it
-   returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
+(* A well-typed word value rules out NoneV and type/value mismatches.
+   A word annotation selects MLOAD; aggregate annotations return the pointer. *)
 Theorem compile_name_correct:
-  ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
+  ∀ func cenv cx ty ann id es ss st op st' v es' p sz entry.
     state_rel func cenv cx es ss ∧
     (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
       (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) size) ∧
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ∧
     lookup_scopes id es.scopes = SOME entry ∧
     entry.value = v ∧
-    v ≠ NoneV ∧
     value_has_type entry.type v ∧
     (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt)) ∧
     is_word_type ann
@@ -991,25 +994,25 @@ Proof
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def] >>
      metis_tac[read_result_state]) >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, compile_expr_def, expr_type_def, compile_name_vv_def,
-       unwrap_value_def, contextTheory.mk_ptr_def,
-       contextTheory.compile_ptr_load_def, comp_bind_def,
-       comp_return_def] >>
-  strip_tac >>
+  `emit_op MLOAD [Var p] st = (op,st')` by
+    (drule lower_value_name_ptrvar >> simp[] >> strip_tac >> gvs[]) >>
   drule emit_op_extends >> drule emitted_insts_emit_op_local >>
   rpt strip_tac >> gvs[] >>
   `∃w. lookup_var p ss = SOME w ∧
-       val_in_memory (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
-    (fs[state_rel_def, local_ptrs_rel_def] >> first_x_assum drule_all >>
-     strip_tac >> qexists_tac `w` >> gvs[]) >>
+       memory_value_rel (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
+    (qpat_x_assum `state_rel _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [state_rel_def]) >>
+     simp[local_ptrs_rel_def] >> strip_tac >>
+     qpat_x_assum `!name ent ptr size. P name ent ptr size ==> ?w. Q name ent ptr size w`
+       (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+     simp[] >> strip_tac >> qexists_tac `w` >> gvs[]) >>
   `eval_operand (Var p) ss = SOME w` by simp[eval_operand_def] >>
   drule step_MLOAD_local >> strip_tac >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   `mload (w2n w) ss = mem_word_at (w2n w) ss.vs_memory` by
     simp[mload_def, mem_word_at_def] >>
-  simp[] >> irule word_val_in_memory_mem_word_at >> simp[]
+  simp[] >> irule memory_value_rel_base_word >> simp[]
 QED
 
 (* --- Not (boolean negation) --- *)
@@ -1296,7 +1299,7 @@ Proof
   simp[ci_mono_def, cs_extends_refl]
 QED
 
-Theorem ci_mono_trans[local]:
+Theorem ci_mono_trans:
   ci_mono a b ∧ ci_mono b c ⇒ ci_mono a c
 Proof
   simp[ci_mono_def] >> rpt strip_tac >> gvs[] >>
@@ -2950,7 +2953,7 @@ QED
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
-Theorem ci_mono_compile_materialize_vv[local]:
+Theorem ci_mono_compile_materialize_vv:
   ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
 Proof
   rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
@@ -3149,7 +3152,8 @@ Proof
     conj_tac >- (
       IF_CASES_TAC >> gvs[]
       >- simp[ci_mono_compile_abi_encode_dyn_static_loop]
-      >> rpt strip_tac >> first_x_assum irule) >>
+      >> rpt strip_tac >>
+         first_x_assum irule >> simp[]) >>
     rpt strip_tac >>
     rpt (ho_match_mp_tac ci_mono_bind ORELSE
          ho_match_mp_tac ci_mono_ignore_bind ORELSE
@@ -4040,20 +4044,42 @@ Theorem ci_mono_builtin_hash[local]:
 Proof
   strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
   >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
-      rpt IF_CASES_TAC >>
-      Cases_on `expr_type (HD args)` >> simp[] >>
-      TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-           TRY (rename1 `BytesT bound` >> Cases_on `bound` >> simp[])) >>
+      Cases_on `is_bytestring_type (expr_type (HD args))`
+      >- (simp[] >> irule ci_mono_uncurry >> reverse conj_tac
+          >- simp[ci_mono_lower_value_cfn] >>
+          simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes]) >>
+      simp[] >> Cases_on `expr_type (HD args)` >> simp[] >>
+      rpt (irule ci_mono_uncurry >> reverse conj_tac
+           >- simp[ci_mono_lower_value_cfn]
+           >> rpt gen_tac >> BETA_TAC) >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word] >>
+      rename1 `BaseT b` >> Cases_on `b` >> simp[] >>
+      rpt (irule ci_mono_uncurry >> reverse conj_tac
+           >- simp[ci_mono_lower_value_cfn]
+           >> rpt gen_tac >> BETA_TAC) >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word] >>
+      rename1 `BytesT bound` >> Cases_on `bound` >> simp[] >>
       rpt (irule ci_mono_uncurry >> reverse conj_tac
            >- simp[ci_mono_lower_value_cfn]
            >> rpt gen_tac >> BETA_TAC) >>
       simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
            ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word]) >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt IF_CASES_TAC >>
-  Cases_on `expr_type (HD args)` >> simp[] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-       TRY (rename1 `BytesT bound` >> Cases_on `bound` >> simp[])) >>
+  Cases_on `is_bytestring_type (expr_type (HD args))`
+  >- (simp[] >> irule ci_mono_uncurry >> reverse conj_tac
+      >- simp[ci_mono_lower_value_cfn] >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_sha256_bytes]) >>
+  simp[] >> Cases_on `expr_type (HD args)` >> simp[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_word] >>
+  rename1 `BaseT b` >> Cases_on `b` >> simp[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_word] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >> simp[] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
@@ -4343,7 +4369,7 @@ Proof
 QED
 
 (* Derive: lower_value compile_expr preserves ci_mono *)
-Theorem ci_mono_lower_value_compile_expr[local]:
+Theorem ci_mono_lower_value_compile_expr:
   ∀ cenv ty e st.
     ci_mono st (SND (lower_value compile_expr cenv ty e st))
 Proof

@@ -1,6 +1,6 @@
 (* Temporary reorder spill slots are fresh for the incoming planner map. *)
 Theory reorderSpillFresh
-Ancestors reorderSim doSwapSim planWf prefixSpillReplay stackPlanGen stackPlanOps
+Ancestors reorderSim reduceDepthSim doSwapSim planWf prefixSpillReplay stackPlanGen stackPlanOps
           stackPlanTypes stackModel finite_map list rich_list pred_set arithmetic
 Libs BasicProvers
 

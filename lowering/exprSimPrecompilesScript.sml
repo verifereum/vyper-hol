@@ -2441,4 +2441,3 @@ Proof
   >- metis_tac[int_calls_builtin_arg] >>
   gvs[EVERY_MEM]
 QED
-

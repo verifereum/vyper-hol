@@ -1,6 +1,6 @@
 Theory regularCallEmitSim
 Ancestors
-  regularMemorySim venomExecSemantics venomCallOracleDefs codegenRel asmSem
+  memoryReadRel regularMemorySim venomExecSemantics venomCallOracleDefs codegenRel asmSem
   stackPlanGen contextCodegenRel venomInst asmIR
   list rich_list arithmetic venomState strongPrefixSim spillSim emitSim stackModel instSimHelpers planSpillBounds
 

@@ -1,6 +1,6 @@
 Theory generatedPrefixSim
 Ancestors
-  scratchPrefixSim emitInputSim reorderSim allocMono planWf
+  operandPreparationSim scratchPrefixSim emitInputSim reorderSim allocMono planWf
   planSpillBounds genericInputReady
   stackPlanGen stackPlanOps stackPlanTypes stackModel
   codegenRel asmSem planExec spillSim doSwapSim stackOpSim blockSimHelpers
@@ -79,15 +79,6 @@ Proof
   Cases_on `MEM s nl` >> simp[do_dup_def]
 QED
 
-Theorem do_restore_layout_wf:
-  do_restore op ps = (ops,ps') /\
-  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
-  spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
-Proof
-  strip_tac >> Cases_on `FLOOKUP ps.ps_spilled op` >>
-  gvs[do_restore_def] >> metis_tac[spill_alloc_layout_wf_after_free]
-QED
-
 Theorem do_restore_not_spilled:
   do_restore op ps = (ops,ps') ==> FLOOKUP ps'.ps_spilled op = NONE
 Proof
@@ -120,7 +111,7 @@ Proof
          disch_then (qspecl_then [`opc`, `nl`] mp_tac) >> simp[]) >>
       gvs[EVERY_APPEND] >>
       `spill_alloc_layout_wf ps1.ps_alloc ps1.ps_spilled` by
-        metis_tac[do_restore_layout_wf] >>
+        metis_tac[spillPlanSimTheory.do_restore_layout_wf] >>
       `FLOOKUP ps1.ps_spilled op = NONE` by metis_tac[do_restore_not_spilled] >>
       qpat_x_assum `asm_block_at _ _ _` mp_tac >>
       simp[execute_plan_append, asm_block_at_append] >> strip_tac >>
@@ -140,53 +131,6 @@ Proof
       conj_tac >- first_assum ACCEPT_TAC >>
       simp[execute_plan_append] >> decide_tac) >>
   drule_all emit_one_input_unspilled_numeric >> simp[]
-QED
-
-Theorem emit_one_input_unspilled_layout_wf:
-  ~(is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-  emit_one_input opc nl op ps = (ops,ps') /\
-  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
-  spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
-Proof
-  strip_tac >> Cases_on `op` >> fs[is_var_operand_def]
-  >- gvs[emit_one_input_def, is_var_operand_def]
-  >- (rename1 `Var v` >>
-      qpat_x_assum `emit_one_input _ _ _ _ = _` mp_tac >>
-      simp[emit_one_input_def, is_var_operand_def] >>
-      Cases_on `MEM v nl` >> simp[]
-      >- (Cases_on `stack_get_depth (Var v) ps.ps_stack` >> simp[]
-          >- (strip_tac >> gvs[]) >>
-          rename1 `stack_get_depth _ _ = SOME dist` >>
-          Cases_on `do_dup dist ps` >> simp[] >> strip_tac >> gvs[] >>
-          drule do_dup_layout_wf >>
-          disch_then (qspec_then `dist` mp_tac) >>
-          simp[] >> metis_tac[stack_get_depth_bound]) >>
-      strip_tac >> gvs[]) >>
-  qpat_x_assum `emit_one_input _ _ _ _ = _` mp_tac >>
-  simp[emit_one_input_def, is_var_operand_def] >>
-  Cases_on `opc = INVOKE` >> simp[] >> strip_tac >> gvs[]
-QED
-
-Theorem emit_one_input_layout_wf:
-  emit_one_input opc nl op ps = (ops,ps') /\
-  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
-  spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
-Proof
-  strip_tac >>
-  Cases_on `is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)`
-  >- (qpat_x_assum `is_var_operand op /\ _` strip_assume_tac >>
-      Cases_on `do_restore op ps` >>
-      rename1 `do_restore op ps = (rops,ps1)` >>
-      Cases_on `emit_one_input opc nl op ps1` >>
-      rename1 `emit_one_input opc nl op ps1 = (sops,ps2)` >>
-      drule_all emit_one_input_restore_decompose >>
-      disch_then (qspecl_then [`opc`, `nl`] mp_tac) >> simp[] >> strip_tac >>
-      `spill_alloc_layout_wf ps1.ps_alloc ps1.ps_spilled` by
-        metis_tac[do_restore_layout_wf] >>
-      `FLOOKUP ps1.ps_spilled op = NONE` by metis_tac[do_restore_not_spilled] >>
-      irule emit_one_input_unspilled_layout_wf >>
-      qexistsl [`nl`, `op`, `opc`, `sops`, `ps1`] >> simp[]) >>
-  metis_tac[emit_one_input_unspilled_layout_wf]
 QED
 
 Theorem emit_input_plan_venom_asm_rel_numeric:
@@ -216,7 +160,7 @@ Proof
   gvs[EVERY_APPEND] >>
   `!l. h = Label l ==> IS_SOME (FLOOKUP lo l)` by metis_tac[MEM] >>
   `spill_alloc_layout_wf ps1.ps_alloc ps1.ps_spilled` by
-    metis_tac[emit_one_input_layout_wf] >>
+    metis_tac[emitOperandSimTheory.emit_one_input_layout_wf] >>
   qpat_x_assum `asm_block_at _ _ _` mp_tac >>
   simp[execute_plan_append, asm_block_at_append] >> strip_tac >>
   drule_all emit_one_input_venom_asm_rel_numeric >>
@@ -277,17 +221,6 @@ Proof
   metis_tac[emit_one_input_unspilled_slots_bounded]
 QED
 
-Theorem emit_input_plan_layout_wf:
-  !operands ps ops ps'.
-  emit_input_plan opc operands nl ps = (ops,ps') /\
-  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
-  spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
-Proof
-  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >> strip_tac >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  metis_tac[emit_one_input_layout_wf]
-QED
-
 Theorem emit_input_plan_slots_bounded:
   !operands ps ops ps'.
   emit_input_plan opc operands nl ps = (ops,ps') /\ plan_slots_bounded spill_base ps ==>
@@ -305,7 +238,7 @@ Theorem emit_one_input_available:
 Proof
   strip_tac >>
   qspecl_then [`opc`, `nl`, `op`, `ps`, `x`] mp_tac
-    emit_one_input_inventory_mono_aux >>
+    operandInventoryTheory.emit_one_input_inventory_mono >>
   simp[] >>
   spose_not_then strip_assume_tac >>
   gvs[GSYM LIST_ELEM_COUNT_MEM] >>
@@ -458,7 +391,7 @@ Theorem emit_input_plan_prepared_sim:
         st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
   strip_tac >>
-  conj_tac >- metis_tac[emit_input_plan_layout_wf] >>
+  conj_tac >- metis_tac[operandPreparationSimTheory.emit_input_plan_layout_wf] >>
   conj_tac >- metis_tac[emit_input_plan_slots_bounded] >>
   conj_tac >- metis_tac[emit_input_plan_residual_budget_nil] >>
   conj_tac >- metis_tac[emit_input_plan_pending_inventory] >>
@@ -637,7 +570,7 @@ Proof
     (Cases_on `x > 16` >> gvs[]
      >- (qspecl_then [`LENGTH ps1.ps_stack`, `pending`, `op`,
            `LENGTH pending - (idx + 1)`, `LENGTH pending`, `ps1`,
-           `reduce_ops`, `ps2`] mp_tac reduce_depth_plan_length_floor >>
+           `reduce_ops`, `ps2`] mp_tac reduceDepthSimTheory.reduce_depth_plan_length_floor >>
          simp[] >> decide_tac)) >>
   Cases_on `stack_get_unfixed_depth op
     (LENGTH pending - (idx + 1)) (LENGTH pending) ps2.ps_stack` >> simp[]
@@ -900,7 +833,7 @@ Theorem selected_input_arranged:
   arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected
 Proof
   strip_tac >>
-  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all inputMaterialisedTheory.emit_input_plan_materialised >> strip_tac >>
   drule_all emit_input_plan_residual_budget_nil >> strip_tac >>
   drule perm_operand_counts >> strip_tac >>
   drule residual_budget_wf_perm >>

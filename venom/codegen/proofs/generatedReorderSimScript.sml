@@ -167,7 +167,7 @@ Proof
   Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[]
   >- (Cases_on `FLOOKUP ps.ps_spilled op` >> gvs[]
       >- simp[execute_plan_def, asm_steps_def] >>
-      conj_tac >- metis_tac[do_restore_layout_wf] >>
+      conj_tac >- metis_tac[spillPlanSimTheory.do_restore_layout_wf] >>
       drule_all do_restore_venom_asm_rel_numeric >>
       disch_then (qspec_then `o2pc` strip_assume_tac) >>
       qexists `st'` >> asm_rewrite_tac[] >> MATCH_ACCEPT_TAC ADD_COMM) >>
@@ -209,7 +209,7 @@ Proof
   rename1 `venom_asm_rel lo ps1 vs mid` >>
   Cases_on `dist > 16` >> gvs[]
   >- ( `LENGTH pending <= LENGTH ps2.ps_stack` by
-         (drule reduce_depth_plan_length_floor >> simp[] >> decide_tac) >>
+         (drule reduceDepthSimTheory.reduce_depth_plan_length_floor >> simp[] >> decide_tac) >>
        `asm_block_at prog mid.as_pc (execute_plan initial_fmp reduce_ops)` by
          metis_tac[ADD_COMM] >>
        drule_all reduce_depth_plan_venom_asm_rel_numeric >>
@@ -495,7 +495,7 @@ Proof
   `plan_steps (\(idx,op) ps. reorder_one dfg target_ops idx op ps)
      (MAPi (\i op. (i,op)) target_ops) ps = (ops,ps')` by
     (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-     simp[reorder_plan_eq_plan_steps]) >>
+     simp[reorderStagesTheory.reorder_plan_eq_plan_steps]) >>
   drule_all plan_steps_reorder_venom_asm_rel_numeric >> simp[]
 QED
 
@@ -571,7 +571,7 @@ Proof
   `EVERY (\s. case s of SOSpill off => off < dimword(:256)
      | SORestore off => off < dimword(:256) | _ => T) ops` by
     (irule reorder_steps_spill_ready_address_bounds >>
-     gvs[reorder_plan_eq_plan_steps] >> metis_tac[]) >>
+     gvs[reorderStagesTheory.reorder_plan_eq_plan_steps] >> metis_tac[]) >>
   drule_all reorder_plan_venom_asm_rel_numeric >> simp[]
 QED
 

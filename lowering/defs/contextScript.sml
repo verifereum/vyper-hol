@@ -31,7 +31,8 @@
 
 Theory context
 Ancestors
-  emitHelper compileEnv venomInst typedCopyDomain list pair arithmetic combin
+  emitHelper compileEnv venomInst typedCopyDomain memoryLayoutDefs
+  list pair arithmetic combin
 Libs
   monadsyntax
 
@@ -837,12 +838,13 @@ End
 
 (* Store a primitive value or a complex memory pointer, with the source layout.
    Bytestrings always copy their runtime length, even when the types agree.
+   Tuple bulk copies retain the pinned code shape when all field layouts agree.
    Mirrors Python: context.py Context.store_memory. *)
 Definition compile_store_memory_def:
   compile_store_memory cenv src dst dst_ty src_ty =
     if is_word_type dst_ty then emit_void MSTORE [dst; src]
     else if is_bytestring_type dst_ty then compile_store_bytestring src dst
-    else if dst_ty ≠ src_ty then
+    else if dst_ty ≠ src_ty ∧ ¬tuple_memory_layout_eq dst_ty src_ty then
       compile_store_memory_typed cenv dst dst_ty src src_ty
     else compile_copy_memory dst src (type_memory_bytes cenv dst_ty)
 End
