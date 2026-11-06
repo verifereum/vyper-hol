@@ -2345,3 +2345,36 @@ Proof
    gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
        generate_offset_plan_def, stack_push_def] >> metis_tac[])
 QED
+
+Theorem regional_indexed_body_live_coverage:
+  !fn bb i inst sb ps dfg cfg halting next_term ops qs.
+  wf_function fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+  ~is_param_opcode inst.inst_opcode /\
+  plan_slots_bounded sb ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+  generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halting next_term
+    bb.bb_label ps = SOME (ops,qs) ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> qx_gen_tac `v` >> disch_tac >>
+  Cases_on `inst.inst_opcode = NOP \/ inst.inst_opcode = OFFSET`
+  >- (irule regional_indexed_special_live_coverage >>
+      goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      simp[] >> metis_tac[]) >>
+  irule regional_indexed_regular_live_coverage >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `sb` >> simp[] >> metis_tac[]
+QED
