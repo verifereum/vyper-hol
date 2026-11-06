@@ -52,16 +52,16 @@ Theorem copy_generated_destination_checks:
   H = step_prov PG G (mk_inst (cs.cs_next_id+6) MUL
     [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) u /\
   tm = step_taint (mk_inst (cs.cs_next_id+6) MUL
-    [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) s u tn ==>
+    [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) s u tn /\
+  Gf = step_prov PG H (mk_inst (cs.cs_next_id+7) ADD
+    [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5])
+    (update_var (slot_copy_var cs 5) (a+n2w off) w) /\
+  tnf = step_taint (mk_inst (cs.cs_next_id+7) ADD
+    [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]) w
+    (update_var (slot_copy_var cs 5) (a+n2w off) w) tm ==>
   inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst (cs.cs_next_id+6) MUL [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4];
-     mk_inst (cs.cs_next_id+7) ADD [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]] s
-    (step_prov PG H (mk_inst (cs.cs_next_id+7) ADD
-      [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5])
-      (update_var (slot_copy_var cs 5) (a+n2w off) w))
-    (step_taint (mk_inst (cs.cs_next_id+7) ADD
-      [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]) w
-      (update_var (slot_copy_var cs 5) (a+n2w off) w) tm)
+     mk_inst (cs.cs_next_id+7) ADD [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]] s Gf tnf
 Proof
   strip_tac >>
   `op_taint tm (Var root) = {} /\
@@ -114,4 +114,72 @@ Proof
   fs[] >> rpt strip_tac >> gvs[] >>
   simp[copy_len_binop_ghost_frame, step_prov_other_output,
        step_taint_other_output, mk_inst_def]
+QED
+
+Theorem copy_generated_destination_execution:
+  eval_operand (Var (slot_copy_var cs 0)) s = SOME k /\ k*32w = n2w off /\
+  lookup_var root s = SOME a /\ root <> slot_copy_var cs 4 ==>
+  run_inst_seq
+    [mk_inst (cs.cs_next_id+6) MUL [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4];
+     mk_inst (cs.cs_next_id+7) ADD [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]] s =
+  OK (update_var (slot_copy_var cs 5) (a+n2w off)
+        (update_var (slot_copy_var cs 4) (n2w off) s))
+Proof
+  strip_tac >>
+  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_def] >>
+  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem copy_generated_destination_segment:
+  eval_operand (Var (slot_copy_var cs 0)) s = SOME k /\
+  op_taint tn (Var (slot_copy_var cs 0)) = {} /\ k*32w = n2w off /\
+  lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
+  root <> slot_copy_var cs 4 /\ root <> slot_copy_var cs 5 /\
+  off < capacity /\ off+32 <= capacity /\ w2n a+off < dimword(:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?Gf tnf t.
+    t = update_var (slot_copy_var cs 5) (a+n2w off)
+          (update_var (slot_copy_var cs 4) (n2w off) s) /\
+    run_inst_seq
+      [mk_inst (cs.cs_next_id+6) MUL [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4];
+       mk_inst (cs.cs_next_id+7) ADD [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]] s = OK t /\
+    (!ix. inst_seq_ptr D lo ctx fn PG G tn
+      [mk_inst (cs.cs_next_id+6) MUL [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4];
+       mk_inst (cs.cs_next_id+7) ADD [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]]
+      (s with vs_inst_idx := ix) Gf tnf) /\
+    ptr_covers Gf tnf (slot_copy_var cs 5) t 32 /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. p <> slot_copy_var cs 4 /\ p <> slot_copy_var cs 5 ==>
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qabbrev_tac `u = update_var (slot_copy_var cs 4) (n2w off) s` >>
+  qabbrev_tac `t = update_var (slot_copy_var cs 5) (a+n2w off) u` >>
+  qabbrev_tac `H = step_prov PG G (mk_inst (cs.cs_next_id+6) MUL
+    [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) u` >>
+  qabbrev_tac `tm = step_taint (mk_inst (cs.cs_next_id+6) MUL
+    [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) s u tn` >>
+  qabbrev_tac `Gf = step_prov PG H (mk_inst (cs.cs_next_id+7) ADD
+    [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]) t` >>
+  qabbrev_tac `tnf = step_taint (mk_inst (cs.cs_next_id+7) ADD
+    [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]) u t tm` >>
+  qexistsl [`Gf`, `tnf`, `t`] >>
+  conj_tac >- simp[Abbr `t`, Abbr `u`] >>
+  conj_tac >- (simp[Abbr `t`, Abbr `u`] >>
+               irule copy_generated_destination_execution >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> irule copy_generated_destination_checks >>
+      simp[Abbr `Gf`, Abbr `tnf`, Abbr `t`, Abbr `u`, Abbr `H`, Abbr `tm`,
+           copy_update_inst_idx, allocas_from_def, allocas_below_fmp_def] >>
+      conj_tac
+      >- (qexistsl [`a`, `off`] >> fs[lookup_var_def]) >>
+      qexists `capacity` >> simp[]) >>
+  rule_assum_tac (REWRITE_RULE[markerTheory.Abbrev_def]) >>
+  `u = (u with vs_inst_idx := u.vs_inst_idx)` by simp[] >>
+  conj_tac
+  >- (drule_all copy_generated_destination_covers >> simp[]) >>
+  drule_all copy_generated_destination_ghost >> simp[]
 QED
