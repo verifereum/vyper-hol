@@ -2378,3 +2378,92 @@ Proof
   goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `sb` >> simp[] >> metis_tac[]
 QED
+
+Theorem regional_regular_resources:
+  inst.inst_opcode <> JMP /\
+  plan_slots_bounded sb ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,mid)` >>
+  rename1 `_ = (rops,arranged)` >>
+  `?pending. PERM pending (compute_operands inst) /\
+    reorder_plan dfg pending mid = (rops,arranged)` by
+    (irule inventory_selected_reorder >> qexists_tac `inst.inst_opcode` >> simp[LET_THM]) >>
+  qpat_x_assum `(if _ then _ else _) = (rops,arranged)` kall_tac >> fs[] >>
+  `LENGTH (compute_operands inst) <= LENGTH mid.ps_stack` by
+    (drule available_input_plan_length >> simp[] >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics pushed` >>
+  `ALL_DISTINCT pushed.ps_stack /\ DISJOINT (set pushed.ps_stack) (FDOM pushed.ps_spilled)` by
+    (irule inventory_regular_output_resources >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+     simp[Abbr `pushed`] >> metis_tac[]) >>
+  pairarg_tac >> simp[] >>
+  rename1 `generate_emit_ops _ _ _ = (eops,emitted)` >>
+  `ALL_DISTINCT emitted.ps_stack /\ DISJOINT (set emitted.ps_stack) (FDOM emitted.ps_spilled)` by
+    metis_tac[fnBlockPlanStaticBalanceTheory.generate_emit_ops_stack, inventory_emit_ops_spilled, pairTheory.SND] >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  qpat_x_assum `Abbrev (pushed = _)` kall_tac >>
+  Cases_on `inst.inst_outputs = []`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      metis_tac[inventory_release_resources, release_dead_spills_stack]) >>
+  `ALL_DISTINCT (SND (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted
+      else ([],emitted))).ps_stack /\
+   DISJOINT (set (SND (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted
+      else ([],emitted))).ps_stack)
+     (FDOM (SND (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted
+      else ([],emitted))).ps_spilled)` by
+    (IF_CASES_TAC >> simp[] >> irule inventory_popmany_resources >> simp[]) >>
+  simp[] >> pairarg_tac >> fs[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (oopt,optimised)` >>
+  `ALL_DISTINCT optimised.ps_stack /\ DISJOINT (set optimised.ps_stack) (FDOM optimised.ps_spilled)` by
+    (Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> gvs[] >>
+     metis_tac[inventory_optimistic_swap_resources, pairTheory.SND]) >>
+  strip_tac >> gvs[] >>
+  metis_tac[inventory_release_resources, release_dead_spills_stack]
+QED
+
+Theorem regional_body_resources:
+  inst_wf inst /\ inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+  ~is_param_opcode inst.inst_opcode /\
+  plan_slots_bounded sb ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs /\
+  generate_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = SOME (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack /\ DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = NOP`
+  >- gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def] >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (drule_all inst_wf_offset_shape >> strip_tac >>
+      gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+          generate_offset_plan_def, stack_push_def, EVERY_DEF, ALL_DISTINCT_SNOC,
+          pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = (ops,qs)` by
+    (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_inst_plan_def, LET_THM] >> rpt IF_CASES_TAC >> gvs[]) >>
+  irule regional_regular_resources >>
+  goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `sb` >> simp[]
+QED
