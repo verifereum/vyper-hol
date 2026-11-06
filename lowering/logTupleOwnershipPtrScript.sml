@@ -2,7 +2,7 @@
 Theory logTupleOwnershipPtr
 Ancestors
   localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv exprLoweringProps abiBuiltinAllocation
-  logTupleShapePtr abiEncoderComplexCode abiEncoderComplexPrefix
+  logTupleShapePtr abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderArrayFrame
   stmtSimLogTrace emitHelperProps exprSimProps abiDecoderReentry context ASCIInumbers string
   venomMemDefs venomState venomInst finite_map list words arithmetic
 
@@ -141,4 +141,64 @@ Theorem log_local_region_inst_idx[simp]:
   local_region ce scopes s name b sz
 Proof
   simp[local_region_def, lookup_var_def]
+QED
+
+Theorem log_one_allocation_protected_bytes:
+  alloca_inv s /\ cut <= site /\
+  ((FLOOKUP s.vs_allocas site = NONE /\ p = s.vs_alloca_next) \/
+   FLOOKUP s.vs_allocas site = SOME (p,cap)) /\
+  (!name b sz. local_region ce scopes s name b sz ==>
+    abi_footprint_disjoint b sz [(p,cap)]) ==>
+  (!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+    aid < cut /\ off <= i /\ i < off+sz ==>
+    abi_footprint_disjoint i 1 [(p,cap)]) /\
+  (!name b sz i. local_region ce scopes s name b sz /\ b <= i /\ i < b+sz ==>
+    abi_footprint_disjoint i 1 [(p,cap)])
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `aid <> site` by decide_tac >>
+      drule_all log_alloca_candidate_other_region >> disch_tac >>
+      irule abi_footprint_disjoint_subwindow >>
+      qexistsl_tac [`off`,`sz`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >> irule abi_footprint_disjoint_subwindow >>
+  qexistsl_tac [`b`,`sz`] >> simp[] >> metis_tac[]
+QED
+
+Theorem log_two_allocations_protected_bytes:
+  alloca_inv s /\ alloca_inv t /\ cut <= site1 /\ cut <= site2 /\
+  abi_builtin_allocation_frame next site1 cap1 s t /\
+  ((FLOOKUP s.vs_allocas site1 = NONE /\ p1 = s.vs_alloca_next) \/
+   FLOOKUP s.vs_allocas site1 = SOME (p1,cap1)) /\
+  ((FLOOKUP t.vs_allocas site2 = NONE /\ p2 = t.vs_alloca_next) \/
+   FLOOKUP t.vs_allocas site2 = SOME (p2,cap2)) /\
+  (!name b sz. local_region ce scopes s name b sz ==>
+    abi_footprint_disjoint b sz [(p1,cap1)] /\
+    abi_footprint_disjoint b sz [(p2,cap2)]) ==>
+  (!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+    aid < cut /\ off <= i /\ i < off+sz ==>
+    abi_footprint_disjoint i 1 [(p1,cap1);(p2,cap2)]) /\
+  (!name b sz i. local_region ce scopes s name b sz /\ b <= i /\ i < b+sz ==>
+    abi_footprint_disjoint i 1 [(p1,cap1);(p2,cap2)])
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `aid <> site1 /\ aid <> site2` by decide_tac >>
+      `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by
+        metis_tac[abi_builtin_allocation_frame_outside] >>
+      `abi_footprint_disjoint off sz [(p1,cap1)]` by
+        (irule log_alloca_candidate_other_region >>
+         qexistsl_tac [`aid`,`s`,`site1`] >> asm_simp_tac bool_ss []) >>
+      `abi_footprint_disjoint off sz [(p2,cap2)]` by
+        (irule log_alloca_candidate_other_region >>
+         qexistsl_tac [`aid`,`t`,`site2`] >> asm_simp_tac bool_ss []) >>
+      `abi_footprint_disjoint off sz [(p1,cap1);(p2,cap2)]` by
+        fs[abi_footprint_disjoint_def] >>
+      irule abi_footprint_disjoint_subwindow >>
+      qexistsl_tac [`off`,`sz`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `abi_footprint_disjoint b sz [(p1,cap1);(p2,cap2)]` by
+    (first_x_assum drule >> simp[abi_footprint_disjoint_def]) >>
+  irule abi_footprint_disjoint_subwindow >>
+  qexistsl_tac [`b`,`sz`] >> simp[]
 QED
