@@ -7,6 +7,7 @@ Ancestors
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
   reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
+  deepResidualSim deepResidualBudget genericInputReady
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -3464,4 +3465,34 @@ Proof
   simp[arithmeticTheory.ADD1] >>
   eq_tac >> strip_tac >> gvs[arithmeticTheory.ADD1] >>
   rpt (first_assum $ irule_at Any) >> simp[arithmeticTheory.ADD1]
+QED
+
+Theorem regional_regular_core_marked_wf:
+  generated_plan_state_wf_marked sb ps /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  reorder_plan dfg pending mid = (rops,arranged) ==>
+  generated_plan_state_wf_marked sb
+    (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack)
+Proof
+  strip_tac >>
+  `residual_budget_wf_marked sb [] ps` by
+    (drule generated_plan_state_wf_marked_residual_nil >> simp[]) >>
+  `residual_budget_wf_marked sb operands mid` by
+    (drule_all emit_input_plan_residual_budget_wf_marked >> simp[]) >>
+  `residual_budget_wf_marked sb pending mid` by
+    metis_tac[residual_budget_wf_marked_perm] >>
+  `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `LENGTH operands <= LENGTH mid.ps_stack` by
+    (drule_all available_input_plan_length >> simp[]) >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (drule_all emit_input_plan_stack_counts >>
+     drule perm_operand_counts >> simp[]) >>
+  `LENGTH pending <= LENGTH mid.ps_stack /\ LENGTH pending <= 16` by simp[] >>
+  `plan_state_residual_wf_marked sb pending (LENGTH pending) arranged` by
+    (drule_all reorder_plan_materialised_arranged_marked >> simp[]) >>
+  drule plan_state_residual_wf_marked_pop >>
+  simp[generated_plan_state_wf_marked_def]
 QED
