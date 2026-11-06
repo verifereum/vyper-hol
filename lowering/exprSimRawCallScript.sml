@@ -2284,7 +2284,10 @@ Theorem raw_call_prefix_sim[local]:
     ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
     t.vs_inst_idx = LENGTH s6.cs_current_insts /\
     (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
-         MEM (Var x) xs ==> not_fresh_at s6 x) ==>
+         MEM (Var x) xs ==> not_fresh_at s6 x) /\
+    safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 ptr_op /\
+    safe_operand s6 gas /\ safe_operand s6
+      (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) ==>
     gas_outcome F (cx_tops cx) (ctx,func) (k av (BytesV bs) kvs) (esK,t) Q R) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx a) (read_result cx)) (\av.
@@ -2560,6 +2563,32 @@ Resume raw_call_prefix_sim[freshness]:
      rpt (pop_assum kall_tac) >>
      simp[EVERY_MEM, not_fresh_at_def, ci_mono_def] >> rpt strip_tac >>
      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_TRANS]) >>
+  suspend "safety"
+QED
+
+Resume raw_call_prefix_sim[safety]:
+  `!l. gas <> Label l` by
+    (qpat_x_assum `(case go of NONE => _ | SOME g => _) = _` mp_tac >>
+     qpat_x_assum `go = ext_call_kwarg _ _ _` mp_tac >>
+     qpat_x_assum `EVERY _ xs` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `go` >> gvs[]
+     >- metis_tac[emit_op_safe_operand, safe_operand_def] >>
+     `MEM (Label l) xs` by metis_tac[raw_call_kwarg_mem] >>
+     fs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
+  `safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 ptr_op /\
+   safe_operand s6 gas` by
+    (qpat_x_assum `!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/ _ ==> _` mp_tac >>
+     qpat_x_assum `!l. addr <> Label l` mp_tac >>
+     qpat_x_assum `safe_operand s3 len` mp_tac >>
+     qpat_x_assum `safe_operand s4 ptr_op` mp_tac >>
+     qpat_x_assum `!l. gas <> Label l` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[safe_operand_def] >> metis_tac[]) >>
+  `safe_operand s6 (case ext_call_kwarg EKValue flags.rcf_kws xs of
+    NONE => Lit 0w | SOME v => v)` by
+    (Cases_on `ext_call_kwarg EKValue flags.rcf_kws xs` >> simp[] >>
+     `MEM x xs` by metis_tac[raw_call_kwarg_mem] >>
+     fs[EVERY_MEM, safe_operand_def] >> metis_tac[]) >>
   suspend "continuation"
 QED
 
@@ -5552,6 +5581,189 @@ val _ = app (fn th => if null (hyp th) then ()
   else raise Fail "raw_call source boundary retained hypotheses")
   [raw_call_prefix_source_ready, raw_call_source_continuation, raw_call_source_tail];
 
+(* Lift a target-only suffix: every observed target GAS is implicit. *)
+Theorem raw_call_tail_path_outcome[local]:
+  (!gs. source (es with gas_obs := gs) = (res,ee with gas_obs := gs)) /\
+  frag_path ctx sa sb (\u. u = s)
+    (\u. Q res (ee with gas_obs := []) u)
+    (\r. R res (ee with gas_obs := []) r) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F tops (ctx,func) source (es,s)
+    (\res ee u. Q res ee u /\ u.vs_current_bb = sb.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sb.cs_current_insts) R
+Proof
+  strip_tac >>
+  qpat_x_assum `frag_path _ _ _ _ _ _` mp_tac >>
+  simp[frag_path_def] >>
+  disch_then (qspec_then `func` mp_tac) >> simp[] >> strip_tac >>
+  simp[gas_outcome_def] >> qexists_tac `REPLICATE n F` >> disj1_tac >>
+  simp[gas_summary_at_def, gas_marked_exec_def,
+    fragGasModeTheory.gas_marked_path_def] >>
+  qexistsl_tac [`res`,`ee`,`r`] >> simp[]
+QED
+
+Theorem raw_call_tail_outcome[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
+  bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
+    (INL (BytesV bs),esD) /\
+  eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
+  esK.gas_obs = [] /\ expr_sim_inv cenv cx env esK /\
+  typed_args_post ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
+  expr_val_rel cx (BaseT AddressT) av addr t /\
+  (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
+  eval_operand len t = SOME (n2w (LENGTH bs)) /\
+  eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx esK t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  ci_mono sa s6 /\ fn_has_code s6 sb func /\ fn_inst_ids_distinct func /\
+  ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
+  t.vs_inst_idx = LENGTH s6.cs_current_insts /\
+  safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 dp /\
+  safe_operand s6 gas /\ safe_operand s6
+    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) /\
+  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
+  compile_raw_call_finish addr dp len gas
+    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v)
+    (if flags.rcf_is_static then StaticCall else RegularCall)
+    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (do
+      type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+      target <- lift_option_type (dest_AddressV av) "raw_call target";
+      data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
+      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+      eval_raw_call cx flags target data amount
+        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+    od) (esK,t)
+    (\res ee u. (\res ee u. ?tv. res = INL tv /\
+      vv_post ctx func cenv cx
+        (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
+        es sa sb s0 ee tv
+        (if flags.rcf_max_outsize = 0 then StackValue ann result
+         else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u) res ee u /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >> drule_all raw_call_prefix_source_ready >> strip_tac >>
+  drule raw_call_pre_flags >> strip_tac >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `IS_SOME esK.outcomes /\ outcomes_accounts_typed esK.outcomes /\
+   accounts_runtime_well_typed esK.accounts` by
+    fs[expr_sim_inv_def,
+      vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  drule_all raw_call_source_tail >>
+  disch_then (qspecl_then [`target`,
+    `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)`,`bs`]
+    strip_assume_tac) >>
+  suspend "ready"
+QED
+
+Resume raw_call_tail_outcome[ready]:
+  `MAP FDOM es.scopes = MAP FDOM esA.scopes` by
+    (qpat_assum `bind (eval_expr cx a) _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[bind_def, AllCaseEqs()] >> strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM esA.scopes = MAP FDOM esD.scopes` by
+    (qpat_assum `bind (eval_expr cx d) _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[bind_def, AllCaseEqs()] >> strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM esD.scopes = MAP FDOM esK.scopes` by
+    (drule eval_exprs_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM esK.scopes` by metis_tac[] >>
+  `MAP FDOM esK.scopes = MAP FDOM es2.scopes` by
+    (`es1.scopes = esK.scopes` by
+       (drule take_call_outcome_frame >>
+        disch_then (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]) >>
+     drule adopt_call_outcome_frame >> simp[] >> strip_tac >>
+     pop_assum (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]) >>
+  drule_all raw_call_source_continuation >>
+  disch_then (qspecl_then [`cx`,`bs`] SUBST1_TAC) >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`bind (eval_expr cx a) _ _ = _`, `bind (eval_expr cx d) _ _ = _`,
+     `eval_exprs cx kws _ = _`, `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _`,
+     `expr_val_rel _ _ _ _ _`, `!x w. MEM x xs /\ _ ==> _`,
+     `MAP FDOM es.scopes = MAP FDOM esA.scopes`,
+     `MAP FDOM esA.scopes = MAP FDOM esD.scopes`,
+     `MAP FDOM esD.scopes = MAP FDOM esK.scopes`] >>
+  suspend "capacity"
+QED
+
+Resume raw_call_tail_outcome[capacity]:
+  `0 < flags.rcf_max_outsize ==>
+    64 + ((flags.rcf_max_outsize + 31) DIV 32)*32 < dimword (:256)` by
+    (strip_tac >>
+     `type_alloc_ok cenv ann` by fs[expr_body_pre_def, alloc_limits_expr_def] >>
+     Cases_on `flags.rcf_revert_on_failure` >>
+     gvs[raw_call_return_type_def, type_alloc_ok_def, is_word_type_def,
+       type_memory_bytes_def] >>
+     `2 ** 64 + 64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+     fs[] >> decide_tac) >>
+  `local_ptrs_reserved cenv s6` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  `LENGTH outcome.co_returnData < dimword (:256)` by
+    (drule_all exprSimRawCallCalldataTheory.calldata_take_call_outcome_bound >> simp[]) >>
+  `read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t = bs` by
+    simp[read_memory_def, GSYM mem_bytes_at_def] >>
+  suspend "path"
+QED
+
+Resume raw_call_tail_outcome[path]:
+  `w2w (w2w target : bytes32) = target` by wordsLib.WORD_DECIDE_TAC >>
+  `w2n (if flags.rcf_is_static then 0w else (n2w amount : bytes32)) =
+    (case (if flags.rcf_is_static then NONE else SOME amount) of NONE => 0 | SOME n => n)` by
+    (Cases_on `flags.rcf_is_static` >> simp[]) >>
+  `flags.rcf_is_static = IS_NONE (if flags.rcf_is_static then NONE else SOME amount)` by
+    (Cases_on `flags.rcf_is_static` >> simp[]) >>
+  `take_call_outcome target
+    (read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t)
+    (if flags.rcf_is_static then NONE else SOME amount) esK = (INL (rq,outcome),es1)` by simp[] >>
+  `MAP FDOM esK.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes` by simp[] >>
+  `0 < flags.rcf_max_outsize ==> evaluate_type (get_tenv cx)
+    (expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) =
+    SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic flags.rcf_max_outsize))
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic flags.rcf_max_outsize))])` by
+    (qpat_assum `flags.rcf_max_outsize < dimword (:256)`
+       (mp_then Any strip_assume_tac raw_call_bytes_slot_size_bound) >>
+     Cases_on `flags.rcf_revert_on_failure` >>
+     fs[expr_type_def, raw_call_return_type_def, evaluate_type_def]) >>
+  `expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) =
+    raw_call_return_type flags` by simp[expr_type_def] >>
+  irule raw_call_tail_path_outcome >>
+  suspend "lift"
+QED
+
+Resume raw_call_tail_outcome[lift]:
+  conj_tac >- simp[] >>
+  qexistsl_tac [`es2`,
+    `FST (eval_raw_call cx flags target bs amount
+      (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) esK)`, `s6`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  irule frag_path_conseq >>
+  irule_at (Pos last) raw_call_outbuf_tail_vv_path >>
+  goal_assum (drule_at (Pos hd)) >>
+  goal_assum (drule_at (Pos hd)) >>
+  qpat_assum `stmt_state_rel _ _ _ _ esK t` assume_tac >>
+  rpt (goal_assum (drule_at (Pos hd))) >>
+  qexistsl_tac [`Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `ann`] >>
+  simp[] >>
+  `es2 with gas_obs := [] = es2` by
+    (Cases_on `es2` >> gvs[evaluation_state_fn_updates]) >>
+  conj_tac >- (rpt strip_tac >> gvs[expr_exit_def]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Finalise raw_call_tail_outcome
+
 Theorem compile_expr_raw_call[local]:
   compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa =
     (vv,sb) ==>
@@ -5580,6 +5792,14 @@ QED
 
 
 (* TOP-LEVEL *)
+Theorem raw_call_exists_align[local]:
+  ((?tv. P tv) /\ A /\ B) = (?tv. P tv /\ A /\ B)
+Proof
+  eq_tac
+  >- (rpt strip_tac >> qexists_tac `tv` >> simp[]) >>
+  strip_tac >> simp[] >> qexists_tac `tv` >> simp[]
+QED
+
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
     exprs_case nocalls ctx func cenv cx args ==>
@@ -5627,111 +5847,35 @@ Resume compile_raw_call_case[placement]:
     (fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
   `fn_has_code sa s6 func /\ fn_has_code s6 sb func` by
     (irule fn_has_code_split >> fs[ci_mono_def]) >>
-  Cases_on `eval_exprs cx (a::d::kws) es` >>
-  rename1 `eval_exprs cx (a::d::kws) es = (rr,arg_es)` >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (irule frag_exec_pointwise >> simp[]) >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
-  drule_all raw_call_prefix_sim >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                         `expr_exit res`] mp_tac) >>
-  (impl_tac
-   >- (simp[] >> Cases_on `rr` >> simp[wb_args_exit_def]
-       >> drule_all eval_expr_raw_call_operand_exit >>
-       strip_tac >> gvs[] >>
-       qspecl_then [`\v:value. Value v`, `INR y : value + exception`]
-         mp_tac expr_exit_success_map >> simp[])) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_then) >>
-  `cs_extends sa s6` by fs[ci_mono_def] >>
-  disch_then irule >> simp[] >> rpt strip_tac >>
-  suspend "tail"
-QED
-
-Resume compile_raw_call_case[tail]:
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`compile_expr _ _ _ _ = _`, `lower_value _ _ _ a _ = _`,
-     `lower_value _ _ _ d _ = _`, `emit_op MLOAD _ _ = _`,
-     `emit_op ADD _ _ = _`, `compile_ext_call_kwargs _ _ _ _ _ _ = _`,
-     `(case go of NONE => _ | SOME g => _) = _`,
-     `lower_word_args _ _ _ _ = _`, `EVERY _ xs`, `LENGTH xs = _`,
-     `ci_mono sa s1`, `ci_mono s1 s2`, `ci_mono s2 s3`,
-     `ci_mono s3 s4`, `ci_mono s5 s6`] >>
-  drule_all raw_call_prefix_decode >> strip_tac >> gvs[] >>
-  drule_all eval_expr_raw_call_values >>
-  disch_then (qspecl_then [`NONE`, `raw_call_return_type flags`] mp_tac) >>
-  strip_tac >>
-  `eval_raw_call cx flags target bs amount
-      (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
-      arg_es = (res,es')` by metis_tac[] >>
-  `IS_SOME arg_es.outcomes /\ outcomes_accounts_typed arg_es.outcomes /\
-   accounts_runtime_well_typed arg_es.accounts` by
-    fs[expr_sim_inv_def,
-       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
-  drule_all raw_call_source_tail >> strip_tac >>
-  drule_all exprSimRawCallCalldataTheory.calldata_take_call_outcome_bound >> strip_tac >>
-  suspend "oracle_tail"
-QED
-
-Resume compile_raw_call_case[oracle_tail]:
-  `local_ptrs_reserved cenv s6` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
-  `MAP FDOM es.scopes = MAP FDOM arg_es.scopes` by
-    (qpat_assum `eval_exprs cx (a::d::kws) es = _`
-       (mp_then Any mp_tac vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom) >> simp[]) >>
-  `MAP FDOM arg_es.scopes = MAP FDOM es'.scopes` by
-    (`es1.scopes = arg_es.scopes` by
-       (drule take_call_outcome_frame >>
-        disch_then (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]) >>
-     drule adopt_call_outcome_frame >> simp[] >> strip_tac >>
-     pop_assum (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]) >>
-  `0 < flags.rcf_max_outsize ==>
-     ((flags.rcf_max_outsize + 31) DIV 32)*32 + 32 < dimword(:256)` by
-    (strip_tac >> drule_all raw_call_outbuf_capacity >> simp[]) >>
-  `read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t = bs` by
-    simp[read_memory_def, GSYM mem_bytes_at_def] >>
-  suspend "apply_tail"
-QED
-
-Resume compile_raw_call_case[apply_tail]:
-  `!x. addr = Var x \/ dp = Var x \/ len = Var x \/ gas = Var x \/
-      (case ext_call_kwarg EKValue flags.rcf_kws xs' of NONE => Lit 0w | SOME v => v) = Var x
-      ==> not_fresh_at s6 x` by
-    (gen_tac >> Cases_on `ext_call_kwarg EKValue flags.rcf_kws xs'` >> simp[] >>
-     rpt strip_tac >> imp_res_tac raw_call_kwarg_mem >> metis_tac[operand_distinct]) >>
-  `w2w (w2w target : bytes32) = target` by wordsLib.WORD_DECIDE_TAC >>
-  `w2n (if flags.rcf_is_static then 0w else (n2w amount : bytes32)) =
-     (case (if flags.rcf_is_static then NONE else SOME amount) of NONE => 0 | SOME n => n)` by
-    (Cases_on `flags.rcf_is_static` >> simp[]) >>
-  `flags.rcf_is_static = IS_NONE (if flags.rcf_is_static then NONE else SOME amount)` by
-    (Cases_on `flags.rcf_is_static` >> simp[]) >>
-  `expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) =
-     (if flags.rcf_max_outsize = 0 then NoneT else BaseT (BytesT (Dynamic flags.rcf_max_outsize)))` by
-    simp[expr_type_def, raw_call_return_type_def] >>
-  `0 < flags.rcf_max_outsize ==> evaluate_type (get_tenv cx)
-     (expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) =
-     SOME (BaseTV (BytesT (Dynamic flags.rcf_max_outsize)))` by
-    (simp[expr_type_def, raw_call_return_type_def, evaluate_type_def,
-          type_slot_size_def, vfmConstantsTheory.word_size_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `0 < flags.rcf_max_outsize`)) >> simp[] >> decide_tac) >>
-  suspend "wrapper"
-QED
-
-Resume compile_raw_call_case[wrapper]:
-  `flags.rcf_max_outsize < dimword(:256) /\
-   LENGTH outcome.co_returnData < dimword(:256)` by fs[] >>
-  `take_call_outcome target
-     (read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t)
-     (if flags.rcf_is_static then NONE else SOME amount) arg_es = (INL (rq,outcome),es1)` by simp[] >>
-  `MAP FDOM arg_es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes` by simp[] >>
-  drule_all (Q.INST
-    [`e` |-> `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`,
-     `ann` |-> `raw_call_return_type flags`] raw_call_outbuf_tail_vv_frag) >>
-  disch_then (mp_then Any irule frag_exec_weaken) >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[expr_exit_def]) >>
-  rpt strip_tac >> gvs[expr_type_def]
+  gvs[] >>
+  rewrite_tac[raw_call_eval_action] >>
+  irule (BETA_RULE (Q.ISPEC `\av dv kvs.
+    do
+      type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+      target <- lift_option_type (dest_AddressV av) "raw_call target";
+      data <- lift_option_type (dest_BytesV dv) "raw_call data";
+      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+      eval_raw_call cx flags target data amount
+        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+    od` (Q.GEN `k` (SPEC_ALL raw_call_prefix_sim)))) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `exprs_case _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
+  simp[] >> conj_tac >-
+    (rpt gen_tac >> Cases_on `r` >> Cases_on `exc` >>
+     simp[expr_exit_def] >> rename1 `Error err` >>
+     Cases_on `err` >> simp[expr_exit_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `ext_call_kwarg EKValue _ xs = _`
+    (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
+  simp[CONJ_ASSOC, arithmeticTheory.ADD_COMM] >>
+  irule (SRULE [raw_call_exists_align, CONJ_ASSOC, arithmeticTheory.ADD_COMM]
+    (BETA_RULE raw_call_tail_outcome)) >>
+  first_assum (irule_at (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >>
+  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Finalise compile_raw_call_case
