@@ -70,3 +70,32 @@ Proof
   drule_all current_wf_phi_occurrence_cleanup_cases >> strip_tac >> gvs[] >>
   metis_tac[]
 QED
+
+Theorem current_prefix_cleaned_copy_source_cases:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\ bb = simplify_current_phi_block new /\
+  phi_prefix_length bb.bb_instructions <= k /\
+  k < phi_prefix_length new.bb_instructions /\
+  (EL k bb.bb_instructions).inst_opcode = ASSIGN /\
+  (EL k bb.bb_instructions).inst_outputs = [d] /\
+  (EL k bb.bb_instructions).inst_operands = [Var src] ==>
+  ?q v. q < LENGTH new.bb_instructions /\
+    (EL q new.bb_instructions).inst_opcode = PHI /\
+    current_wf_inserted_phi_at A renamed h q v /\
+    (EL q new.bb_instructions).inst_outputs = [d] /\
+    simplify_current_phi (EL q new.bb_instructions) =
+      (EL q new.bb_instructions) with
+        <|inst_opcode := ASSIGN; inst_operands := [Var src]|> /\
+    ((?db di. MEM db renamed /\ MEM di db.bb_instructions /\
+      MEM src di.inst_outputs /\ db.bb_label <> new.bb_label /\
+      fn_dominates (fn with fn_blocks := renamed) db.bb_label new.bb_label) \/
+     (?j r slots. current_wf_original_phi_at fn A renamed h j r slots /\
+       MEM src (EL r new.bb_instructions).inst_outputs /\ src <> d /\
+       simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions))
+Proof
+  strip_tac >> drule_all current_prefix_cleaned_copy_occurrence >> strip_tac >>
+  qexistsl_tac [`q`, `v`] >> simp[] >>
+  drule_all current_wf_phi_occurrence_cleanup_cases >> strip_tac >> gvs[] >>
+  gvs[instruction_component_equality] >> metis_tac[]
+QED
