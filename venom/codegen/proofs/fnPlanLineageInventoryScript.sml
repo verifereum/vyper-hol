@@ -2905,6 +2905,84 @@ Proof
   simp[] >> disch_then irule >> simp[]
 QED
 
+Theorem emit_reorder_plan_shielded_bottom_frame:
+  !opc operands selected nl ps prefix dfg iops ps1 rops ps2.
+    LENGTH operands <= 16 /\
+    (!x. MEM x operands /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    PERM operands selected /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    emit_input_plan opc operands nl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (iops,ps1 with ps_stack := prefix ++ ps1.ps_stack) /\
+    reorder_plan dfg selected
+      (ps1 with ps_stack := prefix ++ ps1.ps_stack) =
+      (rops,ps2 with ps_stack := prefix ++ ps2.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  conj_tac
+  >- (irule emit_input_plan_shielded_bottom_frame >> simp[] >>
+      rpt strip_tac >> first_x_assum (qspec_then `Var v` mp_tac) >>
+      simp[stackPlanTypesTheory.is_var_operand_def]) >>
+  irule reorder_plan_materialised_bottom_frame >> simp[] >> metis_tac[]
+QED
+
+(* The two speculative reorders below start from the emitted state, as in
+   the non-JMP preparation branch of generate_regular_inst_plan. *)
+Theorem emitted_commutative_preparation_bottom_frame:
+  !opc operands nl ps prefix dfg iops ps1 rops ps2.
+    LENGTH operands <= 16 /\
+    (!x. MEM x operands /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    (if is_commutative opc /\ 2 <= LENGTH operands then
+       case reorder_plan dfg operands ps1 of (ops_a,ps_a) =>
+       case reorder_plan dfg
+         (TAKE (LENGTH operands - 2) operands ++
+          [EL (LENGTH operands - 1) operands;
+           EL (LENGTH operands - 2) operands]) ps1 of (ops_b,ps_b) =>
+       if reorder_cost ops_a < reorder_cost ops_b then (ops_a,ps_a)
+       else (ops_b,ps_b)
+     else reorder_plan dfg operands ps1) = (rops,ps2) ==>
+    (if is_commutative opc /\ 2 <= LENGTH operands then
+       case reorder_plan dfg operands
+         (ps1 with ps_stack := prefix ++ ps1.ps_stack) of (ops_a,ps_a) =>
+       case reorder_plan dfg
+         (TAKE (LENGTH operands - 2) operands ++
+          [EL (LENGTH operands - 1) operands;
+           EL (LENGTH operands - 2) operands])
+         (ps1 with ps_stack := prefix ++ ps1.ps_stack) of (ops_b,ps_b) =>
+       if reorder_cost ops_a < reorder_cost ops_b then (ops_a,ps_a)
+       else (ops_b,ps_b)
+     else reorder_plan dfg operands
+       (ps1 with ps_stack := prefix ++ ps1.ps_stack)) =
+      (rops,ps2 with ps_stack := prefix ++ ps2.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `reorder_plan dfg operands ps1` >>
+  rename1 `reorder_plan dfg operands ps1 = (ops_a,ps_a)` >>
+  `PERM operands operands` by simp[] >>
+  drule_all emit_reorder_plan_shielded_bottom_frame >> strip_tac >>
+  Cases_on `is_commutative opc /\ 2 <= LENGTH operands`
+  >- (gvs[] >>
+      drule last_two_reorder_perm >> strip_tac >>
+      Cases_on `reorder_plan dfg
+        (TAKE (LENGTH operands - 2) operands ++
+         [EL (LENGTH operands - 1) operands;
+          EL (LENGTH operands - 2) operands]) ps1` >>
+      rename1 `reorder_plan _ _ _ = (ops_b,ps_b)` >>
+      qpat_x_assum `reorder_plan dfg operands ps1 = _` kall_tac >>
+      drule_all emit_reorder_plan_shielded_bottom_frame >>
+      disch_then (qspec_then `prefix` strip_assume_tac) >>
+      Cases_on `reorder_cost ops_a < reorder_cost ops_b` >> gvs[]) >>
+  gvs[]
+QED
+
 Theorem reorder_fold_bottom_frame[local]:
   !steps dfg targets ps prefix acc ops qs.
     EVERY (\(idx,op). idx < LENGTH targets /\ ~MEM op prefix) steps /\
