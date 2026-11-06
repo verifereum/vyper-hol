@@ -69,6 +69,16 @@ Proof
   gvs[generate_inst_plan_def, is_param_opcode_def, AllCaseEqs()]
 QED
 
+Theorem alias_join_reached_length:
+  join_reached liveness fn lbl inst qs /\
+  join_target_ops liveness fn lbl inst = SOME targets ==>
+  LENGTH targets <= LENGTH qs.ps_stack
+Proof
+  strip_tac >> fs[join_reached_def] >>
+  qpat_x_assum `_ ++ _ = _` (mp_tac o AP_TERM ``LENGTH:operand list -> num``) >>
+  simp[]
+QED
+
 Theorem alias_block_insts_final_jmp_join_reached:
   !prefix i ps ops ps'.
   inst.inst_opcode = JMP /\
@@ -4483,6 +4493,57 @@ Theorem alias_distinct_probe:
     (live_vars_at (liveness_analyze alias_distinct_probe_fn) "use" 0))
 Proof
   EVAL_TAC
+QED
+
+(* The ready repeated-use edge reaches restoration with only one copy.
+   Restoration cannot supply the target multiplicity; the block plan fails. *)
+Definition alias_distinct_probe_prefix_def:
+  alias_distinct_probe_prefix = SND (generate_regular_inst_plan
+    (liveness_analyze alias_distinct_probe_fn)
+    (dfg_build_function alias_distinct_probe_fn)
+    (cfg_analyze alias_distinct_probe_fn) alias_distinct_probe_fn
+    (mk_inst 0 CALLDATASIZE [] ["r"]) ["r"; "r"] F T "entry"
+    (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Theorem alias_distinct_probe_prefix_eq:
+  alias_distinct_probe_prefix =
+    (init_cleanup_plan_state NONE [] 0 0) with ps_stack := [Var "r"]
+Proof
+  EVAL_TAC >> simp[listTheory.SET_TO_LIST_EMPTY]
+QED
+
+Theorem alias_distinct_probe_restore_boundary:
+  join_target_ops (liveness_analyze alias_distinct_probe_fn)
+    alias_distinct_probe_fn "entry" (mk_inst 1 JMP [Label "use"] []) =
+      SOME [Var "r"; Var "r"] /\
+  alias_distinct_probe_prefix.ps_stack = [Var "r"] /\
+  restore_spilled_plan [Var "r"; Var "r"] alias_distinct_probe_prefix =
+    ([], alias_distinct_probe_prefix) /\
+  ~(LENGTH [Var "r"; Var "r"] <=
+    LENGTH (SND (restore_spilled_plan [Var "r"; Var "r"]
+      alias_distinct_probe_prefix)).ps_stack)
+Proof
+  rewrite_tac[alias_distinct_probe_prefix_eq] >> EVAL_TAC
+QED
+
+Theorem alias_distinct_probe_planning:
+  prepare_params_plan (liveness_analyze alias_distinct_probe_fn)
+    alias_distinct_probe_fn (init_cleanup_plan_state NONE [] 0 0) =
+    ([], init_cleanup_plan_state NONE [] 0 0) /\
+  cfg_preds_of (cfg_analyze alias_distinct_probe_fn) "entry" = [] /\
+  live_vars_at (liveness_analyze alias_distinct_probe_fn) "entry" 1 = ["r"; "r"] /\
+  generate_block_plan (liveness_analyze alias_distinct_probe_fn)
+    (dfg_build_function alias_distinct_probe_fn)
+    (cfg_analyze alias_distinct_probe_fn) alias_distinct_probe_fn
+    (EL 0 alias_distinct_probe_fn.fn_blocks)
+    (init_cleanup_plan_state NONE [] 0 0) = NONE
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  EVAL_TAC >> rewrite_tac[listTheory.SET_TO_LIST_EMPTY] >> EVAL_TAC >>
+  rewrite_tac[listTheory.SET_TO_LIST_EMPTY] >> EVAL_TAC
 QED
 
 Theorem alias_wf_jmp_shape:
