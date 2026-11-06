@@ -5,6 +5,7 @@ Ancestors forPtrArrayInvariant forPtrRangeCallback stmtSimForArrayLoop
   stmtFragPtr compileEnv bodyPtrDefs loweringPosts finite_map
   forPtrAllocationFrame gasSummaryComposePtr stmtSimProps stmtLowering vyperState forPtrScope forPtrSourceScopes
   exprLoweringProps localPtrsProps vyperEvalPreservesScopes
+  forPtrRangeLanding venomState fragGasPathPtr
 
 Theorem for_array_callback_control_ptr:
   array_for_code func cenv bc ty stmts id et tv n stride (Var bp)
@@ -154,4 +155,49 @@ Proof
   rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
   goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
   qexistsl_tac [`func`, `ainst`, `p`] >> simp[]
+QED
+
+Theorem for_array_callback_landing_ptr:
+  array_for_code func cenv bc ty stmts id et tv n stride saved_base
+    p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  lookup_scopes id esk.scopes = NONE /\
+  not_local_ptr bc (FEMPTY :: esk.scopes) p /\
+  eval_stmts cx stmts (esk with scopes :=
+    (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee s /\
+  ghost_inv d c3 cx ee G tn s /\
+  FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
+  ptr_covers G tn p s sz /\ ptr_covers G tn bp s extent /\
+  stmt_lands (InLoop exit_lbl incr_lbl) sb1 res s /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ (res = INL () ==> ~block_is_terminated sb1) ==>
+  ?sc rest t.
+    ee.scopes = sc :: rest /\ lookup_scopes id rest = NONE /\
+    t = (if res = INL () then jump_to incr_lbl s else s) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK t) /\
+    t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+    (res = INR BreakException ==> t.vs_current_bb = exit_lbl) /\
+    (res <> INR BreakException ==> t.vs_current_bb = incr_lbl) /\
+    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv d cenv cx (ee with scopes := rest) G tn t /\
+    ptr_covers G tn p t sz /\ ptr_covers G tn bp t extent /\
+    t.vs_allocas = s.vs_allocas /\ (!x. lookup_var x t = lookup_var x s) /\
+    (!name lo z. local_region cenv rest t name lo z ==>
+      regions_disjoint (w2n a) sz lo z)
+Proof
+  strip_tac >> drule_all for_array_callback_outer_state_ptr >> strip_tac >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 G tn
+    (OK (if res = INL () then jump_to incr_lbl s else s)) /\
+   (if res = INL () then jump_to incr_lbl s else s).vs_inst_idx = 0 /\
+   (res = INR BreakException ==> s.vs_current_bb = exit_lbl) /\
+   (res <> INR BreakException ==>
+     (if res = INL () then jump_to incr_lbl s else s).vs_current_bb = incr_lbl)` by
+    (irule for_body_lands_path_ptr >> simp[] >>
+     qexistsl_tac [`sb1`, `sj`] >> fs[array_for_code_def]) >>
+  qexistsl_tac [`sc`, `rest`,
+    `if res = INL () then jump_to incr_lbl s else s`] >> simp[] >>
+  Cases_on `res = INL ()` >> gvs[] >>
+  rewrite_tac[stmt_state_rel_jump_to] >>
+  fs[local_region_def, ptr_covers_def, jump_to_def,
+     lookup_var_def, ghost_inv_jump_to] >> first_assum ACCEPT_TAC
 QED
