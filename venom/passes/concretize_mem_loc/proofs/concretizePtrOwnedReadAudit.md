@@ -8,6 +8,18 @@ It is a quotation, **not a theorem**. No recovery, universal prefix coverage,
 source continuation success, fixed-byte recovery, or extra opcode producer is
 claimed. Existing conditional diagnostic theorems are retained unchanged.
 
+### Checked follow-up (.48-.50)
+
+Actual step/adjacent/interval framing and full actual-writer retention are now
+proved (E0403/E0404). The .50 in-place migration replaces the requested writer
+clauses of `ptr_demand_interval` with actual writes and successor purity.
+`ptr_paired_actual_protected_write_exclusion` proves the formerly quoted
+`actual_protected_exclusion_candidate` with its exact assumptions and the SAME
+supplied w. DemandWriteExclusion, HistoricalWriteExclusion, HistoricalMcopyExclusion,
+PairedJumpSchema and this audit consumer all rebuild. The missing-boundary and
+migration discussions below describe the earlier diagnostic, superseded by
+these checked exports; endpoint byte recovery itself is still not proved.
+
 The recovery quotation now uses the **input** (first conjunct) of the old
 `ptr_demand_interval_def`, written explicitly without its requested-writer
 witness. It includes the existing task-derived shape, access/provenance and
@@ -53,7 +65,7 @@ All SML paths below are in this directory unless otherwise indicated.
 | Immediate byte equality | `ptr_paired_write_def:91-102` -> `ptr_ledger_write_pair_def` (PrefixLedger:16): equality outside source successor memory taint on actual source written bytes. | **Available at SUC w/SUC q0.** Both actual membership and purity are supplied by actual protection, for the SAME w. |
 | Matching relocation | `ActiveWriteOwner:7`, `ptr_paired_write_owner_relocation`: owner certificate on xs and immediate snapshot, x IN xs, lo<=x, ptr_birth_slices post tokens births, length tokens=SUC stack length, active geometry, live owner lookup containing x and positions lookup => rho x=pa+(x-b). | **Proved.** post=EL(SUC w)h, snapshot=EL(SUC w)H, xs=actual footprint at w; owner depth d and lookup come from protection. Slices/length from historical ownership; geometry from source reachability/no DALLOCA and empty initial table. Since x=b+k, result is pa+k. No retained-birth global uniqueness is needed or valid. |
 | Source actual suffix exclusion | `ptr_endpoint_actual_protected_livesets`, no actual write after w. | **Proved.** Supplies the source interval frame premise for SUC w<=n<N. |
-| Target actual suffix exclusion | `HistoricalWriteExclusion:318`, `ptr_paired_historical_owned_write_exclusion` requires `ptr_demand_interval ... w`, whose second conjunct includes no later REQUESTED chrono writes. | **Not directly applicable.** Installed actual protection does not imply that old predicate. Need actual-demand migration of the exclusion consumer cone; see below. |
+| Target actual suffix exclusion | `HistoricalWriteExclusion:318`, `ptr_paired_historical_owned_write_exclusion` requires `ptr_demand_interval ... w`, whose second conjunct includes no later REQUESTED chrono writes. | **Proved after in-place actual-demand migration.** `ptr_demand_interval` now records actual membership, immediate successor purity and actual suffix nonmembership. The existing owner/layout/separation cone and historical assembly rebuild against that interface. `ptr_paired_actual_protected_write_exclusion` in the companion audit theory checks the exact formerly quoted candidate, packaging the SAME supplied w via bottom-token continuity. No requested-nonwrite implication is used. |
 | Actual chronological byte frame | `OperationalBytes:7,30,71` all consume REQUESTED exclusion. Compiler `stepWriteFootprintBase:107,128,148` also uses requested capacity, not clipped actual length. | **Proved (E0403).** `ActualByteFrame` exports `ptr_chrono_step_actual_byte_frame`, `ptr_chrono_history_actual_byte_frame` and `ptr_chrono_history_actual_interval_byte_frame`, imported by the audit. These consume actual `step_writes` exclusion, including clipped external calls and internal return callee memory. Old requested interfaces remain intact. |
 | Endpoint assembly | Frame source SUC w -> N and target SUC q0 -> T; combine ledger equality and rho equation. | Routine only AFTER actual exclusion migration, writer retention and actual framing. Not yet proved. |
 

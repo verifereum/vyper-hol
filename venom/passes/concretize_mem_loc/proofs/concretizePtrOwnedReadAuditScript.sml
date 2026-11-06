@@ -1,6 +1,9 @@
 Theory concretizePtrOwnedReadAudit
 Ancestors concretizePtrHistoricalWriteExclusion concretizePtrOperationalBytes
-  concretizePtrActualByteFrame
+  concretizePtrActualByteFrame concretizePtrPairedPrefix
+  concretizePtrStructuralTranscript concretizePtrStructuralTrace
+  concretizePtrChronologicalHistory concretizePtrTokenInterval
+  concretizePtrDemandWriteExclusion list rich_list arithmetic
   concretizePtrPairedFields concretizePtrPrefixLedger
   concretizePtrOwnedActualInitializer concretizePtrProtectedLivesets
   concretizePtrActiveWriteOwner concretizePtrMstoreProducer words
@@ -172,9 +175,8 @@ val actual_writer_retention_candidate = ``
       (EL (SUC w) h).po_state) ==>
     ?q. q < LENGTH done /\ EL q done = w``;
 
-(* Proposed actual-demand exclusion consumer: all variables universally closed
-   in the proposed theorem. w is the SAME protected actual initializer. *)
-val actual_protected_exclusion_candidate = ``
+(* The supplied w is the SAME protected actual initializer. *)
+Theorem ptr_paired_actual_protected_write_exclusion:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   vs.vs_allocas = FEMPTY /\
@@ -225,4 +227,33 @@ val actual_protected_exclusion_candidate = ``
   ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst /\
   q < LENGTH done /\ w < EL q done ==>
   pa+k NOTIN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
-    (EL (SUC q) ht).po_state)``;
+    (EL (SUC q) ht).po_state)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  drule ptr_structural_transcript_endpoint >> strip_tac >>
+  `LENGTH h-1 < LENGTH h /\ EL (LENGTH h-1) h = endpoint /\
+   EL (LENGTH h-1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (Cases_on `h` >> Cases_on `H` >> gvs[LAST_EL]) >>
+  qmatch_goalsub_abbrev_tac `step_writes ti ts tz` >>
+  qabbrev_tac `token = EL (LENGTH endpoint.po_stack-d) tokens` >>
+  `!j. w <= j /\ j < LENGTH h ==>
+    EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token` by
+    (`!j. w <= j /\ j <= LENGTH h-1 ==>
+       ?tsj rj bj PTj TGj sj ej.
+         EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+         EL (LENGTH (EL j h).po_stack-d) tsj = token` by
+       (drule ptr_transcript_bottom_token_interval >>
+        disch_then (qspecl_then [`w`,`LENGTH h-1`,`d`] mp_tac) >>
+        simp[Abbr `token`]) >>
+     rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
+     (impl_tac >- decide_tac) >> strip_tac >> simp[]) >>
+  `ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w` by
+    (simp[ptr_demand_interval_def, Abbr `token`, ADD1] >> metis_tac[]) >>
+  unabbrev_all_tac >> drule_all ptr_paired_historical_owned_write_exclusion >> simp[]
+QED

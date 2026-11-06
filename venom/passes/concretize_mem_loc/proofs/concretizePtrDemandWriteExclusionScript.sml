@@ -53,8 +53,13 @@ Theorem ptr_demand_protected_token_interval:
   o1_walk_view rpolicy 2 C' fn observed /\
   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
-  ?w. w+1 < LENGTH h /\ ptr_chrono_write C (b+k) (EL w h) /\
-    (!j. w < j /\ j+1 < LENGTH h ==> ~ptr_chrono_write C (b+k) (EL j h)) /\
+  ?w. w+1 < LENGTH h /\
+    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+      (EL (SUC w) h).po_state) /\
+    b+k NOTIN (EL (SUC w) h).po_taint.t_mem /\
+    (!j. w < j /\ j+1 < LENGTH h ==>
+      b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+        (EL (SUC j) h).po_state)) /\
     (!t. w < t /\ t < LENGTH h ==>
       ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
         observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
@@ -72,7 +77,7 @@ Proof
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
-  drule_all ptr_endpoint_protected_livesets >> strip_tac >>
+  drule_all ptr_endpoint_actual_protected_livesets >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   drule ptr_structural_transcript_endpoint >> strip_tac >>
   `LENGTH h-1 < LENGTH h /\ EL (LENGTH h-1) h = endpoint /\
@@ -128,8 +133,13 @@ Definition ptr_demand_interval_def:
   o1_walk_view rpolicy 2 C' fn observed /\
   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions) /\
-  (w+1 < LENGTH h /\ ptr_chrono_write C (b+k) (EL w h) /\
-    (!j. w < j /\ j+1 < LENGTH h ==> ~ptr_chrono_write C (b+k) (EL j h)) /\
+  (w+1 < LENGTH h /\
+    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+      (EL (SUC w) h).po_state) /\
+    b+k NOTIN (EL (SUC w) h).po_taint.t_mem /\
+    (!j. w < j /\ j+1 < LENGTH h ==>
+      b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+        (EL (SUC j) h).po_state)) /\
     (!t. w < t /\ t < LENGTH h ==>
       ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
         observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
@@ -192,7 +202,8 @@ Theorem ptr_demand_interval_owner_at[local]:
   FLOOKUP (ptr_owner_view d (EL j h)).cf_state.vs_allocas aid = SOME (b,sz) /\
   EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token /\
   (ptr_owner_view d (EL j h)).cf_fn = fn /\
-  ~ptr_chrono_write C (b+k) (EL j h) /\
+  b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+    (EL (SUC j) h).po_state) /\
   ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
     observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
     MEM ((ptr_owner_view d (EL j h)).cf_state.vs_current_bb,
@@ -305,8 +316,7 @@ Theorem ptr_demand_same_owner_write_exclusion[local]:
   b <= w2n x /\ w2n x + w2n z <= b+sz /\ pa+sz < dimword(:256) /\
   (MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
     LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
-  (b+k IN range_bytes (step_writes inst src posts) <=>
-    ptr_chrono_write C (b+k) (EL j h)) ==>
+  b+k NOTIN range_bytes (step_writes inst src posts) ==>
   pa+k NOTIN range_bytes (step_writes inst tgt postt)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -727,8 +737,7 @@ Theorem ptr_demand_ordinary_write_exclusion:
   op_prov TGj sizeop = NONE /\ op_taint (EL j h).po_taint sizeop = {} /\
   (MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
     LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
-  (b+k IN range_bytes (step_writes (EL j h).po_inst src posts) <=>
-    ptr_chrono_write C (b+k) (EL j h)) /\
+  b+k NOTIN range_bytes (step_writes (EL j h).po_inst src posts) /\
   ((op_prov TGj ops.iao_ofst = NONE /\
     op_taint (EL j h).po_taint ops.iao_ofst = {} /\ w2n x + w2n z <= lo) \/
    (?dv tokB bid db sb pb.

@@ -74,12 +74,12 @@ Proof
      db <= w2n ds /\ w2n ds + w2n n_target <= db+sb /\ pb+sb < dimword(:256)))` by
     (drule_at (Pat `mem_write_ops _ = SOME _`) ptr_historical_write_classification >>
      simp[] >> disch_then drule_all >> simp[]) >>
-  `(b+k IN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
-      (mcopy (w2n ds) (w2n rs) (w2n n_target) (EL j h).po_state)) <=>
-     ptr_chrono_write C (b+k) (EL j h))` by
-    (simp[ptr_step_write_range, ptr_chrono_write_def, is_terminator_def,
-       source_memory_write_ranges_def, sized_source_write_range_def,
-       range_bytes_def] >> metis_tac[]) >>
+  `b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+      (mcopy (w2n ds) (w2n rs) (w2n n_target) (EL j h).po_state))` by
+    (`b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+        (EL (SUC j) h).po_state)` by
+       (fs[ptr_demand_interval_def] >> metis_tac[]) >>
+     gvs[step_writes_def]) >>
   `!op. ptr_lookup_transport bj positions (op_prov TGj op)
     (op_taint (EL j h).po_taint op)
     (eval_operand op (EL j h).po_state) (eval_operand op tgt)` by
@@ -93,7 +93,7 @@ Proof
   goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `EL j H = _`)) >>
   goal_assum (drule_at (Pat `src.vs_labels = tgt.vs_labels`)) >>
-  goal_assum (drule_at (Pat `(_ IN range_bytes _) <=> ptr_chrono_write _ _ _`)) >>
+  goal_assum (drule_at (Pat `_ NOTIN range_bytes (step_writes _ _ _)`)) >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty] >>
   qexists `ds` >> gvs[]

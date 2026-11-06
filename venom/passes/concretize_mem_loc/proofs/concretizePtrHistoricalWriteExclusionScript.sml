@@ -302,12 +302,10 @@ Proof
    access_ok lo (EL j h).po_prov (EL j h).po_fn
       (EL j h).po_inst (EL j h).po_state /\
    ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
-   ~ptr_chrono_write C (b+k) (EL j h)` by
+   b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+     (EL (SUC j) h).po_state)` by
     (fs[ptr_demand_interval_def] >>
      metis_tac[rich_listTheory.EL_MEM, LESS_IMP_LESS_OR_EQ]) >>
-  `(b+k IN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
-      (EL (SUC j) h).po_state)) <=> ptr_chrono_write C (b+k) (EL j h)` by
-    (drule_all ptr_chrono_nonwrite_footprint >> simp[]) >>
   drule_all ptr_historical_write_classification >>
   disch_then assume_tac >>
   `MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
