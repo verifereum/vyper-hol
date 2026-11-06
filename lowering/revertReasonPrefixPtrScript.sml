@@ -448,6 +448,9 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac >-
     (Cases_on `op` >> gvs[] >>
      simp[step_taint_other_output, mk_inst_def, op_taint_def]) >>
+  conj_tac >-
+    (strip_tac >> Cases_on `op` >> gvs[] >>
+     fs[step_prov_other_output, mk_inst_def, op_prov_def]) >>
   strip_tac >> irule alloca_step_ptr_mem_ok >> simp[] >> metis_tac[]
 QED
 
@@ -504,6 +507,7 @@ Proof
   qpat_x_assum `ptr_val_ok _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ptr_val_ok_def] >> strip_tac >> conj_tac >-
     (Cases_on `op` >> gvs[op_taint_def]) >>
+  conj_tac >- (strip_tac >> simp[]) >>
   strip_tac >> irule mstore_literal_ptr_mem_ok >> simp[] >> metis_tac[]
 QED
 
@@ -562,6 +566,9 @@ Theorem ptr_val_ok_step_frame:
 Proof
   strip_tac >> fs[ptr_val_ok_def] >> conj_tac >-
     (Cases_on `op` >> gvs[op_taint_def, step_taint_other_output]) >>
+  conj_tac >-
+    (strip_tac >> Cases_on `op` >>
+     gvs[op_prov_def, step_prov_other_output]) >>
   strip_tac >>
   irule ptr_mem_ok_step_frame >> simp[]
 QED
