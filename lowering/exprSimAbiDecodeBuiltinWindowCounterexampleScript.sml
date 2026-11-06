@@ -161,3 +161,64 @@ Proof
   simp[window_static_premises, window_input, window_resources,
     GSYM window_lower_def]
 QED
+
+Theorem window_block_halts:
+  !fuel. ?s. exec_block fuel window_ctx (HD window_fn.fn_blocks) window_initial = Halt s
+Proof
+  gen_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``]) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 10 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  ntac 3 (pure_once_rewrite_tac [exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV [``exec_block``, ``window_ctx``])) >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >> simp[]
+QED
+
+Theorem window_run_halts:
+  !fuel. ?s. run_from fuel window_ctx window_fn window_initial = Halt s
+Proof
+  gen_tac >> qspec_then `fuel` strip_assume_tac window_block_halts >>
+  gvs[run_from_def, window_fn_def, mk_raw_function_def,
+    lookup_block_def, listTheory.FIND_thm, window_initial_def,
+    init_venom_state_def, mstore_def]
+QED
+
+Theorem window_run_never_reverts:
+  !fuel u. run_from fuel window_ctx window_fn window_initial <> Abort Revert_abort u
+Proof
+  rpt gen_tac >> qspec_then `fuel` strip_assume_tac window_run_halts >> simp[]
+QED
