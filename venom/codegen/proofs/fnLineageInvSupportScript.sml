@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
   stackPlanTypes stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -341,4 +341,37 @@ Proof
   gvs[generated_plan_state_wf_marked_def,
       planSpillBoundsTheory.plan_slots_bounded_def] >>
   metis_tac[]
+QED
+
+Theorem analyzed_join_edge_block_spills_empty:
+  !fn pred succ pb sb dfg ps ops qs.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block succ fn.fn_blocks = SOME sb /\
+    MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+    1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps =
+      SOME (ops,qs) ==> qs.ps_spilled = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sb.bb_label = succ` by metis_tac[lookup_block_label] >>
+  `lookup_block sb.bb_label fn.fn_blocks = SOME sb /\
+   MEM sb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+   LENGTH (cfg_preds_of (cfg_analyze fn) sb.bb_label) <> 1` by simp[] >>
+  drule_all join_predecessor_jmp_shape >> strip_tac >>
+  drule_all join_predecessor_single_successor >> strip_tac >>
+  `inst_wf (LAST pb.bb_instructions)` by
+    (`fn_inst_wf fn /\ MEM pb fn.fn_blocks` by
+       metis_tac[codegen_ready_fn_def, lookup_block_MEM] >>
+     gvs[fn_inst_wf_def] >> first_x_assum irule >>
+     qexists_tac `pb` >> simp[LAST_MEM]) >>
+  `(LAST pb.bb_instructions).inst_outputs = []` by gvs[inst_wf_def] >>
+  irule phi_jmp_block_spills_empty >>
+  goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+  simp[join_target_ops_def] >>
+  `set (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) =
+   set (input_vars_from pred sb.bb_instructions
+     (live_vars_at (liveness_analyze fn) succ 0))` by
+    (irule analyzed_live_out_jmp >> simp[] >> metis_tac[]) >>
+  gvs[EXTENSION, MEM_MAP] >> metis_tac[]
 QED
