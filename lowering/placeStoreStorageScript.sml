@@ -7050,6 +7050,55 @@ Proof
       valueEncodingTheory.val_in_memory_def, is_bytestring_type_def]
 QED
 
+Theorem place_store_load_emit_path:
+  emit_op MLOAD [src] sa = (loaded,sm) /\
+  emit_void (if tr then TSTORE else SSTORE) [dst;loaded] sm = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  fn_inst_ids_distinct func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand dst s = SOME k /\ eval_operand src s = SOME sw ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    store_copy_normalize s t = (if tr then tstore else sstore) k (mload (w2n sw) s) s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id MLOAD [src] [out]) s =
+    OK (update_var out (mload (w2n sw) s) s)` by
+    (gen_tac >> irule emitHelperPropsTheory.step_MLOAD >> simp[eval_operands_def]) >>
+  drule place_store_emit_op_path >>
+  simp[is_terminator_def] >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`mload (w2n sw) s`,`ctx`] mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `gas_marked_path F ctx func s 0 (OK u)` >>
+  first_x_assum (qspecl_then [`0`,`0`] strip_assume_tac) >>
+  fs[typedMemoryCopyTheory.typed_copy_state_frame_def] >>
+  `u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `_ = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `eval_operand dst u = SOME k` by
+    (Cases_on `dst` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `~u.vs_call_ctx.cc_static /\ u.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `_ = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  drule_all place_store_emit_slot_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `((if tr then tstore else sstore) k (mload (w2n sw) s) u)
+    with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  conj_tac
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+        gas_marked_path_then)) >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `tr` >>
+  gvs[store_copy_normalize_def, tstore_def, sstore_def, lookup_var_def] >>
+  qpat_x_assum `_ = s` mp_tac >>
+  simp[venom_state_component_equality] >> strip_tac >> gvs[]
+QED
+
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
