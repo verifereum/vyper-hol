@@ -6,7 +6,7 @@ Ancestors forPtrRangePrepare forPtrAddress forPtrWriteScope forPtrArraySnapshot
   fragExec emitHelperProps finite_map list forPtrControl venomState ptrDiscipline
   exprSimProps typedCopyAgreement context compileEnv valueEncoding stmtLowering
   exprLoweringProps rich_list forPtrElementFrame bodyPtrDefs forPtrScope
-  exprSimPtrLiteralBuffer
+  exprSimPtrLiteralBuffer venomInst venomExecSemantics vyperState loweringPosts
 
 Theorem for_array_header_test_path_ptr:
   lookup_block cond_lbl func.fn_blocks =
@@ -310,4 +310,118 @@ Proof
   conj_tac
   >- (gvs[] >> irule for_element_address_outer_ghost >> simp[]) >>
   drule_all for_element_address_slice_coverage >> simp[]
+QED
+
+Theorem for_array_entry_address_inputs:
+  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+    idx (Var bp) arr_base k stride ov ep j3 j4 bb st ==>
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]) /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst j4 ADD [Var bp; Var ov] [ep]) /\
+  lookup_var bp s = SOME arr_base /\ bp <> ov /\
+  not_fresh_at sa p /\ not_local_ptr cenv es.scopes p
+Proof
+  strip_tac >> fs[array_entry_inputs_def, eval_operand_def] >>
+  `?tail. bb.bb_instructions = sb0.cs_current_insts ++ tail` by
+    metis_tac[IS_PREFIX_APPEND] >>
+  simp[get_instruction_def] >>
+  conj_tac
+  >- (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  fs[not_local_ptr_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `FLOOKUP bc.ce_vars name = FLOOKUP cenv.ce_vars name` by
+        (drule_all cenv_top_ext_outer_lookup >> simp[]) >>
+      fs[lookup_scopes_def] >> metis_tac[]) >>
+  fs[loweringPostsTheory.cenv_top_ext_def] >>
+  qpat_x_assum `_ with <|ce_vars := _; ce_dynarray_capacity := _;
+    ce_var_type := _|> = _`
+    (mp_tac o Q.AP_TERM `\ce. ce.ce_imm_alloca`) >> simp[] >> metis_tac[]
+QED
+
+Theorem for_array_entry_raw_ready:
+  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+    idx saved_base arr_base k stride ov ep j3 j4 bb st /\
+  run_inst_seq sb0.cs_current_insts s = OK t ==>
+  array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s
+    (t with vs_inst_idx := LENGTH sb0.cs_current_insts)
+Proof
+  pure_rewrite_tac[array_entry_inputs_def] >> rpt strip_tac >>
+  drule_all array_for_body_entry_run >>
+  disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >>
+  `t' = t` by metis_tac[exec_result_11] >> gvs[] >>
+  `t.vs_current_bb = s.vs_current_bb /\ t.vs_allocas = s.vs_allocas /\
+   t.vs_halted = s.vs_halted` by
+    (qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  simp[array_entry_ready_def, stmt_state_rel_inst_idx] >> conj_tac
+  >- (fs[ret_pc_ok_def, lookup_var_def] >> metis_tac[]) >>
+  conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
+  `!fuel. run_from fuel ctx func s =
+    run_from fuel ctx func (t with vs_inst_idx := s.vs_inst_idx +
+      LENGTH sb0.cs_current_insts)` suffices_by simp[] >>
+  irule array_seq_prefix_result >> fs[mk_inst_def, is_terminator_def]
+QED
+
+Theorem for_array_entry_copy_checked:
+  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+    idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
+  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn bp s ((k+1)*stride) /\ ptr_covers G tn p s sz /\
+  op_taint tn (Var idx) = {} /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n arr_base + k*stride) m) /\
+  (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+         cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
+  ?GA tA sA gf tf sf.
+    sA = ((update_var ep (arr_base + n2w k * n2w stride)
+      (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
+    inst_seq_ptr D 0 ctx func PG GA tA (emitted_insts sa sb0) sA gf tf /\
+    run_inst_seq (emitted_insts sa sb0) sA = OK sf /\
+    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
+      gf tf sf /\
+    (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
+      FLOOKUP gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule for_array_entry_address_inputs >> strip_tac >>
+  fs[array_entry_inputs_def] >>
+  qabbrev_tac `sA = (update_var ep (arr_base + n2w k * n2w stride)
+    (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2` >>
+  qabbrev_tac `GA = set_prov (DRESTRICT G (COMPL {ov})) [ep] (FLOOKUP G bp)` >>
+  qabbrev_tac `tA = tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{})` >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
+   stmt_state_rel ctx func cenv cx es sA /\ ghost_inv d cenv cx es GA tA sA /\
+   ptr_covers GA tA ep sA stride /\
+   lookup_var ep sA = SOME (arr_base + n2w k * n2w stride) /\
+   sA.vs_memory = s.vs_memory /\ tA.t_mem = tn.t_mem /\
+   (!x. x <> ov /\ x <> ep ==>
+     lookup_var x sA = lookup_var x s /\ FLOOKUP GA x = FLOOKUP G x /\
+     op_taint tA (Var x) = op_taint tn (Var x))` by
+    (irule for_element_address_ready_ptr >>
+     simp[Abbr `sA`, Abbr `GA`, Abbr `tA`] >> conj_tac
+     >- metis_tac[] >> qexistsl_tac [`bp`, `idx`, `j3`, `j4`] >> gvs[]) >>
+  `ptr_covers GA tA p sA sz` by
+    (`lookup_var p sA = lookup_var p s /\ FLOOKUP GA p = FLOOKUP G p /\
+      op_taint tA (Var p) = op_taint tn (Var p)` by metis_tac[] >>
+     drule_all for_ptr_covers_transport >> simp[]) >>
+  `lookup_var p sA = SOME dst` by metis_tac[] >>
+  `FLOOKUP sA.vs_allocas ainst.inst_id = SOME (w2n dst,sz)` by
+    simp[Abbr `sA`, update_var_def] >>
+  `!m. mem_agree_outside tA.t_mem sA.vs_memory m ==>
+    val_in_memory tv v (w2n (arr_base + n2w k * n2w stride)) m` by
+    (`k*stride < dimword (:256)` by decide_tac >>
+     gvs[wordsTheory.word_mul_n2w, wordsTheory.w2n_add_2, wordsTheory.w2n_n2w]) >>
+  `type_memory_size tv < dimword (:256) /\ type_memory_size tv <= sz /\
+   type_memory_bytes cenv et = type_memory_size tv /\
+   ptr_covers GA tA ep sA (type_memory_size tv)` by (gvs[] >> decide_tac) >>
+  `!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+    cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all for_array_element_install_checked >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`GA`, `tA`, `gf`, `tf`, `sf`] >>
+  gvs[Abbr `sA`] >> metis_tac[]
 QED
