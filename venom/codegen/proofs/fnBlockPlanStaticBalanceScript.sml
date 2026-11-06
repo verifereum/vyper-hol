@@ -1,6 +1,6 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
-  stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec
+  stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec planWf
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -296,4 +296,18 @@ Proof
   Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
   rpt (pairarg_tac >> gvs[]) >> simp[] >>
   metis_tac[emit_one_input_no_push_var, pairTheory.FST]
+QED
+
+Theorem emit_input_plan_signed_balance:
+  !opc operands nl ps lo ops qs.
+    opc <> INVOKE /\
+    (!l. MEM (Label l) operands ==> IS_SOME (FLOOKUP lo l)) /\
+    emit_input_plan opc operands nl ps = (ops, qs) ==>
+    &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  rpt strip_tac >> drule_all emit_input_plan_wf_len >>
+  disch_then (qspecl_then [`nl`, `ps`] mp_tac) >> strip_tac >>
+  gvs[] >> drule prefix_wf_signed_balance >>
+  impl_tac >- metis_tac[emit_input_plan_no_push_var, pairTheory.FST] >>
+  simp[]
 QED
