@@ -3,7 +3,7 @@ Theory fnBlockPlanStaticOffsetLive
 Ancestors
   fnFrameStepsRevertForward venomExecProofs rich_list list stackPlanGen venomWf pair
   livenessConvergenceProofs livenessDefs livenessBlockProofs
-  codegenReadyCompute pred_set livenessProofs venomInst basePtrProofs
+  codegenReadyCompute pred_set livenessProofs venomInst basePtrProofs finite_map
 
 Theorem ready_output_location_unique:
   !fn db k ub j v.
@@ -219,4 +219,120 @@ Proof
   qpat_x_assum `build_phi_maps _ _ = _` (fn th => rewrite_tac[th]) >>
   simp[Once UNCURRY] >>
   irule phi_input_fold_selected >> simp[] >> metis_tac[]
+QED
+
+Theorem phi_pair_updates_lookup[local]:
+  !pairs (m:string |-> num) v i.
+    FLOOKUP (FOLDL (\m (l,w). m |+ (w,i)) m pairs) v =
+      if MEM v (MAP SND pairs) then SOME i else FLOOKUP m v
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >>
+  rename1 `(lbl,w)` >>
+  simp[FLOOKUP_UPDATE] >> Cases_on `MEM v (MAP SND pairs)` >> simp[] >>
+  Cases_on `w = v` >> simp[]
+QED
+
+Theorem phi_maps_fold_selected[local]:
+  !items (om:string |-> num) (mm:num |-> string) pred v idx.
+    EVERY (\(i,phi).
+      (MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> i = idx) /\
+      (i = idx ==> MEM v (MAP SND (phi_pairs phi.inst_operands)) /\
+        FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) =
+                    SOME (pred,v))) items /\
+    (MEM idx (MAP FST items) \/
+     (FLOOKUP om v = SOME idx /\ FLOOKUP mm idx = SOME v)) ==>
+    FLOOKUP (FST (FOLDL (\(op_map,matching) (i,phi).
+      (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+         NONE => matching | SOME (_,w) => matching |+ (i,w)))
+      (om,mm) items)) v = SOME idx /\
+    FLOOKUP (SND (FOLDL (\(op_map,matching) (i,phi).
+      (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+         NONE => matching | SOME (_,w) => matching |+ (i,w)))
+      (om,mm) items)) idx = SOME v
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `h` >>
+  rename1 `(i,phi) :: items` >> simp[NoAsms] >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac assume_tac) >>
+  first_x_assum irule >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `EVERY _ items` kall_tac >>
+  Cases_on `i = idx`
+  >- (qpat_x_assum `i = idx ==> _` drule >> strip_tac >>
+      qpat_x_assum `MEM _ _ ==> _` kall_tac >>
+      gvs[phi_pair_updates_lookup, FLOOKUP_UPDATE]) >>
+  `~MEM v (MAP SND (phi_pairs phi.inst_operands))` by metis_tac[] >>
+  qpat_x_assum `MEM _ _ ==> _` kall_tac >>
+  qpat_x_assum `i = idx ==> _` kall_tac >>
+  Cases_on `FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands)` >>
+  gvs[phi_pair_updates_lookup, FLOOKUP_UPDATE, AllCaseEqs()] >>
+  rename1 `FIND _ _ = SOME found` >> Cases_on `found` >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem phi_pairs_find_selected[local]:
+  !pairs pred v. ALL_DISTINCT (MAP FST pairs) /\ MEM (pred,v) pairs ==>
+    FIND (\(l,w). l = pred) pairs = SOME (pred,v)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `h` >>
+  rename1 `(lbl,w) :: pairs` >> simp[NoAsms, FIND_thm] >> strip_tac >>
+  IF_CASES_TAC >> simp[NoAsms] >> metis_tac[MEM_MAP, FST, PAIR_EQ]
+QED
+
+Theorem phi_disjoint_source_index[local]:
+  !phis i j v.
+    phi_uses_disjoint phis /\ EVERY (\phi. phi.inst_opcode = PHI) phis /\
+    i < LENGTH phis /\ j < LENGTH phis /\
+    MEM v (MAP SND (phi_pairs (EL i phis).inst_operands)) /\
+    MEM v (MAP SND (phi_pairs (EL j phis).inst_operands)) ==> i = j
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> Cases_on `j` >>
+  gvs[phi_uses_disjoint_def, EVERY_MEM, inst_uses_def] >>
+  metis_tac[phi_pairs_mem_operand_vars, EL_MEM]
+QED
+
+Theorem build_phi_maps_selected:
+  !phis pred v j.
+    phi_uses_disjoint phis /\ EVERY (\phi. phi.inst_opcode = PHI) phis /\
+    j < LENGTH phis /\
+    ALL_DISTINCT (MAP FST (phi_pairs (EL j phis).inst_operands)) /\
+    MEM (pred,v) (phi_pairs (EL j phis).inst_operands) ==>
+    FLOOKUP (FST (build_phi_maps pred phis)) v = SOME j /\
+    FLOOKUP (SND (build_phi_maps pred phis)) j = SOME v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM v (MAP SND (phi_pairs (EL j phis).inst_operands))` by
+    (simp[MEM_MAP] >> metis_tac[SND]) >>
+  `FIND (\(l,w). l = pred) (phi_pairs (EL j phis).inst_operands) =
+     SOME (pred,v)` by (irule phi_pairs_find_selected >> simp[]) >>
+  simp[NoAsms, build_phi_maps_def, LET_THM] >>
+  irule phi_maps_fold_selected >> conj_tac
+  >- (simp[EVERY_EL, indexedListsTheory.EL_MAPi,
+           indexedListsTheory.LENGTH_MAPi] >> rpt strip_tac >> gvs[] >>
+      metis_tac[phi_disjoint_source_index]) >>
+  disj1_tac >> simp[MEM_MAP, indexedListsTheory.MEM_MAPi] >>
+  qexists_tac `(j, EL j phis)` >> simp[] >> metis_tac[]
+QED
+
+Theorem input_vars_from_selected_phi:
+  !instrs phi pred v live.
+    phi_uses_disjoint (collect_phis instrs) /\
+    MEM phi (collect_phis instrs) /\
+    ALL_DISTINCT (MAP FST (phi_pairs phi.inst_operands)) /\
+    MEM (pred,v) (phi_pairs phi.inst_operands) /\ MEM v live ==>
+    MEM v (input_vars_from pred instrs live)
+Proof
+  rpt strip_tac >>
+  `?j. j < LENGTH (collect_phis instrs) /\
+       EL j (collect_phis instrs) = phi` by metis_tac[MEM_EL] >>
+  `EVERY (\phi. phi.inst_opcode = PHI) (collect_phis instrs)` by
+    (simp[EVERY_MEM] >> metis_tac[collect_phis_mem]) >>
+  `FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME j /\
+   FLOOKUP (SND (build_phi_maps pred (collect_phis instrs))) j = SOME v` by
+    (irule build_phi_maps_selected >> simp[]) >>
+  irule input_vars_from_selected_maps >> simp[] >>
+  qexistsl_tac [`j`, `SND (build_phi_maps pred (collect_phis instrs))`,
+    `FST (build_phi_maps pred (collect_phis instrs))`] >> simp[]
 QED
