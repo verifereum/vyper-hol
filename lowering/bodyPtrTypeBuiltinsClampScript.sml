@@ -166,3 +166,45 @@ Proof
   qpat_assum `step_inst_base (mk_inst _ ISZERO _ _) _ = _`
     (mp_then Any strip_assume_tac iszero_ghost_update) >> simp[]
 QED
+
+Theorem clamp_assert_certificate:
+  ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
+  eval_operand op s = SOME w ==>
+  inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id ASSERT [op] []] s G tn
+Proof
+  strip_tac >> simp[inst_seq_ptr_def] >> conj_tac
+  >- (irule ptr_inst_ok_assert >> goal_assum (drule_at Any) >> simp[]) >>
+  `step_inst_base (mk_inst id ASSERT [op] []) s =
+    if w = 0w then Abort Revert_abort (revert_state (set_returndata [] s))
+    else OK s` by
+    (simp[mk_inst_def] >> irule venomExecProofsTheory.step_assert_behavior >>
+     first_assum ACCEPT_TAC) >>
+  Cases_on `w = 0w` >> simp[assert_ghost_unchanged, inst_seq_ptr_def]
+QED
+
+Theorem scalar_iszero_assert_certificate:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_prov G y = NONE /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq [mk_inst id opc [x;y] [a];
+                mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
+  inst_seq_ptr D 0 ctx fn PG G tn
+    ([mk_inst id opc [x;y] [a]; mk_inst (id+1) ISZERO [Var a] [b]] ++
+     [mk_inst (id+2) ASSERT [Var b] []]) s
+    (DRESTRICT (DRESTRICT G (COMPL {a})) (COMPL {b}))
+    (tn with t_var := tn.t_var |+ (a,{}) |+ (b,{}))
+Proof
+  strip_tac >> irule inst_seq_ptr_append >> conj_tac
+  >- (gvs[MEM] >> simp[mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`DRESTRICT (DRESTRICT G (COMPL {a})) (COMPL {b})`,
+               `t`, `tn with t_var := tn.t_var |+ (a,{}) |+ (b,{})`] >>
+  reverse conj_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      irule scalar_iszero_certificate >> simp[] >> goal_assum (drule_at Any)) >>
+  gen_tac >> irule clamp_assert_certificate >>
+  simp[op_taint_def, FLOOKUP_UPDATE] >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  drule iszero_run_shape >> strip_tac >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
