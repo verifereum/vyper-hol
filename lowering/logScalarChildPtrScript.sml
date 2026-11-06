@@ -5,6 +5,7 @@ Ancestors
   abiEncoder abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv
   bodyPtrDefs ptrDiscipline venomExecSemantics venomState venomInst instIdxIndep
   finite_map words arithmetic list rich_list
+  logMembersInvariantPtr logAbiInputPtr abiEncoderMembersInput
 
 Theorem compile_abi_copy_child_seq_ptr:
   compile_abi_encode_child (Var dst) (Var src) (AbiCopy 32) F ho dp sa = (out,sb) /\
@@ -100,3 +101,28 @@ Resume compile_abi_copy_child_seq_ptr[post]:
   metis_tac[]
 QED
 Finalise compile_abi_copy_child_seq_ptr
+
+Theorem robust_abi_encoder_members_input_cons:
+  (!q. mem_agree_outside m mem q ==>
+    abi_encoder_input (AbiComplex ((ei,asz,mz,dyn)::infos))
+      (Tuple (ty::tys)) (ListV (av::avs)) a cap q) ==>
+  (!q. mem_agree_outside m mem q ==> abi_encoder_input ei ty av a mz q) /\
+  (!q. mem_agree_outside m mem q ==>
+    abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs)
+      (a+mz) (abi_encoder_member_span infos) q)
+Proof
+  strip_tac >> conj_tac >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule abi_encoder_members_input_cons >> simp[]
+QED
+
+(* A cursor cell already clean before and after a child does not enlarge
+   that child's taint-change footprint, even though its memory is written. *)
+Theorem taint_frame_clean_exception:
+  (!i. i IN clean ==> i NOTIN m) /\
+  (!i. i IN clean ==> i NOTIN m') /\
+  (!i. i NOTIN writes /\ i NOTIN clean ==> (i IN m' <=> i IN m)) ==>
+  !i. i NOTIN writes ==> (i IN m' <=> i IN m)
+Proof
+  metis_tac[]
+QED
