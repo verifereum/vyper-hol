@@ -76,7 +76,7 @@ Proof
     (qunabbrev_tac `cap` >> irule abi_caller_allocation_budget_zero >>
      asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
   `~(abi_builtin_decode_output_site st min_size max_size IN abi_decoder_ids first last)` by
-    (simp[abi_decoder_ids_def] >> decide_tac) >>
+    (simp[NoAsms, abi_decoder_ids_def] >> decide_tac) >>
   mp_tac (Q.INST [`s` |-> `allocated:venom_state`,
     `output_id` |-> `abi_builtin_decode_output_site st min_size max_size`, `b` |-> `0:num`]
     abi_scratch_decode_allocation_windows) >>

@@ -420,16 +420,14 @@ Proof
   `abi_footprint_disjoint sb source_cap
     (abi_decoder_child_scratch (abi_decoder_ids first last) 0
       (initial.vs_alloca_next + 32 * CARD (abi_decoder_missing first last initial)) actual)` by
-    (mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`, `b` |-> `0:num`,
-       `cap` |-> `initial.vs_alloca_next + 32 * CARD (abi_decoder_missing first last initial)`,
-       `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
-       `p` |-> `sb`, `n` |-> `source_cap`] abi_scratch_disjoint_advance) >> simp[]) >>
+    (irule abi_scratch_disjoint_advance >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `initial` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `abi_footprint_disjoint d output_size
     (abi_decoder_child_scratch (abi_decoder_ids first last) 0
       (initial.vs_alloca_next + 32 * CARD (abi_decoder_missing first last initial)) actual)` by
-    (mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`, `b` |-> `0:num`,
-       `cap` |-> `initial.vs_alloca_next + 32 * CARD (abi_decoder_missing first last initial)`,
-       `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
-       `p` |-> `d:num`, `n` |-> `output_size`] abi_scratch_disjoint_advance) >> simp[]) >>
+    (irule abi_scratch_disjoint_advance >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `initial` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`actual`, `slot`] >> simp[]
 QED

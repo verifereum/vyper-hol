@@ -163,16 +163,16 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem call_storage_argument_reads_after_later_argument:
+Theorem call_storage_argument_reads_before_later_argument:
   FST (load_timing_run call_storage_read_context
-    call_storage_read_program [] empty_state) = INL (IntV 10)
+    call_storage_read_program [] empty_state) = INL (IntV 0)
 Proof
   CONV_TAC cv_eval
 QED
 
-Theorem call_memory_argument_reads_after_later_pop:
+Theorem call_memory_argument_reads_before_later_pop:
   FST (load_timing_run call_memory_pop_context
-    call_memory_pop_program [] empty_state) = INL (IntV 1)
+    call_memory_pop_program [] empty_state) = INL (IntV 2)
 Proof
   CONV_TAC cv_eval
 QED
