@@ -4,7 +4,7 @@ Ancestors
   internalReturnMetadata intCallStep externalNormalizePremises compileEnv
   valueEncoding exprLowering vyperTypeSystem vyperTypeArgFits vyperValue
   abiTypeBoundProps vyperABI exprSimSource exprSafeOperand
-  exprSimHypsDefs vyperTypeInvariants vyperAST
+  exprSimHypsDefs exprSimHyps vyperTypeInvariants vyperAST
 
 Theorem nonzero_internal_call_located:
   !cfn ce ret ty fid args dret sa vv sb ret_count rbs pvs.
@@ -120,7 +120,16 @@ Proof
       `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
         fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
       drule_all abi_encode_layout >>
-      gvs[lowered_value_type_def, expr_type_def]) >>
+      gvs[lowered_value_type_def, expr_type_def])
+  >>~- ([`Builtin bt bi xs`],
+      Cases_on `bi` >> gvs[lowered_value_type_def, expr_type_def] >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def,
+          is_bytestring_type_def, concat_buffer_type_def, arg_type_fits_def] >>
+      `MAP bytelike_type_bound (MAP expr_type xs) =
+       MAP concat_payload_capacity (MAP expr_type xs)` by
+        (irule concat_payload_capacity_bound >>
+         fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+      fs[listTheory.MAP_MAP_o]) >>
   rename1 `Call ann target xs drv` >>
   Cases_on `target` >> gvs[lowered_value_type_def, expr_type_def] >>
   rename1 `IntCall fid` >>
