@@ -24,7 +24,7 @@ Ancestors
   extRetAbiArrayStaticLoopPtr extRetAbiArrayStaticCountedPtr extRetAbiSourceInputPtr
   extRetAbiWrappedSourcePtr extRetAbiSingletonCountedPtr extRetAbiSingletonWrapperPtr
   extRetAbiStorageFramePtr extRetAbiSingletonReturnPtr extRetBufferAllocCountedPtr
-  extRetAbiReturnConsumerPtr extRetAbiBytesLivePtr
+  extRetAbiReturnConsumerPtr extRetAbiBytesLivePtr extRetAbiSingletonLivePtr
 
 val _ = Parse.hide "body";
 
