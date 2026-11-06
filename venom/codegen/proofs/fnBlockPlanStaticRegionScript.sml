@@ -1646,3 +1646,69 @@ Proof
     (SPEC_ALL regional_selected_phi_inv_prefix)) >>
   gvs[]
 QED
+
+Theorem regional_phi_preparation_identity:
+  !fn bb lv ps.
+    codegen_ready_fn fn /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    collect_phis bb.bb_instructions <> [] ==>
+    (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps else ([],ps)) = ([],ps) /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1
+     then clean_stack_plan lv (cfg_analyze fn) fn bb ps else ([],ps)) = ([],ps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `fn_entry_label fn <> SOME bb.bb_label` by
+    (Cases_on `collect_phis bb.bb_instructions` >> gvs[] >>
+     metis_tac[regional_phi_nonentry, MEM]) >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
+  `~(LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1)` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM, NULL_EQ] >>
+     strip_tac >>
+     qpat_x_assum `!bb'. MEM bb' _ ==> _` (qspec_then `bb` mp_tac) >> simp[]) >>
+  simp[]
+QED
+
+Theorem regional_selected_phi_inv_cleanup_fields:
+  !lv dfg sb bb i ps h promised.
+    regional_selected_phi_inv lv dfg sb bb i
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) <=>
+    regional_selected_phi_inv lv dfg sb bb i ps
+Proof
+  simp[regional_selected_phi_inv_def, generated_plan_state_wf_marked_def,
+    plan_slots_bounded_def]
+QED
+
+Theorem regional_lineage_prepared_selected_phi_inv:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps_l h promised
+    param_ops ps1 clean_ops ps2.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps_l /\ collect_phis bb.bb_instructions <> [] /\
+    (if bb = HD fn.fn_blocks then prepare_params_plan lv fn
+       (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([], ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (param_ops, ps1) /\
+    (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+     then clean_stack_plan lv cfg fn bb ps1 else ([], ps1)) = (clean_ops, ps2) ==>
+    regional_selected_phi_inv lv dfg sb bb 0 ps2
+Proof
+  rpt gen_tac >> strip_tac >>
+  `regional_selected_phi_inv lv dfg sb bb 0 ps_l` by
+    (drule_all regional_lineage_selected_phi_inv >> simp[]) >>
+  drule_all regional_phi_preparation_identity >>
+  disch_then (qspecl_then [`lv`,
+    `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`] mp_tac) >>
+  strip_tac >> gvs[] >>
+  drule_all regional_phi_preparation_identity >>
+  disch_then (qspecl_then [`lv`, `ps1`] mp_tac) >>
+  gvs[regional_selected_phi_inv_cleanup_fields]
+QED
