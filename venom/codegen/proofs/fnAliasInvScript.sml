@@ -11096,6 +11096,70 @@ Proof
   conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
+Theorem alias_eval_phis_neutral_lookup:
+  !insts s t r.
+    eval_phis s insts = OK t /\
+    (!inst v. MEM inst (TAKE (phi_prefix_length insts) insts) /\
+      eval_one_phi s inst = SOME (r,v) ==> FLOOKUP s.vs_vars r = SOME v) ==>
+    FLOOKUP t.vs_vars r = FLOOKUP s.vs_vars r
+Proof
+  Induct_on `insts`
+  >- simp[eval_phis_def] >>
+  rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[eval_phis_def, phi_prefix_length_def] >>
+  Cases_on `eval_one_phi s h` >> simp[] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_phis s insts` >> simp[] >>
+  strip_tac >> gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `x0 = r` >> gvs[]
+  >- metis_tac[] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_eval_phis_shared_root:
+  eval_phis s insts = OK t /\
+  (!inst v. MEM inst (TAKE (phi_prefix_length insts) insts) /\
+    eval_one_phi s inst = SOME (r,v) ==> FLOOKUP s.vs_vars r = SOME v) /\
+  FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x /\
+  FLOOKUP s.vs_vars x = FLOOKUP s.vs_vars r ==>
+  FLOOKUP t.vs_vars x = FLOOKUP t.vs_vars r
+Proof
+  metis_tac[alias_eval_phis_neutral_lookup]
+QED
+
+Theorem alias_phi_selected_root_old_value:
+  eval_one_phi s inst = SOME (r,v) /\
+  s.vs_prev_bb = SOME pred /\
+  resolve_phi pred inst.inst_operands = SOME (Var b) /\
+  normalize_operand dfg [] (Var b) = Var r /\
+  operand_val (frame_view fn ra s) lo (Var b) =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] (Var b)) /\
+  ~retpc_var fn b /\ ~retpc_var fn r ==>
+  FLOOKUP s.vs_vars r = SOME v
+Proof
+  strip_tac >>
+  gvs[operand_val_def, frame_view_non_retpc] >>
+  gvs[eval_one_phi_def, AllCaseEqs(), eval_operand_def, lookup_var_def]
+QED
+
+Theorem alias_eval_phis_shared_root_frame:
+  eval_phis s insts = OK t /\
+  (!inst v. MEM inst (TAKE (phi_prefix_length insts) insts) /\
+    eval_one_phi s inst = SOME (r,v) ==> FLOOKUP s.vs_vars r = SOME v) /\
+  FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x /\
+  normalize_operand dfg [] (Var x) = Var r /\
+  operand_val (frame_view fn ra s) lo (Var x) =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] (Var x)) /\
+  ~retpc_var fn x /\ ~retpc_var fn r ==>
+  operand_val (frame_view fn ra t) lo (Var x) =
+    operand_val (frame_view fn ra t) lo (normalize_operand dfg [] (Var x))
+Proof
+  strip_tac >> gvs[operand_val_def, frame_view_non_retpc] >>
+  sym_tac >> irule alias_eval_phis_neutral_lookup >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
