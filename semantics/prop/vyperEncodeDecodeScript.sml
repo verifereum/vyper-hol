@@ -1197,6 +1197,78 @@ Proof
   )
 QED
 
+(* ===== Decode Zero Storage ===== *)
+
+Theorem word_to_bytes_be_zero[local]:
+  word_to_bytes_be (0w : 256 word) = REPLICATE 32 (0w : word8)
+Proof
+  EVAL_TAC
+QED
+
+Theorem TAKE_REPLICATE[local]:
+  n ≤ m ⇒ TAKE n (REPLICATE m x) = REPLICATE n x
+Proof
+  rw[REPLICATE_GENLIST, TAKE_GENLIST, MIN_DEF] >>
+  `n = m` by simp[] >> gvs[]
+QED
+
+Theorem DROP_REPLICATE[local]:
+  n ≤ m ⇒ DROP n (REPLICATE m x) = REPLICATE (m - n) x
+Proof
+  rw[REPLICATE_GENLIST, DROP_GENLIST, combinTheory.o_DEF, combinTheory.K_THM]
+QED
+
+Theorem enumerate_static_array_REPLICATE[local]:
+  ∀n k. enumerate_static_array d k (REPLICATE n d) = []
+Proof
+  Induct >> rw[enumerate_static_array_def]
+QED
+
+Theorem decode_value_zero_is_default:
+  (∀s offset tv.
+    (∀k. s k = 0w) ∧ well_formed_type_value tv ⇒
+    decode_value s offset tv = SOME (default_value tv)) ∧
+  (∀s offset tvs.
+    (∀k. s k = 0w) ∧ EVERY well_formed_type_value tvs ⇒
+    decode_tuple s offset tvs = SOME (MAP default_value tvs)) ∧
+  (∀s offset tv n.
+    (∀k. s k = 0w) ∧ well_formed_type_value tv ⇒
+    decode_static_array s offset tv n =
+      SOME (REPLICATE n (default_value tv))) ∧
+  (∀s offset tv n.
+    (∀k. s k = 0w) ∧ well_formed_type_value tv ⇒
+    decode_dyn_array s offset tv n =
+      SOME (REPLICATE n (default_value tv))) ∧
+  (∀s offset ftypes.
+    (∀k. s k = 0w) ∧ EVERY (well_formed_type_value o SND) ftypes ⇒
+    decode_struct s offset ftypes =
+      SOME (MAP (λ(id,t). (id, default_value t)) ftypes))
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[decode_value_def, default_value_def, type_slot_size_def,
+       read_slot_def, lookup_storage_def, well_formed_type_value_def, ETA_THM] >>
+  rpt strip_tac
+  (* BytesT Dynamic / StringT *)
+  >> TRY (
+    simp[decode_dyn_bytes_def, lookup_storage_def,
+         vfmConstantsTheory.word_size_def, read_slots_def,
+         slots_to_bytes_def] >> NO_TAC
+  )
+  (* UintT, IntT, DecimalT, FlagTV *)
+  >> TRY (simp[decode_base_from_slot_def] >> NO_TAC)
+  (* BoolT *)
+  >> TRY (simp[decode_base_from_slot_def, slot_to_bool_def] >> NO_TAC)
+  (* BytesT Fixed *)
+  >> TRY (
+    simp[decode_base_from_slot_def, word_to_bytes_be_zero, TAKE_REPLICATE] >> NO_TAC
+  )
+  (* AddressT *)
+  >> TRY (EVAL_TAC >> NO_TAC)
+  (* TupleTV, ArrayTV Fixed, StructTV, ArrayTV Dynamic, recursive cases *)
+  >> fs[] >> gvs[default_value_tuple_MAP, default_value_struct_MAP,
+                 enumerate_static_array_REPLICATE, MIN_DEF]
+QED
+
 (* ===== Non-compound Roundtrip ===== *)
 
 (* For non-compound types (BaseTV, FlagTV, NoneTV), encode_decode_roundtrip_ok follows
