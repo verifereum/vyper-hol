@@ -317,67 +317,6 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def, exec_read1_def]
 QED
 
-Theorem compile_slice_extcode_bounds_abort:
-  compile_slice_extcode addr start len root data sa = (out,sb) /\
-  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  fresh_vars_wrt sa s /\
-  eval_operand addr s = SOME a /\ eval_operand start s = SOME wa /\
-  eval_operand len s = SOME wn /\
-  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  q = (update_var (STRING #"%" (toString sa.cs_next_var))
-    (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
-      vs_inst_idx := SUC s.vs_inst_idx /\
-  run_inst_seq (emitted_insts sc sd) q = Abort ab u ==>
-  ab = Revert_abort /\
-  ?G' tn' j.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
-      (Abort Revert_abort (u with vs_inst_idx := j)) /\
-    (!x. not_fresh_at sa x ==>
-      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
-Proof
-  strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
-  `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >> gvs[] >>
-  `cs_extends s2 sb` by metis_tac[cs_extends_trans] >>
-  `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s1 fn /\ fn_has_code s1 s2 fn` by metis_tac[fn_has_code_split] >>
-  `step_inst_base
-    (mk_inst sa.cs_next_id EXTCODESIZE [addr] [STRING #"%" (toString sa.cs_next_var)]) s =
-    OK (update_var (STRING #"%" (toString sa.cs_next_var))
-      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s)` by
-    (irule external_size_step >> simp[] >> metis_tac[]) >>
-  `MEM EXTCODESIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH [addr] <= 1 /\
-   (!arg. MEM arg [addr] ==> op_taint tn arg = {})` by simp[] >>
-  drule_all emit_external_size_counted >>
-  disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
-  suspend "bounds"
-QED
-
-Resume compile_slice_extcode_bounds_abort[bounds]:
-  `run_inst_seq (emitted_insts s1 s2) t = Abort ab u` by gvs[] >>
-  `fresh_vars_wrt s1 t` by simp[] >>
-  `eval_operand start t = SOME wa /\ eval_operand len t = SOME wn` by metis_tac[] >>
-  `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
-    (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
-     `op = start \/ op = len` by fs[] >>
-     `?v. eval_operand op s = SOME v` by metis_tac[] >>
-     metis_tac[]) >>
-  drule_all compile_assert_slice_bounds_counted_abort >>
-  strip_tac >> suspend "compose"
-QED
-Resume compile_slice_extcode_bounds_abort[compose]:
-  qpat_x_assum `!PG D. _` (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn''
-    (Abort Revert_abort (u with vs_inst_idx := j))` by
-    (drule_all gas_path_ptr_then >> simp[]) >>
-  simp[] >> qexistsl_tac [`G''`,`tn''`,`j`] >> gvs[] >>
-  rpt strip_tac >> metis_tac[]
-QED
-Finalise compile_slice_extcode_bounds_abort
 
 Theorem external_copy_step:
   ((opc = CALLDATACOPY /\ ops = [dst;start;len] /\ src = s.vs_call_ctx.cc_calldata) \/
@@ -745,4 +684,47 @@ Proof
   qpat_assum `emit_op EXTCODESIZE _ _ = _`
     (mp_then Any (mp_tac o SRULE []) external_slice_fragment_counted_ok) >>
   simp[] >> disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
+QED
+
+Theorem compile_slice_extcode_bounds_abort:
+  compile_slice_extcode addr start len root data sa = (out,sb) /\
+  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\
+  eval_operand addr s = SOME a /\ eval_operand start s = SOME wa /\
+  eval_operand len s = SOME wn /\
+  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  q = (update_var (STRING #"%" (toString sa.cs_next_var))
+    (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
+      vs_inst_idx := SUC s.vs_inst_idx /\
+  run_inst_seq (emitted_insts sc sd) q = Abort ab u ==>
+  ab = Revert_abort /\
+  ?G' tn' j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (Abort Revert_abort (u with vs_inst_idx := j)) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
+  `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `s1 = sc` SUBST_ALL_TAC >> qpat_x_assum `s2 = sd` SUBST_ALL_TAC >>
+  qpat_x_assum `q = _` SUBST_ALL_TAC >>
+  `cs_extends sd sb /\ cs_extends sc sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sd fn` by metis_tac[fn_has_code_split] >>
+  `step_inst_base
+    (mk_inst sa.cs_next_id EXTCODESIZE [addr] [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s)` by
+    (irule external_size_step >> simp[] >> metis_tac[]) >>
+  `MEM EXTCODESIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH [addr] <= 1 /\
+   (!arg. MEM arg [addr] ==> op_taint tn arg = {})` by simp[] >>
+  `!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}` by
+    (simp[] >> metis_tac[]) >>
+  qpat_assum `step_inst_base _ s = _`
+    (mp_then Any mp_tac external_query_bounds_counted_abort) >>
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
