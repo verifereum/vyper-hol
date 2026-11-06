@@ -39,9 +39,14 @@ Proof
   `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp` by metis_tac[] >>
   `new_site_bytes s u = {}` by
     simp[new_site_bytes_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
-  gvs[scalar_shape_def, scalar_binary_def, scalar_unary_def,
-      LENGTH_EQ_NUM_compute] >>
+  `i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
+   i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> SSTORE /\
+   i.inst_opcode <> TSTORE /\ i.inst_opcode <> ISTORE` by
+    gvs[scalar_shape_def, scalar_binary_def, scalar_unary_def] >>
+  `source_memory_write_ranges i s = [] /\ written_taint tn i s = {}` by
+    (gvs[scalar_shape_def, scalar_binary_def, scalar_unary_def,
+         LENGTH_EQ_NUM_compute] >>
+     simp[source_memory_write_ranges_def, written_taint_def]) >>
   simp[step_taint_def, mem_taint_def, store_taint_def, imm_taint_def,
-       adopt_reset_def, step_writes_def, source_memory_write_ranges_def,
-       written_taint_def, range_bytes_def]
+       adopt_reset_def, step_writes_def, range_bytes_def]
 QED
