@@ -13,7 +13,69 @@ Ancestors
   loweringPosts fragGasMode
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem
-  venomState
+  venomState placeMemoryTypeInterfaces placeMemoryPrimitiveForward
+  placeMemoryCodeLayout placeMemoryCopyFrames placeMemoryTypedBase
+  placeMemoryStateRebuild placeMemoryAssignForward exprSimProps vyperTypeArgFits
+
+(* A widening-compatible representative that selects the typed array loop. *)
+Theorem typed_copy_string_array_widens[local]:
+  well_formed_type tenv (ArrayT (BaseT (StringT 33)) (Dynamic 2)) ==>
+  type_widens_to tenv (ArrayT (BaseT (StringT 1)) (Dynamic 2))
+                     (ArrayT (BaseT (StringT 33)) (Dynamic 2))
+Proof
+  simp[type_widens_to_def, arg_type_fits_def]
+QED
+
+Theorem typed_copy_string_array_dispatch[local]:
+  acyclic_struct_metadata cenv.ce_struct_fields ==>
+  compile_store_memory_typed cenv dst
+    (ArrayT (BaseT (StringT 33)) (Dynamic 2)) src
+    (ArrayT (BaseT (StringT 1)) (Dynamic 2)) =
+  compile_copy_dynarray_typed cenv dst (BaseT (StringT 33)) 2
+                             src (BaseT (StringT 1))
+Proof
+  simp[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def]
+QED
+
+Theorem typed_copy_string_array_loop[local]:
+  compile_copy_dynarray_typed cenv dst (BaseT (StringT 33)) 2
+                             src (BaseT (StringT 1)) =
+  (do length <- emit_op MLOAD [src];
+      too_long <- emit_op GT [length; Lit (n2w 2)];
+      ok <- emit_op ISZERO [too_long];
+      emit_void ASSERT [ok];
+      emit_void MSTORE [dst; length];
+      src_data <- emit_op ADD [src; Lit 32w];
+      dst_data <- emit_op ADD [dst; Lit 32w];
+      cond_lbl <- fresh_label "typed_dyn_cond";
+      body_lbl <- fresh_label "typed_dyn_body";
+      exit_lbl <- fresh_label "typed_dyn_exit";
+      counter <- fresh_var;
+      emit_inst ASSIGN [Lit 0w] [counter];
+      emit_inst JMP [Label cond_lbl] [];
+      new_block cond_lbl;
+      lt_op <- emit_op LT [Var counter; length];
+      done_op <- emit_op ISZERO [lt_op];
+      emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+      new_block body_lbl;
+      src_off <- emit_op MUL [Var counter;
+        Lit (n2w (type_memory_bytes cenv (BaseT (StringT 1))))];
+      dst_off <- emit_op MUL [Var counter;
+        Lit (n2w (type_memory_bytes cenv (BaseT (StringT 33))))];
+      src_elem <- emit_op ADD [src_data; src_off];
+      dst_elem <- emit_op ADD [dst_data; dst_off];
+      compile_store_memory_typed cenv dst_elem (BaseT (StringT 33))
+                                     src_elem (BaseT (StringT 1));
+      new_ctr <- emit_op ADD [Var counter; Lit 1w];
+      emit_inst ASSIGN [new_ctr] [counter];
+      emit_inst JMP [Label cond_lbl] [];
+      _ <- new_block exit_lbl;
+      return ()
+   od)
+Proof
+  simp[Once contextTheory.compile_store_memory_typed_def]
+QED
 
 (* compile_assign_value into memory. *)
 Theorem place_store_value_memory_run:
@@ -72,5 +134,15 @@ Theorem place_store_value_memory_run:
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_assign_memory_forward_local_frame >> strip_tac >>
+  drule_all type_widens_to_value_has_type >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx ff t` by
+    (irule memory_place_write_stmt_state >>
+     goal_assum (drule_at (Pat `val_in_memory _ _ _ t.vs_memory`)) >>
+     qexistsl_tac [`dty`, `ee`, `env`, `p`, `r`, `s`, `sa`] >>
+     gvs[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     first_assum ACCEPT_TAC) >>
+  qexists_tac `t` >> simp[]
 QED
