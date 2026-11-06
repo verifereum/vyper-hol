@@ -502,7 +502,7 @@ QED
 
 (* ===== The selected function's parameters ===== *)
 
-Theorem source_typing_ok_type_def_keys_distinct[local]:
+Theorem source_typing_ok_type_def_keys_distinct:
   !tops am tx.
     source_typing_ok tops am tx ==>
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
@@ -554,7 +554,7 @@ Proof
   simp[check_function_body_def, type_env_all_modules_one]
 QED
 
-Theorem build_positional_args_names[local]:
+Theorem build_positional_args_names:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>

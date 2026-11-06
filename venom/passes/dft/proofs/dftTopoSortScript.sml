@@ -78,6 +78,15 @@ Definition output_eda_before_def:
       ?m. m < k /\ (EL m output).inst_id = d.inst_id
 End
 
+Theorem output_eda_before_dft_eda:
+  output_eda_before (dft_eda bi) out ==> output_eda_before (build_eda bi) out
+Proof
+  rw[output_eda_before_def] >>
+  Cases_on `FLOOKUP (build_eda bi) (EL k out).inst_id` >> gvs[] >>
+  drule_all dft_eda_mono >> strip_tac >>
+  first_x_assum (qspecl_then [`k`, `d`] mp_tac) >> simp[]
+QED
+
 (* ===== EDA topo compatibility: all deps respect block order ===== *)
 
 Definition eda_topo_compatible_def:

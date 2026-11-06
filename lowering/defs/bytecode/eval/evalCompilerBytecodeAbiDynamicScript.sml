@@ -6,7 +6,7 @@
 
 Theory evalCompilerBytecodeAbiDynamic
 Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib intReduce
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
@@ -156,8 +156,59 @@ val abi_dynamic_ready_available_terms = find_terms
 val () =
   if length abi_dynamic_ready_available_terms = 495 then ()
   else raise Fail "expected 495 ABI-dynamic availability calls"
+(* The same-block order check of def_available_at_exec_compute indexes the
+   block with EL over GENLIST, which is cubic in the block length; this
+   single pass decides the same thing. *)
+Definition inst_before_in_def:
+  (inst_before_in d u [] <=> F) /\
+  (inst_before_in d u (x::xs) <=> (x = d /\ MEM u xs) \/ inst_before_in d u xs)
+End
+
+Theorem inst_before_in_el:
+  !l. inst_before_in d u l <=>
+      ?i j. i < j /\ j < LENGTH l /\ EL i l = d /\ EL j l = u
+Proof
+  Induct >> simp[inst_before_in_def] >> gen_tac >> eq_tac
+  >- (strip_tac
+      >- (gvs[listTheory.MEM_EL] >> qexistsl_tac [`0`, `SUC n`] >> simp[])
+      >> qexistsl_tac [`SUC i`, `SUC j`] >> simp[])
+  >> strip_tac >> Cases_on `i` >> Cases_on `j` >> gvs[]
+  >- (simp[listTheory.MEM_EL] >> metis_tac[])
+  >> disj2_tac >> metis_tac[]
+QED
+
+Theorem genlist_order_inst_before_in:
+  EXISTS (\i. EL i l = d /\
+               EXISTS (\j. i < j /\ EL j l = u) (GENLIST I (LENGTH l)))
+    (GENLIST I (LENGTH l)) <=> inst_before_in d u l
+Proof
+  simp[inst_before_in_el, listTheory.EXISTS_MEM, listTheory.MEM_GENLIST, PULL_EXISTS] >>
+  eq_tac >> strip_tac >> qexistsl_tac [`i`, `j`] >> simp[]
+QED
+
+Theorem def_available_at_exec_single_pass:
+  def_available_at_exec cfg dom fn target_bb use_inst_opt v <=>
+    EXISTS
+      (\def_bb.
+        EXISTS
+          (\def_inst.
+            MEM v def_inst.inst_outputs /\
+            cfg_reachable_of cfg target_bb.bb_label /\
+            dominates dom def_bb.bb_label target_bb.bb_label /\
+            (def_bb.bb_label = target_bb.bb_label ==>
+             case use_inst_opt of
+               NONE => T
+             | SOME use_inst =>
+                 inst_before_in def_inst use_inst target_bb.bb_instructions))
+          def_bb.bb_instructions)
+      fn.fn_blocks
+Proof
+  simp[codegenReadyComputeTheory.def_available_at_exec_compute,
+       genlist_order_inst_before_in]
+QED
+
 val () = computeLib.upd_compset (computeLib.add_thms
-  [codegenReadyComputeTheory.def_available_at_exec_compute])
+  [def_available_at_exec_single_pass, inst_before_in_def])
 fun abi_dynamic_take_chunk _ [] = ([],[])
   | abi_dynamic_take_chunk 0 xs = ([],xs)
   | abi_dynamic_take_chunk n (x::xs) = let
@@ -174,67 +225,227 @@ fun abi_dynamic_available_slice n =
 Theorem abi_dynamic_available_00:
   ^(abi_dynamic_available_slice 0)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_01:
   ^(abi_dynamic_available_slice 1)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_02:
   ^(abi_dynamic_available_slice 2)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_03:
   ^(abi_dynamic_available_slice 3)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_04:
   ^(abi_dynamic_available_slice 4)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_05:
   ^(abi_dynamic_available_slice 5)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_06:
   ^(abi_dynamic_available_slice 6)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_07:
   ^(abi_dynamic_available_slice 7)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_08:
   ^(abi_dynamic_available_slice 8)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_09:
   ^(abi_dynamic_available_slice 9)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_10:
   ^(abi_dynamic_available_slice 10)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_11:
   ^(abi_dynamic_available_slice 11)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 Theorem abi_dynamic_available_12:
   ^(abi_dynamic_available_slice 12)
 Proof
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
 val abi_dynamic_ready_available_evals = map EQT_INTRO
@@ -274,6 +485,10 @@ val abi_dynamic_ready_insts_step1 = TRY_CONV EVAL
       (^abi_dynamic_ready_fn).fn_blocks``
 val abi_dynamic_ready_insts_eval = TRANS abi_dynamic_ready_insts_step1
   (TRY_CONV EVAL (rhs (concl abi_dynamic_ready_insts_step1)))
+val abi_dynamic_ready_offsets_eval =
+  EVAL ``stackPlanGen$offset_outputs_used ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_phi_joins_eval =
+  EVAL ``stackPlanGen$phis_at_joins (cfg_analyze ^abi_dynamic_ready_fn) ^abi_dynamic_ready_fn``
 val abi_dynamic_ready_fn_rhs = LIST_CONJ
   [EQT_ELIM abi_dynamic_ready_canonical_eval,
    EQT_ELIM abi_dynamic_ready_wf_fn_eval,
@@ -284,7 +499,9 @@ val abi_dynamic_ready_fn_rhs = LIST_CONJ
    EQT_ELIM abi_dynamic_ready_cfg_norm_eval,
    EQT_ELIM abi_dynamic_ready_entries_eval,
    EQT_ELIM abi_dynamic_ready_phi_eval,
-   EQT_ELIM abi_dynamic_ready_insts_eval]
+   EQT_ELIM abi_dynamic_ready_insts_eval,
+   EQT_ELIM abi_dynamic_ready_offsets_eval,
+   EQT_ELIM abi_dynamic_ready_phi_joins_eval]
 val abi_dynamic_ready_fn_thm = prove
   (``codegen_ready_fn ^abi_dynamic_ready_fn``,
    PURE_REWRITE_TAC [stackPlanGenTheory.codegen_ready_fn_def] >>
@@ -516,6 +733,8 @@ val abi_dynamic_context_safe_eval = EVAL
 val abi_dynamic_assembly_safe_eval = EVAL
   ``assembly_target_safe (^abi_dynamic_rpolicy).rpol_target
       ^abi_dynamic_raw_asm``
+val abi_dynamic_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^abi_dynamic_raw_asm``
 val abi_dynamic_codegen_step0 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def, abi_dynamic_target_wf_eval,
    abi_dynamic_context_safe_eval, abi_dynamic_context_plan_eval,
@@ -525,7 +744,8 @@ val abi_dynamic_codegen_step0 = SIMP_CONV pure_ss
 val abi_dynamic_codegen_step1 = SIMP_CONV pure_ss
   [abi_dynamic_plan_ops_eval, abi_dynamic_initial_fmp_eval,
    abi_dynamic_execute_plan_eval, abi_dynamic_data_asm_eval,
-   abi_dynamic_raw_asm_eval, abi_dynamic_assembly_safe_eval]
+   abi_dynamic_raw_asm_eval, abi_dynamic_assembly_safe_eval,
+   abi_dynamic_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl abi_dynamic_codegen_step0))
 val abi_dynamic_codegen_eval = save_thm
   ("abi_dynamic_codegen_eval",

@@ -119,23 +119,6 @@ Proof
   simp[fix_phi_inst_non_phi]
 QED
 
-Theorem label_positions_ok_fix_phi_inst:
-  inst_wf inst /\ label_positions_ok inst ==>
-  label_positions_ok (fix_phi_inst actual_preds inst)
-Proof
-  strip_tac >> Cases_on `inst.inst_opcode = PHI`
-  >- (`phi_well_formed (filter_phi_ops actual_preds inst.inst_operands)` by
-        (irule filter_phi_ops_well_formed >> fs[inst_wf_def]) >>
-      simp[fix_phi_inst_def] >>
-      Cases_on `filter_phi_ops actual_preds inst.inst_operands` >>
-      simp[label_positions_ok_def] >>
-      Cases_on `t` >> gvs[phi_well_formed_def] >>
-      Cases_on `t'` >> gvs[label_positions_ok_def, stackPlanTypesTheory.is_label_operand_def] >>
-      Cases_on `h` >> Cases_on `h'` >>
-      gvs[phi_well_formed_def, label_positions_ok_def, stackPlanTypesTheory.is_label_operand_def]) >>
-  simp[fix_phi_inst_non_phi]
-QED
-
 Theorem fix_all_phis_fn_inst_wf:
   fn_inst_wf fn ==> fn_inst_wf (fix_all_phis fn)
 Proof
@@ -150,16 +133,8 @@ Theorem fix_all_phis_label_positions_ok:
 Proof
   simp[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem, fix_all_phis_def,
        MEM_MAP, PULL_EXISTS, fix_phis_in_block_mem] >> rpt strip_tac >> gvs[] >>
-  irule label_positions_ok_fix_phi_inst >>
+  irule fix_phi_inst_label_positions >>
   fs[fn_inst_wf_def] >> metis_tac[]
-QED
-
-Theorem remove_unreachable_blocks_fn_inst_wf:
-  fn_inst_wf fn ==> fn_inst_wf (remove_unreachable_blocks fn)
-Proof
-  simp[fn_inst_wf_def] >> strip_tac >>
-  Cases_on `fn_entry_label fn` >>
-  simp[remove_unreachable_blocks_def, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem remove_unreachable_blocks_label_positions_ok:
@@ -325,7 +300,7 @@ Proof
   `EVERY (\bb. EVERY inst_wf bb.bb_instructions) fn'.fn_blocks` by
     (irule do_merge_jump_every_inst >> qexistsl [`a`, `b`, `fn`, `lm`, `lm'`] >>
      simp[inst_wf_update_phi_bypass] >> rpt strip_tac >>
-     IF_CASES_TAC >> simp[] >> irule inst_wf_canon_jnz_inst >>
+     IF_CASES_TAC >> simp[] >> irule canon_jnz_inst_wf >>
      qpat_x_assum `EVERY _ _` kall_tac >>
      qpat_x_assum `fn_inst_wf _` kall_tac >>
      qpat_x_assum `do_merge_jump _ _ _ _ = _` kall_tac >>
@@ -1279,13 +1254,6 @@ Proof
   first_x_assum (qspecl_then [`entry`, `bb.bb_label`] mp_tac) >> simp[]
 QED
 
-Theorem update_phi_bypass_label_positions_ok:
-  label_positions_ok inst ==> label_positions_ok (update_phi_bypass a b inst)
-Proof
-  Cases_on `inst.inst_opcode = PHI` >> simp[update_phi_bypass_def] >>
-  Cases_on `MEM (Label a) inst.inst_operands` >> simp[label_positions_ok_def]
-QED
-
 Theorem canon_jnz_inst_label_positions_ok:
   label_positions_ok inst ==> label_positions_ok (canon_jnz_inst inst)
 Proof
@@ -1313,7 +1281,7 @@ Proof
     (fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
   `EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn'.fn_blocks` by
     (irule do_merge_jump_every_inst >> qexistsl [`a`, `b`, `fn`, `lm`, `lm'`] >>
-     simp[update_phi_bypass_label_positions_ok] >> rpt strip_tac >>
+     simp[update_phi_bypass_label_positions] >> rpt strip_tac >>
      irule bypass_source_label_positions_ok >> simp[]) >>
   fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
 QED
