@@ -629,3 +629,145 @@ Resume first_emission_extcall[extcall_tail]:
 QED
 
 Finalise first_emission_extcall
+
+Theorem first_emission_raw_call_outbuf[local]:
+  !n a x b. compile_raw_call_outbuf n a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  gen_tac >> simp_tac (srw_ss()) [builtinSystemTheory.compile_raw_call_outbuf_def, LET_THM] >>
+  Cases_on `n > 0` >> simp[] >>
+  (ho_match_mp_tac first_emission_strong_bind >> conj_tac
+   >- metis_tac[first_emission_alloc_buffer] >>
+   rpt gen_tac >> simp_tac (srw_ss()) [LET_THM, comp_bind_def, comp_return_def] >>
+   rpt strip_tac >> gvs[cs_extends_refl] >>
+   Cases_on `emit_op ADD [buf_alloc.buf_operand; Lit 32w] b` >> gvs[] >>
+   drule_at Any (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[])
+QED
+
+Theorem first_emission_raw_calldata:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty rcf args dr a x b.
+  compile_call cfn ce rt ty (RawCallCalldataTarget rcf) args dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `args` >>
+  simp[Once compile_call_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (drule first_emission_ext_call_kwargs >> disch_then MATCH_ACCEPT_TAC) >>
+  gen_tac >> PairCases_on `v` >> simp_tac (srw_ss()) [LET_THM] >>
+  Cases_on `v1` >> simp_tac (srw_ss()) [LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      gen_tac >> suspend "raw_calldata_outbuf") >>
+  suspend "raw_calldata_outbuf"
+QED
+
+Resume first_emission_raw_calldata[raw_calldata_outbuf]:
+  markerLib.RESUME_TAC >>
+  rewrite_tac[state_pair_let_bind] >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_raw_call_outbuf] >>
+  qx_gen_tac `out` >> PairCases_on `out` >> simp_tac (srw_ss()) [LET_THM] >>
+  map_every qx_gen_tac [`a`, `res`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (res,b)` >>
+  `!s. cs_extends s (SND (tail s)) /\
+       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
+    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- simp[compile_msg_data_to_memory_labels] >>
+  map_every qx_gen_tac [`p`, `s`] >> PairCases_on `p` >> simp_tac (srw_ss()) [] >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- simp[compile_raw_call_finish_labels] >>
+  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> reverse conj_tac
+  >- simp[emit_void_labels] >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
+  simp[cs_extends_refl, loweringShapeDefsTheory.added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Finalise first_emission_raw_calldata
+
+Theorem first_emission_raw_call:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty rcf args dr a x b.
+  compile_call cfn ce rt ty (RawCallTarget rcf) args dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `args` >>
+  simp[Once compile_call_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]) >>
+  Cases_on `t` >> simp[LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]) >>
+  ntac 2 (ho_match_mp_tac first_emission_pair_let >> conj_tac
+    >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  ntac 2 (ho_match_mp_tac first_emission_pair_let >> conj_tac
+    >- (rpt strip_tac >> drule_at Any
+         (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >> gen_tac) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (drule first_emission_ext_call_kwargs >> disch_then MATCH_ACCEPT_TAC) >>
+  gen_tac >> PairCases_on `v` >> simp_tac (srw_ss()) [LET_THM] >>
+  Cases_on `v1` >> simp_tac (srw_ss()) [LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      gen_tac >> suspend "raw_call_outbuf") >>
+  suspend "raw_call_outbuf"
+QED
+
+Resume first_emission_raw_call[raw_call_outbuf]:
+  markerLib.RESUME_TAC >> rewrite_tac[state_pair_let_bind] >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_raw_call_outbuf] >>
+  qx_gen_tac `out` >> PairCases_on `out` >> simp_tac (srw_ss()) [LET_THM] >>
+  map_every qx_gen_tac [`a`, `res`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (res,b)` >>
+  `!s. cs_extends s (SND (tail s)) /\
+       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
+    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- simp[compile_raw_call_finish_labels] >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
+  simp[cs_extends_refl, loweringShapeDefsTheory.added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Finalise first_emission_raw_call
