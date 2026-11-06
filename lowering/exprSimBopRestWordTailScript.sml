@@ -458,48 +458,6 @@ Proof
   gvs[] >> qpat_x_assum `t = _` (fn th => conj_tac >> simp[Once th])
 QED
 
-Theorem rest_word_capacity_check_run:
-  eval_operand lenop s = SOME (n2w len) /\ len <= cap /\ cap < dimword (:256) ==>
-  run_inst_seq
-    [mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar];
-     mk_inst id2 ISZERO [Var invvar] [valid];
-     mk_inst id3 ASSERT [Var valid] []] s =
-  OK (update_var valid 1w (update_var invvar 0w s))
-Proof
-  strip_tac >>
-  `len < dimword (:256)` by decide_tac >>
-  `step_inst_base (mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar]) s =
-    OK (update_var invvar 0w s)` by
-    (drule emitHelperPropsTheory.step_GT >>
-     disch_then (qspecl_then [`Lit (n2w cap)`, `n2w cap`] mp_tac) >>
-     simp[venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w,
-       venomExecSemanticsTheory.bool_to_word_def]) >>
-  `step_inst_base (mk_inst id2 ISZERO [Var invvar] [valid]) (update_var invvar 0w s) =
-    OK (update_var valid 1w (update_var invvar 0w s))` by
-    (mp_tac (Q.SPECL [`Var invvar`, `0w`] emitHelperPropsTheory.step_ISZERO) >>
-     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-       venomExecSemanticsTheory.bool_to_word_def]) >>
-  `step_inst_base (mk_inst id3 ASSERT [Var valid] [])
-    (update_var valid 1w (update_var invvar 0w s)) =
-    OK (update_var valid 1w (update_var invvar 0w s))` by
-    (irule emitHelperPropsTheory.step_ASSERT_ok >>
-     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
-  simp[exprLoweringPropsTheory.run_inst_seq_def]
-QED
-
-Theorem rest_word_capacity_check_mem_ok:
-  run_inst_seq_mem_ok
-    [mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar];
-     mk_inst id2 ISZERO [Var invvar] [validvar];
-     mk_inst id3 ASSERT [Var validvar] []] s
-Proof
-  irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
-  simp[venomInstTheory.mk_inst_def] >> rpt conj_tac >> gen_tac >>
-  irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]
-QED
-
 Theorem rest_word_capacity_check_shape:
   emit_op GT [lenop; Lit (n2w cap)] ca = (invop,cb) /\
   emit_op ISZERO [invop] cb = (validop,cc) /\
