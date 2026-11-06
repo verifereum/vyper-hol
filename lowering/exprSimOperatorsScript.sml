@@ -69,7 +69,7 @@
 
 Theory exprSimOperators
 Ancestors
-  exprSimBopRestWord exprSimBopInLiteralWord exprSimBopHeld
+  exprSimBopRestWord exprSimBopInLiteralWord exprSimBopHeld exprSimBopBytestring
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps

@@ -184,14 +184,8 @@ Theorem aug_place_bop_write_result_ok:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
-   case evaluate_binop
-     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     NoneTV bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
-  Cases_on `evaluate_binop
-     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     NoneTV bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]
+  Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs st` >>
+  gvs[expr_res_ok_def, stmt_res_ok_def]
 QED
 
 
@@ -439,6 +433,7 @@ QED
 
 Theorem aug_place_binop_store_outcome:
   bop <> In /\ bop <> NotIn /\
+  ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
   emit_void MSTORE [dst;op] s3 = ((),sf) /\
   binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] cur rhs ee /\
@@ -594,7 +589,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      dtv bop cur rhs of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   pop_assum SUBST1_TAC >> simp[AllCaseEqs()] >> strip_tac >>
   irule well_typed_binop_success_type >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -1277,6 +1273,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >- metis_tac[word_value_not_bytes] >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
