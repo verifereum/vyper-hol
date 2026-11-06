@@ -1,6 +1,7 @@
 Theory bodyPtrIfExpAllocResources
 Ancestors
   bodyPtrIfExpAllocSource bodyPtrIfExpAllocCompiler bodyPtrIfExpAllocStep
+  bodyPtrIfExpAllocSeparation
   bodyPtrDefs exprSimVVFrame loweringPosts compileEnv exprLoweringProps
   ptrDiscipline venomState venomInst loweringHalt finite_map exprLowering context
 
@@ -36,7 +37,9 @@ Theorem compile_alloc_buffer_vv_source_frame:
       (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
           ptr_buf_ok cenv e p.ptr_operand G1 t) /\
       ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sc.cs_current_insts
+      t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      lookup_var out t = SOME (n2w (buffer_allocation_base s sb.cs_next_id)) /\
+      buffer_allocation_base s sb.cs_next_id + n < dimword (:256)
 Proof
   rpt strip_tac >>
   `stmt_state_rel ctx fn cenv cx es' s` by gvs[vv_post_def] >>
@@ -51,7 +54,12 @@ Proof
   disch_then (qspec_then `PG` assume_tac) >>
   drule_all compile_alloc_buffer_kept_frame >>
   disch_then (qspec_then `PG` assume_tac) >>
-  qexistsl_tac [`out`, `G1`, `tn1`, `t`] >> simp[] >>
+  `lookup_var out u = SOME (n2w (buffer_allocation_base s sb.cs_next_id))` by
+    (drule_all ifexp_alloca_step_base >> simp[]) >>
+  `buffer_allocation_base s sb.cs_next_id + n < dimword (:256)` by
+    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[] >>
+     drule_all ifexp_alloca_base_bound >> simp[]) >>
+  qexistsl_tac [`out`, `G1`, `tn1`, `t`] >> simp[lookup_var_def] >>
   conj_tac >- suspend "ghost_position" >>
   conj_tac >- suspend "stack_buffer" >>
   conj_tac >- suspend "located_buffer" >>
@@ -78,6 +86,6 @@ Resume compile_alloc_buffer_vv_source_frame[located_buffer]:
 QED
 Resume compile_alloc_buffer_vv_source_frame[control]:
   drule_all alloca_step_contracts >> strip_tac >>
-  drule compile_alloc_buffer_insts >> strip_tac >> gvs[]
+  drule compile_alloc_buffer_insts >> strip_tac >> gvs[lookup_var_def]
 QED
 Finalise compile_alloc_buffer_vv_source_frame

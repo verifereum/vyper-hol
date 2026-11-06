@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpAllocCaller
 Ancestors
   exprOperandVar exprLoweringProps exprLowering compileEnv context fragExec
-  vyperEvalExprPreservesScopesDom vyperState vyperValue finite_map
+  vyperEvalExprPreservesScopesDom vyperState vyperValue finite_map exprSimUnwrap
 
 Theorem ifexp_selected_arm_allocation_premises:
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
@@ -10,7 +10,7 @@ Theorem ifexp_selected_arm_allocation_premises:
   compile_ifexp_arm cenv res_ty arm_ty vv sb = (op,sd) /\
   fn_has_code sb sd fn ==>
   (!x. vv_operand vv = Var x ==> not_fresh_at sb x) /\
-  sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   ?buf sc src sn.
     compile_alloc_buffer (type_memory_bytes cenv res_ty) sb = (buf,sc) /\
@@ -26,6 +26,8 @@ Proof
      disch_then (qspecl_then [`expr_type e`, `e`, `sa`] mp_tac) >> simp[]) >>
   `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
+  `sa.cs_next_id <= sb.cs_next_id` by
+    (drule compile_expr_extends >> simp[]) >>
   simp[] >> conj_tac >- gvs[ci_mono_def] >>
   qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >>
   simp[compile_ifexp_arm_def, comp_bind_def, comp_ignore_bind_def,
