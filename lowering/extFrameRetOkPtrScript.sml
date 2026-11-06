@@ -18,6 +18,7 @@ Ancestors
   extRetOperandBoundaryPtr extRetDispatchProtectionPtr extRetDispatchResultPtr
   extRetStaticStmtPtr extRetStaticReservedPtr extRetStaticFrameMetadataPtr
   extRetStaticFrameConsumerPtr extRetStaticCapacityPtr extRetStaticBoundedConsumerPtr
+  extRetRawValuePtr
 
 val _ = Parse.hide "body";
 
