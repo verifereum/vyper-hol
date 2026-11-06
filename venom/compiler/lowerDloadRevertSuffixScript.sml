@@ -215,3 +215,33 @@ Proof
   simp[revert_forward_pair_def, get_instruction_def, EL_APPEND_EQN,
        TAKE_APPEND, TAKE_LENGTH_TOO_LONG, EL_CONS]
 QED
+
+Theorem ld_revert_pair_interval_step:
+  revert_forward_pair bb copypos endpos /\
+  copypos <= t.vs_inst_idx /\ t.vs_inst_idx <= endpos /\
+  get_instruction bb t.vs_inst_idx = SOME j ==>
+  step_inst fuel CT j t <> Halt th /\
+  step_inst fuel CT j t <> IntRet ret th /\
+  j.inst_opcode <> INVOKE /\
+  (step_inst fuel CT j t = OK z ==>
+    ~is_terminator j.inst_opcode /\ z.vs_requests = t.vs_requests /\
+    (next_inst z).vs_current_bb = t.vs_current_bb /\
+    copypos < (next_inst z).vs_inst_idx /\
+    (next_inst z).vs_inst_idx <= endpos)
+Proof
+  strip_tac >> Cases_on `copypos = t.vs_inst_idx`
+  >- (`j.inst_opcode = RETURNDATACOPY` by gvs[revert_forward_pair_def] >>
+      simp[step_inst_non_invoke] >>
+      pure_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
+      simp[AllCaseEqs(), is_terminator_def] >> rpt strip_tac >>
+      gvs[] >>
+      `t.vs_inst_idx < endpos` by fs[revert_forward_pair_def] >>
+      simp[next_inst_def, write_memory_with_expansion_def] >> decide_tac) >>
+  `copypos < t.vs_inst_idx` by decide_tac >>
+  `j.inst_opcode = ASSIGN \/ j.inst_opcode = REVERT` by
+    (irule ld_revert_pair_suffix_opcode >> metis_tac[]) >>
+  drule_all ld_revert_pair_suffix_step >> strip_tac >>
+  simp[] >> strip_tac >>
+  `j.inst_opcode = ASSIGN` by metis_tac[ld_revert_suffix_step] >>
+  fs[is_terminator_def, next_inst_def] >> metis_tac[]
+QED

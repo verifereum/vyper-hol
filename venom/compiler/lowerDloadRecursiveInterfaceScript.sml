@@ -618,3 +618,40 @@ Proof
   qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
   asm_rewrite_tac []
 QED
+
+Theorem ld_recursive_exceptional_next:
+  revert_forward_pair bb copypos endpos /\
+  copypos <= t.vs_inst_idx /\ t.vs_inst_idx <= endpos /\
+  get_instruction bb t.vs_inst_idx = SOME j /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME bb /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) gn.fn_blocks) /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  drule_all ld_revert_pair_interval_step >> strip_tac >>
+  `~is_terminator j.inst_opcode /\ z.vs_requests = t.vs_requests /\
+   (next_inst z).vs_current_bb = t.vs_current_bb /\
+   copypos < (next_inst z).vs_inst_idx /\
+   (next_inst z).vs_inst_idx <= endpos` by metis_tac[] >>
+  `z.vs_inst_idx = t.vs_inst_idx` by
+    (irule step_inst_preserves_inst_idx >> metis_tac[]) >>
+  `next_inst z = (z with vs_inst_idx := SUC t.vs_inst_idx)` by
+    simp[venomStateTheory.next_inst_def, arithmeticTheory.ADD1] >>
+  `lookup_block (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb
+      gn.fn_blocks = SOME bb` by
+    (qpat_x_assum `(next_inst z).vs_current_bb = _` mp_tac >>
+     qpat_x_assum `lookup_block t.vs_current_bb _ = _` mp_tac >> simp[]) >>
+  drule_all ld_active_lookup_el >> strip_tac >>
+  BETA_TAC >> disj2_tac >> qexistsl_tac [`bb`,`copypos`,`endpos`] >>
+  asm_rewrite_tac [] >>
+  `endpos < LENGTH bb.bb_instructions` by
+    gvs[contextCodegenRelTheory.revert_forward_pair_def,
+        venomInstTheory.get_instruction_def] >>
+  qpat_x_assum `copypos < (next_inst z).vs_inst_idx` mp_tac >>
+  qpat_x_assum `(next_inst z).vs_inst_idx <= endpos` mp_tac >>
+  simp[venomStateTheory.next_inst_def, venomInstTheory.get_instruction_def] >>
+  rpt strip_tac >> simp[]
+QED
