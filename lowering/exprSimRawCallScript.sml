@@ -2849,7 +2849,7 @@ Proof
   goal_assum (drule_at (Pat `fn_has_code`)) >> simp[cs_extends_refl]
 QED
 
-Theorem raw_call_success_code[local]:
+Theorem raw_call_success_code:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
       capped <- compile_select cmp len (Lit (n2w cap));
@@ -3024,7 +3024,7 @@ Definition raw_call_finish_view_def[local]:
              vs_current_bb := ""; vs_inst_idx := 0|>
 End
 
-Theorem raw_call_finish_view_control[local]:
+Theorem raw_call_finish_view_control:
   raw_call_finish_view (jump_to l s) = raw_call_finish_view s /\
   raw_call_finish_view (s with vs_inst_idx := k) = raw_call_finish_view s
 Proof
@@ -3252,7 +3252,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem raw_call_success_run_aged[local]:
+Theorem raw_call_success_run_aged:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
       capped <- compile_select cmp len (Lit (n2w cap));
