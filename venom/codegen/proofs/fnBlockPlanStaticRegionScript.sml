@@ -6,7 +6,7 @@ Ancestors
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
-  reorderSim stackPlanTypes fnFrameStepsRevertForward sorting
+  reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -1913,4 +1913,230 @@ Proof
    LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH pending) arranged.ps_stack) +
    LIST_ELEM_COUNT (Var v) pending` by metis_tac[elem_count_append] >>
   gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
+Theorem regional_restore_ownership[local]:
+  do_restore x ps = (ops,qs) /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled
+Proof
+  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled x` >>
+  simp[stack_push_def, finite_mapTheory.FDOM_DOMSUB] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem regional_spill_tos_ownership[local]:
+  0 < LENGTH ps.ps_stack /\ do_spill_tos ps = (ops,qs) /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled
+Proof
+  strip_tac >>
+  `ps.ps_stack <> []` by (Cases_on `ps.ps_stack` >> gvs[]) >>
+  `ps.ps_stack = SNOC (LAST ps.ps_stack) (FRONT ps.ps_stack)` by
+    metis_tac[SNOC_LAST_FRONT] >>
+  qpat_x_assum `do_spill_tos _ = _` mp_tac >>
+  simp[do_spill_tos_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  once_asm_rewrite_tac[] >>
+  simp[stack_pop_def, stack_peek_def, TAKE_SNOC, EL_LENGTH_SNOC,
+       finite_mapTheory.FDOM_FUPDATE, MEM_SNOC] >> metis_tac[MEM_SNOC]
+QED
+
+Theorem regional_swap_ownership[local]:
+  d < LENGTH ps.ps_stack /\ do_swap d ps = (ops,qs) /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled
+Proof
+  metis_tac[do_swap_stack_perm, do_swap_spilled_unchanged, PERM_MEM_EQ,
+            pairTheory.SND]
+QED
+
+Theorem regional_stack_swap_membership[local]:
+  d < LENGTH stk ==> (MEM op (stack_swap d stk) <=> MEM op stk)
+Proof
+  strip_tac >> simp[stack_swap_def, LET_THM] >>
+  `LENGTH stk - 1 < LENGTH stk /\ LENGTH stk - (d + 1) < LENGTH stk` by decide_tac >>
+  simp[MEM_EL, EL_LUPDATE] >> eq_tac >> rpt strip_tac
+  >- (rpt (COND_CASES_TAC >> gvs[]) >> metis_tac[EL_MEM]) >>
+  rename1 `op = EL i stk` >>
+  Cases_on `i = LENGTH stk - 1`
+  >- (qexists_tac `LENGTH stk - (d + 1)` >> simp[]) >>
+  Cases_on `i = LENGTH stk - (d + 1)`
+  >- (qexists_tac `LENGTH stk - 1` >> simp[] >> metis_tac[]) >>
+  qexists_tac `i` >> simp[]
+QED
+
+Theorem regional_spill_ownership[local]:
+  d < LENGTH ps.ps_stack /\ do_spill_at d ps = (ops,qs) /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled
+Proof
+  strip_tac >> Cases_on `d = 0`
+  >- (gvs[do_spill_at_def] >> metis_tac[regional_spill_tos_ownership]) >>
+  `!x. MEM x (stack_swap d ps.ps_stack) <=> MEM x ps.ps_stack` by
+    metis_tac[regional_stack_swap_membership] >>
+  qpat_x_assum `do_spill_at _ _ = _` mp_tac >>
+  simp[do_spill_at_def, LET_THM] >>
+  Cases_on `do_spill_tos (ps with ps_stack := stack_swap d ps.ps_stack)` >>
+  simp[] >> strip_tac >> gvs[] >>
+  irule regional_spill_tos_ownership >> goal_assum (drule_at Any) >>
+  simp[]
+QED
+
+Theorem regional_reduce_ownership[local]:
+  !fuel tops x f n ps ops qs op.
+  reduce_depth_plan fuel tops x f n ps = (ops,qs) /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled
+Proof
+  Induct >- (simp[reduce_depth_plan_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> simp[reduce_depth_plan_def, LET_THM] >>
+  Cases_on `f + 1 < n` >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `stack_get_unfixed_depth x f n ps.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth x f n ps.ps_stack = SOME dist` >>
+  Cases_on `dist <= 16` >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack tops dist n`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
+  rename1 `select_spill_candidate ps.ps_stack tops dist n = SOME cand` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `1 <= LENGTH ps.ps_stack` by
+    (drule stack_get_unfixed_depth_bound >> simp[]) >>
+  `cand < LENGTH ps.ps_stack` by
+    (drule_all select_spill_candidate_bound >> simp[]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  metis_tac[regional_spill_ownership]
+QED
+
+Theorem regional_reorder_restore_ownership[local]:
+  (case stack_get_unfixed_depth x f n ps.ps_stack of
+     SOME _ => ([],ps)
+   | NONE => case FLOOKUP ps.ps_spilled x of
+       SOME _ => do_restore x ps | NONE => ([],ps)) = (ops,qs) ==>
+  LENGTH ps.ps_stack <= LENGTH qs.ps_stack /\
+  (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+        MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled)
+Proof
+  Cases_on `stack_get_unfixed_depth x f n ps.ps_stack` >> simp[] >>
+  Cases_on `FLOOKUP ps.ps_spilled x` >> simp[] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (qpat_x_assum `do_restore _ _ = _` mp_tac >>
+      simp[do_restore_def] >> strip_tac >> gvs[stack_push_def]) >>
+  metis_tac[regional_restore_ownership]
+QED
+
+Theorem regional_reorder_reduce_ownership[local]:
+  (if (dist:num) > 16 then reduce_depth_plan (LENGTH ps.ps_stack) pending x f
+     (LENGTH pending) ps else ([],ps)) = (ops,qs) /\
+  LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack ==>
+  LENGTH pending <= LENGTH qs.ps_stack /\
+  (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+        MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled)
+Proof
+  Cases_on `dist > 16` >> simp[] >> strip_tac >> gvs[] >>
+  conj_tac >- (drule reduce_depth_plan_length_floor >> simp[] >> decide_tac) >>
+  metis_tac[regional_reduce_ownership]
+QED
+
+Theorem regional_reorder_finish_ownership[local]:
+  d < LENGTH ps.ps_stack /\ f < LENGTH ps.ps_stack /\
+  stack_peek d ps.ps_stack = x /\
+  (if d = f then (pre,ps)
+   else if operand_equiv dfg x (stack_peek f ps.ps_stack) then
+     (pre,ps with ps_stack := stack_poke f x
+       (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+   else let (s1,mid) = do_swap d ps;
+            (s2,last) = do_swap f mid in (pre ++ s1 ++ s2,last)) = (ops,qs) ==>
+  LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+  (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+        MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled)
+Proof
+  strip_tac >> Cases_on `d = f` >> gvs[] >>
+  Cases_on `operand_equiv dfg (stack_peek d ps.ps_stack)
+    (stack_peek f ps.ps_stack)` >> gvs[]
+  >- (conj_tac >- simp[stack_poke_def] >>
+      gen_tac >> strip_tac >> simp[] >>
+      qspecl_then [`dfg`, `stack_peek d ps.ps_stack`, `d`, `f`, `ps`, `op`]
+        mp_tac reorder_place_phase_multiplicity >> simp[] >>
+      metis_tac[LIST_ELEM_COUNT_MEM]) >>
+  Cases_on `do_swap d ps` >> gvs[] >>
+  rename1 `do_swap d ps = (s1,mid)` >>
+  Cases_on `do_swap f mid` >> gvs[] >>
+  `LENGTH mid.ps_stack = LENGTH ps.ps_stack` by
+    (qspec_then `d` (qspec_then `ps` mp_tac) do_swap_length >> simp[]) >>
+  conj_tac >- (qspec_then `f` (qspec_then `mid` mp_tac) do_swap_length >> simp[]) >>
+  metis_tac[regional_swap_ownership]
+QED
+
+Theorem regional_reorder_one_ownership[local]:
+  LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  idx < LENGTH pending /\ reorder_one dfg pending idx x ps = (ops,qs) ==>
+  LENGTH pending <= LENGTH qs.ps_stack /\
+  (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+        MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled)
+Proof
+  strip_tac >> qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [reorder_one_def, LET_THM] >>
+  `LENGTH pending - 1 - idx = LENGTH pending - (idx + 1)` by decide_tac >>
+  asm_rewrite_tac[] >> pairarg_tac >>
+  rename1 `(case stack_get_unfixed_depth _ _ _ _ of _ => _) = (restore_ops,mid)` >>
+  `LENGTH pending <= LENGTH mid.ps_stack /\
+   (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+         MEM op mid.ps_stack \/ op IN FDOM mid.ps_spilled)` by
+    (drule regional_reorder_restore_ownership >> strip_tac >>
+     conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
+  Cases_on `stack_get_unfixed_depth x (LENGTH pending - (idx + 1))
+    (LENGTH pending) mid.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[] >> first_assum ACCEPT_TAC) >>
+  pairarg_tac >>
+  rename1 `(if _ then reduce_depth_plan _ _ _ _ _ _ else _) = (reduce_ops,last)` >>
+  `LENGTH pending <= LENGTH last.ps_stack /\
+   (!op. MEM op mid.ps_stack \/ op IN FDOM mid.ps_spilled ==>
+         MEM op last.ps_stack \/ op IN FDOM last.ps_spilled)` by
+    (drule regional_reorder_reduce_ownership >> simp[] >> metis_tac[]) >>
+  Cases_on `stack_get_unfixed_depth x (LENGTH pending - (idx + 1))
+    (LENGTH pending) last.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `stack_get_unfixed_depth x _ _ last.ps_stack = SOME depth` >>
+  `depth < LENGTH last.ps_stack /\ stack_peek depth last.ps_stack = x` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  `LENGTH pending - (idx + 1) < LENGTH last.ps_stack` by decide_tac >>
+  simp[] >> strip_tac >>
+  drule_all (SRULE[LET_THM, APPEND_ASSOC] regional_reorder_finish_ownership) >> strip_tac >>
+  conj_tac >- decide_tac >> metis_tac[]
+QED
+
+Theorem regional_reorder_steps_ownership[local]:
+  !items ps ops qs pending dfg.
+  EVERY (\(idx,x). idx < LENGTH pending) items /\
+  LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  plan_steps (\(idx,x) ps. reorder_one dfg pending idx x ps) items ps = (ops,qs) ==>
+  LENGTH pending <= LENGTH qs.ps_stack /\
+  (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+        MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled)
+Proof
+  Induct >- (simp[foldlSimTheory.plan_steps_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[foldlSimTheory.plan_steps_def] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `reorder_one dfg pending idx x ps = (step_ops,mid)` >>
+  `LENGTH pending <= LENGTH mid.ps_stack /\
+   (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==>
+         MEM op mid.ps_stack \/ op IN FDOM mid.ps_spilled)` by
+    (drule_all regional_reorder_one_ownership >> metis_tac[]) >>
+  first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+Theorem regional_reorder_materialised_ownership:
+  !dfg pending mid rops arranged op.
+  LENGTH pending <= 16 /\ LENGTH pending <= LENGTH mid.ps_stack /\
+  (!x. MEM x pending ==> LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack) /\
+  reorder_plan dfg pending mid = (rops,arranged) /\
+  (MEM op mid.ps_stack \/ op IN FDOM mid.ps_spilled) ==>
+  MEM op arranged.ps_stack \/ op IN FDOM arranged.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\(idx,x). idx < LENGTH pending) (MAPi (\i x. (i,x)) pending)` by
+    simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >>
+  gvs[reorder_plan_eq_plan_steps] >>
+  drule_all regional_reorder_steps_ownership >> metis_tac[]
 QED
