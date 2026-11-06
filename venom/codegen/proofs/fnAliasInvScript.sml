@@ -3396,6 +3396,21 @@ Proof
   metis_tac[alias_popmany_plan_deletes]
 QED
 
+Theorem alias_clean_stack_edge_inventory:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM v (live_vars_at live pred (LENGTH pb.bb_instructions)) /\
+  ~MEM v (input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0)) /\
+  LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 ==>
+  (plan_holds (SND (clean_stack_plan live cfg fn bb ps)) (Var v) <=>
+   Var v IN FDOM ps.ps_spilled)
+Proof
+  strip_tac >> drule_all alias_clean_stack_edge_deletes >> strip_tac >>
+  Cases_on `clean_stack_plan live cfg fn bb ps` >>
+  drule alias_clean_stack_spilled >> simp[plan_holds_def]
+QED
+
 Theorem alias_pop_fold_mass_zero:
   !xs ops ps. MEM (Var x) xs /\ alias_var_mass x ps <= 1 /\
     Var x NOTIN FDOM ps.ps_spilled ==>
