@@ -7751,6 +7751,120 @@ Proof
   qexists_tac `lbl` >> simp[]
 QED
 
+Definition alias_prefix_edge_def:
+  alias_prefix_edge s t writes <=>
+    (?fuel ctx inst. step_inst fuel ctx inst s = OK t /\
+      writes = set inst.inst_outputs) \/
+    (?instructions. eval_phis s instructions = OK t /\
+      writes = {x | ?inst. MEM inst instructions /\ inst.inst_opcode = PHI /\
+        MEM x inst.inst_outputs}) \/
+    (?i. t = s with vs_inst_idx := i /\ writes = {})
+End
+
+Inductive alias_execution_prefix:
+  (!s. alias_execution_prefix [s] {}) /\
+  (!states writes t edge_writes.
+    alias_execution_prefix states writes /\
+    alias_prefix_edge (LAST states) t edge_writes ==>
+    alias_execution_prefix (states ++ [t]) (writes UNION edge_writes))
+End
+
+Theorem alias_execution_prefix_nonempty:
+  !states writes. alias_execution_prefix states writes ==> states <> []
+Proof
+  ho_match_mp_tac alias_execution_prefix_ind >> simp[]
+QED
+
+Theorem alias_prefix_snoc_cut:
+  states <> [] ==>
+  PRE (LENGTH (states ++ [t])) = LENGTH states /\
+  EL (PRE (LENGTH states)) (states ++ [t]) = LAST states /\
+  EL (LENGTH states) (states ++ [t]) = t
+Proof
+  simp[EL_APPEND, LAST_EL] >> rpt strip_tac >>
+  `0 < LENGTH states` by (Cases_on `states` >> gvs[]) >> simp[]
+QED
+
+Theorem alias_certificate_prefix_extension:
+  !fn dfg lo ps states n at.
+  alias_certificate fn dfg lo ps states n at ==>
+  !suffix. alias_certificate fn dfg lo ps (states ++ suffix) n at
+Proof
+  ho_match_mp_tac alias_certificate_ind >> rpt strip_tac
+  >- (irule (cj 1 alias_certificate_rules) >> simp[])
+  >- (irule (cj 2 alias_certificate_rules) >> simp[])
+  >- (irule (cj 2 alias_certificate_rules) >> simp[])
+  >- (irule (cj 3 alias_certificate_rules) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[EL_APPEND1] >> metis_tac[])
+  >- (irule (cj 4 alias_certificate_rules) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[EL_APPEND1] >> metis_tac[])
+  >- (irule (cj 5 alias_certificate_rules) >> simp[EL_APPEND1] >>
+      `n < LENGTH states` by decide_tac >> simp[EL_APPEND1] >>
+      qexistsl_tac [`ctx`, `fuel`, `inst`, `at`] >> simp[]) >>
+  irule (cj 6 alias_certificate_rules) >> simp[] >>
+  `n < LENGTH states` by decide_tac >> simp[EL_APPEND1] >> metis_tac[]
+QED
+
+Theorem alias_prefix_edge_certificate:
+  alias_prefix_edge (EL n states) (EL (SUC n) states) writes /\
+  alias_certificate fn dfg lo ps states n at /\ SUC n < LENGTH states /\
+  (!x. at = Var x ==> x NOTIN writes) /\
+  (!x. normalize_operand dfg [] at = Var x ==> x NOTIN writes) ==>
+  alias_certificate fn dfg lo ps states (SUC n) at
+Proof
+  simp[alias_prefix_edge_def] >> strip_tac
+  >- (irule (cj 3 alias_certificate_rules) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[])
+  >- (irule (cj 4 alias_certificate_rules) >>
+      goal_assum (drule_at Any) >> simp[] >> qexists_tac `instructions` >>
+      gvs[] >> metis_tac[]) >>
+  irule (cj 6 alias_certificate_rules) >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_execution_prefix_certificate:
+  !states writes. alias_execution_prefix states writes ==>
+  !fn dfg lo ps at. plan_holds ps at /\
+    (!x. at = Var x ==> x NOTIN writes) /\
+    (!x. normalize_operand dfg [] at = Var x ==> x NOTIN writes) ==>
+    alias_certificate fn dfg lo ps states (PRE (LENGTH states)) at
+Proof
+  ho_match_mp_tac alias_execution_prefix_strongind >> conj_tac
+  >- (rpt strip_tac >> simp[] >> irule (cj 2 alias_certificate_rules) >>
+      gvs[plan_holds_def]) >>
+  rpt strip_tac >>
+  `states <> []` by metis_tac[alias_execution_prefix_nonempty] >>
+  `alias_certificate fn dfg lo ps states (PRE (LENGTH states)) at` by
+    (first_x_assum irule >> gvs[]) >>
+  drule alias_certificate_prefix_extension >>
+  disch_then (qspec_then `[t]` assume_tac) >>
+  `SUC (PRE (LENGTH states)) = LENGTH states` by
+    (Cases_on `states` >> gvs[]) >>
+  drule alias_prefix_snoc_cut >> strip_tac >>
+  `alias_certificate fn dfg lo ps (states ++ [t])
+      (SUC (PRE (LENGTH states))) at` by
+    (irule alias_prefix_edge_certificate >>
+     simp[] >> qexists_tac `edge_writes` >> gvs[]) >>
+  gvs[GSYM arithmeticTheory.ADD1]
+QED
+
+Theorem alias_execution_prefix_value:
+  alias_execution_prefix states writes /\ plan_holds ps at /\
+  (!x. at = Var x ==> x NOTIN writes) /\
+  (!x. normalize_operand dfg [] at = Var x ==> x NOTIN writes) /\
+  (!op. plan_holds ps op ==>
+    operand_val (frame_view fn ra (HD states)) lo op =
+    operand_val (frame_view fn ra (HD states)) lo (normalize_operand dfg [] op)) ==>
+  operand_val (frame_view fn ra (LAST states)) lo at =
+  operand_val (frame_view fn ra (LAST states)) lo (normalize_operand dfg [] at)
+Proof
+  strip_tac >>
+  `states <> []` by metis_tac[alias_execution_prefix_nonempty] >>
+  `alias_certificate fn dfg lo ps states (PRE (LENGTH states)) at` by
+    metis_tac[alias_execution_prefix_certificate] >>
+  drule alias_certificate_sound >> disch_then (qspec_then `ra` mp_tac) >>
+  simp[GSYM LAST_EL, EL, plan_holds_def] >> metis_tac[plan_holds_def]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
