@@ -5,7 +5,7 @@ Ancestors
   exprSimIfExp exprSimHyps exprSimTypedAlloc valueEncodingTyping loweringPosts
   vyperTypeSystem valueEncodingProps vyperValue valueEncoding vyperMisc
   exprSimVVFrame exprSimAggregateChildren exprSimUnwrap context venomState
-  vyperState exprSimDefs
+  vyperState exprSimDefs exprSimMemorySource gasContext gasSummary
 
 Theorem normalize_owned_value_framed_frag:
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf, sm) /\
@@ -149,3 +149,48 @@ Proof
   gvs[read_place_def, get_immutables_def, bind_def]
 QED
 
+
+Theorem place_type_value_gas_obs:
+  place_type_value cx p ee = (INL pt,ee) ==>
+  !tail. place_type_value cx p (ee with gas_obs := tail) =
+    (INL pt,ee with gas_obs := tail)
+Proof
+  Cases_on `p` >>
+  simp[place_type_value_def, get_scopes_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, bind_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+QED
+
+Theorem conditional_result_gas_obs:
+  conditional_result cx raw ee = (INL tv,ee) ==>
+  !tail. conditional_result cx raw (ee with gas_obs := tail) =
+    (INL tv,ee with gas_obs := tail)
+Proof
+  Cases_on `raw`
+  >- simp[conditional_result_def, return_def]
+  >- (simp[conditional_result_def, bind_def] >>
+      strip_tac >>
+      gvs[AllCaseEqs()] >>
+      imp_res_tac place_type_value_state >> gvs[] >>
+      drule place_type_value_gas_obs >> strip_tac >> simp[] >>
+      qmatch_goalsub_abbrev_tac `if keep then _ else _` >>
+      Cases_on `keep` >> gvs[return_def, bind_def, AllCaseEqs()] >>
+      rename1 `read_place cx p ee = (INL v,ee)` >>
+      `read_result cx (PlaceR p) ee = (INL v,ee)` by
+        simp[read_result_def] >>
+      drule read_result_gas_obs >> simp[read_result_def]) >>
+  simp[conditional_result_def, raise_def]
+QED
+
+Theorem gas_marked_continuation_admissible:
+  gas_marked_exec memory (ctx,func) a (es,s0) marks (INL v) mid (OK t) /\
+  gas_admissible (bind a k) admissible es ==>
+  gas_admissible (k v) admissible (mid with gas_obs := [])
+Proof
+  simp[gas_marked_exec_def, gas_admissible_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!gs res ee. _` (qspec_then
+    `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
+  simp[bind_def] >> metis_tac[]
+QED
