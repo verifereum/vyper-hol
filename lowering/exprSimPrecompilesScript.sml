@@ -297,7 +297,7 @@ Proof
   strip_tac >> drule_all computed_static_exec >> simp[take_outcome_def]
 QED
 
-Theorem ecrecover_typing[local]:
+Theorem ecrecover_typing:
   well_typed_builtin_app ty ECRecover ts ==>
   LENGTH ts = 4 /\ ty = BaseT AddressT /\
   HD ts = BaseT (BytesT (Fixed 32)) /\
@@ -631,7 +631,7 @@ Proof
        fcpLib.INDEX_CONV ``dimindex(:256)``, DROP_LENGTH_TOO_LONG]
 QED
 
-Theorem precompile_result_four_words[local]:
+Theorem precompile_result_four_words:
   !(h:bytes32) (v:bytes32) (r:bytes32) (s:bytes32).
   precompile_result 1w
     (word_to_bytes h T ++ word_to_bytes v T ++
@@ -649,7 +649,7 @@ Proof
        word_of_bytes_be_def]
 QED
 
-Theorem ecrecover_arg_typed_encoding[local]:
+Theorem ecrecover_arg_typed_encoding:
   ((?k. tv = BaseTV (UintT k) /\ k <= 256) \/
    tv = BaseTV (BytesT (Fixed 32))) /\ value_has_type tv x ==>
   ecrecover_arg_to_num x = SOME (w2n (typed_val_to_w256 tv x))
@@ -668,7 +668,7 @@ Proof
       typed_val_to_w256_def, PAD_LEFT, PAD_RIGHT]
 QED
 
-Theorem ecrecover_output_encoding[local]:
+Theorem ecrecover_output_encoding:
   ((data = [] /\ (addr:address) = 0w) \/
    data = PAD_LEFT 0w 32 (word_to_bytes addr T)) ==>
   (word_of_bytes_be (TAKE 32 (data ++ REPLICATE 32 0w)) : bytes32) =
@@ -690,7 +690,7 @@ QED
    to stack values in order as the source evaluates them; the fragment after
    them only writes its own two fresh buffers, so the operands' variables
    and every live allocation are kept. *)
-Theorem ecrecover_code_shape[local]:
+Theorem ecrecover_code_shape:
   compile_ecrecover h v r s sa = (op,sb) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   same_blocks sa sb /\
@@ -783,7 +783,7 @@ Proof
 QED
 
 (* Frozen baseline instance of the shared four-word serialization. *)
-Theorem ecrecover_input_stores[local]:
+Theorem ecrecover_input_stores:
   mem_bytes_at a 128
     (mstore (a+96) sig
       (mstore (a+64) r (mstore (a+32) v (mstore a h s)))).vs_memory =
@@ -793,7 +793,7 @@ Proof
   simp[scratch_four_word_stores]
 QED
 
-Theorem ecrecover_input_stores_shape[local]:
+Theorem ecrecover_input_stores_shape:
   (do emit_void MSTORE [base_op; h];
       p1 <- emit_op ADD [base_op; Lit 32w];
       emit_void MSTORE [p1; v];
@@ -813,7 +813,7 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, same_blocks_def]
 QED
 
-Theorem ecrecover_lookup_generated_update[local]:
+Theorem ecrecover_lookup_generated_update:
   not_fresh_at sa x /\ sa.cs_next_var <= k ==>
   lookup_var x (update_var (STRING #"%" (toString k)) z t) = lookup_var x t
 Proof
@@ -821,7 +821,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ecrecover_operand_generated_update[local]:
+Theorem ecrecover_operand_generated_update:
   (!x. q = Var x ==> not_fresh_at sa x) /\ sa.cs_next_var <= k ==>
   eval_operand q (update_var (STRING #"%" (toString k)) z t) = eval_operand q t
 Proof
@@ -829,13 +829,13 @@ Proof
   metis_tac[ecrecover_lookup_generated_update]
 QED
 
-Theorem ecrecover_operand_mstore[local]:
+Theorem ecrecover_operand_mstore:
   eval_operand q (mstore a z t) = eval_operand q t
 Proof
   Cases_on `q` >> simp[eval_operand_def, mstore_def, lookup_var_def]
 QED
 
-Theorem ecrecover_input_stores_run[local]:
+Theorem ecrecover_input_stores_run:
   (do emit_void MSTORE [base_op; h];
       p1 <- emit_op ADD [base_op; Lit 32w];
       emit_void MSTORE [p1; v];
@@ -948,7 +948,7 @@ Proof
   rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED
 
-Theorem ecrecover_input_stores_sim[local]:
+Theorem ecrecover_input_stores_sim:
   (do emit_void MSTORE [base_op; h];
       p1 <- emit_op ADD [base_op; Lit 32w];
       emit_void MSTORE [p1; v];
@@ -1084,7 +1084,7 @@ Proof
   simp[not_fresh_at_def] >> decide_tac
 QED
 
-Theorem ecrecover_buffers_prefix_shape[local]:
+Theorem ecrecover_buffers_prefix_shape:
   (do ib <- context$compile_alloc_buffer 128;
       emit_void MSTORE [ib.buf_operand; h];
       p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
@@ -1199,7 +1199,7 @@ Proof
 QED
 
 (* Preserve the baseline interface; execution also uses the prefix split. *)
-Theorem ecrecover_buffers_shape[local]:
+Theorem ecrecover_buffers_shape:
   (do ib <- context$compile_alloc_buffer 128;
       emit_void MSTORE [ib.buf_operand; h];
       p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
@@ -1449,7 +1449,7 @@ Proof
   simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem ecrecover_buffers_run[local]:
+Theorem ecrecover_buffers_run:
   (do ib <- context$compile_alloc_buffer 128;
       emit_void MSTORE [ib.buf_operand; h];
       p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
@@ -1623,7 +1623,7 @@ Proof
   Cases_on `s.vs_outcomes` >> simp[take_outcome_def]
 QED
 
-Theorem ecrecover_output_write[local]:
+Theorem ecrecover_output_write:
   mem_word_at off s.vs_memory = 0w /\
   ((data = [] /\ (addr:address) = 0w) \/
     data = PAD_LEFT 0w 32 (word_to_bytes addr T)) ==>
@@ -1655,7 +1655,7 @@ Proof
   metis_tac[rich_listTheory.TAKE_LENGTH_APPEND]
 QED
 
-Theorem ecrecover_request_result[local]:
+Theorem ecrecover_request_result:
   mem_bytes_at (w2n ai) 128 s.vs_memory =
     word_to_bytes (h:bytes32) T ++ word_to_bytes (v:bytes32) T ++
     word_to_bytes (r:bytes32) T ++ word_to_bytes (sig:bytes32) T ==>
@@ -1670,7 +1670,7 @@ Proof
        fcpLib.INDEX_CONV ``dimindex(:160)``, precompile_result_four_words]
 QED
 
-Theorem compile_ecrecover_prefix[local]:
+Theorem compile_ecrecover_prefix:
   compile_ecrecover h v r sig =
     do bufs <-
          (do ib <- context$compile_alloc_buffer 128;
@@ -1955,7 +1955,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[not_fresh_at_def]
 QED
 
-Theorem ecrecover_suffix_core[local]:
+Theorem ecrecover_suffix_core:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
         [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
@@ -1977,7 +1977,7 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]
 QED
 
-Theorem ecrecover_suffix_shape[local]:
+Theorem ecrecover_suffix_shape:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
         [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
@@ -2321,7 +2321,7 @@ Proof
   gvs[return_def, raise_def, ignore_bind_def, bind_def] >> metis_tac[]
 QED
 
-Theorem ecrecover_source_outcome_step[local]:
+Theorem ecrecover_source_outcome_step:
   precompile_call_success ECRecover es =
     case es.outcomes of
       NONE => (INL (),es)
@@ -2337,7 +2337,7 @@ Proof
   Cases_on `call_outcome_success h` >> simp[return_def, raise_def]
 QED
 
-Theorem ecrecover_suffix_run[local]:
+Theorem ecrecover_suffix_run:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
         [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
@@ -2375,7 +2375,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem ecrecover_suffix_oracle_failure[local]:
+Theorem ecrecover_suffix_oracle_failure:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
         [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
@@ -2399,7 +2399,7 @@ Proof
   drule run_inst_seq_append_err >> simp[]
 QED
 
-Theorem ecrecover_suffix_preserves[local]:
+Theorem ecrecover_suffix_preserves:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
         [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
@@ -2454,7 +2454,7 @@ Proof
   rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]
 QED
 
-Theorem compile_ecrecover_run[local]:
+Theorem compile_ecrecover_run:
   compile_ecrecover h v r sig sf = (res,sb) /\
   s.vs_outcomes = co::rest /\ co.co_success /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -2534,7 +2534,7 @@ Proof
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
 
-Theorem compile_ecrecover_oracle_failure[local]:
+Theorem compile_ecrecover_oracle_failure:
   compile_ecrecover h v r sig sf = (res,sb) /\
   ~(?co rest. s.vs_outcomes = co::rest /\ co.co_success) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -2598,7 +2598,7 @@ Proof
   gvs[MEM] >> drule_all (SRULE [MEM] compile_ecrecover_oracle_failure) >> simp[]
 QED
 
-Theorem lower_value_ecrecover[local]:
+Theorem lower_value_ecrecover:
   lower_value compile_expr cenv ty (Builtin ann ECRecover [a;b;c;d]) sa = (op,sb) ==>
   ?h v r sig sm. lower_word_args cenv (\e. ty) [a;b;c;d] sa = ([h;v;r;sig],sm) /\
     compile_ecrecover h v r sig sm = (op,sb)
@@ -2622,7 +2622,7 @@ Proof
   simp[lower_word_args_def, comp_bind_def, comp_return_def]
 QED
 
-Theorem lower_value_ecrecover_args[local]:
+Theorem lower_value_ecrecover_args:
   LENGTH args = 4 /\
   lower_value compile_expr cenv ty (Builtin ann ECRecover args) sa = (op,sb) ==>
   ?h v r sig sm. lower_word_args cenv (\e. ty) args sa = ([h;v;r;sig],sm) /\
@@ -2632,7 +2632,7 @@ Proof
   drule lower_value_ecrecover >> simp[]
 QED
 
-Theorem compile_ecrecover_stack[local]:
+Theorem compile_ecrecover_stack:
   LENGTH args = 4 /\
   compile_expr cenv ty (Builtin ann ECRecover args) sa = (vv,sb) ==>
   ?op. vv = StackValue ann op
@@ -2652,7 +2652,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[as_stack_val_pair]
 QED
 
-Theorem compile_ecrecover_extends[local]:
+Theorem compile_ecrecover_extends:
   compile_ecrecover h v r sig sa = (op,sb) ==>
   cs_extends sa sb
 Proof
@@ -2661,7 +2661,7 @@ Proof
   qexists_tac `[]` >> simp[rich_listTheory.IS_PREFIX_APPEND]
 QED
 
-Theorem ecrecover_pre_types[local]:
+Theorem ecrecover_pre_types:
   expr_body_pre cenv cx env (Builtin ann ECRecover args) es ==>
   ann = BaseT AddressT /\ LENGTH args = 4 /\
   EVERY (\e. is_word_type (expr_type e)) args
@@ -2672,7 +2672,7 @@ Proof
   gvs[LENGTH_EQ_NUM_compute] >> gvs[is_word_type_def]
 QED
 
-Theorem evaluate_ecrecover_encoded[local]:
+Theorem evaluate_ecrecover_encoded:
   LENGTH bs = 32 /\
   ecrecover_arg_to_num va = SOME v /\
   ecrecover_arg_to_num ra = SOME r /\
@@ -2686,7 +2686,7 @@ Proof
   simp[evaluate_ecrecover_def]
 QED
 
-Theorem evaluate_ecrecover_typed[local]:
+Theorem evaluate_ecrecover_typed:
   value_has_type (BaseTV (BytesT (Fixed 32))) vh /\
   EVERY (\tv. (?k. tv = BaseTV (UintT k) /\ k <= 256) \/
                 tv = BaseTV (BytesT (Fixed 32))) [tv;tr;ts] /\
@@ -2711,7 +2711,7 @@ Proof
   irule evaluate_ecrecover_encoded >> simp[]
 QED
 
-Theorem ecrecover_typed_result[local]:
+Theorem ecrecover_typed_result:
   well_typed_builtin_app ann ECRecover (MAP expr_type args) /\
   LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) args vs ==>
@@ -2772,7 +2772,7 @@ Proof
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
 
-Theorem ecrecover_read_cases[local]:
+Theorem ecrecover_read_cases:
   LENGTH args = 4 /\
   (do r <- eval_expr cx (Builtin ann ECRecover args); read_result cx r od) es = (res,es') ==>
   (?exc. eval_exprs cx args es = (INR exc,es') /\ res = INR exc) \/
@@ -2880,7 +2880,7 @@ Proof
   goal_assum drule >> asm_simp_tac (srw_ss()) [exit_result_def]
 QED
 
-Theorem eval_expr_ecrecover_read_action[local]:
+Theorem eval_expr_ecrecover_read_action:
   LENGTH args = 4 ==>
   bind (eval_expr cx (Builtin ann ECRecover args)) (read_result cx) =
   bind (eval_exprs cx args)

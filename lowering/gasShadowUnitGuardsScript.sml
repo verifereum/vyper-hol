@@ -366,7 +366,26 @@ Theorem gas_shadow_ptr_ok_check:
   gas_shadow_context c d ==> (ptr_ok_check c <=> ptr_ok_check d)
 Proof
   strip_tac >> drule gas_shadow_ctx_ptr_param_list >> strip_tac >>
-  simp[ptr_ok_check_def] >> irule gas_shadow_list_every >>
+  `!f g. gas_shadow_function f g ==>
+     (EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f) <=>
+      EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts g))`
+    by (rpt strip_tac >>
+        `FILTER (\i. i.inst_opcode = DALLOCA) (fn_insts f) =
+         FILTER (\i. i.inst_opcode = DALLOCA) (fn_insts g)`
+          by (irule gas_shadow_list_filter_opc >>
+              simp[gas_shadow_function_insts]) >>
+        metis_tac[listTheory.FILTER_NEQ_NIL, listTheory.EXISTS_MEM]) >>
+  `EXISTS (\fn. EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts fn))
+     c.ctx_functions <=>
+   EXISTS (\fn. EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts fn))
+     d.ctx_functions`
+    by (`LIST_REL gas_shadow_function c.ctx_functions d.ctx_functions`
+          by fs[gas_shadow_context_def] >>
+        pop_assum mp_tac >>
+        qspec_tac (`d.ctx_functions`,`ys`) >>
+        qspec_tac (`c.ctx_functions`,`xs`) >>
+        Induct >> Cases_on `ys` >> simp[] >> metis_tac[]) >>
+  simp[ptr_ok_check_def] >> AP_TERM_TAC >> irule gas_shadow_list_every >>
   qexists_tac `gas_shadow_function` >>
   reverse conj_tac >- fs[gas_shadow_context_def] >>
   rpt strip_tac >> rename1 `gas_shadow_function f1 g1` >>

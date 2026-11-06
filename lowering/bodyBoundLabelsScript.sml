@@ -265,7 +265,7 @@ QED
 Theorem bound_labels_return_value_decode:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_return_value_decode buf lo hi s))))
+    (SND (compile_return_value_decode lo hi s))))
 Proof
   strip_tac >> simp[compile_return_value_decode_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,

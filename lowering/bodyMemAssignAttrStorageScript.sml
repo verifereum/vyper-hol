@@ -159,7 +159,7 @@ Proof
   simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
 QED
 
-Theorem vv_store_bound_frame_mem_src[local]:
+Theorem vv_store_bound_frame_mem_src:
   vv_store_bound cx ty lt es tv vv s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
   s.vs_alloca_next <= t.vs_alloca_next ==>

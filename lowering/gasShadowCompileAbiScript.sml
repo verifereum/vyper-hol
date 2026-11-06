@@ -87,27 +87,45 @@ Proof
        >> gen_tac >> BETA_TAC) >> simp[]
 QED
 
+Theorem gas_shadow_compiles_abi_dec_addr:
+  gas_shadow_compiles (compile_abi_dec_addr bop pos) (compile_abi_dec_addr bop pos)
+Proof
+  Cases_on `bop = Lit 0w` >>
+  simp[compile_abi_dec_addr_def, gas_shadow_compiles_return] >>
+  simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_void]
+QED
+
+Theorem gas_shadow_compiles_abi_decode_range_check:
+  gas_shadow_compiles (compile_abi_decode_range_check start end_op hi)
+    (compile_abi_decode_range_check start end_op hi)
+Proof
+  simp[compile_abi_decode_range_check_def] >>
+  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- simp[] >> gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_emit_void]
+QED
+
 Theorem gas_shadow_compiles_getelemptr_abi:
-  gas_shadow_compiles (compile_getelemptr_abi src dyn off opc hi)
-    (compile_getelemptr_abi src dyn off opc hi)
+  gas_shadow_compiles (compile_getelemptr_abi src dyn off opc bop hi)
+    (compile_getelemptr_abi src dyn off opc bop hi)
 Proof
   Cases_on `dyn` >> Cases_on `hi = Lit 0w` >>
   simp[compile_getelemptr_abi_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_void,
+       >- simp[gas_shadow_compiles_bind, gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void,
                gas_shadow_compiles_return]
        >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_compiles_abi_decode_dyn_elem_ptr:
-  gas_shadow_compiles (compile_abi_decode_dyn_elem_ptr opc src data_op hi sz)
-    (compile_abi_decode_dyn_elem_ptr opc src data_op hi sz)
+  gas_shadow_compiles (compile_abi_decode_dyn_elem_ptr opc bop src data_op hi sz)
+    (compile_abi_decode_dyn_elem_ptr opc bop src data_op hi sz)
 Proof
-  Cases_on `hi = Lit 0w` >>
+  Cases_on `hi = Lit 0w` >> Cases_on `bop = Lit 0w` >>
   simp[compile_abi_decode_dyn_elem_ptr_def, comp_ignore_bind_def] >>
   rpt (pure_rewrite_tac[comp_bind_assoc] >> BETA_TAC >>
        match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_void,
+       >- simp[gas_shadow_compiles_bind, gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void,
                gas_shadow_compiles_return]
        >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
@@ -228,20 +246,36 @@ Proof
   metis_tac[gas_shadow_compiles_abi_encode_mutual]
 QED
 
+Theorem gas_shadow_compiles_abi_decode_copy:
+  gas_shadow_compiles
+    (case opc of
+       CALLDATALOAD => emit_void CALLDATACOPY [d; s; n]
+     | DLOAD => emit_void DLOADBYTES [d; s; n]
+     | _ => emit_void MCOPY [d; s; n])
+    (case opc of
+       CALLDATALOAD => emit_void CALLDATACOPY [d; s; n]
+     | DLOAD => emit_void DLOADBYTES [d; s; n]
+     | _ => emit_void MCOPY [d; s; n])
+Proof
+  Cases_on `opc` >> simp[gas_shadow_compiles_emit_void]
+QED
+
 Theorem gas_shadow_compiles_abi_decode_mutual:
-  (!dst src opc hi info.
-    gas_shadow_compiles (compile_abi_decode_to_buf dst src opc hi info)
-      (compile_abi_decode_to_buf dst src opc hi info)) /\
-  (!dst src opc hi elems ao vo.
-    gas_shadow_compiles (compile_abi_decode_complex_elems dst src opc hi elems ao vo)
-      (compile_abi_decode_complex_elems dst src opc hi elems ao vo)) /\
-  (!dst src opc hi info abi_sz mem_sz ip cnt.
-    gas_shadow_compiles (compile_abi_decode_dyn_loop dst src opc hi info abi_sz mem_sz ip cnt)
-      (compile_abi_decode_dyn_loop dst src opc hi info abi_sz mem_sz ip cnt))
+  (!dst src opc bop hi info.
+    gas_shadow_compiles (compile_abi_decode_to_buf dst src opc bop hi info)
+      (compile_abi_decode_to_buf dst src opc bop hi info)) /\
+  (!dst src opc bop hi elems ao vo.
+    gas_shadow_compiles (compile_abi_decode_complex_elems dst src opc bop hi elems ao vo)
+      (compile_abi_decode_complex_elems dst src opc bop hi elems ao vo)) /\
+  (!dst src opc bop hi info abi_sz mem_sz ip cnt.
+    gas_shadow_compiles (compile_abi_decode_dyn_loop dst src opc bop hi info abi_sz mem_sz ip cnt)
+      (compile_abi_decode_dyn_loop dst src opc bop hi info abi_sz mem_sz ip cnt))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   rpt conj_tac >> rpt gen_tac
   >- (once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+      match_mp_tac gas_shadow_compiles_bind >>
+      simp[gas_shadow_compiles_abi_dec_addr] >> gen_tac >>
       irule gas_shadow_compiles_abi_decode_static >>
       simp[gas_shadow_compiles_abi_clamp_basetype])
   >- suspend "bytes"
@@ -253,36 +287,36 @@ Proof
 QED
 
 Resume gas_shadow_compiles_abi_decode_mutual[bytes]:
-  Cases_on `hi = Lit 0w` >>
+  Cases_on `hi = Lit 0w` >> Cases_on `bop = Lit 0w` >>
   once_rewrite_tac[compile_abi_decode_to_buf_def] >>
   simp[LET_THM, comp_ignore_bind_def] >>
   rpt (pure_rewrite_tac[comp_bind_assoc] >> BETA_TAC >>
        match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_return]
+       >- simp[gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void, gas_shadow_compiles_return]
        >> gen_tac >> BETA_TAC) >>
-  Cases_on `opc` >> simp[gas_shadow_compiles_emit_void]
+  simp[gas_shadow_compiles_abi_decode_copy, gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void]
 QED
 
 Resume gas_shadow_compiles_abi_decode_mutual[array]:
-  strip_tac >> Cases_on `hi = Lit 0w` >>
+  strip_tac >> Cases_on `hi = Lit 0w` >> Cases_on `bop = Lit 0w` >>
   Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp info` >>
   once_rewrite_tac[compile_abi_decode_to_buf_def] >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> asm_rewrite_tac[] >>
   gvs[] >> rewrite_tac[comp_ignore_bind_def] >>
   rpt (pure_rewrite_tac[comp_bind_assoc] >> BETA_TAC >>
        match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_return,
+       >- simp[gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void, gas_shadow_compiles_return,
                gas_shadow_compiles_alloc_buffer]
        >> gen_tac >> BETA_TAC) >>
-  Cases_on `opc` >> simp[gas_shadow_compiles_emit_void]
+  simp[gas_shadow_compiles_abi_decode_copy, gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void]
 QED
 
 Resume gas_shadow_compiles_abi_decode_mutual[complex]:
-  strip_tac >> Cases_on `hi = Lit 0w` >> gvs[] >>
+  strip_tac >> Cases_on `hi = Lit 0w` >> Cases_on `bop = Lit 0w` >> gvs[] >>
   once_rewrite_tac[compile_abi_decode_to_buf_def] >>
   simp[LET_THM, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_emit_void]
+       >- simp[gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void]
        >> gen_tac >> BETA_TAC) >> simp[]
 QED
 
@@ -301,29 +335,29 @@ Resume gas_shadow_compiles_abi_decode_mutual[loop]:
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_fresh_label, gas_shadow_compiles_emit_inst,
                gas_shadow_compiles_new_block, gas_shadow_compiles_return,
-               gas_shadow_compiles_emit_void, gas_shadow_compiles_abi_decode_dyn_elem_ptr]
+               gas_shadow_compiles_abi_dec_addr, gas_shadow_compiles_abi_decode_range_check, gas_shadow_compiles_emit_void, gas_shadow_compiles_abi_decode_dyn_elem_ptr]
        >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
 
 Finalise gas_shadow_compiles_abi_decode_mutual
 
 Theorem gas_shadow_compiles_abi_decode_to_buf:
-  gas_shadow_compiles (compile_abi_decode_to_buf dst src opc hi info)
-    (compile_abi_decode_to_buf dst src opc hi info)
+  gas_shadow_compiles (compile_abi_decode_to_buf dst src opc bop hi info)
+    (compile_abi_decode_to_buf dst src opc bop hi info)
 Proof
   metis_tac[gas_shadow_compiles_abi_decode_mutual]
 QED
 
 Theorem gas_shadow_compiles_abi_decode_complex_elems:
-  gas_shadow_compiles (compile_abi_decode_complex_elems dst src opc hi elems ao vo)
-    (compile_abi_decode_complex_elems dst src opc hi elems ao vo)
+  gas_shadow_compiles (compile_abi_decode_complex_elems dst src opc bop hi elems ao vo)
+    (compile_abi_decode_complex_elems dst src opc bop hi elems ao vo)
 Proof
   metis_tac[gas_shadow_compiles_abi_decode_mutual]
 QED
 
 Theorem gas_shadow_compiles_abi_decode_dyn_loop:
-  gas_shadow_compiles (compile_abi_decode_dyn_loop dst src opc hi info abi_sz mem_sz ip cnt)
-    (compile_abi_decode_dyn_loop dst src opc hi info abi_sz mem_sz ip cnt)
+  gas_shadow_compiles (compile_abi_decode_dyn_loop dst src opc bop hi info abi_sz mem_sz ip cnt)
+    (compile_abi_decode_dyn_loop dst src opc bop hi info abi_sz mem_sz ip cnt)
 Proof
   metis_tac[gas_shadow_compiles_abi_decode_mutual]
 QED

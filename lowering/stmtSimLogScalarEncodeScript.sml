@@ -1,6 +1,7 @@
 (* Selected-shape scalar tuple encoding; static tuples need no cursor. *)
 Theory stmtSimLogScalarEncode
 Ancestors
+  abiDecoderRange
   stmtSimLogMembersRun stmtSimLogScalarPrefix stmtSimLogScalarMembers
   stmtSimLogEncodeLayout abiEncoderReentryLeaves abiEncoderInputFrame abiEncoderInput
   abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderMemberCode abiBuiltinPrefix

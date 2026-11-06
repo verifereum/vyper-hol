@@ -7,6 +7,20 @@ Ancestors
   abiEncoderWindowLeaves abiEncoderBytes abiEncoderWrites emitHelperProps
   exprLoweringProps localPtrsProps abiEncoderExtendSim venomMemDefs
   emitHelper compileEnv freshWrites venomState venomExecSemantics venomInst words arithmetic
+  abiEncoder list rich_list abiEncoderWindowLookup
+
+Theorem window_bytes_output_bounds:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')
+Proof
+  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def] >>
+  rpt strip_tac >> gvs[]
+QED
 
 Theorem window_round_sequence:
   abi_encode_round len st = (out,st') /\
@@ -290,10 +304,16 @@ Proof
     abi_encoder_write_observations] >> strip_tac >> asm_rewrite_tac[]
 QED
 
-Theorem window_bytes_contract:
-  window_strong_contract (AbiBytestring maxlen)
+Theorem window_bytes_observed:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
 Proof
-  simp_tac bool_ss [window_strong_contract_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\
+             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')` by
+    metis_tac[window_bytes_output_bounds] >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
      FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
     metis_tac[window_pre_sites] >> pop_assum (mk_asm "sizes") >>
@@ -331,7 +351,15 @@ Proof
   `abi_encoder_extend_sim ctx func s
     (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (irule window_seq_extend_sim >> simp[] >> qexists_tac `st` >> simp[]) >>
+  `!x. ~not_fresh_at st' x ==>
+       lookup_var x (actual with vs_inst_idx := LENGTH st'.cs_current_insts) =
+       lookup_var x s` by
+    (`run_inst_seq (emitted_insts st st') s = OK actual` by
+       gvs[window_seq_def] >>
+     drule abi_window_seq_high_vars >>
+     disch_then (qspec_then `st'` mp_tac) >> simp[lookup_var_def]) >>
   qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  (conj_tac >- (
   (* Package the concrete sequence without reopening instruction semantics. *)
   `alloca_inv actual` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func actual` by
@@ -372,5 +400,11 @@ Proof
   `abi_decode_sim ctx func s final` by metis_tac[abi_encoder_extend_sim_sim] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   asm_rewrite_tac[] >> (conj_tac >- asm "sizes" ACCEPT_TAC) >>
-  simp[Abbr `final`] >> metis_tac[window_seq_labels]
+  simp[Abbr `final`] >> metis_tac[window_seq_labels])) >> simp[]
+QED
+
+Theorem window_bytes_contract:
+  window_strong_contract (AbiBytestring maxlen)
+Proof
+  rw[window_strong_contract_def] >> metis_tac[window_bytes_observed]
 QED
