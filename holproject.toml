@@ -89,4 +89,4 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "f5562577de645f973144750d88223bce177b6a1b"
+rev = "2927181a5fdfb871a2cbe7913bfc9902c0143cde"
