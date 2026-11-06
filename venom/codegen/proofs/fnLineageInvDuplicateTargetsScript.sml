@@ -72,3 +72,60 @@ Theorem long_duplicate_join_plan_rejected:
 Proof
   (computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY]; EVAL_TAC)
 QED
+
+(* Alter only the join block's use ordering: x is now consumed last. *)
+Definition late_duplicate_join_fn_def:
+  late_duplicate_join_fn = long_duplicate_join_fn with fn_blocks :=
+    TAKE 3 long_duplicate_join_fn.fn_blocks ++
+    [<| bb_label := "use"; bb_instructions :=
+        MAPi (\i v. mk_inst (22+i) MSTORE [Lit 0w; Var v] [])
+          ["a";"b";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n";"o";"p";"q";"r"] ++
+        [mk_inst 39 ADD [Var "x"; Var "x"] ["y"];
+         mk_inst 40 STOP [] []] |>]
+End
+
+Theorem late_duplicate_join_ready:
+  codegen_ready_fn late_duplicate_join_fn
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem late_duplicate_join_target:
+  join_target_ops (liveness_analyze late_duplicate_join_fn)
+    late_duplicate_join_fn "left" (mk_inst 20 JMP [Label "use"] []) =
+    SOME (MAP Var ["x";"x";"r";"q";"p";"o";"n";"m";"l";"k";"j";"i";"h";"g";"f";"e";"d";"b";"a"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem late_duplicate_join_entry_fields:
+  ?ops qs. generate_block_plan
+    (liveness_analyze late_duplicate_join_fn) (dfg_build_function late_duplicate_join_fn)
+    (cfg_analyze late_duplicate_join_fn) late_duplicate_join_fn
+    (EL 0 late_duplicate_join_fn.fn_blocks)
+    (init_cleanup_plan_state NONE [] 0 0) = SOME (ops,qs) /\
+    qs.ps_stack =
+      MAP Var ["x";"b";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n";"o";"p";"q";"r";"a"] /\
+    qs.ps_spilled = FEMPTY
+Proof
+  (computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY]; EVAL_TAC) >> simp[]
+QED
+
+Theorem late_duplicate_join_symbolic_success:
+  HD ([]:operand list) = Var "x" ==>
+  ?ops qs. generate_block_plan
+    (liveness_analyze late_duplicate_join_fn) (dfg_build_function late_duplicate_join_fn)
+    (cfg_analyze late_duplicate_join_fn) late_duplicate_join_fn
+    (EL 1 late_duplicate_join_fn.fn_blocks)
+    (SND (THE (generate_block_plan
+      (liveness_analyze late_duplicate_join_fn) (dfg_build_function late_duplicate_join_fn)
+      (cfg_analyze late_duplicate_join_fn) late_duplicate_join_fn
+      (EL 0 late_duplicate_join_fn.fn_blocks)
+      (init_cleanup_plan_state NONE [] 0 0)))) = SOME (ops,qs) /\
+    qs.ps_stack = MAP Var
+      ["x";"x";"r";"q";"p";"o";"n";"m";"l";"k";"j";"i";"h";"g";"f";"e";"d";"b";"a"]
+Proof
+  strip_tac >>
+  (computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY]; EVAL_TAC) >>
+  gvs[] >> EVAL_TAC
+QED
