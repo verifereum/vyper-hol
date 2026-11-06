@@ -1,9 +1,8 @@
 (*
  * Memmerging — Block / Function / Pass Simulation (Proofs)
  *
- * Builds on mmCorrectness (per-instruction simulation, invariants)
+ * Builds on mmCorrectnessProofs (per-instruction simulation, invariants)
  * to prove block-level, function-level, and pass-level correctness.
- * Re-exported by mmBlockSimScript.sml.
  *)
 
 Theory mmBlockSimProofs

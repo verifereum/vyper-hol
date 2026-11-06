@@ -219,7 +219,8 @@ Proof
   irule ceil_ready_vv_sim >> qexists_tac `env` >> simp[] >>
   gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
   rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[expr_body_pre_builtin_arg]
+  >- (irule expr_body_pre_builtin_arg >>
+      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[])
   >- metis_tac[int_calls_builtin_arg] >>
   drule ceil_operand_types >> simp[EVERY_MEM]
 QED

@@ -6586,6 +6586,52 @@ Proof
   gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
 QED
 
+Theorem compile_abi_encode_args_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) ==>
+  !es R. ~supported_exprs_exists expr_shape_root es /\ shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ cenv_shape_ok st cenv)
+    (compile_abi_encode_args cfn cenv es)
+    (\vs st. R st /\ EVERY (plain_operand st) vs)
+Proof
+  strip_tac >> Induct >> rpt strip_tac >>
+  gvs[supported_exprs_exists_every] >> rewrite_tac[compile_abi_encode_args_def]
+  >- (irule shape_step_return >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. (R st /\ cenv_shape_ok st cenv) /\ value_shape_ok st v` >> conj_tac
+  >- (match_mp_tac shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+                    `\st. (R st /\ cenv_shape_ok st cenv) /\ cenv_shape_ok st cenv`,
+                    `\v st. (R st /\ cenv_shape_ok st cenv) /\ value_shape_ok st v`] >>
+      conj_tac
+      >- (ho_match_mp_tac shape_step_frame >> simp[shape_stable_conj, cenv_shape_ok_stable]) >>
+      simp[]) >>
+  qx_gen_tac `vv` >> BETA_TAC >> match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. R st /\ cenv_shape_ok st cenv /\ plain_operand st v` >> conj_tac
+  >- (IF_CASES_TAC
+      >- (pure_rewrite_tac[GSYM CONJ_ASSOC] >>
+          irule compile_materialize_vv_shape_under >> simp[]) >>
+      shape_unwrap_value_tac `\st. R st /\ cenv_shape_ok st cenv` >>
+      simp[shape_stable_conj, cenv_shape_ok_stable]) >>
+  qx_gen_tac `head_op` >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label HeadPre _ _` >>
+  `shape_stable (\st. R st /\ plain_operand st head_op)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[head_op]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\vs st. (R st /\ plain_operand st head_op) /\ EVERY (plain_operand st) vs` >>
+  conj_tac
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+                    `\st. (R st /\ plain_operand st head_op) /\ cenv_shape_ok st cenv`,
+                    `\vs st. (R st /\ plain_operand st head_op) /\ EVERY (plain_operand st) vs`] >>
+      simp[Abbr `HeadPre`] >>
+      first_x_assum (qspec_then `\st. R st /\ plain_operand st head_op` mp_tac) >>
+      simp[]) >>
+  qx_gen_tac `tail_ops` >> BETA_TAC >> irule shape_step_return >> simp[]
+QED
+
 Theorem compile_ext_call_kwarg_shape[local]:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -8051,7 +8097,7 @@ Resume compile_type_builtin_dispatch_body_shape[encode]:
   simp[compile_type_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_uncurry >>
   qexists_tac `\vs st. EVERY (plain_operand st) vs` >> reverse conj_tac
-  >- (drule compile_multi_exprs_shape >>
+  >- (drule compile_abi_encode_args_shape >>
       disch_then (fn th => shape_under_tac th `\st. T`) >> simp[shape_stable_def]) >>
   qx_gen_tac `vs` >> simp[] >>
   qabbrev_tac `P = \st. EVERY (plain_operand st) vs` >>

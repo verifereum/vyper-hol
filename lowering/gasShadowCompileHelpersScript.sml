@@ -44,6 +44,38 @@ Proof
    simp[gas_shadow_compiles_return])
 QED
 
+Theorem gas_shadow_expr_can_mutate:
+  (!cenv e. expr_can_mutate cenv (gas_shadow_expr e) = expr_can_mutate cenv e) /\
+  (!cenv es. exprs_can_mutate cenv (MAP gas_shadow_expr es) =
+             exprs_can_mutate cenv es) /\
+  (!cenv opt. opt_expr_can_mutate cenv (OPTION_MAP gas_shadow_expr opt) =
+              opt_expr_can_mutate cenv opt) /\
+  (!cenv kes. named_exprs_can_mutate cenv (MAP (I ## gas_shadow_expr) kes) =
+              named_exprs_can_mutate cenv kes)
+Proof
+  ho_match_mp_tac expr_can_mutate_ind >>
+  rw[expr_can_mutate_def, gas_shadow_expr_def, pairTheory.PAIR_MAP_THM]
+QED
+
+Theorem gas_shadow_compiles_abi_encode_args:
+  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
+    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+  !es. gas_shadow_compiles (compile_abi_encode_args f cenv es)
+    (compile_abi_encode_args g cenv (if sh then MAP gas_shadow_expr es else es))
+Proof
+  strip_tac >> Induct >>
+  simp[compile_abi_encode_args_def, gas_shadow_compiles_return] >>
+  Cases_on `sh` >> gvs[compile_abi_encode_args_def, gas_shadow_expr_can_mutate] >>
+  gen_tac >>
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- metis_tac[COND_CLAUSES] >>
+   gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- (IF_CASES_TAC >>
+       simp[gas_shadow_compiles_materialize_vv, gas_shadow_compiles_unwrap_value]) >>
+   gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >>
+   simp[gas_shadow_compiles_return])
+QED
+
 Theorem gas_shadow_compiles_multi_vvs:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>

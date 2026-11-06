@@ -6,7 +6,7 @@ Ancestors
   simplifyCfgLabelProps unitLabelMapIdentity
   unitShapeDefs stackPlanTypes venomWf venomInst simplifyCfgDefs
   list rich_list
-  simplifyCfgStruct simplifyCfgReachuses
+  simplifyCfgStruct
   simplifyCfgShape
 
 Theorem scfg_fix_phi_operand_subset:
@@ -156,5 +156,5 @@ Theorem scfg_restriction_fix_phis_shape:
   scfg_shape (fix_all_phis (remove_unreachable_blocks fn))
 Proof
   strip_tac >> irule scfg_fix_all_phis_shape >>
-  simp[simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf, scfg_restriction_shape]
+  simp[simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf, scfg_restriction_shape]
 QED
