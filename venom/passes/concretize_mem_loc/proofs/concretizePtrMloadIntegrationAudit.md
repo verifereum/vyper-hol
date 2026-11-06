@@ -54,3 +54,104 @@ success or read equality was smuggled into the candidate. Remaining gaps are
 explicit obligations; typechecking the candidate does not certify them.
 
 Verification: holbuild(concretizePtrMloadIntegrationAuditTheory) passes.
+
+## .63 active-owner / production supplier audit (current source)
+
+`mload_masked_bytes_candidate` is a second **quotation, not a theorem**.
+It has exactly the classification antecedent, and asks for all 32 untainted
+bytes to agree at the evaluated source/target addresses. It adds no owner,
+production, byte-equality or source-success premise.
+
+The earlier matrix is historical: its non-forwarding and classification
+obligations are now discharged by `ptr_paired_mload_endpoint_inputs` and
+`ptr_paired_mload_address_classification` (.61/.62). The mixed-success
+consumer has also been checked separately; this audit does not assemble a
+producer.
+
+### Exact same-tag owner supplier: already exported
+
+SourceOwnership exports (lines 566–573):
+```
+ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+FLOOKUP TG v = SOME (token,aid) /\
+FLOOKUP a.po_prov v = SOME (b,sz) ==>
+?d. d <= LENGTH a.po_stack /\
+    EL (LENGTH a.po_stack-d) tokens = token /\
+    FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz)
+```
+This is `ptr_source_ownership_live_cache`. Its premises are supplied by
+transcript erasure/trace ownership, `~ctx_has_dalloca C`, and the OWNED
+classification alternative. It preserves the exact aid, b and sz; no
+retained-birth uniqueness is required. Thus active membership is NOT a new
+semantic gap.
+
+More directly, `ptr_stage_placements_live_owner` (StagePlacements 59–77)
+takes the stage, NONE input eoms, shape, distinct ids, callee_first,
+run-state/no-dalloca, the same source ownership, stage placements, and
+those same two TG/numerical lookups. It returns
+```
+?d owner output p.
+ d <= LENGTH a.po_stack /\
+ EL (LENGTH a.po_stack-d) tokens = token /\
+ FLOOKUP registry token = SOME owner /\
+ owner = (ptr_owner_view d a).cf_fn /\
+ FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz) /\
+ lookup_function owner.fn_name C'.ctx_functions = SOME output /\
+ MEM (Allocation aid,p,sz) output.fn_mems_used /\
+ FLOOKUP positions (Allocation aid) = SOME (p,sz)
+```
+The classified `pa` equals p by functional lookup. Prefer this boundary to
+reconstructing historical placement or selecting another numerical owner.
+
+### Recovery premise ledger
+
+| Owned recovery premise (OwnedReadAudit 19–55) | Supplier / remaining assembly |
+| --- | --- |
+| Existing paired prefix and complete frozen stage antecedent | Identical candidate hypotheses. |
+| `vs.vs_allocas = FEMPTY` | `o1_run_state_ok_def`, `o1_initial_state_ok_def`; no use of vs_alloca_next=0. |
+| no DALLOCA everywhere | `ctx_has_dalloca_def`, EVERY/EXISTS duality. |
+| `EVERY wf_function`, `EVERY fn_inst_wf`, every instruction wf | `o1_ctx_shape_def`, `o1_fn_shape_def`, `fn_inst_wf_def`, fn_insts membership. |
+| `EVERY (fn_ptr_ok P)` | Extract existential P once from `ptr_discipline_def` (first conjunct inside EVERY). |
+| `!obs. MEM obs h ==> access_ok ...` | transcript erasure/trace source yields `ptr_chrono_history vs C h`; `ptr_chrono_history_reachable` gives EVERY observation reachability; unfold only observation reachability and use ptr_discipline access projection. |
+| non-forwarding and opcode not ASSIGN | Endpoint inputs, MLOAD constructor distinction. |
+| same-aid owner depth/cache | `ptr_stage_placements_live_owner` above, or `ptr_source_ownership_live_cache`. No missing implication. |
+| `lo <= b+k` | `ptr_reachable_owner_allocas_from`: observation reachability / discipline / d bound imply `allocas_from lo (ptr_owner_view d a).cf_state`. `allocas_from_def` plus the exact cache lookup gives lo<=b. |
+| k<size, pure byte, numerical provenance | Set k=`w2n x-b+j`; classification b<=w2n x and w2n x+32<=b+sz, j<32 imply k<sz and b+k=w2n x+j. Candidate supplies purity. |
+| operand membership, inst_read_op | classified op=Var v; singleton operand; `inst_read_op_def` at MLOAD. |
+| output lookup | StagePlacements live-owner supplier above. |
+| source owner lookup | `ptr_frame_sizes` gives MEM a.po_fn and EVERY saved cf_fn membership, from endpoint reachability and task shape/run/no-dalloca. Split current/saved with `ptr_owner_view_def`. Context wf supplies distinct function names, so membership implies lookup owner.fn_name C.ctx_functions=SOME owner. |
+| production observed/s/out | `ptr_stage_lookup_origin`: stage and output lookup give source fn lookup, fn_pass_step, out.fpo_function=output, ctx names equality, and view. Compare its source lookup to the SAME owner lookup to identify fn=owner. |
+| bp and mems equations | Choose precisely bp_analyze_fuel and the lambda in recovery lines 35–36; no semantic side condition. |
+| placement and final target arithmetic | classification; w2n y=pa+(w2n x-b) implies w2n y+j=pa+k. No new word arithmetic needed. |
+
+Exact production export (`ptr_stage_lookup_origin`, ImportOrigins 75–83):
+```
+ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+lookup_function name C'.ctx_functions = SOME g ==>
+?fn observed s out.
+ lookup_function name C.ctx_functions = SOME fn /\
+ fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+ out.fpo_function = g /\
+ ctx_fn_names observed.cu_context = ctx_fn_names C /\ view C' fn observed
+```
+
+### Decision
+
+No genuinely missing semantic implication was found in the active-owner or
+production chain: these are existing exported boundaries, not inferred from
+retained births. Remaining work is a direct recovery assembly theorem for
+the quoted candidate, with fixed branch using fixed recovery and owned branch
+using the ledger above. This diagnostic does NOT prove that theorem. In
+particular the source-lookup membership normalization and historical EVERY
+access normalization have been inspected as interfaces, not implemented as
+new theorems here. They should be handled locally in assembly; if they cause
+large instantiation chains, stop and review the interface rather than add
+conditional wrappers.
+
+Verification (.63): `holbuild(targets=["concretizePtrMloadIntegrationAuditTheory"])`
+passes with the masked-byte quotation. This theory intentionally does not
+import MloadEndpoint: Endpoint already depends on IntegrationAudit, so such
+an import creates a cycle. Endpoint theorems cited above are documentation
+references only; no new theorem here consumes them. The future recovery
+assembly belongs downstream of Endpoint, not in this quotation theory.
