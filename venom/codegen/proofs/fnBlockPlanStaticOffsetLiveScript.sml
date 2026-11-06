@@ -717,3 +717,27 @@ Proof
   qexistsl_tac [`LENGTH pb.bb_instructions`, `pb`] >>
   simp[collect_phis_length_bound] >> metis_tac[]
 QED
+
+Theorem ready_offset_output_live:
+  !fn bb k v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    k < LENGTH bb.bb_instructions /\
+    (EL k bb.bb_instructions).inst_opcode = OFFSET /\
+    MEM v (EL k bb.bb_instructions).inst_outputs ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (k+1))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `offset_outputs_used fn` by gvs[codegen_ready_fn_def] >>
+  `MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     metis_tac[MEM_EL]) >>
+  `?ub use. MEM ub fn.fn_blocks /\ MEM use ub.bb_instructions /\
+      MEM (Var v) use.inst_operands` by
+    (gvs[offset_outputs_used_def, EVERY_MEM, EXISTS_MEM,
+         fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  Cases_on `use.inst_opcode = PHI`
+  >- (irule ready_output_phi_use_live >> simp[] >>
+      qexistsl_tac [`ub`, `use`] >> simp[]) >>
+  irule ready_output_ordinary_use_live >> simp[] >>
+  qexistsl_tac [`ub`, `use`] >> simp[]
+QED
