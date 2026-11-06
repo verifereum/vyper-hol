@@ -2,7 +2,7 @@
 Theory bodyMemTbConvertScalarDispatch
 Ancestors
   bodyMemTbConvertScalarFlags bodyMemTbConvertScalarBytes
-  bodyMemTbConvertScalarOutputs
+  bodyMemTbConvertScalarOutputs bodyMemTbConvertScalarDecimal
   convertScalarDispatch convertScalarTyping exprSimConvert compileEnv
   exprSimHyps vyperTypeSystem vyperTyping vyperValue exprLowering
 Libs intLib
