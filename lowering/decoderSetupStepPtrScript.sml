@@ -33,6 +33,31 @@ Proof
     step_prov_other_output, step_taint_other_output, mk_inst_def]
 QED
 
+Theorem setup_instruction_continuation:
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ [inst] /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+  step_inst_base inst s = OK t /\ t.vs_current_bb = s.vs_current_bb /\
+  fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  H = step_prov PG G inst t /\ u = step_taint inst s t tn /\
+  (!fuel. ptr_inst_ok D lower fuel ctx func G tn inst s) /\
+  (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+    (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+  !fuel. ptr_safe_run D lower fuel ctx func PG G tn s
+Proof
+  strip_tac >>
+  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+    !k. k < LENGTH [inst] ==>
+      get_instruction bb (LENGTH sa.cs_current_insts + k) = SOME (EL k [inst])` by
+    (irule fn_has_code_same_block >> qexists_tac `sb` >> simp[]) >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    (qpat_x_assum `!k. k < LENGTH _ ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  gen_tac >> irule ptr_safe_run_scalar_continuation >>
+  qexistsl_tac [`bb`,`inst`,`t`] >>
+  gvs[step_inst_non_invoke, ADD1, ptr_safe_step_def]
+QED
+
 Theorem setup_emit_continuation:
   emit_op opc ops sa = (Var x,sb) /\
   opc <> INVOKE /\ ~is_terminator opc /\
@@ -53,16 +78,9 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id opc ops [x]) s = OK t` by
     gvs[run_inst_seq_def, AllCaseEqs()] >>
   `same_blocks sa sb` by metis_tac[emit_op_same_blocks] >>
-  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
-    !k. k < LENGTH [mk_inst sa.cs_next_id opc ops [x]] ==>
-      get_instruction bb (LENGTH sa.cs_current_insts + k) =
-        SOME (EL k [mk_inst sa.cs_next_id opc ops [x]])` by
-    (irule fn_has_code_same_block >> qexists_tac `sb` >> fs[same_blocks_def]) >>
-  `get_instruction bb s.vs_inst_idx = SOME (mk_inst sa.cs_next_id opc ops [x])` by
-    (qpat_x_assum `!k. k < LENGTH _ ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
-  gen_tac >> irule ptr_safe_run_scalar_continuation >>
-  qexistsl_tac [`bb`,`mk_inst sa.cs_next_id opc ops [x]`,`t`] >>
-  gvs[mk_inst_def, step_inst_non_invoke, ADD1, ptr_safe_step_def]
+  irule setup_instruction_continuation >> simp[] >>
+  goal_assum (drule_at Any) >> qexistsl_tac [`sa`,`sb`] >>
+  gvs[mk_inst_def, same_blocks_def]
 QED
 
 Theorem setup_mload_continuation:
