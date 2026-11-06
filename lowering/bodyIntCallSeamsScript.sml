@@ -131,7 +131,7 @@ Definition intcall_entry_def:
                 (base_ptr rbuf) /\
          eval_operand rbuf.buf_operand t = SOME (n2w off) /\
          FLOOKUP t.vs_allocas aid = SOME (off,rbuf.buf_size) /\
-         sa.cs_next_id <= aid /\
+         sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
          (0 < rc ==>
           arg_ops = invoke_args /\
           ?results st4 u.
@@ -174,7 +174,7 @@ Definition intcall_entry_def:
            FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
            ?aid off asz.
              FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-             sa.cs_next_id <= aid /\
+             sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
              off <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
              w2n (EL ((if has_rb then 1 else 0) + i) argv) + psz <=
                off + asz) /\
@@ -231,6 +231,41 @@ Definition intcall_callee_exit_def:
       (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
 End
 
+(* The caller's compile env agrees with every function's
+   build_compile_env for tops on the module-level fields the callee's
+   package env takes from tops: the module, module-variable types and
+   locations (immutables included), flag metadata and method ids.  body_inv pins the other module-level
+   fields this way. *)
+Definition cenv_module_pins_def:
+  cenv_module_pins tops cenv <=>
+    cenv.ce_module = NONE /\
+    cenv.ce_module_var_type = build_var_type_map tops /\
+    cenv.ce_module_vars =
+      add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+        tops 0 (add_module_var_locations tops FEMPTY) /\
+    cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_method_id =
+      (\s tys. w2n (calldata_method_id
+                     (function_selector s (vyper_to_abi_types (type_env tops) tys))))
+End
+
+Theorem build_compile_env_module_pins:
+  cenv_module_pins tops
+    (build_compile_env tops vis mut fname args ret fbody use_trans)
+Proof
+  simp[cenv_module_pins_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+(* Held admission: the body_inv strengthening adds these pins to
+   body_inv, which then proves this.  Only intcall_body_expr_ok uses it. *)
+Theorem body_inv_module_pins:
+  body_inv tops ctx cenv cx ==> cenv_module_pins tops cenv
+Proof
+  cheat
+QED
+
 (* Seam 1: argument evaluation and the callee's frame setup.  The
    caller's code up to the INVOKE runs against the source up to
    push_function, so any continuation from an intcall_entry state gives
@@ -239,6 +274,7 @@ Theorem intcall_args_frame_setup:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr Q R.
     body_inv tops ctx cenv cx /\
+    cenv_module_pins tops cenv /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,F,args,[],ret,ss) /\
@@ -277,6 +313,7 @@ Theorem intcall_callee_body_sim:
   !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
    prev penv rtv es1 t callee entered rc rbs pvs.
     body_inv tops ctx cenv cx /\
+    cenv_module_pins tops cenv /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,F,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
