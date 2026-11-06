@@ -130,3 +130,149 @@ Resume storage_copy_increment_path_ptr[assign]:
 QED
 
 Finalise storage_copy_increment_path_ptr
+
+Theorem storage_copy_destination_pair_path_ptr:
+  storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G tn s /\
+  mv IN scratch /\ dv IN scratch /\ mv <> dv /\
+  mv <> cv /\ dv <> cv /\ mv <> root /\ dv <> root /\
+  src <> Var mv /\ src <> Var dv /\
+  k < n /\ b+32*n < dimword(:256) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var cv; Lit 32w] [mv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME
+    (mk_inst (id+1) ADD [Var root; Var mv] [dv]) ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G' tn' t /\
+    ptr_covers G' tn' dv t 32 /\ lookup_var dv t = SOME (n2w (b+32*k)) /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+2 /\
+    ~t.vs_halted /\
+    (!x. x <> mv /\ x <> dv ==>
+      lookup_var x t = lookup_var x s /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  rpt strip_tac >>
+  qhdtm_assum `storage_copy_inv_ptr` mp_tac >>
+  rewrite_tac[Once storage_copy_inv_ptr_def] >> strip_tac >>
+  qabbrev_tac `u = update_var mv (n2w (32*k)) s` >>
+  qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `i = mk_inst id MUL [Var cv; Lit 32w] [mv]` >>
+  qabbrev_tac `G1 = step_prov PG G i u` >>
+  qabbrev_tac `tn1 = tn with t_var := tn.t_var |+ (mv,{})` >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK s1)` by
+    (simp[Abbr `G1`, Abbr `tn1`, Abbr `i`, Abbr `u`, Abbr `s1`] >>
+     once_rewrite_tac[arithmeticTheory.MULT_COMM] >>
+     simp[GSYM word_mul_n2w] >>
+     irule storage_copy_arith_path_ptr >> simp[eval_operand_def, op_taint_def] >>
+     gvs[op_taint_def]) >>
+  suspend "destination"
+QED
+
+Resume storage_copy_destination_pair_path_ptr[destination]:
+  `storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G1 tn1 s1` by
+    (simp[Abbr `s1`, Abbr `u`, Abbr `tn1`] >>
+     irule storage_copy_inv_ptr_scratch >> simp[] >> qexists_tac `G` >> simp[] >>
+     simp[Abbr `G1`, Abbr `i`, scalar_step_old_prov]) >>
+  qabbrev_tac `v = update_var dv (n2w b + n2w (32*k)) s1` >>
+  qabbrev_tac `t = v with vs_inst_idx := SUC s1.vs_inst_idx` >>
+  qabbrev_tac `j = mk_inst (id+1) ADD [Var root; Var mv] [dv]` >>
+  qabbrev_tac `G2 = step_prov PG G1 j v` >>
+  qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (dv,{})` >>
+  `gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0 G2 tn2 (OK t)` by
+    (simp[Abbr `G2`, Abbr `tn2`, Abbr `j`, Abbr `v`, Abbr `t`] >>
+     irule storage_copy_arith_path_ptr >>
+     simp[Abbr `s1`, Abbr `u`, Abbr `tn1`, update_var_def, lookup_var_def,
+          eval_operand_def, FLOOKUP_UPDATE, op_taint_def] >>
+     gvs[ptr_covers_def, op_taint_def, lookup_var_def]) >>
+  suspend "coverage"
+QED
+
+Resume storage_copy_destination_pair_path_ptr[coverage]:
+  `storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G2 tn2 t` by
+    (simp[Abbr `t`, Abbr `v`, Abbr `tn2`] >>
+     irule storage_copy_inv_ptr_scratch >> simp[] >> qexists_tac `G1` >> simp[] >>
+     simp[Abbr `G2`, Abbr `j`, scalar_step_old_prov]) >>
+  `ptr_covers G1 tn1 root s1 (32*n)` by
+    gvs[storage_copy_inv_ptr_def] >>
+  `lookup_var root s1 = SOME (n2w b)` by
+    (simp[Abbr `s1`, Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     gvs[lookup_var_def]) >>
+  `32*k < dimword(:256) /\ b < dimword(:256) /\ b+32*k < dimword(:256)` by
+    decide_tac >>
+  `ptr_covers G2 tn2 dv t 32` by
+    (simp[Abbr `G2`, Abbr `tn2`, Abbr `j`, Abbr `v`, Abbr `t`] >>
+     irule (SRULE[] storage_copy_add_covers) >> simp[] >>
+     qexists_tac `32*n` >> simp[] >> decide_tac) >>
+  qexistsl_tac [`G2`, `tn2`, `t`] >> conj_tac
+  >- (drule_all gas_path_ptr_then >> simp[]) >>
+  simp[Abbr `tn2`, Abbr `t`, Abbr `v`, Abbr `s1`, Abbr `u`,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w,
+       arithmeticTheory.ADD1, op_taint_def] >> rpt strip_tac >>
+  simp[Abbr `tn1`, FLOOKUP_UPDATE]
+QED
+
+Finalise storage_copy_destination_pair_path_ptr
+
+Theorem storage_copy_store_chunk_path_ptr:
+  storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G tn s /\
+  mv IN scratch /\ dv IN scratch /\ mv <> dv /\
+  mv <> cv /\ dv <> cv /\ mv <> root /\ dv <> root /\
+  src <> Var mv /\ src <> Var dv /\ vv <> mv /\ vv <> dv /\
+  k < n /\ b+32*n < dimword(:256) /\
+  lookup_var vv s = SOME w /\ op_taint tn (Var vv) = key_taint X slot /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var cv; Lit 32w] [mv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME
+    (mk_inst (id+1) ADD [Var root; Var mv] [dv]) /\
+  get_instruction bb (s.vs_inst_idx+2) = SOME
+    (mk_inst (id+2) MSTORE [Var dv; Var vv] []) ==>
+  ?G' tn' u.
+    storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G' tn' u /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G'
+      (tn' with t_mem :=
+        (tn'.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
+        {b+32*k+r | r < 32 /\ (slot,r) IN X})
+      (OK (mstore (b+32*k) w u with vs_inst_idx := s.vs_inst_idx+3)) /\
+    u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+2 /\
+    ~u.vs_halted
+Proof
+  rpt strip_tac >>
+  drule_all storage_copy_destination_pair_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK u)` >>
+  `lookup_var vv u = SOME w /\ op_taint tn' (Var vv) = key_taint X slot` by
+    metis_tac[] >>
+  suspend "store"
+QED
+
+Resume storage_copy_store_chunk_path_ptr[store]:
+  `b+32*k < dimword(:256)` by decide_tac >>
+  `gas_path_ptr D 0 ctx fn PG G' tn' u 0 G'
+    (step_taint (mk_inst (id+2) MSTORE [Var dv;Var vv] []) u
+      (mstore (b+32*k) w u) tn')
+    (OK (mstore (b+32*k) w u with vs_inst_idx := SUC u.vs_inst_idx))` by
+    (qsuff_tac `gas_path_ptr D 0 ctx fn PG G' tn' u 0 G'
+       (step_taint (mk_inst (id+2) MSTORE [Var dv;Var vv] []) u
+         (mstore (w2n (n2w (b+32*k):bytes32)) w u) tn')
+       (OK (mstore (w2n (n2w (b+32*k):bytes32)) w u with vs_inst_idx := SUC u.vs_inst_idx))`
+     >- simp[] >>
+     irule storage_copy_mstore_path_ptr >> simp[eval_operand_def] >>
+     qexistsl_tac [`bb`, `n2w (b+32*k)`] >> simp[]) >>
+  `step_taint (mk_inst (id+2) MSTORE [Var dv;Var vv] []) u
+    (mstore (b+32*k) w u) tn' =
+    tn' with t_mem :=
+      (tn'.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
+      {b+32*k+r | r < 32 /\ (slot,r) IN X}` by
+    (`eval_operand (Var dv) u = SOME (n2w (b+32*k)) /\
+      eval_operand (Var vv) u = SOME w` by simp[eval_operand_def] >>
+     qpat_assum `eval_operand (Var dv) u = _`
+       (mp_then Any mp_tac storage_copy_mstore_ghost) >>
+     disch_then drule >> simp[] >>
+     disch_then (qspec_then `id+2` mp_tac) >> simp[]) >>
+  qexistsl_tac [`G'`, `tn'`, `u`] >> simp[] >>
+  drule_all gas_path_ptr_then >> simp[arithmeticTheory.ADD1]
+QED
+
+Finalise storage_copy_store_chunk_path_ptr
