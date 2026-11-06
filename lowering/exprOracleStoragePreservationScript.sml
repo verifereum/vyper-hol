@@ -655,24 +655,21 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_ExtCall]:
         (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
       qpat_x_assum `!s target t. eval_exprs cx (TAKE 1 es) s = (INL target,t) ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >> strip_tac >>
-      Cases_on `eval_expr_results cx (TAKE (LENGTH sig1) (DROP 1 es)) target_st` >>
-      rename1 `eval_expr_results _ _ target_st = (capture_res,capture_st)` >>
+      Cases_on `eval_exprs cx (TAKE (LENGTH sig1) (DROP 1 es)) target_st` >>
+      rename1 `eval_exprs _ _ target_st = (capture_res,capture_st)` >>
       qpat_x_assum `!env0 st0 res0 st0'. well_typed_exprs env0 (TAKE _ (DROP _ es)) /\ _ ==> _`
         drule_all >> strip_tac >>
       Cases_on `capture_res`
       >- (qpat_x_assum `!s target t s1 rs t1. _ ==> _`
             (drule o SIMP_RULE (srw_ss()) []) >> disch_then drule >> strip_tac >>
           `runtime_consistent env cx capture_st` by
-            (qpat_x_assum `runtime_consistent env cx target_st` mp_tac >>
-             simp[runtime_consistent_def] >> strip_tac >>
-             drule_all (cj 1 (SPEC_ALL (cj 11 eval_scc_type_sound_results_mutual))) >>
-             simp[runtime_consistent_def]) >>
+            metis_tac[eval_exprs_preserves_runtime_consistent] >>
           `runtime_storage_consistent env cx capture_st` by
             metis_tac[runtime_storage_consistent_intro, runtime_storage_consistent_layout] >>
           `IS_SOME capture_st.outcomes /\ oracle_storage_ok cx capture_st` by
             (irule oracle_storage_entry_suffix >> qexists_tac `target_st` >> simp[] >>
-             drule eval_expr_results_outcome_suffix >> simp[]) >>
-          qpat_assum `eval_expr_results _ _ target_st = _`
+             drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
+          qpat_assum `eval_exprs _ _ target_st = _`
             (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
           Cases_on `eval_exprs cx (DROP (1 + LENGTH sig1) es) capture_st` >>
           rename1 `eval_exprs _ _ capture_st = (kw_res,kw_st)` >>
@@ -682,12 +679,7 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_ExtCall]:
              drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
           rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
           Cases_on `kw_res` >> gvs[]
-          >- (Cases_on `read_results cx x' kw_st` >>
-              drule read_results_state >> strip_tac >> gvs[] >>
-              rename1 `read_results cx _ kw_st = (read_res,kw_st)` >>
-              Cases_on `read_res` >> gvs[]
-              >- metis_tac[eval_ext_call_oracle_storage_preserved] >>
-              strip_tac >> gvs[]) >>
+          >- metis_tac[eval_ext_call_oracle_storage_preserved] >>
           strip_tac >> gvs[]) >>
       rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
       gvs[LET_THM, bind_apply] >> strip_tac >> gvs[]) >>

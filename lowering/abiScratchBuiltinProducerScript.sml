@@ -138,7 +138,9 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_builtin_effect_def]) >>
   `FLOOKUP actual.vs_allocas outer_id = SOME (q,outer_size)` by
     (qpat_x_assum `!id. id < start.cs_next_id \/ final.cs_next_id <= id ==> _`
-       (qspec_then `outer_id` mp_tac) >> asm_simp_tac bool_ss []) >>
+       (qspec_then `outer_id` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (fn th => pure_rewrite_tac [th]) >> first_assum ACCEPT_TAC) >>
   asm_rewrite_tac[] >> irule abi_scratch_builtin_producer_input >> asm_rewrite_tac[] >>
   qexists_tac `p` >> asm_rewrite_tac[] >>
   qpat_assum `p+_ <= q \/ _` mp_tac >>

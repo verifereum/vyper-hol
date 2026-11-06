@@ -313,9 +313,15 @@ Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  metis_tac[reason_stack_result]
+  Cases_on `(bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type (HD (TL args)))` >> asm_rewrite_tac[]
+  >- (rpt (pairarg_tac >> gvs[]) >>
+      gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+      metis_tac[reason_stack_result]) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ (bop = Eq \/ bop = NotEq)` >> asm_rewrite_tac[]
+  >- (rpt (pairarg_tac >> gvs[]) >>
+      gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+      metis_tac[reason_stack_result]) >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[reason_stack_result]
 QED
 
 Theorem reason_ensure_memory_operand[local]:
