@@ -3,6 +3,9 @@ Theory exprSimAbiDecodeArrayControl
 Ancestors
   exprSimAbiDecodeArrayInvariant exprSimAbiDecodeMemberExecute abiDecoderFiniteControl
   abiDecoderExecution abiDecoderLoopData abiDecoderContract
+  exprSimAbiDecodeOwnedContext exprSimAbiDecodeScratchCover
+  exprSimAbiDecodeSiteProvenance abiDecoderIndexInit
+  venomMemProofs valueEncodingProps valueEncoding finite_map pred_set
   compileEnv venomState venomInst words list arithmetic
 
 Theorem abi_array_ready_position_ready:
@@ -90,4 +93,55 @@ Proof
   `w2n(n2w slot:bytes32) = slot` by simp[w2n_n2w] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all Dreach_backedge >> simp[]
+QED
+
+Theorem abi_array_owned_slot_cover:
+  abi_decode_owned outer scratch d outsz origin /\
+  FLOOKUP origin.vs_allocas idx = SOME(slot,32) /\ idx IN outer ==>
+  {a | slot <= a /\ a < slot+32} SUBSET scratch
+Proof
+  simp[abi_decode_owned_def, abi_decode_scratch_cover_def] >> metis_tac[]
+QED
+
+Theorem abi_array_body_post_source_slot:
+  abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  idx IN outer ==>
+  B+LENGTH bs <= slot \/ slot+32 <= B
+Proof
+  strip_tac >>
+  qhdtm_x_assum `abi_array_body_post` mp_tac >>
+  simp_tac bool_ss [abi_array_body_post_def, abi_array_loop_data_def] >> strip_tac >>
+  ` {a | slot <= a /\ a < slot+32} SUBSET scratch` by
+    metis_tac[abi_array_owned_slot_cover] >>
+  drule abi_array_runtime_source >> strip_tac >>
+  `0 < LENGTH bs` by (fs[abi_array_runtime_context_def] >> decide_tac) >>
+  fs[SUBSET_DEF] >>
+  Cases_on `B <= slot` >> Cases_on `slot < B+LENGTH bs` >>
+  Cases_on `B < slot+32` >> gvs[] >>
+  first_x_assum (qspec_then `MAX B slot` mp_tac) >>
+  simp[MAX_DEF] >> metis_tac[LESS_EQ_REFL, DECIDE ``!x:num. x < x+32``]
+QED
+
+Theorem abi_array_index_outer_site:
+  abi_decode_index_init alloc_st = (ip,loop_st) /\
+  first.cs_next_id <= alloc_st.cs_next_id /\
+  loop_st.cs_next_id <= last.cs_next_id /\
+  abi_decode_sites first.cs_next_id last.cs_next_id SUBSET outer ==>
+  alloc_st.cs_next_id IN outer
+Proof
+  strip_tac >> drule abi_decode_index_init_shape >> strip_tac >>
+  fs[abi_decode_sites_def, SUBSET_DEF] >> first_x_assum irule >> simp[]
+QED
+
+Theorem abi_array_body_post_store_source:
+  abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  idx IN outer ==>
+  bs = mem_bytes_at B (LENGTH bs) (mstore slot w s).vs_memory
+Proof
+  strip_tac >> drule_all abi_array_body_post_source_slot >> strip_tac >>
+  `bs = mem_bytes_at B (LENGTH bs) s.vs_memory` by
+    (fs[abi_array_body_post_def] >> metis_tac[abi_array_runtime_source]) >>
+  metis_tac[mstore_mem_bytes_at_disjoint]
 QED
