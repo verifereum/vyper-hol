@@ -230,3 +230,99 @@ Proof
   BETA_TAC >> rpt conj_tac >>
   metis_tac[first_emission_mod_names, first_emission_powmod256_names]
 QED
+
+Theorem first_emission_expr_body[local]:
+  (!ce ty e a x b. f ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!ce rt ty bi es a x b. g ce rt ty bi es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!ce vt ty tb rt es a x b. h ce vt ty tb rt es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!ce ty e a. cs_extends a (SND (f ce ty e a)) /\
+    EVERY (isPREFIX "@") (added_labels a (SND (f ce ty e a)))) ==>
+  !ce ty e a x b. compile_expr_body f g h ce ty e a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >>
+  `!ce ty e. cs_appends (f ce ty e)` by
+    (rw[cs_appends_def] >> metis_tac[pairTheory.SND]) >>
+  rpt gen_tac >> Cases_on `e`
+  >~ [`TopLevelName _ _`] >- metis_tac[first_emission_expr_toplevelname]
+  >~ [`IfExp _ _ _ _`] >- (strip_tac >> irule first_emission_expr_ifexp >>
+      goal_assum (drule_at Any) >> simp[] >> first_assum ACCEPT_TAC)
+  >~ [`Pop _ _`] >- (drule first_emission_expr_pop >> metis_tac[])
+  >~ [`Builtin _ _ _`] >- (drule first_emission_expr_builtin >> metis_tac[])
+  >~ [`StructLit _ _ _`] >- (strip_tac >> drule first_emission_expr_structlit >>
+      disch_then drule >> metis_tac[]) >>
+  simp_tac (srw_ss()) [compile_expr_body_def, LET_THM]
+  >~ [`compile_name_vv _ _ _ _`] >- metis_tac[first_emission_name_vv]
+  >~ [`compile_literal_vv _ _ _`] >- metis_tac[first_emission_literal_vv]
+  >~ [`compile_subscript _ _ _ _ _ _ _`] >- (drule first_emission_subscript >> metis_tac[])
+  >~ [`compile_attribute _ _ _ _ _ _ _`] >- (strip_tac >>
+      irule (INST_TYPE [alpha |-> ``:type``] first_emission_attribute) >>
+      goal_assum (drule_at Any) >> metis_tac[])
+  >~ [`compile_call _ _ _ _ _ _ _ _`] >- (strip_tac >>
+      drule (INST_TYPE [alpha |-> ``:type``, beta |-> ``:expr option``] first_emission_call) >>
+      disch_then drule >> simp[]) >>
+  simp[cs_extends_refl] >> metis_tac[]
+QED
+
+Theorem first_emission_compile_expr:
+  (!ce ty e a x b. compile_expr ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!ce rt ty bi es a x b. compile_builtin_dispatch ce rt ty bi es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!ce vt ty tb rt es a x b. compile_type_builtin_dispatch ce vt ty tb rt es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)))
+Proof
+  ho_match_mp_tac compile_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[compile_expr_raw_def] >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> rpt gen_tac >> strip_tac
+  >~ [`compile_expr_body _ _ _ _ _ _ _`] >-
+    (irule first_emission_expr_body >> goal_assum (drule_at Any) >> rpt conj_tac
+     >- (match_mp_tac first_emission_expr_child_callback >> metis_tac[])
+     >- (rpt gen_tac >> irule expr_child_callback_labels >> simp[compile_expr_labels])
+     >- (match_mp_tac first_emission_builtin_child_callback >> metis_tac[]) >>
+     match_mp_tac first_emission_type_child_callback >> metis_tac[])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ _ _ _`] >-
+    (irule first_emission_builtin_dispatch >> goal_assum (drule_at Any) >>
+     match_mp_tac first_emission_expr_child_callback >> metis_tac[]) >>
+  irule first_emission_type_builtin_dispatch >> goal_assum (drule_at Any) >>
+  match_mp_tac first_emission_expr_child_callback >> metis_tac[]
+QED
