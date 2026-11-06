@@ -213,6 +213,14 @@ Proof
        FLOOKUP_UPDATE]
 QED
 
+Theorem alloca_step_operand_prov:
+  (!x. op = Var x ==> x <> out) ==>
+  op_prov (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u) op =
+  op_prov G op
+Proof
+  Cases_on `op` >> simp[op_prov_def, step_prov_other_output, mk_inst_def]
+QED
+
 Theorem alloca_step_source_vv:
   stmt_state_rel ctx fn cenv cx es s /\
   vv_at cenv cx ty sa sb es raw vv s /\
@@ -228,6 +236,7 @@ Proof
   >- (gvs[ptr_vv_ok_def, vv_operand_def] >>
       gvs[ptr_val_ok_def] >>
       conj_tac >- metis_tac[alloca_step_operand_taint] >>
+      conj_tac >- metis_tac[alloca_step_operand_prov] >>
       strip_tac >> irule alloca_step_source_memory >> simp[] >>
       rpt gen_tac >> disch_tac >>
       qpat_assum `vv_at _ _ _ _ _ _ _ _ _`
