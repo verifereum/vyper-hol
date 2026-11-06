@@ -27,7 +27,10 @@ Theorem return_word_consumer[local]:
     (ee with gas_obs := tail) (INR (ReturnException v))
     (IntRet <|iret_values := [typed_val_to_w256 ret_tv v]; iret_adopt_fmp := NONE|> t))
 Proof
-  strip_tac >> fs[expr_post_def, expr_val_rel_def] >>
+  strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
+  fs[expr_post_def, expr_val_rel_def] >>
   rename1 `eval_operand op t = SOME w` >>
   `w = typed_val_to_w256 ret_tv v` by metis_tac[] >>
   `?pc. lookup_var rpc t = SOME pc` by

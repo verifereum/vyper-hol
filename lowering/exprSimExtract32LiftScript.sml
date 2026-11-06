@@ -31,6 +31,11 @@ Proof
   conj_tac
   >- (gvs[expr_val_at_def] >> simp[drop_fresh_def] >> metis_tac[]) >>
   conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `_ <> _ ==> expr_val_own _ _ _ _ _ _ _ _ _` drule >>
+      `(drop_fresh sm s).vs_allocas = s.vs_allocas` by simp[drop_fresh_def] >>
+      simp[expr_val_own_def]) >>
+  conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
       simp[lookup_var_drop_fresh] >> metis_tac[]) >>
@@ -82,6 +87,13 @@ Proof
           first_assum MATCH_ACCEPT_TAC) >>
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`n`,`b`,`sz`] >> simp[]) >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `_ <> _ ==> expr_val_own _ _ _ _ _ _ _ _ _` drule >>
+      simp[expr_val_own_def] >> rpt strip_tac >>
+      first_x_assum drule_all >> strip_tac >> qexists_tac `w` >> simp[] >>
+      disj1_tac >> qexistsl_tac [`aid`,`b`,`sz`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
   conj_tac >- metis_tac[] >>
   irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
 QED
@@ -155,6 +167,8 @@ Proof
   strip_tac >> drule_all extract32_prepare_post_arbitrary >>
   disch_then (qx_choose_then `u` (qx_choose_then `p` strip_assume_tac)) >>
   drule_all extract32_prepare_run_path >> strip_tac >>
+  `post_value_type cenv src = expr_type src` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`,`p`] >>
   simp[] >>
   conj_tac

@@ -93,8 +93,8 @@ QED
 Theorem rest_word_array_memory_load_mem_ok:
   vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
-  expr_type e = ArrayT ty bd /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
+  post_value_type cenv e = ArrayT ty bd /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et bd) /\
   eval_operand (vv_operand vv) s = SOME w /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et bd) (ArrayV av) /\
@@ -119,8 +119,8 @@ QED
 Theorem rest_word_array_memory_header_mem_ok:
   vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
-  expr_type e = ArrayT ty (Dynamic cap) /\
-  evaluate_type (get_tenv cx) (expr_type e) =
+  post_value_type cenv e = ArrayT ty (Dynamic cap) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) =
     SOME (ArrayTV et (Dynamic cap)) /\
   eval_operand (vv_operand vv) s = SOME w /\
   context$compile_ptr_load ctor imm LocMemory addr sa = (op,sb) /\

@@ -15,19 +15,11 @@
  *     its operands' judgments
  *
  * ADMITTED:
- *   vv_post_storage_live — what the conjunct
- *     (~expr_has_effect e ==> vv_storage_live cx vv es' s) that vv_post_def
- *     is to gain gives, written out: an effect-free operand's storage or
- *     transient pointer reads live slots at es'.  It lets a storage or
- *     transient positional operand, read only after the later operands,
- *     still read live slots.  Held for the posts-interface round after the
- *     branch merge, which adds the conjunct to vv_post_def; then it
- *     follows from vv_post_def.
  *   vv_post_pure_memory_frame — an effect-free operand's fragment keeps
  *     the live locals' bytes and writes memory only inside its own
  *     allocations.  It lets a positional memory
  *     or immutable operand, read only after the later operands, keep its
- *     value.  Held for the same posts-interface round.
+ *     value.  Held for the posts-interface round.
  *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
@@ -67,9 +59,7 @@ Theorem vv_post_storage_live:
     (p.ptr_location = LocTransient ==>
      storage_read_live cx T (get_storage cx es' T) w tvt)
 Proof
-  (* Held for the posts-interface round: follows from vv_post_def once it
-     has the vv_storage_live conjunct. *)
-  cheat
+  rpt strip_tac >> gvs[vv_post_def] >> metis_tac[]
 QED
 
 (* An effect-free operand's fragment pops no scope and writes memory only

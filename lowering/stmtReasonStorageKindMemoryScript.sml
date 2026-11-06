@@ -340,9 +340,11 @@ Proof
      simp[vv_operand_def]) >>
   `vv_post ctx func cenv cx se es sa sm s0 ee (Value (StringV str))
      (LocatedValue ty p) t` by metis_tac[vv_post_read_result] >>
+  `post_value_type cenv se = BaseT (StringT n)` by
+    simp[post_value_type_bytestring, is_bytestring_type_def] >>
   `ty = BaseT (StringT n)` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
-     simp[vv_post_def, vv_holds_def]) >>
+     simp[vv_post_def, vv_holds_def] >> rpt strip_tac >> gvs[]) >>
   qpat_x_assum `ty = _` SUBST_ALL_TAC >>
   qabbrev_tac `tr = (p.ptr_location = LocTransient)` >>
   `(if tr then LocTransient else LocStorage) = p.ptr_location` by
