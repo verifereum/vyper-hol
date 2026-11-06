@@ -83,7 +83,9 @@ Theorem tuple_target_local_word_head_path_ptr:
       (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
         op_taint tn' (Var x) = op_taint tn (Var x)) /\
       gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
-      tn'.t_mem SUBSET tn.t_mem
+      tn'.t_mem SUBSET tn.t_mem /\
+      (!i. ~(w2n dw <= i /\ i < w2n dw + 32) ==>
+        (i IN tn'.t_mem <=> i IN tn.t_mem))
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[tuple_target_aligned_local, tuple_target_layout_local] >>
