@@ -38,8 +38,14 @@ revision. It backports two upstream fixes that the HOL lowering follows:
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
 
-Only fixtures with external calls that take arguments change. The
-provenance's `vyper_commit` names the unpatched base revision.
+Only fixtures with external calls that take arguments change.
+
+It also carries the effects-table part of vyperlang/vyper#5345 (not merged
+yet): `create` and `create2` write memory in `vyper/venom/effects.py`, as
+`call` does, matching the HOL `write_effects`. No memory read is then
+scheduled above a creation.
+
+The provenance's `vyper_commit` names the unpatched base revision.
 
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
 `evm_version="prague"` (`ORACLE_EVM_VERSION`), the newest version the pinned
