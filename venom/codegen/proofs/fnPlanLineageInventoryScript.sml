@@ -5504,3 +5504,16 @@ Proof
   rpt strip_tac >> gvs[stack_dup_def, MEM_SNOC] >>
   metis_tac[stack_peek_mem]
 QED
+
+(* Exact copy of regularPostfixSim.popmany_plan_top_singleton;
+   importing that simulation theory would cross the planner-leaf boundary. *)
+Theorem popmany_plan_top_singleton:
+  stack_get_depth v ps.ps_stack = SOME 0 ==>
+  popmany_plan [v] ps =
+    ([SOPop 1], ps with ps_stack := stack_pop 1 ps.ps_stack)
+Proof
+  strip_tac >>
+  simp[popmany_plan_def, is_contiguous_top_def, popmany_individual_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF]
+QED

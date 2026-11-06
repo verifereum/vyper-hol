@@ -2,7 +2,7 @@ Theory fnPlanLineageStageAudit
 Ancestors
   fnPlanLineageInventory fnPlanLineageReplay fnPlanLineageSuffix planWf
   fnPlanLineageEntryProbe
-  stackPlanGen stackPlanOps stackModel venomInst
+  stackPlanGen stackPlanOps stackModel venomInst list rich_list
 Libs wordsLib
 
 (* These are local stage-interface tests, not reachable-ready-program claims. *)
@@ -1251,3 +1251,106 @@ Proof
     deep_origin_incoming_left,deep_origin_incoming_right,deep_origin_targets,
     deep_origin_branch_live_vars] >> EVAL_TAC
 QED
+
+(* Output shadow acceptance: p is arbitrary, including copies of out.
+   Pushing creates a nearer occurrence; removing it does not search p. *)
+Theorem output_shadow_push_pop:
+  !ps p core out.
+    popmany_plan [Var out]
+      (ps with ps_stack := stack_push (Var out) (p ++ core)) =
+    ([SOPop 1], ps with ps_stack := p ++ core)
+Proof
+  rpt gen_tac >>
+  `stack_get_depth (Var out) (stack_push (Var out) (p ++ core)) = SOME 0` by
+    simp[stack_get_depth_def, stack_push_def, listTheory.REVERSE_SNOC, stack_find_def] >>
+  `stack_get_depth (Var out)
+     (ps with ps_stack := stack_push (Var out) (p ++ core)).ps_stack = SOME 0` by
+    simp[] >>
+  drule popmany_plan_top_singleton >>
+  simp[stack_pop_def, stack_push_def, rich_listTheory.TAKE_SNOC,
+       TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+QED
+
+(* The scheduled live value is physically in the suffix. The prefix may
+   contain BOTH the scheduled name and the new output name. *)
+Theorem output_shadow_optimistic_core_hit:
+  !ps p a out.
+    a <> out /\ ~operand_equiv dfg_empty (Var out) (Var a) ==>
+    optimistic_swap_plan dfg_empty (mk_inst 0 ISZERO [] [out]) [a] F
+      (ps with ps_stack := p ++ [Var a; Var out]) =
+    ([SOSwap 1], ps with ps_stack := p ++ [Var out; Var a])
+Proof
+  rpt strip_tac >>
+  simp[optimistic_swap_plan_def, mk_inst_def,
+       stack_get_depth_def, REVERSE_APPEND, stack_find_def,
+       do_swap_def, stack_swap_def, top_n_def, stack_pop_def,
+       TAKE_APPEND, DROP_APPEND, stack_push_def, stack_peek_def,
+       EL_APPEND2, LUPDATE_APPEND2, LUPDATE_def] >>
+  EVAL_TAC
+QED
+
+(* Output-shadow consumer ledger (refines the earlier exclusion audit).
+
+   output_shadow_push_pop is symbolic in the entire prefix AND old core,
+   with no output absence premise anywhere. In particular p=[Var out] and
+   an out-free core give the requested stale runtime output test. The
+   newly inserted output shields its own singleton dead-output pop. The
+   resulting operations and allocator are identical for any p and q; only
+   the untouched lower stacks differ. This is not total output uniqueness.
+   For several distinct outputs the analogous removal needs occurrence
+   shielding at each sequential request; the old DISJOINT-prefix inventory
+   pop lemmas do not supply that result when prefixes contain outputs.
+   We do NOT claim a general multi-output replay theorem from this test.
+
+   Post-emission stage        canonical counts / core / runtime observations
+   ----------------------------------------------------------------------
+   MAP Var outputs push      For counts at most one in core, outputs distinct
+                             and absent from core suffice. The common spill
+                             domain must also lack outputs for core+spill
+                             resource at most one. A runtime stale copy in p
+                             adds to TOTAL count, not the common-core count.
+                             Push itself does not inspect spills or prefix.
+   dead-output pop           Actual singleton output pop is shielded by the
+                             just-pushed top occurrence, as checked above.
+                             No spill absence is needed for the operation.
+                             Canonical resource accounting still needs the
+                             separate count boundary, not just this frame.
+   optimistic swap           Disabled tests use only shared inst/nl/term/dfg.
+                             Enabled branch queries Var(LAST nl), NOT outputs
+                             in general. output_shadow_optimistic_core_hit
+                             checks the hit case with arbitrary prefix copies
+                             of BOTH query and output. Its non-equivalence
+                             premise selects the actual swap branch; equiv
+                             selects a no-op independently of stack/prefix.
+                             Mere common spill availability is insufficient:
+                             LowerPrefix.optimistic_swap_prefix_obstruction
+                             already checks the absent-core countercase.
+                             StageAudit.optimistic_producer_spills_query_probe,
+                             enabled_query_probe, native_ops_probe strengthen
+                             it through actual preparation: a formerly core
+                             query can be spilled, exposing a hidden live name.
+                             Therefore initial core-hit coverage alone is NOT
+                             a preservation theorem for this tail consumer.
+   release_dead_spills        Shared maps and allocators give same deletion
+                             list and frees. Stack is untouched. Reuse Setup's
+                             release_fold_stack_update (implementation frame)
+                             and Inventory.release_dead_spills_stack. Output
+                             absence from spills matters for resource bounds,
+                             not equality of the two release computations.
+   successor cleanup         Not part of regular tail, but next block setup.
+                             Reuse Inventory.clean_stack_plan_prefix_replay:
+                             its layout/input depth and branch-coordination
+                             premises remain required. Core-relative output
+                             freshness alone says nothing about them. Cleanup
+                             can inspect residual names and total LENGTH.
+
+   Conclusion limited to this test: TOTAL runtime output absence is not
+   needed by push or a just-created singleton dead-output pop, and need not
+   be postulated merely to frame these operations. Core-relative freshness
+   is adequate for the proposed core resource count, provided spill absence
+   is separately produced. Full replay still requires query shielding after
+   selective spill, multi-output pop shielding, cleanup branch coordination,
+   common spill/allocator layout, and the canonical resource producers. None
+   follows from SSA alone or from an arbitrary equal suffix. These local
+   observations do not certify reachability or refute the frozen theorem.
+*)
