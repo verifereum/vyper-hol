@@ -481,21 +481,21 @@ Proof
 QED
 
 Theorem external_query_bounds_counted_ok:
+  step_inst_base
+    (mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var)) wl s) ==>
   emit_op opc ops sa = (limit,sc) /\ fn_has_code sa sc fn /\
   MEM opc [CALLDATASIZE; CODESIZE; EXTCODESIZE] /\ LENGTH ops <= 1 /\
   (!arg. MEM arg ops ==> op_taint tn arg = {}) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base
-    (mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]) s =
-    OK (update_var (STRING #"%" (toString sa.cs_next_var)) wl s) /\
   fresh_vars_wrt sa s /\
   compile_assert_slice_bounds start len limit sc = ((),sd) /\ fn_has_code sc sd fn /\
   eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
   (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  q = (update_var (STRING #"%" (toString sa.cs_next_var)) wl s) with
-    vs_inst_idx := SUC s.vs_inst_idx /\
-  run_inst_seq (emitted_insts sc sd) q = OK u ==>
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString sa.cs_next_var)) wl s) with
+      vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
   ?r H tm.
     r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK r) /\
@@ -511,7 +511,7 @@ Theorem external_query_bounds_counted_ok:
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
-  strip_tac >> drule_all emit_external_size_counted >>
+  ntac 2 strip_tac >> drule_all emit_external_size_counted >>
   disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts sc sd) t = OK u` by gvs[] >>
   `fresh_vars_wrt sc t /\ eval_operand start t = SOME wa /\
@@ -547,3 +547,4 @@ Proof
   qexistsl_tac [`r`,`G''`,`tn''`] >>
   simp[Abbr `r`, fresh_vars_wrt_def] >> fs[fresh_vars_wrt_def]
 QED
+
