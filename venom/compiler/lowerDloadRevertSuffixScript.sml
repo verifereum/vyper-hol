@@ -392,3 +392,113 @@ Proof
   disch_then irule >> simp[]
 QED
 
+
+Theorem ld_revert_segment_middle[local]:
+  bb.bb_instructions = pre ++ copy::(mid ++ rev::post) ==>
+  ((!k inst. LENGTH pre < k /\ k < LENGTH pre + SUC (LENGTH mid) /\
+      get_instruction bb k = SOME inst ==> inst.inst_opcode = ASSIGN) <=>
+   EVERY (\i. i.inst_opcode = ASSIGN) mid)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> simp[EVERY_EL] >> rpt strip_tac >>
+      first_x_assum irule >>
+      qexists_tac `LENGTH pre + SUC n` >>
+      simp[get_instruction_def, EL_APPEND_EQN, EL_CONS] ) >>
+  simp[EVERY_EL] >> rpt strip_tac >>
+  `?n. k = LENGTH pre + SUC n /\ n < LENGTH mid` by
+    (qexists_tac `k - SUC (LENGTH pre)` >> decide_tac) >>
+  gvs[get_instruction_def, EL_APPEND_EQN, EL_CONS]
+QED
+
+Theorem ld_revert_pair_segment_iff:
+  bb.bb_instructions = pre ++ [copy] ++ mid ++ [rev] ++ post ==>
+  (revert_forward_pair bb (LENGTH pre) (LENGTH pre + SUC (LENGTH mid)) <=>
+   EVERY (\i. i.inst_opcode = ASSIGN) mid /\
+   ?p src rds p' rds'.
+    copy.inst_opcode = RETURNDATACOPY /\ copy.inst_operands = [p;src;rds] /\
+    rev.inst_opcode = REVERT /\ rev.inst_operands = [p';rds'] /\
+    same_after_assigns (REVERSE pre) src (Lit 0w) /\
+    same_after_assigns (REVERSE pre) p (resolve_block_assigns (REVERSE mid) p') /\
+    same_after_assigns (REVERSE pre) rds (resolve_block_assigns (REVERSE mid) rds'))
+Proof
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> strip_tac >>
+  `TAKE (LENGTH pre) bb.bb_instructions = pre` by simp[TAKE_APPEND] >>
+  `DROP (SUC (LENGTH pre)) bb.bb_instructions = mid ++ rev::post` by
+    simp[GSYM ADD1, DROP_APPEND] >>
+  `LENGTH pre + SUC (LENGTH mid) - SUC (LENGTH pre) = LENGTH mid` by decide_tac >>
+  `TAKE (LENGTH mid) (mid ++ rev::post) = mid` by simp[TAKE_APPEND] >>
+  `get_instruction bb (LENGTH pre) = SOME copy` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  `get_instruction bb (LENGTH pre + SUC (LENGTH mid)) = SOME rev` by
+    simp[get_instruction_def, EL_APPEND_EQN, EL_CONS] >>
+  drule ld_revert_segment_middle >> strip_tac >>
+  pure_rewrite_tac[revert_forward_pair_def] >> asm_rewrite_tac[] >> simp[]
+QED
+
+Theorem ld_lower_revert_pair_supported:
+  revert_forward_pair bb i j /\
+  EVERY (\v. MEM v q.irs_used_vars)
+    (FLAT (MAP inst_ir_vars bb.bb_instructions)) /\
+  lower_dload_block_supply q bb = (dst,qe) ==>
+  ?before qi.
+    lower_dload_insts_supply q (TAKE i bb.bb_instructions) = (before,qi) /\
+    revert_forward_pair dst (LENGTH before) (LENGTH before + (j-i))
+Proof
+  strip_tac >> drule ld_revert_pair_segment >> strip_tac >>
+  `i < j` by metis_tac[revert_forward_pair_def] >>
+  `j-i = SUC (LENGTH mid)` by decide_tac >>
+  `bb.bb_instructions = pre ++ [copy] ++ mid ++ [rev] ++ post` by
+    (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     qpat_assum `bb.bb_instructions = _` ACCEPT_TAC) >>
+  drule ld_revert_pair_segment_iff >>
+  `j = LENGTH pre + SUC (LENGTH mid)` by decide_tac >>
+  qpat_x_assum `LENGTH mid = _` kall_tac >>
+  qpat_x_assum `LENGTH pre = i` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `j = _` SUBST_ALL_TAC >>
+  asm_rewrite_tac[] >> strip_tac >>
+  Cases_on `lower_dload_insts_supply q pre` >>
+  rename1 `lower_dload_insts_supply q pre = (before,qi)` >>
+  Cases_on `lower_dload_insts_supply qi post` >>
+  rename1 `lower_dload_insts_supply qi post = (after,qf)` >>
+  drule_all ld_lower_revert_segment >> strip_tac >>
+  `dst.bb_instructions = before ++ [copy] ++ mid ++ [rev] ++ after` by
+    (qpat_x_assum `lower_dload_block_supply _ _ = _` mp_tac >>
+     pure_rewrite_tac[lower_dload_block_supply_def] >>
+     qpat_assum `bb.bb_instructions = pre ++ copy::_` SUBST1_TAC >>
+     asm_rewrite_tac[] >> strip_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> gvs[]) >>
+  qexistsl_tac [`before`, `qi`] >> conj_tac
+  >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[TAKE_APPEND]) >>
+  qpat_x_assum `EVERY _ (FLAT (MAP inst_ir_vars bb.bb_instructions))` mp_tac >>
+  qpat_assum `bb.bb_instructions = pre ++ copy::_` (fn th => pure_rewrite_tac[th]) >>
+  pure_rewrite_tac[MAP_APPEND, MAP, FLAT_APPEND, FLAT, EVERY_APPEND, EVERY_DEF] >>
+  strip_tac >>
+  qpat_x_assum `bb.bb_instructions = _` kall_tac >>
+  qpat_x_assum `bb.bb_instructions = _` kall_tac >>
+  drule ld_revert_pair_segment_iff >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  `EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [p]) /\
+   EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [src]) /\
+   EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [rds]) /\
+   EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [p']) /\
+   EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [rds'])` by
+    (fs[inst_ir_vars_def, inst_uses_def] >>
+     Cases_on `p` >> Cases_on `src` >> Cases_on `rds` >>
+     Cases_on `p'` >> Cases_on `rds'` >>
+     gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  `EVERY (\v. MEM v q.irs_used_vars)
+      (venomInst$operand_vars [resolve_block_assigns (REVERSE mid) p']) /\
+   EVERY (\v. MEM v q.irs_used_vars)
+      (venomInst$operand_vars [resolve_block_assigns (REVERSE mid) rds'])` by
+    (conj_tac >> irule ld_resolve_block_assigns_support >>
+     fs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[MEM_REVERSE]) >>
+  simp[] >> rpt conj_tac >> irule ld_insts_supply_same_after_assigns >>
+  qexistsl_tac [`q`, `qi`, `pre`] >>
+  simp[] >>
+  `!x y. venomInst$operand_vars [x;y] =
+      venomInst$operand_vars [x] ++ venomInst$operand_vars [y]` by
+    (rpt gen_tac >> Cases_on `x` >>
+     simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  asm_rewrite_tac[] >>
+  simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
+QED
