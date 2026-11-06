@@ -285,13 +285,6 @@ Proof
        stack_swap_def, LENGTH_LUPDATE, LUPDATE_MAP, EL_MAP]
 QED
 
-Theorem stack_pop_bottom_extension:
-  !n prefix core. n <= LENGTH core ==>
-    stack_pop n (prefix ++ core) = prefix ++ stack_pop n core
-Proof
-  rpt strip_tac >> simp[stack_pop_def, TAKE_APPEND]
-QED
-
 Theorem phi_origin_write_suffix_projection:
   !left keep d ret prefix cells.
     d < LENGTH cells ==>

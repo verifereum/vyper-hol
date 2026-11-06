@@ -2354,6 +2354,37 @@ Proof
   irule reorder_plan_bottom_frame >> simp[]
 QED
 
+(* General list boundary moved from fnPlanLineagePhiTemporal. *)
+Theorem stack_pop_bottom_extension:
+  !n prefix core. n <= LENGTH core ==>
+    stack_pop n (prefix ++ core) = prefix ++ stack_pop n core
+Proof
+  rpt strip_tac >> simp[stack_pop_def, TAKE_APPEND]
+QED
+
+Theorem emit_reorder_consume_bottom_frame:
+  !opc inputs nl ps iops ps1 dfg targets rops ps2 prefix n.
+    emit_input_plan opc inputs nl ps = (iops,ps1) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    EVERY (\op. ~is_var_operand op) prefix /\
+    EVERY (\op. ~MEM op prefix) targets /\
+    LENGTH targets <= LENGTH inputs /\
+    reorder_plan dfg targets ps1 = (rops,ps2) /\
+    n <= LENGTH targets ==>
+    LENGTH targets <= LENGTH ps2.ps_stack /\
+    emit_input_plan opc inputs nl (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (iops,ps1 with ps_stack := prefix ++ ps1.ps_stack) /\
+    reorder_plan dfg targets (ps1 with ps_stack := prefix ++ ps1.ps_stack) =
+      (rops,ps2 with ps_stack := prefix ++ ps2.ps_stack) /\
+    stack_pop n (prefix ++ ps2.ps_stack) = prefix ++ stack_pop n ps2.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all emit_reorder_plan_bottom_frame >> strip_tac >>
+  drule_all reorder_plan_target_length >> strip_tac >>
+  simp[] >> irule stack_pop_bottom_extension >> decide_tac
+QED
+
 Theorem reorder_plan_marker_core_inventory:
   !ps m core base pending dfg ops qs.
     ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
