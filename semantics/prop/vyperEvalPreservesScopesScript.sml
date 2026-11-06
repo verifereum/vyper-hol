@@ -2358,12 +2358,6 @@ Resume eval_preserves_tv_with_results[IntCall_ptv]:
   qpat_x_assum `do _ od _ = _` mp_tac >>
   simp_tac std_ss [bind_apply, get_scopes_def, return_def] >>
   BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac read_results_state >>
-  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >- (
-    strip_tac >> gvs[] >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (
     strip_tac >> gvs[] >>
@@ -2395,11 +2389,10 @@ Resume eval_preserves_tv_with_results[IntCall_ptv]:
      eval_stmts (cx with stk updated_by CONS (src_id_opt, fn)) body' st = (res,st') ==>
      preserves_tv (cx with stk updated_by CONS (src_id_opt, fn)) st st'` by (
     rpt strip_tac >>
-    qpat_x_assum `!a b c d e f. _`
-      (qspecl_then [`r`, `x'4'`, `r'`, `r'`, `r'`] mp_tac) >>
-    simp[] >> disch_then drule_all >> simp[]
+    first_x_assum irule >>
+    rpt (first_assum (irule_at Any)) >> simp[] >>
+    qexistsl_tac [`r'' with scopes := r'.scopes`, `r'`, `r'`] >> simp[]
   ) >>
-  qpat_x_assum `!a b c d e f. _` kall_tac >>
   qmatch_asmsub_rename_tac
     `lift_option_type (bind_arguments _ _ _) _ _ = (INL call_env,_)` >>
   qmatch_asmsub_rename_tac

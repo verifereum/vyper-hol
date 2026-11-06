@@ -312,8 +312,10 @@ Proof
   simp DIRECT_CALL_SIMP >> CONV_TAC cv_eval
 QED
 
-(* Positional arguments retain their locations through later positional and
-   keyword effects. The value keyword is evaluated before ABI encoding. *)
+(* Each positional argument is read as it is evaluated, before later
+   positional and keyword arguments pop the array (Vyper 0.5.0b1
+   snapshot_value_for_delayed_use). The value keyword is evaluated before ABI
+   encoding. *)
 Definition extcall_argument_state_def:
   extcall_argument_state = empty_state with
     <|outcomes := SOME [];
@@ -384,32 +386,7 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem extcall_argument_positional_read[local]:
-  let s2 = extcall_argument_state with scopes :=
-     [FEMPTY |+ ("d", <|assignable := T;
-       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
-       value := ArrayV (DynArrayV []);
-       popped := [([ValueSubscript (IntV 0)],IntV 1);
-                  ([ValueSubscript (IntV 1)],IntV 2)]|>)] in
-  read_results empty_evaluation_context
-    [PlaceR (MemoryPlace "d" []);
-     PlaceR (MemoryPlace "d" [ValueSubscript (IntV 1)])] s2 =
-  (INL [ArrayV (DynArrayV []);IntV 2],s2)
-Proof
-  simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
-  CONV_TAC cv_eval
-QED
-
-Theorem extcall_argument_calldata[local]:
-  IS_SOME (build_ext_calldata FEMPTY "f"
-    [ArrayT (BaseT (UintT 256)) (Dynamic 3); BaseT (UintT 256)]
-    [ArrayV (DynArrayV []); IntV 2])
-Proof
-  CONV_TAC cv_eval
-QED
-
-Theorem external_arguments_read_after_positional_and_keyword_pops:
+Theorem external_arguments_read_before_later_pops:
   FST (eval_expr empty_evaluation_context extcall_argument_expr
     extcall_argument_state) = INR (Error (RevertData [])) /\
   (SND (eval_expr empty_evaluation_context extcall_argument_expr
@@ -417,21 +394,23 @@ Theorem external_arguments_read_after_positional_and_keyword_pops:
       [call_outcome_request 0x99w
         (THE (build_ext_calldata FEMPTY "f"
           [ArrayT (BaseT (UintT 256)) (Dynamic 3); BaseT (UintT 256)]
-          [ArrayV (DynArrayV []); IntV 2]))
+          [ArrayV (DynArrayV [IntV 1; IntV 2]); IntV 2]))
         (SOME 1) empty_state]
 Proof
   simp (extcall_argument_expr_def :: extcall_argument_state_def ::
         FLOOKUP_UPDATE :: get_place_def ::
-        (map (SRULE [LET_THM, extcall_argument_state_def, empty_state_def,
-                     empty_evaluation_context_def])
+        (map (SRULE (LET_THM :: extcall_argument_state_def ::
+                     EXT_CALL_FIXTURE_SIMP))
           [extcall_argument_first_pop, extcall_argument_second_pop,
-           extcall_argument_keyword_read, extcall_argument_positional_read]) @
-        List.filter (fn th => not (aconv (concl th) (concl read_results_def)))
-          EXT_CALL_FIXTURE_SIMP) >>
+           extcall_argument_keyword_read]) @
+        [read_place_def, read_memory_path_def, evaluate_subscripts_def,
+         lift_sum_def, dest_NumV_def, array_index_def, read_popped_def,
+         subscripts_type_def, subscript_type_def, oEL_def] @ EXT_CALL_FIXTURE_SIMP) >>
   Cases_on `build_ext_calldata FEMPTY "f"
     [ArrayT (BaseT (UintT 256)) (Dynamic 3); BaseT (UintT 256)]
-    [ArrayV (DynArrayV []); IntV 2]`
-  >- (mp_tac extcall_argument_calldata >> simp[]) >>
-  gvs (dest_NumV_def :: EXT_CALL_FIXTURE_SIMP) >>
+    [ArrayV (DynArrayV [IntV 1; IntV 2]); IntV 2]` >>
+  pop_assum mp_tac >>
+  CONV_TAC (LAND_CONV (LAND_CONV cv_eval)) >>
+  simp EXT_CALL_FIXTURE_SIMP >> strip_tac >> gvs[] >>
   CONV_TAC cv_eval
 QED

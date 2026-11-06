@@ -1726,11 +1726,11 @@ QED
 Theorem case_expr_ext_call_logs[local]:
   (!s0 r s1. eval_exprs cx (TAKE 1 es) s0 = (r,s1) ==> log_extends s0 s1) /\
   (!s0 target s1. eval_exprs cx (TAKE 1 es) s0 = (INL target,s1) ==>
-    !st res st'. eval_expr_results cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)) st = (res,st') ==>
+    !st res st'. eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)) st = (res,st') ==>
       log_extends st st') /\
   (!s0 target s1 s2 results s3.
     eval_exprs cx (TAKE 1 es) s0 = (INL target,s1) /\
-    eval_expr_results cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)) s2 = (INL results,s3) ==>
+    eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)) s2 = (INL results,s3) ==>
     !st res st'. eval_exprs cx (DROP (1 + LENGTH (FST (SND sig))) es) st = (res,st') ==>
       log_extends st st') ==>
   !st res st'.
@@ -1740,7 +1740,6 @@ Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac read_results_state >> gvs[] >>
   rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
   imp_res_tac eval_ext_call_log_extends >>
@@ -2152,14 +2151,16 @@ Proof
           imp_res_tac lift_option_type_state >>
           gvs[type_check_def, assert_def, return_def, raise_def] >>
           unabbrev_all_tac >> gvs[arithmeticTheory.ADD_COMM] >>
-          `!s0 res s1. eval_expr_results cx es s0 = (res,s1) ==>
+          `!s0 res s1. eval_exprs cx es s0 = (res,s1) ==>
             log_extends s0 s1` by
             (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+          qpat_x_assum `!a b c d e f. _ ==> !st res st'.
+            eval_exprs cx es st = (res,st') ==> _` kall_tac >>
           BasicProvers.TOP_CASE_TAC >>
           `log_extends r r''` by (first_x_assum drule_all >> simp[]) >>
           reverse BasicProvers.TOP_CASE_TAC >-
             (rpt strip_tac >> gvs[]) >>
-          qmatch_asmsub_rename_tac `eval_expr_results cx es r = (INL captured,after_capture)` >>
+          qmatch_asmsub_rename_tac `eval_exprs cx es r = (INL captured,after_capture)` >>
           qmatch_goalsub_abbrev_tac `eval_exprs cxd defaults` >>
           `!s0 res s1. eval_exprs cxd defaults s0 = (res,s1) ==>
             log_extends s0 s1` by
@@ -2173,11 +2174,7 @@ Proof
             (drule intcall_defaults_exact_log_extends >>
              disch_then irule >> first_assum MATCH_ACCEPT_TAC) >>
           `log_extends r after_capture` by
-            (qpat_x_assum `!s0 res s1. eval_expr_results _ _ _ = _ ==> _` drule >> simp[]) >>
-          reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
-          BasicProvers.TOP_CASE_TAC >>
-          imp_res_tac read_results_state >> gvs[] >>
+            (qpat_x_assum `!s0 res s1. eval_exprs _ _ _ = _ ==> _` drule >> simp[]) >>
           reverse BasicProvers.TOP_CASE_TAC >-
             (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
           BasicProvers.TOP_CASE_TAC >>
@@ -2220,14 +2217,15 @@ Proof
           simp[push_function_def, return_def] >>
           BasicProvers.TOP_CASE_TAC >>
           qmatch_asmsub_rename_tac `finally_unless_halt _ _ _ = (body_res,after_body)` >>
-          `log_extends (after_lock with scopes := [x'⁴']) after_body` by
+          qmatch_asmsub_rename_tac `finally_unless_halt _ _ (after_lock with scopes := [body_scope]) = _` >>
+          `log_extends (after_lock with scopes := [body_scope]) after_body` by
             (drule intcall_body_finally_exact_log_extends >>
              disch_then irule >> simp[Abbr `cxd`]) >>
           Cases_on `body_res` >> simp[] >>
           rpt BasicProvers.TOP_CASE_TAC >>
           rpt strip_tac >> imp_res_tac lift_option_type_state >> gvs[] >>
           `log_extends r after_capture` by
-            (qpat_x_assum `!s0 res s1. eval_expr_results _ _ _ = _ ==> _` drule >> simp[]) >>
+            (qpat_x_assum `!s0 res s1. eval_exprs _ _ _ = _ ==> _` drule >> simp[]) >>
           `log_extends after_defaults after_lock` by
             (qpat_x_assum `!s0 res s1. lock _ = _ ==> _` drule >> simp[]) >>
           `log_extends after_lock after_body` by

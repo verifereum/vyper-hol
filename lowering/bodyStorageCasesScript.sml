@@ -834,41 +834,44 @@ Proof
 QED
 
 Theorem body_ext_call_capture_storage:
-  (!r s. eval_expr_results cx es st = (r,s) ==>
+  (!r s. eval_exprs cx es st = (r,s) ==>
     contract_storage_well_formed cx s) /\
-  (!rs s r s'. eval_expr_results cx es st = (INL rs,s) /\
+  (!rs s r s'. eval_exprs cx es st = (INL rs,s) /\
     runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_exprs cx kws s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-  bind (eval_expr_results cx es) (\results.
+  bind (eval_exprs cx es) (\vs.
     bind (eval_exprs cx kws) (\kwargs.
-      bind (read_results cx results) (\vs.
-        eval_ext_call cx static skip_check sig opts (target ++ vs ++ kwargs)))) st =
+      eval_ext_call cx static skip_check sig opts (target ++ vs ++ kwargs))) st =
     (res,st') ==> contract_storage_well_formed cx st'
 Proof
   strip_tac >>
   qpat_x_assum `bind _ _ st = _` mp_tac >>
   simp_tac (srw_ss()) [Once bind_apply] >>
-  Cases_on `eval_expr_results cx es st` >>
-  rename1 `eval_expr_results cx es st = (cap_res,cap_st)` >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (cap_res,cap_st)` >>
   `contract_storage_well_formed cx cap_st` by metis_tac[] >>
   `runtime_consistent env cx cap_st` by
-    (`runtime_consistent env cx st` by
-       metis_tac[runtime_storage_consistent_runtime] >>
-     qpat_x_assum `runtime_consistent env cx st` mp_tac >>
-     simp[runtime_consistent_def] >> strip_tac >>
-     drule_all (cj 1 (SPEC_ALL (cj 11
-       vyperTypeEvalSoundnessTheory.eval_scc_type_sound_results_mutual))) >>
-     simp[runtime_consistent_def]) >>
+    metis_tac[eval_exprs_preserves_runtime_consistent,
+              runtime_storage_consistent_runtime] >>
   `outcome_suffix st.outcomes cap_st.outcomes` by
-    (drule eval_expr_results_outcome_suffix >> simp[]) >>
+    (drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
   drule_all body_oracle_storage_entry_transfer >> strip_tac >>
   Cases_on `cap_res` >> gvs[]
-  >- (rpt strip_tac >> irule body_ext_call_kwargs_storage >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  >- (simp_tac (srw_ss()) [bind_apply] >>
+      Cases_on `eval_exprs cx kws cap_st` >>
+      rename1 `eval_exprs cx kws cap_st = (kw_res,kw_st)` >>
+      `contract_storage_well_formed cx kw_st` by metis_tac[] >>
+      `IS_SOME kw_st.outcomes /\ oracle_storage_ok cx kw_st` by
+        (irule exprOracleStorageInterfacesTheory.oracle_storage_entry_suffix >>
+         qexists_tac `cap_st` >> simp[] >>
+         drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
+      Cases_on `kw_res` >> gvs[]
+      >- metis_tac[vyperOracleCallStorageTheory.eval_ext_call_oracle_storage_preserved] >>
+      rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -878,10 +881,10 @@ Theorem body_eval_ext_call_storage:
   (!target s r s'. eval_exprs cx (TAKE 1 es) st = (INL target,s) /\
     runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\
-    eval_expr_results cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (r,s') ==>
+    eval_exprs cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   (!target s rs s1 r s'. eval_exprs cx (TAKE 1 es) st = (INL target,s) /\
-    eval_expr_results cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (INL rs,s1) /\
+    eval_exprs cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (INL rs,s1) /\
     runtime_storage_consistent env cx s1 /\ IS_SOME s1.outcomes /\
     oracle_storage_ok cx s1 /\
     eval_exprs cx (DROP (1 + LENGTH argtys) es) s1 = (r,s') ==>
@@ -1687,9 +1690,8 @@ Theorem body_eval_intcall_empty_defaults:
   lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
   LENGTH es = LENGTH args ==>
   eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) =
-  (do results <- eval_expr_results cx es;
+  (do vs <- eval_exprs cx es;
       prev <- get_scopes;
-      vs <- read_results cx results;
       call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
         "IntCall bind_arguments";
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
@@ -3135,12 +3137,11 @@ Proof
 QED
 
 Theorem body_intcall_guard_apply:
-  (!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 call_env t3
+  (!s0 vs t0 prev s1 dflt_vs t1 s3 call_env t3
       s4 rtv t4 s5 t5 s6 cxf t6.
-    eval_expr_results cx es s0 = (INL results,t0) /\
+    eval_exprs cx es s0 = (INL vs,t0) /\
     finally (do set_scopes [FEMPTY]; eval_exprs (cx with stk updated_by CONS (NONE,fn)) [] od)
       (set_scopes prev.scopes) s1 = (INL dflt_vs,t1) /\
-    read_results cx results s2 = (INL vs,t2) /\
     lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
       "IntCall bind_arguments" s3 = (INL call_env,t3) /\
     lift_option_type (evaluate_type (get_tenv cx) ret)
@@ -3153,8 +3154,7 @@ Theorem body_intcall_guard_apply:
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')) /\
-  eval_expr_results cx es st = (INL results,args_st) /\
-  read_results cx results args_st = (INL vs,args_st) /\
+  eval_exprs cx es st = (INL vs,args_st) /\
   bind_arguments (get_tenv cx) args vs = SOME call_env /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
   lock_if_nr cx nr (is_view_mut mut) args_st = (INL (),lock_st) /\
@@ -3167,7 +3167,6 @@ Theorem body_intcall_guard_apply:
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')
 Proof
   strip_tac >> first_x_assum match_mp_tac >>
-  goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >>

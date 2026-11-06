@@ -799,7 +799,7 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ∧
-     eval_expr_results cx es s'6 = (INL vs,t'4) ∧
+     eval_exprs cx es s'6 = (INL vs,t'4) ∧
      get_scopes s'7 = (INL prev,t'5) ∧
      set_scopes [FEMPTY] s'8 = (INL x'',t'6) ⇒
      ∀s exc st'.
@@ -820,7 +820,7 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ⇒
-     ∀s exc st'. eval_expr_results cx es s = (INR exc,st') ⇒
+     ∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒
        no_control_exc exc) ⇒
   ∀s exc st'.
     eval_expr cx (Call v16 (IntCall (src_id_opt,fn)) es v17) s =
@@ -841,7 +841,6 @@ Proof
     rpt gen_tac >> strip_tac >>
     step_tac >- (gvs at_mono) >>
     metis_tac[])
-  >> step_tac >- metis_tac[read_results_no_control]
   >> pop_assum mp_tac
   >> PURE_ONCE_REWRITE_TAC[GSYM DE_MORGAN_THM]
   >> strip_tac >> drule int_call_tail_no_control >> simp[]

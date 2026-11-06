@@ -258,7 +258,7 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `!s t s1 ts t1 s2 tup t2 s3 t3. _ ==>
-       !st res st'. eval_expr_results cx es st = (res,st') ==> _`
+       !st res st'. eval_exprs cx es st = (res,st') ==> _`
     (mp_tac o SRULE [type_check_def, assert_def, lift_option_type_def,
                      option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   disch_then assume_tac >>

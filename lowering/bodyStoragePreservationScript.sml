@@ -741,8 +741,8 @@ Resume body_oracle_storage_mutual[intcall_live]:
   drule_all body_eval_intcall_empty_defaults >>
   disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   simp_tac bool_ss [bind_def, ignore_bind_def] >>
-  Cases_on `eval_expr_results cx es st` >>
-  rename1 `eval_expr_results cx es st = (args_res,args_st)` >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
     (irule call_evaluation_safe_mono >>
      qexists_tac `(NONE,fn)::int_calls_exprs es` >> simp[]) >>
@@ -758,35 +758,26 @@ Resume body_oracle_storage_mutual[intcall_live]:
 QED
 
 Resume body_oracle_storage_mutual[intcall_args_success]:
-  rename1 `eval_expr_results cx es st = (INL actual_results,args_st)` >>
+  rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
   `runtime_consistent env cx st` by
     metis_tac[runtime_storage_consistent_runtime] >>
   `runtime_consistent env cx args_st` by
-    (fs[runtime_consistent_def] >>
-     drule_all (cj 1 (SPEC_ALL (cj 11 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_results_mutual))) >> simp[]) >>
-  `expr_results_typed (env,cx,args_st) es actual_results` by
+    metis_tac[eval_exprs_preserves_runtime_consistent] >>
+  `exprs_runtime_typed env es vs` by
     (qpat_assum `runtime_consistent env cx st`
        (strip_assume_tac o SRULE [runtime_consistent_def]) >>
-     drule_all (cj 1 (SPEC_ALL (cj 11 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_results_mutual))) >> simp[]) >>
+     drule_all (cj 1 (SPEC_ALL (cj 6 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_mutual))) >> simp[]) >>
   `runtime_storage_consistent env cx args_st /\
    IS_SOME args_st.outcomes /\ oracle_storage_ok cx args_st` by
     (irule body_oracle_storage_entry_transfer >> simp[] >>
      qexists_tac `st` >> simp[] >>
-     drule eval_expr_results_outcome_suffix >> simp[]) >>
+     drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
   qpat_x_assum `!env0 s0 r0 s1. well_typed_exprs _ _ /\ _ ==> _` kall_tac >>
   simp_tac bool_ss [get_scopes_def, return_def] >>
-  Cases_on `read_results cx actual_results args_st` >>
-  rename1 `read_results cx actual_results args_st = (read_res,read_st)` >>
-  drule read_results_state >> strip_tac >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
-  Cases_on `read_res` >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"]
-  >- suspend "intcall_read_success" >>
-  rpt strip_tac >> gvs[]
+  suspend "intcall_read_success"
 QED
 
 Resume body_oracle_storage_mutual[intcall_read_success]:
-  rename1 `read_results cx actual_results args_st = (INL vs,args_st)` >>
   Cases_on `bind_arguments (get_tenv cx) args vs`
   >- (simp[lift_option_type_def, raise_def] >> rpt strip_tac >> gvs[]) >>
   rename1 `bind_arguments (get_tenv cx) args vs = SOME call_env` >>
@@ -819,7 +810,7 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
   (`push_function (NONE,fn) call_env cx lock_st =
       (INL (cx with stk updated_by CONS (NONE,fn)), lock_st with scopes := [call_env])` by
       simp[push_function_def, return_def] >>
-   qpat_x_assum `!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
+   qpat_x_assum `!s0 vs t0 prev s1 dflt_vs t1 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
       (assume_tac o SIMP_RULE bool_ss [GSYM is_view_mut_def, GSYM lock_if_nr_def]) >>
    drule body_intcall_guard_apply >> disch_then assume_tac >>
    drule_all body_intcall_runtime_frame >> strip_tac >>
@@ -839,7 +830,7 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
         (qpat_x_assum `get_module_code cx NONE = _` mp_tac >>
          simp[vyperContextTheory.get_module_code_def]) >>
       gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
-      qpat_x_assum `!vs st results lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
+      qpat_x_assum `!vs st lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
       simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
       conj_tac
       >- (rpt (goal_assum (drule_at Any)) >>

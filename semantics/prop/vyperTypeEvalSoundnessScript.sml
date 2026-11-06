@@ -2162,20 +2162,6 @@ Proof
   metis_tac[exprs_runtime_typed_cons]
 QED
 
-Theorem delayed_read_results_sound[local]:
-  state_well_typed s1 /\ typed_scope_transition s0 s1 /\
-  vyperImmutableMetadataFrame$immutable_metadata_frame s0 s1 /\
-  expr_results_typed (env,cx,s0) es rs /\
-  read_results cx rs s1 = (r,s2) ==>
-  s2 = s1 /\ no_type_error_result r /\
-  (case r of INL vs => exprs_runtime_typed env es vs | INR _ => T)
-Proof
-  strip_tac >>
-  drule_all expr_results_typed_transport >> strip_tac >>
-  drule_all read_results_typed >> strip_tac >>
-  drule read_results_state >> simp[]
-QED
-
 Theorem exprs_runtime_typed_slices[local]:
   exprs_runtime_typed env (TAKE a es) xs /\
   exprs_runtime_typed env (TAKE b (DROP a es)) ys /\
@@ -5498,12 +5484,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem intcall_defaults_restored_sound[local]:
+Theorem intcall_defaults_frame_sound[local]:
   env_consistent env cx base_st /\ state_well_typed base_st /\
   env_body.type_defs = get_tenv cx /\
   env_body.bare_globals = env.bare_globals /\
   env_body.toplevel_vtypes = env.toplevel_vtypes /\
-  expr_results_typed (env,cx,base_st) es results /\
   (!r fs. eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed
                (base_st with scopes := [FEMPTY]) = (r,fs) ==>
      state_well_typed fs /\
@@ -5517,7 +5502,7 @@ Theorem intcall_defaults_restored_sound[local]:
     (set_scopes base_st.scopes) base_st = (res,st') ==>
   st'.scopes = base_st.scopes /\ state_well_typed st' /\
   env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-  no_type_error_result res /\ expr_results_typed (env,cx,st') es results /\
+  no_type_error_result res /\
   (case res of INL vs => exprs_runtime_typed (defaults_env env_body) needed vs
              | INR _ => T)
 Proof
@@ -5527,14 +5512,6 @@ Proof
     (irule state_well_typed_restore_scopes >> simp[]) >>
   `env_consistent env cx (framed_st with scopes := base_st.scopes)` by
     (metis_tac[env_consistent_restore_intcall_default_frame]) >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame
-     (base_st with scopes := [FEMPTY]) framed_st` by
-    (drule (cj 6 eval_metadata_frame_mutual) >> simp[]) >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame base_st st'` by
-    (gvs[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
-     metis_tac[]) >>
-  `st'.scopes = base_st.scopes` by simp[] >>
-  drule_all expr_results_typed_restore_scopes >>
   gvs[]
 QED
 
@@ -7067,7 +7044,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
         no_type_error_result_def]) >>
   simp_tac(srw_ss())[bind_apply] >>
   BasicProvers.TOP_CASE_TAC >>
-  qmatch_asmsub_rename_tac `eval_expr_results cx es r = (args_res,args_st)` >>
+  qmatch_asmsub_rename_tac `eval_exprs cx es r = (args_res,args_st)` >>
   drule intcall_call_evaluation_safe_args >> strip_tac >>
   qmatch_asmsub_rename_tac `type_check _ "IntCall args length" r = (INL tc_ok,tc_st)` >>
   `type_check
@@ -7080,7 +7057,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   reverse (Cases_on `args_res`) >- (
     rpt (qpat_x_assum `!a b c. _` kall_tac) >>
     gvs[no_type_error_result_def] >> strip_tac >> gvs[no_type_error_result_def]) >>
-  rename1 `eval_expr_results cx es r = (INL results,args_st)` >>
+  rename1 `eval_exprs cx es r = (INL actual_vs,args_st)` >>
   RULE_ASSUM_TAC (REWRITE_RULE [sumTheory.sum_case_def]) >>
   qpat_assum `lift_option_type (get_module_code cx src_id_opt) _ _ = _`
     (mp_tac o MATCH_MP (iffLR lift_option_type_INL_eq)) >> strip_tac >>
@@ -7122,10 +7099,10 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   qmatch_asmsub_rename_tac `finally _ _ args_st = (dflt_res,dflt_st)` >>
   `dflt_st.scopes = args_st.scopes /\ state_well_typed dflt_st /\
    env_consistent env cx dflt_st /\ accounts_well_typed dflt_st.accounts /\
-   no_type_error_result dflt_res /\ expr_results_typed (env,cx,dflt_st) es results /\
+   no_type_error_result dflt_res /\
    (case dflt_res of INL vs => exprs_runtime_typed (defaults_env env_body)
       (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3) vs | INR _ => T)` by
-    (irule intcall_defaults_restored_sound >>
+    (irule intcall_defaults_frame_sound >>
      qpat_x_assum `!a b c d e f. _` kall_tac >>
      simp[] >> qexistsl_tac [`fn`, `src_id_opt`] >>
      simp[ignore_bind_def] >>
@@ -7136,13 +7113,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   pure_rewrite_tac [sumTheory.sum_case_def]
   >- (RULE_ASSUM_TAC (BETA_RULE o REWRITE_RULE [sumTheory.sum_case_def]) >>
       rename1 `exprs_runtime_typed _ _ dflt_vs` >>
-      BasicProvers.TOP_CASE_TAC >>
-      rename1 `read_results cx results dflt_st = (read_res,read_st)` >>
-      drule read_results_state >> disch_then SUBST_ALL_TAC >>
-      drule_all read_results_typed >> strip_tac >>
-      Cases_on `read_res` >> pure_rewrite_tac [sumTheory.sum_case_def]
-      >- (RULE_ASSUM_TAC (BETA_RULE o REWRITE_RULE [sumTheory.sum_case_def]) >>
-          rename1 `exprs_runtime_typed env es actual_vs` >>
+      rename1 `exprs_runtime_typed env es actual_vs` >>
           `fn_sigs_consistent env.fn_sigs cx` by
             (qpat_assum `env_consistent env cx args_st` mp_tac >>
              POP_ASSUM_LIST (K ALL_TAC) >>
@@ -7183,7 +7154,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
                 (INL (cx with stk updated_by CONS (src_id_opt,fn)),
                  lock_st with scopes := [call_env])` by simp[push_function_def, return_def] >>
               first_x_assum drule >>
-              ntac 11 (disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) [])) >>
+              ntac 10 (disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) [])) >>
               disch_then (mk_asm "body_sound") >>
               asm_x "default_sound" kall_tac >>
               `env_immutables_consistent env_body
@@ -7197,8 +7168,6 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
           drule_all intcall_lock_attempt_sound_frame >> strip_tac >>
           gvs[no_type_error_result_def] >> strip_tac >>
           gvs[no_type_error_result_def]) >>
-      qpat_x_assum `!a b c d e f. _` kall_tac >>
-      gvs[no_type_error_result_def] >> strip_tac >> gvs[no_type_error_result_def]) >>
   qpat_x_assum `!a b c d e f. _` kall_tac >>
   gvs[no_type_error_result_def] >> strip_tac >> gvs[no_type_error_result_def]
 QED
@@ -7259,16 +7228,16 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_ExtCall_result]:
         (fn th => simp_tac(srw_ss())[th, sum_case_def, pair_case_def]) >>
       qpat_x_assum `!s target t nargs. eval_exprs cx (TAKE 1 es) s = (INL target,t) /\ _ ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >> strip_tac >>
-      Cases_on `eval_expr_results cx (TAKE (LENGTH fsig1) (DROP 1 es)) target_st` >>
-      rename1 `eval_expr_results _ _ target_st = (capture_res,capture_st)` >>
+      Cases_on `eval_exprs cx (TAKE (LENGTH fsig1) (DROP 1 es)) target_st` >>
+      rename1 `eval_exprs _ _ target_st = (capture_res,capture_st)` >>
       qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-        (case res0 of INL rs => expr_results_typed _ _ rs | INR _ => T)`
+        (case res0 of INL rs => exprs_runtime_typed env0 (TAKE _ _) rs | INR _ => T)`
         drule_all >> strip_tac >>
       Cases_on `capture_res`
       >- (qpat_x_assum `!s target t nargs s1 rs t1. _ ==> _`
             (drule o SIMP_RULE (srw_ss()) []) >>
           disch_then drule >> strip_tac >>
-          qpat_assum `eval_expr_results _ _ target_st = _`
+          qpat_assum `eval_exprs _ _ target_st = _`
             (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
           Cases_on `eval_exprs cx (DROP (1 + LENGTH fsig1) es) capture_st` >>
           rename1 `eval_exprs _ _ capture_st = (kw_res,kw_st)` >>
@@ -7282,13 +7251,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_ExtCall_result]:
           Cases_on `kw_res`
           >- (qpat_assum `eval_exprs _ _ capture_st = _`
                 (fn th => simp_tac(srw_ss())[th, bind_apply]) >>
-              Cases_on `read_results cx x' kw_st` >>
-              rename1 `read_results _ _ kw_st = (read_res,read_st)` >>
-              drule_all delayed_read_results_sound >> strip_tac >>
               rpt (qpat_x_assum `!env0 st0 res0 st0'. _` kall_tac) >>
-              Cases_on `read_res` >>
-              gvs[no_type_error_result_def] >> strip_tac
-              >- (`exprs_runtime_typed env es (x ++ x''' ++ x'')` by
+              gvs[no_type_error_result_def] >> strip_tac >>
+                  `exprs_runtime_typed env es (x ++ x' ++ x'')` by
                     (irule exprs_runtime_typed_slices >>
                      qexistsl [`1`, `LENGTH fsig1`] >> simp[DROP_DROP]) >>
                   `runtime_consistent env cx kw_st` by simp[runtime_consistent_def] >>
@@ -7302,7 +7267,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_ExtCall_result]:
                   strip_tac >> Cases_on `res` >>
                   gvs[no_type_error_result_def, expr_result_typed_def,
                       expr_runtime_typed_def, value_result_typed_def,
-                      eval_result_typed_def, expr_type_def]) >> gvs[]) >>
+                      eval_result_typed_def, expr_type_def]) >>
           rpt (qpat_x_assum `!env0 st0 res0 st0'. _` kall_tac) >>
           gvs[no_type_error_result_def] >> strip_tac >> gvs[]) >>
       rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
@@ -8486,7 +8451,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
     (qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
      simp[NoAsms, call_evaluation_safe_def] >> metis_tac[]) >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr_results _ _ _ = _`)) >>
+    (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
@@ -8534,18 +8499,18 @@ Resume eval_scc_type_sound_results_mutual[Trace_ExtCall_Operands]:
         (fn th => simp_tac(srw_ss())[th, sum_case_def, pair_case_def]) >>
       qpat_x_assum `!s target t nargs. eval_exprs cx (TAKE 1 es) s = (INL target,t) /\ _ ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >> strip_tac >>
-      Cases_on `eval_expr_results cx (TAKE (LENGTH sig1) (DROP 1 es)) target_st` >>
-      rename1 `eval_expr_results _ _ target_st = (capture_res,capture_st)` >>
+      Cases_on `eval_exprs cx (TAKE (LENGTH sig1) (DROP 1 es)) target_st` >>
+      rename1 `eval_exprs _ _ target_st = (capture_res,capture_st)` >>
       qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-        (case res0 of INL rs => expr_results_typed _ _ rs | INR _ => T)`
+        (case res0 of INL vs => exprs_runtime_typed env0 (TAKE _ (DROP _ es)) vs | INR _ => T)`
         drule_all >> strip_tac >>
       qpat_assum `!env0 st0 res0 st0'. well_typed_exprs env0 (TAKE _ (DROP _ es)) /\ _ ==> typed_scope_transition _ _`
         drule_all >> strip_tac >>
       Cases_on `capture_res`
-      >- (qpat_x_assum `!s target t nargs s1 rs t1. _ ==> _`
+      >- (qpat_x_assum `!s target t nargs s1 vs t1. _ ==> _`
             (drule o SIMP_RULE (srw_ss()) []) >>
           disch_then drule >> strip_tac >>
-          qpat_assum `eval_expr_results _ _ target_st = _`
+          qpat_assum `eval_exprs _ _ target_st = _`
             (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
           Cases_on `eval_exprs cx (DROP (1 + LENGTH sig1) es) capture_st` >>
           rename1 `eval_exprs _ _ capture_st = (kw_res,kw_st)` >>
@@ -8553,14 +8518,9 @@ Resume eval_scc_type_sound_results_mutual[Trace_ExtCall_Operands]:
             drule_all >> strip_tac >>
           rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
           Cases_on `kw_res` >> simp_tac(srw_ss())[sum_case_def, pair_case_def]
-          >- (Cases_on `read_results cx x' kw_st` >>
-              drule read_results_state >> strip_tac >> gvs[] >>
-              rename1 `read_results cx _ kw_st = (read_res,kw_st)` >>
-              Cases_on `read_res` >>
-              simp_tac(srw_ss())[sum_case_def, pair_case_def] >> strip_tac
-              >- (drule eval_ext_call_preserves_non_accounts >> strip_tac >>
-                  metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]) >>
-              gvs[] >> metis_tac[typed_scope_transition_trans]) >>
+          >- (strip_tac >>
+              drule eval_ext_call_preserves_non_accounts >> strip_tac >>
+              metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]) >>
           strip_tac >> gvs[] >> metis_tac[typed_scope_transition_trans]) >>
       rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
       gvs[LET_THM, bind_apply] >> strip_tac >> gvs[] >>

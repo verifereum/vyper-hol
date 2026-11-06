@@ -308,9 +308,8 @@ Resume evaluate_read_only[extcall_results]:
   simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> simp[] >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def] >> conj_tac
-      >- (rpt strip_tac >> match_mp_tac machine_frame_bind >>
-          simp[machine_frame_read_results] >> gen_tac >>
-          simp[state_rel_frame_result] >> metis_tac[machine_frame_ext_call]) >> metis_tac[]) >>
+      >- (rpt strip_tac >> simp[state_rel_frame_result] >>
+          metis_tac[machine_frame_ext_call]) >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -533,7 +532,7 @@ Resume evaluate_read_only[expr_intcall]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
   conj_tac >- suspend "intcall_after_args" >>
-  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3. _ ==> !mods. _ ==> state_rel_frame _ (eval_expr_results cx es)`
+  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3. _ ==> !mods. _ ==> state_rel_frame _ (eval_exprs cx es)`
     (drule o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then drule >> disch_then drule >>
   simp[arithmeticTheory.ADD_COMM] >> disch_then drule >>
@@ -559,8 +558,6 @@ QED
 
 Resume evaluate_read_only[intcall_after_defaults]:
   rpt strip_tac >> BETA_TAC >>
-  irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_read_results] >> rpt strip_tac >>
   ntac 2 (irule state_rel_frame_bind_guarded >>
           simp[machine_frame_def, machine_frame_primitives] >> rpt strip_tac) >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
@@ -584,12 +581,12 @@ Resume evaluate_read_only[intcall_after_lock]:
   rpt strip_tac >> BETA_TAC >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_push_function] >>
   rpt strip_tac >>
-  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3 s6 results t4 s7 prev t5 s8 dv t6 sr vs tr s9 env t7 s10 rtv t8 s11 t9 s12 cx1 t10. _ ==> !mods. _ ==> state_rel_frame _ (eval_stmts _ _)`
+  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3 s6 vs t4 s7 prev t5 s8 dv t6 s9 env t7 s10 rtv t8 s11 t9 s12 cx1 t10. _ ==> !mods. _ ==> state_rel_frame _ (eval_stmts _ _)`
     (drule o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then drule >> disch_then drule >> simp[arithmeticTheory.ADD_COMM] >>
   ntac 3 (disch_then drule) >> simp[ignore_bind_def] >>
   ntac 2 (disch_then drule) >> simp[] >>
-  ntac 4 (disch_then drule) >>
+  ntac 3 (disch_then drule) >>
   disch_then (qspec_then `mods` mp_tac) >>
   ntac 3 (qpat_x_assum `!s. _` kall_tac) >>
   impl_tac
