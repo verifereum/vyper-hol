@@ -1306,3 +1306,68 @@ Proof
     (irule regional_ret_reaching_dfs_edge_height >> metis_tac[]) >>
   simp[] >> intLib.ARITH_TAC
 QED
+
+Theorem regional_replay_ret_block_empty:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,pend) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_l /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\
+  generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (block_ops,qs_dfs) /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+    SOME (block_ops,qs) /\
+  MEM ret bb.bb_instructions /\ ret.inst_opcode = RET ==> qs.ps_stack = []
+Proof
+  strip_tac >>
+  `LENGTH ps_l.ps_stack = LENGTH ps_dfs.ps_stack` by
+    (irule regional_ret_reaching_lineage_height >>
+     rpt (first_assum $ irule_at Any) >> simp[cfg_path_def]) >>
+  `qs_dfs.ps_stack = []` by
+    (irule regional_actual_dfs_ret_block_empty >> metis_tac[]) >>
+  drule_all regional_replay_dfs_block_height_delta >>
+  simp[] >> strip_tac >>
+  `LENGTH qs.ps_stack = 0` by intLib.ARITH_TAC >> gvs[]
+QED
+
+Theorem regional_replay_ret_step_empty:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,pend) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) lbl ps_l /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) lbl ps_dfs /\
+  generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (block_ops,qs_dfs) /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+    SOME (block_ops,qs) /\
+  block_plan_state lv dfg cfg fn bb
+    (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) k ps /\
+  phi_prefix_length bb.bb_instructions <= k /\ k < LENGTH bb.bb_instructions /\
+  EL k bb.bb_instructions = inst /\
+  next_live = live_vars_at lv bb.bb_label (k+1) /\
+  next_is_term = (k+1 < LENGTH bb.bb_instructions /\
+    is_terminator (EL (k+1) bb.bb_instructions).inst_opcode) /\
+  inst.inst_opcode = RET /\
+  generate_inst_plan lv dfg cfg fn inst next_live (bb_is_halting bb)
+    next_is_term bb.bb_label ps = SOME (ops,ps') ==> ps'.ps_stack = []
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `k+1 = LENGTH bb.bb_instructions` by
+    (irule ready_block_ret_index_last >> metis_tac[]) >>
+  `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
+  `ps' = qs` by
+    (irule regional_ret_step_block_endpoint >>
+     rpt (first_assum $ irule_at Any) >> gvs[]) >>
+  gvs[] >> irule regional_replay_ret_block_empty >> metis_tac[]
+QED
