@@ -42,8 +42,8 @@ Proof
   fs[]
 QED
 
-(* This partition is exhaustive, but its ordinary arm is NOT yet a
-   preservation theorem. OFFSET is covered by ld_normal_offset_backward. *)
+(* Exhaustive partition for the ordinary normal-data dispatcher below.
+   The complement retains its separate control/call/allocation/effect owners. *)
 Theorem ld_normal_opcode_partition:
   ~MEM opc
     [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD;
@@ -64,8 +64,7 @@ Proof
   Cases_on `opc` >> simp[]
 QED
 
-(* AUDIT: proposed ld_normal_ordinary_backward statement, pending review.
-
+Theorem ld_normal_ordinary_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
@@ -97,7 +96,201 @@ QED
       (step_taint i s s' tn) (step_taint i t t' un) s' t'
       astk live keys d A suspended gstk f
 
-PREMISE-TO-SOURCE TABLE
+Proof
+  strip_tac >>
+  `inst_wf i` by (drule_all ld_annotated_inst_wf >> simp[]) >>
+  Cases_on `MEM i.inst_opcode
+    [MUL;Div;Mod;SDIV;SMOD;Exp;ADDMOD;MULMOD;SLT;SGT;ISZERO;AND;OR;XOR;NOT]`
+  >- suspend "scalar" >>
+  Cases_on `i.inst_opcode = ASSIGN` >- suspend "assign" >>
+  Cases_on `MEM i.inst_opcode [PARAM;RETPC_PARAM]` >- suspend "param" >>
+  Cases_on `MEM i.inst_opcode [ADD;SUB]` >- suspend "affine" >>
+  Cases_on `MEM i.inst_opcode [SHL;SHR;SAR]` >- suspend "shift" >>
+  Cases_on `MEM i.inst_opcode [EQ;LT;GT]` >- suspend "compare" >>
+  Cases_on `i.inst_opcode = MLOAD` >- suspend "mload" >>
+  Cases_on `i.inst_opcode = ILOAD` >- suspend "iload" >>
+  Cases_on `i.inst_opcode = MSTORE` >- suspend "mstore" >>
+  Cases_on `i.inst_opcode = MSTORE8` >- suspend "mstore8" >>
+  Cases_on `i.inst_opcode = ISTORE` >- suspend "istore" >>
+  Cases_on `i.inst_opcode = MCOPY` >- suspend "mcopy" >>
+  Cases_on `MEM i.inst_opcode [CALLDATACOPY;CODECOPY;RETURNDATACOPY;EXTCODECOPY]`
+  >- suspend "copy" >>
+  Cases_on `i.inst_opcode = SHA3` >- suspend "sha3" >>
+  Cases_on `i.inst_opcode = LOG` >- suspend "log" >>
+  Cases_on `MEM i.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE]`
+  >- suspend "guard" >>
+  Cases_on `i.inst_opcode = INITIAL_FMP` >- suspend "fmp" >>
+  Cases_on `i.inst_opcode = GAS` >- suspend "gas" >>
+  Cases_on `MEM i.inst_opcode [BYTE;SIGNEXTEND]` >- suspend "byte" >>
+  Cases_on `MEM i.inst_opcode
+    [CALLER;ADDRESS;CALLVALUE;ORIGIN;GASPRICE;CHAINID;COINBASE;TIMESTAMP;
+     NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;BLOBBASEFEE;BLOCKHASH;BLOBHASH;
+     CALLDATASIZE;CALLDATALOAD;RETURNDATASIZE;CODESIZE]`
+  >- suspend "environment" >>
+  Cases_on `i.inst_opcode = BUMP` >- suspend "bump" >>
+  Cases_on `MEM i.inst_opcode [SLOAD;TLOAD]` >- suspend "storage_read" >>
+  Cases_on `MEM i.inst_opcode [BALANCE;SELFBALANCE;EXTCODESIZE;EXTCODEHASH]`
+  >- suspend "account" >>
+  Cases_on `MEM i.inst_opcode [SSTORE;TSTORE]` >- suspend "storage_write" >>
+  `i.inst_opcode = OFFSET` by (fs[MEM] >> metis_tac[]) >>
+  drule_all ld_normal_offset_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[scalar]:
+  `?out. i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode [MUL;Div;Mod;SDIV;SMOD;Exp;ADDMOD;MULMOD;SLT;SGT;ISZERO;AND;OR;XOR;NOT]` mp_tac >>
+     simp[MEM] >> strip_tac >> simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_clean_scalar_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[assign]:
+  `?op out. i.inst_operands = [op] /\ i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_assign_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[param]:
+  `?idx out. i.inst_operands = [Lit idx] /\ i.inst_outputs = [out]` by
+    (irule ld_normal_parameter_shape >> simp[] >> fs[MEM]) >>
+  qpat_x_assum `MEM i.inst_opcode [PARAM;RETPC_PARAM]` mp_tac >>
+  simp[MEM] >> strip_tac
+  >- (drule_all ld_normal_param_backward >> simp[]) >>
+  drule_all ld_normal_retpc_param_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[affine]:
+  `i.inst_opcode = ADD \/ i.inst_opcode = SUB` by fs[MEM] >>
+  `?a b out. i.inst_operands = [a;b] /\ i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  metis_tac[ld_normal_affine_backward]
+QED
+
+Resume ld_normal_ordinary_backward[shift]:
+  `?n v out. i.inst_operands = [n;v] /\ i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode [SHL;SHR;SAR]` mp_tac >>
+     simp[MEM] >> strip_tac >> simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_shift_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[compare]:
+  `?a b out. i.inst_operands = [a;b] /\ i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode [EQ;LT;GT]` mp_tac >>
+     simp[MEM] >> strip_tac >> simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_compare_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[mload]:
+  `?op out. i.inst_operands = [op] /\ i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_mload_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[iload]:
+  `?op out. i.inst_operands = [op] /\ i.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_iload_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[mstore]:
+  `?a b. i.inst_operands = [a;b] /\ i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_mstore_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[mstore8]:
+  `?a b. i.inst_operands = [a;b] /\ i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_mstore8_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[istore]:
+  `?a b. i.inst_operands = [a;b] /\ i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_istore_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[mcopy]:
+  `?a b c. i.inst_operands = [a;b;c] /\ i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_mcopy_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[copy]:
+  `?addr dst off sz.
+     i.inst_operands = (if i.inst_opcode = EXTCODECOPY then [addr;dst;off;sz]
+                       else [dst;off;sz]) /\ i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode [CALLDATACOPY;CODECOPY;RETURNDATACOPY;EXTCODECOPY]` mp_tac >>
+     simp[MEM] >> strip_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_payload_copy_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[sha3]:
+  `?off sz. i.inst_operands = [off;sz]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  drule_all ld_normal_sha3_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[log]:
+  `?tc off sz topics.
+     i.inst_operands = Lit tc :: REVERSE (off::sz::topics) /\
+     LENGTH topics = w2n tc /\ i.inst_outputs = []` by
+    (drule_all ld_normal_log_shape >> simp[]) >>
+  drule_all ld_normal_log_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[guard]:
+  drule_all ld_normal_guard_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[fmp]:
+  drule_all ld_normal_initial_fmp_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[gas]:
+  drule_all ld_normal_gas_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[byte]:
+  drule_all ld_normal_byte_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[environment]:
+  drule_all ld_normal_environment_read_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[bump]:
+  drule_all ld_normal_bump_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[storage_read]:
+  drule_all ld_normal_storage_read_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[account]:
+  drule_all ld_normal_account_read_backward >> simp[]
+QED
+
+Resume ld_normal_ordinary_backward[storage_write]:
+  drule_all ld_normal_storage_write_backward >> simp[]
+QED
+
+Finalise ld_normal_ordinary_backward
+
+(* PREMISE-TO-SOURCE TABLE for the exported dispatcher.
 All wrappers return the displayed single source witness and the SAME entire
 normal-data successor.  No existential witnesses need to be joined.
 Common environmental, support, normal-mode and comparison premises above are
