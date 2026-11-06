@@ -40,3 +40,25 @@ Proof
     (irule current_wf_cleanup_cfg >> simp[]) >>
   simp[]
 QED
+
+Theorem current_context_external_producer_lookup:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  final = fn with fn_blocks := simplify_current_phis_if enabled renamed /\
+  strict_dom_vars_defined final st /\
+  MEM db renamed /\ MEM di db.bb_instructions /\ MEM src di.inst_outputs /\
+  db.bb_label <> st.vs_current_bb /\
+  fn_dominates (fn with fn_blocks := renamed) db.bb_label st.vs_current_bb ==>
+  ?v. lookup_var src st = SOME v
+Proof
+  strip_tac >>
+  drule_all current_wf_phi_context_lookup >> strip_tac >>
+  drule_all current_context_conditional_producer >>
+  disch_then (qspec_then `enabled` strip_assume_tac) >>
+  `fn_dominates final db.bb_label st.vs_current_bb` by
+    (mp_tac (Q.INST [`f` |-> `fn with fn_blocks := renamed`, `g` |-> `final`,
+       `d` |-> `db.bb_label`, `n` |-> `st.vs_current_bb`]
+      current_conditional_cleanup_dominance) >> gvs[]) >>
+  irule current_strict_dom_producer_lookup >>
+  qexistsl [`b`, `final`, `j`] >> gvs[]
+QED
