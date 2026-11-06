@@ -122,6 +122,54 @@ syntactic forwarding transport. These are explicit next planning inputs, not
 new premises allowed on the frozen theorem or the prefix certificate. This audit
 does not reopen the independent opcode producer queue.
 
+### Forwarding backward-comparison boundary (2026-11-06)
+
+`concretizePtrForwardingBoundaryTheory` checks the semantic core:
+`ptr_forwarding_step_back` preserves every successful one-instruction backward
+step; `ptr_forwarding_same_after_rewrite` preserves successful backward comparison
+through MAP positions rewrite followed by FILTER nonNOP, assuming original NOPs
+have no outputs. `ptr_forwarding_assign_interval` proves the transformed filtered
+list equals its source on an ASSIGN-only interval, using imported
+`concretize_positions_unchanged`. EVAL tests cover unequal operands meeting at
+an ASSIGN before an earlier ALLOCA (lookup present and missing), deletion of an
+output-free NOP, and an ALLOCA overwritten by a literal before the compared use.
+These are local interface tests, not execution or whole forwarding proofs.
+
+The output-free NOP premise is available: `inst_wf_def` forces NOP outputs=[];
+`concretizeStageShape` lines 49--50 already uses this exact implication. Obtain
+EVERY inst_wf on the source block from frozen source shape. No new premise on
+the frozen theorem is needed. The actual pass block transformer is exactly
+FILTER nonNOP after MAP positions (concretize_function_with_positions_def,
+clear_nops_function/block_map_transform), as already used by LedgerAlignment.
+
+Remaining lifting obligations, not proved here:
+- Define/count the retained prefix at source index k by
+  `LENGTH (FILTER (\i. i.inst_opcode <> NOP)
+    (MAP (concretize_inst_with_positions p) (TAKE k xs)))`.
+  It counts transformed nonNOPs, not original nonNOPs: missing allocation
+  positions can create NOPs. For each retained endpoint relate that count to the
+  unique index provided by `ptr_ledger_alignment_source`; order follows from
+  `ptr_ledger_alignment_order`, and contents from `ptr_ledger_alignment_cursor`.
+- In `ptr_paired_cursor_def`, source index is only <= EL target_index indices,
+  with a NOP gap. At a non-NOP source observation that gap must be empty; prove
+  equality before transferring forwarding. Current block and previous block
+  labels are already equated by this cursor definition.
+- For copy at i and REVERT at j, both endpoints are unchanged nonALLOCA/nonNOP
+  instructions (reuse `concretize_positions_unchanged`). The open source interval
+  is ASSIGN-only by revert_forward_pair, so it retains every member, maps
+  identically, and has no new ALLOCA. Prove the matching TAKE/DROP slice equations
+  for the two new endpoint counts, then use ptr_forwarding_assign_interval for
+  resolve_block_assigns on that interval.
+- The earlier prefix need not have equal resolve_block_assigns: newly rewritten
+  ALLOCA can resolve where source clobbered. Only apply the proved one-way
+  same_after_assigns implication to its reversed mapped/filtered prefix, using
+  MAP/FILTER/REVERSE commutation. That proves all three prefix comparisons after
+  the between-interval resolutions agree.
+- Lift the resulting pair via revert_forward_at/in_revert_forward and existing
+  block lookup/alignment witnesses. This is still a missing theorem, not a
+  consequence credited to the local probes. No successful source departure or
+  about_to_revert premise is involved.
+
 The older inventory below is retained as historical reasoning, not current proof
 status; in particular its claims that H/W types remain unresolved are superseded
 by the accepted concrete certificate and historical recovery libraries.
