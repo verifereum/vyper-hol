@@ -520,3 +520,200 @@ Proof
   irule ready_output_suffix_live >> simp[] >>
   qexists_tac `LENGTH db.bb_instructions` >> simp[]
 QED
+
+Theorem non_phi_after_collect_phis[local]:
+  !instrs j. j < LENGTH instrs /\ (EL j instrs).inst_opcode <> PHI ==>
+    LENGTH (collect_phis instrs) <= j
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `j` >>
+  simp[collect_phis_def] >> Cases_on `h.inst_opcode = PHI` >> simp[]
+QED
+
+Theorem ready_ordinary_use_available[local]:
+  !fn ub use v.
+    codegen_ready_fn fn /\ MEM ub fn.fn_blocks /\
+    MEM use ub.bb_instructions /\ use.inst_opcode <> PHI /\
+    MEM (Var v) use.inst_operands ==>
+    def_available_at fn ub (SOME use) v
+Proof
+  rpt strip_tac >>
+  `def_dominates_uses fn` by
+    gvs[codegen_ready_fn_def, wf_function_def, wf_ssa_def] >>
+  gvs[def_dominates_uses_def] >> metis_tac[]
+QED
+
+Theorem ready_output_ordinary_use_live:
+  !fn db k v ub use.
+    codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+    k < LENGTH db.bb_instructions /\
+    MEM v (EL k db.bb_instructions).inst_outputs /\
+    MEM ub fn.fn_blocks /\ MEM use ub.bb_instructions /\
+    use.inst_opcode <> PHI /\ MEM (Var v) use.inst_operands ==>
+    MEM v (live_vars_at (liveness_analyze fn) db.bb_label (k+1))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `def_available_at fn ub (SOME use) v` by
+    metis_tac[ready_ordinary_use_available] >>
+  drule_all ready_output_available >> strip_tac >>
+  `?j. j < LENGTH ub.bb_instructions /\ EL j ub.bb_instructions = use /\
+       (ub = db ==> k < j)` by
+    (Cases_on `ub = db` >> gvs[] >> metis_tac[MEM_EL]) >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_reachable fn ub.bb_label` by metis_tac[fn_dominates_def] >>
+  `lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
+    (irule MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label j)` by
+    (drule live_vars_at_uses >> simp[] >> disch_then irule >> simp[] >>
+     simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+     irule ready_reachable_preorder >> simp[]) >>
+  irule ready_output_dominated_live >> simp[] >>
+  qexistsl_tac [`j`, `ub`] >> simp[] >>
+  irule non_phi_after_collect_phis >> simp[]
+QED
+
+Theorem collect_phis_index[local]:
+  !instrs j. j < LENGTH (collect_phis instrs) ==>
+    EL j (collect_phis instrs) = EL j instrs /\
+    (EL j instrs).inst_opcode = PHI
+Proof
+  Induct >- simp[collect_phis_def] >> rpt gen_tac >> simp[collect_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `j` >> simp[]
+QED
+
+Theorem phi_index_in_prefix[local]:
+  !instrs j. j < LENGTH instrs /\ (EL j instrs).inst_opcode = PHI /\
+    (!i. i < j ==> (EL i instrs).inst_opcode = PHI) ==>
+    j < LENGTH (collect_phis instrs)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `j`
+  >- simp[collect_phis_def] >>
+  rename1 `SUC n < LENGTH (h::t)` >> strip_tac >>
+  `h.inst_opcode = PHI` by (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[collect_phis_def] >> first_x_assum irule >> gvs[] >>
+  qx_gen_tac `i` >> strip_tac >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Theorem ready_phi_use_location[local]:
+  !fn ub use. codegen_ready_fn fn /\ MEM ub fn.fn_blocks /\
+    MEM use ub.bb_instructions /\ use.inst_opcode = PHI ==>
+    ?j. j < LENGTH (collect_phis ub.bb_instructions) /\
+        EL j ub.bb_instructions = use /\
+        EL j (collect_phis ub.bb_instructions) = use
+Proof
+  rpt strip_tac >>
+  `?j. j < LENGTH ub.bb_instructions /\ EL j ub.bb_instructions = use` by
+    metis_tac[MEM_EL] >>
+  `bb_well_formed ub` by gvs[codegen_ready_fn_def, wf_function_def] >>
+  `j < LENGTH (collect_phis ub.bb_instructions)` by
+    (irule phi_index_in_prefix >> simp[] >>
+     gvs[bb_well_formed_def] >> metis_tac[]) >>
+  qexists_tac `j` >> simp[collect_phis_index]
+QED
+
+Theorem ready_output_not_phi_def[local]:
+  !fn db k v ub p.
+    codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+    k < LENGTH db.bb_instructions /\
+    MEM v (EL k db.bb_instructions).inst_outputs /\
+    (EL k db.bb_instructions).inst_opcode <> PHI /\
+    MEM ub fn.fn_blocks /\ p < LENGTH (collect_phis ub.bb_instructions) ==>
+    ~MEM v (inst_defs (EL p ub.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >> simp[inst_defs_def] >> disch_tac >>
+  `p < LENGTH ub.bb_instructions` by
+    (mp_tac (Q.SPEC `ub.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  `db = ub /\ k = p` by
+    (irule ready_output_location_unique >> metis_tac[]) >>
+  gvs[] >> metis_tac[collect_phis_index]
+QED
+
+Theorem ready_output_phi_entry_live[local]:
+  !fn db k v ub use.
+    codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+    k < LENGTH db.bb_instructions /\
+    MEM v (EL k db.bb_instructions).inst_outputs /\
+    (EL k db.bb_instructions).inst_opcode <> PHI /\
+    MEM ub fn.fn_blocks /\ MEM use ub.bb_instructions /\
+    use.inst_opcode = PHI /\ MEM (Var v) use.inst_operands /\
+    fn_reachable fn ub.bb_label ==>
+    MEM v (live_vars_at (liveness_analyze fn) ub.bb_label 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_phi_use_location >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM ub.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[ready_reachable_preorder] >>
+  `lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
+    (irule MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def]) >>
+  `j < LENGTH ub.bb_instructions` by
+    (mp_tac (Q.SPEC `ub.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label j)` by
+    (drule live_vars_at_uses >> simp[] >> disch_then irule >>
+     simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  irule ready_live_range >> simp[] >> qexists_tac `j` >> simp[] >>
+  qx_gen_tac `p` >> strip_tac >>
+  irule ready_output_not_phi_def >> simp[] >>
+  qexistsl_tac [`db`, `fn`, `k`] >> simp[] >> decide_tac
+QED
+
+Theorem ready_phi_edge_available[local]:
+  !fn ub use v.
+    codegen_ready_fn fn /\ MEM ub fn.fn_blocks /\
+    MEM use ub.bb_instructions /\ use.inst_opcode = PHI /\
+    MEM (Var v) use.inst_operands ==>
+    ?pred pb. phi_edge_uses_wf fn ub use /\
+      MEM (pred,v) (phi_pairs use.inst_operands) /\
+      MEM pb fn.fn_blocks /\ pb.bb_label = pred /\
+      fn_cfg_edge fn pred ub.bb_label /\ def_available_at fn pb NONE v
+Proof
+  rpt strip_tac >>
+  `def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `phi_edge_uses_wf fn ub use` by
+    (gvs[def_dominates_uses_def] >> metis_tac[]) >>
+  `?pred. MEM (pred,v) (phi_pairs use.inst_operands)` by
+    (irule phi_well_formed_var_pair >> gvs[phi_edge_uses_wf_def]) >>
+  metis_tac[phi_edge_uses_wf_def]
+QED
+
+Theorem ready_output_phi_use_live:
+  !fn db k v ub use.
+    codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+    k < LENGTH db.bb_instructions /\
+    MEM v (EL k db.bb_instructions).inst_outputs /\
+    (EL k db.bb_instructions).inst_opcode <> PHI /\
+    MEM ub fn.fn_blocks /\ MEM use ub.bb_instructions /\
+    use.inst_opcode = PHI /\ MEM (Var v) use.inst_operands ==>
+    MEM v (live_vars_at (liveness_analyze fn) db.bb_label (k+1))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_phi_edge_available >> strip_tac >>
+  drule_all ready_output_available >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_reachable fn pred` by metis_tac[fn_dominates_def] >>
+  `fn_reachable fn ub.bb_label` by metis_tac[fn_reachable_step] >>
+  `lookup_block pred fn.fn_blocks = SOME pb /\
+   lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
+    (conj_tac >> irule MEM_lookup_block >> simp[] >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label 0)` by
+    (irule ready_output_phi_entry_live >> simp[] >>
+     conj_tac >- (qexistsl_tac [`db`, `k`] >> simp[]) >>
+     qexists_tac `use` >> simp[]) >>
+  `MEM v (input_vars_from pred ub.bb_instructions
+      (live_vars_at (liveness_analyze fn) ub.bb_label 0))` by
+    (`phi_block_ready (liveness_analyze fn) ub` by metis_tac[ready_phi_block] >>
+     irule input_vars_from_selected_phi >> simp[] >>
+     (conj_tac >- gvs[phi_block_ready_def]) >>
+     qexists_tac `use` >>
+     `?j. j < LENGTH (collect_phis ub.bb_instructions) /\
+       EL j (collect_phis ub.bb_instructions) = use` by
+       metis_tac[ready_phi_use_location] >>
+     gvs[phi_block_ready_def, phi_edge_uses_wf_def] >> metis_tac[MEM_EL]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+    (irule input_vars_from_predecessor_exit >> simp[] >> metis_tac[]) >>
+  irule ready_output_dominated_live >> simp[] >>
+  qexistsl_tac [`LENGTH pb.bb_instructions`, `pb`] >>
+  simp[collect_phis_length_bound] >> metis_tac[]
+QED
