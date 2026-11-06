@@ -134,16 +134,18 @@ Theorem oracle_call_checked_full:
     op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
     t.vs_allocas = s.vs_allocas /\
     t.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
-    t.vs_fmp = s.vs_fmp
+    t.vs_fmp = s.vs_fmp /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx /\
+    t.vs_halted = s.vs_halted
 Proof
-  rpt gen_tac >> disch_tac >>
-  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  rpt gen_tac >> disch_tac >> rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   `state_rel func cenv cx es s` by fs[stmt_state_rel_def] >>
-  drule_all oracle_call_checked_step >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule_all oracle_call_checked_step >> disch_then (qspec_then `PG` strip_assume_tac) >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_labels = s.vs_labels /\
    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-   s'.vs_fmp = s.vs_fmp /\ s'.vs_data_section = s.vs_data_section` by
+   s'.vs_fmp = s.vs_fmp /\ s'.vs_data_section = s.vs_data_section /\
+   s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
+   s'.vs_halted = s.vs_halted` by
     (qpat_x_assum `s' = _` mp_tac >> simp[venom_state_component_equality]) >>
   `local_ptrs_rel func cenv es.scopes s /\
    immutables_rel cenv cx.txn.target cenv.ce_module F es s /\
@@ -157,8 +159,7 @@ Proof
        (simp[listTheory.LENGTH_TAKE_EQ] >> rw[] >> decide_tac) >>
      rpt strip_tac >> first_x_assum drule_all >>
      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-  drule_all oracle_write_semantic_frame >>
-  disch_then (qspecl_then [`if outcome.co_success then 1w else 0w`,
+  drule_all oracle_write_semantic_frame >> disch_then (qspecl_then [`if outcome.co_success then 1w else 0w`,
     `SUC s.vs_inst_idx`] strip_assume_tac) >>
   `state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s'` by
     (first_x_assum irule >> simp[]) >>
