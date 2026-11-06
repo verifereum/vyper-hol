@@ -189,3 +189,34 @@ Resume storage_loop_body_backedge[successor]:
   qexistsl_tac [`H`, `t`, `tm`] >> gvs[jump_to_def]
 QED
 Finalise storage_loop_body_backedge
+
+Theorem storage_loop_init_inv:
+  cv IN writes /\ dst NOTIN writes /\
+  (!x. src = Var x ==> x NOTIN writes) /\
+  eval_operand src s = SOME a /\ op_prov G src = NONE /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+  allocas_from 0 s /\ ~s.vs_halted ==>
+  storage_body_inv src dst cv writes loc a b n G tn s 0
+    (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
+    (jump_to hdr (update_var cv 0w s))
+Proof
+  strip_tac >>
+  `dst <> cv /\ (!x. src = Var x ==> x <> cv)` by metis_tac[] >>
+  `copy_prefix loc a b n s 0 (jump_to hdr (update_var cv 0w s))` by
+    simp[copy_prefix_jump, copy_prefix_update_var, copy_prefix_zero] >>
+  `storage_body_frame writes G tn s (DRESTRICT G (COMPL {cv}))
+     (tn with t_var := tn.t_var |+ (cv,{})) (jump_to hdr (update_var cv 0w s))` by
+    (simp[storage_body_frame_def, copy_static_def, jump_to_def, update_var_def,
+      lookup_var_def, op_prov_def, op_taint_def, FLOOKUP_DRESTRICT,
+      FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `ptr_covers (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
+     dst (jump_to hdr (update_var cv 0w s)) (32*n)` by
+    (irule storage_body_frame_covers >> metis_tac[]) >>
+  `eval_operand src (jump_to hdr (update_var cv 0w s)) = SOME a /\
+   op_prov (DRESTRICT G (COMPL {cv})) src = NONE /\
+   op_taint (tn with t_var := tn.t_var |+ (cv,{})) src = {}` by
+    (drule storage_body_frame_operand >> disch_then (qspec_then `src` mp_tac) >> simp[]) >>
+  simp[storage_body_inv_def, jump_to_def, update_var_def, lookup_var_def,
+    FLOOKUP_UPDATE, op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, allocas_from_def] >>
+  gvs[lookup_var_def]
+QED
