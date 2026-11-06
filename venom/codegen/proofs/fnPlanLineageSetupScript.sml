@@ -1613,3 +1613,92 @@ Proof
   CONV_TAC (LAND_CONV EVAL) >>
   CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
 QED
+
+(* The exact accumulator step used by popmany_individual. *)
+Definition lineage_delete_step_def:
+  lineage_delete_step (ops, ps) v =
+    case stack_get_depth v ps.ps_stack of
+      NONE => (ops, ps)
+    | SOME dist =>
+        let (swap_ops, ps') =
+          if dist = 0 then ([], ps) else do_swap dist ps in
+        (ops ++ swap_ops ++ [SOPop 1],
+         ps' with ps_stack := stack_pop 1 ps'.ps_stack)
+End
+
+Theorem lineage_delete_step_deeper:
+  !ps v d w e acc ops qs.
+    stack_get_depth v ps.ps_stack = SOME d /\
+    stack_get_depth w ps.ps_stack = SOME e /\ d < e /\
+    lineage_delete_step (acc,ps) v = (ops,qs) ==>
+    stack_get_depth w qs.ps_stack = SOME (e - 1)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_props] >>
+  Cases_on `d = 0`
+  >- (gvs[lineage_delete_step_def] >>
+      irule stack_pop_get_depth >> simp[]) >>
+  ` (SND (do_swap d ps)).ps_stack = stack_swap d ps.ps_stack` by
+    simp[do_swap_stack_result] >>
+  namedCases_on `do_swap d ps` ["swaps ps1"] >>
+  gvs[lineage_delete_step_def] >>
+  irule stack_swap_pop_deeper_query >> simp[]
+QED
+
+Theorem lineage_delete_step_bottom_frame:
+  !ps v d acc prefix ops qs.
+    stack_get_depth v ps.ps_stack = SOME d /\
+    lineage_delete_step (acc,ps) v = (ops,qs) ==>
+    lineage_delete_step (acc, ps with ps_stack := prefix ++ ps.ps_stack) v =
+      (ops, qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_props] >>
+  `stack_get_depth v (prefix ++ ps.ps_stack) = SOME d` by
+    metis_tac[fnPlanLineageSuffixTheory.stack_get_depth_suffix_hit] >>
+  Cases_on `d = 0`
+  >- (gvs[lineage_delete_step_def] >>
+      simp[stack_pop_bottom_extension]) >>
+  namedCases_on `do_swap d ps` ["swaps ps1"] >>
+  drule_all do_swap_bottom_frame >> strip_tac >>
+  `LENGTH ps1.ps_stack = LENGTH ps.ps_stack` by
+    (drule do_swap_stack_result >> simp[]) >>
+  gvs[lineage_delete_step_def] >> simp[stack_pop_bottom_extension]
+QED
+
+Theorem sorted_pred_above[local]:
+  !(ds:num list) d. sorting$SORTED ($<) ds /\ EVERY (\e. d < e) ds ==>
+    sorting$SORTED ($<) (MAP (\e. e - 1) ds)
+Proof
+  `transitive ($< :num -> num -> bool)` by
+    (simp[relationTheory.transitive_def] >> decide_tac) >>
+  Induct >> simp[sortingTheory.SORTED_EQ, MEM_MAP] >> rpt strip_tac
+  >- (first_x_assum irule >> simp[] >> qexists_tac `d` >> simp[]) >>
+  gvs[] >> res_tac >> decide_tac
+QED
+
+Theorem lineage_ordered_delete_fold_frame:
+  !requests depths ps acc prefix ops qs.
+    LIST_REL (\x d. stack_get_depth x ps.ps_stack = SOME d) requests depths /\
+    sorting$SORTED ($<) depths /\
+    FOLDL lineage_delete_step (acc,ps) requests = (ops,qs) ==>
+    FOLDL lineage_delete_step (acc,ps with ps_stack := prefix ++ ps.ps_stack) requests =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[] >>
+  Cases_on `depths` >> gvs[sortingTheory.SORTED_EQ] >>
+  rename1 `stack_get_depth h ps.ps_stack = SOME d` >>
+  namedCases_on `lineage_delete_step (acc,ps) h` ["acc1 ps1"] >>
+  drule_all lineage_delete_step_bottom_frame >> strip_tac >> simp[] >>
+  `LIST_REL (\x e. stack_get_depth x ps1.ps_stack = SOME e)
+     requests (MAP (\e. e - 1) t)` by
+    (gvs[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt strip_tac >>
+     irule lineage_delete_step_deeper >>
+     goal_assum (drule_at (Pat `lineage_delete_step _ _ = _`)) >>
+     qexists_tac `d` >> simp[] >> metis_tac[MEM_EL]) >>
+  `sorting$SORTED ($<) (MAP (\e. e - 1) t)` by
+    (irule sorted_pred_above >> simp[] >> qexists_tac `d` >> simp[EVERY_MEM]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `MAP (\e. e - 1) t` >> simp[]
+QED
