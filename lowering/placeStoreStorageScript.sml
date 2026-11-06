@@ -2921,7 +2921,8 @@ Proof
   simp[AllCaseEqs(),
        vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
   rpt strip_tac >> gvs[] >>
-  metis_tac[typedMemoryCopyTheory.typed_copy_memory_size]
+  (* FIRST_PROVE gives each of the six goals its own timed step. *)
+  FIRST_PROVE [metis_tac[typedMemoryCopyTheory.typed_copy_memory_size]]
 QED
 
 Theorem place_store_tuple_children_widen:
@@ -3676,17 +3677,30 @@ Proof
     place_store_operand_update, place_store_mload_update] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
     place_store_operand_update] >>
-  Cases_on `tr` >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
-    eval_operands_def, place_store_operand_update, place_store_update_static] >>
-  qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
-  `eval_operand (Var cv) post = SOME k` by
-    (simp[Abbr `post`, place_store_operand_update,
-      SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
-      SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    emitHelperPropsTheory.eval_operand_lit] >>
-  simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update]
+  (* One case per step: both cases together are too slow for one step. *)
+  Cases_on `tr`
+  >- (
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+      eval_operands_def, place_store_operand_update, place_store_update_static] >>
+    qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
+    `eval_operand (Var cv) post = SOME k` by
+      (simp[Abbr `post`, place_store_operand_update,
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+      emitHelperPropsTheory.eval_operand_lit] >>
+    simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update])
+  >> (
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+      eval_operands_def, place_store_operand_update, place_store_update_static] >>
+    qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
+    `eval_operand (Var cv) post = SOME k` by
+      (simp[Abbr `post`, place_store_operand_update,
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+      emitHelperPropsTheory.eval_operand_lit] >>
+    simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update])
 QED
 
 (* Forward-copy layout shares names, initialization and test with slot copying.
@@ -3891,7 +3905,10 @@ Proof
         `mk_inst (cs.cs_next_id + 3) JNZ
            [Var (slot_copy_var cs 1); Label (slot_copy_exit cs);
             Label (slot_copy_body cs)] []`] >>
-     Cases_on `k = n` >>
+     Cases_on `k = n`
+     >- simp[Abbr `u`, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+             get_instruction_def, slot_copy_cond_insts_def, step_inst_base_def,
+             mk_inst_def, eval_operand_def, bool_to_word_def, jump_to_def] >>
      simp[Abbr `u`, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
           get_instruction_def, slot_copy_cond_insts_def, step_inst_base_def,
           mk_inst_def, eval_operand_def, bool_to_word_def, jump_to_def]) >>
@@ -4299,7 +4316,9 @@ Proof
   reverse conj_tac >- simp[] >>
   irule place_store_emitted_seq_path >> conj_tac >- simp[] >>
   qexists_tac `sa` >>
-  Cases_on `tr` >>
+  Cases_on `tr`
+  >- simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
+          step_inst_base_def, exec_write2_def, eval_operands_def] >>
   simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
        step_inst_base_def, exec_write2_def, eval_operands_def]
 QED
