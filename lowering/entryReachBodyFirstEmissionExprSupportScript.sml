@@ -2645,3 +2645,142 @@ Proof
    goal_assum (drule_at Any) >> rw[cs_appends_def] >>
    metis_tac[first_emission_ptr_load])
 QED
+
+Theorem first_emission_binop_aux[local]:
+  !m.
+  ((?v ty. m = clamp_and_return v ty) \/
+   (?v ty. m = wrap_truncate v ty)) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `type_bounds ty` >>
+  rewrite_tac[clamp_and_return_def, wrap_truncate_def,
+              compile_mul_overflow_check_def, compile_clamp_def] >>
+  gvs[] >>
+  rpt (FIRST [IF_CASES_TAC,
+              ho_match_mp_tac first_emission_bind >> conj_tac,
+              ho_match_mp_tac first_emission_ignore_bind >> conj_tac,
+              pairarg_tac >> gvs[], gen_tac] >> BETA_TAC) >>
+  simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[] >> metis_tac[]
+QED
+
+Theorem first_emission_arithmetic_checks[local]:
+  !m.
+  ((?v ty. m = compile_clamp v ty) \/
+   (?x y v sg bits. m = compile_mul_overflow_check x y v sg bits)) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  gen_tac >> strip_tac >> pure_asm_rewrite_tac [] >>
+  Cases_on `type_bounds ty` >>
+  pure_asm_rewrite_tac[compile_clamp_def, compile_mul_overflow_check_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> BETA_TAC >>
+  rpt (FIRST [IF_CASES_TAC,
+              ho_match_mp_tac first_emission_bind >> conj_tac,
+              ho_match_mp_tac first_emission_ignore_bind >> conj_tac,
+              gen_tac] >> BETA_TAC) >>
+  simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[] >> metis_tac[]
+QED
+
+Theorem first_emission_safe_arithmetic[local]:
+  !m.
+  ((?x y ty. m = compile_safe_add x y ty) \/
+   (?x y ty. m = compile_safe_sub x y ty) \/
+   (?x y ty. m = compile_safe_mul x y ty) \/
+   (?x y ty. m = compile_safe_div x y ty) \/
+   (?x y d ty. m = compile_safe_decimal_div x y d ty) \/
+   (?x y ty. m = compile_safe_mod x y ty)) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  gen_tac >> strip_tac >> gvs[] >>
+  rewrite_tac[compile_safe_add_def, compile_safe_sub_def,
+    compile_safe_mul_def, compile_safe_div_def, compile_safe_decimal_div_def,
+    compile_safe_mod_def] >> simp_tac (srw_ss()) [LET_THM] >>
+  rpt (FIRST [IF_CASES_TAC,
+              ho_match_mp_tac first_emission_bind >> conj_tac,
+              ho_match_mp_tac first_emission_ignore_bind >> conj_tac,
+              gen_tac] >> BETA_TAC) >>
+  simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[] >>
+  metis_tac[first_emission_binop_aux, first_emission_arithmetic_checks]
+QED
+
+Theorem first_emission_safe_pow[local]:
+  !x y ty bl el a v b. compile_safe_pow x y ty bl el a = (v,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ntac 5 gen_tac >> Cases_on `bl` >> Cases_on `el` >>
+  rewrite_tac[compile_safe_pow_def] >> simp_tac (srw_ss()) [LET_THM] >>
+  rpt (FIRST [IF_CASES_TAC,
+              ho_match_mp_tac first_emission_bind >> conj_tac,
+              ho_match_mp_tac first_emission_ignore_bind >> conj_tac,
+              gen_tac] >> BETA_TAC) >>
+  simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[] >>
+  metis_tac[first_emission_arithmetic_checks]
+QED
+
+Theorem first_emission_compare[local]:
+  !op x y ty a v b. compile_compare op x y ty a = (v,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ntac 4 gen_tac >> Cases_on `op` >>
+  rewrite_tac[compile_compare_def] >> simp_tac (srw_ss()) [LET_THM] >>
+  rpt (FIRST [IF_CASES_TAC,
+              ho_match_mp_tac first_emission_bind >> conj_tac,
+              ho_match_mp_tac first_emission_ignore_bind >> conj_tac,
+              gen_tac] >> BETA_TAC) >>
+  simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[] >> metis_tac[]
+QED
+
+Theorem first_emission_binop:
+  !op x y ty bl el a v b. compile_binop op x y ty bl el a = (v,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ntac 6 gen_tac >> Cases_on `op` >>
+  rewrite_tac[compile_binop_def, builtinSimpleTheory.compile_select_def] >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  rpt (FIRST [IF_CASES_TAC,
+              ho_match_mp_tac first_emission_bind >> conj_tac,
+              ho_match_mp_tac first_emission_ignore_bind >> conj_tac,
+              gen_tac] >> BETA_TAC) >>
+  simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[] >>
+  metis_tac[first_emission_safe_arithmetic, first_emission_safe_pow,
+            first_emission_compare, first_emission_binop_aux]
+QED
