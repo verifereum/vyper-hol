@@ -41,3 +41,16 @@ Proof
   fs[exec_pure1_def, AllCaseEqs()] >>
   Cases_on `inst'.inst_operands` >> gvs[]
 QED
+
+Theorem current_invoke_decode_args_pair:
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  decode_invoke inst = SOME (nm, ops) ==>
+  ?ops'. decode_invoke inst' = SOME (nm, ops') /\
+    eval_operands ops' st' = eval_operands ops st
+Proof
+  strip_tac >> drule_all inst_pair_ops >>
+  gvs[decode_invoke_def, AllCaseEqs(), ops_pair_def] >>
+  strip_tac >>
+  `op' = Label nm` by (Cases_on `op'` >> fs[op_rename_def]) >>
+  gvs[] >> metis_tac[eval_operands_rel]
+QED
