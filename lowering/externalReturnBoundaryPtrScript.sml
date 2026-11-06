@@ -149,34 +149,29 @@ Proof
   drule_all compile_external_return_word_run_ptr >> simp[]
 QED
 
-Theorem external_return_word_stmt_frag_ptr:
-  !cenv nr nkey ut iv ret_ty d ctx PG func cx e es res es' lctx.
-    cenv.ce_return_pc = NONE /\ cenv.ce_raw_return = F /\
-    cenv.ce_nonreentrant = (nr,nkey,ut,iv) /\ (nr ==> iv) /\
-    is_word_type ret_ty /\
-    expr_sim_ptr d ctx PG func cenv cx ret_ty e es /\
-    eval_stmt cx (Return (SOME e)) es = (res,es') ==>
-    stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
-      (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
+Theorem return_expr_continuation_stmt_frag_ptr:
+  expr_sim_ptr d ctx PG func cenv cx ret_ty e es /\
+  eval_stmt cx (Return (SOME e)) es = (res,es') /\
+  (!sa sb cenv'. m sa = (cenv',sb) ==>
+    ?op sm. lower_value compile_expr cenv ret_ty e sa = (op,sm) /\
+      cs_extends sm sb /\
+      (!es1 v s0 s G tn.
+        (do raw <- eval_expr cx e; read_result cx raw od) es = (INL v,es1) /\
+        expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+        ghost_inv d cenv cx es1 G tn s /\
+        ptr_val_ok cx (expr_type e) v op G tn s /\
+        fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
+        ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+        (!y. op = Var y ==> not_fresh_at sm y) ==>
+        ptr_safe_run (cx_dead cx) 0 0 ctx func PG G tn s /\
+        ?ss. run_from 0 ctx func s = Halt ss)) ==>
+  stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv m es res es'
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_ptr_def] >>
-  rpt gen_tac >> strip_tac >> disj2_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  Cases_on `lower_value compile_expr cenv ret_ty e sa` >>
-  rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
-  Cases_on `compile_external_return (SOME op) T F cenv.ce_ret_enc_info
-    cenv.ce_max_return_size nr nkey ut iv sm` >>
-  rename1 `_ = (u,sb')` >> gvs[] >>
+  strip_tac >> simp[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+  disj2_tac >>
+  qpat_x_assum `!sa sb cenv'. _` drule >> strip_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends sm sb` by
-    (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_external_return_def, optional_unlock_view,
-          compile_alloc_buffer_def, emit_op_def, emit_void_def, emit_inst_def,
-          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
-          fresh_var_def, emit_def] >>
-     strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
   drule_all fn_has_code_split >> strip_tac >>
   `eval_stmt cx (Return (SOME e)) es =
      bind (do raw <- eval_expr cx e; read_result cx raw od)
@@ -201,21 +196,55 @@ Proof
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then (qspecl_then [`sa`,`sm`,`op`,`r1`,`es1`,`s0`,`G0`,`tn0`] mp_tac) >>
-  impl_tac >- simp[] >>
-  simp[frag_exec_ptr_def] >>
+  impl_tac >- simp[] >> simp[frag_exec_ptr_def] >>
   disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> strip_tac
-  >- (gvs[expr_post_def, ptr_val_ok_def, expr_val_rel_def] >>
-      `!y. op = Var y ==> not_fresh_at sm y` by
+  >- (`!y. op = Var y ==> not_fresh_at sm y` by
         metis_tac[compile_lower_value_var] >>
-      `stor_taint_ok cx tn' s''` by gvs[ghost_inv_def] >>
-      drule_all compile_external_return_word_state_rel_run_ptr >>
-      disch_then (qspecl_then [`PG`,`G'`,`0`] strip_assume_tac) >>
+      `ptr_safe_run (cx_dead cx) 0 0 ctx func PG G' tn' s'' /\
+       ?ss. run_from 0 ctx func s'' = Halt ss` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
       qpat_x_assum `!fuel. (!e. run_from fuel ctx func s'' <> Error e) ==> _`
         (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-      qexists `fuel'` >> simp[exit_result_def, stmt_exit_ptr_def]) >>
+      qexists `fuel'` >> gvs[exit_result_def, stmt_exit_ptr_def]) >>
   qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
   disj1_tac >> metis_tac[expr_exit_INR_type]
+QED
+
+Theorem external_return_word_stmt_frag_ptr:
+  !cenv nr nkey ut iv ret_ty d ctx PG func cx e es res es' lctx.
+    cenv.ce_return_pc = NONE /\ cenv.ce_raw_return = F /\
+    cenv.ce_nonreentrant = (nr,nkey,ut,iv) /\ (nr ==> iv) /\
+    is_word_type ret_ty /\
+    expr_sim_ptr d ctx PG func cenv cx ret_ty e es /\
+    eval_stmt cx (Return (SOME e)) es = (res,es') ==>
+    stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
+      (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule return_expr_continuation_stmt_frag_ptr >>
+  qexistsl [`e`,`ret_ty`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `lower_value compile_expr cenv ret_ty e sa` >>
+  rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `compile_external_return (SOME op) T F cenv.ce_ret_enc_info
+    cenv.ce_max_return_size nr nkey ut iv sm` >>
+  rename1 `_ = (u,sb')` >> gvs[] >>
+  conj_tac
+  >- (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_external_return_def, optional_unlock_view,
+           compile_alloc_buffer_def, emit_op_def, emit_void_def, emit_inst_def,
+           comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+           fresh_var_def, emit_def] >>
+      strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[expr_post_def, ptr_val_ok_def, expr_val_rel_def] >>
+  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  drule_all compile_external_return_word_state_rel_run_ptr >>
+  disch_then (qspecl_then [`PG`,`G`,`0`] strip_assume_tac) >> metis_tac[]
 QED
 
 Theorem compile_external_return_copy_state_rel_run_ptr:
@@ -376,8 +405,9 @@ Theorem external_return_static_copy_stmt_frag_ptr:
     stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
       (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_ptr_def] >>
-  rpt gen_tac >> strip_tac >> disj2_tac >>
+  rpt gen_tac >> strip_tac >>
+  irule return_expr_continuation_stmt_frag_ptr >>
+  qexistsl [`e`,`ret_ty`] >> simp[] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -385,74 +415,36 @@ Proof
   rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
   Cases_on `compile_external_return (SOME op) F F (AbiCopy (type_memory_size tv))
     (type_memory_size tv) nr nkey ut iv sm` >>
-  rename1 `_ = (u,sb')` >> gvs[] >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends sm sb` by
-    (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_external_return_def, optional_unlock_view,
-          compile_alloc_buffer_def, Once compile_abi_encode_child_def,
-          emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-          emit_def] >>
-     strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
-  drule_all fn_has_code_split >> strip_tac >>
-  `eval_stmt cx (Return (SOME e)) es =
-     bind (do raw <- eval_expr cx e; read_result cx raw od)
-       (\v. raise (ReturnException v)) es` by
-    (simp[NoAsms, Once evaluate_def, bind_def] >>
-     Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,est)` >>
-     Cases_on `raw` >> simp[]) >>
-  qpat_x_assum `eval_stmt _ _ _ = (res,es')` mp_tac >>
-  asm_rewrite_tac[] >>
-  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
-  rename1 `_ = (r1,es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
-  `expr_res_ok r1` by
-    (Cases_on `r1` >- gvs[expr_res_ok_def] >>
-     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
-     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
-     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-     imp_res_tac read_result_no_control >>
-     imp_res_tac (cj 1 eval_expr_no_control) >>
-     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
-  `r1 <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
-    (Cases_on `r1` >> gvs[]) >>
-  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`sa`,`sm`,`op`,`r1`,`es1`,`s0`,`G0`,`tn0`] mp_tac) >>
-  impl_tac >- simp[] >>
-  simp[frag_exec_ptr_def] >>
-  disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> strip_tac
-  >- (gvs[expr_post_def, expr_val_rel_def] >>
-      `well_typed_expr env e` by
-        (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
-         simp[type_stmt_def] >> metis_tac[]) >>
-      `call_evaluation_safe cx (int_calls_expr e)` by
-        gvs[int_calls_stmt_def, int_calls_expr_def] >>
-      `env_consistent env cx es /\ state_well_typed es /\
-       accounts_well_typed es.accounts /\ context_well_typed cx /\
-       functions_well_typed cx` by gvs[expr_sim_inv_def] >>
-      drule_all eval_expr_read_type_sound >> simp[] >> strip_tac >>
-      `value_has_type tv v` by
-        gvs[value_runtime_typed_def, env_consistent_def, env_context_consistent_def] >>
-      drule_all static_val_footprint >> strip_tac >>
-      `val_footprint tv v <> 0 /\ type_memory_size tv <= val_footprint tv v` by
-        simp[] >>
-      drule_all ptr_val_ok_read_covers >> strip_tac >> gvs[] >>
-      `stor_taint_ok cx tn' s''` by gvs[ghost_inv_def] >>
-      `not_fresh_at sm p` by metis_tac[compile_lower_value_var] >>
-      drule ptr_val_ok_static_clean >> simp[] >> strip_tac >>
-      `type_memory_size tv <= val_footprint tv v` by simp[] >>
-      `ptr_safe_run (cx_dead cx) 0 0 ctx func PG G' tn' s'' /\
-       ?ss. run_from 0 ctx func s'' = Halt ss` by
-        (irule compile_external_return_copy_state_rel_halt_ptr >> simp[] >>
-         goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
-         simp[ADD_COMM] >> metis_tac[]) >>
-      qpat_x_assum `!fuel. (!e. run_from fuel ctx func s'' <> Error e) ==> _`
-        (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-      qexists `fuel'` >> simp[exit_result_def, stmt_exit_ptr_def]) >>
-  qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
-  disj1_tac >> metis_tac[expr_exit_INR_type]
+  rename1 `_ = (u,sb')` >> gvs[] >> conj_tac
+  >- (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_external_return_def, optional_unlock_view,
+           compile_alloc_buffer_def, Once compile_abi_encode_child_def,
+           emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+           emit_def] >>
+      strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  rpt gen_tac >> strip_tac >> gvs[expr_post_def, expr_val_rel_def] >>
+  `well_typed_expr env e` by
+    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def] >> metis_tac[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    gvs[int_calls_stmt_def, int_calls_expr_def] >>
+  `env_consistent env cx es /\ state_well_typed es /\
+   accounts_well_typed es.accounts /\ context_well_typed cx /\
+   functions_well_typed cx` by gvs[expr_sim_inv_def] >>
+  drule_all eval_expr_read_type_sound >> simp[] >> strip_tac >>
+  `value_has_type tv v` by
+    gvs[value_runtime_typed_def, env_consistent_def, env_context_consistent_def] >>
+  drule_all static_val_footprint >> strip_tac >>
+  `val_footprint tv v <> 0 /\ type_memory_size tv <= val_footprint tv v` by simp[] >>
+  drule_all ptr_val_ok_read_covers >> strip_tac >> gvs[] >>
+  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  `not_fresh_at sm p` by metis_tac[] >>
+  drule ptr_val_ok_static_clean >> simp[] >> strip_tac >>
+  irule compile_external_return_copy_state_rel_halt_ptr >> simp[] >>
+  goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[ADD_COMM] >>
+  goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >> simp[]
 QED
 
 Theorem compile_external_return_zero_halt_ptr:
@@ -538,8 +530,9 @@ Theorem external_return_static_zero_stmt_frag_ptr:
     stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
       (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_ptr_def] >>
-  rpt gen_tac >> strip_tac >> disj2_tac >>
+  rpt gen_tac >> strip_tac >>
+  irule return_expr_continuation_stmt_frag_ptr >>
+  qexistsl [`e`,`ret_ty`] >> simp[] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -547,60 +540,21 @@ Proof
   rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
   Cases_on `compile_external_return (SOME op) F F (AbiCopy 0)
     0 nr nkey ut iv sm` >>
-  rename1 `_ = (u,sb')` >> gvs[] >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends sm sb` by
-    (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_external_return_def, optional_unlock_view,
-          compile_alloc_buffer_def, Once compile_abi_encode_child_def,
-          emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-          emit_def] >>
-     strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
-  drule_all fn_has_code_split >> strip_tac >>
-  `eval_stmt cx (Return (SOME e)) es =
-     bind (do raw <- eval_expr cx e; read_result cx raw od)
-       (\v. raise (ReturnException v)) es` by
-    (simp[NoAsms, Once evaluate_def, bind_def] >>
-     Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,est)` >>
-     Cases_on `raw` >> simp[]) >>
-  qpat_x_assum `eval_stmt _ _ _ = (res,es')` mp_tac >>
-  asm_rewrite_tac[] >>
-  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
-  rename1 `_ = (r1,es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
-  `expr_res_ok r1` by
-    (Cases_on `r1` >- gvs[expr_res_ok_def] >>
-     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
-     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
-     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-     imp_res_tac read_result_no_control >>
-     imp_res_tac (cj 1 eval_expr_no_control) >>
-     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
-  `r1 <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
-    (Cases_on `r1` >> gvs[]) >>
-  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`sa`,`sm`,`op`,`r1`,`es1`,`s0`,`G0`,`tn0`] mp_tac) >>
-  impl_tac >- simp[] >>
-  simp[frag_exec_ptr_def] >>
-  disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> strip_tac
-  >- (gvs[expr_post_def, expr_val_rel_def] >>
-      `stor_taint_ok cx tn' s''` by gvs[ghost_inv_def] >>
-      `!p. op = Var p ==> not_fresh_at sm p` by
-        metis_tac[compile_lower_value_var] >>
-      gvs[ptr_val_ok_def, ptr_mem_ok_def] >>
-      `ptr_safe_run (cx_dead cx) 0 0 ctx func PG G' tn' s'' /\
-       ?ss. run_from 0 ctx func s'' = Halt ss` by
-        (irule compile_external_return_zero_halt_ptr >> simp[] >>
-         reverse conj_tac >- metis_tac[] >>
-         goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
-         simp[]) >>
-      qpat_x_assum `!fuel. (!e. run_from fuel ctx func s'' <> Error e) ==> _`
-        (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-      qexists `fuel'` >> simp[exit_result_def, stmt_exit_ptr_def]) >>
-  qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
-  disj1_tac >> metis_tac[expr_exit_INR_type]
+  rename1 `_ = (u,sb')` >> gvs[] >> conj_tac
+  >- (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_external_return_def, optional_unlock_view,
+           compile_alloc_buffer_def, Once compile_abi_encode_child_def,
+           emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+           emit_def] >>
+      strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  rpt gen_tac >> strip_tac >> gvs[expr_post_def, expr_val_rel_def] >>
+  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  gvs[ptr_val_ok_def, ptr_mem_ok_def] >>
+  irule compile_external_return_zero_halt_ptr >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[]
 QED
 
 Theorem compile_external_return_raw_state_rel_halt_ptr:
