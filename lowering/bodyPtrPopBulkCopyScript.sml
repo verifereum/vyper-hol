@@ -152,7 +152,8 @@ Theorem pop_bulk_rhs_ptr_val:
     (FEMPTY |+ ("%src", (0,96))) pop_bulk_taint pop_bulk_start
 Proof
   simp[ptr_val_ok_def, pop_bulk_rhs_ptr_mem, pop_bulk_taint_def,
-       op_taint_def, entry_taint_def, FLOOKUP_DEF]
+       op_taint_def, entry_taint_def, FLOOKUP_DEF,
+       is_word_type_def, pop_bulk_ty_def]
 QED
 
 Theorem pop_bulk_rhs_ptr_buf:
