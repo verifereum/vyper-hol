@@ -272,13 +272,11 @@ Proof
   qexists_tac `raw` >> simp[]
 QED
 
-(* An ALLOCA emitted into func's code is one of the covered sites. *)
-Theorem abi_sites_cover_code:
-  abi_sites_cover func sites /\ fn_has_code st en func /\
-  MEM inst en.cs_current_insts /\ inst.inst_opcode = ALLOCA ==>
-  inst.inst_id IN sites
+(* Code emitted between st and en is in func. *)
+Theorem abi_encoder_code_member:
+  fn_has_code st en func /\ MEM inst en.cs_current_insts ==> MEM inst (fn_insts func)
 Proof
-  rw[abi_sites_cover_def] >> first_x_assum irule >> fs[fragExecTheory.fn_has_code_def] >>
+  simp_tac bool_ss [fragExecTheory.fn_has_code_def] >> strip_tac >>
   irule fragExecTheory.lookup_block_fn_insts >> goal_assum (drule_at Any) >>
   fs[IS_PREFIX_APPEND] >> simp[]
 QED
@@ -287,34 +285,38 @@ Theorem abi_encode_complex_prefix_site:
   abi_encode_complex_prefix infos st = (dp,prepared) /\ fn_has_code st prepared func /\
   abi_sites_cover func sites ==> st.cs_next_id IN sites
 Proof
-  strip_tac >>
-  qspec_then `mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]`
-    (irule o SIMP_RULE (srw_ss()) [venomInstTheory.mk_inst_def]) abi_sites_cover_code >>
-  goal_assum (drule_at Any) >> simp[] >>
+  strip_tac >> fs[abi_sites_cover_def] >>
+  first_x_assum (qspec_then `mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]` mp_tac) >>
+  simp[venomInstTheory.mk_inst_def] >> disch_then irule >>
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)`
+    suffices_by simp[venomInstTheory.mk_inst_def] >>
+  irule abi_encoder_code_member >> goal_assum (drule_at Any) >>
   qpat_x_assum `abi_encode_complex_prefix _ _ = _` mp_tac >>
   simp[abiEncoderComplexCodeTheory.abi_encode_complex_prefix_def,
     contextTheory.compile_alloc_buffer_def, compileEnvTheory.comp_bind_def,
     compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
-    emitHelperTheory.emit_void_def, compileEnvTheory.fresh_var_def,
+    emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def, compileEnvTheory.fresh_var_def,
     compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[venomInstTheory.mk_inst_def]
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> simp[]
 QED
 
 Theorem abi_encode_array_tail_init_site:
   abi_encode_array_tail_init count_op asz st = (dp,prepared) /\ fn_has_code st prepared func /\
   abi_sites_cover func sites ==> st.cs_next_id IN sites
 Proof
-  strip_tac >>
-  qspec_then `mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]`
-    (irule o SIMP_RULE (srw_ss()) [venomInstTheory.mk_inst_def]) abi_sites_cover_code >>
-  goal_assum (drule_at Any) >> simp[] >>
+  strip_tac >> fs[abi_sites_cover_def] >>
+  first_x_assum (qspec_then `mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]` mp_tac) >>
+  simp[venomInstTheory.mk_inst_def] >> disch_then irule >>
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)`
+    suffices_by simp[venomInstTheory.mk_inst_def] >>
+  irule abi_encoder_code_member >> goal_assum (drule_at Any) >>
   qpat_x_assum `abi_encode_array_tail_init _ _ _ = _` mp_tac >>
   simp[abiEncoderArrayTailInitTheory.abi_encode_array_tail_init_def,
     contextTheory.compile_alloc_buffer_def, compileEnvTheory.comp_bind_def,
     compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
     emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def, compileEnvTheory.fresh_var_def,
     compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[venomInstTheory.mk_inst_def]
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> simp[]
 QED
 
 Theorem abi_encoder_shared_array_tail_prepare:
