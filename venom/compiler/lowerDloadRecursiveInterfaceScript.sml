@@ -3257,10 +3257,23 @@ val ld_proposed_call_normal_setup = ``
    normal restoration remain residuals. These boundaries do not certify closure.
 *)
 
-(* CALL observes an opcode, not a successful terminator step. *)
-val ld_recursive_call_zero =
+(* Guard the shared saved slice without adding a parallel HOL predicate. *)
+fun ld_refine_saved_when guard candidate =
   let
-    val (args,body) = strip_abs ld_recursive_geometry_candidate
+    val refined = ld_refine_saved candidate
+    val (args,body) = strip_abs refined
+    val (normal,exceptional) = dest_disj body
+    val (ws,b) = strip_exists normal
+    val (base,slice) = dest_conj b
+  in list_mk_abs(args,mk_disj(list_mk_exists(ws,
+       mk_conj(base,mk_imp(guard,slice))),exceptional)) end;
+val ld_recursive_guarded_candidate =
+  ld_refine_geometry (ld_refine_saved_when ``b:bool`` ld_recursive_candidate);
+
+(* CALL observes an opcode, not a successful terminator step. *)
+fun ld_call_zero candidate =
+  let
+    val (args,body) = strip_abs candidate
     val (g1,rest) = dest_conj body
     val (g2,alternatives) = dest_conj rest
     val (ws,b) = strip_exists (fst (dest_disj alternatives))
@@ -3272,11 +3285,13 @@ val ld_recursive_call_zero =
   in list_mk_abs(args,list_mk_conj [g1,g2,list_mk_exists(ws,
        list_mk_conj [b, ``^n = 0``, ``^code = [^i]``, ``^a2 = ^a1``,
          ``^j = ^i``, ``^t = ^ta``, ``^un = ^ua``])]) end;
+val ld_recursive_call_zero = ld_call_zero ld_recursive_geometry_candidate;
+val ld_recursive_guarded_call_zero = ld_call_zero ld_recursive_guarded_candidate;
 
-Theorem ld_recursive_call_anchor:
-  (^ld_recursive_geometry_candidate) vs0 CT stk un gn j t /\
+Theorem ld_recursive_guarded_call_anchor[local]:
+  (^ld_recursive_guarded_candidate) vs0 CT stk un gn j t /\
   j.inst_opcode = INVOKE ==>
-  (^ld_recursive_call_zero) vs0 CT stk un gn j t
+  (^ld_recursive_guarded_call_zero) vs0 CT stk un gn j t
 Proof
   reverse (BETA_TAC >> strip_tac >>
     (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -3309,15 +3324,36 @@ Proof
   asm_rewrite_tac []
 QED
 
-Theorem ld_recursive_geometry_call_clause:
+Theorem ld_recursive_call_anchor:
+  (^ld_recursive_geometry_candidate) vs0 CT stk un gn j t /\
+  j.inst_opcode = INVOKE ==>
+  (^ld_recursive_call_zero) vs0 CT stk un gn j t
+Proof
+  mp_tac (Q.INST [`b` |-> `F`] ld_recursive_guarded_call_anchor) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [IMP_CLAUSES, AND_CLAUSES] >>
+  disch_then ACCEPT_TAC
+QED
+
+val ld_recursive_guarded_call_goal =
+  let
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses,_) = dest_imp body
+    val clause = subst [p |-> ld_recursive_guarded_candidate]
+      (List.nth(strip_conj clauses,3))
+    val (v0::ct::rest,b) = strip_forall clause
+  in subst [v0 |-> mk_var("vs0",type_of v0),
+            ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_recursive_guarded_call_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_geometry_call_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_guarded_call_goal
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
-  drule_all ld_recursive_call_anchor >>
-  qpat_x_assum `(^ld_recursive_geometry_candidate) _ _ _ _ _ _ _` kall_tac >>
+  drule_all ld_recursive_guarded_call_anchor >>
+  qpat_x_assum `(^ld_recursive_guarded_candidate) _ _ _ _ _ _ _` kall_tac >>
   CONV_TAC (LAND_CONV (DEPTH_CONV BETA_CONV)) >> strip_tac >>
   qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved_tail") >>
   CONV_TAC (REWR_CONV (GSYM (Q.SPEC `ARB` markerTheory.label_def))) >>
@@ -3466,6 +3502,15 @@ Proof
     `amid`, `aend`, `[]`, `post''`, `[]`, `code`, `tail'`, `[]`, `bpost'`,
     `[]`, `qpost'`, `V::supports`, `keys::savedkeys`, `ss`, `0`] >>
   reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+  reverse conj_tac >-
+    (disch_tac >>
+     qpat_assum `ld_normal_data CS fn _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+         mp_tac (BETA_RULE lowerDloadSavedGeometryTheory.ld_saved_geometry_call_push)) >>
+     disch_then (qspecl_then [`savedkeys`, `tf`, `sf`] assume_tac) >>
+     gen_tac >> disch_tac >> first_x_assum irule >>
+     simp[Abbr `sf`, Abbr `tf`, Abbr `keys`] >>
+     first_x_assum irule >> first_assum ACCEPT_TAC) >>
   qpat_assum `!q. q < LENGTH (sf::astk) ==> _` (fn th => pure_rewrite_tac [BETA_RULE th]) >>
   asm_rewrite_tac [] >>
   conj_tac >-
@@ -3479,7 +3524,7 @@ Proof
     Abbr `sf`, Abbr `tf`]
 QED
 
-Resume ld_recursive_geometry_call_clause[exceptional_child_entry]:
+Resume ld_recursive_guarded_call_clause[exceptional_child_entry]:
   `MEM child obs.cu_context.ctx_functions /\ ir_supply_covers_unit supply obs` by
     (qpat_assum `fn_pass_step _ _ obs supply child output` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -3514,7 +3559,18 @@ Resume ld_recursive_geometry_call_clause[exceptional_child_entry]:
   disj2_tac >> qexistsl_tac [`gb'`, `copypos`, `endpos`] >> asm_rewrite_tac []
 QED
 
-Finalise ld_recursive_geometry_call_clause
+Finalise ld_recursive_guarded_call_clause
+
+Theorem ld_recursive_geometry_call_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_geometry_call_goal
+Proof
+  mp_tac (Q.INST [`b` |-> `F`] ld_recursive_guarded_call_clause) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [IMP_CLAUSES, AND_CLAUSES] >> disch_then ACCEPT_TAC
+QED
 
 (* RETURN restoration diagnostic (not an asserted theorem).
    This interface universally fixes the EXISTING normal witnesses. The only
@@ -4122,4 +4178,20 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   first_assum ACCEPT_TAC
+QED
+
+val ld_recursive_combined_call_fixed_goal =
+  let val (v0::ct::rest,b) = strip_forall ld_recursive_combined_call_goal
+  in subst [v0 |-> mk_var("vs0",type_of v0),
+            ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_recursive_combined_call_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_combined_call_fixed_goal
+Proof
+  mp_tac (Q.INST [`b` |-> `T`] ld_recursive_guarded_call_clause) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [IMP_CLAUSES, AND_CLAUSES] >> disch_then ACCEPT_TAC
 QED
