@@ -18,14 +18,6 @@ Ancestors
   stmtSimLogStoreEncode stmtSimLogDataRun abiEncoderCounters abiDecoderReentry
   emitHelperProps localPtrsProps fragExec words list arithmetic
 
-Theorem log_mem_operands_values[local]:
-  !ops ws. LIST_REL (\op w. eval_operand op s = SOME w) ops ws ==>
-    eval_operands ops s = SOME ws
-Proof
-  Induct >> Cases_on `ws` >> simp[eval_operands_def] >> rpt strip_tac >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem log_data_prepare_run_mem_direct[local]:
   compile_alloc_buffer (MAX 32 (SUM (MAP (type_memory_bytes ce) (MAP SND xs)))) source_st = (srcbuf,start) /\
   fn_has_code source_st start func /\
@@ -151,7 +143,7 @@ Resume log_success_suffix_mem_ok[empty]:
   `run_inst_seq (emitted_insts st sb) u = OK t` by
     metis_tac[run_inst_seq_append] >>
   `eval_operands (Lit (n2w h)::ops) u = SOME (n2w h::topics)` by
-    (drule log_mem_operands_values >> simp[eval_operands_def, eval_operand_def]) >>
+    (drule stmtSimLogSuffixTheory.log_operands_values >> simp[eval_operands_def, eval_operand_def]) >>
   `eval_operand (Lit 0w) u = SOME 0w` by simp[eval_operand_def] >>
   drule_all compile_log_emit_frontier >> simp[]
 QED
@@ -235,7 +227,7 @@ Resume log_success_suffix_mem_ok[emit]:
   `LIST_REL (\op w. eval_operand op actual = SOME w) ops topics` by
     (fs[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >> metis_tac[]) >>
   `eval_operands (Lit (n2w h)::ops) actual = SOME (n2w h::topics)` by
-    (drule log_mem_operands_values >> simp[eval_operands_def, eval_operand_def]) >>
+    (drule stmtSimLogSuffixTheory.log_operands_values >> simp[eval_operands_def, eval_operand_def]) >>
   drule log_topics_inst_extends >> strip_tac >>
   drule inst_extends_emit_inst >> strip_tac >>
   `emitted_insts st sb = emitted_insts st s4 ++ emitted_insts s4 sb` by
