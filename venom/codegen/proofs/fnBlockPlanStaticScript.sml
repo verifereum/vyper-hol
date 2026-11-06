@@ -22,7 +22,7 @@ Ancestors
   stackPlanGen stackPlanOps stackPlanTypes venomExecSemantics venomWf
   livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion fnBlockPlanStaticInventory
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
-  fnBlockPlanStaticAccounting
+  fnBlockPlanStaticAccounting simplifyCfgStruct venomExecProps venomInst
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
@@ -225,6 +225,31 @@ Proof
   irule regional_actual_lower_inv >>
   rpt (first_assum $ irule_at Any) >>
   gvs[arithmeticTheory.MAX_DEF, regional_collect_phis_length]
+QED
+
+Theorem ready_ret_body_no_jmp:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM ret bb.bb_instructions /\ ret.inst_opcode = RET ==>
+  EVERY (\inst. inst.inst_opcode <> JMP) (non_param_insts bb)
+Proof
+  strip_tac >> drule_all ready_block_ret_last >> strip_tac >>
+  drule lookup_block_MEM >> strip_tac >>
+  `bb_well_formed bb` by
+    (fs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  simp[non_param_insts_def, listTheory.EVERY_FILTER, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> fs[listTheory.MEM_FILTER] >>
+  `inst = LAST bb.bb_instructions` by
+    (irule bb_well_formed_terminator_last >> simp[is_terminator_def]) >>
+  gvs[]
+QED
+
+Theorem non_phi_index_after_prefix:
+  (EL j insts).inst_opcode <> PHI ==> phi_prefix_length insts <= j
+Proof
+  qid_spec_tac `j` >> Induct_on `insts` >>
+  simp[phi_prefix_length_def] >> gen_tac >>
+  Cases_on `j` >> simp[phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[]
 QED
 
 (* Used at each instruction of the block body's induction, for the
