@@ -12,6 +12,7 @@ Ancestors
   entryReachBodyOwnedLoop entryReachBodyOwnedRegion entryReachBodyActualOwnedLoop
   entryReachBodyIndexedLoopInput abiDecoderArrayBackedge
   emitHelperProps valueEncodingProps venomExecSemantics venomState
+  removeUnusedSsaProofs
   words finite_map list rich_list arithmetic
 
 (* Extract the actual child lists and all bytes-array typing inputs directly
@@ -638,7 +639,10 @@ Theorem nested_array_compiler_phases[local]:
     abi_decoder_operand_live ploop.cs_next_var dst /\
     abi_decoder_operand_live st.cs_next_var ip /\
     abi_decoder_operand_live st.cs_next_var src /\
-    abi_decoder_operand_live st.cs_next_var dst
+    abi_decoder_operand_live st.cs_next_var dst /\
+    fn_has_code ploop final fn /\
+    fn_has_code initial ploop fn /\
+    (!i. MEM i (emitted_insts initial ploop) ==> MEM i (fn_insts fn))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all (calldata_nonbulk_parent_shell |> SPEC_ALL |>
@@ -692,6 +696,14 @@ Resume nested_array_compiler_phases[witnesses]:
    abi_decoder_operand_live st0.cs_next_var dst` by
     (rpt conj_tac >> irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
      qexists_tac `loop_st.cs_next_var` >> simp[]) >>
+  `fn_has_code loop_st final fn` by
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ initial = _`
+       (mp_then Any mp_tac (calldata_nonbulk_parent_intervals |> SPEC_ALL |>
+         Q.INST [`dyn` |-> `T`] |> SIMP_RULE bool_ss [])) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  suspend "code_witnesses"
+QED
+Resume nested_array_compiler_phases[code_witnesses]:
   rename1 `nested_array_child_code _ _ _ _ _ _ _ _ _ _ _ iguard iheader iloop iip icnt _ _ _ _ _` >>
   qexistsl_tac [`ip`,`cnt`,`guard_st`,`header_st`,`loop_st`,`labels`,`st0`,`ops`,
     `middle`,`last`,`iguard`,`iheader`,`iloop`,`iip`,`icnt`] >>
@@ -704,7 +716,23 @@ Resume nested_array_compiler_phases[witnesses]:
     (STRING #"%" (toString (loop_st.cs_next_var+3)))` by
     (simp_tac bool_ss [abi_decode_loop_cfg_def] >>
      asm_rewrite_tac [] >> metis_tac[]) >>
-  asm_rewrite_tac [] >> decide_tac
+  asm_rewrite_tac [] >> rpt conj_tac
+  >- decide_tac >- decide_tac >- decide_tac >- decide_tac >>
+  rpt strip_tac >>
+  `?bb. lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX loop_st.cs_current_insts bb.bb_instructions` by
+    (drule abi_decoder_loop_prefix_extends >> strip_tac >>
+     drule_all fn_has_code_start >> simp[]) >>
+  rename1 `isPREFIX loop_st.cs_current_insts init_bb.bb_instructions` >>
+  irule lookup_block_fn_insts >>
+  qexistsl_tac [`init_bb`,`loop_st.cs_current_bb`] >> asm_simp_tac bool_ss [] >>
+  irule rich_listTheory.IS_PREFIX_MEM >>
+  qexists_tac `loop_st.cs_current_insts` >> simp[] >>
+  irule rich_listTheory.MEM_DROP_IMP >>
+  qexists_tac `LENGTH initial.cs_current_insts` >>
+  drule abiDecoderArrayInitTheory.abi_decode_array_loop_init_shape >>
+  simp[abi_decode_source_opcode_def] >> strip_tac >>
+  fs[emitted_insts_def]
 QED
 Finalise nested_array_compiler_phases
 
@@ -908,3 +936,166 @@ Proof
     nested_array_child_code_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+Theorem entry_owned_canonical_nested_bytes_array_execution:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecDynArray (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      (type_memory_bytes ce (ArrayT ty (Dynamic inner))) T outer) st = ((),final) /\
+  fn_has_code st final fn /\
+  (!bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  abi_decoder_coherent ce env sf (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))
+    (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer)) /\
+  abi_decoder_metadata ce env (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))
+    (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer))
+    (DecDynArray (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
+      (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+      (type_memory_bytes ce (ArrayT ty (Dynamic inner))) T outer)
+    (ListV avs) (ArrayV (DynArrayV xs)) /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\
+  type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)) =
+    DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T inner /\
+  type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic inner)) =
+    DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
+      (type_memory_bytes ce ty) T inner /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  outer < dimword (:256) /\ inner < dimword (:256) /\ n < dimword (:256) /\
+  entry_nested_array_init_resources sf ce ty inner outer dst src st
+    (ctx,fn,site,d,b,cap,p,oid,root,extent,initial) cid iid /\
+  abi_alloca_history (fn_insts fn) initial /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) b cap initial /\
+  mem_bytes_at sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs)))
+    (abi_decode_source CALLDATALOAD initial) =
+    enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs) /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  fresh_vars_wrt limit_st initial /\ final.cs_next_var <= limit_st.cs_next_var /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. val_in_memory (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer))
+      (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\ fresh_vars_wrt limit_st t /\
+    entry_owned_loop_resources ctx fn site cid p oid root extent d
+      (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) t /\
+    entry_loop_fields initial t /\ entry_decode_path ctx fn initial t /\
+    abi_encoder_registered_effect {cid;iid}
+      [(d,type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)))] initial t /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
+      eval_operand op t = SOME w)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all nested_array_compiler_phases >> strip_tac >>
+  drule_all nested_array_initial_site_alignment >> strip_tac >>
+  drule_all nested_array_canonical_facts >> strip_tac >>
+  `LENGTH avs <= outer` by decide_tac >>
+  `ploop.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  `oid <> pheader.cs_next_id` by metis_tac[] >>
+  drule_all owned_array_canonical_initializer >>
+  disch_then (qx_choose_then `prepared` strip_assume_tac) >>
+  qpat_x_assum `cid = _` SUBST_ALL_TAC >>
+  qpat_x_assum `iid = _` SUBST_ALL_TAC >>
+  drule_all nested_array_initializer_scratch >> strip_tac >>
+  qpat_assum `entry_array_init_resources _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE
+      [entryReachBodyCanonicalBytesArrayTheory.entry_array_init_resources_def]) >>
+  `p < dimword (:256)` by
+    (qpat_assum `alloca_frontier_inv _ _ _ initial` mp_tac >>
+     simp_tac bool_ss [allocaFrontierBoundTheory.alloca_frontier_inv_def] >> strip_tac >>
+     qpat_x_assum `FLOOKUP initial.vs_allocas _ = NONE /\ _ \/ _` strip_assume_tac >>
+     gvs[] >> decide_tac) >>
+  SUBGOAL_THEN ``d+type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer)) <= p \/ p+32 <= d`` assume_tac
+  >- (drule entry_owned_region_counter_separation >>
+     disch_then (qspecl_then [`p`,`pheader.cs_next_id`] mp_tac) >>
+     asm_rewrite_tac [] >> metis_tac[]) >>
+  `nested_array_loop_config
+    ((ce,env,sf,ty,tv,inner,outer,
+      DecDynArray (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
+        (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
+        (type_memory_bytes ce (ArrayT ty (Dynamic inner))) T outer,avs,xs,n),
+     (ip,src,dst,st',ops,middle,last,guard_st,header_st,loop_st,iip,icnt,limit_st,
+       STRING #"%" (toString st'.cs_next_var),last.cs_next_var),
+     (ctx,fn,site,pheader.cs_next_id,oid,root,extent,d,b,cap,prepared,
+       (n2w p:bytes32),(n2w sb:bytes32),sb),
+     (FST labels,FST (SND labels),SND (SND labels),ploop.cs_next_id+1,ploop.cs_next_var))` by
+    (simp_tac bool_ss [nested_array_loop_config_def] >>
+     asm_simp_tac (srw_ss()) [w2n_n2w, venomWfTheory.fn_inst_ids_distinct_def, Excl "enc_def"] >>
+     conj_tac
+     >- (qpat_x_assum `ALL_DISTINCT (MAP _ (fn_insts fn))` mp_tac >>
+         simp[venomInstTheory.fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+           MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+     qpat_x_assum `d+type_memory_bytes ce _ <= p \/ _` mp_tac >>
+     qpat_x_assum `32 <= type_memory_bytes ce _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
+  qmatch_asmsub_abbrev_tac `nested_array_loop_config cfg` >>
+  suspend "configured"
+QED
+Resume entry_owned_canonical_nested_bytes_array_execution[configured]:
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abiDecoderRecursiveLoopEntryTheory.abi_decoder_loop_phase_entry >> strip_tac >>
+  drule_all abiDecoderRecursiveLoopLayoutTheory.abi_decoder_loop_phase_lookups >> strip_tac >>
+  `eval_operand src prepared = SOME (n2w sb)` by
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
+     pure_rewrite_tac [abi_decoder_ranges_def] >> metis_tac[]) >>
+  `abi_decode_load CALLDATALOAD (n2w sb:bytes32) prepared = n2w (LENGTH avs)` by
+    (irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
+     qexists_tac `vyper_to_abi_type env (ArrayT ty (Dynamic inner))` >>
+     asm_rewrite_tac [] >>
+     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
+     pure_rewrite_tac [abi_decoder_ranges_def] >> metis_tac[]) >>
+  qpat_assum `Abbrev (cfg = _)`
+    (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `entry_owned_loop_resources ctx fn site pheader.cs_next_id (w2n (n2w p:bytes32))
+    oid root extent d
+    (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) prepared` by
+    simp[] >>
+  `mload (w2n (n2w p:bytes32)) prepared = 0w /\
+   mem_word_at d prepared.vs_memory = n2w (LENGTH xs) /\
+   abi_decode_load CALLDATALOAD (n2w sb:bytes32) prepared = n2w (LENGTH xs)` by
+    simp[] >>
+  `phi_prefix_length (abi_decode_header_insts (ploop.cs_next_id+1) ip src CALLDATALOAD
+    (STRING #"%" (toString ploop.cs_next_var))
+    (STRING #"%" (toString (ploop.cs_next_var+1)))
+    (STRING #"%" (toString (ploop.cs_next_var+2)))
+    (STRING #"%" (toString (ploop.cs_next_var+3))) st'.cs_current_bb (SND (SND labels))) = 0` by
+    simp[abi_decode_header_insts_def, phi_prefix_length_def, venomInstTheory.mk_inst_def] >>
+  drule nested_array_prepared_endpoint >>
+  disch_then (qspec_then `ploop` mp_tac) >>
+  disch_then (drule_at (Pat `lookup_block (FST labels) _ = SOME _`)) >>
+  impl_tac >- simp[abi_decode_header_insts_def, phi_prefix_length_def, venomInstTheory.mk_inst_def] >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  suspend "endpoint"
+QED
+
+Resume entry_owned_canonical_nested_bytes_array_execution[endpoint]:
+  qpat_x_assum `nested_array_inv _ _ _ _ _ _ _ _ t`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [nested_array_inv_def]) >>
+  qpat_x_assum `entry_owned_loop_resources _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  simp[w2n_n2w] >> strip_tac >>
+  qexists_tac `t` >> asm_simp_tac (srw_ss()) [w2n_n2w] >>
+  conj_tac >-
+    (qpat_x_assum `entry_loop_fields initial prepared` mp_tac >>
+     qpat_x_assum `entry_loop_fields prepared t` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[entry_loop_fields_def]) >>
+  conj_tac >- metis_tac[entryReachBodyOperationalPathTheory.entry_decode_path_trans] >>
+  conj_tac >- suspend "effects" >>
+  rpt strip_tac >>
+  `abi_decoder_operand_live ploop.cs_next_var op` by
+    (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[] >>
+     drule abiDecoderArrayInitTheory.abi_decode_array_loop_init_shape >>
+     simp[abi_decode_source_opcode_def]) >>
+  metis_tac[]
+QED
+Resume entry_owned_canonical_nested_bytes_array_execution[effects]:
+  irule abi_encoder_registered_effect_trans >>
+  qexists_tac `prepared` >> asm_rewrite_tac [] >>
+  irule abi_encoder_registered_effect_enlarge >>
+  qexistsl_tac [`{pheader.cs_next_id}`,`[(d,32)]`] >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+Finalise entry_owned_canonical_nested_bytes_array_execution
