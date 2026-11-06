@@ -441,3 +441,29 @@ Proof
   simp_tac bool_ss [abi_array_ready_def, abi_array_runtime_context_def,
     abi_array_loop_data_def, Ldata_def, abi_decode_entry_def] >> metis_tac[]
 QED
+
+(* Initial JMP changes only the runtime entry point. *)
+Theorem abi_array_ready_jump_transport:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  target.cs_next_var = st.cs_next_var /\ target.cs_current_bb = lbl /\
+  target.cs_current_insts = [] ==>
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip target dst src base_op hi B bs p d n j vs
+    (jump_to lbl s)
+Proof
+  simp_tac bool_ss [abi_array_ready_def, abi_array_runtime_context_def,
+    abi_array_loop_data_def, Ldata_def, abi_decode_entry_def] >> strip_tac >>
+  `decode_site_resources ctx func (jump_to lbl s)` by
+    (irule decode_site_resources_fields >> qexists `s` >> simp[jump_to_def]) >>
+  fs[jump_to_def, eval_operand_def, lookup_var_def,
+    fresh_vars_wrt_def, abi_decode_alloc_progress_def,
+    abi_array_memory_prefix_def, decode_site_effect_def,
+    decode_static_frame_def, decode_memory_frame_def, mload_def, abi_decode_load_def] >>
+  gs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_x_assum `s = _` (fn th =>
+       CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
