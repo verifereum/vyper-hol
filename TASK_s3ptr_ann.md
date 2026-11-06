@@ -89,3 +89,7 @@ All paths are relative to this directory (the vyper-hol project root).
 - AnnAssign declares a fresh local: `stmt_env` extends `cenv` (`declare_local`), the post's `cenv''` is that extension, and `ghost_inv` at the end must cover the new local: its pointer's site comes from the ALLOCA (`out_prov`), see `allocationPtrScript.sml`.
 - The other live locals' `ghost_inv` facts carry over: their sites are disjoint from the fresh buffer.
 - The RESIDUAL lemmas of `lowering/bodyPtrAssignResidualScript.sml` are frozen and admitted: dispatch to them exactly where S1 dispatches to the S1 lemma of the same name (minus `_ptr`), and don't prove or restate them.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
