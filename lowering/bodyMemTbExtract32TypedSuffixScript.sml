@@ -1,7 +1,7 @@
 (* Typed source representation at the extract32 suffix entry. *)
 Theory bodyMemTbExtract32TypedSuffix
 Ancestors
-  bodyMemTbExtract32Load bodyMemTbExtract32Cuts stmtSimLogArgs
+  bodyMemTbExtract32Load bodyMemTbExtract32Cuts bodyMemTbExtract32Slice stmtSimLogArgs
   exprSimHash exprSimProps exprSimWordArgs loweringPosts exprSimDefs
   valueEncoding vyperTypeSystem compileEnv
 
