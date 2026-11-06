@@ -131,7 +131,8 @@ Theorem oracle_call_checked_full:
       (t with vs_inst_idx := SUC s.vs_inst_idx) /\
     ghost_kept cenv es sa G tn s H un /\
     wb_frame cenv es sa s (t with vs_inst_idx := SUC s.vs_inst_idx) /\
-    op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE
+    op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
+    t.vs_allocas = s.vs_allocas
 Proof
   rpt gen_tac >> disch_tac >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
