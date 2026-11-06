@@ -229,3 +229,39 @@ QED
    This is a limitation of candidate R, NOT a counterexample to the frozen
    theorem. Global closure and the frozen proof remain unauthorized.
 *)
+
+(* The exact-name cut is already dead_phi_selected_erased above; its
+   length-one premise is weaker than FILTER ... = [Var v].  The native
+   producer must still supply unique selection, absent spill, output
+   inequality and deadness; these local transitions supply none of them. *)
+Theorem dead_phi_resource_nonincrease:
+  !inst next halting ps d v ops qs w.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    stack_peek d ps.ps_stack = Var v /\ ~MEM v next /\
+    generate_phi_plan inst next halting ps = (ops,qs) /\
+    w <> HD inst.inst_outputs ==>
+    LIST_ELEM_COUNT (Var w) qs.ps_stack +
+      (if Var w IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var w) ps.ps_stack +
+      (if Var w IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by
+    (fs[stackModelTheory.stack_get_phi_depth_def] >>
+     drule planAlignTheory.stack_find_bound >> simp[]) >>
+  `~MEM (operand_to_string (Var v)) next` by
+    simp[stackPlanTypesTheory.operand_to_string_def] >>
+  drule fnPlanLineagePhiTemporalTheory.generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`next`,`halting`] mp_tac) >>
+  simp[fnPlanLineagePhiTemporalTheory.phi_write_phase_def] >> strip_tac >>
+  `LIST_ELEM_COUNT (Var w) (stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack) <=
+     LIST_ELEM_COUNT (Var w) ps.ps_stack` by
+    (drule stack_poke_count_balance >>
+     disch_then (qspecl_then [`Var w`,`Var (HD inst.inst_outputs)`] mp_tac) >>
+     simp[] >> Cases_on `w = v` >> simp[]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next` >> gvs[]
+  >- (pairarg_tac >> gvs[] >>
+      drule fnPlanLineageInventoryTheory.popmany_plan_resource_nonincrease >>
+      disch_then (qspec_then `Var w` mp_tac) >> simp[] >> decide_tac) >>
+  simp[]
+QED
