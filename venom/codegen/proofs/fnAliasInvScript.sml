@@ -3985,6 +3985,86 @@ Proof
   simp[EL_REVERSE, stack_peek_def, arithmeticTheory.PRE_SUB1]
 QED
 
+Theorem alias_ready_phi_source_dead_cuts:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  k < LENGTH (collect_phis bb.bb_instructions) /\
+  MEM x (inst_uses (EL k (collect_phis bb.bb_instructions))) /\
+  k < j /\ j <= LENGTH (collect_phis bb.bb_instructions) ==>
+  ~MEM x (live_vars_at (liveness_analyze fn) lbl j)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ collect_phis bb.bb_instructions <> []` by
+    (conj_tac >- metis_tac[lookup_block_MEM] >> strip_tac >> gvs[]) >>
+  `~EVERY (\b. NULL (collect_phis b.bb_instructions)) fn.fn_blocks` by
+    (simp[EVERY_MEM, NULL_EQ, EXISTS_MEM] >> metis_tac[]) >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `MEM (EL k (collect_phis bb.bb_instructions))
+     (collect_phis bb.bb_instructions)` by simp[EL_MEM] >>
+  `wf_function fn /\ phi_block_ready (liveness_analyze fn) bb` by
+    (fs[codegen_ready_fn_def, phi_operands_ready_def, EVERY_MEM, EXISTS_MEM] >>
+     metis_tac[]) >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions) /\
+   ~MEM x (live_vars_at (liveness_analyze fn) lbl
+     (LENGTH (collect_phis bb.bb_instructions)))` by
+    (fs[phi_block_ready_def, EVERY_MEM] >> metis_tac[]) >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[fn_reachable_cfg_analyze] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  qspec_then `bb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+  strip_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl
+     (LENGTH (collect_phis bb.bb_instructions)))` suffices_by simp[] >>
+  irule alias_live_no_use_range >> goal_assum (drule_at Any) >>
+  simp[] >> qexists_tac `j` >> simp[] >> conj_tac
+  >- (qx_gen_tac `n` >> strip_tac >> strip_tac >>
+      `EL n bb.bb_instructions = EL n (collect_phis bb.bb_instructions)` by
+        metis_tac[EL_APPEND1] >>
+      `k = n` by metis_tac[alias_phi_uses_disjoint_index] >>
+      decide_tac) >>
+  metis_tac[LENGTH_APPEND, arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem alias_ready_phi_selected_dead:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  k < LENGTH (collect_phis bb.bb_instructions) /\
+  stack_get_phi_depth
+    (FILTER is_var_operand (EL k (collect_phis bb.bb_instructions)).inst_operands)
+    ps.ps_stack = SOME d /\ stack_peek d ps.ps_stack = Var x ==>
+  ~MEM x (live_vars_at (liveness_analyze fn) lbl (SUC k))
+Proof
+  strip_tac >>
+  `MEM (Var x) (EL k (collect_phis bb.bb_instructions)).inst_operands` by
+    (drule alias_phi_depth_selected >> simp[MEM_FILTER]) >>
+  `MEM x (inst_uses (EL k (collect_phis bb.bb_instructions)))` by
+    simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  irule alias_ready_phi_source_dead_cuts >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `k` >> simp[]
+QED
+
+Theorem alias_ready_phi_selected_mass_decreases:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  k < LENGTH (collect_phis bb.bb_instructions) /\
+  stack_get_phi_depth
+    (FILTER is_var_operand (EL k (collect_phis bb.bb_instructions)).inst_operands)
+    ps.ps_stack = SOME d /\ stack_peek d ps.ps_stack = Var x /\
+  x <> HD (EL k (collect_phis bb.bb_instructions)).inst_outputs ==>
+  alias_var_mass x (SND (generate_phi_plan
+    (EL k (collect_phis bb.bb_instructions))
+    (live_vars_at (liveness_analyze fn) lbl (SUC k)) halting ps)) <
+  alias_var_mass x ps
+Proof
+  strip_tac >>
+  `~MEM x (live_vars_at (liveness_analyze fn) lbl (SUC k))` by
+    (drule_all alias_ready_phi_selected_dead >> simp[]) >>
+  irule alias_phi_dead_selected_mass_decreases >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem alias_phi_plan_retains_stack:
   ~MEM (Var x) (FILTER is_var_operand inst.inst_operands) /\
   ~MEM x inst.inst_outputs /\ MEM (Var x) ps.ps_stack /\
