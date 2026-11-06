@@ -318,3 +318,31 @@ Proof
   simp[wordsTheory.dimword_def, arithmeticTheory.EXP_ADD,
        arithmeticTheory.DIV_LT_X]
 QED
+
+Theorem unsigned_payload_zero:
+  LENGTH bs <= 32 ==>
+  (((word_of_bytes_be bs:bytes32) = 0w) <=> EVERY (\b. b = 0w) bs)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> simp[EVERY_EL] >> rpt strip_tac >> rename1 `j < LENGTH bs` >>
+      `j < 32` by decide_tac >>
+      drule unsigned_get_byte_encoding >>
+      disch_then (qspec_then `bs` mp_tac) >>
+      simp[byteTheory.get_byte_def, wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]) >>
+  simp[EVERY_EL] >> strip_tac >>
+  simp[fcpTheory.CART_EQ, wordsTheory.word_0, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >>
+  gvs[unsigned_word_bit_byte, unsigned_get_byte_encoding] >>
+  Cases_on `31 - i DIV 8 < LENGTH bs` >>
+  gvs[wordsTheory.word_0, fcpTheory.FCP_BETA]
+QED
+
+Theorem unsigned_decoded_zero:
+  LENGTH bs <= 32 ==>
+  ((word_lsr (word_of_bytes_be bs:bytes32) (8*(32-LENGTH bs)) = 0w) <=>
+    EVERY (\b. b = 0w) bs)
+Proof
+  strip_tac >> simp[unsigned_payload_padding] >>
+  `LENGTH (PAD_LEFT 0w 32 bs) <= 32` by simp[PAD_LEFT] >>
+  drule unsigned_payload_zero >> simp[PAD_LEFT, EVERY_GENLIST]
+QED
