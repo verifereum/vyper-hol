@@ -22,6 +22,7 @@ Ancestors
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
   fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
   livenessConvergenceProofs livenessBlockProofs codegenReadyCompute fnPlanPrefix
+  simplifyCfgFixupStatic
 
 Theorem alias_single_successor_liveout:
   wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
@@ -6877,6 +6878,59 @@ Proof
   `out = x` by metis_tac[MEM] >>
   ho_match_mp_tac alias_lineage_join_phi_fold_lower_coverage >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_collect_phis_length:
+  !insts. LENGTH (collect_phis insts) = phi_prefix_length insts
+Proof
+  Induct >> simp[collect_phis_def, phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[collect_phis_def, phi_prefix_length_def]
+QED
+
+Theorem alias_ready_phi_suffix:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  EVERY (\inst. inst_wf inst /\ inst.inst_opcode <> PHI)
+    (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `wf_function fn /\ fn_inst_wf fn` by gvs[codegen_ready_fn_def] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `EVERY inst_wf bb.bb_instructions` by metis_tac[fn_inst_wf_every_bb] >>
+  simp[EVERY_CONJ, alias_collect_phis_length] >> conj_tac
+  >- metis_tac[EVERY_DROP] >>
+  irule scfg_phi_suffix_nonphi >> gvs[bb_well_formed_def]
+QED
+
+Theorem alias_ready_param_partition:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb /\
+  EVERY (\inst. ~is_param_opcode inst.inst_opcode) (non_param_insts bb) /\
+  (bb <> HD fn.fn_blocks ==> get_params bb.bb_instructions = [])
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+  drule (iffLR callLayoutDefsTheory.canonical_param_prefix_iff) >> strip_tac >>
+  (Cases_on `bb = entry`
+  >- (qpat_x_assum `bb = entry` SUBST_ALL_TAC >>
+      rename1 `no_param_insts tail` >>
+      `EVERY (\inst. is_param_opcode inst.inst_opcode) (users ++ fmp ++ retpc)` by
+        (gvs[EVERY_MEM, is_param_opcode_def] >> metis_tac[]) >>
+      `get_params (users ++ fmp ++ retpc ++ tail) = users ++ fmp ++ retpc` by
+        (irule get_params_prefix >> gvs[callLayoutDefsTheory.no_param_insts_def]) >>
+      `FILTER (\inst. ~is_param_opcode inst.inst_opcode) users = []` by
+        (gvs[FILTER_EQ_NIL, EVERY_MEM, is_param_opcode_def]) >>
+      `FILTER (\inst. ~is_param_opcode inst.inst_opcode) tail = tail` by
+        gvs[FILTER_EQ_ID, callLayoutDefsTheory.no_param_insts_def] >>
+      gvs[non_param_insts_def, FILTER_APPEND, is_param_opcode_def,
+          callLayoutDefsTheory.no_param_insts_def]) >>
+  `no_param_insts bb.bb_instructions` by gvs[EVERY_MEM] >>
+  `FILTER (\inst. ~is_param_opcode inst.inst_opcode) bb.bb_instructions = bb.bb_instructions` by
+    gvs[FILTER_EQ_ID, callLayoutDefsTheory.no_param_insts_def] >>
+  `get_params bb.bb_instructions = []` by
+    (Cases_on `bb.bb_instructions` >> gvs[get_params_def, callLayoutDefsTheory.no_param_insts_def]) >>
+  gvs[non_param_insts_def, callLayoutDefsTheory.no_param_insts_def])
 QED
 
 Theorem alias_phi_prefix_plan_state:
