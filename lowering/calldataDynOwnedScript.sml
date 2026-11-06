@@ -2588,7 +2588,8 @@ Resume calldata_owned_header_step[ownership_frame]:
   qpat_assum `Abbrev (Own = _)` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   pure_rewrite_tac[markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >> BETA_TAC >>
   ntac 8 disch_tac >>
-  ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)) >>
+  ho_match_mp_tac (GEN_ALL (SIMP_RULE (pure_ss ++ boolSimps.BOOL_ss) [LET_THM]
+    calldata_owned_interval_replace)) >>
   qexistsl_tac [`u`,`st1.cs_next_id`,`middle.cs_next_id`] >>
   asm_rewrite_tac[] >> decide_tac
 QED
@@ -4403,6 +4404,9 @@ QED
 
 Finalise calldata_owned_after_initial_repeat
 
+val calldata_owned_header_initial_repeat_simp =
+  SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat;
+
 Theorem calldata_nonbulk_owned_repeat:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
@@ -4581,7 +4585,7 @@ Proof
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
   >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat) >>
+  irule calldata_owned_header_initial_repeat_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`
@@ -5692,6 +5696,9 @@ QED
 
 Finalise calldata_owned_after_initial_repeat_observed
 
+val calldata_owned_header_initial_repeat_observed_simp =
+  SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed;
+
 Theorem calldata_nonbulk_owned_repeat_observed:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
@@ -5870,7 +5877,7 @@ Proof
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
   >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed) >>
+  irule calldata_owned_header_initial_repeat_observed_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`
