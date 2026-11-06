@@ -126,6 +126,9 @@ Theorem raw_log_dynamic_inst_seq_ptr:
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!z. not_fresh_at sa z ==>
       FLOOKUP G' z = FLOOKUP G z /\ op_taint tn' (Var z) = op_taint tn (Var z)) /\
+    (?mid. t = mid with vs_logs := t.vs_logs /\
+      (mid with vs_vars := s.vs_vars) = s /\
+      (!z. not_fresh_at sa z ==> lookup_var z mid = lookup_var z s)) /\
     t.vs_memory = s.vs_memory /\
     t.vs_logs = s.vs_logs ++
       [<| logger := w2w s.vs_call_ctx.cc_address; topics := vals;
@@ -206,7 +209,7 @@ Resume raw_log_dynamic_inst_seq_ptr[log]:
     conj_tac >- suspend "nonterm" >>
     qexistsl_tac [`G'`, `mid`, `tn'`] >> simp[Abbr `li`]) >>
   drule run_inst_seq_append >> disch_then (qspec_then `[li]` mp_tac) >>
-  simp[run_inst_seq_def]
+  simp[run_inst_seq_def] >> strip_tac >> qexists_tac `mid` >> simp[]
 QED
 
 Resume raw_log_dynamic_inst_seq_ptr[nonterm]:
