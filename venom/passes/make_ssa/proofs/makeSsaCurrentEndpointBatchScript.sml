@@ -2,7 +2,7 @@ Theory makeSsaCurrentEndpointBatch
 Ancestors
   makeSsaCurrentDominanceAvailability makeSsaCurrentPhiBatchRuntime
   makeSsaCurrentPrefixRuntime venomExecProofs venomWf venomExecSemantics
-  venomState list option
+  venomState list option cfgNormSupplySim finite_map sccpCorrectnessProofs
 
 Theorem current_endpoint_available_lookup[local]:
   wf_function f /\ MEM pred f.fn_blocks /\
@@ -59,4 +59,66 @@ Proof
   rpt strip_tac >> irule current_phi_batch_success_all >> rpt strip_tac >>
   irule current_endpoint_phi_read >> goal_assum (drule_at Any) >>
   fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_completed_block_outputs_defined:
+  bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+  exec_block fuel C bb st = OK edge /\
+  (!j x. j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+     MEM x (EL j bb.bb_instructions).inst_outputs ==> IS_SOME (lookup_var x st)) ==>
+  !i x. MEM i bb.bb_instructions /\ MEM x i.inst_outputs ==>
+    IS_SOME (lookup_var x edge)
+Proof
+  rpt strip_tac >>
+  `?idx. idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = i` by
+    metis_tac[MEM_EL] >>
+  `~is_terminator i.inst_opcode` by
+    (strip_tac >> `i.inst_outputs = []` by
+       metis_tac[terminator_no_outputs, EVERY_MEM] >> gvs[]) >>
+  `x IN FDOM edge.vs_vars` by
+    (irule exec_block_outputs_in_fdom_from_prefix >>
+     qexistsl [`bb`, `C`, `fuel`, `idx`, `st`] >>
+     simp[] >> rpt strip_tac >>
+     fs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+     metis_tac[option_nchotomy, IS_SOME_DEF]) >>
+  fs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
+Theorem current_completed_edge_phi_batch_total:
+  wf_function f /\ wf_ssa f /\ MEM pred f.fn_blocks /\
+  pred.bb_label = before.vs_current_bb /\ EVERY inst_wf pred.bb_instructions /\
+  strict_dom_vars_defined f before /\ fn_reachable f before.vs_current_bb /\
+  before.vs_inst_idx <= LENGTH pred.bb_instructions /\
+  (!j x. j < before.vs_inst_idx /\ j < LENGTH pred.bb_instructions /\
+     MEM x (EL j pred.bb_instructions).inst_outputs ==> IS_SOME (lookup_var x before)) /\
+  exec_block fuel C pred before = OK edge /\
+  lookup_block edge.vs_current_bb f.fn_blocks = SOME bb /\
+  EVERY inst_wf bb.bb_instructions ==> ?post. eval_phis edge bb.bb_instructions = OK post
+Proof
+  rpt strip_tac >>
+  `bb_well_formed pred` by metis_tac[wf_function_def] >>
+  `pred.bb_instructions <> [] /\
+   (!i. i < LENGTH pred.bb_instructions - 1 ==>
+      ~is_terminator (EL i pred.bb_instructions).inst_opcode)` by
+    (fs[bb_well_formed_def] >> rpt strip_tac >>
+     `i < LENGTH pred.bb_instructions` by decide_tac >>
+     `i = PRE (LENGTH pred.bb_instructions)` by metis_tac[] >> decide_tac) >>
+  `edge.vs_prev_bb = SOME before.vs_current_bb` by
+    (drule_all exec_block_ok_prev_bb_general >> simp[]) >>
+  `MEM edge.vs_current_bb (bb_succs pred)` by
+    (drule_all exec_block_current_bb_in_succs >> simp[]) >>
+  `MEM bb f.fn_blocks /\ bb.bb_label = edge.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `fn_cfg_edge f pred.bb_label bb.bb_label` by
+    (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  `strict_dom_vars_defined f (edge with vs_current_bb := pred.bb_label)` by
+    (drule exec_block_fdom_mono >>
+     simp[strict_dom_vars_defined_def, pred_setTheory.SUBSET_DEF] >>
+     fs[strict_dom_vars_defined_def] >> metis_tac[]) >>
+  `!i x. MEM i pred.bb_instructions /\ MEM x i.inst_outputs ==>
+     IS_SOME (lookup_var x edge)` by
+    (rpt strip_tac >> irule current_completed_block_outputs_defined >>
+     qexistsl [`C`, `pred`, `fuel`, `i`, `before`] >> simp[] >> metis_tac[]) >>
+  irule current_endpoint_phi_batch_total >>
+  conj_tac >- simp[] >> qexistsl [`f`, `pred`] >> simp[] >> metis_tac[]
 QED
