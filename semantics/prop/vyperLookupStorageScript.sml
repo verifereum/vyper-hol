@@ -1300,7 +1300,9 @@ Proof
       simp[] >> disch_then irule >>
       gvs[value_has_type_def, well_formed_type_value_def, type_slot_size_def] >>
       gvs[listTheory.EVERY_MEM] >>
-      reverse conj_tac >- (qexists_tac `l` >> simp[]) >>
+      reverse conj_tac >-
+        (conj_tac >- (qexists_tac `l` >> simp[]) >>
+         gvs[Once slots_in_range_def]) >>
       rpt strip_tac >>
       `type_value_size tv < type_value_size (TupleTV tvs)` by
         (irule MEM_TupleTV_type_value_size >> simp[]) >>
@@ -1309,7 +1311,8 @@ Proof
       simp[] >> disch_then (qspec_then `tv` mp_tac) >>
       simp[] >> disch_then irule >>
       gvs[listTheory.EVERY_MEM] >> metis_tac[])
-  >- (`!x ws b s. value_has_type t x /\ encode_value t x = SOME ws ==>
+  >- (`!x ws b s. slots_in_range s b t /\
+         value_has_type t x /\ encode_value t x = SOME ws ==>
          slots_in_range (apply_writes (n2w b) ws s) b t` by
         (rpt strip_tac >>
          qpat_x_assum `!m. _` (qspec_then `type_value_size t` mp_tac) >>
@@ -1335,7 +1338,8 @@ Proof
       gvs[value_has_type_def, well_formed_type_value_def, type_slot_size_def] >>
       gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >>
       reverse conj_tac >- (conj_tac >- metis_tac[] >>
-                           qexists_tac `l` >> simp[]) >>
+        conj_tac >- (qexists_tac `l` >> simp[]) >>
+        gvs[Once slots_in_range_def]) >>
       rpt strip_tac >>
       `type_value_size p_2 < type_value_size (StructTV ftypes)` by
         (irule MEM_StructTV_type_value_size >> metis_tac[]) >>
@@ -1378,7 +1382,9 @@ Proof
   rpt strip_tac >> gvs[slots_in_range_def] >>
   TRY (fs[decode_dyn_bytes_def, LET_THM, read_slot_def] >> NO_TAC) >>
   TRY (res_tac >> gvs[] >> NO_TAC) >>
-  metis_tac[]
+  gvs[SF ETA_ss]
+  >- (first_x_assum irule >> irule dyn_slots_in_range_prefix >>
+      qexists_tac `max` >> simp[])
 QED
 
 (* Public decoder boundary: current in-range slots decode to a current,
@@ -1717,7 +1723,11 @@ Proof
     >- (
       gvs[] >>
       irule encode_implies_slots_in_range >>
-      simp[] >> qexists_tac `v` >> simp[]
+      simp[] >> conj_tac
+      >- (qexists_tac `v` >> simp[]) >>
+      qpat_x_assum `well_formed_storage cx st` mp_tac >>
+      simp[well_formed_storage_def, storage_var_in_range_def] >>
+      metis_tac[]
     ) >>
     `off + type_slot_size tv ≤ dimword(:256)` by
       (fs[well_formed_layout_def] >> res_tac) >>
