@@ -3,7 +3,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
-  removeUnusedSsaProofs
+  removeUnusedSsaProofs venomInst cfgNormSupplyProofs
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
 
 Theorem dfs_saved_parent_origin_mutual[local]:
@@ -646,4 +646,54 @@ Proof
   simp[def_available_at_def] >> strip_tac >>
   rpt strip_tac >>
   `def_bb = bb` by metis_tac[ssa_unique_output_block] >> gvs[]
+QED
+
+Theorem regional_phi_nonentry[local]:
+  !fn bb phi. codegen_ready_fn fn /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM phi (collect_phis bb.bb_instructions) ==>
+    fn_entry_label fn <> SOME bb.bb_label
+Proof
+  rpt strip_tac >>
+  `block_entries_ready (cfg_analyze fn) fn` by gvs[codegen_ready_fn_def] >>
+  qpat_x_assum `codegen_ready_fn _` kall_tac >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def, lookup_block_def,
+      FIND_thm, block_entries_ready_def, NULL_EQ]
+QED
+
+Theorem regional_phi_live_trigger:
+  !fn bb phi. codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM phi (collect_phis bb.bb_instructions) ==>
+    ?w. MEM w (MAP SND (phi_pairs phi.inst_operands)) /\
+        MEM w (live_vars_at (liveness_analyze fn) bb.bb_label 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fn_entry_label fn <> SOME bb.bb_label` by metis_tac[regional_phi_nonentry] >>
+  drule_all regional_first_entry_edge >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI` by
+    metis_tac[collect_phis_mem] >>
+  `phi_edge_uses_wf fn bb phi` by
+    (gvs[codegen_ready_fn_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `?w. MEM (pred,w) (phi_pairs phi.inst_operands)` by
+    (gvs[phi_edge_uses_wf_def] >> Cases_on `p` >> gvs[] >> metis_tac[]) >>
+  `!inst. MEM inst bb.bb_instructions ==> ~MEM w inst.inst_outputs` by
+    metis_tac[regional_phi_edge_source_fresh] >>
+  `?idx. idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = phi` by
+    metis_tac[MEM_EL] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[ready_reachable_preorder] >>
+  `MEM w (inst_uses phi)` by
+    metis_tac[MEM_phi_pairs_SND_operand_vars, inst_uses_def] >>
+  `MEM w (live_vars_at (liveness_analyze fn) bb.bb_label idx)` by
+    (drule live_vars_at_uses >> simp[] >> disch_then irule >> metis_tac[]) >>
+  qexists_tac `w` >> conj_tac >- (simp[MEM_MAP] >> metis_tac[pairTheory.SND]) >>
+  drule live_vars_at_propagate_range >> simp[] >> disch_then irule >>
+  simp[] >> qexists_tac `idx` >>
+  simp[inst_defs_def] >> rpt strip_tac >>
+  `k < LENGTH bb.bb_instructions` by decide_tac >>
+  metis_tac[EL_MEM]
 QED
