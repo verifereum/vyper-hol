@@ -17,7 +17,9 @@ Ancestors
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
-  makeSsaCurrentCutTransport
+  makeSsaCurrentCutTransport makeSsaCurrentPrefixSuffixOwner
+  makeSsaCurrentPrefixMaps makeSsaCurrentPrefixOwner makeSsaCurrentCleanupShape
+  makeSsaCurrentLockstepShape
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -392,4 +394,67 @@ Proof
   drule_all current_transport_cleanup_ordinary_outputs >>
   disch_then (rewrite_tac o single) >>
   metis_tac[current_cut_pair_precleanup_output_exclusion]
+QED
+
+Theorem current_cut_sg_owned_name:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  FLOOKUP (current_cut_sg fn A renamed H events l i) z = SOME x ==>
+  ?t. MEM (t,x,z) H
+Proof
+  strip_tac >> drule_all current_cut_sg_lookup >> strip_tac >>
+  irule current_cut_pair_owned_name >> metis_tac[]
+QED
+
+Theorem current_cut_cleaned_suffix_owner:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\ bb = simplify_current_phi_block new /\
+  phi_prefix_length bb.bb_instructions <= k /\
+  k <= phi_prefix_length new.bb_instructions ==>
+  (!z x. current_prefix_back
+    (TAKE (phi_prefix_length new.bb_instructions - k) (DROP k bb.bb_instructions))
+    (current_cut_sg fn A renamed H events l i) z x ==> ?t. MEM (t,x,z) H) /\
+  current_prefix_functional (current_prefix_back
+    (TAKE (phi_prefix_length new.bb_instructions - k) (DROP k bb.bb_instructions))
+    (current_cut_sg fn A renamed H events l i))
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  irule current_prefix_cleaned_suffix_owner >> metis_tac[current_cut_sg_owned_name]
+QED
+
+Theorem current_cut_actual_suffix_owner:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\ A h = current_block_annotations old pre /\
+  lookup_block h (simplify_current_phis_if enabled renamed) = SOME bb /\
+  phi_prefix_length bb.bb_instructions <= k /\
+  k <= LENGTH pre + LENGTH (collect_phis old.bb_instructions) ==>
+  (!z x. current_prefix_back
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) - k)
+      (DROP k bb.bb_instructions))
+    (current_cut_sg fn A renamed H events h (LENGTH (collect_phis old.bb_instructions)))
+    z x ==> ?t. MEM (t,x,z) H) /\
+  current_prefix_functional (current_prefix_back
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) - k)
+      (DROP k bb.bb_instructions))
+    (current_cut_sg fn A renamed H events h (LENGTH (collect_phis old.bb_instructions))))
+Proof
+  strip_tac >>
+  `phi_prefix_length new.bb_instructions =
+    LENGTH pre + LENGTH (collect_phis old.bb_instructions)` by
+    metis_tac[current_prefix_actual_endpoint] >>
+  fs[current_cleanup_if_lookup] >> Cases_on `enabled` >> gvs[]
+  >- (qpat_assum `phi_prefix_length bb'.bb_instructions = _`
+        (fn th => rewrite_tac[GSYM th]) >>
+      irule current_cut_cleaned_suffix_owner >> metis_tac[]) >>
+  `k = LENGTH pre + LENGTH (collect_phis old.bb_instructions)` by decide_tac >>
+  gvs[current_prefix_back_def] >>
+  conj_tac >- metis_tac[current_cut_sg_owned_name] >>
+  simp[current_prefix_functional_def, current_prefix_back_def] >>
+  metis_tac[optionTheory.SOME_11]
 QED
