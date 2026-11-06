@@ -33,10 +33,11 @@ Overload abi_decoder_ids = “abi_sites_decoder_ids UNIV”
 Overload abi_decoder_missing = “abi_sites_decoder_missing UNIV”
 Overload abi_decoder_budget = “abi_sites_decoder_budget UNIV”
 
-(* Callers that know the function name its ALLOCA sites; UNIV covers any function. *)
+(* Callers that know the function name its 32-byte ALLOCA sites; UNIV covers any function. *)
 Definition abi_sites_cover_def:
   abi_sites_cover func sites <=>
-    !inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA ==> inst.inst_id IN sites
+    !inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+           inst.inst_operands = [Lit 32w] ==> inst.inst_id IN sites
 End
 
 Theorem abi_sites_cover_univ[simp]:
