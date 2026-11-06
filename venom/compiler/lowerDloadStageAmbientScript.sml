@@ -4,9 +4,9 @@ Ancestors
   lowerDloadConfiguredOrigins lowerDloadSafetyRootCoverage
   lowerDloadReturnReconstruction o1PassContract unitMemInv
   contextRawReachable contextCodegenRel ptrDiscipline list
-  venomInst o1ContractLowerDload fmpAnalysisProps
+  venomInst o1ContractLowerDload fmpAnalysisProps lowerDloadOwnedTransitionBoundary
 Libs
-  lowerDloadReturnPackageLib
+  lowerDloadReturnPackageLib lowerDloadOwnedTransitionPackageLib
 
 Theorem ld_stage_ambient:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -61,18 +61,7 @@ Theorem ld_stage_root_coverage:
   enters_block fn'
     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t /\
   active_inst fn' ti t ==>
-  ?stk PG G tn fn inst s t0 A frames N X p h.
-    ld_sync lo P C vs stk PG G tn fn inst s t0 A frames N /\
-    ld_global lo A frames /\
-    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
-    (!j k. j < k /\ k < LENGTH frames ==>
-      list_precedes (EL j frames).lf_fn.fn_name
-                    (EL k frames).lf_fn.fn_name names) /\
-    fn' = ld_image (HD frames) /\
-    ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
-    ld_prefix C' fn' X p h t0 t /\ ti = EL h X /\
-    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
-      j IN P f.lf_fn.fn_name) frames
+  ^ld_owned lo P C C' vs Sigma names fn' ti t
 Proof
   strip_tac >>
   `?nm fn lb. C.ctx_entry = SOME nm /\
@@ -94,8 +83,8 @@ Proof
      `o1_fn_shape C fn` by metis_tac[] >>
      drule o1_fn_shape_components >> simp[]) >>
   `lbl = lb` by metis_tac[optionTheory.SOME_11] >>
-  irule ld_owned_root_coverage >>
-  goal_assum (drule_at Any) >> simp[] >> gvs[]
+  gvs[] >> irule (SRULE [] ld_owned_root) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
