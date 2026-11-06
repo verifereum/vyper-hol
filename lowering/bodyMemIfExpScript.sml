@@ -8,7 +8,7 @@ Theory bodyMemIfExp
 Ancestors
   bodyMemIfExpWidened bodyIfExpMemory exprSimMemUnwrap
   bodyMemoryPreds exprSimOperators exprSimIfExp exprSimSource exprSimHyps
-  exprSimHypsDefs bodyIfExpReturnLayout
+  exprSimHypsDefs bodyIfExpArmLayout
 
 Theorem body_ifexp_mem_ok:
   !cx v5 e1 e2 e3.
