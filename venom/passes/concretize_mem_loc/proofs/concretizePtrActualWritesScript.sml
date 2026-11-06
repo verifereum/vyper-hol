@@ -32,26 +32,49 @@ Proof
   simp[ptr_observe_def]
 QED
 
-(* Finite backward selection: the final actual write has a pure successor. *)
-Theorem ptr_last_actual_index[local]:
-  !j i. i <= j /\ tainted i /\ ~tainted j /\
+(* Backwards purity across a finite interval of actual nonwrites. *)
+Theorem ptr_nonwrite_interval_pure[local]:
+  !j i. i <= j /\ ~tainted j /\
+    (!k. i <= k /\ k < j ==> ~writes k) /\
     (!k. i <= k /\ k < j ==> tainted k /\ ~tainted (SUC k) ==> writes k) ==>
-    ?w. i <= w /\ w < j /\ writes w /\ ~tainted (SUC w) /\
-        (!k. w < k /\ k < j ==> ~writes k)
+    ~tainted i
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- gvs[] >>
   Cases_on `i = SUC j` >- gvs[] >>
   `i <= j` by decide_tac >>
+  `~tainted j` by
+    (qpat_x_assum `!k. _ ==> tainted k /\ _ ==> _` (qspec_then `j` mp_tac) >>
+     qpat_x_assum `!k. _ ==> ~writes k` (qspec_then `j` mp_tac) >> simp[]) >>
+  first_x_assum irule >> simp[] >> conj_tac >> rpt strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
+(* One selection implementation, allowing initially pure fixed bytes. *)
+Theorem ptr_last_actual_index[local]:
+  !j i. i <= j /\ ~tainted j /\
+    (!k. i <= k /\ k < j ==> tainted k /\ ~tainted (SUC k) ==> writes k) ==>
+    ((!k. i <= k /\ k < j ==> ~writes k) \/
+     ?w. i <= w /\ w < j /\ writes w /\ ~tainted (SUC w) /\
+         (!k. w < k /\ k < j ==> ~writes k))
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- simp[] >>
+  Cases_on `i = SUC j` >- simp[] >>
+  `i <= j` by decide_tac >>
   Cases_on `writes j`
-  >- (qexists `j` >> simp[] >> rpt strip_tac >> decide_tac) >>
+  >- (disj2_tac >> qexists `j` >> simp[]) >>
   `~tainted j` by
     (qpat_x_assum `!k. _` (qspec_then `j` mp_tac) >> simp[]) >>
-  `?w. i <= w /\ w < j /\ writes w /\ ~tainted (SUC w) /\
-        (!k. w < k /\ k < j ==> ~writes k)` by
+  `(!k. i <= k /\ k < j ==> ~writes k) \/
+   ?w. i <= w /\ w < j /\ writes w /\ ~tainted (SUC w) /\
+       (!k. w < k /\ k < j ==> ~writes k)` by
     (first_x_assum irule >> simp[] >> rpt strip_tac >>
-     first_x_assum irule >> simp[]) >>
-  qexists `w` >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> simp[])
+  >- (disj1_tac >> rpt strip_tac >>
+      Cases_on `k = j` >- gvs[] >>
+      `k < j` by decide_tac >> metis_tac[]) >>
+  disj2_tac >> qexists `w` >> simp[] >> rpt strip_tac >>
   Cases_on `k = j` >- gvs[] >>
   `k < j` by decide_tac >> metis_tac[]
 QED
@@ -67,10 +90,62 @@ Theorem ptr_chrono_last_actual_interval:
       x NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
                                        (EL (SUC k) h).po_state))
 Proof
-  strip_tac >> ho_match_mp_tac ptr_last_actual_index >> simp[] >>
-  rpt strip_tac >> irule ptr_chrono_step_actual_mem >> simp[] >>
-  qexists `ctx` >> simp[] >> irule ptr_chrono_history_adjacent >>
-  conj_tac >- decide_tac >> qexistsl [`endpoint`,`vs0`] >> simp[]
+  strip_tac >>
+  `!k. i <= k /\ k < j ==>
+    x IN (EL k h).po_taint.t_mem /\ x NOTIN (EL (SUC k) h).po_taint.t_mem ==>
+    x IN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
+      (EL (SUC k) h).po_state)` by
+    (rpt strip_tac >> irule ptr_chrono_step_actual_mem >> simp[] >>
+     qexists `ctx` >> simp[] >> irule ptr_chrono_history_adjacent >>
+     conj_tac >- decide_tac >> qexistsl [`endpoint`,`vs0`] >> simp[]) >>
+  `(!k. i <= k /\ k < j ==> x NOTIN range_bytes
+      (step_writes (EL k h).po_inst (EL k h).po_state (EL (SUC k) h).po_state)) \/
+   ?w. i <= w /\ w < j /\
+     x IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+       (EL (SUC w) h).po_state) /\ x NOTIN (EL (SUC w) h).po_taint.t_mem /\
+     (!k. w < k /\ k < j ==> x NOTIN range_bytes
+       (step_writes (EL k h).po_inst (EL k h).po_state (EL (SUC k) h).po_state))` by
+    (ho_match_mp_tac ptr_last_actual_index >> simp[])
+  >- (`x NOTIN (EL i h).po_taint.t_mem` suffices_by simp[] >>
+      mp_tac (Q.INST
+        [`tainted` |-> `\k. x IN (EL k h).po_taint.t_mem`,
+         `writes` |-> `\k. x IN range_bytes (step_writes (EL k h).po_inst
+           (EL k h).po_state (EL (SUC k) h).po_state)`]
+        ptr_nonwrite_interval_pure) >>
+      disch_then (qspecl_then [`j`,`i`] mp_tac) >> simp[] >> metis_tac[]) >>
+  qexists `w` >> simp[]
+QED
+
+Theorem ptr_chrono_last_actual_or_none:
+  ptr_chrono_history vs C h endpoint /\ x NOTIN endpoint.po_taint.t_mem ==>
+  ((!n. SUC n < LENGTH h ==>
+      x NOTIN range_bytes (step_writes (EL n h).po_inst
+        (EL n h).po_state (EL (SUC n) h).po_state)) \/
+   (?w. SUC w < LENGTH h /\
+     x IN range_bytes (step_writes (EL w h).po_inst
+       (EL w h).po_state (EL (SUC w) h).po_state) /\
+     x NOTIN (EL (SUC w) h).po_taint.t_mem /\
+     (!n. w < n /\ SUC n < LENGTH h ==>
+       x NOTIN range_bytes (step_writes (EL n h).po_inst
+         (EL n h).po_state (EL (SUC n) h).po_state))))
+Proof
+  strip_tac >> drule ptr_chrono_history_end >> strip_tac >>
+  `0 < LENGTH h /\ EL (LENGTH h-1) h = endpoint` by
+    (Cases_on `h` >> gvs[LAST_EL]) >>
+  `!k. k < LENGTH h-1 <=> SUC k < LENGTH h` by decide_tac >>
+  `!k. k < LENGTH h-1 ==>
+    x IN (EL k h).po_taint.t_mem /\ x NOTIN (EL (SUC k) h).po_taint.t_mem ==>
+    x IN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
+      (EL (SUC k) h).po_state)` by
+    (rpt strip_tac >> irule ptr_chrono_step_actual_mem >> simp[] >>
+     qexists `C` >> simp[] >> irule ptr_chrono_history_adjacent >>
+     conj_tac >- decide_tac >> qexistsl [`endpoint`,`vs`] >> simp[]) >>
+  mp_tac (Q.INST
+    [`tainted` |-> `\k. x IN (EL k h).po_taint.t_mem`,
+     `writes` |-> `\k. x IN range_bytes (step_writes (EL k h).po_inst
+       (EL k h).po_state (EL (SUC k) h).po_state)`]
+    ptr_last_actual_index) >>
+  disch_then (qspecl_then [`LENGTH h-1`,`0`] mp_tac) >> simp[]
 QED
 
 Theorem ptr_chrono_fresh_last_actual_index:
