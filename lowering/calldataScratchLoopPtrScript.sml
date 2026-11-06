@@ -625,3 +625,89 @@ Resume calldata_scratch_loop_finite_prefix_ptr[finite_scratch]:
 QED
 
 Finalise calldata_scratch_loop_finite_prefix_ptr
+
+Theorem calldata_scratch_loop_exit_ptr:
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
+    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
+    (Var q) src (Var root) sb d slot first last b cap next initial /\
+  abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+    first last lo hi next limit_st b cap initial hdr (LENGTH vs) s /\
+  fn_inst_ids_distinct func /\
+  (!k. k < LENGTH vs ==> !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem) /\
+  ptr_covers G tn root s (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+  ptr_covers G tn q s 32 /\ DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  allocas_from lower s /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+  ?t H u.
+    abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+      first last lo hi next limit_st b cap initial exit_lbl (LENGTH vs) t /\
+    abi_decode_sim ctx func s t /\ t.vs_memory = s.vs_memory /\
+    ptr_covers H u root t (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+    ptr_covers H u q t 32 /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\ allocas_from lower t /\
+    (!x. abi_decoder_older_vars next x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!k a. k IN abi_decoder_ids first last /\ ~(k IN abi_decoder_ids lo hi) /\
+      FLOOKUP s.vs_allocas k = SOME (a,32) ==>
+      FLOOKUP t.vs_allocas k = SOME (a,32) /\ mload a t = mload a s) /\
+    (!k. k < LENGTH vs ==> !mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u t) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_scratch_decoder_loop_data_facts >> strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
+  qhdtm_assum `abi_decoder_recursive_loop_compiled`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
+  qhdtm_assum `abi_scratch_decoder_loop_data`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def]) >>
+  `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by
+    fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
+  `site IN abi_decoder_ids first last` by (simp[abi_decoder_ids_def] >> decide_tac) >>
+  drule_all abi_decoder_budget_site_bounds >> strip_tac >>
+  `slot + 32 < dimword (:256)` by
+    (qpat_assum `abi_decoder_budget first last b cap s` mp_tac >>
+     simp_tac bool_ss [abi_decoder_budget_def] >> strip_tac >> decide_tac) >>
+  `sb + LENGTH bs < dimword (:256) /\ eval_operand src initial = SOME (n2w sb)` by
+    fs[abi_scratch_decoder_ranges_def] >>
+  drule_at (Pat `abi_decode_loop_cfg _ _ _ _ _ _ _ _ _ _ _ _`) decoder_scratch_header_ptr_core >>
+  disch_then (drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (qspecl_then [`header_var`,`ctx`,`PG`,`D`] mp_tac) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
+  rename1 `abi_decode_sim ctx func s h` >>
+  `h.vs_memory = s.vs_memory` by
+    (qpat_assum `h = _` (fn th => pure_rewrite_tac [th]) >>
+     simp[jump_to_def, abi_decode_header_state_def, update_var_def]) >>
+  `!x. abi_decoder_older_vars next x ==>
+    ~MEM x [STRING #"%" (toString header_var); STRING #"%" (toString (header_var+1));
+      STRING #"%" (toString (header_var+2)); STRING #"%" (toString (header_var+3))]` by
+    (fs[abi_decoder_older_vars_def] >> rpt strip_tac >> fs[] >>
+     metis_tac[DECIDE ``next <= header_var ==> next <= header_var + (n:num)``]) >>
+  `ptr_covers H u root h (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))` by
+    (irule ptr_covers_frame >> qexistsl_tac [`G`,`s`,`tn`] >> simp[] >>
+     fs[abi_decoder_operand_live_def] >> metis_tac[pred_setTheory.SPECIFICATION]) >>
+  `allocas_from lower h` by (fs[allocas_from_def] >> metis_tac[]) >>
+  qexistsl_tac [`h`,`H`,`u`] >> asm_simp_tac bool_ss [] >>
+  suspend "exit_frames"
+QED
+
+Resume calldata_scratch_loop_exit_ptr[exit_frames]:
+  conj_tac
+  >- (qpat_assum `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
+      qpat_assum `h = _` mp_tac >>
+      qpat_assum `type_memory_size tv = _` mp_tac >>
+      qpat_assum `type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  simp[mload_def, jump_to_def, abi_decode_header_state_def, update_var_def]
+QED
+
+Finalise calldata_scratch_loop_exit_ptr
