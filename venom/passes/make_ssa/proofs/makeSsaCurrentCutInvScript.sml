@@ -1393,3 +1393,57 @@ Proof
        gvs[] >> metis_tac[]) >>
    gvs[EL_TAKE] >> metis_tac[])
 QED
+
+Theorem current_cut_phi_prefix_index[local]:
+  !xs j. j < LENGTH (collect_phis xs) ==>
+    j < LENGTH xs /\ (EL j xs).inst_opcode = PHI
+Proof
+  Induct >> simp[livenessDefsTheory.collect_phis_def] >> gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `j` >> simp[]
+QED
+
+Theorem current_cut_local_original_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  A h = current_block_annotations old pre /\
+  j < LENGTH (collect_phis old.bb_instructions) /\
+  r < LENGTH (EL j old.bb_instructions).inst_outputs /\
+  EL r (EL j old.bb_instructions).inst_outputs = x /\
+  E x = CurrentOriginal h j r /\
+  (current_token_name H (E x) = SOME z \/
+   ?d. E x = CurrentInserted x d /\
+       current_collapsed_carrier fn A renamed d x z) ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >>
+  `current_token_name H (CurrentOriginal h j r) = SOME z` by gvs[] >>
+  drule current_cut_phi_prefix_index >> strip_tac >>
+  drule_all current_wf_phi_context_block_opcodes >> strip_tac >>
+  rename1 `A h = current_block_annotations old pre'` >>
+  `LENGTH new.bb_instructions = LENGTH pre' + LENGTH old.bb_instructions` by
+    metis_tac[LENGTH_MAP, LENGTH_APPEND] >>
+  `(EL (LENGTH pre' + j) new.bb_instructions).inst_opcode = PHI` by
+    (qpat_x_assum `MAP instruction_inst_opcode _ = _`
+      (mp_tac o Q.AP_TERM `\xs. EL (LENGTH pre' + j) xs`) >>
+     simp[EL_MAP, EL_APPEND_EQN]) >>
+  `fn_inst_wf fn` by fs[current_wf_phi_context_def] >>
+  `inst_wf (EL j old.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, lookup_block_MEM, EL_MEM] >>
+  `phi_well_formed (EL j old.bb_instructions).inst_operands` by
+    (qpat_x_assum `inst_wf _` mp_tac >> simp[inst_wf_def]) >>
+  `current_wf_original_phi_at fn A renamed h j (LENGTH pre' + j)
+    (phi_pairs (EL j old.bb_instructions).inst_operands)` by
+    (simp[current_wf_original_phi_at_def] >> qexists_tac `pre'` >>
+     simp[makeSsaCurrentNonDegCleanupTheory.current_nondeg_slots_decode] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  drule_all current_wf_original_phi_output >> strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  `MEM (CurrentOriginal h j r,x,z) H` by
+    (irule current_history_owned_name_member >> gvs[] >> metis_tac[]) >>
+  gvs[] >> irule current_cut_retained_original_endpoint >> metis_tac[]
+QED
