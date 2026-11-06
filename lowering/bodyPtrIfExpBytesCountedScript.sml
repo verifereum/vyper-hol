@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpBytesCounted
 Ancestors
-  bodyPtrIfExpCopyHeader bodyPtrIfExpCopyInputs typedCopyPtr fragGasSeqPtr
+  bodyPtrIfExpBytesFrame bodyPtrIfExpCopyHeader bodyPtrIfExpCopyInputs typedCopyPtr fragGasSeqPtr
   context compileEnv emitHelper exprLoweringProps rich_list venomInst
   venomState venomExecSemantics ptrSafeRun ptrDiscipline fragExec
   finite_map instIdxIndep ghostPcTransportPtr
@@ -520,6 +520,8 @@ Theorem compile_store_bytestring_seq_ptr:
     ?Gf tnf sf.
       inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
       run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
       tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
@@ -538,7 +540,10 @@ Proof
      gvs[vfmConstantsTheory.word_size_def]) >>
   `clean_emitted_prefix D ctx fn PG sa sm count_op (n2w n) s G tn` by
     (drule_all compile_bytestring_copy_len_clean_prefix >> simp[]) >>
-  drule_all clean_emitted_prefix_mcopy >> simp[]
+  drule_all clean_emitted_prefix_mcopy >> strip_tac >>
+  drule bytes_writer_ambient_effects >> simp[] >> strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`] >> simp[]
 QED
 
 Theorem compile_store_bytestring_gas_path_ptr:
@@ -557,6 +562,8 @@ Theorem compile_store_bytestring_gas_path_ptr:
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
         (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
       run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
       tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION

@@ -90,6 +90,8 @@ Theorem compile_store_bytestring_robust_gas_path_ptr:
       (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
         mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
       (!i. i < n ==> (w2n b+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)) /\
       (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
