@@ -1,7 +1,7 @@
 (*
  * Lowering Memory Safety — Proofs
  *
- * Proofs for theorems in loweringMemSafetyProps.
+ * Memory-safety results for the lowering.
  *)
 
 Theory loweringMemSafetyProofs
