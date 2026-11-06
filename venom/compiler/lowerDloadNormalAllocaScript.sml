@@ -25,7 +25,7 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ld_alloca_normal_data_backward:
+Theorem ld_alloca_normal_data_backward_fresh_bounds:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   ld_annotated_reachable vs0 C astk k L AP AG tn fn i s /\
@@ -35,8 +35,9 @@ Theorem ld_alloca_normal_data_backward:
   op_taint tn op = {} /\ eval_operand op s = SOME n /\
   lo <= s.vs_alloca_next /\
   (FLOOKUP L i.inst_id = NONE ==> (0,k) NOTIN live) /\
-  s.vs_alloca_next + w2n n < dimword(:256) /\
-  t.vs_alloca_next + w2n n < dimword(:256) /\
+  (FLOOKUP L i.inst_id = NONE ==>
+    s.vs_alloca_next + w2n n < dimword(:256) /\
+    t.vs_alloca_next + w2n n < dimword(:256)) /\
   step_inst fuelT CT i t = OK t' ==>
   ?s' E' k' L' H'.
     step_inst fuelS CS i s = OK s' /\
@@ -94,47 +95,58 @@ Proof
   >> suspend "shared_and_account"
 QED
 
-Resume ld_alloca_normal_data_backward[noncurrent_storage]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[noncurrent_storage]:
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   fs[ld_shared_state_def, ld_alloca_nonmemory_taints] >>
   drule ld_normal_data_companions >> simp[]
 QED
 
-Resume ld_alloca_normal_data_backward[noncurrent_transient]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[noncurrent_transient]:
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   drule ld_normal_data_companions >> simp[]
 QED
 
-Resume ld_alloca_normal_data_backward[provenance_support]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[provenance_support]:
   map_every qx_gen_tac [`v`,`owner`,`b0`,`n0`] >> strip_tac >>
   `ld_live astk L' AP (ld_step_prov AP AG L' i) (owner,(b0,n0))` by
     (simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 
-Resume ld_alloca_normal_data_backward[strict_endpoints]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[strict_endpoints]:
+  Cases_on `FLOOKUP L i.inst_id = NONE`
+  >- suspend "fresh_strict_endpoints" >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume ld_alloca_normal_data_backward_fresh_bounds[fresh_strict_endpoints]:
+  `s.vs_alloca_next + w2n n < dimword(:256) /\
+   t.vs_alloca_next + w2n n < dimword(:256)` by metis_tac[] >>
   qpat_assum `step_inst fuelS CS i s = OK s'`
     (mp_then Any (qspecl_then [`out`,`op`] mp_tac) ld_alloca_step_effects) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qpat_assum `step_inst fuelT CT i t = OK t'`
     (mp_then Any (qspecl_then [`out`,`op`] mp_tac) ld_alloca_step_effects) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `n' = n /\ n'' = n` by fs[] >> gvs[] >>
+  `n' = n /\ n'' = n` by fs[] >>
+  qpat_x_assum `n' = n` SUBST_ALL_TAC >>
+  qpat_x_assum `n'' = n` SUBST_ALL_TAC >>
   `allocas_from 0 s` by simp[allocas_from_def] >>
   `0 <= s.vs_alloca_next` by simp[] >>
   drule_all ld_alloca_frontier_floor >> strip_tac >>
   qpat_assum `exec_alloca i s n = OK s'`
     (mp_then Any (qspec_then `0` mp_tac) ld_alloca_frontier_floor) >>
-  simp[] >> strip_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `s'.vs_alloca_next < dimword(:256) /\
+   t'.vs_alloca_next < dimword(:256)` by decide_tac >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!owner b c n. _ IN _ /\ _ ==> _`
-    drule >> simp[] >> strip_tac >>
-  first_x_assum drule >> strip_tac >> decide_tac
+    drule >> strip_tac >> first_x_assum drule >> strip_tac >> decide_tac
 QED
 
-Resume ld_alloca_normal_data_backward[live_representation]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[live_representation]:
   map_every qx_gen_tac [`owner`,`b0`,`c0`,`n0`] >> strip_tac >>
   Cases_on `FLOOKUP L i.inst_id = NONE /\ owner = (0,k)`
   >- (gvs[ld_site_entry_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
@@ -146,19 +158,19 @@ Resume ld_alloca_normal_data_backward[live_representation]:
   metis_tac[ld_alloca_preserves_entry]
 QED
 
-Resume ld_alloca_normal_data_backward[frontier_floor]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[frontier_floor]:
   qpat_assum `step_inst fuelT CT i t = OK t'`
     (mp_then Any (qspecl_then [`out`,`op`] mp_tac) ld_alloca_step_effects) >>
   (impl_tac >- simp[]) >> strip_tac >> decide_tac
 QED
 
-Resume ld_alloca_normal_data_backward[gas_equal]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[gas_equal]:
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   drule ld_normal_data_companions >> simp[]
 QED
 
-Resume ld_alloca_normal_data_backward[parameter_envelope]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[parameter_envelope]:
   qpat_x_assum `E' = _` kall_tac >>
   drule ld_normal_data_envelope >> strip_tac
   >- (disj1_tac >> asm_rewrite_tac[]) >>
@@ -172,18 +184,50 @@ Resume ld_alloca_normal_data_backward[parameter_envelope]:
   metis_tac[]
 QED
 
-Resume ld_alloca_normal_data_backward[allocas_floor]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[allocas_floor]:
   qpat_assum `step_inst fuelT CT i t = OK t'`
     (mp_then Any (qspecl_then [`out`,`op`] mp_tac) ld_alloca_step_effects) >>
   (impl_tac >- simp[]) >> strip_tac >>
   drule_all ld_alloca_frontier_floor >> simp[]
 QED
 
-Resume ld_alloca_normal_data_backward[shared_and_account]:
+Resume ld_alloca_normal_data_backward_fresh_bounds[shared_and_account]:
   markerLib.RESUME_TAC >> gvs[] >>
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_alloca_restore_normalize >> disch_then SUBST_ALL_TAC >>
   fs[ld_shared_state_def, ld_alloca_nonmemory_taints]
 QED
 
-Finalise ld_alloca_normal_data_backward
+Finalise ld_alloca_normal_data_backward_fresh_bounds
+
+(* Compatibility interface; the substantive assembly is branch-sensitive. *)
+Theorem ld_alloca_normal_data_backward:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  ld_annotated_reachable vs0 C astk k L AP AG tn fn i s /\
+  i.inst_opcode = ALLOCA /\ i.inst_operands = [op] /\
+  i.inst_outputs = [out] /\ i.inst_id NOTIN keys /\
+  (!v. op = Var v ==> v IN U) /\ ld_op_prov AG op = NONE /\
+  op_taint tn op = {} /\ eval_operand op s = SOME n /\
+  lo <= s.vs_alloca_next /\
+  (FLOOKUP L i.inst_id = NONE ==> (0,k) NOTIN live) /\
+  s.vs_alloca_next + w2n n < dimword(:256) /\
+  t.vs_alloca_next + w2n n < dimword(:256) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s' E' k' L' H'.
+    step_inst fuelS CS i s = OK s' /\
+    ld_select_alloca k L i s' = (k',L') /\
+    ld_select_alloca k H i t' = (k',H') /\
+    E' = (if FLOOKUP L i.inst_id = NONE then
+      E |+ ((0,k),(FST (THE (FLOOKUP s'.vs_allocas i.inst_id)),
+                    FST (THE (FLOOKUP t'.vs_allocas i.inst_id)),w2n n)) else E) /\
+    (!owner. owner IN live ==> FLOOKUP E' owner = FLOOKUP E owner) /\
+    ld_normal_data CS fn V U lo E' L' H' AP BP
+      (ld_step_prov AP AG L' i) (ld_step_prov BP BH H' i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk (if FLOOKUP L i.inst_id = NONE then (0,k) INSERT live else live)
+      keys d A suspended gstk f
+Proof
+  strip_tac >> irule ld_alloca_normal_data_backward_fresh_bounds >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
