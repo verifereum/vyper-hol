@@ -2,7 +2,7 @@
    clean but need not be a pointer; only old destinations retain coverage. *)
 Theory bodyPtrMakeArrayMemoryWord
 Ancestors
-  bodyPtrMakeArrayLoad bodyPtrMakeArrayWordClean typedCopyPtr
+  bodyPtrMakeArrayLoad bodyPtrMakeArrayWordClean bodyPtrMakeArrayMloadFrame typedCopyPtr
   exprSimProps bodyPtrDefs valueEncodingProps venomState venomInst finite_map
 
 Theorem memory_word_materialize_endpoint:
@@ -20,7 +20,12 @@ Theorem memory_word_materialize_endpoint:
     eval_operand (Var tmp) sf = SOME (typed_val_to_w256 ty v) /\
     op_taint tnf (Var tmp) = {} /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\ sf.vs_memory = s.vs_memory /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    sf.vs_memory = s.vs_memory /\
+    (!x. x <> tmp ==>
+      lookup_var x sf = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x)) /\
     (!dst n. tmp <> dst /\ ptr_covers G tn dst s n ==>
        ptr_covers Gf tnf dst sf n)
 Proof
@@ -41,7 +46,8 @@ Proof
       vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac >- (irule mload_ptr_path >> simp[]) >>
   drule_all mload_ghost_clean >> strip_tac >>
-  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       mload_ghost_frame] >>
   rpt strip_tac >>
   qpat_x_assum `mload _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
   irule (SRULE [update_var_def] mload_ptr_old_coverage) >> simp[]
