@@ -134,22 +134,12 @@ Proof
   metis_tac[QSORT_PERM, PERM_MEM_EQ]
 QED
 
-Theorem inventory_swap_ends[local]:
-  !stem mid a b.
-  stack_swap (LENGTH mid + 1) (stem ++ [a] ++ mid ++ [b]) =
-    stem ++ [b] ++ mid ++ [a]
-Proof
-  rpt gen_tac >>
-  simp[stack_swap_def, LET_THM, EL_APPEND_EQN, LUPDATE_APPEND2,
-       LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def]
-QED
-
 Theorem inventory_bulk_result:
   stack_pop (LENGTH mid + 1)
     (stack_swap (LENGTH mid + 1) (stem ++ [a] ++ mid ++ [b])) =
   stem ++ [b]
 Proof
-  simp[inventory_swap_ends, stack_pop_def, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+  simp[stack_swap_append_ends, stack_pop_def, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
 QED
 
 Theorem inventory_bulk_inventory[local]:
@@ -731,13 +721,6 @@ Proof
   Induct >> simp[] >> rpt gen_tac >> Cases_on `h = x` >> simp[]
 QED
 
-Theorem inventory_operand_vars_mem[local]:
-  !operands v. MEM v (dfgDefs$operand_vars operands) <=> MEM (Var v) operands
-Proof
-  Induct >> simp[dfgDefsTheory.operand_vars_def] >> gen_tac >>
-  Cases_on `h` >> simp[dfgDefsTheory.operand_var_def]
-QED
-
 Theorem inventory_emit_count:
   !operands ps ops qs.
   emit_input_plan opc operands nl ps = (ops, qs) /\
@@ -755,7 +738,7 @@ Proof
   drule_all inventory_emit_one_count >> strip_tac >>
   drule inventory_emit_one_spilled >> disch_then (qspec_then `v` assume_tac) >>
   `MEM (Var v) operands ==> MEM (Var v) mid.ps_stack \/ IS_SOME (FLOOKUP mid.ps_spilled (Var v))` by
-    (gvs[MEM_APPEND, inventory_operand_vars_mem] >>
+    (gvs[MEM_APPEND, input_mem_operand_vars] >>
      Cases_on `h = Var v` >> gvs[] >>
      Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var v))` >> gvs[] >>
      gvs[GSYM inventory_count_pos] >> decide_tac) >>
@@ -763,7 +746,7 @@ Proof
   Cases_on `h = Var v` >>
   Cases_on `MEM (Var v) operands` >> Cases_on `MEM v nl` >>
   Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var v))` >>
-  gvs[MEM_APPEND, inventory_operand_vars_mem] >> decide_tac
+  gvs[MEM_APPEND, input_mem_operand_vars] >> decide_tac
 QED
 
 Theorem inventory_distinct_count[local]:
@@ -828,19 +811,6 @@ Proof
   gvs[GSYM inventory_filter_count, GSYM inventory_count_pos]
 QED
 
-Theorem inventory_stack_swap_origin[local]:
-  !d stk x. MEM x (stack_swap d stk) ==> MEM x stk
-Proof
-  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
-  `LENGTH stk - 1 < LENGTH stk /\ LENGTH stk - (d + 1) < LENGTH stk` by
-    (Cases_on `stk` >> gvs[]) >>
-  `MEM (EL (LENGTH stk - 1) stk) stk /\
-   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
-    (conj_tac >> irule EL_MEM >> decide_tac) >>
-  simp[stack_swap_def, LET_THM] >> strip_tac >>
-  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
-QED
-
 Theorem inventory_spill_physical_origin[local]:
   do_spill_at d ps = (ops,qs) ==>
   !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
@@ -849,7 +819,7 @@ Proof
   simp[do_spill_at_def, do_spill_tos_def, LET_THM] >>
   Cases_on `alloc_spill_slot ps.ps_alloc` >>
   simp[stack_pop_def] >> rpt strip_tac >> gvs[] >>
-  metis_tac[rich_listTheory.MEM_TAKE, inventory_stack_swap_origin]
+  metis_tac[rich_listTheory.MEM_TAKE, stack_swap_mem_subset]
 QED
 
 Theorem inventory_reduce_physical_origin:
@@ -877,7 +847,7 @@ Theorem inventory_swap_physical_origin[local]:
 Proof
   disch_tac >> Cases_on `d <= 16`
   >- (gvs[do_swap_def, LET_THM] >> Cases_on `d = 0` >> gvs[] >>
-      metis_tac[inventory_stack_swap_origin]) >>
+      metis_tac[stack_swap_mem_subset]) >>
   gvs[] >>
   drule do_swap_stack_perm >> simp[] >> strip_tac >>
   metis_tac[PERM_MEM_EQ]
@@ -1551,7 +1521,7 @@ Proof
   `ALL_DISTINCT (stack_swap d ps.ps_stack) /\
    DISJOINT (set (stack_swap d ps.ps_stack)) (FDOM ps.ps_spilled)` by
     (simp[inventory_stack_swap_distinct] >>
-     gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[inventory_stack_swap_origin]) >>
+     gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[stack_swap_mem_subset]) >>
   drule inventory_spill_tos_partition >> simp[]
 QED
 
@@ -1583,7 +1553,7 @@ Proof
   disch_tac >> Cases_on `d <= 16`
   >- (gvs[do_swap_def, LET_THM] >> Cases_on `d = 0` >> gvs[] >>
       simp[inventory_stack_swap_distinct] >>
-      gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[inventory_stack_swap_origin]) >>
+      gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[stack_swap_mem_subset]) >>
   gvs[] >>
   `PERM qs.ps_stack ps.ps_stack` by
     (drule do_swap_stack_perm >> simp[]) >>
@@ -2074,7 +2044,7 @@ Proof
   drule stack_get_depth_props >> strip_tac >>
   simp[do_swap_stack_result, reorderSimTheory.do_swap_spilled_unchanged] >>
   conj_tac >- metis_tac[inventory_stack_swap_distinct] >>
-  gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[inventory_stack_swap_origin]
+  gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[stack_swap_mem_subset]
 QED
 
 Theorem inventory_release_resources:
@@ -2423,7 +2393,7 @@ Proof
   Cases_on `d = 1` >> gvs[] >>
   Cases_on `d = 0`
   >- (gvs[do_swap_def, stack_pop_def] >> rpt strip_tac >> gvs[] >>
-      metis_tac[MEM_TAKE, inventory_stack_swap_origin]) >>
+      metis_tac[MEM_TAKE, stack_swap_mem_subset]) >>
   gvs[stack_pop_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
   drule MEM_TAKE >> strip_tac >>

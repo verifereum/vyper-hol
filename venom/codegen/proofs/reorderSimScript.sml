@@ -1425,7 +1425,7 @@ Proof
 QED
 
 
-Theorem input_mem_operand_vars[local]:
+Theorem input_mem_operand_vars:
   !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
 Proof
   Induct >> simp[dfgDefsTheory.operand_vars_def] >>
@@ -3738,7 +3738,7 @@ Proof
   rpt strip_tac >> gvs[] >> fs[FLOOKUP_DEF]
 QED
 
-Theorem stack_swap_mem_subset[local]:
+Theorem stack_swap_mem_subset:
   !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
 Proof
   rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
