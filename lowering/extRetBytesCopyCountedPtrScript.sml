@@ -102,6 +102,7 @@ Theorem emit_mload_clean_counted_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (mload (w2n a) s) /\ op_taint tnf (Var out) = {} /\
+    op_prov Gf (Var out) = NONE /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -136,6 +137,9 @@ Proof
     (simp[Abbr `tnf`, Abbr `t`] >> irule mload_ghost_clean >>
      simp[eval_operand_def]) >>
   simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >-
+    simp[Abbr `Gf`, op_prov_def, step_prov_def, set_prov_def,
+         out_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> `p <> out` by metis_tac[] >>
   simp[Abbr `Gf`, Abbr `tnf`, step_prov_def, set_prov_def,
        out_prov_def, step_taint_def, set_var_taint_def, mk_inst_def,
