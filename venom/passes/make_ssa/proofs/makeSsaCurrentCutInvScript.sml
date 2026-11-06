@@ -24,6 +24,7 @@ Ancestors
   makeSsaCurrentRetainedContext makeSsaCurrentPrefixPayload
   makeSsaCurrentEdgeTransport makeSsaCurrentPrefixEndpoints
   makeSsaCurrentHistoryOwner venomInst venomWf venomExecProps list rich_list
+  makeSsaCurrentNonphiDemandEdge makeSsaCurrentSingletonDemandEdge
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -1124,4 +1125,55 @@ Proof
   drule_all (cj 1 current_cut_actual_suffix_owner) >>
   strip_tac >>
   irule current_cut_retained_original_endpoint >> metis_tac[]
+QED
+
+Theorem current_cut_clear_edge_env:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  MEM pev events /\ current_event_label pev = p /\
+  MEM hev events /\ current_event_label hev = h /\
+  ~current_actual_inserted fn v h /\ current_phi_cut_clear fn v h /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  current_demand fn v h (LENGTH (collect_phis old.bb_instructions)) ==>
+  current_event_exit_env pev v = current_event_entry_env hev v
+Proof
+  strip_tac >>
+  Cases_on `?pb phi. MEM pb fn.fn_blocks /\
+    MEM phi (collect_phis pb.bb_instructions) /\
+    MEM v (MAP SND (phi_pairs phi.inst_operands))`
+  >- (irule current_phi_operand_demand_edge_env >> metis_tac[]) >>
+  irule current_nonphi_demand_edge_env >> metis_tac[]
+QED
+
+Theorem current_cut_reaching_external_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  MEM pev events /\ current_event_label pev = p /\
+  MEM hev events /\ current_event_label hev = h /\
+  ~current_actual_inserted fn x h /\ current_phi_cut_clear fn x h /\
+  current_demand fn x h (LENGTH (collect_phis old.bb_instructions)) /\
+  (current_token_name H (current_event_entry_env hev x) = SOME z \/
+   ?d. current_event_entry_env hev x = CurrentInserted x d /\
+     current_collapsed_carrier fn A renamed d x z) /\
+  EVERY (\j. ~MEM z j.inst_outputs)
+    (collect_phis (simplify_current_phi_block new).bb_instructions) ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >>
+  `wf_function fn` by fs[current_wf_phi_context_def] >>
+  `current_demand fn x p (LENGTH pred.bb_instructions)` by
+    (irule current_demand_edge_no_phi_defs >>
+     fs[makeSsaCurrentLastSiteTheory.current_phi_cut_clear_def] >>
+     qexistsl [`old`, `h`] >> metis_tac[]) >>
+  `current_event_exit_env pev x = current_event_entry_env hev x` by
+    (irule current_cut_clear_edge_env >> metis_tac[]) >>
+  `FLOOKUP (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)) z = SOME x` by
+    (irule current_cut_sg_exit_lookup >> metis_tac[]) >>
+  `phi_eff (SOME p) x old.bb_instructions = SOME (Var x)` by
+    metis_tac[current_cut_phi_eff_clear] >>
+  simp[current_cut_semantic_endpoint_def] >>
+  disj2_tac >> disj2_tac >> qexists `x` >> simp[]
 QED
