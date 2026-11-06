@@ -13,6 +13,13 @@ Ancestors
   contextCodegenRel venomInst concretizeMemLocDefs concretizePtrWriteClassification
   codegenRel passSharedDefs concretizePtrLifetime arithmetic pred_set memLocDefs words venomState stackPlanTypes
 
+Theorem ptr_fn_inst_wf_flat:
+  fn_inst_wf fn ==> EVERY inst_wf (fn_insts fn)
+Proof
+  gvs[fn_inst_wf_def, EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >>
+  metis_tac[]
+QED
+
 Theorem ptr_trace_departed_inst_ids:
   !R vs C Ct h a ht at done tokens registry births PT TG saved entries.
   ptr_structural_trace R vs C Ct h a ht at done tokens registry births PT TG saved entries ==>
@@ -79,9 +86,6 @@ QED
 Theorem ptr_paired_historical_event:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
-    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
-    rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -93,8 +97,8 @@ Theorem ptr_paired_historical_event:
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   max_live_eom C' = SOME eom /\
-  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
-  w < EL q done /\ q < LENGTH done ==>
+  ~in_revert_forward (EL (EL q done) h).po_fn (EL (EL q done) h).po_state /\
+  q < LENGTH done ==>
   ?tsj rj bj PTj TGj sj ej next.
     EL (EL q done) H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
     next = EL (SUC (EL q done)) H /\
@@ -156,11 +160,7 @@ Proof
     (fs[ptr_observation_reachable_def, ptr_discipline_def] >>
      qpat_x_assum `!stk PG G tn fn inst s. frame_reachable _ _ _ _ _ _ _ _ _ ==> _`
        drule >> simp[]) >>
-  `~in_revert_forward aa.po_fn aa.po_state` by
-    (qhdtm_x_assum `ptr_demand_interval` mp_tac >>
-     simp[ptr_demand_interval_def] >> strip_tac >>
-     qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
-       (qspec_then `EL q done` mp_tac) >> simp[Abbr `aa`]) >>
+
   `aa.po_inst.inst_id = (EL q ht).po_inst.inst_id` by
     (drule ptr_trace_departed_inst_ids >>
      disch_then (qspec_then `q` mp_tac) >> simp[Abbr `aa`]) >>
@@ -168,15 +168,14 @@ Proof
     (fs[ptr_observation_reachable_def] >>
      drule ptr_frame_context_membership >> simp[]) >>
   `fn_inst_ids_distinct aa.po_fn` by
-    (qhdtm_x_assum `ptr_demand_interval` mp_tac >>
-     simp[ptr_demand_interval_def] >> strip_tac >>
-     fs[EVERY_MEM, wf_function_def]) >>
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def,
+        EVERY_MEM, wf_function_def] >> metis_tac[]) >>
   `(EL q ht).po_inst = concretize_inst_with_positions (lp aa.po_fn) aa.po_inst` by
     (irule ptr_departed_cursor_instruction >> simp[]) >>
   simp[ptr_snapshot_step_def]
 QED
 
-Theorem ptr_ordinary_write_descriptor[local]:
+Theorem ptr_ordinary_write_descriptor:
   inst.inst_opcode <> DRET /\ label_positions_ok inst /\
   (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
   q IN range_bytes (step_writes inst tgt postt) ==>
@@ -208,6 +207,60 @@ Proof
   rpt conj_tac >> qmatch_goalsub_rename_tac `dest = Var _` >>
   Cases_on `dest` >> gvs[is_label_operand_def] >>
   BasicProvers.FULL_CASE_TAC >> gvs[is_label_operand_def]
+QED
+
+Theorem ptr_ordinary_write_operand_transport:
+  ptr_mixed_vars births positions TG tn fn ft src tgt /\
+  src.vs_labels = tgt.vs_labels /\
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst src /\ label_positions_ok inst /\ inst.inst_opcode <> DRET /\
+  (!u. u IN FDOM TG ==> u IN fn_pv P fn) /\
+  q IN range_bytes (step_writes inst tgt postt) ==>
+  ?ops sizeop x z xt.
+    mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+    eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
+    MEM (w2n x,w2n z) (source_memory_write_ranges inst src) /\
+    eval_operand ops.iao_ofst tgt = SOME xt /\ eval_operand sizeop tgt = SOME z /\
+    ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+      (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst src)
+      (eval_operand ops.iao_ofst tgt) /\ w2n z <> 0 /\
+    ptr_lookup_transport births positions (op_prov TG sizeop)
+      (op_taint tn sizeop) (eval_operand sizeop src) (eval_operand sizeop tgt) /\
+    op_prov TG sizeop = NONE /\ op_taint tn sizeop = {} /\
+    (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
+    ((?u. ops.iao_ofst = Var u) \/ (?y. ops.iao_ofst = Lit y)) /\
+    ((?u. sizeop = Var u) \/ (?y. sizeop = Lit y))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)` by
+    (drule_all ptr_mixed_vars_eval_presence >> simp[]) >>
+  drule_all ptr_ordinary_write_descriptor >>
+  disch_then (qx_choose_then `ops` (qx_choose_then `sizeop`
+    (qx_choose_then `x` (qx_choose_then `z`
+      (map_every assume_tac o CONJUNCTS))))) >>
+  `EVERY (ptr_nonopaque_operand fn) inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> simp[] >>
+     drule ptr_step_write_opcode >> simp[] >> strip_tac >> gvs[]) >>
+  `ptr_nonopaque_operand fn ops.iao_ofst /\ ptr_nonopaque_operand fn sizeop` by
+    (gvs[EVERY_MEM] >> metis_tac[ptr_nonopaque_operand_def]) >>
+  `ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+    (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst src)
+    (eval_operand ops.iao_ofst tgt)` by
+    (irule ptr_mixed_vars_eval >> simp[] >> qexistsl_tac [`fn`,`ft`] >> simp[]) >>
+  `ptr_lookup_transport births positions (op_prov TG sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop src) (eval_operand sizeop tgt)` by
+    (irule ptr_mixed_vars_eval >> simp[] >> qexistsl_tac [`fn`,`ft`] >> simp[]) >>
+  `op_taint tn sizeop = {}` by (drule_all ptr_write_max_size_untainted >> simp[]) >>
+  `op_prov TG sizeop = NONE` by (drule_all ptr_write_max_size_no_provenance >> simp[]) >>
+  `eval_operand sizeop tgt = SOME z` by
+    (qpat_x_assum `ptr_lookup_transport _ _ (op_prov _ sizeop) _ _ _` mp_tac >>
+     Cases_on `eval_operand sizeop tgt` >>
+     simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
+  `?xt. eval_operand ops.iao_ofst tgt = SOME xt` by
+    (qpat_x_assum `!op. IS_SOME _ = _` (qspec_then `ops.iao_ofst` mp_tac) >>
+     Cases_on `eval_operand ops.iao_ofst tgt` >> simp[]) >>
+  `w2n z <> 0` by (drule_all ptr_step_write_max_containment >> decide_tac) >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem ptr_chrono_nonwrite_footprint[local]:
@@ -248,29 +301,6 @@ Theorem ptr_historical_ordinary_assembly[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   spose_not_then assume_tac >>
-  `!op. IS_SOME (eval_operand op (EL j h).po_state) =
-        IS_SOME (eval_operand op t)` by
-    (drule_all ptr_mixed_vars_eval_presence >> simp[]) >>
-  drule_all ptr_ordinary_write_descriptor >>
-  disch_then (qx_choose_then `ops` (qx_choose_then `sizeop`
-    (qx_choose_then `x` (qx_choose_then `z`
-      (map_every assume_tac o CONJUNCTS))))) >>
-  `EVERY (ptr_nonopaque_operand (EL j h).po_fn) (EL j h).po_inst.inst_operands` by
-    (irule ptr_nonopaque_instruction_operands >> simp[] >>
-     drule ptr_step_write_opcode >> simp[] >> strip_tac >> gvs[]) >>
-  `ptr_nonopaque_operand (EL j h).po_fn ops.iao_ofst /\
-   ptr_nonopaque_operand (EL j h).po_fn sizeop` by
-    (gvs[EVERY_MEM] >> metis_tac[ptr_nonopaque_operand_def]) >>
-  `ptr_lookup_transport bj positions (op_prov TGj ops.iao_ofst)
-    (op_taint (EL j h).po_taint ops.iao_ofst)
-    (eval_operand ops.iao_ofst (EL j h).po_state) (eval_operand ops.iao_ofst t)` by
-    (irule ptr_mixed_vars_eval >> simp[] >>
-     qexistsl_tac [`(EL j h).po_fn`,`ft`] >> simp[]) >>
-  `ptr_lookup_transport bj positions (op_prov TGj sizeop)
-    (op_taint (EL j h).po_taint sizeop)
-    (eval_operand sizeop (EL j h).po_state) (eval_operand sizeop t)` by
-    (irule ptr_mixed_vars_eval >> simp[] >>
-     qexistsl_tac [`(EL j h).po_fn`,`ft`] >> simp[]) >>
   `j < LENGTH h` by decide_tac >>
   `ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
      births PT TG saved entries H /\
@@ -281,19 +311,10 @@ Proof
   `!u. u IN FDOM TGj ==> u IN fn_pv P (EL j h).po_fn` by
     (rpt strip_tac >> irule ptr_transcript_tagged_domain_support >> simp[] >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  `op_taint (EL j h).po_taint sizeop = {}` by
-    (drule_all ptr_write_max_size_untainted >> simp[]) >>
-  `op_prov TGj sizeop = NONE` by
-    (drule_all ptr_write_max_size_no_provenance >> simp[]) >>
-  `eval_operand sizeop t = SOME z` by
-    (qpat_x_assum `ptr_lookup_transport _ _ (op_prov _ sizeop) _ _ _` mp_tac >>
-     Cases_on `eval_operand sizeop t` >>
-     simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
-  `?xt. eval_operand ops.iao_ofst t = SOME xt` by
-    (qpat_x_assum `!op. IS_SOME _ = _` (qspec_then `ops.iao_ofst` mp_tac) >>
-     Cases_on `eval_operand ops.iao_ofst t` >> simp[]) >>
-  `w2n z <> 0` by
-    (drule_all ptr_step_write_max_containment >> decide_tac) >>
+  drule_all ptr_ordinary_write_operand_transport >>
+  disch_then (qx_choose_then `ops` (qx_choose_then `sizeop`
+    (qx_choose_then `x` (qx_choose_then `z` (qx_choose_then `xt`
+      (map_every assume_tac o CONJUNCTS)))))) >>
   `ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
       (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
@@ -337,6 +358,17 @@ Theorem ptr_paired_historical_owned_write_exclusion:
       (EL (SUC q) ht).po_state)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~in_revert_forward (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_state` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_embedding >>
+     simp[ptr_event_embedding_def, EVERY_MEM] >> strip_tac >>
+     `EL q done < LENGTH h` by
+       (first_x_assum irule >> simp[MEM_EL] >> qexists `q` >> simp[]) >>
+     fs[ptr_demand_interval_def] >>
+     qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
+       (qspec_then `EL q done` mp_tac) >> simp[]) >>
   drule_all ptr_paired_historical_event >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_mixed_vars bj positions TGj aa.po_taint
     aa.po_fn tat.po_fn aa.po_state tat.po_state` >>
