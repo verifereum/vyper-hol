@@ -163,3 +163,157 @@ Proof
   simp[abi_encoder_empty_effect_def, update_var_def, mk_inst_def, is_terminator_def,
     venom_state_component_equality]
 QED
+
+Definition abi_encoder_empty_seq_def:
+  abi_encoder_empty_seq st st' s t <=>
+    run_inst_seq (emitted_insts st st') s = OK t /\
+    fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    abi_encoder_empty_effect s t /\ inst_extends st st' /\ same_blocks st st' /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st st')
+End
+
+Theorem abi_encoder_empty_seq_refl:
+  !st s. fresh_vars_wrt st s ==> abi_encoder_empty_seq st st s s
+Proof
+  simp[abi_encoder_empty_seq_def, emitted_insts_def, run_inst_seq_def,
+    inst_extends_refl, same_blocks_def]
+QED
+
+Theorem abi_encoder_empty_seq_trans:
+  !st mid fin s t u.
+    abi_encoder_empty_seq st mid s t /\ abi_encoder_empty_seq mid fin t u ==>
+    abi_encoder_empty_seq st fin s u
+Proof
+  rpt gen_tac >> simp[abi_encoder_empty_seq_def] >> strip_tac >>
+  `emitted_insts st fin = emitted_insts st mid ++ emitted_insts mid fin` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  `run_inst_seq (emitted_insts st fin) s = OK u` by
+    (simp[] >> qpat_x_assum `run_inst_seq (emitted_insts st mid) s = OK t`
+       (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
+  `abi_encoder_empty_effect s u` by (irule abi_encoder_empty_effect_trans >> metis_tac[]) >>
+  `inst_extends st fin` by (irule inst_extends_trans >> metis_tac[]) >>
+  `same_blocks st fin` by (irule same_blocks_trans >> metis_tac[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem abi_encoder_empty_seq_add:
+  emit_op ADD [lhs;rhs] st = (out,st') /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  fresh_vars_wrt st s ==>
+  ?t. abi_encoder_empty_seq st st' s t /\ eval_operand out t = SOME (a+b)
+Proof
+  strip_tac >> drule_all abi_encoder_empty_add_sequence >>
+  simp[abi_encoder_empty_seq_def] >> metis_tac[]
+QED
+
+Theorem abi_encoder_empty_seq_copy:
+  compile_abi_encode_to_buf dst src (AbiCopy 0) st = (out,st') /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME b /\
+  fresh_vars_wrt st s ==>
+  ?t. abi_encoder_empty_seq st st' s t /\ out = Lit 0w
+Proof
+  strip_tac >> drule_all abi_encoder_empty_copy_sequence >> strip_tac >>
+  `st'.cs_next_var = st.cs_next_var` by
+    (qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` mp_tac >>
+     simp[compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     drule emitted_insts_emit_void >> simp[]) >>
+  qexists_tac `mcopy (w2n d) (w2n b) 0 s` >>
+  simp[abi_encoder_empty_seq_def, abi_encoder_empty_effect_mcopy, same_blocks_def] >>
+  conj_tac >- gvs[fresh_vars_wrt_def, mcopy_def, write_memory_with_expansion_def,
+    lookup_var_def] >>
+  Cases_on `op` >>
+  simp[eval_operand_def, lookup_var_def, mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem abi_encoder_empty_members_metadata:
+  !infos. abi_encoder_empty_members infos ==>
+    ~EXISTS (\(_,_,_,dyn). dyn) infos /\
+    SUM (MAP (\(_,asz,_,_). asz) infos) = 0
+Proof
+  Induct >> simp[abi_encoder_empty_def] >>
+  qx_gen_tac `info` >> PairCases_on `info` >> simp[abi_encoder_empty_def] >>
+  strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem abi_encoder_empty_seq_fresh:
+  !st st' s t. abi_encoder_empty_seq st st' s t ==> fresh_vars_wrt st' t
+Proof
+  simp[abi_encoder_empty_seq_def]
+QED
+
+Theorem abi_encoder_empty_seq_eval:
+  !st st' s t op w. abi_encoder_empty_seq st st' s t /\
+    eval_operand op s = SOME w ==> eval_operand op t = SOME w
+Proof
+  simp[abi_encoder_empty_seq_def]
+QED
+
+Theorem abi_encoder_empty_execution:
+  (!ei. abi_encoder_empty ei ==>
+    !dst src st out st' s d b.
+      compile_abi_encode_to_buf dst src ei st = (out,st') /\
+      eval_operand dst s = SOME d /\ eval_operand src s = SOME b /\
+      fresh_vars_wrt st s ==>
+      ?t. abi_encoder_empty_seq st st' s t /\ out = Lit 0w) /\
+  (!infos. abi_encoder_empty_members infos ==>
+    !dst src so ho dp st out st' s d b.
+      compile_abi_encode_complex_elems dst src infos so ho dp st = (out,st') /\
+      eval_operand dst s = SOME d /\ eval_operand src s = SOME b /\
+      fresh_vars_wrt st s ==>
+      ?t. abi_encoder_empty_seq st st' s t /\ out = Lit 0w)
+Proof
+  ho_match_mp_tac abi_encoder_empty_ind >>
+  simp[abi_encoder_empty_def] >> conj_tac
+  >- metis_tac[abi_encoder_empty_seq_copy] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      drule abi_encoder_empty_members_metadata >> strip_tac >>
+      Cases_on `infos`
+      >- (gvs[compile_abi_encode_child_def, comp_return_def] >>
+          metis_tac[abi_encoder_empty_seq_refl]) >>
+      qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` mp_tac >>
+      simp[Once compile_abi_encode_child_def] >>
+      simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> strip_tac >> gvs[] >>
+      first_x_assum drule_all >> metis_tac[]) >>
+  conj_tac
+  >- (simp[compile_abi_encode_child_def, comp_return_def] >>
+      metis_tac[abi_encoder_empty_seq_refl]) >>
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_abi_encode_complex_elems _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_op ADD [src; Lit (n2w so)] st = (elem_src,src_st)` >>
+  qpat_x_assum `compile_abi_encode_child _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_op ADD [dst; Lit (n2w ho)] src_st = (static_loc,dst_st)` >>
+  rename1 `compile_abi_encode_to_buf static_loc elem_src ei dst_st = (child_out,child_st)` >>
+  `?t1. abi_encoder_empty_seq st src_st s t1 /\
+        eval_operand elem_src t1 = SOME (b + n2w so)` by
+    (irule abi_encoder_empty_seq_add >> simp[] >>
+     qexistsl_tac [`src`, `Lit (n2w so)`] >> simp[eval_operand_def]) >>
+  `fresh_vars_wrt src_st t1 /\ eval_operand dst t1 = SOME d` by
+    metis_tac[abi_encoder_empty_seq_fresh, abi_encoder_empty_seq_eval] >>
+  `?t2. abi_encoder_empty_seq src_st dst_st t1 t2 /\
+        eval_operand static_loc t2 = SOME (d + n2w ho)` by
+    (irule abi_encoder_empty_seq_add >> simp[] >>
+     qexistsl_tac [`dst`, `Lit (n2w ho)`] >> simp[eval_operand_def]) >>
+  `fresh_vars_wrt dst_st t2 /\
+   eval_operand elem_src t2 = SOME (b + n2w so)` by
+    metis_tac[abi_encoder_empty_seq_fresh, abi_encoder_empty_seq_eval] >>
+  qpat_x_assum `abi_encoder_empty ei ==> _` drule >>
+  disch_then drule_all >> strip_tac >>
+  rename1 `abi_encoder_empty_seq dst_st child_st t2 t3` >>
+  `abi_encoder_empty_seq st child_st s t3` by
+    metis_tac[abi_encoder_empty_seq_trans] >>
+  `fresh_vars_wrt child_st t3 /\ eval_operand dst t3 = SOME d /\
+   eval_operand src t3 = SOME b` by
+    metis_tac[abi_encoder_empty_seq_fresh, abi_encoder_empty_seq_eval] >>
+  qpat_x_assum `abi_encoder_empty_members infos ==> _` drule >>
+  disch_then drule_all >> strip_tac >>
+  metis_tac[abi_encoder_empty_seq_trans]
+QED
