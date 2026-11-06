@@ -90,6 +90,38 @@ source_memory_*_ranges, including imported owners and word wrap;
 normalized extension conclusion; (4) discharge HistoryCoverage premise and raw
 observation packaging. No further opcode queue is authorized by this audit.
 
+### Observation-interface validation (2026-11-06)
+
+`concretizePtrObservationInterfaceTheory` builds without admissions. It exports
+`ptr_access_range_classification` and `ptr_owned_range_relocation_probe`.
+`observation_range_transport_schema` in that script is a typechecked term ONLY,
+not a theorem. It uses the frozen stage antecedent plus the actual
+`LIST_REL (ptr_paired_code R lp positions)`, `ptr_stage_placements`,
+`ptr_paired_prefix`, non-NOP source observation and exact current transformed
+instruction equation. It concludes target forwarding OR universal zero/fixed/
+placed range classification. It assumes neither a successful departing step nor
+range safety. The following supplier audit is the deliverable of the bounded
+probe; missing implications below are NOT proved by typechecking the term.
+
+| Required fact | Existing supplier / exact remaining gap |
+|---|---|
+| Source current discipline | `ptr_paired_prefix_transcript` and transcript erasure give the actual source history; source `ptr_discipline_def` applies to its frame-reachable endpoint. Must project `access_ok`, `taint_ok`, and source function pointer-use discipline at that endpoint, not assume source step success. |
+| Non-forwarding source classification | New `ptr_access_range_classification`: for either actual read or write ranges and matching `mem_*_ops`, every range has len=0, or ends below lo with absent address provenance, or has `ops.iao_ofst=Var v`, `FLOOKUP G v=SOME(b,sz)`, b<=off and off+len<=b+sz. Ownership is retained even below lo. |
+| Mixed operand transport and eval presence | `ptr_mixed_vars_eval` requires nonopaque operand and equal labels; `ptr_mixed_vars_eval_presence` covers presence including opaque operands. `ptr_paired_samples` supplies endpoint mixed values. `ptr_nonopaque_instruction_operands` and paired shared-field/label interfaces must be used, not copied assumptions. Presence alone gives no equal scalar value. |
+| Scalar lengths and fixed addresses | `ptr_value_transport_scalar_empty` gives equality ONLY with tag NONE and empty taint. Source `taint_ok_def` prohibits tainted address/length uses (including RETURN/REVERT; `about_to_revert` exempts memory-content checks, not operand taint checks). `ptr_use_ok_def` confines provenance-bearing uses to the appropriate offset slot. Missing general implication: for each selected length operand, derive `op_prov TG len_op=NONE` and `op_taint a.po_taint len_op={}`, then equal source/target evaluated lengths; likewise for an absent-provenance address. This must account for op occurrences, not merely membership. |
+| Imported owner and numerical bounds | `ptr_structural_transcript_ownership` plus endpoint snapshot supplies `ptr_source_ownership`; `ptr_source_ownership_prov_erases` gives `ptr_ledger_erases births TG a.po_prov` under no-DALLOCA. `ptr_value_transport_def` for SOME(token,aid) supplies `FLOOKUP births (token,aid)=SOME(base,size)`, global `FLOOKUP positions (Allocation aid)=SOME(pos,size)` and exact word equation. Must connect the erased numerical `(b,sz)` in access_ok to this birth, using the actual ledger-erasure definition. No current-function lookup or equality of activation tokens is justified. |
+| Word relocation and endpoint | New `ptr_owned_range_relocation_probe` proves p<=w2n y and w2n y+len<=p+sz from y=x-n2w b+n2w p, b<=w2n x, w2n x+len<=b+sz and p+sz<dimword(:256). Existing `ptr_stage_placements_strict_bound` (PlacementBounds) supplies that STRICT bound from stage/fresh eoms/shape/callee_first/placements/lookup. `ptr_stage_placements_endpoint_bound` then gives p+sz<=eom. Merely p+sz<=eom does not justify nonwrapping. |
+| Actual range extraction | `source_memory_read_ranges_def` and `source_memory_write_ranges_def` are guarded by operand list shape and evaluation of extra operands. Missing unified extraction/transport implication: each target range must correspond to the same source read/write offset slot and equal scalar length (or zero), with matched eval presence for every guard. MLOAD/ILOAD have constant length 32; MCOPY has separate source/destination offsets; LOG reverses its operand tail and evaluates topics; CALL variants evaluate extra arguments; CREATE variants evaluate value/salt. Existing MCOPY/MLOAD/MSTORE local interfaces are not a universal range lemma. Do not derive source success from these eval guards. |
+| Terminal RETURN/REVERT | Both read `memory_range_of_operands` on [off;len]; no successful departure is needed. STOP/SINK/SELFDESTRUCT/INVALID have no memory ranges in these definitions. DRET must be excluded by fn_ptr_ok, not treated as RETURN. Non-forwarding RETURN/REVERT require the same scalar length and fixed/owned address transport just listed. |
+| Zero length | New classification and candidate conclusion explicitly accept len=0 at arbitrary offset. Never demand p<=off or off<=eom for this case; no unique zero-size allocation is needed. |
+| Source forwarding exemption | Exact missing implication under paired code/cursor alignment: `in_revert_forward a.po_fn a.po_state ==> in_revert_forward at.po_fn at.po_state`. `in_revert_forward_def` uses lookup_block and `revert_forward_at`; the latter existentially chooses a `revert_forward_pair`. That pair uses instruction indices, ASSIGN-only between region, `same_after_assigns (REVERSE (TAKE i ...))`, and `resolve_block_assigns` between endpoints (contextCodegenRel lines 346--378). Must transport indices through deleted NOPs and show prefix/between ASSIGN resolution unaffected by ALLOCA-to-ASSIGN. Neither terminator preservation nor `about_to_revert` proves this. No such general supplier has been established here. |
+
+Result: the arithmetic and source classification interfaces are validated, but
+universal observation safety remains unsupported at scalar/slot extraction and
+syntactic forwarding transport. These are explicit next planning inputs, not
+new premises allowed on the frozen theorem or the prefix certificate. This audit
+does not reopen the independent opcode producer queue.
+
 The older inventory below is retained as historical reasoning, not current proof
 status; in particular its claims that H/W types remain unresolved are superseded
 by the accepted concrete certificate and historical recovery libraries.
