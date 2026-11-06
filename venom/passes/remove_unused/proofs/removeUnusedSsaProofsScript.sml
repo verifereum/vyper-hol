@@ -358,7 +358,7 @@ Proof
 QED
 
 (* Helper: is_fn_path init (drop last element) *)
-Theorem is_fn_path_init[local]:
+Theorem is_fn_path_init:
   !fn path x. is_fn_path fn (SNOC x path) ==> is_fn_path fn path
 Proof
   Induct_on `path` >> simp[is_fn_path_def, SNOC] >> rpt strip_tac >>
@@ -367,7 +367,7 @@ Proof
 QED
 
 (* Helper: is_fn_path last edge *)
-Theorem is_fn_path_last_edge[local]:
+Theorem is_fn_path_last_edge:
   !fn path x. is_fn_path fn (SNOC x path) /\ path <> [] ==>
     fn_cfg_edge fn (LAST path) x
 Proof
