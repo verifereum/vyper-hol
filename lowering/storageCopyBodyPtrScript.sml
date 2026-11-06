@@ -270,3 +270,18 @@ Proof
   drule (cj 2 gas_path_ptr_rules) >> simp[] >> disch_then irule >>
   irule (cj 1 gas_path_ptr_rules) >> simp[update_var_def]
 QED
+
+Theorem storage_copy_add_covers:
+  lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
+  w2n d + needed <= capacity /\ w2n a + w2n d < dimword(:256) ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id ADD [Var root;offset] [out])
+      (update_var out (a+d) s))
+    (tn with t_var := tn.t_var |+ (out,{})) out
+    (update_var out (a+d) s with vs_inst_idx := SUC s.vs_inst_idx) needed
+Proof
+  strip_tac >> gvs[bodyPtrDefsTheory.ptr_covers_def] >>
+  simp[bodyPtrDefsTheory.ptr_covers_def, step_prov_def, set_prov_def,
+       out_prov_def, first_prov_def, op_prov_def, op_taint_def, mk_inst_def,
+       FLOOKUP_UPDATE, update_var_def, lookup_var_def, w2n_add_2] >> decide_tac
+QED
