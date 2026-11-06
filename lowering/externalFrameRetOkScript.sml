@@ -1,6 +1,8 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalFrameRetOk
 Ancestors
+  externalReturnNoneFrag externalReturnValuedFrag
+  externalReturnSelectedResources vyperTypeCallGraph
   stmtSimProps
   stmtSimDefs
   exprSimDefs
@@ -14,32 +16,9 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* Notes for the proof (unchecked analysis, not part of the statement):
-   - IntCall returns: typing lets a call's annotation widen the callee's
-     return type, while compile_call leaves the value at the callee's type
-     (lowered_value_type = ce_func_return_type), and expr_post describes it
-     at the annotation.  Where the two differ, the premises can't hold on a
-     successful run; expr_vv_sim's vv_holds ties a LocatedValue's type to
-     expr_type e, which may give the needed equality.
-   - Footprints: expr_val_at bounds a value by val_footprint (a "abc" literal
-     returned as String[100] has a 64-byte buffer), not type_memory_size, so
-     helpers asking for p + type_memory_size tv <= vs_alloca_next need a
-     footprint form.
-   - A return inside a loop can rerun its ALLOCAs: their ids may already be
-     allocated (stmt_frag has no alloca_history), so "fragment ALLOCA ids
-     unallocated" premises need replacing by alloca_inv disjointness.
-   - nr = F in this frame's package (lookup_function's tuple), so no unlock;
-     a raw-return function returns Bytes. *)
-
-(* ADMITTED (#640): in the selected external function's frame, a return
-   statement exits as S1 asks of the call: the returned value casts to the
-   return type, and the run halts in external_call_result_rel's success
-   case for it, at the source state after the return.  Its cases are the
-   return sequences of vyperLoweringCorrect (external_return_none_result_rel,
-   external_return_word_result_rel, external_return_static_cenv_result_rel,
-   external_return_abi_cenv_result_rel), after the returned expression's
-   simulation; dynamic returns and returns whose value widens to the
-   return type (frame_ret_ok's comment) are not covered by them yet. *)
+(* The selected frame's two counted return fragments discharge the return
+   continuation. Valued returns retain the successful producer's physical
+   layout facts and use actual value footprints through normalization. *)
 Theorem external_frame_ret_ok:
   !tops rpolicy unit am tx ret vs mut args fbody env lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa func.
@@ -74,6 +53,22 @@ Theorem external_frame_ret_ok:
             es.requests) r)
       cenv ret
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[frame_ret_ok_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `eo`
+  >- (irule return_selected_none_frag >>
+      qpat_assum `set_external_package_target _ _ = _` (irule_at Any) >>
+      qpat_assum `compile_register_positional_args _ _ _ _ = _` (irule_at Any) >>
+      qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
+      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+      simp[initial_evaluation_context_def]) >>
+  irule return_selected_valued_frag >>
+  qpat_assum `set_external_package_target _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_register_positional_args _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
+  qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+  drule_all return_selected_consumer_resources >> strip_tac >>
+  drule source_deployment_context >> strip_tac >>
+  fs[initial_evaluation_context_def, int_calls_stmt_def, int_calls_expr_def]
 QED
 

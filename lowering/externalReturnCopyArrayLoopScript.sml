@@ -400,13 +400,6 @@ Proof
   simp[word_mul_n2w]
 QED
 
-Theorem return_copy_operand_fresh_mono:
-  ci_mono a b /\ (!x. op = Var x ==> not_fresh_at a x) ==>
-  (!x. op = Var x ==> not_fresh_at b x)
-Proof
-  rw[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]
-QED
-
 Theorem return_copy_index_adds_frag:
   !ctx src dst so doff sw dw sv dv a sp b dp c s off len.
     emit_op ADD [src;so] a = (sp,b) /\
