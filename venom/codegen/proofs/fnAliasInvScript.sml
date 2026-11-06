@@ -2354,6 +2354,65 @@ Proof
   simp[top_n_def]
 QED
 
+(* In the oversized branch the second exchange indexes the entire desired
+   window, including indices beyond the first exchange's actual stack.
+   These EL terms remain symbolic: no value is chosen for them here. *)
+Theorem alias_oversized_exchange_stack:
+  e < LENGTH ps.ps_stack /\ 16 < d /\ LENGTH ps.ps_stack <= d ==>
+  (SND (do_swap d (SND (do_swap e ps)))).ps_stack =
+    MAP (\idx. EL idx (stack_swap e ps.ps_stack))
+      ([d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0])
+Proof
+  strip_tac >>
+  `LENGTH (SND (do_swap e ps)).ps_stack = LENGTH ps.ps_stack` by
+    simp[alias_do_swap_stack, planWfTheory.stack_swap_length] >>
+  simp[alias_do_swap_oversized_stack, alias_do_swap_stack]
+QED
+
+Theorem alias_oversized_exchange_head:
+  e < LENGTH ps.ps_stack /\ 16 < d /\ LENGTH ps.ps_stack <= d ==>
+  HD (SND (do_swap d (SND (do_swap e ps)))).ps_stack =
+    EL d (stack_swap e ps.ps_stack)
+Proof
+  simp[alias_oversized_exchange_stack]
+QED
+
+Theorem alias_oversized_exchange_new_origin:
+  e < LENGTH ps.ps_stack /\ 16 < d /\ LENGTH ps.ps_stack <= d /\
+  MEM at (SND (do_swap d (SND (do_swap e ps)))).ps_stack /\
+  ~MEM at ps.ps_stack ==>
+  ?i. LENGTH ps.ps_stack <= i /\ i <= d /\
+      at = EL i (stack_swap e ps.ps_stack)
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM at _` mp_tac >>
+  asm_simp_tac bool_ss [alias_oversized_exchange_stack] >>
+  pure_rewrite_tac[MEM_MAP] >> strip_tac >>
+  `~(y < LENGTH ps.ps_stack)` by
+    (strip_tac >>
+     `MEM (EL y (stack_swap e ps.ps_stack)) (stack_swap e ps.ps_stack)` by
+       (irule EL_MEM >> simp[]) >>
+     gvs[stack_swap_mem_iff]) >>
+  qexists_tac `y` >> gvs[MEM_GENLIST] >> decide_tac
+QED
+
+Theorem alias_oversized_exchange_join_window:
+  e < LENGTH ps.ps_stack /\ 16 < d /\ LENGTH ps.ps_stack <= d /\
+  d < LENGTH targets /\
+  stack_pop (LENGTH targets)
+      (SND (do_swap d (SND (do_swap e ps)))).ps_stack ++ targets =
+      (SND (do_swap d (SND (do_swap e ps)))).ps_stack ==>
+  targets = (SND (do_swap d (SND (do_swap e ps)))).ps_stack
+Proof
+  strip_tac >>
+  `LENGTH (SND (do_swap d (SND (do_swap e ps)))).ps_stack = d + 1` by
+    (simp[alias_oversized_exchange_stack] >> decide_tac) >>
+  `stack_pop (LENGTH targets)
+      (SND (do_swap d (SND (do_swap e ps)))).ps_stack = []` by
+    simp[stack_pop_def] >>
+  gvs[]
+QED
+
 Theorem alias_restore_spilled_domain:
   !targets ps.
   FDOM (SND (restore_spilled_plan targets ps)).ps_spilled =
