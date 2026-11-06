@@ -165,3 +165,28 @@ Proof
   drule cfgNormSupplyProofsTheory.MEM_phi_pairs_SND_operand_vars_pair >>
   gvs[venomInstTheory.inst_uses_def] >> metis_tac[]
 QED
+
+Theorem analyzed_entry_reachable:
+  wf_function fn /\ fn_entry_label fn = SOME lbl ==>
+  cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  strip_tac >> gvs[fn_entry_label_def, AllCaseEqs()] >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability >>
+  simp[cfgDefsTheory.cfg_path_def, relationTheory.RTC_REFL]
+QED
+
+Theorem analyzed_successor_reachable:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) ==>
+  cfg_reachable_of (cfg_analyze fn) succ
+Proof
+  strip_tac >>
+  `?bb. entry_block fn = SOME bb` by
+    (gvs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def,
+         entry_block_def, listTheory.NULL_EQ] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability >>
+  disch_then (fn th => fs[th, cfgDefsTheory.cfg_path_def]) >>
+  irule relationTheory.RTC_TRANS >> qexists_tac `pred` >>
+  simp[] >> irule relationTheory.RTC_SINGLE >> simp[]
+QED

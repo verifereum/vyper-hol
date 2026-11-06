@@ -27,7 +27,7 @@
 
 Theory fnPlanLineage
 Ancestors
-  stackPlanGen stackPlanTypes fnPlanLineageJoinEntry
+  stackPlanGen stackPlanTypes fnPlanLineageJoinEntry fnPlanLineageLiveness
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -199,6 +199,94 @@ Proof
   simp[Once lineage_state_cases] >> strip_tac >> gvs[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)
+QED
+
+Theorem dfs_calls_reachable_origin[local]:
+  !lv dfg fn ps0.
+  wf_function fn ==>
+  (!wl visited ps.
+    dfs_aux_call lv dfg (cfg_analyze fn) fn ps0 wl visited ps ==>
+    EVERY (cfg_reachable_of (cfg_analyze fn)) wl /\
+    (wl = [] \/
+     ?lbl. wl = [lbl] /\
+       ((fn_entry_label fn = SOME lbl /\ ps = ps0) \/
+        ?pred pb psBefore ops psAfter.
+          cfg_reachable_of (cfg_analyze fn) pred /\
+          lookup_block pred fn.fn_blocks = SOME pb /\
+          MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+          generate_block_plan lv dfg (cfg_analyze fn) fn pb psBefore =
+            SOME (ops,psAfter) /\
+          ps.ps_stack = psAfter.ps_stack /\ ps.ps_spilled = psAfter.ps_spilled))) /\
+  (!stk spills succs visited ps.
+    dfs_succs_call lv dfg (cfg_analyze fn) fn ps0 stk spills succs visited ps ==>
+    !lbl. MEM lbl succs ==>
+      cfg_reachable_of (cfg_analyze fn) lbl /\
+      ?pred pb psBefore ops psAfter.
+        cfg_reachable_of (cfg_analyze fn) pred /\
+        lookup_block pred fn.fn_blocks = SOME pb /\
+        MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+        generate_block_plan lv dfg (cfg_analyze fn) fn pb psBefore =
+          SOME (ops,psAfter) /\
+        stk = psAfter.ps_stack /\ spills = psAfter.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >> ho_match_mp_tac dfs_aux_call_ind >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[analyzed_entry_reachable, analyzed_successor_reachable]
+QED
+
+Theorem dfs_block_state_reachable:
+  !lv dfg fn ps0 lbl ps.
+  wf_function fn /\ dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl ps ==>
+  cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  rpt strip_tac >> gvs[dfs_block_state_def] >>
+  drule (cj 1 dfs_calls_reachable_origin) >>
+  disch_then drule >> simp[]
+QED
+
+Theorem dfs_block_state_reachable_predecessor_origin:
+  !lv dfg fn ps0 lbl ps.
+  wf_function fn /\ dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl ps /\
+  fn_entry_label fn <> SOME lbl ==>
+  ?pred pb psBefore ops psAfter.
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    generate_block_plan lv dfg (cfg_analyze fn) fn pb psBefore = SOME (ops,psAfter) /\
+    ps.ps_stack = psAfter.ps_stack /\ ps.ps_spilled = psAfter.ps_spilled
+Proof
+  rpt strip_tac >> gvs[dfs_block_state_def] >>
+  drule (cj 1 dfs_calls_reachable_origin) >>
+  disch_then drule >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem lineage_state_reachable:
+  !lv dfg fn ps0 lbl ps.
+  wf_function fn /\ lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl ps ==>
+  cfg_reachable_of (cfg_analyze fn) lbl
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lineage_state_dfs_fields >> strip_tac >>
+  drule_all dfs_block_state_reachable >> simp[]
+QED
+
+Theorem lineage_state_reachable_predecessor_origin:
+  !lv dfg fn ps0 lbl ps.
+  wf_function fn /\ lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl ps /\
+  fn_entry_label fn <> SOME lbl ==>
+  ?pred pb psBefore ops psAfter.
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    generate_block_plan lv dfg (cfg_analyze fn) fn pb psBefore = SOME (ops,psAfter) /\
+    ps.ps_stack = psAfter.ps_stack /\ ps.ps_spilled = psAfter.ps_spilled
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+  simp[Once lineage_state_cases] >> strip_tac >> gvs[] >>
+  drule_all lineage_state_reachable >> strip_tac >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem lineage_dfs_join_common_cells:
