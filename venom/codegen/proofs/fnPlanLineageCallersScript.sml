@@ -44,6 +44,71 @@ Proof
   metis_tac[compute_operands_inst_uses, livenessDefsTheory.MEM_ordered_inst_uses]
 QED
 
+(* Backward demand transport over an arbitrary instruction interval. *)
+Theorem interval_live_origin:
+  !fn bb a j v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= j /\ j <= LENGTH bb.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label j) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label a) \/
+    ?k. a <= k /\ k < j /\ MEM v (EL k bb.bb_instructions).inst_outputs
+Proof
+  ntac 2 gen_tac >> Induct_on `j`
+  >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `a = SUC j`
+  >- gvs[] >>
+  Cases_on `MEM v (EL j bb.bb_instructions).inst_outputs`
+  >- (disj2_tac >> qexists_tac `j` >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label j)` by
+    (irule analyzed_computed_operand_demand >> simp[] >> decide_tac) >>
+  first_x_assum (qspecl_then [`a`, `v`] mp_tac) >> simp[] >>
+  strip_tac >- simp[] >>
+  disj2_tac >> qexists_tac `k` >> simp[]
+QED
+
+Theorem interval_computed_query_origin:
+  !fn bb a j v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= j /\ j < LENGTH bb.bb_instructions /\
+    MEM (Var v) (compute_operands (EL j bb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label a) \/
+    ?k. a <= k /\ k < j /\ MEM v (EL k bb.bb_instructions).inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label j)` by
+    (irule analyzed_computed_operand_demand >> simp[]) >>
+  irule interval_live_origin >> simp[]
+QED
+
+Theorem prefix_live_query_defined_since_boundary:
+  !fn bb a j prefix v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= j /\ j <= LENGTH bb.bb_instructions /\
+    (!w. MEM (Var w) prefix ==>
+      ~MEM w (live_vars_at (liveness_analyze fn) bb.bb_label a)) /\
+    MEM (Var v) prefix /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label j) ==>
+    ?k. a <= k /\ k < j /\ MEM v (EL k bb.bb_instructions).inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all interval_live_origin >> metis_tac[]
+QED
+
+Theorem prefix_computed_query_defined_since_boundary:
+  !fn bb a j prefix v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= j /\ j < LENGTH bb.bb_instructions /\
+    (!w. MEM (Var w) prefix ==>
+      ~MEM w (live_vars_at (liveness_analyze fn) bb.bb_label a)) /\
+    MEM (Var v) prefix /\
+    MEM (Var v) (compute_operands (EL j bb.bb_instructions)) ==>
+    ?k. a <= k /\ k < j /\ MEM v (EL k bb.bb_instructions).inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all interval_computed_query_origin >> metis_tac[]
+QED
+
 (* Exact copies of genBlockSim's local helper and readiness boundary.
    Importing that frame-level theory here would cross the planner boundary. *)
 Theorem all_distinct_flat_map_member[local]:
