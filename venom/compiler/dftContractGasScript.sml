@@ -21,6 +21,7 @@
 Theory dftContractGas
 Ancestors
   dftGasOracleFromList dftGasOracleToList dftGasOracleSim dftGasOracleInv
+  dftGasFromListUnion dftGasToListAgreement dftGasToListTrace
   dftGasOracleDefs venomRetProps contextRawReachable ptrDiscipline passSimulationDefs
   o1ContractCfgNorm gasOracleReplay dftWf dftCorrectnessFinal stackPlanGen contextCodegenRel
   o1DftStep dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
@@ -224,13 +225,33 @@ QED
    so the context's run never ends in IntRet.  lowered_mem_fact reads
    operands, memory ranges and vs_initial_fmp, not vs_gas_readings, and
    dft_fn keeps fn_eom, so max_live_eom C' = max_live_eom C. *)
-Theorem dft_ctx_sim_gas:
+(* Input readings replay the output's actual instruction events in input
+   order. Unrecorded output events read zero; the list has no arbitrary tail. *)
+Definition dft_gas_replay_def:
+  dft_gas_replay C C' vs vs' <=>
+    gas_variant vs vs' /\
+    ?j. vs.vs_gas_readings =
+          MAP (list_oracle C' vs')
+            (trace_events (dftGasToListTrace$trace_context
+              (list_oracle C' vs') j C vs')) /\
+        !fuel. agrees (list_oracle C' vs') vs.vs_gas_readings
+          (trace_events (dftGasToListTrace$trace_context
+            (list_oracle C' vs') fuel C vs'))
+End
+
+Theorem dft_gas_replay_variant:
+  dft_gas_replay C C' vs vs' ==> gas_variant vs vs'
+Proof
+  simp[dft_gas_replay_def]
+QED
+
+Theorem dft_ctx_sim_gas_replay:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
   o1_ctx_shape C /\
   ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
+  ?vs. dft_gas_replay C C' vs vs' /\ ctx_sim D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
   strip_tac >>
@@ -240,36 +261,54 @@ Proof
   drule_all o1_ctx_shape_wf_functions >> strip_tac >>
   drule_all dft_ctx_wf_functions >> strip_tac >>
   mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
-            gas_oracle_from_list) >>
+            gas_oracle_from_list_traced) >>
   impl_tac >- simp[] >> strip_tac >>
   mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
-            gas_oracle_to_list) >>
+            gas_oracle_to_list_traced) >>
   impl_tac >- simp[] >> strip_tac >>
-  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  qabbrev_tac `gas_orc = list_oracle C' vs'` >>
+  qpat_x_assum `orc = _` SUBST_ALL_TAC >>
+  qabbrev_tac `rds = MAP gas_orc (trace_events (trace_context gas_orc j C vs'))` >>
   qexists_tac `vs' with vs_gas_readings := rds` >>
-  conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
+  conj_tac
+  >- (fs[dft_gas_replay_def, gas_variant_def, venom_state_component_equality,
+         Abbr `gas_orc`, Abbr `rds`] >>
+      metis_tac[]) >>
   conj_tac
   >- (rw[ctx_sim_def] >> qexists_tac `fuel` >>
       irule gas_dft_dead_result >>
       simp[run_context_not_ok, o1_ctx_shape_run_context_no_intret] >>
-      qexistsl [`ev_context orc fuel C vs'`, `ev_context orc fuel C' vs'`] >>
+      qexistsl [`ev_context gas_orc fuel C vs'`, `ev_context gas_orc fuel C' vs'`] >>
       simp[] >> irule dft_ev_context_sim >> simp[] >>
       metis_tac[gas_res_rel_terminates]) >>
   rw[o1_lowered_inv_def] >> qexists_tac `eom` >>
   conj_tac >- gvs[max_live_eom_def, collect_fn_eoms_dft] >>
   gvs[mem_inv_raw_reachable] >>
-  `!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
+  `!p d fn inst t. ev_reachable gas_orc vs' C p d fn inst t ==>
      lowered_mem_fact eom C fn inst t` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >>
      first_x_assum drule >> simp[]) >>
-  `!p d fn inst t. ev_reachable orc vs' C' p d fn inst t ==>
+  `!p d fn inst t. ev_reachable gas_orc vs' C' p d fn inst t ==>
      lowered_mem_fact eom C' fn inst t` by
-    (mp_tac (Q.INST [`s:venom_state` |-> `vs'`] dft_ev_lowered_inv) >>
+    (mp_tac (Q.INST [`s:venom_state` |-> `vs'`, `orc` |-> `gas_orc`]
+      dft_ev_lowered_inv) >>
      simp[] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   conj_tac
   >- (simp[lookup_function_map, dft_fn_entry_label] >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   first_x_assum drule >> simp[]
+QED
+
+Theorem dft_ctx_sim_gas:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
+  ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
+  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
+       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
+Proof
+  metis_tac[dft_ctx_sim_gas_replay, dft_gas_replay_variant]
 QED
 
 Theorem dft_out_wf_ssa:
