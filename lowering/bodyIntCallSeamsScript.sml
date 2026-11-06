@@ -387,9 +387,10 @@ Theorem intcall_return_restore:
       (\res ee r. expr_exit res r)
 Proof
   rpt strip_tac >>
-  `ann = ret` by (drule_all body_internal_decl_return_type >> simp[]) >>
+  `ret = ann` by (drule_all body_internal_decl_return_type >> simp[]) >>
+  qpat_x_assum `ret = ann` SUBST_ALL_TAC >>
   `rc' = returns_stack_count
-    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ret` by
+    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ann` by
     (drule_all body_internal_decl_return_count >> simp[]) >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
     fs[expr_body_pre_def, expr_sim_inv_def] >>
@@ -408,6 +409,14 @@ Proof
     fs[intcall_entry_def, stmt_state_rel_def] >>
   qpat_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[intcall_entry_def] >> strip_tac >>
+  qpat_assum `cenv.ce_func_info _ = (rc'',rbs',pvs')` mp_tac >>
+  qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
+  simp[NoAsms] >> strip_tac >>
+  qpat_x_assum `rc' = rc''` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `rbs = rbs'` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `pvs = pvs'` (SUBST_ALL_TAC o SYM) >>
+  qpat_assum `cenv.ce_func_return_type _ = ann` SUBST_ALL_TAC >>
+  qpat_x_assum `ann = ann` kall_tac >>
   qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >>
   strip_tac >>
   rewrite_tac[intcall_rest_def] >>
@@ -439,28 +448,16 @@ Proof
     (strip_assume_tac o SIMP_RULE (srw_ss())
       [intcall_callee_exit_def, expr_exit_def]) >>
   simp[NoAsms] >>
-  `0 < rc' ==> 0 < returns_stack_count
-    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ann` by
-    (qpat_assum `ann = ret` (fn th => rewrite_tac[th]) >>
-     qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th])) >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  irule source_return_dispatch >>
-  asm_rewrite_tac[] >>
+  irule source_return_dispatch >> asm_rewrite_tac[] >>
   reverse conj_tac >- (qexists_tac `es1` >> first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
-  qexistsl_tac [`arg_ops`,`cenv.ce_func_return_type (nsid_to_string (NONE,name))`,
-    `lbl`,`rc''`,`rc'`,`rbs'`,`rbs'`,`rtv`,`HD argv`] >>
-  asm_rewrite_tac[] >>
-  qpat_assum `cenv.ce_func_return_type _ = ann` (fn th => rewrite_tac[th]) >>
-  simp[NoAsms, expr_type_def] >>
-  qpat_assum `cenv.ce_func_info _ = (rc'',rbs',pvs')` mp_tac >>
-  qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
-  simp[NoAsms] >> strip_tac >>
+  qexistsl_tac [`arg_ops`,`ann`,`lbl`,`rc'`,`rc'`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
+  asm_rewrite_tac[] >> simp[NoAsms, expr_type_def] >>
   qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >>
-  qpat_assum `ann = ret` (fn th => rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[]
 QED
 
