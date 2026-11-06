@@ -2904,8 +2904,62 @@ val ld_proposed_call_normal_setup = ``
    See lowerDloadTargetValidity:31-34 for the actual allocation-field interfaces:
    ld_bind_outputs_allocas, bind_outputs_shared_fields, adopt_return_fmp_allocas.
 
-   RESULT: CALL/RETURN are not proved. The exact setup normal-data quotation is
-   the proposed bounded next boundary; singleton INVOKE inversion, setup-entry
-   empty PHI update alignment, saved push packaging and RETURN normal restoration
-   remain distinct residuals. No historical ledger paragraph certifies them.
+   RESULT: CALL/RETURN are not proved. The historical proposed setup boundary
+   above is now provided by ld_call_normal_setup_backward; successful empty-table
+   entry is provided by ld_call_normal_entry_backward. ld_recursive_call_anchor
+   below proves the geometry-preserving singleton INVOKE inversion, without an
+   OK-step premise. Configured child positioning, saved push packaging and RETURN
+   normal restoration remain residuals. These boundaries do not certify closure.
 *)
+
+(* CALL observes an opcode, not a successful terminator step. *)
+val ld_recursive_call_zero =
+  let
+    val (args,body) = strip_abs ld_recursive_geometry_candidate
+    val (g1,rest) = dest_conj body
+    val (g2,alternatives) = dest_conj rest
+    val (ws,b) = strip_exists (fst (dest_disj alternatives))
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) (ws @ args))
+    val n = named "n" and code = named "code" and i = named "i"
+    val a2 = named "a2" and a1 = named "a1"
+    val j = named "j" and t = named "t" and ta = named "ta"
+    val un = named "un" and ua = named "ua"
+  in list_mk_abs(args,list_mk_conj [g1,g2,list_mk_exists(ws,
+       list_mk_conj [b, ``^n = 0``, ``^code = [^i]``, ``^a2 = ^a1``,
+         ``^j = ^i``, ``^t = ^ta``, ``^un = ^ua``])]) end;
+
+Theorem ld_recursive_call_anchor:
+  (^ld_recursive_geometry_candidate) vs0 CT stk un gn j t /\
+  j.inst_opcode = INVOKE ==>
+  (^ld_recursive_call_zero) vs0 CT stk un gn j t
+Proof
+  reverse (BETA_TAC >> strip_tac >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- first_assum ACCEPT_TAC))
+  >- (drule_all ld_revert_pair_interval_step >> simp[]) >>
+  `MEM j code` by
+    (qpat_x_assum `code <> []` mp_tac >>
+     qpat_x_assum `j = _` mp_tac >>
+     TRY (qpat_x_assum `n < LENGTH code` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `code` >> simp[] >>
+     Cases_on `n` >> simp[] >> metis_tac[MEM_EL]) >>
+  `j = i` by
+    (irule o1ContractLowerDloadTheory.lower_dload_inst_supply_control >>
+     simp[] >> metis_tac[]) >>
+  `code = [i] /\ a2 = a1` by
+    (qpat_x_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     `i.inst_opcode = INVOKE` by metis_tac[] >>
+     simp[lower_dload_inst_supply_def]) >>
+  TRY (qpat_x_assum `0 < n` mp_tac >>
+       qpat_x_assum `n < LENGTH code` mp_tac >>
+       qpat_x_assum `code = [i]` SUBST_ALL_TAC >> simp[] >> NO_TAC) >>
+  qexistsl_tac [`astk`, `gstk`, `k`, `L`, `AP`, `AG`, `tn`, `fn`, `i`,
+    `s`, `ta`, `ua`, `V`, `U`, `E`, `H`, `BP`, `BH`, `live`, `keys`, `A`,
+    `suspended`, `f`, `fa`, `fb`, `bb`, `gb`, `a0`, `a1`, `a2`, `a3`,
+    `pre`, `post`, `p`, `code`, `tail`, `bpre`, `bpost`, `qpre`, `qpost`,
+    `supports`, `savedkeys`, `s0`, `n`] >>
+  asm_rewrite_tac [] >> simp[] >>
+  qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
+  asm_rewrite_tac []
+QED
