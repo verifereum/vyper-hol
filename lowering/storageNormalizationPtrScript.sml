@@ -6,7 +6,7 @@ Ancestors
   exprSimStorageCopy venomState ptrDiscipline words arithmetic
   reasonStoragePrefixPtr reasonPrefixPtr ghostPcTransportPtr allocationPtr
   exprSimAlloc exprLoweringProps loweringHalt venomExecSemantics venomInstProofs
-  context emitHelper compileEnv venomInst loweringPosts fragGasPathPtr
+  context emitHelper compileEnv venomInst loweringPosts fragGasPathPtr exprSimCopy
 
 Theorem storage_normalization_endpoint_resources:
   stmt_state_rel ctx func cenv cx es u /\
@@ -253,6 +253,9 @@ Theorem storage_normalization_alloc_copy_path_ptr:
     z.vs_current_bb = cb.cs_current_bb /\
     z.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~z.vs_halted /\
     stmt_state_rel ctx func cenv cx es z /\
+    local_ptrs_reserved cenv cb /\
+    (!old. not_fresh_at cc old \/ old = root ==> not_fresh_at cb old) /\
+    cc.cs_next_id < cb.cs_next_id /\ b+32*n < dimword(:256) /\
     lookup_var root z = SOME (n2w b) /\
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf z /\
     val_wf (BaseTV (StringT max)) (StringV str) /\
@@ -281,7 +284,8 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `z`, `b`] >>
   asm_rewrite_tac[] >> rpt conj_tac
-  >- suspend "path" >- suspend "old" >> suspend "covers"
+  >- suspend "path" >- suspend "reserved" >- suspend "names"
+  >- suspend "ids" >- suspend "old" >> suspend "covers"
 QED
 
 Resume storage_normalization_alloc_copy_path_ptr[fresh]:
@@ -312,6 +316,28 @@ Resume storage_normalization_alloc_copy_path_ptr[covers]:
   `not_fresh_at ca old` by
     (drule compile_alloc_buffer_parts >> strip_tac >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[reserved]:
+  drule_all storage_copy_suffix_ci_mono >> strip_tac >>
+  irule local_ptrs_reserved_next_var >> qexists_tac `ca` >>
+  gvs[ci_mono_def]
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[names]:
+  drule_all storage_copy_suffix_ci_mono >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`buf.buf_operand = Var root`, `buf.buf_operand = Var (STRING _ _)`,
+     `ci_mono ca cb`, `ca.cs_next_var = _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  gvs[ci_mono_def, not_fresh_at_def] >> rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Resume storage_normalization_alloc_copy_path_ptr[ids]:
+  drule_all storage_copy_suffix_ci_mono >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  gvs[ci_mono_def]
 QED
 
 Finalise storage_normalization_alloc_copy_path_ptr
