@@ -2,11 +2,12 @@ Theory concretizePtrReturnProduction
 Ancestors concretizePtrUniversalStepSchema concretizePtrReturnTransport
   concretizePtrOpaqueRetpc concretizePtrHistoricalPlacement
   concretizePtrPairedPrefix contextCodegenRel unitLabelMapIdentity
-  concretizePtrTaggedSupport concretizePtrParamSupport concretizePtrStructuralTrace
+  concretizePtrSourceOwnership concretizePtrTaggedSupport concretizePtrParamSupport concretizePtrStructuralTrace
   concretizePtrStructuralTranscript concretizePtrDeletedGapHistory
   concretizePtrChronologicalHistory concretizeStepStructure
   ptrDiscipline memLocDefs unitShapeDefs o1PassContract venomExecSemantics venomState
-  venomInst venomWf pointerConfinedDefs finite_map list pred_set
+  venomInst venomWf venomInstProofs1 venomExecProofs
+  concretizePtrOperationalOpcodes pointerConfinedDefs finite_map list pred_set
 
 Theorem ptr_paired_ret_scalar_operands:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -292,3 +293,287 @@ Proof
   irule (cj 2 ptr_mixed_return_bind) >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
+
+Theorem ptr_ret_cursor_active[local]:
+  ptr_paired_cursor lp a at ==> active_inst a.po_fn a.po_inst a.po_state
+Proof
+  simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >> strip_tac >>
+  drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> strip_tac >>
+  `EL at.po_state.vs_inst_idx indices < LENGTH bb.bb_instructions` by
+    (first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[]) >>
+  `bb.bb_label = a.po_state.vs_current_bb` by metis_tac[lookup_block_label] >>
+  simp[active_inst_def] >> qexists_tac `bb` >> simp[] >> decide_tac
+QED
+
+Theorem ptr_ret_bind_control[local]:
+  bind_outputs os vals s = SOME t ==>
+  t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb /\
+  t = (s with vs_vars := t.vs_vars)
+Proof
+  strip_tac >>
+  `t = (s with vs_vars := t.vs_vars)` by
+    (qspec_then `(\u. u with vs_vars := t.vs_vars)` mp_tac bind_outputs_preserves >>
+     simp[update_var_def] >> disch_then drule >> simp[]) >>
+  conj_tac >- (pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  conj_tac >- (pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >> simp[]
+QED
+
+Theorem ptr_ret_caller_cursor[local]:
+  ptr_paired_cursor lp u ut /\ u.po_inst.inst_opcode = INVOKE /\
+  ALL_DISTINCT (fn_labels ut.po_fn) /\
+  (!i. MEM i (fn_insts u.po_fn) /\ i.inst_opcode = ALLOCA ==>
+    ?p. FLOOKUP (lp u.po_fn) (Allocation i.inst_id) = SOME p) /\
+  b.po_fn = u.po_fn /\ bt.po_fn = ut.po_fn /\
+  b.po_state.vs_current_bb = u.po_state.vs_current_bb /\
+  bt.po_state.vs_current_bb = ut.po_state.vs_current_bb /\
+  b.po_state.vs_prev_bb = u.po_state.vs_prev_bb /\
+  bt.po_state.vs_prev_bb = ut.po_state.vs_prev_bb /\
+  b.po_state.vs_inst_idx = SUC u.po_state.vs_inst_idx /\
+  bt.po_state.vs_inst_idx = SUC ut.po_state.vs_inst_idx /\
+  active_inst bt.po_fn bt.po_inst bt.po_state ==>
+  ?i. active_inst b.po_fn i b.po_state /\
+      ptr_paired_cursor lp (b with po_inst := i) bt
+Proof
+  simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >> strip_tac >>
+  `u.po_state.vs_inst_idx = EL ut.po_state.vs_inst_idx indices` by
+    (first_x_assum (qspec_then `u.po_state.vs_inst_idx` mp_tac) >>
+     gvs[] >> decide_tac) >>
+  `SUC ut.po_state.vs_inst_idx < LENGTH indices /\
+   bt.po_inst = EL (SUC ut.po_state.vs_inst_idx) bbt.bb_instructions` by
+    (qpat_x_assum `active_inst _ _ _` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block ut.po_state.vs_current_bb ut.po_fn.fn_blocks = SOME bb'` by
+       (irule MEM_lookup_block >> gvs[fn_labels_def]) >>
+     gvs[] >> drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> simp[]) >>
+  `SUC u.po_state.vs_inst_idx <= EL (SUC ut.po_state.vs_inst_idx) indices /\
+   EL (SUC ut.po_state.vs_inst_idx) indices < LENGTH bb.bb_instructions` by
+    (drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> strip_tac >>
+     `EL ut.po_state.vs_inst_idx indices < EL (SUC ut.po_state.vs_inst_idx) indices` by
+       (irule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_order >>
+        simp[] >> rpt (goal_assum (drule_at Any))) >>
+     first_x_assum (qspec_then `SUC ut.po_state.vs_inst_idx` mp_tac) >>
+     simp[] >> decide_tac) >>
+  qexists_tac `EL (SUC u.po_state.vs_inst_idx) bb.bb_instructions` >>
+  conj_tac
+  >- (simp[active_inst_def] >> qexists_tac `bb` >> simp[] >>
+      `bb.bb_label = u.po_state.vs_current_bb` by metis_tac[lookup_block_label] >>
+      simp[] >> decide_tac) >>
+  simp[] >> qexistsl_tac [`bb`, `indices`] >>
+  `lookup_block ut.po_state.vs_current_bb u.po_fn.fn_blocks = SOME bb` by metis_tac[] >>
+  simp[] >>
+  rpt strip_tac >> irule concretizePtrDeletedGapsTheory.ptr_ledger_source_gap >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >> decide_tac
+QED
+
+Theorem ptr_paired_ret_successor:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode = RET /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?b ret sr tr PTc TGc outs B'.
+    step_inst 0 C a.po_inst a.po_state = IntRet ret a.po_state /\
+    step_inst 0 C' at.po_inst at.po_state = IntRet ret at.po_state /\
+    ret.iret_adopt_fmp = NONE /\
+    a.po_stack <> [] /\ at.po_stack <> [] /\ saved <> [] /\
+    HD saved = (PTc,TGc) /\ outs = (HD a.po_stack).cf_inst.inst_outputs /\
+    bind_outputs outs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD a.po_stack).cf_state a.po_state)) = SOME sr /\
+    bind_outputs (HD at.po_stack).cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD at.po_stack).cf_state at.po_state)) = SOME tr /\
+    b.po_state = (sr with vs_inst_idx := SUC (HD a.po_stack).cf_state.vs_inst_idx) /\
+    b.po_stack = TL a.po_stack /\
+    ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PTc
+      (DRESTRICT TGc (COMPL (set outs))) (TL saved) /\
+    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_mixed_vars births positions (DRESTRICT TGc (COMPL (set outs)))
+      b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
+    B' = ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births /\
+    ptr_structural_transcript R vs C C'
+      (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      (TL tokens) registry B' PTc (DRESTRICT TGc (COMPL (set outs)))
+      (TL saved) entries
+      (H ++ [(TL tokens,registry,B',PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])
+Proof
+  strip_tac >> drule_all ptr_paired_ret_restored_vars >> strip_tac >>
+  drule ptr_paired_prefix_callers >>
+  simp[concretizePtrPairedFieldsTheory.ptr_paired_callers_def] >> strip_tac >>
+  `0 < LENGTH calls` by (Cases_on `calls` >> Cases_on `a.po_stack` >> gvs[]) >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
+  Cases_on `HD calls` >>
+  simp[concretizePtrPairedFieldsTheory.ptr_paired_call_def,
+    concretizePtrPairedFieldsTheory.ptr_paired_saved_tags_def] >> strip_tac >>
+  drule ptr_paired_prefix_alignment >>
+  disch_then (qspec_then `r` mp_tac) >>
+  `r < LENGTH ht` by
+    (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def] >> decide_tac) >>
+  simp[EL_APPEND_EQN] >> strip_tac >>
+  suspend "target_control"
+QED
+
+Resume ptr_paired_ret_successor[target_control]:
+  `at.po_inst = a.po_inst` by gvs[concretize_positions_unchanged] >>
+  `zt.po_fn = (HD at.po_stack).cf_fn /\ 
+   zt.po_stack = TL at.po_stack /\
+   zt.po_state = (tr with vs_inst_idx := SUC (HD at.po_stack).cf_state.vs_inst_idx) /\
+   active_inst zt.po_fn zt.po_inst zt.po_state` by
+    (qpat_x_assum `ptr_chrono_step C' at zt` mp_tac >>
+     simp[Once ptr_chrono_step_cases, ptr_observe_def] >>
+     rpt strip_tac >> gvs[is_terminator_def] >>
+     qpat_x_assum `step_inst fuel C' _ _ = _` mp_tac >>
+     simp[Once run_defs, step_inst_base_def] >>
+     qpat_x_assum `step_inst 0 C' _ _ = _` mp_tac >>
+     simp[Once run_defs, step_inst_base_def] >>
+     gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (drule ptr_paired_prefix_endpoint >> strip_tac >>
+     drule ptr_ret_cursor_active >> simp[]) >>
+  `MEM (EL r ht).po_fn C'.ctx_functions /\
+   MEM (EL (EL r done) h).po_fn C.ctx_functions` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_structural_trace_target >> strip_tac >>
+     imp_res_tac ptr_chrono_history_reachable >>
+     `ptr_observation_reachable vs C' (EL r ht) /\
+      ptr_observation_reachable vs C (EL (EL r done) h)` by
+       (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def] >>
+        strip_tac >> fs[EVERY_MEM] >> metis_tac[EL_MEM]) >>
+     fs[ptr_observation_reachable_def] >>
+     imp_res_tac ptr_frame_context_membership >> simp[]) >>
+  `ALL_DISTINCT (fn_labels (EL r ht).po_fn) /\
+   (!i. MEM i (fn_insts (EL (EL r done) h).po_fn) /\ i.inst_opcode = ALLOCA ==>
+     ?p. FLOOKUP (lp (EL (EL r done) h).po_fn) (Allocation i.inst_id) = SOME p)` by
+    (fs[EVERY_MEM, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  suspend "caller_cursor"
+QED
+
+Resume ptr_paired_ret_successor[caller_cursor]:
+  `sr.vs_current_bb = (HD a.po_stack).cf_state.vs_current_bb /\
+   tr.vs_current_bb = (HD at.po_stack).cf_state.vs_current_bb /\
+   sr.vs_prev_bb = (HD a.po_stack).cf_state.vs_prev_bb /\
+   tr.vs_prev_bb = (HD at.po_stack).cf_state.vs_prev_bb` by
+    (imp_res_tac ptr_ret_bind_control >> gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
+  qabbrev_tac `b0 = ptr_observe (TL a.po_stack) (HD a.po_stack).cf_params
+    (DRESTRICT (HD a.po_stack).cf_prov (COMPL (set outs)))
+    (a.po_taint with t_var := DRESTRICT (HD a.po_stack).cf_tvar (COMPL (set outs)))
+    (HD a.po_stack).cf_fn a.po_inst
+    (sr with vs_inst_idx := SUC (HD a.po_stack).cf_state.vs_inst_idx)` >>
+  `?i. active_inst b0.po_fn i b0.po_state /\
+       ptr_paired_cursor lp (b0 with po_inst := i) zt` by
+    (irule ptr_ret_caller_cursor >> conj_tac >- simp[] >>
+     qexistsl_tac [`EL (EL r done) h`, `EL r ht`] >>
+     gvs[Abbr `b0`, ptr_observe_def,
+       concretizePtrPairedFieldsTheory.ptr_paired_frame_def]) >>
+  qabbrev_tac `b = b0 with po_inst := i` >>
+  `active_inst b.po_fn b.po_inst b.po_state /\ ptr_paired_cursor lp b zt` by
+    (gvs[Abbr `b`]) >>
+  suspend "tagged_return"
+QED
+
+Resume ptr_paired_ret_successor[tagged_return]:
+  `b = ptr_observe (TL a.po_stack) (HD a.po_stack).cf_params
+    (DRESTRICT (HD a.po_stack).cf_prov (COMPL (set outs)))
+    (a.po_taint with t_var := DRESTRICT (HD a.po_stack).cf_tvar (COMPL (set outs)))
+    (HD a.po_stack).cf_fn i
+    (sr with vs_inst_idx := SUC (HD a.po_stack).cf_state.vs_inst_idx)` by
+      simp[NoAsms, Abbr `b`, Abbr `b0`, ptr_observe_def] >>
+  `ptr_observe a.po_stack a.po_params a.po_prov a.po_taint
+     a.po_fn a.po_inst a.po_state = a` by
+    simp[NoAsms, ptr_observe_def, ptr_observation_component_equality] >>
+  `ptr_tagged_chrono_step C (HD tokens)
+    (ptr_observe a.po_stack a.po_params a.po_prov a.po_taint
+      a.po_fn a.po_inst a.po_state) b PT TG saved PTc
+      (DRESTRICT TGc (COMPL (set outs))) (TL saved)` by
+    (qpat_x_assum `ptr_observe _ _ _ _ _ _ _ = a` kall_tac >>
+     qpat_x_assum `b = ptr_observe _ _ _ _ _ _ _` (fn th => pure_rewrite_tac[th]) >>
+     Cases_on `a.po_stack` >> gvs[] >> Cases_on `saved` >> gvs[] >>
+     qpat_assum `_.cf_inst.inst_outputs = _` (fn th => once_rewrite_tac[GSYM th]) >>
+     irule (cj 4 ptr_tagged_chrono_step_rules) >>
+     simp[ptr_observe_def] >>
+     conj_tac >- (qexistsl_tac [`0`, `ret`, `a.po_state`] >> simp[]) >>
+     gvs[Abbr `b0`, ptr_observe_def]) >>
+  `ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PTc
+     (DRESTRICT TGc (COMPL (set outs))) (TL saved)` by metis_tac[] >>
+  suspend "restored_fields"
+QED
+
+Resume ptr_paired_ret_successor[restored_fields]:
+  `ptr_core_shared a.po_state at.po_state /\
+   ptr_core_shared (HD a.po_stack).cf_state (HD at.po_stack).cf_state` by
+    (conj_tac
+     >- (drule ptr_paired_prefix_endpoint >> simp[ptr_paired_sample_def]) >>
+     drule ptr_paired_prefix_samples >> strip_tac >>
+     drule_all ptr_paired_samples_core >>
+     simp[EL_APPEND_EQN] >>
+     gvs[concretizePtrPairedFieldsTheory.ptr_paired_frame_def]) >>
+  `ptr_core_shared sr tr` by
+    (`ptr_core_shared
+       (merge_callee_state (HD a.po_stack).cf_state a.po_state)
+       (merge_callee_state (HD at.po_stack).cf_state at.po_state)` by
+       (irule ptr_core_shared_merge >> simp[]) >>
+     imp_res_tac ptr_ret_bind_control >>
+     qpat_assum `sr = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `tr = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     fs[adopt_return_fmp_def, ptr_core_shared_def,
+       concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
+  `ptr_core_shared b.po_state zt.po_state` by
+    (gvs[Abbr `b`, Abbr `b0`, ptr_observe_def, ptr_core_shared_def,
+       concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
+  `ptr_mixed_vars births positions (DRESTRICT TGc (COMPL (set outs)))
+     b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state` by
+    (qpat_x_assum `ptr_mixed_vars births positions _ _ _ _ sr tr` mp_tac >>
+     simp[Abbr `b`, Abbr `b0`, ptr_observe_def, ptr_mixed_vars_def,
+       ptr_opaque_env_def, lookup_var_def, op_taint_def] >>
+     metis_tac[]) >>
+  suspend "transcript"
+QED
+
+Resume ptr_paired_ret_successor[transcript]:
+  `LENGTH a.po_stack = SUC (LENGTH b.po_stack) /\
+   LENGTH at.po_stack = SUC (LENGTH zt.po_stack)` by
+    (gvs[Abbr `b`, Abbr `b0`, ptr_observe_def] >>
+     Cases_on `a.po_stack` >> Cases_on `at.po_stack` >> gvs[]) >>
+  `ptr_structural_transcript R vs C C'
+      (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      (TL tokens) registry (ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births)
+      PTc (DRESTRICT TGc (COMPL (set outs))) (TL saved) entries
+      (H ++ [(TL tokens,registry,ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births,
+        PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule (cj 3 ptr_structural_transcript_rules) >>
+     disch_then drule >> disch_then drule >>
+     qpat_assum `LENGTH a.po_stack = SUC (LENGTH b.po_stack)` (fn th =>
+       simp[NoAsms, th, concretizePtrActivationChronologyTheory.ptr_activation_tokens_def,
+         concretizePtrActivationChronologyTheory.ptr_activation_registry_def]) >>
+     disch_then irule >> asm_rewrite_tac[]) >>
+  qexistsl_tac [`b`, `sr`] >>
+  qpat_assum `outs = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> pure_rewrite_tac[th]) >>
+  qpat_assum `(HD a.po_stack).cf_inst.inst_outputs = (HD at.po_stack).cf_inst.inst_outputs` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> pure_rewrite_tac[th]) >>
+  qpat_x_assum `at.po_inst = concretize_inst_with_positions _ _` kall_tac >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+    simp[NoAsms, Abbr `b`, Abbr `b0`, ptr_observe_def]]
+QED
+
+Finalise ptr_paired_ret_successor
