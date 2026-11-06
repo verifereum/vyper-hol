@@ -335,3 +335,70 @@ Proof
   CONV_TAC (LAND_CONV (RAND_CONV EVAL)) >>
   pure_rewrite_tac[CONS_11] >> metis_tac[]
 QED
+
+Theorem bounded_do_swap_stack_perm:
+  !d ps. d <= 16 \/ d < LENGTH ps.ps_stack ==>
+    PERM (SND (do_swap d ps)).ps_stack ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac
+  >- (Cases_on `d = 0` >- simp[do_swap_def] >>
+      Cases_on `ps.ps_stack = []`
+      >- simp[do_swap_def, stack_swap_def] >>
+      `MIN d (LENGTH ps.ps_stack - 1) < LENGTH ps.ps_stack` by
+        (Cases_on `ps.ps_stack` >> gvs[] >> decide_tac) >>
+      Cases_on `LENGTH ps.ps_stack = 1`
+      >- (Cases_on `ps.ps_stack` >>
+          gvs[do_swap_def, stack_swap_def, LUPDATE_def]) >>
+      `MIN d (LENGTH ps.ps_stack - 1) <> 0 /\
+       MIN d (LENGTH ps.ps_stack - 1) <= 16 /\
+       LENGTH ps.ps_stack - 1 - MIN d (LENGTH ps.ps_stack - 1) =
+       LENGTH ps.ps_stack - 1 - d` by
+        (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+      qspec_then `MIN d (LENGTH ps.ps_stack - 1)` mp_tac
+        do_swap_stack_perm >>
+      disch_then (qspec_then `ps` mp_tac) >>
+      simp[do_swap_def, stack_swap_def])
+  >> irule do_swap_stack_perm >> simp[]
+QED
+
+Theorem bounded_full_support_reorder_one_perm:
+  !targets dfg ps idx op ops qs.
+    LENGTH targets <= 17 /\ ps.ps_spilled = FEMPTY /\
+    (!x. MEM x ps.ps_stack /\ is_var_operand x ==> MEM x targets) /\
+    idx < LENGTH targets /\ MEM op targets /\
+    reorder_one dfg targets idx op ps = (ops,qs) ==>
+    PERM qs.ps_stack ps.ps_stack /\ qs.ps_spilled = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!fuel f n. reduce_depth_plan fuel targets op f n ps = ([],ps)` by
+    metis_tac[full_support_reduce_depth_plan_identity] >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - 1 - idx)
+    (LENGTH targets) ps.ps_stack` >> simp[] >> strip_tac >> gvs[] >>
+  `x < LENGTH ps.ps_stack /\ stack_peek x ps.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_bound, stack_get_unfixed_depth_peek] >>
+  `LENGTH targets - (idx + 1) <= 16` by decide_tac >>
+  Cases_on `x = LENGTH targets - (idx + 1)` >> gvs[] >>
+  Cases_on `LENGTH targets < idx + (LENGTH ps.ps_stack + 1) /\
+            0 < LENGTH ps.ps_stack` >> gvs[]
+  >- (Cases_on `operand_equiv dfg (stack_peek x ps.ps_stack)
+        (stack_peek (LENGTH targets - (idx + 1)) ps.ps_stack)` >> gvs[]
+      >- (simp[stack_poke_def, stack_peek_def] >>
+          irule lupdate_exchange_perm >> simp[]) >>
+      suspend "swaps") >>
+  suspend "swaps"
+QED
+
+Resume bounded_full_support_reorder_one_perm[swaps]:
+  markerLib.RESUME_TAC >> rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  `PERM ps3.ps_stack ps.ps_stack` by
+    (qspec_then `x` (qspec_then `ps` mp_tac) do_swap_stack_perm >> gvs[]) >>
+  `PERM ps4.ps_stack ps3.ps_stack` by
+    (qspec_then `LENGTH (targets:operand list) - (idx + 1)`
+       (qspec_then `ps3` mp_tac) bounded_do_swap_stack_perm >>
+     simp[] >> gvs[]) >>
+  metis_tac[PERM_TRANS, do_swap_spilled_unchanged, pairTheory.SND]
+QED
+
+Finalise bounded_full_support_reorder_one_perm

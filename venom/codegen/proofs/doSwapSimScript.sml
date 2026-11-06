@@ -3364,7 +3364,7 @@ Proof
   Cases_on `x = a` >> Cases_on `x = v` >>
   gvs[APPEND_ASSOC, filter_eq_rotate]
 QED
-Theorem lupdate_exchange_perm[local]:
+Theorem lupdate_exchange_perm:
   !(xs:'a list) i j.
     i < LENGTH xs /\ j < LENGTH xs ==>
     PERM (LUPDATE (EL i xs) j (LUPDATE (EL j xs) i xs)) xs
