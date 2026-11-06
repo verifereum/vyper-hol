@@ -3,7 +3,7 @@ Theory logTupleOwnershipPtr
 Ancestors
   localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv exprLoweringProps abiBuiltinAllocation
   logTupleShapePtr abiEncoderComplexCode abiEncoderComplexPrefix
-  stmtSimLogTrace emitHelperProps context ASCIInumbers string
+  stmtSimLogTrace emitHelperProps exprSimProps abiDecoderReentry context ASCIInumbers string
   venomMemDefs venomState venomInst finite_map list words arithmetic
 
 Theorem log_alloca_candidate_other_region:
@@ -114,4 +114,31 @@ Proof
   goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   qexistsl_tac [`STRING #"%" (toString st.cs_next_var)`,`st`] >>
   asm_simp_tac bool_ss [mk_inst_def] >> simp[not_fresh_at_def]
+QED
+
+Theorem log_allocation_local_regions:
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  abi_builtin_allocation_frame st.cs_next_var site cap s t ==>
+  !name b sz. (local_region ce es.scopes t name b sz <=>
+              local_region ce es.scopes s name b sz)
+Proof
+  strip_tac >>
+  `local_ptrs_rel func ce es.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==>
+    lookup_var x t = SOME w` by
+    (rpt strip_tac >>
+     qpat_x_assum `abi_builtin_allocation_frame _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_builtin_allocation_frame_def] >> strip_tac >>
+     first_x_assum (qspec_then `Var x` mp_tac) >>
+     simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       not_fresh_at_def, eval_operand_def] >> fs[not_fresh_at_def]) >>
+  metis_tac[local_region_frame, local_region_frame_fwd]
+QED
+
+Theorem log_local_region_inst_idx[simp]:
+  local_region ce scopes (s with vs_inst_idx := k) name b sz <=>
+  local_region ce scopes s name b sz
+Proof
+  simp[local_region_def, lookup_var_def]
 QED
