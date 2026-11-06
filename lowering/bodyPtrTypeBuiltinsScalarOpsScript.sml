@@ -99,3 +99,30 @@ Proof
   strip_tac >> drule_all convert_scalar_ghost_update >>
   simp[op_taint_def, FLOOKUP_UPDATE]
 QED
+
+Theorem convert_scalar_no_abort:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] ==>
+  step_inst_base (mk_inst id opc [x;y] [z]) s <> Abort err t
+Proof
+  simp[MEM] >> strip_tac >> gvs[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+                  instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure2_def, AllCaseEqs()]
+QED
+
+Theorem scalar_iszero_no_abort:
+  step_inst_base (mk_inst id ISZERO [x] [z]) s <> Abort err t
+Proof
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+                  instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure1_def, AllCaseEqs()]
+QED
+
+Theorem convert_scalar_opcode_filter:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] ==>
+  opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS
+Proof
+  simp[MEM] >> strip_tac >> gvs[is_terminator_def]
+QED
