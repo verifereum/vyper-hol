@@ -377,9 +377,13 @@ QED
 Resume place_store_dead_subregion_frame[fixed]:
   gvs[] >> rpt strip_tac >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
-  gvs[dead_bytes_def, type_slot_size_def] >>
+  qpat_x_assum `base' + type_slot_size (ArrayTV _ _) <= _` mp_tac >>
+  simp_tac (srw_ss()) [Once type_slot_size_def] >> disch_tac >>
+  qpat_x_assum `dead_bytes st base' (ArrayTV _ _) j b` mp_tac >>
+  simp_tac (srw_ss()) [Once dead_bytes_def] >> strip_tac >>
+  pure_once_rewrite_tac [dead_bytes_def] >>
   rename1 `dead_bytes st (base' + k * type_slot_size root) root j b` >>
-  (qexists_tac `k` >> simp[] >>
+  (qexists_tac `k` >> (conj_tac >- first_assum ACCEPT_TAC) >>
   `k * type_slot_size root + type_slot_size root <= n * type_slot_size root` by
     (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
   Cases_on `k = Num i`
@@ -6395,6 +6399,67 @@ Theorem place_store_copy_operand_fresh:
   op <> Var (slot_copy_var cs k)
 Proof
   metis_tac[place_store_copy_old_var]
+QED
+
+(* Finite control-flow boundaries for the forward slot-copy loop. *)
+Theorem place_store_copy_jump_path:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  (inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ) /\
+  step_inst_base inst s = OK (jump_to lbl s) ==>
+  gas_marked_path F ctx func s 0 (OK (jump_to lbl s))
+Proof
+  strip_tac >>
+  `gas_path_edge ctx func s 0 (OK (jump_to lbl s))` by
+    (simp[gas_path_edge_def] >> qexists_tac `0` >>
+     simp[step_inst_non_invoke, gasCountTheory.gas_count_step_def,
+          is_terminator_def] >>
+     metis_tac[]) >>
+  simp[gas_marked_path_def] >>
+  metis_tac[gas_path_rules, gas_path_edge_normal, ADD_0]
+QED
+
+Theorem place_store_copy_entry_path:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~s.vs_halted /\ s.vs_current_bb = cs.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cs.cs_current_insts ==>
+  gas_marked_path F ctx func s 0
+    (OK (jump_to (slot_copy_cond cs) (update_var (slot_copy_var cs 0) 0w s)))
+Proof
+  strip_tac >> drule place_store_copy_lookup >> strip_tac >>
+  `get_instruction
+     <|bb_label := cs.cs_current_bb;
+       bb_instructions := cs.cs_current_insts ++ slot_copy_init_insts cs|>
+     s.vs_inst_idx =
+     SOME (mk_inst cs.cs_next_id ASSIGN [Lit 0w] [slot_copy_var cs 0])` by
+    simp[get_instruction_def, slot_copy_init_insts_def, listTheory.EL_APPEND_EQN] >>
+  `step_inst_base
+     (mk_inst cs.cs_next_id ASSIGN [Lit 0w] [slot_copy_var cs 0]) s =
+     OK (update_var (slot_copy_var cs 0) 0w s)` by
+    simp[step_inst_base_def, mk_inst_def, exec_read1_def,
+         eval_operands_def, eval_operand_def] >>
+  `gas_path_edge ctx func s 0
+     (OK ((update_var (slot_copy_var cs 0) 0w s)
+       with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
+     simp[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `gas_path_edge ctx func s 0 (OK u)` >>
+  `gas_marked_path F ctx func u 0 (OK (jump_to (slot_copy_cond cs) u))` by
+    (irule place_store_copy_jump_path >>
+     (conj_tac >- simp[Abbr `u`, update_var_def]) >>
+     qexistsl_tac
+       [`<|bb_label := cs.cs_current_bb;
+           bb_instructions := cs.cs_current_insts ++ slot_copy_init_insts cs|>`,
+        `mk_inst (cs.cs_next_id + 1) JMP [Label (slot_copy_cond cs)] []`] >>
+     simp[Abbr `u`, update_var_def, get_instruction_def,
+          slot_copy_init_insts_def, listTheory.EL_APPEND_EQN,
+          step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+  `jump_to (slot_copy_cond cs) u =
+   jump_to (slot_copy_cond cs) (update_var (slot_copy_var cs 0) 0w s)` by
+    simp[Abbr `u`, jump_to_def] >>
+  gvs[gas_marked_path_def] >>
+  metis_tac[gas_path_rules, ADD_0]
 QED
 
 (* The allocation-limit check bounds the natural size, before n2w. *)
