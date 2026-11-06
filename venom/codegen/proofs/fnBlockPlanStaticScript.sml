@@ -23,6 +23,7 @@ Ancestors
   livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion fnBlockPlanStaticInventory
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
   fnBlockPlanStaticAccounting fnBlockPlanStaticBalance simplifyCfgStruct venomExecProps venomInst
+  fnBlockPlanStaticDfsTrace cfgAnalysisProps
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
@@ -990,4 +991,43 @@ Proof
   irule regional_actual_dfs_ret_step_empty >>
   rpt (first_assum $ irule_at Any) >>
   gvs[arithmeticTheory.MAX_DEF, regional_collect_phis_length]
+QED
+
+Theorem regional_dfs_unique_predecessor_endpoint:
+  cfg = cfg_analyze fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,pend) /\
+  fn_entry_label fn <> SOME succ /\ cfg_preds_of cfg succ = [pred] /\
+  lookup_block pred fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin /\
+  generate_block_plan lv dfg cfg fn bb pin = SOME (bops,pout) /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) succ ds ==>
+  ds.ps_stack = pout.ps_stack /\ ds.ps_spilled = pout.ps_spilled
+Proof
+  strip_tac >>
+  qpat_x_assum `dfs_block_state _ _ _ _ _ succ ds`
+    (mp_tac o MATCH_MP dfs_block_state_inverse_origin) >>
+  simp[] >> strip_tac >>
+  rename1 `MEM succ (cfg_succs_of (cfg_analyze fn) origin)` >>
+  `origin = pred` by (gvs[] >> metis_tac[cfg_edge_symmetry_uncond, listTheory.MEM]) >>
+  gvs[] >>
+  rename1 `generate_block_plan lv dfg _ fn bb other_in = SOME _` >>
+  `other_in = pin` by (irule dfs_block_state_unique >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem regional_dfs_unique_predecessor_height:
+  cfg = cfg_analyze fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,pend) /\
+  fn_entry_label fn <> SOME succ /\ cfg_preds_of cfg succ = [pred] /\
+  lookup_block pred fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin /\
+  generate_block_plan lv dfg cfg fn bb pin = SOME (bops,pout) /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) succ ds /\
+  LENGTH replay_out.ps_stack <= LENGTH pout.ps_stack ==>
+  LENGTH replay_out.ps_stack <= LENGTH ds.ps_stack
+Proof
+  strip_tac >>
+  drule_all regional_dfs_unique_predecessor_endpoint >> simp[]
 QED
