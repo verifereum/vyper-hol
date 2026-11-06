@@ -30,22 +30,23 @@ Proof
 QED
 
 Theorem pointer_offset_counted_edge:
-  !D ctx func PG G tn s bb id root out a off.
+  !D ctx func PG G tn s bb id root out a off delta.
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst id ADD [Var root; Lit (n2w off)] [out]) /\
-    lookup_var root s = SOME a /\ op_taint tn (Var root) = {} ==>
+      SOME (mk_inst id ADD [Var root; delta] [out]) /\
+    lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
+    eval_operand delta s = SOME (n2w off) /\ op_taint tn delta = {} ==>
     gas_path_ptr_edge D 0 ctx func PG G tn s 0
-      (step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out])
+      (step_prov PG G (mk_inst id ADD [Var root; delta] [out])
         (update_var out (a + n2w off) s))
-      (step_taint (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s
+      (step_taint (mk_inst id ADD [Var root; delta] [out]) s
         (update_var out (a + n2w off) s) tn)
       (OK ((update_var out (a + n2w off) s) with
         vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rpt strip_tac >>
-  `step_inst_base (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s =
+  `step_inst_base (mk_inst id ADD [Var root; delta] [out]) s =
     OK (update_var out (a + n2w off) s)` by
     (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      pure_rewrite_tac[mk_inst_def, instruction_accessors,
@@ -58,13 +59,14 @@ Proof
 QED
 
 Theorem pointer_offset_covers:
-  !PG G tn s id root out a off total n.
+  !PG G tn s id root out a off total n delta.
     lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
+    eval_operand delta s = SOME (n2w off) /\ op_taint tn delta = {} /\
     off + n <= total /\ w2n a + off < dimword(:256) ==>
     ptr_covers
-      (step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out])
+      (step_prov PG G (mk_inst id ADD [Var root; delta] [out])
         (update_var out (a + n2w off) s))
-      (step_taint (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s
+      (step_taint (mk_inst id ADD [Var root; delta] [out]) s
         (update_var out (a + n2w off) s) tn)
       out ((update_var out (a + n2w off) s) with
         vs_inst_idx := SUC s.vs_inst_idx) n

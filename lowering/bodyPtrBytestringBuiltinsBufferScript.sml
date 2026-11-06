@@ -5,7 +5,7 @@ Ancestors
   normalizationAllocPtr loweringPosts builtinBytes bodyPtrDefs
   exprSimLiteralBuffer exprSimPtrLiteralBuffer exprLoweringProps venomState
   fragGasPathPtr fragGasSeqPtr typedCopyPtr bodyPtrAttributeAdd
-  venomExecSemantics words
+  venomExecSemantics words ptrDiscipline
 
 Theorem compile_alloc_buffer_counted_edge_covers:
   compile_alloc_buffer n sa = (buf,sb) /\ buf.buf_operand = Var out /\
@@ -79,36 +79,37 @@ Proof
 QED
 
 Theorem emit_pointer_offset_counted_covers:
-  !root off sa out sb func ctx s a G tn total n D PG.
-  emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
+  !root off delta sa out sb func ctx s a G tn total n D PG.
+  emit_op ADD [Var root; delta] sa = (Var out,sb) /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
+  eval_operand delta s = SOME (n2w off) /\ op_taint tn delta = {} /\
   off + n <= total /\ w2n a + off < dimword (:256) ==>
   gas_path_ptr_edge D 0 ctx func PG G tn s 0
-    (step_prov PG G (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out])
+    (step_prov PG G (mk_inst sa.cs_next_id ADD [Var root; delta] [out])
       (update_var out (a + n2w off) s))
-    (step_taint (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out]) s
+    (step_taint (mk_inst sa.cs_next_id ADD [Var root; delta] [out]) s
       (update_var out (a + n2w off) s) tn)
     (OK ((update_var out (a + n2w off) s) with vs_inst_idx := SUC s.vs_inst_idx)) /\
   ptr_covers
-    (step_prov PG G (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out])
+    (step_prov PG G (mk_inst sa.cs_next_id ADD [Var root; delta] [out])
       (update_var out (a + n2w off) s))
-    (step_taint (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out]) s
+    (step_taint (mk_inst sa.cs_next_id ADD [Var root; delta] [out]) s
       (update_var out (a + n2w off) s) tn)
     out ((update_var out (a + n2w off) s) with vs_inst_idx := SUC s.vs_inst_idx) n
 Proof
   rpt gen_tac >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++
-     [mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out]]` by
+     [mk_inst sa.cs_next_id ADD [Var root; delta] [out]]` by
     (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[]) >>
   drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb s.vs_inst_idx =
-    SOME (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)] [out])` by
+    SOME (mk_inst sa.cs_next_id ADD [Var root; delta] [out])` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   conj_tac
   >- (irule pointer_offset_counted_edge >>
@@ -256,6 +257,8 @@ Resume compile_slice_out_buf_counted[offset]:
     (fs[Abbr `uh`, lookup_var_def] >>
      `a < dimword (:256)` by decide_tac >> simp[w2n_n2w] >> decide_tac) >>
   `32 + (n - 32) <= n` by decide_tac >>
+  `eval_operand (Lit 32w) uh = SOME (n2w 32) /\ op_taint tn1 (Lit 32w) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
   drule_all emit_pointer_offset_counted_covers >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   suspend "compose"

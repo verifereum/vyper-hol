@@ -111,6 +111,8 @@ Proof
    lookup_var src u = SOME a /\ ptr_covers G' tn' src u (32+L)` by
     gvs[Abbr `u`, update_var_def, lookup_var_def, ptr_covers_def, FLOOKUP_UPDATE] >>
   `32 + L <= 32 + L` by simp[] >>
+  `eval_operand (Lit 32w) u = SOME (n2w 32) /\ op_taint tn' (Lit 32w) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
   drule_all emit_pointer_offset_counted_covers >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   suspend "compose"
@@ -161,6 +163,7 @@ Theorem emit_scratch_word_counted:
     t = (mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tn' (OK t) /\
     ptr_covers G tn' dst t 32 /\
+    (!root cap. ptr_covers G tn root s cap ==> ptr_covers G tn' root t cap) /\
     mem_word_at (w2n a) t.vs_memory = w /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn'.t_mem) /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
@@ -211,6 +214,7 @@ Resume emit_scratch_word_counted[scratch_path]:
   simp[Abbr `t`, mstore_mem_word_at_same, lookup_var_def] >>
   conj_tac
   >- gvs[ptr_covers_def, mstore_def, op_taint_def] >>
+  conj_tac >- gvs[ptr_covers_def, mstore_def, op_taint_def, lookup_var_def] >>
   simp[Abbr `tn'`, step_taint_def, imm_taint_def, mk_inst_def] >>
   simp[mstore_def]
 QED
