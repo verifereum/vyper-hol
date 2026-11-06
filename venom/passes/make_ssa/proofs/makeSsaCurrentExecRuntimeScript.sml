@@ -222,3 +222,198 @@ Proof
   fs[execution_frame_def, mload_def, sload_def, tload_def,
      contract_storage_def, contract_transient_def]
 QED
+
+Theorem current_exec_store_state_rel:
+  state_rel sg a b ==>
+  state_rel sg (mstore off v a) (mstore off v b) /\
+  state_rel sg (mstore8 off v a) (mstore8 off v b) /\
+  state_rel sg (sstore key v a) (sstore key v b) /\
+  state_rel sg (tstore key v a) (tstore key v b)
+Proof
+  simp[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def,
+       mstore_def, mstore8_def, sstore_def, tstore_def,
+       write_memory_with_expansion_def, contract_storage_def,
+       contract_transient_def]
+QED
+
+Theorem current_exec_write2_opcodes_pair:
+  MEM inst.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE] /\
+  inst.inst_outputs = [] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_call_ctx = st.vs_call_ctx` by
+    fs[state_rel_def, execution_frame_def] >>
+  `eval_operands inst'.inst_operands st' = eval_operands inst.inst_operands st` by
+    (drule_all inst_pair_ops >> simp[ops_pair_def] >>
+     metis_tac[eval_operands_rel]) >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  gvs[AllCaseEqs()] >>
+  ho_match_mp_tac current_exec_write2_pair >> asm_rewrite_tac[] >>
+  rpt strip_tac >> metis_tac[current_exec_store_state_rel]
+QED
+
+Theorem current_exec_memory_state_rel:
+  state_rel sg a b ==>
+  state_rel sg (write_memory_with_expansion off bytes a)
+               (write_memory_with_expansion off bytes b) /\
+  state_rel sg (mcopy dst src sz a) (mcopy dst src sz b) /\
+  state_rel sg (istore off v a) (istore off v b)
+Proof
+  simp[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def,
+       write_memory_with_expansion_def, mcopy_def, istore_def, mstore_def,
+       read_memory_def]
+QED
+
+Theorem current_exec_copy3_opcodes_pair:
+  MEM inst.inst_opcode [MCOPY; CALLDATACOPY; RETURNDATACOPY; DLOADBYTES; CODECOPY] /\
+  inst.inst_outputs = [] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_call_ctx = st.vs_call_ctx /\ st'.vs_returndata = st.vs_returndata /\
+   st'.vs_data_section = st.vs_data_section /\ st'.vs_code = st.vs_code` by
+    fs[state_rel_def, execution_frame_def] >>
+  `inst'.inst_outputs = []` by gvs[current_last_output_slots_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[current_exec_empty_last_slots, current_exec_memory_state_rel]
+QED
+
+Theorem current_exec_istore_extcodecopy_pair:
+  MEM inst.inst_opcode [ISTORE; EXTCODECOPY] /\ inst.inst_outputs = [] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_accounts = st.vs_accounts` by fs[state_rel_def, execution_frame_def] >>
+  `inst'.inst_outputs = []` by gvs[current_last_output_slots_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[current_exec_empty_last_slots, current_exec_memory_state_rel]
+QED
+
+Theorem current_exec_assign_sha3_pair:
+  MEM inst.inst_opcode [ASSIGN; SHA3] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_memory = st.vs_memory` by fs[state_rel_def, execution_frame_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  gvs[AllCaseEqs()] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  metis_tac[current_exec_update_last_slots]
+QED
+
+Theorem current_exec_fmp_state_rel:
+  state_rel sg a b ==> state_rel sg (a with vs_fmp := v) (b with vs_fmp := v)
+Proof
+  simp[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def]
+QED
+
+Theorem current_exec_fmp_read_pair:
+  MEM inst.inst_opcode [GETFMP; INITIAL_FMP; PARAM; FMP_PARAM; RETPC_PARAM] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_fmp = st.vs_fmp /\ st'.vs_initial_fmp = st.vs_initial_fmp /\
+   st'.vs_params = st.vs_params /\ st'.vs_return_pc_token = st.vs_return_pc_token` by
+    fs[state_rel_def, execution_frame_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  gvs[AllCaseEqs(), op_rename_lit] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  metis_tac[current_exec_update_last_slots]
+QED
+
+Theorem current_exec_setfmp_pair:
+  inst.inst_opcode = SETFMP /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = SETFMP` by fs[inst_pair_def] >>
+  stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs()] >>
+  `inst.inst_outputs = []` by gvs[current_last_output_slots_def] >>
+  gvs[] >> metis_tac[current_exec_empty_last_slots, current_exec_fmp_state_rel]
+QED
+
+Theorem current_exec_dalloca_pair:
+  inst.inst_opcode = DALLOCA /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = DALLOCA` by fs[inst_pair_def] >>
+  `st'.vs_fmp = st.vs_fmp` by fs[state_rel_def, execution_frame_def] >>
+  stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs()] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  metis_tac[current_exec_update_last_slots, current_exec_fmp_state_rel]
+QED
+
+Theorem current_exec_nop_pair:
+  inst.inst_opcode = NOP /\ inst.inst_outputs = [] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> `inst'.inst_opcode = NOP` by fs[inst_pair_def] >>
+  stepInstBaseLib.with_opcode_clause fs >> gvs[] >>
+  `inst'.inst_outputs = []` by gvs[current_last_output_slots_def] >>
+  metis_tac[current_exec_empty_last_slots]
+QED
+
+Theorem current_exec_alloca_pair:
+  inst.inst_opcode = ALLOCA /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = ALLOCA /\ inst'.inst_id = inst.inst_id` by fs[inst_pair_def] >>
+  `st'.vs_allocas = st.vs_allocas /\ st'.vs_alloca_next = st.vs_alloca_next` by
+    fs[state_rel_def, execution_frame_def] >>
+  stepInstBaseLib.with_opcode_clause fs >>
+  gvs[exec_alloca_def, AllCaseEqs(), op_rename_lit] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  irule current_exec_update_last_slots >> qexists_tac `sg` >> simp[] >>
+  fs[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def]
+QED
