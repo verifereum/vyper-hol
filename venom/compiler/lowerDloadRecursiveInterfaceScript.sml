@@ -222,9 +222,11 @@ val ld_recursive_candidate =
 
    BLOCK -- C2.control:
    Exact target is P vs0 CT stk (entry_taint_vars gn t' un) gn j' t1.
-   Strict prefixes cannot contain a terminator (supply definition). At phase
-   zero a changed code has no terminator either. For unchanged terminators
-   the residual is source step_inst fuelS CS i s=OK s' /\ ~s'.vs_halted /\
+   ld_recursive_block_anchor proves that a successful target terminator
+   retains the full normal certificate with n=0, code=[i], a2=a1, j=i,
+   t=ta and un=ua. It excludes strict prefixes and the revert interval;
+   it does NOT prove backward successful branch execution. The residual is
+   source step_inst fuelS CS i s=OK s' /\ ~s'.vs_halted /\
      enters_block fn s' s1 /\ active_inst fn i' s1,
    together with N at s1/t1, AG'=ld_entry_prov fn s' AG and
    BH'=ld_entry_prov gn t' BH. This includes backward PHI data and configured
@@ -1224,3 +1226,56 @@ Resume ld_recursive_alloca_next[saved_successor]:
 QED
 
 Finalise ld_recursive_alloca_next
+
+val ld_recursive_block_zero =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (ws,b) = strip_exists (fst (dest_disj body))
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) (ws @ args))
+    val n = named "n" and code = named "code" and i = named "i"
+    val a2 = named "a2" and a1 = named "a1"
+    val j = named "j" and t = named "t" and ta = named "ta"
+    val un = named "un" and ua = named "ua"
+  in list_mk_abs(args,list_mk_exists(ws,
+       list_mk_conj [b, ``^n = 0``, ``^code = [^i]``, ``^a2 = ^a1``,
+         ``^j = ^i``, ``^t = ^ta``, ``^un = ^ua``])) end;
+
+Theorem ld_recursive_block_anchor:
+  (^ld_recursive_candidate) vs0 CT stk un gn j t /\
+  is_terminator j.inst_opcode /\ step_inst fuel CT j t = OK z ==>
+  (^ld_recursive_block_zero) vs0 CT stk un gn j t
+Proof
+  reverse (BETA_TAC >> strip_tac)
+  >- (drule_all ld_revert_pair_interval_step >>
+      disch_then (qspecl_then [`z`, `t`, `ret`, `fuel`, `CT`] mp_tac) >>
+      simp[]) >>
+  `MEM j code` by
+    (qpat_x_assum `code <> []` mp_tac >>
+     qpat_x_assum `j = _` mp_tac >>
+     TRY (qpat_x_assum `n < LENGTH code` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `code` >> simp[] >>
+     Cases_on `n` >> simp[] >> metis_tac[MEM_EL]) >>
+  `j = i` by
+    (irule o1ContractLowerDloadTheory.lower_dload_inst_supply_control >>
+     metis_tac[]) >>
+  `code = [i] /\ a2 = a1` by
+    (qpat_x_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     `i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES` by
+       (qpat_x_assum `is_terminator _` mp_tac >>
+        qpat_x_assum `j = i` SUBST_ALL_TAC >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        rpt strip_tac >> gvs[is_terminator_def]) >>
+     simp[lower_dload_inst_supply_def] >> metis_tac[]) >>
+  TRY (qpat_x_assum `0 < n` mp_tac >>
+       qpat_x_assum `n < LENGTH code` mp_tac >>
+       qpat_x_assum `code = [i]` SUBST_ALL_TAC >> simp[] >> NO_TAC) >>
+  qexistsl_tac [`astk`, `gstk`, `k`, `L`, `AP`, `AG`, `tn`, `fn`, `i`,
+    `s`, `ta`, `ua`, `V`, `U`, `E`, `H`, `BP`, `BH`, `live`, `keys`, `A`,
+    `suspended`, `f`, `fa`, `fb`, `bb`, `gb`, `a0`, `a1`, `a2`, `a3`,
+    `pre`, `post`, `p`, `code`, `tail`, `bpre`, `bpost`, `qpre`, `qpost`,
+    `supports`, `savedkeys`, `s0`, `n`] >>
+  asm_rewrite_tac [] >> simp[] >>
+  qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
+  asm_rewrite_tac []
+QED
