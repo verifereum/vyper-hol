@@ -178,3 +178,73 @@ Proof
   rpt strip_tac >> `x <> p` by metis_tac[] >>
   drule_all alloca_old_variable_ghost_frame >> simp[]
 QED
+
+Theorem for_array_entry_initialize_ptr:
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  fn_inst_ids_distinct func /\
+  MEM (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  (!q. cenv.ce_return_buf <> SOME (PtrVar (Var p) q)) /\
+  (!q. cenv.ce_return_buf <> SOME (PtrVar (Var idx) q)) /\
+  bp <> p /\ idx <> p /\ idx <> bp /\ not_local_ptr cenv es.scopes idx /\
+  ptr_covers G tn bp s (LENGTH vs * type_memory_size tv) /\
+  lookup_var bp s = SOME arr_base /\ ret_pc_ok cenv st s /\
+  (!x. not_fresh_at st x ==> x <> p /\ x <> idx) /\
+  lookup_scopes name es.scopes = SOME snapshot /\ lookup_scopes id es.scopes = NONE /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME
+    <|bb_label := lbl; bb_instructions := pre ++
+      [mk_inst aid ALLOCA [Lit (n2w sz)] [p]; mk_inst j JMP [Label entry] []]|> /\
+  s.vs_inst_idx = LENGTH pre /\
+  lookup_block entry func.fn_blocks = SOME
+    <|bb_label := entry; bb_instructions :=
+      [mk_inst ei ASSIGN [Lit 0w] [idx]; mk_inst ej JMP [Label cond] []]|> ==>
+  ?u dst.
+    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz
+      (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) cond st s G tn d name snapshot
+      0 es
+      (DRESTRICT (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+        (COMPL {idx}))
+      ((step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) with
+        t_var := (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn).t_var
+          |+ (idx,{}))
+      (jump_to cond (update_var idx 0w (jump_to entry u))) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0
+      (DRESTRICT (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+        (COMPL {idx}))
+      ((step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) with
+        t_var := (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn).t_var
+          |+ (idx,{}))
+      (OK (jump_to cond (update_var idx 0w (jump_to entry u))))
+Proof
+  strip_tac >>
+  `!x. not_fresh_at st x ==> x <> p` by metis_tac[] >>
+  drule_all for_array_alloca_resources_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`u`, `dst`] >> conj_tac
+  >- (irule for_array_counter_zero_inv_ptr >>
+      simp[stmt_state_rel_jump_to, ghost_inv_jump_to, ret_pc_ok_jump_to,
+        jump_to_def] >>
+      rpt conj_tac >> rpt strip_tac >>
+      fs[ptr_covers_def, lookup_var_def, local_region_def, jump_to_def] >>
+      gvs[]
+      >~ [`regions_disjoint _ _ _ _`]
+      >- (qpat_x_assum `!nm lo z. _ ==> regions_disjoint _ _ _ _` irule >>
+          qexists_tac `nm` >> qexistsl_tac [`entry'`, `p'`, `w''`] >> simp[]) >>
+      fs[mk_inst_def] >> metis_tac[]) >>
+  drule_all for_array_alloca_prefix_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  `gas_path_ptr D 0 ctx func PG
+    (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+    (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn)
+    (jump_to entry u) 0
+    (DRESTRICT (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+      (COMPL {idx}))
+    ((step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) with
+      t_var := (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn).t_var
+        |+ (idx,{}))
+    (OK (jump_to cond (update_var idx 0w (jump_to entry u))))` by
+    (irule for_array_counter_entry_ptr >> simp[jump_to_def] >>
+     qexistsl_tac [`ei`, `ej`] >> simp[]) >>
+  drule_all gas_path_ptr_then >> simp[]
+QED
