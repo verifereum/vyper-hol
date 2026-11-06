@@ -661,6 +661,10 @@ Resume compile_ifexp_word_vv_sim_mem[selected]:
      drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
   `gas_path_mem ctx func t 0 (OK (jump_to se.cs_current_bb t))` by
     (asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >> simp[] >> metis_tac[]) >>
+  suspend "selected_entry"
+QED
+
+Resume compile_ifexp_word_vv_sim_mem[selected_entry]:
   irule ifexp_selected_outcome_prefix_mem >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >>
@@ -771,8 +775,8 @@ QED
 
 Finalise compile_ifexp_word_vv_sim_mem
 
-(* The non-word case: the arms are converted to the lowered type
-   (compile_ifexp_arm) and the result is a memory pointer.  Open. *)
+(* The non-word case: selected arms are converted by compile_ifexp_arm
+   and the result is routed to the join as a bounded memory pointer. *)
 Theorem compile_ifexp_nonword_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     ~is_word_type t /\
@@ -1115,6 +1119,10 @@ Resume compile_ifexp_word_sim_mem[selected_arm]:
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >>
   qexistsl_tac [`marks`,`es_end`,`sel`] >> simp[] >>
+  suspend "forced_entry"
+QED
+
+Resume compile_ifexp_word_sim_mem[forced_entry]:
   `lower_value compile_expr cenv ty (if sel then a else b) se = (aop,sx)` by
     (irule ifexp_arm_lower_value >> simp[] >> metis_tac[]) >>
   `gas_admissible
