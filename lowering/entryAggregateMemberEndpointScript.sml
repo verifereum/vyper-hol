@@ -2,11 +2,11 @@
 Theory entryAggregateMemberEndpoint
 Ancestors
   entryAggregateValuePackaging abiStaticDynarrayLayout valueEncodingProps vyperTyping
-  valueEncodingTyping
+  valueEncodingTyping abiDecoderFixedMemory
   entryTupleMemberFold entryDecoderMemberEndpoint abiDecoderValidFixed
   abiDecoderCoherence abiDecoderMemberInfos abiDecoderComplexGuard abiDecoderComplexHead
   abiDecoderValidContract abiDecoderMembers calldataSourceMemberFold
-  valueEncodingProofs valueEncoding compileEnv emitHelper list arithmetic
+  valueEncodingProofs valueEncoding compileEnv emitHelper list rich_list arithmetic
 
 Theorem entry_member_tuple_contract:
   LIST_REL (entry_member_child_contract ce env sf ctx fn site limit_st) tys tvs ==>
@@ -119,4 +119,61 @@ val () =
   in if null axioms andalso null (Thm.hyp entry_member_struct_contract) andalso
         List.all (fn tag => tag = "DISK_THM") oracles
      then () else raise Fail "struct entry endpoint unexpected admission"
+  end;
+
+Theorem entry_member_fixed_contract:
+  abi_decoder_coherent ce env sf ty tv /\
+  entry_member_child_contract ce env sf ctx fn site limit_st ty tv ==>
+  entry_member_child_contract ce env sf ctx fn site limit_st
+    (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+Proof
+  strip_tac >> rewrite_tac[entry_member_child_contract_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decoder_valid_fixed_array_inputs >> strip_tac >>
+  `LIST_REL (abi_decoder_coherent ce env sf) (REPLICATE n ty) (REPLICATE n tv)` by
+    simp[LIST_REL_REPLICATE_same] >>
+  `MAP type_memory_size (REPLICATE n tv) =
+    MAP (type_memory_bytes ce) (REPLICATE n ty)` by
+    (drule abi_decoder_coherent_header >> simp[abi_decoder_header_def, map_replicate]) >>
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    (abi_decoder_member_infos sf ce (REPLICATE n ty)) 0 0 first = ((),last)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decoder_fixed_array_infos, abi_decode_complex_phases,
+       abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def]) >>
+  `base_addr <= p /\
+    p + SUM (MAP type_memory_size (REPLICATE n tv)) <= base_addr + cap /\
+    SUM (MAP type_memory_size (REPLICATE n tv)) <=
+      SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) /\
+    p + SUM (MAP type_memory_size (REPLICATE n tv)) < dimword (:256)` by
+    (drule abi_decoder_coherent_header >>
+     simp[abi_decoder_header_def] >> strip_tac >>
+     gvs[type_memory_size_def, map_replicate, SUM_REPLICATE]) >>
+  `!i. i < LENGTH (REPLICATE n ty) ==>
+    entry_member_child_contract ce env sf ctx fn site limit_st
+      (EL i (REPLICATE n ty)) (EL i (REPLICATE n tv))` by simp[EL_REPLICATE] >>
+  `LENGTH vs = LENGTH (REPLICATE n ty)` by simp[] >>
+  drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
+    entry_source_members_tuple_success)) >> strip_tac >>
+  qexistsl_tac [`t`,`scratch`] >>
+  `val_wf (ArrayTV tv (Fixed n))
+    (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs)))` by
+    (irule entry_fixed_array_wf >> simp[]) >>
+  `val_in_memory (ArrayTV tv (Fixed n))
+    (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs))) p t.vs_memory` by
+    (irule abi_decoder_fixed_array_memory >> simp[]) >>
+  `SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) = n * type_memory_size tv` by
+    (qpat_assum `MAP type_memory_size _ = _` (mp_tac o AP_TERM ``SUM : num list -> num``) >>
+     simp_tac (srw_ss()) [map_replicate, SUM_REPLICATE] >> metis_tac[]) >>
+  asm_simp_tac (srw_ss()) [calldata_member_success_def, type_memory_size_def] >>
+  qhdtm_x_assum `calldata_member_resource_frame` mp_tac >>
+  qpat_assum `SUM (MAP (type_memory_bytes ce) _) = _`
+    (fn th => pure_rewrite_tac[th]) >> simp[]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_member_fixed_contract)
+  in if null axioms andalso null (Thm.hyp entry_member_fixed_contract) andalso
+        List.all (fn tag => tag = "DISK_THM") oracles
+     then () else raise Fail "fixed entry endpoint unexpected admission"
   end;
