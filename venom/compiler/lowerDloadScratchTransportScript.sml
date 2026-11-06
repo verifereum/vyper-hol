@@ -18,10 +18,11 @@ Proof
   qexists_tac `EL bi f.lf_fn.fn_blocks` >> metis_tac[MEM_EL]
 QED
 
-Theorem ld_configured_charge_bound:
+Theorem ld_site_subset_charge_bound:
   ALL_DISTINCT (MAP (\f. f.lf_fn) frames) /\
   set (MAP (\f. f.lf_fn) frames) SUBSET set C.ctx_functions /\
-  EVERY (ld_maps A) frames ==>
+  EVERY (\f. f.lf_E SUBSET set (MAP (\i. i.inst_id)
+    (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts f.lf_fn)))) frames ==>
   ld_charge frames <= ctx_dload_count C
 Proof
   strip_tac >>
@@ -29,10 +30,7 @@ Proof
     LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts f.lf_fn))` by
     (rpt strip_tac >> irule subset_ids_card_bound >>
      qexists_tac `\i. i.inst_id` >>
-     simp[SUBSET_DEF, MEM_MAP] >> rpt strip_tac >>
-     `ld_maps A f` by metis_tac[EVERY_MEM] >>
-     `?ai. ld_private f x ai` by metis_tac[ld_maps_def] >>
-     drule ld_private_source_member >> simp[MEM_MAP]) >>
+     fs[EVERY_MEM]) >>
   `SUM (MAP (\f. CARD f.lf_E) frames) <=
    SUM (MAP (\f. LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
                                    (fn_insts f.lf_fn))) frames)` by
@@ -49,6 +47,44 @@ Proof
         (MAP (\f. f.lf_fn) frames)) <= ctx_dload_count C` by
     (simp[ctx_dload_count_def] >> irule sum_map_sublist_bound >> simp[]) >>
   gvs[ld_charge_def, MAP_MAP_o, combinTheory.o_DEF] >> decide_tac
+QED
+
+Theorem ld_configured_charge_bound:
+  ALL_DISTINCT (MAP (\f. f.lf_fn) frames) /\
+  set (MAP (\f. f.lf_fn) frames) SUBSET set C.ctx_functions /\
+  EVERY (ld_maps A) frames ==>
+  ld_charge frames <= ctx_dload_count C
+Proof
+  strip_tac >> irule ld_site_subset_charge_bound >> simp[] >>
+  simp[EVERY_MEM, SUBSET_DEF] >> rpt strip_tac >>
+  `ld_maps A f` by metis_tac[EVERY_MEM] >>
+  `?ai. ld_private f x ai` by metis_tac[ld_maps_def] >>
+  metis_tac[ld_private_source_member]
+QED
+
+Theorem ld_configured_charge_fresh_bound:
+  ALL_DISTINCT (MAP (\f. f.lf_fn) (f::fs)) /\
+  set (MAP (\f. f.lf_fn) (f::fs)) SUBSET set C.ctx_functions /\
+  EVERY (ld_maps A) (f::fs) /\ ld_private f d ai /\ d NOTIN f.lf_E ==>
+  ld_charge (f::fs) + 1 <= ctx_dload_count C
+Proof
+  strip_tac >>
+  `EVERY (\g. g.lf_E SUBSET set (MAP (\i. i.inst_id)
+    (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts g.lf_fn)))) (f::fs)` by
+    (pure_rewrite_tac[EVERY_MEM, SUBSET_DEF] >>
+     BETA_TAC >> qx_gen_tac `g` >> disch_tac >> qx_gen_tac `x` >> disch_tac >>
+     `ld_maps A g` by (fs[EVERY_MEM]) >>
+     `?aj. ld_private g x aj` by metis_tac[ld_maps_def] >>
+     metis_tac[ld_private_source_member]) >>
+  `FINITE f.lf_E` by
+    (irule SUBSET_FINITE >>
+     qexists_tac `set (MAP (\i. i.inst_id)
+       (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts f.lf_fn)))` >>
+     gvs[]) >>
+  `ld_charge ((f with lf_E := d INSERT f.lf_E)::fs) <= ctx_dload_count C` by
+    (irule ld_site_subset_charge_bound >> simp[] >>
+     gvs[INSERT_SUBSET] >> metis_tac[ld_private_source_member]) >>
+  gvs[ld_charge_def, CARD_INSERT] >> decide_tac
 QED
 
 Theorem ld_dload_scratch_tail_transport:
