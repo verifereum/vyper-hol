@@ -547,6 +547,15 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
+Theorem build_func_mutability_inert_decl:
+  !pre suf d.
+    (d = FlagDecl fid ms \/ d = ErrorDecl eid ps) ==>
+    build_func_mutability (pre ++ d :: suf) = build_func_mutability (pre ++ suf)
+Proof
+  Induct >> rw[build_func_mutability_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
 Theorem classify_functions_inert_decl:
   !pre suf d.
     (d = FlagDecl fid ms \/ d = ErrorDecl eid ps) ==>
@@ -686,7 +695,7 @@ Proof
        add_immutable_locations_inert_decl, add_module_var_locations_inert_decl,
        collect_module_vars_inert_decl, build_func_info_inert_decl,
        build_func_param_types_inert_decl, build_func_return_type_inert_decl,
-       build_func_ids_inert_decl]
+       build_func_ids_inert_decl, build_func_mutability_inert_decl]
 QED
 
 (* A FlagDecl entry: the compile env's module-variable bindings and
@@ -735,5 +744,5 @@ Proof
        build_hashmap_info_inert_decl, add_immutable_locations_inert_decl,
        add_module_var_locations_inert_decl, collect_module_vars_inert_decl,
        build_func_info_inert_decl, build_func_param_types_inert_decl,
-       build_func_return_type_inert_decl, build_func_ids_inert_decl]
+       build_func_return_type_inert_decl, build_func_ids_inert_decl, build_func_mutability_inert_decl]
 QED
