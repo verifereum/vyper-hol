@@ -1,7 +1,8 @@
 (* Arbitrary-input array prefix rejection boundaries. *)
 Theory exprSimAbiDecodeArrayPrefix
 Ancestors
-  abiEncoder abiDecoderDynarrayPrefix abiDecoderBytestringOutcome abiDecoderDynarrayBound
+  abiDecoderArrayInitExec abiDecoderArrayHeader abiDecoderArrayLoopInit abiDecoderFrame valueEncoding
+  exprSimAbiDecodeArraySource abiEncoder abiDecoderDynarrayPrefix abiDecoderBytestringOutcome abiDecoderDynarrayBound
   abiDecoderBytesBound abiDecoderGuards abiDecoderRange abiDecoderGuard abiDecoderContract
   compileEnv emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState words list
 
@@ -154,4 +155,76 @@ Proof
   `h < p+32+n*abi_sz \/ maxn < n` by decide_tac >>
   conj_tac >- simp[] >>
   mp_tac abi_decode_dynarray_position_prefix_revert >> simp[]
+QED
+
+Theorem abi_decode_dynarray_position_prefix_source_outcome:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn
+    (abi_member_head_size at) st = (addr,st') /\
+  abi_decode_source_opcode opc /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\
+  eval_operand base_op s = SOME(n2w b) /\
+  eval_operand hi s = SOME(n2w h) /\
+  n = w2n (mem_word_at (b+p) s.vs_memory) /\
+  bs = mem_bytes_at (b+p) (h-p) s.vs_memory /\
+  abi_decode_load opc (n2w (b+p):bytes32) s = n2w n /\
+  p < dimword(:256) /\ h < dimword(:256) /\
+  maxn < dimword(:256) /\
+  (n <= maxn ==> n * abi_member_head_size at < dimword(:256)) /\
+  fresh_vars_wrt st s ==>
+  (n <= maxn /\ p+32+n*abi_member_head_size at <= h /\
+   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+       eval_operand addr t = SOME(n2w (b+p)) /\ fresh_vars_wrt st' t /\
+       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+       t.vs_data_section = s.vs_data_section /\ inst_extends st st') \/
+  (?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t /\
+       ~(vyper_decode_valid_enc (Array NONE at) bs /\
+         ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+               (dec (Array NONE at) bs) = SOME v))
+Proof
+  strip_tac >>
+  `n < dimword(:256)` by simp[wordsTheory.w2n_lt] >>
+  drule_all abi_decode_dynarray_position_prefix_outcome >>
+  disch_then strip_assume_tac
+  >- (disj1_tac >> simp[] >> metis_tac[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  irule abi_decode_dynarray_suffix_guard_reject >>
+  goal_assum (drule_at Any) >> qexists `n` >> asm_rewrite_tac[]
+QED
+
+Theorem abi_decode_dynarray_prepare_outcome:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,guard_st) /\
+  abi_decode_array_header dst addr opc guard_st = (cnt,header_st) /\
+  abi_decode_source_opcode opc /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\
+  eval_operand base_op s = SOME(n2w b) /\
+  eval_operand hi s = SOME(n2w h) /\
+  eval_operand dst s = SOME(n2w d) /\ d < dimword(:256) /\
+  abi_decode_load opc (n2w (b+p):bytes32) s = n2w n /\
+  p < dimword(:256) /\ h < dimword(:256) /\
+  n < dimword(:256) /\ maxn < dimword(:256) /\
+  (n <= maxn ==> n * abi_sz < dimword(:256)) /\
+  fresh_vars_wrt st s ==>
+  (n <= maxn /\ p+32+n*abi_sz <= h /\
+   ?t. run_inst_seq (emitted_insts st header_st) s = OK t /\
+       eval_operand cnt t = SOME(n2w n) /\ mem_word_at d t.vs_memory = n2w n /\
+       fresh_vars_wrt header_st t /\
+       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+       abi_decode_frame d 32 s t /\
+       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+       t.vs_halted = s.vs_halted /\ inst_extends st header_st) \/
+  ((h < p+32 \/ maxn < n \/ h < p+32+n*abi_sz) /\
+   ?t. run_inst_seq (emitted_insts st header_st) s = Abort Revert_abort t)
+Proof
+  strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_outcome >>
+  disch_then strip_assume_tac
+  >- (disj1_tac >> simp[] >>
+      mp_tac (Q.INST [`sb` |-> `p`, `B` |-> `b`] abi_decode_array_prepare_sequence) >>
+      asm_simp_tac bool_ss [] >>
+      disch_then irule >> qexists `h` >> asm_rewrite_tac[]) >>
+  disj2_tac >> conj_tac >- simp[] >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  metis_tac[run_inst_seq_abort_extends]
 QED
