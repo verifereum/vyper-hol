@@ -93,3 +93,100 @@ Proof
   `retpc_use_ok a.po_inst s` by metis_tac[opaque_use_ok_retpc_use] >>
   gvs[retpc_use_ok_def] >> gvs[rich_listTheory.FRONT_APPEND_NOT_NIL]
 QED
+
+Theorem ptr_paired_ret_execution_back:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode = RET /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?ret sr tr.
+    step_inst 0 C a.po_inst a.po_state = IntRet ret a.po_state /\
+    step_inst 0 C' at.po_inst at.po_state = IntRet ret at.po_state /\
+    ret.iret_adopt_fmp = NONE /\
+    a.po_stack <> [] /\ at.po_stack <> [] /\
+    (HD a.po_stack).cf_inst.inst_outputs = (HD at.po_stack).cf_inst.inst_outputs /\
+    bind_outputs (HD a.po_stack).cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD a.po_stack).cf_state a.po_state)) = SOME sr /\
+    bind_outputs (HD at.po_stack).cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD at.po_stack).cf_state at.po_state)) = SOME tr
+Proof
+  strip_tac >>
+  drule_all ptr_paired_ret_scalar_operands >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `at.po_inst = a.po_inst` by gvs[concretize_positions_unchanged] >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+    a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
+    fs[ptr_paired_sample_def, ptr_core_shared_def,
+      concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
+  `?ret tr. step_inst 0 C' at.po_inst at.po_state = IntRet ret at.po_state /\
+    ret.iret_adopt_fmp = NONE /\ at.po_stack <> [] /\
+    bind_outputs (HD at.po_stack).cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD at.po_stack).cf_state at.po_state)) = SOME tr` by
+    (qpat_x_assum `ptr_chrono_step C' at zt` mp_tac >>
+     simp[Once ptr_chrono_step_cases, ptr_observe_def] >>
+     rpt strip_tac >> gvs[is_terminator_def] >>
+     gvs[Once run_defs, step_inst_base_def, AllCaseEqs()] >>
+     qexistsl_tac [`<|iret_values := FRONT (v3::v4); iret_adopt_fmp := NONE|>`, `s'`] >>
+     simp[Once run_defs, step_inst_base_def, adopt_return_fmp_def]) >>
+  `?ys. eval_operands (ops ++ [last]) at.po_state = SOME ys /\
+    ys <> [] /\ ret.iret_values = FRONT ys` by
+    (qpat_x_assum `step_inst 0 C' _ _ = _` mp_tac >>
+     simp[Once run_defs, step_inst_base_def] >>
+     gvs[AllCaseEqs()] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  drule_all ptr_mixed_return_front >> strip_tac >>
+  `step_inst 0 C a.po_inst a.po_state = IntRet ret a.po_state` by
+    (simp[Once run_defs, step_inst_base_def] >>
+     Cases_on `xs` >> gvs[] >> Cases_on `ret` >> gvs[internal_return_component_equality]) >>
+  drule ptr_paired_prefix_callers >> strip_tac >>
+  `a.po_stack <> []` by
+    (fs[concretizePtrPairedFieldsTheory.ptr_paired_callers_def] >>
+     Cases_on `a.po_stack` >> Cases_on `at.po_stack` >> gvs[]) >>
+  `(HD a.po_stack).cf_inst.inst_outputs = (HD at.po_stack).cf_inst.inst_outputs` by
+    (qpat_x_assum `ptr_paired_callers _ _ _ _ _ _ _ _` mp_tac >>
+     simp[concretizePtrPairedFieldsTheory.ptr_paired_callers_def] >> strip_tac >>
+     first_x_assum (qspec_then `0` mp_tac) >>
+     `0 < LENGTH calls` by (Cases_on `calls` >> gvs[]) >>
+     simp[concretizePtrPairedFieldsTheory.ptr_paired_call_def] >>
+     Cases_on `HD calls` >>
+     simp[concretizePtrPairedFieldsTheory.ptr_paired_call_def] >> strip_tac >>
+     drule ptr_paired_prefix_alignment >>
+     disch_then (qspec_then `r` mp_tac) >>
+     `r < LENGTH ht` by
+       (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def] >> decide_tac) >>
+     simp[EL_APPEND_EQN] >> strip_tac >>
+     qpat_x_assum `ptr_paired_cursor lp (EL _ h) _` mp_tac >>
+     simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >> strip_tac >>
+     drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> strip_tac >>
+     `((EL (EL r done) h).po_state.vs_inst_idx) =
+       EL (EL r ht).po_state.vs_inst_idx indices` by
+       (qpat_x_assum `!k. _ <= k /\ _ ==> _`
+          (qspec_then `(EL (EL r done) h).po_state.vs_inst_idx` mp_tac) >>
+        gvs[] >> decide_tac) >>
+     qpat_x_assum `!j. j < LENGTH bbt.bb_instructions ==> _`
+       (qspec_then `(EL r ht).po_state.vs_inst_idx` mp_tac) >>
+     simp[] >> strip_tac >>
+     gvs[concretize_positions_unchanged,
+       concretizePtrPairedFieldsTheory.ptr_paired_frame_def]) >>
+  qexists_tac `ret` >> simp[] >>
+  qpat_x_assum `bind_outputs _ _ _ = SOME tr` mp_tac >>
+  simp[bind_outputs_def] >> strip_tac >> simp[]
+QED
