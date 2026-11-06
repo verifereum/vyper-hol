@@ -450,15 +450,15 @@ Definition asm_selfdestruct_def:
         let bal = (lookup_account self s.as_accounts).balance in
         let beneficiary : address = w2w addr in
         let self_acct = lookup_account self s.as_accounts in
-        let ben_acct = lookup_account beneficiary s.as_accounts in
-        let accts' = (λa. if a = self then
-                            self_acct with balance := 0
-                          else if a = beneficiary then
-                            ben_acct with balance :=
-                              ben_acct.balance + bal
-                          else s.as_accounts a) in
+        let transferred = transfer_value self beneficiary bal s.as_accounts in
+        let created = s.as_call_ctx.cc_created_in_tx in
+        let accts' = if created then
+            update_account self (self_acct with balance := 0) transferred
+          else transferred in
         AsmHalt (s with <|
-          as_stack := stk; as_accounts := accts'; as_returndata := [] |>)
+          as_stack := stk; as_accounts := accts'; as_returndata := [];
+          as_pending_deletions := if created then
+            self :: s.as_pending_deletions else s.as_pending_deletions |>)
     | _ => AsmError "selfdestruct: stack underflow"
 End
 
