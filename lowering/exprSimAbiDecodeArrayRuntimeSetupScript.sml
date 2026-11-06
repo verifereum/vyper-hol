@@ -741,3 +741,151 @@ Proof
       asm_simp_tac bool_ss [] >> metis_tac[]) >>
   simp_tac bool_ss [abi_decode_context_result_def] >> metis_tac[]
 QED
+
+Theorem abi_array_runtime_context_preserved:
+  abi_array_runtime_context ctx func ce env ty tv limit_st first
+    scratch sites st dst src base_op hi B bs p d n s /\
+  st.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+  V SUBSET (scratch UNION {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty}) /\
+  decode_site_effect ctx func st.cs_next_var V s t /\
+  abi_decode_alloc_progress sites s t /\ fresh_vars_wrt limit_st t ==>
+  abi_array_runtime_context ctx func ce env ty tv limit_st first
+    scratch sites last dst src base_op hi B bs p d n t
+Proof
+  simp_tac bool_ss [abi_array_runtime_context_def] >> strip_tac >>
+  `decode_protects V {(B,LENGTH bs)}` by
+    (simp_tac (srw_ss()) [decode_protects_def] >> rpt strip_tac >>
+     fs[SUBSET_DEF] >> metis_tac[]) >>
+  `bs = mem_bytes_at B (LENGTH bs) t.vs_memory` by
+    metis_tac[decode_site_effect_protected, IN_SING] >>
+  `B+LENGTH bs <= t.vs_alloca_next` by
+    metis_tac[decode_site_effect_frontier, LESS_EQ_TRANS] >>
+  `!id b sz. id IN sites /\ FLOOKUP t.vs_allocas id = SOME(b,sz) ==>
+    abi_footprint_disjoint B (LENGTH bs) [(b,sz)]` by
+    (drule exprSimAbiDecodeSiteTransportTheory.abi_decode_alloc_progress_source >>
+     disch_then (qspecl_then [`LENGTH bs`,`B`] mp_tac) >>
+     asm_simp_tac bool_ss [] >> metis_tac[]) >>
+  `EVERY (abi_decoder_operand_live last.cs_next_var) [dst;src;base_op;hi]` by
+    (fs[EVERY_MEM] >> metis_tac[abi_decoder_operand_live_mono]) >>
+  fs[EVERY_DEF] >> rpt conj_tac >>
+  metis_tac[decode_site_effect_live, decode_site_effect_resources, LESS_EQ_TRANS]
+QED
+
+Theorem abi_array_ready_child_envelope:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\ j < n ==>
+  (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+    SUBSET (scratch UNION {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty})
+Proof
+  strip_tac >>
+  `abi_array_child_scratch sites origin SUBSET scratch` by
+    (drule abi_array_ready_loop_data >>
+     simp_tac bool_ss [abi_array_loop_data_def] >> strip_tac >>
+     metis_tac[abi_array_child_scratch_subset, abi_decode_owned_def]) >>
+  `j*type_memory_bytes ce ty+type_memory_bytes ce ty <= n*type_memory_bytes ce ty` by
+    (`j*type_memory_bytes ce ty+type_memory_bytes ce ty = SUC j*type_memory_bytes ce ty`
+       by (simp_tac bool_ss [MULT_CLAUSES] >> decide_tac) >>
+     asm_rewrite_tac [] >> simp[LE_MULT_RCANCEL] >> decide_tac) >>
+  fs[SUBSET_DEF, abi_array_cell_def, RIGHT_ADD_DISTRIB] >> rpt strip_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem abi_array_ready_child_source_word:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\ j < n ==>
+  decode_protects
+    (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+    {(w2n (n2w (B+p):bytes32),32)}
+Proof
+  strip_tac >> drule_all abi_array_ready_child_envelope >> strip_tac >>
+  drule abi_array_ready_runtime_context >>
+  simp_tac bool_ss [abi_array_runtime_context_def] >> strip_tac >>
+  `B+p < dimword(:256)` by decide_tac >>
+  asm_simp_tac (srw_ss()) [decode_protects_def, w2n_n2w] >> rpt strip_tac >>
+  fs[SUBSET_DEF] >>
+  `B <= a /\ a < B+LENGTH bs` by decide_tac >> metis_tac[]
+QED
+
+Theorem abi_array_ready_child_frame:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\ j < n /\
+  st.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+  (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+    SUBSET writes /\
+  decode_site_effect ctx func st.cs_next_var
+    (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
+  abi_decode_alloc_progress sites s t /\ fresh_vars_wrt limit_st t /\ abi_decode_entry last t /\
+  abi_decode_source_accepts env ty
+    (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v /\
+  val_in_memory tv v (d+32+j*type_memory_bytes ce ty) t.vs_memory ==>
+  abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip last dst src base_op hi B bs p d n j (vs ++ [v]) t
+Proof
+  strip_tac >>
+  drule abi_array_ready_runtime_context >> strip_tac >>
+  drule abi_array_ready_loop_data >> strip_tac >>
+  drule abi_array_ready_entry >> strip_tac >>
+  `val_wf tv v` by
+    (irule exprSimAbiDecodeTupleAssemblyTheory.abi_decode_source_accepts_wf >>
+     fs[abi_array_runtime_context_def] >> metis_tac[]) >>
+  drule_all abi_array_ready_child_envelope >> strip_tac >>
+  `abi_array_runtime_context ctx func ce env ty tv limit_st first
+    scratch sites last dst src base_op hi B bs p d n t` by
+    (irule abi_array_runtime_context_preserved >> metis_tac[]) >>
+  `decode_protects
+    (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+    {(slot,32)}` by metis_tac[abi_array_loop_data_protect_slot] >>
+  drule_all abi_array_ready_child_source_word >> strip_tac >>
+  `Ldata ctx func first writes origin idx slot ip src MLOAD base_op B p n j t` by
+    (irule Ldata_child_preserved >>
+     simp_tac bool_ss [abi_decode_source_opcode_def] >>
+     qexistsl_tac [`abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j`,
+       `st.cs_next_var`,`s`] >>
+     gvs[abi_array_loop_data_def, abi_array_runtime_context_def, EVERY_DEF,
+         abi_decode_source_opcode_def] >> metis_tac[]) >>
+  drule_all abi_array_loop_data_append_prefix >> strip_tac >>
+  simp_tac bool_ss [abi_array_body_post_def, abi_array_loop_data_def] >>
+  asm_simp_tac bool_ss [] >>
+  fs[abi_array_loop_data_def] >> rpt conj_tac >>
+  metis_tac[abi_decode_alloc_progress_trans, abi_decoder_operand_live_mono]
+QED
+
+Theorem abi_array_ready_dynamic_body_outcome:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  abi_decode_owned_child_contract ce env ty tv /\
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi
+    (type_to_abi_dec_info ce.ce_struct_fields ce ty) 32
+    (type_memory_bytes ce ty) st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) MLOAD base_op hi
+    (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
+  dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty) /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  j < n /\ p+32+n*abi_member_head_size (vyper_to_abi_type env ty) <= LENGTH bs /\
+  st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= limit_st.cs_next_var /\
+  middle.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+  abi_decode_sites middle.cs_next_id last.cs_next_id SUBSET sites /\
+  fn_has_code st middle fn /\ abi_decode_code_context func fn middle last /\
+  (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+    SUBSET writes ==>
+  (?t v. Dreach ctx fn s t /\
+    abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v /\
+    val_in_memory tv v (d+32+j*type_memory_bytes ce ty) t.vs_memory /\
+    decode_site_effect ctx func st.cs_next_var
+      (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
+    abi_decode_alloc_progress sites s t /\
+    abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+      outer scratch sites idx slot ip last dst src base_op hi B bs p d n j (vs ++ [v]) t) \/
+  (?u. Dabort ctx fn s Revert_abort u /\
+    ~(?v. abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v))
+Proof
+  strip_tac >> drule_all abi_array_ready_dynamic_child_outcome >>
+  simp_tac bool_ss [abi_decode_context_result_def] >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (disj1_tac >> qexistsl_tac [`t`,`v`] >> asm_simp_tac bool_ss [] >>
+      irule abi_array_ready_child_frame >> metis_tac[LESS_EQ_TRANS]) >>
+  disj2_tac >> metis_tac[]
+QED
