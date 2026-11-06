@@ -195,4 +195,52 @@ Proof
   simp[layout_terminal_entry_def]
 QED
 
+Theorem layout_origin_initialize:
+  terminal_call_prefix C bb
+    (s with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+    (layout_phase_normalize F (s with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+  simp[terminal_call_prefix_rules]
+QED
+
+Theorem layout_origin_successful_step:
+  terminal_call_prefix C bb p s /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  ~is_terminator i.inst_opcode /\ step_inst fuel C i s = OK post /\
+  post.vs_inst_idx = s.vs_inst_idx ==>
+  terminal_call_prefix C bb p (layout_phase_normalize T post)
+Proof
+  strip_tac >>
+  `terminal_call_edge C bb s (layout_phase_normalize T post)` by
+    (simp[terminal_call_edge_def] >> metis_tac[]) >>
+  `terminal_call_prefix C bb s (layout_phase_normalize T post)` by
+    metis_tac[terminal_call_prefix_rules] >>
+  metis_tac[terminal_call_prefix_trans]
+QED
+
+Theorem layout_origin_pending_ready:
+  layout_phase_normalize T s =
+    layout_phase_normalize F (s with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  simp[]
+QED
+
+Theorem layout_origin_prefix_splice:
+  terminal_call_prefix C bb p (layout_phase_normalize pending s) /\
+  terminal_call_prefix C bb (layout_phase_normalize pending s)
+    (layout_phase_normalize pending' t) ==>
+  terminal_call_prefix C bb p (layout_phase_normalize pending' t)
+Proof
+  metis_tac[terminal_call_prefix_trans]
+QED
+
+Theorem layout_phase_begins_splice:
+  layout_phase_begins g bb p /\
+  layout_phase_ok_abort D lo vs0 C C' q0 es qs q g h (OK s) (OK t) ==>
+  layout_phase_begins h bb p
+Proof
+  strip_tac >> drule layout_phase_ok_origin >>
+  strip_tac >> gvs[layout_phase_begins_def]
+QED
+
 val _ = export_theory();
