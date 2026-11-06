@@ -10308,6 +10308,70 @@ Proof
   simp[alias_live_or_retired_def]
 QED
 
+Definition alias_shared_phi_fn_def:
+  alias_shared_phi_fn = mk_raw_function "shared_phi_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 CALLDATASIZE [] ["e"];
+        mk_inst 1 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+       [mk_inst 2 PHI [Label "entry"; Var "e"; Label "backedge"; Var "a"] ["p"];
+        mk_inst 3 PHI [Label "entry"; Var "e"; Label "backedge"; Var "b"] ["r"];
+        mk_inst 4 PHI [Label "entry"; Var "e"; Label "backedge"; Var "a"] ["s"];
+        mk_inst 5 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+       [mk_inst 6 ASSIGN [Var "r"] ["a"];
+        mk_inst 7 ASSIGN [Var "r"] ["b"];
+        mk_inst 8 ADD [Var "p"; Var "s"] ["t"];
+        mk_inst 9 ISZERO [Var "t"] ["z"];
+        mk_inst 10 JNZ [Var "z"; Label "backedge"; Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 11 STOP [] []] |>;
+     <| bb_label := "backedge"; bb_instructions :=
+       [mk_inst 12 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_shared_phi_readiness_audit:
+  [canonical_param_prefix alias_shared_phi_fn;
+   wf_function alias_shared_phi_fn;
+   fn_inst_wf alias_shared_phi_fn;
+   ssa_form alias_shared_phi_fn;
+   def_dominates_uses alias_shared_phi_fn;
+   single_use_form alias_shared_phi_fn;
+   cfg_is_normalized (cfg_analyze alias_shared_phi_fn) alias_shared_phi_fn;
+   block_entries_ready (cfg_analyze alias_shared_phi_fn) alias_shared_phi_fn;
+   phi_operands_ready alias_shared_phi_fn;
+   EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions) alias_shared_phi_fn.fn_blocks;
+   offset_outputs_used alias_shared_phi_fn;
+   phis_at_joins (cfg_analyze alias_shared_phi_fn) alias_shared_phi_fn] =
+  [T;T;T;T;T;T;T;T;F;T;T;T]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_shared_phi_roots:
+  normalize_operand (dfg_build_function alias_shared_phi_fn) [] (Var "a") = Var "r" /\
+  normalize_operand (dfg_build_function alias_shared_phi_fn) [] (Var "b") = Var "r"
+Proof
+  EVAL_TAC
+QED
+
+(* The repeated-name retention mechanism is inadmissible: a occurs in two
+   PHIs and e occurs in all three. The readiness vector fails only its ninth
+   clause, phi_operands_ready. No DFS/lineage or run witness is constructed
+   for this rejected fixture. Universal interfaces already available are
+   alias_phi_uses_disjoint_index, alias_phi_ready_ordinary_input and
+   alias_phi_ready_postprefix_input. These constrain PHI input NAMES and their
+   subsequent demand, not distinct aliases sharing a normalized root, nor
+   unrelated retired stack residues. This is not a target counterexample. *)
+Theorem alias_shared_phi_rejected:
+  ~codegen_ready_fn alias_shared_phi_fn /\
+  ~phi_uses_disjoint
+    (collect_phis (EL 1 alias_shared_phi_fn.fn_blocks).bb_instructions) /\
+  MEM "a" (inst_uses (EL 0 (EL 1 alias_shared_phi_fn.fn_blocks).bb_instructions)) /\
+  MEM "a" (inst_uses (EL 2 (EL 1 alias_shared_phi_fn.fn_blocks).bb_instructions))
+Proof
+  EVAL_TAC
+QED
+
 Theorem lineage_alias_successor:
   !fuel ctx lo liveness dfg cfg ch growth spill_base lbl_ctr fn lbl bb ps h
    promised block_ops ps_after ra vs vs'.
