@@ -4237,7 +4237,7 @@ Proof
      `i.inst_opcode <> INVOKE` by simp[] >>
      drule step_inst_non_invoke >>
      disch_then (qspecl_then [`fuel`, `CT`, `t`] mp_tac) >>
-     simp[step_inst_base_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+     gvs[] >> simp[step_inst_base_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
   asm_rewrite_tac[]
 QED
 
@@ -4393,8 +4393,9 @@ Proof
 QED
 
 (* Common-state RETURN interface audit. This is a TERM, not an asserted theorem.
-   The antecedent consumes exactly paired_pop's premises and its opened result:
-   sr/tr are not independently chosen again. The final combined-candidate output
+   The antecedent consumes paired_pop's premises and its opened result, PLUS
+   the combined candidate's outer current/saved validity context (which paired_pop
+   itself does not need). s'/t' are not independently chosen again. The final combined-candidate output
    includes configured successor, tail certificates, origin and validity; normal
    data is also exposed explicitly to prevent a hidden unrelated witness. *)
 val ld_proposed_combined_return_restore =
@@ -4433,7 +4434,18 @@ val ld_proposed_combined_return_restore =
       case List.find (fn w => fst(dest_var w) = fst(dest_var v) andalso
                              type_of w = type_of v) inputs of
         NONE => NONE | SOME w => SOME (v |-> w)) (free_vars tm)) tm
-    val obligation = mk_imp(mk_conj(pre,popbody),align result)
+    (* paired_pop deliberately needs no target validity. Restoration does:
+       retain precisely the outer context of the already-opened candidate. *)
+    val (args,body) = strip_abs ld_recursive_combined_return_zero
+    val (current,rest) = dest_conj body
+    val (saved,_) = dest_conj rest
+    val actuals = map (fn v =>
+      case List.find (fn w => fst(dest_var w) = fst(dest_var v) andalso
+                             type_of w = type_of v) inputs of
+        SOME w => w | NONE => v) args
+    val context = subst (ListPair.map (fn (v,w) => v |-> w)
+      (args,actuals)) (mk_conj(current,saved))
+    val obligation = mk_imp(list_mk_conj [pre,popbody,context],align result)
   in list_mk_forall(free_vars obligation,obligation) end;
 
 (* COMPLETE AUDIT for the term above (supersedes the old proposed geometry-only
@@ -4557,4 +4569,37 @@ Theorem ld_normal_return_owner_subset:
 Proof
   strip_tac >> irule ld_return_owner_subset >>
   drule ld_normal_data_geometry >> simp[] >> metis_tac[]
+QED
+
+
+
+(* The data-only pop theorem omits validity; this consumer uses the restored
+   specification's retained outer context, with no second choice of states. *)
+val ld_return_restored_validity =
+  let
+    val (vars,body) = strip_forall ld_proposed_combined_return_restore
+    val (pre,_) = dest_imp body
+    val bound = hd (filter (fn v => fst(dest_var v) = "t'") vars)
+  in list_mk_forall(vars,mk_imp(pre,``alloca_inv ^bound``)) end;
+
+Theorem ld_recursive_return_restored_validity:
+  ^ld_return_restored_validity
+Proof
+  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
+  qpat_x_assum `gstk = tf::gtail` SUBST_ALL_TAC >>
+  qpat_x_assum `projected_stk = _` SUBST_ALL_TAC >>
+  `alloca_inv tf.lf_state` by
+    (qpat_x_assum `!f i st tv. MEM (f,i,st,tv) _ ==> alloca_inv st`
+       (qspecl_then [`tf.lf_fn`, `tf.lf_inst`, `tf.lf_state`, `tf.lf_tvar`] mp_tac) >>
+     simp[]) >>
+  qpat_assum `bind_outputs _ _ _ = SOME t'`
+    (mp_then Any assume_tac lowerDloadOwnershipTheory.ld_bind_outputs_allocas) >>
+  qpat_assum `bind_outputs _ _ _ = SOME t'`
+    (mp_then Any strip_assume_tac calleeTransportTheory.bind_outputs_shared_fields) >>
+  qpat_x_assum `alloca_inv tf.lf_state` mp_tac >>
+  fs[venomMemDefsTheory.alloca_inv_def,
+     venomMemDefsTheory.allocas_non_overlapping_def,
+     venomMemDefsTheory.alloca_next_valid_def,
+     adopt_return_fmp_allocas, merge_callee_state_def]
 QED
