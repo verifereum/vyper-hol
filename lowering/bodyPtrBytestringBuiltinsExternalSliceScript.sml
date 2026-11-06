@@ -7,7 +7,7 @@ Ancestors
   ptrSafeRun memLocDefs codegenRel contextCodegenRel
   emitHelper emitHelperProps compileEnv freshWrites fragGasPathPtr fragExec
   exprSimPtrProps builtinBytes bodyPtrBytestringBuiltinsBuffer
-  bodyPtrBytestringBuiltinsBounds
+  bodyPtrBytestringBuiltinsBounds bodyPtrBytestringBuiltinsSource
 
 Theorem ptr_inst_ok_external_copy:
   (((opc = CALLDATACOPY \/ opc = CODECOPY) /\
@@ -57,6 +57,8 @@ QED
 (* Replay boundary: the semantic copy equation is supplied by the S1 run;
    pointer checks and counted execution are established independently. *)
 Theorem emit_external_copy_counted:
+  step_inst_base (mk_inst sa.cs_next_id opc ops []) s =
+    OK (write_memory_with_expansion dest bytes s) ==>
   emit_void opc ops sa = ((),sb) /\ fn_has_code sa sb fn /\
   (((opc = CALLDATACOPY \/ opc = CODECOPY) /\
      ops = [Var dst; start; cnt_op]) \/
@@ -66,9 +68,7 @@ Theorem emit_external_copy_counted:
   op_taint tn start = {} /\ op_taint tn cnt_op = {} /\
   ptr_covers G tn dst s (w2n n) /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id opc ops []) s =
-    OK (write_memory_with_expansion dest bytes s) ==>
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   !D PG. ?t tn'.
     t = (write_memory_with_expansion dest bytes s) with
       vs_inst_idx := SUC s.vs_inst_idx /\
@@ -80,7 +80,7 @@ Theorem emit_external_copy_counted:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
 Proof
-  strip_tac >> rpt gen_tac >>
+  ntac 2 strip_tac >> rpt gen_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++
      [mk_inst sa.cs_next_id opc ops []]` by
@@ -391,4 +391,72 @@ Theorem external_copy_step:
       (TAKE (w2n wn) (DROP (w2n wa) src ++ REPLICATE (w2n wn) 0w)) s)
 Proof
   strip_tac >> gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def]
+QED
+
+
+Theorem ptr_covers_successful_transport:
+  fresh_vars_wrt sa s /\
+  (!x v. lookup_var x s = SOME v ==> lookup_var x t = SOME v) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)) ==>
+  !p cap. ptr_covers G tn p s cap ==> ptr_covers H tm p t cap
+Proof
+  strip_tac >> rpt gen_tac >> simp[ptr_covers_def] >> strip_tac >>
+  `not_fresh_at sa p` by
+    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand,
+      eval_operand_def, arithmeticTheory.GREATER_EQ]) >>
+  metis_tac[]
+QED
+
+Theorem external_copy_store_counted:
+  step_inst_base (mk_inst sc.cs_next_id opc ops []) r =
+    OK (write_memory_with_expansion dest bytes r) ==>
+  emit_void opc ops sc = ((),sd) /\ fn_has_code sc sd fn /\
+  (((opc = CALLDATACOPY \/ opc = CODECOPY) /\
+     ops = [Var dst; start; cnt_op]) \/
+   (opc = EXTCODECOPY /\ ops = [addr; Var dst; start; cnt_op] /\
+    (?wa. eval_operand addr r = SOME wa) /\ op_taint tn addr = {})) /\
+  eval_operand start r = SOME a /\ eval_operand cnt_op r = SOME n /\
+  op_taint tn start = {} /\ op_taint tn cnt_op = {} /\
+  ptr_covers G tn dst r (w2n n) /\ ~ctx_has_dalloca ctx /\ ~r.vs_halted /\
+  r.vs_current_bb = sc.cs_current_bb /\ r.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  emit_void MSTORE [Var root;cnt_op] sd = ((),sb) /\ fn_has_code sd sb fn /\
+  lookup_var root r = SOME b /\ 32 <= N /\ ptr_covers G tn root r N ==>
+  !D PG. ?v t tm.
+    v = (write_memory_with_expansion dest bytes r) with vs_inst_idx := SUC r.vs_inst_idx /\
+    t = (mstore (w2n b) n v) with vs_inst_idx := SUC v.vs_inst_idx /\
+    gas_path_ptr D 0 ctx fn PG G tn r 0 G tm (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    ptr_covers G tm root t N /\ mem_word_at (w2n b) t.vs_memory = n /\
+    tm.t_var = tn.t_var /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  ntac 2 strip_tac >> rpt gen_tac >> gvs[] >>
+  qpat_assum `step_inst_base _ r = _`
+    (mp_then Any (mp_tac o SRULE []) emit_external_copy_counted) >>
+  simp[] >> disch_then drule_all >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  rename1 `tc.t_var = tn.t_var` >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn r 0 G tc (OK v)` >>
+  `ptr_covers G tc root v N` by
+    (simp[Abbr `v`, ptr_covers_def, lookup_var_def] >> metis_tac[ptr_covers_def]) >>
+  `ptr_covers G tc root v 32` by
+    (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `lookup_var root v = SOME b /\ eval_operand cnt_op v = SOME n /\
+   op_taint tc cnt_op = {}` by
+    (`!op. eval_operand op v = eval_operand op r /\
+       op_taint tc op = op_taint tn op` by
+       (Cases >> simp[eval_operand_def, op_taint_def] >>
+        simp[Abbr `v`, write_memory_with_expansion_def, write_memory_def, expand_memory_def]) >>
+     simp[]) >>
+  `v.vs_current_bb = sd.cs_current_bb /\
+   v.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~v.vs_halted` by simp[Abbr `v`] >>
+  drule_all emit_scratch_word_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  rename1 `tm.t_var = tc.t_var` >>
+  `gas_path_ptr D 0 ctx fn PG G tn r 0 G tm (OK t)` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  `ptr_covers G tm root t N` by metis_tac[] >>
+  qexists_tac `tm` >> gvs[Abbr `v`]
 QED
