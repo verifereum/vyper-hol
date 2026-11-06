@@ -2,6 +2,9 @@ Theory lowerDloadRecursiveInterface
 Ancestors
   lowerDloadProjectedReachability lowerDloadNormalData lowerDloadReachability
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
+  lowerDloadNormalJump lowerDloadNormalEntry lowerDloadReachableJump
+  o1LowerDloadEntryFetch o1LowerDloadJointEntry lowerDloadNonhalted
+  lowerDloadConfiguredSelection
   lowerDloadControlPosition lowerDloadOwnership lowerDloadDefs
   lowerDloadCoverageAlloca lowerDloadNormalLive lowerDloadReachableFloor
   lowerDloadConfiguredSuccessor lowerDloadOrdinaryNext lowerDloadSourceInterface venomInstProps
@@ -952,7 +955,13 @@ Proof
    s'.vs_prev_bb = s.vs_prev_bb /\
    z.vs_current_bb = t.vs_current_bb /\
    z.vs_prev_bb = t.vs_prev_bb` by
-    metis_tac[step_preserves_control_flow] >>
+    (qpat_assum `step_inst fuel CT i t = OK z` mp_tac >>
+     qpat_assum `step_inst fuel CS i s = OK s'` mp_tac >>
+     qpat_assum `~is_terminator i.inst_opcode` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_all step_preserves_control_flow >> strip_tac >>
+     qpat_x_assum `step_inst fuel CT i t = OK z` kall_tac >>
+     drule_all step_preserves_control_flow >> simp[]) >>
   Cases_on `lower_dload_inst_supply a1 i'` >>
   rename1 `lower_dload_inst_supply a1 i' = (nextcode,nexta)` >>
   Cases_on `lower_dload_insts_supply nexta rest` >>
@@ -1278,4 +1287,211 @@ Proof
   asm_rewrite_tac [] >> simp[] >>
   qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
   asm_rewrite_tac []
+QED
+
+val ld_recursive_block_goal =
+  let val (v0::ct::rest, body) = strip_forall (List.nth(ld_recursive_clause_goals,2))
+  in subst [v0 |-> mk_var("vs0", type_of v0),
+            ct |-> mk_var("CT", type_of ct)]
+       (list_mk_forall (rest, body))
+  end;
+
+Theorem ld_recursive_block_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_block_goal
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all ld_recursive_block_anchor >>
+  qpat_x_assum `(\vs0 CT projected_stk un gn j t. _) _ _ _ _ _ _ _` kall_tac >>
+  BETA_TAC >> strip_tac >>
+  TRY (qpat_x_assum `0 < n` mp_tac >>
+       qpat_x_assum `n = 0` SUBST1_TAC >> simp[] >> NO_TAC) >>
+  qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved") >>
+  qpat_x_assum `inst = i` SUBST_ALL_TAC >>
+  qpat_x_assum `s = ta` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `tn = ua` (SUBST_ALL_TAC o SYM) >>
+  `?plo. ptr_discipline plo CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+  `opaque_use_ok fn'` by
+    (qpat_assum `o1_ctx_shape CS`
+       (strip_assume_tac o SRULE [o1PassContractTheory.o1_ctx_shape_def,
+          o1PassContractTheory.o1_fn_shape_def, EVERY_MEM]) >>
+     first_x_assum (qspec_then `fn'` mp_tac) >>
+     simp[unitShapeDefsTheory.fn_shape_ok_def] >> metis_tac[]) >>
+  `MEM i.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[ld_successful_terminator_branch] >>
+  `ld_frame_data V U E L H AP BP AG BH tn' tn s'' s` by
+    metis_tac[ld_normal_data_frame] >>
+  `U = {v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v}` by simp[] >>
+  qpat_x_assum `U = {v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v}` SUBST_ALL_TAC >>
+  drule_all ld_reachable_jump_backward >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  `ld_normal_data CS fn' V {v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v}
+    lo E L H AP BP AG BH tn' tn (jump_to lbl s'') (jump_to lbl s)
+    astk live keys (32 * SUM (MAP CARD suspended)) A suspended gstk f` by
+    (rewrite_tac[ld_normal_data_jump] >> asm_rewrite_tac[]) >>
+  `s' = jump_to lbl s` by metis_tac[] >>
+  `enters_block fn (jump_to lbl s) s1` by metis_tac[] >>
+  `s'.vs_current_bb = (jump_to lbl s'').vs_current_bb /\
+   s'.vs_prev_bb = (jump_to lbl s'').vs_prev_bb` by simp[venomStateTheory.jump_to_def] >>
+  `!bb i v. MEM bb fn'.fn_blocks /\ MEM i bb.bb_instructions /\
+    MEM (Var v) i.inst_operands ==> v IN V` by
+    (qpat_assum `V = set (fn_ir_vars fn')` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> rpt strip_tac >>
+     irule ld_original_operand_support >> goal_assum (drule_at Any) >>
+     simp[fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[]) >>
+  `{v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v} =
+    {v | v IN V /\ ~retpc_var fn' v}` by
+    (qpat_assum `V = set (fn_ir_vars fn')` SUBST1_TAC >> simp[NoAsms]) >>
+  `(jump_to lbl s'').vs_current_bb = (jump_to lbl s).vs_current_bb /\
+   (jump_to lbl s'').vs_prev_bb = (jump_to lbl s).vs_prev_bb` by
+    simp[venomStateTheory.jump_to_def] >>
+  drule_all ld_normal_data_entry_backward >> strip_tac >>
+  `wf_function fn'` by
+    (qpat_assum `o1_ctx_shape CS`
+       (strip_assume_tac o SRULE [o1PassContractTheory.o1_ctx_shape_def,
+          o1PassContractTheory.o1_fn_shape_def, EVERY_MEM]) >>
+     first_x_assum (qspec_then `fn'` mp_tac) >> simp[] >> metis_tac[]) >>
+  drule_all ld_wf_enters_block_fetch >> strip_tac >>
+  `~vs0.vs_halted` by
+    (qpat_assum `o1_run_state_ok vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_run_state_ok_def,
+          unitTransformDefsTheory.o1_initial_state_ok_def]) >>
+  `~(jump_to lbl s'').vs_halted` by
+    (simp[venomStateTheory.jump_to_def] >>
+     metis_tac[ld_annotated_not_halted]) >>
+  `ld_annotated_reachable vs0 CS astk k L AP
+     (ld_entry_prov fn' (jump_to lbl s'') AG)
+     (entry_taint_vars fn' (jump_to lbl s'') tn') fn' inst s1'` by
+    (irule ld_annotated_reachable_block >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `lower_dload_blocks_supply fa fn'.fn_blocks = (fn.fn_blocks,fb)` by
+    (qpat_assum `lower_dload_function_supply fa fn' = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lower_dload_function_supply_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  drule_all lower_dload_blocks_supply_lookup_forward >> strip_tac >>
+  drule_all lower_dload_blocks_supply_selected_prefix >> strip_tac >>
+  rename1 `lower_dload_block_supply ac bc = (bb'',ad)` >>
+  `bc = bb'` by
+    (qpat_x_assum `lookup_block s1'.vs_current_bb fn'.fn_blocks = SOME bc` mp_tac >>
+     qpat_x_assum `lookup_block s1'.vs_current_bb fn'.fn_blocks = SOME bb'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  qpat_x_assum `bc = bb'` SUBST_ALL_TAC >>
+  `s1'.vs_inst_idx = phi_prefix_length bb'.bb_instructions` by
+    (qpat_assum `enters_block fn' _ s1'` mp_tac >>
+     qpat_assum `lookup_block s1'.vs_current_bb fn'.fn_blocks = SOME bb'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[enters_block_def] >> rpt strip_tac >>
+     drule eval_phis_only_updates_vs_vars >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_current_bb`) >>
+     simp[] >> strip_tac >> fs[] >> gvs[]) >>
+  `?post0. bb'.bb_instructions =
+       TAKE s1'.vs_inst_idx bb'.bb_instructions ++ inst::post0` by
+    (qpat_assum `get_instruction bb' s1'.vs_inst_idx = SOME inst` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[get_instruction_def] >> strip_tac >>
+     qexists_tac `DROP (SUC s1'.vs_inst_idx) bb'.bb_instructions` >>
+     metis_tac[rich_listTheory.TAKE_DROP_SUC]) >>
+  `lower_dload_insts_supply ac bb'.bb_instructions =
+     (bb''.bb_instructions,ad)` by
+    (qpat_assum `lower_dload_block_supply ac bb' = (bb'',ad)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[lower_dload_block_supply_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  drule o1LowerDloadJointEntryTheory.ld_supply_phi_boundary >> strip_tac >>
+  `?entrycode nexts entrytail.
+     lower_dload_inst_supply ac inst = (entrycode,nexts) /\
+     lower_dload_insts_supply nexts post0 = (entrytail,ad) /\
+     bb''.bb_instructions = TAKE s1'.vs_inst_idx bb'.bb_instructions ++ entrycode ++ entrytail` by
+    (`lower_dload_insts_supply ac (TAKE s1'.vs_inst_idx bb'.bb_instructions) =
+        (TAKE s1'.vs_inst_idx bb'.bb_instructions,ac)` by metis_tac[] >>
+     pop_assum mp_tac >>
+     qpat_assum `lower_dload_insts_supply ac bb'.bb_instructions = _` mp_tac >>
+     qpat_assum `bb'.bb_instructions = TAKE _ _ ++ inst::post0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     qpat_x_assum `lower_dload_insts_supply ac bb'.bb_instructions = _` mp_tac >>
+     qpat_assum `bb'.bb_instructions = TAKE _ _ ++ inst::post0` SUBST1_TAC >>
+     disch_then (strip_assume_tac o MATCH_MP o1ContractLowerDloadTheory.lower_dload_insts_supply_append) >>
+     `lower_dload_insts_supply ac (TAKE s1'.vs_inst_idx bb'.bb_instructions) =
+        (TAKE s1'.vs_inst_idx bb'.bb_instructions,ac)` by metis_tac[] >>
+     gvs[] >>
+     qpat_x_assum `lower_dload_insts_supply ac (inst::post0) = _`
+       (strip_assume_tac o SRULE [Once lower_dload_insts_supply_def, AllCaseEqs()]) >>
+     qpat_assum `bb'.bb_instructions = _`
+       (fn th => once_rewrite_tac[GSYM th]) >>
+     qexistsl_tac [`out`,`s1`,`outs`] >> simp[]) >>
+  `s1'.vs_inst_idx < LENGTH bb'.bb_instructions` by
+    (qpat_assum `get_instruction bb' s1'.vs_inst_idx = SOME inst` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[get_instruction_def] >> metis_tac[]) >>
+  `LENGTH (TAKE s1'.vs_inst_idx bb'.bb_instructions) = s1'.vs_inst_idx` by
+    (qpat_assum `s1'.vs_inst_idx < LENGTH bb'.bb_instructions` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[LENGTH_TAKE]) >>
+  `lower_dload_insts_supply ac (TAKE s1'.vs_inst_idx bb'.bb_instructions) =
+    (TAKE s1'.vs_inst_idx bb'.bb_instructions,ac)` by metis_tac[] >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb''` by metis_tac[] >>
+  `ALL_DISTINCT (fn_labels fn)` by
+    (qpat_assum `lower_dload_function_supply fa fn' = (fn,fb)` mp_tac >>
+     qpat_assum `wf_function fn'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >>
+     fs[venomWfTheory.wf_function_def]) >>
+  `get_instruction bb'' s1.vs_inst_idx = SOME inst'` by
+    (qpat_assum `ALL_DISTINCT (fn_labels fn)` mp_tac >>
+     qpat_assum `active_inst fn inst' s1` mp_tac >>
+     qpat_assum `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb''` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[active_inst_def] >>
+     `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb` by
+       (irule MEM_lookup_block >> fs[fn_labels_def]) >>
+     gvs[get_instruction_def]) >>
+  Cases_on `in_revert_forward fn' s1'`
+  >- (irule (BETA_RULE ld_recursive_configured_revert_entry) >>
+      goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `lower_dload_insts_supply _ (TAKE _ _) = _`)) >>
+      goal_assum (drule_at (Pat `lower_dload_blocks_supply _ _ = _`)) >>
+      goal_assum (drule_at (Pat `lower_dload_block_supply _ _ = _`)) >>
+      qexists_tac `post'` >> rpt conj_tac >> metis_tac[]) >>
+  `entrycode <> []` by metis_tac[o1ContractLowerDloadTheory.lower_dload_inst_supply_nonempty] >>
+  `inst' = HD entrycode` by
+    (qpat_assum `get_instruction bb'' s1.vs_inst_idx = SOME inst'` mp_tac >>
+     qpat_assum `bb''.bb_instructions = TAKE _ _ ++ entrycode ++ entrytail` mp_tac >>
+     qpat_assum `LENGTH (TAKE s1'.vs_inst_idx bb'.bb_instructions) = _` mp_tac >>
+     qpat_assum `s1'.vs_inst_idx = s1.vs_inst_idx` mp_tac >>
+     qpat_assum `entrycode <> []` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >>
+     qmatch_asmsub_abbrev_tac `LENGTH pref = s1'.vs_inst_idx` >>
+     Cases_on `entrycode` >> gvs[get_instruction_def, EL_APPEND2] >>
+     qpat_x_assum `LENGTH pref = _` (fn th => rewrite_tac[GSYM th]) >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[NoAsms, EL_APPEND2]) >>
+  disj1_tac >>
+  qexistsl_tac [`astk`,`gstk`,`k`,`L`,`AP`,
+    `ld_entry_prov fn' (jump_to lbl s'') AG`,
+    `entry_taint_vars fn' (jump_to lbl s'') tn'`,`fn'`,`inst`,`s1'`,`s1`,
+    `entry_taint_vars fn (jump_to lbl s) tn`,`V`,
+    `{v | v IN V /\ ~retpc_var fn' v}`,`E`,`H`,`BP`,
+    `ld_entry_prov fn (jump_to lbl s) BH`,`live`,`keys`,`A`,`suspended`,`f`,
+    `fa`,`fb`,`bb'`,`bb''`,`ac`,`ac`,`nexts`,`ad`,
+    `TAKE s1'.vs_inst_idx bb'.bb_instructions`,`post0`,
+    `TAKE s1'.vs_inst_idx bb'.bb_instructions`,`entrycode`,`entrytail`,
+    `pre'`,`post'`,`gp`,`gt`,`supports`,`savedkeys`,`s0`,`0`] >>
+  rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >>
+  TRY (asm "saved" mp_tac >> simp[NoAsms] >> NO_TAC) >>
+  TRY (qpat_assum `{v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v} = _`
+        (fn th => pure_rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+  qpat_assum `s' = jump_to lbl s` (fn th => pure_rewrite_tac[th]) >>
+  simp[NoAsms] >- first_assum ACCEPT_TAC
+  >- (qpat_assum `s1'.vs_inst_idx = s1.vs_inst_idx` mp_tac >>
+      qpat_assum `LENGTH (TAKE s1'.vs_inst_idx bb'.bb_instructions) = _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> simp[])
+  >- (sym_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
