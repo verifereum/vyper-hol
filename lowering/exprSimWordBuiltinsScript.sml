@@ -612,8 +612,8 @@ Proof
   simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_update_not_fresh] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_update_var, eval_operand_def, lookup_var_update_var] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[eval_operand_update_var, eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_def] >>
   simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def] >>
   simp[] >>
