@@ -337,7 +337,8 @@ QED
 
 Theorem input_vars_fold_distinct[local]:
   !live acc placed om mm.
-    ALL_DISTINCT live /\ ALL_DISTINCT acc /\
+    ALL_DISTINCT (FILTER (\v. FLOOKUP om v = NONE) live) /\
+    ALL_DISTINCT acc /\
     (!i v. FLOOKUP mm i = SOME v ==> FLOOKUP om v = SOME i) /\
     (!v. MEM v acc ==> case FLOOKUP om v of
        NONE => ~MEM v live | SOME i => MEM i placed) ==>
@@ -352,7 +353,7 @@ Proof
   Induct >- simp[] >> rpt gen_tac >> strip_tac >> simp[] >>
   Cases_on `FLOOKUP om h`
   >- (simp[] >> first_x_assum irule >>
-      gvs[ALL_DISTINCT_APPEND, MEM_APPEND] >>
+      gvs[ALL_DISTINCT_APPEND, MEM_APPEND, MEM_FILTER] >>
       rpt strip_tac >> gvs[] >>
       first_x_assum drule >> Cases_on `FLOOKUP om v` >> simp[]) >>
   simp[] >> Cases_on `MEM x placed` >> simp[]
@@ -371,13 +372,16 @@ Proof
   gvs[] >> first_x_assum drule >> simp[]
 QED
 
-Theorem input_vars_from_distinct:
-  !pred insts live.
-    phi_uses_disjoint (collect_phis insts) /\ ALL_DISTINCT live ==>
+Theorem input_vars_from_residual_distinct:
+  !pred insts live om.
+    phi_uses_disjoint (collect_phis insts) /\
+    om = FST (build_phi_maps pred (collect_phis insts)) /\
+    ALL_DISTINCT (FILTER (\v. FLOOKUP om v = NONE) live) ==>
     ALL_DISTINCT (input_vars_from pred insts live)
 Proof
   rpt strip_tac >> simp[input_vars_from_def] >>
-  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC
+  >- (gvs[build_phi_maps_def] >> Cases_on `collect_phis insts` >> gvs[]) >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   qspecl_then [`live`, `[]`, `[]`, `op_map`, `matching`] mp_tac
     input_vars_fold_distinct >> simp[] >>
@@ -393,4 +397,104 @@ Theorem repeated_operand_liveness_not_distinct:
     (liveness_transfer [] (mk_inst 0 ADD [Var "x"; Var "x"] ["y"]) [])
 Proof
   EVAL_TAC
+QED
+
+Theorem input_vars_fold_residual_count[local]:
+  !live acc placed om mm v.
+    (!i w. FLOOKUP mm i = SOME w ==> FLOOKUP om w = SOME i) /\
+    FLOOKUP om v = NONE ==>
+    LIST_ELEM_COUNT v (FST (FOLDL (\(acc,placed) w.
+      case FLOOKUP om w of
+        SOME i => if MEM i placed then (acc,placed)
+          else (case FLOOKUP mm i of
+                  SOME w => (acc ++ [w],i::placed)
+                | NONE => (acc,placed))
+      | NONE => (acc ++ [w],placed)) (acc,placed) live)) =
+    LIST_ELEM_COUNT v acc + LIST_ELEM_COUNT v live
+Proof
+  Induct >- simp[LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> strip_tac >> simp[LIST_ELEM_COUNT_THM] >>
+  Cases_on `FLOOKUP om h`
+  >- (simp[] >> first_x_assum drule >>
+      disch_then (qspecl_then [`acc ++ [h]`, `placed`, `v`] mp_tac) >>
+      simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND, LIST_ELEM_COUNT_THM] >> Cases_on `v = h` >> simp[]) >>
+  `v <> h` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+  Cases_on `MEM x placed` >> simp[]
+  >- (first_x_assum drule >>
+      disch_then (qspecl_then [`acc`, `placed`, `v`] mp_tac) >> simp[LIST_ELEM_COUNT_THM]) >>
+  Cases_on `FLOOKUP mm x` >> simp[]
+  >- (first_x_assum drule >>
+      disch_then (qspecl_then [`acc`, `placed`, `v`] mp_tac) >> simp[LIST_ELEM_COUNT_THM]) >>
+  `v <> x'` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+  qpat_x_assum `!acc placed om mm v. _` drule >>
+  disch_then (qspecl_then [`acc ++ [x']`, `x::placed`, `v`] mp_tac) >>
+  simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND, LIST_ELEM_COUNT_THM]
+QED
+
+Theorem input_vars_from_residual_count:
+  phi_uses_disjoint (collect_phis insts) /\
+  om = FST (build_phi_maps p (collect_phis insts)) /\
+  FLOOKUP om v = NONE ==>
+  LIST_ELEM_COUNT v (input_vars_from p insts live) = LIST_ELEM_COUNT v live
+Proof
+  strip_tac >> simp[input_vars_from_def] >>
+  IF_CASES_TAC >- simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qspecl_then [`live`, `[]`, `[]`, `op_map`, `matching`, `v`] mp_tac
+    input_vars_fold_residual_count >> simp[LIST_ELEM_COUNT_THM] >>
+  impl_tac >- metis_tac[build_phi_maps_matching_operand, pairTheory.FST, pairTheory.SND] >>
+  simp[]
+QED
+
+Theorem input_vars_fold_selected_count[local]:
+  !live acc placed om mm v i.
+    (!j w. FLOOKUP mm j = SOME w ==> FLOOKUP om w = SOME j) /\
+    FLOOKUP om v = SOME i /\ LIST_ELEM_COUNT v acc <= 1 /\
+    (MEM v acc ==> MEM i placed) ==>
+    LIST_ELEM_COUNT v (FST (FOLDL (\(acc,placed) w.
+      case FLOOKUP om w of
+        SOME j => if MEM j placed then (acc,placed)
+          else (case FLOOKUP mm j of
+                  SOME w => (acc ++ [w],j::placed)
+                | NONE => (acc,placed))
+      | NONE => (acc ++ [w],placed)) (acc,placed) live)) <= 1
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >> simp[] >>
+  Cases_on `FLOOKUP om h`
+  >- (simp[] >> first_x_assum irule >> simp[MEM_APPEND] >>
+      `v <> h` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+      gvs[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >> metis_tac[]) >>
+  Cases_on `MEM x placed` >- simp[] >> simp[] >>
+  Cases_on `FLOOKUP mm x` >- simp[] >> simp[] >>
+  `FLOOKUP om x' = SOME x` by metis_tac[] >>
+  qpat_x_assum `!acc placed om mm v i. _` irule >>
+  simp[MEM_APPEND, LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
+  Cases_on `v = x'` >> gvs[] >>
+  gvs[GSYM LIST_ELEM_COUNT_DEF, GSYM LIST_ELEM_COUNT_MEM] >>
+  metis_tac[]
+QED
+
+Theorem input_vars_from_selected_count:
+  phi_uses_disjoint (collect_phis insts) /\
+  om = FST (build_phi_maps p (collect_phis insts)) /\
+  FLOOKUP om v = SOME i ==>
+  LIST_ELEM_COUNT v (input_vars_from p insts live) <= 1
+Proof
+  strip_tac >> simp[input_vars_from_def] >>
+  IF_CASES_TAC
+  >- (gvs[build_phi_maps_def] >> Cases_on `collect_phis insts` >> gvs[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qspecl_then [`live`, `[]`, `[]`, `op_map`, `matching`, `v`, `i`] mp_tac
+    input_vars_fold_selected_count >> simp[LIST_ELEM_COUNT_THM] >>
+  impl_tac >- metis_tac[build_phi_maps_matching_operand, pairTheory.FST, pairTheory.SND] >>
+  simp[]
+QED
+
+Theorem input_vars_from_distinct:
+  !pred insts live.
+    phi_uses_disjoint (collect_phis insts) /\ ALL_DISTINCT live ==>
+    ALL_DISTINCT (input_vars_from pred insts live)
+Proof
+  rpt strip_tac >> irule input_vars_from_residual_distinct >>
+  simp[] >> metis_tac[FILTER_ALL_DISTINCT]
 QED
