@@ -4,7 +4,9 @@ Ancestors concretizeLayoutExternalRequests concretizeLayoutSupplement
   venomInst list pred_set frameRelocationStoreSteps frameRelocationGhostCopy
   frameRelocationAllocationSteps frameRelocationLocal frameRelocationValues
   frameRelocationOpaque frameRelocationMemory frameRelocationGuardedValues
-  frameOriginUpdates finite_map
+  frameOriginUpdates finite_map frameRelocationCleanOperands o1PassContract
+  pointerConfinedDefs memLocDefs concretizeLayoutLocalCalldataCopy
+  frameRelocationTaintOrder frameRelocationCopyTaint
 
 (* Expose state fields without expanding oracle selection or adoption. *)
 Theorem call_completion_fields:
@@ -243,7 +245,7 @@ QED
 
 Theorem concretize_ext_call_observation:
   MEM inst.inst_opcode [CALL; STATICCALL] /\
-  is_static = (inst.inst_opcode = STATICCALL) /\
+  is_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
   concretize_local_obs s t /\ concretize_supplement D tn s t /\
   s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
@@ -268,7 +270,7 @@ Proof
    rq.cr_kind = MessageCall /\
    rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
    rq with <|cr_accounts := rqT.cr_accounts; cr_tStorage := rqT.cr_tStorage|> = rqT` by
-    simp[Abbr `rq`, Abbr `rqT`, venom_call_request_def] >>
+    (simp[Abbr `rq`, Abbr `rqT`, venom_call_request_def] >> metis_tac[]) >>
   `request_agree_except D rq rqT` by
     (drule_all concretize_request_observation >> simp[]) >>
   drule ext_call_success_envelope >> strip_tac >>
@@ -333,7 +335,7 @@ QED
 
 Theorem concretize_ext_call_local_execution:
   MEM inst.inst_opcode [CALL; STATICCALL] /\
-  is_static = (inst.inst_opcode = STATICCALL) /\
+  is_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R concretize_local_obs s t /\
   concretize_supplement D tn s t /\
@@ -411,5 +413,118 @@ Resume concretize_ext_call_local_execution[values]:
   rpt strip_tac >> gvs[op_taint_def, FLOOKUP_UPDATE]
 QED
 Finalise concretize_ext_call_local_execution
+Theorem ext_call_base_envelope[local]:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  step_inst_base inst s = OK post ==>
+  ?opg opa vals opd opn opr opm gas addr value off sz ro rs.
+    inst.inst_operands = [opg;opa] ++ vals ++ [opd;opn;opr;opm] /\
+    ((inst.inst_opcode = CALL /\ ?opv. vals = [opv] /\
+       eval_operand opv s = SOME value /\
+       ~(s.vs_call_ctx.cc_static /\ value <> 0w)) \/
+     (inst.inst_opcode = STATICCALL /\ vals = [] /\ value = 0w)) /\
+    eval_operand opg s = SOME gas /\ eval_operand opa s = SOME addr /\
+    eval_operand opd s = SOME off /\ eval_operand opn s = SOME sz /\
+    eval_operand opr s = SOME ro /\ eval_operand opm s = SOME rs /\
+    exec_ext_call inst s gas addr value off sz ro rs
+      (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) = OK post
+Proof
+  strip_tac >> qpat_x_assum `step_inst_base inst s = OK post` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  fs[MEM] >> asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
+  simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  rpt strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
+  metis_tac[]
+QED
+
+Theorem ext_call_scalar_agreement[local]:
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst s /\
+  inst.inst_operands = [opg;opa] ++ vals ++ [opd;opn;opr;opm] /\
+  ((inst.inst_opcode = CALL /\ LENGTH vals = 1) \/
+   (inst.inst_opcode = STATICCALL /\ vals = [])) /\
+  (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
+    (guarded_bytes (retpc_var fn) rv tn) R Obs s t ==>
+  !op. MEM op ([opg;opa;opn;opm] ++ vals) ==>
+    eval_operand op s = eval_operand op t
+Proof
+  strip_tac >> Cases_on `vals` >> gvs[] >> rpt strip_tac >>
+  `!v. op = Var v ==> FLOOKUP rv v = NONE` by
+    (rpt strip_tac >> spose_not_then assume_tac >>
+     `v IN fn_pv P fn` by metis_tac[] >>
+     `ptr_use_ok P (fn_pv P fn) inst` by metis_tac[fn_ptr_ok_def] >>
+     gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+         mem_write_ops_def, mem_read_ops_def] >>
+     qpat_x_assum `!v. _ ==> _` (qspec_then `v` mp_tac) >>
+     Cases_on `opd = Var v` >> Cases_on `opr = Var v` >>
+     Cases_on `opg = Var v` >> Cases_on `opa = Var v` >>
+     Cases_on `opn = Var v` >> Cases_on `opm = Var v` >>
+     gvs[] >> Cases_on `h = Var v` >> gvs[] >> rpt strip_tac >> gvs[]) >>
+  drule_at (Pat `local_rel _ _ _ _ _ _ _`) disciplined_scalar_operand >>
+  disch_then irule >> simp[] >>
+  (conj_tac >- metis_tac[]) >> (conj_tac >- metis_tac[]) >>
+  qexists_tac `inst` >> simp[] >> fs[] >> metis_tac[]
+QED
+
+Theorem ext_call_prov[local]:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\ inst.inst_outputs = [v] ==>
+  step_prov PG (SND o_f rv) inst post =
+    SND o_f (origin_set rv inst.inst_outputs NONE)
+Proof
+  strip_tac >> fs[MEM] >>
+  simp[step_prov_def, out_prov_def, set_prov_def, origin_set_def,
+       fmap_eq_flookup, FLOOKUP_o_f, FLOOKUP_DRESTRICT] >>
+  rpt gen_tac >> Cases_on `x = v` >> simp[]
+QED
+
+(* Pure transport for clean output prefixes and synchronized snapshot reset. *)
+Theorem concretize_reset_write_taint_order[local]:
+  relocation_taint_le R tn un /\
+  (!a b. next a b /\ a IN written ==> b IN writtenT) /\
+  (!a b. next a b /\ a NOTIN written ==> R a b) ==>
+  relocation_taint_le next
+    (tn with <|t_mem := tn.t_mem DIFF written;
+       t_var := tn.t_var |+ (v,{});
+       t_stor := if reset then {} else tn.t_stor;
+       t_trans := if reset then {} else tn.t_trans|>)
+    (un with <|t_mem := un.t_mem DIFF writtenT;
+       t_var := un.t_var |+ (v,{});
+       t_stor := if reset then {} else un.t_stor;
+       t_trans := if reset then {} else un.t_trans|>)
+Proof
+  strip_tac >> fs[relocation_taint_le_def] >>
+  simp[relocation_taint_le_def] >> conj_tac
+  >- (fs[demand_taint_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
+      IF_CASES_TAC >> simp[] >> fs[op_taint_def]) >>
+  Cases_on `reset` >> simp[]
+QED
+
+Theorem ext_call_taint[local]:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\ inst.inst_outputs = [v] /\
+  inst.inst_operands = [opg;opa] ++ vals ++ [opd;opn;opr;opm] /\
+  (vals = [] \/ ?opv. vals = [opv]) /\
+  post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp ==>
+  step_taint inst s post tn =
+    tn with <|t_mem := tn.t_mem DIFF range_bytes (step_writes inst s post);
+      t_var := tn.t_var |+ (v,{});
+      t_stor := adopt_reset inst
+        (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+         post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
+      t_trans := adopt_reset inst
+        (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+         post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans|>
+Proof
+  strip_tac >>
+  `new_site_bytes s post = {}` by
+    (irule new_site_bytes_unchanged >> simp[]) >>
+  fs[MEM] >>
+  simp[step_taint_def, mem_taint_def, written_taint_def, out_taint_def,
+       set_var_taint_def, store_taint_def, imm_taint_def,
+       taint_component_equality]
+QED
+
 
 val _ = export_theory();
