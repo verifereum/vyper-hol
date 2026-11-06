@@ -224,7 +224,7 @@ Proof
      asm_simp_tac bool_ss [] >>
      conj_tac >- decide_tac >>
      goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >> decide_tac) >>
-  `first <= cursor_site /\ cursor_site < last /\ cursor_slot < dimword (:256)` by
+  `cursor_site IN sites /\ first <= cursor_site /\ cursor_site < last /\ cursor_slot < dimword (:256)` by
     (drule_all abi_encoder_cursor_bounds >> simp[]) >>
   `eval_operand dp address_ready = SOME (n2w cursor_slot) /\
    abi_decoder_operand_live addressed.cs_next_var dp /\
@@ -407,7 +407,7 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
      SUM (MAP (abi_member_tail_size ty) avs)` by
     (mp_tac (Q.ISPECL [`abi_member_tail_size ty`,`avs:abi_value list`,`j:num`]
       abi_encoder_prefix_sum_bound) >> asm_simp_tac bool_ss [abi_member_tail_size_def]) >>
-  `first <= cursor_site /\ cursor_site < last /\ cursor_slot < dimword (:256) /\
+  `cursor_site IN sites /\ first <= cursor_site /\ cursor_site < last /\ cursor_slot < dimword (:256) /\
    first <= site /\ site < last /\ slot < dimword (:256)` by
     (imp_res_tac abi_encoder_cursor_bounds >> simp[]) >>
   drule abi_encoder_shared_member_dynamic_saved >> strip_tac >>
