@@ -196,16 +196,46 @@ Proof
   simp[GSYM arithmeticTheory.ADD_ASSOC] >> metis_tac[]
 QED
 
-(* Static producer, as compile_for_array_parts: the body stays opaque. *)
 (* A block emitted between two states is found by its label; the emitted
    blocks are read off the state equation, so simp never sees the context. *)
-fun emitted_lookup_tac pat a b =
-  irule array_emitted_block_lookup >>
-  qpat_assum pat (fn th =>
-    exists_tac (fst (listSyntax.dest_append (rhs (concl th))))) >>
-  qexistsl_tac [a, b] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp_tac (srw_ss()) []
+(* The register and label names the prefix lemma fixes (lv = STRING ..). *)
+fun name_eq t =
+  is_eq t andalso is_var (lhs t) andalso
+  (can (match_term ``STRING c s``) (rhs t) orelse
+   can (match_term ``fresh_label_output l n``) (rhs t))
 
+(* An equation between two states' finished blocks (sj.cs_blocks =
+   sb1.cs_blocks when the body's block was left open). *)
+fun blocks_eq t =
+  is_eq t andalso
+  can (match_term ``(x:compile_state).cs_blocks``) (lhs t) andalso
+  can (match_term ``(x:compile_state).cs_blocks``) (rhs t)
+
+fun emitted_lookup_tac pat a b =
+  let
+    fun front t =
+      if listSyntax.is_append t then fst (listSyntax.dest_append t)
+      else
+        let
+          fun strip t = if listSyntax.is_cons t then
+                          let val (h, tl) = listSyntax.dest_cons t
+                          in h :: strip tl end
+                        else []
+          val hs = strip t
+        in listSyntax.mk_list (hs, type_of (hd hs)) end
+  in
+    irule array_emitted_block_lookup >>
+    conj_tac >- rewrite_tac [venomInstTheory.basic_block_accfupds, combinTheory.K_THM] >>
+    qpat_assum pat (fn th =>
+      exists_tac (front (rhs (concl th))) >> qexistsl_tac [a, b] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      (fn (asl, g) =>
+        rewrite_tac (th :: map ASSUME (filter (fn t => name_eq t orelse blocks_eq t) asl) @
+                     [listTheory.MEM, listTheory.APPEND]) (asl, g)))
+  end
+
+
+(* Static producer, as compile_for_array_parts: the body stays opaque. *)
 Theorem compile_for_dynarray_parts:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
   compile_stmt cenv lctx ty
@@ -296,10 +326,10 @@ Proof
   fs[] >>
   rpt conj_tac
   >- fs[same_blocks_def]
-  >- emitted_lookup_tac `sa.cs_blocks = _ ++ st.cs_blocks` `st` `sa`
-  >- emitted_lookup_tac `sa.cs_blocks = _ ++ st.cs_blocks` `st` `sa`
-  >- emitted_lookup_tac `sa.cs_blocks = _ ++ st.cs_blocks` `st` `sa`
-  >> emitted_lookup_tac `st'.cs_blocks = _ ++ sj.cs_blocks` `sj` `st'`
+  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
+  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
+  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
+  >> emitted_lookup_tac `st'.cs_blocks = _` `sj` `st'`
 QED
 
 Theorem dynarray_register_frame[local]:
@@ -336,9 +366,7 @@ Proof
      irule local_ptrs_reserved_fresh >> qexists_tac `st` >> simp[]) >>
   `!x. arr_op = Var x ==> not_fresh_at st x` by
     (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  simp[] >> conj_tac
-  >- (simp[ALL_DISTINCT] >> rpt strip_tac >> fs[]) >>
-  simp[not_fresh_at_def] >> rpt strip_tac >> gvs[]
+  simp[] >> simp[not_fresh_at_def] >> rpt strip_tac >> gvs[]
 QED
 
 (* Everything the loop and its entry need from the compiled code. *)
@@ -379,7 +407,7 @@ Theorem compile_for_dynarray_code_ready:
     (?sd. declare_local cenv id et st1 = (bc,sd)) /\
     ALL_DISTINCT [lv; p; idx; g; vld] /\
     (!scs. not_local_ptr cenv scs lv /\ not_local_ptr cenv scs g /\
-           not_local_ptr cenv scs vld) /\
+           not_local_ptr cenv scs vld /\ not_local_ptr cenv scs idx) /\
     (!x. arr_op = Var x ==> ~MEM x [lv; p; idx; g; vld]) /\
     (!x. not_fresh_at st x ==> ~MEM x [lv; p; idx; g; vld]) /\
     (!x. not_fresh_at st x ==> not_fresh_at st1 x) /\
@@ -405,26 +433,34 @@ Proof
   `MEM (mk_inst (st.cs_next_id + 1) ALLOCA
           [Lit (n2w (type_memory_bytes cenv et))] [p]) (fn_insts func)` by
     (irule lookup_block_fn_insts >>
-     goal_assum (drule_at (Pat `lookup_block st.cs_current_bb _ = _`)) >>
+     qpat_assum `lookup_block st.cs_current_bb _ = _` (irule_at (Pos hd)) >>
      simp[]) >>
   qexistsl_tac [`st1`, `bc`, `lv`, `p`, `idx`, `g`, `vld`, `dv`, `ov`, `tot`,
     `ep`, `nv`, `entry`, `cond`, `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`,
     `sj`] >>
   simp[] >> rpt conj_tac
-  >- (simp[dynarray_for_code_def, elem_size_in_location_def,
-           is_slot_addressed_def, mk_inst_def] >>
-      gvs[ALL_DISTINCT] >> metis_tac[])
+  >- (`elem_size_in_location cenv LocMemory et = type_memory_size tv` by
+        simp[elem_size_in_location_def, is_slot_addressed_def] >>
+      simp[dynarray_for_code_def, mk_inst_def] >> gvs[ALL_DISTINCT] >>
+      qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `MEM _ (fn_insts func)` mp_tac >>
+      simp[mk_inst_def] >> rpt strip_tac >> simp[not_fresh_at_def] >>
+      rpt strip_tac >> qpat_x_assum `!x. arr_op = Var x ==> _` drule >>
+      rewrite_tac[not_fresh_at_def] >>
+      disch_then (qspec_then `n'` mp_tac) >> simp[])
   >- gvs[ALL_DISTINCT]
   >- (rpt strip_tac >> gvs[] >> fs[not_fresh_at_def])
-  >- (rpt strip_tac >> first_x_assum drule >> simp[])
+  >- (rpt strip_tac >> qpat_x_assum `not_fresh_at st _` mp_tac >>
+      simp[not_fresh_at_def])
   >- simp[not_fresh_at_def]
   >- (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[])
   >- (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[])
   >- simp[not_fresh_at_def]
   >- simp[not_fresh_at_def]
-  >- simp[not_fresh_at_def]
-  >> rpt strip_tac >> first_x_assum drule >>
-  simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> simp[]
+  >> rpt strip_tac >>
+  qpat_x_assum `!x. arr_op = Var x ==> not_fresh_at st x` drule >>
+  rewrite_tac[not_fresh_at_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[]
 QED
 
 (* The entry block: index zero, then the capacity check passes. *)
@@ -675,7 +711,10 @@ Proof
   `ainst.inst_operands = [Lit (n2w (type_memory_bytes cenv et))] /\
    ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p]` by
     simp[mk_inst_def] >>
-  `MEM ainst (fn_insts func)` by fs[dynarray_for_code_def] >>
+  `MEM ainst (fn_insts func)` by
+    (irule lookup_block_fn_insts >>
+     qpat_assum `lookup_block st.cs_current_bb _ = _` (irule_at (Pos hd)) >>
+     simp[]) >>
   `not_local_ptr cenv es.scopes p` by
     (`bc.ce_imm_alloca = cenv.ce_imm_alloca /\ local_ptrs_reserved bc sa /\
       FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes cenv et)) /\
@@ -688,11 +727,13 @@ Proof
       array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc)` by
     (irule dynarray_loop_initialize >> simp[] >>
      qpat_assum `lookup_block entry _ = _` (irule_at Any) >> simp[] >>
-     qpat_assum `lookup_block st.cs_current_bb _ = _` (irule_at Any) >>
+     qexistsl_tac [`st.cs_next_id`, `st.cs_next_id + 2`] >>
      simp[] >> fs[ALL_DISTINCT] >> metis_tac[]) >>
   qexistsl_tac [`st1`, `bc`, `lv`, `p`, `idx`, `dv`, `ov`, `tot`, `ep`, `nv`,
     `cond`, `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`, `sj`, `ainst`, `sd`,
     `addr`, `dst`, `cc`] >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!k. k < LENGTH vs ==> val_in_memory _ _ _ _ /\ _` drule >>
   simp[]
 QED
 
@@ -751,13 +792,15 @@ Proof
     (fs[ret_pc_ok_def] >> metis_tac[]) >>
   `?bb. lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
      isPREFIX sb0.cs_current_insts bb.bb_instructions` by
-    (irule fn_has_code_start >> fs[dynarray_for_code_def]) >>
+    (irule fn_has_code_start >> qexists_tac `sb1` >> fs[dynarray_for_code_def]) >>
   `!j ei s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
       ainst bod st j ei s /\ j < LENGTH vs ==>
       val_in_memory tv (EL j vs) (w2n arr_base + 32 + j * stride) s.vs_memory /\
       ret_pc_ok bc sb0 s` by
     (rpt gen_tac >> simp[array_loop_inv_def] >> strip_tac >>
-     qpat_x_assum `!ei s. P ei /\ _ ==> _` drule_all >> strip_tac >>
+     qpat_assum `!ei s. P ei /\ _ ==> _` (qspecl_then [`ei`, `s`] mp_tac) >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `!k. _ ==> val_in_memory _ _ _ _` (qspec_then `j` mp_tac) >>
      gvs[]) >>
   `!ei j. P ei /\ lookup_scopes id ei.scopes = NONE /\ j < LENGTH vs ==>
     w2n arr_base + 32 + j * stride < dimword (:256) /\
@@ -780,7 +823,8 @@ Proof
   `array_caller_frame st1 cc cc` by simp[] >>
   drule_all (SRULE [DROP_0] (Q.INST [`k` |-> `0`] dynarray_for_loop_counted)) >>
   strip_tac >>
-  irule gas_outcome_post_mono >> goal_assum drule >>
+  irule gas_outcome_post_mono >>
+  qpat_assum `gas_outcome _ _ _ _ _ _ _` (irule_at (Pos last)) >>
   simp[] >> rpt strip_tac >> irule dynarray_frame_weaken >> metis_tac[]
 QED
 
@@ -852,7 +896,10 @@ Proof
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
      strip_tac >> asm_rewrite_tac[]) >>
   `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
-  drule_all dynarray_public_entry_ready >> strip_tac >>
+  `type_memory_bytes cenv et + 64 < dimword (:256)` by simp[] >>
+  mp_tac (Q.INST [`es` |-> `es with gas_obs := []`, `st'` |-> `cs'`]
+    dynarray_public_entry_ready) >>
+  impl_tac >- (simp[] >> conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `LENGTH vs <= n /\ LENGTH vs < dimword (:256)` by decide_tac >>
   `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
      (es with gas_obs := [])` by
@@ -874,7 +921,8 @@ Proof
         val_in_memory tv (EL k vs)
           (w2n addr + 32 + k * type_memory_bytes cenv et) t.vs_memory)` by
     (rpt strip_tac >> qpat_assum `!ei s. _` drule_all >> strip_tac >>
-     qexists_tac `base'` >> simp[]) >>
+     qpat_assum `eval_operand (Var arr_ptr) t = SOME _` (irule_at Any) >>
+     simp[]) >>
   drule_all dynarray_code_loop_counted >> strip_tac >>
   drule_all gas_outcome_zero_prefix >> strip_tac >>
   drule_all for_source_prefix_bounded >> strip_tac >>
