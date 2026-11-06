@@ -23,6 +23,7 @@ Theorem bop_expr_ptr_ok:
 ## Completion Criteria
 
 1. `holbuild -j4 build bodyPtrBopTheory` passes, with `bop_expr_ptr_ok` proved with no `cheat` in its proof or in any theory you add (CHEAT warnings inherited from the locally admitted ancestors are expected; see Domain Constraints).
+   Owner amendment (decision 15, 2026-11-06): S1 itself admits the dynamic bytestring `Eq`/`NotEq` case (`compile_bop_bytestring_eqne_case` in `alan-ref/s1-ops-widened-expr/exprSimBopHeldScript.sml.txt`). Mirror it: exactly one named lemma covering `bop_expr_ptr_ok` for `(bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)` may be admitted with `cheat`, in a new leaf theory `bodyPtrBopResidual`, marked `(* RESIDUAL: dynamic bytestring Eq/NotEq; held with S1's compile_bop_bytestring_eqne_case *)`. State it with the same hypotheses `bop_expr_ptr_ok` has plus that case guard. Prove every other case cheat-free; the run is complete when `bop_expr_ptr_ok` is proved and that residual is its only new admission.
 2. No duplicate lemmas: search before adding one; each helper exists once, in its most general form, in a new leaf theory under `lowering/`.
 
 **If the theorem is false as stated:** give a concrete counterexample, state the tightest sufficient fix, and stop. Do not weaken the statement.
@@ -77,3 +78,7 @@ All paths are relative to this directory (the vyper-hol project root).
 
 
 - The builtin-operand lemmas `expr_body_pre_builtin_arg`, `expr_sim_pre_builtin_arg` and `expr_body_pre_builtin_head` (exprSim*) take the premise `(!n. bi <> Slice n) \/ ~is_extcode e`: a slice's `.code` source (`is_extcode`) is not a lowered operand but is read through its address (`extcode_addr_expr`). For a builtin that isn't a slice, discharge it from the builtin; for word operands the typed forms `expr_body_pre_builtin_typed_arg` and `expr_sim_pre_builtin_typed_arg` avoid it. `rg` them in `lowering/` for their current statements.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
