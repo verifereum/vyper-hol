@@ -27,7 +27,7 @@ Ancestors
   extRetAbiReturnConsumerPtr extRetAbiBytesLivePtr extRetAbiSingletonLivePtr
   extRetBufferStatePtr extRetCursorResourcePtr extRetBufferCursorStatePtr
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
-  extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr
+  extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
 
 val _ = Parse.hide "body";
 
