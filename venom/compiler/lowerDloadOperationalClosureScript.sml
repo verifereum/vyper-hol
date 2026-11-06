@@ -330,3 +330,261 @@ Proof
   drule_all ld_frame_reachable_prefix >> strip_tac >>
   metis_tac[ld_stack_origin_unique]
 QED
+
+(* RECURSIVE CONSUMER AUDIT (C2.coverage.recursive_interface, after E0326).
+   Non-theorem design checkpoint. Nothing in this comment is an axiom,
+   definition, admitted theorem, or claim of completed recursive coverage.
+   The historical inventory above is not the current ordinary interface.
+
+   INDUCTION CHOICE AND ITS LIMIT
+   The actual target relation is ptrDisciplineTheory.frame_reachable, not
+   run_blocks. Its generated rule induction is frame_reachable_ind:
+     !P. entry_clause P /\ next_clause P /\ block_clause P /\
+         call_clause P /\ ret_clause P ==>
+         !vs0 CT stk PG G un gn j t.
+           frame_reachable vs0 CT stk PG G un gn j t ==>
+           P vs0 CT stk PG G un gn j t.
+   Here the five clause names above denote, IN THIS COMMENT ONLY, the five
+   universally quantified rule implications at ptrDisciplineScript.sml
+   457-508 with P added for each recursive premise. There is exactly one
+   recursive premise in each non-entry rule, not a second completed-run IH.
+   In full, their execution/control premises after that recursive premise are:
+     entry: ctx_entry/lookup_function/fn_entry_label, enters_block from the
+       initial control update, active_inst;
+     next: active_inst gn j t, ~is_terminator j.inst_opcode,
+       j.inst_opcode <> INVOKE, step_inst fuel CT j t = OK t1,
+       active_inst gn j1 (t1 with vs_inst_idx := SUC t.vs_inst_idx);
+     block: active_inst gn j t, is_terminator j.inst_opcode,
+       step_inst fuel CT j t = OK t1, ~t1.vs_halted,
+       enters_block gn t1 t2, active_inst gn j1 t2;
+     call: active_inst gn inv t, inv.inst_opcode = INVOKE,
+       decode_invoke inv = SOME(nm,ops), lookup_function nm
+       CT.ctx_functions = SOME callee, eval_operands ops t = SOME args,
+       setup_callee callee args t = SOME ct, enters_block callee ct t1,
+       active_inst callee j1 t1;
+     ret: active_inst gn j t, step_inst fuel CT j t = IntRet ret tend,
+       bind_outputs f.cf_inst.inst_outputs ret.iret_values
+         (adopt_return_fmp ret (merge_callee_state f.cf_state tend)) = SOME t1,
+       active_inst f.cf_fn j1
+         (t1 with vs_inst_idx := SUC f.cf_state.vs_inst_idx).
+   next updates G to step_prov PG G j t1 and un to step_taint j t t1 un;
+   block uses entry_prov and entry_taint_vars; call pushes the actual saved
+   call_frame and clears local G/t_var; ret restores the saved PG/G/t_var.
+   Those are the signatures of the source rules, not a fuel-induction IH.
+   Choosing this induction matches taint_within's quantifier and gives the
+   terminal target instruction in ret. It does NOT give a completed source
+   callee run. ld_annotated_call_pop reconstructs that run from the source
+   terminal annotation produced by the invariant. A run_ind proof instead
+   needs a result-indexed strengthened postcondition, including terminal
+   annotations; ordinary forward simulation does not supply it backwards.
+
+   CANDIDATE NORMAL ANCHOR: exact clause inventory
+   A target frame_reachable witness fixes stk,PG,G,un,gn,j,t. The intended
+   existential source witnesses include astk,k,L,AP,AG,tn,fn,i,s. A tempting
+   target annotation alignment would use
+     MAP ld_erase_frame bstk = stk /\
+     MAP (OPTION_MAP SND) BPT = PG /\ ld_erase BHT = G /\
+     ld_annotated_reachable vs0 CT bstk h HT BPT BHT un gn j t.
+   IMPORTANT: HT,BPT,BHT here are DISTINCT from the normal-data H,BP,BH.
+   In particular HT includes actual scratch ALLOCAs. ld_frame_embedding
+   pairs every entry of H with L; a target annotation local table also has
+   scratch entries, so using H for HT would be wrong after the first DLOAD.
+   Alternatively the coverage induction can keep raw target annotations
+   without manufacturing a second target ld_annotated_reachable witness.
+   The bridge from raw target stack/provenance to normal-data gstk/BH is
+   unresolved; no equality to those normal-data tables is being assumed.
+   The normal anchor fragment itself is exactly
+     ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+     ld_normal_data CS fn V U lo E L H AP BP AG BH tn ua s ta
+       astk live keys (32 * SUM (MAP CARD suspended)) A suspended gstk f /\
+     V = set(fn_ir_vars fn) /\ U = {v | v IN V /\ ~retpc_var fn v} /\
+     lower_dload_function_supply fa fn = (gn,fb) /\
+     fn.fn_blocks = bpre ++ bb::bpost /\
+     lower_dload_blocks_supply fa bpre = (qpre,a0) /\
+     lower_dload_block_supply a0 bb = (gb,a3) /\
+     lower_dload_blocks_supply a3 bpost = (qpost,fb) /\
+     gn.fn_blocks = qpre ++ gb::qpost /\
+     bb.bb_instructions = pre ++ i::post /\
+     lower_dload_insts_supply a0 pre = (p,a1) /\
+     lower_dload_inst_supply a1 i = (code,a2) /\
+     lower_dload_insts_supply a2 post = (tail,a3) /\
+     gb.bb_instructions = p ++ code ++ tail /\
+     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+     lookup_block ta.vs_current_bb gn.fn_blocks = SOME gb /\
+     s.vs_current_bb = ta.vs_current_bb /\
+     s.vs_prev_bb = ta.vs_prev_bb /\
+     s.vs_inst_idx = LENGTH pre /\ ta.vs_inst_idx = LENGTH p.
+   Actual incoming fa must come from the configured context fold, not an
+   arbitrary existence of a function supply. Likewise keys must be the set
+   of scratch ALLOCA IDs from those actual block/instruction folds.
+
+   Normal-mode phase conclusion at this anchor is the explicit disjunction
+     (n = 0 /\ t = ta /\ un = ua /\ j = HD code) \/
+     (0 < n /\ n < LENGTH code /\
+       ld_target_prefix CT code ta ua n t un /\ j = EL n code).
+   Both alternatives require ~in_revert_forward fn s; the second preserves
+   the OLD source annotation and old normal_data, not normal_data at t.
+   There is no EL (LENGTH code) code branch. Completion produces a source
+   OK step, successor annotation and a new anchor for the next segment or
+   block. A DLOAD strict prefix at n=1 contains its scratch allocation; n=2
+   has ADD's code offset; n=3 has CODECOPY's memory; these are not source
+   DLOAD successors. DLOADBYTES has the analogous ADD/CODECOPY prefix.
+   Existing load/bytes certificates establish local effects; they do not
+   yet preserve every normal_data companion or the configured next anchor.
+
+   The indexed saved-data obligation is NOT a single caller-independent V:
+     LENGTH astk = LENGTH gstk /\ LENGTH supports = LENGTH astk /\
+     LENGTH savedkeys = LENGTH astk /\ LENGTH suspended = LENGTH astk /\
+     (!q. q < LENGTH astk ==>
+       ld_saved_embedded
+         {v | v IN EL q supports /\ ~retpc_var (EL q astk).lf_fn v}
+         E (EL q savedkeys)
+         (32 * SUM (MAP CARD (DROP (SUC q) suspended)))
+         (EL q suspended) (EL q astk) (EL q gstk) /\
+       (!v. v IN EL q supports ==>
+         (lookup_var v (EL q astk).lf_state = NONE <=>
+          lookup_var v (EL q gstk).lf_state = NONE)) /\
+       (!v. (case FLOOKUP (EL q astk).lf_tvar v of NONE => {} | SOME m => m)
+         SUBSET count 32) /\
+       (!v. (case FLOOKUP (EL q gstk).lf_tvar v of NONE => {} | SOME m => m)
+         SUBSET count 32)).
+   ld_saved_indexed_cons/frame are checked destructors for exactly this
+   data schema. They do not prove saved configured INVOKE position matching,
+   the saved parameter envelope, or identification gstk=bstk. These remain
+   extra required control/parameter fields, not consequences of this schema.
+   Scratch bounds must also retain, for the same erased source stack,
+     LIST_REL (\A g. FINITE A /\ CARD A <= LENGTH
+       (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts g)))
+       (A::suspended) (fn::MAP (\f. f.cf_fn) (MAP ld_erase_frame astk)).
+   Seen configured scratch sites A are per frame and persist across loops;
+   cardinality cannot count executions instead of sites.
+
+   COMPLETED CALL EXIT (execution part, exact candidate)
+   With cs fixed by setup_callee callee args saved_source = SOME cs and
+   target terminal step step_inst fuelT CT rj tr = IntRet ret tend, require
+     ?fuelS send k1 L1 AP1 AG1 tn1 ri sr.
+       run_blocks fuelS CS callee cs = IntRet ret send /\
+       ld_annotated_reachable vs0 CS (sf::astk) k1 L1 AP1 AG1 tn1
+         callee ri sr /\ active_inst callee ri sr /\
+       step_inst fuelS CS ri sr = IntRet ret send /\
+       ret.iret_adopt_fmp = NONE.
+   This retains the SAME ret record needed by bind_outputs; equal return
+   values alone are not the record equality required by resume_owned.
+   ld_annotated_prefix_at_origin, ld_stack_origin_setup_eq and
+   ld_frame_return_complete reconstruct completion, then fuel_mono can lift
+   source witnesses to a common fuel. ld_completed_callee_resume_owned
+   supplies only caller owned variables after binding. Full exit data must
+   additionally relate CURRENT send/tend memory, storage and taints, restore
+   the caller's allocation maps/frontiers and parameter envelope, drop the
+   callee's live owners, and advance the saved configured positions. No
+   predicate currently packages/proves this exit. send is not automatically
+   sr (though a RET-specific theorem can show this); cs is before entry PHIs.
+
+   CONSTRUCTOR/PREMISE LEDGER (checked source interfaces versus open work)
+   - Global environment: ctx_pass_stage and stage lookup/function facts
+     provide configured function mapping. ptr_discipline, o1_ctx_shape,
+     mem_inv dload_headroom_ok and callee_first are frozen source hypotheses
+     via o1_src_inv; they are not target induction hypotheses.
+   - Entry: actual target enters_block is in the entry rule. Function/block
+     supply entry and PHI preservation are checked; frame_data_source_entry
+     is only reflexive data. Packaged target-to-source normal_data entry,
+     configured scratch key set and initial phase remain unproved.
+   - next ordinary: ld_normal_ordinary_backward supplies a single source OK
+     and every data field; ld_normal_ordinary_next_backward adds annotation;
+     lower_dload_configured_segment_next and ld_ordinary_segment_coverage /
+     its configured trace consumer handle sequential positions and iteration.
+     Shape/operand support come from annotated inst_wf/original support;
+     opaque_use_ok/fn_ptr_ok come from source invariant. These are not new
+     semantic gaps. Block lookup preservation is checked for the ordinary
+     finite family. Comparison's fixed source origin is obtained using
+     ld_annotated_prefix_at_origin; scratch cardinality remains an invariant
+     obligation at call/macro boundaries.
+   - next ALLOCA: ld_alloca_normal_data_backward produces s',E',k',L',H'
+     and step provenance, taints, live geometry and account. AP,BP,astk,
+     gstk,keys,A,suspended stay fixed. Saved data needs E extension support
+     on its selected live owners; configured singleton position and annotated
+     next must still be installed, not inferred from normal_data.
+     Fresh zero size: E' adds (old source frontier,old target frontier,0),
+     live inserts (0,k); strict endpoints reduce to old frontier bounds.
+     Cached: E'=E, live unchanged and frontiers unchanged. Current operand
+     size need NOT equal cached sz; exec_alloca ignores it after lookup.
+   - next macro: retain anchor at strict prefixes, then complete the source
+     step once. Scratch allocation changes A/account, not source L. A DLOAD
+     executed again reuses its scratch slot. Prefix source annotation is IH;
+     completed normal_data/annotation and seen-site bounds are open work.
+   - block: target OK/enters_block is an actual rule premise. JumpProducer
+     gives common clean selectors, not paired entry PHIs, new provenance,
+     configured position or full entered data. These are still control work.
+   - call: one IH at caller, target setup/entry in rule. Paired argument
+     evaluation, push of indexed saved data/control and callee normal_data
+     entry remain obligations. o1LowerDloadJointCall.ld_joint_boundary_call
+     is checked but FORWARD and consumes source setup/entry plus its own
+     occurrence relation. It is not backward coverage or this normal_data
+     interface; reuse its setup/PHI reasoning, do not invoke it as that IH.
+   - ret: one IH at terminal callee instruction, actual target IntRet/bind in
+     rule. Nonopaque RET backward gives a common record. Source completion
+     is reconstructed at the saved setup origin, then annotated_call_pop
+     supplies caller annotation. Full current-memory/data/control resumption
+     remains open. o1LowerDloadJointReturn.ld_joint_ret_step is forward and
+     returns a jr with equal values, not necessarily the SAME ret token.
+   - revert-forward: ~in_revert_forward is required by ordinary wrappers.
+     Its negation cannot be dropped. An exact alternate memory/observation
+     invariant for copy/revert and intervening assignments is still missing;
+     requiring normal_data throughout this mode would hide the exception.
+   - terminal/external: frame_reachable stops at observations; taint_within
+     still quantifies their read ranges. Existing observation/dead transport
+     consumes clean source observations, but phase and revert-forward cases,
+     external output effects and terminal alignment remain obligations.
+
+   SMALLEST PRECISE OBSTRUCTION / NEXT RECOMMENDED SEMANTIC BOUNDARY
+   A CLOSED GLOBAL CANDIDATE CANNOT YET BE ASSERTED. In addition to the open
+   saved-control and revert-mode fields above, the accepted ALLOCA interface
+   has an immediate use-site mismatch:
+     s.vs_alloca_next + w2n n < dimword(:256) /\
+     t.vs_alloca_next + w2n n < dimword(:256).
+   Current dload_headroom_ok bounds s.vs_alloca_next plus the CONTEXT scratch
+   budget, not the next original allocation. Target step OK imposes no word
+   bound: exec_alloca uses unbounded natural addition. The normal_data IH
+   bounds existing sites, not a future allocation of w2n n.
+
+   For a FRESH source site, the legitimate route is to construct the source
+   exec_alloca success separately (one clean/equal scalar operand suffices),
+   establish the next source active instruction from block shape, obtain
+   source raw_reachable there, and use mem_inv headroom at that successor.
+   Since the new source frontier is old+w2n n, and ld_alloc_account plus
+   stack/cardinality bounds charges target excess against the context scratch
+   budget, arithmetic can then give BOTH requested endpoint inequalities.
+   Invoking the backward normal producer to obtain that source successor
+   first is circular. Raw memory alone gives only a source word bound; the
+   scratch budget and account are essential for the target inequality.
+
+   For a CACHED site even this argument does NOT yield old+w2n n < dimword:
+   source future frontier is just old. This remains so for fixed literal
+   allocations on revisits; old can have advanced since the first visit.
+   No falsehood of the frozen theorem is claimed. The sufficient local
+   producer's hypotheses are stronger than what recursive coverage supplies.
+   Recommended next semantic obligation: a source-success/future-headroom
+   boundary distinguishing fresh and cached ALLOCA, with conclusion
+     ?s1. step_inst fuelS CS i s = OK s1 /\
+       (FLOOKUP s.vs_allocas i.inst_id = NONE ==>
+         s.vs_alloca_next + w2n n + 32 * ctx_dload_count CS < dimword(:256)).
+   Its premises must explicitly provide source current annotation/shape,
+   operand evaluation and source mem_inv headroom, plus next activity (or a
+   checked shape derivation of it); it must NOT assume source success or
+   the desired endpoint bounds. Cached normal-data closure must bypass the
+   unnecessarily strong operand-size endpoint premise using the unchanged
+   frontier and old site bounds. Strategist authorization is required for
+   either new theorem; accepted statements cannot be changed by this audit.
+
+   Types of the displayed terms: vs0,s,ta,t,cs,sr,send,tend : venom_state;
+   CS,CT : venom_context; fn,gn,callee : ir_function; i,j,ri,rj : instruction;
+   astk,bstk,gstk : ld_saved_frame list; stk : call_frame list;
+   V,U : string set; supports : string set list; keys,A : num set;
+   savedkeys,suspended : num set list; live : (num # num) set;
+   E : (num # num) |-> (num # num # num); L,H : num |-> ((num # num) # num # num);
+   AP,BP : ((num # num) # num # num) option list;
+   AG,BH : string |-> ((num # num) # num # num); tn,ua,un : taint;
+   k,h,n,f,lo,fuelS,fuelT : num; code,p,tail,pre,post : instruction list.
+   Supply variables have the type inferred from lower_dload_*_supply;
+   they are not legacy integer fresh-ID arithmetic.
+*)
