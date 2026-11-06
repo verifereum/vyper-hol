@@ -176,7 +176,18 @@ Theorem emit_external_size_counted:
     (!x. x <> out ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t)
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t) /\
+    sb.cs_next_var = SUC sa.cs_next_var /\
+    (!x. not_fresh_at sa x ==>
+      not_fresh_at sb x /\ x <> out /\ lookup_var x t = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (fresh_vars_wrt sa s ==> !arg v. eval_operand arg s = SOME v ==>
+      eval_operand arg t = SOME v /\ op_prov G' arg = op_prov G arg /\
+      op_taint tn' arg = op_taint tn arg) /\
+    (fresh_vars_wrt sa s ==> !p cap. ptr_covers G tn p s cap ==>
+      ptr_covers G' tn' p t cap) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
 Proof
   strip_tac >> rpt gen_tac >>
   `op = Var (STRING #"%" (toString sa.cs_next_var)) /\
@@ -207,14 +218,37 @@ Proof
     (gvs[] >> simp[mk_inst_def, is_terminator_def]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all gas_path_ptr_one_step >> disch_then (qspec_then `PG` mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> strip_tac >> suspend "frames"
+QED
+
+Resume emit_external_size_counted[frames]:
   simp[Abbr `u`, Abbr `out`, eval_operand_def, update_var_def, lookup_var_def,
     op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
   simp[ptr_covers_def, op_taint_def, update_var_def, lookup_var_def,
     FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-  simp[fresh_vars_wrt_def, update_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
+  conj_tac
+  >- (simp[fresh_vars_wrt_def, update_var_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (gen_tac >> disch_tac >> fs[not_fresh_at_def] >>
+      simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (disch_tac >> qx_gen_tac `arg` >> qx_gen_tac `v` >> disch_tac >>
+      Cases_on `arg` >> gvs[eval_operand_def, lookup_var_def] >>
+      rename1 `FLOOKUP s.vs_vars name = SOME v` >>
+      `name <> STRING #"%" (toString sa.cs_next_var)` by
+        (strip_tac >> gvs[fresh_vars_wrt_def] >>
+         qpat_x_assum `!n. n >= sa.cs_next_var ==> _`
+           (qspec_then `sa.cs_next_var` mp_tac) >> fs[FLOOKUP_DEF]) >>
+      simp[FLOOKUP_UPDATE]) >>
+  rpt strip_tac >>
+  `p <> STRING #"%" (toString sa.cs_next_var)` by
+    (strip_tac >> gvs[fresh_vars_wrt_def] >>
+     qpat_x_assum `!n. n >= sa.cs_next_var ==> _`
+       (qspec_then `sa.cs_next_var` mp_tac) >> fs[FLOOKUP_DEF]) >>
+  simp[] >> metis_tac[]
 QED
+Finalise emit_external_size_counted
 
 Theorem compile_slice_calldata_stages:
   compile_slice_calldata start len N sa = (out,sb) ==>
@@ -326,35 +360,17 @@ QED
 Resume compile_slice_extcode_bounds_abort[bounds]:
   `run_inst_seq (emitted_insts s1 s2) t = Abort ab u` by gvs[] >>
   `fresh_vars_wrt s1 t` by simp[] >>
-  `!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w` by
-    (rpt strip_tac >>
-     `op <> Var out'` by
-       (strip_tac >> gvs[eval_operand_def, lookup_var_def, fresh_vars_wrt_def] >>
-        qpat_x_assum `!n. n >= sa.cs_next_var ==> _`
-          (qspec_then `sa.cs_next_var` mp_tac) >> fs[FLOOKUP_DEF]) >>
-     Cases_on `op` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `eval_operand start t = SOME wa /\ eval_operand len t = SOME wn` by metis_tac[] >>
   `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
     (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
-     `op_prov G op = NONE /\ op_taint tn op = {}` by
-       (qpat_x_assum `!op. op = addr \/ op = start \/ op = len ==> _`
-          (qspec_then `op` mp_tac) >> fs[]) >>
-     Cases_on `op` >>
-     gvs[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-     rw[]) >>
+     `op = start \/ op = len` by fs[] >>
+     `?v. eval_operand op s = SOME v` by metis_tac[] >>
+     metis_tac[]) >>
   drule_all compile_assert_slice_bounds_counted_abort >>
   strip_tac >> suspend "compose"
 QED
 Resume compile_slice_extcode_bounds_abort[compose]:
   qpat_x_assum `!PG D. _` (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `s1.cs_next_var = SUC sa.cs_next_var` by
-    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
-     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[]) >>
-  `!x. not_fresh_at sa x ==> not_fresh_at s1 x /\ x <> out'` by
-    (gen_tac >> disch_tac >> conj_tac
-     >- (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-     fs[not_fresh_at_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn''
     (Abort Revert_abort (u with vs_inst_idx := j))` by
     (drule_all gas_path_ptr_then >> simp[]) >>
