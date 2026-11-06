@@ -60,10 +60,10 @@ Proof
 QED
 
 Theorem abi_decoder_budget_mstore[simp]:
-  abi_decoder_budget first last b cap (mstore p w s) <=>
-  abi_decoder_budget first last b cap s
+  abi_sites_decoder_budget sites first last b cap (mstore p w s) <=>
+  abi_sites_decoder_budget sites first last b cap s
 Proof
-  simp[abi_decoder_budget_def, abi_decoder_missing_def, mstore_def,
+  simp[abi_sites_decoder_budget_def, abi_sites_decoder_missing_def, mstore_def,
        write_memory_with_expansion_def]
 QED
 

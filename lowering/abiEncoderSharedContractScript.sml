@@ -233,12 +233,12 @@ Proof
 QED
 
 Theorem abi_encoder_shared_input_inst_idx[simp]:
-  abi_encoder_shared_input source code window output resources (s with vs_inst_idx := ix) <=>
-  abi_encoder_shared_input source code window output resources s
+  abi_sites_encoder_shared_input sites source code window output resources (s with vs_inst_idx := ix) <=>
+  abi_sites_encoder_shared_input sites source code window output resources s
 Proof
   PairCases_on `source` >> PairCases_on `code` >> PairCases_on `window` >>
   PairCases_on `output` >> PairCases_on `resources` >>
-  simp[abi_encoder_shared_input_def, eval_op_inst_idx,
+  simp[abi_sites_encoder_shared_input_def, eval_op_inst_idx,
     abi_decoder_child_scratch_def]
 QED
 

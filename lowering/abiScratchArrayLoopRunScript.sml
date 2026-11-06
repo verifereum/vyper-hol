@@ -12,10 +12,10 @@ Ancestors
    TOP-LEVEL: abi_scratch_array_loop_enter starts at index zero without changing
    the source, output, cursor observations or physical scratch footprint. *)
 Theorem abi_scratch_input_jump[simp]:
-  abi_scratch_input ei at av st src dst sb source_cap d sz first last b cap (jump_to hdr s) <=>
-  abi_scratch_input ei at av st src dst sb source_cap d sz first last b cap s
+  abi_sites_scratch_input sites ei at av st src dst sb source_cap d sz first last b cap (jump_to hdr s) <=>
+  abi_sites_scratch_input sites ei at av st src dst sb source_cap d sz first last b cap s
 Proof
-  simp[abi_scratch_input_def, abi_decoder_operand_jump, jump_to_def, abi_decoder_child_scratch_def]
+  simp[abi_sites_scratch_input_def, abi_decoder_operand_jump, jump_to_def, abi_decoder_child_scratch_def]
 QED
 
 Theorem abi_scratch_effect_jump:

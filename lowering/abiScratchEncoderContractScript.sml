@@ -120,11 +120,11 @@ Proof
 QED
 
 Theorem abi_scratch_effect_inst_idx[simp]:
-  abi_scratch_effect first last lo hi next limit_st d sz b cap initial
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap initial
     (actual with vs_inst_idx := ix) <=>
-  abi_scratch_effect first last lo hi next limit_st d sz b cap initial actual
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap initial actual
 Proof
-  simp[abi_scratch_effect_def, abi_scratch_evolution_def, fresh_vars_wrt_def,
-    eval_op_inst_idx, abi_decode_footprint_frame_def, abi_decoder_budget_def,
-    abi_decoder_missing_def]
+  simp[abi_sites_scratch_effect_def, abi_scratch_evolution_def, fresh_vars_wrt_def,
+    eval_op_inst_idx, abi_decode_footprint_frame_def, abi_sites_decoder_budget_def,
+    abi_sites_decoder_missing_def]
 QED

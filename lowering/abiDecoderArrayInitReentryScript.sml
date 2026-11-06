@@ -9,10 +9,10 @@ Ancestors
   venomState venomInst finite_map words list rich_list arithmetic
 
 Theorem abi_decoder_budget_prune[simp]:
-  abi_decoder_budget first last b cap (abi_decoder_prune_vars next s) <=>
-  abi_decoder_budget first last b cap s
+  abi_sites_decoder_budget sites first last b cap (abi_decoder_prune_vars next s) <=>
+  abi_sites_decoder_budget sites first last b cap s
 Proof
-  simp[abi_decoder_budget_def, abi_decoder_missing_def, abi_decoder_prune_vars_def]
+  simp[abi_sites_decoder_budget_def, abi_sites_decoder_missing_def, abi_decoder_prune_vars_def]
 QED
 
 Theorem abi_decoder_pruned_operand_defined:
