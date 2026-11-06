@@ -5,6 +5,7 @@ Ancestors
   exprSimAbiDecodeTupleTraversal exprSimAbiDecodeOwnedMember
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderReentry abiDecoderVarExtend
   abiDecoderSequenceReach abiDecoderFiniteControl
+  exprSimAbiDecodeMemberExecute abiDecoderDynamicLoopSetup instIdxIndep
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   venomState venomInst words list rich_list arithmetic
 
@@ -62,4 +63,28 @@ Proof
   drule_all abi_decoder_run_sequence_abort >> strip_tac >>
   qpat_x_assum `!ctx. _` (qspec_then `ctx` strip_assume_tac) >>
   simp[Dabort_def] >> qexistsl_tac [`t with vs_inst_idx := n`, `0`] >> simp[]
+QED
+
+Theorem abi_decode_complex_head_guard_reach_reentry:
+  abi_decode_complex_head_guard src hi k st = ((),st') /\
+  hi <> Lit 0w /\ eval_operand src s = SOME(n2w p) /\
+  eval_operand hi s = SOME(n2w H) /\ p+k <= H /\ H < dimword(:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st st' fn /\ abi_decode_entry st s ==>
+  ?t. Dreach ctx fn s t /\ fresh_vars_wrt limit_st t /\
+    abi_decoder_address_frame st.cs_next_var s t /\ abi_decode_entry st' t
+Proof
+  strip_tac >>
+  drule abi_decoder_complex_guard_reentry >>
+  disch_then (qspecl_then [`p`, `limit_st`, `s`] mp_tac) >>
+  (impl_tac >- (simp[] >> qexists_tac `H` >> simp[])) >> strip_tac >>
+  drule abi_decode_complex_head_guard_prefix_shape >> strip_tac >>
+  `~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts` by fs[abi_decode_entry_def] >>
+  drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
+  qexists_tac `t` >> conj_tac >- metis_tac[Dreach_straight_prefix] >>
+  gvs[abi_decode_entry_def, abi_decoder_address_frame_def, fresh_vars_wrt_def,
+    eval_op_inst_idx]
 QED
