@@ -12,12 +12,19 @@ Theorem slice_code_address_body_pre:
   expr_body_pre cenv cx env a es'
 Proof
   strip_tac >>
-  `expr_body_pre cenv cx env (Builtin ct (Acc Code) [a]) es'` by
-    (irule expr_body_pre_builtin_arg >> simp[] >>
-     qexistsl [`ann`, `[Builtin ct (Acc Code) [a]; start; len]`,
-               `Slice n`, `es`] >> simp[]) >>
-  irule expr_body_pre_builtin_arg >> simp[] >>
-  qexistsl [`ct`, `[a]`, `Acc Code`, `es'`] >> simp[]
+  `alloc_limits_expr cenv a` by
+    (gvs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     qpat_x_assum `alloc_limits_expr _ _` mp_tac >>
+     simp[Once allocLimitsTheory.alloc_limits_expr_def, exprLoweringTheory.is_extcode_def,
+          exprLoweringTheory.extcode_addr_expr_def] >>
+     simp[allocLimitsTheory.alloc_limits_expr_def]) >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def, well_typed_expr_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+      exprSimHypsDefsTheory.byte_widths_expr_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every, listTheory.EXISTS_MEM] >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
 QED
 
 Theorem slice_bytes_nat:
