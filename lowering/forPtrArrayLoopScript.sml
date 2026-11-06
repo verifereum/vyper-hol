@@ -7,6 +7,8 @@ Ancestors forPtrArrayAssemble forPtrArrayTerminal forPtrArrayInvariant forPtrRou
 Libs monadsyntax
 
 Theorem array_code_loop_counted_ptr:
+  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    cond_lbl st s0 G0 tn0 d name snapshot k es G tn s ==>
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride (Var bp)
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
@@ -24,11 +26,6 @@ Theorem array_code_loop_counted_ptr:
         finally (try (do eval_stmts cx stmts; return F od)
           handle_loop_exception) pop_scope od) (ei with gas_obs := obs) = (INL F,ee) ==>
     P ee) /\
-  (!j ei G tn s. Inv j ei G tn s <=>
-    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
-      cond_lbl st s0 G0 tn0 d name snapshot j ei G tn s) /\
-  (!ei G tn s. Done ei G tn s <=>
-    for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ei G tn s) /\
   supported_stmts tops bindings stmts /\
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
   type_stmts env ret_ty stmts = SOME env' /\
@@ -52,16 +49,29 @@ Theorem array_code_loop_counted_ptr:
     x <> idx /\ x <> nv) /\
   (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) ==>
-  !k es s G tn.
-    k <= LENGTH vs /\ (Inv k es G tn s /\ P es) /\
+    k <= LENGTH vs /\ P es /\
+    gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+      (eval_for cx tv id stmts (DROP k vs)) (es,s,G,tn)
+      (\res ee gf tf t. res = INL () /\
+        for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ee gf tf t)
+      (\res ee gt r. ?ex. res = INR ex /\
+        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+Proof
+  strip_tac >> strip_tac >>
+  qabbrev_tac `Inv = for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    cond_lbl st s0 G0 tn0 d name snapshot` >>
+  qabbrev_tac `Done = for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d` >>
+  `!k es s G tn. k <= LENGTH vs /\ (Inv k es G tn s /\ P es) /\
     gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (eval_for cx tv id stmts (DROP k vs)) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
-Proof
-  strip_tac >> ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
+        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)` suffices_by metis_tac[] >>
+  unabbrev_all_tac >>
+  qhdtm_x_assum `for_array_inv_ptr` kall_tac >>
+  ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `lookup_scopes name es.scopes = SOME snapshot /\
        lookup_scopes id es.scopes = NONE` by

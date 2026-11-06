@@ -289,11 +289,6 @@ Theorem for_array_round_ptr:
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
       gas_obs := []|>) /\
   stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = (bc',sb1) /\
-  (!j ei G tn s. Inv j ei G tn s <=>
-    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
-      cond_lbl st s0 G0 tn0 d name snapshot j ei G tn s) /\
-  (!ei G tn s. Done ei G tn s <=>
-    for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ei G tn s) /\
   supported_stmts tops bindings stmts /\
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
   type_stmts env ret_ty stmts = SOME env' /\
@@ -315,14 +310,17 @@ Theorem for_array_round_ptr:
     x <> idx /\ x <> nv) /\
   (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
-  Inv k es G tn s /\
+  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    cond_lbl st s0 G0 tn0 d name snapshot k es G tn s /\
   gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (do push_scope_with_var id tv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od)
           handle_loop_exception) pop_scope od) (es,s,G,tn)
     (\res ee gf tf t. ?broke. res = INL broke /\
-      (broke ==> Done ee gf tf t) /\ (~broke ==> Inv (SUC k) ee gf tf t))
+      (broke ==> for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ee gf tf t) /\
+      (~broke ==> for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+        cond_lbl st s0 G0 tn0 d name snapshot (SUC k) ee gf tf t))
     (\res ee gt r. ?ex. res = INR ex /\
       !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
 Proof
@@ -350,6 +348,9 @@ Proof
 QED
 
 Resume for_array_round_ptr[outcome]:
+  qabbrev_tac `Inv = for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    cond_lbl st s0 G0 tn0 d name snapshot` >>
+  qabbrev_tac `Done = for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d` >>
   qmatch_goalsub_abbrev_tac `gas_outcome_ptr _ _ _ _ _ _ Qround Rround` >>
   dxrule for_outcome_source_evidence_ptr >> disch_then assume_tac >>
   drule_then (qspecl_then [`k`, `Inv`, `Done`] mp_tac) (Q.INST
@@ -390,7 +391,7 @@ Resume for_array_round_ptr[outcome]:
 QED
 
 Resume for_array_round_ptr[finish]:
-  rpt gen_tac >> strip_tac >> fs[IgnAsm `vs = _`] >>
+  rpt gen_tac >> strip_tac >> fs[Abbr `Inv`, Abbr `Done`, IgnAsm `vs = _`] >>
   `!x. not_fresh_at st x ==> not_fresh_at sb0 x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      simp[IgnAsm `vs = _`] >> metis_tac[]) >>
