@@ -68,3 +68,86 @@ to the quoted candidate. No counterexample to the frozen task is claimed.
 with identity relocation. The demand here explicitly has `lo<=b+k`, so neither
 is the origin for this owned-byte proof. Fixed initial memory and its sentinel
 require a separate future recovery argument.
+
+## CALL clipping / actual initializer diagnostic (C1.5.90.67.30)
+
+### Checked conditional result, not a concrete execution counterexample
+
+`audit_call_clipped_byte` in the companion theory retains explicitly
+`take_outcome rq s.vs_outcomes = (outcome,rest)` and
+`outcome.co_returnData = [byte]`. For CALL-shaped operands evaluating to
+output offset 0 and capacity 2, and the matching successful `exec_ext_call`
+result, it proves requested ranges `[(0,2)]`, actual ranges `[(0,1)]`,
+requested membership and actual nonmembership for byte 1, preservation of
+that byte's memory value, and exactly
+
+```
+1 IN (step_taint inst s post tn).t_mem <=> 1 IN tn.t_mem
+```
+
+Thus both initially-pure and initially-tainted cases are covered: the
+clipped second byte stays pure if already initialized, and stays tainted
+if not initialized. A later clipped CALL does not become an actual writer
+of an earlier-initialized byte merely because its endpoint is pure.
+No concrete oracle-selection equation, reachable history, or stage fixture
+has been constructed. The attempted whole concrete state/oracle unfolding
+was reverted after timeout. This conditional calculation is the permitted
+fallback, not EVAL evidence against the frozen target or any global lemma.
+It uses the existing `wmwe_byte_at_outside` rather than duplicating framing.
+
+### Exact selector and supplier consequences
+
+* `ptr_chrono_fresh_write_index` (ChronologicalHistory:245) uses the fresh
+  allocation/endpoint-purity premises to produce **some requested writer**
+  strictly after allocation and before the final observation. It does not
+  claim this is the last writer or an actual writer. Its proof proceeds via
+  `ptr_chrono_fresh_write` and `ptr_chrono_step_mem`: a tainted-to-pure
+  transition implies a requested write. That implication intentionally
+  forgets actual footprint membership supplied by taint clearing.
+* `ptr_chrono_initializing_writer_seed` (ChronologicalDemand:112) adds
+  discipline, non-revert history, no DALLOCA, function wellformedness,
+  reachability, SSA and instruction wellformedness. It refines that requested
+  writer with a Var write address, allocation cache and ml_used_gen seed.
+  It still does not assert actual membership or immediate postwrite purity.
+  The companion quotation `actual_initializer_candidate` retains its exact
+  antecedent and asks for `LENGTH pre < k`, `SUC k < LENGTH h`, actual
+  step_writes membership at k and purity at SUC k. It is typechecked only.
+* `mem_taint_def` removes taint only from **actual** step_writes, then adds
+  written_taint. Hence a tainted-to-pure transition must be an actual write
+  and its successor is pure. A chronological lifting plus finite-history
+  selection of such a transition is the recommended next semantic lemma;
+  the quotation does not assert this lifting has been proved.
+* Actual membership implies requested membership: CALL/STATICCALL/
+  DELEGATECALL replace len by MIN len returndata_length; all other opcodes
+  keep the list unchanged. This follows by per-range containment from
+  step_writes_def. The reverse does not hold, as the conditional probe shows.
+* Selecting the last **actual** writer does NOT itself supply absence of
+  later **requested** writers: an intervening clipped CALL can request byte
+  1 without writing it, preserving purity and content. Therefore the
+  proposed actual selector must not simply replace w in existing demand
+  intervals.
+* `ptr_endpoint_protected_livesets` (ProtectedLivesets:8) supplies a last
+  requested writer w and excludes later ptr_chrono_write events. Its
+  no-kill argument at lines 71-89 explicitly contradicts a requested range
+  membership by turning it into ptr_chrono_write. `ptr_demand_protected_token_interval`
+  (DemandWriteExclusion:25) preserves this SAME witness and derives token
+  continuity. `ptr_demand_interval_exists` (:147) packages it into
+  ptr_demand_interval_def (:97), whose no-later-requested clause is at :132.
+  Consequently changing requested exclusion to actual exclusion affects
+  ProtectedHistory/ProtectedLivesets, token-interval and demand packaging,
+  and downstream historical target write exclusion, not only recovery.
+
+### Recommended next obligation / decision needed
+
+First prove the exact `actual_initializer_candidate` statement (or a stronger
+last-actual-writer version with immediate purity and no later actual writes),
+by chronological taint transitions. Do not strengthen recovery premises.
+Then separately decide how to supply production lifetime/conflict protection
+on the interval from this actual initializer to the existing requested
+writer w. The current exclusion theorem covers writes after w, not the
+possibly earlier actual initializer. Merely keeping both indices does not
+close that interval gap. A full semantic revision must either prove
+protection across the extra clipped-request segment, or derive an
+actual-footprint-aware lifetime/no-kill interface. Neither revision has
+been implemented here; retained-birth identity and target actual framing
+remain separate gaps. No universal prefix-extension theorem is certified.
