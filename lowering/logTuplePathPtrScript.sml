@@ -51,7 +51,11 @@ Theorem log_allocated_tuple_path_ptr:
     (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
     ghost_inv d ce cx es H tm
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) /\
-    ghost_kept ce es st G tn s H tm
+    ghost_kept ce es st G tn s H tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv
+      (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) outcap) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) = SOME w)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all log_allocated_tuple_sequence_ptr >>
@@ -61,7 +65,7 @@ Proof
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> disch_tac >>
   qexistsl_tac [`actual`,`db`,`H`,`tm`] >>
   asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx,
-    stmt_state_rel_inst_idx, fresh_vars_wrt_def,
+    stmt_state_rel_inst_idx, fresh_vars_wrt_def, ptr_covers_inst_idx,
     PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize] >>
   qpat_x_assum `fresh_vars_wrt limit_st actual` mp_tac >>
   simp_tac bool_ss [fresh_vars_wrt_def]

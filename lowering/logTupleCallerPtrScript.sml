@@ -200,7 +200,10 @@ Theorem log_allocated_tuple_sequence_ptr:
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     op_taint tm out = {} /\ op_prov H out = NONE /\
     (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
-    ghost_inv d ce cx es H tm actual /\ ghost_kept ce es st G tn s H tm
+    ghost_inv d ce cx es H tm actual /\ ghost_kept ce es st G tn s H tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv actual outcap) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op actual = SOME w)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule abi_encoder_counters >> strip_tac >>
@@ -336,10 +339,18 @@ Resume log_allocated_tuple_sequence_ptr[result]:
   `lookup_var dv u = SOME (n2w db)` by
     (qpat_x_assum `!v. not_fresh_at prepared v ==> _`
       (qspec_then `dv` mp_tac) >> simp[lookup_var_def] >> fs[lookup_var_def]) >>
+  `ptr_covers Gf tk dv u outcap` by
+    (qpat_x_assum `!v. not_fresh_at prepared v ==> _`
+      (qspec_then `dv` mp_tac) >>
+     asm_simp_tac bool_ss [] >> strip_tac >>
+     qpat_x_assum `ptr_covers H tm dv t outcap` mp_tac >>
+     asm_simp_tac bool_ss [ptr_covers_def, lookup_var_def, venom_state_accfupds]) >>
   `db < dimword (:256)` by decide_tac >>
   `inst_extends st end_st` by metis_tac[inst_extends_trans] >>
   qexistsl_tac [`u with vs_inst_idx := t.vs_inst_idx`,`db`,`Gf`,`tk`] >>
   asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx, eval_operand_def,
-    PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize]
+    ptr_covers_inst_idx,
+    PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize] >>
+  qexists_tac `dv` >> asm_simp_tac bool_ss []
 QED
 Finalise log_allocated_tuple_sequence_ptr

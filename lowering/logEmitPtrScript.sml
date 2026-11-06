@@ -139,3 +139,17 @@ Proof
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >>
   simp[] >> strip_tac >> qexists_tac `t` >> simp[ADD1]
 QED
+
+Theorem log_emit_ghost_inv:
+  ghost_inv d ce cx es G tn s ==>
+  ghost_inv d ce cx (es with logs := es.logs ++ [ev]) G tn
+    (s with vs_logs := s.vs_logs ++ [ev])
+Proof
+  strip_tac >> qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> Cases_on `d`
+  >- (simp[ghost_inv_def, ptr_covers_def, lookup_var_def, stor_taint_ok_def,
+       return_buf_ptr_def] >> metis_tac[]) >>
+  PairCases_on `x` >>
+  simp[ghost_inv_def, ptr_covers_def, lookup_var_def, stor_taint_ok_def,
+    return_buf_ptr_def] >> metis_tac[]
+QED
