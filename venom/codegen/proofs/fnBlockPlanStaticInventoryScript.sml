@@ -1956,7 +1956,7 @@ Proof
 QED
 
 
-Theorem inventory_selected_reorder[local]:
+Theorem inventory_selected_reorder:
   (if is_commutative opc /\ LENGTH operands >= 2 then
      let (oa,sa) = reorder_plan dfg operands ps in
      let (ob,sb) = reorder_plan dfg
