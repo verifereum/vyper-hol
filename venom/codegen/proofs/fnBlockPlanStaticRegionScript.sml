@@ -2467,3 +2467,118 @@ Proof
   goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `sb` >> simp[]
 QED
+
+Theorem regional_optimistic_stack_membership[local]:
+  MEM op (SND (optimistic_swap_plan dfg inst nl next_term ps)).ps_stack <=>
+  MEM op ps.ps_stack
+Proof
+  simp[optimistic_swap_plan_def, LET_THM] >> rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth _ _ = SOME dist` >>
+  drule stack_get_depth_props >> strip_tac >>
+  simp[do_swap_stack_result, regional_stack_swap_membership]
+QED
+
+Theorem regional_params_exact_filter[local]:
+  ALL_DISTINCT installed.ps_stack /\
+  installed.ps_stack = MAP (\i. Var (HD i.inst_outputs)) params /\
+  installed.ps_spilled = FEMPTY /\
+  popmany_plan (FILTER is_var_operand
+    (FILTER (\v. ~MEM (operand_to_string v) nl) installed.ps_stack)) installed = (ops,mid) /\
+  optimistic_swap_plan dfg inst nl next_term mid = (swaps,qs) ==>
+  ALL_DISTINCT qs.ps_stack /\ qs.ps_spilled = FEMPTY /\
+  (!op. MEM op qs.ps_stack <=>
+    MEM op installed.ps_stack /\ MEM (operand_to_string op) nl)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT mid.ps_stack` by metis_tac[inventory_popmany_distinct] >>
+  `mid.ps_spilled = FEMPTY` by
+    metis_tac[fnFrameStepsRevertForwardTheory.rf_popmany_spilled, pairTheory.SND] >>
+  drule inventory_optimistic_swap_resources >> simp[] >> strip_tac >>
+  `qs.ps_spilled = FEMPTY` by
+    metis_tac[fnFrameStepsRevertForwardTheory.rf_optimistic_spilled, pairTheory.SND] >>
+  `ALL_DISTINCT qs.ps_stack` by metis_tac[pairTheory.SND] >>
+  simp[] >> gen_tac >>
+  `MEM op qs.ps_stack <=> MEM op mid.ps_stack` by
+    metis_tac[regional_optimistic_stack_membership, pairTheory.SND] >>
+  drule_all inventory_popmany_mem >>
+  disch_then (qspec_then `op` assume_tac) >>
+  Cases_on `MEM op installed.ps_stack`
+  >- (`is_var_operand op` by
+        (gvs[MEM_MAP] >> simp[stackPlanTypesTheory.is_var_operand_def]) >>
+      gvs[MEM_FILTER]) >>
+  gvs[MEM_FILTER]
+QED
+
+Theorem regional_prepare_params_initial_exact[local]:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack /\ qs.ps_spilled = FEMPTY /\
+  (!op. MEM op qs.ps_stack <=>
+    MEM op (MAP (\i. Var (HD i.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    MEM (operand_to_string op)
+      (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))))
+Proof
+  strip_tac >>
+  qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  simp[prepare_params_plan_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `get_params entry.bb_instructions` >>
+  Cases_on `get_params entry.bb_instructions = []`
+  >- (strip_tac >> gvs[init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def]) >>
+  simp[parameter_stack_fold] >>
+  qmatch_goalsub_abbrev_tac `popmany_plan items installed` >>
+  pairarg_tac >> simp[] >>
+  rename1 `popmany_plan items installed = (pops,mid)` >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `ALL_DISTINCT installed.ps_stack` by
+    (simp[Abbr `installed`] >> metis_tac[regional_param_heads_distinct]) >>
+  `installed.ps_spilled = FEMPTY` by
+    simp[Abbr `installed`, init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def] >>
+  `installed.ps_stack = MAP (\i. Var (HD i.inst_outputs))
+      (get_params entry.bb_instructions)` by simp[Abbr `installed`] >>
+  `popmany_plan (FILTER is_var_operand
+      (FILTER (\v. ~MEM (operand_to_string v)
+        (live_vars_at (liveness_analyze fn) entry.bb_label
+          (LENGTH (get_params entry.bb_instructions)))) installed.ps_stack))
+      installed = (pops,mid)` by gvs[Abbr `items`] >>
+  drule_all regional_params_exact_filter >> simp[]
+QED
+
+Theorem regional_prepare_params_initial_membership:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  !op. MEM op qs.ps_stack <=>
+    MEM op (MAP (\i. Var (HD i.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    MEM (operand_to_string op)
+      (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))
+Proof
+  strip_tac >> drule_all regional_prepare_params_initial_exact >> simp[]
+QED
+
+Theorem regional_prepare_params_initial_spilled:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  qs.ps_spilled = FEMPTY
+Proof
+  strip_tac >> drule_all regional_prepare_params_initial_exact >> simp[]
+QED
+
+Theorem regional_prepare_params_initial_distinct:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack
+Proof
+  strip_tac >> drule_all regional_prepare_params_initial_exact >> simp[]
+QED
