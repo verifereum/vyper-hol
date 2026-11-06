@@ -482,7 +482,7 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
     (irule abi_encoder_shared_input_effect >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   `alloca_inv initial ==> alloca_inv actual` by metis_tac[] >>
-  `abi_encoder_cursor T ip site slot first site st j actual` by
+  `abi_sites_encoder_cursor sites T ip site slot first site st j actual` by
     (irule abi_scratch_cursor_protected >>
      qpat_assum `abi_sites_scratch_effect sites _ _ cursor_site _ _ _ _ _ _ _ address_ready actual`
        (irule_at Any) >>
@@ -494,13 +494,13 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
   `SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs)) =
      SUM (MAP (abi_member_tail_size ty) (TAKE j avs)) + LENGTH (enc ty (EL j avs))` by
     (simp[GSYM SNOC_EL_TAKE,MAP_SNOC,SUM_SNOC,abi_member_tail_size_def]) >>
-  `abi_encoder_cursor T dp cursor_site cursor_slot first site st
+  `abi_sites_encoder_cursor sites T dp cursor_site cursor_slot first site st
      (LENGTH avs*abi_member_head_size ty+
        SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual` by
     (irule abi_scratch_cursor_registered >>
      qpat_assum `abi_sites_scratch_effect sites _ _ site _ _ _ _ _ _ _ initial actual`
        (irule_at Any) >>
-     qpat_assum `abi_encoder_cursor T dp _ _ _ _ _ _ initial` (irule_at Any) >>
+     qpat_assum `abi_sites_encoder_cursor sites T dp _ _ _ _ _ _ initial` (irule_at Any) >>
      asm_simp_tac bool_ss [GSYM mem_word_at_eq_mload] >>
      (conj_tac >- (AP_TERM_TAC >> decide_tac)) >> decide_tac) >>
   `abi_encoder_child_suffix_post child_len ce limit_st
@@ -585,7 +585,7 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
     (qpat_assum `abi_encoder_child_suffix_post _ _ _ _ _ _ _ encoded actual` mp_tac >>
      fs[abi_encoder_child_suffix_post_def,abi_sites_encoder_shared_endpoint_def]) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
-  qpat_assum `abi_encoder_cursor T dp _ _ _ _ _ _ actual` mp_tac >>
+  qpat_assum `abi_sites_encoder_cursor sites T dp _ _ _ _ _ _ actual` mp_tac >>
   qpat_assum `SUM (MAP _ (TAKE (SUC j) avs)) = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]
@@ -711,11 +711,11 @@ Resume abi_encoder_shared_array_static_body[static_finish]:
      qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ initial` (irule_at Any) >>
      simp[]) >>
   `alloca_inv initial ==> alloca_inv actual` by metis_tac[] >>
-  `abi_encoder_cursor T ip site slot first site st j actual` by
+  `abi_sites_encoder_cursor sites T ip site slot first site st j actual` by
     (irule abi_scratch_cursor_protected >>
      qpat_assum `abi_sites_scratch_effect sites _ _ addressed.cs_next_id _ _ _ _ _ _ _ address_ready actual`
        (irule_at Any) >>
-     qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ address_ready` (irule_at Any) >>
+     qpat_assum `abi_sites_encoder_cursor sites T ip _ _ _ _ _ _ address_ready` (irule_at Any) >>
      asm_simp_tac bool_ss [] >>
      fs[abi_sites_encoder_shared_input_def] >>
      qpat_x_assum `asz = _` SUBST_ALL_TAC >>
