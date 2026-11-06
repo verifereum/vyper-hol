@@ -54,10 +54,13 @@ Theorem oracle_call_checked_step:
       (step_prov PG G inst (update_var out (if outcome.co_success then 1w else 0w) s'))
       (Var out) = NONE
 Proof
-  strip_tac >> (
+  VALID (strip_tac >> (
   `~s.vs_call_ctx.cc_static` by fs[compileEnvTheory.state_rel_def] >>
-  drule_all exec_ext_call_oracle_step >>
-  disch_then (strip_assume_tac o Q.ISPECL [`gas:bytes32`, `ro:bytes32`, `rz:bytes32`]) >>
+  mp_tac (exec_ext_call_oracle_step |>
+    INST_TYPE [``:'a`` |-> ``:256 word``, ``:'b`` |-> ``:256``,
+               ``:'c`` |-> ``:256``] |> SPEC_ALL |>
+    Q.INST [`vw` |-> `if stat then 0w else vw`]) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qexists_tac `s'` >> gvs[] >>
   `step_inst_base inst s =
     OK (update_var out (if outcome.co_success then 1w else 0w) s')` by
@@ -68,8 +71,11 @@ Proof
   >- metis_tac[exec_ext_call_stor_taint_ok] >>
   simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
     step_prov_def, set_prov_def, out_prov_def, op_prov_def,
-    finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE])
+    finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE]))
 QED
+
+val _ = if null (hyp oracle_call_checked_step) then ()
+        else raise Fail "oracle_call_checked_step has kernel hypotheses";
 
 Theorem oracle_effect_stmt_frame[local]:
   stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx ee t /\
