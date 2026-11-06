@@ -327,3 +327,100 @@ Proof
   drule_all gas_path_ptr_then >>
   simp[Abbr `G1`, Abbr `tn1`, Abbr `s1`, update_var_def, ADD1]
 QED
+
+Theorem storage_copy_address_store_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id ADD [Var root;offset] [out];
+     mk_inst (id+1) MSTORE [Var out;Var vv] []] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\ lookup_var root s = SOME a /\
+  eval_operand offset s = SOME (n2w off) /\ lookup_var vv s = SOME value /\
+  ptr_covers G tn root s span /\ op_taint tn offset = {} /\
+  off < span /\ off+32 <= span /\ w2n a+off < dimword(:256) /\
+  root <> out /\ vv <> out /\ ~ctx_has_dalloca ctx ==>
+  ?G1 tn1 t1.
+    G1 = step_prov PG G (mk_inst id ADD [Var root;offset] [out])
+      (update_var out (a+n2w off) s) /\
+    tn1 = (tn with t_var := tn.t_var |+ (out,{})) /\
+    t1 = (update_var out (a+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G1
+      (tn1 with t_mem :=
+        (tn.t_mem DIFF {i | w2n (a+n2w off) <= i /\ i < w2n (a+n2w off)+32}) UNION
+        {w2n (a+n2w off)+k | k IN op_taint tn (Var vv)})
+      (OK (mstore (w2n (a+n2w off)) value t1 with vs_inst_idx := SUC t1.vs_inst_idx))
+Proof
+  strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id ADD [Var root;offset] [out])` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  drule_all storage_copy_address_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t1)` >>
+  qexistsl [`G1`, `tn1`, `t1`] >>
+  conj_tac >- simp[Abbr `G1`] >>
+  conj_tac >- simp[Abbr `tn1`] >>
+  conj_tac >- simp[Abbr `t1`] >>
+  `gas_path_ptr D 0 ctx fn PG G1 tn1 t1 0 G1
+    (tn1 with t_mem :=
+      (tn1.t_mem DIFF {i | w2n (a+n2w off) <= i /\ i < w2n (a+n2w off)+32}) UNION
+      {w2n (a+n2w off)+k | k IN op_taint tn1 (Var vv)})
+    (OK (mstore (w2n (a+n2w off)) value t1 with vs_inst_idx := SUC t1.vs_inst_idx))` by
+    (irule storage_copy_store_path_ptr >>
+     simp[Abbr `t1`, Abbr `tn1`, update_var_def, get_instruction_def,
+          EL_APPEND_EQN, ADD1, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     conj_tac >- metis_tac[lookup_var_def] >>
+     qexistsl [`id+1`, `out`] >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  drule_all gas_path_ptr_then >>
+  simp[Abbr `G1`, Abbr `tn1`, Abbr `t1`, op_taint_def, FLOOKUP_UPDATE]
+QED
+
+Theorem storage_copy_store_taint_byte:
+  bytes SUBSET {j | j < 32} /\ h < 32 ==>
+  (b+32*k+h IN
+    ((M DIFF {i | b+32*k <= i /\ i < b+32*k+32}) UNION
+      {b+32*k+j | j IN bytes}) <=> h IN bytes) /\
+  (!i. (i < b+32*k \/ b+32*k+32 <= i) ==>
+    (i IN ((M DIFF {i | b+32*k <= i /\ i < b+32*k+32}) UNION
+      {b+32*k+j | j IN bytes}) <=> i IN M))
+Proof
+  strip_tac >>
+  simp[IN_UNION, IN_DIFF, GSPECIFICATION] >>
+  gvs[SUBSET_DEF, GSPECIFICATION] >>
+  rpt strip_tac >> eq_tac >> strip_tac >> gvs[] >>
+  res_tac >> decide_tac
+QED
+
+Theorem storage_copy_payload_taint_advance:
+  M' = (M DIFF {i | b+32*k <= i /\ i < b+32*k+32}) UNION
+       {i | ?h. i = b+32*k+h /\ h IN key_taint X (a+n2w k)} /\
+  (!j h. j < k /\ h < 32 ==>
+     (b+32*j+h IN M <=> (a+n2w j,h) IN X)) /\
+  (!i. (i < b \/ b+32*k <= i) ==> (i IN M <=> i IN M0)) ==>
+  (!j h. j < k+1 /\ h < 32 ==>
+     (b+32*j+h IN M' <=> (a+n2w j,h) IN X)) /\
+  (!i. (i < b \/ b+32*(k+1) <= i) ==> (i IN M' <=> i IN M0))
+Proof
+  strip_tac >>
+  `key_taint X (a+n2w k) SUBSET {j | j < 32}` by
+    simp[key_taint_def, SUBSET_DEF] >>
+  qpat_x_assum `M' = _` SUBST1_TAC >>
+  conj_tac >-
+    (rpt strip_tac >> Cases_on `j = k`
+     >- (simp[IN_UNION, IN_DIFF, GSPECIFICATION, key_taint_def]) >>
+     `j < k /\ b+32*j+h < b+32*k` by decide_tac >>
+     simp[IN_UNION, IN_DIFF, GSPECIFICATION, key_taint_def] >>
+     `~(?h'. b+(h+32*j) = b+(h'+32*k) /\ h' < 32 /\
+          (a+n2w k,h') IN X)` by
+       (strip_tac >> decide_tac) >>
+     simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `i < b+32*k \/ b+32*k+32 <= i` by decide_tac >>
+  `i < b \/ b+32*k <= i` by decide_tac >>
+  simp[IN_UNION, IN_DIFF, GSPECIFICATION, key_taint_def] >>
+  `~(?h. i = b+(h+32*k) /\ h < 32 /\ (a+n2w k,h) IN X)` by
+    (strip_tac >> decide_tac) >>
+  gvs[] >> eq_tac >- (strip_tac >> gvs[] >> decide_tac) >> simp[]
+QED
