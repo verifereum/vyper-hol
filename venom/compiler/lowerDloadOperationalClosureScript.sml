@@ -308,6 +308,36 @@ Proof
   metis_tac[ld_annotated_active_inst]
 QED
 
+(* Recover setup from the actual saved head, not from a caller IH. *)
+Theorem ld_annotated_return_pop:
+  o1_ctx_shape C /\
+  ld_annotated_reachable vs0 C (f::stk) k L AP AG tn callee ri sr /\
+  step_inst fuelR C ri sr = IntRet ret send /\
+  bind_outputs f.lf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.lf_state send)) = SOME s' ==>
+  ?nm ops args cs fuelS.
+    f.lf_inst.inst_opcode = INVOKE /\
+    decode_invoke f.lf_inst = SOME (nm,ops) /\
+    lookup_function nm C.ctx_functions = SOME callee /\
+    eval_operands ops f.lf_state = SOME args /\
+    setup_callee callee args f.lf_state = SOME cs /\
+    run_blocks fuelS C callee cs = IntRet ret send /\
+    step_inst fuelS C f.lf_inst f.lf_state = OK s' /\
+    (!inst'. active_inst f.lf_fn inst'
+       (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx) ==>
+     ld_annotated_reachable vs0 C stk k f.lf_local f.lf_params
+       (DRESTRICT f.lf_prov (COMPL (set f.lf_inst.inst_outputs)))
+       (tn with t_var := DRESTRICT f.lf_tvar
+         (COMPL (set f.lf_inst.inst_outputs)))
+       f.lf_fn inst' (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx))
+Proof
+  strip_tac >> drule ld_annotated_erasure >> strip_tac >>
+  drule_all ld_frame_reachable_prefix >> strip_tac >>
+  fs[MAP, ld_stack_origin_cons, ld_erase_frame_def] >>
+  drule_all ld_annotated_call_pop >> strip_tac >>
+  qexists_tac `fuelS` >> asm_rewrite_tac[]
+QED
+
 (* Fixed-stack origin functionality aligns a prefix with a consumer's s0;
    it does not assert uniqueness of execution histories. *)
 Theorem ld_stack_origin_unique:
