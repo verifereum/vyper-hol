@@ -109,3 +109,124 @@ QED
 val _ = List.app (fn th => if null (hyp th) then ()
         else raise Fail "return restoration boundary has kernel hypotheses")
   [ld_return_shared_restore, ld_vars_bind_outputs, ld_vars_alloc_agree];
+
+Theorem ld_maps_alloc_agree:
+  ld_maps A f /\
+  (!a. a IN ld_slots A [f] ==> FLOOKUP B a = FLOOKUP A a) ==>
+  ld_maps B f
+Proof
+  simp[ld_maps_def] >> strip_tac >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      first_x_assum drule >> strip_tac >> qexists_tac `c` >> simp[] >>
+      `((f.lf_serial,aid) IN ld_slots A [f])` by
+        (simp[ld_slots_def] >> metis_tac[]) >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> strip_tac
+      >- (simp[] >>
+          `((f.lf_serial,ai) IN ld_slots A [f])` by
+            (simp[ld_slots_def] >> metis_tac[]) >> simp[]) >>
+      disj2_tac >> simp[] >> qexists_tac `d` >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem ld_slots_restrict_domain:
+  FDOM (DRESTRICT A (ld_slots A frames)) =
+    ld_slots (DRESTRICT A (ld_slots A frames)) frames
+Proof
+  simp[FDOM_DRESTRICT, ld_slots_restrict, EXTENSION] >>
+  gen_tac >> eq_tac >- simp[] >>
+  simp[ld_slots_def, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem ld_saved_alloc_restore:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  ld_global lo A frames /\
+  (!a. a IN ld_slots A frames ==> FLOOKUP Ar a = FLOOKUP A a) ==>
+  EVERY (\f. ld_maps (DRESTRICT Ar (ld_slots Ar frames)) f /\
+    ld_vars P (DRESTRICT Ar (ld_slots Ar frames)) f) frames /\
+  FDOM (DRESTRICT Ar (ld_slots Ar frames)) =
+    ld_slots (DRESTRICT Ar (ld_slots Ar frames)) frames
+Proof
+  strip_tac >> conj_tac >- (
+    `FDOM A = ld_slots A frames /\
+     EVERY (\f. ld_maps A f /\ ld_vars P A f) frames` by
+      (qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       rpt (pop_assum kall_tac) >> simp[ld_sync_def, EVERY_MEM] >> metis_tac[]) >>
+    `ld_slots A frames SUBSET ld_slots Ar frames` by
+      (irule lowerDloadReturnInvokeStackTheory.ld_slots_agree_subset >> simp[]) >>
+    `!a. a IN ld_slots A frames ==>
+       FLOOKUP (DRESTRICT Ar (ld_slots Ar frames)) a = FLOOKUP A a` by
+      (simp[FLOOKUP_DRESTRICT] >> fs[SUBSET_DEF]) >>
+    simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+    `ld_maps A f /\ ld_vars P A f` by fs[EVERY_MEM] >> conj_tac
+    >- (irule ld_maps_alloc_agree >> qexists_tac `A` >> simp[] >> rpt strip_tac >>
+        first_x_assum irule >> fs[ld_slots_def] >> metis_tac[]) >>
+    irule ld_vars_alloc_agree >> qexists_tac `A` >> simp[] >> rpt strip_tac >>
+    first_x_assum irule >>
+    `a IN FDOM A` by (irule ld_global_selected >> metis_tac[]) >>
+    metis_tac[]) >>
+  irule ld_slots_restrict_domain
+QED
+
+Theorem ld_call_saved_alloc_restore:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  ^ld_probe_stable lo P Sigma names (f::fs) fc A Ar fr ==>
+  EVERY (\g. ld_maps (DRESTRICT Ar (ld_slots Ar (f::fs))) g /\
+    ld_vars P (DRESTRICT Ar (ld_slots Ar (f::fs))) g) (f::fs) /\
+  FDOM (DRESTRICT Ar (ld_slots Ar (f::fs))) =
+    ld_slots (DRESTRICT Ar (ld_slots Ar (f::fs))) (f::fs)
+Proof
+  qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
+  `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
+  `!a. a IN ld_slots A (f::fs) ==> FLOOKUP Ar a = FLOOKUP A a` by
+    (fs[Abbr `Stable`] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     fs[ld_slots_def, FLOOKUP_DEF]) >>
+  drule_all ld_saved_alloc_restore >> simp[]
+QED
+
+Theorem ld_vars_merge_callee:
+  ld_vars P A f ==>
+  ld_vars P A (f with <|
+    lf_src := merge_callee_state f.lf_src sc;
+    lf_tgt := merge_callee_state f.lf_tgt tc|>)
+Proof
+  simp[ld_vars_def, merge_callee_state_def]
+QED
+
+Theorem ld_vars_resume:
+  ld_vars P A f ==>
+  ld_vars P A (f with <|
+    lf_src := f.lf_src with vs_inst_idx := si;
+    lf_tgt := f.lf_tgt with vs_inst_idx := ti|>)
+Proof
+  simp[ld_vars_def]
+QED
+
+val _ = List.app (fn th => if null (hyp th) then ()
+        else raise Fail "saved-frame restoration has kernel hypotheses")
+  [ld_maps_alloc_agree, ld_slots_restrict_domain, ld_saved_alloc_restore,
+   ld_call_saved_alloc_restore, ld_vars_merge_callee, ld_vars_resume];
+
+Theorem ld_vars_return_restore:
+  ld_vars P A f /\ set outs SUBSET set (fn_ir_vars f.lf_fn) /\
+  bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
+  bind_outputs outs vals (merge_callee_state f.lf_tgt tc) = SOME tr ==>
+  ld_vars P A (f with <|
+    lf_src := sr with vs_inst_idx := si;
+    lf_tgt := tr with vs_inst_idx := ti;
+    lf_H := DRESTRICT f.lf_H (COMPL (set outs));
+    lf_tv := DRESTRICT f.lf_tv (COMPL (set outs))|>)
+Proof
+  strip_tac >>
+  `ld_vars P A (f with <|lf_src := merge_callee_state f.lf_src sc;
+     lf_tgt := merge_callee_state f.lf_tgt tc|>)` by
+    (irule ld_vars_merge_callee >> simp[]) >>
+  drule ld_vars_bind_outputs >>
+  disch_then (qspecl_then [`outs`, `vals`, `sr`, `tr`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule ld_vars_resume >> simp[]
+QED
+
+val _ = if null (hyp ld_vars_return_restore) then ()
+        else raise Fail "resumed variable restoration has kernel hypotheses";
