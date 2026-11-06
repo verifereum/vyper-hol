@@ -3,7 +3,7 @@ Ancestors
   loweringHalt stmtLowering compileEnv emitHelper venomInst
   compileVyper entryStateRel bodySim bodyPtrDefs fragExecPtr fragExec stmtSim
   ptrSafeRun ptrDiscipline venomState venomExecSemantics contextCodegenRelProps
-  abiBuiltinAllocation allocationPtr finite_map words arithmetic list
+  abiBuiltinAllocation allocationPtr allocaFootprint finite_map words arithmetic list
   exprOperandVar exprLoweringProps stmtSimReturn context rich_list
   vyperInterpreter vyperExprNoControl vyperState exprSim
 Libs
@@ -214,4 +214,99 @@ Proof
       qexists `fuel'` >> simp[exit_result_def, stmt_exit_ptr_def]) >>
   qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
   disj1_tac >> metis_tac[expr_exit_INR_type]
+QED
+
+Theorem compile_external_return_copy_state_rel_run_ptr:
+  compile_external_return (SOME (Var src)) F F (AbiCopy m) m
+    nr nkey ut iv sa = (x,sb) /\
+  (nr ==> iv) /\ not_fresh_at sa src /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  ptr_covers G tn src s m /\
+  (!i. w2n w <= i /\ i < w2n w + m ==> i NOTIN tn.t_mem) /\
+  stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx /\
+  expr_val_at cenv cx ty ea eb es v (Var src) s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand (Var src) s = SOME w /\ m <= val_footprint tv v ==>
+  !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s
+Proof
+  strip_tac >>
+  drule_all compile_external_return_copy_parts >> strip_tac >>
+  `src <> buf` by metis_tac[] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [buf]) /\
+   get_instruction bb (s.vs_inst_idx+1) =
+     SOME (mk_inst (sa.cs_next_id+1) MCOPY [Var buf;Var src;Lit (n2w m)] []) /\
+   get_instruction bb (s.vs_inst_idx+2) =
+     SOME (mk_inst (sa.cs_next_id+2) RETURN [Var buf;Lit (n2w m)] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn j => mp_tac (Q.SPEC j th)) [`0`,`1`,`2`]) >> simp[]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [buf]) (fn_insts func)` by
+    (irule lookup_block_fn_insts >> qexistsl [`bb`,`sa.cs_current_bb`] >>
+     simp[] >> gvs[get_instruction_def] >>
+     `LENGTH sa.cs_current_insts < LENGTH bb.bb_instructions` by decide_tac >>
+     metis_tac[EL_MEM]) >>
+  qabbrev_tac `n = w2n (n2w m : 256 word)` >>
+  `n < dimword (:256) /\ n <= m /\ (n2w n : 256 word) = n2w m` by
+    simp[Abbr `n`, w2n_n2w, MOD_LESS_EQ] >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [buf]) (fn_insts func)` by
+    metis_tac[] >>
+  qpat_x_assum `MEM (mk_inst _ ALLOCA [Lit (n2w m)] _) _` kall_tac >>
+  `?base. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id n s).vs_allocas
+      sa.cs_next_id = SOME (base,n) /\ base < dimword (:256)` by
+    (Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+     >- (drule_all stmt_state_rel_alloca_fresh_bound >> strip_tac >>
+         qexists `s.vs_alloca_next` >>
+         simp[abi_builtin_allocate_state_def, FLOOKUP_UPDATE] >> decide_tac) >>
+     rename1 `FLOOKUP s.vs_allocas sa.cs_next_id = SOME slot` >>
+     PairCases_on `slot` >>
+     drule_all stmt_state_rel_alloca_site_bound >> strip_tac >>
+     qexists `slot0` >> simp[abi_builtin_allocate_state_def] >> decide_tac) >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [buf]` >>
+  qabbrev_tac `t = update_var buf (n2w base)
+    (abi_builtin_allocate_state sa.cs_next_id n s)` >>
+  `step_inst_base inst s = OK t` by
+    (simp[NoAsms, Abbr `inst`, Abbr `t`] >>
+     irule step_alloca_site >> simp[]) >>
+  qunabbrev_tac `inst` >>
+  drule_all alloca_step_ptr_covers >>
+  disch_then (qspecl_then [`PG`,`G`,`tn`] assume_tac) >>
+  drule_all alloca_step_old_ptr_covers >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  drule_all alloca_step_stor_taint_ok >> strip_tac >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [buf]` >>
+  qabbrev_tac `G1 = step_prov PG G inst t` >>
+  qabbrev_tac `tn1 = step_taint inst s t tn` >>
+  `!i. w2n w <= i /\ i < w2n w + n ==> i NOTIN tn1.t_mem` by
+    (rpt strip_tac >>
+     `i < w2n w + val_footprint tv v /\ i NOTIN tn.t_mem` by
+       (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
+     qunabbrev_tac `tn1` >> qunabbrev_tac `inst` >>
+     drule_all alloca_step_expr_read_clean >> simp[]) >>
+  `t.vs_current_bb = s.vs_current_bb /\ lookup_var src t = SOME w` by
+    (Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE` >>
+     gvs[Abbr `t`, update_var_def, abi_builtin_allocate_state_def,
+         eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  qabbrev_tac `s1 = t with vs_inst_idx := s.vs_inst_idx + 1` >>
+  `ptr_covers G1 tn1 buf s1 n /\ ptr_covers G1 tn1 src s1 n /\
+   stor_taint_ok cx tn1 s1` by
+    (simp[Abbr `s1`, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
+     gvs[ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
+     metis_tac[LESS_EQ_TRANS]) >>
+  gen_tac >>
+  `ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G1 tn1 s1` by
+    (irule ptr_safe_run_copy_return >> simp[] >>
+     qexistsl [`bb`,`buf`,`sa.cs_next_id+1`,`n2w m`,`src`] >>
+     simp[Abbr `s1`, GSYM ADD_ASSOC] >>
+     gvs[Abbr `n`, lookup_var_def]) >>
+  `step_inst fuel ctx inst s = OK t` by
+    simp[Abbr `inst`, step_inst_non_invoke] >>
+  `ptr_inst_ok (cx_dead cx) 0 fuel ctx func G tn inst s` by
+    (simp[Abbr `inst`] >> irule ptr_inst_ok_alloca >> simp[]) >>
+  qunabbrev_tac `inst` >> gvs[mk_inst_def] >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
+       is_terminator_def, ghost_step_def, ADD1] >>
+  gvs[ptr_safe_run_def, Abbr `n`, Abbr `s1`, Abbr `G1`, Abbr `tn1`, n2w_mod]
 QED
