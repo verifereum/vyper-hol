@@ -212,3 +212,103 @@ Proof
   gvs[generate_inst_plan_def, AllCaseEqs()] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+(* Exact native prefix: the unexecuted tail, not a truncated list, determines
+   both next-live and next-terminator arguments. No resource premise occurs. *)
+Inductive native_inst_prefix:
+  (!lv dfg cfg fn label halting n len xs ps.
+    native_inst_prefix lv dfg cfg fn label halting n len xs ps 0 ps) /\
+  (!lv dfg cfg fn label halting n len xs ps0 k ps inst rest ops qs.
+    native_inst_prefix lv dfg cfg fn label halting n len xs ps0 k ps /\
+    DROP k xs = inst::rest /\
+    generate_inst_plan lv dfg cfg fn inst
+      (if rest = [] then live_vars_at lv label len
+       else live_vars_at lv label (k+n+1)) halting
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      label ps = SOME (ops,qs) ==>
+    native_inst_prefix lv dfg cfg fn label halting n len xs ps0 (SUC k) qs)
+End
+
+Theorem native_inst_prefix_zero:
+  native_inst_prefix lv dfg cfg fn label halting n len xs ps 0 qs <=> qs = ps
+Proof
+  simp[Once native_inst_prefix_cases] >> metis_tac[]
+QED
+
+Theorem native_inst_prefix_bound:
+  !lv dfg cfg fn label halting n len xs ps k qs.
+    native_inst_prefix lv dfg cfg fn label halting n len xs ps k qs ==>
+    k <= LENGTH xs
+Proof
+  ho_match_mp_tac native_inst_prefix_ind >> conj_tac >- simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+  simp[] >> decide_tac
+QED
+
+Theorem native_inst_prefix_one:
+  native_inst_prefix lv dfg cfg fn label halting n len (inst::rest) ps 1 qs <=>
+    ?ops. generate_inst_plan lv dfg cfg fn inst
+      (if rest = [] then live_vars_at lv label len
+       else live_vars_at lv label (n+1)) halting
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      label ps = SOME (ops,qs)
+Proof
+  simp[Once native_inst_prefix_cases, native_inst_prefix_zero] >> metis_tac[]
+QED
+
+Theorem native_inst_prefix_resources:
+  !lv dfg cfg fn label halting n len xs ps0 k ps.
+    native_inst_prefix lv dfg cfg fn label halting n len xs ps0 k ps ==>
+    !bb. lv = liveness_analyze fn /\ label = bb.bb_label /\
+      n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      entry_boundary_resources fn bb n ps0 /\
+      (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\
+                       (EL j xs).inst_opcode <> PHI) ==>
+      entry_boundary_resources fn bb (n+k) ps
+Proof
+  ho_match_mp_tac native_inst_prefix_ind >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `k < LENGTH (non_param_insts bb)` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k (non_param_insts bb)` by
+    metis_tac[listTheory.HD_DROP, listTheory.HD] >>
+  `inst = EL (LENGTH (get_params bb.bb_instructions) + k) bb.bb_instructions` by
+    metis_tac[ready_block_suffix_index] >>
+  `entry_boundary_resources fn bb (LENGTH (get_params bb.bb_instructions)+k) ps` by
+    (simp[arithmeticTheory.ADD_COMM] >> first_x_assum irule >> simp[]) >>
+  `LENGTH (get_params bb.bb_instructions)+k < LENGTH bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `~is_param_opcode inst.inst_opcode` by
+    (`MEM inst (non_param_insts bb)` by metis_tac[EL_MEM] >>
+     gvs[non_param_insts_def, MEM_FILTER]) >>
+  `(if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH bb.bb_instructions)
+    else live_vars_at (liveness_analyze fn) bb.bb_label
+      (k + LENGTH (get_params bb.bb_instructions) + 1)) =
+    live_vars_at (liveness_analyze fn) bb.bb_label
+      (SUC (LENGTH (get_params bb.bb_instructions) + k))` by
+    (irule ready_block_suffix_next_live >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `!bb'. _ ==> entry_boundary_resources _ _ _ _` kall_tac >>
+  `inst.inst_opcode <> JMP /\ inst.inst_opcode <> PHI` by
+    (qpat_x_assum `!j. j < SUC k ==> _` (qspec_then `k` mp_tac) >>
+     simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  simp_tac bool_ss [arithmeticTheory.ADD_CLAUSES] >>
+  irule entry_inst_boundary_step >>
+  goal_assum (drule_at Any) >>
+  simp_tac bool_ss [] >>
+  rule_assum_tac (REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC]) >>
+  qpat_x_assum `inst = EL _ bb.bb_instructions`
+    (fn th => rewrite_tac[GSYM th]) >>
+  asm_simp_tac bool_ss [] >>
+  qexistsl_tac [`cfg`, `dfg`, `halting`, `ops`, `ps`,
+    `case rest of [] => F | h::t => is_terminator h.inst_opcode`] >>
+  conj_tac >- (qpat_x_assum `_ = live_vars_at _ _ _`
+    (fn th => fs[th])) >>
+  asm_simp_tac bool_ss []
+QED
