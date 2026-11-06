@@ -213,9 +213,9 @@ QED
 
 (* The fixture above makes every non-delegate call static, so adopt_call_outcome
    leaves the state alone.  A plain raw_call(target, data) is a CALL with value
-   0, and a delegate one a DELEGATECALL: a successful outcome's accounts,
-   transient storage and logs are adopted, and a failed one changes nothing but
-   the request and outcome lists. *)
+   0, and a delegate one a DELEGATECALL (its request has the delegate kind): a
+   successful outcome's accounts, transient storage and logs are adopted, and a
+   failed one changes nothing but the request and outcome lists. *)
 Definition integration_raw_call_adopt_observe_def:
   integration_raw_call_adopt_observe delegate rof outsize target os expected
       balance nonce code persistent transient logs rqs rest =
@@ -227,7 +227,9 @@ Definition integration_raw_call_adopt_observe_def:
        Literal (BaseT (BytesT (Dynamic 1))) (BytesL [])] NONE in
     let r = cpscv_run e (send_state with outcomes := os) in
       FST r = expected /\
-      send_snapshot balance nonce code persistent transient logs rqs rest (SND r)
+      send_snapshot balance nonce code persistent transient logs rqs rest (SND r) /\
+      (MEM DelegateMessageCall (MAP (λrq. rq.cr_kind) (SND r).requests) <=>
+       delegate)
 End
 val () = cv_auto_trans integration_raw_call_adopt_observe_def;
 
