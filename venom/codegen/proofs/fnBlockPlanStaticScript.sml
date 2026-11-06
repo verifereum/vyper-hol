@@ -1452,3 +1452,145 @@ Proof
   drule_all regional_computed_operands_marker_safe >>
   gvs[listTheory.EVERY_DEF]
 QED
+
+Theorem regional_body_forward_operand_owned:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  regional_body_lower_inv (liveness_analyze fn) dfg sb bb k ps /\
+  k <= k' /\ get_instruction bb k' = SOME inst /\
+  MEM op (compute_operands inst) /\ is_var_operand op /\
+  (!i ii x. k <= i /\ i < k' /\ get_instruction bb i = SOME ii /\
+             op = Var x ==> ~MEM x ii.inst_outputs) ==>
+  MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled
+Proof
+  strip_tac >> Cases_on `op` >> gvs[is_var_operand_def] >>
+  rename1 `MEM (Var v) (compute_operands inst)` >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `k' < LENGTH bb.bb_instructions /\ inst = EL k' bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `MEM v (inst_uses inst)` by metis_tac[regional_compute_var_use] >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k')` by
+    (drule livenessProofsTheory.live_vars_at_uses >> simp[LET_THM] >>
+     disch_then irule >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k)` by
+    (drule livenessProofsTheory.live_vars_at_propagate_range >> simp[LET_THM] >>
+     disch_then irule >> simp[] >>
+     rpt (first_assum $ irule_at Any) >>
+     gvs[get_instruction_def, inst_defs_def] >> metis_tac[]) >>
+  gvs[regional_body_lower_inv_def] >> metis_tac[]
+QED
+
+Theorem regional_jmp_target_operand_owned:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  fn_reachable fn bb.bb_label /\ fn_cfg_edge fn bb.bb_label target /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lookup_block target fn.fn_blocks = SOME target_bb /\
+  regional_body_lower_inv (liveness_analyze fn) dfg sb bb k ps /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions /\
+  inst.inst_opcode = JMP /\
+  MEM v (input_vars_from bb.bb_label target_bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) target 0)) ==>
+  MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb_well_formed bb` by
+    (gvs[wf_function_def] >> metis_tac[]) >>
+  `k + 1 = LENGTH bb.bb_instructions` by
+    (gvs[bb_well_formed_def] >>
+     `is_terminator (EL k bb.bb_instructions).inst_opcode` by simp[is_terminator_def] >>
+     `k = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >> decide_tac) >>
+  `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
+  `inst_wf inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def] >> metis_tac[]) >>
+  `inst.inst_outputs = []` by gvs[inst_wf_def] >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+     (LENGTH bb.bb_instructions))` by
+    (irule fnBlockPlanStaticOffsetLiveTheory.input_vars_from_predecessor_exit >>
+     rpt (first_assum $ irule_at Any) >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k)` by
+    (drule livenessProofsTheory.live_vars_at_propagate >> simp[LET_THM] >>
+     disch_then irule >> gvs[inst_defs_def, arithmeticTheory.ADD1]) >>
+  gvs[regional_body_lower_inv_def] >> metis_tac[]
+QED
+
+Theorem regional_distinct_covered_inventory:
+  !targets ps. ALL_DISTINCT targets /\
+  (!op. MEM op targets ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  pending_inventory_wf targets ps
+Proof
+  Induct >> simp[pending_inventory_wf_def, rich_listTheory.LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> strip_tac >> qx_gen_tac `op` >>
+  Cases_on `h = op`
+  >- (gvs[] >>
+      `LIST_ELEM_COUNT h targets = 0` by
+        simp[rich_listTheory.LIST_ELEM_COUNT_DEF, listTheory.FILTER_EQ_NIL,
+             listTheory.EVERY_MEM] >>
+      `MEM h ps.ps_stack \/ h IN FDOM ps.ps_spilled` by metis_tac[] >>
+      Cases_on `h IN FDOM ps.ps_spilled` >>
+      simp[rich_listTheory.LIST_ELEM_COUNT_THM] >>
+      gvs[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM]) >>
+  first_x_assum (qspec_then `ps` mp_tac) >>
+  simp[pending_inventory_wf_def, rich_listTheory.LIST_ELEM_COUNT_THM]
+QED
+
+(* Counted restore probe: unlike set ownership this preserves multiplicity. *)
+Theorem regional_restore_supply:
+  do_restore op ps = (ops, qs) ==>
+  !x. LIST_ELEM_COUNT x qs.ps_stack +
+        (if x IN FDOM qs.ps_spilled then 1 else 0) =
+      LIST_ELEM_COUNT x ps.ps_stack +
+        (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
+  strip_tac >>
+  gvs[stackModelTheory.stack_push_def, listTheory.SNOC_APPEND,
+      rich_listTheory.LIST_ELEM_COUNT_DEF, listTheory.FILTER_APPEND_DISTRIB,
+      finite_mapTheory.FLOOKUP_DEF] >>
+  rw[] >> gvs[]
+QED
+
+Theorem regional_restore_pending_iff:
+  do_restore op ps = (ops, qs) ==>
+  (pending_inventory_wf targets qs <=> pending_inventory_wf targets ps)
+Proof
+  strip_tac >> drule regional_restore_supply >>
+  simp[pending_inventory_wf_def]
+QED
+
+Theorem regional_exchange_supply:
+  d1 < LENGTH ps.ps_stack /\ d2 < LENGTH ps.ps_stack /\
+  stack_peek d1 ps.ps_stack = op ==>
+  !x. LIST_ELEM_COUNT x
+    (stack_poke d2 op (stack_poke d1 (stack_peek d2 ps.ps_stack) ps.ps_stack)) =
+    LIST_ELEM_COUNT x ps.ps_stack
+Proof
+  strip_tac >> gvs[] >>
+  irule doSwapSimTheory.stack_poke_exchange_multiplicity >> simp[]
+QED
+
+Theorem regional_repeated_restore_pending:
+  restore_spilled_plan [op;op] ps = (ops, qs) ==>
+  (pending_inventory_wf [op;op] qs <=> pending_inventory_wf [op;op] ps)
+Proof
+  simp[restore_spilled_plan_def] >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[] >> metis_tac[regional_restore_pending_iff]
+QED
+
+Theorem regional_spill_supply_le:
+  d < LENGTH ps.ps_stack /\ d <= 16 /\ do_spill_at d ps = (ops, qs) ==>
+  !x. LIST_ELEM_COUNT x qs.ps_stack +
+        (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x ps.ps_stack +
+        (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  strip_tac >> drule_all inventory_spill_key >> strip_tac >>
+  drule_all reorderSimTheory.do_spill_at_stack_count >>
+  disch_then assume_tac >> qx_gen_tac `x` >>
+  first_x_assum (qspec_then `x` mp_tac) >>
+  simp[finite_mapTheory.FDOM_FUPDATE, rich_listTheory.LIST_ELEM_COUNT_THM] >>
+  Cases_on `x = stack_peek d ps.ps_stack` >>
+  Cases_on `x IN FDOM ps.ps_spilled` >>
+  simp[rich_listTheory.LIST_ELEM_COUNT_THM] >> decide_tac
+QED

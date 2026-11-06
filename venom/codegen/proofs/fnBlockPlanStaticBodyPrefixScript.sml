@@ -15,7 +15,7 @@ Definition regional_body_lower_inv_def:
       ~MEM v (EL j bb.bb_instructions).inst_outputs)
 End
 
-Theorem regional_compute_var_use[local]:
+Theorem regional_compute_var_use:
   MEM (Var v) (compute_operands inst) ==> MEM v (inst_uses inst)
 Proof
   simp[compute_operands_def, LET_THM] >> rpt IF_CASES_TAC >>

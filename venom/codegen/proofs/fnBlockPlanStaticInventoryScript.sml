@@ -2486,7 +2486,7 @@ Proof
   drule FIND_SOME_MEM >> simp[]
 QED
 
-Theorem inventory_spill_key[local]:
+Theorem inventory_spill_key:
   d < LENGTH ps.ps_stack /\ do_spill_at d ps = (ops,qs) ==>
   ?off. qs.ps_spilled = ps.ps_spilled |+ (stack_peek d ps.ps_stack,off)
 Proof
