@@ -17,8 +17,6 @@ The changes, as they appear in the pinned Python compiler:
   first.
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
-- P5 slice allocation order: a slice's output buffer is allocated after its
-  bounds check.
 - P6 eager call arguments: internal- and external-call arguments are read as
   they are evaluated (also a source-semantics change).
 - P7 subscript overlap: a dynamic array's base is copied when the index
@@ -30,10 +28,11 @@ The changes, as they appear in the pinned Python compiler:
   copied before a later argument that can modify memory or storage is
   evaluated (also a source-semantics change).
 
-P1 (ceil32: `and(add(x, 31), not 31)`) is ported, so it no longer appears
-below. A fixture listed under several changes needs all of them. The
-attribution comes from reverting one change at a time in the pinned compiler
-and recompiling. The creation fixtures' P4 entries are by elimination: P4 can't
+P1 (ceil32: `and(add(x, 31), not 31)`) and P5 (a slice's output buffer
+allocated after its bounds check) are ported, so they no longer appear below.
+A fixture listed under several changes needs all of them. The attribution
+comes from reverting one change at a time in the pinned compiler and
+recompiling. The creation fixtures' P4 entries are by elimination: P4 can't
 be reverted on its own, and no revert of the other changes restores those
 fixtures.
 
@@ -81,13 +80,6 @@ P2 is ported. These two still differ from the oracle with it:
 - `main/mixed_event_log`
 - `memory-stores/enc_in_assign`
 - `raw-system/rr03_abi`
-
-## P5 (slice allocation order)
-
-- `builtin-forms/ext_code_slice`
-- `builtin-forms/self_code_slice`
-- `slice-buffers/slice_msg_data_var`
-- `slice-buffers/slice_msg_data`
 
 ## P6 (eager call arguments)
 

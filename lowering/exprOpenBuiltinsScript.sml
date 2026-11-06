@@ -136,9 +136,10 @@ Proof
   rpt gen_tac >>
   simp[compile_slice_calldata_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
+  ntac 2 (pairarg_tac >> simp[]) >>
   pairarg_tac >> rename1 `compile_slice_out_buf _ _ = (bufs,cs)` >>
   PairCases_on `bufs` >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  ntac 2 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   drule emit_void_terminated >> simp[is_terminator_def]
 QED
 

@@ -473,9 +473,8 @@ Theorem reason_slice_adhoc[local]:
     compile_slice_calldata start lenop sz sa = (op,sb) ==> !l. op <> Label l) /\
   (!start lenop sz sa op sb.
     compile_slice_code start lenop sz sa = (op,sb) ==> !l. op <> Label l) /\
-  (!addr start lenop buf data sa op sb.
-    (!l. buf <> Label l) /\
-    compile_slice_extcode addr start lenop buf data sa = (op,sb) ==>
+  (!addr start lenop sz sa op sb.
+    compile_slice_extcode addr start lenop sz sa = (op,sb) ==>
     !l. op <> Label l)
 Proof
   rpt conj_tac >> rpt gen_tac >>

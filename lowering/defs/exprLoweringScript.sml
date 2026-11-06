@@ -3263,11 +3263,10 @@ Definition compile_builtin_dispatch_body_def:
           else if is_extcode src_e then
             (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
-             let ((out_buf, out_data), st3) = compile_slice_out_buf out_size st2 in
              let addr_e = extcode_addr_expr src_e in
-             let (addr_op, st4) = lower_value compile_expr cenv ty addr_e st3 in
+             let (addr_op, st3) = lower_value compile_expr cenv ty addr_e st2 in
              as_ptr_val ret_ty LocMemory
-               (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
+               (compile_slice_extcode addr_op start_op len_op out_size st3))
           else
             let src_ty = expr_type src_e in
             (* lower_value handles ensure_in_memory for bytestrings *)

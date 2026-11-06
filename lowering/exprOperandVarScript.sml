@@ -967,8 +967,7 @@ Theorem compiler_slice_var:
      !x. op = Var x ==> not_fresh_at sb x) /\
   (!sa op sb. compile_slice_out_buf n sa = ((buf,data),sb) ==>
      !x. buf = Var x ==> not_fresh_at sb x) /\
-  (!sa op sb. (!x. buf = Var x ==> not_fresh_at sa x) /\
-     compile_slice_extcode addr start sz buf data sa = (op,sb) ==>
+  (!sa op sb. compile_slice_extcode addr start sz n sa = (op,sb) ==>
      !x. op = Var x ==> not_fresh_at sb x)
 Proof
   rpt conj_tac >>
@@ -1224,14 +1223,7 @@ Resume compiler_builtin_var[slice]:
   IF_CASES_TAC
   >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
   IF_CASES_TAC
-  >- (builtin_ptr_var_tac >>
-      `!x. out_buf = Var x ==> not_fresh_at st3 x` by
-        metis_tac[compiler_slice_var] >>
-      `st3.cs_next_var <= st4.cs_next_var` by
-        metis_tac[ci_mono_lower_value_cfn, ci_mono_def, pairTheory.SND] >>
-      `!x. out_buf = Var x ==> not_fresh_at st4 x` by
-        metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-      metis_tac[compiler_slice_var]) >>
+  >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
   rpt (pairarg_tac >> gvs[]) >>
   IF_CASES_TAC >> builtin_ptr_var_tac >>
   metis_tac[compiler_slice_var]
@@ -2207,13 +2199,7 @@ Resume compiler_builtin_reserved_cong[slice]:
   IF_CASES_TAC >> simp[]
   >- rpt compiler_reserved_pair_tac >>
   IF_CASES_TAC >> simp[]
-  >- (compiler_reserved_pair_tac >> compiler_reserved_pair_tac >>
-      pairarg_tac >> gvs[] >>
-      rename1 `compile_slice_out_buf _ st2 = (_,st3)` >>
-      `local_ptrs_reserved ce st3` by
-        (irule compiler_ci_mono_reserved >> qexists `st2` >>
-         metis_tac[ci_mono_compile_slice_out_buf, pairTheory.SND]) >>
-      simp[] >> rpt compiler_reserved_pair_tac) >>
+  >- rpt compiler_reserved_pair_tac >>
   compiler_reserved_pair_tac >> IF_CASES_TAC >> simp[]
   >- (pairarg_tac >> gvs[] >>
       rename1 `compile_bytestring_src _ st1 = (_,st2)` >>
