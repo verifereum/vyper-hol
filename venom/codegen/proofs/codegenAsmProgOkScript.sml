@@ -9,7 +9,7 @@ Theory codegenAsmProgOk
 Ancestors
   asmFrameRel codegenEncodingWf codegen unitShapeDefs asmWf asmSem
   symbolResolve stackPlanGen stackPlanOps stackPlanTypes asmIR list rich_list
-  arithmetic finite_map planExec venomInst
+  arithmetic finite_map planExec venomInst pair
 
 Theorem exec_stack_op_no_data[local]:
   EVERY (\i. ~is_data_inst i) (exec_stack_op fmp op)
@@ -61,4 +61,14 @@ Proof
         `data_segment_asm unit.cu_data_segment ++ [AsmDataHeader "code_end"]`]
         mp_tac (Q.GENL [`xs`, `ys`] data_suffix_prefix_indices) >>
       simp[execute_plan_no_data, data_suffix_all_data])
+QED
+
+(* Every generated context includes the executable revert postamble. *)
+Theorem codegen_assembly_nonempty:
+  codegen_assembly rpolicy unit = SOME prog ==> assemble prog <> []
+Proof
+  rw[codegen_assembly_def, AllCaseEqs()] >>
+  gvs[context_plan_ops_def, execute_plan_def, MAP_APPEND, FLAT_APPEND,
+      revert_postamble_def, exec_stack_op_def] >>
+  simp[assemble_def, pairTheory.UNCURRY, MAP_APPEND, FLAT_APPEND, encode_inst_def]
 QED
