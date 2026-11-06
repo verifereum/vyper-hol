@@ -101,3 +101,66 @@ Theorem u2s_safe_store_frame:
 Proof
   simp[u2s_safe_def, stmt_state_rel_def, compileEnvTheory.state_rel_def]
 QED
+
+Theorem u2s_body_invariant_ptr:
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
+  u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n (LENGTH str) G tn s /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
+  not_local_ptr cenv es.scopes q /\
+  n+32 <= sz /\ b+sz < dimword(:256) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 2) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|> /\
+  s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 ==>
+  ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr t /\
+    u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
+    u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n (LENGTH str+1) G' tn' t /\
+    t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  `lookup_var (u2s_var a 0) s = SOME (n2w x) /\
+   lookup_var (u2s_var a 1) s = SOME (n2w (LENGTH str)) /\
+   x < dimword(:256)` by gvs[u2s_digits_def] >>
+  drule_all u2s_body_front_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ gf tf (OK front)` >>
+  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr front` by
+    (simp[Abbr `front`] >> irule u2s_body_front_safe >> simp[]) >>
+  drule u2s_safe_store_frame >> strip_tac >>
+  `lookup_var (u2s_var a 8) front = SOME (n2w (b+n-LENGTH str)) /\
+   lookup_var (u2s_var a 6) front = SOME (n2w (48+x MOD 10)) /\
+   lookup_var (u2s_var a 0) front = SOME (n2w x) /\
+   lookup_var (u2s_var a 1) front = SOME (n2w (LENGTH str)) /\
+   front.vs_current_bb = u2s_label a 2 /\ front.vs_inst_idx = 4 /\
+   ~front.vs_halted` by
+    (simp[Abbr `front`, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+          u2s_word_arithmetic, word_add_n2w] >> gvs[lookup_var_def]) >>
+  drule_all u2s_store_tail_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_rename_tac `gas_path_ptr _ _ _ _ _ gf tf front _ gout tout (OK out)` >>
+  qpat_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ s`
+    (mp_then Any mp_tac u2s_body_iteration) >>
+  disch_then (qspecl_then [`x`, `str`, `n`, `X`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  rename1 `run_inst_seq (TAKE 9 (u2s_body a (Var p) n)) s = OK sem` >>
+  `lookup_var p s = SOME (n2w b)` by
+    metis_tac[u2s_ptr_state_buffer] >>
+  `LENGTH str <= n /\ b+n-LENGTH str < dimword(:256)` by decide_tac >>
+  drule_all u2s_body_numeric_run >> disch_tac >>
+  `out = jump_to (u2s_label a 1) sem` by
+    gvs[Abbr `front`, u2s_word_arithmetic, word_add_n2w,
+        arithmeticTheory.ADD1, update_var_def, jump_to_def,
+        mstore_def, write_memory_with_expansion_def] >>
+  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr out /\
+   u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) out` by
+    metis_tac[u2s_safe_jump, u2s_digits_jump] >>
+  qexistsl_tac [`gout`, `tout`, `out`] >> simp[] >>
+  reverse conj_tac >- gvs[jump_to_def] >>
+  metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+QED
