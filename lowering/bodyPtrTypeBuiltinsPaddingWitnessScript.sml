@@ -7,7 +7,7 @@ Ancestors
   vyperState vyperInterpreter vyperTypeSystem exprSimHypsDefs vyperTyping
   vyperValue vyperTypeCallGraphSoundness relation bodySim
   venomState compileEnv vyperContext vyperCompiler exprLowering
-  exprLoweringProps venomInst
+  exprLoweringProps venomInst fragExec
 
 Theorem outside_taint_window_equal:
   mem_agree_outside M mem mem' /\
@@ -202,3 +202,110 @@ Theorem padding_empty_runtime_excludes_probe:
 Proof
   EVAL_TAC >> simp[dimword_def] >> strip_tac >> gvs[] >> EVAL_TAC >> simp[]
 QED
+
+(* Actual program embedding: the previous synthetic function cannot be inserted
+   into an unrelated runtime context. *)
+Definition padding_program_def:
+  padding_program =
+    [FunctionDecl Internal Pure F F "probe"
+       [("x",BaseT (BytesT (Dynamic 1)))] [] (BaseT (IntT 256))
+       [Return (SOME padding_expr)]]
+End
+
+Definition padding_policy_def:
+  padding_policy =
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+End
+
+Theorem padding_program_supported:
+  supported_program padding_program
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem padding_program_lowers:
+  IS_SOME (lower_vyper_runtime_unit padding_program padding_policy)
+Proof
+  EVAL_TAC >> simp[dimword_def]
+QED
+
+Definition padding_runtime_def:
+  padding_runtime = THE (lower_vyper_runtime_unit padding_program padding_policy)
+End
+
+Definition padding_runtime_label_def:
+  padding_runtime_label = internal_fn_label
+    (build_func_ids 0 padding_program "probe") "probe"
+    [BaseT (BytesT (Dynamic 1))] F
+End
+
+Definition padding_runtime_function_def:
+  padding_runtime_function = THE (venomInst$lookup_function padding_runtime_label
+    padding_runtime.cu_context.ctx_functions)
+End
+
+Theorem padding_runtime_function_member:
+  venomInst$lookup_function padding_runtime_function.fn_name
+    padding_runtime.cu_context.ctx_functions = SOME padding_runtime_function
+Proof
+  EVAL_TAC >> simp[dimword_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem padding_runtime_opcodes:
+  MAP (\i. i.inst_opcode) (fn_insts padding_runtime_function) =
+    [PARAM; RETPC_PARAM; ALLOCA; MLOAD; ADD; MLOAD; ISZERO; ISZERO;
+     MUL; SUB; MUL; SAR; RET]
+Proof
+  EVAL_TAC >> simp[dimword_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem padding_runtime_function_equation:
+  padding_runtime_function = (mk_raw_function padding_runtime_label
+    [<| bb_label := padding_runtime_label;
+        bb_instructions :=
+          [<| inst_id := 8; inst_opcode := PARAM; inst_operands := [Lit 0w]; inst_outputs := ["%5"] |>;
+           <| inst_id := 9; inst_opcode := RETPC_PARAM; inst_operands := [Lit 1w]; inst_outputs := ["%6"] |>;
+           <| inst_id := 10; inst_opcode := ALLOCA; inst_operands := [Lit 32w]; inst_outputs := ["%7"] |>;
+           <| inst_id := 11; inst_opcode := MLOAD; inst_operands := [Var "%5"]; inst_outputs := ["%8"] |>;
+           <| inst_id := 12; inst_opcode := ADD; inst_operands := [Var "%5";Lit 32w]; inst_outputs := ["%9"] |>;
+           <| inst_id := 13; inst_opcode := MLOAD; inst_operands := [Var "%9"]; inst_outputs := ["%10"] |>;
+           <| inst_id := 14; inst_opcode := ISZERO; inst_operands := [Var "%8"]; inst_outputs := ["%11"] |>;
+           <| inst_id := 15; inst_opcode := ISZERO; inst_operands := [Var "%11"]; inst_outputs := ["%12"] |>;
+           <| inst_id := 16; inst_opcode := MUL; inst_operands := [Var "%10";Var "%12"]; inst_outputs := ["%13"] |>;
+           <| inst_id := 17; inst_opcode := SUB; inst_operands := [Lit 32w;Var "%8"]; inst_outputs := ["%14"] |>;
+           <| inst_id := 18; inst_opcode := MUL; inst_operands := [Var "%14";Lit 8w]; inst_outputs := ["%15"] |>;
+           <| inst_id := 19; inst_opcode := SAR; inst_operands := [Var "%15";Var "%13"]; inst_outputs := ["%16"] |>;
+           <| inst_id := 20; inst_opcode := RET; inst_operands := [Var "%16";Var "%6"]; inst_outputs := [] |>] |>]) with
+      fn_call_abi := <| ica_has_memory_return_buffer := SOME F;
+                        ica_user_return_count := SOME 1 |>
+Proof
+  EVAL_TAC >> simp[dimword_def] >> EVAL_TAC >> simp[]
+QED
+
+(* The runtime diagnostic fixes the actual parameter and return-PC operands,
+   and places the fragment after PARAM, RETPC_PARAM and the dead return ALLOCA. *)
+Definition padding_actual_cenv_def:
+  padding_actual_cenv =
+    (build_compile_env padding_program Internal Pure "probe"
+      [("x",BaseT (BytesT (Dynamic 1)))] (BaseT (IntT 256))
+      [Return (SOME padding_expr)] F) with
+      <| ce_vars := FEMPTY |+ ("x",PtrVar (Var "%5") 64);
+         ce_return_pc := SOME (PtrVar (Var "%6") 0) |>
+End
+
+Definition padding_actual_start_def:
+  padding_actual_start =
+    (initial_compile_state padding_runtime_label) with
+      <| cs_next_var := 8; cs_next_id := 11;
+         cs_current_insts := TAKE 3 (fn_insts padding_runtime_function) |>
+End
+
+Definition padding_actual_end_def:
+  padding_actual_end = SND (lower_value compile_expr padding_actual_cenv
+     (BaseT (IntT 256)) padding_expr padding_actual_start)
+End
+
+(* padding_actual_start/cenv are candidates extracted from the checked runtime
+   equation.  Their lower_value equation and the complete entry predicates
+   remain to be checked; runtime membership alone is not a frame certificate. *)
