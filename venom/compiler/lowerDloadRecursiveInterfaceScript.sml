@@ -1484,14 +1484,23 @@ val ld_recursive_block_goal =
        (list_mk_forall (rest, body))
   end;
 
-Theorem ld_recursive_block_clause:
+val ld_recursive_block_anchor_goal =
+  let
+    val (args,body) = strip_forall ld_recursive_block_goal
+    val (prem,post) = dest_imp body
+    val target = List.last (snd(strip_comb post))
+    val post' = subst [ld_recursive_candidate |-> ld_recursive_post_anchor] post
+  in list_mk_forall(args,mk_imp(mk_conj(prem,mk_comb(mk_var("Q", ``:venom_state -> bool``),target)),post')) end;
+
+Theorem ld_recursive_block_clause_anchor[local]:
+  !Q.
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
-  ^ld_recursive_block_goal
+  ^ld_recursive_block_anchor_goal
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
+  gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all ld_recursive_block_anchor >>
   qpat_x_assum `(\vs0 CT projected_stk un gn j t. _) _ _ _ _ _ _ _` kall_tac >>
   BETA_TAC >> strip_tac >>
@@ -1639,7 +1648,7 @@ Proof
        (irule MEM_lookup_block >> fs[fn_labels_def]) >>
      gvs[get_instruction_def]) >>
   Cases_on `in_revert_forward fn' s1'`
-  >- (irule (BETA_RULE ld_recursive_configured_revert_entry) >>
+  >- (irule (BETA_RULE ld_recursive_configured_revert_anchor) >>
       goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `lower_dload_insts_supply _ (TAKE _ _) = _`)) >>
       goal_assum (drule_at (Pat `lower_dload_blocks_supply _ _ = _`)) >>
@@ -1669,6 +1678,7 @@ Proof
     `TAKE s1'.vs_inst_idx bb'.bb_instructions`,`post0`,
     `TAKE s1'.vs_inst_idx bb'.bb_instructions`,`entrycode`,`entrytail`,
     `pre'`,`post'`,`gp`,`gt`,`supports`,`savedkeys`,`s0`,`0`] >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
   rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >>
   TRY (asm "saved" mp_tac >> simp[NoAsms] >> NO_TAC) >>
@@ -1684,6 +1694,17 @@ Proof
     (qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
      rpt conj_tac >> first_assum ACCEPT_TAC)]
+QED
+
+Theorem ld_recursive_block_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_block_goal
+Proof
+  qspec_then `\s. T` mp_tac ld_recursive_block_clause_anchor >>
+  BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
 (* Completion restriction extracted from the operational normal alternative. *)
@@ -2257,6 +2278,47 @@ Proof
   rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >> simp[]
 QED
 
+val ld_recursive_geometry_block_goal =
+  let
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses, _) = dest_imp body
+    val clause = subst [p |-> ld_recursive_geometry_candidate] (List.nth(strip_conj clauses,2))
+    val (v0::ct::rest, b) = strip_forall clause
+  in subst [v0 |-> mk_var("vs0", type_of v0),
+            ct |-> mk_var("CT", type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_recursive_geometry_block_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_geometry_block_goal
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule ld_recursive_geometry_forget >> disch_tac >>
+  `alloca_inv s /\ (!f i st tv. MEM (f,i,st,tv) stk ==> alloca_inv st)` by
+    (qpat_assum `(^ld_recursive_geometry_candidate) _ _ _ _ _ _ _`
+       (mp_tac o BETA_RULE) >>
+     disch_then (fn th => assume_tac (CONJUNCT1 th) >>
+                         assume_tac (CONJUNCT1 (CONJUNCT2 th))) >>
+     asm_rewrite_tac []) >>
+  `alloca_inv s'` by
+    (irule venomMemPropsTheory.alloca_inv_step_inst >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  `alloca_inv s1` by
+    (qpat_assum `enters_block fn s' s1` mp_tac >>
+     qpat_assum `alloca_inv s'` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> drule ld_enters_block_allocation_fields >> strip_tac >>
+     gvs[venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.allocas_non_overlapping_def,
+         venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+  qspec_then `alloca_inv` mp_tac ld_recursive_block_clause_anchor >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  disch_then (qspecl_then [`stk`,`tn`,`fn`,`inst`,`inst'`,`s`,`s'`,`s1`,`fuel`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac []) >> disch_tac >>
+  irule ld_recursive_post_anchor_geometry >> asm_rewrite_tac []
+QED
+
 val ld_recursive_geometry_inside =
   let
     val (args,body) = strip_abs ld_recursive_geometry_candidate
@@ -2318,10 +2380,14 @@ QED
      producer is duplicated. ld_recursive_geometry_load_next below separately
      retains OLD anchor validity and its explicit source-headroom premise.
 
+   Checked BLOCK: ld_recursive_geometry_block_clause shares the original
+     jump/PHI/position proof and its single witness packaging via the local
+     post-anchor clause. It retains Q(actual entered successor) at phase zero;
+     the old clause uses Q=true and geometry uses Q=alloca_inv. Current validity
+     advances through the target step and enters_block allocation fields, while
+     saved validity is unchanged. The revert branch needs no anchor predicate.
+
    Remaining constructor obligations for the refined quotation:
-   JUMP: choose ta'=actual entered target successor and n'=0. Preserve allocation
-     validity through the target step and enters_block allocation-field lemma.
-     Existing positional/normal-data jump obligations remain independent.
    CALL: save the actual target caller state with its current validity; setup
      initializes the new callee allocation map to empty, enters_block preserves
      it. The callee normal anchor is that actual entered state. Existing call
