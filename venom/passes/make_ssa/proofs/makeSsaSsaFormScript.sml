@@ -1,7 +1,8 @@
 (*
  * Make SSA Pass — SSA Form Proof
  *
- * Cross-block output distinctness and ssa_form for make_ssa_fn.
+ * Cross-block output distinctness for make_ssa_fn, used for
+ * makeSsaCorrectness.make_ssa_establishes_ssa_form.
  * Depends on makeSsaProofTheory for label preservation, counter mono, etc.
  *)
 
@@ -9,7 +10,7 @@ Theory makeSsaSsaForm
 Ancestors
   makeSsaProof makeSsaHelper makeSsaDefs dominatorDefs cfgTransform venomInst venomWf
   venomExecProofs cfgTransformProofs cfgTransformProps
-  list rich_list alist arithmetic sorting pred_set
+  list rich_list alist arithmetic sorting pred_set ssaPipeline
 
 (* ==========================================================================
    Part 7: SSA form — every variable defined at most once
@@ -1199,7 +1200,7 @@ Proof
   strip_tac >> simp[collect_outputs_append]
 QED
 
-Triviality rename_blocks_cross_distinct:
+Theorem rename_blocks_cross_distinct:
   (!dtree rs bbs succ_map ctrs' bbs'.
     rename_blocks rs bbs succ_map dtree = (ctrs', bbs') /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
@@ -1273,7 +1274,7 @@ Proof
 QED
 
 (* Bridge: ALL_DISTINCT outputs of fn_insts => ssa_form *)
-Triviality all_distinct_outputs_ssa_form:
+Theorem all_distinct_outputs_ssa_form:
   !func.
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts func))) ==>
     ssa_form func
@@ -1282,7 +1283,7 @@ Proof
 QED
 
 (* PERM of labels gives PERM of collect_outputs *)
-Triviality collect_outputs_perm:
+Theorem collect_outputs_perm:
   !labels1 labels2 bbs.
     PERM labels1 labels2 ==>
     PERM (collect_outputs bbs labels1) (collect_outputs bbs labels2)
@@ -1292,7 +1293,7 @@ Proof
 QED
 
 (* collect_outputs over own labels = fn_insts outputs *)
-Triviality collect_outputs_eq_fn_insts_outputs:
+Theorem collect_outputs_eq_fn_insts_outputs:
   !bbs.
     ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
     collect_outputs bbs (MAP (\bb. bb.bb_label) bbs) =
@@ -1318,15 +1319,6 @@ Proof
      simp[lookup_block_def, FIND_thm]) >>
   ASM_REWRITE_TAC[] >>
   first_x_assum irule >> gvs[]
-QED
-
-(* block_assignments extracts from inst_outputs, so colon_free transfers *)
-Triviality block_assignments_colon_free:
-  !bb. EVERY (\i. EVERY colon_free i.inst_outputs) bb.bb_instructions ==>
-       EVERY colon_free (block_assignments bb)
-Proof
-  rw[block_assignments_def, EVERY_MEM, MEM_nub, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  metis_tac[EVERY_MEM]
 QED
 
 (* process_frontiers preserves colon_free outputs *)
@@ -1373,7 +1365,7 @@ Proof
 QED
 
 (* add_phi_nodes preserves colon_free outputs *)
-Triviality add_phi_nodes_colon_free:
+Theorem add_phi_nodes_colon_free:
   !defs df pred_map live_in bbs.
     EVERY (\bb. EVERY (\i. EVERY colon_free i.inst_outputs) bb.bb_instructions)
       bbs /\
@@ -1390,30 +1382,7 @@ Proof
   irule insert_phis_for_var_colon_free >> simp[]
 QED
 
-(* compute_defs produces colon_free var names *)
-Triviality compute_defs_colon_free:
-  !bbs.
-    EVERY (\bb. EVERY (\i. EVERY colon_free i.inst_outputs) bb.bb_instructions)
-      bbs ==>
-    EVERY (\p. colon_free (FST p)) (compute_defs bbs)
-Proof
-  rpt strip_tac >> irule compute_defs_every_key >> rpt strip_tac >>
-  irule block_assignments_colon_free >> fs[EVERY_MEM] >> metis_tac[]
-QED
-
-(* MEM in labels implies lookup exists *)
-Triviality mem_labels_lookup_exists:
-  !lbl bbs.
-    MEM lbl (MAP (\bb. bb.bb_label) bbs) ==>
-    lookup_block lbl bbs <> NONE
-Proof
-  Induct_on `bbs` >> simp[lookup_block_def, FIND_thm] >>
-  rpt strip_tac >> gvs[] >>
-  first_x_assum (qspec_then `lbl` mp_tac) >>
-  simp[lookup_block_def]
-QED
-
-Triviality every_lookup_block:
+Theorem every_lookup_block:
   !bbs P.
     EVERY (\bb. P bb.bb_instructions) bbs ==>
     !lbl bb. lookup_block lbl bbs = SOME bb ==>
@@ -1423,110 +1392,4 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   Cases_on `h.bb_label = lbl` >> simp[] >>
   strip_tac >> gvs[] >> metis_tac[lookup_block_def]
-QED
-
-(* ssa_form for make_ssa_fn *)
-Theorem make_ssa_fn_ssa_form:
-  !dom_frontiers dtree dom_post_order pred_map succ_map live_in func.
-    wf_function func /\
-    valid_dom_tree dom_frontiers dtree dom_post_order func /\
-    valid_cfg_maps pred_map succ_map func /\
-    valid_liveness live_in func /\
-    (!bb inst. MEM bb func.fn_blocks /\
-              MEM inst bb.bb_instructions ==>
-              EVERY colon_free inst.inst_outputs) ==>
-    ssa_form (make_ssa_fn dom_frontiers dtree dom_post_order
-                pred_map succ_map live_in func)
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[make_ssa_fn_def] >>
-  (* valid_dom_tree gives fn_entry_label = SOME entry *)
-  `?entry children. dtree = DNode entry children /\
-                    fn_entry_label func = SOME entry` by
-    (gvs[valid_dom_tree_def] >> metis_tac[]) >>
-  gvs[] >> simp[LET_THM] >>
-  (* Name intermediate results *)
-  qabbrev_tac `defs = compute_defs
-    (MAP THE (FILTER IS_SOME
-      (MAP (\lbl. lookup_block lbl func.fn_blocks) dom_post_order)))` >>
-  qabbrev_tac `bbs1 = add_phi_nodes dom_frontiers pred_map live_in
-                         func.fn_blocks defs` >>
-  qabbrev_tac `rs0 = init_rename_state defs` >>
-  Cases_on `rename_blocks rs0 bbs1 succ_map (DNode entry children)` >>
-  rename1 `rename_blocks _ _ _ _ = (ctrs', bbs2)` >>
-  simp[] >>
-  (* === Phase A: Establish reusable intermediate facts === *)
-  (* A1: label chain bbs2 = bbs1 = fn_blocks *)
-  `MAP (\bb. bb.bb_label) bbs2 = MAP (\bb. bb.bb_label) bbs1` by
-    (`bbs2 = SND (rename_blocks rs0 bbs1 succ_map (DNode entry children))` by
-       simp[] >>
-     metis_tac[rename_blocks_preserves_labels]) >>
-  `MAP (\bb. bb.bb_label) bbs1 = MAP (\bb. bb.bb_label) func.fn_blocks` by
-    metis_tac[add_phi_nodes_preserves_labels] >>
-  (* A2: ALL_DISTINCT labels *)
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs2)` by
-    gvs[wf_function_def, fn_labels_def] >>
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs1)` by
-    gvs[wf_function_def, fn_labels_def] >>
-  (* A3: dtree facts from valid_dom_tree (forward, non-destructive) *)
-  `ALL_DISTINCT (dom_tree_labels (DNode entry children))` by
-    (qpat_x_assum `valid_dom_tree _ _ _ _` mp_tac >>
-     simp[valid_dom_tree_def]) >>
-  `set (dom_tree_labels (DNode entry children)) = set (fn_labels func)` by
-    (qpat_x_assum `valid_dom_tree _ _ _ _` mp_tac >>
-     simp[valid_dom_tree_def]) >>
-  (* A4: PERM dtree_labels ~ MAP bb_label bbs2 *)
-  `PERM (dom_tree_labels (DNode entry children))
-        (MAP (\bb. bb.bb_label) bbs2)` by
-    (irule PERM_ALL_DISTINCT >> simp[] >>
-     gvs[fn_labels_def, EXTENSION] >> metis_tac[]) >>
-  (* A5: colon_free for bbs1 *)
-  `EVERY (\bb. EVERY (\i. EVERY colon_free i.inst_outputs)
-           bb.bb_instructions) func.fn_blocks` by
-    (simp[EVERY_MEM] >> rpt strip_tac >> res_tac >> gvs[EVERY_MEM]) >>
-  `EVERY (\p. colon_free (FST p)) defs` by
-    (qunabbrev_tac `defs` >> irule compute_defs_colon_free >>
-     gvs[EVERY_MEM, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
-     rpt strip_tac >>
-     Cases_on `lookup_block lbl func.fn_blocks` >> gvs[] >>
-     imp_res_tac lookup_block_MEM >>
-     gvs[EVERY_MEM] >> res_tac >> gvs[EVERY_MEM]) >>
-  `EVERY (\bb. EVERY (\i. EVERY colon_free i.inst_outputs)
-           bb.bb_instructions) bbs1` by
-    (qunabbrev_tac `bbs1` >>
-     irule add_phi_nodes_colon_free >> simp[]) >>
-  (* A6: lookup exists for dtree labels in bbs1 *)
-  `!lbl. MEM lbl (dom_tree_labels (DNode entry children)) ==>
-         lookup_block lbl bbs1 <> NONE` by
-    (rpt gen_tac >> disch_tac >>
-     irule mem_labels_lookup_exists >>
-     `MEM lbl (fn_labels func)` by
-       (qpat_x_assum `set _ = set (fn_labels _)` mp_tac >>
-        simp[EXTENSION] >> metis_tac[]) >>
-     gvs[fn_labels_def]) >>
-  (* === Phase B: Apply the chain === *)
-  irule all_distinct_outputs_ssa_form >>
-  `collect_outputs bbs2 (MAP (\bb. bb.bb_label) bbs2) =
-   FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs2))` by
-    (irule collect_outputs_eq_fn_insts_outputs >> simp[]) >>
-  ASM_REWRITE_TAC[] >>
-  (* A7: colon_free for bbs1 blocks via lookup *)
-  `!lbl bb. lookup_block lbl bbs1 = SOME bb ==>
-            EVERY (\i. EVERY colon_free i.inst_outputs)
-              bb.bb_instructions` by
-    metis_tac[every_lookup_block] >>
-  (* B1: rename_blocks_cross_distinct *)
-  qspecl_then [`DNode entry children`, `rs0`, `bbs1`, `succ_map`,
-     `ctrs'`, `bbs2`]
-     mp_tac (CONJUNCT1 rename_blocks_cross_distinct) >>
-  simp[] >>
-  (impl_tac >- metis_tac[]) >>
-  strip_tac >>
-  (* B2: PERM transfer *)
-  `PERM (collect_outputs bbs2 (dom_tree_labels (DNode entry children)))
-        (collect_outputs bbs2 (MAP (\bb. bb.bb_label) bbs2))` by
-    (irule collect_outputs_perm >> simp[]) >>
-  `ALL_DISTINCT (collect_outputs bbs2 (MAP (\bb. bb.bb_label) bbs2))`
-    by metis_tac[ALL_DISTINCT_PERM] >>
-  gvs[fn_insts_def]
 QED

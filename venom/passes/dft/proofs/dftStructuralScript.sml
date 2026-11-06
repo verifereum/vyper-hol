@@ -487,7 +487,7 @@ QED
 (* ===== add_barrier_deps preserves eda_wf ===== *)
 
 (* Helper: membership in FOLDL that adds list elements *)
-Triviality foldl_add_mem:
+Theorem foldl_add_mem:
   !prev init x.
     MEM x (FOLDL (\ds (p:instruction). if MEM p ds then ds else p :: ds)
              init prev) ==>

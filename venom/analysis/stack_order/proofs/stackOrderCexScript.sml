@@ -1,7 +1,8 @@
 (*
  * Counterexamples for FALSE stack order theorems.
  *
- * so_needed_are_live_proof and so_get_stack_sound_proof are FALSE.
+ * so_needed_are_live_proof and so_get_stack_sound_proof (an earlier, stronger
+ * statement than stackOrderProofs.so_get_stack_sound) are FALSE.
  *
  * Key insight: so_analyze_block tracks stack layout (what operands need
  * to be available), NOT liveness. A variable defined and consumed within
@@ -256,7 +257,7 @@ QED
    INFORMAL COUNTEREXAMPLE for so_get_stack_sound_proof
    =====================================================================
 
-   so_get_stack_sound_proof claims from_to_wf lr from_to' where from_to'
+   so_get_stack_sound_proof claimed from_to_wf lr from_to' where from_to'
    is the updated from_to after so_get_stack. This depends on
    so_needed_are_live_proof (needed vars must be live for from_to_wf
    to be preserved when recording them). Since so_needed_are_live_proof
@@ -265,7 +266,7 @@ QED
    violating from_to_wf for the new entry.
 
    The ALL_DISTINCT part of so_get_stack_sound IS independently provable
-   (follows from so_analyze_block_needed_distinct_proof).
+   (follows from so_analyze_block_needed_distinct).
    ===================================================================== *)
 
 

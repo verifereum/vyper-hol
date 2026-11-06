@@ -1,8 +1,9 @@
 (*
- * Memory Alias Analysis — Proofs (internal)
+ * Memory Alias Analysis — Proofs
  *
- * Safety property proofs. The externally-facing API
- * is in memAliasPropsScript.sml (ACCEPT_TAC wrappers).
+ * Safety property proofs. The structural results and
+ * ma_may_alias_sound_no_alloca are exported from here; memAliasProps adds
+ * the runtime soundness theorems.
  *)
 
 Theory memAliasProofs
@@ -895,7 +896,7 @@ Proof
   Cases_on `p` >> Cases_on `p'` >> gvs[]
 QED
 
-Theorem ma_may_alias_sound_no_alloca_proof:
+Theorem ma_may_alias_sound_no_alloca:
   ∀sets loc1 loc2.
     wf_alias_sets sets ∧
     ¬ma_may_alias sets loc1 loc2 ∧
