@@ -3,7 +3,7 @@ Theory bodyPtrBopScalarRun
 Ancestors exprSimArith exprSimBinopFrag exprBopSimDefs exprLowering
   freshWrites compileEnv valueEncoding vyperInterpreter loweringSlice
   vyperContext vyperValueOperation varsExt appendStorageStageTransportPtr
-  fragGasFresh list arithmeticProps builtinProps exprBopBitwise exprSimCompare
+  fragGasFresh list arithmeticProps builtinProps exprBopBitwise exprSimCompare exprBopShift vyperAST
 
 Theorem bop_checked_fresh_run:
   MEM bop [Add; Sub; Mul] /\
@@ -464,4 +464,211 @@ Proof
   goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
   gvs[eval_operand_drop_fresh] >> qexists_tac `tv` >> simp[] >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem bop_shift_fresh_run:
+  (bop = ShL \/ bop = ShR) /\ (bop = ShL ==> n = 256) /\
+  0 < n /\ n <= 256 /\ within_int_bound (Unsigned 256) i2 /\
+  type_to_int_bound ann =
+    SOME (if is_signed_type ty then Signed n else Unsigned n) /\
+  within_int_bound (if is_signed_type ty then Signed n else Unsigned n) i1 /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (i2w i1) /\ eval_operand y s = SOME (i2w i2) ==>
+  ?v t. bop_result cx ann bop tys (IntV i1) (IntV i2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?v. bop_result cx ann bop tys (IntV i1) (IntV i2) es = INL v /\
+       word_value v /\ val_to_w256 v =
+         if bop = ShL then word_lsl (val_to_w256 (IntV i1)) (w2n (val_to_w256 (IntV i2)))
+         else if is_signed_type ty then word_asr (val_to_w256 (IntV i1)) (w2n (val_to_w256 (IntV i2)))
+         else word_lsr (val_to_w256 (IntV i1)) (w2n (val_to_w256 (IntV i2)))` by
+    (Cases_on `bop = ShL`
+     >- (`n = 256` by metis_tac[] >> irule bop_result_shift >> gvs[]) >>
+     `bop = ShR` by metis_tac[] >> asm_rewrite_tac[] >>
+     irule bop_result_shr >> simp[] >> qexists_tac `n` >> simp[]) >>
+  qexists_tac `v` >> simp[val_to_w256_def] >> drule_all compile_shift_run >> simp[]
+QED
+
+Theorem bop_shift_run:
+  (bop = ShL \/ bop = ShR) /\ (bop = ShL ==> n = 256) /\
+  0 < n /\ n <= 256 /\ within_int_bound (Unsigned 256) i2 /\
+  type_to_int_bound ann =
+    SOME (if is_signed_type ty then Signed n else Unsigned n) /\
+  within_int_bound (if is_signed_type ty then Signed n else Unsigned n) i1 /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (i2w i1) /\ eval_operand y s = SOME (i2w i2) ==>
+  (?v t. bop_result cx ann bop tys (IntV i1) (IntV i2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys (IntV i1) (IntV i2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_run_drop_fresh_transport >> conj_tac
+  >- (`straight_fresh (compile_binop bop x y ty bl el)` by
+        metis_tac[straight_fresh_compile_shift] >>
+      `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+      drule writes_fresh_path_opcodes >> simp[EVERY_MEM]) >>
+  qexists_tac `sa` >> disj1_tac >> irule bop_shift_fresh_run >>
+  simp[fresh_vars_wrt_drop_fresh] >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  simp[eval_operand_drop_fresh] >> qexists_tac `n` >> simp[] >> metis_tac[]
+QED
+
+Theorem bop_decimal_mul_fresh_run:
+  within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 /\
+  compile_binop Mul x y (BaseT DecimalT) bl el sa = (op,sb) /\
+  fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (i2w d1) /\ eval_operand y s = SOME (i2w d2) ==>
+  (?v t. bop_result cx ann Mul tys (DecimalV d1) (DecimalV d2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann Mul tys (DecimalV d1) (DecimalV d2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  strip_tac >>
+  `in_type_range (BaseT DecimalT) d1 /\ in_type_range (BaseT DecimalT) d2`
+    by simp[in_type_range_decimal] >>
+  gvs[compile_binop_def] >>
+  drule_all compile_safe_decimal_mul_run >>
+  simp[in_type_range_decimal] >> strip_tac >>
+  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+       decimal_sgn_quot, bounded_decimal_op_def] >>
+  Cases_on `within_int_bound (Signed 168) (d1 * d2 quot 10000000000)` >>
+  gvs[word_value_def, val_to_w256_def] >> metis_tac[]
+QED
+
+Theorem bop_decimal_div_fresh_run:
+  within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 /\
+  compile_binop Div x y (BaseT DecimalT) bl el sa = (op,sb) /\
+  fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (i2w d1) /\ eval_operand y s = SOME (i2w d2) ==>
+  (?v t. bop_result cx ann Div tys (DecimalV d1) (DecimalV d2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann Div tys (DecimalV d1) (DecimalV d2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  strip_tac >>
+  `w2i (i2w d1 : bytes32) = d1 /\ w2i (i2w d2 : bytes32) = d2` by
+    (conj_tac >> irule integer_wordTheory.w2i_i2w >>
+     fs[vyperValueTheory.within_int_bound_def, wordsTheory.INT_MIN_def,
+        wordsTheory.INT_MAX_def, wordsTheory.dimword_def] >> intLib.ARITH_TAC) >>
+  `(i2w d1 * n2w 10000000000 : bytes32) = i2w (d1 * 10000000000)` by
+    (qspecl_then [`i2w d1 : bytes32`, `n2w 10000000000 : bytes32`] mp_tac
+       integer_wordTheory.word_mul_i2w >>
+     asm_rewrite_tac[w2i_decimal_divisor] >>
+     disch_then (SUBST1_TAC o SYM) >> REFL_TAC) >>
+  `(i2w d2 = (0w : bytes32)) <=> d2 = 0` by
+    (eq_tac >> strip_tac >> simp[integer_wordTheory.i2w_0] >>
+     qpat_x_assum `w2i (i2w d2) = d2` (SUBST1_TAC o SYM) >>
+     asm_simp_tac std_ss [integer_wordTheory.word_0_w2i]) >>
+  gvs[compile_binop_def, is_decimal_type_def, decimal_divisor_def] >>
+  drule_all compile_safe_decimal_div_run >> strip_tac >>
+  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+       bounded_decimal_op_def] >>
+  Cases_on `d2 = 0` >- (gvs[] >> metis_tac[]) >>
+  `safe_sdiv (i2w d1 * n2w 10000000000) (i2w d2) =
+     (i2w (d1 * 10000000000) / i2w d2 : bytes32)` by
+    asm_simp_tac std_ss [venomExecSemanticsTheory.safe_sdiv_def] >>
+  Cases_on `within_int_bound (Signed 168)
+              (w2i (i2w (d1 * 10000000000) / i2w d2 : bytes32))` >>
+  gvs[word_value_def, val_to_w256_def, in_type_range_decimal,
+      integer_wordTheory.i2w_w2i] >> metis_tac[]
+QED
+
+Theorem bop_decimal_run_transfer:
+  ((?v t. ri = INL v /\ word_value v /\ run_inst_seq code s = OK t /\
+     eval_operand op t = SOME (val_to_w256 v)) \/
+   (?m t. ri = INR (Error (RuntimeError m)) /\
+     run_inst_seq code s = Abort Revert_abort t)) /\
+  ((?z. ri = INL (IntV z) /\ rd = INL (DecimalV z)) \/
+   (?m m'. ri = INR (Error (RuntimeError m)) /\
+     rd = INR (Error (RuntimeError m')))) ==>
+  (?v t. rd = INL v /\ word_value v /\ run_inst_seq code s = OK t /\
+     eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. rd = INR (Error (RuntimeError m)) /\
+     run_inst_seq code s = Abort Revert_abort t)
+Proof
+  strip_tac >> gvs[word_value_def, val_to_w256_def] >> metis_tac[]
+QED
+
+Theorem bop_decimal_add_sub_mod_fresh_run:
+  MEM bop [Add; Sub; Mod] /\
+  within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 /\
+  compile_binop bop x y (BaseT DecimalT) bl el sa = (op,sb) /\
+  fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (i2w d1) /\ eval_operand y s = SOME (i2w d2) ==>
+  (?v t. bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `compile_binop bop x y (BaseT (IntT 168)) bl el sa = (op,sb)` by
+    (qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >>
+     gvs[compile_binop_def, compile_safe_add_def, compile_safe_sub_def,
+         compile_safe_mod_def, clamp_and_return_def, compile_clamp_def,
+         type_bounds_def, type_bits_def, is_signed_type_def]) >>
+  irule bop_decimal_run_transfer >>
+  qexists_tac `bop_result cx (BaseT (IntT 168)) bop tys (IntV d1) (IntV d2) es` >>
+  conj_tac
+  >- (gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+          bounded_int_op_def, bounded_decimal_op_def, type_to_int_bound_def,
+          int_bound_bits_def] >> rw[]) >>
+  Cases_on `bop = Mod`
+  >- (gvs[] >> irule bop_divmod_fresh_run >>
+      simp[type_to_int_bound_def, type_bits_def] >>
+      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+      simp[type_to_int_bound_def, type_bits_def]) >>
+  irule bop_checked_fresh_run >> simp[type_to_int_bound_def, type_bits_def] >>
+  conj_tac >- (gvs[] >> metis_tac[]) >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  gvs[type_to_int_bound_def, type_bits_def]
+QED
+
+Theorem bop_decimal_arith_run:
+  MEM bop [Add; Sub; Mul; Div; Mod] /\
+  within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 /\
+  compile_binop bop x y (BaseT DecimalT) bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (i2w d1) /\ eval_operand y s = SOME (i2w d2) ==>
+  (?v t. bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_run_drop_fresh_transport >> conj_tac
+  >- (`straight_fresh (compile_binop bop x y (BaseT DecimalT) bl el)` by
+        (gvs[compile_binop_def, is_decimal_type_def, decimal_divisor_def] >>
+         simp[straight_fresh_checked, straight_fresh_decimal_div]) >>
+      `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+      drule writes_fresh_path_opcodes >> simp[EVERY_MEM]) >>
+  qexists_tac `sa` >>
+  `eval_operand x (drop_fresh sa s) = SOME (i2w d1) /\
+   eval_operand y (drop_fresh sa s) = SOME (i2w d2)` by
+    simp[eval_operand_drop_fresh] >>
+  Cases_on `bop = Mul`
+  >- (gvs[] >> irule bop_decimal_mul_fresh_run >>
+      simp[fresh_vars_wrt_drop_fresh] >>
+      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> simp[]) >>
+  Cases_on `bop = Div`
+  >- (gvs[] >> irule bop_decimal_div_fresh_run >>
+      simp[fresh_vars_wrt_drop_fresh] >>
+      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> simp[]) >>
+  irule bop_decimal_add_sub_mod_fresh_run >> simp[fresh_vars_wrt_drop_fresh] >>
+  conj_tac >- (gvs[] >> metis_tac[]) >> gvs[] >> metis_tac[]
 QED
