@@ -170,7 +170,7 @@ Definition imm_target_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 Theorem imm_place_at_gas_obs[local,simp]:
@@ -202,7 +202,7 @@ Theorem imm_target_post_frame[local]:
     (?w. eval_operand (FST r) s = SOME w /\ imm_place_at cenv cx ee pv w ty) /\
     FST (SND r) = SOME LocCode /\ SND (SND r) = SOME (ValPT ty) /\
     (!x. FST r = Var x ==> not_fresh_at sb x) /\
-    wb_frame cenv es sa s0 s
+    wb_frame cenv es ee sa s0 s
 Proof
   simp[imm_target_post_def, wb_frame_def]
 QED
@@ -2257,7 +2257,7 @@ Resume imm_target_subscript_step[in_bounds]:
           wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w,
           arithmeticTheory.ADD_CLAUSES] >>
      simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es es sa s0 t` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      qexistsl_tac [`sn`, `t'`] >> simp[] >>
      fs[imm_target_post_frame] >> decide_tac) >>

@@ -324,7 +324,7 @@ QED
 Theorem expr_post_none_intro:
   post_value_type cenv e = expr_type e /\
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es es' sa s0 s ==>
   expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
 Proof
   strip_tac >>
@@ -401,7 +401,7 @@ Theorem send_tail_frag:
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -581,7 +581,7 @@ Theorem send_tail_path[local]:
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
@@ -659,7 +659,7 @@ Theorem send_tail_summary[local]:
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ es1.gas_obs = [] /\
   outcomes_accounts_typed es1.outcomes /\

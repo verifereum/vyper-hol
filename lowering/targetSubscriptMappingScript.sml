@@ -54,7 +54,7 @@ Theorem target_scratch_store_frame:
   (!name off len. local_region cenv es.scopes s name off len ==>
      regions_disjoint b sz off len) ==>
   stmt_state_rel ctx func cenv cx es (mstore a w s) /\
-  wb_frame cenv es sa s (mstore a w s)
+  wb_frame cenv es es sa s (mstore a w s)
 Proof
   strip_tac >> conj_tac
   >- (irule literal_mstore_state_rel >>
@@ -458,7 +458,7 @@ Theorem target_mapping_post:
   stmt_state_rel ctx func cenv cx es'' t /\
   eval_operand op t = SOME (hashmap_slot slot (encode_hashmap_key kt key)) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es es'' sa s0 t ==>
   target_post ctx func cenv cx es sa sb s0 es'' pv vt
     (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
 Proof
@@ -475,7 +475,7 @@ Theorem target_mapping_counted_suffix:
   local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es es' sa s0 s /\
   (!x. bop = Var x ==> not_fresh_at sm x) /\
   (!x. keyop = Var x ==> not_fresh_at sm x) /\
   eval_operand bop s = SOME slot /\
@@ -493,7 +493,7 @@ Proof
   strip_tac >> drule_all target_mapping_run >> strip_tac >>
   drule_all target_mapping_run_path >> strip_tac >>
   `es'' = es'` by metis_tac[target_mapping_extend_place] >> gvs[] >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es es sa s0 t` by
     (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
      qexistsl_tac [`s`, `es'.scopes`, `sm`] >> simp[] >>
      metis_tac[]) >>
@@ -542,7 +542,7 @@ Theorem target_mapping_dynamic_counted_suffix:
   stmt_state_rel ctx func cenv cx es' s /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
-  MAP FDOM es.scopes = MAP FDOM es'.scopes /\ wb_frame cenv es sa s0 s /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\ wb_frame cenv es es' sa s0 s /\
   (!x. bop = Var x ==> not_fresh_at sc x) /\
   (!x. keyop = Var x ==> not_fresh_at sc x) /\
   eval_operand bop s = SOME slot /\ eval_operand keyop s = SOME (n2w b) /\
@@ -571,7 +571,7 @@ Proof
          ``\z:venom_state. z.vs_labels``]) >> simp[]) >>
   `eval_operand bop u = SOME slot` by
     (Cases_on `bop` >> gvs[eval_operand_def]) >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es sa s0 u` by
     (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
      qexistsl_tac [`s`, `es'.scopes`, `sc`] >> simp[] >> metis_tac[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>

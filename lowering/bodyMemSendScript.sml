@@ -269,7 +269,7 @@ Theorem send_tail_path_mem:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   stmt_state_rel ctx func cenv cx es1 t /\ alloca_history func t /\
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\

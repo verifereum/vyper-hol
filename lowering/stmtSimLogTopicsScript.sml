@@ -264,7 +264,7 @@ QED
 Theorem log_readonly_frame:
   (t with vs_vars := s.vs_vars) = s /\
   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) ==>
-  wb_frame cenv es sa s t
+  wb_frame cenv es es sa s t
 Proof
   strip_tac >>
   `t = s with vs_vars := t.vs_vars` by
@@ -286,7 +286,7 @@ Theorem log_readonly_arg:
   log_arg_rel cenv cx sa sb es t arg v
 Proof
   strip_tac >>
-  `wb_frame cenv es sm s t` by (irule log_readonly_frame >> simp[]) >>
+  `wb_frame cenv es es sm s t` by (irule log_readonly_frame >> simp[]) >>
   irule log_arg_rel_frame >> simp[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)
@@ -477,7 +477,7 @@ Theorem compile_split_log_topics_run:
     stmt_state_rel ctx func cenv cx es t /\
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
-    wb_frame cenv es sm s t /\
+    wb_frame cenv es es sm s t /\
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>

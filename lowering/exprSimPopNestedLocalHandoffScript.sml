@@ -112,7 +112,7 @@ Theorem memory_target_encoding_handoff:
   evaluate_type (get_tenv cx) root_ty = SOME entry.type ==>
   loc = SOME LocMemory /\ pt = SOME (value_type_place (Type ty)) /\
   stmt_state_rel ctx func cenv cx es' s /\
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es es' sa s0 s /\
   (!x. hdr = Var x ==> not_fresh_at sb x) /\
   ?p b sz k tv w.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\

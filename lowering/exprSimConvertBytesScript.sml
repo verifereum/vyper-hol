@@ -1091,14 +1091,14 @@ QED
 
 Theorem convert_wb_frame_trans:
   !ctx func cenv cx es es1 sa sm s0 s1 s2.
-    wb_frame cenv es sa s0 s1 /\ wb_frame cenv es1 sm s1 s2 /\
+    wb_frame cenv es es sa s0 s1 /\ wb_frame cenv es1 es1 sm s1 s2 /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
-    wb_frame cenv es sa s0 s2
+    wb_frame cenv es es sa s0 s2
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 s2` by
+  `locals_kept cenv es es s0 s2` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
      gvs[loweringPostsTheory.wb_frame_def]) >>
@@ -1133,7 +1133,7 @@ Theorem convert_buffer_expr_post:
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tv v <= sz /\
     (!name lb lsz. local_region cenv es'.scopes tt name lb lsz ==>
        w2n p + sz <= lb \/ lb + lsz <= w2n p) /\
-    wb_frame cenv es sa s0 tt ==>
+    wb_frame cenv es es' sa s0 tt ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op tt
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1286,10 +1286,10 @@ Theorem convert_expr_post_compose:
     expr_post ctx func cenv cx e es sa sb s0 es1 v op tt
 Proof
   rpt gen_tac >> strip_tac >>
-  `wb_frame cenv es sa s0 s1` by
+  `wb_frame cenv es es1 sa s0 s1` by
     (gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv es1 sm s1 tt` by
+  `wb_frame cenv es1 es1 sm s1 tt` by
     (gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all convert_wb_frame_trans >> strip_tac >>

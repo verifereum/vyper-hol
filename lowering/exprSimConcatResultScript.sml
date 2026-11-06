@@ -916,7 +916,7 @@ Proof
               qpat_x_assum `mem_bytes_at off osz t.vs_memory = _` (fn th3 =>
                 rewrite_tac[th1, th2, th3])))) >>
       (* locals kept *)
-      `locals_kept cenv es s0 t` by
+      `locals_kept cenv es es s0 t` by
         (irule locals_kept_regions >> qx_genl_tac [`nm`, `lb`, `lsz`] >>
          strip_tac >>
          `local_region cenv es.scopes t nm lb lsz` by
@@ -927,7 +927,7 @@ Proof
          disch_then (assume_tac o CONJUNCT2) >>
          qpat_x_assum `!p n. _ \/ _ ==> mem_bytes_at p n t.vs_memory = _` irule >>
          pop_assum mp_tac >> rpt (pop_assum kall_tac) >> decide_tac) >>
-      `locals_kept cenv es s0 t5` by
+      `locals_kept cenv es es s0 t5` by
         (match_mp_tac (Q.SPECL [`cenv`, `es`, `es`, `sa`, `s0`, `t`, `t5`]
                          locals_kept_trans) >>
          rpt conj_tac

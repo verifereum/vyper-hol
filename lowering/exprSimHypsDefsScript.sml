@@ -15,6 +15,10 @@ Definition outcomes_accounts_typed_def:
                       accounts_runtime_well_typed oc.co_accounts)) os
 End
 
+(* Every local's popped history is typed, each snapshot sits at an element
+   of a dynamic array, and its path is dead in the local's value: a pop
+   records an element it just removed, a pop only shrinks, and every live
+   write clears the history. *)
 Definition popped_keys_indexed_def:
   popped_keys_indexed (scs : scope list) <=>
     EVERY (\sc. !id entry. FLOOKUP sc id = SOME entry ==>
@@ -23,6 +27,9 @@ Definition popped_keys_indexed_def:
                              k = p ++ [ValueSubscript i] /\
                              subscripts_type entry.type p =
                                SOME (ArrayTV etv (Dynamic n)))
+                       (MAP FST entry.popped) /\
+                 EVERY (\k. ?err. evaluate_subscripts entry.type entry.value k =
+                                  INR err)
                        (MAP FST entry.popped)) scs
 End
 

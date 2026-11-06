@@ -47,7 +47,7 @@
 
 Theory exprSimAttributeFields
 Ancestors
-  loweringPosts
+  loweringPosts exprSimPopNestedLocalPath
   exprSimFieldLayout
   exprSimHypsDefs
   storageDecodeMemory
@@ -434,19 +434,6 @@ Proof
   Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
   rpt gen_tac >>
   TRY (rename1 `AttrSubscript fname :: _` >> Cases_on `a`) >>
-  simp[evaluate_subscripts_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >> res_tac >> simp[]
-QED
-
-Theorem evaluate_subscripts_append_err:
-  !path tv a err sfx.
-    evaluate_subscripts tv a path = INR err ==>
-    evaluate_subscripts tv a (path ++ sfx) = INR err
-Proof
-  Induct >- simp[evaluate_subscripts_def] >>
-  Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
-  rpt gen_tac >>
-  Cases_on `a` >>
   simp[evaluate_subscripts_def] >> strip_tac >>
   gvs[AllCaseEqs()] >> res_tac >> simp[]
 QED

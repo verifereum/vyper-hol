@@ -300,11 +300,11 @@ Proof
   impl_tac
   >- (simp[] >> irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   strip_tac >>
-  `wb_frame cenv es sa s0 s` by
+  `wb_frame cenv es ee sa s0 s` by
     (fs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
-  `wb_frame cenv ee (sa with cs_next_var := sm.cs_next_var) s u` by
+  `wb_frame cenv ee ee (sa with cs_next_var := sm.cs_next_var) s u` by
     (fs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es ee sa s0 u` by
     (irule wb_frame_trans >> goal_assum drule >>
      conj_tac >- (goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
                   simp[]) >> metis_tac[]) >>

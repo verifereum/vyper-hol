@@ -59,11 +59,11 @@ Theorem extract32_posts_to_vv_post_frame:
     es sa final s0 es2 (Value v) (StackValue ty op) u
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s1` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es1 sm s1 s2` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 s2` by metis_tac[wb_frame_trans] >>
+  `wb_frame cenv es es1 sa s0 s1` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es1 es2 sm s1 s2` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es2 sa s0 s2` by metis_tac[wb_frame_trans] >>
   `sa.cs_next_var <= st3.cs_next_var` by decide_tac >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es2 sa s0 u` by
     (irule wb_frame_readonly_tail >> qexistsl [`st3`,`s2`] >> simp[]) >>
   irule vv_post_word_intro >> simp[expr_type_def] >>
   metis_tac[optionTheory.SOME_11]
@@ -115,7 +115,7 @@ Proof
      >- (disj2_tac >> disj1_tac >> qexistsl [`n`,`b`,`sz`] >>
          asm_rewrite_tac[]) >> simp[]) >>
   qexistsl [`u`,`p`] >> simp[] >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es' sa s0 u` by
     (irule wb_frame_readonly_tail >> qexistsl [`sm`,`s`] >>
      simp[] >> metis_tac[expr_post_frame]) >>
   gvs[expr_post_def, wb_frame_def] >>

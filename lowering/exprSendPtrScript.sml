@@ -348,7 +348,7 @@ Proof
 QED
 
 Theorem send_tail_none_post:
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   ~not_fresh_at sm out /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   es'.scopes = es1.scopes /\ es'.immutables = es1.immutables /\
@@ -388,7 +388,7 @@ Theorem send_tail_path_ptr:
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   ghost_inv d cenv cx es1 G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -491,7 +491,7 @@ Theorem send_tail_summary_ptr:
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   ghost_inv d cenv cx es1 G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\

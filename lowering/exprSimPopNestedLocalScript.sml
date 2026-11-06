@@ -220,7 +220,7 @@ Resume pop_nested_local_live_case[nonempty]:
   simp[] >> conj_tac >- metis_tac[] >>
   qpat_assum `mem_path_offset entry.type path = _` (irule_at Any) >>
   qpat_assum `FLOOKUP cenv.ce_vars id = _` (irule_at Any) >>
-  qpat_assum `wb_frame cenv es sa s0 t` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es es sa s0 t` (irule_at Any) >>
   qpat_assum `local_ptrs_reserved cenv sm` (irule_at Any) >>
   simp[] >>
   qexists_tac `record_pop path (ArrayV (DynArrayV vs)) (LAST vs) entry.popped` >>

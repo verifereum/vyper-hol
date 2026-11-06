@@ -320,7 +320,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es1.scopes t2 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n t2.vs_memory) /\
-    locals_kept cenv es1 t2 u ==>
+    locals_kept cenv es1 es1 t2 u ==>
     mem_bytes_at (B + 32) (k + LENGTH (bv ++ bvs)) u.vs_memory =
       mem_bytes_at (B + 32) k s0.vs_memory ++ (bv ++ bvs) /\
     (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -332,7 +332,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept cenv es s0 u
+    locals_kept cenv es es s0 u
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -354,12 +354,12 @@ Proof
     (rpt strip_tac >> irule local_region_frame >>
      conj_tac >- (qexists_tac `func` >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`sa`, `es1.scopes`, `t2`] >> asm_rewrite_tac[]) >>
-  `locals_kept cenv es1 t t2` by
+  `locals_kept cenv es1 es1 t t2` by
     (irule locals_kept_regions >> rpt strip_tac >>
      first_x_assum irule >>
      `local_region cenv es.scopes s0 n b sz` by metis_tac[] >>
      metis_tac[]) >>
-  `locals_kept cenv es s0 t2` by
+  `locals_kept cenv es es s0 t2` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
      asm_rewrite_tac[]) >>
   rpt conj_tac
@@ -913,7 +913,7 @@ Theorem concat_args_sim:
             (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                           p + n <= lo \/ lo + sz <= p) ==>
             mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-         locals_kept cenv es s0 t)
+         locals_kept cenv es ee s0 t)
       (\rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)
 Proof

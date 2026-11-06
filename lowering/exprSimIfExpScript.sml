@@ -1324,7 +1324,7 @@ Proof
          simp[]) >>
       fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   (* the locals' memory: kept by c, then by e *)
-  `locals_kept cenv es s0 ss` by
+  `locals_kept cenv es es' s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `u` >>
      conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
      irule locals_kept_trans >>
@@ -1333,7 +1333,7 @@ Proof
      >~ [`lookup_var _ (jump_to _ _)`] >- metis_tac[] >>
      irule locals_kept_mem_tail >> qexists_tac `tt` >>
      simp[jump_to_def] >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `locals_kept cenv es s0 ss` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `locals_kept cenv es es' s0 ss` (fn th => rewrite_tac[th]) >>
   rpt strip_tac >>
   qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
     (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>

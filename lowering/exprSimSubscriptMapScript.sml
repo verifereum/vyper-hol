@@ -712,7 +712,7 @@ Theorem compile_mapping_subscript_outcome:
        p.ptr_location = slot_loc tr /\
        eval_operand p.ptr_operand t =
          SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -775,13 +775,13 @@ Proof
   qpat_x_assum `(\res ee t. _) _ _ _` mp_tac >>
   simp[] >> strip_tac >>
   rename1 `v = HashMapRef tr base_slot bkt bvt` >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es ee sa s0 t` by
     (pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` kall_tac >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` kall_tac >>
   qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ t.vs_memory = _` kall_tac >>
-  qpat_x_assum `locals_kept cenv es s0 t` kall_tac >>
+  qpat_x_assum `locals_kept cenv es ee s0 t` kall_tac >>
   `expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
    ?s u. eval_expr cx obj s = (INL v,u)` by
     (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
@@ -863,12 +863,12 @@ Proof
   `?out. gas_marked_path F ctx func it 0 (OK out) /\
      eval_operand slot out = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
      stmt_state_rel ctx func cenv cx (fin with gas_obs := []) out /\
-     wb_frame cenv (mid with gas_obs := []) sm t out /\
+     wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t out /\
      out.vs_current_bb = sb.cs_current_bb /\
      out.vs_inst_idx = LENGTH sb.cs_current_insts` by
     (drule compile_mapping_index_success_tail >>
      disch_then irule >> simp[] >> qexists `vv_operand bvv` >> simp[]) >>
-  `wb_frame cenv es sa s0 out` by
+  `wb_frame cenv es (fin with gas_obs := []) sa s0 out` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
      conj_tac
      >- (qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>

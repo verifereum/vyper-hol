@@ -668,38 +668,65 @@ Proof
   gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
-(* The store of the new length leaves the live locals' memory as
-   locals_kept allows: the popped local is a dynamic array, whose length word
-   is exempt, and the other locals' regions are disjoint from its region. *)
+(* The store of the new length is a pop step of locals_kept: the popped
+   local is a dynamic array, whose length word is exempt, the other locals'
+   regions are disjoint from its region, the popped element stays in place
+   past the new length, and the older snapshots, at dead paths, are past the
+   length word (mem_path_offset_dead_apart). *)
 Theorem pop_locals_kept[local]:
-  !func cenv es s0 u id entry p sz w et n v.
+  !func cenv es es' s0 u id pre envs entry rest p sz w et n etv vs v.
     local_ptrs_rel func cenv es.scopes s0 /\
-    lookup_scopes id es.scopes = SOME entry /\
+    popped_keys_indexed es.scopes /\
+    find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
+    es'.scopes = pre ++ envs |+ (id, pop_name_entry entry vs) :: rest /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s0 = SOME w /\ 32 <= sz /\
     cenv.ce_var_type id = SOME (ArrayT et (Dynamic n)) /\
+    entry.type = ArrayTV etv (Dynamic n) /\
+    snapshot_in entry.type (w2n w) sz
+      ([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs) u.vs_memory /\
     u.vs_memory = (mstore (w2n w) v s0).vs_memory ==>
-    locals_kept cenv es s0 u
+    locals_kept cenv es es' s0 u
 Proof
-  rw[locals_kept_def] >> rename1 `local_region _ _ _ nm b' sz'` >>
-  `local_region cenv es.scopes s0 id (w2n w) sz` by
-    (simp[local_region_def] >> metis_tac[]) >>
-  qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
-  irule mstore_mem_bytes_at_disjoint >>
-  Cases_on `nm = id`
-  >- (`b' = w2n w` by gvs[local_region_def] >>
-      `dynarray_len_at cenv id 0` by
-        (irule dynarray_len_at_root >> metis_tac[]) >>
-      gvs[] >> first_x_assum drule >> simp[]) >>
-  `regions_disjoint (w2n w) sz b' sz'` by
-    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  rpt strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `EVERY (\k. ?err. evaluate_subscripts entry.type entry.value k = INR err)
+     (MAP FST entry.popped)` by
+    metis_tac[popped_keys_indexed_lookup_dead] >>
+  drule find_containing_scope_pre_none >> strip_tac >>
+  drule find_containing_scope_structure >> strip_tac >>
+  `id IN FDOM envs` by gvs[finite_mapTheory.FLOOKUP_DEF] >>
+  qspecl_then [`func`, `cenv`, `es`, `es'`, `s0`, `u`, `id`, `w2n w`, `sz`,
+               `0`, `v`, `entry`, `pop_name_entry entry vs`,
+               `([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)`, `[]`,
+               `entry.value`, `etv`, `n`]
+    mp_tac locals_kept_live_pop >>
+  impl_tac
+  >- (rpt conj_tac
+      >- fs[]
+      >- (simp[local_region_def] >> metis_tac[])
+      >- fs[]
+      >- (irule dynarray_len_at_root >> metis_tac[])
+      >- fs[]
+      >- gvs[pred_setTheory.ABSORPTION_RWT]
+      >- fs[]
+      >- gvs[lookup_scopes_update]
+      >- gvs[lookup_scopes_update_other]
+      >- simp[pop_name_entry_def]
+      >- simp[pop_name_entry_def]
+      >- fs[]
+      >- fs[]
+      >- simp[evaluate_subscripts_def] >>
+      simp[mem_path_offset_def]) >>
+  simp[]
 QED
 
 Theorem pop_vv_post:
   !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
     stmt_state_rel ctx func cenv cx es s0 /\
     local_ptrs_rel func cenv es.scopes s0 /\
+    popped_keys_indexed es.scopes /\
     find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
     cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -806,11 +833,23 @@ Proof
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
       TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))
   >~ [`locals_kept`]
-  >- (irule pop_locals_kept >>
-      conj_tac
-      >- (qexistsl [`entry`, `ann`, `id`, `n`, `p`, `sz`,
-                   `n2w (LENGTH vs) - 1w`, `w`] >> simp[]) >>
-      qexists `func` >> simp[]) >>
+  >- (qspecl_then [`func`, `cenv`, `es`,
+                   `es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest`,
+                   `s0`, `u`, `id`, `pre`, `envs`, `entry`, `rest`, `p`, `sz`, `w`,
+                   `ann`, `n`, `etv`, `vs`, `n2w (LENGTH vs) - 1w`]
+        mp_tac pop_locals_kept >>
+      impl_tac >- (
+        `val_wf etv (LAST vs)` by
+          gvs[LAST_EL, arithmeticTheory.PRE_SUB1, elems_val_wf_EL] >>
+        `val_in_memory etv (LAST vs)
+           (w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv) u.vs_memory` by
+          (irule pop_elem_in_memory >> simp[] >> metis_tac[]) >>
+        `(LENGTH vs - 1) * type_memory_size etv + type_memory_size etv =
+         LENGTH vs * type_memory_size etv` by
+          (Cases_on `vs` >> gvs[arithmeticTheory.MULT_CLAUSES]) >>
+        fs[snapshot_in_def, mem_path_offset_def, mem_step_offset_def] >>
+        decide_tac) >>
+      simp[]) >>
   (* the variables and allocations clauses simplified away; the memory
      frame is left *)
   `32 <= sz` by (qpat_x_assum `32 + _ <= sz` mp_tac >> simp[]) >>

@@ -356,7 +356,7 @@ Theorem target_subscript_mapping_scalar_normal:
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT kt vt)` by
@@ -390,7 +390,7 @@ Theorem target_subscript_mapping_dynamic_normal:
 Proof
   strip_tac >> gvs[] >>
   drule_all target_subscript_dynamic_key_view >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT (expr_type e) vt)` by
