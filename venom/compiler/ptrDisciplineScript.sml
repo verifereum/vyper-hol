@@ -361,7 +361,13 @@ Definition out_taint_def:
              else {}
          | NONE => {})
     | [n; a] =>
-        (case eval_operand n s of
+        if inst.inst_opcode = MUL then
+          if op_taint tn n = {} then
+            (if eval_operand n s = SOME 1w then op_taint tn a else {})
+          else
+            (if op_taint tn a = {} /\ eval_operand a s = SOME 1w
+             then op_taint tn n else {})
+        else (case eval_operand n s of
            SOME k =>
              if inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/
                 inst.inst_opcode = SAR
@@ -577,7 +583,8 @@ End
 
 (* Tainted data is only copied around and stored: a tainted variable is
    only ASSIGNed, shifted by an untainted amount (shift_taint tracks where
-   its bytes go), or stored as the value of a store with an untainted
+   its bytes go), multiplied by an untainted zero/one selector, or stored
+   as the value of a store with an untainted
    address, and tainted memory is only loaded, copied or returned.  Code
    that runs on this contract's storage (DELEGATECALL, CREATE) sees none
    tainted. *)
@@ -585,6 +592,10 @@ Definition taint_ok_def:
   taint_ok fn tn inst s <=>
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
           inst.inst_opcode = ASSIGN \/
+          (inst.inst_opcode = MUL /\
+           ?b. (inst.inst_operands = [op; b] \/
+                inst.inst_operands = [b; op]) /\ op_taint tn b = {} /\
+               (eval_operand b s = SOME 0w \/ eval_operand b s = SOME 1w)) \/
           ((inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/
             inst.inst_opcode = SAR) /\
            ?n. inst.inst_operands = [n; op] /\ op_taint tn n = {}) \/
