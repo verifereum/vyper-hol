@@ -99,3 +99,57 @@ Proof
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- first_assum ACCEPT_TAC >> gen_tac >> place_weak_tac
 QED
+
+Theorem first_emission_subscript:
+  (!a x b. cfn ce ty base_e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!ity a x b. (ity = ty \/ ity = expr_type idx_e) /\ cfn ce ity idx_e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_subscript cfn ce rty ty base_e idx_e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> simp_tac bool_ss [compile_subscript_def, LET_THM] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- first_assum ACCEPT_TAC >> gen_tac >>
+  Cases_on `place_type ce base_e`
+  >- (simp_tac (srw_ss()) [] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (IF_CASES_TAC >> simp_tac bool_ss []
+          >- MATCH_ACCEPT_TAC first_emission_keccak256_key >>
+          metis_tac[first_emission_return]) >>
+      gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+      >- MATCH_ACCEPT_TAC first_emission_mapping_subscript >>
+      gen_tac >> metis_tac[first_emission_return]) >>
+  rename1 `ValPT bty` >> Cases_on `bty` >> simp_tac (srw_ss()) [] >>
+  all_tac
+  >~ [`compile_tuple_subscript _ _`] >- (ho_match_mp_tac first_emission_bind >> conj_tac
+       >- MATCH_ACCEPT_TAC first_emission_tuple_subscript >>
+       gen_tac >> metis_tac[first_emission_return])
+  >~ [`compile_tuple_subscript _ _`] >- (ho_match_mp_tac first_emission_bind >> conj_tac
+       >- MATCH_ACCEPT_TAC first_emission_tuple_subscript >>
+       gen_tac >> metis_tac[first_emission_return]) >>
+  (ho_match_mp_tac first_emission_bind >> conj_tac
+   >- (match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+   >- (match_mp_tac first_emission_array_subscript >>
+       ho_match_mp_tac first_emission_strong >>
+       MATCH_ACCEPT_TAC first_emission_ptr_load) >>
+   gen_tac >> metis_tac[first_emission_return])
+QED
