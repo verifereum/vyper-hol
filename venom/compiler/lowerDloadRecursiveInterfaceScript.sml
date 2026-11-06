@@ -3201,3 +3201,145 @@ Resume ld_recursive_geometry_call_clause[exceptional_child_entry]:
 QED
 
 Finalise ld_recursive_geometry_call_clause
+
+(* RETURN restoration diagnostic (not an asserted theorem).
+   This interface universally fixes the EXISTING normal witnesses. The only
+   additional operational premises are the nonempty projected RETURN stack,
+   IntRet, and target binding. No saved normal_data or completed run is added.
+   The result uses the SAME s and ret for source binding, and retains current
+   global masks. The existential floor is intentionally an obligation. *)
+val ld_proposed_return_normal_restore =
+  let
+    val (args,body) = strip_abs ld_recursive_geometry_candidate
+    val (g1,rest) = dest_conj body
+    val (g2,alts) = dest_conj rest
+    val (ws,b) = strip_exists (fst (dest_disj alts))
+    val extra = ``astk <> [] /\ gstk <> [] /\
+      step_inst fuelT CT j t = IntRet ret tend /\
+      bind_outputs (HD gstk).lf_inst.inst_outputs ret.iret_values
+        (adopt_return_fmp ret (merge_callee_state (HD gstk).lf_state tend)) = SOME tr``
+    val result = ``?sr floor.
+      step_inst fuelS CS i s = IntRet ret s /\ ret.iret_adopt_fmp = NONE /\
+      bind_outputs (HD astk).lf_inst.inst_outputs ret.iret_values
+        (merge_callee_state (HD astk).lf_state s) = SOME sr /\
+      (let sf = HD astk; tf = HD gstk;
+           keep = COMPL (set (HD astk).lf_inst.inst_outputs);
+           tvkeep = COMPL (set (HD gstk).lf_inst.inst_outputs) in
+       let owners = {owner | ?bs sz. ld_live (TL astk) sf.lf_local sf.lf_params
+                         (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} in
+       owners SUBSET live /\
+       ld_normal_data CS sf.lf_fn (HD supports)
+         {v | v IN HD supports /\ ~retpc_var sf.lf_fn v}
+         lo (DRESTRICT E owners) sf.lf_local tf.lf_local sf.lf_params tf.lf_params
+         (DRESTRICT sf.lf_prov keep) (DRESTRICT tf.lf_prov tvkeep)
+         (tn with t_var := DRESTRICT sf.lf_tvar keep)
+         (un with t_var := DRESTRICT tf.lf_tvar tvkeep) sr tr
+         (TL astk) owners (HD savedkeys) (32 * SUM (MAP CARD (TL suspended)))
+         (HD suspended) (TL suspended) (TL gstk) floor)``
+    (* Rebind free interface names to the actual candidate witnesses. *)
+    fun align tm = subst (List.mapPartial (fn v =>
+      case List.find (fn w => fst(dest_var w) = fst(dest_var v) andalso
+                             type_of w = type_of v) (ws @ args) of
+        NONE => NONE | SOME w => SOME (v |-> w)) (free_vars tm)) tm
+    val env = ``ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+      dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+      o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+      lo = vs0.vs_alloca_next``
+  in list_mk_forall(args @ ws,
+       mk_imp(list_mk_conj [align env,g1,g2,b,align extra],align result)) end;
+
+(* Exhaustive premise/conclusion provenance ledger for the quotation above.
+
+   INPUTS: env is exactly the common generated-clause environment used by CALL.
+   g1/g2/b are extracted from the existing geometry candidate, NOT a second
+   certificate. Nonempty astk/gstk follows from the RETURN projection cons and
+   equal lengths. IntRet and target bind are precisely projected rule 5; the
+   projection identifies saved function/instruction/state/tvar with HD gstk.
+   No current source success, caller IH, saved memory or restoration result is
+   an input. fuelS is arbitrary for non-INVOKE RET, just as in OpaqueExecution.
+
+   ANCHOR: exceptional copy/ASSIGN/REVERT interval has no IntRet, by RevertSuffix.
+   Expanded DLOAD/DLOADBYTES instructions have no IntRet (supply classification
+   plus opcode semantics), hence n=0 and singleton original instruction. Under
+   source fn_ptr_ok, RETFMP/DRET are excluded; only RET can produce IntRet.
+   This requires a RETURN analogue of call_anchor; it is NOT proved here.
+   ReachableDiscipline supplies fn_ptr_ok, taint_ok and provenance-domain bounds;
+   shape supplies opaque_use_ok; fn_ir_vars supplies operand support.
+   ld_nonopaque_ret_resumed_owned_backward fixes the SAME ret and sr and gives
+   resumed owned-vars at E. Its entry_taint wrappers are ONLY the t_var relation,
+   not the proposed full taint state. RET implies tend=t and adopt_fmp=NONE.
+
+   SOURCE POP: saved annotation/origin alone does not state child setup.
+   Invert CURRENT annotated reachability with nonempty stack (or its erased
+   frame_reachable prefix) and current stack_origin_cons: this yields decode,
+   source callee lookup, eval operands and setup at the actual saved head.
+   ld_stack_origin_setup_eq aligns that setup with the prefix origin.
+   ld_annotated_call_pop then reconstructs the source completed run and resumed
+   annotation from sr; it does not assume a second recursive IH. Saved head
+   origin is the resumed caller origin. Configured successor uses saved pre/p
+   supply split and actual target caller active_inst, as in ordinary_next.
+
+   SURVIVORS: owners is ALL resumed ld_live roots, not just active locals.
+   Every restricted head selection is an old head selection (restrict_selected).
+   Every tail selection is an old stack selection. Hence owners SUBSET live by
+   current normal_data live inclusion. All tail locals, parameters and variable
+   provenance are retained, even when absent from the active caller locals.
+   ld_saved_embedded_restrict/ld_saved_stack_restrict apply to each tail with
+   the SAME support/key/charge witnesses. SavedExtension's selected transport
+   handles indexed certificates and their additional parameter value envelope:
+   E lookup is unchanged on each selected sf.lf_params owner. An unselected
+   NONE parameter needs no entry. Do NOT replace this with table-wide equality.
+   TableSupport return_pruned_snapshot/entries preserve a supplied snapshot;
+   they do not manufacture one and are not needed for plain E restriction.
+
+   NORMAL_DATA INVENTORY (line numbers refer to NormalData definition):
+   11 frame_data: saved embedding restores layout, params and restricted prov;
+      same-ret producer restores non-retpc owned vars. Saved full-support
+      definedness plus bind_outputs restores definedness, including retpc.
+      Shared-state uses saved nine-field slice (call/tx/block contexts, hashes,
+      code/data, fmp/call-entry-fmp/initial-fmp); current callee supplies accounts,
+      transient/immutables/outcomes/returndata. E restriction needs the selected
+      support argument above, also for head local/params/restricted variables.
+   12 provenance owners: selected active roots are in owners by definition.
+   13-18 lower/no-wrap/separation: inherit current geometry on owners SUBSET live
+      and site_entry_restrict. No pointer-address equality is substituted.
+   19-20 bytes: ld_call_return_memory, using CURRENT callee tn.t_mem/un.t_mem;
+      bind and merge retain callee memory. No absence-of-writes premise needed.
+   21-22 account: saved_embedded_return_account and bind allocation fields;
+      head charge is 32*SUM(CARD(TL suspended)), A is HD suspended. NormalData
+      has no retained current-callee A after pop. TargetGeometry return supplies
+      restored frontier equation, frame_bound and tail stack_bound (line 23).
+   24 floor: NOT supplied by saved_embedded or saved nine-field slice. Existing
+      ld_return_floor needs allocas_from floor saved_target and its lower bound.
+      Candidate saves neither a floor nor the saved representation disjunction.
+   25 live lower bound: current live inclusion plus survivors; source annotation
+      coherence identifies source bs for the same owner when using E entries.
+   27-28 endpoints: source resumed annotated bounds and target paired_live_endpoints
+      plus return geometry; CURRENT callee frontier bound is insufficient here.
+   29-30 representation: ld_representation_return requires representation in the
+      SAVED target caller at an appropriate saved floor. Current representation
+      refers to CURRENT callee allocas and floor, which cannot simply be restored.
+      This is the main UNDISCHARGED semantic interface. A saved snapshot carrying
+      floor/representation, stable on selected E entries, would suffice; whether
+      it follows from the candidate without refinement is not established.
+   31-32 var masks: saved head pointwise count-32 bounds; DRESTRICT clears outputs.
+   33-34 global masks: current callee masks unchanged, not saved stn masks.
+   35-41 envelope: saved head disjunction, bind/merge restore caller params;
+      use selected parameter support to transport its ld_owned_value through E'.
+   42 gas: current callee readings, retained by merge/bind on both sides.
+   43-45 off-address accounts/transient: current callee facts and restored saved
+      call address; internal setup preserves cc_address. Need explicit source
+      setup-origin field transport, not equality of unrelated saved/callee ctxs.
+
+   MISSING CHECKPOINTS, not unexplained new assumptions:
+   (a) RETURN ordinary-anchor inversion and annotated-stack setup elimination;
+   (b) complete saved-slice/current-shared-state merge and support-restriction
+       packaging (existing elementary boundaries suffice in principle);
+   (c) saved floor/representation recovery or candidate refinement. No theorem
+       currently found derives the premises of representation_return from this
+       exact candidate. Choose/refine that interface BEFORE an omnibus proof.
+   Suggested compact addition if refinement is required: save one existential
+   caller floor together with allocas_from, floor/frontier bounds and selected
+   representation at INVOKE; use support transport under allocation extension
+   and owner restriction. Do not save old bytes or global taints. This diagnostic
+   does not authorize that change and proves no exact RETURN closure. *)
