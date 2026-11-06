@@ -1,7 +1,7 @@
 Theory bodyPtrBytestringBuiltinsUintZero
 Ancestors
   bodyPtrBytestringBuiltinsUintExit bodyPtrBytestringBuiltinsUintBody
-  bodyPtrBytestringBuiltinsUintBlockInv
+  bodyPtrBytestringBuiltinsUintBlockInv bodyPtrBytestringBuiltinsUintBodyStep
   bodyPtrBytestringBuiltinsUintInvariant bodyPtrBytestringBuiltinsUintBlocks
   exprSimUint2Str fragGasPathPtr ptrDiscipline ptrSafeRun
   venomInst venomState venomExecSemantics finite_map words list rich_list
@@ -310,4 +310,98 @@ Proof
   qexistsl_tac [`gr`, `tr`] >>
   gvs[Abbr `stored`, Abbr `ts`, update_var_def, jump_to_def] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem u2s_zero_prefix_invariant_ptr:
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n i G tn s /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  n+32 <= sz /\ b+sz < dimword(:256) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 3) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a (Var p) n|> /\
+  s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 0 ==>
+  ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n i G' tn' t /\
+    u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr t /\
+    tn'.t_mem = tn.t_mem DIFF {j | b+n <= j /\ j < b+n+32} /\
+    t = (mstore (b+n) 48w (update_var (u2s_var a 11) (n2w (b+n)) s)
+      with vs_inst_idx := 2)
+Proof
+  strip_tac >> drule_all u2s_zero_address_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ ga ta (OK addr)` >>
+  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr addr` by
+    (simp[Abbr `addr`] >> irule u2s_safe_index >> irule u2s_safe_update >> simp[]) >>
+  drule u2s_safe_store_frame >> strip_tac >>
+  `lookup_var (u2s_var a 11) addr = SOME (n2w (b+n)) /\
+   addr.vs_current_bb = u2s_label a 3 /\ addr.vs_inst_idx = 1 /\ ~addr.vs_halted` by
+    simp[Abbr `addr`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  drule_all u2s_zero_digit_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ ga ta addr _ _ ts (OK stored)` >>
+  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr stored` by
+    (simp[Abbr `stored`] >> irule u2s_safe_index >>
+     irule u2s_safe_mstore >> simp[]) >>
+  qexistsl_tac [`ga`, `ts`, `stored`] >> simp[Abbr `ts`, Abbr `ta`] >>
+  `stored = (mstore (b+n) 48w (update_var (u2s_var a 11) (n2w (b+n)) s)
+    with vs_inst_idx := 2)` by
+    simp[Abbr `stored`, Abbr `addr`, mstore_def, write_memory_with_expansion_def,
+         update_var_def] >>
+  gvs[] >> irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem u2s_zero_suffix_invariant_ptr:
+  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i G tn s /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  b+(buf_size+n) < dimword(:256) /\ 32 <= buf_size /\ 1 <= n /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 3) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a (Var p) n|> /\
+  s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 2 ==>
+  ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i G' tn' t /\
+    ptr_covers G' tn' (u2s_var a 2) t buf_size /\
+    tn'.t_mem = tn.t_mem DIFF {j | b+n-1 <= j /\ j < b+n-1+32} /\
+    t = jump_to (u2s_label a 5) (update_var (u2s_var a 2) (n2w (b+n-1))
+      (mstore (b+n-1) 1w
+        (update_var (u2s_var a 13) (n2w (b+n-1))
+          (update_var (u2s_var a 12) (n2w (b+n)) s))))
+Proof
+  strip_tac >>
+  drule_all (SRULE [] (Q.INST [`sz` |-> `buf_size+n`]
+    u2s_zero_header_address_invariant_ptr)) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ ga ta (OK addr)` >>
+  `u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr addr` by
+    (simp[Abbr `addr`] >> irule u2s_safe_index >>
+     ntac 2 (irule u2s_safe_update >> simp[])) >>
+  drule u2s_safe_store_frame >> strip_tac >>
+  `lookup_var (u2s_var a 13) addr = SOME (n2w (b+n-1)) /\
+   addr.vs_current_bb = u2s_label a 3 /\ addr.vs_inst_idx = 4 /\
+   ~addr.vs_halted /\ n+32 <= buf_size+n` by
+    simp[Abbr `addr`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i ga ta addr /\
+   ptr_covers ga ta (u2s_var a 13) addr buf_size` by simp[Abbr `addr`] >>
+  drule_all u2s_zero_tail_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_rename_tac `gas_path_ptr _ _ _ _ _ ga ta addr _ gr tr _` >>
+  qexistsl_tac [`gr`, `tr`] >> goal_assum (drule_at Any) >>
+  gvs[Abbr `addr`, update_var_def, jump_to_def,
+      mstore_def, write_memory_with_expansion_def] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ gr tr _` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
