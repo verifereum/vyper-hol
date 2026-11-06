@@ -1,7 +1,7 @@
 (* Saved operand transport across keyword evaluation. *)
 Theory rawCallKeywordPrefixPtr
 Ancestors
-  rawCallOperandPrefixPtr stmtSimLogArgs bodyPtrDefs loweringPosts
+  rawCallOperandPrefixPtr stmtSimLogArgs bodyPtrDefs loweringPosts wordArgsNonLabelPtr
 
 Theorem saved_value_footprint_taint_kept:
   expr_val_at cenv cx ty sa sb es v op s /\
@@ -169,6 +169,7 @@ Theorem raw_call_kwargs_execution_ptr:
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\x. op_taint tn x = {}) xs /\
       EVERY (\x. !v. x = Var v ==> not_fresh_at sb v) xs /\
+      EVERY (\op. !l. op <> Label l) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
@@ -182,6 +183,10 @@ Proof
     (fs[vyperTypeSystemTheory.raw_call_kws_ok_def] >>
      metis_tac[listTheory.LENGTH_MAP]) >>
   drule_all rawCallShapePtrTheory.raw_call_kwargs_word_args >> strip_tac >>
+  `EVERY (\op. !l. op <> Label l) xs` by
+    (irule lower_word_args_nonLabel >> goal_assum (drule_at Any) >>
+     qexists_tac `env` >> fs[exprSimHypsDefsTheory.expr_body_pre_def,
+        vyperTypeSystemTheory.well_typed_expr_def, exprSimHypsDefsTheory.expr_sim_inv_def]) >>
   `!e ee. MEM e kws /\ expr_sim_inv cenv cx env ee ==>
       expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)` by
     (rpt strip_tac
@@ -256,6 +261,7 @@ Theorem raw_call_kwargs_sim_ptr:
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
       EVERY (\op. !z. op = Var z ==> not_fresh_at sb z) xs /\
+      EVERY (\op. !l. op <> Label l) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
