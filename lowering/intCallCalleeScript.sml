@@ -290,7 +290,7 @@ End
 
 (* ===== The prologue's code ===== *)
 
-Theorem compile_internal_param_decls_shape[local]:
+Theorem compile_internal_param_decls_shape:
   !ps idx st r st'.
     compile_internal_param_decls ps idx st = (r, st') ==>
     SND r = idx + LENGTH ps /\
@@ -323,7 +323,7 @@ Proof
 QED
 
 (* Running the PARAMs binds each output to its argument. *)
-Theorem run_inst_seq_params[local]:
+Theorem run_inst_seq_params:
   !n id idx nv s.
     idx + n <= LENGTH s.vs_params /\ LENGTH s.vs_params < dimword (:256) ==>
     ?s'.
@@ -378,7 +378,7 @@ Proof
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_shape[local]:
+Theorem materialize_internal_params_shape:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -414,7 +414,7 @@ Proof
   rpt strip_tac >> gvs[FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_reserved[local]:
+Theorem materialize_internal_params_reserved:
  !caps cenv st cenv' st'.
  materialize_internal_params cenv caps st = (cenv',st') /\
  ALL_DISTINCT (MAP FST caps) /\
@@ -477,7 +477,7 @@ QED
 
 (* ===== The arguments' pointers ===== *)
 
-Theorem regions_disjoint_sym[local]:
+Theorem regions_disjoint_sym:
   !b1 s1 b2 s2.
     regions_disjoint b1 s1 b2 s2 <=> regions_disjoint b2 s2 b1 s1
 Proof
@@ -485,7 +485,7 @@ Proof
 QED
 
 (* A live local's region lies below the frontier. *)
-Theorem local_region_below_next[local]:
+Theorem local_region_below_next:
   !func cenv scopes ss n b sz.
     local_ptrs_rel func cenv scopes ss /\ local_region cenv scopes ss n b sz ==>
     b + sz <= ss.vs_alloca_next
@@ -531,7 +531,7 @@ QED
 
 (* A live local's region under cenv extended at name is either name's
    new one or was live before. *)
-Theorem local_region_bind[local]:
+Theorem local_region_bind:
   !cenv scopes ss ss' name p sz n b sz'.
     local_region
       (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar (Var p) sz)))
@@ -547,7 +547,7 @@ Proof
   qpat_x_assum `!q. q <> p ==> _` drule >> simp[]
 QED
 
-Theorem step_mstore_vars[local]:
+Theorem step_mstore_vars:
   !id x y a v s.
     lookup_var x s = SOME a /\ lookup_var y s = SOME v ==>
     step_inst_base (mk_inst id MSTORE [Var x; Var y] []) s =
@@ -559,7 +559,7 @@ QED
 
 (* The ALLOCA and MSTORE of a stack-passed argument x, of value a, put it
    at the frontier in a region of its slot's size sz, bound to name. *)
-Theorem materialize_stack_step[local]:
+Theorem materialize_stack_step:
   !func cenv env s st x a name off sz entry.
     local_ptrs_rel func cenv [env] s /\ alloca_inv s /\
     (!inst n base sz.
@@ -687,7 +687,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem internal_stack_size_update[local]:
+Theorem internal_stack_size_update:
   !l cenv name v.
     ~MEM name (MAP FST l) ==>
     internal_stack_size (cenv with ce_vars updated_by (\m. m |+ (name, v))) l =
@@ -698,7 +698,7 @@ Proof
 QED
 
 (* Stores above the call frontier cannot disturb a pending caller buffer. *)
-Theorem pending_arg_mstore[local]:
+Theorem pending_arg_mstore:
   !ty v b sz f0 dst w s.
     val_in_memory ty v b s.vs_memory /\ val_wf ty v /\
     type_memory_size ty <= sz /\ b + sz <= f0 /\ f0 <= dst ==>
@@ -708,7 +708,7 @@ Proof
 QED
 
 (* Caller buffers are backed by their separation from all frame allocations. *)
-Theorem caller_buffer_backed[local]:
+Theorem caller_buffer_backed:
   !func p s b sz f0.
     b + sz <= f0 /\
     (!aid base size. FLOOKUP s.vs_allocas aid = SOME (base, size) ==>
@@ -720,7 +720,7 @@ Proof
   simp[compileEnvTheory.regions_disjoint_def]
 QED
 
-Theorem materialize_memory_bind[local]:
+Theorem materialize_memory_bind:
   !func cenv env s name entry p sz w f0 mr.
     local_ptrs_rel func cenv [env] s /\
     FLOOKUP env name = SOME entry /\
@@ -751,7 +751,7 @@ Proof
 QED
 
 (* The region partition is stable under either kind of parameter binding. *)
-Theorem local_region_partition_bind[local]:
+Theorem local_region_partition_bind:
   !cenv env s s' name p sz f0 mr.
     (!n b size. local_region cenv [env] s n b size ==>
                 f0 <= b \/ mr n = SOME (b, size)) /\
@@ -817,13 +817,13 @@ Definition mat_frame_def:
        mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory)
 End
 
-Theorem mat_frame_refl[local]:
+Theorem mat_frame_refl:
   !st s. mat_frame st s s
 Proof
   simp[mat_frame_def, venom_state_component_equality]
 QED
 
-Theorem mat_frame_trans[local]:
+Theorem mat_frame_trans:
   !st mid s t u.
     mat_frame st s t /\ mat_frame mid t u /\
     (!x. not_fresh_at st x ==> not_fresh_at mid x) ==>
@@ -833,7 +833,7 @@ Proof
   gvs[venom_state_component_equality] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem mat_pending_bind[local]:
+Theorem mat_pending_bind:
   !caps cenv env st s mid t f0 mr name loc.
     mat_pending cenv env st s f0 mr caps /\ ~MEM name (MAP FST caps) /\
     mat_frame st s t /\
@@ -854,7 +854,7 @@ Proof
   qexists_tac `sz` >> simp[]
 QED
 
-Theorem mat_tail_stack_size[local]:
+Theorem mat_tail_stack_size:
   !caps cenv name loc.
     ~MEM name (MAP FST caps) ==>
     internal_stack_size (cenv with ce_vars updated_by (\m. m |+ (name, loc)))
@@ -865,7 +865,7 @@ Proof
   simp[MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss]
 QED
 
-Theorem mat_inv_memory_bind[local]:
+Theorem mat_inv_memory_bind:
   !func cenv env st s f0 mr name entry p sz w off.
     mat_inv func cenv env st s f0 mr /\
     FLOOKUP cenv.ce_vars name = SOME (MemLoc off sz) /\
@@ -896,7 +896,7 @@ Proof
   simp[local_region_def] >> metis_tac[]
 QED
 
-Theorem mat_stack_frame[local]:
+Theorem mat_stack_frame:
   !st mid s t sz a.
     fresh_vars_wrt st s /\ mid.cs_next_var = st.cs_next_var + 1 /\
     t = mstore s.vs_alloca_next a
@@ -924,7 +924,7 @@ Proof
   simp[] >> first_x_assum irule >> decide_tac
 QED
 
-Theorem mat_inv_stack_bind[local]:
+Theorem mat_inv_stack_bind:
   !func cenv env st s mid t f0 mr name x0 sz a.
     mat_inv func cenv env st s f0 mr /\
     x0 = STRING #"%" (toString st.cs_next_var) /\
@@ -981,7 +981,7 @@ Proof
            wordsTheory.w2n_n2w])) >> simp[]
 QED
 
-Theorem mat_pending_stack_bind[local]:
+Theorem mat_pending_stack_bind:
   !caps cenv env st s mid t f0 mr name x0 sz a.
     mat_pending cenv env st s f0 mr caps /\ ~MEM name (MAP FST caps) /\
     mat_frame st s t /\ mid.cs_next_var = st.cs_next_var + 1 /\
@@ -1001,7 +1001,7 @@ Proof
   simp[update_var_def] >> qexistsl_tac [`f0`, `sz'`] >> simp[]
 QED
 
-Theorem materialize_stack_split[local]:
+Theorem materialize_stack_split:
   !cenv name off sz p caps st cenv' st'.
     FLOOKUP cenv.ce_vars name = SOME (MemLoc off sz) /\
     materialize_internal_params cenv ((name,T,Var p)::caps) st = (cenv',st') ==>
@@ -1036,7 +1036,7 @@ Proof
   simp[]
 QED
 
-Theorem mat_stack_head_run[local]:
+Theorem mat_stack_head_run:
   !func cenv env st s mid f0 mr name off sz p caps.
     mat_inv func cenv env st s f0 mr /\
     mat_pending cenv env st s f0 mr ((name,T,Var p)::caps) /\
@@ -1166,7 +1166,7 @@ Resume materialize_run_compact[stack]:
 QED
 Finalise materialize_run_compact
 
-Theorem internal_args_local_memloc[local]:
+Theorem internal_args_local_memloc:
   !cenv params env idx args frontier mem name entry.
     internal_args_rel cenv params env idx args frontier mem /\
     lookup_scopes name [env] = SOME entry ==>
@@ -1181,7 +1181,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem internal_args_initial_locals[local]:
+Theorem internal_args_initial_locals:
   !cenv params env idx args frontier mem func s.
     internal_args_rel cenv params env idx args frontier mem ==>
     local_ptrs_rel func cenv [env] s /\
@@ -1194,7 +1194,7 @@ Proof
 QED
 
 (* The indexed caller-buffer specification has a name-indexed interface. *)
-Theorem internal_args_regions[local]:
+Theorem internal_args_regions:
   !cenv params env base args frontier mem.
     internal_args_rel cenv params env base args frontier mem ==>
     ?mr.
@@ -1242,7 +1242,7 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem internal_args_materialization_pre[local]:
+Theorem internal_args_materialization_pre:
   !cenv params env idx args frontier mem caps st s func.
     internal_args_rel cenv params env idx args frontier mem /\
     LENGTH caps = LENGTH params /\
@@ -1288,7 +1288,7 @@ Proof
 QED
 
 (* Capturing the return-PC after the ordinary PARAMs preserves the frame. *)
-Theorem run_inst_seq_params_retpc[local]:
+Theorem run_inst_seq_params_retpc:
   !n id base nv s.
     base + n <= LENGTH s.vs_params /\ LENGTH s.vs_params < dimword (:256) /\
     (!k. nv <= k ==> STRING #"%" (toString k) NOTIN FDOM s.vs_vars) ==>
@@ -1350,7 +1350,7 @@ Proof
   simp[lookup_var_def]
 QED
 
-Theorem capture_internal_params_run[local]:
+Theorem capture_internal_params_run:
   !params idx st caps next stp rpc stc s.
     compile_internal_param_decls params idx st = ((caps, next), stp) /\
     emit_op RETPC_PARAM [Lit (n2w next)] stp = (rpc, stc) /\
@@ -1384,7 +1384,7 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
 QED
 
-Theorem capture_internal_return_buffer_run[local]:
+Theorem capture_internal_return_buffer_run:
   !has_rb st rb st' s.
     (if has_rb then
        do p <- emit_op PARAM [Lit 0w]; return (SOME p) od
@@ -1519,7 +1519,7 @@ Proof
 QED
 
 
-Theorem scratch_alloca_run[local]:
+Theorem scratch_alloca_run:
   !func cenv scopes st s n.
     local_ptrs_rel func cenv scopes s /\ alloca_inv s /\
     fresh_vars_wrt st s /\
@@ -1600,7 +1600,7 @@ QED
 
 (* Keep this elementary emission fact local: importing loweringHalt merely
    for its compile_alloc_buffer_insts pulls in the end-to-end contract stack. *)
-Theorem internal_alloc_buffer_insts[local]:
+Theorem internal_alloc_buffer_insts:
   !n st buf st'.
     compile_alloc_buffer n st = (buf, st') ==>
     buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
@@ -1615,7 +1615,7 @@ Proof
        emit_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem scratch_buffer_run[local]:
+Theorem scratch_buffer_run:
   !func cenv scopes st s n buf st'.
     compile_alloc_buffer n st = (buf, st') /\
     local_ptrs_rel func cenv scopes s /\ alloca_inv s /\
@@ -1665,7 +1665,7 @@ Proof
   gvs[fresh_vars_wrt_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-Theorem internal_scratch_run[local]:
+Theorem internal_scratch_run:
   !func cenv scopes st s ret_type alloc_cenv st'.
     (case ret_type of
        SOME ty => if alloc_cenv.ce_returns_count > 0 then
@@ -1716,7 +1716,7 @@ Proof
       first_assum ACCEPT_TAC
 QED
 
-Theorem materialize_nonptr_binding[local]:
+Theorem materialize_nonptr_binding:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') ==>
     !name loc. FLOOKUP cenv'.ce_vars name = SOME loc /\
@@ -1740,7 +1740,7 @@ Proof
   simp[FLOOKUP_UPDATE] >> Cases_on `name = h0` >> gvs[] >> metis_tac[]
 QED
 
-Theorem materialize_global_binding[local]:
+Theorem materialize_global_binding:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') /\
     EVERY (\c. ?off sz. FLOOKUP cenv.ce_vars (FST c) = SOME (MemLoc off sz)) caps ==>
@@ -1775,7 +1775,7 @@ Definition internal_immutable_regions_def:
       val_wf tv v /\ off + type_memory_size tv <= frontier
 End
 
-Theorem internal_immutables_frame[local]:
+Theorem internal_immutables_frame:
   !cenv cx vs caller s.
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs caller /\
     internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
@@ -1800,7 +1800,7 @@ Proof
   qexistsl_tac [`type_memory_size tv`, `caller.vs_memory`] >> simp[]
 QED
 
-Theorem internal_body_state_rel[local]:
+Theorem internal_body_state_rel:
   !f func cenv cx vs caller cenv1 cenv2 rb rpc caps st st' env s0 s args st0.
     state_rel f cenv cx (vs with scopes := []) caller /\
     internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
@@ -1843,7 +1843,7 @@ Proof
   simp[]
 QED
 
-Theorem compile_internal_prologue_shape[local]:
+Theorem compile_internal_prologue_shape:
   !cenv params has_rb ret_type st cenv' rpc st'.
     compile_internal_prologue cenv params has_rb ret_type st = ((cenv',rpc),st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -1887,7 +1887,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem internal_stack_size_vars[local]:
+Theorem internal_stack_size_vars:
   !params cenv ce.
     ce.ce_vars = cenv.ce_vars ==>
     internal_stack_size ce params = internal_stack_size cenv params
@@ -1896,7 +1896,7 @@ Proof
   PairCases >> simp[internal_stack_size_def]
 QED
 
-Theorem setup_callee_frontier[local]:
+Theorem setup_callee_frontier:
   !func args caller s0.
     setup_callee func args caller = SOME s0 ==>
     s0.vs_alloca_next = caller.vs_alloca_next /\
@@ -1906,7 +1906,7 @@ Proof
   simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem internal_scratch_shape[local]:
+Theorem internal_scratch_shape:
   !cenv ret_type st st'.
     (case ret_type of
        SOME ty => if cenv.ce_returns_count > 0 then
@@ -1930,7 +1930,7 @@ Proof
       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def]
 QED
 
-Theorem internal_prologue_stages[local]:
+Theorem internal_prologue_stages:
   !cenv params has_rb ret_type st0 cenv2 rpc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2,rpc),st1) ==>
@@ -1962,7 +1962,7 @@ Proof
   metis_tac[pairTheory.PAIR]
 QED
 
-Theorem internal_prologue_stage_shapes[local]:
+Theorem internal_prologue_stage_shapes:
   !has_rb st0 rb stb params caps next stp rpc sc ce cenv2 sm cenv ret_type st1.
     (if has_rb then
        do p <- emit_op PARAM [Lit 0w]; return (SOME p) od
@@ -2006,7 +2006,7 @@ Proof
   fs[IS_PREFIX_APPEND] >> gvs[] >> simp[APPEND_ASSOC]
 QED
 
-Theorem internal_prologue_segment_members[local]:
+Theorem internal_prologue_segment_members:
   !st0 st1 func sc sm.
     fn_has_code st0 st1 func /\
     isPREFIX sm.cs_current_insts st1.cs_current_insts ==>
@@ -2032,7 +2032,7 @@ QED
 (* A step of an instruction of func other than an INVOKE keeps the room in
    func's frame: a fresh ALLOCA moves its size from the pending sizes to
    the frontier, and nothing else moves either. *)
-Theorem step_inst_base_alloca_room[local]:
+Theorem step_inst_base_alloca_room:
   !func inst s s' ctx.
     step_inst_base inst s = OK s' /\ MEM inst (fn_insts func) /\
     inst.inst_opcode <> INVOKE /\ alloca_room ctx func s ==>
@@ -2057,7 +2057,7 @@ Proof
             step_inst_base_preserves_alloca_next]
 QED
 
-Theorem run_inst_seq_alloca_room[local]:
+Theorem run_inst_seq_alloca_room:
   !is func s t ctx.
     run_inst_seq is s = OK t /\
     EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\
@@ -2332,7 +2332,7 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!i po psz name tv iv io. _` irule >>
   simp[] >> qexistsl_tac [`v`, `name`] >> simp[]
 QED
-Finalise internal_prologue_run[local]
+Finalise internal_prologue_run
 
 
 (* Running the prologue of an internal function func, compiled in cenv from
@@ -2356,7 +2356,7 @@ Finalise internal_prologue_run[local]
    alloca_room of the callee's entry
    state is a hypothesis: the caller's frontier carries over, so only the
    call site can establish it. *)
-Theorem compile_internal_prologue_imm_alloca[local]:
+Theorem compile_internal_prologue_imm_alloca:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2, return_pc), st1) ==>
@@ -2473,7 +2473,7 @@ Proof
 QED
 
 
-Theorem compile_internal_prologue_reserved[local]:
+Theorem compile_internal_prologue_reserved:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2, return_pc), st1) /\
@@ -2614,7 +2614,7 @@ QED
 (* materialize_internal_params rebinds each parameter at a MemLoc slot to a
    pointer variable, when the PARAMs' outputs are variables, and leaves a
    variable already held through a pointer variable so held. *)
-Theorem materialize_internal_params_ptrs[local]:
+Theorem materialize_internal_params_ptrs:
   !caps cenv st cenv' st' n.
     materialize_internal_params cenv caps st = (cenv', st') /\
     EVERY (\c. ?p. SND (SND c) = Var p) caps /\
