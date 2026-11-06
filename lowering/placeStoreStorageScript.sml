@@ -6804,6 +6804,46 @@ Proof
   gvs[place_store_copy_final_def, store_copy_frame_def]
 QED
 
+Theorem place_store_memory_to_slots_path:
+  (if tr then compile_memory_to_transient else compile_memory_to_storage)
+    src dst n sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  n < dimword (:256) /\ w2n sw + 32*n < dimword (:256) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      store_copy_normalize s t =
+        FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+                 (mload (w2n sw + 32*j) s) q) s (COUNT_LIST n) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `compile_word_copy_loop src dst n LocMemory
+     (if tr then LocTransient else LocStorage) F sa = (result,sb)` by
+    (Cases_on `tr` >> gvs[contextTheory.compile_memory_to_transient_def,
+                          contextTheory.compile_memory_to_storage_def]) >>
+  drule place_store_copy_boundary >> strip_tac >> gvs[] >>
+  `n < dimword (:256)` by (simp[] >> decide_tac) >>
+  drule_all place_store_copy_framed_run >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  drule place_store_copy_frame_observations >> strip_tac >> simp[] >>
+  fs[store_copy_frame_def, store_copy_prefix_def] >>
+  irule listTheory.FOLDL_CONG >> simp[] >>
+  simp[rich_listTheory.MEM_COUNT_LIST] >> rpt strip_tac >>
+  `32*x + w2n sw < dimword (:256)` by (simp[] >> decide_tac) >>
+  `sw + 32w * n2w x = n2w (32*x + w2n sw)` by
+    simp[GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w,
+         wordsTheory.WORD_ADD_COMM] >>
+  Cases_on `tr` >> simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]
+QED
+
 (* The allocation-limit check bounds the natural size, before n2w. *)
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
