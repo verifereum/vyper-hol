@@ -554,3 +554,15 @@ Proof
   drule_all ld_revert_endpoint_prefix_length >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem ld_blocks_supply_used_vars_mono:
+  !bbs a out b. lower_dload_blocks_supply a bbs = (out,b) ==>
+  !v. MEM v a.irs_used_vars ==> MEM v b.irs_used_vars
+Proof
+  Induct >- simp[lower_dload_blocks_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `lower_dload_insts_supply a h.bb_instructions` >>
+  Cases_on `lower_dload_blocks_supply r bbs` >>
+  simp[lower_dload_blocks_supply_def, lower_dload_block_supply_def] >>
+  strip_tac >> gvs[] >> metis_tac[ld_insts_supply_used_vars_mono]
+QED

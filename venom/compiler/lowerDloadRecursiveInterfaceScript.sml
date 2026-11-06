@@ -745,3 +745,36 @@ val ld_revert_entry_prospective = ``
   lower_dload_block_supply a bb = (gb,b) /\
   lower_dload_insts_supply a (TAKE c bb.bb_instructions) = (before,q) ==>
   revert_forward_pair gb (LENGTH before) (LENGTH before + (e-c))``;
+
+Theorem ld_recursive_configured_revert_entry:
+  fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed fa fn out /\
+  fn.fn_blocks = bpre ++ bb::bpost /\
+  lower_dload_blocks_supply fa bpre = (qpre,a0) /\
+  lower_dload_block_supply a0 bb = (gb,a3) /\
+  in_revert_forward fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lower_dload_insts_supply a0 (TAKE s.vs_inst_idx bb.bb_instructions) = (p,a1) /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+  t.vs_inst_idx = LENGTH p /\
+  get_instruction gb t.vs_inst_idx = SOME j ==>
+  (^ld_recursive_candidate) vs0 CT stk un gn j t
+Proof
+  strip_tac >>
+  `MEM fn observed.cu_context.ctx_functions /\ ir_supply_covers_unit fa observed` by
+    (fs[o1PassContractTheory.fn_pass_step_def,
+        venomFnScheduleRunnerTheory.lookup_unique_function_def, AllCaseEqs()] >>
+     `MEM fn (FILTER (\f. f.fn_name = fn.fn_name)
+        observed.cu_context.ctx_functions)` by simp[] >> gvs[MEM_FILTER]) >>
+  `EVERY (\v. MEM v fa.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
+    (fs[venomFnScheduleRunnerTheory.ir_supply_covers_unit_def,
+        venomFnScheduleRunnerTheory.list_subset_def, irSupplyTheory.unit_ir_vars_def,
+        irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
+        EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     fs[lambdify irSupplyTheory.block_ir_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[MEM_APPEND, MEM]) >>
+  `EVERY (\v. MEM v a0.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
+    (drule ld_blocks_supply_used_vars_mono >> fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all ld_configured_revert_interval_entry >> strip_tac >>
+  BETA_TAC >> disj2_tac >>
+  qexistsl_tac [`gb`, `copypos`, `endpos`] >> gvs[]
+QED
