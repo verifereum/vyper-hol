@@ -1,6 +1,7 @@
 (* Compiled fixed-bytes keccak: semantic and counted ghost endpoints agree. *)
 Theory bodyPtrHashBuiltinsKeccakFixedFrame
 Ancestors bodyPtrHashBuiltinsKeccakFixedRun bodyPtrHashBuiltinsFreshFrame
+  bodyPtrHashBuiltinsCursor
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsGhostFrame
   exprSimHash exprSimAlloc bodyPtrDefs fragGasSeqPtr ghostPcTransportPtr
   venomExecSemantics venomState venomInst ptrDiscipline exprLowering
@@ -24,6 +25,7 @@ Theorem hash_fixed_keccak_ptr_frame:
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
     ?u G3 tn3.
       run_inst_seq (emitted_insts sa sb) s = OK u /\
+      u.vs_current_bb = s.vs_current_bb /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G3 tn3
         (OK (u with vs_inst_idx := s.vs_inst_idx+3)) /\
       eval_operand op u = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
@@ -38,6 +40,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_keccak256_bytesm_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s = OK u` >>
+  `u.vs_current_bb = s.vs_current_bb` by
+    (irule hash_run_inst_seq_current_bb >>
+     goal_assum (drule_at Any) >> metis_tac[keccak_suffix_shape]) >>
   drule hash_fixed_keccak_emission >> strip_tac >>
   `?buf sm. compile_alloc_buffer 32 sa = (buf,sm)` by metis_tac[pairTheory.PAIR] >>
   drule_all hash_literal_alloc_store_frame >>

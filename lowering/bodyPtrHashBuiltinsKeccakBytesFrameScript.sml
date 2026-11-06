@@ -1,6 +1,7 @@
 (* Match the read-only S1 hash run with the counted pointer run. *)
 Theory bodyPtrHashBuiltinsKeccakBytesFrame
 Ancestors bodyPtrHashBuiltinsKeccakBytesRun bodyPtrHashBuiltinsGhostFrame
+  bodyPtrHashBuiltinsCursor
   exprSimHash exprSimVVFrame bodyPtrDefs venomState words
 
 Theorem hash_bytes_keccak_ptr_frame:
@@ -22,6 +23,7 @@ Theorem hash_bytes_keccak_ptr_frame:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
     ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      t.vs_current_bb = s.vs_current_bb /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
         (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
       eval_operand op t = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
@@ -35,6 +37,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!z. Var x = Var z ==> not_fresh_at sa z` by simp[] >>
   drule_all compile_keccak256_bytes_frame >> strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (irule hash_run_inst_seq_current_bb >>
+     goal_assum (drule_at Any) >> metis_tac[keccak_suffix_shape]) >>
   drule_all hash_keccak_bytes_counted >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   `ghost_inv d cenv cx es G' tn' t` by
@@ -67,6 +72,7 @@ Theorem hash_bytes_keccak_ptr_post:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
     ?t G' tn'.
+      t.vs_current_bb = s.vs_current_bb /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
         (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
       vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])

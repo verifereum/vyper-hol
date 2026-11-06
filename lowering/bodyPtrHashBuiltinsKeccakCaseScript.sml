@@ -23,6 +23,7 @@ Theorem hash_fixed_keccak_ptr_post:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.
+    t.vs_current_bb = s.vs_current_bb /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx+3)) /\
     vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
@@ -64,6 +65,7 @@ Theorem hash_dynamic_keccak_ptr_post:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.
+    t.vs_current_bb = s.vs_current_bb /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
     vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
@@ -110,6 +112,7 @@ Theorem hash_string_keccak_ptr_post:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.
+    t.vs_current_bb = s.vs_current_bb /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
     vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
