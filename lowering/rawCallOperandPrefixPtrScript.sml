@@ -367,7 +367,7 @@ Theorem raw_call_addr_data_header_sim_ptr:
       eval_operand data_op t = SOME (n2w (b+32)) /\
       op_taint tn len_op = {} /\ op_taint tn data_op = {} /\
       data = Var x /\ eval_operand data t = SOME (n2w b) /\
-      FLOOKUP G x = SOME (base,sz) /\ base <= b /\
+      FLOOKUP G x = SOME (base,sz) /\ op_prov G data_op = SOME (base,sz) /\ base <= b /\
       b + 32 + LENGTH bs <= base + sz /\ b < dimword (:256) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
       mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
@@ -604,7 +604,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_return]:
   fs[valueEncodingTheory.mem_word_at_def] >>
   `w + 32w = n2w (w2n w + 32)` by
     metis_tac[wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
-  simp[wordsTheory.w2n_lt] >> rpt strip_tac >> gvs[] >>
+  simp[wordsTheory.w2n_lt, ptrDisciplineTheory.op_prov_def] >> rpt strip_tac >> gvs[] >>
   fs[exprLoweringPropsTheory.ci_mono_def] >>
   metis_tac[stmtFragPtrTheory.not_fresh_at_mono]
 QED

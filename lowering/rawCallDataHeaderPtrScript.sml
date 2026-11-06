@@ -266,6 +266,7 @@ Theorem raw_call_add_header_stage:
     eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
     eval_operand (Var lx) u = SOME len /\ op_taint un (Var lx) = {} /\
     eval_operand (Var dx) u = SOME (w+32w) /\ op_taint un (Var dx) = {} /\
+    op_prov H (Var dx) = op_prov G (Var x) /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem
 Proof
   strip_tac >>
@@ -285,6 +286,13 @@ Proof
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
      fs[compileEnvTheory.not_fresh_at_def]) >>
+  `op_prov H (Var dx) = op_prov G (Var x)` by
+    (Cases_on `FLOOKUP G x` >>
+     simp[Abbr `H`, Abbr `u`, ptrDisciplineTheory.step_prov_def,
+      ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.set_prov_def,
+      ptrDisciplineTheory.first_prov_def, ptrDisciplineTheory.op_prov_def,
+      venomInstTheory.mk_inst_def, finite_mapTheory.FLOOKUP_UPDATE,
+      finite_mapTheory.FLOOKUP_DRESTRICT]) >>
   `x <> dx /\ lx <> dx` by metis_tac[] >>
   `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sl s u` by
     (qunabbrev_tac `u` >> irule raw_call_fresh_update_state_frame >>
@@ -322,6 +330,7 @@ Theorem raw_call_header_two_steps:
     eval_operand (Var dx) u = SOME (w+32w) /\ op_taint un (Var dx) = {} /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
     FLOOKUP H x = FLOOKUP G x /\
+    op_prov H (Var dx) = op_prov G (Var x) /\
     not_fresh_at sm x /\ not_fresh_at sm lx /\ not_fresh_at sm dx
 Proof
   strip_tac >>
@@ -366,6 +375,9 @@ Resume raw_call_header_two_steps[compose]:
      qexistsl_tac [`H`, `es`, `u`, `sl`, `un`] >>
 
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `op_prov H' (Var dx) = op_prov G (Var x)` by
+    (fs[ptrDisciplineTheory.op_prov_def, bodyPtrDefsTheory.ghost_kept_def] >>
+     metis_tac[]) >>
   qexistsl_tac [`H'`, `un'`, `u'`] >> simp[] >>
   conj_tac
   >- (fs[venomStateTheory.eval_operand_def] >>

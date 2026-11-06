@@ -173,7 +173,8 @@ Theorem raw_call_kwargs_execution_ptr:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
       ghost_inv dep cenv cx ee G tn t /\
-      wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn)
+      wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      sa.cs_next_id <= sb.cs_next_id)
     (\rr ee gt r. wb_args_exit rr r)
 Proof
   strip_tac >> drule rawCallShapePtrTheory.raw_call_kwargs_types >> strip_tac >>
@@ -260,13 +261,16 @@ Theorem raw_call_kwargs_sim_ptr:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
       ghost_inv dep cenv cx ee G tn t /\
       wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sd sb ee
+        (BytesV bs) (Var x) t /\
       eval_operand (Var x) t = SOME (n2w b) /\
       FLOOKUP G x = SOME (region_base,sz) /\
       op_taint tn (Var x) = op_taint tn0 (Var x) /\
       mem_bytes_at b (32+LENGTH bs) t.vs_memory =
         mem_bytes_at b (32+LENGTH bs) s0.vs_memory /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
-      (!op. MEM op saved ==> op_taint tn op = op_taint tn0 op /\
+      (!op. MEM op saved ==> op_prov G op = op_prov G0 op /\
+        op_taint tn op = op_taint tn0 op /\
         (!w. eval_operand op s0 = SOME w ==> eval_operand op t = SOME w)))
     (\rr ee gt r. wb_args_exit rr r)
 Proof
@@ -275,10 +279,17 @@ Proof
   irule gasSummaryComposePtrTheory.gas_outcome_ptr_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   drule_all saved_dynamic_bytes_across_word_args >> strip_tac >>
+  `expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sd sb ee
+     (BytesV bs) (Var x) t` by
+    (irule log_frame_placement >> simp[] >> goal_assum (drule_at Any) >>
+     simp[] >> fs[exprSimPrecompilesTheory.typed_args_post_def] >> metis_tac[]) >>
   qexistsl_tac [`vs`, `xs`] >> simp[] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   gen_tac >> strip_tac >>
   `(!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l)` by metis_tac[] >>
+  conj_tac
+  >- (Cases_on `op` >>
+      fs[ptrDisciplineTheory.op_prov_def, bodyPtrDefsTheory.ghost_kept_def]) >>
   conj_tac
   >- (Cases_on `op` >>
       fs[ptrDisciplineTheory.op_taint_def, bodyPtrDefsTheory.ghost_kept_def]) >>

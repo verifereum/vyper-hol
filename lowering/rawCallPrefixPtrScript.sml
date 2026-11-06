@@ -351,12 +351,13 @@ Theorem raw_call_operands_sim_ptr:
       eval_operand data_op t = SOME (n2w (b+32)) /\
       op_taint tn len_op = {} /\ op_taint tn data_op = {} /\
       data = Var x /\ eval_operand data t = SOME (n2w b) /\
-      FLOOKUP G x = SOME (base,sz) /\ base <= b /\
+      FLOOKUP G x = SOME (base,sz) /\ op_prov G data_op = SOME (base,sz) /\ base <= b /\
       b + 32 + LENGTH bs <= base + sz /\ b < dimword (:256) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
       mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
       (!v. addr = Var v \/ data = Var v \/ len_op = Var v \/ data_op = Var v ==>
-        not_fresh_at s5 v))
+        not_fresh_at s5 v) /\
+      expr_val_at cenv cx (expr_type d) s1 s5 ee (BytesV bs) data t)
     (\rr ee gt r. wb_args_exit rr r)
 Proof
   strip_tac >>
@@ -472,10 +473,13 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
          qexistsl_tac [`G`, `ee`, `t`, `sm`, `tn`] >>
          fs[exprLoweringPropsTheory.ci_mono_def]) >>
       `expr_val_rel cx (BaseT AddressT) av addr t' /\ op_taint tn' addr = {}` by
-        (qpat_x_assum `!op. _ ==> op_taint tn' op = _ /\ _`
+        (qpat_assum `!op. _ ==> op_prov G' op = _ /\ _`
            (qspec_then `addr` assume_tac) >>
          qpat_x_assum `expr_val_rel cx (BaseT AddressT) av addr t` mp_tac >>
          simp[loweringPostsTheory.expr_val_rel_def] >> metis_tac[]) >>
+      `op_prov G' data_op = SOME (base',sz)` by
+        (qpat_assum `!op. _ ==> op_prov G' op = _ /\ _`
+          (qspec_then `data_op` mp_tac) >> simp[]) >>
       qexistsl_tac [`xs'`, `ea`, `ee`, `ta`, `tb`, `t`, `b`] >>
       simp[wordsTheory.MOD_DIMINDEX] >> conj_tac
       >- (qpat_x_assum `mem_bytes_at b (LENGTH bs + 32) _ = _` mp_tac >>
@@ -551,7 +555,7 @@ Theorem raw_call_prefix_sim_ptr:
       eval_operand data_op t = SOME (n2w (b+32)) /\
       op_taint tn len_op = {} /\ op_taint tn data_op = {} /\
       data = Var x /\ eval_operand data t = SOME (n2w b) /\
-      FLOOKUP G x = SOME (base,sz) /\ base <= b /\
+      FLOOKUP G x = SOME (base,sz) /\ op_prov G data_op = SOME (base,sz) /\ base <= b /\
       b + 32 + LENGTH bs <= base + sz /\ b < dimword (:256) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
       mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
@@ -562,7 +566,8 @@ Theorem raw_call_prefix_sim_ptr:
         | NONE => case t5.vs_gas_readings of [] => 0w | r::rs => r) /\
       op_taint tn gas_op = {} /\
       t.vs_gas_readings = (case go of SOME g => t5.vs_gas_readings
-        | NONE => TL t5.vs_gas_readings))
+        | NONE => TL t5.vs_gas_readings) /\
+      expr_val_at cenv cx (expr_type d) s1 s6 ee (BytesV bs) data t)
     (\rr ee gt r. wb_args_exit rr r)
 Proof
   strip_tac >>
@@ -642,6 +647,14 @@ Resume raw_call_prefix_sim_ptr[gas_post]:
 QED
 
 Resume raw_call_prefix_sim_ptr[transport]:
+  `op_prov H data_op = SOME (base',sz)` by
+    (Cases_on `data_op` >>
+     fs[ptrDisciplineTheory.op_prov_def, bodyPtrDefsTheory.ghost_kept_def]) >>
+  `expr_val_at cenv cx (expr_type d) s1 s6 es_end (BytesV bs) (Var x) t'` by
+    (irule stmtSimLogArgsTheory.log_frame_placement >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     fs[exprLoweringPropsTheory.ci_mono_def, loweringPostsTheory.expr_val_at_def] >>
+     metis_tac[]) >>
   conj_tac >- suspend "typed_post" >>
   conj_tac
   >- (qpat_x_assum `!op. _ ==> op_taint un op = _ /\ _` mp_tac >>
@@ -669,7 +682,10 @@ Resume raw_call_prefix_sim_ptr[transport]:
   conj_tac
   >- (qpat_x_assum `ghost_kept _ _ s5 G tn t H un` mp_tac >>
       simp[bodyPtrDefsTheory.ghost_kept_def]) >>
-  fs[exprLoweringPropsTheory.ci_mono_def] >>
+  conj_tac
+  >- (fs[exprLoweringPropsTheory.ci_mono_def] >>
+      metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
+  fs[loweringPostsTheory.expr_val_at_def, exprLoweringPropsTheory.ci_mono_def] >>
   metis_tac[stmtFragPtrTheory.not_fresh_at_mono]
 QED
 
