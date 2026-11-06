@@ -1151,7 +1151,7 @@ Theorem convert_widen_copy_run[local]:
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) s.vs_memory /\
     val_footprint tv v <= k ==>
@@ -1203,7 +1203,7 @@ Resume convert_widen_copy_run[owned_post]:
          venomStateTheory.write_memory_with_expansion_def] >>
   irule convert_buffer_expr_post >>
   `sm.cs_next_id < sb.cs_next_id` by gvs[ci_mono_def] >>
-  simp[] >> conj_tac
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >> conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
           qpat_assum `stmt_state_rel _ _ _ _ _ (mcopy _ _ _ _)`
@@ -1342,10 +1342,10 @@ Proof
   `!n b sz. local_region cenv es.scopes tt n b sz <=>
              local_region cenv es.scopes s n b sz` by
     (rpt gen_tac >> eq_tac
-     >- (strip_tac >> irule exprSimOpsTheory.local_region_frame >>
+     >- (strip_tac >> irule exprSimPropsTheory.local_region_frame >>
          conj_tac >- (qexists_tac `func` >> simp[]) >>
          qexistsl_tac [`sm`, `es.scopes`, `tt`] >> simp[]) >>
-     strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
   gvs[expr_val_own_def] >> rpt strip_tac >>
   qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >> gvs[] >>
@@ -1637,6 +1637,8 @@ Theorem convert_dynamic_counted_cont[local]:
         (Abort Revert_abort tt))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> gvs[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e1) v x s /\
    stmt_state_rel ctx func cenv cx es1 s` by gvs[expr_post_def] >>
   drule_all convert_dynamic_view >> strip_tac >>

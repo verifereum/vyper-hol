@@ -430,6 +430,8 @@ Proof
      disch_then (qspec_then `entry` mp_tac) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `?sw. eval_operand op s = SOME sw /\ val_in_memory tyv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `val_wf tyv v` by metis_tac[value_has_type_memory_wf] >>
@@ -812,9 +814,13 @@ Proof
        `gas_explicit marks s0.vs_gas_readings ++ []`] >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `val_wf tyv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
-    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >> gvs[is_bytestring_word_type]) >>
+    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac
+     >- (qpat_x_assum `expr_type e = vtyp` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     metis_tac[is_bytestring_word_type]) >>
   `?sw. eval_operand op s = SOME sw /\
         val_in_memory etv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
