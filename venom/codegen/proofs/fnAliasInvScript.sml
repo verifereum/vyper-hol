@@ -10293,6 +10293,21 @@ QED
      is not yet an inductive lineage invariant. Its genuine write-step
      preservation and initial-state projection remain unproved. *)
 
+Theorem alias_var_mass_init_cleanup[simp]:
+  alias_var_mass x (init_cleanup_plan_state ch growth spill_base lbl_ctr) = 0
+Proof
+  simp[alias_var_mass_def, init_cleanup_plan_state_def, init_plan_state_def,
+       LIST_ELEM_COUNT_THM]
+QED
+
+Theorem alias_live_or_retired_initial:
+  alias_live_or_retired dfg
+    (\k. init_cleanup_plan_state ch growth spill_base lbl_ctr)
+    demand writes 0
+Proof
+  simp[alias_live_or_retired_def]
+QED
+
 Theorem lineage_alias_successor:
   !fuel ctx lo liveness dfg cfg ch growth spill_base lbl_ctr fn lbl bb ps h
    promised block_ops ps_after ra vs vs'.
