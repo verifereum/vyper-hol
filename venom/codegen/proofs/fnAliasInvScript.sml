@@ -6655,6 +6655,77 @@ Proof
   simp[eval_one_phi_def] >> Cases_on `inst.inst_outputs` >> simp[]
 QED
 
+Theorem alias_run_without_predecessor_no_phis:
+  s.vs_prev_bb = NONE /\ run_block fuel ctx bb s = OK s' ==>
+  collect_phis bb.bb_instructions = []
+Proof
+  Cases_on `bb.bb_instructions` >> simp[collect_phis_def] >>
+  strip_tac >> Cases_on `h.inst_opcode = PHI` >>
+  gvs[collect_phis_def, run_block_def, eval_phis_def,
+      eval_one_phi_without_predecessor]
+QED
+
+Theorem alias_lineage_join_without_predecessor_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of cfg lbl) /\
+  s.vs_prev_bb = NONE /\ run_block fuel ctx bb s = OK s' /\
+  MEM x (live_vars_at liveness lbl 0) ==>
+  plan_holds ps (Var x)
+Proof
+  strip_tac >>
+  `collect_phis bb.bb_instructions = []` by
+    metis_tac[alias_run_without_predecessor_no_phis] >>
+  `MEM x (live_vars_at liveness lbl (LENGTH (collect_phis bb.bb_instructions)))`
+    by gvs[] >>
+  drule_all alias_lineage_join_ordinary_coverage >> simp[plan_holds_def]
+QED
+
+Theorem alias_entry_ordinary_ownership:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  s.vs_prev_bb = SOME pred /\
+  (!p x. s.vs_prev_bb = SOME p /\
+    MEM x (input_vars_from p bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)) ==> plan_holds ps (Var x)) /\
+  MEM x (live_vars_at (liveness_analyze fn) lbl 0) /\
+  MEM x (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions))) ==>
+  plan_holds ps (Var x)
+Proof
+  strip_tac >> first_x_assum irule >> qexists_tac `pred` >> simp[] >>
+  Cases_on `NULL (collect_phis bb.bb_instructions)`
+  >- gvs[NULL_EQ, alias_input_vars_no_phis] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `phi_block_ready (liveness_analyze fn) bb` by
+    (gvs[codegen_ready_fn_def, phi_operands_ready_def, EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `bb.bb_label = lbl` (SUBST_ALL_TAC o SYM) >>
+  drule_all alias_phi_ready_ordinary_input >> simp[]
+QED
+
+Theorem alias_use_entry_or_earlier_definition:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) ==>
+  MEM x (live_vars_at (liveness_analyze fn) lbl 0) \/
+  ?k. k < i /\ MEM x (inst_defs (EL k bb.bb_instructions))
+Proof
+  strip_tac >>
+  Cases_on `?k. k < i /\ MEM x (inst_defs (EL k bb.bb_instructions))`
+  >- metis_tac[] >>
+  disj1_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl i)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >> simp[]) >>
+  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >> simp[] >>
+  disch_then irule >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`bb`, `i`] >> simp[] >> metis_tac[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
