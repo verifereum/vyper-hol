@@ -1447,3 +1447,255 @@ Proof
     (irule current_history_owned_name_member >> gvs[] >> metis_tac[]) >>
   gvs[] >> irule current_cut_retained_original_endpoint >> metis_tac[]
 QED
+
+Theorem current_cut_output_token_inserted[local]:
+  !xs j t. current_output_token x l i j xs t = CurrentInserted v h <=>
+    ~MEM x xs /\ t = CurrentInserted v h
+Proof
+  Induct >> simp[current_output_token_def] >> rpt gen_tac >>
+  Cases_on `h' = x` >> simp[]
+QED
+
+Theorem current_cut_original_scan_inserted[local]:
+  !insts i t. current_original_scan x l i insts t = CurrentInserted v h <=>
+    EVERY (\inst. ~MEM x inst.inst_outputs) insts /\ t = CurrentInserted v h
+Proof
+  Induct >> simp[current_original_scan_def,
+    current_cut_output_token_inserted] >> metis_tac[]
+QED
+
+Theorem current_cut_inserted_scan_phi_clear[local]:
+  wf_function fn /\ lookup_block h fn.fn_blocks = SOME old /\
+  A h = current_block_annotations old pre /\ current_event_label ev = h /\
+  current_source_cut A ev
+    (LENGTH pre + LENGTH (collect_phis old.bb_instructions)) rs E /\
+  E x = CurrentInserted x h ==>
+  !di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==>
+    ~MEM x di.inst_outputs
+Proof
+  strip_tac >>
+  `h = old.bb_label` by metis_tac[lookup_block_label] >>
+  `LENGTH (collect_phis old.bb_instructions) <= LENGTH old.bb_instructions` by
+    simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+  `current_event_label ev = old.bb_label /\
+   A old.bb_label = current_block_annotations old pre` by metis_tac[] >>
+  drule_all current_wf_source_cut_original_scan >>
+  disch_then (qspec_then `x` assume_tac) >>
+  `EVERY (\inst. ~MEM x inst.inst_outputs)
+    (TAKE (LENGTH (collect_phis old.bb_instructions)) old.bb_instructions)` by
+    metis_tac[current_cut_original_scan_inserted] >>
+  `bb_well_formed old` by metis_tac[wf_function_def, lookup_block_MEM, EVERY_MEM] >>
+  rpt strip_tac >>
+  `?j. j < LENGTH old.bb_instructions /\ EL j old.bb_instructions = di` by
+    metis_tac[MEM_EL] >>
+  `j < LENGTH (collect_phis old.bb_instructions)` by
+    (irule makeSsaCurrentDemandTheory.current_phi_index_before_prefix >>
+     fs[bb_well_formed_def] >> metis_tac[]) >>
+  qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [EVERY_EL]) >>
+  disch_then (qspec_then `j` mp_tac) >> simp[LENGTH_TAKE, EL_TAKE]
+QED
+
+Theorem current_cut_inserted_occurrence[local]:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  A h = current_block_annotations old pre /\
+  MEM inst pre /\ MEM x inst.inst_outputs ==>
+  ?q. current_wf_inserted_phi_at A renamed h q x
+Proof
+  strip_tac >>
+  `?q. q < LENGTH pre /\ EL q pre = inst` by metis_tac[MEM_EL] >>
+  drule_all current_wf_phi_context_block_opcodes >> strip_tac >>
+  `LENGTH pre' = LENGTH pre` by
+    (fs[current_block_annotations_def, current_inserted_annotations_def] >>
+     metis_tac[LENGTH_MAP, LENGTH_APPEND, arithmeticTheory.EQ_ADD_RCANCEL]) >>
+  `?id w. EL q pre' = build_phi_inst_supply id w
+    (case ALOOKUP (current_pred_map fn) old.bb_label of SOME ps => ps | NONE => [])` by
+    (fs[EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  `MAP (\v. (CurrentInserted v old.bb_label,v)) inst.inst_outputs =
+    [(CurrentInserted w old.bb_label,w)]` by
+    (`current_block_annotations old pre = current_block_annotations old pre'` by
+       metis_tac[] >>
+     qpat_x_assum `current_block_annotations _ _ = _`
+       (mp_tac o Q.AP_TERM `\xs. EL q xs`) >>
+     simp[current_block_annotations_def, current_inserted_annotations_def,
+       EL_APPEND_EQN, EL_MAP, makeSsaCurrentDefsTheory.build_phi_inst_supply_def]) >>
+  `w = x` by
+    (qpat_x_assum `MAP _ _ = _` (mp_tac o Q.AP_TERM `MAP SND`) >>
+     simp[MAP_MAP_o, combinTheory.o_DEF] >> strip_tac >> gvs[]) >>
+  `LENGTH new.bb_instructions = LENGTH pre' + LENGTH old.bb_instructions` by
+    metis_tac[LENGTH_MAP, LENGTH_APPEND] >>
+  `(EL q new.bb_instructions).inst_opcode = PHI` by
+    (qpat_x_assum `MAP instruction_inst_opcode _ = _`
+      (mp_tac o Q.AP_TERM `\xs. EL q xs`) >>
+     simp[EL_MAP, EL_APPEND_EQN, makeSsaCurrentDefsTheory.build_phi_inst_supply_def]) >>
+  qexists_tac `q` >> simp[current_wf_inserted_phi_at_def] >>
+  simp[current_block_annotations_def, current_inserted_annotations_def,
+    EL_APPEND_EQN, EL_MAP, makeSsaCurrentDefsTheory.build_phi_inst_supply_def] >>
+  metis_tac[lookup_block_label]
+QED
+
+Theorem current_cut_moved_phi_index[local]:
+  !xs phis ord. MEM inst (collect_phis xs) /\
+  (simplify_current_phi inst).inst_opcode <> PHI /\
+  makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs = (phis,ord) ==>
+  ?k. k < phi_prefix_length xs - LENGTH phis /\
+    k < LENGTH ord /\ EL k ord = simplify_current_phi inst
+Proof
+  Induct >> simp[livenessDefsTheory.collect_phis_def,
+    makeSsaCurrentDefsTheory.simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs` >>
+  simp[] >> Cases_on `(simplify_current_phi h).inst_opcode = PHI` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  fs[venomExecSemanticsTheory.phi_prefix_length_def]
+  >- (qexists_tac `k` >> simp[])
+  >- (drule simplify_current_phi_prefix_partition >> strip_tac >>
+      qexists_tac `0` >> simp[] >> decide_tac)
+  >> qexists_tac `SUC k` >>
+  simp[] >> decide_tac
+QED
+
+Theorem current_cut_moved_phi_nonwrite[local]:
+  MEM inst (collect_phis xs) /\
+  (simplify_current_phi inst).inst_opcode <> PHI /\
+  EVERY (\i. ~MEM z i.inst_outputs)
+    (TAKE (phi_prefix_length xs - phi_prefix_length (simplify_current_phi_prefix xs))
+      (DROP (phi_prefix_length (simplify_current_phi_prefix xs))
+        (simplify_current_phi_prefix xs))) ==>
+  ~MEM z (simplify_current_phi inst).inst_outputs
+Proof
+  strip_tac >>
+  Cases_on `makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs` >>
+  rename1 `makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs = (phis,ord)` >>
+  drule_all current_cut_moved_phi_index >> strip_tac >>
+  `phi_prefix_length (simplify_current_phi_prefix xs) = LENGTH phis` by
+    (simp[makeSsaCurrentDefsTheory.simplify_current_phi_prefix_def,
+      reassign_current_inst_ids_phi_prefix] >>
+     metis_tac[simplify_current_phi_parts_prefix]) >>
+  `LENGTH phis + k < LENGTH (phis ++ ord)` by simp[] >>
+  drule makeSsaCurrentCleanupBoundaryTheory.current_reassign_content >>
+  disch_then (qspec_then `MAP (\i. i.inst_id) xs` strip_assume_tac) >>
+  qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [EVERY_EL]) >>
+  disch_then (qspec_then `k` mp_tac) >>
+  simp[LENGTH_TAKE, LENGTH_DROP,
+    makeSsaCurrentDefsTheory.simplify_current_phi_prefix_def,
+    makeSsaCurrentCleanupBoundaryTheory.current_reassign_length,
+    EL_TAKE, EL_DROP, EL_APPEND_EQN] >>
+  gvs[LENGTH_TAKE_EQ, LENGTH_DROP,
+    makeSsaCurrentCleanupBoundaryTheory.current_reassign_length,
+    EL_APPEND_EQN, arithmeticTheory.ADD_COMM, arithmeticTheory.MIN_DEF]
+QED
+
+Theorem current_cut_inserted_name_endpoint[local]:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\ A h = current_block_annotations old pre /\
+  current_wf_inserted_phi_at A renamed h q x /\
+  current_token_name H (CurrentInserted x h) = SOME z /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM x di.inst_outputs) /\
+  EVERY (\inst. ~MEM z inst.inst_outputs)
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) -
+       phi_prefix_length (simplify_current_phi_block new).bb_instructions)
+      (DROP (phi_prefix_length (simplify_current_phi_block new).bb_instructions)
+        (simplify_current_phi_block new).bb_instructions)) ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_output >> strip_tac >>
+  `out = z` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `out = z` SUBST_ALL_TAC >>
+  Cases_on `simplify_current_phi (EL q new.bb_instructions) = EL q new.bb_instructions`
+  >- (simp[current_cut_semantic_endpoint_def] >> metis_tac[]) >>
+  `q < LENGTH new.bb_instructions /\ (EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_inserted_phi_at_def] >> metis_tac[optionTheory.SOME_11]) >>
+  `MEM (EL q new.bb_instructions) (collect_phis new.bb_instructions)` by
+    (irule makeSsaCurrentDemandTheory.current_phi_in_prefix >>
+     metis_tac[current_wf_phi_context_prefix_order]) >>
+  `phi_prefix_length new.bb_instructions = LENGTH pre + LENGTH (collect_phis old.bb_instructions)` by
+    (irule current_prefix_actual_endpoint >> metis_tac[]) >>
+  `~MEM z (simplify_current_phi (EL q new.bb_instructions)).inst_outputs` suffices_by
+    (drule_all current_wf_phi_occurrence_cleanup_cases >> strip_tac >>
+     gvs[] >> fs[]) >>
+  irule current_cut_moved_phi_nonwrite >> conj_tac
+  >- (drule_all current_wf_phi_occurrence_cleanup_cases >> strip_tac >> gvs[] >> fs[]) >>
+  qexists_tac `new.bb_instructions` >>
+  Cases_on `new.bb_instructions` >>
+  fs[livenessDefsTheory.collect_phis_def] >>
+  rename1 `new.bb_instructions = hd::tl` >>
+  Cases_on `hd.inst_opcode = PHI` >>
+  fs[livenessDefsTheory.collect_phis_def,
+    makeSsaCurrentDefsTheory.simplify_current_phi_block_def]
+QED
+
+Theorem current_cut_local_carrier_endpoint[local]:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  current_collapsed_carrier fn A renamed h x z ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >> drule_all current_collapsed_carrier_owned_name >> strip_tac >>
+  qpat_x_assum `current_collapsed_carrier _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_collapsed_carrier_def] >> strip_tac >>
+  `old' = old /\ new' = new` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+  `q < LENGTH new.bb_instructions /\ (EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_inserted_phi_at_def] >> metis_tac[optionTheory.SOME_11]) >>
+  qpat_assum `simplify_current_phi _ = _` (mk_asm "collapse") >>
+  drule_all current_wf_phi_occurrence_cleanup_cases >> strip_tac >>
+  gvs[venomInstTheory.instruction_component_equality] >>
+  asm "collapse" assume_tac >>
+  rename1 `MEM (t,x,z) H`
+  >- (`!ni. MEM ni new.bb_instructions ==> ~MEM z ni.inst_outputs` by
+        metis_tac[current_wf_external_output_disjoint] >>
+      `FLOOKUP (current_cut_sg fn A renamed H events p
+         (LENGTH pred.bb_instructions)) z = SOME x` by
+        (irule current_cut_collapsed_inserted_edge_lookup >> metis_tac[]) >>
+      `phi_eff (SOME p) x old.bb_instructions = SOME (Var x)` by
+        (irule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
+         simp[EVERY_MEM] >> metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+      simp[current_cut_semantic_endpoint_def] >> disj2_tac >> disj2_tac >>
+      simp[EVERY_MEM] >> rpt strip_tac >>
+      `MEM z (FLAT (MAP (\i. i.inst_outputs)
+        (simplify_current_phi_block new).bb_instructions))` by
+        (simp[MEM_FLAT, MEM_MAP] >> metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+      drule current_wf_cleanup_block_output_member >>
+      simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  irule current_cut_retained_original_endpoint >> metis_tac[]
+QED
+
+Theorem current_cut_local_inserted_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  A h = current_block_annotations old pre /\
+  (?inst. MEM inst pre /\ MEM x inst.inst_outputs) /\
+  MEM ev events /\ current_event_label ev = h /\
+  current_source_cut A ev
+    (LENGTH pre + LENGTH (collect_phis old.bb_instructions)) rs E /\
+  current_demand fn x h (LENGTH (collect_phis old.bb_instructions)) /\
+  E x = CurrentInserted x h /\
+  (current_token_name H (E x) = SOME z \/
+   ?d. E x = CurrentInserted x d /\
+       current_collapsed_carrier fn A renamed d x z) /\
+  EVERY (\inst. ~MEM z inst.inst_outputs)
+    (TAKE
+      (LENGTH pre + LENGTH (collect_phis old.bb_instructions) -
+       phi_prefix_length (simplify_current_phi_block new).bb_instructions)
+      (DROP (phi_prefix_length (simplify_current_phi_block new).bb_instructions)
+        (simplify_current_phi_block new).bb_instructions)) ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac
+  >- (`wf_function fn` by fs[current_wf_phi_context_def] >>
+      `!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==>
+        ~MEM x di.inst_outputs` by
+        metis_tac[current_cut_inserted_scan_phi_clear] >>
+      `?q. current_wf_inserted_phi_at A renamed h q x` by
+        (irule current_cut_inserted_occurrence >> metis_tac[]) >>
+      irule current_cut_inserted_name_endpoint >> metis_tac[]) >>
+  `d = h` by metis_tac[current_token_11] >>
+  irule current_cut_local_carrier_endpoint >> metis_tac[]
+QED
