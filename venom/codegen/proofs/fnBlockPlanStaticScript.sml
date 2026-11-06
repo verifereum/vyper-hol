@@ -22,6 +22,7 @@ Ancestors
   stackPlanGen stackPlanOps stackPlanTypes venomExecSemantics venomWf
   livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion fnBlockPlanStaticInventory
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
+  fnBlockPlanStaticAccounting
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
