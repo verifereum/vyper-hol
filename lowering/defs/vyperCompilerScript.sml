@@ -25,6 +25,7 @@ Ancestors
   venomWf
   fcgDefs
   pointerConfinedDefs
+  defsReachCheck
 
 (* ===== Compile State Initialization ===== *)
 
@@ -410,6 +411,25 @@ Definition write_excl_check_def:
     | NONE => T
 End
 
+(* Each definition of a pointer variable is a root (an ALLOCA, or a DALLOCA
+   or pointer PARAM whose output no ALLOCA writes), or a pointer-preserving
+   op on a pointer variable. *)
+Definition pv_def_check_def:
+  pv_def_check (pl : num list) ar pv inst <=>
+    EVERY (\v. MEM v pv ==>
+             inst.inst_opcode = ALLOCA \/
+             ((inst.inst_opcode = DALLOCA \/
+               (inst.inst_opcode = PARAM /\
+                case inst.inst_operands of
+                  [Lit idx] => MEM (w2n idx) pl
+                | _ => F)) /\
+              ~MEM v ar) \/
+             (is_pointer_preserving_op inst.inst_opcode /\
+              EXISTS (\op. case op of Var u => MEM u pv | _ => F)
+                inst.inst_operands))
+      inst.inst_outputs
+End
+
 Definition fn_ptr_ok_check_def:
   fn_ptr_ok_check PL fn <=>
     let ar = opcode_root_list ALLOCA fn in
@@ -419,7 +439,8 @@ Definition fn_ptr_ok_check_def:
       (SOME pv, SOME pva, SOME pvo) =>
         fn.fn_forced_alloc_positions = FEMPTY /\
         EVERY (\inst. inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
-                      phi_check pv inst /\ write_excl_check pva pvo inst)
+                      phi_check pv inst /\ write_excl_check pva pvo inst /\
+                      pv_def_check (PL fn.fn_name) ar pv inst)
           (fn_insts fn)
     | _ => F
 End
@@ -476,11 +497,13 @@ End
    (mem_safe_raw_unit_memory_ok, alloca_frontier_inv_entry) asks of the
    unit: every function's labels distinct and an entry block, and the
    reachable call graph acyclic.  ptr_ok_check is what S3's pointer
-   discipline asks of it (fn_ptr_ok).  Like the inst-id and budget checks, they
-   are decided on the unit rather than proved of the lowering.  The budget
-   check leaves room for 32 bytes per DLOAD: LowerDload gives each DLOAD a
-   32-byte scratch ALLOCA, so its output's frontier runs that far past the
-   input's. *)
+   discipline asks of it (fn_ptr_ok).  The last conjunct is definite
+   assignment (every use is written on every path to it), which
+   SimplifyCFG's input contract asks for.  Like the inst-id and budget
+   checks, they are decided on the unit rather than proved of the
+   lowering.  The budget check leaves room for 32 bytes per DLOAD:
+   LowerDload gives each DLOAD a 32-byte scratch ALLOCA, so its output's
+   frontier runs that far past the input's. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
@@ -494,7 +517,8 @@ Definition lowering_context_ok_def:
     EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
       ctx.ctx_functions /\
     reachable_fcg_acyclic ctx (fcg_analyze ctx) /\
-    ptr_ok_check ctx
+    ptr_ok_check ctx /\
+    EVERY fn_defs_reach_uses_check ctx.ctx_functions
 End
 (* ===== Policy Boundary ===== *)
 
@@ -554,6 +578,14 @@ Theorem lowering_context_ok_bridge:
         reachable_fcg_acyclic ctx (fcg_analyze ctx)
 Proof
   simp[lowering_context_ok_def]
+QED
+
+Theorem lowering_context_ok_defs_reach_uses:
+  !ctx. lowering_context_ok ctx ==>
+        EVERY fn_defs_reach_uses ctx.ctx_functions
+Proof
+  rw[lowering_context_ok_def, listTheory.EVERY_MEM] >>
+  metis_tac[fn_defs_reach_uses_check_sound]
 QED
 
 Definition internal_fn_matches_descriptor_def:
@@ -654,7 +686,11 @@ Definition install_immutable_reservation_def:
     ctx with ctx_global_reserved :=
       (if immutables_len = 0 then [] else [(0, immutables_len)])
 End
-(* Deploy lowering owns both the runtime size and runtime data installation. *)
+(* Deploy lowering owns both the runtime size and runtime data installation.
+   The constructor's immutables occupy [0, immutables_len), and the unit's
+   alloca frontier starts past them, so the budget check also leaves room
+   for that region below 2^256; and the epilogue returns runtime_size +
+   immutables_len bytes, so it leaves room for the runtime code too. *)
 Definition run_deploy_lowering_def:
   run_deploy_lowering has_constructor (rpolicy : resolved_compiler_policy)
                        (runtime_bytecode : byte list) immutables_len
@@ -672,7 +708,13 @@ Definition run_deploy_lowering_def:
         NONE => NONE
       | SOME (ctx, data) =>
           let ctx' = install_immutable_reservation immutables_len ctx in
-          if lowering_context_ok ctx' then
+          if lowering_context_ok ctx' /\
+             LENGTH runtime_bytecode + immutables_len +
+               unit_alloca_budget ctx' +
+               32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                              (FLAT (MAP fn_insts ctx'.ctx_functions))) <
+               dimword (:256)
+          then
             SOME <| cu_context := ctx';
                     cu_data_segment :=
                       data ++

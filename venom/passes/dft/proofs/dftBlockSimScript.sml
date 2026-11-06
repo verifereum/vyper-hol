@@ -788,17 +788,6 @@ QED
        Key helpers for INVOKE × pure commutation.
    ================================================================ *)
 
-(* FOLDL update_var preserves all non-vs_vars fields *)
-Theorem foldl_update_var_field[local]:
-  !pairs (ss:venom_state).
-    (FOLDL (\s' (out,val). update_var out val s') ss pairs).vs_alloca_next =
-    ss.vs_alloca_next /\
-    (FOLDL (\s' (out,val). update_var out val s') ss pairs).vs_allocas =
-    ss.vs_allocas
-Proof
-  Induct >> rw[] >> Cases_on `h` >> simp[update_var_def]
-QED
-
 Triviality exec_pure1_structure[local]:
   !f inst s s'.
     exec_pure1 f inst s = OK s' ==>
@@ -976,18 +965,6 @@ Proof
           (qpat_x_assum `w = h0 \/ MEM w (MAP FST pairs)` mp_tac >>
            ASM_REWRITE_TAC[]) >>
         gvs[] >> irule foldl_update_var_lookup_shadowed >> simp[]
-QED
-
-Triviality foldl_update_var_lookup_cong[local]:
-  !pairs s1 s2.
-    (!w. MEM w (MAP FST pairs) ==> lookup_var w s1 = lookup_var w s2) ==>
-    !w. MEM w (MAP FST pairs) ==>
-      lookup_var w
-        (FOLDL (\s' (out,v). update_var out v s') s1 pairs) =
-      lookup_var w
-        (FOLDL (\s' (out,v). update_var out v s') s2 pairs)
-Proof
-  rpt strip_tac >> irule foldl_update_var_lookup_member_determined >> simp[]
 QED
 
 Triviality step_inst_ok_frame_foldl[local]:

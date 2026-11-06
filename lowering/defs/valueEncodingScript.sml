@@ -10,6 +10,9 @@
  * Helper:
  *   bool_to_w256, int_to_w256 — sub-cases of val_to_w256
  *
+ * Lemmas:
+ *   mem_bytes_at_bounded — mem_bytes_at is TAKE/DROP when in bounds
+ *
  * Consistent with vyperStorage encode_base_to_slot / decode_base_from_slot.
  * word_of_bytes_be = word_of_bytes T 0w (HOL4 byteTheory).
  * Venom mload uses word_of_bytes T 0w — same encoding.
@@ -17,7 +20,7 @@
 
 Theory valueEncoding
 Ancestors
-  vyperValue vyperStorage venomState
+  vyperValue vyperStorage venomState bitstring byte integer_word list rich_list
 
 (* ===== Primitive Value → bytes32 ===== *)
 
@@ -359,3 +362,10 @@ Termination
   >> Induct >> simp[listTheory.list_size_def, basicSizeTheory.pair_size_def]
   >> Cases >> simp[basicSizeTheory.pair_size_def]
 End
+
+Theorem mem_bytes_at_bounded:
+  off + n <= LENGTH mem ==>
+  mem_bytes_at off n mem = TAKE n (DROP off mem)
+Proof
+  simp[mem_bytes_at_def, rich_listTheory.TAKE_APPEND, listTheory.LENGTH_DROP]
+QED

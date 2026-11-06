@@ -17,7 +17,9 @@ Theorem lower_vyper_runtime_unit_memory_ok_full:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx))
     ==> raw_unit_memory_ok unit.cu_context vs /\
         EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
         fixed_region_reserved 0 unit.cu_context /\

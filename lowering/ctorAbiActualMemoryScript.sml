@@ -2,21 +2,9 @@
 Theory ctorAbiActualMemory
 Ancestors
   ctorAbiActualFrame abiEncoderPrimitiveEffect valueEncodingProps
-  valueEncodingProofs venomExecSemantics allocaBudgetProps
+  venomExecSemantics allocaBudgetProps
   abiEncoderRegisteredEffect venomMemDefs allocaFrontierBound venomState
-  list arithmetic finite_map pred_set
-
-Theorem ctor_actual_pointwise_window:
-  (!a. p <= a /\ a < p+n ==>
-    mem_bytes_at a 1 m = mem_bytes_at a 1 m') ==>
-  mem_bytes_at p n m = mem_bytes_at p n m'
-Proof
-  strip_tac >> irule LIST_EQ >> simp[LENGTH_mem_bytes_at] >>
-  qx_gen_tac `i` >> strip_tac >>
-  first_x_assum (qspec_then `p+i` mp_tac) >> simp[] >>
-  disch_then (mp_tac o Q.AP_TERM `EL 0`) >>
-  simp[EL_mem_bytes_at]
-QED
+  list arithmetic finite_map pred_set abiEncoderZeroFrame
 
 Theorem ctor_actual_registered_window:
   abi_encoder_registered_effect ids outs s t /\
@@ -27,7 +15,7 @@ Theorem ctor_actual_registered_window:
   mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory
 Proof
   simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >>
-  irule ctor_actual_pointwise_window >> rpt strip_tac >>
+  irule abi_encoder_mem_bytes_singletons >> rpt strip_tac >>
   first_x_assum irule >> simp[] >> rpt strip_tac >>
   `regions_disjoint (p,n) (b,sz)` by metis_tac[] >>
   gvs[regions_disjoint_def] >> decide_tac
