@@ -31,7 +31,7 @@ Theorem build_compile_env_module_pins:
     cenv_module_pins tops
       (build_compile_env tops vis mut fname args ret fbody use_trans)
 Proof
-  simp[cenv_module_pins_def, build_compile_env_def] >>
+  rpt gen_tac >> simp[cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
 
@@ -44,13 +44,8 @@ Theorem body_inv_build_internal_env:
        with <| ce_target := caller.ce_target;
                ce_is_ctor := caller.ce_is_ctor |>) cx
 Proof
-  strip_tac >>
-  `!src ts. get_module_code cx src = SOME ts ==> src = NONE` by
-    fs[body_inv_def] >>
-  mp_tac (Q.SPECL [`tops`,`Internal`,`mut`,`fname`,`args`,`ret`,`stmts`,
-                   `use_trans`] build_compile_env_module_pins) >>
   rw[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+  rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem compile_register_positional_args_body_inv:
@@ -101,7 +96,7 @@ Proof
   drule_at (Pat `materialize_internal_params _ _ _ = _`)
     materialize_internal_params_body_inv >>
   disch_then (qspecl_then [`tops`, `cx`, `ctx`] mp_tac) >>
-  (impl_tac >- (gvs[body_inv_def] >> metis_tac[])) >> simp[]
+  (impl_tac >- (gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[])) >> simp[]
 QED
 
 (* A compile env that binds only parameters, with a type environment that
@@ -373,9 +368,9 @@ Proof
   disch_then (qx_choosel_then [`pre2`,`post2`,`v2`,`d2`,`s2`]
                 strip_assume_tac) >>
   `MEM (VariableDecl v1 Immutable id1 d1 s1) tops` by
-    (qpat_assum `tops = pre1 ++ _` SUBST1_TAC >> simp[]) >>
+    metis_tac[MEM_APPEND, MEM] >>
   `MEM (VariableDecl v2 Immutable id2 d2 s2) tops` by
-    (qpat_assum `tops = pre2 ++ _` SUBST1_TAC >> simp[]) >>
+    metis_tac[MEM_APPEND, MEM] >>
   `d1 = ty1 /\ d2 = ty2` by metis_tac[build_maps_variable, SOME_11] >>
   `type_memory_size tv1 =
      type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty1 /\
@@ -383,5 +378,6 @@ Proof
      type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty2` by
     metis_tac[evaluated_type_mem_bytes] >>
   ntac 2 (pop_assum SUBST1_TAC) >> rpt BasicProvers.VAR_EQ_TAC >>
-  irule immutable_layout_disjoint >> metis_tac[]
+  irule immutable_layout_disjoint >>
+  qexistsl_tac [`id1`,`id2`,`post1`,`post2`,`s1`,`s2`,`v1`,`v2`] >> fs[]
 QED
