@@ -1,25 +1,12 @@
 (* Memory-counted store continuation for aggregate children. *)
 Theory bodyMemAggregateStore
 Ancestors
+  exprSimAggregateLoops
   bodyMemAggregateUnwrap bodyCopyMemory exprSimAggregateChildren
   exprLowering context compileEnv vyperTypeSystem vyperTypeCallGraph
   loweringPosts exprSimMemDefs exprSimProps exprSimBufferStore valueEncodingProps
   bodyDeclMemoryCore exprSimMemoryValues emitHelperProps emitHelper
   instMemFrontier memSafeRun fragExecMem exprLoweringProps venomInst venomState list rich_list
-
-(* No calls excludes widened internal-call layouts, but not bytestring
-   layout differences. Keep the latter as a real alternative. *)
-Theorem aggregate_mem_elem_lowered_type:
-  !ce e env.
-    well_typed_expr env e /\
-    (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
-    lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)
-Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, vyperASTTheory.expr_type_def, is_bytestring_type_def,
-       well_typed_expr_def, type_builtin_result_ok_def, int_calls_expr_def] >>
-  rpt strip_tac >> gvs[is_bytestring_type_def]
-QED
 
 Theorem aggregate_mem_store_lowered_elem:
   !ce e env src dst.
@@ -30,7 +17,7 @@ Theorem aggregate_mem_store_lowered_elem:
 Proof
   rpt gen_tac >> strip_tac >>
   `lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)` by
-    metis_tac[aggregate_mem_elem_lowered_type] >>
+    metis_tac[aggregate_elem_lowered_type] >>
   simp[compile_store_memory_def] >> gvs[]
 QED
 
@@ -76,7 +63,7 @@ Proof
       qexistsl_tac [`d`, `dst`, `len`, `src`, `sw`] >> simp[] >>
       rpt strip_tac >> gvs[] >> decide_tac) >>
   `lowered_value_type ce e = expr_type e` by
-    metis_tac[aggregate_mem_elem_lowered_type] >>
+    metis_tac[aggregate_elem_lowered_type] >>
   Cases_on `type_memory_size tv = 0`
   >- gvs[compile_store_memory_def, compile_copy_memory_def, comp_return_def,
          emitted_insts_def, run_inst_seq_mem_ok_def] >>

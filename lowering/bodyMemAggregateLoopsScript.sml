@@ -84,7 +84,7 @@ Proof
     (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all aggregate_tuple_child_outcome_mem >> strip_tac >>
-  rewrite_tac[aggregate_mem_tuple_eval_cons] >>
+  rewrite_tac[aggregate_tuple_eval_cons] >>
   match_mp_tac (Q.SPEC `\tv ee r.
     vv_post ctx func ce cx h es sa sm s0 ee tv vv r /\
     vv_store_bound cx (expr_type h) (lowered_value_type ce h) ee tv vv r /\

@@ -1,6 +1,7 @@
 (* Reachability interface for the conditional aggregate children predicate. *)
 Theory bodyMemAggregateLoopBoundary
 Ancestors
+  exprSimAggregateLoops
   bodyMemoryPreds gasSummary gasOutcome gasSummaryCompose gasExemptCert vyperState
   exprSimHyps vyperEvalExprPreservesScopesDom vyperImmutableMetadataFrame
   loweringPosts exprSimSource exprLoweringProps compileEnv
@@ -80,14 +81,6 @@ Proof
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
-Theorem aggregate_tuple_ignore_values_mem[local]:
-  ignore_bind (bind (eval_exprs cx args) (\vs. return (v::vs))) (return ()) =
-  ignore_bind (eval_exprs cx args) (return ())
-Proof
-  simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >> gen_tac >>
-  Cases_on `eval_exprs cx args x` >> Cases_on `q` >> simp[]
-QED
-
 Theorem aggregate_tuple_values_outcome_any:
   gas_outcome memory tops (ctx,func) (eval_exprs cx args) (es,s) Q1 R1 /\
   (!res ee r. Q1 res ee r ==>
@@ -98,7 +91,7 @@ Theorem aggregate_tuple_values_outcome_any:
     (bind (eval_exprs cx args) (\vs. return (v::vs))) (es,s) Q R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def,
-              aggregate_tuple_ignore_values_mem] >>
+              aggregate_tuple_ignore_values] >>
   strip_tac >> qexists_tac `marks`
   >- (disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR exc => INR exc`,
@@ -174,26 +167,6 @@ Proof
   PairCases_on `entry` >> simp[] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem aggregate_alloca_immutable_sep_mem:
-  stmt_state_rel ctx func cenv cx es t /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
-  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
-  cenv.ce_is_ctor ==>
-  !name itv iv io.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc io) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name =
-        SOME (itv,iv) ==>
-    regions_disjoint io (type_memory_size itv) b sz
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
 Theorem aggregate_regions_disjoint_slice:
   regions_disjoint io k b sz /\ off + n <= sz ==>
   regions_disjoint io k (b+off) n
@@ -252,14 +225,6 @@ Proof
   simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem aggregate_mem_tuple_eval_cons:
-  eval_exprs cx (e::args) =
-  bind (eval_expr cx e) (\tv. bind (read_result cx tv)
-    (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))
-Proof
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >> REFL_TAC
 QED
 
 Theorem aggregate_mem_tuple_local_region_backward:

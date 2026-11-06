@@ -57,7 +57,7 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`env`, `es`, `ctx`, `tops`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt strip_tac >>
-    irule aggregate_alloca_immutable_sep_mem >>
+    irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -183,7 +183,7 @@ Resume body_make_array_nowiden_mem[tuple]:
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`tops`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
-    irule aggregate_alloca_immutable_sep_mem >>
+    irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -283,7 +283,7 @@ Resume body_make_array_nowiden_mem[array]:
     rpt strip_tac >>
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x n))` by
-      (irule aggregate_alloca_immutable_sep_mem >>
+      (irule aggregate_alloca_immutable_sep >>
        goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
        qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
        goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
