@@ -4,7 +4,7 @@ Ancestors
   internalReturnMetadata intCallStep externalNormalizePremises compileEnv
   valueEncoding exprLowering vyperTypeSystem vyperTypeArgFits vyperValue
   abiTypeBoundProps vyperABI exprSimSource exprSafeOperand
-  exprSimHypsDefs vyperTypeInvariants
+  exprSimHypsDefs vyperTypeInvariants vyperAST
 
 Theorem nonzero_internal_call_located:
   !cfn ce ret ty fid args dret sa vv sb ret_count rbs pvs.
@@ -82,4 +82,53 @@ Proof
   `well_typed_expr env a` by metis_tac[well_typed_exprs_member] >>
   drule_all well_typed_expr_type_well_formed >>
   simp[well_formed_type_def]
+QED
+
+Theorem incompatible_return_layout_located:
+  !tops am tx ce env es ret e ty sa vv sm.
+  supported_program tops /\ source_typing_ok tops am tx /\
+  expr_sim_inv ce
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  ce.ce_func_info = build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
+  ce.ce_func_return_type = build_func_return_type tops /\
+  ce.ce_struct_fields = make_struct_fields_map tops /\
+  ~(lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\
+    is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e)) /\
+  compile_expr ce ty e sa = (vv,sm) ==>
+  ?declared p. vv = LocatedValue declared p /\ declared <> expr_type e
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_expr env e` by gvs[type_stmt_def, AllCaseEqs()] >>
+  Cases_on `e` >> gvs[lowered_value_type_def, expr_type_def]
+  >>~- ([`Literal ann lit`],
+      Cases_on `lit` >> Cases_on `ann` >>
+      gvs[lowered_value_type_def, well_typed_expr_def, well_typed_literal_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[lowered_value_type_def, expr_type_def, is_bytestring_type_def,
+          well_typed_literal_def, arg_type_fits_def, compatible_bound_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[lowered_value_type_def, expr_type_def, is_bytestring_type_def,
+          well_typed_literal_def, arg_type_fits_def, compatible_bound_def])
+  >>~- ([`TypeBuiltin ann tb target xs`],
+      Cases_on `tb` >> gvs[lowered_value_type_def, expr_type_def] >>
+      `well_typed_exprs env xs` by
+        fs[well_typed_expr_def, well_typed_type_builtin_args_def] >>
+      drule_all expr_sim_inv_args_evaluate >> strip_tac >>
+      `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+        fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+      drule_all abi_encode_layout >>
+      gvs[lowered_value_type_def, expr_type_def]) >>
+  rename1 `Call ann target xs drv` >>
+  Cases_on `target` >> gvs[lowered_value_type_def, expr_type_def] >>
+  rename1 `IntCall fid` >>
+  namedCases_on `ce.ce_func_info (nsid_to_string fid)` ["ret_count rbs pvs"] >>
+  `ce.ce_func_return_type (nsid_to_string fid) <> ann` by metis_tac[] >>
+  drule_all typed_widened_internal_convention >> strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once compile_expr_def] >> strip_tac >>
+  drule nonzero_internal_call_located >>
+  disch_then drule >> simp[] >> metis_tac[]
 QED
