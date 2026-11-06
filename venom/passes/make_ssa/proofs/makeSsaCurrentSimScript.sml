@@ -27,7 +27,7 @@
 Theory makeSsaCurrentSim
 Ancestors
   o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract makeSsaCurrentLockstep
 
 (* Terminating runs of the input and the output correspond. *)
 Theorem make_ssa_current_fn_fn_bisim:
