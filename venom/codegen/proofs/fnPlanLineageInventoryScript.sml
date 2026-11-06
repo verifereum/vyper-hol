@@ -2327,6 +2327,33 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[EL_MEM]
 QED
 
+(* Count-free preparation frame. Input emission needs a non-variable
+   prefix, not merely exclusion of the current inputs. Coverage produces
+   the core-height floor; repeated inputs/core values are permitted. *)
+Theorem emit_reorder_plan_bottom_frame:
+  !opc inputs nl ps iops ps1 dfg targets rops ps2 prefix.
+    emit_input_plan opc inputs nl ps = (iops,ps1) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    EVERY (\op. ~is_var_operand op) prefix /\
+    EVERY (\op. ~MEM op prefix) targets /\
+    LENGTH targets <= LENGTH inputs /\
+    reorder_plan dfg targets ps1 = (rops,ps2) ==>
+    LENGTH targets <= LENGTH ps1.ps_stack /\
+    emit_input_plan opc inputs nl (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (iops,ps1 with ps_stack := prefix ++ ps1.ps_stack) /\
+    reorder_plan dfg targets (ps1 with ps_stack := prefix ++ ps1.ps_stack) =
+      (rops,ps2 with ps_stack := prefix ++ ps2.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  `LENGTH targets <= LENGTH ps1.ps_stack` by decide_tac >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (irule emit_input_plan_bottom_frame >> simp[]) >>
+  irule reorder_plan_bottom_frame >> simp[]
+QED
+
 Theorem reorder_plan_marker_core_inventory:
   !ps m core base pending dfg ops qs.
     ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
