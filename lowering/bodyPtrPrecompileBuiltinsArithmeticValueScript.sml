@@ -253,3 +253,40 @@ Proof
        contextTheory.mk_ptr_def, evaluate_type_def, is_word_type_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def]
 QED
+
+(* Common ordinary and pointer posts for the arithmetic memory result. *)
+Theorem ec_builtin_result_posts:
+  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es sa s0 t /\
+  eval_operand (Var dst) t = SOME w /\ ptr_covers G tn dst t 64 /\
+  (!i. w2n w <= i /\ i < w2n w+64 ==> i NOTIN tn.t_mem) /\
+  mem_bytes_at (w2n w) 64 t.vs_memory =
+    word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
+  FLOOKUP t.vs_allocas aid = SOME (w2n w,64) /\
+  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+  (!name b sz. local_region cenv es'.scopes t name b sz ==>
+    regions_disjoint (w2n w) 64 b sz) ==>
+  ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2))
+    (mk_ec_result (x,y)) (Var dst) G tn t /\
+  ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args) (Var dst) G t /\
+  vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args)
+    es sa sb s0 es' (Value (mk_ec_result (x,y)))
+    (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (Var dst,sb))) t /\
+  ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value (mk_ec_result (x,y)))
+    (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (Var dst,sb))) es' G tn t
+Proof
+  strip_tac >> drule ec_result_word_contents >> strip_tac >>
+  `ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2))
+    (mk_ec_result (x,y)) (Var dst) G tn t` by
+    (irule ec_result_ptr_val_ok >> goal_assum (drule_at Any) >>
+     simp[evaluate_type_def, is_word_type_def, type_slot_size_def, wordsTheory.dimword_def]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (irule ec_result_buffer_ok >> simp[ec_builtin_buffer_size] >>
+               qexists `tn` >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (irule (SRULE [expr_type_def] (Q.INST
+        [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args`]
+        ec_result_pointer_post)) >>
+      conj_tac >- (qexistsl [`aid`,`w`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  irule ec_result_pointer_vv_ok >> first_assum ACCEPT_TAC
+QED
