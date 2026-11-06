@@ -91,10 +91,10 @@ Proof
     fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
   gvs[abi_encoder_member_phase_raw_def, emitted_insts_def] >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
-  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-    exec_read1_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def, AllCaseEqs()] >>
   drule abi_encoder_cursor_alloca_observations >> strip_tac >>
-  gvs[Once step_inst_base_def, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
   fs[mstore_def, write_memory_with_expansion_def, alloca_inv_def,
     allocas_non_overlapping_def, alloca_next_valid_def] >> first_assum ACCEPT_TAC
 QED
@@ -124,9 +124,9 @@ Proof
     fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
   gvs[abi_encoder_member_phase_raw_def, emitted_insts_def] >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
-  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-    exec_read1_def, eval_operand_def, AllCaseEqs()] >>
-  gvs[Once step_inst_base_def, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
   gvs[exec_alloca_def, AllCaseEqs(), update_var_def, mstore_def,
     write_memory_with_expansion_def] >>
   rpt strip_tac >> gvs[FLOOKUP_UPDATE] >> Cases_on `st.cs_next_id = i` >> gvs[]
@@ -183,11 +183,11 @@ Proof
     fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
   gvs[abi_encoder_member_phase_raw_def, emitted_insts_def] >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
-  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-    exec_read1_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def, AllCaseEqs()] >>
   drule abi_encoder_cursor_alloca_observations >> strip_tac >>
-  gvs[Once step_inst_base_def, exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
-  gvs[Once step_inst_base_def, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
   fs[update_var_def, mstore_def, write_memory_with_expansion_def, alloca_inv_def,
     allocas_non_overlapping_def, alloca_next_valid_def] >> first_assum ACCEPT_TAC
 QED
@@ -202,10 +202,10 @@ Proof
     fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
   gvs[abi_encoder_member_phase_raw_def, emitted_insts_def] >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
-  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-    exec_read1_def, eval_operand_def, AllCaseEqs()] >>
-  gvs[Once step_inst_base_def, exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
-  gvs[Once step_inst_base_def, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[DROP_LENGTH_APPEND, run_inst_seq_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, AllCaseEqs()] >>
   gvs[exec_alloca_def, AllCaseEqs(), update_var_def, mstore_def,
     write_memory_with_expansion_def] >>
   rpt strip_tac >> gvs[FLOOKUP_UPDATE] >> Cases_on `st.cs_next_id = i` >> gvs[]

@@ -664,7 +664,7 @@ Proof
       (if w = 0w then 1w else 0w)
       (update_var (STRING #"%" (toString st.cs_next_var)) w s))` by
     (rev_drule emitted_insts_emit_op >> strip_tac >>
-     simp[step_inst_base_def, exec_pure1_def, eval_operand_update_var,
+     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_pure1_def, eval_operand_update_var,
           venomExecSemanticsTheory.bool_to_word_def, mk_inst_def] >>
      Cases_on `w = 0w` >> simp[venomExecSemanticsTheory.bool_to_word_def]) >>
   drule_all decode_two_tests_assert >>
@@ -742,7 +742,7 @@ Proof
       (if extended = w then 1w else 0w)
       (update_var (STRING #"%" (toString st.cs_next_var)) extended s))` by
     (rev_drule emitted_insts_emit_op >> strip_tac >>
-     simp[step_inst_base_def, exec_pure2_def, eval_operand_update_var, mk_inst_def] >>
+     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_update_var, mk_inst_def] >>
      Cases_on `extended = w` >> gvs[venomExecSemanticsTheory.bool_to_word_def]) >>
   drule_all decode_two_tests_assert >> Cases_on `extended = w` >> simp[]
 QED

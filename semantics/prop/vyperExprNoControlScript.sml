@@ -584,12 +584,26 @@ Theorem eval_ext_call_no_control:
   no_control_exc exc
 Proof
   PairCases_on `sig` >> Cases_on `vs`
-  >- simp[eval_ext_call_def, raise_def, no_control_exc_def] >>
-  simp_tac bool_ss [eval_ext_call_def, LET_THM] >> strip_tac >>
-  rpt (FIRST [
-    qpat_x_assum `eval_ext_call_effects _ _ _ _ _ _ _ = (INR _,_)`
-      (ACCEPT_TAC o MATCH_MP eval_ext_call_effects_no_control),
-    CALL_NO_CONTROL_STEP])
+  >- simp[eval_ext_call_def, raise_def, no_control_exc_def]
+  >> simp[eval_ext_call_def, LET_THM] >> strip_tac
+  >> ibind_step_tac
+  >- (drule type_check_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule lift_option_type_no_control >> simp[])
+  >> bind_step_tac
+  >- (gvs[AllCaseEqs(), COND_RATOR, option_CASE_rator, return_def] >>
+      bind_step_tac >> drule lift_option_type_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule lift_option_type_no_control >> simp[])
+  >> gvs[bind_def, get_accounts_def, return_def]
+  >> ibind_step_tac
+  >- (drule check_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule eval_ext_call_effects_no_control >> simp[])
+  >> gvs[option_CASE_rator, AllCaseEqs()]
+  >- (bind_step_tac >> drule lift_sum_runtime_no_control >> simp[])
+  >> gvs[bind_def, get_accounts_def, return_def]
+  >> ibind_step_tac >> drule check_no_control >> simp[]
 QED
 
 Theorem eval_send_no_control:
@@ -1085,3 +1099,16 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("No-control oracle debt: " ^ name)
   end) (DB.thms "vyperExprNoControl");
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+QED

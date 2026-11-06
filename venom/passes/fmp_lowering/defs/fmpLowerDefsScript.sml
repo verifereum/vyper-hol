@@ -163,7 +163,7 @@ Definition fmp_lower_inst_def:
                  case fresh_inst_id s3a of (and_id,s4) =>
                  case fresh_inst_id s4 of (bump_id,s5) =>
                    SOME
-                     ([mk_inst add_id ADD [size_op; Lit 31w] [plus31];
+                     ([mk_inst add_id ADD [Lit 31w; size_op] [plus31];
                        mk_inst not_id NOT [Lit 31w] [mask];
                        mk_inst and_id AND [Var plus31; Var mask] [aligned];
                        mk_inst bump_id BUMP

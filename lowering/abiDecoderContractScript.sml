@@ -193,8 +193,10 @@ Theorem abi_guard_emit_frame[local]:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   gvs[run_inst_seq_def] >>
-  gvs[Once step_inst_base_def, mk_inst_def] >>
-  gvs[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def]
+  qpat_x_assum `_ = OK s'` mp_tac >>
+  simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def] >>
+  simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem abi_decode_seq_compose[local]:

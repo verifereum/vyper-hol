@@ -16,12 +16,12 @@ from pathlib import Path
 REPO = "verifereum/vyper-hol"
 GROUPS_FILE = Path(".github/vyper-test-groups.txt")
 GENERATED = Path("tests/generated")
-WORKERS = 4
-"""Theories one test group builds at once: `holbuild -j"$(nproc)"` on a 4-vCPU runner."""
+WORKERS = 1
+"""Conservative CI concurrency: one worker below 12 GiB, at most two otherwise."""
 
 BUILT = re.compile(r"^\S+Z (vyperTest(?:Defs)?_\S+)Theory built in ([\d.]+)s$")
 ANCESTOR = re.compile(r"^Ancestors (vyperTestDefs_\S+)$", re.MULTILINE)
-CHUNK = re.compile(r"^(.*)_part\d+$")
+PART = re.compile(r"^(.*)_part\d+$")
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,10 @@ def generated_tests(generated: Path) -> list[Test]:
 class BuildTimes:
     """Median build seconds per theory, from `<theory>Theory built in <n>s` log lines."""
 
-    def __init__(self, logs: Iterable[str], tests: list[Test]) -> None:
+    def __init__(self, logs: Iterable[str], tests: list[Test], workers: int = WORKERS) -> None:
+        if workers < 1:
+            raise ValueError("workers must be positive")
+        self.workers = workers
         samples: dict[str, list[float]] = {}
         for log in logs:
             for line in log.splitlines():
@@ -54,33 +57,34 @@ class BuildTimes:
                 if match:
                     samples.setdefault(match[1], []).append(float(match[2]))
         self.seconds = {name: statistics.median(s) for name, s in samples.items()}
-        self.estimate_new_chunks(tests)
+        self.estimate_new_parts(tests)
 
-    def estimate_new_chunks(self, tests: list[Test]) -> None:
-        """Give chunks no log built yet an equal share of their unsplit test's time.
+    def estimate_new_parts(self, tests: list[Test]) -> None:
+        """Estimate independent replay AND definitions parts from whole-file times.
 
-        A test split into trace chunks has CI times only for the unsplit
-        test until the chunks have run. The first chunk keeps the unsplit
-        name. Treat that timing as unsplit only while no suffixed chunk has
-        a measurement; otherwise preserve all measured chunk timings.
+        Part zero keeps the unsuffixed name. Until any suffixed part has a
+        measurement, divide the old whole-file time among all parts, including
+        zero. Once siblings have measurements, keep them (and part zero) intact
+        and use their median for missing siblings. These equal-share estimates
+        are only a bootstrap; fresh partitioned CI measurements should replace them.
         """
-        chunks: dict[str, set[str]] = {}
-        for test in tests:
-            for name in (test.name, test.defs):
-                match = CHUNK.match(name)
-                if match:
-                    chunks.setdefault(match[1], set()).add(name)
-        current = {name for test in tests for name in (test.name, test.defs)}
-        for whole, names in chunks.items():
-            if whole in self.seconds:
-                unsplit = not any(name in self.seconds for name in names)
-                if whole in current:
-                    names.add(whole)
-                estimate = self.seconds[whole] / len(names)
-                if unsplit and whole in names:
-                    self.seconds[whole] = estimate
-                for name in names:
+        families: dict[str, set[str]] = {}
+        names = {name for test in tests for name in (test.name, test.defs)}
+        for name in sorted(names):
+            match = PART.match(name)
+            if match:
+                families.setdefault(match[1], set()).add(name)
+        for whole, siblings in families.items():
+            family = siblings | ({whole} & names)
+            measured = [self.seconds[name] for name in sorted(family) if name in self.seconds]
+            if any(name in self.seconds for name in siblings):
+                estimate = statistics.median(measured)
+                for name in family:
                     self.seconds.setdefault(name, estimate)
+            elif whole in self.seconds:
+                estimate = self.seconds[whole] / len(family)
+                for name in family:
+                    self.seconds[name] = estimate
 
     def missing(self, tests: Iterable[Test]) -> list[str]:
         """Theories of `tests` that no log built."""
@@ -94,7 +98,7 @@ class BuildTimes:
     def makespan(self, tests: list[Test]) -> float:
         """Seconds holbuild takes to build `tests` as one group.
 
-        holbuild runs WORKERS theories at once and starts the first ready
+        holbuild runs `self.workers` theories at once and starts the first ready
         theory in target order, a definitions theory before its tests. Tests
         sharing a definitions theory build it once.
         """
@@ -108,7 +112,7 @@ class BuildTimes:
         clock = 0.0
         while pending or running:
             ready = [job for job in pending if job[1] is None or job[1] in finished]
-            for job in ready[:WORKERS - len(running)]:
+            for job in ready[:self.workers - len(running)]:
                 pending.remove(job)
                 heapq.heappush(running, (clock + self.seconds[job[0]], job[0]))
             clock, name = heapq.heappop(running)
@@ -121,14 +125,17 @@ class BuildTimes:
         A test goes to the group whose build ends earliest with it; on a tie,
         to the group with the least work, so a long test running alone does
         not leave its runner's other workers idle while another group queues.
-        Tests that share a definitions theory (the trace chunks of one test
-        file) go to different groups while there are groups left, so their
-        replays run in parallel.
+        Trace chunks sharing definitions and independent parts of one file
+        go to different groups while there are groups left, so their replays
+        run in parallel without introducing sibling dependencies.
         """
+        if groups < 1:
+            raise ValueError("groups must be positive")
         assigned: list[list[Test]] = [[] for _ in range(groups)]
         for test in self.by_cost(tests):
+            family = PART.sub(r"\1", test.defs)
             apart = [group for group in assigned
-                     if all(other.defs != test.defs for other in group)] or assigned
+                     if all(PART.sub(r"\1", other.defs) != family for other in group)] or assigned
             def rank(group: list[Test]) -> tuple[float, float]:
                 return self.makespan(self.by_cost(group + [test])), sum(map(self.cost, group))
             min(apart, key=rank).append(test)
@@ -194,7 +201,8 @@ def format_groups(assigned: list[list[Test]], times: BuildTimes) -> str:
     """The groups file for `assigned`, each group with its estimated holbuild time."""
     lines = ["# Test group of each generated test theory, written by",
              "# `tools/vyper_test_groups.py plan` from CI build times. Within a group,",
-             "# longest first: holbuild starts the targets in this order."]
+             "# longest first: holbuild starts the targets in this order.",
+             f"# Estimates assume {times.workers} holbuild worker(s) per group."]
     for group, tests in enumerate(assigned):
         lines.append(f"# group {group}: about {times.makespan(tests) / 60:.0f} min of holbuild")
         lines += [f"{group} {test.name}" for test in tests]
@@ -205,7 +213,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     plan = commands.add_parser("plan", help=f"rewrite {GROUPS_FILE} from CI build times")
-    plan.add_argument("--groups", type=int, default=10)
+    plan.add_argument("--groups", type=int, default=6)
+    plan.add_argument("--workers", type=int, choices=(1, 2), default=WORKERS,
+                      help="HOL workers per group (default: 1, for CI runners below 12 GiB)")
     plan.add_argument("--runs", type=int, default=40, help="latest successful runs to read")
     targets = commands.add_parser("targets", help="print the theories one test group builds")
     targets.add_argument("--group", type=int, required=True)
@@ -227,7 +237,7 @@ def main() -> None:
 
     ci = CiLogs(REPO)
     runs = ci.recent_runs(args.runs)
-    times = BuildTimes((log for run in runs for log in ci.test_logs(run)), tests)
+    times = BuildTimes((log for run in runs for log in ci.test_logs(run)), tests, args.workers)
     missing = times.missing(tests)
     if missing:
         sys.exit(f"no build time in runs {', '.join(runs)} for: {', '.join(missing)}")

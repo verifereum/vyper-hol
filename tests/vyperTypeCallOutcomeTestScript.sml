@@ -1,8 +1,8 @@
-(* Focused clients of the checked-call and external-call type boundaries. *)
+(* Focused typed boundary clients of the current Send/ExtCall helpers. *)
 Theory vyperTypeCallOutcomeTest
 Ancestors
   list option pair sum arithmetic words finite_map
-  vyperAST vyperValue vyperState vyperInterpreter vyperABI vyperTyping
+  vyperMisc vyperAST vyperValue vyperState vyperInterpreter vyperABI vyperTyping
   vyperRuntimeAccounts vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
   vyperCallOutcomeFrame vyperTypeCallOutcome vyperTypeExtCallSoundness
   vyperTypeExprSoundness vyperTypeExprResult vyperTypeSystem vyperTypeInvariants
@@ -58,9 +58,11 @@ Proof
   rw[no_control_exc_def]
 QED
 
-(* Typed operands include keyword values in their source evaluation order. *)
+(* Typed operands are required by eval_ext_call; functions_well_typed is
+   not: the callee is outside the source function environment. *)
 Theorem ExtCall_decode_type_client:
-  runtime_consistent env cx st /\ exprs_runtime_typed env es vs /\
+  runtime_consistent env cx st /\
+  exprs_runtime_typed env es vs /\
   MAP expr_type es =
     BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
   arg_types_fit call_types arg_types /\
@@ -75,49 +77,64 @@ Theorem ExtCall_decode_type_client:
       (Call ret_type (ExtCall stat skc (func_name,arg_types,ret_type) opts) es NONE) tv
   | INR _ => T
 Proof
-  strip_tac >> drule_all eval_ext_call_result_sound >> simp[]
+  rpt strip_tac >> drule_all eval_ext_call_result_sound >> simp[]
 QED
 
 Theorem ExtCall_decode_no_control:
-  eval_ext_call cx stat skc sig opts vs st = (INR exc,st') ==>
+  eval_ext_call cx stat skc fsig opts vs st = (INR exc,st') ==>
   no_control_exc exc
 Proof
-  strip_tac >> drule eval_ext_call_no_control >> simp[]
+  rpt strip_tac >> drule eval_ext_call_no_control >> simp[]
 QED
 
-Theorem ExtCall_typed_errors_exclude_type_and_control:
-  runtime_consistent env cx st /\ exprs_runtime_typed env es vs /\
-  MAP expr_type es =
-    BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
-  arg_types_fit call_types arg_types /\
-  EVERY (well_formed_type env.type_defs) arg_types /\
-  ext_call_opts_ok stat opts /\
-  evaluate_type env.type_defs ret_type = SOME ret_tv /\
-  eval_ext_call cx stat skc (func_name,arg_types,ret_type) opts vs st = (INR exc,st') ==>
-  no_control_exc exc /\ (!msg. exc <> Error (TypeError msg)) /\
-  exc <> BreakException /\ exc <> ContinueException /\
-  (!v. exc <> ReturnException v)
+(* Skip the code guard to isolate the post-adoption decoder. No default is
+   supplied: malformed bytes really run the decoder, even on empty data. *)
+val extcall_boundary_simps =
+  [eval_ext_call_def, eval_ext_call_effects_def,
+   ext_call_opts_ok_def, ext_call_kwarg_def,
+   ext_call_precheck_ok_def, bind_def, ignore_bind_def, return_def, raise_def,
+   type_check_def, check_def, assert_def, lift_option_type_def,
+   lift_sum_runtime_def, get_accounts_def];
+
+Theorem ExtCall_decode_errors_are_runtime:
+  st.outcomes = SOME os /\
+  dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
+  build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
+  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+  evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData = INR msg ==>
+  eval_ext_call cx F T (func_name,[],ret_type) [EKValue] [target_v;amount_v] st =
+    (INR (Error (RuntimeError msg)),st2)
 Proof
-  strip_tac >> drule_all eval_ext_call_result_sound >> strip_tac >>
-  drule eval_ext_call_no_control >>
-  rw[no_type_error_result_def, no_control_exc_def] >>
-  gvs[no_type_error_result_def]
+  rpt strip_tac >> Cases_on `ret_type` >> simp extcall_boundary_simps
 QED
 
-(* The shared checked continuation follows adoption; default expressions are
-   already evaluated operands when eval_ext_call starts. *)
-Theorem checked_continuation_runs_after_adoption:
-  take_call_outcome target data value st = (INL (rq,outcome),st1) /\
-  outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
-  (do
-    (rq,outcome) <- take_call_outcome target data value;
-    check outcome.co_success msg;
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st = k outcome.co_returnData st2
+(* Failure propagates the actual bytes and does not adopt the outcome. *)
+Theorem ExtCall_revert_preserves_payload:
+  st.outcomes = SOME os /\
+  dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
+  build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
+  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  ~outcome.co_success ==>
+  eval_ext_call cx F T (func_name,[],ret_type) [EKValue] [target_v;amount_v] st =
+    (INR (Error (RevertData outcome.co_returnData)),st1)
 Proof
-  rpt strip_tac >>
-  simp[bind_def, ignore_bind_def, check_def, assert_def, return_def]
+  rpt strip_tac >> Cases_on `ret_type` >> simp extcall_boundary_simps
+QED
+
+(* Defaults are already evaluated operands, not expressions to run after
+   adoption. Empty return data selects that captured value at the adopted state. *)
+Theorem ExtCall_default_selected_after_adoption:
+  st.outcomes = SOME os /\
+  dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
+  build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
+  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  outcome.co_success /\ outcome.co_returnData = [] /\
+  adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
+  eval_ext_call cx F T (func_name,[],ret_type) [EKValue;EKDefault]
+    [target_v;amount_v;default_v] st = (INL (Value default_v),st2)
+Proof
+  rpt strip_tac >> Cases_on `ret_type` >> simp extcall_boundary_simps
 QED
 
 Theorem source_account_guard_bounds_not_storage:
@@ -148,4 +165,37 @@ Theorem decode_failure_is_runtime_and_unchanged:
       return (Value v) od) st = (INR (Error (RuntimeError msg)),st)
 Proof
   simp[lift_sum_runtime_def, bind_def, raise_def]
+QED
+
+Theorem ExtCall_typed_errors_exclude_type_and_control:
+  runtime_consistent env cx st /\ exprs_runtime_typed env es vs /\
+  MAP expr_type es =
+    BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
+  arg_types_fit call_types arg_types /\
+  EVERY (well_formed_type env.type_defs) arg_types /\
+  ext_call_opts_ok stat opts /\
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\
+  eval_ext_call cx stat skc (func_name,arg_types,ret_type) opts vs st = (INR exc,st') ==>
+  no_control_exc exc /\ (!msg. exc <> Error (TypeError msg)) /\
+  exc <> BreakException /\ exc <> ContinueException /\
+  (!v. exc <> ReturnException v)
+Proof
+  strip_tac >> drule_all eval_ext_call_result_sound >> strip_tac >>
+  drule eval_ext_call_no_control >>
+  rw[no_type_error_result_def, no_control_exc_def] >>
+  gvs[no_type_error_result_def]
+QED
+
+Theorem checked_continuation_runs_after_adoption:
+  take_call_outcome target data value st = (INL (rq,outcome),st1) /\
+  outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
+  (do
+    (rq,outcome) <- take_call_outcome target data value;
+    check outcome.co_success msg;
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = k outcome.co_returnData st2
+Proof
+  rpt strip_tac >>
+  simp[bind_def, ignore_bind_def, check_def, assert_def, return_def]
 QED

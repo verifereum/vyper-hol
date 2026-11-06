@@ -14,6 +14,9 @@ signature vyperTestLib = sig
   (* Weights in selected-list order: binary payload hex-character counts.
      Max 100 cases / 262144 characters; oversized cases get singleton chunks. *)
   val test_chunks : string * int list -> test_chunk list
+  (* Raw exports determine the expected chunk inventory, including both scripts. *)
+  val check_generated_script_inventory : string list -> string list -> unit
+  val check_generated_scripts : unit -> unit
   val generate_defn_scripts : unit -> unit
   val generate_test_scripts : unit -> unit
 

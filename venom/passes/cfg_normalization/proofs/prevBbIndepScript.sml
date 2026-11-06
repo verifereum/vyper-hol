@@ -311,7 +311,8 @@ val ext_call_prev_bb_ss = prev_bb_case_ss ++ rewrites
     write_mem_prev_bb, update_var_def, venom_state_accfupds,
     exec_delegatecall_def,
     make_venom_delegatecall_state_prev_bb, exec_create_def,
-    make_venom_create_state_prev_bb]);
+    make_venom_create_state_prev_bb, venom_create_request_def,
+    consume_create_outcome_eq]);
 
 Theorem exec_ext_call_prev_bb[local]:
   !inst s gas addr value ao as_ ro rs is_static p.

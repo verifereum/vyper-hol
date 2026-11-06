@@ -1733,7 +1733,7 @@ Definition evaluate_def:
   (* Blueprint validation interrupts the runtime operand layout before ctor
      arguments, retaining the modular copy size even if those arguments deploy
      code at a previously empty target. *)
-  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) =
+  eval_expr cx (Call ty (CreateTarget kind has_salt rof _) es _) =
     (case kind of
      | CreateFromBlueprint raw_args => do
          prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
@@ -1821,7 +1821,7 @@ Termination
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
-  \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
+  \\ pure_rewrite_tac [prim_recTheory.measure_def, relationTheory.inv_image_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[custom_error_exprs_size]
   \\ rpt (FIRST [
     (* Custom-error keyword operands are a declaration-order permutation. *)

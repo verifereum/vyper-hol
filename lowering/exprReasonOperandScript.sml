@@ -737,6 +737,8 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
+    >- suspend "create"
   >> suspend "send"
 QED
 
@@ -753,6 +755,15 @@ Resume reason_compile_call[external]:
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_external_call_operand]
+QED
+
+Resume reason_compile_call[create]:
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val rt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[reason_result_shape_def] >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand,
+            safe_operand_def]
 QED
 
 Resume reason_compile_call[send]:

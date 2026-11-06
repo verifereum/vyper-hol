@@ -319,8 +319,8 @@ Theorem supported_raw_call_forms_excluded:
                      rcf_is_static := F; rcf_revert_on_failure := T;
                      rcf_kws := [] |>;
      RawLog; RawRevert; SelfDestructTarget;
-     CreateTarget CreateMinimalProxy F T; CreateTarget CreateCopyOf F T;
-     CreateTarget (CreateFromBlueprint F) T T; CreateTarget RawCreate F T]
+     CreateTarget CreateMinimalProxy F T []; CreateTarget CreateCopyOf F T [];
+     CreateTarget (CreateFromBlueprint F) T T []; CreateTarget RawCreate F T []]
 Proof
   EVAL_TAC
 QED

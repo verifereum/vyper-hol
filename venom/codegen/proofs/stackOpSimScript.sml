@@ -424,6 +424,16 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem asm_consume_create_outcome_pc[local]:
+  !rq stk s s2.
+    asm_consume_create_outcome rq stk s = AsmOK s2 ==>
+    s2.as_pc = s.as_pc + 1
+Proof
+  simp[asm_consume_create_outcome_def, pairTheory.pair_CASE_def,
+       pairTheory.UNCURRY, asm_next_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem extract_asm_result_pc[local]:
   !rr s v ro rs result.
     extract_asm_result s v ro rs rr = SOME result ==>
@@ -459,6 +469,7 @@ local
   val result_ty = ``:asm_result``
   val extract = ``extract_asm_result``
   val consume = ``asm_consume_call_outcome``
+  val create_consume = ``asm_consume_create_outcome``
   val project = ``\r. case r of AsmOK s => SOME s.as_pc | _ => NONE``
 in
 fun asm_extcall_pc_tac (g as (asl, _)) =
@@ -481,6 +492,8 @@ fun asm_extcall_pc_tac (g as (asl, _)) =
     | NONE => if same_const (#1 (strip_comb result)) consume then
       ACCEPT_TAC (simpLib.SIMP_RULE asm_pc_ss []
         (MATCH_MP asm_consume_call_outcome_pc (ASSUME eq))) g
+    else if same_const (#1 (strip_comb result)) create_consume then
+      (drule asm_consume_create_outcome_pc >> simp[]) g
     else
       ACCEPT_TAC (SYM (simpLib.SIMP_RULE asm_pc_ss (map ASSUME asl)
         (AP_TERM project (ASSUME eq)))) g

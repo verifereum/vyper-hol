@@ -45,7 +45,10 @@ Theorem abi_decoder_budget_reservation:
   abi_decoder_reservation first last b cap s
 Proof
   pure_rewrite_tac[abi_decoder_budget_def, abi_decoder_reservation_def] >>
-  strip_tac >> rpt conj_tac >> TRY decide_tac >>
+  strip_tac >> rpt conj_tac
+  >- asm_rewrite_tac[]
+  >- asm_rewrite_tac[]
+  >- decide_tac >>
   rpt gen_tac >> strip_tac >>
   `id IN abi_decoder_ids first last` by (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> asm_rewrite_tac[]) >>
   qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` drule >> disch_then drule >> strip_tac >> decide_tac

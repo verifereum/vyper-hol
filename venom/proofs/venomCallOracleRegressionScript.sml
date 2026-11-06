@@ -24,7 +24,7 @@ End
 
 Definition call_probe_outcome_def:
   call_probe_outcome =
-    <| co_success := T;
+    <| co_created := 0w; co_success := T;
        co_returnData := [9w];
        co_accounts := ((8w:address) =+
          (empty_account_state with balance := 23)) empty_accounts;
@@ -265,6 +265,18 @@ Proof
   simp probe_defs >> EVAL_TAC
 QED
 
+(* A computed CALL cannot discard deletions scheduled by an earlier call. *)
+Theorem computed_call_preserves_pending_deletions:
+  (SND (consume_call_outcome
+    (venom_call_request (call_probe_state with vs_pending_deletions := [8w])
+      2w 0w 0w 0w F) 0 0
+    (call_probe_state with vs_pending_deletions := [8w]))).vs_pending_deletions = [8w]
+Proof
+  simp_tac (srw_ss()) [consume_call_outcome_eq] >>
+  irule adopt_outcome_deletions_computed >>
+  simp[computed_precompile_addresses, venom_call_request_def, w2w_n2w]
+QED
+
 (* A successful non-static outcome prepends its deletion delta to the queue;
  * a static request or a failed outcome leaves the queue alone. *)
 Theorem consume_deletion_delta:
@@ -280,4 +292,15 @@ Theorem consume_deletion_delta:
        = [7w]
 Proof
   simp probe_defs >> EVAL_TAC
+QED
+
+Theorem concrete_result_deletion_delta:
+  es.contexts = [(ctxt,rb)] /\ es.rollback.toDelete = [5w] /\
+  s.vs_pending_deletions = [7w] ==>
+  (SND (THE (extract_venom_result s 1w 0 0
+        (SOME (INR NONE,es))))).vs_pending_deletions = [5w;7w] /\
+  (SND (THE (extract_venom_result s 1w 0 0
+        (SOME (INR (SOME Reverted),es))))).vs_pending_deletions = [7w]
+Proof
+  strip_tac >> simp[extract_venom_result_def]
 QED

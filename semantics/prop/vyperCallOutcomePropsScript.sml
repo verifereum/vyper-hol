@@ -83,16 +83,19 @@ Theorem take_call_outcome_computed_invalid:
 Proof
   rpt strip_tac >>
   gvs[take_call_outcome_def, take_outcome_def, record_request_def,
-      computed_precompile_def, evaluation_state_component_equality]
+      computed_precompile_def, call_outcome_request_def, evaluation_state_component_equality]
 QED
 
 (* ===== Whole-record frame and guarded typing ===== *)
 
+(* Failed CREATE outcomes retain their account/transient snapshots. Only
+   failed message calls, or any static request, leave the whole state alone. *)
 Theorem adopt_call_outcome_static_failed:
-  (rq.cr_static \/ ~outcome.co_success) ==>
+  (rq.cr_static \/ (rq.cr_kind = MessageCall /\ ~outcome.co_success)) ==>
   adopt_call_outcome rq outcome st = (INL (),st)
 Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
+  rw[adopt_call_outcome_equation, adopt_outcome_deletions_def] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem take_call_outcome_guard_rejected:
@@ -166,6 +169,6 @@ Theorem take_adopt_call_outcome_typed:
   accounts_runtime_well_typed st''.accounts
 Proof
   rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
-  gvs[adopt_call_outcome_equation] >>
-  IF_CASES_TAC >> gvs[]
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def]
 QED
