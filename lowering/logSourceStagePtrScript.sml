@@ -6,6 +6,8 @@ Ancestors
   logDataStorePtr stmtSimLogDataFrame abiBuiltinAllocation abiDecoderFrame
   exprLoweringProps bodyPtrDefs localPtrsProps compileEnv venomMemDefs
   venomState finite_map words list arithmetic appendStorageGhostPtr
+  fragExec stmtFragPtr logDataStorePtr ghostPcTransportPtr exprSimPtrLiteralBuffer
+  stmtSimLogDataRun instIdxIndep
 
 Theorem log_source_allocation_regions_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
@@ -37,7 +39,7 @@ Proof
   simp[abi_footprint_disjoint_def] >> metis_tac[]
 QED
 
-Theorem log_allocated_source_store_path_ptr:
+Theorem log_allocated_source_store_raw_path_ptr[local]:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
   buf.buf_operand = Var src /\
   compile_log_store_data ce xs (Var src) 0 start = ((),end_st) /\
@@ -106,4 +108,76 @@ Proof
     (drule_all log_allocation_local_regions >> disch_tac >>
      rpt gen_tac >> drule_all log_write_frame_local_region >> metis_tac[]) >>
   qexistsl_tac [`H`,`tm`,`t`] >> simp[]
+QED
+
+(* Semantic facts stay at the raw allocation endpoint; k is only the counted
+   instruction cursor.  This is the public composition interface. *)
+Theorem log_allocated_source_store_path_ptr:
+  ghost_kept ce es st G0 tn0 s0 G tn ==>
+  compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
+  buf.buf_operand = Var src /\
+  compile_log_store_data ce xs buf.buf_operand 0 start = ((),end_st) /\
+  stmt_state_rel ctx func ce cx es s0 /\ stmt_state_rel ctx func ce cx es s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
+  st.cs_next_var <= start.cs_next_var /\
+  abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s0 s /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,cap) /\
+  LIST_REL (log_data_source cx b cap s) xs vs /\
+  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
+  EVERY (\(op,ty). !p. op = Var p ==> not_fresh_at start p) xs /\
+  not_fresh_at start src /\ lookup_var src s = SOME (n2w b) /\
+  ptr_covers G tn src s cap /\
+  SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
+  b+cap < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts start end_st) (DROP k bb.bb_instructions) /\
+  ghost_inv d ce cx es G tn s /\ fresh_vars_wrt limit_st s /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at start p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at start p) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx func PG G tn (s with vs_inst_idx := k)
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts start end_st))) H tm
+      (OK (t with vs_inst_idx := k + LENGTH (emitted_insts start end_st))) /\
+    run_inst_seq (emitted_insts start end_st) s = OK t /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      log_data_layout cx (MAP SND xs) vs b m) /\
+    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    ghost_inv d ce cx es H tm t /\ ghost_kept ce es st G0 tn0 s0 H tm /\
+    log_write_frame start b (SUM (MAP (type_memory_bytes ce) (MAP SND xs))) s t /\
+    (!p. not_fresh_at start p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      op_taint tm (Var p) = op_taint tn (Var p)) /\
+    lookup_var src t = SOME (n2w b) /\ ptr_covers H tm src t cap /\
+    t.vs_allocas = s.vs_allocas /\
+    (!name p sz. local_region ce es.scopes t name p sz <=>
+      local_region ce es.scopes s0 name p sz)
+Proof
+  strip_tac >> strip_tac >>
+  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
+    log_allocated_source_store_raw_path_ptr) >>
+  (impl_tac >- (gvs[abi_builtin_allocation_frame_def, fresh_vars_wrt_def, lookup_var_def] >>
+    simp[stmt_state_rel_inst_idx, ptr_covers_inst_idx, lookup_var_def,
+      fresh_vars_wrt_def, abi_builtin_allocation_frame_def,
+      log_data_source_inst_idx, ptr_val_ok_inst_idx,
+      PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize])) >>
+  strip_tac >>
+  `eval_operand buf.buf_operand s = SOME (n2w b)` by
+    simp[eval_operand_def] >>
+  `!x. buf.buf_operand = Var x ==> not_fresh_at start x` by simp[] >>
+  drule_all (SRULE [] (Q.INST [`off` |-> `0`] compile_log_store_data_run)) >>
+  strip_tac >>
+  `EVERY (supported_scalar_type o SND) xs` by metis_tac[log_data_sources_types] >>
+  drule_all log_data_store_opcode_shape >> disch_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts start end_st)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`s`,`k`] mp_tac) >>
+  Cases_on `run_inst_seq (emitted_insts start end_st) s` >>
+  gvs[exec_result_map_def] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`H`,`tm`] >>
+  gvs[stmt_state_rel_inst_idx, fresh_vars_wrt_def, ptr_covers_inst_idx,
+    lookup_var_def, log_write_frame_def, venom_state_component_equality,
+    PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize,
+    local_region_def]
 QED
