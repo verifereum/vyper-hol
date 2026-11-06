@@ -57,6 +57,32 @@ Proof
        deploy_ctor_noninit_storage] >> EVAL_TAC >> rpt strip_tac >> gvs[supportedStmtTraverseTheory.supported_stmt_expr_exists_def]
 QED
 
+Theorem deploy_ctor_zero_gas_jumpdest_terminal:
+  es.contexts = [(c,r)] /\
+  FLOOKUP c.msgParams.parsed c.pc = SOME JumpDest /\
+  c.msgParams.gasLimit = 0 ==>
+  ISR (FST (step es))
+Proof
+  rpt strip_tac >>
+  simp[vfmExecutionTheory.step_def, vfmExecutionTheory.get_current_context_def,
+       vfmExecutionTheory.bind_def, vfmExecutionTheory.ignore_bind_def,
+       vfmExecutionTheory.handle_def, vfmExecutionTheory.return_def,
+       vfmExecutionTheory.step_inst_def, vfmExecutionTheory.consume_gas_def,
+       vfmExecutionTheory.assert_def, vfmExecutionTheory.fail_def,
+       vfmExecutionTheory.handle_step_def,
+       vfmExecutionTheory.handle_create_def, vfmExecutionTheory.handle_exception_def,
+       vfmExecutionTheory.get_return_data_def, vfmExecutionTheory.get_output_to_def,
+       vfmExecutionTheory.reraise_def, vfmExecutionTheory.get_gas_left_def,
+       vfmExecutionTheory.get_num_contexts_def, vfmExecutionTheory.set_return_data_def,
+       vfmExecutionTheory.set_current_context_def] >>
+  Cases_on `c.msgParams.outputTo` >>
+  simp[vfmExecutionTheory.reraise_def, vfmExecutionTheory.bind_def,
+       vfmExecutionTheory.ignore_bind_def, vfmExecutionTheory.get_current_context_def,
+       vfmExecutionTheory.assert_def, vfmExecutionTheory.fail_def,
+       vfmExecutionTheory.return_def, vfmExecutionTheory.set_current_context_def] >>
+  Cases_on `c.gasUsed = 0` >> simp[vfmExecutionTheory.reraise_def]
+QED
+
 Theorem deploy_ctor_empty_stack_terminal_trace:
   es.contexts <> [] /\
   (FST (HD es.contexts)).stack = [] /\
