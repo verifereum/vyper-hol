@@ -4,7 +4,10 @@ Ancestors
   compileVyper entryStateRel bodySim bodyPtrDefs fragExecPtr fragExec stmtSim
   ptrSafeRun ptrDiscipline venomState venomExecSemantics contextCodegenRelProps
   abiBuiltinAllocation allocationPtr finite_map words arithmetic list
-  exprOperandVar exprLoweringProps stmtSimReturn
+  exprOperandVar exprLoweringProps stmtSimReturn context rich_list
+  vyperInterpreter vyperExprNoControl vyperState exprSim
+Libs
+  monadsyntax
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "base";
@@ -142,4 +145,73 @@ Proof
      drule_all stmt_state_rel_alloca_site_bound >> strip_tac >>
      qexists `slot0` >> simp[abi_builtin_allocate_state_def] >> decide_tac) >>
   drule_all compile_external_return_word_run_ptr >> simp[]
+QED
+
+Theorem external_return_word_stmt_frag_ptr:
+  !cenv nr nkey ut iv ret_ty d ctx PG func cx e es res es' lctx.
+    cenv.ce_return_pc = NONE /\ cenv.ce_raw_return = F /\
+    cenv.ce_nonreentrant = (nr,nkey,ut,iv) /\ (nr ==> iv) /\
+    is_word_type ret_ty /\
+    expr_sim_ptr d ctx PG func cenv cx ret_ty e es /\
+    eval_stmt cx (Return (SOME e)) es = (res,es') ==>
+    stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
+      (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
+Proof
+  rpt gen_tac >> strip_tac >> simp[stmt_frag_ptr_def] >>
+  rpt gen_tac >> strip_tac >> disj2_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `lower_value compile_expr cenv ret_ty e sa` >>
+  rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `compile_external_return (SOME op) T F cenv.ce_ret_enc_info
+    cenv.ce_max_return_size nr nkey ut iv sm` >>
+  rename1 `_ = (u,sb')` >> gvs[] >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  `cs_extends sm sb` by
+    (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_external_return_def, optional_unlock_view,
+          compile_alloc_buffer_def, emit_op_def, emit_void_def, emit_inst_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+          fresh_var_def, emit_def] >>
+     strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `eval_stmt cx (Return (SOME e)) es =
+     bind (do raw <- eval_expr cx e; read_result cx raw od)
+       (\v. raise (ReturnException v)) es` by
+    (simp[NoAsms, Once evaluate_def, bind_def] >>
+     Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,est)` >>
+     Cases_on `raw` >> simp[]) >>
+  qpat_x_assum `eval_stmt _ _ _ = (res,es')` mp_tac >>
+  asm_rewrite_tac[] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1,es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
+  `expr_res_ok r1` by
+    (Cases_on `r1` >- gvs[expr_res_ok_def] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     imp_res_tac read_result_no_control >>
+     imp_res_tac (cj 1 eval_expr_no_control) >>
+     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+  `r1 <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
+    (Cases_on `r1` >> gvs[]) >>
+  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
+  disch_then (qspecl_then [`sa`,`sm`,`op`,`r1`,`es1`,`s0`,`G0`,`tn0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  simp[frag_exec_ptr_def] >>
+  disch_then (qspec_then `func` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac
+  >- (gvs[expr_post_def, ptr_val_ok_def, expr_val_rel_def] >>
+      `!y. op = Var y ==> not_fresh_at sm y` by
+        metis_tac[compile_lower_value_var] >>
+      `stor_taint_ok cx tn' s''` by gvs[ghost_inv_def] >>
+      drule_all compile_external_return_word_state_rel_run_ptr >>
+      disch_then (qspecl_then [`PG`,`G'`,`0`] strip_assume_tac) >>
+      qpat_x_assum `!fuel. (!e. run_from fuel ctx func s'' <> Error e) ==> _`
+        (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+      qexists `fuel'` >> simp[exit_result_def, stmt_exit_ptr_def]) >>
+  qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
+  disj1_tac >> metis_tac[expr_exit_INR_type]
 QED
