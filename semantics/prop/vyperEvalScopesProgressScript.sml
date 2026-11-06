@@ -94,6 +94,17 @@ Proof
   metis_tac[set_immutable_scopes, scopes_progress_refl]
 QED
 
+Theorem finally_set_scopes_then_scopes[local]:
+  (!s r t. g s = (r,t) ==> t.scopes = s.scopes) /\
+  finally f (do set_scopes prev; g od) st = (res,st') ==>
+  st'.scopes = prev
+Proof
+  strip_tac >>
+  fs[finally_def, AllCaseEqs(), ignore_bind_def, bind_def,
+     set_scopes_def, return_def, raise_def] >>
+  gvs[] >> first_x_assum drule >> simp[]
+QED
+
 Theorem eval_scopes_progress:
   (!cx e st res st'. eval_expr cx e st = (res,st') ==>
      scopes_progress st.scopes st'.scopes) /\
