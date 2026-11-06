@@ -1,7 +1,7 @@
 Theory fnPlanLineagePhiSchedule
 Ancestors
   fnPlanLineagePhiTemporal fnPlanLineagePhiClasses fnPlanLineageJoinEntry
-  fnPlanLineagePhiRealization fnPlanLineagePhiSlots
+  fnPlanLineagePhiRealization fnPlanLineagePhiSlots fnPlanLineageEdge
   fnPlanLineagePhiActivation fnPlanLineagePhiMaps venomExecProps venomWf stackPlanGen
   codegenReadyCompute livenessTransferProofs
 
@@ -46,6 +46,37 @@ Proof
   simp[native_phi_class_def] >>
   drule build_phi_maps_operand_class >>
   disch_then (qspecl_then [`v`, `pred`, `i`] mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem successful_join_edge_native_phi_coverage:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn succ /\ succ <> entry /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 =
+    SOME (ops,psAfter) ==>
+  !i. i < LENGTH (collect_phis sb.bb_instructions) ==>
+    ?op. MEM op psAfter.ps_stack /\
+      native_phi_class pred (collect_phis sb.bb_instructions) op = SOME i
+Proof
+  strip_tac >> drule_all generate_block_plan_join_edge_suffix >> strip_tac >>
+  `MAP (phi_cell_value T)
+     (MAP PhiCommon (MAP Var (input_vars_from pred sb.bb_instructions
+       (live_vars_at (liveness_analyze fn) succ 0)))) =
+   MAP Var (input_vars_from pred sb.bb_instructions
+       (live_vars_at (liveness_analyze fn) succ 0))` by
+    simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, phi_cell_value_def,
+         ETA_AX] >>
+  mp_tac (Q.INST [`cells` |-> `MAP PhiCommon (MAP Var
+    (input_vars_from pred sb.bb_instructions (live_vars_at (liveness_analyze fn) succ 0)))`,
+    `lbl` |-> `succ`, `bb` |-> `sb`] reachable_native_phi_cells_coverage) >>
+  simp[] >> rpt strip_tac >> first_x_assum drule >>
+  simp[listTheory.MEM_MAP, phi_cell_value_def] >> strip_tac >>
+  gvs[phi_cell_value_def] >> goal_assum (drule_at Any) >>
+  simp[phi_cell_value_def]
 QED
 
 Theorem analyzed_native_phi_schedule_classes:

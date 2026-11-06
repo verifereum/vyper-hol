@@ -28,6 +28,7 @@
 Theory fnPlanLineage
 Ancestors
   stackPlanGen stackPlanTypes fnPlanLineageJoinEntry fnPlanLineageLiveness
+  fnPlanLineagePhiSchedule codegenReadyCompute
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -287,6 +288,52 @@ Proof
   drule_all lineage_state_reachable >> strip_tac >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem dfs_block_state_native_phi_coverage:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ ps ==>
+  ?pred. MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+    (!i. i < LENGTH (collect_phis sb.bb_instructions) ==>
+      ?op. MEM op ps.ps_stack /\
+        native_phi_class pred (collect_phis sb.bb_instructions) op = SOME i)
+Proof
+  strip_tac >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  `fn_reachable fn succ` by
+    metis_tac[fn_reachable_cfg_analyze, dfs_block_state_reachable] >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  drule_all dfs_block_state_reachable_predecessor_origin >> strip_tac >>
+  drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
+    successful_join_edge_native_phi_coverage >>
+  disch_then (qspecl_then [`succ`, `sb`, `pred`, `entry`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem lineage_state_native_phi_coverage:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ ps ==>
+  ?pred. MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+    (!i. i < LENGTH (collect_phis sb.bb_instructions) ==>
+      ?op. MEM op ps.ps_stack /\
+        native_phi_class pred (collect_phis sb.bb_instructions) op = SOME i)
+Proof
+  strip_tac >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  `fn_reachable fn succ` by
+    metis_tac[fn_reachable_cfg_analyze, lineage_state_reachable] >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  drule_all lineage_state_reachable_predecessor_origin >> strip_tac >>
+  drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
+    successful_join_edge_native_phi_coverage >>
+  disch_then (qspecl_then [`succ`, `sb`, `pred`, `entry`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem lineage_dfs_join_common_cells:
