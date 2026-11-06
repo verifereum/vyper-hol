@@ -272,6 +272,36 @@ Proof
   metis_tac[current_cut_pair_unique_owner]
 QED
 
+Theorem current_cut_sg_exit_name_lookup:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM ev events /\
+  current_event_label ev = pred /\
+  lookup_block pred fn.fn_blocks = SOME old_p /\
+  current_demand fn v pred (LENGTH old_p.bb_instructions) /\
+  current_token_name H (current_event_exit_env ev v) = SOME n ==>
+  FLOOKUP (current_cut_sg fn A renamed H events pred
+    (LENGTH old_p.bb_instructions)) n = SOME v
+Proof
+  strip_tac >>
+  drule_all current_cut_sg_lookup >> disch_then (rewrite_tac o single) >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by fs[current_wf_phi_context_def] >>
+  drule current_wf_precleanup_structural >> strip_tac >>
+  `lookup_block (current_event_label ev) fn.fn_blocks = SOME old_p` by simp[] >>
+  drule_all current_wf_certificate_actual_prefix >> strip_tac >>
+  `LENGTH (current_event_input_block ev).bb_instructions =
+    LENGTH pre + LENGTH old_p.bb_instructions` by
+    (qpat_x_assum `current_edge_shape _ (current_event_input_block ev)` mp_tac >>
+     simp[makeSsaCurrentFinalBlockTheory.current_edge_shape_def,
+       listTheory.LIST_REL_EL_EQN]) >>
+  drule current_wf_event_exit_cut >> strip_tac >>
+  simp[current_cut_pair_def] >>
+  qexistsl [`ev`, `pre`, `current_event_exit_rs ev`,
+    `current_event_exit_env ev`] >>
+  simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+  metis_tac[]
+QED
+
 Theorem current_cut_pair_precleanup_output_exclusion:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\
