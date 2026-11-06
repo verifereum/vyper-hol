@@ -8,6 +8,7 @@ Ancestors
   abiEncoderRegisteredEffect valueEncodingProofs valueEncodingProps
   emitHelperProps exprLoweringProps localPtrsProps
   emitHelper compileEnv venomState venomExecSemantics venomInst words list
+  abiEncoderWindowLookup
 
 Theorem window_emit_copy_run:
   emit_void MCOPY [dst;src;len] st = ((),st') /\
@@ -44,10 +45,31 @@ Proof
     window_alloca_growth_def] >> metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
-Theorem window_copy_contract:
-  window_strong_contract (AbiCopy sz)
+Theorem window_copy_output_bounds:
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')
 Proof
-  simp_tac bool_ss [window_strong_contract_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> drule abi_encode_copy_code >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[mk_inst_def]
+QED
+
+Theorem window_empty_output_bounds:
+  compile_abi_encode_to_buf dst src (AbiComplex []) st = (out,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')
+Proof
+  simp[Once compile_abi_encode_child_def, comp_return_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def]
+QED
+
+Theorem window_copy_observed:
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
      FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
     metis_tac[window_pre_sites] >>
@@ -78,6 +100,8 @@ Proof
      qexistsl_tac [`window_alloca_sites func (frag_ids st st')`, `[(d,sz)]`] >>
      simp[window_alloca_sites_subset]) >>
   qexists_tac `(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  reverse conj_tac
+  >- simp[lookup_var_def, mcopy_def, write_memory_with_expansion_def] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, mcopy_mem_bytes_at_same, abi_encoder_extend_sim_sim] >>
   mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `sb`, `n` |-> `sz`,
@@ -85,6 +109,12 @@ Proof
   simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
   simp[venomExecSemanticsTheory.mcopy_def,
     venomStateTheory.write_memory_with_expansion_def]
+QED
+
+Theorem window_copy_contract:
+  window_strong_contract (AbiCopy sz)
+Proof
+  rw[window_strong_contract_def] >> metis_tac[window_copy_observed]
 QED
 
 Theorem window_word_run:
@@ -147,10 +177,31 @@ Proof
   metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
-Theorem window_word_contract:
-  window_strong_contract AbiPrimWord
+Theorem window_word_output_bounds:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')
 Proof
-  simp_tac bool_ss [window_strong_contract_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> drule abi_encode_word_trace >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `inst_extends st loaded_st` by metis_tac[inst_extends_emit_op] >>
+  `inst_extends loaded_st st'` by metis_tac[inst_extends_emit_void] >>
+  `emitted_insts st st' = emitted_insts st loaded_st ++ emitted_insts loaded_st st'` by
+    metis_tac[emitted_insts_append] >>
+  gvs[] >> simp[mk_inst_def, not_fresh_at_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem window_word_observed:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src AbiPrimWord at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\
+             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')` by
+    metis_tac[window_word_output_bounds] >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
      FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
     metis_tac[window_pre_sites] >>
@@ -183,6 +234,9 @@ Proof
      qexistsl_tac [`window_alloca_sites func (frag_ids st st')`, `[(d,32)]`] >>
      simp[window_alloca_sites_subset]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  reverse conj_tac
+  >- (drule abi_window_seq_high_vars >>
+      disch_then (qspec_then `st'` mp_tac) >> simp[lookup_var_def]) >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, abi_encoder_extend_sim_sim] >>
   mp_tac (Q.INST [`d` |-> `d`, `w` |-> `mload sb s`,
@@ -193,10 +247,19 @@ Proof
   asm "sizes" ACCEPT_TAC
 QED
 
-Theorem window_empty_contract:
-  window_strong_contract (AbiComplex [])
+Theorem window_word_contract:
+  window_strong_contract AbiPrimWord
 Proof
-  simp_tac bool_ss [window_strong_contract_def] >> rpt gen_tac >> strip_tac >>
+  rw[window_strong_contract_def] >> metis_tac[window_word_observed]
+QED
+
+Theorem window_empty_observed:
+  compile_abi_encode_to_buf dst src (AbiComplex []) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiComplex []) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
      FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
     metis_tac[window_pre_sites] >>
@@ -215,6 +278,12 @@ Proof
     window_alloca_growth_def] >>
   (conj_tac >- metis_tac[optionTheory.NOT_SOME_NONE]) >>
   asm "sizes" ACCEPT_TAC
+QED
+
+Theorem window_empty_contract:
+  window_strong_contract (AbiComplex [])
+Proof
+  rw[window_strong_contract_def] >> metis_tac[window_empty_observed]
 QED
 
 Theorem window_emit_load_run:

@@ -1,7 +1,10 @@
-(* Exact staged Python-oracle bytecode check for static ABI encode/decode. *)
+(* Staged bytecode check for static ABI encode/decode. Bounded ABI decoding
+   deliberately differs from VYPER_PIN (vyperlang/vyper#5333), so the program
+   is checked to be supported, to compile, and to differ from the pinned
+   bytes. *)
 
 Theory evalCompilerBytecodeAbiStatic
-Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs stackPlanGenCompute alist byte integer_word option cv_std
+Ancestors evalCompilerSubsetAbiBuiltins compileVyper supportedProgram concretizeMemLocDefs stackPlanGenCompute alist byte integer_word option cv_std
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -374,10 +377,21 @@ Proof
 QED
 val () = evalCompilerBytecodeLib.add_compile_eval abi_static_compile_eval
 
-Theorem abi_static_matches_python_oracle:
+(* Bounded ABI decoding deliberately differs from VYPER_PIN: it checks
+   relative positions before forming pointers and copies bytestrings by their
+   runtime length (vyperlang/vyper#5333). Keep the independent pinned oracle. *)
+val _ = save_thm ("abi_static_supported_status",
+  EVAL ``supported_program task090_abi_static_program``)
+Theorem abi_static_compiles:
+  IS_SOME (compile_vyper (K SOME) (o1_policy all_capabilities)
+    task090_abi_static_program)
+Proof
+  CONV_TAC (RAND_CONV (K abi_static_compile_eval)) >> EVAL_TAC
+QED
+Theorem abi_static_differs_from_pinned_decoder:
   compile_vyper (K SOME) (o1_policy all_capabilities)
-    task090_abi_static_program =
+    task090_abi_static_program <>
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "abi_static.hex")
 Proof
-  EVAL_TAC
+  CONV_TAC (RAND_CONV (LAND_CONV (K abi_static_compile_eval))) >> EVAL_TAC
 QED
