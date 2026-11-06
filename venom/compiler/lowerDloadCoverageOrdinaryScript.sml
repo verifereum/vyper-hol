@@ -1,6 +1,7 @@
 Theory lowerDloadCoverageOrdinary
 Ancestors
   lowerDloadOrdinaryNext lowerDloadControlPosition lowerDloadNormalData
+  lowerDloadCoveragePhase lowerDloadSupplySegment
   lowerDloadCoverageInvariant lowerDloadProvenanceSupport lowerDloadReachability
   lowerDloadNormalDispatch lowerDloadDefs lowerDloadOwnership
   ptrDiscipline memSafeRun unitMemInv o1PassContract
@@ -151,28 +152,25 @@ Proof
   rename1 `Ts 0 = t` >>
   `EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) ins` by
     (gvs[EVERY_MEM] >> metis_tac[]) >>
-  `!h. h <= LENGTH ins ==> (Ts h).vs_current_bb = t.vs_current_bb /\
-    (Ts h).vs_inst_idx = LENGTH p + h` by
-    (Induct >- gvs[] >> strip_tac >>
-     `h < LENGTH ins /\ h <= LENGTH ins` by decide_tac >>
-     first_x_assum drule >> strip_tac >>
-     qpat_assum `!h. h < _ ==> _` (qspec_then `h` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >>
-     `J h = EL h ins` by
-       (drule_all lower_dload_configured_segment_fetch >>
-        gvs[]) >>
-     `~is_terminator (J h).inst_opcode` by
-       (gvs[EVERY_EL] >> metis_tac[]) >>
-     ` (R h).vs_current_bb = (Ts h).vs_current_bb` by
-       metis_tac[step_preserves_control_flow] >> simp[]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >>
-  qpat_assum `!h. h < _ ==> _` (qspec_then `h` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  drule_all lower_dload_configured_segment_fetch >>
-  strip_tac >>
-  `h <= LENGTH ins` by decide_tac >>
-  first_x_assum drule >> strip_tac >> gvs[]
+  `lower_dload_insts_supply a1 ins = (ins,a1)` by
+    metis_tac[lower_dload_insts_supply_unchanged] >>
+  Cases_on `lower_dload_insts_supply a1 rest` >>
+  `lower_dload_insts_supply a1 (ins ++ rest) = (ins ++ q,r)` by
+    metis_tac[lower_dload_insts_supply_append_forward] >>
+  `lower_dload_insts_supply a (pre ++ (ins ++ rest)) = (p ++ (ins ++ q),r)` by
+    (irule lower_dload_insts_supply_append_forward >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `gb.bb_instructions = p ++ ins ++ q` by
+    gvs[lower_dload_block_supply_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) ins` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `(!h. h <= LENGTH ins ==> (Ts h).vs_current_bb = t.vs_current_bb /\
+     (Ts h).vs_inst_idx = LENGTH p + h) /\
+   (!h. h < LENGTH ins ==> J h = EL h ins) /\
+   (!h. h <= LENGTH ins /\ h < LENGTH ins ==> active_inst gn (EL h ins) (Ts h))` by
+    (irule ld_block_slice_trace >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  simp[]
 QED
 
 Theorem ld_configured_ordinary_segment_coverage:

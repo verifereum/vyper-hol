@@ -199,7 +199,7 @@ Proof
   Cases_on `next` >> gvs[] >> simp[EL_APPEND2, EL_APPEND1]
 QED
 
-Theorem lower_dload_insts_supply_unchanged[local]:
+Theorem lower_dload_insts_supply_unchanged:
   !ins a. EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) ins ==>
     lower_dload_insts_supply a ins = (ins,a)
 Proof
