@@ -3,7 +3,7 @@
    and the rest, held in bodyMemTbExtract32Held. *)
 Theory bodyMemTbExtract32
 Ancestors
-  bodyMemoryPreds bodyMemTbExtract32Held
+  bodyMemoryPreds bodyMemTbExtract32Held bodyMemTbExtract32Source
 
 Theorem body_type_builtin_extract32_ready_mem_case:
   !cx v11 typ src off m k.
