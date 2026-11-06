@@ -5,6 +5,7 @@ Ancestors
   exprSimHyps vyperEvalExprPreservesScopesDom vyperImmutableMetadataFrame
   loweringPosts exprSimSource exprLoweringProps compileEnv
   fragGasMode fragGasPathMem exprSimMemDefs exprSimWordArgs
+  exprLowering vyperInterpreter exprSimProps
 
 Theorem aggregate_body_exprs_mem_tail:
   body_exprs_mem_ok cx (e::args) /\
@@ -236,4 +237,40 @@ Proof
     (fs[body_exprs_mem_ok_def, body_expr_mem_ok_def] >> metis_tac[]) >>
   drule expr_body_pre_vv_gas_admissible >> strip_tac >>
   fs[expr_vv_sim_mem_def]
+QED
+
+Theorem aggregate_mem_tuple_cons_compile:
+  compile_make_tuple compile_expr ce (e::args) buf off sa = (out,sb) ==>
+  ?vv sm dst sn op su st.
+    compile_expr ce (expr_type e) e sa = (vv,sm) /\
+    emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
+    unwrap_value ce vv sn = (op,su) /\
+    compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su = ((),st) /\
+    compile_make_tuple compile_expr ce args buf
+      (off + type_memory_bytes ce (expr_type e)) st = (out,sb)
+Proof
+  simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem aggregate_mem_tuple_eval_cons:
+  eval_exprs cx (e::args) =
+  bind (eval_expr cx e) (\tv. bind (read_result cx tv)
+    (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))
+Proof
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >> REFL_TAC
+QED
+
+Theorem aggregate_mem_tuple_local_region_backward:
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  vv_post ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
+  local_region ce es1.scopes s1 name b sz ==>
+  local_region ce es.scopes s0 name b sz
+Proof
+  rpt strip_tac >> irule local_region_frame >>
+  conj_tac
+  >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+  qexistsl_tac [`sa`, `es1.scopes`, `s1`] >> gvs[vv_post_def]
 QED
