@@ -31,7 +31,7 @@ of h/H appends to match HistoryCoverage's extension conclusion.
 | Partition | Exact current supplier or missing implication |
 |---|---|
 | N1 ADD/SUB | OwnedAffinePrefix: ptr_affine_prefix_back_next, ptr_affine_owned_prefix are lower-level affine interfaces, NOT complete paired-prefix producers; general immediate family supplier missing |
-| N2 scalar arithmetic, bitwise, OFFSET | No complete paired-prefix family producer located; operand shape/eval, scalar masking and ledger/ghost attachment remain |
+| N2 scalar arithmetic, bitwise, OFFSET | ScalarCoreProducer supplies ptr_paired_prefix_scalar_core and ptr_paired_scalar_core_prefix_normalize for exactly MUL, Div, SDIV, Mod, SMOD, Exp, ADDMOD, MULMOD, SLT, SGT, ISZERO, AND, OR, XOR, NOT, SIGNEXTEND, BYTE. Operand discipline and source success are derived, not premises. Shifts and OFFSET remain missing; this is not full N2 or universal coverage. |
 | N3 EQ/LT/GT | Comparison transport is lower-level; no complete paired-prefix producer; common provenance/nonwrapping endpoints must be derived, not supplied |
 | N4 source ASSIGN | ptr_paired_prefix_assign (AssignProducer), complete immediate prefix; not the ALLOCA preimage of target ASSIGN |
 | N5 PARAM | ptr_paired_prefix_param (ParamProducer), complete immediate prefix |
