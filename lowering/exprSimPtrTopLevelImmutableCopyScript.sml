@@ -208,7 +208,8 @@ Theorem toplevel_immutable_offset_frame:
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
   op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
   ?t H tm.
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
+    (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+       (s with vs_inst_idx := pc) H tm) /\
     immutable_copy_ghost_frame sa s G tn sb t H tm 0 0 0w /\
     eval_operand r t = SOME (a+n2w off) /\ op_taint tm r = {} /\
     copy_old_operand sb r
@@ -242,7 +243,11 @@ Proof
   qexists_tac `step_taint (mk_inst id ADD [left; Lit (n2w off)] [out]) s s' tn` >>
   conj_tac
   >- (simp[emitted_insts_def, DROP_APPEND, inst_seq_ptr_def] >>
-      irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def, Abbr `left`]) >>
+      gen_tac >> conj_tac
+      >- (irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def, Abbr `left`]) >>
+      `~is_terminator (mk_inst id ADD [left; Lit (n2w off)] [out]).inst_opcode` by
+        simp[mk_inst_def, is_terminator_def] >>
+      simp[step_inst_inst_idx_indep, exec_result_map_def]) >>
   simp[immutable_copy_ghost_frame_def] >>
   `!x. not_fresh_at sa x ==> x <> out` by
     (simp[Abbr `out`, not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
@@ -257,7 +262,8 @@ Theorem toplevel_immutable_load_frame:
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
   op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
   ?t H tm.
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
+    (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+       (s with vs_inst_idx := pc) H tm) /\
     immutable_copy_ghost_frame sa s G tn sb t H tm 0 0 0w /\
     eval_operand r t = SOME (immutable_copy_read F a s) /\
     op_taint tm r = {} /\ copy_old_operand sb r
@@ -279,7 +285,11 @@ Proof
   qexists_tac `step_taint (mk_inst id DLOAD [op] [out]) s s' tn` >>
   conj_tac
   >- (simp[emitted_insts_def, DROP_APPEND, inst_seq_ptr_def] >>
-      irule toplevel_ptr_inst_ok_load >> simp[]) >>
+      gen_tac >> conj_tac
+      >- (irule toplevel_ptr_inst_ok_load >> simp[]) >>
+      `~is_terminator (mk_inst id DLOAD [op] [out]).inst_opcode` by
+        simp[mk_inst_def, is_terminator_def] >>
+      simp[step_inst_inst_idx_indep, exec_result_map_def]) >>
   simp[immutable_copy_ghost_frame_def] >>
   `!x. not_fresh_at sa x ==> x <> out` by
     (simp[Abbr `out`, not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
@@ -294,8 +304,9 @@ Theorem toplevel_immutable_store_frame:
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
   op_taint tn value = {} /\ ptr_covers G tn dst s 32 /\
   w2n a = w2n b+off /\ ~ctx_has_dalloca ctx ==>
-  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G
-    (tn with t_mem := tn.t_mem DIFF {q | w2n a <= q /\ q < w2n a+32}) /\
+  (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+    (s with vs_inst_idx := pc) G
+    (tn with t_mem := tn.t_mem DIFF {q | w2n a <= q /\ q < w2n a+32})) /\
   immutable_copy_ghost_frame sa s G tn sb (mstore (w2n a) w s) G
     (tn with t_mem := tn.t_mem DIFF {q | w2n a <= q /\ q < w2n a+32})
     off 32 b
@@ -314,7 +325,10 @@ Proof
          OK (mstore (w2n a) w s)` by
         simp[mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
              eval_operand_def] >>
-      simp[] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+      `~is_terminator (mk_inst sa.cs_next_id MSTORE [Var dst;value] []).inst_opcode` by
+        simp[mk_inst_def, is_terminator_def] >>
+      simp[step_inst_inst_idx_indep, exec_result_map_def] >>
+      gen_tac >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
   simp[immutable_copy_ghost_frame_def, op_taint_def]
 QED
 
@@ -356,3 +370,177 @@ Proof
   gvs[run_inst_seq_inst_idx, exec_result_map_def, copy_static_def,
       lookup_var_def]
 QED
+
+Theorem toplevel_immutable_destination_frame:
+  compile_lit_byte_offset (Var root) off sa = (r,sb) /\
+  not_fresh_at sa root /\ lookup_var root s = SOME b /\
+  ptr_covers G tn root s capacity /\ off+32 <= capacity /\
+  w2n b+capacity < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+  ?dst t H tm.
+    r = Var dst /\
+    (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := pc) H tm) /\
+    immutable_copy_ghost_frame sa s G tn sb t H tm 0 0 0w /\
+    lookup_var dst t = SOME (b+n2w off) /\
+    ptr_covers H tm dst t 32 /\ copy_old_operand sb (Var dst)
+Proof
+  strip_tac >>
+  `copy_old_operand sa (Var root) /\ eval_operand (Var root) s = SOME b /\
+   op_taint tn (Var root) = {}` by
+    gvs[copy_old_operand_def, eval_operand_def, ptr_covers_def, op_taint_def] >>
+  drule_all toplevel_immutable_offset_frame >>
+  disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  Cases_on `off = 0`
+  >- (gvs[compile_lit_byte_offset_def, comp_return_def] >>
+      qexistsl_tac [`t`,`H`,`tm`] >> simp[] >>
+      conj_tac >- gvs[eval_operand_def] >>
+      `ptr_covers H tm root t capacity` by
+        metis_tac[immutable_copy_ghost_frame_covers] >>
+      gvs[ptr_covers_def] >> decide_tac) >>
+  gvs[compile_lit_byte_offset_def, emit_op_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+      emit_def] >>
+  rename1 `eval_operand (Var dst) t = SOME _` >>
+  qexistsl_tac [`t`,`H`,`tm`] >> simp[] >>
+  conj_tac >- gvs[eval_operand_def] >>
+  qpat_x_assum `!pc. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` (qspec_then `s.vs_inst_idx` mp_tac) >>
+  gvs[emitted_insts_def, DROP_APPEND, inst_seq_ptr_def] >>
+  `step_inst_base (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [dst]) s =
+   OK (update_var dst (b+n2w off) s)` by
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
+  simp[] >> strip_tac >>
+  `t = update_var dst (b+n2w off) s` by
+    gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def,
+        emitted_insts_def, DROP_APPEND, run_inst_seq_def] >>
+  gvs[] >> irule toplevel_immutable_offset_coverage >> simp[] >>
+  qexists_tac `capacity` >> simp[]
+QED
+
+Theorem toplevel_immutable_frame_append:
+  immutable_copy_ghost_frame sa s G tn sm t H tm 0 0 0w /\
+  immutable_copy_ghost_frame sm t H tm sb u J tu off nb b /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm) /\
+  (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm)
+     (s with vs_inst_idx := pc) H tm) /\
+  (!pc. inst_seq_ptr D 0 ctx fn PG H tm (emitted_insts sm sb)
+     (t with vs_inst_idx := pc) J tu) ==>
+  immutable_copy_ghost_frame sa s G tn sb u J tu off nb b /\
+  (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+     (s with vs_inst_idx := pc) J tu)
+Proof
+  strip_tac >> conj_tac
+  >- (irule (immutable_copy_ghost_frame_trans |> Q.INST [`m` |-> `0`] |> SRULE []) >>
+      qexistsl_tac [`H`,`sm`,`t`,`tm`] >>
+      metis_tac[immutable_copy_ghost_frame_zero_offset]) >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> gvs[immutable_copy_ghost_frame_def,
+                                      copy_runtime_frame_def]) >>
+  simp[] >> irule inst_seq_ptr_uniform_append >>
+  metis_tac[immutable_copy_ghost_frame_def, copy_runtime_frame_def]
+QED
+
+Theorem toplevel_immutable_offset_nonterminators:
+  compile_lit_byte_offset op off sa = (r,sb) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+Proof
+  strip_tac >> drule code_offset_insts >>
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> gvs[is_terminator_def]
+QED
+
+Theorem toplevel_immutable_load_nonterminators:
+  compile_imm_load_word F imm op sa = (r,sb) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+Proof
+  simp[compile_imm_load_word_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+       emit_def] >> rpt strip_tac >> gvs[] >>
+  simp[emitted_insts_def, DROP_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem toplevel_immutable_one_frame:
+  immutable_copy_one F imm src (Var root) off sa = ((),sb) /\
+  copy_old_operand sa src /\ not_fresh_at sa root /\
+  eval_operand src s = SOME a /\ lookup_var root s = SOME b /\
+  op_taint tn src = {} /\ ptr_covers G tn root s capacity /\
+  off+32 <= capacity /\ w2n b+capacity < dimword (:256) /\
+  ~ctx_has_dalloca ctx ==>
+  ?t H tm.
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := pc) H tm) /\
+    ptr_covers H tm root t capacity /\
+    immutable_copy_ghost_frame sa s G tn sb t H tm off 32 b
+Proof
+  simp[immutable_copy_one_def, immutable_comp_bind_cases] >> strip_tac >>
+  drule_all toplevel_immutable_offset_frame >>
+  disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  rename1 `compile_lit_byte_offset src off sa = (sop,s1)` >>
+  rename1 `immutable_copy_ghost_frame sa s G tn s1 t1 G1 tn1 _ _ _` >>
+  drule_all toplevel_immutable_load_frame >>
+  disch_then (qspecl_then [`fn`,`PG`,`G1`,`D`] strip_assume_tac) >>
+  rename1 `compile_imm_load_word F imm sop s1 = (value,s2)` >>
+  rename1 `immutable_copy_ghost_frame s1 t1 G1 tn1 s2 t2 G2 tn2 _ _ _` >>
+  `immutable_copy_ghost_frame sa s G tn s2 t2 G2 tn2 0 0 0w /\
+   (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa s2)
+     (s with vs_inst_idx := pc) G2 tn2)` by
+    (irule toplevel_immutable_frame_append >>
+     qexistsl_tac [`G1`,`s1`,`t1`,`tn1`] >> simp[] >>
+     metis_tac[toplevel_immutable_offset_nonterminators]) >>
+  `not_fresh_at s2 root /\ lookup_var root t2 = SOME b /\
+   ptr_covers G2 tn2 root t2 capacity` by
+    (conj_tac
+     >- (gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def,
+             not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+     conj_tac
+     >- (drule_at Any immutable_copy_ghost_frame_operand >>
+         disch_then (qspec_then `Var root` mp_tac) >>
+         simp[copy_old_operand_def, eval_operand_def]) >>
+     metis_tac[immutable_copy_ghost_frame_covers]) >>
+  `w2n b+capacity < dimword (:256)` by decide_tac >>
+  drule_all toplevel_immutable_destination_frame >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  gvs[] >> suspend "store_and_compose"
+QED
+
+Resume toplevel_immutable_one_frame[store_and_compose]:
+  rename1 `immutable_copy_ghost_frame s2 t2 G2 tn2 s3 t3 G3 tn3 0 0 0w` >>
+  `copy_old_operand s3 value` by
+    metis_tac[copy_old_operand_mono, immutable_copy_ghost_frame_def,
+              copy_runtime_frame_def] >>
+  `eval_operand value t3 = SOME (immutable_copy_read F (a+n2w off) t1) /\
+   op_taint tn3 value = {}` by
+    metis_tac[immutable_copy_ghost_frame_operand] >>
+  `w2n (b+n2w off) = w2n b+off` by
+    (Cases_on `b` >> gvs[wordsTheory.word_add_n2w] >> decide_tac) >>
+  drule_all toplevel_immutable_store_frame >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `immutable_copy_ghost_frame s3 t3 G3 tn3 sb t4 G3 tn4 off 32 b` >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s2 s3)` by
+    metis_tac[toplevel_immutable_offset_nonterminators] >>
+  `immutable_copy_ghost_frame s2 t2 G2 tn2 sb t4 G3 tn4 off 32 b /\
+   (!pc. inst_seq_ptr D 0 ctx fn PG G2 tn2 (emitted_insts s2 sb)
+     (t2 with vs_inst_idx := pc) G3 tn4)` by
+    (irule toplevel_immutable_frame_append >>
+     qexistsl_tac [`G3`,`s3`,`t3`,`tn3`] >> simp[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s1 s2)` by
+    metis_tac[toplevel_immutable_load_nonterminators] >>
+  `immutable_copy_ghost_frame s1 t1 G1 tn1 sb t4 G3 tn4 off 32 b /\
+   (!pc. inst_seq_ptr D 0 ctx fn PG G1 tn1 (emitted_insts s1 sb)
+     (t1 with vs_inst_idx := pc) G3 tn4)` by
+    (irule toplevel_immutable_frame_append >>
+     qexistsl_tac [`G2`,`s2`,`t2`,`tn2`] >> simp[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa s1)` by
+    metis_tac[toplevel_immutable_offset_nonterminators] >>
+  `immutable_copy_ghost_frame sa s G tn sb t4 G3 tn4 off 32 b /\
+   (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+     (s with vs_inst_idx := pc) G3 tn4)` by
+    (irule toplevel_immutable_frame_append >>
+     qexistsl_tac [`G1`,`s1`,`t1`,`tn1`] >> simp[]) >>
+  qexistsl_tac [`t4`,`G3`,`tn4`] >> simp[] >>
+  conj_tac
+  >- gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def] >>
+  metis_tac[immutable_copy_ghost_frame_covers]
+QED
+
+Finalise toplevel_immutable_one_frame
