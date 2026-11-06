@@ -5,7 +5,7 @@ Ancestors
   exprLowering compileEnv vyperAST vyperInterpreter vyperState vyperTypeSystem
   vyperTypeCallGraph vyperTypeInvariants vyperRuntimeAccounts vyperPlaceInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation supportedExprTraverse
-  supportedProgram placeTypingProps allocLimits
+  supportedProgram placeTypingProps allocLimits selectorDispatch
 
 Definition outcomes_accounts_typed_def:
   outcomes_accounts_typed (oos : call_outcome list option) <=>
@@ -35,12 +35,22 @@ Definition expr_sim_inv_def:
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              cenv.ce_var_type id = SOME ty) /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+               cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>
        cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
     (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    (* The compile environment's method id of an external function is the
+       selector of its signature, the four bytes the source sends first
+       (build_ext_calldata); build_compile_env fills ce_method_id with
+       exactly that, over its type environment. *)
+    (!fname tys.
+       cenv.ce_method_id fname tys =
+       w2n (calldata_method_id
+              (function_selector fname (vyper_to_abi_types (get_tenv cx) tys)))) /\
     sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
     (!name fields.
        FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -139,6 +149,7 @@ Definition expr_sim_pre_def:
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
     ~expr_has_evm_run e /\
+    ~supported_expr_exists call_operands_effect_root e /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -150,9 +161,11 @@ Definition expr_body_pre_def:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops)
+                      get_module_code cx NONE = SOME tops /\
+                      IS_SOME (supported_function_decl tops c Internal))
           (int_calls_expr e) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
@@ -202,6 +215,18 @@ Definition exprs_case_def:
      ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
                         read_result cx tv s1 = (INL v, t1)) ==>
       exprs_case nocalls ctx func cenv cx es))
+End
+
+(* The positional operands of an external call, evaluated in order and
+   read only after the keyword operands (eval_expr_results): each one's
+   judgments if the ones before it evaluate (bodySim's body_results_ok). *)
+Definition results_case_def:
+  results_case nocalls ctx func cenv cx [] = T /\
+  results_case nocalls ctx func cenv cx (e::es) =
+    (expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e /\
+     ((?s r t. eval_expr cx e s = (INL r, t)) ==>
+      results_case nocalls ctx func cenv cx es))
 End
 
 Definition names_builtin_def:

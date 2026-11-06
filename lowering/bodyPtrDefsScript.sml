@@ -6,13 +6,15 @@
  * TOP-LEVEL:
  *   ghost_inv -- what the ghost owes the source state at a statement
  *     boundary
- *   frag_exec_ptr -- frag_exec with the ghost and pointer safety
+ *   frag_exec_ptr -- frag_exec with the ghost and pointer safety, for
+ *     fixed runs
  *   expr_sim_ptr, expr_vv_sim_ptr, stmt_frag_ptr, frame_ret_ok_ptr --
- *     the twins of expr_sim, expr_vv_sim, stmt_frag, frame_ret_ok
+ *     the twins of expr_sim, expr_vv_sim, stmt_frag, frame_ret_ok, as
+ *     counted paths (fragGasPathPtr's gas_outcome_ptr)
  *)
 Theory bodyPtrDefs
 Ancestors
-  bodySim stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHyps fragExec ptrSafeRun ptrDiscipline
+  fragGasPathPtr gasContext bodySim stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHyps fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
@@ -116,7 +118,8 @@ Definition ghost_kept_def:
 End
 
 (* v of type t is in memory at op's address whatever the tainted bytes
-   hold, and op's pointer is covered for its footprint. *)
+   hold, and op's pointer is covered for its word-padded footprint,
+   val_store_size: copies of a bytestring read whole words. *)
 Definition ptr_mem_ok_def:
   ptr_mem_ok cx t v op G tn (s : venom_state) <=>
     !tv w. evaluate_type (get_tenv cx) t = SOME tv /\
@@ -125,20 +128,73 @@ Definition ptr_mem_ok_def:
                   val_in_memory tv v (w2n w) mem) /\
            (val_footprint tv v <> 0 ==>
             ?x b sz. op = Var x /\ FLOOKUP G x = SOME (b, sz) /\
-                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz)
+                     b <= w2n w /\ w2n w + val_store_size tv v <= b + sz)
 End
 
-(* A lowered value op of type t holding v is untainted, and a memory
-   value's is ptr_mem_ok. *)
+(* A lowered value op of type t holding v is untainted, a word value's
+   carries no provenance (so access_ok's comparisons can pair it with any
+   other clean word), and a memory value's is ptr_mem_ok. *)
 Definition ptr_val_ok_def:
   ptr_val_ok cx t v op G tn (s : venom_state) <=>
     op_taint tn op = {} /\
+    (is_word_type t ==> op_prov G op = NONE) /\
     (~is_word_type t ==> ptr_mem_ok cx t v op G tn s)
 End
 
+Theorem ptr_val_ok_word:
+  is_word_type t /\ op_taint tn op = {} /\ op_prov G op = NONE ==>
+  ptr_val_ok cx t v op G tn s
+Proof
+  simp[ptr_val_ok_def]
+QED
+
+Theorem op_prov_lit[simp]:
+  op_prov G (Lit w) = NONE
+Proof
+  simp[op_prov_def]
+QED
+
+Theorem first_prov_eq_none:
+  first_prov G ops = NONE <=> EVERY (\op. op_prov G op = NONE) ops
+Proof
+  Induct_on `ops` >> simp[first_prov_def] >> rpt strip_tac >>
+  CASE_TAC >> simp[]
+QED
+
+(* An output of a step whose out_prov is NONE has no provenance after it. *)
+Theorem step_prov_out_none:
+  MEM out inst.inst_outputs /\ out_prov PG G inst s' = NONE ==>
+  op_prov (step_prov PG G inst s') (Var out) = NONE
+Proof
+  rw[step_prov_def, set_prov_def, op_prov_def] >>
+  rpt CASE_TAC >> gvs[FLOOKUP_DRESTRICT]
+QED
+
+(* ADD, SUB and ASSIGN of operands with no provenance give none. *)
+Theorem out_prov_arith_none:
+  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+   inst.inst_opcode = ASSIGN) /\
+  EVERY (\op. op_prov G op = NONE) inst.inst_operands ==>
+  out_prov PG G inst s' = NONE
+Proof
+  rw[out_prov_def, first_prov_eq_none]
+QED
+
+(* Every other opcode but ALLOCA, DALLOCA and PARAM gives none. *)
+Theorem out_prov_other_none:
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
+  inst.inst_opcode <> PARAM /\ inst.inst_opcode <> ADD /\
+  inst.inst_opcode <> SUB /\ inst.inst_opcode <> ASSIGN ==>
+  out_prov PG G inst s' = NONE
+Proof
+  rw[out_prov_def]
+QED
+
 (* ptr_val_ok for compile_expr's value_vv: a stack value as ptr_val_ok, a
-   located one's pointer untainted, and a memory place, of any type,
-   ptr_mem_ok. *)
+   located one's pointer untainted, a memory place, of any type,
+   ptr_mem_ok, and a storage or transient place tainted only in the bytes
+   its own type leaves dead (a popped element's slots are dead after the
+   pop's length store, so this is stated over the taint, not liveness). *)
 Definition ptr_vv_ok_def:
   (ptr_vv_ok cx t tv (StackValue t' op) es G tn s <=>
      ?v. read_result cx tv es = (INL v, es) /\
@@ -147,7 +203,31 @@ Definition ptr_vv_ok_def:
      op_taint tn p.ptr_operand = {} /\
      (p.ptr_location = LocMemory ==>
       ?v. read_result cx tv es = (INL v, es) /\
-          ptr_mem_ok cx t v p.ptr_operand G tn s))
+          ptr_mem_ok cx t v p.ptr_operand G tn s) /\
+     (!w ty k b.
+        eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME ty /\
+        w2n w <= w2n k /\ w2n k < w2n w + type_slot_size ty /\ b < 32 ==>
+        (p.ptr_location = LocStorage /\ (k, b) IN tn.t_stor ==>
+         dead_bytes (s.vs_accounts s.vs_call_ctx.cc_address).storage
+           (w2n w) ty (w2n k) b) /\
+        (p.ptr_location = LocTransient /\ (k, b) IN tn.t_trans ==>
+         dead_bytes (s.vs_transient s.vs_call_ctx.cc_address)
+           (w2n w) ty (w2n k) b)))
+End
+
+(* A memory value's pointer is covered for the whole buffer of e's lowered
+   type, not just the value's footprint: compile_assign_value's
+   memory-to-memory staging and its bytestring copies to storage read
+   type_memory_bytes of the source's lowered type. *)
+Definition ptr_buf_ok_def:
+  ptr_buf_ok cenv e op G (s : venom_state) <=>
+    !w. eval_operand op s = SOME w /\
+        type_memory_bytes cenv (lowered_value_type cenv e) <> 0 ==>
+        ?x b sz. op = Var x /\ FLOOKUP G x = SOME (b, sz) /\
+                 b <= w2n w /\
+                 w2n w + type_memory_bytes cenv (lowered_value_type cenv e)
+                   <= b + sz
 End
 
 (* frag_exec with the ghost: P, Q over the ghost and the state.  The
@@ -176,44 +256,73 @@ Definition frag_exec_ptr_def:
                 ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s)
 End
 
+(* expr_sim with the ghost: the ghost invariant at s0 gives a pointer-safe
+   counted path whose post keeps the invariant, with the value's pointer
+   covered, and leaves older variables' ghost alone.  The return buffer's
+   and return PC's variables, which ghost_inv reads, are older than sa, so
+   the fragment's fresh variables don't clobber them.  S3 is about the
+   runtime code only: a constructor's immutable region is read and written
+   through fixed addresses, not pointers, so the judgments assume
+   ~cenv.ce_is_ctor. *)
 Definition expr_sim_ptr_def:
   expr_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb op res es' s0 G0 tn0.
+    !sa sb op s0 G0 tn0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
-      (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\
-      expr_res_ok res /\ fn_has_code sa sb func /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-      frag_exec_ptr cx ctx PG sa sb
-        (\G tn s. s = s0 /\ G = G0 /\ tn = tn0 /\
-                  stmt_state_rel ctx func cenv cx es s /\
-                  ghost_inv d cenv cx es G tn s)
-        (\G tn s. ?v. res = INL v /\
-           expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
-           ghost_inv d cenv cx es' G tn s /\
-           ptr_val_ok cx (expr_type e) v op G tn s /\
-           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\gt r. expr_exit res r)
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      ~cenv.ce_is_ctor /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+      stmt_state_rel ctx func cenv cx es s0 /\
+      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+        (bind (eval_expr cx e) (read_result cx)) (es, s0, G0, tn0)
+        (\res ee G tn t. ?v. res = INL v /\
+          expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          ghost_inv d cenv cx ee G tn t /\
+          ptr_val_ok cx (expr_type e) v op G tn t /\
+          (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+          ghost_kept cenv es sa G0 tn0 s0 G tn)
+        (\res ee gt r. expr_exit res r)
 End
 
 Definition expr_vv_sim_ptr_def:
   expr_vv_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb vv res es' s0 G0 tn0.
+    !sa sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
-      eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec_ptr cx ctx PG sa sb
-        (\G tn s. s = s0 /\ G = G0 /\ tn = tn0 /\
-                  stmt_state_rel ctx func cenv cx es s /\
-                  ghost_inv d cenv cx es G tn s)
-        (\G tn s. ?tv. res = INL tv /\
-           vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
-           ghost_inv d cenv cx es' G tn s /\
-           ptr_vv_ok cx (expr_type e) tv vv es' G tn s /\
-           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\gt r. expr_exit res r)
+      local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      ~cenv.ce_is_ctor /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+      stmt_state_rel ctx func cenv cx es s0 /\
+      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+        (eval_expr cx e) (es, s0, G0, tn0)
+        (\res ee G tn t. ?tv. res = INL tv /\
+          vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          ghost_inv d cenv cx ee G tn t /\
+          ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
+          (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
+                   ptr_buf_ok cenv e op G t) /\
+          (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+                  ptr_buf_ok cenv e p.ptr_operand G t) /\
+          ghost_kept cenv es sa G0 tn0 s0 G tn)
+        (\res ee gt r. expr_exit res r)
 End
 
 (* stmt_exit with the ghost where the run stops: a return's RetQ sees it,
@@ -227,51 +336,46 @@ End
 
 Definition stmt_frag_ptr_def:
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
-    (m : compile_env compiler) es res es' <=>
+    (m : compile_env compiler) source es <=>
     !sa sb s0 G0 tn0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
-      ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
+      ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
-      ~block_is_terminated sa /\ stmt_res_ok lctx res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      ~block_is_terminated sa /\
+      gas_admissible source (stmt_res_ok lctx) es /\
       stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\
-      ~s0.vs_halted /\
+      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      (?s G tn cenv''.
-         stmt_lands lctx sb res s /\ ~s.vs_halted /\
-         (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
-         cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel ctx func cenv'' cx es' s /\
-         ghost_inv d cenv'' cx es' G tn s /\
-         (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-                lookup_var x s = SOME w) /\
-         (!x. not_fresh_at sa x ==>
-              FLOOKUP G x = FLOOKUP G0 x /\
-              op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-         !fuel r. run_from fuel ctx func s = r /\ (!e. r <> Error e) ==>
-           ?fuel'. run_from fuel' ctx func s0 = r /\
-             ghost_run fuel' ctx func PG G0 tn0 s0 =
-               ghost_run fuel ctx func PG G tn s /\
-             (ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s ==>
-              ptr_safe_run (cx_dead cx) 0 fuel' ctx func PG G0 tn0 s0)) \/
-      (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
-                stmt_exit_ptr RetQ es' res
-                  (ghost_run fuel ctx func PG G0 tn0 s0) r /\
-                ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G0 tn0 s0)
+      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG source
+        (es, s0, G0, tn0)
+        (\res ee G tn t. ?cenv''.
+          stmt_lands lctx sb res t /\ ~t.vs_halted /\
+          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+          cenv_top_ext cenv cenv'' ee.scopes /\
+          stmt_state_rel ctx func cenv'' cx ee t /\
+          ghost_inv d cenv'' cx ee G tn t /\
+          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                 lookup_var x t = SOME w) /\
+          (!x. not_fresh_at sa x ==>
+               FLOOKUP G x = FLOOKUP G0 x /\
+               op_taint tn (Var x) = op_taint tn0 (Var x)))
+        (\res ee gt r.
+          !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
 End
 
 Definition frame_ret_ok_ptr_def:
   frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty <=>
-    !cenv' env lctx eo es res es'.
+    !cenv' env lctx eo es.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      stmt_exprs_ok cenv' (Return eo) /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
               expr_sim_ptr d ctx PG func cenv' cx ty e es /\
-              expr_vv_sim_ptr d ctx PG func cenv' cx ty e es) /\
-      eval_stmt cx (Return eo) es = (res, es') ==>
+              expr_vv_sim_ptr d ctx PG func cenv' cx ty e es) ==>
       stmt_frag_ptr d ctx PG func cx lctx RetQ cenv'
-        (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
+        (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 End

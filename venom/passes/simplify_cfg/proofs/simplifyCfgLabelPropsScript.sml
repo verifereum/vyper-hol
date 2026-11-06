@@ -1033,17 +1033,6 @@ Definition simplify_cfg_block_invoke_labels_def:
     MAP FST (get_invoke_targets bb.bb_instructions)
 End
 
-Theorem simplify_cfg_invoke_labels_append[local]:
-  !first second.
-    MAP FST (get_invoke_targets (first ++ second)) =
-    MAP FST (get_invoke_targets first) ++
-    MAP FST (get_invoke_targets second)
-Proof
-  Induct_on `first` >>
-  simp[fcgDefsTheory.get_invoke_targets_def] >>
-  rpt gen_tac >> rpt CASE_TAC >> gvs[]
-QED
-
 Theorem fn_insts_blocks_mem:
   !blocks inst.
     MEM inst (fn_insts_blocks blocks) <=>
@@ -1276,7 +1265,7 @@ Proof
   strip_tac >>
   drule can_merge_blocks_front_no_invoke >> strip_tac >>
   simp[merge_blocks_def, simplify_cfg_block_invoke_labels_def,
-       simplify_cfg_invoke_labels_append] >>
+       fcgDefsTheory.cfg_invoke_labels_append] >>
   metis_tac[invoke_labels_front]
 QED
 

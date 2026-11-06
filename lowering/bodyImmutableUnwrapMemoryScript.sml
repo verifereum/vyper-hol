@@ -42,6 +42,8 @@ Theorem body_code_copy_frag_mem:
       eval_operand dst s = SOME b /\
       w2n b + off + 32 * n <= s.vs_alloca_next /\
       w2n b + off + 32 * n < dimword (:256) /\
+      w2n a + off + 32 * n <= LENGTH s.vs_data_section /\
+      w2n a + off + 32 * n < dimword (:256) /\
       alloca_history func s /\ alloca_inv s)
     (\t. t.vs_memory = (immutable_transfers F F a b n off s0).vs_memory /\
       copy_static t = copy_static s0 /\
@@ -58,6 +60,8 @@ Proof
     eval_operand dst s = SOME b /\
     w2n b + off + 32 * n <= s.vs_alloca_next /\
     w2n b + off + 32 * n < dimword (:256) /\
+    w2n a + off + 32 * n <= LENGTH s.vs_data_section /\
+    w2n a + off + 32 * n < dimword (:256) /\
     alloca_history func s /\ alloca_inv s` >>
   `frag_exec_mem ctx sa sb
     (\s. P s /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -83,8 +87,22 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+(* At runtime an immutable's bytes lie inside the data section. *)
+Theorem runtime_immutable_data_section:
+  immutable_holds cenv cx t (Value v) a es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel ctx func cenv cx es u /\
+  evaluate_type (get_tenv cx) t = SOME tv ==>
+  w2n a + type_memory_size tv <= LENGTH u.vs_data_section
+Proof
+  rw[immutable_holds_def] >> gvs[sub_layout_def] >>
+  gvs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
+  simp[wordsTheory.w2n_n2w]
+QED
+
 Theorem unwrap_runtime_code_copy_sim_mem:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
     local_ptrs_reserved cenv sa /\
@@ -143,6 +161,8 @@ Proof
   `(type_memory_bytes cenv t + 31) DIV 32 = type_slot_size tv` by
     (simp[type_memory_size_slots] >> decide_tac) >>
   `alloca_inv u` by fs[stmt_state_rel_def] >>
+  `w2n a + type_memory_size tv <= LENGTH u.vs_data_section` by
+    (irule runtime_immutable_data_section >> metis_tac[]) >>
   `w2n w + type_memory_size tv <= u.vs_alloca_next` by
     (qpat_assum `alloca_inv u`
        (strip_assume_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>

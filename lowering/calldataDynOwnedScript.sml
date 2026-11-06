@@ -3774,9 +3774,9 @@ Resume calldata_array_loop_init_repeat_safe[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
-     gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+    (conj_tac >>
+     irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> asm_rewrite_tac[] >> decide_tac) >>
   `eval_operand op h = eval_operand op initial` by metis_tac[] >>
   drule_all calldata_index_init_live_frame >> simp[]
 QED
