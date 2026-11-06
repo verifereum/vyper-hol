@@ -5235,7 +5235,7 @@ Proof
   gvs[]
 QED
 
-Theorem plan_steps_reorder_resource_nonincrease[local]:
+Theorem plan_steps_reorder_resource_nonincrease:
   !items dfg pending ps ops qs x.
     EVERY (\(idx,op). idx < LENGTH pending) items /\
     LENGTH pending <= LENGTH ps.ps_stack /\

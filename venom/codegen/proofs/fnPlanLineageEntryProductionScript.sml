@@ -488,3 +488,75 @@ Proof
   drule_all short_full_reorder_homogeneous_probe >> strip_tac >>
   simp[] >> EVAL_TAC
 QED
+
+Theorem short_full_reorder_count_probe[local]:
+  !dfg ps qs.
+    qs = SND (reorder_plan dfg (REPLICATE 18 (Var "x"))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)) ==>
+    LIST_ELEM_COUNT (Var "x") qs.ps_stack <=
+    LIST_ELEM_COUNT (Var "x")
+      (SND (do_swap 17 (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>))).ps_stack
+Proof
+  rpt gen_tac >> rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (RATOR_CONV (RAND_CONV EVAL))))) >>
+  pure_once_rewrite_tac[foldlSimTheory.plan_steps_def] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >>
+  pure_asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  qmatch_goalsub_abbrev_tac `plan_steps f items ps1` >>
+  Cases_on `plan_steps f items ps1` >> simp_tac (srw_ss()) [] >>
+  strip_tac >> gvs[] >>
+  `ps1 = SND (do_swap 17
+     (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>))` by
+    (qpat_x_assum `reorder_one _ _ _ _ _ = _`
+      (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >>
+     simp[short_reorder_capacity_probe]) >>
+  `LENGTH ps1.ps_stack = 18 /\ ps1.ps_spilled = FEMPTY` by
+    (gvs[] >>
+     qspec_then `ps with ps_spilled := FEMPTY` mp_tac short_bulk_swap_stack_probe >>
+     simp[reorderSimTheory.do_swap_spilled_unchanged]) >>
+  gvs[Abbr `f`] >>
+  drule_at (Pos last) fnPlanLineageInventoryTheory.plan_steps_reorder_resource_nonincrease >>
+  simp[Abbr `items`] >> disch_then (qspec_then `Var "x"` mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `Var "x" IN FDOM qs.ps_spilled` >> gvs[]
+QED
+
+Theorem elem_count_full_length_iff:
+  !xs x. LENGTH xs <= LIST_ELEM_COUNT x xs <=> EVERY (\y. y = x) xs
+Proof
+  Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt gen_tac >>
+  Cases_on `h = x` >> simp[LIST_ELEM_COUNT_THM] >>
+  `LIST_ELEM_COUNT x xs <= LENGTH xs` by
+    simp[LIST_ELEM_COUNT_DEF, LENGTH_FILTER_LEQ] >> decide_tac
+QED
+
+Theorem short_full_reorder_guard_iff:
+  !dfg ps qs.
+    qs = SND (reorder_plan dfg (REPLICATE 18 (Var "x"))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)) ==>
+    (stack_pop 18 qs.ps_stack ++ REPLICATE 18 (Var "x") = qs.ps_stack <=>
+     HD ([] : operand list) = Var "x" /\
+     (!i. 0 < i /\ i < 17 ==> EL i ([] : operand list) = Var "x"))
+Proof
+  rpt gen_tac >> strip_tac >> eq_tac
+  >- (strip_tac >>
+      `LIST_ELEM_COUNT (Var "x") (REPLICATE 18 (Var "x")) = 18` by EVAL_TAC >>
+      `18 <= LIST_ELEM_COUNT (Var "x") qs.ps_stack` by
+        (qpat_x_assum `stack_pop _ _ ++ _ = _`
+          (mp_tac o AP_TERM ``LIST_ELEM_COUNT (Var "x")``) >>
+         simp[reorderSimTheory.elem_count_append]) >>
+      drule short_full_reorder_count_probe >> strip_tac >>
+      `EVERY (\y. y = Var "x")
+        (SND (do_swap 17
+          (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>))).ps_stack` by
+        (rewrite_tac[GSYM elem_count_full_length_iff] >>
+         qspec_then `ps with ps_spilled := FEMPTY` mp_tac short_bulk_swap_capacity_probe >>
+         simp[] >> strip_tac >> decide_tac) >>
+      qspec_then `ps with ps_spilled := FEMPTY` mp_tac short_bulk_swap_stack_probe >>
+      strip_tac >> gvs[] >>
+      `EVERY (\y. y = Var "x")
+         (GENLIST (\i. EL i ([] : operand list)) 17)` by
+        (CONV_TAC (RAND_CONV EVAL) >> simp[]) >>
+      gvs[EVERY_GENLIST]) >>
+  strip_tac >> drule_all short_full_reorder_conditional_guard_probe >> simp[]
+QED
