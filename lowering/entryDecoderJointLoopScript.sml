@@ -7,7 +7,8 @@ Ancestors
   entryDecoderSetupEndpoint entryDecoderHistoryFrame successfulSequenceEndpoint
   abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup abiDecoderContract
   fragExecMem instIdxIndep abiEncoder emitHelper exprLoweringProps
-  list rich_list arithmetic venomInst
+  list rich_list arithmetic venomInst venomMemDefs decoderPrefixEdges
+  abiDecoderValidArrayEntry abiDecoderLoopRegisters calldataDynOwned
 
 Definition EntryLoopOwn_def:
   EntryLoopOwn fn lo hi s <=>
@@ -290,6 +291,159 @@ Proof
      abi_decoder_address_frame_def]
 QED
 
+(* Execute the backedge of the child already selected by the caller. *)
+Theorem entry_joint_backedge_transfer:
+  lookup_block child.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv ip hdr /\
+  child.vs_inst_idx = LENGTH prefix /\ ~child.vs_halted /\
+  eval_operand (Var iv) child = SOME (n2w j) /\
+  eval_operand ip child = SOME (n2w p) /\ ip <> Var nv /\
+  j < n /\ n < dimword (:256) /\ p < dimword (:256) /\
+  p+32 <= child.vs_alloca_next /\
+  lookup_block hdr fn.fn_blocks = SOME next_bb /\
+  phi_prefix_length next_bb.bb_instructions = 0 /\
+  v = jump_to hdr (mstore p (n2w (SUC j)) (update_var nv (n2w (SUC j)) child)) ==>
+  EntryLoopSafe ctx fn child v /\ EntryLoopPull ctx fn child v
+Proof
+  strip_tac >>
+  `v = jump_to hdr (mstore (w2n (n2w p:bytes32)) (n2w (SUC j))
+    (update_var nv (n2w (SUC j)) child)) /\
+   w2n (n2w p:bytes32)+32 <= child.vs_alloca_next` by simp[] >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] calldata_backedge_safe_transfer) >>
+  disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var iv) child = _`)) >>
+  disch_then (drule_at (Pat `eval_operand ip child = _`)) >>
+  disch_then (drule_at (Pat `lookup_block hdr fn.fn_blocks = _`)) >>
+  disch_then (qspecl_then [`v`, `n`, `ctx`] mp_tac) >>
+  asm_rewrite_tac[] >> disch_tac >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] calldata_backedge_all_fuel_pullback) >>
+  disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var iv) child = _`)) >>
+  disch_then (drule_at (Pat `eval_operand ip child = _`)) >>
+  disch_then (drule_at (Pat `lookup_block hdr fn.fn_blocks = _`)) >>
+  disch_then (qspecl_then [`v`, `n`, `ctx`] mp_tac) >>
+  asm_rewrite_tac[] >> disch_tac >>
+  asm_rewrite_tac[EntryLoopSafe_def, EntryLoopPull_def] >>
+  qpat_x_assum `!fuel. (!fuel. _) ==> _` mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[]
+QED
+
+Theorem entry_joint_setup_resources:
+  EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
+    hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
+    p d iid oid base_addr cap /\
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial j u old /\
+  j < LENGTH vs /\ EntrySetupFrame next u entry ==>
+  alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
+  EntryLoopOwn fn ready.cs_next_id st1.cs_next_id entry /\
+  FLOOKUP entry.vs_allocas oid = SOME (base_addr,cap) /\
+  base_addr <= d+32+j*type_memory_size tv /\
+  d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+  d+32+j*type_memory_size tv+type_memory_size tv < dimword (:256)
+Proof
+  pure_rewrite_tac[EntryLoopConfig_def, EntryLoopInv_def, EntryLoopHeader_def,
+    EntrySetupFrame_def] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `j+1 <= maxn` by decide_tac >>
+  `j*type_memory_size tv+type_memory_size tv <= maxn*type_memory_size tv` by
+    (`(j+1)*type_memory_size tv <= maxn*type_memory_size tv` by simp[LE_MULT_RCANCEL] >>
+     qpat_x_assum `(j+1)*_ <= maxn*_` mp_tac >>
+     pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  conj_tac >- metis_tac[cj 1 calldata_alloca_invariants_fields] >>
+  conj_tac >- metis_tac[cj 2 calldata_alloca_invariants_fields] >>
+  conj_tac >-
+    (qpat_assum `EntryLoopOwn _ _ _ _` mp_tac >>
+     qpat_assum `st.cs_next_id <= ready.cs_next_id` mp_tac >>
+     qpat_assum `st1.cs_next_id <= end_st.cs_next_id` mp_tac >>
+     qpat_assum `entry.vs_allocas = u.vs_allocas` mp_tac >>
+     qpat_assum `entry.vs_alloca_next = u.vs_alloca_next` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     ntac 5 strip_tac >>
+     pure_rewrite_tac[EntryLoopOwn_def] >>
+     rpt gen_tac >> strip_tac >>
+     qpat_x_assum `EntryLoopOwn _ _ _ _` mp_tac >>
+     pure_rewrite_tac[EntryLoopOwn_def] >> strip_tac >>
+     qpat_assum `entry.vs_allocas = _` (fn th =>
+       rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+     pure_asm_rewrite_tac[] >> first_x_assum irule >>
+     pure_asm_rewrite_tac[] >> decide_tac) >>
+  asm_rewrite_tac[] >> decide_tac
+QED
+
+Theorem entry_joint_valid_setup:
+  EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
+    hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
+    p d iid oid base_addr cap /\
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial j u old /\
+  j < LENGTH vs /\ alloca_history fn u /\ fn_inst_ids_distinct fn /\
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) ==>
+  ?head entry.
+    abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+    ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+    entry.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    EntrySetupFrame next u entry /\
+    fresh_vars_wrt limit_st entry /\ eval_operand (FST ops) entry = SOME (n2w j) /\
+    EntryLoopSafe ctx fn u entry /\ EntryLoopPull ctx fn u entry /\
+    entry_decoder_obs u entry /\ alloca_history fn entry
+Proof
+  pure_rewrite_tac[EntryLoopConfig_def, EntryLoopInv_def, EntryLoopHeader_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `p+32 <= u.vs_alloca_next` by
+    (qhdtm_assum `alloca_inv` mp_tac >>
+     qpat_assum `FLOOKUP u.vs_allocas iid = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  qpat_assum `lookup_block hdr _ = _` mp_tac >>
+  qpat_assum `u.vs_current_bb = hdr` (fn th => once_rewrite_tac[GSYM th]) >>
+  disch_tac >>
+  drule_all entry_valid_header_child_frame >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `fresh_vars_wrt limit_st entry /\ eval_operand (FST ops) entry = SOME (n2w j)` by
+    (qhdtm_assum `abi_decoder_valid_array_entry` mp_tac >>
+     simp_tac bool_ss [abi_decoder_valid_array_entry_def, LET_THM] >>
+     strip_tac >> asm_rewrite_tac[]) >>
+  qexistsl_tac [`head`, `entry`] >>
+  asm_rewrite_tac[EntrySetupFrame_def, EntryLoopSafe_def, EntryLoopPull_def]
+QED
+
+Theorem entry_joint_ordinary_child:
+  EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
+    hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
+    p d iid oid base_addr cap /\
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial j u old /\
+  j < LENGTH vs /\ alloca_history fn u /\ fn_inst_ids_distinct fn /\
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  (!head entry.
+    abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+    ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+    entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
+    alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
+    EntryLoopOwn fn ready.cs_next_id st1.cs_next_id entry /\
+    FLOOKUP entry.vs_allocas oid = SOME (base_addr,cap) /\
+    base_addr <= d+32+j*type_memory_size tv /\
+    d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+    d+32+j*type_memory_size tv+type_memory_size tv < dimword (:256) /\
+    alloca_history fn entry ==>
+    ?child new. EntryChildResources ctx fn site ready st1 limit_st tv vs d j entry child new /\
+      EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child /\
+      entry_decoder_obs entry child /\ alloca_history fn child) ==>
+  ?entry child new.
+    EntrySetupFrame next u entry /\ eval_operand (FST ops) entry = SOME (n2w j) /\
+    EntryChildResources ctx fn site ready st1 limit_st tv vs d j entry child new /\
+    EntryLoopSafe ctx fn u entry /\ EntryLoopPull ctx fn u entry /\
+    EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child /\
+    entry_decoder_obs u entry /\ entry_decoder_obs entry child /\ alloca_history fn child
+Proof
+  strip_tac >> drule_all entry_joint_valid_setup >> strip_tac >>
+  drule_all entry_joint_setup_resources >> strip_tac >>
+  qpat_x_assum `!head entry. _` drule_all >> strip_tac >>
+  qexistsl_tac [`entry`, `child`, `new`] >> asm_rewrite_tac[]
+QED
+
 (* Finite closure hides scratch existentially; a successor must still supply
    all resources and observations jointly before this boundary can be used. *)
 Theorem entry_joint_loop_finite:
@@ -337,4 +491,6 @@ val () =
           entry_joint_loop_safe_trans, entry_joint_loop_pull_trans,
           entry_joint_fixed_successor, entry_joint_identity_child,
           entry_joint_child_control, entry_joint_loop_control,
-          entry_joint_empty_setup_endpoint, entry_joint_loop_finite];
+          entry_joint_empty_setup_endpoint, entry_joint_loop_finite,
+          entry_joint_backedge_transfer, entry_joint_setup_resources,
+          entry_joint_valid_setup, entry_joint_ordinary_child];
