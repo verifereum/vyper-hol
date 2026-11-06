@@ -2,7 +2,7 @@ Theory bodyIfExpMemory
 Ancestors
   loweringPosts exprSimMemUnwrap bodyIfExpMemoryJoin bodyIfExpArmMemory
   bodyIfExpSelectedMemory bodyIfExpBytesCopy bodyIfExpDestination bodyIfExpBytesAdapter
-  bodyIfExpArmOutcome
+  bodyIfExpArmOutcome bodyIfExpRootSelection
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
@@ -140,79 +140,6 @@ Proof
      valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def]
 QED
 
-Theorem ifexp_root_eval_forced[local]:
-  eval_expr cx (IfExp t c a b) =
-  vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
-    (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
-         else if v = BoolV F then vyperState$bind (eval_expr cx b) (conditional_result cx)
-         else raise (Error (TypeError "not BoolV")))
-Proof
-  simp[Once evaluate_def, switch_BoolV_def, vyperStateTheory.bind_assoc] >>
-  simp[FUN_EQ_THM, vyperStateTheory.bind_def] >> gen_tac >>
-  Cases_on `eval_expr cx c x` >> rename1 `_ = (raw,st)` >>
-  Cases_on `raw` >> simp[] >>
-  rename1 `read_result cx captured st` >>
-  Cases_on `read_result cx captured st` >> rename1 `_ = (forced,sf)` >>
-  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >>
-  simp[raise_def, vyperStateTheory.bind_def]
-QED
-
-Theorem ifexp_root_condition_admissible[local]:
-  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
-  gas_admissible (vyperState$bind (eval_expr cx c) (read_result cx)) expr_res_ok es
-Proof
-  rw[gas_admissible_def] >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
-  simp[ifexp_root_eval_forced, vyperStateTheory.bind_def] >>
-  fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
-QED
-
-Theorem ifexp_root_branch_admissible[local]:
-  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-  (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
-    (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
-  gas_admissible
-    (vyperState$bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
-    expr_vv_res_ok (mid with gas_obs := [])
-Proof
-  rewrite_tac[gas_admissible_def] >> strip_tac >>
-  rpt gen_tac >> disch_tac >>
-  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
-  simp[ifexp_root_eval_forced, vyperStateTheory.bind_def] >>
-  Cases_on `sel` >> gvs[]
-QED
-
-Theorem ifexp_root_condition_bool[local]:
-  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-  vyperState$bind (eval_expr cx c) (read_result cx)
-    (es with gas_obs := gs) = (INL v,mid) ==>
-  ?sel. v = BoolV sel
-Proof
-  strip_tac >>
-  Cases_on `v = BoolV T` >- metis_tac[] >>
-  Cases_on `v = BoolV F` >- metis_tac[] >>
-  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-  simp[gas_admissible_def, ifexp_root_eval_forced] >>
-  disch_then (qspec_then `gs` mp_tac) >>
-  simp[vyperStateTheory.bind_def, raise_def, expr_vv_res_ok_def]
-QED
-
-Theorem ifexp_root_condition_cert[local]:
-  gas_exempt_cert memory tops (ctx,func)
-    (vyperState$ignore_bind
-      (vyperState$bind (eval_expr cx c) (read_result cx)) (return ()))
-    (es,s0) marks (err,ee) (leaf,finalst) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (vyperState$ignore_bind (eval_expr cx (IfExp t c a b)) (return ()))
-    (es,s0) marks (err,ee) (leaf,finalst)
-Proof
-  strip_tac >> rewrite_tac[ifexp_root_eval_forced] >>
-  pure_once_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
-  irule gas_exempt_cert_error_value >> simp[]
-QED
 
 Theorem ifexp_root_code_layout[local]:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
@@ -333,25 +260,6 @@ Proof
   Cases_on `sel` >> fs[GSYM vyperStateTheory.ignore_bind_def]
 QED
 
-Theorem ifexp_condition_exit_mem[local]:
-  gas_marked_exec T (ctx,func)
-    (vyperState$bind (eval_expr cx c) (read_result cx))
-    (es,s0) marks res mid r /\ expr_exit res r ==>
-  gas_outcome T tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\res ee r. expr_exit res r)
-Proof
-  Cases_on `res` >> simp[] >> strip_tac >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR y`,`mid`,`r`] >> simp[] >>
-  conj_tac
-  >- (rewrite_tac[ifexp_root_eval_forced] >>
-      irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >>
-  Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
-  Cases_on `y` >> fs[expr_exit_def] >>
-  rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
-QED
 
 Theorem ifexp_vv_post_of_expr_post_read[local]:
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
@@ -610,17 +518,6 @@ Proof
       gvs[bind_def, expr_res_ok_def])
 QED
 
-Theorem ifexp_root_condition_scopes[local]:
-  vyperState$bind (eval_expr cx c) (read_result cx)
-    (es with gas_obs := gs) = (INL v,mid) ==>
-  MAP FDOM es.scopes = MAP FDOM mid.scopes
-Proof
-  simp[vyperStateTheory.bind_def] >>
-  Cases_on `eval_expr cx c (es with gas_obs := gs)` >>
-  rename1 `_ = (raw,st)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-  drule read_result_state >> strip_tac >> gvs[] >>
-  drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]
-QED
 
 Theorem ifexp_forced_arm_source[local]:
   gas_admissible
