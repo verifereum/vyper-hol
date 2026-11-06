@@ -5,9 +5,23 @@ Ancestors annAssignPtrMemoryAssign annAssignPtrMemoryWindow
  annAssignPtrMemoryStageFrame stmtFragPtr compileEnv valueTypingMemoryProps
  fragGasPathPtr
 
+Theorem ghost_kept_restrict_frontier_ptr:
+ (!q. not_fresh_at fr q ==> not_fresh_at sa q) /\
+ fr.cs_next_id <= sa.cs_next_id /\
+ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+ ghost_kept cenv es fr G0 tn0 s0 G tn
+Proof
+ pure_rewrite_tac [bodyPtrDefsTheory.ghost_kept_def] >> strip_tac >>
+ conj_tac >- metis_tac[] >>
+ conj_tac >- (rpt strip_tac >>
+   `aid < sa.cs_next_id` by decide_tac >>
+   qpat_x_assum `!aid off sz i. FLOOKUP _ _ = _ /\ _ ==> _` irule >> metis_tac[]) >>
+ asm_rewrite_tac[]
+QED
+
 Theorem annassign_memory_assignment_declaration_ptr:
  !ctx func cenv cx es sa sb p cap w aid src a sty dty info bytes
-  s0 d PG G0 tn0 t ea eb tv dtv stv v inst sc rest id.
+  s0 d PG G0 tn0 t ea eb tv dtv stv v inst sc rest id fr.
  compile_assign_value cenv (Var p) LocMemory (Var src) F (SOME LocMemory)
    dty sty info bytes sa = ((),sb) /\
  (sty = dty \/ is_bytestring_type dty) /\
@@ -30,7 +44,9 @@ Theorem annassign_memory_assignment_declaration_ptr:
  lookup_var p s0 = SOME w /\ ptr_covers G0 tn0 p s0 cap /\
  FLOOKUP s0.vs_allocas aid = SOME (w2n w,cap) /\
  MEM inst (fn_insts func) /\ inst.inst_id = aid /\
- inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\ sa.cs_next_id <= aid /\
+ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\ fr.cs_next_id <= aid /\
+ fr.cs_next_id <= sa.cs_next_id /\
+ (!q. not_fresh_at fr q ==> not_fresh_at sa q) /\
  not_local_ptr cenv es.scopes p /\ ~cenv.ce_is_ctor /\
  es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
@@ -49,8 +65,8 @@ Theorem annassign_memory_assignment_declaration_ptr:
  ghost_inv d cenv cx
    (es with scopes := (sc |+ (id,<|assignable := T; type := dtv;
                                  value := v; popped := []|>)) :: rest) Gf tnf sf /\
- ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
- (!q. not_fresh_at sa q ==> lookup_var q sf = lookup_var q s0) /\
+ ghost_kept cenv es fr G0 tn0 s0 Gf tnf /\
+ (!q. not_fresh_at fr q ==> lookup_var q sf = lookup_var q s0) /\
  ptr_covers Gf tnf p sf cap
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -70,8 +86,11 @@ Proof
   (!q. cenv.ce_imm_alloca = SOME (Var q) ==> not_fresh_at sn q)` by
    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
  `val_wf dtv v` by metis_tac[value_has_type_memory_wf] >>
+ `ghost_kept cenv es fr G0 tn0 s0 G tn` by
+   (irule ghost_kept_restrict_frontier_ptr >> metis_tac[]) >>
+ `!q. not_fresh_at fr q ==> not_fresh_at sn q` by metis_tac[] >>
  `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,cap) /\
-  sa.cs_next_id <= inst.inst_id` by simp[] >>
+  fr.cs_next_id <= inst.inst_id` by simp[] >>
  drule_all (annassign_memory_destination_declaration_ptr |> SPEC_ALL |>
    Q.INST [`sty` |-> `ty`] |> SRULE []) >>
  disch_then (qspecl_then [`T`,`PG`] (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac)) >>

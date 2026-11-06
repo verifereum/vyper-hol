@@ -7,7 +7,7 @@ Ancestors annAssignPtrMemoryContinuation stmtLowering
 
 Theorem annassign_memory_assignment_location_ptr:
  !ctx func cenv cx es sa sb p cap w aid src a sty dty info bytes
-  s0 d PG G0 tn0 t ea eb tv dtv stv v inst sc rest id loc.
+  s0 d PG G0 tn0 t ea eb tv dtv stv v inst sc rest id loc fr.
  compile_assign_value cenv (Var p) LocMemory (Var src) F loc
    dty sty info bytes sa = ((),sb) /\
  (sty = dty \/ is_bytestring_type dty) /\
@@ -30,7 +30,9 @@ Theorem annassign_memory_assignment_location_ptr:
  lookup_var p s0 = SOME w /\ ptr_covers G0 tn0 p s0 cap /\
  FLOOKUP s0.vs_allocas aid = SOME (w2n w,cap) /\
  MEM inst (fn_insts func) /\ inst.inst_id = aid /\
- inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\ sa.cs_next_id <= aid /\
+ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\ fr.cs_next_id <= aid /\
+ fr.cs_next_id <= sa.cs_next_id /\
+ (!q. not_fresh_at fr q ==> not_fresh_at sa q) /\
  not_local_ptr cenv es.scopes p /\ ~cenv.ce_is_ctor /\
  es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
@@ -49,8 +51,8 @@ Theorem annassign_memory_assignment_location_ptr:
  ghost_inv d cenv cx
    (es with scopes := (sc |+ (id,<|assignable := T; type := dtv;
                                  value := v; popped := []|>)) :: rest) Gf tnf sf /\
- ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
- (!q. not_fresh_at sa q ==> lookup_var q sf = lookup_var q s0) /\
+ ghost_kept cenv es fr G0 tn0 s0 Gf tnf /\
+ (!q. not_fresh_at fr q ==> lookup_var q sf = lookup_var q s0) /\
  ptr_covers Gf tnf p sf cap
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -66,15 +68,15 @@ Proof
  drule_all annassign_memory_copy_window_ptr >>
  disch_then (qx_choosel_then [`k`,`len`] strip_assume_tac) >>
  `val_wf dtv v` by metis_tac[value_has_type_memory_wf] >>
- `ghost_kept cenv es sa G0 tn0 s0 G0 tn0` by simp[ghost_kept_def] >>
+ `ghost_kept cenv es fr G0 tn0 s0 G0 tn0` by simp[ghost_kept_def] >>
  `(!name ent q nsz. lookup_scopes name es.scopes = SOME ent /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var q) nsz) ==> not_fresh_at sa q) /\
   (!q. cenv.ce_imm_alloca = SOME (Var q) ==> not_fresh_at sa q)` by
    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
  `FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w,cap) /\
-  sa.cs_next_id <= inst.inst_id` by simp[] >>
+  fr.cs_next_id <= inst.inst_id` by simp[] >>
  drule_all (annassign_memory_destination_declaration_ptr |> SPEC_ALL |>
-   Q.INST [`st` |-> `sa`, `s` |-> `s0`] |> SRULE []) >>
+   Q.INST [`sa` |-> `fr`, `st` |-> `sa`, `s` |-> `s0`] |> SRULE []) >>
  disch_then (qspecl_then [`T`,`PG`] (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac)) >>
- qexistsl [`sf`,`Gf`,`tnf`] >> asm_rewrite_tac[]
+ qexistsl [`sf`,`Gf`,`tnf`] >> asm_rewrite_tac[] >> metis_tac[]
 QED
