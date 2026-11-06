@@ -124,11 +124,11 @@ Theorem word_not_emit_form:
 Proof
   disch_then (CONJUNCTS_THEN2 (strip_assume_tac o MATCH_MP not_type_cases)
     assume_tac) >>
-  gvs[compile_invert_def] >>
+  gvs[compile_invert_def]
   >~ [`emit_op ISZERO _`]
   >- (qexistsl [`ISZERO`, `[x]`] >> simp[]) 
   >~ [`emit_op XOR _`]
   >- (qexistsl [`XOR`, `[x; Lit (n2w (2 ** cenv.ce_flag_n_members (nsid_to_string nsid) - 1))]`] >>
-      simp[ptrDisciplineTheory.op_taint_def]) >>
+      rpt strip_tac >> gvs[] >> simp[ptrDisciplineTheory.op_taint_def]) >>
   qexistsl [`NOT`, `[x]`] >> simp[]
 QED
