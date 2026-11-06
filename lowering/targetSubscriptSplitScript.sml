@@ -14,7 +14,7 @@
 Theory targetSubscriptSplit
 Ancestors
   targetPlaceLive targetSubscriptMemory targetSubscriptDecode targetSubscriptContinuation
-  targetPlaceSimCasesBase targetSubscriptOperand
+  targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource
   targetPlaceSimDefs
@@ -467,29 +467,6 @@ Proof
   metis_tac[cj 11 target_subscript_nopop_scopes_mutual]
 QED
 
-(* A live local path remains live after a successful extension. *)
-Theorem target_subscript_extend_memory_live:
-  lookup_scopes id es.scopes = SOME entry /\
-  evaluate_subscripts entry.type entry.value path = INL v /\
-  extend_place cx (PlaceR (MemoryPlace id path)) sb es = (INL pv,ee) ==>
-  ee = es /\ pv = PlaceR (MemoryPlace id (path ++ [sb])) /\
-  ?w. evaluate_subscripts entry.type entry.value (path ++ [sb]) = INL w
-Proof
-  strip_tac >>
-  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
-  simp[extend_place_def, place_type_value_def, read_place_def,
-       get_scopes_def, bind_def, ignore_bind_def, lift_option_type_def,
-       lift_sum_def, return_def, raise_def, read_memory_path_def,
-       extend_memory_place_def, AllCaseEqs()] >> strip_tac >>
-  Cases_on `subscripts_type entry.type path` >>
-  gvs[return_def, raise_def] >>
-  rename1 `subscripts_type entry.type path = SOME ptv` >>
-  Cases_on `evaluate_subscripts ptv v [sb]` >>
-  gvs[return_def, raise_def] >>
-  drule_all evaluate_subscripts_append >>
-  disch_then (qspec_then `[sb]` mp_tac) >> simp[]
-QED
-
 Theorem target_subscript_local_base_live:
   !bt cx es pv ee id.
     target_root bt = NameTarget id /\
@@ -514,9 +491,9 @@ Proof
   >- (drule_all target_subscript_nopop_expr_scopes >> strip_tac >>
       drule read_result_state >> strip_tac >> gvs[] >>
       drule_at (Pat `extend_place _ _ _ _ = _`)
-        target_subscript_extend_memory_live >>
+        extend_place_memory_live >>
       simp[] >> strip_tac >> gvs[] >> metis_tac[])
-  >> drule_all target_subscript_extend_memory_live >>
+  >> drule_all extend_place_memory_live >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
@@ -997,13 +974,6 @@ Proof
   Cases_on `r` >> simp[expr_exit_def, exit_result_def, AllCaseEqs()]
 QED
 
-Theorem target_subscript_place_access_root[local]:
-  !bt attrs. FST (place_access bt attrs) = target_root bt
-Proof
-  recInduct base_assignment_target_induct >>
-  simp[place_access_def, target_root_def]
-QED
-
 Theorem target_subscript_source_readiness[local]:
   target_pre cenv cx env bt es0 /\
   expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env fin /\
@@ -1037,7 +1007,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> gvs[] >>
       drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
-      simp[target_subscript_place_access_root]) >>
+      simp[place_access_target_root]) >>
   rpt gen_tac >> disch_tac >> gvs[] >>
   `EVERY pure_expr (target_indices (SubscriptTarget bt e))` by metis_tac[] >>
   `storage_layout_safe cx /\ contract_storage_well_formed cx es` by
@@ -1237,7 +1207,7 @@ Proof
        metis_tac[target_subscript_pre_result_well_formed] >>
      metis_tac[target_subscript_vtype_well_formed]) >>
   simp[] >> reverse conj_tac >- metis_tac[] >>
-  irule target_subscript_lower_value_not_label >>
+  irule lower_compile_expr_not_label >>
   goal_assum (drule_at (Pat `lower_value`)) >>
   qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
 QED
