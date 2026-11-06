@@ -85,3 +85,7 @@ All paths are relative to this directory (the vyper-hol project root).
 - The loop variable's slot is allocated once before the loop; each iteration's element store re-establishes `ghost_inv` for it.
 - A dynamic array's length word, read by MLOAD for the bound, is untainted because `ghost_inv`'s `val_in_memory` holds for every memory agreeing outside `tn.t_mem`, and that fixes the length bytes. `ghost_kept` excludes dynamic-array length words from its taint frame, so get that fact from `ghost_inv`, not `ghost_kept`.
 - `typedCopyLoop*PtrScript.sml` (loop header test, back-edge, address arithmetic) are pointer facts for a copy loop of the same counter-and-JNZ shape.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
