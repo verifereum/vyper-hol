@@ -193,3 +193,7 @@ Proof
       qexistsl_tac [`if outcome.co_success then 1w else 0w`, `out`, `PG`] >>
       simp[] >> metis_tac[]) >> metis_tac[]
 QED
+
+val _ = if null (hyp oracle_call_checked_step) andalso
+           null (hyp oracle_call_checked_full) then ()
+        else raise Fail "oracle checked exports have kernel hypotheses";
