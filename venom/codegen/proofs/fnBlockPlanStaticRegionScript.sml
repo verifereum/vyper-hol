@@ -2780,3 +2780,92 @@ Proof
   drule_all regional_prepare_params_slots_layout >> strip_tac >>
   simp[generated_plan_state_wf_marked_def, FILTER_ALL_DISTINCT]
 QED
+
+Theorem regional_param_output_normalize[local]:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  is_param_opcode inst.inst_opcode /\ MEM v inst.inst_outputs ==>
+  normalize_operand (dfg_build_function fn) [] (Var v) = Var v
+Proof
+  strip_tac >> drule_all dfg_build_function_defs_complete >> strip_tac >>
+  rename1 `dfg_get_def (dfg_build_function fn) v = SOME found` >>
+  `found = inst` by
+    (drule dfg_build_function_correct >> strip_tac >>
+     `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+     metis_tac[ssa_unique_output]) >>
+  gvs[dfg_get_def_def] >> simp[Once normalize_operand_def] >>
+  gvs[is_param_opcode_iff]
+QED
+
+Theorem regional_param_suffix_freshness[local]:
+  codegen_ready_fn fn /\
+  MEM param (get_params (HD fn.fn_blocks).bb_instructions) /\
+  MEM v param.inst_outputs /\
+  LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= j /\
+  j < LENGTH (HD fn.fn_blocks).bb_instructions ==>
+  ~MEM v (EL j (HD fn.fn_blocks).bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `?i. i < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+    EL i (get_params (HD fn.fn_blocks).bb_instructions) = param` by
+    metis_tac[MEM_EL] >>
+  qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+  `i < LENGTH (HD fn.fn_blocks).bb_instructions /\ i <> j /\
+   EL i (HD fn.fn_blocks).bb_instructions = param` by
+    (rpt conj_tac
+     >- (`LENGTH (HD fn.fn_blocks).bb_instructions =
+           LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + LENGTH suffix`
+           by metis_tac[LENGTH_APPEND] >> decide_tac)
+     >- decide_tac >>
+     qpat_x_assum `_ = _ ++ _` (fn th => once_rewrite_tac[th]) >>
+     simp[EL_APPEND_EQN]) >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, wf_function_def, fn_has_entry_def]) >>
+  metis_tac[ready_output_other_location]
+QED
+
+Theorem regional_param_member_shape[local]:
+  param_insts_from n insts /\ MEM inst insts ==>
+  is_param_opcode inst.inst_opcode /\ LENGTH inst.inst_outputs = 1
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM inst insts`
+    (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  gvs[param_insts_from_append, param_insts_from_def, param_inst_at_def]
+QED
+
+Theorem regional_prepare_params_initial_freshness:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  !j op v.
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= j /\
+    j < LENGTH (HD fn.fn_blocks).bb_instructions /\
+    (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) /\
+    (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+    ~MEM v (EL j (HD fn.fn_blocks).bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  drule_all regional_prepare_params_initial_spilled >> strip_tac >>
+  drule_all regional_prepare_params_initial_membership >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `MEM op (MAP (\i. Var (HD i.inst_outputs))
+    (get_params (HD fn.fn_blocks).bb_instructions))` by gvs[] >>
+  fs[MEM_MAP] >> rename1 `MEM param (get_params _)` >>
+  `param_insts_from 0 (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[canonical_get_params_layout] >>
+  `is_param_opcode param.inst_opcode /\ LENGTH param.inst_outputs = 1` by
+    metis_tac[regional_param_member_shape] >>
+  `MEM (HD param.inst_outputs) param.inst_outputs` by
+    (Cases_on `param.inst_outputs` >> gvs[]) >>
+  `MEM param (fn_insts fn)` by
+    (qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+     `MEM param (HD fn.fn_blocks).bb_instructions` by metis_tac[MEM_APPEND] >>
+     `fn.fn_blocks <> []` by
+       gvs[codegen_ready_fn_def, wf_function_def, fn_has_entry_def] >>
+     simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     Cases_on `fn.fn_blocks` >> gvs[] >> metis_tac[]) >>
+  drule_all regional_param_output_normalize >> strip_tac >> gvs[] >>
+  metis_tac[regional_param_suffix_freshness]
+QED
