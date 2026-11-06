@@ -6744,6 +6744,70 @@ Proof
   gvs[]
 QED
 
+(* A state-independent cut interface.  No planner coverage is assumed here. *)
+Definition alias_cut_closure_def:
+  alias_cut_closure Z S R H =
+    Z UNION {a | a IN H /\ S a} UNION {d | ?s. s IN H /\ R d s}
+End
+
+Theorem alias_cut_closure_backward:
+  !Z H D safe repair.
+  D SUBSET alias_cut_closure Z safe repair H <=>
+  ?Ds P. Ds SUBSET H /\ (!a. a IN Ds ==> safe a) /\
+    (!d s. P d s ==> repair d s /\ s IN H) /\
+    D SUBSET (Z UNION Ds UNION {d | ?s. P d s})
+Proof
+  rpt gen_tac >> eq_tac
+  >- (strip_tac >>
+      qexistsl_tac [`{a | a IN H /\ safe a}`, `\d s. s IN H /\ repair d s`] >>
+      gvs[alias_cut_closure_def, pred_setTheory.SUBSET_DEF]) >>
+  rw[alias_cut_closure_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem alias_cut_zero_coverage:
+  D SUBSET ({a | normalize_operand dfg [] a = a} UNION {a | plan_holds ps a}) <=>
+  (!a. a IN D ==> normalize_operand dfg [] a = a \/ plan_holds ps a)
+Proof
+  simp[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem alias_cut_entry_input_coverage:
+  D DIFF {a | normalize_operand dfg [] a = a} SUBSET {Var x | MEM x inputs} /\
+  (!x. MEM x inputs ==> plan_holds ps (Var x)) ==>
+  D SUBSET ({a | normalize_operand dfg [] a = a} UNION {a | plan_holds ps a})
+Proof
+  rw[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem alias_cut_zero_certificates:
+  0 < LENGTH states /\
+  D SUBSET ({a | normalize_operand dfg [] a = a} UNION {a | plan_holds ps a}) ==>
+  !a. a IN D ==> alias_certificate fn dfg lo ps states 0 a
+Proof
+  rw[pred_setTheory.SUBSET_DEF, plan_holds_def] >> metis_tac[alias_certificate_rules]
+QED
+
+Theorem alias_cut_step_certificates:
+  SUC n < LENGTH states /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  step_inst fuel ctx inst (EL n states) = OK (EL (SUC n) states) /\
+  (!l. FLOOKUP (EL n states).vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  (!a. a IN H ==> alias_certificate fn dfg lo ps states n a) ==>
+  !a. a IN alias_cut_closure
+    {a | normalize_operand dfg [] a = a}
+    (\a. (!x. a = Var x ==> ~MEM x inst.inst_outputs) /\
+         (!x. normalize_operand dfg [] a = Var x ==> ~MEM x inst.inst_outputs))
+    (\dst src. ?x. dst = Var x /\ inst.inst_opcode = ASSIGN /\
+       inst.inst_operands = [src] /\ inst.inst_outputs = [x] /\
+       normalize_operand dfg [] (Var x) = normalize_operand dfg [] src /\
+       (!y. normalize_operand dfg [] src = Var y ==> ~MEM y inst.inst_outputs)) H ==>
+    alias_certificate fn dfg lo ps states (SUC n) a
+Proof
+  rw[alias_cut_closure_def]
+  >- (irule (cj 1 alias_certificate_rules) >> simp[]) 
+  >- (irule (cj 3 alias_certificate_rules) >> metis_tac[]) >>
+  irule (cj 5 alias_certificate_rules) >> metis_tac[]
+QED
+
 Theorem alias_support_obstruction_names_reflexive:
   normalize_operand (dfg_build_function alias_retired_fn) [] (Var "b") = Var "b" /\
   normalize_operand (dfg_build_function alias_halting_cut_fn) [] (Var "dead") = Var "dead" /\
