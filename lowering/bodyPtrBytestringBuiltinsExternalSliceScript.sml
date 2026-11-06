@@ -6,7 +6,7 @@ Ancestors
   venomExecSemantics venomState bodyPtrDefs list words finite_map
   ptrSafeRun memLocDefs codegenRel contextCodegenRel
   emitHelper emitHelperProps compileEnv freshWrites fragGasPathPtr fragExec
-  exprSimPtrProps
+  exprSimPtrProps builtinBytes bodyPtrBytestringBuiltinsBuffer
 
 Theorem ptr_inst_ok_external_copy:
   (((opc = CALLDATACOPY \/ opc = CODECOPY) /\
@@ -206,4 +206,59 @@ Proof
     op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
   simp[ptr_covers_def, op_taint_def, update_var_def, lookup_var_def,
     FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
+Theorem compile_slice_calldata_stages:
+  compile_slice_calldata start len N sa = (out,sb) ==>
+  ?s1 s2 s3 s4 data limit.
+    compile_slice_out_buf N sa = ((out,data),s1) /\
+    emit_op CALLDATASIZE [] s1 = (limit,s2) /\
+    compile_assert_slice_bounds start len limit s2 = ((),s3) /\
+    emit_void CALLDATACOPY [data; start; len] s3 = ((),s4) /\
+    emit_void MSTORE [out; len] s4 = ((),sb) /\
+    cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+    cs_extends s3 s4 /\ cs_extends s4 sb
+Proof
+  simp[compile_slice_calldata_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >>
+  `cs_extends sa cs'` by
+    (drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
+QED
+
+Theorem compile_slice_code_stages:
+  compile_slice_code start len N sa = (out,sb) ==>
+  ?s1 s2 s3 s4 data limit.
+    compile_slice_out_buf N sa = ((out,data),s1) /\
+    emit_op CODESIZE [] s1 = (limit,s2) /\
+    compile_assert_slice_bounds start len limit s2 = ((),s3) /\
+    emit_void CODECOPY [data; start; len] s3 = ((),s4) /\
+    emit_void MSTORE [out; len] s4 = ((),sb) /\
+    cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+    cs_extends s3 s4 /\ cs_extends s4 sb
+Proof
+  simp[compile_slice_code_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >>
+  `cs_extends sa cs'` by
+    (drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
+QED
+
+Theorem compile_slice_extcode_stages:
+  compile_slice_extcode addr start len root data sa = (out,sb) ==>
+  ?s1 s2 s3 limit.
+    out = root /\ emit_op EXTCODESIZE [addr] sa = (limit,s1) /\
+    compile_assert_slice_bounds start len limit s1 = ((),s2) /\
+    emit_void EXTCODECOPY [addr; data; start; len] s2 = ((),s3) /\
+    emit_void MSTORE [root; len] s3 = ((),sb) /\
+    cs_extends sa s1 /\ cs_extends s1 s2 /\
+    cs_extends s2 s3 /\ cs_extends s3 sb
+Proof
+  simp[compile_slice_extcode_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
