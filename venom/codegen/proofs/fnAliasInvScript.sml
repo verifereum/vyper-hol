@@ -7613,6 +7613,144 @@ Proof
   simp[] >> disch_then drule >> simp[] >> metis_tac[]
 QED
 
+Theorem alias_available_promote_entry:
+  lookup_block lbl fn.fn_blocks = SOME bb /\ alias_path_available fn lbl i x /\
+  (!k. k < i /\ k < LENGTH bb.bb_instructions ==>
+    ~MEM x (EL k bb.bb_instructions).inst_outputs) ==>
+  alias_path_available fn lbl 0 x
+Proof
+  simp[alias_path_available_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac
+  >- metis_tac[] >>
+  gvs[inst_defs_def] >> metis_tac[]
+QED
+
+Theorem alias_nonlocal_use_available_entry:
+  wf_function fn /\ def_dominates_uses fn /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) /\
+  (!k. k < i ==> ~MEM x (EL k bb.bb_instructions).inst_outputs) ==>
+  alias_path_available fn lbl 0 x
+Proof
+  strip_tac >> irule alias_available_promote_entry >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `~alias_pending_phi fn lbl i x` by metis_tac[alias_pending_phi_past_prefix] >>
+  metis_tac[alias_use_available_or_pending]
+QED
+
+Theorem alias_nonlocal_use_not_output:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) /\
+  (!k. k < i ==> ~MEM x (EL k bb.bb_instructions).inst_outputs) ==>
+  !inst. MEM inst bb.bb_instructions ==> ~MEM x inst.inst_outputs
+Proof
+  strip_tac >>
+  `alias_path_available fn lbl 0 x` by
+    (irule alias_nonlocal_use_available_entry >> goal_assum (drule_at Any) >>
+     simp[] >> qexists_tac `i` >> simp[]) >>
+  metis_tac[alias_available_entry_not_output]
+QED
+
+Theorem alias_nonlocal_use_root_not_output:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) /\
+  (!k. k < i ==> ~MEM x (EL k bb.bb_instructions).inst_outputs) /\
+  normalize_operand (dfg_build_function fn) [] (Var x) = Var r ==>
+  !inst. MEM inst bb.bb_instructions ==> ~MEM r inst.inst_outputs
+Proof
+  strip_tac >>
+  `alias_path_available fn lbl 0 x` by
+    (irule alias_nonlocal_use_available_entry >> goal_assum (drule_at Any) >>
+     simp[] >> qexists_tac `i` >> simp[]) >>
+  `alias_path_available fn lbl 0 r` by
+    (irule alias_normalize_available >> simp[] >>
+     qexistsl_tac [`Var x`, `[]`] >> simp[]) >>
+  metis_tac[alias_available_entry_not_output]
+QED
+
+Theorem alias_run_block_non_output_lookup:
+  run_block fuel ctx bb s = OK s' /\
+  (!inst. MEM inst bb.bb_instructions ==> ~MEM x inst.inst_outputs) ==>
+  lookup_var x s' = lookup_var x s
+Proof
+  strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  gvs[run_block_def] >>
+  drule venomExecProofsTheory.exec_block_preserves_non_output_vars >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[MEM_FLAT, MEM_MAP] >>
+  impl_tac >- metis_tac[] >>
+  strip_tac >>
+  drule venomExecProofsTheory.eval_phis_flookup_not_phi_output >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[lookup_var_def] >> metis_tac[]
+QED
+
+Theorem alias_nonlocal_use_run_equality:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) /\
+  (!k. k < i ==> ~MEM x (EL k bb.bb_instructions).inst_outputs) /\
+  run_block fuel ctx bb s = OK s' /\
+  operand_val (frame_view fn ra s) lo (Var x) =
+    operand_val (frame_view fn ra s) lo (normalize_operand (dfg_build_function fn) [] (Var x)) ==>
+  operand_val (frame_view fn ra s') lo (Var x) =
+    operand_val (frame_view fn ra s') lo (normalize_operand (dfg_build_function fn) [] (Var x))
+Proof
+  strip_tac >>
+  `lookup_var x s' = lookup_var x s` by
+    (irule alias_run_block_non_output_lookup >> goal_assum (drule_at Any) >>
+     metis_tac[alias_nonlocal_use_not_output]) >>
+  Cases_on `normalize_operand (dfg_build_function fn) [] (Var x)` >>
+  gvs[operand_val_def, frame_view_vars_lookup, GSYM lookup_var_def] >>
+  rename1 `normalize_operand _ _ _ = Var r` >>
+  `lookup_var r s' = lookup_var r s` by
+    (irule alias_run_block_non_output_lookup >> goal_assum (drule_at Any) >>
+     metis_tac[alias_nonlocal_use_root_not_output]) >>
+  gvs[]
+QED
+
+Theorem alias_lineage_nonlocal_use_equality:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  run_block fuel ctx bb s = OK s' /\
+  (!pred y. s.vs_prev_bb = SOME pred /\
+    MEM y (input_vars_from pred bb.bb_instructions (live_vars_at liveness lbl 0)) ==>
+      plan_holds ps (Var y)) /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) /\
+  (!k. k < i ==> ~MEM x (EL k bb.bb_instructions).inst_outputs) /\
+  (!at. plan_holds ps at ==>
+    operand_val (frame_view fn ra s) lo at =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] at)) ==>
+  operand_val (frame_view fn ra s') lo (Var x) =
+    operand_val (frame_view fn ra s') lo (normalize_operand dfg [] (Var x))
+Proof
+  strip_tac >>
+  `plan_holds ps (Var x)` by
+    (drule_at (Pat `lineage_state _ _ _ _ _ _ _`) alias_lineage_use_origin >>
+     simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
+  gvs[Excl "run_block_def"] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_reachable fn lbl` by
+    metis_tac[alias_lineage_reachable, fn_reachable_cfg_analyze] >>
+  drule_at (Pat `run_block _ _ _ _ = _`) alias_nonlocal_use_run_equality >>
+  simp[] >> disch_then irule >>
+  gvs[codegen_ready_fn_def] >> conj_tac
+  >- (qexists_tac `i` >> simp[]) >>
+  qexists_tac `lbl` >> simp[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
