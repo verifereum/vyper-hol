@@ -1,5 +1,5 @@
 Theory bodyPtrIfExpReturnBounds
-Ancestors bodyPtrDefs exprSimProps valueEncoding finite_map
+Ancestors bodyPtrDefs exprSimProps valueEncoding finite_map ptrSafeRun
 
 Theorem ifexp_ptr_mem_site_upper:
   !cx t v p G tn s tv w b n.
@@ -32,4 +32,18 @@ Proof
      (TupleTV [BaseTV (BytesT (Dynamic 64)); BaseTV (UintT 256)])
      (ArrayV (TupleV [BytesV []; IntV 42])) <> 0` by EVAL_TAC >>
   drule_all ifexp_ptr_mem_site_upper >> EVAL_TAC
+QED
+
+Theorem ifexp_invoke_caller_prov:
+  !fuel ctx PG G tn inst s p.
+    inst.inst_opcode = INVOKE /\ ~MEM p inst.inst_outputs ==>
+    FLOOKUP (FST (ghost_step fuel ctx PG G tn inst s)) p = FLOOKUP G p
+Proof
+  rpt strip_tac >> simp[Once ghost_step_def] >>
+  Cases_on `decode_invoke inst` >> simp[] >>
+  rename1 `decode_invoke inst = SOME pair` >> PairCases_on `pair` >>
+  Cases_on `lookup_function pair0 ctx.ctx_functions` >> simp[] >>
+  Cases_on `eval_operands pair1 s` >> simp[] >>
+  rename1 `eval_operands pair1 s = SOME args` >>
+  Cases_on `setup_callee x args s` >> simp[FLOOKUP_DRESTRICT]
 QED
