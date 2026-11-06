@@ -4,7 +4,7 @@ Ancestors
   exprValueFirstEmission contextFirstEmission compilerFirstEmission
   entryConditionalFirstEmission abiEncoderFirstEmission abiEncoderAppend
   abiDecoderAppend exprLowering fragExec compileEnv emitHelper
-  venomInst context builtinSimple
+  venomInst context builtinSimple builtinPrefixFirstEmission
 
 fun call_emit_tac g =
   (rpt gen_tac >> strip_tac >>
@@ -19,7 +19,7 @@ fun call_weak_tac g =
     ho_match_mp_tac first_emission_ignore_bind >> conj_tac >> call_weak_tac]) g;
 
 Theorem first_emission_create_salt:
-  (!e a x b. cfn ce (expr_type e) e a = (x,b) ==>
+  (!e a x b. salt = SOME e /\ cfn ce (expr_type e) e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -37,7 +37,7 @@ Proof
   strip_tac >> Cases_on `salt` >> rewrite_tac[compile_create_salt_def]
   >- metis_tac[first_emission_return] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
   gen_tac >> metis_tac[first_emission_return]
 QED
 
@@ -94,7 +94,7 @@ Proof
 QED
 
 Theorem first_emission_create_blueprint_args:
-  (!e a x b. cfn ce (expr_type e) e a = (x,b) ==>
+  (!e a x b. MEM e es /\ cfn ce (expr_type e) e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -115,7 +115,7 @@ Proof
       Cases_on `t`
       >- (simp_tac bool_ss [compile_create_blueprint_args_def, listTheory.list_case_def] >>
           ho_match_mp_tac first_emission_bind >> conj_tac
-          >- (match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+          >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
           gen_tac >> call_weak_tac) >>
       simp_tac bool_ss [compile_create_blueprint_args_def, listTheory.list_case_def] >> call_weak_tac) >>
   simp_tac bool_ss [compile_create_blueprint_args_def, listTheory.list_case_def] >> IF_CASES_TAC
@@ -130,34 +130,6 @@ Proof
   gen_tac >> call_weak_tac
 QED
 
-Theorem first_emission_create_snapshot:
-  !a x b. compile_create_snapshot ce vv ty a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==>
-       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  simp_tac bool_ss [compile_create_snapshot_def, LET_THM] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (simp_tac bool_ss [compile_alloc_buffer_def] >> call_weak_tac) >>
-  gen_tac >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-  >- (Cases_on `vv_location vv` >>
-      simp_tac bool_ss [optionTheory.option_case_def]
-      >- (rewrite_tac[compile_copy_memory_dynamic_def] >> call_weak_tac) >>
-      Cases_on `x` >>
-      simp_tac bool_ss [data_location_case_def, compile_slot_to_memory_def,
-        compile_copy_memory_dynamic_def] >>
-      FIRST [call_weak_tac,
-        ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-          >- (ho_match_mp_tac first_emission_strong >>
-              MATCH_ACCEPT_TAC first_emission_word_copy_loop) >> call_weak_tac,
-        ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-          >- MATCH_ACCEPT_TAC first_emission_imm_copy >> call_weak_tac]) >>
-  call_weak_tac
-QED
-
 val call_append_simps =
   [cs_appends_return, cs_appends_prims, cs_appends_emit_helpers,
    cs_appends_abi_alloc_buffer, cs_appends_abi_encode_mutual,
@@ -168,6 +140,10 @@ fun call_append_tac g =
       simp[cs_appends_def] >> metis_tac[first_emission_extcall_store_values]),
     (rename1 `cs_appends (compile_store_memory _ _ _ _ _)` >>
       simp[cs_appends_def] >> metis_tac[first_emission_store_memory]),
+    (rename1 `cs_appends (compile_word_copy_loop _ _ _ _ _ _)` >>
+      simp[cs_appends_def] >> metis_tac[first_emission_word_copy_loop]),
+    (rename1 `cs_appends (compile_imm_copy_to_memory _ _ _ _ _ _)` >>
+      simp[cs_appends_def] >> metis_tac[first_emission_imm_copy]),
     ho_match_mp_tac cs_appends_bind >> conj_tac
       >- call_append_tac >> rpt gen_tac >> call_append_tac,
     ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >> call_append_tac,
@@ -198,4 +174,108 @@ Proof
     compile_default_return_path_def, compile_extcodesize_check_def,
     compile_return_value_decode_def, compile_select_def, LET_THM] >>
   call_strong_tac
+QED
+
+Theorem first_emission_create_snapshot:
+  !a x b. compile_create_snapshot ce vv ty a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  simp_tac bool_ss [compile_create_snapshot_def, LET_THM] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (simp_tac bool_ss [compile_alloc_buffer_def] >> call_strong_tac) >>
+  gen_tac >> Cases_on `vv_location vv` >>
+  simp_tac bool_ss [optionTheory.option_case_def]
+  >- (rewrite_tac[compile_copy_memory_dynamic_def] >> call_tail_tac) >>
+  Cases_on `x` >>
+  simp_tac bool_ss [data_location_case_def, compile_slot_to_memory_def,
+    compile_copy_memory_dynamic_def] >> call_tail_tac
+QED
+
+Theorem cs_appends_lower_value_callback[local]:
+  cs_appends (cfn ce ty e) ==> cs_appends (lower_value cfn ce ty e)
+Proof
+  strip_tac >> rewrite_tac[lower_value_def] >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> simp[cs_appends_def] >> metis_tac[first_emission_unwrap_value]
+QED
+
+Theorem cs_appends_multi_vvs_callback[local]:
+  (!ce ty e. cs_appends (cfn ce ty e)) ==>
+  !es. cs_appends (compile_multi_vvs cfn ce es)
+Proof
+  strip_tac >> Induct >> rewrite_tac[compile_multi_vvs_def]
+  >- simp[cs_appends_return] >>
+  gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac >- simp[] >>
+  gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_return]
+QED
+
+Theorem cs_appends_create_ctor_callback[local]:
+  (!ce ty e. cs_appends (cfn ce ty e)) ==>
+  cs_appends (compile_create_ctor_tuple cfn ce es)
+Proof
+  strip_tac >> simp_tac bool_ss [compile_create_ctor_tuple_def, LET_THM] >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (irule cs_appends_multi_vvs_callback >> simp[]) >>
+  gen_tac >> call_append_tac
+QED
+
+Theorem cs_appends_create_salt_callback[local]:
+  (!ce ty e. cs_appends (cfn ce ty e)) ==>
+  cs_appends (compile_create_salt cfn ce salt)
+Proof
+  strip_tac >> Cases_on `salt` >> rewrite_tac[compile_create_salt_def]
+  >- simp[cs_appends_return] >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (irule cs_appends_lower_value_callback >> simp[]) >>
+  simp[cs_appends_return]
+QED
+
+fun creation_append_tac g =
+  (FIRST [FIRST_PROVE [asm_simp_tac (srw_ss())
+      [cs_appends_lower_value_callback, cs_appends_multi_vvs_callback,
+       cs_appends_create_ctor_callback, cs_appends_create_salt_callback,
+       cs_appends_return]],
+    call_append_tac,
+    (rename1 `cs_appends (compile_create_dispatch _ _ _ _ _)` >>
+      simp[cs_appends_def] >> metis_tac[first_emission_create_dispatch]),
+    ho_match_mp_tac cs_appends_bind >> conj_tac
+      >- creation_append_tac >>
+      simp_tac bool_ss [pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF] >>
+      rpt gen_tac >> creation_append_tac,
+    ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >> creation_append_tac,
+    IF_CASES_TAC >> creation_append_tac]) g;
+fun creation_tail_tac g =
+  (rpt gen_tac >> strip_tac >>
+   qmatch_asmsub_abbrev_tac `tail s = (y,c)` >>
+   `cs_appends tail` by
+     (simp_tac bool_ss [Abbr `tail`] >> creation_append_tac) >>
+   fs[cs_appends_def]) g;
+
+Theorem first_emission_raw_create:
+  (!ce ty e. cs_appends (cfn ce ty e)) /\
+  (!a x b. cfn ce (expr_type bytecode) bytecode a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_raw_create cfn ce bytecode value args salt rof a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> simp_tac bool_ss [compile_raw_create_def, LET_THM] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  gen_tac >> ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_create_snapshot >>
+  simp_tac bool_ss [compile_copy_memory_dynamic_def] >> creation_tail_tac
 QED
