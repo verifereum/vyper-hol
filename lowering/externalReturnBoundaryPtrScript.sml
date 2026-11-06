@@ -3,7 +3,7 @@ Ancestors
   loweringHalt stmtLowering compileEnv emitHelper venomInst
   compileVyper entryStateRel bodySim bodyPtrDefs fragExecPtr fragExec stmtSim
   ptrSafeRun ptrDiscipline venomState venomExecSemantics contextCodegenRelProps
-  abiBuiltinAllocation finite_map words arithmetic list
+  abiBuiltinAllocation allocationPtr finite_map words arithmetic list
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "base";
@@ -104,4 +104,41 @@ Proof
       qexistsl [`base`,`buf`,`sa.cs_next_id`,`op`,`w`] >> gvs[]) >>
   irule return_word_run >> simp[] >>
   qexistsl [`buf`,`sa.cs_next_id`,`op`] >> gvs[]
+QED
+
+Theorem compile_external_return_word_state_rel_run_ptr:
+  compile_external_return (SOME op) T F ei msz nr nkey ut iv sa = (x,sb) /\
+  (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at sa y) /\
+  fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand op s = SOME w /\ op_taint tn op = {} /\
+  stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx /\
+  stmt_state_rel ctx func cenv cx es s ==>
+  !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s /\
+    ?ss. run_from fuel ctx func s = Halt ss /\
+      ss.vs_returndata = word_to_bytes w T /\
+      ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
+      ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+      ss.vs_pending_deletions = s.vs_pending_deletions
+Proof
+  strip_tac >>
+  drule_all compile_external_return_word_parts >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w 32)] [buf]) (fn_insts func)` by
+    (irule lookup_block_fn_insts >> qexistsl [`bb`,`sa.cs_current_bb`] >>
+     simp[] >> gvs[get_instruction_def] >>
+     qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[] >>
+     strip_tac >> metis_tac[EL_MEM]) >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  `?base. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas
+      sa.cs_next_id = SOME (base,32) /\ base < dimword (:256)` by
+    (Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+     >- (drule_all stmt_state_rel_alloca_fresh_bound >> strip_tac >>
+         qexists `s.vs_alloca_next` >>
+         simp[abi_builtin_allocate_state_def, FLOOKUP_UPDATE] >> decide_tac) >>
+     rename1 `FLOOKUP s.vs_allocas sa.cs_next_id = SOME slot` >>
+     PairCases_on `slot` >>
+     drule_all stmt_state_rel_alloca_site_bound >> strip_tac >>
+     qexists `slot0` >> simp[abi_builtin_allocate_state_def] >> decide_tac) >>
+  drule_all compile_external_return_word_run_ptr >> simp[]
 QED
