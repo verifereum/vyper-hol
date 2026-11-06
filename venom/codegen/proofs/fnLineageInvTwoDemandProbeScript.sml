@@ -64,40 +64,6 @@ Proof
   strip_tac >> first_x_assum irule
 QED
 
-Theorem splice_two_second_reorder_swap:
-  reorder_one dfg [Lit 3w; Lit 4w] 0 (Lit 3w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 4w; Lit 3w]) =
-  ([SOSwap 1], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 3w; Lit 4w])
-Proof
-  rewrite_tac[splice_loop_e_exact, stackPlanOpsTheory.reorder_one_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``operand_equiv``, ``reduce_depth_plan``, ``do_swap``]) >>
-  simp[dfgDefsTheory.operand_equiv_def, dfgDefsTheory.normalize_operand_def,
-    wordsTheory.dimword_def, wordsTheory.n2w_11] >>
-  EVAL_TAC >> simp[wordsTheory.dimword_def, wordsTheory.n2w_11] >> EVAL_TAC
-QED
-
-Theorem splice_two_second_reorder_noops:
-  reorder_one dfg [Lit 3w; Lit 4w] 1 (Lit 4w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 3w; Lit 4w]) =
-  ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 3w; Lit 4w]) /\
-  reorder_one dfg [Lit 4w; Lit 3w] 0 (Lit 4w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 4w; Lit 3w]) =
-  ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 4w; Lit 3w]) /\
-  reorder_one dfg [Lit 4w; Lit 3w] 1 (Lit 3w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 4w; Lit 3w]) =
-  ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Lit 4w; Lit 3w])
-Proof
-  rewrite_tac[splice_loop_e_exact, stackPlanOpsTheory.reorder_one_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``operand_equiv``, ``reduce_depth_plan``, ``do_swap``]) >>
-  simp[wordsTheory.dimword_def, wordsTheory.n2w_11] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``operand_equiv``, ``reduce_depth_plan``, ``do_swap``]) >>
-  simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
-  EVAL_TAC >> simp[wordsTheory.n2w_11, wordsTheory.dimword_def]
-QED
-
 Theorem splice_two_second_add:
   generate_inst_plan (liveness_analyze splice_two_fn)
     (dfg_build_function splice_two_fn) (cfg_analyze splice_two_fn)

@@ -1,5 +1,5 @@
 Theory fnLineageInvSpliceProbe
-Ancestors fnPlanLineage fnLineageInvBoundary codegenReadyCompute cfgTransform
+Ancestors fnPlanLineage fnLineageInvBoundary fnLineageInvLiteral codegenReadyCompute cfgTransform
   stackPlanGen stackPlanOps stackPlanTypes venomInst
 
 (* Single-demand diagnostic candidate. Its intended burial mechanism is
@@ -77,39 +77,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem splice_loop_literal_reorder:
-  reorder_one dfg [Lit 1w; Lit 2w] 0 (Lit 1w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 2w; Lit 1w]) =
-  ([SOSwap 1], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 1w; Lit 2w])
-Proof
-  rewrite_tac[splice_loop_e_exact, reorder_one_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV [``dfg``]) >>
-  simp[dfgDefsTheory.operand_equiv_def, dfgDefsTheory.normalize_operand_def,
-    wordsTheory.dimword_def] >>
-  EVAL_TAC
-QED
-
-Theorem splice_loop_literal_reorder_noops:
-  reorder_one dfg [Lit 1w; Lit 2w] 1 (Lit 2w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 1w; Lit 2w]) =
-  ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 1w; Lit 2w]) /\
-  reorder_one dfg [Lit 2w; Lit 1w] 0 (Lit 2w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 2w; Lit 1w]) =
-  ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 2w; Lit 1w]) /\
-  reorder_one dfg [Lit 2w; Lit 1w] 1 (Lit 1w)
-    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 2w; Lit 1w]) =
-  ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Lit 2w; Lit 1w])
-Proof
-  rewrite_tac[splice_loop_e_exact, reorder_one_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``operand_equiv``, ``reduce_depth_plan``, ``do_swap``]) >>
-  simp[wordsTheory.dimword_def, wordsTheory.n2w_11] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``operand_equiv``, ``reduce_depth_plan``, ``do_swap``]) >>
-  simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
-  EVAL_TAC >> simp[wordsTheory.n2w_11, wordsTheory.dimword_def]
-QED
-
 Theorem splice_loop_h_first_add:
   generate_inst_plan (liveness_analyze splice_loop_fn)
     (dfg_build_function splice_loop_fn) (cfg_analyze splice_loop_fn)
@@ -119,17 +86,19 @@ Theorem splice_loop_h_first_add:
   SOME ([SOPush (Lit 2w); SOPush (Lit 1w); SOEmit "ADD"],
     splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"])
 Proof
-  rewrite_tac[splice_loop_e_exact, splice_loop_h_live_one, generate_inst_plan_def,
-    generate_regular_inst_plan_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``reorder_one``, ``liveness_analyze``, ``dfg_build_function``,
-     ``cfg_analyze``, ``splice_loop_fn``]) >>
-  simp[listTheory.FOLDL, pairTheory.UNCURRY_DEF] >>
-  simp[SRULE [splice_loop_e_exact] splice_loop_literal_reorder,
-    SRULE [splice_loop_e_exact] splice_loop_literal_reorder_noops] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``, ``splice_loop_fn``]) >>
-  simp[]
+  `optimistic_swap_plan (dfg_build_function splice_loop_fn)
+    (mk_inst 21 ADD [Lit 1w; Lit 2w] ["t"])
+    (live_vars_at (liveness_analyze splice_loop_fn) "H" 1) F
+    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"]) =
+    ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"])` by
+    (rewrite_tac[splice_loop_h_live_one, splice_loop_e_exact,
+       optimistic_swap_plan_def, venomInstTheory.mk_inst_def] >> EVAL_TAC) >>
+  `1w <> (2w:256 word)` by simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
+  `MEM "t" (live_vars_at (liveness_analyze splice_loop_fn) "H" 1)` by
+    simp[splice_loop_h_live_one] >>
+  drule_all literal_add_inst_plan >>
+  simp[release_dead_spills_def, splice_loop_e_exact, splice_loop_h_live_one] >>
+  strip_tac >> first_x_assum irule
 QED
 
 Theorem splice_loop_h_live_two:
