@@ -107,6 +107,8 @@ Theorem code_offset_add_covers_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (a + n2w off) /\ ptr_covers Gf tnf out sf needed /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -140,6 +142,8 @@ Theorem compile_lit_byte_offset_covers_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (a + n2w off) /\ ptr_covers Gf tnf out sf needed /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\

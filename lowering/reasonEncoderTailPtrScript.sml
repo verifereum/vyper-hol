@@ -40,6 +40,8 @@ Theorem reason_encoder_mstore_resources_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     sf.vs_memory = (mstore (w2n a) w s).vs_memory /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     mload (w2n a) sf = w /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tnf.t_mem) /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
@@ -55,11 +57,12 @@ Proof
     (drule_all (cj 1 mstore_ghost_frame) >>
      disch_then (qspecl_then [`PG`, `G`, `sa.cs_next_id`] mp_tac) >>
      simp[Abbr `t`]) >>
-  `tnf.t_var = tn.t_var /\
+  `tnf.t_var = tn.t_var /\ tnf.t_stor = tn.t_stor /\
+   tnf.t_trans = tn.t_trans /\
    tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}` by
-    (simp[Abbr `tnf`, Abbr `t`] >> conj_tac
-     >- (irule (cj 2 mstore_ghost_frame) >> simp[]) >>
-     irule (cj 5 mstore_ghost_frame) >> simp[]) >>
+    (drule_all mstore_ghost_frame >>
+     disch_then (qspecl_then [`PG`, `G`, `sa.cs_next_id`] mp_tac) >>
+     simp[Abbr `tnf`, Abbr `t`]) >>
   qexistsl_tac [`tnf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac
   >- (drule_all reason_encoder_mstore_path_ptr >>
@@ -129,6 +132,8 @@ Theorem reason_encoder_offset_path_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (a + d) /\ ptr_covers Gf tnf out sf k /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_data_section = s.vs_data_section /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     (!p. p <> out ==>
       lookup_var p sf = lookup_var p s /\
@@ -860,7 +865,10 @@ Proof
     (gvs[ptr_covers_def, mload_def, op_taint_def] >>
      rpt conj_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
        arithmeticTheory.SUB_LESS_EQ]) >>
-  drule_all reason_encoder_payload_tail_ptr >>
+  qpat_assum `emit_inst MLOAD [Var src] [len] sm = _`
+    (mp_then Any mp_tac reason_encoder_payload_tail_ptr) >>
+  ntac 13 (disch_then drule) >>
+  disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
