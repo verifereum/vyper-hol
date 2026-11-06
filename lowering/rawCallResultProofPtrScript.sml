@@ -1233,10 +1233,11 @@ QED
 (* The protected checkpoint precedes output allocation: the suffix intentionally
    overwrites the output buffer, but not any protected allocation or live local. *)
 Theorem raw_call_bytes_suffix_stage:
-  emit_op RETURNDATASIZE [] sa = (Var rz,s1) /\
-  emit_op LT [Var rz;Lit (n2w n)] s1 = (Var cmpx,s2) /\
-  compile_select (Var cmpx) (Var rz) (Lit (n2w n)) s2 = (cap,s3) /\
-  emit_void MSTORE [Var dst;cap] s3 = ((),sb) /\ fn_has_code sa sb func /\
+  (do z <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [z;Lit (n2w n)];
+      cap <- compile_select cmp z (Lit (n2w n));
+      emit_void MSTORE [Var dst;cap]; return (Var dst) od) sa = (result,sb) /\
+  fn_has_code sa sb func /\
   stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
   local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
@@ -1264,9 +1265,19 @@ Theorem raw_call_bytes_suffix_stage:
     stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-    lookup_var dst t = SOME a /\ t.vs_returndata = s.vs_returndata
+    lookup_var dst t = SOME a /\ t.vs_returndata = s.vs_returndata /\ result = Var dst
 Proof
-  strip_tac >>
+  strip_tac >> drule raw_call_bytes_suffix_steps >> strip_tac >>
+  `?rz cmpx. z = Var rz /\ cmp = Var cmpx` by
+    (qpat_x_assum `emit_op RETURNDATASIZE _ _ = _` mp_tac >>
+     qpat_x_assum `emit_op LT _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `z = _` SUBST_ALL_TAC >>
+  qpat_x_assum `cmp = _` SUBST_ALL_TAC >> suspend "execute"
+QED
+
+Resume raw_call_bytes_suffix_stage[execute]:
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s3 sb` by
     metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
       exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND] >>
@@ -1347,3 +1358,77 @@ Resume raw_call_bytes_suffix_stage[compose]:
 QED
 
 Finalise raw_call_bytes_suffix_stage
+
+(* Forward the entire returndata.  No site-capacity premise is appropriate:
+   this is the recognized RETURNDATACOPY/REVERT exception, even for a zero
+   scratch allocation and nonempty returndata. *)
+Theorem raw_call_forward_suffix_stage:
+  emit_void RETURNDATACOPY [p;Lit 0w;rds] sa = ((),sm) /\
+  emit_inst REVERT [p;rds] [] sm = ((),sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  eval_operand p s = SOME a /\
+  eval_operand rds s = SOME (n2w (LENGTH s.vs_returndata)) /\
+  LENGTH s.vs_returndata < dimword(:256) /\
+  op_taint tn p = {} /\ op_taint tn rds = {} ==>
+  ?H un t. gas_path_ptr D 0 ctx func PG G tn s 0 H un (Abort Revert_abort t) /\
+    t.vs_returndata = s.vs_returndata /\ t.vs_halted
+Proof
+  strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] [];
+      mk_inst sm.cs_next_id REVERT [p;rds] []]` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+     simp[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) /\
+   get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst sm.cs_next_id REVERT [p;rds] [])` by
+    (conj_tac
+     >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+     first_x_assum (qspec_then `1` mp_tac) >> simp[arithmeticTheory.ADD1]) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  qabbrev_tac `u = write_memory_with_expansion (w2n a) s.vs_returndata s` >>
+  qabbrev_tac `t = revert_state (set_returndata s.vs_returndata
+    (u with vs_inst_idx := SUC s.vs_inst_idx))` >>
+  `step_inst_base (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) s = OK u` by
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def,
+       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, Abbr `u`]) >>
+  suspend "revert"
+QED
+
+Resume raw_call_forward_suffix_stage[revert]:
+  `eval_operand p (u with vs_inst_idx := SUC s.vs_inst_idx) = SOME a /\
+   eval_operand rds (u with vs_inst_idx := SUC s.vs_inst_idx) =
+     SOME (n2w (LENGTH s.vs_returndata))` by
+    (Cases_on `p` >> Cases_on `rds` >>
+     gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       Abbr `u`, venomStateTheory.write_memory_with_expansion_def,
+       venomStateTheory.write_memory_def]) >>
+  `mem_bytes_at (w2n a) (LENGTH s.vs_returndata) u.vs_memory = s.vs_returndata` by
+    simp[Abbr `u`, exprSimHashTheory.hash_write_memory_read_self] >>
+  `step_inst_base (mk_inst sm.cs_next_id REVERT [p;rds] [])
+      (u with vs_inst_idx := SUC s.vs_inst_idx) = Abort Revert_abort t` by
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomInstTheory.mk_inst_def, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD, Abbr `t`] >>
+     fs[valueEncodingTheory.mem_bytes_at_def]) >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) u)
+    (step_taint (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) s u tn)
+    (Abort Revert_abort t)` by
+    (irule rawCallBufferPtrTheory.revert_forward_pair_path_ptr >>
+     simp[venomInstTheory.mk_inst_def] >>
+     qexists_tac `mk_inst sm.cs_next_id REVERT [p;rds] []` >>
+     fs[venomInstTheory.mk_inst_def] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >>
+  simp[Abbr `t`, venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def]
+QED
+
+Finalise raw_call_forward_suffix_stage
