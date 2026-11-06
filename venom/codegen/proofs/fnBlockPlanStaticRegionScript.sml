@@ -5,7 +5,7 @@ Ancestors
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
-  dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair
+  dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -1711,4 +1711,70 @@ Proof
   drule_all regional_phi_preparation_identity >>
   disch_then (qspecl_then [`lv`, `ps1`] mp_tac) >>
   gvs[regional_selected_phi_inv_cleanup_fields]
+QED
+
+(* nonentry_block_no_params is downstream of the target, so cannot be imported. *)
+Theorem regional_phi_no_params:
+  !fn bb. codegen_ready_fn fn /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    collect_phis bb.bb_instructions <> [] ==>
+    get_params bb.bb_instructions = [] /\
+    non_param_insts bb = bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `fn_entry_label fn <> SOME bb.bb_label` by
+    (Cases_on `collect_phis bb.bb_instructions` >> gvs[] >>
+     metis_tac[regional_phi_nonentry, MEM]) >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
+  `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+  `no_param_insts bb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
+  gvs[no_param_insts_def] >>
+  conj_tac >- (Cases_on `bb.bb_instructions` >> gvs[get_params_def]) >>
+  irule non_param_insts_all_neq >> simp[]
+QED
+
+Theorem regional_lineage_selected_phi_prefix:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps_l h promised
+    param_ops ps1 clean_ops ps2 j ops qs.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps_l /\ collect_phis bb.bb_instructions <> [] /\
+    ~bb_is_halting bb /\
+    (if bb = HD fn.fn_blocks then prepare_params_plan lv fn
+       (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([], ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (param_ops, ps1) /\
+    (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+     then clean_stack_plan lv cfg fn bb ps1 else ([], ps1)) = (clean_ops, ps2) /\
+    j <= LENGTH (collect_phis bb.bb_instructions) /\
+    generate_block_insts_prefix lv dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 j (non_param_insts bb) ps2 = SOME (ops, qs) ==>
+    regional_selected_phi_inv lv dfg sb bb j qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `regional_selected_phi_inv lv dfg sb bb 0 ps2` by
+    (drule_all regional_lineage_prepared_selected_phi_inv >> simp[]) >>
+  `get_params bb.bb_instructions = [] /\
+   non_param_insts bb = bb.bb_instructions` by
+    (drule_all regional_phi_no_params >> simp[]) >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_reachable fn bb.bb_label` by
+    (drule lineage_state_dfs_fields >> strip_tac >> gvs[] >>
+     drule_all dfs_block_state_cfg_reachable >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
+  gvs[] >>
+  irule (INST_TYPE [alpha |-> ``:cfg_analysis``]
+    regional_selected_phi_inv_block_prefix) >> simp[] >>
+  qexistsl [`cfg_analyze fn`, `ops`, `ps2`] >> simp[]
 QED
