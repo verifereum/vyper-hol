@@ -1,5 +1,5 @@
 Theory bodyPtrIfExpReturnMetadata
-Ancestors bodyPtrIfExpEndpointTyping entryStateRel compileVyper compileEnv supportedNames vyperInterpreter vyperTypeContractStaticMaps
+Ancestors bodyPtrIfExpEndpointTyping entryStateRel compileVyper compileEnv supportedNames vyperInterpreter vyperTypeContractStaticMaps stmtSimReturn exprSimHyps vyperValue vyperTyping valueEncoding
 
 (* Local calling-convention algebra, before lookup in the framed program. *)
 Theorem ifexp_compute_func_info_buffer_size:
@@ -152,4 +152,75 @@ Proof
   drule_all ifexp_internal_call_info_bridge >> strip_tac >>
   drule_all ifexp_internal_call_return_bridge >> strip_tac >>
   gvs[] >> drule ifexp_compute_func_info_zero_size >> simp[]
+QED
+
+Theorem ifexp_returns_stack_extent:
+  !ce cx env es ty tv.
+    expr_sim_inv ce cx env es /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    0 < returns_stack_count
+      (\n. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields n)) ty ==>
+    32 * returns_stack_count
+      (\n. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields n)) ty =
+    type_memory_bytes ce ty
+Proof
+  rpt gen_tac >> strip_tac >>
+  `type_memory_bytes ce ty = type_memory_size tv` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  Cases_on `ty` >>
+  gvs[returns_stack_count_def, is_word_type_def]
+  >~ [`BaseT bt`] >- (Cases_on `bt` >>
+    gvs[is_word_type_def, evaluate_type_def, type_memory_size_def, AllCaseEqs()] >>
+    Cases_on `b` >> gvs[is_word_type_def, type_memory_size_def])
+  >~ [`FlagT nsid`] >- gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def]
+  >~ [`TupleT tys`] >- (
+    gvs[tuple_like_stack_count_def, AllCaseEqs(), evaluate_type_def] >>
+    IF_CASES_TAC >> gvs[] >>
+    gvs[evaluate_types_OPT_MMAP] >>
+    drule vyperTypeABITheory.OPT_MMAP_LIST_REL >> strip_tac >>
+    drule_all word_tuple_size >> simp[type_memory_size_def]) >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
+    gvs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[get_struct_fields_def, tuple_like_stack_count_def] >>
+  IF_CASES_TAC >> gvs[] >>
+  gvs[evaluate_types_OPT_MMAP] >>
+  drule vyperTypeABITheory.OPT_MMAP_LIST_REL >> strip_tac >>
+  `LENGTH fields = LENGTH args /\ LENGTH tvs = LENGTH args` by
+    metis_tac[listTheory.LENGTH_MAP, listTheory.LIST_REL_LENGTH] >>
+  drule_all word_tuple_size >>
+  simp[type_memory_size_def, struct_layout_size_zip]
+QED
+
+Theorem ifexp_internal_call_stack_extent:
+  !tops ctx ce cx env es ann id args drv rc rbs pvs.
+    body_inv tops ctx ce cx /\
+    expr_body_pre ce cx env (Call ann (IntCall id) args drv) es /\
+    ce.ce_func_info (nsid_to_string id) = (rc,rbs,pvs) /\
+    0 < rc ==>
+    32 * rc = type_memory_bytes ce (ce.ce_func_return_type (nsid_to_string id))
+Proof
+  rpt strip_tac >>
+  `?sig. FLOOKUP env.fn_sigs id = SOME sig` by
+    (Cases_on `id` >>
+     gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+         vyperTypeSystemTheory.well_typed_expr_def,
+         optionTheory.IS_SOME_EXISTS]) >>
+  `expr_sim_inv ce cx env es` by
+    gvs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `well_formed_type env.type_defs sig.ret_ty` by
+    metis_tac[ifexp_frame_signature_return_well_formed] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[exprSimHypsDefsTheory.expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `?tv. evaluate_type (get_tenv cx) sig.ret_ty = SOME tv` by
+    gvs[vyperTypeSystemTheory.well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+  drule_all ifexp_internal_call_info_bridge >> strip_tac >>
+  drule_all ifexp_internal_call_return_bridge >> strip_tac >>
+  gvs[compute_func_info_def] >>
+  irule ifexp_returns_stack_extent >> metis_tac[]
 QED
