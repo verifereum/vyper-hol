@@ -1,7 +1,7 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanLineageCallers livenessProofs cfgAnalysisProps venomWf
-  stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute list pred_set
+  fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup livenessProofs cfgAnalysisProps venomWf
+  stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
   !inst v. inst.inst_opcode <> LOG /\ MEM v (inst_uses inst) ==>
@@ -87,4 +87,66 @@ Proof
   drule_all inst_uses_compute_operands_log >>
   rewrite_tac[GSYM MEM_operand_vars_eq_Var] >>
   strip_tac >> metis_tac[]
+QED
+
+Theorem analyzed_ordinary_live_inventory:
+  !fn bb i dfg cfg term lbl ps m core base ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode <> PHI /\
+    (EL i bb.bb_instructions).inst_opcode <> JMP /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands (EL i bb.bb_instructions)) /\
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    set core UNION FDOM ps.ps_spilled SUBSET
+      set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label i)) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      demand_available fn bb i v) /\
+    generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn
+      (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) F term lbl ps = (ops,qs)
+    ==>
+    lineage_inventory (set (MAP Var
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)))) qs /\
+    ?rest. lineage_core m rest qs /\
+      residual_budget_wf base [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn /\ wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     metis_tac[EL_MEM]) >>
+  `ALL_DISTINCT (EL i bb.bb_instructions).inst_outputs` by
+    metis_tac[codegen_ready_inst_outputs_distinct] >>
+  `LENGTH (compute_operands (EL i bb.bb_instructions)) <= 16` by
+    (gvs[codegen_ready_fn_def, EVERY_MEM, codegen_ready_inst_def] >>
+     metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) (compute_operands (EL i bb.bb_instructions)) \/
+      (MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) /\
+       ~MEM v (EL i bb.bb_instructions).inst_outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    metis_tac[analyzed_computed_operand_demand] >>
+  `!v. MEM (Var v) (compute_operands (EL i bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+  drule_all definition_support_output_fresh >> strip_tac >>
+  `EVERY (\v. ~MEM (Var v) (compute_operands (EL i bb.bb_instructions)) /\
+     ~MEM (Var v) core /\ Var v NOTIN FDOM ps.ps_spilled)
+     (EL i bb.bb_instructions).inst_outputs` by
+    (gvs[EVERY_MEM, MEM_APPEND] >> metis_tac[]) >>
+  `set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label i)) SUBSET
+    set (MAP Var (venomInst$operand_vars (compute_operands (EL i bb.bb_instructions)) ++
+      live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)))` by
+    (Cases_on `(EL i bb.bb_instructions).inst_opcode = LOG`
+     >- (irule analyzed_log_live_upper_support >> simp[]) >>
+     irule analyzed_nonlog_live_upper_support >> simp[]) >>
+  irule native_regular_live_inventory >>
+  goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `core` >> asm_rewrite_tac[] >>
+  irule SUBSET_TRANS >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `_ SUBSET set (MAP Var (_ ++ _))` mp_tac >>
+  simp[SUBSET_DEF, MEM_MAP, reorderSimTheory.input_mem_operand_vars,
+    MEM_operand_vars_eq_Var]
 QED
