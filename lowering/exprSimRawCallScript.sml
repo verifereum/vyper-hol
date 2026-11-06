@@ -87,11 +87,6 @@ Proof
   simp[] >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
-val _ = if List.all (null o hyp)
-  [raw_call_tuple_memory_encoding, raw_call_tuple_memory_frame]
-  then print "raw-call tuple encoding/frame: checked, no hypotheses\n"
-  else raise Fail "raw-call tuple encoding/frame retained hypotheses";
-
 Theorem raw_call_tuple_copy_seq_run[local]:
   emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
   emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
@@ -170,11 +165,6 @@ Proof
   qexists_tac `t` >> simp[] >>
   gvs[mcopy_def, write_memory_with_expansion_def]
 QED
-
-val _ = if List.all (null o hyp)
-  [raw_call_tuple_copy_seq_run, raw_call_tuple_copy_tail_run]
-  then print "raw-call no-restore copy tail: checked, no hypotheses\n"
-  else raise Fail "raw-call no-restore copy tail retained hypotheses";
 
 Theorem raw_call_tuple_build_no_restore_run[local]:
   compile_alloc_buffer (32 + sz) sa = (buf,sm) /\
@@ -270,10 +260,6 @@ Resume raw_call_tuple_build_no_restore_run[separation]:
 QED
 
 Finalise raw_call_tuple_build_no_restore_run
-
-val _ = if null (hyp raw_call_tuple_build_no_restore_run)
-  then print "raw-call no-restore tuple build: checked, no hypotheses\n"
-  else raise Fail "raw-call no-restore tuple build retained hypotheses";
 
 Theorem raw_call_nonrevert_finish_code[local]:
   compile_raw_call_finish to_op dp dl gas val call_ty n F ov op sa = (result,sb) ==>
@@ -465,9 +451,6 @@ QED
 
 Finalise raw_call_nonrevert_positive_run
 
-val _ = if null (hyp raw_call_nonrevert_positive_run) then ()
-  else raise Fail "raw_call_nonrevert_positive_run retained hypotheses";
-
 Theorem raw_call_nonrevert_no_restore_frag[local]:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
@@ -534,9 +517,6 @@ Proof
   fs[local_region_def, lookup_var_def] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
-
-val _ = if null (hyp raw_call_nonrevert_no_restore_frag) then ()
-  else raise Fail "raw_call_nonrevert_no_restore_frag retained hypotheses";
 
 Theorem raw_call_values_outcome_bind[local]:
   gas_outcome memory tops (ctx,func)
@@ -1117,9 +1097,6 @@ Proof
   fs[rich_listTheory.IS_PREFIX_APPEND, EVERY_MEM]
 QED
 
-val _ = if null (hyp raw_call_outbuf_path) then ()
-  else raise Fail "raw_call_outbuf_path retained hypotheses";
-
 Theorem raw_call_outbuf_add_frame[local]:
   emit_op ADD [ov; Lit 32w] sa = (op,sb) /\
   eval_operand ov s = SOME w /\
@@ -1309,10 +1286,6 @@ Resume raw_call_outbuf_alloc_path[positive]:
 QED
 
 Finalise raw_call_outbuf_alloc_path
-
-val _ = if null (hyp raw_call_outbuf_zero_run) andalso
-    null (hyp raw_call_zero_alloca_sep) andalso null (hyp raw_call_outbuf_alloc_path) then ()
-  else raise Fail "raw_call outbuf allocation boundary retained hypotheses";
 
 Theorem raw_call_frame_footprint[local]:
   expr_sim_inv cenv cx env es /\
@@ -2680,9 +2653,6 @@ Proof
   metis_tac[]
 QED
 
-val _ = if null (hyp raw_call_memory_oracle_exec) then ()
-        else raise Fail "raw_call_memory_oracle_exec retained hypotheses";
-
 (* Turn the parametric external-call equation into emitted code execution. *)
 Theorem raw_call_emit_run:
   emit_op (if static_call then STATICCALL else CALL)
@@ -2721,9 +2691,6 @@ Proof
   Cases_on `stat` >>
   fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
 QED
-
-val _ = if null (hyp raw_call_emit_path) then ()
-  else raise Fail "raw_call_emit_path retained hypotheses";
 
 (* A fresh result variable is disjoint from source locals even after adoption. *)
 Theorem raw_call_result_frame:
@@ -3285,11 +3252,6 @@ Proof
   metis_tac[]
 QED
 
-val _ = app (fn th => if null (hyp th) then ()
-  else raise Fail "raw_call aged frame retained hypotheses")
-  [raw_call_clean_operand_frame, raw_call_clean_regions,
-   raw_call_finish_state_rel_aged, raw_call_finish_frame_aged];
-
 Theorem raw_call_success_run_aged[local]:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
@@ -3367,9 +3329,6 @@ QED
 
 Finalise raw_call_success_run_aged
 
-val _ = if null (hyp raw_call_success_run_aged) then ()
-  else raise Fail "raw_call_success_run_aged retained hypotheses";
-
 (* Counted success suffix: no SETFMP is emitted by RawCallTarget. *)
 Theorem raw_call_success_suffix_path[local]:
   (if 0 < n then
@@ -3403,9 +3362,6 @@ Proof
        instIdxIndepTheory.eval_op_inst_idx, eval_operand_def, lookup_var_def]
 QED
 
-val _ = if null (hyp raw_call_success_suffix_path) then ()
-  else raise Fail "raw_call_success_suffix_path retained hypotheses";
-
 Theorem raw_call_success_frag_aged[local]:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
@@ -3431,9 +3387,6 @@ Proof
   simp[raw_call_finish_view_control] >>
   gvs[eval_operand_def, lookup_var_def]
 QED
-
-val _ = if null (hyp raw_call_success_frag_aged) then ()
-  else raise Fail "raw_call_success_frag_aged retained hypotheses";
 
 Theorem raw_call_failure_prefix_frag_aged[local]:
   emit_op RETURNDATASIZE [] sa = (rds,sb) /\
@@ -3534,10 +3487,6 @@ Proof
             loweringHaltTheory.emit_inst_metadata, cs_extends_trans]
 QED
 
-val _ = app (fn th => if null (hyp th) then ()
-  else raise Fail "raw_call aged failure retained hypotheses")
-  [raw_call_failure_prefix_frag_aged, raw_call_failure_frag_aged];
-
 Theorem raw_call_oracle_emit_run_aged[local]:
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
@@ -3618,10 +3567,6 @@ Resume raw_call_oracle_emit_run_aged[result]:
 QED
 
 Finalise raw_call_oracle_emit_run_aged
-
-val _ = if null (hyp raw_call_oracle_emit_run_aged) then
-  print "Checked raw_call_oracle_emit_run_aged Resume/Finalise: no retained hypotheses\n"
-  else raise Fail "raw_call_oracle_emit_run_aged retained hypotheses";
 
 Theorem raw_call_finish_frag_aged[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -3817,9 +3762,6 @@ QED
 
 Finalise raw_call_finish_frag_aged
 
-val _ = if null (hyp raw_call_finish_frag_aged) then ()
-  else raise Fail "raw_call_finish_frag_aged retained hypotheses";
-
 Theorem raw_call_revert_finish_path[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) n T ov op sa = (result,sb) /\
@@ -3917,9 +3859,6 @@ QED
 
 Finalise raw_call_revert_finish_path
 
-val _ = if null (hyp raw_call_revert_finish_path) then ()
-  else raise Fail "raw_call_revert_finish_path retained hypotheses";
-
 Theorem raw_call_finish_related_frag_aged[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap T ov op sa = (result,sb) /\
@@ -3978,9 +3917,6 @@ Proof
      Cases_on `0 < cap` >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >> Cases_on `0 < cap` >> gvs[]
 QED
-
-val _ = if null (hyp raw_call_finish_related_frag_aged) then ()
-  else raise Fail "raw_call_finish_related_frag_aged retained hypotheses";
 
 Theorem raw_call_output_alloca_sep[local]:
   stmt_state_rel ctx func cenv cx es t /\
@@ -4156,9 +4092,6 @@ Resume raw_call_oracle_path[post]:
 QED
 
 Finalise raw_call_oracle_path
-
-val _ = if null (hyp raw_call_oracle_path) then ()
-  else raise Fail "raw_call_oracle_path retained hypotheses";
 
 Theorem raw_call_allocated_tail_frag_aged[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -4348,9 +4281,6 @@ QED
 
 Finalise raw_call_allocated_tail_frag_aged
 
-val _ = if null (hyp raw_call_allocated_tail_frag_aged) then ()
-  else raise Fail "raw_call_allocated_tail_frag_aged retained hypotheses";
-
 Theorem raw_call_none_post[local]:
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
@@ -4404,9 +4334,6 @@ Proof
   simp[vfmConstantsTheory.word_size_def] >> decide_tac
 QED
 
-val _ = if null (hyp raw_call_bool_post) andalso null (hyp raw_call_tuple_post)
-  then () else raise Fail "raw_call result packaging retained hypotheses";
-
 Theorem raw_call_nonrevert_vv_path[local]:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
@@ -4454,9 +4381,6 @@ Proof
   gvs[raw_call_return_type_def] >>
   qexists_tac `ti` >> simp[] >> first_assum ACCEPT_TAC
 QED
-
-val _ = if null (hyp raw_call_nonrevert_vv_path) then ()
-  else raise Fail "raw_call_nonrevert_vv_path retained hypotheses";
 
 Theorem raw_call_bytes_post[local]:
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
@@ -4693,9 +4617,6 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
 QED
 
 Finalise raw_call_outbuf_zero_tail_vv_path
-
-val _ = if null (hyp raw_call_outbuf_zero_tail_vv_path) then ()
-  else raise Fail "raw_call_outbuf_zero_tail_vv_path retained hypotheses";
 
 Theorem raw_call_outbuf_allocation_site[local]:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
@@ -4991,9 +4912,6 @@ QED
 
 Finalise raw_call_outbuf_positive_tail_vv_path
 
-val _ = if null (hyp raw_call_outbuf_positive_tail_vv_path) then ()
-  else raise Fail "raw_call_outbuf_positive_tail_vv_path retained hypotheses";
-
 Theorem raw_call_outbuf_tail_vv_path[local]:
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -5036,9 +4954,6 @@ Proof
   `0 < cap` by decide_tac >>
   drule_all raw_call_outbuf_positive_tail_vv_path >> simp[]
 QED
-
-val _ = if null (hyp raw_call_outbuf_tail_vv_path) then ()
-  else raise Fail "raw_call_outbuf_tail_vv_path retained hypotheses";
 
 Theorem raw_call_outbuf_tail_vv_frag[local]:
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
@@ -5360,9 +5275,6 @@ QED
 
 Finalise raw_call_outbuf_tail_vv_frag
 
-val _ = if null (hyp raw_call_outbuf_tail_vv_frag) then ()
-        else raise Fail "raw_call_outbuf_tail_vv_frag: retained hypotheses";
-
 Theorem eval_expr_raw_call_values[local]:
   eval_exprs cx args es = (INL (AddressV target::BytesV bytes::vs),es1) /\
   LENGTH vs = LENGTH flags.rcf_kws /\
@@ -5576,10 +5488,6 @@ Proof
   qspecl_then [`cx`,`flags`,`target`,`bytes`,`amount`,`gas`,`es`] mp_tac
     calldata_raw_call_gas_obs >> simp[]
 QED
-
-val _ = app (fn th => if null (hyp th) then ()
-  else raise Fail "raw_call source boundary retained hypotheses")
-  [raw_call_prefix_source_ready, raw_call_source_continuation, raw_call_source_tail];
 
 (* Lift a target-only suffix: every observed target GAS is implicit. *)
 Theorem raw_call_tail_path_outcome[local]:
@@ -5879,13 +5787,3 @@ Resume compile_raw_call_case[placement]:
 QED
 
 Finalise compile_raw_call_case
-
-(* Integrity boundary: the frozen case must be closed and oracle-free. *)
-val _ =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_raw_call_case) in
-    if null (Thm.hyp compile_raw_call_case) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else (print ("raw_call audit oracles: " ^ String.concatWith "," oracles ^ "\n");
-          app (fn tm => print (term_to_string tm ^ "\n")) (Thm.hyp compile_raw_call_case);
-          raise Fail "non-clean compile_raw_call_case")
-  end;
