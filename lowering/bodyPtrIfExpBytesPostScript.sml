@@ -86,6 +86,8 @@ Theorem compile_store_bytestring_robust_gas_path_ptr:
     ?Gf tnf sf.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
         (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
       (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
         mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
@@ -111,6 +113,14 @@ Proof
   drule_all bodyPtrIfExpCopyHeaderTheory.robust_bytestring_header >> strip_tac >>
   drule_all compile_store_bytestring_gas_path_ptr >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  `(sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
+    (`eval_operand (Var src) s = SOME a /\ eval_operand (Var dst) s = SOME b` by
+       simp[venomStateTheory.eval_operand_def] >>
+     `!x. Var src = Var x \/ Var dst = Var x ==> not_fresh_at sa x` by
+       (rpt strip_tac >> gvs[]) >>
+     `32 + 32 * word_size len < dimword(:256)` by
+       gvs[vfmConstantsTheory.word_size_def] >>
+     drule_all buffer_store_bytestring_run >> strip_tac >> gvs[]) >>
   drule_all bytestring_copy_effects >> strip_tac >>
   `!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
      val_in_memory dtv v (w2n b) m` by

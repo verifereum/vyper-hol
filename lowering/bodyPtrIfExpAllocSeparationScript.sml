@@ -101,3 +101,21 @@ Proof
   drule_all stmt_state_rel_alloca_site_bound >> simp[buffer_allocation_base_def]
 QED
 
+
+Theorem ifexp_alloca_step_site:
+  stmt_state_rel ctx fn ce cx es s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+  n < dimword(:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
+  FLOOKUP u.vs_allocas id = SOME (buffer_allocation_base s id,n)
+Proof
+  strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
+  >- (drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
+      simp[] >> disch_then (qspec_then `out` assume_tac) >>
+      gvs[buffer_allocation_base_def, update_var_def, FLOOKUP_UPDATE]) >>
+  qmatch_asmsub_rename_tac `FLOOKUP s.vs_allocas id = SOME site` >>
+  PairCases_on `site` >>
+  drule_all stmt_state_rel_alloca_site_bound >> strip_tac >> gvs[] >>
+  drule reused_alloca_step >> disch_then (qspec_then `out` assume_tac) >>
+  gvs[buffer_allocation_base_def, update_var_def]
+QED

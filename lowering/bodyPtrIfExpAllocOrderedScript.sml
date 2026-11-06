@@ -42,7 +42,11 @@ Theorem compile_alloc_buffer_vv_ordered_frame:
         buffer_allocation_base s sb.cs_next_id+n <= off) /\
       (!name p sz. local_region cenv es.scopes s0 name p sz ==>
         p+sz <= buffer_allocation_base s sb.cs_next_id \/
-        buffer_allocation_base s sb.cs_next_id+n <= p)
+        buffer_allocation_base s sb.cs_next_id+n <= p) /\
+      MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+      FLOOKUP t.vs_allocas sb.cs_next_id = SOME (buffer_allocation_base s sb.cs_next_id,n) /\
+      sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id < sc.cs_next_id /\
+      not_local_ptr cenv es'.scopes out
 Proof
   rpt strip_tac >>
   drule_all compile_alloc_buffer_vv_source_frame >>
@@ -52,6 +56,8 @@ Proof
   `not_local_ptr cenv es'.scopes out` by
     (drule_all compile_alloc_buffer_frame_separation >> simp[]) >>
   `n < dimword (:256)` by decide_tac >>
+  `sb.cs_next_id < sc.cs_next_id` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
   qexistsl_tac [`G1`, `tn1`, `t`] >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> drule_all ifexp_alloca_original_site_separate >> simp[]) >>

@@ -39,7 +39,9 @@ Theorem compile_alloc_buffer_vv_source_frame:
       ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
       t.vs_inst_idx = LENGTH sc.cs_current_insts /\
       lookup_var out t = SOME (n2w (buffer_allocation_base s sb.cs_next_id)) /\
-      buffer_allocation_base s sb.cs_next_id + n < dimword (:256)
+      buffer_allocation_base s sb.cs_next_id + n < dimword (:256) /\
+      MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+      FLOOKUP t.vs_allocas sb.cs_next_id = SOME (buffer_allocation_base s sb.cs_next_id,n)
 Proof
   rpt strip_tac >>
   `stmt_state_rel ctx fn cenv cx es' s` by gvs[vv_post_def] >>
@@ -59,6 +61,10 @@ Proof
   `buffer_allocation_base s sb.cs_next_id + n < dimword (:256)` by
     (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[] >>
      drule_all ifexp_alloca_base_bound >> simp[]) >>
+  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn)` by
+    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
+  `FLOOKUP u.vs_allocas sb.cs_next_id = SOME (buffer_allocation_base s sb.cs_next_id,n)` by
+    (drule_all ifexp_alloca_step_site >> simp[]) >>
   qexistsl_tac [`out`, `G1`, `tn1`, `t`] >> simp[lookup_var_def] >>
   conj_tac >- suspend "ghost_position" >>
   conj_tac >- suspend "stack_buffer" >>
