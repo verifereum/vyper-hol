@@ -183,34 +183,6 @@ Proof
    rpt strip_tac >> irule consume_call_outcome_byte_frame >> simp[])
 QED
 
-Theorem exec_delegatecall_frame_view:
-  exec_delegatecall inst s gas addr argOff argSize retOff retSize = OK t /\
-  inst.inst_outputs = [out] /\ ~retpc_var fn out /\
-  read_memory (w2n argOff) (w2n argSize) (s with vs_memory := m) =
-    read_memory (w2n argOff) (w2n argSize) s ==>
-  ?bytes. LENGTH bytes <= w2n retSize /\
-    t.vs_memory = (write_memory_with_expansion (w2n retOff) bytes s).vs_memory /\
-    exec_delegatecall inst (frame_view fn ra s with vs_memory := m)
-      gas addr argOff argSize retOff retSize =
-    OK (frame_view fn ra t with vs_memory :=
-      (write_memory_with_expansion (w2n retOff) bytes
-        (s with vs_memory := m)).vs_memory)
-Proof
-  strip_tac >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK t` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  rename1 `extract_venom_result s 1w _ _ _ = SOME (w,u)` >>
-  qexists_tac `TAKE (w2n retSize) u.vs_returndata` >>
-  drule extract_venom_result_memory >> strip_tac >>
-  simp[LENGTH_TAKE_EQ, update_var_def] >>
-  drule extract_venom_result_frame_view >>
-  disch_then (qspecl_then [`ra`, `m`, `fn`] assume_tac) >>
-  fs[read_memory_def] >>
-  simp[exec_delegatecall_def, read_memory_def,
-       make_venom_delegatecall_state_frame_view] >>
-  fs[frame_view_def] >> simp[update_var_def, finite_mapTheory.FMAP_MAP2_FUPDATE]
-QED
-
 Theorem exec_create_frame_view:
   exec_create inst s value off sz salt = OK t /\
   inst.inst_outputs = [out] /\ ~retpc_var fn out /\
@@ -301,14 +273,28 @@ Proof
      rpt strip_tac >> first_x_assum irule >>
      simp[source_memory_read_byte_def, source_memory_read_ranges_def,
           memory_range_of_operands_def, byte_in_memory_range_def]) >>
-  drule_all exec_delegatecall_frame_view >>
-  disch_then (qspec_then `ra` strip_assume_tac) >>
-  qexists_tac `(write_memory_with_expansion (w2n retOff) bytes
-                  (s with vs_memory := m)).vs_memory` >>
-  simp[opcode_equation ``DELEGATECALL``, write_memory_byte_agreement] >>
+  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK s'` mp_tac >>
+  simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  pairarg_tac >> simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq (w2n retOff) (w2n retSize) s` >>
+  qexists_tac `(SND (consume_call_outcome rq (w2n retOff) (w2n retSize)
+                        (s with vs_memory := m))).vs_memory` >>
+  conj_tac
+  >- (simp[opcode_equation ``DELEGATECALL``, Excl "consume_call_outcome_eq"] >>
+      drule venom_call_request_frame_view >> strip_tac >>
+      simp[exec_delegatecall_def, consume_call_outcome_frame_view,
+           frame_view_update_var, Excl "consume_call_outcome_eq"] >>
+      simp[Abbr `rq`, frame_view_def, update_var_def,
+           Excl "consume_call_outcome_eq"]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      drule consume_call_outcome_byte_agreement >>
+      disch_then (qspecl_then [`w2n retSize`, `rq`, `w2n retOff`] mp_tac) >>
+      simp[update_var_def, Excl "consume_call_outcome_eq"]) >>
   simp[source_memory_write_ranges_def, sized_source_write_range_def,
-       byte_in_memory_range_def] >>
-  rpt strip_tac >> simp[read_byte_write_memory_with_expansion]
+       byte_in_memory_range_def, Excl "consume_call_outcome_eq"] >>
+  rpt strip_tac >> irule consume_call_outcome_byte_frame >> simp[]
 QED
 
 Theorem external_step_frame_view:

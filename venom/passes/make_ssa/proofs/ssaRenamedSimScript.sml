@@ -232,16 +232,6 @@ Proof
   rw[ssa_sim_def, make_venom_call_state_def, LET_THM, venom_to_tx_params_def]
 QED
 
-Triviality make_venom_delegatecall_state_ssa_sim:
-  !sigma s1 s2 target gas calldata code is_static.
-    ssa_sim sigma s1 s2 ==>
-    make_venom_delegatecall_state s1 target gas calldata code is_static =
-    make_venom_delegatecall_state s2 target gas calldata code is_static
-Proof
-  rw[ssa_sim_def, make_venom_delegatecall_state_def, LET_THM,
-     venom_to_tx_params_def]
-QED
-
 Triviality make_venom_create_state_ssa_sim:
   !sigma s1 s2 new_address gas value init_code.
     ssa_sim sigma s1 s2 ==>
@@ -250,25 +240,6 @@ Triviality make_venom_create_state_ssa_sim:
 Proof
   rw[ssa_sim_def, make_venom_create_state_def, LET_THM,
      venom_to_tx_params_def]
-QED
-
-(* extract_venom_result preserves ssa_sim: if the run_result is the same
-   and input states are ssa_sim-related, output states are too. *)
-Triviality extract_venom_result_ssa_sim:
-  !sigma s1 s2 output_val retOff retSize run_result output s1'.
-    ssa_sim sigma s1 s2 /\
-    extract_venom_result s1 output_val retOff retSize run_result =
-      SOME (output, s1') ==>
-    ?s2'. extract_venom_result s2 output_val retOff retSize run_result =
-            SOME (output, s2') /\
-          ssa_sim sigma s1' s2'
-Proof
-  rw[extract_venom_result_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  imp_res_tac ssa_sim_fields >>
-  simp[ssa_sim_def, lookup_var_def,
-       write_memory_with_expansion_def, LET_THM] >>
-  gvs[ssa_sim_def, lookup_var_def]
 QED
 
 (* exec_ext_call simulation *)
@@ -333,23 +304,24 @@ Triviality exec_delegatecall_renamed:
           ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
                   s1' s2'
 Proof
-  rw[exec_delegatecall_def, LET_THM] >>
-  imp_res_tac ssa_sim_fields >> gvs[read_memory_def] >>
-  `make_venom_delegatecall_state s1 (w2w addr_w) (w2n gas)
-     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory ++ REPLICATE (w2n as_) 0w))
-     (lookup_account (w2w addr_w) s2.vs_accounts).code
-     s2.vs_call_ctx.cc_static =
-   make_venom_delegatecall_state s2 (w2w addr_w) (w2n gas)
-     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory ++ REPLICATE (w2n as_) 0w))
-     (lookup_account (w2w addr_w) s2.vs_accounts).code
-     s2.vs_call_ctx.cc_static` by
-    metis_tac[make_venom_delegatecall_state_ssa_sim] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  drule_all extract_venom_result_ssa_sim >> strip_tac >> gvs[] >>
-  irule ssa_sim_update_var >> gvs[] >>
-  gvs[extract_venom_result_def, AllCaseEqs(), LET_THM, lookup_var_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  rpt strip_tac >>
+  `venom_call_request s1 addr_w 0w ao as_ F =
+   venom_call_request s2 addr_w 0w ao as_ F` by
+    fs[ssa_sim_def, venom_call_request_def, read_memory_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+    fs[ssa_sim_def] >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >>
+  qexists_tac `update_var (HD inst2.inst_outputs)
+    (if (FST (take_outcome
+      (venom_call_request s2 addr_w 0w ao as_ F with
+         cr_kind := DelegateMessageCall) s2.vs_outcomes)).co_success
+     then 1w else 0w)
+    (SND (consume_call_outcome
+      (venom_call_request s2 addr_w 0w ao as_ F with
+         cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) s2))` >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  irule ssa_sim_update_var >>
+  gvs[ssa_sim_def, lookup_var_def, write_memory_with_expansion_def]
 QED
 
 (* exec_create simulation *)
