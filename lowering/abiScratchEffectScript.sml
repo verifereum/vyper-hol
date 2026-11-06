@@ -44,7 +44,9 @@ Proof
      simp[] >> decide_tac) >>
   qpat_x_assum `abi_sites_scratch_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_effect_def]) >>
-  `site < lo \/ hi <= site` by fs[abi_sites_decoder_ids_def] >>
+  `site < lo \/ hi <= site` by
+    (qpat_x_assum `~(site IN _)` mp_tac >> qpat_x_assum `site IN _` mp_tac >>
+     simp[abi_sites_decoder_ids_def]) >>
   `FLOOKUP t.vs_allocas site = FLOOKUP s.vs_allocas site` by simp[] >>
   drule_all abi_decode_footprint_frame_mload >> simp[]
 QED
