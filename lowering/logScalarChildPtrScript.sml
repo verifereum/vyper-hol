@@ -5,7 +5,9 @@ Ancestors
   abiEncoder abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv
   bodyPtrDefs ptrDiscipline venomExecSemantics venomState venomInst instIdxIndep
   finite_map words arithmetic list rich_list
-  logMembersInvariantPtr logAbiInputPtr abiEncoderMembersInput
+  logMembersInvariantPtr logAbiInputPtr abiEncoderMembersInput logAbiChildPtr
+  stmtSimLogScalarMembers stmtSimLogEncodeLayout abiEncoderInput contractABI abiDecodeRanges abiEncoderBytes
+  valueEncodingProps
 
 Theorem compile_abi_copy_child_seq_ptr:
   compile_abi_encode_child (Var dst) (Var src) (AbiCopy 32) F ho dp sa = (out,sb) /\
@@ -126,3 +128,114 @@ Theorem taint_frame_clean_exception:
 Proof
   metis_tac[]
 QED
+
+(* Dispatch exposes only the newly written meaningful ranges.  In particular,
+   it never asks for the padding of a staged bytestring to be clean. *)
+Theorem log_scalar_child_ranges_seq_ptr:
+  compile_abi_encode_child (Var dst) (Var src) ei dyn ho (Var dp) sa = (out,end_st) /\
+  log_members_layout ((ei,asz,mz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs sb so ho d hl cap s.vs_memory /\
+  (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
+    abi_encoder_input ei ty av (sb+so) mz q) /\
+  not_fresh_at sa dst /\ not_fresh_at sa src /\ not_fresh_at sa dp /\
+  lookup_var dst s = SOME (n2w d) /\ lookup_var src s = SOME (n2w (sb+so)) /\
+  lookup_var dp s = SOME (n2w p) /\
+  r = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\ mload p s = n2w r /\
+  ptr_covers G tn dst s cap /\ ptr_covers G tn src s mz /\ ptr_covers G tn dp s 32 /\
+  sb+so+mz < dimword(:256) /\ d+cap < dimword(:256) /\ p+32 < dimword(:256) /\
+  (sb+so+mz <= d \/ d+cap <= sb+so) /\ (d+cap <= p \/ p+32 <= d) /\
+  (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\ ~ctx_has_dalloca ctx ==>
+  ?H tm t.
+    run_inst_seq (emitted_insts sa end_st) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa end_st) s H tm /\
+    (!i. (d+ho <= i /\ i < d+ho+asz) \/
+         (d+r <= i /\ i < d+r+(if dyn then LENGTH (enc ty av) else 0)) \/
+         (p <= i /\ i < p+32) ==> i NOTIN tm.t_mem) /\
+    (!i. ~((d+ho <= i /\ i < d+ho+asz) \/
+           (d+r <= i /\ i < d+r+(if dyn then LENGTH (enc ty av) else 0)) \/
+           (p <= i /\ i < p+32)) ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    mem_agree_outside
+      {i | (d+ho <= i /\ i < d+ho+asz) \/
+           (d+r <= i /\ i < d+r+(if dyn then LENGTH (enc ty av) else 0)) \/
+           (p <= i /\ i < p+32)} t.vs_memory s.vs_memory /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v t = lookup_var v s /\ FLOOKUP H v = FLOOKUP G v /\
+      op_taint tm (Var v) = op_taint tn (Var v))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule log_members_layout_cons_input >> strip_tac >>
+  drule log_members_layout_bounds >> strip_tac >>
+  qpat_x_assum `log_scalar_enc_info ei`
+    (DISJ_CASES_THEN2 SUBST_ALL_TAC (qx_choose_then `mx` SUBST_ALL_TAC) o
+     REWRITE_RULE [log_scalar_enc_info_def])
+  >- suspend "static"
+  >> suspend "bytes"
+QED
+Resume log_scalar_child_ranges_seq_ptr[static]:
+  markerLib.RESUME_TAC >>
+  `~is_dynamic ty /\ 32 <= mz /\ static_length ty = 32` by
+    metis_tac[abi_encoder_input_copy_iff] >>
+  `dyn = F /\ asz = 32` by fs[abi_member_head_size_def] >>
+  qpat_x_assum `dyn = F` SUBST_ALL_TAC >>
+  qpat_x_assum `asz = 32` SUBST_ALL_TAC >>
+  `ptr_covers G tn src s 32` by
+    (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `!i. sb+so <= i /\ i < sb+so+32 ==> i NOTIN tn.t_mem` by
+    metis_tac[robust_abi_copy_input_clean] >>
+  `ho+32 <= cap /\ sb+so+32 < dimword(:256)` by decide_tac >>
+  drule_all compile_abi_copy_child_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t` strip_assume_tac)))) >>
+  qexistsl_tac [`H`,`tm`,`t`] >>
+  simp_tac (srw_ss()) [] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (rpt strip_tac >- metis_tac[] >- decide_tac >>
+     `~(d+ho <= i /\ i < d+ho+32)` by decide_tac >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (fs[mem_agree_outside_def] >> rpt strip_tac >> first_x_assum irule >> fs[]) >>
+  metis_tac[]
+QED
+Resume log_scalar_child_ranges_seq_ptr[bytes]:
+  markerLib.RESUME_TAC >>
+  qpat_assum `abi_encoder_input (AbiBytestring mx) _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_input_bytes_iff]) >>
+  qpat_x_assum `av = BytesV bs` SUBST_ALL_TAC >>
+  `dyn = T /\ asz = 32` by
+    (fs[abi_member_head_size_def] >> fs[is_dynamic_def]) >>
+  qpat_x_assum `dyn = T` SUBST_ALL_TAC >>
+  qpat_x_assum `asz = 32` SUBST_ALL_TAC >>
+  `LENGTH (enc ty (BytesV bs)) = 32+contractABI$ceil32 (LENGTH bs)` by
+    metis_tac[abi_encoder_bytes_encoding] >>
+  `ptr_covers G tn src s (32+LENGTH bs)` by
+    (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `!i. sb+so <= i /\ i < sb+so+32+LENGTH bs ==> i NOTIN tn.t_mem` by
+    metis_tac[robust_abi_bytes_input_clean] >>
+  `mload (sb+so) s = n2w (LENGTH bs)` by fs[mem_word_at_eq_mload] >>
+  `ho+32 <= r /\ r+32+contractABI$ceil32 (LENGTH bs) <= cap /\
+   sb+so+32+LENGTH bs < dimword(:256)` by
+    (fs[] >> decide_tac) >>
+  drule compile_abi_bytes_child_seq_ptr >>
+  disch_then (drule_at (Pat `lookup_var dst s = _`)) >>
+  disch_then (drule_at (Pat `ptr_covers G tn dst s cap`)) >>
+  disch_then (drule_at (Pat `lookup_var src s = _`)) >>
+  disch_then (drule_at (Pat `mload (sb+so) s = _`)) >>
+  disch_then (drule_at (Pat `lookup_var dp s = _`)) >>
+  disch_then (drule_at (Pat `mload p s = _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca ctx`)) >>
+  disch_then (qspecl_then [`fn`,`cap`,`PG`,`D`] mp_tac) >>
+  (impl_tac >-
+    (qpat_x_assum `32 = abi_member_head_size ty` kall_tac >>
+     asm_simp_tac bool_ss [] >> decide_tac)) >>
+  disch_then (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t` strip_assume_tac))) >>
+  qexistsl_tac [`H`,`tm`,`t`] >>
+  simp_tac bool_ss [COND_CLAUSES] >>
+  qpat_assum `LENGTH (enc ty (BytesV bs)) = _`
+    (fn th => rewrite_tac[th, ADD_ASSOC]) >>
+  rule_assum_tac (SIMP_RULE bool_ss [ADD_ASSOC]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise log_scalar_child_ranges_seq_ptr
