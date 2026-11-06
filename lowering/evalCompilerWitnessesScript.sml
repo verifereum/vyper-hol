@@ -17,3 +17,4 @@ Ancestors
   evalCompilerAllocationLimit
   evalCompilerConversions
   evalCompilerRawCalls
+  evalCompilerLoadTiming

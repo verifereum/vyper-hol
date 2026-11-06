@@ -367,8 +367,11 @@ QED
      label by intCallLookup's compile_call_intcall_label (body_inv gives
      its premises), and the callee's code in ctx by
      lower_vyper_runtime_unit_internal_lookup;
-   - the arguments: the IH, then intCallArgs' stage_mem_arg_frag for
-     the staged memory arguments;
+   - the arguments: compile_stage_intcall_args lowers each argument (the
+     IH), then allocates its buffer, unwraps and stores it.
+     intCallArgs' stage_mem_arg_frag predates this order (it stores
+     right after the allocation), so this step splits it into the
+     allocation and a store after the unwrap;
    - the callee's entry: intCallCallee's compile_internal_prologue_entry
      gives stmt_state_rel at the callee's start, at
      vs with scopes := [env];

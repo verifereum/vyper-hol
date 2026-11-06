@@ -2965,6 +2965,34 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
+Theorem ci_mono_compile_snapshot_vv:
+  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value, ci_mono_comp_return])
+  >- (ho_match_mp_tac ci_mono_bind >>
+      simp[ci_mono_compile_materialize_vv, ci_mono_comp_return]) >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_ext_call_args:
+  ∀es tys cfn cenv kw_es sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_ext_call_args cfn cenv kw_es tys es sa))
+Proof
+  Induct >> rpt gen_tac >> Cases_on `tys` >> strip_tac >>
+  simp[Once compile_ext_call_args_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_snapshot_vv] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_abi_encode_child_branches[local]:
   (¬is_dyn ⇒ ∀dst sa.
      ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
@@ -3392,26 +3420,31 @@ Proof
 QED
 
 Theorem ci_mono_compile_stage_intcall_args:
-  ∀ cenv vals flags tys sa.
-    ci_mono sa (SND (compile_stage_intcall_args cenv vals flags tys sa))
+  ∀cfn cenv es flags tys sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_stage_intcall_args cfn cenv es flags tys sa))
 Proof
   ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
   >- simp[Once compile_stage_intcall_args_def, ci_mono_comp_return]
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
-      ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- simp[ci_mono_unwrap_value] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_compile_alloc_buffer] >>
+      rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac
+      >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (IF_CASES_TAC >> simp[ci_mono_emit_void] >>
@@ -3421,39 +3454,28 @@ Proof
              simp[ci_mono_compile_store_bytestring, ci_mono_comp_return])) >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-QED
-
-Theorem ci_mono_compile_multi_vvs:
-  ∀cfn cenv es sa.
-    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
-    ci_mono sa (SND (compile_multi_vvs cfn cenv es sa))
-Proof
-  Induct_on `es` >> rpt strip_tac
-  >- simp[compile_multi_vvs_def, ci_mono_comp_return] >>
-  simp[Once compile_multi_vvs_def] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (first_x_assum irule >> simp[]) >>
-  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_ext_call_gas_opt[local]:
@@ -3739,10 +3761,9 @@ rpt (CHANGED_TAC (
   (irule ci_mono_trans >>
    irule_at (Pos last) ci_mono_compile_stage_intcall_args) ORELSE
   (irule ci_mono_trans >>
-   irule_at (Pos last) ci_mono_compile_alloc_buffer) ORELSE
-  (irule ci_mono_compile_multi_vvs)
+   irule_at (Pos last) ci_mono_compile_alloc_buffer)
 )) >>
-rpt strip_tac >> first_assum irule)
+rpt strip_tac >> simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
   >- ( (* ExtCall *)
     PairCases_on `p` >> simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
@@ -3755,7 +3776,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_emit_op >> simp[]) ORELSE
       (irule ci_mono_trans >>
-       irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
+       irule_at (Pos last) ci_mono_compile_ext_call_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_ext_call_kwargs >> simp[]) ORELSE
       (irule ci_mono_trans >>
@@ -3769,7 +3790,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_external_call_kwargs) ORELSE
       (irule ci_mono_lower_value_cfn >> simp[]) ORELSE
-      (irule ci_mono_compile_multi_vvs >> simp[]) ORELSE
+      (irule ci_mono_compile_ext_call_args >> simp[]) ORELSE
       (irule ci_mono_compile_extcall_store_args >> simp[])
     )) >>
     gvs[] >> rpt strip_tac >>

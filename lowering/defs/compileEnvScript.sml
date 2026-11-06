@@ -495,6 +495,11 @@ Datatype:
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)
     ce_func_ids : string -> num;
+    (* Internal functions that may modify state (nonpayable or payable):
+       func_name → T. Decides whether a call argument must be copied before
+       later operands run.
+       Mirrors Python: func_t.is_modifying in eval_order.py _call_can_mutate *)
+    ce_func_modifying : string -> bool;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.
