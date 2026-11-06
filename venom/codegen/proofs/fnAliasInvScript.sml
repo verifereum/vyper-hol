@@ -4464,6 +4464,27 @@ Proof
   fs[alias_var_budget_def, LIST_ELEM_COUNT_THM] >> metis_tac[]
 QED
 
+Definition alias_distinct_probe_fn_def:
+  alias_distinct_probe_fn = mk_raw_function "distinct_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 CALLDATASIZE [] ["r"];
+        mk_inst 1 JMP [Label "use"] []] |>;
+     <| bb_label := "use"; bb_instructions :=
+       [mk_inst 2 ADD [Var "r"; Var "r"] ["z"];
+        mk_inst 3 STOP [] []] |>]
+End
+
+Theorem alias_distinct_probe:
+  codegen_ready_fn alias_distinct_probe_fn /\
+  lookup_block "use" alias_distinct_probe_fn.fn_blocks =
+    SOME (EL 1 alias_distinct_probe_fn.fn_blocks) /\
+  ~ALL_DISTINCT (input_vars_from "entry"
+    (EL 1 alias_distinct_probe_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_distinct_probe_fn) "use" 0))
+Proof
+  EVAL_TAC
+QED
+
 Theorem alias_wf_jmp_shape:
   inst_wf inst /\ inst.inst_opcode = JMP ==>
   inst.inst_outputs = [] /\ compute_operands inst = []
@@ -6868,7 +6889,8 @@ Proof
       >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
       >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >>
       simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC) >>
   Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
@@ -6880,7 +6902,8 @@ Proof
   >- (rewrite_tac[Once alias_buried_path_def] >>
       CONV_TAC (RAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV
         (RAND_CONV computeLib.EVAL_CONV))))) >> EVAL_TAC)
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >>
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC) >>
   CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC
 QED
 
