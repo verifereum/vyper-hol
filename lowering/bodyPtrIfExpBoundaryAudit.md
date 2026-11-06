@@ -137,3 +137,76 @@ excluding gas_exempt_cert and expr_exit. This still needs a real frame (or
 an applicable existing nonexemption theorem); no universal-frame vacuity
 or frozen-target falsehood follows yet. Do not invest in full machine run
 or generic physical-layout conversion before that boundary is reviewed.
+
+## Outcome forcing audit (C1.31.2.3)
+
+Checked tag interfaces are now available: vv_holds_located_type in
+bodyPtrIfExpLocatedTag; existing vv_post_located_type in UnwrapContract;
+ifexp_buffer_call_post_incompatible in CallTag. These do not force Q.
+
+The exact compiler bridge is compile_expr's Call case in
+exprLoweringScript.sml:3010-3011:
+`Call _ target args default_ret =>
+ compile_call compile_expr cenv ret_ty ty target args default_ret st`.
+It is exposed through compile_expr_component_eq, as in ScalarProbe:57;
+no special AST embedding theorem has been proved for this audit.
+
+Certificate exclusion has an existing checked interface:
+gasExemptCert:241-249, gas_exempt_cert_execution:
+`gas_exempt_cert memory tops (ctx,func) source (es,s0)
+ marks (err,ee) (leaf,finish) ==>`
+`(!tail. source (es with gas_obs :=
+ gas_explicit marks s0.vs_gas_readings ++ tail) =
+ (INR (Error err), ee with gas_obs := tail)) /\
+ gas_focus_path memory (ctx,func) s0 (LENGTH marks) (leaf,finish) /\
+ unspecified_behaviour_exempt tops err`.
+For the original vv outcome the certificate source is
+`ignore_bind (eval_expr cx e) (return ())`, NOT eval_expr itself.
+Thus a proof of successful eval_expr for EVERY gas observation list,
+plus bind/ignore_bind computation, contradicts the certificate at tail=[].
+Successful eval_expr at only the original es.gas_obs is insufficient.
+No assumption ~source_exempt for call_external is available here;
+top-level e2e source_exempt checks do not discharge this local certificate.
+
+For the summary alternative, gas_summary_ptr_at_def gives an existential
+res ee G tn r and
+`!tail. eval_expr cx e
+ (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+ (res, ee with gas_obs := tail)`.
+A pointwise success theorem for all lists `gs`:
+`!gs. ?tv ee. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee)`
+is enough to force res=INL tv by specializing at tail=[] and comparing
+pairs. No equality of successful values across gs is needed for the tag
+contradiction. expr_exit (exprSimDefs:7-12) rejects all INL results, so
+summary's exit branch is impossible. The remaining Q contains vv_post,
+contradicting CallTag. This uses the exact source equation and does not
+require an all-path machine proof or a successful invocation witness.
+
+The SAME all-gs success statement would eliminate the certificate, using
+gas_exempt_cert_execution on ignore_bind as above. The source interpreter
+for scalar_probe_tops reads no gas in helper, but a checked all-gs call
+success theorem is still missing, with actual cx/es and type checks.
+This is an execution theorem for the source, not something supplied by
+gas_admissible: admissibility permits exception results.
+
+Frame antecedents remain the entire ledger above, independently of source
+success. To refute `body_expr_ptr_ok cx e` one needs ONE instantiation of
+body_inv/expr_body_pre AND the vv simulation frame including compilation,
+code/distinct IDs/reservation, no dalloca/ctor, return variables freshness,
+gas admissibility, state relation and ghost invariant. We have not shown
+these coexist for the concrete misannotated call. In particular functions
+well-typed and expression typing are substantive; neither supported_program
+nor scalar_probe_return_run alone witnesses them.
+
+Recommendation: next semantic statement should establish the all-gs source
+success theorem for the actual scalar helper call at a concrete source
+context/state that is compatible with expr_body_pre. Search an existing
+internal-call evaluation computation before introducing any new fixture.
+Then evaluate whether actual lower_vyper_runtime_unit and an empty-local
+stmt_state_rel/ghost frame can be witnessed. A normal-forcing wrapper with
+hypotheses merely saying no certificate/no exit would add no evidence.
+If the source frame cannot be admitted, classify why rather than silently
+assuming it. Even successful exclusion of this operand premise only removes
+one widened-arm candidate; it cannot falsify the frozen IfExp implication,
+which assumes that premise. A proof of the general target would still need
+a principled use of the original operand judgments across all arm forms.
