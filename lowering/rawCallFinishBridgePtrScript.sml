@@ -125,3 +125,8 @@ Proof
   irule oracle_suffix_frames_compose >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]
 QED
+
+val _ = if List.all (null o hyp)
+  [oracle_call_old_buffer, oracle_call_return_bytes,
+   oracle_call_result_lookup, oracle_call_suffix_ready] then ()
+  else raise Fail "oracle return-buffer transport has kernel hypotheses";
