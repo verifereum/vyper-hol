@@ -4779,3 +4779,28 @@ Proof
   gvs[] >> irule regional_lineage_join_upper >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem regional_entry_dfs_initial:
+  codegen_ready_fn fn /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn ps0 (HD fn.fn_blocks).bb_label ps ==>
+  ps = ps0
+Proof
+  strip_tac >> drule dfs_block_state_inverse_origin >> strip_tac >> gvs[] >>
+  drule regional_entry_no_preds >>
+  metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond, MEM]
+QED
+
+Theorem regional_prepare_params_initial_upper:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))) qs.ps_stack
+Proof
+  strip_tac >> drule_all regional_prepare_params_initial_membership >>
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum (qspec_then `op` mp_tac) >> simp[] >>
+  strip_tac >> gvs[MEM_MAP, operand_to_string_def]
+QED
