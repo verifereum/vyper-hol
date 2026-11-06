@@ -88,6 +88,7 @@ Proof
 QED
 
 Theorem body_expr_ptr_stack:
+  (!a t n elems. e <> Builtin a (MakeArray t n) elems) /\
   (!d PG tops ctx func cenv env ty es.
      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
      expr_sim_ptr d ctx PG func cenv cx ty e es) /\
@@ -96,18 +97,21 @@ Theorem body_expr_ptr_stack:
   (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
   body_expr_ptr_ok cx e
 Proof
-  strip_tac >> simp[body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
   `expr_sim_ptr d ctx PG func cenv cx ty e es` by metis_tac[] >>
   conj_tac >- simp[] >> irule expr_vv_sim_ptr_stack >> metis_tac[]
 QED
 
 Theorem body_expr_ptr_of_vv:
+  (!a t n elems. e <> Builtin a (MakeArray t n) elems) /\
   (!d PG tops ctx func cenv env ty es.
      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
      expr_vv_sim_ptr d ctx PG func cenv cx ty e es) ==>
   body_expr_ptr_ok cx e
 Proof
-  strip_tac >> simp[body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
   `expr_vv_sim_ptr d ctx PG func cenv cx ty e es` by metis_tac[] >>
   conj_tac >- (irule expr_sim_ptr_of_vv >> metis_tac[]) >> simp[]
 QED

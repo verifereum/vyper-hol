@@ -139,8 +139,16 @@ Proof
                  vs_inst_idx := LENGTH sb.cs_current_insts|>))` by
     metis_tac[msg_gas_post_frame] >>
   drule gas_builtin_indexed_ghosts >> disch_then drule_all >>
-  disch_then (qspecl_then [`w`, `s.vs_inst_idx`, `sa.cs_next_id`,
+  disch_then (qspecl_then [`w`, `LENGTH sb.cs_current_insts`, `sa.cs_next_id`,
     `DROP 1 s.vs_gas_readings`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ (update_var _ _ _)` mp_tac >>
+  `update_var (STRING #"%" (toString sa.cs_next_var)) w
+     (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
+               vs_inst_idx := LENGTH sb.cs_current_insts|>) =
+   update_var (STRING #"%" (toString sa.cs_next_var)) w
+     (s with vs_gas_readings := DROP 1 s.vs_gas_readings) with
+     vs_inst_idx := LENGTH sb.cs_current_insts` by simp[update_var_def] >>
+  pop_assum (fn th => rewrite_tac[th, ghost_inv_inst_idx]) >> strip_tac >>
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   gvs[update_var_def, ptr_val_ok_def, env_item_type_def, is_word_type_def,
       arithmeticTheory.ADD1, ghost_inv_gas_obs] >>

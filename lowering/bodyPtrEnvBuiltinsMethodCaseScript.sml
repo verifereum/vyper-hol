@@ -93,7 +93,7 @@ Theorem body_method_runtime_ptr_case:
   method_id_literal e = NONE /\ body_expr_ptr_ok cx e ==>
   body_expr_ptr_ok cx (Builtin ann MethodId [e])
 Proof
-  strip_tac >> irule body_expr_ptr_of_vv >> rpt gen_tac >> strip_tac >>
+  strip_tac >> irule body_expr_ptr_of_vv >> reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   drule method_id_builtin_pre_shape >> strip_tac >> gvs[]
   >- (irule (Q.INST [`fixed` |-> `F`] method_id_runtime_sim_ptr |> SRULE []) >>
       simp[] >> (conj_tac >- (qexists_tac `env` >> simp[])) >>
@@ -123,7 +123,7 @@ Theorem body_method_id_ptr_case:
        (INL x,t) ==> body_exprs_ptr_ok cx es) ==>
   body_expr_ptr_ok cx (Builtin ann MethodId es)
 Proof
-  strip_tac >> irule body_expr_ptr_of_vv >> rpt gen_tac >> strip_tac >>
+  strip_tac >> irule body_expr_ptr_of_vv >> reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   drule method_id_builtin_pre_shape >> disch_then (assume_tac o CONJUNCT1) >>
   Cases_on `es` >> gvs[] >>
   `body_exprs_ptr_ok cx [h]` by

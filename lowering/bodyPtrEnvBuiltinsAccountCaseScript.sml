@@ -132,7 +132,7 @@ Theorem body_account_ptr_case:
 Proof
   strip_tac >> Cases_on `item = Code` >- gvs[body_code_ptr_case] >>
   irule body_expr_ptr_stack >> conj_tac >- simp[compile_acc_stack] >>
-  conj_tac >- metis_tac[eval_expr_builtin_value] >>
+  conj_tac >- metis_tac[eval_expr_builtin_value] >> reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
       drule account_body_pre_args >> strip_tac >> gvs[] >>
       `body_exprs_ptr_ok cx [e]` by

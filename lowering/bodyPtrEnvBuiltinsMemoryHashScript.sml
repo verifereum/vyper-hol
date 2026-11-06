@@ -60,10 +60,8 @@ Theorem hash_after_payload_add_ok:
 Proof
   strip_tac >> irule hash_covered_payload_ok >>
   simp[copy_len_binop_ghost_frame] >>
-  qexistsl_tac [`a + 32w`, `n`] >>
+  qexists_tac `n` >>
   simp[copy_len_binop_ghost_frame, wordsTheory.w2n_add_2] >>
-  conj_tac >- (simp[eval_operand_def, lookup_var_def, update_var_def,
-                    FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
   conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def,
                    FLOOKUP_UPDATE] >>
   irule hash_payload_add_covers >> metis_tac[]
@@ -175,11 +173,8 @@ Proof
   simp[Once inst_seq_ptr_def] >> conj_tac
   >- (irule hash_covered_payload_ok >>
       simp[copy_len_binop_ghost_frame] >>
-      qexistsl_tac [`a + 32w`, `mload (w2n a) s`] >>
       simp[copy_len_binop_ghost_frame, wordsTheory.w2n_add_2] >>
-      conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-      conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-      simp[] >> irule hash_payload_add_covers >> simp[] >>
+      irule hash_payload_add_covers >> simp[] >>
       qexistsl_tac [`b`, `sz`] >> simp[]) >>
   simp[step_inst_inst_idx_indep, exec_result_map_def, inst_seq_ptr_def]
 QED

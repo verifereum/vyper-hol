@@ -149,7 +149,7 @@ Theorem len_builtin_body_ptr_ok:
         (INL x,t) ==> body_expr_ptr_ok cx (HD args)) ==>
     body_expr_ptr_ok cx (Builtin ann Len args)
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_ptr_of_vv >>
+  rpt gen_tac >> strip_tac >> irule body_expr_ptr_of_vv >> reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   drule len_builtin_pre_shape >> strip_tac >> gvs[] >>
   `body_expr_ptr_ok cx e` by

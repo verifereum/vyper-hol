@@ -84,7 +84,7 @@ Theorem body_method_literal_ptr_case:
   method_id_literal (Literal la l) = SOME bs ==>
   body_expr_ptr_ok cx (Builtin ann MethodId [Literal la l])
 Proof
-  strip_tac >> irule body_expr_ptr_of_vv >> rpt gen_tac >> strip_tac >>
+  strip_tac >> irule body_expr_ptr_of_vv >> reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   drule_all method_id_builtin_pre_shape >> strip_tac >> gvs[]
   >- (irule method_literal_dynamic_vv_sim_ptr >> simp[]) >>
   irule method_literal_word_vv_sim_ptr >> simp[]

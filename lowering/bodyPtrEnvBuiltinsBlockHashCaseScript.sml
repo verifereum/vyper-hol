@@ -130,7 +130,7 @@ Theorem body_blockhash_ptr_case:
 Proof
   strip_tac >> irule body_expr_ptr_stack >>
   conj_tac >- simp[compile_blockhash_stack] >>
-  conj_tac >- metis_tac[eval_expr_builtin_value] >>
+  conj_tac >- metis_tac[eval_expr_builtin_value] >> reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   drule blockhash_body_pre_args >> strip_tac >> gvs[] >>
   `body_exprs_ptr_ok cx [e]` by
