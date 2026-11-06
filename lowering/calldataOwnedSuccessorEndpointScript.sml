@@ -20,7 +20,7 @@ Theorem calldata_dynamic_valid_owned_array_child_endpoint:
   is_dynamic (vyper_to_abi_type env ty) /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   eval_operand ip initial = SOME (n2w slot) /\ mload slot initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -34,7 +34,7 @@ Theorem calldata_dynamic_valid_owned_array_child_endpoint:
   ?child. ~child.vs_halted /\ child.vs_current_bb = ready.cs_current_bb /\
     child.vs_inst_idx = LENGTH ready.cs_current_insts /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st.cs_next_var limit_st initial child /\
+      (Lit 0w) sb d b reserve_cap st.cs_next_var limit_st initial child /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op child = eval_operand op initial) /\
     child.vs_memory = initial.vs_memory /\
@@ -70,7 +70,7 @@ Proof
     (drule calldata_element_setup_opcodes >> simp[EVERY_MEM]) >>
   mp_tac (Q.INST [`s` |-> `initial`, `t` |-> `prepared`, `P` |-> `\child.
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st.cs_next_var limit_st initial child /\
+      (Lit 0w) sb d b reserve_cap st.cs_next_var limit_st initial child /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op child = eval_operand op initial)`] (SPEC_ALL successful_sequence_endpoint)) >>
   simp[eval_op_inst_idx] >> strip_tac >>
@@ -89,7 +89,7 @@ Theorem calldata_general_array_child_endpoint[local]:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   eval_operand ip initial = SOME (n2w slot) /\ mload slot initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -103,7 +103,7 @@ Theorem calldata_general_array_child_endpoint[local]:
   ?child. ~child.vs_halted /\ child.vs_current_bb = ready.cs_current_bb /\
     child.vs_inst_idx = LENGTH ready.cs_current_insts /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st.cs_next_var limit_st initial child /\
+      (Lit 0w) sb d b reserve_cap st.cs_next_var limit_st initial child /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op child = eval_operand op initial) /\
     child.vs_memory = initial.vs_memory /\
@@ -148,7 +148,7 @@ Theorem calldata_valid_header_prepare_pullback[local]:
   abi_decoder_operand_live next ip /\
   next+4 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st u /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-    d outsz b cap u /\
+    d outsz b reserve_cap u /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD u) = bs ==>
   ?head.
     head = jump_to body_lbl
@@ -158,7 +158,7 @@ Theorem calldata_valid_header_prepare_pullback[local]:
     ~head.vs_halted /\ head.vs_current_bb = body_lbl /\ head.vs_inst_idx = 0 /\
     fresh_vars_wrt limit_st head /\
     abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-      d outsz b cap head /\
+      d outsz b reserve_cap head /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD head) = bs /\
     eval_operand ip head = SOME (n2w p) /\ mload p head = n2w j /\
     head.vs_memory = u.vs_memory /\ head.vs_call_ctx = u.vs_call_ctx /\
@@ -224,7 +224,7 @@ Theorem calldata_valid_header_child_endpoint:
   next+4 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st u /\
   ready.cs_next_var <= limit_st.cs_next_var /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap u /\
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap u /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD u) = bs ==>
   ?head entry.
     head = jump_to body_lbl
@@ -232,7 +232,7 @@ Theorem calldata_valid_header_child_endpoint:
         (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
         (STRING #"%" (toString (next+3))) j (LENGTH vs) u) /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\
     entry.vs_memory = u.vs_memory /\ entry.vs_call_ctx = u.vs_call_ctx /\
@@ -311,7 +311,7 @@ Theorem calldata_owned_fixed_successor_endpoint:
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
         abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
   H j u old /\
@@ -619,7 +619,7 @@ Theorem calldata_owned_header_successor_endpoint:
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
         abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
@@ -669,7 +669,7 @@ Theorem calldata_owned_header_successor_endpoint:
         (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
         (STRING #"%" (toString (next+3))) j (LENGTH vs) u) /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\

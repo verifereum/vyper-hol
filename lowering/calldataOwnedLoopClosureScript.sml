@@ -166,7 +166,7 @@ Theorem calldata_owned_loop_from_header:
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
         abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
@@ -216,7 +216,7 @@ Theorem calldata_owned_loop_from_header:
         (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
         (STRING #"%" (toString (next+3))) j (LENGTH vs) u) /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\

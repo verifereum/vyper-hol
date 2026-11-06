@@ -86,7 +86,7 @@ Theorem calldata_valid_header_producer_local_frontier:
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
         abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
@@ -95,7 +95,7 @@ Theorem calldata_valid_header_producer_local_frontier:
   fn_has_code st loop_st fn /\ fn_has_code loop_st prefix_st fn /\
   loop_st.cs_next_id <= end_st.cs_next_id /\
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b reserve_cap initial /\
   maxn < dimword (:256) /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   unit_alloca_budget ctx < dimword (:256) /\ initial.vs_alloca_next < dimword (:256) /\

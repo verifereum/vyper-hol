@@ -35,7 +35,7 @@ Theorem calldata_valid_init_header_local_frontier:
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
         abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+          d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
@@ -60,7 +60,7 @@ Theorem calldata_valid_init_header_local_frontier:
   Own initial /\ FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
   fresh_vars_wrt limit_st initial /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
-    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   loop_st.cs_blocks = st.cs_blocks /\ loop_st.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts loop_st.cs_current_insts /\
@@ -138,7 +138,7 @@ Resume calldata_valid_init_header_local_frontier[header]:
   `eval_operand src t = SOME srcword /\ eval_operand dst t = SOME (n2w d)` by
     metis_tac[] >>
   `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d
-    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap t` by
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap t` by
     (gvs[abi_decoder_ranges_def]) >>
   simp_tac bool_ss [Abbr `H`] >>
   simp[jump_to_def, fresh_vars_wrt_def, mload_def,
