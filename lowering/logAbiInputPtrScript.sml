@@ -58,3 +58,10 @@ Proof
   qpat_x_assum `!i. a+32 <= i /\ _ ==> _` (qspec_then `i` mp_tac) >>
   simp[]
 QED
+
+(* Fail the build if a robust boundary accidentally retains proof assumptions. *)
+val _ = List.app (fn (name,th) =>
+  if null (hyp th) then () else raise Fail (name ^ " is not closed"))
+  [("robust_log_data_layout_input",robust_log_data_layout_input),
+   ("robust_abi_copy_input_clean",robust_abi_copy_input_clean),
+   ("robust_abi_bytes_input_clean",robust_abi_bytes_input_clean)];

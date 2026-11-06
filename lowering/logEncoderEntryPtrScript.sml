@@ -74,8 +74,8 @@ Proof
   strip_tac >>
   `log_data_layout cx tys vs a mem` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
-  drule_all robust_log_data_layout_input >>
-  disch_then (strip_assume_tac o ISPEC ``(ce:compile_env).ce_struct_fields``) >>
+  drule_all (ISPEC ``(ce:compile_env).ce_struct_fields``
+    (Q.GEN `sf` robust_log_data_layout_input)) >> strip_tac >>
   qexists_tac `avs` >>
   asm_simp_tac bool_ss [vyper_to_abi_type_def] >>
   conj_tac >- gvs[vyper_to_abi_type_def] >>
@@ -84,8 +84,21 @@ Proof
   `vyper_to_abi (get_tenv cx) (TupleT tys) (ArrayV (TupleV vs)) =
      SOME (ListV avs)` by simp[vyper_to_abi_def] >>
   drule_all (cj 1 vyper_to_abi_enc_le_size_bound) >>
-  drule scalar_tuple_abi_capacity >>
-  disch_then (mp_tac o ISPEC ``(ce:compile_env).ce_struct_fields``) >>
-  simp_tac bool_ss [vyper_to_abi_type_def] >>
-  disch_then (qspec_then `get_tenv cx` SUBST1_TAC) >> simp[]
+  `vyper_abi_size_bound (get_tenv cx) (TupleT tys) =
+     abi_size_bound ce.ce_struct_fields (TupleT tys)` by
+    (irule scalar_tuple_abi_capacity >> simp[]) >>
+  simp_tac bool_ss [vyper_to_abi_type_def] >> simp[]
 QED
+
+(* These interfaces must be closed kernel theorems, not conditional exports. *)
+val _ = List.app (fn (name,th) =>
+  if null (hyp th) then () else
+    (print (name ^ " has hypotheses:\n"); List.app print_term (hyp th);
+     raise Fail (name ^ " is not closed")))
+  [("scalar_abi_embedded_capacity",scalar_abi_embedded_capacity),
+   ("log_tuple_enc_info_selected",log_tuple_enc_info_selected),
+   ("log_scalar_enc_info_selected",log_scalar_enc_info_selected),
+   ("scalar_tuple_abi_capacity",scalar_tuple_abi_capacity),
+   ("scalar_tuple_encoder_shape",scalar_tuple_encoder_shape),
+   ("robust_log_data_layout_input",robust_log_data_layout_input),
+   ("supported_log_encoder_entry_ptr",supported_log_encoder_entry_ptr)];
