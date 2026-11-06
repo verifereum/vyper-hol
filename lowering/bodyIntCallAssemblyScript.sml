@@ -46,10 +46,7 @@ Theorem expr_inv_local_regions_transport:
   !n b sz. local_region ce esA.scopes sA n b sz ==>
     local_region ce esB.scopes sB n b sz
 Proof
-  strip_tac >>
-  mp_tac (local_region_env_transport |> SPEC_ALL
-    |> Q.INST [`env` |-> `env`, `cx` |-> `cx`, `cenv` |-> `ce`,
-               `esA` |-> `esA`, `esB` |-> `esB`, `sa` |-> `sa`,
-               `sA` |-> `sA`, `sB` |-> `sB`]) >>
-  impl_tac >- fs[expr_sim_inv_def] >> simp[]
+  rpt strip_tac >> irule local_region_env_transport >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  fs[expr_sim_inv_def] >> metis_tac[]
 QED
