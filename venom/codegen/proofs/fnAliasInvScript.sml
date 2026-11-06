@@ -21,7 +21,7 @@ Ancestors
   venomInst venomInstProps venomWf venomExecProps venomExecProofs list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
   fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
-  livenessConvergenceProofs livenessBlockProofs codegenReadyCompute
+  livenessConvergenceProofs livenessBlockProofs codegenReadyCompute fnPlanPrefix
 
 Theorem alias_single_successor_liveout:
   wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
@@ -6547,7 +6547,8 @@ Proof
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
   >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC) >>
@@ -6876,6 +6877,66 @@ Proof
   `out = x` by metis_tac[MEM] >>
   ho_match_mp_tac alias_lineage_join_phi_fold_lower_coverage >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_phi_prefix_plan_state:
+  !phis i body ps ops qs.
+    EVERY (\inst. inst.inst_opcode = PHI) phis /\
+    block_len = i + n_params + LENGTH (phis ++ body) /\
+    generate_block_insts_prefix liveness dfg cfg fn lbl halting n_params
+      block_len i (LENGTH phis) (phis ++ body) ps = SOME (ops, qs) ==>
+    qs = FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps
+      (MAPi (\j inst. (inst, live_vars_at liveness lbl (i + n_params + SUC j))) phis)
+Proof
+  Induct >> simp[generate_block_insts_prefix_def, indexedListsTheory.MAPi_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, AllCaseEqs()] >>
+  first_x_assum (qspecl_then [`i + 1`, `body'`] mp_tac) >>
+  simp[] >> disch_then drule >> strip_tac >> gvs[combinTheory.o_DEF] >>
+  AP_TERM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM] >> gen_tac >> AP_TERM_TAC >> decide_tac
+QED
+
+Theorem alias_nonjoin_edge_preds:
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 ==>
+  cfg_preds_of (cfg_analyze fn) lbl = [pred]
+Proof
+  strip_tac >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> gvs[] >>
+  Cases_on `t` >> gvs[]
+QED
+
+(* The actual preparation and an arbitrary instruction cut.  Unlike an
+   isolated prefix plan, this retains the full-list lookahead. *)
+Theorem alias_block_plan_cut:
+  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps_after) /\
+  j <= LENGTH (non_param_insts bb) ==>
+  ?param_ops ps_param clean_ops ps_clean prefix_ops ps_cut body_ops.
+    (if bb = HD fn.fn_blocks then prepare_params_plan liveness fn ps
+     else ([], ps)) = (param_ops, ps_param) /\
+    (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+     then clean_stack_plan liveness cfg fn bb ps_param
+     else ([], ps_param)) = (clean_ops, ps_clean) /\
+    generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 j (non_param_insts bb) ps_clean =
+      SOME (prefix_ops, ps_cut) /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) j (DROP j (non_param_insts bb)) ps_cut =
+      SOME (body_ops, ps_after) /\
+    ops = SOLabel bb.bb_label :: param_ops ++ clean_ops ++ prefix_ops ++ body_ops
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`clean_ops`, `ps2`] >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[] >>
+  metis_tac[generate_block_insts_plan_split, arithmeticTheory.ADD_CLAUSES]
 QED
 
 (* Lower-inventory probe ledger (not a universal lineage inventory theorem).
