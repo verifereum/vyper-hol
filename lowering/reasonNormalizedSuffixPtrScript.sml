@@ -7,7 +7,7 @@ Ancestors reasonFinishPtr reasonTupleCopyPtr reasonResourcesPtr
   representationCleanPtr valueEncoding venomMemProps bodyPtrDefs
   exprSimProps words list pred_set reasonTupleCompilerPtr reasonSlotResourcesPtr
   emitHelperProps exprLoweringProps compileEnv finite_map reasonCompilerFramePtr
-  loweringHalt contextProps freshWrites
+  loweringHalt contextProps freshWrites reasonFinishBoundsPtr reasonFinishCode
 
 Theorem reason_tuple_copy_string_head:
   ptr_mem_ok cx ty (StringV str) op G tn s /\
@@ -143,3 +143,52 @@ Resume reason_normalized_finish_resources_ptr[finish]:
 QED
 
 Finalise reason_normalized_finish_resources_ptr
+
+Theorem reason_normalized_suffix_path_ptr:
+  emit_op MLOAD [Var src] sa = (Var v1,c1) /\
+  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
+  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
+  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_void MCOPY [Var tuple;Var src;Var v4] c4 = ((),sm) /\
+  compile_alloc_buffer 32 sm = (buf,sc) /\ buf.buf_operand = Var slot /\
+  emit_void MSTORE [Var slot;Lit 32w] sc = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\ fn_has_code c4 sm func /\
+  fn_has_code sm sc func /\ fn_has_code sc sb func /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  lookup_var src s = SOME a /\ lookup_var tuple s = SOME (n2w b) /\
+  lookup_var payload s = SOME payload_addr /\ lookup_var outer s = SOME outer_addr /\
+  ptr_mem_ok cx ty (StringV str) (Var src) G tn s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv (StringV str) /\
+  ptr_covers G tn src s n /\ ptr_covers G tn tuple s m /\
+  ptr_covers G tn payload s (32+m) /\ ptr_covers G tn outer s (64+m) /\
+  n = 32 + 32 * word_size (LENGTH str) /\ n <= m /\ n < dimword (:256) /\
+  val_store_size tv (StringV str) <= n /\ b < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_outputs = [tuple] /\ not_local_ptr cenv es.scopes tuple /\
+  inst.inst_id < sm.cs_next_id /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,m) /\
+  fresh_vars_wrt sa s /\ local_ptrs_reserved cenv sa /\
+  (!p. MEM p [src;tuple;payload;outer] ==> not_fresh_at sa p) /\
+  reason_encode_finish (Var outer) (Var payload) (Var tuple) (Var slot) sb = ((),se) /\
+  fn_has_code sb se func /\ 64+m < dimword (:256) /\
+  w2n payload_addr+(32+m) < dimword (:256) /\
+  w2n outer_addr+(64+m) < dimword (:256) ==>
+  ?Gf tnf sf. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (Abort Revert_abort sf)
+Proof
+  strip_tac >> drule_all reason_normalized_finish_resources_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `32 + 32 * word_size (LENGTH str) <= m` by gvs[] >>
+  drule_all reason_finish_capacity_bounds >> strip_tac >>
+  `mload (w2n (n2w b : bytes32)) sf = n2w (LENGTH str) /\
+   (!i. w2n (n2w b : bytes32) <= i /\ i < w2n (n2w b : bytes32)+32 ==>
+     i NOTIN tnf.t_mem)` by simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  drule_all reason_encode_finish_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf'`, `tnf'`, `sf'`] >>
+  qpat_x_assum `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf)` mp_tac >>
+  qpat_x_assum `gas_path_ptr D 0 ctx func PG Gf tnf sf 0 Gf' tnf' (Abort Revert_abort sf')` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+QED
