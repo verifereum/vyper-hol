@@ -52,7 +52,7 @@ Proof
   `abi_encoder_cursor active dyn_ptr site slot first lo st
     (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) actual` by
     (reverse (Cases_on `active`) >- simp[abi_encoder_cursor_def] >>
-     mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`, `owned_lo` |-> `st.cs_next_id`,
+     mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`, `owned_lo` |-> `st.cs_next_id`,
        `owned_hi` |-> `end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
        `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`, `sz` |-> `output_size:num`]
        abi_scratch_cursor_protected) >>
@@ -176,7 +176,7 @@ Proof
   `abi_encoder_cursor active dyn_ptr site slot first lo st
     (hl+LENGTH (FLAT (abi_tuple_tails pre pvs))) actual` by
     (reverse (Cases_on `active`) >- simp[abi_encoder_cursor_def] >>
-     mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`, `owned_lo` |-> `st.cs_next_id`,
+     mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `active` |-> `T`, `cursor_op` |-> `dyn_ptr:operand`, `owned_lo` |-> `st.cs_next_id`,
        `owned_hi` |-> `end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
        `off` |-> `hl+LENGTH (FLAT (abi_tuple_tails pre pvs))`, `sz` |-> `output_size:num`]
        abi_scratch_cursor_protected) >>

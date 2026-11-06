@@ -86,7 +86,7 @@ Proof
     (rpt strip_tac >>
      drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >> strip_tac >>
      `eval_operand head r = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
-     mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
+     mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
        `t` |-> `r:venom_state`, `ids` |-> `abi_decoder_ids first last`] abi_scratch_address) >>
      impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
      `abi_scratch_input ei at av prepared src head sb source_cap (d+offset)
@@ -109,7 +109,7 @@ Proof
   `st.cs_next_id <= prepared.cs_next_id /\ end_st.cs_next_id <= end_st.cs_next_id /\
     d <= d+offset /\ (d+offset)+LENGTH (enc at av) <= d+output_size` by decide_tac >>
   drule_all abi_scratch_spine_frame_after_address >> disch_tac >>
-  drule_all (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
+  drule_all (Q.INST [`sites` |-> `UNIV:num set`, `lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
     `d` |-> `d:num`, `sz` |-> `output_size:num`] abi_scratch_effect_after_address) >> disch_tac >>
   `abi_decode_sim ctx func initial t` by
     (irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss []) >>
@@ -200,7 +200,7 @@ Proof
   drule_all abi_encoder_member_prefix_transport >> strip_tac >>
   drule_all abi_encoder_member_prefix_control >> strip_tac >>
   `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
     `t` |-> `ready:venom_state`, `ids` |-> `abi_decoder_ids first last`] abi_scratch_address) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_scratch_input ei at av prepared src (SND (SND ops)) sb source_cap (d+off)

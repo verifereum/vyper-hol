@@ -206,7 +206,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> strip_tac >>
   rename1 `abi_decode_sim ctx func ready actual` >>
   `eval_operand (FST (FST coords)) actual = SOME (n2w j)` by
-    (mp_tac (Q.INST [`op` |-> `FST (FST (coords:(operand # operand) # (operand # operand)))`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `op` |-> `FST (FST (coords:(operand # operand) # (operand # operand)))`,
        `w` |-> `n2w j:bytes32`, `s` |-> `ready:venom_state`, `t` |-> `actual:venom_state`,
        `next` |-> `addressed.cs_next_var`, `d` |-> `d+32`, `sz` |-> `output_size-32`,
        `lo` |-> `site:num`, `hi` |-> `end_st.cs_next_id`] abi_scratch_effect_operand) >>
@@ -214,7 +214,7 @@ Proof
   mp_tac (Q.INST [`ids` |-> `abi_decoder_ids site end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
     `fp` |-> `[(d+32+j*asz,32);(d+32+off,LENGTH (enc ty (EL j avs)))]`]
     abi_scratch_frame_after_address) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`child_lo` |-> `site:num`, `child_hi` |-> `end_st.cs_next_id`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `child_lo` |-> `site:num`, `child_hi` |-> `end_st.cs_next_id`,
     `child_next` |-> `addressed.cs_next_var`, `child_d` |-> `d+32`, `child_sz` |-> `output_size-32`,
     `hi` |-> `end_st.cs_next_id`, `next` |-> `st.cs_next_var`, `lo` |-> `site:num`,
     `sz` |-> `output_size:num`] abi_scratch_effect_after_address) >>
@@ -311,7 +311,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   drule_all abi_encode_array_dynamic_body_context >> strip_tac >>
   `site < st.cs_next_id /\ index_site < last /\ site < last /\ owner_st.cs_next_id <= last` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
     `site` |-> `index_site:num`, `slot` |-> `index_slot:num`, `s` |-> `initial:venom_state`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_scratch_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)
@@ -326,11 +326,11 @@ Proof
     limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `site`, `st.cs_next_var`, `output_size`] >> simp[]) >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `next` |-> `owner_st.cs_next_var`, `cursor_op` |-> `ip:operand`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `next` |-> `owner_st.cs_next_var`, `cursor_op` |-> `ip:operand`,
     `site` |-> `index_site:num`, `slot` |-> `index_slot:num`, `active` |-> `T`, `off` |-> `j:num`,
     `sz` |-> `output_size:num`, `owned_lo` |-> `site:num`, `owned_hi` |-> `end_st.cs_next_id`]
     abi_scratch_cursor_protected) >> impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `next` |-> `owner_st.cs_next_var`, `cursor_op` |-> `dyn_ptr:operand`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `next` |-> `owner_st.cs_next_var`, `cursor_op` |-> `dyn_ptr:operand`,
     `active` |-> `T`, `sz` |-> `output_size:num`, `owned_lo` |-> `site:num`, `owned_hi` |-> `end_st.cs_next_id`,
     `next_off` |-> `LENGTH (avs:abi_value list)*abi_member_head_size ty+
       SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) (avs:abi_value list)))`]

@@ -78,7 +78,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_decode_footprint_frame [(slot,32)] initial actual` by fs[abi_decode_frame_footprint] >>
   `actual.vs_halted = initial.vs_halted` by simp[] >>
-  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
     abi_scratch_single_write) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   `abi_footprint_disjoint d len [(slot,32)]` by (simp[abi_footprint_disjoint_def] >> decide_tac) >>
   mp_tac (Q.INST [`p` |-> `d:num`, `n` |-> `len:num`, `fp` |-> `[(slot:num,32:num)]`,
@@ -131,7 +131,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   qpat_assum `abi_scratch_input _ _ _ allocated _ _ _ _ _ _ _ _ _ _ allocated_state`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
-  mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `parent_ptr:operand`, `site` |-> `st.cs_next_id`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `active` |-> `T`, `cursor_op` |-> `parent_ptr:operand`, `site` |-> `st.cs_next_id`,
     `lo` |-> `st.cs_next_id`, `st` |-> `allocated`, `off` |-> `0:num`, `sz` |-> `output_size:num`,
     `owned_lo` |-> `allocated.cs_next_id`, `owned_hi` |-> `loop_st.cs_next_id`, `next` |-> `allocated.cs_next_var`,
     `initial` |-> `allocated_state:venom_state`] abi_scratch_cursor_protected) >>
@@ -179,7 +179,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `first <= loop_st.cs_next_id /\ parent_site < last` by
     (fs[abi_encoder_cursor_def] >> decide_tac) >>
-  mp_tac (Q.INST [`active` |-> `T`, `cursor_op` |-> `parent_ptr:operand`, `site` |-> `parent_site:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `active` |-> `T`, `cursor_op` |-> `parent_ptr:operand`, `site` |-> `parent_site:num`,
     `slot` |-> `parent_slot:num`, `lo` |-> `parent_site:num`, `st` |-> `loop_st`, `off` |-> `0:num`,
     `owned_lo` |-> `loop_st.cs_next_id`, `owned_hi` |-> `loop_end.cs_next_id`, `next` |-> `loop_st.cs_next_var`,
     `initial` |-> `ready:venom_state`, `actual` |-> `encoded:venom_state`, `sz` |-> `output_size:num`]
@@ -243,7 +243,7 @@ Proof
     `parent_slot` |-> `slot:num`, `len` |-> `LENGTH (enc (Array NONE ty) (ListV avs))`,
     `bytes` |-> `enc (Array NONE ty) (ListV avs)`] abi_scratch_array_finish_protected) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  mp_tac (Q.INST [`st` |-> `start`, `prepared` |-> `loop_st`, `middle` |-> `loop_end`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `start`, `prepared` |-> `loop_st`, `middle` |-> `loop_end`,
     `end_st` |-> `final`, `sz` |-> `output_size:num`] abi_scratch_phase_compose) >>
   impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> disch_tac >>
   `abi_decode_sim ctx func initial encoded` by

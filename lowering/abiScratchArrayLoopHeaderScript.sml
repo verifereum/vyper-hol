@@ -45,7 +45,7 @@ Proof
      (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) ready` by
     (conj_tac >> qpat_assum `!act op cursor_site cursor_slot cursor_lo off. _` irule >>
      asm_simp_tac bool_ss []) >>
-  mp_tac (Q.INST [`actual` |-> `ready:venom_state`, `lo` |-> `site:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `actual` |-> `ready:venom_state`, `lo` |-> `site:num`,
     `next` |-> `owner_st.cs_next_var`, `sz` |-> `output_size:num`] abi_scratch_address_effect) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`ei` |-> `AbiDynArray ei asz msz active`, `at` |-> `Array NONE ty`, `av` |-> `ListV avs`,

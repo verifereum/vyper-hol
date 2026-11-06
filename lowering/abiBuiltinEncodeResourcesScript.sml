@@ -43,7 +43,7 @@ Proof
     abi_builtin_allocate_state_transport) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST
-    [`s` |-> `abi_builtin_allocate_state st.cs_next_id
+    [`sites` |-> `UNIV:num set`, `s` |-> `abi_builtin_allocate_state st.cs_next_id
        (32+32*word_size (maxlen+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4))) s`,
      `t` |-> `abi_builtin_allocate_state st.cs_next_id
        (32+32*word_size (maxlen+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4))) t`]

@@ -40,7 +40,7 @@ Proof
   rpt strip_tac >> drule_all abi_scratch_member_static_place_raw_transport >> strip_tac >>
   `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
   `abi_decoder_budget first last b cap r` by
-    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `r:venom_state`]
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `r:venom_state`]
       abi_decoder_budget_transport) >> fs[abi_decoder_address_frame_def]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >>
   strip_tac >> fs[abi_scratch_member_core_pre_def]
@@ -89,7 +89,7 @@ Proof
   `abi_scratch_effect first last p.cs_next_id en.cs_next_id p.cs_next_var
     limit_st (d+offset) (LENGTH (enc at av)) b cap r t` by fs[] >>
   drule_all abi_scratch_spine_frame_after_address >> disch_tac >>
-  drule_all (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `en.cs_next_id`,
+  drule_all (Q.INST [`sites` |-> `UNIV:num set`, `lo` |-> `st.cs_next_id`, `hi` |-> `en.cs_next_id`,
     `d` |-> `d:num`, `sz` |-> `output_size:num`] abi_scratch_effect_after_address) >> disch_tac >>
   `abi_decode_sim ctx func initial t` by
     (irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss []) >>

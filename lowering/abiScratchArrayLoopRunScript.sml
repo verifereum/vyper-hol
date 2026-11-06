@@ -97,7 +97,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_array_loop_inv_def]) >>
   qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
-  mp_tac (Q.INST [`cursor_op` |-> `dyn_ptr:operand`, `site` |-> `cursor_site:num`, `slot` |-> `cursor_slot:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `cursor_op` |-> `dyn_ptr:operand`, `site` |-> `cursor_site:num`, `slot` |-> `cursor_slot:num`,
     `off` |-> `LENGTH (enc (Array NONE ty) (ListV avs))-32`, `st` |-> `owner_st`,
     `s` |-> `initial:venom_state`, `lo` |-> `site:num`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -111,7 +111,7 @@ Proof
   mp_tac (Q.INST [`src_word` |-> `n2w sb:bytes32`, `slot` |-> `cursor_slot:num`,
     `offset` |-> `LENGTH (enc (Array NONE ty) (ListV avs))-32`] abi_encode_array_dynamic_exit_reach) >>
   impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  mp_tac (Q.INST [`lo` |-> `site:num`, `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `lo` |-> `site:num`, `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
     abi_scratch_address_effect) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   `abi_scratch_effect first last site hi owner_st.cs_next_var limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_widen >>

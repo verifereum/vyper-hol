@@ -32,7 +32,7 @@ Proof
   `~is_dynamic ty` by fs[] >> drule_all abi_encoder_array_static_size >> disch_tac >>
   mp_tac (Q.INST [`cnt` |-> `LENGTH (avs:abi_value list)`] abi_encode_array_static_exit_reach) >>
   impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  mp_tac (Q.INST [`lo` |-> `site:num`, `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `lo` |-> `site:num`, `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`]
     abi_scratch_address_effect) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   `abi_scratch_effect first last site hi owner_st.cs_next_var limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_widen >>

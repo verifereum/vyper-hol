@@ -359,7 +359,7 @@ Proof
   qpat_assum `abi_decoder_address_frame _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
   `abi_decoder_budget first last b cap prepared` by
-    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
       abi_decoder_budget_transport) >> asm_simp_tac bool_ss []) >>
   `first <= abi_decoder_entry_floor middle` by
     (simp[abi_decoder_entry_floor_def] >> decide_tac) >>

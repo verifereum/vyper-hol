@@ -90,7 +90,7 @@ Proof
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   `actual.vs_halted = initial.vs_halted` by simp[] >>
-  mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
     `lo` |-> `start.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
     `next` |-> `start.cs_next_var`, `sz` |-> `32:num`] abi_scratch_leaf_effect) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -142,7 +142,7 @@ Proof
   qpat_assum `type_memory_bytes ce ty = abi_decode_bytes_copy_size n`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th]) >>
       PURE_REWRITE_TAC [GSYM th]) >>
-  mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
     `lo` |-> `start.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
     `next` |-> `start.cs_next_var`, `sz` |-> `type_memory_bytes ce ty`] abi_scratch_leaf_effect) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -419,7 +419,7 @@ Proof
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   `actual.vs_halted = initial.vs_halted` by simp[] >>
-  mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
     `lo` |-> `start.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
     `next` |-> `start.cs_next_var`, `sz` |-> `32:num`] abi_scratch_leaf_effect) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
@@ -461,7 +461,7 @@ Proof
   qpat_assum `type_memory_bytes ce ty = abi_decode_bytes_copy_size n`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th]) >>
       PURE_REWRITE_TAC [GSYM th]) >>
-  mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
     `lo` |-> `start.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
     `next` |-> `start.cs_next_var`, `sz` |-> `type_memory_bytes ce ty`] abi_scratch_leaf_effect) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>

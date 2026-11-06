@@ -54,7 +54,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `first <= site` by fs[abi_encoder_cursor_def] >>
   `eval_operand count_op actual = SOME (n2w (LENGTH avs))` by
-    (mp_tac (Q.INST [`op` |-> `count_op:operand`, `w` |-> `n2w (LENGTH (avs:abi_value list)):bytes32`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `op` |-> `count_op:operand`, `w` |-> `n2w (LENGTH (avs:abi_value list)):bytes32`,
       `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`, `lo` |-> `site:num`,
       `sz` |-> `output_size:num`, `next` |-> `owner_st.cs_next_var`] abi_scratch_effect_operand) >>
      asm_simp_tac bool_ss []) >>

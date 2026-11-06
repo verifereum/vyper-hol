@@ -63,7 +63,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
   drule_all abi_encode_array_static_body_context >> strip_tac >>
   `first <= st.cs_next_id /\ site < last /\ site < st.cs_next_id /\ owner_st.cs_next_id <= last` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
     abi_encoder_cursor_bounds) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_encoder_buffer_pre (AbiDynArray ei asz msz F) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size b cap initial` by
@@ -161,7 +161,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  mp_tac (Q.INST [`cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
     abi_encoder_cursor_bounds) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   qpat_assum `abi_encoder_array_memory _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_array_memory_def]) >>
@@ -311,7 +311,7 @@ Proof
   drule abi_encoder_array_memory_typed >> strip_tac >>
   qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `s` |-> `initial:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `s` |-> `initial:venom_state`,
     `cursor_op` |-> `ip:operand`, `off` |-> `j:num`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_decoder_operand_live next ip` by

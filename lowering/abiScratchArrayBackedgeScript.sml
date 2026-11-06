@@ -79,7 +79,7 @@ Proof
   qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   `site < last /\ cursor_site < last /\ site+1 <= last` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
     `s` |-> `initial:venom_state`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_decoder_operand_live next ip` by
@@ -101,11 +101,11 @@ Proof
   mp_tac (Q.INST [`ei` |-> `AbiDynArray ei asz msz T`, `at` |-> `Array NONE ty`, `av` |-> `ListV avs`,
     `st` |-> `owner_st`, `lo` |-> `site:num`, `hi` |-> `site+1`, `sz` |-> `output_size:num`]
     abi_scratch_input_effect) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `active` |-> `T`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `active` |-> `T`,
     `off` |-> `j:num`, `next_off` |-> `SUC j`, `owned_lo` |-> `site:num`, `owned_hi` |-> `site+1`,
     `sz` |-> `output_size:num`] abi_scratch_cursor_registered) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `dyn_ptr:operand`, `active` |-> `T`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `dyn_ptr:operand`, `active` |-> `T`,
     `site` |-> `cursor_site:num`, `slot` |-> `cursor_slot:num`, `owned_lo` |-> `site:num`,
     `owned_hi` |-> `site+1`, `sz` |-> `output_size:num`] abi_scratch_cursor_protected) >>
   impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> disch_tac >>

@@ -33,7 +33,7 @@ Theorem abi_scratch_members_compose:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_scratch_effect first last lo hi next limit_st d sz b cap initial encoded` by
-    (mp_tac (Q.INST [`child_lo` |-> `lo:num`, `child_hi` |-> `mid:num`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `child_lo` |-> `lo:num`, `child_hi` |-> `mid:num`,
        `child_next` |-> `child_next:num`, `child_d` |-> `d:num`, `child_sz` |-> `sz:num`,
        `actual` |-> `encoded:venom_state`] abi_scratch_effect_after_address) >>
      asm_simp_tac bool_ss [LESS_EQ_REFL]) >>

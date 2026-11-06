@@ -84,7 +84,7 @@ Proof
   disch_then (qspec_then `ctx` assume_tac) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   `abi_decoder_budget first last b cap t` by
-    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `t:venom_state`]
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `t:venom_state`]
        abi_decoder_budget_transport) >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED

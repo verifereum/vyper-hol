@@ -282,7 +282,7 @@ Proof
   rename1 `abi_decode_sim ctx func initial ready` >>
   qpat_assum `asz = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   `abi_decoder_budget first last b cap ready` by
-    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
       abi_decoder_budget_transport) >>
      impl_tac >- full_simp_tac bool_ss [abi_decoder_address_frame_def] >> asm_simp_tac bool_ss []) >>
   qpat_assum `abi_encoder_buffer_pre (AbiDynArray _ _ _ _) _ _ _ _ _ _ _ _ _ _ _ _`
@@ -410,7 +410,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
   drule_all abi_encode_array_dynamic_body_context >> strip_tac >>
   `site < st.cs_next_id /\ index_site < last /\ site < last /\ owner_st.cs_next_id <= last` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
     `site` |-> `index_site:num`, `slot` |-> `index_slot:num`, `s` |-> `initial:venom_state`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_encoder_buffer_pre (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs)

@@ -49,7 +49,7 @@ Proof
   drule_all abi_encoder_array_prefix_types >> strip_tac >>
   qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  mp_tac (Q.INST [`cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
     abi_encoder_cursor_bounds) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `count_op <> Var (STRING #"%" (toString st.cs_next_var))` by
     (mp_tac (Q.INST [`first` |-> `st.cs_next_var`, `next` |-> `st.cs_next_var`,
@@ -66,7 +66,7 @@ Proof
     (rpt gen_tac >> strip_tac >>
      drule_all (SIMP_RULE bool_ss [LESS_EQ_REFL]
        (Q.INST [`prepared` |-> `st:compile_state`] abi_encoder_cursor_address)) >> simp[]) >>
-  mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `ids` |-> `abi_decoder_ids first last`,
     `fp` |-> `abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial`,
     `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`]
     abi_scratch_address) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>

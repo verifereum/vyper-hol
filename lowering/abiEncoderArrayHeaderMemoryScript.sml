@@ -134,7 +134,7 @@ Proof
   drule abi_encoder_array_memory_typed >> strip_tac >>
   qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  mp_tac (Q.INST [`cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`, `s` |-> `initial:venom_state`]
     abi_encoder_cursor_bounds) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `count_op <> Var (STRING #"%" (toString st.cs_next_var))` by
     (mp_tac (Q.INST [`first` |-> `st.cs_next_var`, `next` |-> `st.cs_next_var`, `op` |-> `count_op:operand`]

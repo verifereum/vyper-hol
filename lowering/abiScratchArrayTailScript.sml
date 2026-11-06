@@ -261,7 +261,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `ids` |-> `abi_decoder_ids first last`,
     `fp` |-> `abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial`,
     `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`]
     abi_scratch_address) >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>

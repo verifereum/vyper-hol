@@ -9,10 +9,10 @@ Theorem abi_decoder_budget_site_bounds:
   FLOOKUP s.vs_allocas site = SOME (p,32) ==>
   b <= p /\ p + 32 <= b + cap
 Proof
-  strip_tac >> drule abi_decoder_budget_reservation >>
-  simp_tac bool_ss [abi_decoder_reservation_def] >> strip_tac >>
-  qpat_x_assum `!id off sz. _` (qspecl_then [`site`, `p`, `32`] mp_tac) >>
-  impl_tac >- gvs[abi_sites_decoder_ids_def] >> simp[]
+  strip_tac >> qpat_x_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [abi_sites_decoder_budget_def] >> strip_tac >>
+  qpat_x_assum `!id off sz. _ ==> sz = 32 /\ _` (qspecl_then [`site`, `p`, `32`] mp_tac) >>
+  asm_rewrite_tac[] >> decide_tac
 QED
 
 Theorem abi_decoder_budget_sites_disjoint:
@@ -37,7 +37,7 @@ Theorem abi_decoder_private_scratch_preserves_slot:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `b <= protected /\ protected + 32 <= b + cap` by
-    (mp_tac (Q.INST [`s` |-> `t:venom_state`, `site` |-> `other:num`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `s` |-> `t:venom_state`, `site` |-> `other:num`,
        `p` |-> `protected:num`] abi_decoder_budget_site_bounds) >> simp[]) >>
   irule abi_decode_footprint_frame_mload >> qexists_tac `[(d,outsz);(slot,32)]` >>
   simp[abi_footprint_disjoint_def, DISJ_IMP_THM, FORALL_AND_THM] >>
@@ -97,8 +97,7 @@ Theorem abi_decoder_bulk_scratch_preservation:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> rpt gen_tac >> strip_tac >>
   `b <= protected /\ protected + 32 <= b + cap` by
-    (mp_tac (Q.INST [`site` |-> `other:num`, `p` |-> `protected:num`]
-       abi_decoder_budget_site_bounds) >> simp[]) >>
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `site` |-> `other:num`, `p` |-> `protected:num`] abi_decoder_budget_site_bounds) >> simp[]) >>
   asm_simp_tac bool_ss [] >> irule abi_decode_footprint_frame_mload >>
   qexists_tac `[(d,outsz)]` >>
   simp[GSYM abi_decode_frame_footprint, abi_footprint_disjoint_def] >>

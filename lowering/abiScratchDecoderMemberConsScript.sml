@@ -63,7 +63,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `abi_scratch_effect first last st.cs_next_id ready.cs_next_id st.cs_next_var
     limit_st d outsz b cap initial prepared` by
-    (mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `lo` |-> `st.cs_next_id`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `lo` |-> `st.cs_next_id`,
       `hi` |-> `ready.cs_next_id`, `sz` |-> `outsz:num`, `actual` |-> `prepared:venom_state`]
       abi_scratch_address_effect) >> asm_simp_tac bool_ss []) >>
   `abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs) d outsz first last b cap prepared` by

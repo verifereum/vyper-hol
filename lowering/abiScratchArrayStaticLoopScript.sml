@@ -68,7 +68,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func ready actual` >>
   `eval_operand (FST (FST coords)) actual = SOME (n2w j)` by
-    (mp_tac (Q.INST [`op` |-> `FST (FST (coords:(operand # operand) # (operand # operand)))`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `op` |-> `FST (FST (coords:(operand # operand) # (operand # operand)))`,
       `w` |-> `n2w j:bytes32`, `s` |-> `ready:venom_state`, `t` |-> `actual:venom_state`,
       `next` |-> `prepared.cs_next_var`, `d` |-> `d+32`, `sz` |-> `output_size-32`,
       `lo` |-> `prepared.cs_next_id`, `hi` |-> `end_st.cs_next_id`] abi_scratch_effect_operand) >>
@@ -81,7 +81,7 @@ Proof
   mp_tac (Q.INST [`ids` |-> `abi_decoder_ids first last`, `next` |-> `st.cs_next_var`,
     `fp` |-> `[(d+32+j*asz,LENGTH (enc ty (EL j avs)))]`] abi_scratch_frame_after_address) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`child_lo` |-> `prepared.cs_next_id`, `child_hi` |-> `end_st.cs_next_id`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `child_lo` |-> `prepared.cs_next_id`, `child_hi` |-> `end_st.cs_next_id`,
     `child_next` |-> `prepared.cs_next_var`, `child_d` |-> `d+32`, `child_sz` |-> `output_size-32`,
     `lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
     `sz` |-> `output_size:num`] abi_scratch_effect_after_address) >>
@@ -119,7 +119,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
   drule_all abi_encode_array_static_body_context >> strip_tac >>
   `owner_st.cs_next_id <= last /\ first <= st.cs_next_id /\ site < last /\ site < st.cs_next_id` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
     `s` |-> `initial:venom_state`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_scratch_input (AbiDynArray ei asz msz F) (Array NONE ty) (ListV avs)
@@ -138,7 +138,7 @@ Proof
     limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`, `output_size`] >> simp[]) >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `active` |-> `T`, `off` |-> `j:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `active` |-> `T`, `off` |-> `j:num`,
     `owned_lo` |-> `st.cs_next_id`, `owned_hi` |-> `end_st.cs_next_id`, `next` |-> `owner_st.cs_next_var`,
     `sz` |-> `output_size:num`] abi_scratch_cursor_protected) >>
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
@@ -179,7 +179,7 @@ Proof
   qpat_assum `abi_scratch_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
   `site < last /\ site+1 <= last` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `off` |-> `j:num`,
     `s` |-> `initial:venom_state`] abi_encoder_cursor_bounds) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_decoder_operand_live next ip` by
@@ -201,7 +201,7 @@ Proof
   mp_tac (Q.INST [`ei` |-> `AbiDynArray ei asz msz F`, `at` |-> `Array NONE ty`, `av` |-> `ListV avs`,
     `st` |-> `owner_st`, `lo` |-> `site:num`, `hi` |-> `site+1`, `sz` |-> `output_size:num`]
     abi_scratch_input_effect) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `active` |-> `T`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `st` |-> `owner_st`, `cursor_op` |-> `ip:operand`, `active` |-> `T`,
     `off` |-> `j:num`, `next_off` |-> `SUC j`, `owned_lo` |-> `site:num`, `owned_hi` |-> `site+1`,
     `sz` |-> `output_size:num`] abi_scratch_cursor_registered) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>

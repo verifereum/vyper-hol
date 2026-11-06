@@ -36,7 +36,7 @@ Proof
   `st.cs_next_id < prepared.cs_next_id /\ st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
   drule_all abi_scratch_owned_prefix_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial ready` >>
-  mp_tac (Q.INST [`site` |-> `st.cs_next_id`, `stop` |-> `prepared.cs_next_id`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `site` |-> `st.cs_next_id`, `stop` |-> `prepared.cs_next_id`,
     `next` |-> `st.cs_next_var`, `sz` |-> `output_size:num`, `actual` |-> `ready:venom_state`]
     abi_scratch_prefix_effect) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `prepared.cs_next_id`,
@@ -92,7 +92,7 @@ Proof
     `initial` |-> `encoded:venom_state`] abi_encoder_load_reach) >>
   impl_tac >- asm_simp_tac (srw_ss()) [w2n_n2w] >> strip_tac >>
   rename1 `abi_decode_sim ctx func encoded actual` >>
-  mp_tac (Q.INST [`initial` |-> `encoded:venom_state`, `actual` |-> `actual:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `initial` |-> `encoded:venom_state`, `actual` |-> `actual:venom_state`,
     `next` |-> `st.cs_next_var`, `hi` |-> `end_st.cs_next_id`, `sz` |-> `output_size:num`]
     abi_scratch_address_effect) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>

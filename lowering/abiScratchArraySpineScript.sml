@@ -37,7 +37,7 @@ Proof
   drule abi_encode_array_tail_shape >> strip_tac >>
   drule_all abi_encoder_member_tail_transport >> strip_tac >>
   `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
     `t` |-> `ready:venom_state`, `ids` |-> `abi_decoder_ids first last`] abi_scratch_address) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_scratch_input ei at av prepared src (SND ops) sb source_cap (d+off)

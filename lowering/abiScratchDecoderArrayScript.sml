@@ -167,7 +167,7 @@ Proof
   `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by simp[Once type_memory_bytes_def] >>
   `abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
     limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual` by
-    (mp_tac (Q.INST [`child_lo` |-> `st.cs_next_id`, `child_hi` |-> `loop_st.cs_next_id`,
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `child_lo` |-> `st.cs_next_id`, `child_hi` |-> `loop_st.cs_next_id`,
        `child_next` |-> `st.cs_next_var`, `child_d` |-> `d:num`, `child_sz` |-> `32:num`,
        `lo` |-> `st.cs_next_id`, `hi` |-> `loop_st.cs_next_id`, `next` |-> `st.cs_next_var`,
        `sz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`,

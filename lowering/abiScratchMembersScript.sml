@@ -474,7 +474,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   mp_tac (Q.INST [`st` |-> `prepared:compile_state`, `s` |-> `ready:venom_state`]
     abi_scratch_members_child_buffer) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
-  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`, `next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
     `t` |-> `ready:venom_state`] abi_scratch_address) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_encoder_tuple_prefix hl pre pvs d ready.vs_memory` by
