@@ -13,7 +13,7 @@ Ancestors
   lowerDloadConfiguredSuccessor lowerDloadOrdinaryNext lowerDloadSourceInterface venomInstProps
   lowerDloadIndexedStageEntry lowerDloadTopEntryControl ctxLookupAgreeHelpers
   contextCodegenRel venomExecSemantics venomInst venomExecProofs venomWf
-  ptrDiscipline list rich_list finite_map pred_set words
+  ptrDiscipline list rich_list finite_map pred_set words o1ContractSimplifyCfg
 
 (* Diagnostic quotation only: not a definition, theorem, or closure claim.
    CS, lo, rpolicy and view are fixed environmental parameters. Context
@@ -4194,4 +4194,89 @@ Proof
   mp_tac (Q.INST [`b` |-> `T`] ld_recursive_guarded_call_clause) >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   pure_rewrite_tac [IMP_CLAUSES, AND_CLAUSES] >> disch_then ACCEPT_TAC
+QED
+
+val ld_recursive_combined_return_zero = ld_call_zero ld_recursive_combined_candidate;
+
+(* Opcode/supply inversion only: independent of recursive witness packaging. *)
+Theorem ld_supply_intret_anchor[local]:
+  ptr_discipline floor CS vs0 /\ MEM fn CS.ctx_functions /\
+  MEM i (fn_insts fn) /\ lower_dload_inst_supply a1 i = (code,a2) /\
+  MEM j code /\ step_inst fuel CT j t = IntRet ret tend ==>
+  j = i /\ i.inst_opcode = RET /\ code = [i] /\ a2 = a1 /\
+  j.inst_opcode = RET /\ tend = t /\ ret.iret_adopt_fmp = NONE
+Proof
+  strip_tac >>
+  drule o1ContractSimplifyCfgTheory.step_inst_intret_opcodes >> strip_tac >>
+  `j = i` by
+    (drule o1ContractLowerDloadTheory.lower_dload_inst_supply_control >>
+     disch_then irule >> fs[is_terminator_def]) >>
+  `~MEM i.inst_opcode [MEMTOP; DRET; GETFMP; SETFMP; RETFMP; FMP_PARAM]` by
+    (drule_all lowerDloadSourceInterfaceTheory.ld_ctx_ptr_excluded_opcodes >> simp[]) >>
+  `i.inst_opcode = RET` by
+    (qpat_assum `MEM j.inst_opcode _` mp_tac >>
+     qpat_assum `~MEM i.inst_opcode _` mp_tac >>
+     qpat_assum `j = i` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `code = [i] /\ a2 = a1` by
+    (qpat_x_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     simp[lower_dload_inst_supply_def]) >>
+  `j.inst_opcode = RET /\ tend = t /\ ret.iret_adopt_fmp = NONE` by
+    (qpat_assum `step_inst fuel CT j t = _` mp_tac >>
+     qpat_assum `j = i` mp_tac >> qpat_assum `i.inst_opcode = RET` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `i.inst_opcode <> INVOKE` by simp[] >>
+     drule step_inst_non_invoke >>
+     disch_then (qspecl_then [`fuel`, `CT`, `t`] mp_tac) >>
+     simp[step_inst_base_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  asm_rewrite_tac[]
+QED
+
+Theorem ld_recursive_combined_return_anchor:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next /\
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t /\
+  step_inst fuel CT j t = IntRet ret tend ==>
+  (^ld_recursive_combined_return_zero) vs0 CT stk un gn j t /\
+  j.inst_opcode = RET /\ tend = t /\ ret.iret_adopt_fmp = NONE
+Proof
+  reverse (BETA_TAC >> strip_tac >>
+    drule o1ContractSimplifyCfgTheory.step_inst_intret_opcodes >> strip_tac)
+  >- (drule_all ld_revert_pair_interval_step >>
+      disch_then (qspecl_then [`t`, `tend`, `ret`, `fuel`, `CT`] mp_tac) >>
+      simp[]) >>
+  `MEM j code` by
+    (qpat_x_assum `code <> []` mp_tac >>
+     qpat_x_assum `j = _` mp_tac >>
+     TRY (qpat_x_assum `n < LENGTH code` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `code` >> simp[] >>
+     Cases_on `n` >> simp[] >> metis_tac[MEM_EL]) >>
+  `MEM i (fn_insts fn)` by
+    (qpat_assum `active_inst fn i s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `?floor. ptr_discipline floor CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+  `MEM fn CS.ctx_functions` by asm_rewrite_tac[MEM_APPEND, MEM] >>
+  drule_all ld_supply_intret_anchor >> strip_tac >>
+  TRY (qpat_x_assum `0 < n` mp_tac >>
+       qpat_x_assum `n < LENGTH code` mp_tac >>
+       qpat_x_assum `code = [i]` SUBST_ALL_TAC >> simp[] >> NO_TAC) >>
+  reverse conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`astk`, `gstk`, `k`, `L`, `AP`, `AG`, `tn`, `fn`, `i`,
+    `s`, `ta`, `ua`, `V`, `U`, `E`, `H`, `BP`, `BH`, `live`, `keys`, `A`,
+    `suspended`, `f`, `fa`, `fb`, `bb`, `gb`, `a0`, `a1`, `a2`, `a3`,
+    `pre`, `post`, `p`, `code`, `tail`, `bpre`, `bpost`, `qpre`, `qpost`,
+    `supports`, `savedkeys`, `s0`, `n`] >>
+  asm_rewrite_tac [] >> simp[] >>
+  qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
+  asm_rewrite_tac []
 QED
