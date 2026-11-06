@@ -3,6 +3,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
+  removeUnusedSsaProofs
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
 
 Theorem dfs_saved_parent_origin_mutual[local]:
@@ -624,4 +625,25 @@ Proof
   strip_tac >> qpat_x_assum `fn_dominates _ _ _` mp_tac >>
   simp[fn_dominates_def] >>
   disj2_tac >> qexists_tac `pre` >> simp[]
+QED
+
+Theorem regional_phi_edge_source_fresh:
+  !fn bb phi pred w.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI /\
+    MEM (pred,w) (phi_pairs phi.inst_operands) /\
+    ~fn_dominates fn bb.bb_label pred ==>
+    !inst. MEM inst bb.bb_instructions ==> ~MEM w inst.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `phi_edge_uses_wf fn bb phi` by
+    (gvs[def_dominates_uses_def] >> metis_tac[]) >>
+  `?pred_bb. MEM pred_bb fn.fn_blocks /\ pred_bb.bb_label = pred /\
+     def_available_at fn pred_bb NONE w` by
+    (gvs[phi_edge_uses_wf_def] >> metis_tac[]) >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  rpt strip_tac >>
+  `def_bb = bb` by metis_tac[ssa_unique_output_block] >> gvs[]
 QED
