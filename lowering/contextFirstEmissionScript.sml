@@ -512,3 +512,72 @@ Proof
   simp_tac bool_ss [compile_load_calldata_def, compile_alloc_buffer_def,
     LET_THM] >> context_fe_tac
 QED
+
+Theorem first_emission_lit_byte_offset:
+  !a x b. compile_lit_byte_offset op off a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rewrite_tac[compile_lit_byte_offset_def] >> IF_CASES_TAC
+  >- metis_tac[first_emission_return] >>
+  Cases_on `op` >> simp_tac (srw_ss()) []
+  >- metis_tac[first_emission_return]
+  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
+      drule_at (Pos (el 2)) (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
+  drule_at (Pos (el 2)) (cj 3 first_emission_emit_helpers) >> simp[]
+QED
+
+Theorem first_emission_imm_copy:
+  !nw ctor imm src dst off a x b.
+    compile_imm_copy_to_memory ctor imm src dst nw off a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct
+  >- (simp_tac bool_ss [compile_imm_copy_to_memory_def] >>
+      rpt gen_tac >> metis_tac[first_emission_return]) >>
+  ntac 5 gen_tac >> simp_tac bool_ss [Once compile_imm_copy_to_memory_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_lit_byte_offset >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >>
+      MATCH_ACCEPT_TAC first_emission_imm_load) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_lit_byte_offset >>
+  gen_tac >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
+      drule_at (Pos (el 2)) (cj 2 first_emission_emit_helpers) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem first_emission_ensure_in_memory:
+  !a x b. compile_ensure_in_memory op loc nbytes nw ctor imm a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Cases_on `loc` >> simp_tac bool_ss [compile_ensure_in_memory_def,
+    data_location_case_def, compile_alloc_buffer_def, compile_storage_to_memory_def,
+    compile_transient_to_memory_def, LET_THM]
+  >- metis_tac[first_emission_return]
+  >- context_fe_tac
+  >- context_fe_tac
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- context_fe_tac >>
+      gen_tac >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+      >- MATCH_ACCEPT_TAC first_emission_imm_copy >>
+      metis_tac[first_emission_return]) >>
+  context_fe_tac
+QED
