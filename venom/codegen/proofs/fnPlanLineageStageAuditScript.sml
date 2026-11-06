@@ -641,3 +641,85 @@ QED
    and target-spill-preservation lemmas instead of uncapped inventory mono.
    No global reachability or suffix-local availability follows from these
    local computations. Optimistic code shielding remains separate. *)
+
+(* Local producer probe: the prefix is not claimed reachable. *)
+Definition optimistic_producer_core_def:
+  optimistic_producer_core = [Var "a"] ++ REPLICATE 16 (Lit 0w) ++ [Var "b"; Lit 0w]
+End
+
+Definition optimistic_producer_reordered_def:
+  optimistic_producer_reordered prefix =
+    SND (reorder_plan dfg_empty [Var "a"]
+      (SND (emit_input_plan ISZERO [Var "a"] ["out"; "b"]
+        ((init_plan_state 0) with ps_stack := prefix ++ optimistic_producer_core))))
+End
+
+Theorem optimistic_producer_spills_query_probe:
+  Var "b" IN FDOM (optimistic_producer_reordered []).ps_spilled /\
+  ~MEM (Var "b") (optimistic_producer_reordered []).ps_stack /\
+  MEM (Var "b") (optimistic_producer_reordered [Var "b"]).ps_stack
+Proof
+  EVAL_TAC
+QED
+
+Definition optimistic_producer_pre_swap_def:
+  optimistic_producer_pre_swap prefix =
+    (optimistic_producer_reordered prefix) with ps_stack :=
+      stack_pop 1 (optimistic_producer_reordered prefix).ps_stack ++ [Var "out"]
+End
+
+Theorem optimistic_producer_enabled_query_probe:
+  (mk_inst 0 ISZERO [Var "a"] ["out"]).inst_outputs <> [] /\
+  FILTER (\v. MEM v ["out"; "b"]) ["out"] <> [] /\
+  ~operand_equiv dfg_empty (Var "out") (Var "b") /\
+  stack_get_depth (Var "b") (optimistic_producer_pre_swap []).ps_stack = NONE /\
+  stack_get_depth (Var "b") (optimistic_producer_pre_swap [Var "b"]).ps_stack <> NONE /\
+  FST (optimistic_swap_plan dfg_empty (mk_inst 0 ISZERO [Var "a"] ["out"])
+    ["out"; "b"] F (optimistic_producer_pre_swap [])) = [] /\
+  FST (optimistic_swap_plan dfg_empty (mk_inst 0 ISZERO [Var "a"] ["out"])
+    ["out"; "b"] F (optimistic_producer_pre_swap [Var "b"])) <> []
+Proof
+  EVAL_TAC
+QED
+
+Theorem optimistic_producer_native_ops_probe:
+  FST (generate_regular_inst_plan lv dfg_empty cfg fn
+    (mk_inst 0 ISZERO [Var "a"] ["out"]) ["out"; "b"] F F "block"
+    ((init_plan_state 0) with ps_stack := optimistic_producer_core)) <>
+  FST (generate_regular_inst_plan lv dfg_empty cfg fn
+    (mk_inst 0 ISZERO [Var "a"] ["out"]) ["out"; "b"] F F "block"
+    ((init_plan_state 0) with ps_stack := [Var "b"] ++ optimistic_producer_core))
+Proof
+  EVAL_TAC
+QED
+
+(* Optimistic producer ledger (E0253 follow-up):
+   The new checked selective-spill fixture starts with a common core hit for
+   the enabled query b, empty spills, and a hidden b in only one lower prefix.
+   Input preparation/reorder spills the sole core b; the retained prefix b
+   then becomes visible to optimistic_swap after operand consumption and the
+   live output push. The full native ISZERO plans emit different operations.
+   This is a local closure obstruction, NOT a reachable-program witness.
+
+   Thus even initial suffix-local live coverage plus empty spills does not
+   preserve query shielding through ordinary selective spilling. A sufficient
+   stronger origin obligation is absence of all currently live names in the
+   lower prefixes, together with suffix-or-spill availability. Selective spill
+   cannot introduce a prefix occurrence, but preserving the chosen physical
+   boundary and producing suffix coverage require their own stage theorems.
+   LowerPrefix's exact-hit/swap frames remain the consumer interface; no new
+   conditional optimistic frame is needed here.
+
+   Initial-producer obligations not discharged by these probes:
+   (1) Join/PHI residual prefixes may contain incoming bases (the checked PHI
+       collision probes above explicitly allow this). Liveness transfer must
+       show any base remaining in such a prefix is not queried live later,
+       or a common suffix hit must survive for every relevant query stage.
+   (2) PHI duplicate/rename/pop stages must establish the chosen suffix and
+       prefix-exclusion property for actual subsequent live names, including
+       names shared by repeated bases; global SSA alone is not a local proof.
+   (3) Ordinary liveness transfer must propagate exclusion to the next live
+       set, with fresh outputs created in the suffix and actual pop/spill
+       windows preserving the boundary. Native live availability (Setup) is
+       budget-free now, but supplies neither exclusion nor suffix-locality.
+   No reachability, long-JMP coverage, or frozen-task falsehood is asserted. *)
