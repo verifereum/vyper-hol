@@ -1728,9 +1728,9 @@ Resume dynamic_scalar_run_exact[string]:
   gvs[vyperValueTheory.evaluate_type_def]
 QED
 
-Finalise dynamic_scalar_run_exact[local]
+Finalise dynamic_scalar_run_exact
 
-Theorem dynamic_operand_packet[local]:
+Theorem dynamic_operand_packet:
   is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   stmt_state_rel ctx func cenv cx es s /\ expr_val_rel cx src v op s /\
@@ -1899,7 +1899,7 @@ Proof
       venom_state_component_equality]
 QED
 
-Theorem dynamic_run_read_fresh[local]:
+Theorem dynamic_run_read_fresh:
   !is st ss tt.
     dynamic_writes_fresh st is /\ run_inst_seq is ss = OK tt ==>
     tt = ss with vs_vars := tt.vs_vars /\
@@ -2220,7 +2220,7 @@ Proof
   (impl_tac >- (simp[] >> fs[EVERY_MEM])) >> metis_tac[]
 QED
 
-Theorem dynamic_run_post[local]:
+Theorem dynamic_run_post:
   dynamic_straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
@@ -2441,7 +2441,7 @@ QED
 
 Finalise dynamic_scalar_counted_fragment
 
-Theorem dynamic_expr_post_convert[local]:
+Theorem dynamic_expr_post_convert:
   expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
   stmt_state_rel ctx func cenv cx es' ss /\
   evaluate_type (get_tenv cx) ann = SOME dtv /\
