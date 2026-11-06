@@ -9,7 +9,7 @@
    theorem; it becomes a one-liner once that branch merges. *)
 Theory whitelistS2
 Ancestors
-  vyperLoweringCorrect
+  vyperLoweringCorrect whitelistS2Shape whitelistS2RawBaseShape
 
 Theorem lower_vyper_runtime_unit_source_unit_ok_full:
   !tops rpolicy unit layouts addr art.
