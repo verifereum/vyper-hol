@@ -28,6 +28,32 @@ Proof
   metis_tac[ptr_value_transport_birth_extension]
 QED
 
+(* Shared operational boundary for both unrestricted and opaque-safe transport. *)
+Theorem ptr_alloca_source_success:
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit sz] /\
+  inst.inst_outputs = [out] /\
+  (!base size. FLOOKUP s.vs_allocas inst.inst_id = SOME (base,size) ==>
+    size = w2n sz) ==>
+  ?s' base. step_inst fuel C inst s = OK s' /\
+    FLOOKUP s'.vs_allocas inst.inst_id = SOME (base,w2n sz) /\
+    s'.vs_vars = (update_var out (n2w base) s).vs_vars /\
+    s'.vs_return_pc_token = s.vs_return_pc_token /\
+    s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
+    s'.vs_labels = s.vs_labels
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  asm_simp_tac bool_ss [step_inst_non_invoke] >>
+  pure_once_rewrite_tac [step_inst_base_def] >>
+  asm_rewrite_tac [opcode_case_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (simp[exec_alloca_def] >>
+      qexistsl_tac [`s.vs_alloca_next`] >> simp[update_var_def, FLOOKUP_UPDATE]) >>
+  PairCases_on `x` >>
+  qpat_x_assum `!base size. _` (mp_tac o Q.SPECL [`x0`,`x1`]) >>
+  simp[] >> strip_tac >> simp[exec_alloca_def, update_var_def]
+QED
+
 Theorem ptr_alloca_transport:
   inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit sz] /\
   inst.inst_outputs = [out] /\
@@ -50,23 +76,8 @@ Theorem ptr_alloca_transport:
         (step_taint inst s s' tn) s' t')
 Proof
   strip_tac >>
-  `?s' base. step_inst fuel C inst s = OK s' /\
-    FLOOKUP s'.vs_allocas inst.inst_id = SOME (base,w2n sz) /\
-    s'.vs_vars = (update_var out (n2w base) s).vs_vars /\
-    s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
-    s'.vs_labels = s.vs_labels` by
-    (`inst.inst_opcode <> INVOKE` by simp[] >>
-     asm_simp_tac bool_ss [step_inst_non_invoke] >>
-     pure_once_rewrite_tac [step_inst_base_def] >>
-     asm_rewrite_tac [opcode_case_def] >>
-     Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-     >- (simp[exec_alloca_def] >>
-         qexistsl_tac [`s.vs_alloca_next`] >> simp[update_var_def, FLOOKUP_UPDATE]) >>
-     PairCases_on `x` >>
-     qpat_x_assum `!base size. _` (mp_tac o Q.SPECL [`x0`,`x1`]) >>
-     simp[] >> strip_tac >>
-     simp[exec_alloca_def] >>
-     qexists_tac `x0` >> gvs[update_var_def]) >>
+  drule_all ptr_alloca_source_success >>
+  disch_then (qspecl_then [`fuel`,`C`] strip_assume_tac) >>
   rename1 `FLOOKUP s'.vs_allocas inst.inst_id = SOME (addr,w2n sz)` >>
   qexistsl_tac [`s'`,`addr`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!base size. FLOOKUP s.vs_allocas _ = _ ==> _` kall_tac >>
