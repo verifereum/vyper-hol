@@ -375,3 +375,32 @@ Proof
     (irule analyzed_live_out_jmp >> simp[] >> metis_tac[]) >>
   gvs[EXTENSION, MEM_MAP] >> metis_tac[]
 QED
+
+Theorem analyzed_active_cleanup_resources:
+ !fn pred succ pb sb ps base ops qs.
+ codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+ cfg_preds_of (cfg_analyze fn) succ = [pred] /\
+ 1 < LENGTH (cfg_succs_of (cfg_analyze fn) pred) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)))) ps /\
+ generated_plan_state_wf_marked base ps /\
+ clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn sb ps = (ops,qs)
+ ==>
+ generated_plan_state_wf_marked base qs /\
+ lineage_inventory
+   (set (MAP Var (input_vars_from pred sb.bb_instructions
+      (live_vars_at (liveness_analyze fn) succ 0))) UNION FDOM ps.ps_spilled) qs /\
+ ?m core. lineage_core m core qs /\
+   !pending. residual_budget_wf base pending (qs with ps_stack := core)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `wf_function fn` by gvs[codegen_ready_fn_def] >>
+ `sb.bb_label = succ` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+ drule_all analyzed_live_out_edge_subset >> disch_tac >>
+ irule native_active_cleanup_resources >> simp[] >>
+ goal_assum (drule_at (Pat `clean_stack_plan _ _ _ _ _ = _`)) >> simp[] >>
+ goal_assum (drule_at Any) >>
+ gvs[SUBSET_DEF, MEM_MAP] >> metis_tac[]
+QED
