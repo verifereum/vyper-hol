@@ -7570,6 +7570,49 @@ Proof
   simp[] >> disch_then drule >> simp[] >> metis_tac[]
 QED
 
+Theorem alias_entry_use_origin:
+  wf_function fn /\ def_dominates_uses fn /\ fn_entry_label fn = SOME lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) ==>
+  ?k. k < i /\ MEM x (EL k bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `~alias_pending_phi fn lbl i x` by
+    metis_tac[alias_pending_phi_past_prefix] >>
+  `alias_path_available fn lbl i x` by
+    metis_tac[alias_use_available_or_pending] >>
+  qpat_x_assum `alias_path_available _ _ _ _` mp_tac >>
+  simp[alias_path_available_def] >>
+  disch_then (qspec_then `[lbl]` mp_tac) >>
+  `is_fn_path fn [lbl]` by
+    (gvs[fn_entry_label_def, entry_block_def, AllCaseEqs()] >>
+     simp[is_fn_path_def]) >>
+  simp[] >> strip_tac >> gvs[inst_defs_def] >> metis_tac[]
+QED
+
+Theorem alias_lineage_use_origin:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  run_block fuel ctx bb s = OK s' /\
+  (!pred y. s.vs_prev_bb = SOME pred /\
+    MEM y (input_vars_from pred bb.bb_instructions (live_vars_at liveness lbl 0)) ==>
+      plan_holds ps (Var y)) /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\ i < LENGTH bb.bb_instructions /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) ==>
+  plan_holds ps (Var x) \/ ?k. k < i /\ MEM x (EL k bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn = SOME lbl`
+  >- (disj2_tac >> irule alias_entry_use_origin >>
+      goal_assum (drule_at Any) >> simp[] >>
+      gvs[codegen_ready_fn_def] >> metis_tac[]) >>
+  drule_at (Pat `lineage_state _ _ _ _ _ _ _`) alias_lineage_nonentry_use_origin >>
+  simp[] >> disch_then drule >> simp[] >> metis_tac[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
