@@ -78,8 +78,11 @@ Ancestors
 Theorem compile_subscript_map_case:
   !nocalls ctx func cenv cx ann obj idx kt vt.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if base_through_dynarray obj
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     place_type cenv obj = MapPT kt vt ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
@@ -141,8 +144,11 @@ QED
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if base_through_dynarray obj
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
@@ -156,19 +162,22 @@ QED
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) ==>
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if base_through_dynarray obj
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >> Cases_on `place_type cenv obj`
-  >- metis_tac[compile_subscript_map_case] >>
+  >- (irule compile_subscript_map_case >> fs[] >> first_assum ACCEPT_TAC) >>
   rename1 `ValPT bt` >>
   Cases_on `bt <> expr_type obj`
   >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
   gvs[] >> simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   drule_all subscript_base_array_or_tuple >> strip_tac
   >- (`expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-        metis_tac[compile_subscript_array_case] >>
+        (irule compile_subscript_array_case >> fs[] >> first_assum ACCEPT_TAC) >>
       qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
       simp[expr_vv_case_def] >>
       disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>

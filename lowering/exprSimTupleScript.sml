@@ -490,7 +490,10 @@ Theorem eval_expr_tuple_subscript[local]:
   !cx ann obj ity k es.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) es =
     (do r <- eval_expr cx obj;
-        select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))) od)
+        r' <- (if base_through_dynarray obj then
+                 do v <- read_result cx r; return (Value v) od
+               else return r);
+        select_result cx (expr_type obj) r' (ValueSubscript (IntV (&k))) od)
       es
 Proof
   rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
@@ -991,9 +994,18 @@ Proof
       irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
       rpt strip_tac >>
       drule_all tuple_base_read >> strip_tac >>
-      drule select_tuple_read >>
-      disch_then (drule_at (Pat `select_result _ _ _ _ _ = _`)) >>
-      simp[] >> strip_tac >> gvs[] >>
+      `es' = es1 /\ ?tv'. res = INL tv' /\
+         read_result cx tv' es1 = (INL (EL k vs),es1)` by
+        (Cases_on `base_through_dynarray obj` >>
+         gvs[bind_def, return_def]
+         >- (`read_result cx (Value (ArrayV (TupleV vs))) es1 =
+                (INL (ArrayV (TupleV vs)),es1)` by simp[read_result_def, return_def] >>
+             drule select_tuple_read >>
+             disch_then (drule_at (Pat `select_result _ _ _ _ _ = _`)) >>
+             simp[popped_at_elem_def]) >>
+         drule select_tuple_read >>
+         disch_then (drule_at (Pat `select_result _ _ _ _ _ = _`)) >>
+         simp[]) >> gvs[] >>
       irule tuple_vv_post >> simp[Abbr `off`] >>
       conj_tac >- metis_tac[] >>
       qexistsl [`btv`, `vs`] >> simp[]) >>

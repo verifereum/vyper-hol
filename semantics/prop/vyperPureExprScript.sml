@@ -146,8 +146,11 @@ QED
 
 Theorem case_Subscript[local]:
   ∀cx ty e1 e2.
-    (∀s'' tv1 t.
-       eval_expr cx e1 s'' = (INL tv1, t) ⇒
+    (∀s'' tv1 t s''' tv1' t'.
+       eval_expr cx e1 s'' = (INL tv1, t) ∧
+       (if base_through_dynarray e1 then
+          do v <- read_result cx tv1; return (Value v) od
+        else return tv1) s''' = (INL tv1', t') ⇒
        ∀st res st'.
          eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st = st') ∧
     (∀st res st'.
@@ -158,6 +161,9 @@ Theorem case_Subscript[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  rpt (qpat_x_assum `!s res t s' res' t'. _` drule_all >> strip_tac) >>
+  Cases_on `base_through_dynarray e1` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
