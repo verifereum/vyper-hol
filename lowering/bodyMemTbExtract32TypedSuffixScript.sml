@@ -45,7 +45,8 @@ Theorem extract32_suffix_success_path:
       eval_operand op t = SOME (typed_val_to_w256 (BaseTV bt) v) /\
       t = s with vs_vars := t.vs_vars /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      fresh_vars_wrt sb t
+      fresh_vars_wrt sb t /\
+      run_inst_seq code s = OK t
 Proof
   strip_tac >> drule_all extract32_suffix_success_run >> strip_tac >>
   `w2n (n2w (p + 32):bytes32) + w2n (n2w (LENGTH bs):bytes32) <= s.vs_alloca_next` by

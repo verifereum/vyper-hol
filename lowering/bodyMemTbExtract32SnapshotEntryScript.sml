@@ -32,7 +32,7 @@ Proof
   pure_rewrite_tac[DROP_LENGTH_APPEND] >> REFL_TAC
 QED
 
-Theorem extract32_snapshot_entry_frame[local]:
+Theorem extract32_snapshot_entry_frame:
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (t with vs_vars := s.vs_vars) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>

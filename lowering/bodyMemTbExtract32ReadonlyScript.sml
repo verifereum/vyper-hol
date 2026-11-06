@@ -44,7 +44,7 @@ Proof
   metis_tac[arithmeticTheory.LESS_ADD_SUC]
 QED
 
-Theorem extract32_suffix_output_range[local]:
+Theorem extract32_suffix_output_range:
   compile_extract32_load l d off sa = (raw,sc) /\
   compile_clamp_basetype raw ty sc = (op,sb) ==>
   sa.cs_next_var <= sb.cs_next_var /\
