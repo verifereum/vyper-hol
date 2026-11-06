@@ -1636,12 +1636,20 @@ val ld_recursive_block_zero =
        list_mk_conj [b, ``^n = 0``, ``^code = [^i]``, ``^a2 = ^a1``,
          ``^j = ^i``, ``^t = ^ta``, ``^un = ^ua``])) end;
 
-Theorem ld_recursive_block_anchor:
-  (^ld_recursive_candidate) vs0 CT stk un gn j t /\
+val ld_recursive_block_witness_candidate =
+  let val (args,b) = strip_abs ld_recursive_candidate
+      val (normal,exceptional) = dest_disj b
+  in list_mk_abs(args,mk_disj(ld_retain_saved_normal normal,exceptional)) end;
+val ld_recursive_block_witness_zero =
+  let val (args,b) = strip_abs ld_recursive_block_zero
+  in list_mk_abs(args,ld_retain_saved_normal b) end;
+
+Theorem ld_recursive_block_anchor_witness[local]:
+  !R. (^ld_recursive_block_witness_candidate) vs0 CT stk un gn j t /\
   is_terminator j.inst_opcode /\ step_inst fuel CT j t = OK z ==>
-  (^ld_recursive_block_zero) vs0 CT stk un gn j t
+  (^ld_recursive_block_witness_zero) vs0 CT stk un gn j t
 Proof
-  reverse (BETA_TAC >> strip_tac)
+  gen_tac >> reverse (BETA_TAC >> strip_tac)
   >- (drule_all ld_revert_pair_interval_step >>
       disch_then (qspecl_then [`z`, `t`, `ret`, `fuel`, `CT`] mp_tac) >>
       simp[]) >>
@@ -1671,9 +1679,19 @@ Proof
     `suspended`, `f`, `fa`, `fb`, `bb`, `gb`, `a0`, `a1`, `a2`, `a3`,
     `pre`, `post`, `p`, `code`, `tail`, `bpre`, `bpost`, `qpre`, `qpost`,
     `supports`, `savedkeys`, `s0`, `n`] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   asm_rewrite_tac [] >> simp[] >>
   qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
   asm_rewrite_tac []
+QED
+
+Theorem ld_recursive_block_anchor:
+  (^ld_recursive_candidate) vs0 CT stk un gn j t /\
+  is_terminator j.inst_opcode /\ step_inst fuel CT j t = OK z ==>
+  (^ld_recursive_block_zero) vs0 CT stk un gn j t
+Proof
+  qspec_then `\E astk gstk savedkeys. T` mp_tac ld_recursive_block_anchor_witness >>
+  BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
 val ld_recursive_block_goal =
@@ -1691,16 +1709,26 @@ val ld_recursive_block_anchor_goal =
     val post' = subst [ld_recursive_candidate |-> ld_recursive_post_anchor] post
   in list_mk_forall(args,mk_imp(mk_conj(prem,mk_comb(mk_var("Q", ``:venom_state -> bool``),target)),post')) end;
 
-Theorem ld_recursive_block_clause_anchor[local]:
-  !Q.
+val ld_recursive_block_witness_anchor_goal =
+  let
+    val (args,body) = strip_forall ld_recursive_block_goal
+    val (prem,post) = dest_imp body
+    val target = List.last (snd(strip_comb post))
+    val prem' = subst [ld_recursive_candidate |-> ld_recursive_block_witness_candidate] prem
+    val post' = subst [ld_recursive_candidate |-> ld_recursive_ordinary_witness_post] post
+  in list_mk_forall(args,mk_imp(mk_conj(prem',
+       mk_comb(mk_var("Q", ``:venom_state -> bool``),target)),post')) end;
+
+Theorem ld_recursive_block_clause_witness[local]:
+  !R Q.
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
-  ^ld_recursive_block_anchor_goal
+  ^ld_recursive_block_witness_anchor_goal
 Proof
-  gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  drule_all ld_recursive_block_anchor >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all ld_recursive_block_anchor_witness >>
   qpat_x_assum `(\vs0 CT projected_stk un gn j t. _) _ _ _ _ _ _ _` kall_tac >>
   BETA_TAC >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >>
@@ -1847,7 +1875,8 @@ Proof
        (irule MEM_lookup_block >> fs[fn_labels_def]) >>
      gvs[get_instruction_def]) >>
   Cases_on `in_revert_forward fn' s1'`
-  >- (irule (BETA_RULE ld_recursive_configured_revert_anchor) >>
+  >- (BETA_TAC >> disj2_tac >>
+      irule (BETA_RULE ld_recursive_configured_revert_exceptional) >>
       goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `lower_dload_insts_supply _ (TAKE _ _) = _`)) >>
       goal_assum (drule_at (Pat `lower_dload_blocks_supply _ _ = _`)) >>
@@ -1878,6 +1907,7 @@ Proof
     `TAKE s1'.vs_inst_idx bb'.bb_instructions`,`entrycode`,`entrytail`,
     `pre'`,`post'`,`gp`,`gt`,`supports`,`savedkeys`,`s0`,`0`] >>
   (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
   rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >>
   TRY (asm "saved" mp_tac >> simp[NoAsms] >> NO_TAC) >>
@@ -1893,6 +1923,19 @@ Proof
     (qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
      rpt conj_tac >> first_assum ACCEPT_TAC)]
+QED
+
+Theorem ld_recursive_block_clause_anchor[local]:
+  !Q.
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_block_anchor_goal
+Proof
+  gen_tac >> qspecl_then [`\E astk gstk savedkeys. T`, `Q`]
+    mp_tac ld_recursive_block_clause_witness >>
+  BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
 Theorem ld_recursive_block_clause:
@@ -3953,4 +3996,47 @@ Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   simp_tac pure_ss [AC CONJ_ASSOC CONJ_COMM] >>
   disch_then ACCEPT_TAC
+QED
+
+val ld_recursive_combined_block_fixed_goal =
+  let val (v0::ct::rest,b) = strip_forall ld_recursive_combined_block_goal
+  in subst [v0 |-> mk_var("vs0",type_of v0),
+            ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_recursive_combined_block_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_combined_block_fixed_goal
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule ld_recursive_combined_saved_forget >> disch_tac >>
+  `alloca_inv s /\ (!f i st tv. MEM (f,i,st,tv) stk ==> alloca_inv st)` by
+    (qpat_assum `(^ld_recursive_combined_candidate) _ _ _ _ _ _ _`
+       (mp_tac o BETA_RULE) >>
+     disch_then (fn th => assume_tac (CONJUNCT1 th) >>
+                         assume_tac (CONJUNCT1 (CONJUNCT2 th))) >>
+     asm_rewrite_tac []) >>
+  `alloca_inv s'` by
+    (irule venomMemPropsTheory.alloca_inv_step_inst >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  `alloca_inv s1` by
+    (qpat_assum `enters_block fn s' s1` mp_tac >>
+     qpat_assum `alloca_inv s'` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> drule ld_enters_block_allocation_fields >> strip_tac >>
+     gvs[venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.allocas_non_overlapping_def,
+         venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+  qspecl_then [`\E astk gstk savedkeys.
+    (^ld_indexed_saved_geometry) lo E astk gstk savedkeys`, `alloca_inv`]
+    mp_tac ld_recursive_block_clause_witness >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  disch_then drule_all >>
+  disch_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC
 QED
