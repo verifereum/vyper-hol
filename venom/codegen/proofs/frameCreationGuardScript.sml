@@ -130,5 +130,26 @@ Theorem step_run_call_creation_guard:
   (created = account_empty (lookup_account self t.originalAccounts)) /\
   (created \/ account_already_created (lookup_account self t.rollback.accounts))
 Proof
-  cheat
+  strip_tac >>
+  `wf_state v` by metis_tac[step_preserves_wf_state, SND] >>
+  `0 < LENGTH s.contexts` by
+    (Cases_on `s.contexts` >> gvs[wf_state_def]) >>
+  `LENGTH s.contexts < LENGTH v.contexts` by simp[] >>
+  `v.contexts <> []` by (strip_tac >> gvs[]) >>
+  `created = account_empty (lookup_account self v.originalAccounts)` by
+    metis_tac[step_creation_original_empty] >>
+  mp_tac (Q.INST [`B` |-> `s.rollback`, `d` |-> `LENGTH s.contexts`,
+    `r` |-> `INL ()`, `t` |-> `v`] step_growth_collision_protection) >>
+  simp[] >>
+  Cases_on `v.contexts` >> simp[] >> strip_tac >>
+  `created \/ account_already_created (lookup_account self v.rollback.accounts)`
+    by metis_tac[] >>
+  `created \/ account_already_created
+     (lookup_account self (SND (HD v.contexts)).accounts)`
+    by (fs[] >> metis_tac[]) >>
+  `((FST (HD v.contexts)).msgParams.outputTo = Code self ==> created)` by
+    (mp_tac (Q.INST [`B` |-> `s.rollback`, `r` |-> `INL ()`, `t` |-> `v`]
+      step_growth_code_provenance) >>
+     simp[] >> metis_tac[]) >>
+  irule run_call_creation_guard >> metis_tac[]
 QED
