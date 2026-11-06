@@ -102,9 +102,10 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   `regions_disjoint (sb+32+j*msz,child_cap) (q,n)` by
     (gvs[abi_encoder_zero_aware_separation] >> decide_tac) >>
-  `abi_footprint_disjoint (sb+32+j*msz) child_cap
+  `child_cap <> 0 ==> abi_footprint_disjoint (sb+32+j*msz) child_cap
      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by
-    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`,`source_cap`] >>
+    (strip_tac >> irule abi_footprint_disjoint_nonzero_subwindow >> asm_rewrite_tac [] >>
+     qexistsl_tac [`source_cap`, `sb`] >>
      asm_rewrite_tac [] >> decide_tac) >>
   `abi_footprint_disjoint q n
      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by

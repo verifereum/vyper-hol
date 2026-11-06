@@ -117,10 +117,11 @@ Proof
   `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
     (irule abi_scratch_registered_member >> simp[abi_decoder_ids_def] >>
      qexists_tac `site` >> simp[]) >>
-  `abi_footprint_disjoint sb source_cap [(slot,32)]` by
-    (fs[abi_footprint_disjoint_def] >> metis_tac[]) >>
   `mem_bytes_at sb source_cap s.vs_memory = mem_bytes_at sb source_cap t.vs_memory` by
-    (drule_all abi_decode_footprint_frame_slice >> simp[]) >>
+    (Cases_on `source_cap = 0` >- simp[mem_bytes_at_def] >>
+     `abi_footprint_disjoint sb source_cap [(slot,32)]` by
+       (fs[abi_footprint_disjoint_def] >> metis_tac[]) >>
+     drule_all abi_decode_footprint_frame_slice >> simp[]) >>
   `abi_encoder_window_input ei at av sb source_cap t.vs_memory` by
     (drule_all abi_encoder_window_input_mem_agree >> simp[]) >>
   simp[abi_encoder_shared_input_def] >> gvs[abi_decoder_child_scratch_def]

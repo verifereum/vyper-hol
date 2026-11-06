@@ -7,6 +7,14 @@ Ancestors
   abiDecoderReentry abiEncoderInput abiEncoder compileEnv fragExec
   valueEncoding contractABI venomMemDefs venomState instIdxIndep words list arithmetic
 
+Theorem abi_footprint_disjoint_nonzero_subwindow:
+  (n <> 0 ==> abi_footprint_disjoint p n fp) /\ p <= q /\ q + m <= p + n ==>
+  (m <> 0 ==> abi_footprint_disjoint q m fp)
+Proof
+  simp_tac bool_ss [abiDecoderFrameTheory.abi_footprint_disjoint_def] >> rpt strip_tac >>
+  `n <> 0` by decide_tac >> first_x_assum drule_all >> decide_tac
+QED
+
 Definition abi_sites_encoder_shared_input_def:
   abi_sites_encoder_shared_input sites (ei,at,av) (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s <=>
     abi_encoder_window_input ei at av sb source_cap s.vs_memory /\
@@ -15,8 +23,8 @@ Definition abi_sites_encoder_shared_input_def:
     LENGTH (enc at av) <= output_size /\
     sb+source_cap < dimword (:256) /\ d+output_size < dimword (:256) /\
     venomMemDefs$regions_disjoint (sb,source_cap) (d,output_size) /\
-    abi_footprint_disjoint sb source_cap
-      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s) /\
+    (source_cap <> 0 ==> abi_footprint_disjoint sb source_cap
+      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)) /\
     abi_footprint_disjoint d output_size
       (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)
 End
@@ -31,8 +39,8 @@ Theorem abi_encoder_shared_input_def:
     LENGTH (enc at av) <= output_size /\
     sb+source_cap < dimword (:256) /\ d+output_size < dimword (:256) /\
     venomMemDefs$regions_disjoint (sb,source_cap) (d,output_size) /\
-    abi_footprint_disjoint sb source_cap
-      (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+    (source_cap <> 0 ==> abi_footprint_disjoint sb source_cap
+      (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)) /\
     abi_footprint_disjoint d output_size
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
 Proof
@@ -122,6 +130,7 @@ QED
 Theorem abi_encoder_shared_input_typed:
   abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s /\
   abi_encoder_input ei at av sb source_cap s.vs_memory /\
+  source_cap <> 0 /\
   (sb+source_cap <= d \/ d+output_size <= sb) ==>
   abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap s
 Proof

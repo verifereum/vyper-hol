@@ -21,7 +21,9 @@ Proof
     ((d,sz)::abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial) initial actual` by
     (drule_all abi_scratch_effect_frame >> simp[]) >>
   `mem_bytes_at sb source_cap initial.vs_memory = mem_bytes_at sb source_cap actual.vs_memory` by
-    (drule_all abi_encoder_footprint_frame_zero_slice >> simp[]) >>
+    (Cases_on `source_cap = 0` >- simp[mem_bytes_at_def] >>
+     qpat_assum `source_cap <> 0 ==> _` drule >> strip_tac >>
+     drule_all abi_encoder_footprint_frame_zero_slice >> simp[]) >>
   `abi_encoder_window_input ei at av sb source_cap actual.vs_memory` by
     (drule_all abi_encoder_window_input_mem_agree >> simp[]) >>
   `abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst` by
@@ -30,11 +32,12 @@ Proof
     (metis_tac[abi_scratch_effect_operand]) >>
   `abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual` by
     fs[abi_sites_scratch_effect_def] >>
-  `abi_footprint_disjoint sb source_cap
-     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual) /\
+  `(source_cap <> 0 ==> abi_footprint_disjoint sb source_cap
+     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual)) /\
    abi_footprint_disjoint d sz
      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual)` by
-    (conj_tac >> irule abi_scratch_disjoint_advance >> simp[] >> qexists_tac `initial` >> simp[]) >>
+    (conj_tac >> TRY strip_tac >> irule abi_scratch_disjoint_advance >> simp[] >>
+     qexists_tac `initial` >> simp[]) >>
   asm_simp_tac bool_ss [abi_sites_encoder_shared_input_def]
 QED
 

@@ -12,7 +12,7 @@ Definition abi_sites_encoder_shared_members_pre_def:
             (sb+so) (rcap-so) s.vs_memory /\
           (infos <> [] ==> so <= rcap) /\ sb+rcap < dimword (:256) /\
           regions_disjoint (sb,rcap) (d,sz) /\
-          abi_footprint_disjoint sb rcap (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)) /\
+          (rcap <> 0 ==> abi_footprint_disjoint sb rcap (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s))) /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     d+sz < dimword (:256) /\
@@ -28,7 +28,7 @@ Theorem abi_encoder_shared_members_pre_def:
             (sb+so) (rcap-so) s.vs_memory /\
           (infos <> [] ==> so <= rcap) /\ sb+rcap < dimword (:256) /\
           regions_disjoint (sb,rcap) (d,sz) /\
-          abi_footprint_disjoint sb rcap (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)) /\
+          (rcap <> 0 ==> abi_footprint_disjoint sb rcap (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s))) /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     d+sz < dimword (:256) /\
@@ -98,23 +98,28 @@ Proof
   qpat_x_assum `?rcap. _` strip_assume_tac >>
   `abi_sites_decoder_ids sites lo hi SUBSET abi_sites_decoder_ids sites first last` by
     (simp[SUBSET_DEF, abi_sites_decoder_ids_def] >> decide_tac) >>
-  `abi_footprint_disjoint sb rcap
+  `rcap <> 0 ==> abi_footprint_disjoint sb rcap
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap initial)` by
-    (irule abi_scratch_disjoint_subset >> qexists_tac `abi_sites_decoder_ids sites first last` >> simp[]) >>
+    (strip_tac >> irule abi_scratch_disjoint_subset >>
+     qexists_tac `abi_sites_decoder_ids sites first last` >> simp[]) >>
   `eval_operand src actual = SOME (n2w sb) /\ eval_operand dst actual = SOME (n2w d)` by
     (imp_res_tac abi_scratch_effect_operand >> asm_simp_tac bool_ss []) >>
   qpat_assum `abi_sites_scratch_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_effect_def]) >>
   `mem_bytes_at sb rcap initial.vs_memory = mem_bytes_at sb rcap actual.vs_memory` by
-    (drule_all abi_encoder_footprint_frame_zero_slice >> simp[EQ_SYM_EQ]) >>
+    (Cases_on `rcap = 0` >- simp[mem_bytes_at_def] >>
+     qpat_assum `rcap <> 0 ==> abi_footprint_disjoint sb rcap
+       (abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap initial)` drule >>
+     strip_tac >> drule_all abi_encoder_footprint_frame_zero_slice >> simp[EQ_SYM_EQ]) >>
   `abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs) (sb+so)
     (rcap-so) actual.vs_memory` by
     (drule_all abi_encoder_window_input_suffix_mem_agree >> simp[]) >>
-  `abi_footprint_disjoint sb rcap
-      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual) /\
+  `(rcap <> 0 ==> abi_footprint_disjoint sb rcap
+      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual)) /\
    abi_footprint_disjoint d sz
       (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap actual)` by
-    (conj_tac >> irule abi_scratch_disjoint_advance >> simp[] >> qexists_tac `initial` >> simp[]) >>
+    (conj_tac >> TRY strip_tac >> irule abi_scratch_disjoint_advance >> simp[] >>
+     qexists_tac `initial` >> simp[]) >>
   asm_simp_tac bool_ss [abi_sites_encoder_shared_members_pre_def] >>
   qexists_tac `rcap` >> asm_simp_tac bool_ss []
 QED
@@ -157,10 +162,11 @@ Proof
   drule abi_encoder_window_complex_cons >> strip_tac >>
   `so <= rcap` by (qpat_x_assum `_ ==> so <= rcap` mp_tac >> simp[]) >>
   qexists_tac `child_cap` >>
-  `abi_footprint_disjoint (sb+so) child_cap
+  `child_cap <> 0 ==> abi_footprint_disjoint (sb+so) child_cap
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by
-    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`, `rcap`] >>
-     asm_simp_tac bool_ss [] >> decide_tac) >>
+    (strip_tac >> irule abi_footprint_disjoint_nonzero_subwindow >> asm_rewrite_tac [] >>
+     qexistsl_tac [`rcap`, `sb`] >>
+     asm_rewrite_tac [] >> decide_tac) >>
   `regions_disjoint (sb+so,child_cap) (d,sz)` by
     (fs[abi_encoder_zero_aware_separation] >> decide_tac) >>
   asm_simp_tac bool_ss [abi_sites_encoder_shared_input_def] >> decide_tac

@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem abi_encoder_shared_restore:
-  abi_encoder_shared_endpoint (ctx,func) (st,st',out,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (st,st',out,limit_st)
     (first,last,b,cap) (at,av,d)
     (abi_decoder_prune_vars st.cs_next_var initial) actual ==>
   ?restored.
@@ -53,11 +53,11 @@ Proof
     (irule abi_decoder_vars_extend_eval >>
      goal_assum (drule_at Any) >>
      drule abi_encoder_shared_endpoint_output >> simp[]) >>
-  fs[abi_encoder_shared_endpoint_def]
+  fs[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_restored_operand:
-  abi_encoder_shared_endpoint (ctx,func) (st,st',out,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (st,st',out,limit_st)
     (first,last,b,cap) (at,av,d)
     (abi_decoder_prune_vars st.cs_next_var initial) actual /\
   abi_decoder_vars_extend initial.vs_vars actual restored /\
