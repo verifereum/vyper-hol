@@ -112,3 +112,41 @@ Proof
   qpat_x_assum `!x. x IN _ UNION _ ==> _` irule >>
   simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
+
+Theorem current_completed_edge_plain_prefix_total:
+  wf_function f /\ wf_ssa f /\ MEM pred f.fn_blocks /\
+  pred.bb_label = before.vs_current_bb /\ EVERY inst_wf pred.bb_instructions /\
+  strict_dom_vars_defined f before /\ fn_reachable f before.vs_current_bb /\
+  before.vs_inst_idx <= LENGTH pred.bb_instructions /\
+  (!j x. j < before.vs_inst_idx /\ j < LENGTH pred.bb_instructions /\
+     MEM x (EL j pred.bb_instructions).inst_outputs ==> IS_SOME (lookup_var x before)) /\
+  exec_block fuel C pred before = OK edge /\
+  lookup_block edge.vs_current_bb f.fn_blocks = SOME bb /\
+  EVERY inst_wf bb.bb_instructions ==>
+  ?post. eval_phis edge bb.bb_instructions = OK post /\
+    strict_dom_vars_defined f (post with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+    phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions /\
+    (!j x. j < phi_prefix_length bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
+      MEM x (EL j bb.bb_instructions).inst_outputs ==>
+      IS_SOME (lookup_var x (post with vs_inst_idx := phi_prefix_length bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `?post. eval_phis edge bb.bb_instructions = OK post` by
+    (irule current_completed_edge_phi_batch_total >> metis_tac[]) >>
+  `strict_dom_vars_defined f edge` by
+    (irule strict_dom_vars_defined_preserved_from_prefix >>
+     conj_tac >- simp[] >>
+     qexistsl [`pred`, `C`, `fuel`, `before`] >> simp[] >>
+     fs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+     metis_tac[option_nchotomy, IS_SOME_DEF]) >>
+  `strict_dom_vars_defined f post` by
+    metis_tac[strict_dom_vars_defined_eval_phis] >>
+  qexists `post` >> simp[strict_dom_vars_defined_inst_idx, phi_prefix_length_le, lookup_var_def] >>
+  rpt strip_tac >>
+  `IS_SOME (lookup_var x post)` suffices_by simp[lookup_var_def] >>
+  irule current_phi_batch_output_defined >>
+  qexistsl [`EL j bb.bb_instructions`, `edge`, `bb.bb_instructions`] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (rewrite_tac[MEM_EL] >> qexists `j` >>
+      simp[EL_TAKE, LENGTH_TAKE_EQ, phi_prefix_length_le]) >> simp[]
+QED
