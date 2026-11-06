@@ -92,3 +92,22 @@ deps = ["compilerNativeEmitTheory"]
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "837592d18c1ad4f9a040bd8dcc99cf35715803f3"
+
+# Functor parameter signatures are not inferred by HOL's module scanner.
+[actions.JsonASTDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonTraceDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonImportHol]
+loads = ["jsonImportTerm"]
+
+[actions.jsonASTLib]
+loads = ["jsonImportTerm", "JsonImportHol", "JsonASTDecodeFn"]
+
+[actions.vyperTestLib]
+loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
+
+[actions.vyperJsonReplayLib]
+loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn", "jsonDocumentLib"]
