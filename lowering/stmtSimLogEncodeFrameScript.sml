@@ -138,7 +138,7 @@ Theorem log_encode_immutable_sep_frame[local]:
   immutable_alloca_sep func ce cx es t
 Proof
   strip_tac >> drule immutable_alloca_sep_frame >> disch_then irule >>
-  rpt conj_tac >- fs[] >- fs[]
+  rpt conj_tac >> TRY (fs[] >> NO_TAC)
   >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas aid` >> res_tac >>
       gvs[]) >>
   rpt strip_tac >> res_tac >> metis_tac[]

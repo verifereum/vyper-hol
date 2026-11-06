@@ -567,7 +567,7 @@ Theorem immutable_alloca_sep_declare_local[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule immutable_alloca_sep_frame >> disch_then irule >>
-  rpt conj_tac >- fs[] >- fs[] >- fs[] >>
+  rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
   rpt strip_tac >>
   rename1 `local_region cenv es'.scopes t n b z` >>
   Cases_on `n = id`

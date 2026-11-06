@@ -104,7 +104,7 @@ Proof
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
      drule immutable_alloca_sep_frame >> disch_then irule >>
-     rpt conj_tac >- simp[] >- fs[] >- fs[] >>
+     rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
      fs[] >> rpt strip_tac >>
      rename1 `local_region cenv scs' t j b len` >>
      Cases_on `j = id`

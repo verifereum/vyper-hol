@@ -1419,7 +1419,8 @@ Proof
   >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any))
   >- (rpt strip_tac >>
       qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
-        drule >> simp[])
+        drule >> simp[]) >>
+  simp[bare_globals_layout_def] >> rpt conj_tac
   >- (rpt strip_tac >>
       gvs[env_consistent_def, env_context_consistent_def,
           bare_global_assignable_complete_def, initial_evaluation_context_def])
