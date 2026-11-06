@@ -1903,3 +1903,26 @@ Proof
   drule_all current_wf_precleanup_coverage >> strip_tac >>
   metis_tac[current_cut_reaching_external_endpoint]
 QED
+
+Theorem current_cut_terminal_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\ A h = current_block_annotations old pre /\
+  FLOOKUP (current_cut_sg fn A renamed H events h
+    (LENGTH (collect_phis old.bb_instructions))) z = SOME x /\
+  EVERY (\inst. ~MEM z inst.inst_outputs)
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) -
+       phi_prefix_length (simplify_current_phi_block new).bb_instructions)
+      (DROP (phi_prefix_length (simplify_current_phi_block new).bb_instructions)
+        (simplify_current_phi_block new).bb_instructions)) ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  rpt strip_tac >>
+  drule_all current_cut_phi_lookup_origin >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `ev` (qx_choose_then `rs` (qx_choose_then `E` assume_tac)))) >>
+  qpat_x_assum `MEM ev events /\ _` (strip_assume_tac) >>
+  metis_tac[current_cut_inherited_endpoint,
+    current_cut_local_inserted_endpoint, current_cut_local_original_endpoint]
+QED
