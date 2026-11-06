@@ -41,7 +41,7 @@ Proof
   `expr_sim_ptr d ctx PG func cenv cx ty e (es with gas_obs := [])` by
     (qpat_x_assum `body_expr_ptr_ok _ _`
        (mp_tac o REWRITE_RULE [body_expr_ptr_ok_def]) >>
-     disch_then (irule o cj 1) >> metis_tac[]) >>
+     disch_then (irule o cj 1 o CONJUNCT1) >> metis_tac[]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
      (es with gas_obs := [])` by
     (simp[] >> irule augassign_rhs_admissible_ptr >> metis_tac[]) >>
