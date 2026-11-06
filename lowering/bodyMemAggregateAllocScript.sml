@@ -7,15 +7,37 @@ Ancestors
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
   fragGasMode fragGasPath fragGasSeq fragExec
   exprLowering exprLoweringProps compileEnv valueEncoding
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState abiBuiltinAllocation allocaHistoryFragment
+  emitHelperProps emitHelper context rich_list list venomInst
 
-Theorem aggregate_buffer_alloc_counted_mem:
+Theorem aggregate_alloc_buffer_history_any_block:
+  compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  rpt strip_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+         emitted_insts_def, fn_has_code_def, IS_PREFIX_APPEND] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, mk_inst_def, is_terminator_def]) >>
+  drule_all alloca_history_run_inst_seq >> simp[]
+QED
+
+Theorem aggregate_buffer_alloc_counted_mem_any_block:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   sz < dimword (:256) /\ stmt_state_rel ctx func ce cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  alloca_history func s0 /\ ~block_is_terminated sa ==>
+  alloca_history func s0 ==>
   ?inst x t b. buf.buf_operand = Var x /\ MEM inst (fn_insts func) /\
     inst.inst_id = sa.cs_next_id /\ inst.inst_outputs = [x] /\
     inst.inst_id < sm.cs_next_id /\ not_fresh_at sm x /\
@@ -82,7 +104,7 @@ Proof
     (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
      qexists_tac `sa` >> simp[]) >>
   `alloca_history func (u with vs_inst_idx := LENGTH sm.cs_current_insts)` by
-    (irule compile_alloc_buffer_body_history >>
+    (irule aggregate_alloc_buffer_history_any_block >>
      simp[] >> qexistsl [`buf`, `sz`, `s0`, `sa`] >>
      simp[] >> fs[stmt_state_rel_def]) >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by
@@ -106,4 +128,39 @@ Proof
   rpt gen_tac >>
   qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _`
     (qspecl_then [`name`, `p'`, `n`] mp_tac) >> simp[]
+QED
+
+(* Backwards-compatible open-block interface. *)
+Theorem aggregate_buffer_alloc_counted_mem:
+  compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  sz < dimword (:256) /\ stmt_state_rel ctx func ce cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  alloca_history func s0 /\ ~block_is_terminated sa ==>
+  ?inst x t b. buf.buf_operand = Var x /\ MEM inst (fn_insts func) /\
+    inst.inst_id = sa.cs_next_id /\ inst.inst_outputs = [x] /\
+    inst.inst_id < sm.cs_next_id /\ not_fresh_at sm x /\
+    local_ptrs_reserved ce sm /\ (!scopes. not_local_ptr ce scopes x) /\
+    gas_marked_path T ctx func s0 0 (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    stmt_state_rel ctx func ce cx es t /\
+    lookup_var x t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
+    b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) /\
+    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+      FLOOKUP t.vs_allocas aid = SOME a) /\
+    (!aid p n. aid < sa.cs_next_id /\
+      FLOOKUP s0.vs_allocas aid = SOME (p,n) ==>
+      regions_disjoint b sz p n) /\
+    (!name p n. local_region ce es.scopes t name p n ==>
+      regions_disjoint b sz p n) /\
+    (!name p n. local_region ce es.scopes t name p n <=>
+      local_region ce es.scopes s0 name p n) /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    b + sz <= t.vs_alloca_next
+Proof
+  strip_tac >> drule_all aggregate_buffer_alloc_counted_mem_any_block >> simp[]
 QED
