@@ -4,7 +4,7 @@ Ancestors exprSimPtrLiteralBuffer exprSimPtrLiteralPayload exprSimLiteralBuffer
   exprLowering exprLoweringProps context emitHelper compileEnv freshWrites
   vfmConstants venomInst list pair exprSimPtrLiteralChunks exprSimPtrLiteralOps
   fragExecPtr fragGasSeqPtr venomExecSemantics venomState ptrDiscipline words
-  finite_map pred_set allocationPtr instIdxIndep fragExec bodyPtrDefs
+  finite_map pred_set allocationPtr instIdxIndep fragExec bodyPtrDefs exprSimHash
 
 Theorem reason_literal_compiler_parts:
   compile_bytelike_literal bs ml sa = (buf,sb) ==>
@@ -128,3 +128,125 @@ Proof
   simp[pred_setTheory.EXTENSION] >> rpt gen_tac >>
   eq_tac >> simp[] >> decide_tac
 QED
+
+Theorem reason_literal_buffer_ptr_run:
+  compile_bytelike_literal bs ml sa = (buf,sb) /\ LENGTH bs <= ml /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  ~ctx_has_dalloca ctx /\ 32+32*word_size ml < dimword (:256) ==>
+  ?u t b p sh G' tn' dirty.
+    buf.buf_operand = Var p /\ not_fresh_at sh p /\
+    (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
+    stmt_state_rel ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,32+32*word_size ml) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+      regions_disjoint b (32+32*word_size ml) a len) /\
+    (!name a len. local_region cenv es.scopes u name a len ==>
+      regions_disjoint b (32+32*word_size ml) a len) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    u.vs_labels = s.vs_labels /\ wb_frame cenv es sa s u /\
+    (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
+    LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+    (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
+    (!a len. a+len <= b \/ b+32+32*word_size (LENGTH bs) <= a ==>
+      mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+    FLOOKUP G' p = SOME (b,32+32*word_size ml) /\
+    lookup_var p t = SOME (n2w b) /\ op_taint tn' (Var p) = {} /\
+    b+32+32*word_size ml < dimword (:256) /\
+    mem_word_at b t.vs_memory = n2w (LENGTH bs) /\
+    mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+    tn'.t_mem = (tn.t_mem UNION dirty) DIFF
+      {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
+    dirty SUBSET {i | b <= i /\ i < b+32+32*word_size ml} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >> drule reason_literal_compiler_shape >> strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA
+      [Lit (n2w (32+32*word_size ml))] [p]) (fn_insts func)` by
+    (irule hash_emitted_inst_mem >> goal_assum (drule_at Any) >> simp[]) >>
+  `word_size (LENGTH bs) <= word_size ml` by
+    metis_tac[exprSimHypsTheory.word_size_monotone] >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA
+      [Lit (n2w (32+32*word_size ml))]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by metis_tac[] >>
+  drule_all alloc_buffer_frame_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
+  `step_inst_base (mk_inst sa.cs_next_id ALLOCA
+     [Lit (n2w (32+32*word_size ml))] [p]) s = OK u` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = _` mp_tac >>
+     simp[run_inst_seq_def, mk_inst_def, is_terminator_def, AllCaseEqs()]) >>
+  drule_all literal_ptr_alloca_ghost >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  suspend "payload"
+QED
+
+Resume reason_literal_buffer_ptr_run[payload]:
+  qpat_x_assum `p = STRING _ _` kall_tac >>
+  `w2n w = b` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  qpat_x_assum `FLOOKUP u.vs_allocas _ = SOME (w2n w,_)` kall_tac >>
+  qabbrev_tac `Ga = G |+ (p,(b,32+32*word_size ml))` >>
+  qabbrev_tac `ta = tn with <|t_var := tn.t_var |+ (p,{}); t_mem := tn.t_mem UNION dirty|>` >>
+  qabbrev_tac `uh = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `lookup_var p uh = SOME (n2w b) /\
+   FLOOKUP Ga p = SOME (b,32+32*word_size ml) /\
+   op_taint ta (Var p) = {}` by
+    (simp[Abbr `uh`, Abbr `Ga`, Abbr `ta`, lookup_var_def, op_taint_def, FLOOKUP_UPDATE] >>
+     metis_tac[lookup_var_def]) >>
+  `b+32+32*word_size (LENGTH bs) < dimword (:256)` by decide_tac >>
+  `?t G' tn'.
+    run_inst_seq (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) uh = OK t /\
+    inst_seq_ptr D 0 ctx fn PG Ga ta
+      (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+       emitted_insts sh sb) uh G' tn' /\
+    tn'.t_mem = ta.t_mem DIFF {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
+    tn'.t_stor = ta.t_stor /\ tn'.t_trans = ta.t_trans /\ tn'.t_imm = ta.t_imm /\
+    (!v. not_fresh_at sh v ==> FLOOKUP G' v = FLOOKUP Ga v /\
+      FLOOKUP tn'.t_var v = FLOOKUP ta.t_var v)` by
+    (irule reason_literal_header_chunks_ptr >> simp[] >>
+     qexists_tac `32+32*word_size ml` >> simp[] >> decide_tac) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+     (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+       emitted_insts sh sb)` by
+    (qpat_x_assum `EVERY _ (emitted_insts sa sb)` mp_tac >> simp[EVERY_MEM] >>
+     metis_tac[]) >>
+  drule run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`u`, `SUC s.vs_inst_idx`] assume_tac) >>
+  Cases_on `run_inst_seq
+    (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) u` >>
+  fs[Abbr `uh`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  qpat_x_assum `run_inst_seq _ (u with vs_inst_idx := _) = _` kall_tac >>
+  qpat_x_assum `lookup_var p (u with vs_inst_idx := _) = _` kall_tac >>
+  `b+32+32*word_size (LENGTH bs) < dimword (:256)` by decide_tac >>
+  drule_all literal_header_chunks_functional >> strip_tac >>
+  suspend "assemble"
+QED
+
+Resume reason_literal_buffer_ptr_run[assemble]:
+  qexistsl_tac [`u`, `v`, `b`, `sh`, `G'`, `tn'`, `dirty`] >>
+  simp[] >>
+  conj_tac
+  >- (PURE_ONCE_REWRITE_TAC[run_inst_seq_def] >>
+      asm_simp_tac bool_ss [] >> simp[mk_inst_def, is_terminator_def]) >>
+  conj_tac
+  >- (PURE_ONCE_REWRITE_TAC[inst_seq_ptr_def] >>
+      asm_simp_tac bool_ss [] >> simp[literal_alloca_ptr_inst_ok]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qpat_x_assum `v with <|vs_vars := _; vs_memory := _|> = u` mp_tac >> simp[]) >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM] >>
+  conj_tac
+  >- (qpat_x_assum `!v. not_fresh_at sh v ==> _` (qspec_then `p` mp_tac) >>
+      simp[op_taint_def, Abbr `ta`, FLOOKUP_UPDATE]) >>
+  simp[Abbr `ta`, Abbr `Ga`] >>
+  rpt strip_tac >> `x <> p` by metis_tac[] >> simp[FLOOKUP_UPDATE]
+QED
+
+Finalise reason_literal_buffer_ptr_run
