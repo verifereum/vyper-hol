@@ -5,7 +5,7 @@ Ancestors bodyPtrPrecompileBuiltinsFullOutputFrame
           exprSimPtrLiteralBuffer ghostPcTransportPtr fragGasPathPtr fragGasSeqPtr
           exprSimDefs exprSimProps compileEnv venomState venomInst venomExecSemantics
           rich_list list bodyPtrDefs wordArgsPtr stmtSimDeclPath exprSimWordArgs
-          venomCallOracleDefs extCallOracle exprLoweringProps
+          venomCallOracleDefs extCallOracle exprLoweringProps entrySinkExtraction exprSimPrecompiles
 
 (* Runtime effects and counted paths share the same staged endpoint. *)
 Theorem arithmetic_staging_continuation:
@@ -20,6 +20,7 @@ Theorem arithmetic_staging_continuation:
   gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK u) /\
   ~u.vs_halted /\ lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX post (DROP u.vs_inst_idx bb.bb_instructions) /\
+  u.vs_current_bb = s.vs_current_bb /\
   u.vs_outcomes = s.vs_outcomes /\
   u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
   u.vs_transient = s.vs_transient /\
@@ -33,6 +34,7 @@ Proof
     (gvs[EVERY_MEM] >> rpt strip_tac >>
      qpat_x_assum `!i. MEM i pre ==> _ \/ _` drule >> strip_tac >>
      gvs[is_terminator_def]) >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   drule_all straightline_continuation_placement >> strip_tac >>
   drule_all staging_sequence_outcomes >> strip_tac >>
   drule_all staging_prefix_nonmemory_frames >> strip_tac >> gvs[]
@@ -92,6 +94,8 @@ Theorem staged_full_output_paths:
       (?co rest. s.vs_outcomes = co::rest /\ co.co_success) /\
       w2n outsz <= LENGTH data ==>
       ?q. gas_path_ptr D 0 ctx fn PG G tn s 1 G2 tn2 (OK q) /\
+        q.vs_current_bb = s.vs_current_bb /\
+        q.vs_inst_idx = s.vs_inst_idx + LENGTH (pre ++ emitted_insts sm sl) /\
         eval_operand (Var dst) q = SOME wo /\ q.vs_allocas = t.vs_allocas /\
         q.vs_memory = (write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) u).vs_memory /\
         ptr_covers G2 tn2 dst q (w2n outsz) /\
@@ -164,12 +168,22 @@ Resume staged_full_output_paths[compose]:
   qpat_assum `u.vs_outcomes = s.vs_outcomes` (fn eq =>
     rule_assum_tac (REWRITE_RULE [eq])) >>
   `q.vs_allocas = t.vs_allocas` by simp[] >>
+  qpat_assum `_ sm = (Var dst,sl)` (mp_then Any strip_assume_tac computed_suffix_shape) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm sl)` by simp[is_terminator_def] >>
+  qpat_assum `run_inst_seq (emitted_insts sm sl) u = OK q`
+    (mp_then Any (drule_all_then strip_assume_tac) run_inst_seq_preserves_entry_control) >>
+  `q.vs_current_bb = s.vs_current_bb` by metis_tac[] >>
+  `u.vs_inst_idx+3 = s.vs_inst_idx + LENGTH (pre ++ emitted_insts sm sl)` by
+    simp[] >>
   qexists `q with vs_inst_idx := u.vs_inst_idx+3` >>
   conj_tac >- (fs[] >> first_assum ACCEPT_TAC) >>
   simp[NoAsms, stmt_state_rel_inst_idx, precompile_frame_cursor,
        SRULE [] (Q.INST [`gs` |-> `es.gas_obs`] literal_ptr_ghost_inv_normalize)] >>
   qpat_assum `!i. w2n wo <= i /\ i < w2n wo + w2n outsz ==> _`
     (assume_tac o SRULE [arithmeticTheory.ADD_COMM]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise staged_full_output_paths

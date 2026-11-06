@@ -44,6 +44,8 @@ Theorem ecmul_residual_success:
   (?co rest. s.vs_outcomes = co::rest /\ co.co_success) ==>
   ?t G' tn' out aid.
     gas_path_ptr D 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sf sb) /\
     eval_operand res t = SOME out /\
     FLOOKUP t.vs_allocas aid = SOME (w2n out,64) /\
     sf.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -175,6 +177,8 @@ Theorem ecadd_residual_success:
   (?co rest. s.vs_outcomes = co::rest /\ co.co_success) ==>
   ?t G' tn' out aid.
     gas_path_ptr D 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sf sb) /\
     eval_operand res t = SOME out /\
     FLOOKUP t.vs_allocas aid = SOME (w2n out,64) /\
     sf.cs_next_id <= aid /\ aid < sb.cs_next_id /\
