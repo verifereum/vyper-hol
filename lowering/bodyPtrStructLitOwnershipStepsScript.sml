@@ -39,9 +39,9 @@ QED
 
 Theorem alloc_run_bind:
   alloc_run P f R /\ (!v. alloc_run (R v) (g v) Q) ==>
-  alloc_run P (\st. case f st of (v,s) => g v s) Q
+  alloc_run P (comp_bind f g) Q
 Proof
-  rw[alloc_run_def] >> Cases_on `f st` >> gvs[] >>
+  rw[alloc_run_def, comp_bind_def] >> Cases_on `f st` >> gvs[] >>
   qpat_x_assum `!st v st'. _` drule_all >> strip_tac >>
   qpat_x_assum `!v st v' st'. _` drule_all >> strip_tac >>
   metis_tac[alloc_frame_trans]

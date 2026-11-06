@@ -2,14 +2,15 @@ Theory bodyPtrStructLitOwnershipPrimitives
 Ancestors bodyPtrStructLitOwnershipShape bodyPtrStructLitOwnershipSlots
   loweringShapeProps context bodyPtrStructLitOwnershipSteps compileEnv
   emitHelper loweringShapeDefs bodyPtrStructLitCompilerOwnership list
+  bodyPtrStructLitOwnershipFreshness
 
 Theorem alloc_run_compile_alloc_buffer:
-  alloc_run shape_base_state (compile_alloc_buffer n) (\v st. T)
+  alloc_run fresh_outputs (compile_alloc_buffer n) (\v st. fresh_outputs st)
 Proof
   rw[alloc_run_def, compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
   Cases_on `emit_op ALLOCA [Lit (n2w n)] st` >> gvs[] >>
   mp_tac (Q.INST [`opc` |-> `ALLOCA`, `ops` |-> `[Lit (n2w n)]`]
-    alloc_run_emit_op) >>
+    alloc_run_emit_op_fresh) >>
   simp[alloc_run_def] >> disch_then drule_all >> simp[]
 QED
 
@@ -18,9 +19,11 @@ Theorem alloc_run_compile_alloc_buffer_shape:
     (compile_alloc_buffer n)
     (\buf st. shape_state st /\ plain_operand st buf.buf_operand /\ T)
 Proof
-  ho_match_mp_tac (Q.INST [`LP` |-> `compiler_label`] alloc_run_shape_join) >>
+  irule alloc_run_conseq >>
+  irule_at Any (Q.INST [`LP` |-> `compiler_label`] alloc_run_shape_join) >>
   irule_at Any alloc_run_compile_alloc_buffer >>
-  simp[compile_alloc_buffer_shape]
+  irule_at Any compile_alloc_buffer_shape >>
+  simp[shape_base_fresh_outputs]
 QED
 
 Theorem alloc_run_fresh_vars:
