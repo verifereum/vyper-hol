@@ -62,7 +62,8 @@ Theorem place_store_value_dyn_run:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
-    type_alloc_ok cenv dty /\
+    (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
+     type_alloc_ok cenv dty) /\
     stmt_state_rel ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -107,14 +108,22 @@ Proof
        sz = type_memory_size tv) fields` by metis_tac[expr_sim_inv_def] >>
   `type_memory_bytes cenv (ArrayT et (Dynamic n)) = type_memory_size tu` by
     (irule typed_copy_memory_size >> qexists_tac `get_tenv cx` >> simp[] >> metis_tac[]) >>
-  `type_memory_size tu < dimword (:256)` by
-    (qpat_x_assum `type_alloc_ok _ _` mp_tac >>
-     simp[allocLimitsTheory.type_alloc_ok_def, wordsTheory.dimword_def] >>
-     decide_tac) >>
   `w2n w' + type_memory_size stv <= s.vs_alloca_next` by metis_tac[] >>
   `w2n w' + type_memory_size stv < dimword (:256)` by
     ( `s.vs_alloca_next < dimword (:256)` by
         metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, exprLoweringPropsTheory.alloca_room_next_lt] >> decide_tac) >>
+  `type_memory_size tu < dimword (:256)` by
+    (Cases_on `ArrayT et (Dynamic n) = sty`
+     >- (qpat_x_assum `ArrayT _ _ = sty` (SUBST_ALL_TAC o SYM) >>
+         `stv = tu` by
+           (qpat_x_assum `evaluate_type _ (ArrayT _ _) = SOME tu` mp_tac >>
+            qpat_x_assum `evaluate_type _ (ArrayT _ _) = SOME stv` mp_tac >>
+            simp[]) >>
+         pop_assum SUBST_ALL_TAC >> decide_tac) >>
+     qpat_x_assum `_ ==> type_alloc_ok _ _` mp_tac >>
+     simp[allocLimitsTheory.type_alloc_ok_def, wordsTheory.dimword_def,
+          is_bytestring_type_def] >>
+     decide_tac) >>
   `val_wf stv v /\ val_wf tu v` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
   `?q pw. gas_marked_path F ctx func s 0 (OK q) /\
      stmt_state_rel ctx func cenv cx ee q /\
