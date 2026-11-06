@@ -124,9 +124,7 @@ Proof
   >- (rpt strip_tac >> drule_all native_regular_live_lower >> simp[]) >>
   ho_match_mp_tac native_regular_variable_support >>
   goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  qexistsl_tac [`m`, `core`] >>
-  goal_assum (drule_at (Pat `residual_budget_wf _ _ _`)) >> simp[] >>
-  gen_tac >> strip_tac
+  simp[] >> gen_tac >> strip_tac
   >- (irule demand_available_mono >> qexists_tac `i` >> simp[] >>
       first_x_assum irule >> simp[])
   >- (irule demand_available_mono >> qexists_tac `i` >> simp[] >>
