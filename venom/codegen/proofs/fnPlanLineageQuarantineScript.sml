@@ -142,3 +142,43 @@ QED
    proved here. No operand availability/global U premise has been assumed.
    Next action is review, not an unrestricted dispatcher proof.
 *)
+
+Theorem generate_inst_plan_jmp_stack_support:
+  !lv dfg cfg fn inst next halt term cur ps targets ops qs x.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops lv fn cur inst = SOME targets /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs) /\
+    MEM x qs.ps_stack ==>
+    MEM x targets \/ MEM x ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?target. inst.inst_operands = [Label target]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_param_opcode_def] >>
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
+  rename1 `restore_spilled_plan targets ps = (rOps,psR)` >>
+  Cases_on `reorder_plan dfg targets psR` >> simp[stackModelTheory.stack_pop_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `join_reached _ _ _ _ _` mp_tac >>
+  simp[join_reached_def, generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
+       release_dead_spills_stack] >>
+  strip_tac >> gvs[stackModelTheory.stack_pop_def, release_dead_spills_stack] >>
+  irule restore_reorder_success_stack_support >>
+  goal_assum (drule_at Any) >> simp[stackModelTheory.stack_pop_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
