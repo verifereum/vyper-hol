@@ -728,3 +728,114 @@ Proof
     (mp_then Any mp_tac external_query_bounds_counted_abort) >>
   disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
+
+(* Replay the allocation at the semantic witness supplied by S1. *)
+Theorem slice_out_buf_counted_replay[local]:
+  compile_slice_out_buf N sa = ((Var root,Var data),sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 <= N /\ N < dimword (:256) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
+  lookup_var root u0 = SOME a /\
+  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) ==>
+  ?H tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t0) /\
+    ptr_covers H tm root t0 N /\ ptr_covers H tm data t0 (N - 32) /\
+    t0.vs_current_bb = sb.cs_current_bb /\ t0.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t0.vs_halted /\ fresh_vars_wrt sb t0 /\
+    sa.cs_next_var <= sb.cs_next_var /\ 
+    (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
+      eval_operand op t0 = eval_operand op s /\ op_prov H op = op_prov G op /\
+      op_taint tm op = op_taint tn op) /\
+    t0.vs_call_ctx = s.vs_call_ctx /\ t0.vs_code = s.vs_code /\
+    lookup_var root t0 = SOME a /\ lookup_var data t0 = SOME (a + 32w) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (qpat_x_assum `compile_slice_out_buf _ _ = _` mp_tac >>
+     simp[compile_slice_out_buf_def, contextTheory.compile_alloc_buffer_def, emit_op_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+       fresh_var_def, emit_def] >> strip_tac >> gvs[]) >>
+  drule_all compile_slice_out_buf_counted >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  gvs[] >> qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+  rpt strip_tac >> simp[op_taint_def] >>
+  first_x_assum drule >> simp[op_taint_def]
+QED
+
+Theorem compile_slice_calldata_counted_ok:
+  compile_slice_calldata start len N sa = (Var root,sb) /\
+  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
+  emit_op CALLDATASIZE [] s1 = (limit,sc) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 <= N /\ N < dimword (:256) /\ w2n wn <= N - 32 /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
+  lookup_var root u0 = SOME a /\
+  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString s1.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) t0) with
+      vs_inst_idx := SUC t0.vs_inst_idx) = OK u ==>
+  ?r v t H tm.
+    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
+    v = (write_memory_with_expansion (w2n (a + 32w))
+      (TAKE (w2n wn) (DROP (w2n wa) s.vs_call_ctx.cc_calldata ++
+        REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx /\
+    t = (mstore (w2n a) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
+  `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
+    metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `s1' = s1` SUBST_ALL_TAC >>
+  qpat_x_assum `data' = Var data` SUBST_ALL_TAC >>
+  qpat_x_assum `s2 = sc` SUBST_ALL_TAC >>
+  qpat_x_assum `limit' = limit` SUBST_ALL_TAC >>
+  qpat_x_assum `s3 = sd` SUBST_ALL_TAC >>
+  `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends s1 sb` by
+    metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn /\
+   fn_has_code sd s4 fn /\ fn_has_code s4 sb fn` by metis_tac[fn_has_code_split] >>
+  drule_all slice_out_buf_counted_replay >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `!op w. eval_operand op s = SOME w ==> !x. op = Var x ==> not_fresh_at sa x` by
+    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand,
+      arithmeticTheory.GREATER_EQ]) >>
+  `eval_operand start t0 = SOME wa /\ eval_operand len t0 = SOME wn /\
+   (!op. op = start \/ op = len ==> op_prov H op = NONE /\ op_taint tm op = {})` by
+    (qpat_x_assum `t0 = _` kall_tac >> fs[] >> metis_tac[]) >>
+  `ptr_covers H tm data t0 (w2n wn)` by
+    (fs[ptr_covers_def] >> qexistsl_tac [`a + 32w`,`b`,`sz'`] >> simp[] >> decide_tac) >>
+  `run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString s1.cs_next_var))
+      (n2w (LENGTH t0.vs_call_ctx.cc_calldata)) t0) with
+      vs_inst_idx := SUC t0.vs_inst_idx) = OK u` by
+    (qpat_x_assum `t0 = _` kall_tac >> fs[]) >>
+  qpat_assum `emit_op CALLDATASIZE _ _ = _`
+    (mp_then Any (mp_tac o SRULE []) external_slice_fragment_counted_ok) >>
+  simp[] >> disch_then drule_all >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  drule_all gas_path_ptr_then >> simp[] >> disch_tac >>
+  qexistsl_tac [`H'`,`tm'`] >>
+  qpat_x_assum `t0 = _` kall_tac >> gvs[] >> rpt strip_tac >>
+  `not_fresh_at s1 x` by
+    (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  qpat_x_assum `!x. not_fresh_at s1 x ==> _` drule >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]
+QED
