@@ -21,7 +21,10 @@ Theorem ptr_val_ok_operand_frame:
   s'.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem ==>
   ptr_val_ok cx t v op G' tn' s'
 Proof
-  simp[ptr_val_ok_def] >> metis_tac[ptr_mem_ok_operand_frame]
+  strip_tac >>
+  `op_prov G' op = op_prov G op` by
+    (Cases_on `op` >> gvs[op_prov_def]) >>
+  gvs[ptr_val_ok_def] >> metis_tac[ptr_mem_ok_operand_frame]
 QED
 
 Theorem ptr_vv_ok_operand_frame:
