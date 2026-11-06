@@ -2077,7 +2077,6 @@ Resume ec_points_path[result]:
       gvs[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
           evaluate_builtin_def, expr_exit_def] >>
       TRY (goal_assum (drule_at Any) >> simp[])) >>
-  post_value_type cenv a = expr_type a /\
   qmatch_goalsub_rename_tac `option_CASE (SOME pair)` >>
   PairCases_on `pair` >> gvs[markerTheory.Abbrev_def] >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes` by gvs[stmt_state_rel_def, state_rel_def] >>
@@ -2140,7 +2139,6 @@ Proof
               rewrite_tac[gas_summary_at_def] >>
               qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[]) >>
           qexists_tac `marks ++ right` >> disj2_tac >>
-  post_value_type cenv a = expr_type a /\
           `ignore_bind (bind m k) (return ()) =
            bind m (\v. ignore_bind (k v) (return ()))` by
             simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>

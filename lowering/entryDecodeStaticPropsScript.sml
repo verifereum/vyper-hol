@@ -35,7 +35,7 @@
  *)
 Theory entryDecodeStaticProps
 Ancestors
-  exprSim arithmetic list rich_list words sorting alist
+  exprSimProps arithmetic list rich_list words sorting alist
   abiDecodeStaticProps entryDecodeProps entryDispatchProps moduleLoweringProps
   valueEncodingProofs valueEncodingProps valueEncoding
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeDefaults vyperTypeABI

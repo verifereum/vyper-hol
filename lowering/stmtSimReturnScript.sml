@@ -438,7 +438,6 @@ Proof
     (pure_rewrite_tac[eval_return_forced] >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[Once bind_def]) >>
   `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
-    post_value_type cenv e = expr_type e /\
   qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
   rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>

@@ -34,7 +34,7 @@ Ancestors
   valueEncodingProofs valueEncodingProps loweringHalt exprSimConvert
   moduleLoweringProps abiEncoderProps entryDispatchProps
   moduleLowering abiEncoder compileEnv compileVyper exprLowering
-  exprSim valueEncoding selectorDispatch fragExec emitHelper emitHelperProps
+  exprSimProps valueEncoding selectorDispatch fragExec emitHelper emitHelperProps
   venomExecSemantics venomState venomInst venomMemProps
   vyperABI vyperABIRoundtrip vyperTyping vyperValue vyperValueOperation
   vyperInterpreter exprSimArith contractABI byte vfmTypes vyperCall

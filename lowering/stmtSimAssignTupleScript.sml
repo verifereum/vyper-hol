@@ -25,7 +25,7 @@
 
 Theory stmtSimAssignTuple
 Ancestors
-  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts tupleAssignCode
+  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts exprSimTypedAlloc tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps fragGasSeq fragGasMode stmtSimDeclPath gasContext stmtSimForced
   fragExec localPtrsProps  loweringSlice  stmtSimDeclMem

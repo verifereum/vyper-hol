@@ -1526,7 +1526,6 @@ Theorem convert_widen_cont:
       (type_memory_bytes cenv (lowered_value_type cenv e1)) sm = (op,sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-  `post_value_type cenv e = expr_type e` by simp[] >>
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
@@ -1557,6 +1556,7 @@ Proof
      type_memory_bytes cenv (expr_type e)` by decide_tac >>
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
   drule_all convert_widen_copy_owned >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
   qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`

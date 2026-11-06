@@ -887,14 +887,17 @@ Proof
   `!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e` by
     (rpt strip_tac >> Cases_on `nocalls` >> gvs[] >>
      metis_tac[post_value_type_no_calls]) >>
+  pop_assum (fn th => disch_then (mp_tac o REWRITE_RULE [EQT_INTRO th])) >>
   impl_tac
-  >- (qpat_x_assum `!e. _ ==> post_value_type _ _ = _` (fn th => simp[th]) >>
-      rpt conj_tac
-      >- (rpt gen_tac >> disch_tac >> irule ifexp_body_pre_lowered_type_compatible >>
-          conj_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
-          qexistsl_tac [`cx`, `env`, `es`] >>
-          `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-          metis_tac[])
+  >- (simp[] >> rpt conj_tac
+      >- (rpt gen_tac >> disch_tac >>
+          `expr_body_pre cenv cx env e es` by
+            (`expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+             metis_tac[]) >>
+          qpat_assum `expr_body_pre _ _ _ e _`
+            (mp_then Any mp_tac ifexp_body_pre_lowered_type_compatible) >>
+          impl_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
+          rpt strip_tac >> simp[])
       >- (rpt gen_tac >> disch_tac >>
           qspecl_then [`cenv`, `cx`, `env`, `IfExp t c a b`]
             mp_tac expr_body_pre_copy_ok >>
