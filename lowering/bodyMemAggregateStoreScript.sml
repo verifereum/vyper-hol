@@ -151,6 +151,89 @@ Proof
   drule_all exprSimMemUnwrapTheory.straight_path_mem >> simp[])
 QED
 
+Theorem aggregate_store_rebased_slice_mem_cursor:
+  compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
+  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\
+  not_fresh_at sm x /\ lookup_var x r = SOME w /\
+  sm.cs_next_var <= su.cs_next_var /\
+  (!z. op = Var z ==> not_fresh_at su z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  stmt_state_rel ctx func ce cx es' r /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
+  well_typed_expr env e /\
+  (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  expr_store_bound cx (expr_type e) v op s /\
+  w2n w + type_memory_size tv <= s.vs_alloca_next /\
+  (~is_word_type (expr_type e) /\ lowered_value_type ce e = expr_type e ==>
+   !sw. eval_operand op s = SOME sw ==>
+        type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
+  fn_has_code su sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts ==>
+  ?q. gas_path_mem ctx func s 0 (OK q) /\
+    val_in_memory tv v (w2n w) q.vs_memory /\
+    stmt_state_rel ctx func ce cx es' q /\
+    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
+      lookup_var z q = SOME a) /\
+    (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!aid off sz a k.
+      FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!n b len. local_region ce es'.scopes r n b len ==>
+        off + sz <= b \/ b + len <= off) /\
+      off <= a /\ a + k <= off + sz /\
+      (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+    locals_kept ce es' r q /\
+    q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> (
+  `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb)` by
+    metis_tac[aggregate_mem_store_lowered_elem] >>
+  `eval_operand (Var x) s = SOME w` by
+    (drule_at (Pos hd) expr_post_rebased_lookup >> simp[eval_operand_def]) >>
+  `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
+    (rpt strip_tac >> gvs[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  drule_all aggregate_store_rebased_slice_run >> strip_tac >>
+  `expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
+  `gas_path_mem ctx func s 0
+     (OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+   alloca_history func (q with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+   q.vs_alloca_next = s.vs_alloca_next` by
+    (irule aggregate_store_memory_path_mem >> simp[] >>
+     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+     simp[] >> qexistsl_tac [`env`, `v`] >> simp[arithmeticTheory.ADD_COMM] >>
+     conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+     fs[arithmeticTheory.ADD_COMM]) >>
+  `q.vs_current_bb = sb.cs_current_bb` by
+    (drule_all (SRULE [] buffer_store_memory_encoding) >> strip_tac >>
+     drule buffer_store_memory_shape >> strip_tac >>
+     gvs[] >>
+     qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>
+     simp[venom_state_component_equality] >> strip_tac >>
+     fs[same_blocks_def]) >>
+  qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  fs[stmt_state_rel_inst_idx, lookup_var_def, locals_kept_def,
+     arithmeticTheory.ADD_COMM] >>
+  conj_tac >> first_assum ACCEPT_TAC)
+QED
+
+(* Compatibility interface: callers not needing the block may forget it. *)
 Theorem aggregate_store_rebased_slice_mem:
   compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
@@ -200,27 +283,7 @@ Theorem aggregate_store_rebased_slice_mem:
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
-  strip_tac >> (
-  `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb)` by
-    metis_tac[aggregate_mem_store_lowered_elem] >>
-  `eval_operand (Var x) s = SOME w` by
-    (drule_at (Pos hd) expr_post_rebased_lookup >> simp[eval_operand_def]) >>
-  `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
-    (rpt strip_tac >> gvs[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  drule_all aggregate_store_rebased_slice_run >> strip_tac >>
-  `expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
-  `gas_path_mem ctx func s 0
-     (OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-   alloca_history func (q with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-   q.vs_alloca_next = s.vs_alloca_next` by
-    (irule aggregate_store_memory_path_mem >> simp[] >>
-     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-     simp[] >> goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
-     simp[] >> qexistsl_tac [`env`, `v`] >> simp[arithmeticTheory.ADD_COMM] >>
-     conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     fs[arithmeticTheory.ADD_COMM]) >>
-  qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  fs[stmt_state_rel_inst_idx, lookup_var_def, locals_kept_def,
-     arithmeticTheory.ADD_COMM] >>
-  conj_tac >> first_assum ACCEPT_TAC)
+  disch_tac >> mp_tac aggregate_store_rebased_slice_mem_cursor >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  strip_tac >> qexists_tac `q` >> fs[] >> first_assum ACCEPT_TAC
 QED
