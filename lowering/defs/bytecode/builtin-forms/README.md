@@ -1,7 +1,7 @@
 # Builtin form witnesses (#566)
 
 Exact bytecode comparisons for `extract32`, `concat`, `slice` of a `bytes32`
-or a struct member named `code` or `data`, and `ceil`, checked in
+or a `.code` source, and `ceil`, checked in
 `eval/evalCompilerBuiltinForms{1,2,3,4}Script.sml` (rolled up by
 `eval/evalCompilerBuiltinFormsScript.sml`, part of the default lowering
 witnesses).
@@ -28,6 +28,8 @@ where vyperlang/vyper#5127 changed their bytes;
 | `len_concat` | `len(concat(a, b))` |
 | `uint2str_local` | `concat("n=", uint2str(x))` |
 | `concat_storage` | `concat` with a storage `Bytes` argument |
+| `self_code_slice` | `slice(self.code, 0, 10)`: `CODESIZE`/`CODECOPY` |
+| `ext_code_slice` | `slice(a.code, s, 10)`: the non-literal start, then the address, `EXTCODESIZE` and the bounds check before the output buffer, then `EXTCODECOPY` |
 | `struct_code_slice` | a struct member named `code` is an ordinary memory slice |
 | `struct_data_slice` | control: the same with a member named `data` |
 | `p97_rbuf_stack_tuple_ret_concat_arg` | internal call with a `concat` argument, stack tuple return |
