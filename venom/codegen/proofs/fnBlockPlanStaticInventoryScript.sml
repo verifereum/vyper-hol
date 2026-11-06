@@ -45,7 +45,7 @@ Proof
     inventory_do_swap_promised >> simp[]
 QED
 
-Theorem inventory_swap_top[local]:
+Theorem inventory_swap_top:
   d < LENGTH stk ==> stack_peek 0 (stack_swap d stk) = stack_peek d stk
 Proof
   strip_tac >> simp[stack_peek_def, stack_swap_def, EL_LUPDATE] >>
@@ -144,7 +144,7 @@ Proof
        LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def]
 QED
 
-Theorem inventory_bulk_result[local]:
+Theorem inventory_bulk_result:
   stack_pop (LENGTH mid + 1)
     (stack_swap (LENGTH mid + 1) (stem ++ [a] ++ mid ++ [b])) =
   stem ++ [b]
@@ -164,7 +164,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem inventory_bulk_split[local]:
+Theorem inventory_bulk_split:
   !n stk. 0 < n /\ n < LENGTH stk ==>
   ?stem a mid b. stk = stem ++ [a] ++ mid ++ [b] /\ n = LENGTH mid + 1
 Proof
@@ -182,7 +182,7 @@ Proof
   pure_asm_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> metis_tac[]
 QED
 
-Theorem inventory_contiguous_depths[local]:
+Theorem inventory_contiguous_depths:
   EVERY IS_SOME (MAP (\v. stack_get_depth v stk) items) /\
   is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v stk) items)) ==>
   LENGTH items <= 16 /\
@@ -199,7 +199,7 @@ Proof
   qexists `d - 1` >> simp[]
 QED
 
-Theorem inventory_depth_image[local]:
+Theorem inventory_depth_image:
   EVERY IS_SOME (MAP (\v. stack_get_depth v stk) items) ==>
   (MEM op items <=>
    ?d. MEM d (MAP THE (MAP (\v. stack_get_depth v stk) items)) /\
@@ -236,7 +236,7 @@ Proof
   metis_tac[stack_get_depth_props]
 QED
 
-Theorem inventory_suffix_depths[local]:
+Theorem inventory_suffix_depths:
   !stem xs b op. (?d. 0 < d /\ d <= LENGTH xs /\
        stack_peek d (stem ++ xs ++ [b]) = op) <=> MEM op xs
 Proof

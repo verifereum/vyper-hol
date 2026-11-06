@@ -2947,6 +2947,149 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem regional_swap_pop_survives[local]:
+  stack_get_depth v ps.ps_stack = SOME d /\
+  MEM op ps.ps_stack /\ op <> v ==>
+  MEM op (stack_pop 1 (SND (do_swap d ps)).ps_stack)
+Proof
+  strip_tac >> drule stack_get_depth_props >> strip_tac >>
+  drule do_swap_stack_perm >> strip_tac >>
+  `MEM op (SND (do_swap d ps)).ps_stack` by
+    metis_tac[sortingTheory.PERM_MEM_EQ] >>
+  `stack_peek 0 (SND (do_swap d ps)).ps_stack = v` by
+    (simp[do_swap_stack_result] >> metis_tac[inventory_swap_top]) >>
+  Cases_on `(SND (do_swap d ps)).ps_stack` using SNOC_CASES >>
+  gvs[stack_peek_def, stack_pop_def, MEM_SNOC, TAKE_SNOC, EL_LENGTH_SNOC]
+QED
+
+Theorem regional_pop_fold_survives[local]:
+  !items ops ps op.
+  MEM op ps.ps_stack /\ ~MEM op items ==>
+  MEM op (SND (FOLDL (\(ops,ps) v.
+    case stack_get_depth v ps.ps_stack of
+      NONE => (ops,ps)
+    | SOME dist =>
+        let (swap_ops,ps') =
+          if dist = 0 then ([],ps) else do_swap dist ps in
+        (ops ++ swap_ops ++ [SOPop 1],
+         ps' with ps_stack := stack_pop 1 ps'.ps_stack))
+    (ops,ps) items)).ps_stack
+Proof
+  Induct >> simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  RULE_ASSUM_TAC (REWRITE_RULE [LET_THM]) >>
+  Cases_on `stack_get_depth h ps.ps_stack`
+  >- (simp[] >> first_x_assum irule >> simp[]) >>
+  rename1 `stack_get_depth h ps.ps_stack = SOME dist` >>
+  drule_all regional_swap_pop_survives >> strip_tac >>
+  Cases_on `dist = 0`
+  >- (gvs[do_swap_def] >> first_x_assum irule >> simp[]) >>
+  Cases_on `do_swap dist ps` >>
+  rename1 `do_swap dist ps = (swap_ops,next)` >> gvs[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem regional_popmany_individual_survives[local]:
+  MEM op ps.ps_stack /\ ~MEM op items ==>
+  MEM op (SND (popmany_individual items ps)).ps_stack
+Proof
+  strip_tac >> simp[popmany_individual_def, LET_THM] >>
+  irule (SRULE[LET_THM] regional_pop_fold_survives) >> simp[] >>
+  metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]
+QED
+
+Theorem regional_contiguous_survives[local]:
+  items <> [] /\
+  EVERY IS_SOME (MAP (\v. stack_get_depth v stk) items) /\
+  is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v stk) items)) /\
+  MEM op stk /\ ~MEM op items ==>
+  MEM op (stack_pop (LENGTH items) (stack_swap (LENGTH items) (stk : operand list)))
+Proof
+  strip_tac >> drule_all contiguous_top_stack_bound >> strip_tac >>
+  `0 < LENGTH items` by (Cases_on `items` >> gvs[]) >>
+  qspecl_then [`LENGTH items`, `stk`] mp_tac inventory_bulk_split >>
+  simp[] >> strip_tac >>
+  drule_all inventory_contiguous_depths >> strip_tac >>
+  `!x. MEM x items <=> MEM x (a::mid)` by
+    (gen_tac >> drule inventory_depth_image >>
+     disch_then (qspec_then `x` mp_tac) >> simp[] >>
+     qspecl_then [`stem`, `a::mid`, `b`, `x`] mp_tac inventory_suffix_depths >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     simp[arithmeticTheory.ADD1] >> metis_tac[]) >>
+  gvs[inventory_bulk_result, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem regional_popmany_marked_survives:
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+  op <> dead_stack_marker /\ MEM op ps.ps_stack /\ ~MEM op victims ==>
+  MEM op (SND (popmany_plan victims ps)).ps_stack
+Proof
+  strip_tac >> Cases_on `victims` >- simp[popmany_plan_def] >>
+  simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (`LENGTH (h::t) < LENGTH ps.ps_stack` by
+            (irule contiguous_top_stack_bound >> simp[] >> metis_tac[]) >>
+          `MEM op (stack_pop (LENGTH (h::t))
+             (stack_swap (LENGTH (h::t)) ps.ps_stack))` by
+            (irule regional_contiguous_survives >> simp[]) >>
+          pairarg_tac >> gvs[] >>
+          qspecl_then [`SUC (LENGTH t)`, `ps`] mp_tac do_swap_stack_result >>
+          simp[] >> metis_tac[]) >>
+      irule regional_popmany_individual_survives >> simp[]) >>
+  irule regional_popmany_individual_survives >> simp[]
+QED
+
+Theorem regional_clean_stack_protected_ownership:
+  generated_plan_state_wf_marked sb ps /\
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
+  (!pred. cfg_preds_of cfg bb.bb_label = [pred] ==>
+    MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at lv bb.bb_label 0))) /\
+  (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+  MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> disch_tac >>
+  `qs.ps_spilled = ps.ps_spilled` by metis_tac[regional_clean_stack_spilled] >>
+  Cases_on `Var v IN FDOM ps.ps_spilled` >- simp[] >>
+  fs[] >>
+  `MEM (Var v) ps.ps_stack` by metis_tac[] >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack)` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- (simp[] >> strip_tac >> gvs[]) >>
+  rename1 `_ = pred::rest` >> Cases_on `rest` >> simp[]
+  >- (IF_CASES_TAC >- (simp[] >> strip_tac >> gvs[]) >>
+      Cases_on `lookup_block pred fn.fn_blocks`
+      >- (simp[] >> strip_tac >> gvs[]) >> simp[] >>
+      `MEM v (input_vars_from pred bb.bb_instructions
+         (live_vars_at lv bb.bb_label 0))` by metis_tac[] >>
+      `input_vars_from pred bb.bb_instructions
+         (live_vars_at lv bb.bb_label 0) <> []` by
+        (strip_tac >> gvs[]) >>
+      simp[NULL_EQ] >>
+      IF_CASES_TAC
+      >- (qmatch_goalsub_abbrev_tac `popmany_plan victims ps` >>
+          `~MEM (Var v) victims` by
+            (simp[Abbr `victims`, MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+          `MEM (Var v) (SND (popmany_plan victims ps)).ps_stack` by
+            (irule regional_popmany_marked_survives >>
+             simp[dead_stack_marker_def]) >>
+          pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+          simp[mark_dead_stack_def, MEM_MAP] >>
+          qexists_tac `Var v` >> simp[] >>
+          simp[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+      strip_tac >>
+      qmatch_asmsub_abbrev_tac `popmany_plan victims ps` >>
+      `MEM (Var v) (SND (popmany_plan victims ps)).ps_stack` by
+        (irule regional_popmany_marked_survives >>
+         simp[dead_stack_marker_def, Abbr `victims`, MEM_MAP, MEM_FILTER] >>
+         metis_tac[]) >> gvs[]) >>
+  rename1 `rest = more::tail` >> Cases_on `tail` >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
 Theorem regional_clean_stack_nonmarker_origin:
   generated_plan_state_wf_marked sb ps /\
   clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
