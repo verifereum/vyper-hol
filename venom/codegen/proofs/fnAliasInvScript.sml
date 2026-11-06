@@ -6416,6 +6416,59 @@ Proof
   simp[alias_search_loop_state, plan_holds_def, init_cleanup_plan_state_def,
        init_plan_state_def] >> rpt strip_tac >> gvs[] >> Cases_on `two` >> EVAL_TAC
 QED
+(* Bounded residual-alias search: no planner stack is manufactured. Padding
+   is defined at entry and read in the loop header; the body copy is demanded
+   only by the exit edge. The path is planned one actual block at a time. *)
+Definition alias_buried_fn_def:
+  alias_buried_fn n flip = alias_diamond_fn with fn_blocks :=
+    MAP (\bb.
+      if bb.bb_label = "entry" then
+        bb with bb_instructions :=
+          TAKE 1 bb.bb_instructions ++
+          GENLIST (\k. mk_inst (30 + k) CALLDATASIZE []
+            [EL k ["d0"; "d1"; "d2"; "d3"]]) n ++ DROP 1 bb.bb_instructions
+      else if bb.bb_label = "header" then
+        bb with bb_instructions :=
+          TAKE 2 bb.bb_instructions ++
+          GENLIST (\k. mk_inst (40 + k) ADD
+            [Var (EL k ["d0"; "d1"; "d2"; "d3"]); Lit 1w]
+            [EL k ["s0"; "s1"; "s2"; "s3"]]) n ++
+          [EL 2 bb.bb_instructions;
+           mk_inst 5 JNZ [Var "c"; Label (if flip then "right" else "left");
+             Label (if flip then "left" else "right")] []]
+      else if bb.bb_label = "join" then
+        bb with bb_instructions := TAKE 2 bb.bb_instructions ++
+          [mk_inst 50 ASSIGN [Var "r"] ["buried"]] ++ DROP 2 bb.bb_instructions
+      else if bb.bb_label = "exit" then
+        bb with bb_instructions :=
+          mk_inst 51 ISZERO [Var "buried"] ["sink"] :: bb.bb_instructions
+      else bb) alias_diamond_fn.fn_blocks
+End
+
+Definition alias_buried_plan_def:
+  alias_buried_plan n flip idx ps =
+    generate_block_plan (liveness_analyze (alias_buried_fn n flip))
+      (dfg_build_function (alias_buried_fn n flip))
+      (cfg_analyze (alias_buried_fn n flip)) (alias_buried_fn n flip)
+      (EL idx (alias_buried_fn n flip).fn_blocks) ps
+End
+
+Definition alias_buried_path_def:
+  (alias_buried_path n flip [] = init_cleanup_plan_state NONE [] 0 0) /\
+  (alias_buried_path n flip (idx::rest) =
+    SND (THE (alias_buried_plan n flip idx (alias_buried_path n flip rest))))
+End
+
+Theorem alias_buried_zero_probe:
+  normalize_operand (dfg_build_function (alias_buried_fn 0 F)) []
+    (Var "buried") = Var "r" /\
+  (alias_buried_path 0 F [4; 3; 1; 0]).ps_stack =
+    [Var "buried"; Var "z"] /\
+  ~plan_holds (alias_buried_path 0 F [6; 4; 3; 1; 0]) (Var "buried")
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+
 Theorem eval_one_phi_without_predecessor:
   s.vs_prev_bb = NONE ==> eval_one_phi s inst = NONE
 Proof
