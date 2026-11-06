@@ -2894,6 +2894,84 @@ Proof
   disch_then (qspecl_then [`ps'`, `x`] mp_tac) >> simp[]
 QED
 
+Theorem reduce_depth_plan_live_reserve:
+  !fuel targets op f ps ops qs x.
+    reduce_depth_plan fuel targets op f (LENGTH targets) ps = (ops,qs) /\
+    LIST_ELEM_COUNT x targets + 1 <= LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) ==>
+    LIST_ELEM_COUNT x targets + 1 <= LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `MEM x targets`
+  >- (drule reduce_depth_plan_pending_stack_count_unconditional >>
+      disch_then drule >> strip_tac >>
+      `x IN FDOM ps.ps_spilled ==> x IN FDOM qs.ps_spilled` by
+        metis_tac[reduce_depth_plan_spilled_present, pairTheory.SND] >>
+      Cases_on `x IN FDOM ps.ps_spilled` >>
+      Cases_on `x IN FDOM qs.ps_spilled` >> gvs[] >> decide_tac) >>
+  (Q.SUBGOAL_THEN `MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled` assume_tac
+    >- (Cases_on `x IN FDOM ps.ps_spilled` >>
+        gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac)) >>
+  `MEM x qs.ps_stack \/ x IN FDOM qs.ps_spilled` by
+    metis_tac[reduce_depth_plan_available_preserved, pairTheory.SND] >>
+  Cases_on `x IN FDOM qs.ps_spilled` >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
+Theorem reorder_one_materialised_live_reserve:
+  !dfg targets idx op ps ops qs d v.
+    idx < LENGTH targets /\ LENGTH targets <= 16 /\
+    LENGTH targets <= LENGTH ps.ps_stack /\ MEM op targets /\
+    stack_get_unfixed_depth op (LENGTH targets - 1 - idx)
+      (LENGTH targets) ps.ps_stack = SOME d /\
+    reorder_one dfg targets idx op ps = (ops,qs) /\
+    LIST_ELEM_COUNT (Var v) targets + 1 <=
+      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+        (if Var v IN FDOM ps.ps_spilled then 1 else 0) ==>
+    LIST_ELEM_COUNT (Var v) targets + 1 <=
+      LIST_ELEM_COUNT (Var v) qs.ps_stack +
+        (if Var v IN FDOM qs.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH targets - 1 - idx = LENGTH targets - (idx + 1)` by decide_tac >>
+  gvs[] >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >> rename1 `_ = (reduce_ops,ps2)` >>
+  `LENGTH targets <= LENGTH ps2.ps_stack` by
+    (Cases_on `d > 16` >> gvs[] >>
+     drule reduce_depth_plan_target_length_floor >>
+     simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `LIST_ELEM_COUNT (Var v) targets + 1 <=
+    LIST_ELEM_COUNT (Var v) ps2.ps_stack +
+      (if Var v IN FDOM ps2.ps_spilled then 1 else 0)` by
+    (Cases_on `d > 16` >> gvs[] >>
+     drule_all reduce_depth_plan_live_reserve >> simp[]) >>
+  `LENGTH targets - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+    (LENGTH targets) ps2.ps_stack`
+  >- (simp[] >> strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
+  `dist < LENGTH ps2.ps_stack /\ stack_peek dist ps2.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  simp[] >> Cases_on `dist = LENGTH targets - (idx + 1)`
+  >- (simp[] >> strip_tac >> gvs[]) >>
+  simp[] >>
+  qspecl_then [`dfg`, `op`] mp_tac reorder_place_phase_multiplicity >>
+  disch_then (qspecl_then [`dist`, `LENGTH targets - (idx + 1)`, `ps2`, `Var v`]
+    mp_tac) >> simp[] >>
+  Cases_on `operand_equiv dfg op
+    (stack_peek (LENGTH targets - (idx + 1)) ps2.ps_stack)`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `do_swap (LENGTH targets - (idx + 1)) ps3` >> gvs[] >>
+  `ps3.ps_spilled = ps2.ps_spilled` by
+    metis_tac[do_swap_spilled_unchanged, pairTheory.SND] >>
+  `ps'.ps_spilled = ps3.ps_spilled` by
+    metis_tac[do_swap_spilled_unchanged, pairTheory.SND] >> gvs[]
+QED
+
 Theorem reorder_materialised_fold_bottom_frame[local]:
   !m k dfg targets ps prefix acc ops qs.
     k + m <= LENGTH targets /\ LENGTH targets <= 16 /\
