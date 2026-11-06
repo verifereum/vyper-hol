@@ -8,7 +8,7 @@ Ancestors
   vyperInterpreter vyperExprNoControl vyperState exprSim
   representationCleanPtr vyperTypeSystem vyperTypeEvalSoundness abiEncoder
   exprSimHyps vyperTypeCallGraph vyperTypeExprSoundness vyperTypeInvariants
-  valueCopyBytes valueEncoding vyperTyping
+  valueCopyBytes valueEncoding vyperTyping contextCodegenRel memLocDefs
 Libs
   monadsyntax
 
@@ -664,4 +664,59 @@ Proof
   goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
   simp[]
+QED
+
+(* Diagnostic: top-level bytestring widening bypasses normalization;
+   a nested bytestring is read under its aggregate's full footprint. *)
+Theorem normalization_bytestring_access_probe[local]:
+  ~(~is_word_type (BaseT (StringT 33)) /\
+    ~(is_bytestring_type (BaseT (StringT 33)) /\
+      is_bytestring_type (BaseT (StringT 1))) /\
+    BaseT (StringT 1) <> BaseT (StringT 33)) /\
+  (~is_word_type (TupleT [BaseT (StringT 33)]) /\
+    ~(is_bytestring_type (TupleT [BaseT (StringT 33)]) /\
+      is_bytestring_type (TupleT [BaseT (StringT 1)])) /\
+    TupleT [BaseT (StringT 1)] <> TupleT [BaseT (StringT 33)]) /\
+  arg_type_fits (TupleT [BaseT (StringT 1)])
+                (TupleT [BaseT (StringT 33)]) /\
+  val_footprint (BaseTV (StringT 1)) (StringV "a") = 33 /\
+  val_store_size (BaseTV (StringT 1)) (StringV "a") = 64 /\
+  val_footprint (TupleTV [BaseTV (StringT 1)])
+    (ArrayV (TupleV [StringV "a"])) = 64
+Proof
+  EVAL_TAC
+QED
+
+Theorem padded_copy_source_range_probe[local]:
+  eval_operand dst s = SOME dw /\ eval_operand (Var src) s = SOME sw ==>
+  source_memory_read_ranges (mk_inst id MCOPY [dst; Var src; Lit 64w] []) s =
+    [(w2n sw,64)]
+Proof
+  simp[source_memory_read_ranges_def, mk_inst_def, eval_operand_def, dimword_def]
+QED
+
+Theorem short_region_padded_copy_rejected[local]:
+  eval_operand dst s = SOME dw /\ eval_operand (Var src) s = SOME sw /\
+  FLOOKUP G src = SOME (w2n sw,33) /\ ~in_revert_forward func s ==>
+  ~access_ok 0 G func (mk_inst id MCOPY [dst; Var src; Lit 64w] []) s
+Proof
+  strip_tac >> simp[access_ok_def] >> disj2_tac >>
+  qexistsl [`w2n sw`,`64`] >>
+  simp[source_memory_read_ranges_def, eval_operand_def, mem_read_ops_def,
+       mk_inst_def, dimword_def]
+QED
+
+Theorem nested_string_padding_covered_probe[local]:
+  ptr_val_ok cx (TupleT [BaseT (StringT 1)])
+    (ArrayV (TupleV [StringV "a"])) (Var src) G tn s /\
+  evaluate_type (get_tenv cx) (TupleT [BaseT (StringT 1)]) =
+    SOME (TupleTV [BaseTV (StringT 1)]) /\
+  eval_operand (Var src) s = SOME w ==>
+  ptr_covers G tn src s 64
+Proof
+  simp[ptr_val_ok_def, ptr_mem_ok_def, is_word_type_def] >>
+  rpt strip_tac >> first_x_assum drule_all >>
+  simp[val_footprint_def, type_memory_size_def] >>
+  rpt strip_tac >>
+  gvs[ptr_covers_def, eval_operand_def, vfmConstantsTheory.word_size_def]
 QED
