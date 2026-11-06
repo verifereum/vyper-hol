@@ -771,3 +771,84 @@ Resume first_emission_raw_call[raw_call_outbuf]:
 QED
 
 Finalise first_emission_raw_call
+
+Theorem lower_value_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce ty e. cs_appends (lower_value cfn ce ty e)
+Proof
+  strip_tac >> rpt gen_tac >> rewrite_tac[lower_value_def] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> first_x_assum (qspecl_then [`ce`, `ty`, `e`, `st`] mp_tac) >> simp[]) >>
+  qx_gen_tac `vv` >> rw[cs_appends_def] >>
+  qspecl_then [`ce`, `vv`, `st`] mp_tac (cj 1 unwrap_value_labels) >> simp[]
+QED
+
+Theorem multi_vvs_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !es ce. cs_appends (compile_multi_vvs cfn ce es)
+Proof
+  strip_tac >> Induct >> rpt gen_tac >> rewrite_tac[compile_multi_vvs_def]
+  >- simp[cs_appends_return] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> first_x_assum (qspecl_then [`ce`, `expr_type h`, `h`, `st`] mp_tac) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- first_x_assum MATCH_ACCEPT_TAC >>
+  simp[cs_appends_return]
+QED
+
+Theorem create_salt_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce se. cs_appends (compile_create_salt cfn ce se)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `se` >>
+  rewrite_tac[compile_create_salt_def]
+  >- simp[cs_appends_return] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+  simp[cs_appends_return]
+QED
+
+Theorem create_ctor_tuple_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce es. cs_appends (compile_create_ctor_tuple cfn ce es)
+Proof
+  strip_tac >> rpt gen_tac >> simp_tac (srw_ss()) [compile_create_ctor_tuple_def, LET_THM] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (irule multi_vvs_extension_only >> first_assum ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >>
+      qspecl_then [`type_memory_bytes ce (TupleT (MAP expr_type es))`, `st`]
+        mp_tac (cj 1 compile_alloc_buffer_labels) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
+  >- (rw[cs_appends_def] >>
+      qspecl_then [`ce`, `ZIP (a,MAP expr_type es)`, `a'.buf_operand`, `0`, `st`]
+        mp_tac (cj 1 compile_extcall_store_values_labels) >> simp[]) >>
+  simp[cs_appends_return]
+QED
+
+Theorem create_blueprint_args_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce raw es. cs_appends (compile_create_blueprint_args cfn ce raw es)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `raw` >>
+  simp_tac (srw_ss()) [compile_create_blueprint_args_def, LET_THM]
+  >- (Cases_on `es` >> simp_tac (srw_ss()) []
+      >- (irule cs_appends_ignore_bind >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
+      Cases_on `t` >> simp_tac (srw_ss()) []
+      >- (irule cs_appends_bind >> reverse conj_tac
+          >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+          gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+          >- simp[cs_appends_emit_helpers] >>
+          gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+          >- simp[cs_appends_emit_helpers] >> simp[cs_appends_return]) >>
+      irule cs_appends_ignore_bind >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  Cases_on `es = []` >> simp[]
+  >- simp[cs_appends_return] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_alloc_buffer_labels, pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (irule create_ctor_tuple_extension_only >> first_assum ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 (CONJUNCT1 (CONJUNCT2 compile_abi_encode_labels)), pairTheory.SND]) >>
+  simp[cs_appends_return]
+QED
