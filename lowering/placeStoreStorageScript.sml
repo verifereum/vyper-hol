@@ -6845,6 +6845,101 @@ Proof
 QED
 
 (* The allocation-limit check bounds the natural size, before n2w. *)
+(* Restore execution cursor fields after reasoning about a normalized suffix. *)
+Theorem place_store_stmt_cursor:
+  stmt_state_rel ctx func cenv cx es
+    (s with <|vs_current_bb := bb; vs_prev_bb := prev; vs_inst_idx := idx|>) <=>
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  `fmp_room ctx func
+    (s with <|vs_current_bb := bb; vs_prev_bb := prev; vs_inst_idx := idx|>) <=>
+   fmp_room ctx func s` by
+    (irule exprLoweringPropsTheory.fmp_room_fields_cong >> simp[]) >>
+  simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
+       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       contract_storage_def, contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def, immutable_alloca_sep_def,
+       exprLoweringPropsTheory.immutable_base_zero_alt,
+       accounts_rel_def, accounts_agree_def]
+QED
+
+Theorem place_store_normalized_stmt_state:
+  stmt_state_rel ctx func cenv cx es (store_copy_normalize s t) /\
+  local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
+  stmt_state_rel ctx func cenv cx es t
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es (t with vs_vars := s.vs_vars)` by
+    (`store_copy_normalize s t =
+       (t with vs_vars := s.vs_vars) with
+         <|vs_current_bb := s.vs_current_bb; vs_prev_bb := s.vs_prev_bb;
+           vs_inst_idx := s.vs_inst_idx|>` by
+       simp[store_copy_normalize_def] >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     asm_rewrite_tac[place_store_stmt_cursor]) >>
+  `stmt_state_rel ctx func cenv cx es
+     ((t with vs_vars := s.vs_vars) with vs_vars := t.vs_vars)` suffices_by
+    simp[] >>
+  irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
+  fs[local_ptrs_reserved_def] >> rpt strip_tac >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+(* Counted suffix execution consumes only the live part of the encoded leaf.
+   In particular n need not cover dead destination capacity words. *)
+Theorem place_store_memory_leaf_run:
+  (if tr then compile_memory_to_transient else compile_memory_to_storage)
+    src dst n sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w start) /\
+  n < dimword (:256) /\ w2n sw + 32*n < dimword (:256) /\
+  local_ptrs_reserved cenv sa /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+  storage_subregion root path delta tv /\ start = w2n rootk + delta /\
+  0 < type_slot_size tv /\ encode_value tv v = SOME writes /\ value_has_type tv v /\
+  start + type_slot_size tv <= dimword (:256) /\ n <= type_slot_size tv /\
+  (!i b. i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes (n2w start) writes (get_storage cx ee tr))
+       start tv (start+i) b ==>
+    i < n /\
+    EL b (word_to_bytes (lookup_storage (n2w (start+i))
+      (apply_writes (n2w start) writes (get_storage cx ee tr))) T) =
+    EL b (word_to_bytes (mload (w2n sw + 32*i) s) T)) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx
+        (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr))) t /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  drule_all (BETA_RULE (Q.INST [`rd` |-> `\i. mload (w2n sw + 32*i) s`]
+    (SPEC_ALL place_store_encoded_leaf_state))) >> strip_tac >>
+  drule_all place_store_memory_to_slots_path >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  irule place_store_normalized_stmt_state >>
+  goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+  qexists_tac `s` >> simp[] >>
+  qpat_x_assum `store_copy_normalize _ _ = _` SUBST1_TAC >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
+  qpat_x_assum `start = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac bool_ss [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n,
+    AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM,
+    arithmeticTheory.ADD_COMM]
+QED
+
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
