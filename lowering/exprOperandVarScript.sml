@@ -1438,6 +1438,12 @@ Proof
   irule compiler_reserved_bind_cong >> simp[] >>
   qexists `ce` >> simp[] >>
   rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac
+  >- (gen_tac >> IF_CASES_TAC >>
+      simp[ci_mono_compile_snapshot_vv, ci_mono_comp_return]) >>
+  qexists `ce` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `place_type ce base_e` >> simp[LET_THM]
   >- (irule compiler_reserved_bind_cong >>
       simp[ci_mono_lower_value_cfn] >>
