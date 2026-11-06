@@ -39,38 +39,9 @@ Proof
        byteTheory.word_slice_alt_zero] >> EVAL_TAC
 QED
 
-(* Bounded feasibility audit (not a counterexample to deploy_ctor_body_frame).
-   Producer chain: deploy_phases_def names codegen_assembly rpolicy
-   dout.po_unit = SOME prog and deploy_bc = assemble prog.
-   assembly_target_safe checks supported opcodes and push-data lengths;
-   encode_inst / pad_bytes do not reject oversized resolved symbols.
-
-   Requirement                         Diagnostic status
-   ----------------------------------- ------------------------------------
-   Supported/typed large source         MISSING: no concrete tops constructed.
-   Deployment length >= 65536           RULED OUT by deploy_bc_size_bounded
-                                        (ctorDeployInitcodeAsm, admitted until
-                                        the codegen sync).
-   Label offset 65536 in real assembly   No witness; compute_label_offsets_bound
-                                        bounds offsets by SUM asm_inst_size.
-                                        codegenEncodingWf's local
-                                        sum_size_le_encode bounds that sum by
-                                        assembled length for supported ops.
-   Explicit assembler width rejection   ABSENT; synthetic encoding above keeps
-                                        three immediate bytes after PUSH2.
-   Reachable overflowing branch         MISSING, and incompatible with the
-                                        preceding size/offset bounds under
-                                        their supported-op hypotheses.
-   Reachable unintended call            MISSING; concrete parser instead sees
-                                        PUSH2 256, STOP, JUMP. STOP alone
-                                        supplies no root call outcome.
-   Bad installed-context outcome        MISSING: context-separation evidence
-                                        does not supply an actual trace.
-
-   codegen_assembly_asm_encoding_wf already packages a useful consumer
-   interface under unit_shape_ok and assembled length < 65536. Its proof
-   establishes the offset bound, rather than relying on assembler rejection.
-   The admitted size supplier is not evidence that the executable compiler
-   rejects oversized deployments. No syntactic
-   or whole-trace confinement theorem is asserted here.
-*)
+(* Historical encoding diagnostic only: the synthetic symbol at 65536
+   encodes an extra byte following PUSH2. This is not a compiled deployment
+   witness or a counterexample to deploy_ctor_body_frame. No deployment
+   size bound is claimed here. If needed, the permitted deployment-bytecode
+   bound is deploy_bc_size_bounded in ctorDeployInitcodeAsm, not a bound
+   on arbitrary initcode plus appended arguments from deploy_state_rel. *)
