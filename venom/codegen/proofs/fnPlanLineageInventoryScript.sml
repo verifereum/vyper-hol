@@ -2338,9 +2338,24 @@ Proof
   gvs[stackPlanTypesTheory.plan_state_component_equality]
 QED
 
-Theorem emit_one_input_bottom_frame:
+Theorem emit_one_input_available_preserved:
+  !op opc nl ps ops qs v.
+    emit_one_input opc nl op ps = (ops,qs) /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`opc`, `nl`, `op`, `ps`, `Var v`]
+    mp_tac emit_one_input_inventory_mono_aux >>
+  simp[] >> gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `Var v IN FDOM ps.ps_spilled` >>
+  Cases_on `Var v IN FDOM qs.ps_spilled` >> gvs[] >> decide_tac
+QED
+
+Theorem emit_one_input_shielded_bottom_frame:
   !op prefix opc nl ps.
-    EVERY (\x. ~is_var_operand x) prefix ==>
+    (!v. op = Var v ==> ~MEM (Var v) prefix \/
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
     emit_one_input opc nl op (ps with ps_stack := prefix ++ ps.ps_stack) =
       (FST (emit_one_input opc nl op ps),
        (SND (emit_one_input opc nl op ps)) with ps_stack :=
@@ -2351,8 +2366,17 @@ Proof
        stack_push_def, SNOC_APPEND, APPEND_ASSOC] >>
   TRY (IF_CASES_TAC >> simp[] >> NO_TAC) >>
   rename1 `MEM v nl` >>
-  `~MEM (Var v) prefix` by
-    (gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_var_operand_def]) >>
+  `FLOOKUP ps.ps_spilled (Var v) = NONE ==>
+    stack_get_depth (Var v) (prefix ++ ps.ps_stack) =
+    stack_get_depth (Var v) ps.ps_stack` by
+    (strip_tac >> Cases_on `MEM (Var v) prefix`
+     >- (`MEM (Var v) ps.ps_stack` by
+           metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+         `IS_SOME (stack_get_depth (Var v) ps.ps_stack)` by
+           simp[stack_get_depth_is_some] >>
+         Cases_on `stack_get_depth (Var v) ps.ps_stack` >> gvs[] >>
+         metis_tac[stack_get_depth_suffix_hit]) >>
+     simp[stack_get_depth_bottom_excluded]) >>
   Cases_on `FLOOKUP ps.ps_spilled (Var v)` >>
   simp[do_restore_def, stack_push_def, SNOC_APPEND, APPEND_ASSOC,
        stack_get_depth_bottom_excluded] >>
@@ -2367,6 +2391,44 @@ Proof
   Cases_on `do_dup d ps` >> drule_all do_dup_bottom_frame >> simp[]
 QED
 
+Theorem emit_one_input_bottom_frame:
+  !op prefix opc nl ps.
+    EVERY (\x. ~is_var_operand x) prefix ==>
+    emit_one_input opc nl op (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (FST (emit_one_input opc nl op ps),
+       (SND (emit_one_input opc nl op ps)) with ps_stack :=
+         prefix ++ (SND (emit_one_input opc nl op ps)).ps_stack)
+Proof
+  rpt strip_tac >> irule emit_one_input_shielded_bottom_frame >>
+  gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_var_operand_def]
+QED
+
+Theorem emit_input_plan_shielded_bottom_frame:
+  !operands prefix opc nl ps ops qs.
+    (!v. MEM (Var v) operands ==> ~MEM (Var v) prefix \/
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (ops,qs) ==>
+    emit_input_plan opc operands nl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct_on `operands` >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `!v. h = Var v ==> ~MEM (Var v) prefix \/
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[MEM] >>
+  drule emit_one_input_shielded_bottom_frame >>
+  disch_then (qspecl_then [`opc`, `operand_vars operands ++ nl`]
+    assume_tac) >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
+  rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
+  `!v. MEM (Var v) operands ==> ~MEM (Var v) prefix \/
+    MEM (Var v) mid.ps_stack \/ Var v IN FDOM mid.ps_spilled` by
+    (rpt strip_tac >> metis_tac[MEM, emit_one_input_available_preserved]) >>
+  Cases_on `emit_input_plan opc operands nl mid` >>
+  gvs[emit_input_plan_cons] >>
+  first_x_assum drule >> disch_then drule >> simp[]
+QED
+
 Theorem emit_input_plan_bottom_frame:
   !operands prefix opc nl ps ops qs.
     EVERY (\x. ~is_var_operand x) prefix /\
@@ -2375,16 +2437,9 @@ Theorem emit_input_plan_bottom_frame:
       (ps with ps_stack := prefix ++ ps.ps_stack) =
       (ops,qs with ps_stack := prefix ++ qs.ps_stack)
 Proof
-  Induct_on `operands` >- simp[] >>
-  rpt gen_tac >> strip_tac >>
-  drule emit_one_input_bottom_frame >>
-  disch_then (qspecl_then [`h`, `opc`, `operand_vars operands ++ nl`, `ps`]
-    assume_tac) >>
-  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
-  rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
-  Cases_on `emit_input_plan opc operands nl mid` >>
-  gvs[emit_input_plan_cons] >>
-  first_x_assum drule >> disch_then drule >> simp[]
+  rpt strip_tac >> irule emit_input_plan_shielded_bottom_frame >>
+  goal_assum (drule_at Any) >> gvs[EVERY_MEM] >>
+  metis_tac[stackPlanTypesTheory.is_var_operand_def]
 QED
 
 Theorem emit_input_plan_marker_core_budget:
