@@ -68,3 +68,56 @@ Proof
   goal_assum (drule_at Any) >> qexistsl [`ce`, `R`, `\v s. T`] >>
   simp[shape_stable_conj, cenv_shape_ok_stable, SF ETA_ss]
 QED
+
+Theorem alloc_run_compile_struct_lit_frame:
+  !fields off R.
+  shape_stable R /\
+  (!fname e. MEM (fname,e) fields ==>
+    shape_step F compiler_label (\s. cenv_shape_ok s ce)
+      (cfn ce (expr_type e) e) (\vv s. value_shape_ok s vv) /\
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+      (cfn ce (expr_type e) e) (\vv s. T)) ==>
+  alloc_run (\s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s buf)
+    (compile_struct_lit cfn ce ty fields buf off)
+    (\op s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s buf /\
+      plain_operand s op)
+Proof
+  Induct
+  >- simp[compile_struct_lit_def, comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  qx_gen_tac `head` >> PairCases_on `head` >> rpt gen_tac >> strip_tac >>
+  simp[compile_struct_lit_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >>
+  qexists `\vv s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+    plain_operand s buf /\ value_shape_ok s vv` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_struct_child_frame >>
+      qexistsl [`F`, `ce`, `\s. R s /\ plain_operand s buf`] >>
+      simp[shape_stable_conj, SRULE [] (Q.SPEC `[buf]` shape_stable_plain_operands)] >>
+      first_x_assum (qspec_then `head0` mp_tac) >> simp[]) >>
+  qx_gen_tac `vv` >> simp[] >> irule alloc_run_bind >>
+  qexists `\dst s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+    plain_operand s buf /\ value_shape_ok s vv /\ plain_operand s dst` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_struct_address_frame >>
+      qexists `\s. R s /\ cenv_shape_ok s ce /\ plain_operand s buf /\ value_shape_ok s vv` >>
+      simp[shape_stable_conj, cenv_shape_ok_stable, value_shape_ok_stable,
+        SRULE [] (Q.SPEC `[buf]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `dst` >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+    plain_operand s buf /\ plain_operand s dst /\ plain_operand s v` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_unwrap_value_frame >>
+      qexists `\s. R s /\ cenv_shape_ok s ce /\ plain_operand s buf /\ plain_operand s dst` >>
+      simp[shape_stable_conj, cenv_shape_ok_stable,
+        SRULE [] (Q.SPEC `[buf]` shape_stable_plain_operands),
+        SRULE [] (Q.SPEC `[dst]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `v` >> simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s buf` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_store_memory_frame >>
+      qexists `\s. R s /\ cenv_shape_ok s ce /\ plain_operand s buf` >>
+      simp[shape_stable_conj, cenv_shape_ok_stable,
+        SRULE [] (Q.SPEC `[buf]` shape_stable_plain_operands)]) >>
+  gen_tac >> simp[] >> first_x_assum irule >> simp[] >>
+  fs[MEM] >> metis_tac[]
+QED
