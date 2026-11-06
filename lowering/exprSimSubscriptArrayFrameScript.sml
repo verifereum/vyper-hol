@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem locals_kept_dynarray_free_value:
-  expr_sim_inv cenv cx env es /\ locals_kept cenv es es s s' /\
+  expr_sim_inv cenv cx env es /\ locals_kept cenv es ee s s' /\
   local_region cenv es.scopes s n b sz /\
   b <= off /\ off + val_footprint tv v <= b + sz /\
   local_val_at cenv cx n (off - b) tv v /\ val_wf tv v /\ dynarray_free tv ==>
@@ -45,7 +45,7 @@ Theorem vv_at_memory_bytes_frame:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   eval_operand p.ptr_operand s = SOME w /\
   expr_sim_inv cenv cx env es /\ dynarray_free tv /\
-  wb_frame cenv es es sb s s' ==>
+  wb_frame cenv es ee sb s s' ==>
   mem_bytes_at (w2n w) (val_footprint tv v) s'.vs_memory =
     mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
@@ -61,7 +61,7 @@ Proof
 QED
 
 Theorem local_region_wb_frame:
-  wb_frame cenv es es sb s s' /\ local_ptrs_reserved cenv sb /\
+  wb_frame cenv es ee sb s s' /\ local_ptrs_reserved cenv sb /\
   local_ptrs_rel func cenv es.scopes s ==>
   (local_region cenv es.scopes s' n b sz <=> local_region cenv es.scopes s n b sz)
 Proof
@@ -79,7 +79,7 @@ Theorem vv_at_located_frame:
        eval_operand p.ptr_operand s' = SOME w) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   es'.scopes = es.scopes /\ es'.immutables = es.immutables /\
-  wb_frame cenv es es sb s s' /\ local_ptrs_reserved cenv sb /\
+  wb_frame cenv es ee sb s s' /\ local_ptrs_reserved cenv sb /\
   local_ptrs_rel func cenv es.scopes s /\ sb.cs_next_id <= sc.cs_next_id ==>
   vv_at cenv cx ty sa sc es' r (LocatedValue ty p) s'
 Proof
@@ -110,7 +110,7 @@ Theorem vv_holds_located_nonword_frame:
        eval_operand p.ptr_operand s' = SOME w) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   es'.scopes = es.scopes /\ es'.immutables = es.immutables /\
-  expr_sim_inv cenv cx env es /\ wb_frame cenv es es sb s s' ==>
+  expr_sim_inv cenv cx env es /\ wb_frame cenv es ee sb s s' ==>
   vv_holds cenv cx ty r (LocatedValue ty p) es' s'
 Proof
   strip_tac
