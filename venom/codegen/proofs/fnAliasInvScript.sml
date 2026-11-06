@@ -7359,6 +7359,82 @@ QED
 
 Finalise alias_block_plan_conditional_liveout
 
+Theorem alias_lineage_block_liveout:
+  !liveness dfg cfg fn ps0 lbl ps.
+  lineage_state liveness dfg cfg fn ps0 lbl ps ==>
+  !ch growth spill_base lbl_ctr bb h promised ops qs.
+  ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan liveness dfg cfg fn bb
+    (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops, qs) ==>
+  !x. MEM x (live_vars_at liveness lbl (LENGTH bb.bb_instructions)) ==>
+    plan_holds qs (Var x)
+Proof
+  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
+  ho_match_mp_tac lineage_state_strongind >> rpt strip_tac
+  >- (`lineage_state liveness dfg cfg fn ps0 lbl ps0` by
+        metis_tac[lineage_state_entry] >>
+      gvs[] >>
+      drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
+        alias_block_plan_conditional_liveout >>
+      simp[] >> disch_then drule >> simp[]) >>
+  `lineage_state liveness dfg cfg fn ps0 lbl'
+    (ps_succ with <|ps_stack := ps_after.ps_stack; ps_spilled := ps_after.ps_spilled|>)` by
+      (irule lineage_state_step >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `!y. MEM y (live_vars_at liveness lbl (LENGTH bb.bb_instructions)) ==>
+      plan_holds ps_after (Var y)` by
+    (first_x_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  gvs[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[alias_lineage_reachable] >>
+  `fn_entry_label fn <> SOME lbl' /\
+     LENGTH (cfg_preds_of (cfg_analyze fn) lbl') <= 1 ==>
+     !y. MEM y (live_vars_at (liveness_analyze fn) lbl' 0) ==>
+       plan_holds (ps_succ with <|ps_stack := ps_after.ps_stack;
+                                 ps_spilled := ps_after.ps_spilled|>) (Var y)` by
+    (rpt strip_tac >>
+     `MEM y (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions))` by
+       (irule alias_ready_nonjoin_input_liveout >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     simp[plan_holds_def] >> metis_tac[plan_holds_def]) >>
+  qpat_assum `lineage_state _ _ _ _ _ lbl' _`
+    (mp_then (Pat `lineage_state _ _ _ _ _ _ _`) mp_tac
+      alias_block_plan_conditional_liveout) >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem alias_lineage_nonjoin_livein:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  fn_entry_label fn <> SOME lbl /\ LENGTH (cfg_preds_of cfg lbl) <= 1 ==>
+  !x. MEM x (live_vars_at liveness lbl 0) ==> plan_holds ps (Var x)
+Proof
+  strip_tac >> gvs[] >>
+  qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+  simp[Once lineage_state_cases] >> strip_tac >> gvs[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) lbl'` by
+    metis_tac[alias_lineage_reachable] >>
+  `!y. MEM y (live_vars_at (liveness_analyze fn) lbl' (LENGTH bb'.bb_instructions)) ==>
+      plan_holds ps_after (Var y)` by
+    (drule alias_lineage_block_liveout >>
+     disch_then (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl' (LENGTH bb'.bb_instructions))` by
+    (irule alias_ready_nonjoin_input_liveout >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[plan_holds_def]
+QED
+
 Theorem alias_run_without_predecessor_no_phis:
   s.vs_prev_bb = NONE /\ run_block fuel ctx bb s = OK s' ==>
   collect_phis bb.bb_instructions = []
