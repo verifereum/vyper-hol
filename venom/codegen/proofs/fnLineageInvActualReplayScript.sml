@@ -170,3 +170,161 @@ Proof
           fnPlanPrefixTheory.release_dead_spills_stack,
           TAKE_APPEND, TAKE_LENGTH_TOO_LONG])
 QED
+
+Theorem generate_regular_plan_bottom_frame:
+  !base lv dfg cfg fn inst nl halting term lbl ps ops qs m.
+    residual_budget_wf base [] ps /\ inst.inst_opcode <> JMP /\
+    LENGTH (compute_operands inst) <= 16 /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
+    (!v. MEM (Var v) (compute_operands inst) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    ALL_DISTINCT inst.inst_outputs /\
+    EVERY (\v. ~MEM (Var v) (compute_operands inst) /\
+      ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled) inst.inst_outputs /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl
+      (ps with ps_stack := REPLICATE m dead_stack_marker ++ ps.ps_stack) =
+      (ops,qs with ps_stack := REPLICATE m dead_stack_marker ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `operands = compute_operands inst` >>
+  qabbrev_tac `prefix = REPLICATE m dead_stack_marker` >>
+  `EVERY (\op. ~is_var_operand op) prefix` by
+    simp[Abbr `prefix`, dead_stack_marker_def, is_var_operand_def] >>
+  `EVERY (\op. ~MEM op prefix) operands` by
+    (gvs[Abbr `prefix`, EVERY_MEM, MEM_REPLICATE] >> metis_tac[]) >>
+  Cases_on `emit_input_plan inst.inst_opcode operands nl ps` >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,ps1)` >>
+  drule_all emit_input_plan_bottom_frame >> strip_tac >>
+  `LENGTH operands <= LENGTH ps1.ps_stack` by
+    (irule fnPlanLineageReorderTheory.available_input_plan_length >>
+     goal_assum (drule_at Any) >>
+     Cases >> gvs[is_var_operand_def]) >>
+  suspend "candidates"
+QED
+
+Resume generate_regular_plan_bottom_frame[candidates]:
+  qabbrev_tac `swapped = TAKE (LENGTH operands - 2) operands ++
+    [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]` >>
+  qabbrev_tac `choice = if is_commutative inst.inst_opcode /\ 2 <= LENGTH operands then
+    if reorder_cost (FST (reorder_plan dfg operands ps1)) <
+       reorder_cost (FST (reorder_plan dfg swapped ps1))
+    then reorder_plan dfg operands ps1 else reorder_plan dfg swapped ps1
+    else reorder_plan dfg operands ps1` >>
+  namedCases_on `choice` ["rops ps4"] >>
+  `?selected. PERM operands selected /\
+      reorder_plan dfg selected ps1 = (rops,ps4)` by
+    (Cases_on `is_commutative inst.inst_opcode /\ 2 <= LENGTH operands`
+     >- (Cases_on `reorder_cost (FST (reorder_plan dfg operands ps1)) <
+                   reorder_cost (FST (reorder_plan dfg swapped ps1))`
+         >- (qexists_tac `operands` >> gvs[markerTheory.Abbrev_def]) >>
+         qexists_tac `swapped` >> gvs[markerTheory.Abbrev_def] >>
+         irule genericInputReadyTheory.last_two_reorder_perm >> simp[]) >>
+     qexists_tac `operands` >> gvs[markerTheory.Abbrev_def]) >>
+  `reorder_plan dfg operands (ps1 with ps_stack := prefix ++ ps1.ps_stack) =
+    (FST (reorder_plan dfg operands ps1),
+     (SND (reorder_plan dfg operands ps1)) with ps_stack :=
+       prefix ++ (SND (reorder_plan dfg operands ps1)).ps_stack)` by
+    (Cases_on `reorder_plan dfg operands ps1` >>
+     irule reorder_plan_bottom_frame >> simp[]) >>
+  `2 <= LENGTH operands ==>
+   reorder_plan dfg swapped (ps1 with ps_stack := prefix ++ ps1.ps_stack) =
+    (FST (reorder_plan dfg swapped ps1),
+     (SND (reorder_plan dfg swapped ps1)) with ps_stack :=
+       prefix ++ (SND (reorder_plan dfg swapped ps1)).ps_stack)` by
+    (strip_tac >> `PERM operands swapped` by
+      (simp[Abbr `swapped`] >>
+       irule genericInputReadyTheory.last_two_reorder_perm >> simp[]) >>
+     `LENGTH swapped = LENGTH operands /\ EVERY (\op. ~MEM op prefix) swapped` by
+       metis_tac[sortingTheory.PERM_LENGTH, sortingTheory.PERM_MEM_EQ, EVERY_MEM] >>
+     Cases_on `reorder_plan dfg swapped ps1` >>
+     irule reorder_plan_bottom_frame >> simp[]) >>
+  suspend "resources"
+QED
+
+Resume generate_regular_plan_bottom_frame[resources]:
+  rename1 `residual_budget_wf spillbase [] ps` >>
+  qabbrev_tac `consumed = ps4 with ps_stack := stack_pop (LENGTH operands) ps4.ps_stack` >>
+  qabbrev_tac `pushed = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+    consumed inst.inst_outputs` >>
+  `residual_budget_wf spillbase [] pushed` by
+    (`ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` by simp[] >>
+     `residual_budget_wf spillbase [] (ps with ps_stack := ps.ps_stack)` by simp[] >>
+     `consumed = ps4 with ps_stack := stack_pop (LENGTH operands) ps4.ps_stack` by
+       simp[Abbr `consumed`] >>
+     drule_all emit_reorder_pop_marker_core_fresh >>
+     qpat_x_assum `ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` kall_tac >>
+     strip_tac >>
+     `pushed = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+       consumed inst.inst_outputs` by simp[Abbr `pushed`] >>
+     drule_all output_push_marker_core >> strip_tac >>
+     `pushed with ps_stack := rest ++ MAP Var inst.inst_outputs = pushed` by
+       (qpat_x_assum `pushed.ps_stack = _` mp_tac >>
+        simp_tac (srw_ss()) [plan_state_component_equality]) >>
+     metis_tac[]) >>
+  `LENGTH operands <= LENGTH ps4.ps_stack` by
+    (`ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` by simp[] >>
+     `residual_budget_wf spillbase [] (ps with ps_stack := ps.ps_stack)` by simp[] >>
+     `consumed = ps4 with ps_stack := stack_pop (LENGTH operands) ps4.ps_stack` by
+       simp[Abbr `consumed`] >>
+     drule_all emit_reorder_pop_marker_execution >>
+     qpat_x_assum `ps.ps_stack = REPLICATE 0 dead_stack_marker ++ ps.ps_stack` kall_tac >>
+     simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
+     metis_tac[sortingTheory.PERM_LENGTH]) >>
+  suspend "tail"
+QED
+
+Resume generate_regular_plan_bottom_frame[tail]:
+  qabbrev_tac `topic = case inst.inst_opcode of LOG =>
+    (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0` >>
+  Cases_on `generate_emit_ops inst topic pushed` >>
+  rename1 `generate_emit_ops inst topic pushed = (eops,ps7)` >>
+  `ALL_DISTINCT ps7.ps_stack` by
+    (drule residual_budget_wf_empty_inventory >> strip_tac >>
+     drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> simp[]) >>
+  `generate_emit_ops inst topic (pushed with ps_stack := prefix ++ pushed.ps_stack) =
+    (eops,ps7 with ps_stack := prefix ++ ps7.ps_stack)` by
+    (drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
+     simp[generate_emit_ops_stack_update]) >>
+  Cases_on `popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) ps7` >>
+  rename1 `popmany_plan _ ps7 = (pops,ps8)` >>
+  `DISJOINT (set prefix) (set (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)))` by
+    (gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION, MEM_MAP, EVERY_MEM] >>
+     metis_tac[is_var_operand_def]) >>
+  drule_all popmany_plan_bottom_frame >> strip_tac >>
+  `!s. optimistic_swap_plan dfg inst nl term
+       (s with ps_stack := prefix ++ s.ps_stack) =
+       (FST (optimistic_swap_plan dfg inst nl term s),
+        (SND (optimistic_swap_plan dfg inst nl term s)) with ps_stack :=
+          prefix ++ (SND (optimistic_swap_plan dfg inst nl term s)).ps_stack)` by
+    (gen_tac >> Cases_on `optimistic_swap_plan dfg inst nl term s` >>
+     irule optimistic_swap_plan_bottom_frame >> simp[]) >>
+  `FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+     (ps4 with ps_stack := stack_pop (LENGTH operands) (prefix ++ ps4.ps_stack))
+     inst.inst_outputs = pushed with ps_stack := prefix ++ pushed.ps_stack` by
+    simp[Abbr `pushed`, Abbr `consumed`, parameter_push_fold,
+         fnPlanLineagePhiTemporalTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
+  suspend "reconstruction"
+QED
+
+Resume generate_regular_plan_bottom_frame[reconstruction]:
+  Cases_on `reorder_plan dfg operands ps1` >>
+  Cases_on `reorder_plan dfg swapped ps1` >>
+  Cases_on `is_commutative inst.inst_opcode /\ 2 <= LENGTH operands` >>
+  Cases_on `reorder_cost (FST (reorder_plan dfg operands ps1)) <
+            reorder_cost (FST (reorder_plan dfg swapped ps1))` >>
+  gvs[markerTheory.Abbrev_def, generate_regular_inst_plan_def] >>
+  Cases_on `inst.inst_outputs = []` >>
+  gvs[release_dead_spills_stack_update,
+      fnPlanPrefixTheory.release_dead_spills_stack] >>
+  Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >> gvs[] >>
+  Cases_on `FILTER (\v. MEM v nl) inst.inst_outputs = []` >>
+  gvs[release_dead_spills_stack_update,
+      fnPlanPrefixTheory.release_dead_spills_stack] >>
+  Cases_on `optimistic_swap_plan dfg inst nl term ps8` >>
+  Cases_on `optimistic_swap_plan dfg inst nl term ps7` >>
+  gvs[release_dead_spills_stack_update,
+      fnPlanPrefixTheory.release_dead_spills_stack]
+QED
+
+Finalise generate_regular_plan_bottom_frame
