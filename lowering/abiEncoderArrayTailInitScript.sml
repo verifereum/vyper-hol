@@ -118,6 +118,7 @@ Proof
        (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
      asm_simp_tac bool_ss []) >>
   `abi_decode_frame p 32 prepared (mstore p (n2w (cnt*asz)) prepared)` by irule abi_decode_mstore_frame >>
+  `st.cs_next_id IN sites` by fs[abi_sites_decoder_ids_def] >>
   qexists_tac `mstore p (n2w (cnt*asz)) prepared` >> asm_simp_tac bool_ss [] >>
   pure_rewrite_tac [abi_sites_encoder_complex_prefix_post_def] >> qexists_tac `p` >>
   gvs[fresh_vars_wrt_mstore, eval_operand_mstore, abi_decode_frame_def, mload_mstore_same,
