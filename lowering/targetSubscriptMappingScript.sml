@@ -298,17 +298,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem target_mapping_decimal_encoding_probe:
-  supported_scalar_type (BaseT DecimalT) /\
-  ~is_bytestring_type (BaseT DecimalT) /\
-  evaluate_type FEMPTY (BaseT DecimalT) = SOME (BaseTV DecimalT) /\
-  value_has_type (BaseTV DecimalT) (DecimalV 1) /\
-  typed_val_to_w256 (BaseTV DecimalT) (DecimalV 1) <>
-    encode_hashmap_key (BaseT DecimalT) (DecimalV 1)
-Proof
-  EVAL_TAC >> simp[]
-QED
-
 Theorem target_mapping_scalar_encoding:
   hashmap_key_type kt /\ ~is_bytestring_type kt /\
   evaluate_type tenv kt = SOME tv /\ value_has_type tv key ==>

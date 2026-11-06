@@ -593,23 +593,6 @@ Proof
   irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]
 QED
 
-(* A dynamic memory parent needs provenance beyond the fixed-history rule:
-   both the parent and child keys can be dynamic-array pop keys. *)
-Theorem dynamic_memory_selection_snapshot_probe[local]:
-  let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) (Dynamic 2);
-      path = [ValueSubscript (IntV 0)];
-      hist = [(path ++ [ValueSubscript (IntV 0)], IntV 9);
-              (path, ArrayV (DynArrayV [IntV 5; IntV 1]))]
-  in subscripts_type tv [] = SOME tv /\
-     subscripts_type tv path = SOME (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) /\
-     read_popped tv path hist = SOME (ArrayV (DynArrayV [IntV 5; IntV 1])) /\
-     read_popped tv (path ++ [ValueSubscript (IntV 0)]) hist = SOME (IntV 9) /\
-     evaluate_subscripts (ArrayTV (BaseTV (UintT 256)) (Dynamic 2))
-       (ArrayV (DynArrayV [IntV 5; IntV 1])) [ValueSubscript (IntV 0)] = INL (IntV 5)
-Proof
-  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
-QED
-
 (* Successful source selection after an index which preserves the captured
    non-storage base's source memory and immutable maps. *)
 Theorem framed_array_select_read:
