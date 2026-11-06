@@ -2702,3 +2702,76 @@ Proof
   qexistsl [`found`, `f`, `ps3`] >> simp[] >>
   qexistsl [`swap1_ops`, `ps2`] >> simp[])
 QED
+
+Theorem inventory_reorder_steps_phase[local]:
+  !items ps ops qs.
+  EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets) items /\
+  EVERY P targets /\
+  (!x. MEM x targets ==> FLOOKUP ps.ps_spilled x = NONE) /\
+  (EVERY P ps.ps_stack \/ LENGTH ps.ps_stack <= LENGTH targets) /\
+  plan_steps (\(idx,op) ps. reorder_one dfg targets idx op ps) items ps = (ops,qs) ==>
+  EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= LENGTH targets
+Proof
+  Induct >- simp[foldlSimTheory.plan_steps_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp_tac (srw_ss()) [foldlSimTheory.plan_steps_def, EVERY_DEF] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  pop_assum mp_tac >>
+  simp_tac bool_ss [LET_THM] >>
+  rpt (pairarg_tac >> asm_simp_tac (srw_ss()) []) >>
+  strip_tac >> gvs[] >>
+  rename1 `reorder_one dfg targets idx op ps = (step_ops,mid)` >>
+  `!x. MEM x targets ==> FLOOKUP mid.ps_spilled x = NONE` by
+    metis_tac[inventory_reorder_one_target_exclusion] >>
+  `EVERY P mid.ps_stack \/ LENGTH mid.ps_stack <= LENGTH targets` by
+    metis_tac[inventory_reorder_one_phase] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem inventory_reorder_phase:
+  EVERY P targets /\
+  (!x. MEM x targets ==> FLOOKUP ps.ps_spilled x = NONE) /\
+  (EVERY P ps.ps_stack \/ LENGTH ps.ps_stack <= LENGTH targets) /\
+  reorder_plan dfg targets ps = (ops,qs) ==>
+  EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= LENGTH targets
+Proof
+  disch_tac >>
+  `EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets)
+      (MAPi (\i op. (i,op)) targets)` by
+    simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi,
+         indexedListsTheory.EL_MAPi, EL_MEM] >>
+  gvs[reorder_plan_eq_plan_steps] >>
+  metis_tac[inventory_reorder_steps_phase]
+QED
+
+Theorem inventory_restore_reorder_residual_support:
+  EVERY P ps.ps_stack /\ EVERY P targets /\
+  restore_spilled_plan targets ps = (rops,rs) /\
+  reorder_plan dfg targets rs = (ops,qs) ==>
+  EVERY P (stack_pop (LENGTH targets) qs.ps_stack)
+Proof
+  strip_tac >>
+  `EVERY P rs.ps_stack` by metis_tac[inventory_restore_support] >>
+  `!x. MEM x targets ==> FLOOKUP rs.ps_spilled x = NONE` by
+    metis_tac[inventory_restore_targets_not_spilled] >>
+  `EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= LENGTH targets` by
+    metis_tac[inventory_reorder_phase] >>
+  (gvs[stack_pop_def] >> simp[EVERY_TAKE] >>
+   `LENGTH qs.ps_stack - LENGTH targets = 0` by decide_tac >> simp[])
+QED
+
+Theorem inventory_restore_reorder_marker_free:
+  ~MEM dead_stack_marker ps.ps_stack /\ ~MEM dead_stack_marker targets /\
+  restore_spilled_plan targets ps = (rops,rs) /\
+  reorder_plan dfg targets rs = (ops,qs) /\
+  stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >> irule inventory_join_marker_free_boundary >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `EVERY (\x. x <> dead_stack_marker)
+     (stack_pop (LENGTH targets) qs.ps_stack)` by
+    (irule inventory_restore_reorder_residual_support >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
+  gvs[EVERY_MEM]
+QED
