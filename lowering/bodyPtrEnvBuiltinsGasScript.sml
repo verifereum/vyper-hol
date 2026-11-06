@@ -144,7 +144,9 @@ Proof
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   gvs[update_var_def, ptr_val_ok_def, env_item_type_def, is_word_type_def,
       arithmeticTheory.ADD1, ghost_inv_gas_obs] >>
-  irule scalar_builtin_output_clean >> simp[MEM]
+  conj_tac
+  >- (irule scalar_builtin_output_clean >> simp[MEM]) >>
+  irule scalar_builtin_output_no_prov >> simp[MEM]
 QED
 
 Theorem compile_msg_gas_sim_ptr:

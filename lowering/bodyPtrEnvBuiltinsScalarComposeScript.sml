@@ -54,7 +54,9 @@ Theorem emit_scalar_builtin_append:
       (k + (if opc = GAS then 1 else 0)) G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\ eval_operand op t = SOME w /\
+    op_taint tn' op = {} /\
+    (opc <> ADD /\ opc <> SUB ==> op_prov G' op = NONE) /\
+    eval_operand op t = SOME w /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\

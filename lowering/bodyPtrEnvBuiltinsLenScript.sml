@@ -235,7 +235,8 @@ Theorem emit_load_builtin_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es0 ss G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\ eval_operand op t = SOME w /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
+    eval_operand op t = SOME w /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -258,6 +259,13 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `op_prov (step_prov PG G
+      (mk_inst sa.cs_next_id opc [src]
+        [STRING #"%" (toString sa.cs_next_var)])
+      (update_var (STRING #"%" (toString sa.cs_next_var)) w s))
+      (Var (STRING #"%" (toString sa.cs_next_var))) = NONE` by
+    (irule step_prov_out_none >> simp[mk_inst_def] >>
+     irule out_prov_other_none >> gvs[MEM, mk_inst_def]) >>
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   gvs[stmt_state_rel_inst_idx, update_var_def, eval_operand_def,
       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

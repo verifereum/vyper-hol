@@ -129,6 +129,18 @@ Proof
        FLOOKUP_UPDATE]
 QED
 
+Theorem scalar_builtin_output_no_prov:
+  MEM opc [CALLER; ADDRESS; CALLVALUE; TIMESTAMP; NUMBER; BLOBBASEFEE;
+    GASPRICE; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
+    ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
+    BLOBHASH; ISZERO; SHR; SHL] ==>
+  op_prov (step_prov PG G (mk_inst id opc ops [out]) t) (Var out) = NONE
+Proof
+  simp[MEM] >> strip_tac >>
+  gvs[op_prov_def, step_prov_def, set_prov_def, out_prov_def,
+      mk_inst_def, FLOOKUP_DRESTRICT]
+QED
+
 Theorem step_taint_no_memory_effect:
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
   source_memory_write_ranges inst s = [] /\ written_taint tn inst s = {} ==>

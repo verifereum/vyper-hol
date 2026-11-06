@@ -66,7 +66,7 @@ Theorem prevhash_counted_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
-    op_taint tn' op = {} /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME
       (s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))) /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\

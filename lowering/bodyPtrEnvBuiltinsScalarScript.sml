@@ -45,7 +45,9 @@ Theorem emit_scalar_builtin_run:
     gas_path_ptr D 0 ctx fn PG G tn s (if opc = GAS then 1 else 0) G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\ eval_operand op t = SOME w /\
+    op_taint tn' op = {} /\
+    (opc <> ADD /\ opc <> SUB ==> op_prov G' op = NONE) /\
+    eval_operand op t = SOME w /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -73,6 +75,8 @@ Proof
        lookup_var_def, FLOOKUP_UPDATE] >>
   conj_tac
   >- (irule scalar_builtin_output_clean >> simp[]) >>
+  conj_tac
+  >- (strip_tac >> irule scalar_builtin_output_no_prov >> gvs[MEM]) >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[]
 QED
 
@@ -94,7 +98,8 @@ Theorem env_builtin_counted_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\ eval_operand op t = SOME (val_to_w256 v) /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
+    eval_operand op t = SOME (val_to_w256 v) /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
