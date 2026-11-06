@@ -32,6 +32,17 @@ val ld_probe_point = ``\lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t.
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
     ld_return_cont C fn cs s``;
 
+(* Structural point with continuation transfer from a current source state. *)
+val ld_transfer_point = ``\lo P C C' vs0 stk fn fn' source fs f0 A0 Sigma names bb t.
+  ?PG G tn inst s t0 A frames N X p h.
+    ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+    ^ld_probe_stable lo P Sigma names fs f0 A0 A frames /\
+    fn' = ld_image (HD frames) /\
+    ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+    ld_prefix C' fn' X p h t0 t /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+    (!cs. ld_return_cont C fn cs source ==> ld_return_cont C fn cs s)``;
+
 val ld_probe_entry = ``\C' fn' Point q.
   !k bb tp. lookup_block q.vs_current_bb fn'.fn_blocks = SOME bb /\
     eval_phis q bb.bb_instructions = OK tp /\

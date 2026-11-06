@@ -470,6 +470,32 @@ val _ = List.app (fn th => if null (hyp th) then ()
 
 (* The actual source return supplies reachability of the resumed caller;
    the old caller continuation, not the callee entry, is retained. *)
+Theorem ld_return_caller_frame_reachable:
+  o1_ctx_shape C /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  run_blocks sf C callee cs = IntRet rs sc /\
+  ld_sync lo P C vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    PGr Gr tnr callee rinst se te Ar fr Nr /\
+  step_inst 0 C rinst se = IntRet rs sc /\
+  bind_outputs inst.inst_outputs rs.iret_values
+    (adopt_return_fmp rs (merge_callee_state s sc)) = SOME sr /\
+  active_inst fn next (sr with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  frame_reachable vs0 C stk PG
+    (DRESTRICT G (COMPL (set inst.inst_outputs)))
+    (tnr with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs)))
+    fn next (sr with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  qpat_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o MATCH_MP ld_sync_source) >>
+  drule frame_reachable_ret >> simp[] >> metis_tac[]
+QED
+
 Theorem ld_return_caller_reachable:
   o1_ctx_shape C /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -493,10 +519,7 @@ Theorem ld_return_caller_reachable:
   ld_return_cont C fn caller_cs (sr with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >> conj_tac
-  >- (qpat_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _`
-        (strip_assume_tac o MATCH_MP ld_sync_source) >>
-      drule frame_reachable_ret >> simp[] >>
-      metis_tac[]) >>
+  >- (drule_all ld_return_caller_frame_reachable >> simp[]) >>
   irule ld_return_cont_next >> goal_assum (drule_at Any) >> simp[] >>
   conj_tac >- (qpat_x_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _` kall_tac >>
     drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
@@ -506,13 +529,13 @@ Proof
   metis_tac[ld_sync_source]
 QED
 
-Theorem ld_invoke_active_pop:
+Theorem ld_invoke_pop_core:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
   fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
   t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
-  ld_return_cont C fn caller_cs s /\ inst.inst_opcode = INVOKE /\
+  inst.inst_opcode = INVOKE /\ 
   decode_invoke inst = SOME (nm,ops) /\
   lookup_function nm C.ctx_functions = SOME callee /\
   eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
@@ -523,13 +546,13 @@ Theorem ld_invoke_active_pop:
   bind_outputs inst.inst_outputs rt.iret_values
     (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
   active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
+  ^ld_transfer_point lo P C C' vs0 stk fn fn' s fs0 f0 A0 Sigma names bb
     (q with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
   qabbrev_tac `Ambient = ^ld_covered_ambient` >>
   qabbrev_tac `Stable = ^ld_probe_stable` >>
   qabbrev_tac `Terminal = ^ld_probe_terminal` >>
-  qabbrev_tac `Point = ^ld_probe_point` >>
+  qabbrev_tac `Point = ^ld_transfer_point` >>
   qabbrev_tac `Guard = ^ld_probe_guard` >> fs[] >> strip_tac >>
   `?sr. bind_outputs inst.inst_outputs rs.iret_values
       (adopt_return_fmp rs (merge_callee_state s cs')) = SOME sr /\
@@ -572,7 +595,13 @@ Proof
      qexistsl_tac [`bb`, `inst`, `q with vs_inst_idx := SUC t.vs_inst_idx`,
        `s`, `t`, `ti`] >> simp[] >>
      metis_tac[ld_sync_control, pairTheory.FST]) >>
-  drule_all ld_return_caller_reachable >> strip_tac >>
+  drule_all ld_return_caller_frame_reachable >> strip_tac >>
+  `!caller_cs. ld_return_cont C fn caller_cs s ==>
+    ld_return_cont C fn caller_cs (sr with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (rpt strip_tac >> irule ld_return_cont_next >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`inst`, `sf`] >>
+     simp[venomInstTheory.is_terminator_def] >> metis_tac[ld_sync_source]) >>
   `cs'.vs_call_ctx = s.vs_call_ctx` by
     (drule_all ld_setup_return_call_ctx >> simp[]) >>
   `bind_outputs inst.inst_outputs rt.iret_values (merge_callee_state s cs') = SOME sr /\
@@ -804,6 +833,33 @@ Proof
   qpat_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb` mp_tac >>
   qpat_assum `fn' = ld_image f` mp_tac >>
   rpt (pop_assum kall_tac) >> simp[]
+QED
+
+Theorem ld_invoke_active_pop:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn caller_cs s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
+  drule_all ld_invoke_pop_core >> simp[] >> strip_tac >>
+  simp[NoAsms, Abbr `Goal`] >>
+  qexistsl_tac [`PG'`,`G'`,`tn'`,`inst'`,`s''`,`t0`,`A'`,`frames`,`N'`,`X`,`p'`,`h`] >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem ld_invoke_guarded_pop:
