@@ -654,3 +654,24 @@ Proof
   Cases_on `is_in` >> gvs[] >>
   qexists `b7` >> simp[] >> metis_tac[]
 QED
+
+Theorem rest_word_loop_layout_safe_entry:
+  rest_word_loop_layout_safe cs ct fn needle arr lenop stride off bound_opt is_in out h code cl cm v ==>
+  ?a b c c0 c1 c2 inv valid.
+    lookup_block h.rw_entry fn.fn_blocks = SOME
+      <|bb_label := h.rw_entry;
+        bb_instructions := [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
+                            mk_inst b ASSIGN [Lit 0w] [h.rw_result]] ++
+          (case bound_opt of NONE => [] | SOME cap =>
+            [mk_inst c0 GT [lenop; Lit (n2w cap)] [inv];
+             mk_inst c1 ISZERO [Var inv] [valid];
+             mk_inst c2 ASSERT [Var valid] []]) ++
+          [mk_inst c JMP [Label h.rw_cond] []]|> /\
+    ~not_fresh_at cs inv /\ ~not_fresh_at cs valid /\
+    inv <> h.rw_idx /\ inv <> h.rw_result /\
+    valid <> h.rw_idx /\ valid <> h.rw_result
+Proof
+  simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >>
+  qexistsl [`a1`, `a2`, `a3`, `c0`, `c1`, `c2`, `inv'`, `valid`] >>
+  simp[] >> metis_tac[]
+QED
