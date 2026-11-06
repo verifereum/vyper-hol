@@ -1,6 +1,6 @@
 Theory fnPlanLineageQuarantine
 Ancestors
-  fnPlanLineageInventory fnPlanLineageSetup stackPlanGen venomInst
+  fnPlanLineageInventory fnPlanLineageSetup fnPlanLineageCallers stackPlanGen venomInst
 Libs wordsLib
 
 (* The unrestricted dispatcher probe admits malformed instructions. OFFSET
@@ -253,7 +253,7 @@ QED
 
 Theorem native_regular_stack_support:
   !lv dfg cfg fn inst nl halt term lbl ps ops qs v.
-    join_target_ops lv fn lbl inst = NONE /\
+    (inst.inst_opcode <> JMP \/ join_target_ops lv fn lbl inst = NONE) /\
     LENGTH (compute_operands inst) <= 16 /\
     generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps = (ops,qs) /\
     MEM (Var v) qs.ps_stack ==>
@@ -261,7 +261,7 @@ Theorem native_regular_stack_support:
     MEM v inst.inst_outputs
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_at (Pos last) native_regular_stages >>
+  (drule_at (Pos last) native_regular_stages >>
   (impl_tac >- simp[]) >> strip_tac >>
   `MEM (Var v) ps7.ps_stack` by
     metis_tac[regular_post_emit_tail_stack_support] >>
@@ -275,7 +275,7 @@ Proof
     (Cases_on `MEM v inst.inst_outputs` >- simp[] >> gvs[] >>
      drule_at (Pos (el 2)) reorder_plan_stack_support >>
      disch_then (qspec_then `Var v` mp_tac) >> simp[]) >>
-  metis_tac[emit_input_plan_stack_support, sortingTheory.PERM_MEM_EQ]
+  metis_tac[emit_input_plan_stack_support, sortingTheory.PERM_MEM_EQ])
 QED
 
 Theorem phi_declared_output_stack_support:
@@ -340,4 +340,51 @@ Proof
   >- (strip_tac >> gvs[generate_inst_plan_def, AllCaseEqs()] >>
       metis_tac[offset_declared_output_stack_support]) >>
   strip_tac >> gvs[generate_inst_plan_def, AllCaseEqs()]
+QED
+
+Theorem native_inst_stack_quarantine:
+  !lv dfg cfg fn inst nl halt term lbl ps ops qs v.
+    inst_wf inst /\ codegen_ready_inst inst /\
+    generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,qs) /\
+    ~MEM (Var v) ps.ps_stack /\ ~MEM (Var v) inst.inst_operands /\
+    ~MEM v inst.inst_outputs /\
+    (!targets. inst.inst_opcode = JMP /\
+      join_target_ops lv fn lbl inst = SOME targets ==> ~MEM (Var v) targets) ==>
+    ~MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI \/ inst.inst_opcode = OFFSET \/
+    is_param_opcode inst.inst_opcode \/ inst.inst_opcode = NOP`
+  >- metis_tac[native_special_stack_support] >>
+  `~MEM (Var v) (compute_operands inst)` by
+    (strip_tac >> drule fnPlanLineageCallersTheory.compute_operands_inst_uses >>
+     gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  Cases_on `inst.inst_opcode = JMP /\ join_target_ops lv fn lbl inst <> NONE`
+  >- (gvs[] >> Cases_on `join_target_ops lv fn lbl inst` >> gvs[] >>
+      drule_all wellformed_jmp_outputs_empty >> strip_tac >>
+      metis_tac[generate_inst_plan_jmp_stack_support]) >>
+  `LENGTH (compute_operands inst) <= 16` by
+    metis_tac[ready_non_phi_operand_bound] >>
+  `generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps = (ops,qs)` by
+    gvs[generate_inst_plan_def, AllCaseEqs()] >>
+  metis_tac[native_regular_stack_support]
+QED
+
+Theorem native_regular_inst_physical_reset:
+  !lv dfg cfg fn inst nl halt term lbl ps ops qs v.
+    inst_wf inst /\ codegen_ready_inst inst /\
+    generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,qs) /\
+    ~MEM (Var v) ps.ps_stack /\ ~MEM (Var v) inst.inst_operands /\
+    ~MEM v inst.inst_outputs /\
+    (!targets. inst.inst_opcode = JMP /\
+      join_target_ops lv fn lbl inst = SOME targets ==> ~MEM (Var v) targets) /\
+    ~MEM v nl /\ inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\
+    ~is_param_opcode inst.inst_opcode /\ inst.inst_opcode <> NOP ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[native_inst_stack_quarantine] >>
+  `generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps = (ops,qs)` by
+    gvs[generate_inst_plan_def, AllCaseEqs()] >>
+  metis_tac[native_regular_spilled_live_upper]
 QED
