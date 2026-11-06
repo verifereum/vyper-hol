@@ -23,11 +23,10 @@
  *     still read live slots.  Held for the posts-interface round after the
  *     branch merge, which adds the conjunct to vv_post_def; then it
  *     follows from vv_post_def.
- *   vv_post_locals_pure_kept — an effect-free operand's fragment keeps
- *     the live locals whole, their dynamic arrays' length words included
- *     (locals_kept exempts those).  It lets a positional memory operand
- *     holding a dynamic array, read only after the later operands, keep
- *     its value.  Held for the same posts-interface round.
+ *   vv_post_pure_memory_frame — an effect-free operand's fragment writes
+ *     memory only inside its own allocations.  It lets a positional memory
+ *     or immutable operand, read only after the later operands, keep its
+ *     value.  Held for the same posts-interface round.
  *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
@@ -72,19 +71,24 @@ Proof
   cheat
 QED
 
-(* An effect-free operand's fragment keeps every live local's bytes, its
-   dynamic arrays' length words too: it pops nothing.  locals_kept exempts
-   those words since a pop writes them; a positional memory operand holding
-   a dynamic array, read only after the later operands, needs them kept. *)
-Theorem vv_post_locals_pure_kept:
-  !ctx func cenv cx e es sa sb s0 es' tv vv s n b sz.
+(* An effect-free operand's fragment writes memory only inside allocations
+   its own ALLOCA instructions make (func's ALLOCAs with ids from
+   sa.cs_next_id): any region clear of those keeps its bytes, the live locals' dynamic-array length words and the
+   constructor's immutable staging included.  A positional operand captured
+   in memory, read only after the later operands, keeps its value. *)
+Theorem vv_post_pure_memory_frame:
+  !ctx func cenv cx e es sa sb s0 es' tv vv s off len.
     vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
     ~expr_has_effect e /\
-    local_region cenv es.scopes s0 n b sz ==>
-    mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
+    (!inst b sz.
+       MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+       sa.cs_next_id <= inst.inst_id /\
+       FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+       compileEnv$regions_disjoint off len b sz) ==>
+    mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
 Proof
   (* Held for the posts-interface round: follows from vv_post_def once it
-     keeps an effect-free operand's locals whole. *)
+     frames an effect-free operand's memory writes to its own allocations. *)
   cheat
 QED
 
@@ -130,8 +134,8 @@ Definition extcall_default_ready_def:
 End
 
 (* At sp, just before the extcodesize check and the CALL: the source has
-   evaluated and read every operand and built the request (target, value,
-   calldata); the CALL's operands evaluate to them, calldata is the bytes
+   evaluated and read every operand, keeping es's scopes, and built the
+   request (target, value, calldata); the CALL's operands evaluate to them, calldata is the bytes
    at call_offset, and the return buffer (cap bytes at buf_op, an alloca
    made after sa) is clear of the locals, the immutables, the allocas before
    sa and a memory default. *)
@@ -143,6 +147,7 @@ Definition extcall_request_ready_def:
     stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     outcomes_accounts_typed ee.outcomes /\
     accounts_runtime_well_typed ee.accounts /\
     sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id /\
@@ -187,7 +192,8 @@ Definition extcall_request_ready_def:
 End
 
 (* At sr, the start of the block after a successful call: the source has
-   the call's returndata, which Venom holds too, and the return buffer (an
+   the call's returndata, which Venom holds too, still with es's scopes,
+   and the return buffer (an
    alloca made after sa) holds its first cap bytes. *)
 Definition extcall_returned_def:
   extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
@@ -195,6 +201,7 @@ Definition extcall_returned_def:
     stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\
     local_ptrs_reserved cenv sr /\
     EVERY (safe_operand sr) [addr_op; buf_op; default_op] /\
@@ -505,6 +512,10 @@ Resume extcall_call_step[call_success]:
   `consumed.gas_obs = ee.gas_obs` by
     (drule vyperCallOutcomeTheory.take_call_outcome_frame >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `(SND (adopt_call_outcome rq oc consumed)).gas_obs = []` by
+    (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
+  `consumed.scopes = ee.scopes` by
+    (drule vyperCallOutcomeTheory.take_call_outcome_frame >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `(SND (adopt_call_outcome rq oc consumed)).scopes = consumed.scopes` by
     (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
