@@ -2,6 +2,7 @@
 
 Theory exprSimBopBytestring
 Ancestors
+  exprSimHashBoundary bytestringHashProps
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps
