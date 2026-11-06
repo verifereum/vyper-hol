@@ -53,7 +53,7 @@ Theorem regional_actual_phi_cut:
     lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
     lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
       bb.bb_label ps_l /\ collect_phis bb.bb_instructions <> [] /\
-    ~bb_is_halting bb /\ p = LENGTH (collect_phis bb.bb_instructions) /\
+    p = LENGTH (collect_phis bb.bb_instructions) /\
     p <= k /\ k <= LENGTH bb.bb_instructions /\
     block_plan_state lv dfg cfg fn bb
       (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) k ps ==>
@@ -88,7 +88,7 @@ Theorem regional_actual_phi_lower_inv:
     lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
     lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
       bb.bb_label ps_l /\ collect_phis bb.bb_instructions <> [] /\
-    ~bb_is_halting bb /\ p = LENGTH (collect_phis bb.bb_instructions) /\
+    p = LENGTH (collect_phis bb.bb_instructions) /\
     p <= k /\ k < LENGTH bb.bb_instructions /\
     block_plan_state lv dfg cfg fn bb
       (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) k ps ==>
@@ -164,6 +164,34 @@ Proof
       conj_tac >- (qexists_tac `k` >> simp[]) >>
       qexists_tac `fn` >> simp[]) >>
   qexistsl_tac [`cfg`, `pre_ops`, `ps2`, `a`] >> gvs[]
+QED
+
+Theorem regional_actual_lower_inv:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps_l h promised k ps.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops,ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps_l /\
+    MAX (LENGTH (get_params bb.bb_instructions))
+      (LENGTH (collect_phis bb.bb_instructions)) <= k /\
+    k < LENGTH bb.bb_instructions /\
+    block_plan_state lv dfg cfg fn bb
+      (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) k ps ==>
+    regional_body_lower_inv lv dfg sb bb k ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `collect_phis bb.bb_instructions = []`
+  >- (irule regional_actual_no_phi_lower_inv >>
+      rpt (first_assum $ irule_at Any) >> simp[] >>
+      qexists_tac `LENGTH (get_params bb.bb_instructions)` >> gvs[arithmeticTheory.MAX_DEF]) >>
+  irule (Q.INST [`p` |-> `LENGTH (collect_phis bb.bb_instructions)`]
+    (SPEC_ALL regional_actual_phi_lower_inv)) >>
+  rpt (first_assum $ irule_at Any) >> gvs[arithmeticTheory.MAX_DEF]
 QED
 
 (* Used at each instruction of the block body's induction, for the

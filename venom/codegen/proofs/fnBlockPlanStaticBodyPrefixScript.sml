@@ -300,14 +300,3 @@ Proof
   gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
-(* Halting PHIs retain even dead outputs: lower ownership is unaffected,
-   but an upper-support invariant must not require their deletion. *)
-Theorem regional_halting_phi_dead_source:
-  phi.inst_outputs = [out] /\
-  stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
-  stack_peek d ps.ps_stack = Var src /\ ~MEM src nl ==>
-  generate_phi_plan phi nl T ps =
-    ([SOPoke d (Var out)], ps with ps_stack := stack_poke d (Var out) ps.ps_stack)
-Proof
-  simp[generate_phi_plan_def, LET_THM, stackPlanTypesTheory.operand_to_string_def]
-QED
