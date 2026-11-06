@@ -577,3 +577,73 @@ Resume ptr_paired_ret_successor[transcript]:
 QED
 
 Finalise ptr_paired_ret_successor
+
+Theorem ptr_paired_ret_successor_births:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode = RET /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?b ret sr tr PTc TGc outs B'.
+    step_inst 0 C a.po_inst a.po_state = IntRet ret a.po_state /\
+    step_inst 0 C' at.po_inst at.po_state = IntRet ret at.po_state /\
+    ret.iret_adopt_fmp = NONE /\
+    a.po_stack <> [] /\ at.po_stack <> [] /\ saved <> [] /\
+    HD saved = (PTc,TGc) /\ outs = (HD a.po_stack).cf_inst.inst_outputs /\
+    bind_outputs outs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD a.po_stack).cf_state a.po_state)) = SOME sr /\
+    bind_outputs (HD at.po_stack).cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state (HD at.po_stack).cf_state at.po_state)) = SOME tr /\
+    b.po_state = (sr with vs_inst_idx := SUC (HD a.po_stack).cf_state.vs_inst_idx) /\
+    b.po_stack = TL a.po_stack /\
+    ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PTc
+      (DRESTRICT TGc (COMPL (set outs))) (TL saved) /\
+    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_mixed_vars B' positions (DRESTRICT TGc (COMPL (set outs)))
+      b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
+    B' = ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births /\
+    ptr_structural_transcript R vs C C'
+      (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      (TL tokens) registry B' PTc (DRESTRICT TGc (COMPL (set outs)))
+      (TL saved) entries
+      (H ++ [(TL tokens,registry,B',PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])
+Proof
+  strip_tac >> drule_all ptr_paired_ret_successor >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  drule ptr_source_ownership_caches >> strip_tac >>
+  drule ptr_tagged_chrono_step_projection >> strip_tac >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `!key site. FLOOKUP births key = SOME site ==> FLOOKUP B' key = SOME site` by
+    (`ptr_activation_tokens h a b tokens = TL tokens` by
+       (Cases_on `a.po_stack` >>
+        gvs[concretizePtrActivationChronologyTheory.ptr_activation_tokens_def]) >>
+     drule concretizePtrActivationBirthsTheory.ptr_source_birth_caches_snoc_retained >>
+     disch_then (qspec_then `b` mp_tac) >> simp[]) >>
+  `ptr_mixed_vars B' positions (DRESTRICT TGc (COMPL (set outs)))
+    b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state` by
+    (irule ptr_mixed_vars_retained_births_tvar >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  qexistsl_tac [`b`, `ret`, `sr`, `tr`, `PTc`, `TGc`, `outs`, `B'`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
