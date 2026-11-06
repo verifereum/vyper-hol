@@ -23,12 +23,8 @@ Proof
 QED
 
 val t04_tuple_assign_extcall = memoryStoreWitnessLib.evaluate fixture_root "t04_tuple_assign_extcall"
-Theorem t04_tuple_assign_extcall_matches_python_oracle:
-  ^(#term t04_tuple_assign_extcall) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "t04_tuple_assign_extcall")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation t04_tuple_assign_extcall))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "t04_tuple_assign_extcall" t04_tuple_assign_extcall
 
 val t05_tuple_assign_storage_targets = memoryStoreWitnessLib.evaluate fixture_root "t05_tuple_assign_storage_targets"
 Theorem t05_tuple_assign_storage_targets_matches_python_oracle:

@@ -8,8 +8,8 @@ Ancestors
   compileEnv fragExec vyperABI contractABI venomState venomExecSemantics words list arithmetic
 
 Theorem abi_decode_empty_member_code:
-  abi_decode_member_setup dst src opc hi F ao vo st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) opc hi (DecComplex dynamic [])
+  abi_decode_member_setup dst src opc base_op hi F ao vo st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) opc base_op hi (DecComplex dynamic [])
     middle = ((),end_st) /\ abi_decode_source_opcode opc /\ fn_has_code st end_st func ==>
   fn_has_code st middle func /\ fn_has_code middle end_st func /\
   st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= end_st.cs_next_var /\
@@ -30,14 +30,14 @@ Proof
 QED
 
 Theorem abi_decode_empty_member_reach:
-  abi_decode_member_setup dst src opc hi F ao vo st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) opc hi (DecComplex dynamic [])
+  abi_decode_member_setup dst src opc base_op hi F ao vo st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) opc base_op hi (DecComplex dynamic [])
     middle = ((),end_st) /\ fn_has_code st end_st func /\ abi_decode_source_opcode opc /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb + ao <= hb /\ hb < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -74,16 +74,16 @@ Theorem abi_decoder_valid_empty_member:
   let at = vyper_to_abi_type env ty;
       ao = SUM (MAP abi_member_head_size pre);
       childbs = abi_decode_member_bytes at bs (DROP ao bs) in
-  abi_decode_member_setup dst src opc hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+  abi_decode_member_setup dst src opc base_op hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     ao vo st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) opc hi (type_to_abi_dec_info sf ce ty)
+  compile_abi_decode_to_buf (SND ops) (FST ops) opc base_op hi (type_to_abi_dec_info sf ce ty)
     middle = ((),end_st) /\ fn_has_code st end_st func /\
   abi_decoder_coherent ce env sf ty tv /\ type_to_abi_dec_info sf ce ty = DecComplex T [] /\
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
-  abi_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz b cap initial /\
+  abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs) d outsz b cap initial /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -97,7 +97,7 @@ Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_empty_descriptor_value >> strip_tac >>
   drule abi_valid_member_head >> simp_tac bool_ss [LET_THM] >> strip_tac >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_ranges`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   SUBGOAL_THEN ``hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb + SUM (MAP abi_member_head_size pre) <= hb /\ hb < dimword (:256)`` assume_tac

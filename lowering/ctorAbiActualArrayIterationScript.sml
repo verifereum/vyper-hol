@@ -5,7 +5,7 @@ Ancestors
   abiDecoderArrayPrefix valueEncodingProofs valueEncodingTyping valueEncoding
   abiEncoderRegisteredEffect venomMemDefs venomState list arithmetic pred_set
   ctorAbiActualObservations ctorAbiActualWorld ctorAbiActualNarrow abiDecoderContract
-  abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderDynamic
+  abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderDynamic abiDecoderReentry
   abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup abiDecoderVarSequence
   compileEnv emitHelper exprLoweringProps venomInst rich_list abiEncoder
 
@@ -51,12 +51,13 @@ Proof
 QED
 
 Theorem ctor_actual_array_setup_opcodes:
-  abi_decode_array_element_setup ip src dst DLOAD hi di asz msz st = (ops,st') ==>
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi di asz msz st = (ops,st') ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')
 Proof
   Cases_on `dec_info_needs_offset di` >> Cases_on `hi = Lit 0w` >>
   simp[abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
-    compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
     emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
   strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -64,13 +65,13 @@ Proof
 QED
 
 Theorem ctor_actual_array_setup_labels:
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
@@ -98,7 +99,10 @@ Proof
       (ListV (pre ++ av::post)))) (abi_decode_source DLOAD s) =
       enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))` by
     (pure_asm_rewrite_tac [] >> REFL_TAC) >>
-  drule_all abi_decoder_dynarray_setup >> strip_tac >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
+  drule_all (SIMP_RULE bool_ss [arithmeticTheory.ADD_CLAUSES]
+    (Q.INST [`B` |-> `0:num`] abi_decoder_dynarray_setup)) >> strip_tac >>
   drule ctor_actual_array_setup_opcodes >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
   drule_all ctor_actual_sequence_world >> strip_tac >>

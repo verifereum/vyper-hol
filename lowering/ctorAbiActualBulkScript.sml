@@ -23,25 +23,25 @@ Theorem ctor_actual_bulk_empty_window_pre:
  d + type_memory_bytes ce ty <= initial.vs_alloca_next /\
  initial.vs_alloca_next < dimword (:256) ==>
  abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v
-   st st.cs_next_id src dst DLOAD hi sb d initial.vs_alloca_next 0
+   st st.cs_next_id src dst DLOAD (Lit 0w) hi 0 sb d initial.vs_alloca_next 0
    (abi_decoder_prune_vars st.cs_next_var initial)
 Proof
  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
  simp_tac bool_ss [abi_decoder_recursive_pre_def, abi_decoder_pre_def,
-   abi_decoder_ranges_def, abi_decoder_reservation_def,
+   abi_decoder_ranges_def, abi_decoder_reservation_def, abi_decoder_entry_floor_def,
    abi_decode_source_opcode_def, abi_decode_source_def] >>
  asm_simp_tac (srw_ss()) [abi_decoder_prune_vars_def,
-   abi_decoder_prune_eval, abi_decoder_prune_fresh] >>
+   abi_decoder_prune_eval, abi_decoder_prune_fresh, eval_operand_def] >>
  conj_tac >- fs[abi_decoder_metadata_def] >>
  conj_tac >- (rpt strip_tac >> decide_tac) >> decide_tac
 QED
 
 Theorem ctor_actual_bulk_labels_fragment:
- compile_abi_decode_to_buf dst src DLOAD hi (DecDynArray ei abi_sz mem_sz F maxn)
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecDynArray ei abi_sz mem_sz F maxn)
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
    (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))
-   st last src dst DLOAD hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+   st last src dst DLOAD (Lit 0w) hi 0 sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
  frag_exec ctx st st' (\s. s = initial)
    (\actual. val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\

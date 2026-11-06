@@ -21,14 +21,14 @@ QED
 
 Theorem abi_decoder_member_frame_source:
   abi_decoder_effect first last lo hi next limit_st cell sz b cap s t /\
-  abi_decoder_ranges opc hi_op src dst sb len d outsz b cap s /\
+  abi_decoder_ranges opc base_op hi_op src dst B sb len d outsz b cap s /\
   d <= cell /\ cell + sz <= d + outsz ==>
-  mem_bytes_at sb len (abi_decode_source opc t) = mem_bytes_at sb len (abi_decode_source opc s)
+  mem_bytes_at (B+sb) len (abi_decode_source opc t) = mem_bytes_at (B+sb) len (abi_decode_source opc s)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   irule abi_decode_footprint_frame_source_window >> asm_simp_tac bool_ss [] >>
   qexists_tac `[(cell,sz);(b,cap)]` >> asm_simp_tac bool_ss [] >> strip_tac >>
@@ -54,22 +54,22 @@ QED
 
 Theorem abi_decoder_member_observations:
   abi_decoder_effect first last lo hi next limit_st cell sz b cap before after /\
-  abi_decoder_ranges opc hi_op src dst sb len d outsz b cap before /\
+  abi_decoder_ranges opc base_op hi_op src dst B sb len d outsz b cap before /\
   d <= cell /\ cell + sz <= d + outsz /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-  abi_decoder_operand_live next hi_op /\ next <= new_next /\
-  mem_bytes_at sb len (abi_decode_source opc before) = bytes ==>
-  abi_decoder_ranges opc hi_op src dst sb len d outsz b cap after /\
-  mem_bytes_at sb len (abi_decode_source opc after) = bytes /\
+  abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next base_op /\ next <= new_next /\
+  mem_bytes_at (B+sb) len (abi_decode_source opc before) = bytes ==>
+  abi_decoder_ranges opc base_op hi_op src dst B sb len d outsz b cap after /\
+  mem_bytes_at (B+sb) len (abi_decode_source opc after) = bytes /\
   fresh_vars_wrt limit_st after /\ abi_decoder_budget first last b cap after /\
   abi_decoder_operand_live new_next src /\ abi_decoder_operand_live new_next dst /\
-  abi_decoder_operand_live new_next hi_op
+  abi_decoder_operand_live new_next hi_op /\ abi_decoder_operand_live new_next base_op
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_effect_ranges >> strip_tac >>
   drule_all abi_decoder_member_frame_source >> strip_tac >>
   `abi_decoder_operand_live new_next src /\ abi_decoder_operand_live new_next dst /\
-   abi_decoder_operand_live new_next hi_op` by
+   abi_decoder_operand_live new_next hi_op /\ abi_decoder_operand_live new_next base_op` by
     (rpt conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
   fs[abi_decoder_effect_def]
 QED

@@ -17,15 +17,14 @@ Definition abi_builtin_decode_setup_def:
   abi_builtin_decode_setup data min_size max_size outsz =
     do inputs <- abi_builtin_decode_header data min_size max_size;
        buf <- compile_alloc_buffer outsz;
-       hi <- emit_op ADD [SND inputs; FST inputs];
-       return (buf.buf_operand,SND inputs,hi)
+       return (buf.buf_operand,SND inputs,FST inputs)
     od
 End
 
 Theorem lower_abi_decode_setup:
   lower_abi_decode data info min_size max_size outsz =
     do ops <- abi_builtin_decode_setup data min_size max_size outsz;
-       compile_abi_decode_to_buf (FST ops) (FST (SND ops)) MLOAD (SND (SND ops)) info;
+       compile_abi_decode_to_buf (FST ops) (Lit 0w) MLOAD (FST (SND ops)) (SND (SND ops)) info;
        return (FST ops)
     od
 Proof
@@ -36,24 +35,22 @@ QED
 
 Theorem abi_builtin_decode_setup_trace:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) ==>
-  ?inputs header_st buf allocation_st hi.
+  ?inputs header_st buf.
     abi_builtin_decode_header data min_size max_size st = (inputs,header_st) /\
-    compile_alloc_buffer outsz header_st = (buf,allocation_st) /\
-    emit_op ADD [SND inputs; FST inputs] allocation_st = (hi,ready) /\
-    ops = (buf.buf_operand,SND inputs,hi)
+    compile_alloc_buffer outsz header_st = (buf,ready) /\
+    ops = (buf.buf_operand,SND inputs,FST inputs)
 Proof
   simp_tac bool_ss [abi_builtin_decode_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   rename1 `abi_builtin_decode_header data min_size max_size st = (inputs,header_st)` >>
-  rename1 `compile_alloc_buffer outsz header_st = (buf,allocation_st)` >>
-  rename1 `emit_op ADD [SND inputs; FST inputs] allocation_st = (hi,_)` >>
-  qexistsl_tac [`inputs`, `header_st`, `buf`, `allocation_st`, `hi`] >> simp[]
+  rename1 `compile_alloc_buffer outsz header_st = (buf,ready)` >>
+  qexistsl_tac [`inputs`, `header_st`, `buf`] >> simp[]
 QED
 
 Theorem abi_builtin_decode_setup_shape:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) ==>
-  ready.cs_next_id = abi_builtin_decode_output_site st min_size max_size + 2 /\
-  ready.cs_next_var = st.cs_next_var + 4 + (if min_size = max_size then 1 else 5) /\
+  ready.cs_next_id = abi_builtin_decode_output_site st min_size max_size + 1 /\
+  ready.cs_next_var = st.cs_next_var + 3 + (if min_size = max_size then 1 else 5) /\
   ready.cs_blocks = st.cs_blocks /\ ready.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts ready.cs_current_insts /\ inst_extends st ready /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st ready)

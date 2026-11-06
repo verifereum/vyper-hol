@@ -8,42 +8,42 @@ Ancestors
 
 val recursive_context_tac =
   qpat_assum `abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst
-    opc hi_op hdr exit_lbl hid header_var first last lo hi next limit_st site`
+    opc base_op hi_op hdr exit_lbl hid header_var first last lo hi next limit_st site`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial`
+  qpat_assum `abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]);
 
 Theorem abi_decoder_recursive_header_reach:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s ==>
-  ?h. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  ?h. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial
     (if j < LENGTH vs then st.cs_current_bb else exit_lbl) j h /\ abi_decode_sim ctx func s h
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decoder_recursive_data_facts >> strip_tac >> recursive_context_tac >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_ranges`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   drule_all abi_decoder_recursive_loop_header >>
   disch_then (qspec_then `ctx` mp_tac) >> simp[]
 QED
 
 Theorem abi_decoder_recursive_body_backedge:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial st.cs_current_bb j s /\ j < LENGTH vs ==>
-  ?v. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  ?v. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr (SUC j) v /\ abi_decode_sim ctx func s v
 Proof
@@ -68,20 +68,20 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_loop_iteration:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\ j < LENGTH vs ==>
-  ?v. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  ?v. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr (SUC j) v /\ abi_decode_sim ctx func s v
 Proof
-  strip_tac >> drule_all abi_decoder_recursive_header_reach >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> drule_all abi_decoder_recursive_header_reach >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial st.cs_current_bb j h` by
     (qpat_x_assum `abi_decoder_recursive_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
@@ -92,40 +92,40 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_loop_exit:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr (LENGTH vs) s ==>
-  ?t. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  ?t. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial exit_lbl (LENGTH vs) t /\ abi_decode_sim ctx func s t
 Proof
-  strip_tac >> drule_all abi_decoder_recursive_header_reach >> simp[]
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> drule_all abi_decoder_recursive_header_reach >> simp[]
 QED
 
 Theorem abi_decoder_recursive_loop_finite:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr i s ==>
-  ?t. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  ?t. abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial exit_lbl (LENGTH vs) t /\ abi_decode_sim ctx func s t
 Proof
-  strip_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `i <= LENGTH vs` by
     fs[abi_decoder_recursive_loop_inv_def, abi_decoder_array_memory_def, Excl "enc_def"] >>
   mp_tac (Q.SPECL [`LENGTH (vs:vyperValue$value list)`, `i:num`,
-    `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+    `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
       first last lo hi next limit_st b cap initial hdr`,
-    `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+    `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
       first last lo hi next limit_st b cap initial exit_lbl (LENGTH vs)`, `ctx`, `func`, `s`]
     abi_decode_finite_iteration) >>
@@ -137,11 +137,11 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_loop_typed:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr i s ==>
   ?t. val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d t.vs_memory /\
@@ -150,7 +150,7 @@ Theorem abi_decoder_recursive_loop_typed:
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = n2w (LENGTH vs) /\
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\ abi_decode_sim ctx func s t
 Proof
-  strip_tac >> drule_all abi_decoder_recursive_loop_finite >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> drule_all abi_decoder_recursive_loop_finite >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qpat_assum `abi_decoder_recursive_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_inv_def]) >>

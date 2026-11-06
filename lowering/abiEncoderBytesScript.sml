@@ -1,6 +1,6 @@
 Theory abiEncoderBytes
 Ancestors
-  abiEncoderInput abiEncoderInputFrame abiDecoderFrame abiDecoderContract valueEncoding
+  abiDecoderRange abiEncoderInput abiEncoderInputFrame abiDecoderFrame abiDecoderContract valueEncoding
   valueEncodingProofs venomState contractABI words list arithmetic abiEncoderBytesCode
   abiEncoderWrites abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderGuards emitHelperProps exprLoweringProps emitHelper compileEnv venomExecSemantics

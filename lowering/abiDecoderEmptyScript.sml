@@ -11,7 +11,7 @@ Ancestors
    an evaluated zero-length fixed array has its value in every memory. *)
 
 Theorem abi_decode_empty_complex_phases:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) =
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dynamic []) =
     abi_decode_complex_head_guard src hi 0
 Proof
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [compile_abi_decode_to_buf_def])) >>
@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem abi_decode_empty_complex_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dynamic []) st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi s = SOME (n2w hb) /\
                       sb <= hb /\ hb < dimword (:256)) /\
@@ -96,7 +96,7 @@ QED
    repeated execution and continuation simulation of the actual code. *)
 
 Theorem abi_decode_empty_complex_reentry:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dynamic []) st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb <= hb /\ hb < dimword (:256)) /\
@@ -113,7 +113,7 @@ Proof
 QED
 
 Theorem abi_decode_empty_complex_reach:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dynamic []) st = ((),st') /\
   fn_has_code st st' func /\ eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb <= hb /\ hb < dimword (:256)) /\

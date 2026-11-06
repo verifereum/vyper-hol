@@ -25,7 +25,7 @@ QED
 
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -53,7 +53,7 @@ val C = ``\ty tv.
 val M = ``\tys tvs.
  !dst src hi st final ctx func site initial limit_st sb d D N ids
    pretys pretvs preavs prevs avs vs.
- compile_abi_decode_complex_elems dst src DLOAD hi (abi_decoder_member_infos sf ce tys)
+ compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi (abi_decoder_member_infos sf ce tys)
    (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
    (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\
  abi_decoder_members ce env sf pretys pretvs preavs prevs /\
@@ -175,7 +175,7 @@ Proof
       (impl_tac >- asm_simp_tac bool_ss []) >> disch_then assume_tac >>
       `abi_decoder_operand_live middle.cs_next_var hi` by
         (irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[]) >>
-      qpat_x_assum `compile_abi_decode_to_buf (SND ops) _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `compile_abi_decode_to_buf (SND ops) _ _ _ _ _ _ = _` mp_tac >>
       asm_simp_tac bool_ss [] >> disch_then assume_tac >>
       qpat_x_assum `eval_operand (FST ops) prepared = _` mp_tac >>
       asm_simp_tac bool_ss [] >> disch_then assume_tac >>
@@ -228,7 +228,7 @@ Proof
      strip_tac >> conj_tac
      >- (irule abi_decoder_members_join >> simp[abi_decoder_members_def]) >>
      first_assum ACCEPT_TAC) >>
-  `compile_abi_decode_complex_elems dst src DLOAD hi (abi_decoder_member_infos sf ce tys)
+  `compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (pretys ++ [ty]))))
     (SUM (MAP (type_memory_bytes ce) (pretys ++ [ty]))) end_st = ((),final)` by
     (asm_x "tail" kall_tac >>
@@ -236,7 +236,7 @@ Proof
        (mp_tac o PURE_REWRITE_RULE [abi_decoder_members_def]) >> strip_tac >>
      drule abi_decoder_coherent_header >>
      simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
-     qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ end_st = _` mp_tac >>
+     qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ end_st = _` mp_tac >>
      qpat_x_assum `abi_embedded_static_size _ ty = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0]) >>

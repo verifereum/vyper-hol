@@ -130,6 +130,21 @@ val phi_db = fn t => rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >>
 val phi_dib = fn t => ho_match_mp_tac abi_decoder_phi_ignore_bind >>
   conj_tac >- simp (t::phi_simps) >> rpt strip_tac;
 
+Theorem abi_decoder_phi_addr:
+  !st. abi_decoder_phi st (SND (compile_abi_dec_addr base_op pos st))
+Proof
+  gen_tac >> rewrite_tac[compile_abi_dec_addr_def] >>
+  IF_CASES_TAC >> simp[abi_decoder_phi_return, abi_decoder_phi_emit_op]
+QED
+
+Theorem abi_decoder_phi_range:
+  !st. abi_decoder_phi st (SND (compile_abi_decode_range_check src e hi st))
+Proof
+  rewrite_tac[compile_abi_decode_range_check_def] >>
+  ntac 5 (phi_db abi_decoder_phi_emit_op) >>
+  simp[abi_decoder_phi_emit_void]
+QED
+
 Theorem abi_decoder_phi_clamp:
   !c v st. abi_decoder_phi st (SND (compile_abi_clamp_basetype v c st))
 Proof
@@ -154,11 +169,12 @@ QED
 Theorem abi_decoder_phi_getelemptr:
   opc <> PHI ==>
   !st. abi_decoder_phi st
-    (SND (compile_getelemptr_abi src dyn off opc hi st))
+    (SND (compile_getelemptr_abi src dyn off opc base_op hi st))
 Proof
   strip_tac >> rewrite_tac[compile_getelemptr_abi_def] >>
   phi_db abi_decoder_phi_emit_op >> Cases_on `dyn` >>
   simp[abi_decoder_phi_return] >>
+  phi_db abi_decoder_phi_addr >>
   ntac 2 (phi_db abi_decoder_phi_emit_op) >>
   ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_phi_return] >>
@@ -170,30 +186,31 @@ QED
 Theorem abi_decoder_phi_dyn_elem_ptr:
   opc <> PHI ==>
   !st. abi_decoder_phi st
-    (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st))
+    (SND (compile_abi_decode_dyn_elem_ptr opc base_op src data hi sz st))
 Proof
   strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
+  phi_db abi_decoder_phi_addr >>
   ntac 2 (phi_db abi_decoder_phi_emit_op) >>
   ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_phi_return] >>
       ntac 2 (phi_db abi_decoder_phi_emit_op) >>
       phi_dib abi_decoder_phi_emit_void >>
-      ntac 3 (phi_db abi_decoder_phi_emit_op) >>
-      simp[abi_decoder_phi_emit_void]) >>
+      phi_db abi_decoder_phi_emit_op >>
+      simp[abi_decoder_phi_range]) >>
   simp[abi_decoder_phi_return]
 QED
 
 (* The source opcode cannot introduce a PHI instruction. *)
 Theorem abi_decoder_phi_mutual:
-  (!dst src opc hi info. opc <> PHI ==>
+  (!dst src opc base_op hi info. opc <> PHI ==>
      !st. abi_decoder_phi st
-       (SND (compile_abi_decode_to_buf dst src opc hi info st))) /\
-  (!dst src opc hi elems ao vo. opc <> PHI ==>
+       (SND (compile_abi_decode_to_buf dst src opc base_op hi info st))) /\
+  (!dst src opc base_op hi elems ao vo. opc <> PHI ==>
      !st. abi_decoder_phi st
-       (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st))) /\
-  (!dst src opc hi ei asz msz ip cnt. opc <> PHI ==>
+       (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st))) /\
+  (!dst src opc base_op hi ei asz msz ip cnt. opc <> PHI ==>
      !st. abi_decoder_phi st
-       (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)))
+       (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
@@ -208,30 +225,45 @@ QED
 
 Resume abi_decoder_phi_mutual[word]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  phi_db abi_decoder_phi_addr >>
   irule abi_decoder_phi_static >> simp[abi_decoder_phi_clamp]
 QED
 Resume abi_decoder_phi_mutual[bytes]:
-  rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  rewrite_tac[Once compile_abi_decode_to_buf_def] >> rpt gen_tac >>
+  ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+  >- (rpt gen_tac >> IF_CASES_TAC >> simp[abi_decoder_phi_return] >>
+      phi_db abi_decoder_phi_emit_op >> phi_dib abi_decoder_phi_range >>
+      simp[abi_decoder_phi_return]) >>
+  rpt strip_tac >> phi_db abi_decoder_phi_addr >>
   ntac 3 (phi_db abi_decoder_phi_emit_op) >>
   phi_dib abi_decoder_phi_emit_void >>
   ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_phi_return] >>
-      ntac 4 (phi_db abi_decoder_phi_emit_op) >>
-      simp[abi_decoder_phi_emit_void]) >>
-  rpt strip_tac >> Cases_on `opc` >> simp[abi_decoder_phi_emit_void]
+      phi_db abi_decoder_phi_emit_op >> simp[abi_decoder_phi_range]) >>
+  rpt strip_tac >> IF_CASES_TAC
+  >- (Cases_on `opc` >> simp[abi_decoder_phi_emit_void]) >>
+  ntac 4 (phi_db abi_decoder_phi_emit_op) >>
+  phi_dib abi_decoder_phi_emit_void >> phi_db abi_decoder_phi_emit_op >>
+  simp[abi_decoder_phi_emit_void]
 QED
 Resume abi_decoder_phi_mutual[array]:
-  rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  rewrite_tac[Once compile_abi_decode_to_buf_def] >> rpt gen_tac >>
+  ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+  >- (rpt gen_tac >> IF_CASES_TAC >> simp[abi_decoder_phi_return] >>
+      phi_db abi_decoder_phi_emit_op >> phi_dib abi_decoder_phi_range >>
+      simp[abi_decoder_phi_return]) >>
+  rpt strip_tac >> phi_db abi_decoder_phi_addr >>
   ntac 3 (phi_db abi_decoder_phi_emit_op) >>
   phi_dib abi_decoder_phi_emit_void >>
   ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_phi_return] >>
-      ntac 5 (phi_db abi_decoder_phi_emit_op) >>
-      simp[abi_decoder_phi_emit_void]) >>
+      ntac 2 (phi_db abi_decoder_phi_emit_op) >>
+      simp[abi_decoder_phi_range]) >>
   rpt strip_tac >> phi_db abi_decoder_phi_emit_op >>
   phi_dib abi_decoder_phi_emit_void >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-  >- (ntac 3 (phi_db abi_decoder_phi_emit_op) >>
+  >- (ntac 2 (phi_db abi_decoder_phi_emit_op) >>
+      phi_db abi_decoder_phi_addr >> phi_db abi_decoder_phi_emit_op >>
       Cases_on `opc` >> simp[abi_decoder_phi_emit_void]) >>
   phi_db abi_decoder_phi_alloc_buffer >> phi_dib abi_decoder_phi_emit_void >>
   first_x_assum irule >> simp[]
@@ -241,7 +273,7 @@ Resume abi_decoder_phi_mutual[complex]:
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
   >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >>
       simp[]) >>
-  ntac 3 (phi_db abi_decoder_phi_emit_op) >> phi_dib abi_decoder_phi_emit_void >>
+  phi_db abi_decoder_phi_emit_op >> phi_dib abi_decoder_phi_range >>
   first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >>
   simp[]
 QED
@@ -262,7 +294,8 @@ Resume abi_decoder_phi_mutual[loop]:
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
   ntac 3 (phi_db abi_decoder_phi_fresh_label) >>
   phi_dib abi_decoder_phi_emit_inst >> phi_dib abi_decoder_phi_new_block >>
-  ntac 4 (phi_db abi_decoder_phi_emit_op) >>
+  phi_db abi_decoder_phi_emit_op >> phi_db abi_decoder_phi_addr >>
+  ntac 3 (phi_db abi_decoder_phi_emit_op) >>
   phi_dib abi_decoder_phi_emit_inst >> phi_dib abi_decoder_phi_new_block >>
   ntac 4 (phi_db abi_decoder_phi_emit_op) >>
   ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
@@ -277,7 +310,7 @@ QED
 Finalise abi_decoder_phi_mutual
 
 Theorem abi_decoder_to_buf_phi:
-  compile_abi_decode_to_buf dst src opc hi info st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi info st = ((),st') /\
   abi_decode_source_opcode opc /\ phi_prefix_length st.cs_current_insts = 0 ==>
   phi_prefix_length st'.cs_current_insts = 0 /\
   ?new. st'.cs_blocks = new ++ st.cs_blocks /\
@@ -297,7 +330,7 @@ QED
 (* An entry block may contain old PHIs: only a newly reached exit needs a
    PHI-free head. Linear decoders keep using the already-entered block. *)
 Theorem abi_decoder_to_buf_exit_phi:
-  compile_abi_decode_to_buf dst src opc hi info st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi info st = ((),st') /\
   abi_decode_source_opcode opc ==>
   st.cs_blocks = st'.cs_blocks \/ phi_prefix_length st'.cs_current_insts = 0
 Proof
