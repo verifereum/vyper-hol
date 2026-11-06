@@ -7969,6 +7969,42 @@ Proof
   disj2_tac >> goal_assum (drule_at Any) >> decide_tac
 QED
 
+Theorem alias_exec_local_base_source_certificate:
+  alias_execution_prefix states writes /\ LAST states = s /\
+  exec_block fuel ctx bb s = OK t /\
+  s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+  (!j. s.vs_inst_idx <= j /\ j < i ==>
+    ~is_terminator (EL j bb.bb_instructions).inst_opcode) /\
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ k < i /\
+  MEM x (EL k bb.bb_instructions).inst_outputs /\
+  (EL k bb.bb_instructions).inst_opcode <> ASSIGN /\
+  MEM x (inst_uses (EL i bb.bb_instructions)) /\
+  (EL i bb.bb_instructions).inst_opcode <> PHI ==>
+  ?suffix u writes'.
+    alias_execution_prefix (states ++ suffix) writes' /\
+    LAST (states ++ suffix) = u /\ u.vs_inst_idx = i /\
+    exec_block fuel ctx bb u = OK t /\
+    writes' SUBSET (writes UNION
+      {x | ?j. s.vs_inst_idx <= j /\ j < i /\
+        MEM x (EL j bb.bb_instructions).inst_outputs}) /\
+    alias_certificate fn (dfg_build_function fn) lo ps (states ++ suffix)
+      (PRE (LENGTH (states ++ suffix))) (Var x)
+Proof
+  rpt strip_tac >>
+  `k < LENGTH bb.bb_instructions` by decide_tac >>
+  `MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     qexists_tac `bb` >> simp[] >> irule EL_MEM >> decide_tac) >>
+  `normalize_operand (dfg_build_function fn) [] (Var x) = Var x` by
+    (irule normalize_operand_non_assign_output >> simp[] >>
+     qexists_tac `EL k bb.bb_instructions` >> simp[]) >>
+  drule_all alias_exec_block_indexed_cut >> strip_tac >>
+  qexistsl_tac [`suffix`, `u`, `writes'`] >> simp[] >>
+  irule (cj 1 alias_certificate_rules) >> simp[] >>
+  `states <> []` by metis_tac[alias_execution_prefix_nonempty] >>
+  Cases_on `states` >> gvs[]
+QED
+
 Theorem alias_exec_block_suffix_prefix:
   alias_execution_prefix states writes /\ LAST states = s /\
   exec_block fuel ctx bb s = OK t ==>
