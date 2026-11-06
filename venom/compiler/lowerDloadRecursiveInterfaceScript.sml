@@ -2,7 +2,7 @@ Theory lowerDloadRecursiveInterface
 Ancestors
   lowerDloadProjectedReachability lowerDloadNormalData lowerDloadReachability
   lowerDloadTargetValidity lowerDloadConfiguredScratch lowerDloadCoverageReserve
-  lowerDloadCoverageLoad lowerDloadCallNormalSetup
+  lowerDloadCoverageLoad lowerDloadCallNormalSetup lowerDloadCallNormalEntry
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
   lowerDloadNormalJump lowerDloadNormalEntry lowerDloadReachableJump
   o1LowerDloadEntryFetch o1LowerDloadJointEntry lowerDloadNonhalted
