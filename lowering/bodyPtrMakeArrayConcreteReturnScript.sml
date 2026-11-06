@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayConcreteReturn
 Ancestors
   bodyPtrMakeArrayForwardLayoutProbe compileVyper moduleLowering vyperCompiler
-  ptrSafeRun integer_word
+  ptrSafeRun integer_word bodyPtrMakeArrayTaintNormalize ptrDiscipline
 Libs finite_mapLib wordsLib intLib
 
 val () = computeLib.upd_compset add_finite_map_compset
@@ -80,3 +80,8 @@ QED
    This run does not establish body_inv, ghost_inv, gas_path_ptr, or the
    full lowered runtime context (only the generated internal segment and
    its packaging). It is not a target counterexample or proof. *)
+
+(* A bounded replay retaining mem_taint and new_site_bytes opaque still
+   duplicates entire operational states through nested taint records before
+   normalization can act. This measurement remains inconclusive; no header
+   cleanliness claim follows from the successful operational return. *)
