@@ -12,8 +12,9 @@ The HOL lowering does the same (`omitted_defaults` in `compile_call`).
 | `d02_int_default_partial` | two defaults: both omitted, and only the last |
 | `d03_int_default_env` | defaults reading `msg.sender` and `block.timestamp + 1` |
 | `d04_int_default_string` | a memory-passed `String` default |
+| `d05_int_default_nested` | an omitted-default call inside another one's arguments |
 
-`parity-fixtures.txt` selects all four; each has an exact deployment and
+`parity-fixtures.txt` selects all five; each has an exact deployment and
 runtime bytecode comparison in `eval/evalCompilerInternalDefaultsScript.sml`,
 included in `evalCompilerWitnesses`.
 
@@ -27,3 +28,7 @@ python lowering/defs/bytecode/memory_store_witnesses.py prepare \
   --corpus internal-defaults --fixtures /tmp/internal-defaults-oracle --check
 holbuild -j4 build evalCompilerInternalDefaultsTheory
 ```
+
+`d05_int_default_nested` declares its functions in the order pinned Python
+emits them: with the order swapped, the HOL bytecode also differs when every
+argument is supplied, since HOL lays internal functions out in source order.
