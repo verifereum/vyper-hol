@@ -26,9 +26,12 @@ Ancestors
      is not.  When LENGTH (enc at av) = 0 the descriptor has no dynamic part
      and the fragment emits no ALLOCA, so no slot entry can sit around d;
      otherwise LENGTH (enc at av) >= 32 and the caller's zero-aware
-     regions_disjoint premise gives the footprint.  Care: a site of func
-     outside the fragment whose id falls in frag_ids would also be in the
-     footprint.
+     regions_disjoint premise gives the footprint.  The zero case needs every
+     site id in frag_ids st st' to be an ALLOCA [Lit 32w] the fragment itself
+     emitted: with fn_has_code and fn_inst_ids_distinct, an instruction of
+     func whose id is in frag_ids is the emitted instruction with that id,
+     provided the fragment emits an instruction for every id it allocates
+     (compare compile_abi_encode_to_buf_next_id in loweringHalt).
    - The exit-block phi disjunction comes from abi_encoder_core_containing_exit_phi;
      the registered effect on frag_ids from abi_encoder_registered_effect_enlarge. *)
 Theorem compile_abi_encode_to_buf_shared_window_run:
