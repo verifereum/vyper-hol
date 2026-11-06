@@ -44,11 +44,22 @@ Proof
   simp[expr_callbacks_agree_def, expr_child_callback_def]
 QED
 
-Theorem compile_multi_vvs_callback_contract:
-  ∀es. expr_callbacks_agree f g cenv es ⇒
-    compile_multi_vvs f cenv es = compile_multi_vvs g cenv es
+Theorem compile_stage_intcall_args_callback_contract:
+  ∀f cenv es flags tys. expr_callbacks_agree f g cenv es ⇒
+    compile_stage_intcall_args f cenv es flags tys =
+    compile_stage_intcall_args g cenv es flags tys
 Proof
-  Induct >> simp[compile_multi_vvs_def] >> rpt strip_tac >>
+  ho_match_mp_tac compile_stage_intcall_args_ind >>
+  rpt strip_tac >> gvs[] >> simp[compile_stage_intcall_args_def]
+QED
+
+Theorem compile_ext_call_args_callback_contract:
+  ∀es kw_es tys. expr_callbacks_agree f g cenv es ⇒
+    compile_ext_call_args f cenv kw_es tys es =
+    compile_ext_call_args g cenv kw_es tys es
+Proof
+  Induct >> rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def] >> rpt strip_tac >>
   gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def] >>
   simp[]
 QED
@@ -151,7 +162,7 @@ Theorem compile_intcall_callback_contract:
   compile_call f cenv ret_ty ty (IntCall id) args default_ret st =
   compile_call g cenv ret_ty ty (IntCall id) args default_ret st
 Proof
-  strip_tac >> drule compile_multi_vvs_callback_contract >>
+  strip_tac >> drule compile_stage_intcall_args_callback_contract >>
   simp[compile_call_def]
 QED
 
@@ -231,7 +242,7 @@ Proof
   drule_then (qspec_then `LENGTH arg_types` strip_assume_tac)
     expr_callbacks_agree_take_drop >>
   qpat_x_assum `expr_callbacks_agree _ _ _ (TAKE _ _)`
-    (assume_tac o MATCH_MP compile_multi_vvs_callback_contract) >>
+    (assume_tac o MATCH_MP compile_ext_call_args_callback_contract) >>
   qpat_x_assum `expr_callbacks_agree _ _ _ (DROP _ _)`
     (assume_tac o MATCH_MP compile_ext_call_kwargs_callback_contract) >>
   fs[] >> rpt strip_tac >>
@@ -442,14 +453,6 @@ Theorem ifexp_lower_value_child_calls:
     cenv ty else_e = lower_value f cenv ty else_e
 Proof
   simp[lower_value_def, FUN_EQ_THM, comp_bind_def, expr_size_def]
-QED
-
-Theorem compile_multi_vvs_call_children:
-  compile_multi_vvs (expr_child_callback (expr_size (Call ann target args default_ret)) f)
-    cenv args = compile_multi_vvs f cenv args
-Proof
-  irule compile_multi_vvs_callback_contract >> irule expr_child_callback_agrees >>
-  rpt strip_tac >> drule expr_list_member_bound >> simp[expr_size_def]
 QED
 
 Theorem compile_multi_exprs_nested_array_children:

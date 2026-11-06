@@ -20,8 +20,9 @@
  *                              fragment: later steps compose with it (fuel
  *                              monotonicity, from venomExecProofs' fuel_mono)
  *   frag_exec_invoke_intret  — frag_exec_invoke from the callee's IntRet
- *   compile_call_intcall_shape — compile_call's IntCall case: arguments,
- *                              return buffer, staged arguments, INVOKE,
+ *   compile_call_intcall_shape — compile_call's IntCall case: return
+ *                              buffer, then each argument lowered and
+ *                              staged, then the INVOKE,
  *                              and the value it returns.  The buffer is
  *                              32 * returns_count bytes for stack returns,
  *                              which the INVOKE's outputs are stored into,
@@ -252,13 +253,12 @@ Theorem compile_call_intcall_shape:
     compile_call cfn cenv ret_ty ty (IntCall func_id) args dret st =
       (v, st') /\
     cenv.ce_func_info (nsid_to_string func_id) = (ret_count, rbs, pvs) ==>
-    ?arg_vals st1 st2 invoke_args st3.
-      compile_multi_vvs cfn cenv args st = (arg_vals, st1) /\
-      compile_stage_intcall_args cenv arg_vals pvs (MAP expr_type args) st2 =
+    ?st2 invoke_args st3.
+      compile_stage_intcall_args cfn cenv args pvs (MAP expr_type args) st2 =
         (invoke_args, st3) /\
       (0 < ret_count ==>
        ?rbuf results st4 u.
-         compile_alloc_buffer (32 * ret_count) st1 = (rbuf, st2) /\
+         compile_alloc_buffer (32 * ret_count) st = (rbuf, st2) /\
          emit_multi_op INVOKE
            (Label (internal_fn_label
                      (cenv.ce_func_ids (nsid_to_string func_id))
@@ -270,7 +270,7 @@ Theorem compile_call_intcall_shape:
          v = LocatedValue ret_ty (base_ptr rbuf)) /\
       (ret_count = 0 /\ 0 < rbs ==>
        ?rbuf u.
-         compile_alloc_buffer rbs st1 = (rbuf, st2) /\
+         compile_alloc_buffer rbs st = (rbuf, st2) /\
          emit_void INVOKE
            (Label (internal_fn_label
                      (cenv.ce_func_ids (nsid_to_string func_id))
@@ -280,7 +280,7 @@ Theorem compile_call_intcall_shape:
            st3 = (u, st') /\
          v = LocatedValue ret_ty (base_ptr rbuf)) /\
       (ret_count = 0 /\ rbs = 0 ==>
-       ?u. st2 = st1 /\
+       ?u. st2 = st /\
            emit_void INVOKE
              (Label (internal_fn_label
                        (cenv.ce_func_ids (nsid_to_string func_id))
@@ -295,13 +295,13 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   Cases_on `0 < ret_count` >> gvs[]
   >- (qmatch_asmsub_rename_tac
-        `compile_stage_intcall_args _ _ _ _ s2 = (ia, s3)` >>
+        `compile_stage_intcall_args _ _ _ _ _ s2 = (ia, s3)` >>
       qmatch_asmsub_rename_tac `emit_multi_op INVOKE _ _ s3 = (res, s4)` >>
       Cases_on `store_multi_results rbuf.buf_operand res 0 s4` >> gvs[] >>
       qexistsl_tac [`s2`, `ia`, `s3`] >> simp[] >>
       qexistsl_tac [`res`, `s4`] >> simp[]) >>
   qmatch_asmsub_rename_tac
-    `compile_stage_intcall_args _ _ _ _ s2 = (ia, s3)` >>
+    `compile_stage_intcall_args _ _ _ _ _ s2 = (ia, s3)` >>
   Cases_on `0 < rbs` >> gvs[] >>
   qexistsl_tac [`s2`, `ia`, `s3`] >> simp[]
 QED
