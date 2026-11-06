@@ -161,6 +161,55 @@ Proof
   gvs[loweringPostsTheory.expr_post_def] >> metis_tac[]
 QED
 
+Theorem comparison_hash_literal[local]:
+  bytestring_literal_hash e = SOME h ==>
+  ?v. (!es. bind (eval_expr cx e) (read_result cx) es = (INL v, es)) /\
+    ((?bs. v = BytesV bs /\
+       h = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) \/
+     (?str. v = StringV str /\
+       h = word_of_bytes T (0w:bytes32)
+         (Keccak_256_w64 (MAP (n2w o ORD) str))))
+Proof
+  Cases_on `e` >> simp[bytestring_literal_hash_def] >>
+  rename1 `Literal ann lit` >> Cases_on `lit` >>
+  simp[bytestring_literal_hash_bytes, bytestring_literal_hash_string,
+       bytestring_literal_hash_def] >> strip_tac >> gvs[] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def,
+       vyperValueOperationTheory.evaluate_literal_def]
+QED
+
+Theorem comparison_compile_cut[local]:
+  (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa =
+    (op, sb) ==>
+  ?h1 sh1 h2 sh2.
+    (case bytestring_literal_hash e1 of
+       SOME h => h1 = Lit h /\ sh1 = sa
+     | NONE => ?p sm. lower_value compile_expr cenv (expr_type e1) e1 sa =
+                       (p, sm) /\ compile_bytestring_hash p sm = (h1, sh1)) /\
+    (case bytestring_literal_hash e2 of
+       SOME h => h2 = Lit h /\ sh2 = sh1
+     | NONE => ?p sm. lower_value compile_expr cenv (expr_type e1) e2 sh1 =
+                       (p, sm) /\ compile_bytestring_hash p sm = (h2, sh2)) /\
+    (if bop = Eq then emit_op EQ [h1; h2] sh2 = (op, sb)
+     else ?q sq. emit_op EQ [h1; h2] sh2 = (q, sq) /\
+                 emit_op ISZERO [q] sq = (op, sb))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bop <> In /\ bop <> NotIn` by
+    (qpat_x_assum `bop = Eq \/ bop = NotEq` strip_assume_tac >> simp[]) >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_bop] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, lower_value_child_call,
+       vyperASTTheory.expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
+  Cases_on `bytestring_literal_hash e1` >>
+  Cases_on `bytestring_literal_hash e2` >> gvs[] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> metis_tac[]
+QED
+
 Theorem compile_bop_bytestring_eqne_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) ==>
@@ -178,5 +227,36 @@ Theorem compile_bop_bytestring_eqne_case:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  strip_tac >>
+  pure_rewrite_tac[expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
+  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
+  `ann = BaseT BoolT /\ expr_type e2 = expr_type e1` by
+    metis_tac[well_typed_binop_def] >>
+  `expr_body_pre cenv cx env e1 es` by
+    (irule expr_body_pre_builtin_arg >>
+     (conj_tac >- gvs[expr_body_pre_def]) >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `!es'. expr_sim_inv cenv cx env es' ==>
+     expr_body_pre cenv cx env e2 es'` by
+    (rpt strip_tac >> irule expr_body_pre_builtin_arg >>
+     (conj_tac >- simp[]) >> goal_assum (drule_at Any) >> simp[]) >>
+  `expr_sim ctx func cenv cx (expr_type e1) e1 es` by
+    (qpat_x_assum `expr_sim_case _ _ _ _ _ e1`
+       (mp_tac o REWRITE_RULE [expr_sim_case_def]) >>
+     disch_then irule >>
+     (conj_tac >- gvs[int_calls_expr_def]) >>
+     qexists_tac `env` >> simp[]) >>
+  `bop <> In /\ bop <> NotIn` by
+    (qpat_x_assum `bop = Eq \/ bop = NotEq` strip_assume_tac >> simp[]) >>
+  simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lower_value _ _ _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_bop] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, lower_value_child_call,
+       vyperASTTheory.expr_type_def, as_stack_val_pair,
+       unwrap_value_def, comp_return_def] >>
   cheat
 QED
