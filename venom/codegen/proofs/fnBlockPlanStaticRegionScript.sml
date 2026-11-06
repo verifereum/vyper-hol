@@ -443,3 +443,107 @@ Proof
   drule_all inventory_phi_spilled >> strip_tac >>
   simp[] >> gvs[EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem regional_param_heads_distinct[local]:
+  codegen_ready_fn fn ==>
+  ALL_DISTINCT (MAP (\i. Var (HD i.inst_outputs))
+    (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  strip_tac >> drule ready_entry_param_outputs_distinct >>
+  `MAP (\i. Var (HD i.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions) =
+    MAP Var (MAP (\i. HD i.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions))` by
+    simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  simp[] >> strip_tac >> irule ALL_DISTINCT_MAP_INJ >> simp[]
+QED
+
+Theorem regional_params_dead_filter[local]:
+  ALL_DISTINCT installed.ps_stack /\
+  installed.ps_stack = MAP (\i. Var (HD i.inst_outputs)) params /\
+  popmany_plan (FILTER is_var_operand
+    (FILTER (\v. ~MEM (operand_to_string v) nl) installed.ps_stack)) installed = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack /\
+  EVERY (\op. ?v. op = Var v /\ MEM v nl /\ MEM op installed.ps_stack) qs.ps_stack
+Proof
+  strip_tac >> conj_tac >- metis_tac[inventory_popmany_distinct] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all inventory_popmany_mem >>
+  disch_then (qspec_then `op` mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[MEM_FILTER, MEM_MAP] >>
+  gvs[stackPlanTypesTheory.operand_to_string_def, stackPlanTypesTheory.is_var_operand_def]
+QED
+
+Theorem regional_prepare_params_inventory:
+  codegen_ready_fn fn /\ lv = liveness_analyze fn /\
+  prepare_params_plan lv fn (init_cleanup_plan_state ch growth sb ctr) = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack /\ qs.ps_spilled = FEMPTY /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at lv (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) /\
+    MEM op (MAP (\i. Var (HD i.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions))) qs.ps_stack
+Proof
+  strip_tac >>
+  qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  simp[prepare_params_plan_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `get_params entry.bb_instructions` >>
+  Cases_on `get_params entry.bb_instructions = []`
+  >- (strip_tac >> gvs[init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def]) >>
+  simp[parameter_stack_fold] >>
+  qmatch_goalsub_abbrev_tac `popmany_plan items installed` >>
+  pairarg_tac >> simp[] >>
+  rename1 `popmany_plan items installed = (pops,mid)` >>
+  `ALL_DISTINCT installed.ps_stack` by
+    (simp[Abbr `installed`, init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def] >>
+     metis_tac[regional_param_heads_distinct]) >>
+  `installed.ps_spilled = FEMPTY` by
+    simp[Abbr `installed`, init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def] >>
+  `ALL_DISTINCT mid.ps_stack /\
+   EVERY (\op. ?v. op = Var v /\
+     MEM v (live_vars_at (liveness_analyze fn) entry.bb_label
+       (LENGTH (get_params entry.bb_instructions))) /\
+     MEM op installed.ps_stack) mid.ps_stack` by
+    (irule regional_params_dead_filter >>
+     goal_assum (drule_at Any) >>
+     simp[Abbr `items`, Abbr `installed`] >>
+     qexists_tac `get_params entry.bb_instructions` >> simp[]) >>
+  `mid.ps_spilled = FEMPTY` by
+    (qspecl_then [`items`, `installed`] mp_tac
+       fnFrameStepsRevertForwardTheory.rf_popmany_spilled >> simp[]) >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule inventory_optimistic_swap_resources >> simp[] >> strip_tac >>
+  drule inventory_optimistic_swap_every >>
+  strip_tac >>
+  gvs[Abbr `installed`, init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def] >>
+  metis_tac[fnFrameStepsRevertForwardTheory.rf_optimistic_spilled, pairTheory.SND]
+QED
+
+Theorem regional_prepare_params_support:
+  codegen_ready_fn fn /\ lv = liveness_analyze fn /\
+  prepare_params_plan lv fn (init_cleanup_plan_state ch growth sb ctr) = (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at lv (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) /\
+    MEM op (MAP (\i. Var (HD i.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions))) qs.ps_stack
+Proof
+  strip_tac >> drule_all regional_prepare_params_inventory >> simp[]
+QED
+
+Theorem regional_prepare_params_distinct:
+  codegen_ready_fn fn /\ lv = liveness_analyze fn /\
+  prepare_params_plan lv fn (init_cleanup_plan_state ch growth sb ctr) = (ops,qs) ==>
+  ALL_DISTINCT qs.ps_stack
+Proof
+  strip_tac >> drule_all regional_prepare_params_inventory >> simp[]
+QED
+
+Theorem regional_prepare_params_spilled:
+  codegen_ready_fn fn /\ lv = liveness_analyze fn /\
+  prepare_params_plan lv fn (init_cleanup_plan_state ch growth sb ctr) = (ops,qs) ==>
+  qs.ps_spilled = FEMPTY
+Proof
+  strip_tac >> drule_all regional_prepare_params_inventory >> simp[]
+QED
