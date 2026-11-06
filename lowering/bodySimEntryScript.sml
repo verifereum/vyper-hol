@@ -121,7 +121,7 @@ Theorem fallback_entry_declared:
     FLOOKUP cenv.ce_vars n = SOME l ==>
     MEM n (MAP FST fargs)
 Proof
-  rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
+  rpt gen_tac >> simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >> strip_tac >>
   gvs[] >> drule build_compile_env_bound >> simp[]
 QED
 

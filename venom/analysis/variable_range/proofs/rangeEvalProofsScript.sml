@@ -276,25 +276,6 @@ Proof
   rw[GSYM integer_wordTheory.word_mul_i2w, w2i_i2w_wrap256]
 QED
 
-(* wrap256_signed is identity on signed range *)
-Theorem wrap256_signed_id[local]:
-  ∀v:int. INT_MIN(:256) ≤ v ∧ v ≤ INT_MAX(:256) ⇒ wrap256_signed v = v
-Proof
-  rw[wrap256_alt] >>
-  qabbrev_tac `M = &INT_MIN(:256) : int` >>
-  `&dimword(:256) = 2 * M` by simp[Abbr `M`, wordsTheory.dimword_IS_TWICE_INT_MIN] >>
-  `0i < M` by (simp[Abbr `M`, integerTheory.INT_OF_NUM_LT, wordsTheory.ZERO_LT_INT_MIN]) >>
-  `&INT_MAX(:256) = M - 1` by (
-    simp[Abbr `M`, wordsTheory.INT_MAX_def] >>
-    `1n <= INT_MIN(:256)` by simp[wordsTheory.INT_MIN_def, dim256] >>
-    imp_res_tac (GSYM integerTheory.INT_SUB) >> simp[]) >>
-  `0 <= v + M /\ v + M < 2 * M` by intLib.ARITH_TAC >>
-  ASM_REWRITE_TAC[] >>
-  `(v + M) % (2 * M) = v + M` by (
-    irule integerTheory.INT_LESS_MOD >> intLib.ARITH_TAC) >>
-  intLib.ARITH_TAC
-QED
-
 (* Bridge: w2i(w1 op w2) = w2i w1 op w2i w2 when result in signed range.
    Uses word_op_i2w (modular identity) + w2i_i2w (signed-range identity). *)
 Theorem w2i_add_id[local]:
@@ -360,14 +341,6 @@ Theorem in_range_constant_sub[local]:
     in_range (vr_constant (wrap256_signed (lo1 - lo2))) (w1 - w2)
 Proof
   rw[in_range_constant, w2i_sub_wrap256]
-QED
-
-Theorem in_range_constant_mul[local]:
-  ∀w1 w2:256 word lo1 lo2.
-    w2i w1 = lo1 ∧ w2i w2 = lo2 ⇒
-    in_range (vr_constant (wrap256_signed (lo1 * lo2))) (w1 * w2)
-Proof
-  rw[in_range_constant, w2i_mul_wrap256]
 QED
 
 (* ===== ASSIGN soundness ===== *)
@@ -732,33 +705,6 @@ Proof
   intLib.ARITH_TAC
 QED
 
-(* Non-negative numerator and positive denominator ⇒ non-negative quotient *)
-Triviality int_div_nonneg:
-  ∀(x:int) (m:int). 0 ≤ x ∧ 0 < m ⇒ 0 ≤ x / m
-Proof
-  rpt strip_tac >> SPOSE_NOT_THEN ASSUME_TAC >>
-  `m ≠ 0:int` by intLib.ARITH_TAC >>
-  `x = x / m * m + x % m` by metis_tac[integerTheory.INT_DIVISION] >>
-  `0 ≤ x % m ∧ x % m < m` by (
-    `if m < 0 then m < x % m ∧ x % m ≤ 0 else 0 ≤ x % m ∧ x % m < m`
-      by metis_tac[integerTheory.INT_DIVISION] >>
-    `¬(m < 0)` by intLib.ARITH_TAC >> fs[]) >>
-  `x / m ≤ -1` by intLib.ARITH_TAC >>
-  `m * (x / m) ≤ m * -1` by simp[integerTheory.INT_LE_MONO] >>
-  intLib.ARITH_TAC
-QED
-
-(* Mod bounds for non-negative numerator and positive denominator *)
-Triviality int_mod_bounds:
-  ∀(x:int) (m:int). 0 ≤ x ∧ 0 < m ⇒ 0 ≤ x % m ∧ x % m < m
-Proof
-  rpt strip_tac >>
-  `m ≠ 0:int` by intLib.ARITH_TAC >>
-  drule integerTheory.INT_DIVISION >>
-  disch_then (qspec_then `x` strip_assume_tac) >>
-  intLib.ARITH_TAC
-QED
-
 (* Denominator monotonicity for nat DIV *)
 Triviality nat_div_le_mono_denom:
   ∀a b x. 0 < a ∧ a ≤ b ⇒ x DIV b ≤ x DIV a
@@ -791,27 +737,6 @@ Proof
   rpt strip_tac >>
   `x / d ≤ x / 1` suffices_by simp[integerTheory.INT_DIV_1] >>
   irule int_div_le_mono_denom >> intLib.ARITH_TAC
-QED
-
-(* Int-to-nat bridges (for MOD proof) *)
-Triviality int_div_to_nat:
-  ∀a b. 0 ≤ a ∧ 0 < b ⇒ a / b = &(Num a DIV Num b)
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`a`, `b`] integerTheory.int_div) >>
-  `b ≠ 0` by intLib.ARITH_TAC >>
-  simp[integerTheory.NUM_OF_INT]
-QED
-
-Triviality int_mod_to_nat:
-  ∀a b. 0 ≤ a ∧ 0 < b ⇒ a % b = &(Num a MOD Num b)
-Proof
-  rpt strip_tac >>
-  `Num b ≠ 0` by intLib.ARITH_TAC >>
-  `a = &(Num a)` by simp[GSYM integerTheory.INT_OF_NUM] >>
-  `b = &(Num b)` by intLib.ARITH_TAC >>
-  ONCE_ASM_REWRITE_TAC[] >>
-  simp[CONJUNCT1 integerTheory.INT_MOD_CALCULATE]
 QED
 
 (* ===== w2i bridge lemmas for word operations ===== *)
@@ -863,36 +788,6 @@ Proof
   `0 < n` by intLib.ARITH_TAC >>
   `1 < Num d` by (Cases_on `Num d = 1` >- fs[] >> DECIDE_TAC) >>
   `n DIV Num d < n` by simp[arithmeticTheory.DIV_LESS] >>
-  intLib.ARITH_TAC
-QED
-
-(* Integer division by positive preserves INT_MIN/INT_MAX bounds *)
-Triviality int_div_in_range_lower:
-  ∀(x:int) (d:int). 0 < d ∧ INT256_MIN ≤ x ⇒ INT256_MIN ≤ x / d
-Proof
-  rpt strip_tac >>
-  irule integerTheory.INT_LE_TRANS >>
-  qexists_tac `INT256_MIN / d` >>
-  reverse conj_tac
-  >- (irule int_div_le_mono >> intLib.ARITH_TAC) >>
-  irule int_div_neg_ge >>
-  simp[INT256_MIN_def, integer_wordTheory.INT_MIN_def,
-       integer_wordTheory.INT_MAX_def,
-       wordsTheory.INT_MIN_def, dim256] >>
-  intLib.ARITH_TAC
-QED
-
-Triviality int_div_in_range_upper:
-  ∀(x:int) (d:int). 0 < d ∧ x ≤ INT256_MAX ⇒ x / d ≤ INT256_MAX
-Proof
-  rpt strip_tac >>
-  irule integerTheory.INT_LE_TRANS >>
-  qexists_tac `INT256_MAX / d` >>
-  conj_tac
-  >- (irule int_div_le_mono >> intLib.ARITH_TAC) >>
-  irule int_div_le_dividend >>
-  simp[INT256_MAX_def, integer_wordTheory.INT_MAX_def,
-       wordsTheory.INT_MIN_def, dim256] >>
   intLib.ARITH_TAC
 QED
 
@@ -1031,19 +926,6 @@ Proof
   rpt strip_tac >>
   `w = i2w (-1)` by metis_tac[integer_wordTheory.w2i_11, w2i_neg1_eq] >>
   simp[i2w_neg1_is_max, wordsTheory.WORD_AND_CLAUSES]
-QED
-
-(* AND with two nonneg operands: result in [0, min(bound1, bound2)] *)
-Triviality and_nonneg_bounded[local]:
-  ∀(w1:256 word) (w2:256 word) b1 b2.
-    0 ≤ w2i w1 ∧ 0 ≤ w2i w2 ∧ w2i w1 ≤ b1 ∧ w2i w2 ≤ b2 ⇒
-    0 ≤ w2i (w1 && w2) ∧ w2i (w1 && w2) ≤ b1 ∧ w2i (w1 && w2) ≤ b2
-Proof
-  rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`w1`, `w2`] w2i_word_and_nonneg) >>
-  mp_tac (ONCE_REWRITE_RULE[wordsTheory.WORD_AND_COMM]
-    (Q.SPECL [`w2`, `w1`] w2i_word_and_nonneg)) >>
-  intLib.ARITH_TAC
 QED
 
 Theorem eval_range_and_sound:
@@ -1459,34 +1341,6 @@ Triviality shl_huge_zero[local]:
   ∀(w:256 word) n. dimindex(:256) ≤ n ⇒ w ≪ n = 0w
 Proof
   metis_tac[wordsTheory.LSL_LIMIT]
-QED
-
-(* For nonneg shift < 255, w2i(n2w(2^n)) = &(2^n) *)
-Triviality w2i_n2w_pow2[local]:
-  ∀n. n < 255 ⇒ w2i (n2w (2 ** n) : 256 word) = &(2 ** n)
-Proof
-  rpt strip_tac >>
-  irule integer_wordTheory.w2i_n2w_pos >>
-  REWRITE_TAC [wordsTheory.INT_MIN_def] >>
-  (* Compare exponents before normalizing the 256-bit bound. *)
-  irule (iffRL (SPEC_ALL (MATCH_MP arithmeticTheory.EXP_BASE_LT_MONO
-    (DECIDE ``1n < 2``)))) >>
-  simp[dim256]
-QED
-
-(* SHL bridge for nonneg shift < 255:
-   w2i(w ≪ n) = wrap256_signed(w2i w * &(2^n)) *)
-Triviality wrap256_signed_add_dimword[local]:
-  ∀(x:int) k. wrap256_signed (x + k * &dimword(:256)) = wrap256_signed x
-Proof
-  rpt strip_tac >> simp[wrap256_alt] >>
-  qabbrev_tac `D = &dimword(:256):int` >>
-  qabbrev_tac `M = &INT_MIN(:256):int` >>
-  `x + k * D + M = k * D + (x + M)` by intLib.ARITH_TAC >>
-  pop_assum SUBST1_TAC >>
-  `(k * D + (x + M)) % D = (x + M) % D` suffices_by simp[] >>
-  irule integerTheory.INT_MOD_ADD_MULTIPLES >>
-  simp[Abbr `D`, wordsTheory.dimword_def, dim256]
 QED
 
 Triviality i2w_wrap256_signed[local]:

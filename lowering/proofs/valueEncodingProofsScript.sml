@@ -1148,7 +1148,7 @@ QED
 (* val_in_memory reads only the bytes of its footprint
    [off, off + type_memory_size ty): memories agreeing there agree on it. *)
 (* Slot k of an n-slot array lies inside the array's window. *)
-Theorem mem_bytes_at_agree_slot[local]:
+Theorem mem_bytes_at_agree_slot:
   ∀ off n t k mem mem'.
     k < n ∧ mem_bytes_at off (n * t) mem = mem_bytes_at off (n * t) mem' ⇒
     mem_bytes_at (off + k * t) t mem' = mem_bytes_at (off + k * t) t mem

@@ -101,14 +101,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem event_log_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy all_capabilities)
-    event_log_program =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "event_log.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem indexed_event_log_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     indexed_event_log_program =

@@ -31,14 +31,6 @@ QED
 
 (* ===== INVOKE at fuel 0 always returns Error ===== *)
 
-Triviality step_inst_invoke_fuel_0:
-  !ctx inst s. inst.inst_opcode = INVOKE ==>
-    ?e. step_inst 0 ctx inst s = Error e
-Proof
-  rw[step_inst_def, run_blocks_def] >>
-  BasicProvers.EVERY_CASE_TAC
-QED
-
 (* ===== General fuel monotonicity for run_blocks ===== *)
 (* This is a GENERAL property of the execution model: once run_blocks
    terminates at some fuel, additional fuel gives the same result.
@@ -189,18 +181,6 @@ Proof
   simp[Once run_blocks_unfold, terminates_def]
 QED
 
-Triviality run_blocks_fuel_mono_IH[local]:
-  !n ctx' fn' s' k.
-    (!m. m < SUC n ==>
-       !ctx fn s. terminates (run_blocks m ctx fn s) ==>
-       !k. run_blocks (m + k) ctx fn s = run_blocks m ctx fn s) ==>
-    terminates (run_blocks n ctx' fn' s') ==>
-    run_blocks (n + k) ctx' fn' s' = run_blocks n ctx' fn' s'
-Proof
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`n`] mp_tac) >> simp[] >> metis_tac[]
-QED
-
 Triviality terminates_run_blocks_from_run_block_OK[local]:
   !n ctx fn s bb v.
     terminates (run_blocks (SUC n) ctx fn s) /\
@@ -255,16 +235,6 @@ Proof
   gen_tac >> rpt strip_tac >> irule run_blocks_fuel_mono >> simp[]
 QED
 
-Triviality exec_block_fuel_mono:
-  !f ctx bb s.
-    (!e. exec_block f ctx bb s <> Error e) ==>
-    !k. exec_block (f + k) ctx bb s = exec_block f ctx bb s
-Proof
-  rpt strip_tac >>
-  irule (REWRITE_RULE [GSYM AND_IMP_INTRO] exec_block_fuel_mono_lem) >>
-  simp[run_blocks_fuel_mono_univ]
-QED
-
 (* ===== resolves_to helpers ===== *)
 
 (* Both sides non-continuable: resolves_to collapses to lift_result *)
@@ -276,26 +246,6 @@ Triviality resolves_to_terminal_collapses:
     lift_result R_ok R_term R_term r1 r2
 Proof
   Induct_on `n` >> rw[resolves_to_def]
-QED
-
-(* When r1 is not OK-non-halted AND terminates, lift_result r1 (Error e) = F *)
-Triviality lift_result_term_error_F:
-  !R_ok R_term r1 e.
-    terminates r1 /\
-    (!v. r1 = OK v ==> v.vs_halted) ==>
-    ~lift_result R_ok R_term R_term r1 (Error e)
-Proof
-  Cases_on `r1` >> simp[lift_result_def, terminates_def]
-QED
-
-(* Symmetric *)
-Triviality lift_result_error_term_F:
-  !R_ok R_term e r2.
-    terminates r2 /\
-    (!v. r2 = OK v ==> v.vs_halted) ==>
-    ~lift_result R_ok R_term R_term (Error e) r2
-Proof
-  Cases_on `r2` >> simp[lift_result_def, terminates_def]
 QED
 
 (* ===== inst_idx_0_lemma ===== *)
@@ -449,14 +399,6 @@ QED
 
 (* ===== Symmetry: lift_result flip ===== *)
 
-Triviality lift_result_flip:
-  !R_ok R_term r1 r2.
-    lift_result R_ok R_term R_term r1 r2 <=>
-    lift_result (\a b. R_ok b a) (\a b. R_term b a) (\a b. R_term b a) r2 r1
-Proof
-  Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def] >> metis_tac[]
-QED
-
 (* ===== resolve_left_fn: generalized left resolution ===== *)
 (* Symmetric to resolve_right_fn for the left side. *)
 
@@ -594,34 +536,6 @@ Proof
 QED
 
 (* ===== fuel_alignment: align fuels via fuel mono + same-code ===== *)
-
-Triviality fuel_alignment:
-  !R_ok R_term fn ctx s1 s2 f1 f2.
-    R_ok s1 s2 /\
-    terminates (run_blocks f1 ctx fn s1) /\
-    terminates (run_blocks f2 ctx fn s2) /\
-    (!fuel k ctx s. terminates (run_blocks fuel ctx fn s) ==>
-       run_blocks (fuel + k) ctx fn s = run_blocks fuel ctx fn s) /\
-    (!fuel ctx s1 s2. R_ok s1 s2 ==>
-       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s1)
-                                (run_blocks fuel ctx fn s2))
-  ==>
-    lift_result R_ok R_term R_term (run_blocks f1 ctx fn s1)
-                             (run_blocks f2 ctx fn s2)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `!fuel ctx s1 s2. R_ok s1 s2 ==> _`
-    (qspecl_then [`f1 + f2`, `ctx`, `s1`, `s2`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `run_blocks (f1 + f2) ctx fn s1 = run_blocks f1 ctx fn s1` by
-    (qpat_x_assum `!fuel k ctx s. terminates _ ==> _`
-       (qspecl_then [`f1`, `f2`, `ctx`, `s1`] mp_tac) >> simp[]) >>
-  `run_blocks (f1 + f2) ctx fn s2 = run_blocks f2 ctx fn s2` by
-    (qpat_x_assum `!fuel k ctx s. terminates _ ==> _`
-       (qspecl_then [`f2`, `f1`, `ctx`, `s2`] mp_tac) >>
-     `f2 + f1 = f1 + f2` by simp[] >> gvs[]) >>
-  gvs[]
-QED
 
 (* ===== fwd_terminal_block: terminal block result => fn' terminates ===== *)
 (* When run_block on the original side gives a terminal result (non-OK or

@@ -40,7 +40,7 @@ Ancestors
   fragExec localPtrsProps venomMemDefs immutableMemoryFrame immutableRelation
   immutableEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv valueEncoding valueEncodingProps memoryValueDefs
   vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperStatePreservation arithmeticProps
@@ -74,6 +74,24 @@ End
 
 (* ===== Reading a word local ===== *)
 
+(* Scalar layouts are selected by the type constructor, not its size:
+   an aggregate can also occupy exactly 32 bytes. *)
+Definition word_memory_type_def:
+  word_memory_type tv <=>
+    (?bt. tv = BaseTV bt) \/ (?n. tv = FlagTV n)
+End
+
+Theorem evaluate_word_memory_type:
+  !tenv ty tv.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv ==>
+    word_memory_type tv
+Proof
+  rpt gen_tac >> Cases_on `ty` >>
+  simp[is_word_type_def, evaluate_type_def, word_memory_type_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[word_memory_type_def]) >>
+  rw[] >> simp[]
+QED
+
 (* A value held in one memory word under its plain encoding val_to_w256:
    the values mstore_establishes_val_in_memory_prim covers.  BytesV, the
    value of address and bytesN locals, is left out, as it is there: how it
@@ -91,6 +109,24 @@ Theorem word_value_in_memory:
     val_in_memory ty v off (mstore off (val_to_w256 v) s).vs_memory
 Proof
   rw[word_value_def] >> simp[mstore_establishes_val_in_memory_prim]
+QED
+
+Theorem word_value_memory_rel:
+  !ty v off s.
+    word_memory_type ty /\ word_value v ==>
+    memory_value_rel ty v off (mstore off (val_to_w256 v) s).vs_memory
+Proof
+  rw[word_memory_type_def] >>
+  simp[memory_value_rel_def, word_value_in_memory]
+QED
+
+(* At a word type the complete layout is the canonical one. *)
+Theorem word_memory_type_memory_value_rel:
+  !ty v off mem.
+    word_memory_type ty ==>
+    (memory_value_rel ty v off mem <=> val_in_memory ty v off mem)
+Proof
+  rw[word_memory_type_def] >> simp[memory_value_rel_def]
 QED
 
 Theorem word_value_wf:
@@ -182,11 +218,12 @@ Theorem step_name_word:
 Proof
   rpt strip_tac >>
   `?w. lookup_var p s = SOME w /\
-       val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+       memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
   `mload (w2n w) s = val_to_w256 entry.value` by
-    (fs[word_value_def] >> gvs[val_in_memory_prim, mem_word_at_eq_mload]) >>
+    (fs[word_value_def] >> Cases_on `entry.type` >>
+     gvs[memory_value_rel_def, val_in_memory_prim, mem_word_at_eq_mload]) >>
   pop_assum (SUBST1_TAC o SYM) >>
   irule step_MLOAD >> simp[eval_operand_def]
 QED
@@ -532,7 +569,7 @@ Theorem stmt_state_rel_declare_word:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
-    cap <= w2n w /\
+    word_memory_type tyv /\ cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module es cap) ==>
     stmt_state_rel ctx func cenv cx
@@ -576,8 +613,8 @@ Proof
     simp[Abbr `scs'`, lookup_scopes_def, FLOOKUP_UPDATE] >>
   `local_backed func p s (w2n w) sz` by
     (simp[local_backed_def] >> disj1_tac >> qexists_tac `inst` >> simp[]) >>
-  `val_in_memory tyv v (w2n w) s'.vs_memory` by
-    simp[Abbr `s'`, word_value_in_memory] >>
+  `memory_value_rel tyv v (w2n w) s'.vs_memory` by
+    simp[Abbr `s'`, word_value_memory_rel] >>
   `val_wf tyv v` by (irule word_value_wf >> simp[]) >>
   `local_ptrs_rel func cenv scs' s'` by
     (`entry.type = tyv /\ entry.value = v` by simp[Abbr `entry`] >>
@@ -784,6 +821,8 @@ Proof
      (INL v, es1)` by simp[bind_def] >>
   `word_value v` by metis_tac[] >>
   `type_memory_size tyv = 32` by fs[] >>
+  `word_memory_type tyv` by
+    (irule evaluate_word_memory_type >> metis_tac[]) >>
   `(cenv.ce_is_ctor ==>
       immutable_prefix_bound cenv cx.txn.target cenv.ce_module es1 cap)` by
     (fs[immutable_prefix_bound_def] >> metis_tac[]) >>
@@ -829,7 +868,7 @@ Proof
   `lookup_var p s = SOME w` by metis_tac[] >> simp[] >>
   qspecl_then [`func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `w`,
                `mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]`,
-               `v`, `tyv`, `sc`, `rest`, `cap`, `T`]
+               `v`, `tyv`, `sc`, `rest`, `cap`, `T`, `ctx`]
     MATCH_MP_TAC stmt_state_rel_declare_word >>
   fs[venomInstTheory.mk_inst_def]
 QED

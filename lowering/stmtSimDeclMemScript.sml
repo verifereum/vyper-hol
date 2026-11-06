@@ -29,7 +29,7 @@ Ancestors
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding valueTypingMemoryProps
+  context compileEnv valueEncoding valueTypingMemoryProps memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -439,7 +439,7 @@ Theorem stmt_state_rel_declare_store_frame[local]:
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size tyv <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    type_memory_size tyv <= sz /\ val_wf tyv v /\
+    type_memory_size tyv <= sz /\ val_wf tyv v /\ value_has_type tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
@@ -476,6 +476,8 @@ Proof
        (fs[regions_disjoint_def] >> decide_tac) >>
      qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
        (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
+  `memory_value_rel tyv v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >> gs[] >>
   qpat_x_assum `t with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>

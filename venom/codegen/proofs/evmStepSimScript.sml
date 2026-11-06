@@ -418,17 +418,17 @@ QED
 
 (* ===== Pre-proved byte-to-opname theorems ===== *)
 (* Each proves: wf_opname op /\ opcode op = [byte] ==> op = ConcreteOp
-   Proved once at file-load time via Cases_on op (84 constructors). *)
+   Derived at file-load time from opcode injectivity and concrete encodings. *)
 local
   val byte_opname_proof = fn (byte_tm, opn_tm) =>
     prove(mk_imp(mk_conj(``wf_opname (op:opname)``,
             mk_eq(``opcode (op:opname)``,
                   listSyntax.mk_list([byte_tm], ``:word8``))),
           mk_eq(``op:opname``, opn_tm)),
-      Cases_on `op` >> simp[opcode_def, wf_opname_def] >>
-      rpt strip_tac >>
-      gvs[wordsTheory.n2w_11, wordsTheory.dimword_8,
-          wordsTheory.word_add_n2w])
+      strip_tac >>
+      `wf_opname ^opn_tm /\ opcode ^opn_tm = [^byte_tm]` by
+        simp[opcode_def, wf_opname_def, wordsTheory.word_add_n2w] >>
+      metis_tac[opcode_wf_inj])
 in
   val byte_opname_thms = map byte_opname_proof [
     (* Arith *)

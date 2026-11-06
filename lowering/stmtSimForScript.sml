@@ -50,8 +50,8 @@ QED
    hypothesis holds at every state satisfying an invariant, not with one
    over the evaluator's recursion, which gives the body only at the visited
    (state, counter) pairs.  Only for n1 <= n2 (not the source's "no range"
-   error), a loop variable of one word, and ce_alloca_locals, which the
-   lowering sets for external functions only. *)
+   error), a scalar loop variable of one word, and ce_alloca_locals, which
+   the lowering sets for external functions only. *)
 Theorem compile_for_range_frag:
   !P ctx func cx lctx RetQ cenv ty id fty e1 n1 e2 n2 bound stmts es res es'
    tyv.
@@ -61,6 +61,7 @@ Theorem compile_for_range_frag:
     (!s. lower_value compile_expr cenv fty e1 s = (Lit (i2w n1), s)) /\
     (!s. lower_value compile_expr cenv fty e2 s = (Lit (i2w n2), s)) /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
+    word_memory_type tyv /\
     32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\
     n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\
@@ -254,6 +255,7 @@ Theorem compile_for_range_lit_frag:
       (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
          bound stmts) es = (res, es') /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
+    word_memory_type tyv /\
     32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\
     n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\
@@ -307,6 +309,7 @@ Theorem compile_for_range_lit_frag_simple:
       (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
          bound stmts) es = (res, es') /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
+    word_memory_type tyv /\
     32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\
     n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\

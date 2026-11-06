@@ -262,7 +262,7 @@ Theorem annassign_word_store_run:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
@@ -358,9 +358,10 @@ Proof
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `lookup_var p s = SOME w` by metis_tac[] >>
   `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz)` by metis_tac[] >>
-  `val_in_memory tyv v (w2n w)
-     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
-   val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
+  `memory_value_rel tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
+    metis_tac[store_lays_out_memory_value_rel] >>
+  `val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
   `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_run >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
@@ -623,7 +624,7 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (qexists_tac `etv` >> simp[]) >> rpt strip_tac >>
   qpat_x_assum `!v es1. _ ==> word_value v` drule >> strip_tac >>
-  irule store_lays_out_word_value >> metis_tac[]
+  irule store_lays_out_word_value >> metis_tac[evaluate_word_memory_type]
 QED
 
 (* x: T = e for a word type T, address and bytesN included, where e has

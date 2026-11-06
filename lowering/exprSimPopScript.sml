@@ -35,6 +35,7 @@ Ancestors
   fragExec loweringSlice exprSim exprSimHyps exprSimLeaves exprSimAggregateLayout
   exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
   emitHelperProps compileEnv localPtrsProps valueEncoding valueEncodingProps
+  memoryValueEncoding
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperLookup vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeEnv
   vyperTypeExprResult vyperTypeExprSoundness
@@ -444,6 +445,8 @@ Proof
   qpat_x_assum `local_ptrs_rel _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
   qpat_x_assum `!name entry p sz. _` (drule_all_then strip_assume_tac) >>
+  `val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
+    metis_tac[memory_value_rel_val_in_memory] >>
   qpat_x_assum `val_wf _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [val_wf_def] o
      REWRITE_RULE [ASSUME ``entry.type = ArrayTV etv (Dynamic n)``,
@@ -478,7 +481,7 @@ Theorem pop_local_ptrs_rel:
     lookup_var p s0 = SOME w /\ local_backed func p s0 (w2n w) sz /\
     w2n w + sz <= s0.vs_alloca_next /\
     entry.type = ArrayTV etv (Dynamic n) /\ vs <> [] /\
-    LENGTH vs <= n /\ elems_val_wf vs etv /\
+    LENGTH vs <= n /\ elems_val_wf vs etv /\ EVERY (value_has_type etv) vs /\
     32 + n * type_memory_size etv <= sz /\
     elems_in_memory vs (w2n w + 32) etv s0.vs_memory /\
     u.vs_memory = (mstore (w2n w) (n2w (LENGTH vs) - 1w) s0).vs_memory /\
@@ -527,9 +530,13 @@ Proof
   >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def, pop_name_entry_def]
   >~ [`val_wf`]
   >- fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT, pop_name_entry_def]
-  >~ [`val_in_memory`]
-  >- fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
-        elems_in_memory_mstore_before, pop_name_entry_def] >>
+  >~ [`memory_value_rel`]
+  >- (irule val_in_memory_memory_value_rel >> conj_tac
+      >- (simp[pop_name_entry_def, value_has_type_def, all_have_type_EVERY,
+               LENGTH_FRONT] >>
+          fs[EVERY_MEM] >> metis_tac[MEM_FRONT_NOT_NIL]) >>
+      fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
+         elems_in_memory_mstore_before, pop_name_entry_def]) >>
   rpt strip_tac >> gvs[]
 QED
 

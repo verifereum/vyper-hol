@@ -1,7 +1,7 @@
 {
   "producer": "pinned Python Vyper",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b+commit.9362e36b",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
   "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",

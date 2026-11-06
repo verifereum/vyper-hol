@@ -53,23 +53,23 @@
       "expected": 5,
       "fixture": "nested_retained_pop",
       "returned": 5,
-      "runtime_sha256": "ee0c03003f41c13679716d02bd56944b7008b29a63085e66c06437fc08486b59",
+      "runtime_sha256": "7c01b7bfbe1130e14b56d53e9f1bb23c4f180bd6d448624561948ac58275bdfe",
       "signature": "f()"
     },
     {
       "arguments": [],
-      "expected": 10,
+      "expected": 0,
       "fixture": "call_storage_read",
-      "returned": 10,
-      "runtime_sha256": "4fb0fa0ba355c7b0f8480d34738e59bf8340512a5e535f342c84c93eb45be443",
+      "returned": 0,
+      "runtime_sha256": "28f103fd38b982cbd625e1f45efe535cb79a828ca0f497bd13675e6149b03e65",
       "signature": "f()"
     },
     {
       "arguments": [],
-      "expected": 1,
+      "expected": 2,
       "fixture": "call_memory_pop",
-      "returned": 1,
-      "runtime_sha256": "6e5c5463b66f466fcc973b5ebaa8d1030b93780a7285688deacdeaef39ee1f2a",
+      "returned": 2,
+      "runtime_sha256": "6704e354f93c26112fff9edf44a47668a64c085dcdf5fffd873f969888844b4d",
       "signature": "f()"
     },
     {

@@ -675,23 +675,6 @@ Proof
   gvs[FLOOKUP_FUNION, FLOOKUP_DEF]
 QED
 
-(* Key properties of inst_map from df_fold_block *)
-Triviality df_fold_block_inst_map_props[local]:
-  !transfer lbl instrs v0 fv inst_map.
-    df_fold_block Forward transfer lbl instrs v0 = (fv, inst_map) ==>
-    (!k. k IN FDOM inst_map ==> FST k = lbl) /\
-    (lbl, 0n) IN FDOM inst_map /\
-    FLOOKUP inst_map (lbl, 0n) = SOME v0
-Proof
-  rpt strip_tac >> imp_res_tac df_fold_block_fdom
-  >- fs[IN_IMAGE, IN_COUNT]
-  >- simp[IN_IMAGE, IN_COUNT]
-  >- (qpat_x_assum `_ = (fv, inst_map)` mp_tac >>
-      simp[dfAnalyzeDefsTheory.df_fold_block_def,
-           dfAnalyzeDefsTheory.direction_case_def] >>
-      strip_tac >> imp_res_tac df_fold_forward_at >> fs[])
-QED
-
 (* C3 coherence: when ds_inst already has the right v0 at (lbl,0),
    the fold output inst_map is absorbed by FUNION. *)
 Triviality funion_fold_coherent[local]:
@@ -739,19 +722,6 @@ Proof
   rpt strip_tac >>
   irule CARD_SUBSET >> simp[FINITE_INTER, FDOM_FUNION] >>
   simp[SUBSET_DEF, IN_INTER] >> metis_tac[IN_UNION]
-QED
-
-(* copy_prop_joined depends only on ds_boundary, and is preserved
-   when df_boundary values are unchanged *)
-Triviality copy_prop_joined_boundary_eq[local]:
-  !fn st bnd di.
-    (!x. df_boundary NONE <|ds_inst := di; ds_boundary := bnd|> x =
-         df_boundary NONE st x) ==>
-    !x. copy_prop_joined fn <|ds_inst := di; ds_boundary := bnd|> x =
-        copy_prop_joined fn st x
-Proof
-  rpt strip_tac >>
-  simp[copy_prop_joined_def, LET_THM]
 QED
 
 (* fresh_count monotonicity under FUNION when joined values are preserved *)

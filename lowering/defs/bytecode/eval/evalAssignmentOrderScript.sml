@@ -12,11 +12,11 @@ Libs
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps
   ["../assignment-order/oracle", "../assignment-order/sources",
-   "../assignment-order/fixtures.txt"]
+   "../assignment-order/fixtures.txt", "../assignment-order/codegen-rejected"]
 val () = computeLib.upd_compset add_finite_map_compset
 
-fun define_source_fixture name = let
-  val path = "../assignment-order/oracle/" ^ name ^ ".json"
+fun define_source_fixture_in dir name = let
+  val path = "../assignment-order/" ^ dir ^ "/" ^ name ^ ".json"
   val ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path
   val layout = JSONDecode.decodeFile jsonASTLib.storage_layout path
   val checked = vyperCheckContractFrontendLib.check_contract_result
@@ -49,7 +49,10 @@ val fixture_names =
   |> String.tokens (fn c => c = #"\n" orelse c = #"\r")
   |> List.map evalCompilerBytecodeLib.strip_comment
   |> List.filter (fn name => name <> "");
-val () = List.app define_source_fixture fixture_names;
+val () = List.app (define_source_fixture_in "oracle") fixture_names;
+(* Python rejects these in codegen; their interpreter regressions stay. *)
+val () = List.app (define_source_fixture_in "codegen-rejected")
+  ["aug_storage_shrink", "aug_memory_shrink", "aug_memory_shrink_append"];
 
 Definition assignment_empty_state_def:
   assignment_empty_state = empty_state with scopes := [FEMPTY]

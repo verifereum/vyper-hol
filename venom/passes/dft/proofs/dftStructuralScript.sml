@@ -878,15 +878,6 @@ Proof
       flip_comparison_opcode_def, is_raw_fmp_opcode_def]
 QED
 
-Theorem from_block_no_raw[local]:
-  from_block block_insts i /\
-  EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) block_insts ==>
-  ~is_raw_fmp_opcode i.inst_opcode
-Proof
-  simp[from_block_def, listTheory.EVERY_MEM] >>
-  metis_tac[dft_flip_no_raw]
-QED
-
 Theorem dft_block_no_raw[local]:
   EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode) bb.bb_instructions ==>
   EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode)

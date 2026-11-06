@@ -3438,6 +3438,7 @@ Proof
   simp[compile_make_array_def, compile_make_array_elems_def,
        unwrap_value_def, mk_ptr_def, is_word_type_def, is_bytestring_type_def,
        compile_store_memory_def, compile_store_memory_typed_def,
+       memoryLayoutDefsTheory.tuple_memory_layout_eq_def,
        compile_with_byte_offset_def,
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]

@@ -220,34 +220,7 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
-(* Conditional: if original lookup is NONE, so is transformed lookup *)
-Theorem lookup_block_lit_codesize_NONE[local]:
-  !lbl fns.
-    lookup_block lbl fns = NONE ==>
-    lookup_block lbl (MAP (block_map_transform lit_codesize_inst) fns) = NONE
-Proof
-  simp[lookup_block_lit_codesize_eq]
-QED
-
-(* Conditional: if original lookup is SOME bb, transformed lookup is SOME (f bb) *)
-Theorem lookup_block_lit_codesize_SOME[local]:
-  !lbl fns bb.
-    lookup_block lbl fns = SOME bb ==>
-    lookup_block lbl (MAP (block_map_transform lit_codesize_inst) fns) =
-    SOME (block_map_transform lit_codesize_inst bb)
-Proof
-  simp[lookup_block_lit_codesize_eq]
-QED
-
 (* Helper: function_map_transform preserves fn_blocks via MAP *)
-(* Critical: simp cannot reduce (fn with fn_blocks := MAP bt fn.fn_blocks).fn_blocks *)
-Triviality function_map_transform_fn_blocks[local]:
-  !bt fn. (function_map_transform bt fn).fn_blocks = MAP bt fn.fn_blocks
-Proof
-  Cases_on `fn` >>
-  simp[passSimulationDefsTheory.function_map_transform_def] >>
-  EVAL_TAC >> simp[]
-QED
 
 (* Helper: get_instruction on block_map_transform *)
 Theorem get_instruction_block_map_transform[local]:

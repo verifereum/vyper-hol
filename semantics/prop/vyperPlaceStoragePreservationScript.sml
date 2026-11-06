@@ -167,10 +167,34 @@ Proof
   simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
        type_check_def, assert_def, lift_sum_def, set_scopes_def,
        return_def, raise_def, ignore_bind_def, check_def, pairTheory.UNCURRY] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
-           lift_sum_def, set_scopes_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[get_storage_scopes]
+  Cases_on `find_containing_scope id st.scopes`
+  >- (simp[raise_def] >> rpt strip_tac >> gvs[]) >>
+  PairCases_on `x` >> simp[return_def] >>
+  reverse (Cases_on `x2.assignable`)
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >>
+  reverse (Cases_on `read_memory_path x2 path`)
+  >- (simp[raise_def] >> rpt strip_tac >> gvs[]) >>
+  simp[return_def] >> rename1 `popped_value arr` >>
+  Cases_on `(case arr of ArrayV (DynArrayV vs) => SOME vs | _ => NONE)`
+  >- (simp[raise_def] >> rpt strip_tac >> gvs[]) >>
+  simp[return_def] >>
+  rename1 `LENGTH vs` >>
+  Cases_on `vs = []`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >>
+  reverse (Cases_on `popped_value arr`)
+  >- (simp[raise_def] >> rpt strip_tac >> gvs[]) >>
+  simp[return_def] >>
+  reverse (Cases_on `pop_element arr`)
+  >- (simp[raise_def] >> rpt strip_tac >> gvs[]) >>
+  simp[return_def] >>
+  (* The update/history calculation is pure; split its result as a whole. *)
+  qmatch_goalsub_abbrev_tac
+    `(case update of INL v => return v | INR e => raise (Error e))` >>
+  reverse (Cases_on `update`)
+  >- (simp[raise_def] >> rpt strip_tac >> gvs[]) >>
+  simp[return_def] >> rpt strip_tac >> gvs[get_storage_scopes]
 QED
 
 Theorem pop_immutable_place_storage:

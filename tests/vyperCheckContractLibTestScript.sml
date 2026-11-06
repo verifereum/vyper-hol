@@ -748,6 +748,125 @@ val () = List.app (assert_some o check_constants)
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
 
+(* a13-08 p15x: retain the exact p03 uint8 conversion/store and getter, then
+   mutate only the constructor's defaults. Both baseline modes must accept. *)
+val p03_constructor =
+  ``FunctionDecl Deploy Nonpayable F F "__init__"
+      [("a",BaseT (UintT 8))] [] NoneT
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"x")))
+        (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+          [Name (BaseT (UintT 8)) "a"]) ]``;
+val p03_constructor_modules =
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
+       ^p03_constructor;
+       FunctionDecl External Nonpayable F F "get" [] [] (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"x")))]])]
+    : (num option # toplevel list) list``;
+val p03_constructor_layouts =
+  ``[(0w : address,
+      ([((NONE,"x"),0)] : storage_layout, [] : storage_layout))]``;
+val p15x_constructor_modules = let
+  val (head,fields) = strip_comb p03_constructor
+  val changed = List.take (fields,6) @
+    [``[Literal (BaseT (UintT 8)) (IntL 5)]``] @ List.drop (fields,7)
+in subst [p03_constructor |-> list_mk_comb (head,changed)]
+     p03_constructor_modules end;
+val () = List.app (fn in_deploy => let
+  fun check modules = vyperCheckContractLib.check_contract_conv
+    (vyperCheckContractLib.mk_check_contract
+      {in_deploy = in_deploy, layouts = p03_constructor_layouts,
+       address = zero_address, modules = modules})
+in assert_some (check p03_constructor_modules);
+   assert_none (check p15x_constructor_modules)
+end) [false,true];
+
+(* Event declaration regressions: indexed aggregates and duplicate event names
+   are rejected. *)
+Theorem event_declaration_regressions:
+  check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
+  check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
+            EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[FlagDecl "F" ["A";"B"];
+            EventDecl "E" [(("a",FlagT (NONE,"F")),T);
+                          (("b",BaseT AddressT),T)]])])
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_FUNION, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+val event_decl_rejections =
+  [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``];
+val () = List.app (fn mods =>
+  let val th = vyperCheckContractLib.check_contract_conv
+        ``check_contract F ^empty_layouts ^zero_address ^mods``
+  in if aconv (rhs (concl th)) ``NONE : contract_type_artifact option`` then ()
+     else raise Fail "event declaration should be rejected"
+  end) event_decl_rejections;
+
+Theorem event_arg_recursive_widening_eval:
+  arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 10)) /\
+  arg_type_fits (ArrayT (BaseT (UintT 256)) (Dynamic 3))
+    (ArrayT (BaseT (UintT 256)) (Dynamic 5)) /\
+  arg_type_fits (ArrayT (BaseT (StringT 3)) (Dynamic 2))
+    (ArrayT (BaseT (StringT 5)) (Dynamic 2)) /\
+  arg_type_fits (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))])
+    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))]) /\
+  arg_type_fits (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2))
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2)) /\
+  ~arg_type_fits (BaseT (UintT 8)) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (BytesT (Dynamic 40))) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 3))
+Proof
+  EVAL_TAC
+QED
+
+Theorem log_missing_event_eval:
+  type_stmt (env with event_fields := FEMPTY) ret (Log (NONE,"missing") es) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def]
+QED
+
+Theorem log_arity_rejected_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),F)])) ret (Log (NONE,"E") []) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def]
+QED
+
+Theorem log_type_mismatch_rejected_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)])) ret
+    (Log (NONE,"E") [Literal (BaseT (UintT 8)) (IntL 1)]) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def]
+QED
+
+Theorem log_literal_accepted_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)])) ret
+    (Log (NONE,"E") [Literal (BaseT (UintT 256)) (IntL 1)]) =
+  SOME (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)]))
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def,
+       well_typed_expr_def, well_typed_literal_def] >> EVAL_TAC
+QED
+
+Theorem log_variable_compatibility_probe:
+  FLOOKUP env.event_fields id = SOME [(("a",fty),idx)] /\
+  FLOOKUP env.var_types "x" = SOME aty ==>
+  (type_stmt env ret (Log id [Name aty "x"]) = SOME env <=>
+   arg_type_fits aty fty)
+Proof
+  simp[type_stmt_def, well_typed_expr_def, vyperASTTheory.expr_type_def]
+QED
+
 (* The sealed evaluator must resolve and type-check custom errors, not just
    evaluate contracts that never mention them. Keywords must follow
    declaration order, as in Vyper; the argument types deliberately differ. *)

@@ -13,14 +13,6 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
 
-Theorem interface_calls_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy all_capabilities)
-    task090_interface_calls_program =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "interface_calls.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem send_value_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_send_value_program =

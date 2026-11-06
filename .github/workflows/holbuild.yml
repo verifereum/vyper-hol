@@ -64,6 +64,12 @@ jobs:
           # The witnesses build in the witnesses jobs; build-rollup adds them.
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $(python3 tools/ci_targets.py build-roots)
 
+      - name: Check external-entry theories for cheats and axioms
+        run: |
+          for theory in vyperABIEntriesTheory vyperExternalEntryBehaviorTheory vyperExternalEntrySourceBehaviorTheory; do
+            holbuild check "$theory"
+          done
+
       - name: Verify no successful-build checkpoints remain
         run: |
           if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then

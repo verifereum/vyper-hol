@@ -9,14 +9,14 @@
   },
   "fixtures": {
     "abi_dynamic": {
-      "deploy_sha256": "6eabe6660344dedcb8b47e3bd9b7450a212d741a03eb5b8c90164d47bd120268",
-      "runtime_sha256": "8e448d83794b63c463e4d202d762a41c2c11eb41585df005782c145f3db583ff",
+      "deploy_sha256": "15ad7037d66e4b258ae8f164d2157d233fdfbedc6eade08f7cb02fa450587435",
+      "runtime_sha256": "33de5d86018eb243a2e214f08f1b79746527cb42da339fb2d409e5dd80983b22",
       "source": "python-o1-no-asm-opt-sources/abi_dynamic.vy",
       "source_sha256": "89725c5a088cd659ef40135815703d8125c3023efd4a94c46b980cd7812e8bca"
     },
     "abi_static": {
-      "deploy_sha256": "02f1559c97baceca421d254773d41247e15d79a09dffa75563e19118ae8b8647",
-      "runtime_sha256": "78923b07ab12c6832e4b873c7c59164a9796eee9372fa6b7a01d1195cebd18f8",
+      "deploy_sha256": "9a824e3463ccfeb1f5ec9c82673e75ac4436c66f37c6438a144c85891706b831",
+      "runtime_sha256": "cf685ac64da88b1c498ad97b435424214061f37646fb165298b133cdabb91656",
       "source": "python-o1-no-asm-opt-sources/abi_static.vy",
       "source_sha256": "72656d72c65fbd1292a3270c686f6d8ea3a04d35e67049fda0234a21623bc714"
     },
@@ -39,8 +39,8 @@
       "source_sha256": "3664556e9043050124e2adacfaea1f1582d5f58908e7ef94837dfc9f1e276924"
     },
     "assert_reason": {
-      "deploy_sha256": "873c482ee57731eb7e8db1f9200a71fe51e3752d6d6dbadfb2639bfae67a6565",
-      "runtime_sha256": "5d4042237bbeafc5e8cd1dfba7f340c2193a7e5fc622e52a74549c48ae6819f4",
+      "deploy_sha256": "b55345d00a8715f46ed7a15f42bb9e24f93f322f63ddf180667197951e07ee02",
+      "runtime_sha256": "e1fa9addfb961dd0730d416a440b320da52bf2b68ff12b2bff522d8277ec66d1",
       "source": "python-o1-no-asm-opt-sources/assert_reason.vy",
       "source_sha256": "61809fb6dee945ae439c5096475aae48f52119608755c2755317e45a8f68f588"
     },
@@ -81,20 +81,20 @@
       "source_sha256": "ba840389cc0602f530c3ddd5753766e1f1bd6e9069865f10f45b6f1c5cd94a61"
     },
     "event_log": {
-      "deploy_sha256": "dcf12f21ec4e8cb4d8c7f7936e4fb5c9fbec4da5bcd8527526b099bfbdec392e",
-      "runtime_sha256": "16429f473f7892dc2f61cab3b3d9bc85b81c38cb87d5b57a026695d73cd50539",
+      "deploy_sha256": "fc9c764c2b5c423149b98692c73cfcf332ff2401faa7cfe63bf91fcc9c185b2d",
+      "runtime_sha256": "6582f094c19fb295c7a2530e0b7b05acd3a125137fdc7a94a60794fc5a2a2140",
       "source": "python-o1-no-asm-opt-sources/event_log.vy",
       "source_sha256": "b722aaedd514f6c28019445dfdf47f8f8adda7ebb6d764808f82861a2fad2a30"
     },
     "external_arrays": {
-      "deploy_sha256": "6ee34c8cb75712472842a9e598ad699d4a87539d60fc3bf12280d70a2e71fc7e",
-      "runtime_sha256": "a90181dc83ccfa4b34d69767e00be46aa9770bbfb9c98b640030d3016dd2af00",
+      "deploy_sha256": "0774fe8b30c53ec37e99ce33c3030e40596316ab131a4fc1e623a22eb3d67530",
+      "runtime_sha256": "604d01e9fcdc385839ee6214412049c5de7652c89ef1b2d2c9a6b95aef02badd",
       "source": "python-o1-no-asm-opt-sources/external_arrays.vy",
       "source_sha256": "d916a09a6247340ac821cd2c9f97deefbe29531939b6ad2a252313b98d4d3890"
     },
     "external_dynamic": {
-      "deploy_sha256": "a831e805de41590bc963a70bdb16106ad4592f73099a3f13925eeeb102353942",
-      "runtime_sha256": "7e42dd4cc811419f4d9e1f3e570520fa38468b47f037f905243c6fea230a01bc",
+      "deploy_sha256": "9376d03f52d572f7513ed2842a6e5fd55a916356b5816e401a6abdc924575e14",
+      "runtime_sha256": "c705caa48c3638d6368ede76586e0309e42b6782f33d25dcf0cc6f845aab8f9d",
       "source": "python-o1-no-asm-opt-sources/external_dynamic.vy",
       "source_sha256": "7cd52aeaeeb3c477bd699808d504f87949346823c0be92c190fb08736e2a75c2"
     },
@@ -177,14 +177,14 @@
       "source_sha256": "7735235e2053a21464cc048aa662577fdca1bece36697e6405345a045fb280f0"
     },
     "interface_calls": {
-      "deploy_sha256": "4117363f8a3b3bcd55a06fd35af06b12c0a219057c24ca85b60c3b195ded10ec",
-      "runtime_sha256": "1b4a0f62a7e5531e19ceed64668cd3aa54f7a44c6252513063142a99deaa28ac",
+      "deploy_sha256": "57e9d5c4abc7dae1fcec16e4816c00d04b6a294d9284f88586be617844be62cf",
+      "runtime_sha256": "eda69d1955543426ad8c61f4c95d96f48c78acfb10b315c46479b28b9c4aee25",
       "source": "python-o1-no-asm-opt-sources/interface_calls.vy",
       "source_sha256": "dad33309147f67f61f2b6b1e00a7f03de648a917da1509e70d75a2482116f36a"
     },
     "internal_bytes_call": {
-      "deploy_sha256": "8105ea2c63ff6fbe79e2af738d24ab595d44cd79f2c7c54c4ed064de49fbf7f1",
-      "runtime_sha256": "3a999f38285cd30962b9e6650197ec8df9ea14862838a3e512d517c1d680456f",
+      "deploy_sha256": "c605df04a312cce54fadf0ec948055037f227663115e9fd01880c7181689dc90",
+      "runtime_sha256": "09fbff64849a61cb43050c7a458dcc4ff6f210851cc8740152dbf2d583c888b2",
       "source": "python-o1-no-asm-opt-sources/internal_bytes_call.vy",
       "source_sha256": "8c004db47f40568d3a070590692786da1e6890c16a4581afdce2dec9ef35c593"
     },
@@ -225,14 +225,14 @@
       "source_sha256": "e6d20ca9a15e281d35f8a1d2c70b286fa86617b91bd9a2016661be51f399582c"
     },
     "mixed_event_log": {
-      "deploy_sha256": "ec9f7d3ee196b61c6061a4e6e8a4c03c35862793a857aceded8d42097bf36f3a",
-      "runtime_sha256": "5bd8defd118166425a5c909bf09668cc9e93380c939c76561f03f30a7d1a2ea6",
+      "deploy_sha256": "c98d2a89d8a083afba74b443fe9d9218ff8e03773b00b5b7db02f0c5fa0480b4",
+      "runtime_sha256": "2be2f66d8a6abad53df4a37656762579d704d1fcf4bcbf759054effe7210ee56",
       "source": "python-o1-no-asm-opt-sources/mixed_event_log.vy",
       "source_sha256": "06eec9cf68636dc0d8910d7cc4bbdb050d27a431aa3bbaf9baf6eb62ee4ad79a"
     },
     "mixed_event_types": {
-      "deploy_sha256": "9c522e138cf4d098719de65eea9eb15eddd81f682fd6e435104fda04a01dc107",
-      "runtime_sha256": "e08ba8212e74cde3bd470c4d0120cc72a56247dd4bb1cbb601f05ce3ce97a5ea",
+      "deploy_sha256": "ccfcf8dcfe15f756eb10ee463b9a24d5eeba4accac9b8cc76e39b4ff8b0911c5",
+      "runtime_sha256": "797b0c705ce917d38e950167c74da5055144748af5ab67e204ae1d10010e651e",
       "source": "python-o1-no-asm-opt-sources/mixed_event_types.vy",
       "source_sha256": "02a59bd1e325623a7858324556d59a2f66387a7ae4d73a092b4963dc03322201"
     },
@@ -249,8 +249,8 @@
       "source_sha256": "dca66ec6465cb79b46b0bae8b554fc2d779c106fc4fdd2fb811df17a763d9578"
     },
     "raise_reason": {
-      "deploy_sha256": "0acbabefb8539440388c586f6f04400bb7f9be316991392f93b5a0d7f93e0b6e",
-      "runtime_sha256": "2513e4fa250ae189ae48673aa13f519e950eb071776ddf1b477e37070ee2e790",
+      "deploy_sha256": "5251e919915bb992b4ba28093d3632b96f9bef63a3a5db0dda9b13836dbdcf51",
+      "runtime_sha256": "9bc4993a1aa720ebb01062c697a46be6b6037f32ca8800100dab513974f48cde",
       "source": "python-o1-no-asm-opt-sources/raise_reason.vy",
       "source_sha256": "9d0dbec0a26c845f5fc404960d3866acc8825a98c99a7adba7f22803c6a095f2"
     },
@@ -375,8 +375,8 @@
       "source_sha256": "7ed841bc720cfb6897a10a2df784f2358fcc647a0651a1f4a7169122b8fae84d"
     },
     "scalar_convert_bytes_dynamic": {
-      "deploy_sha256": "201ff8e9277df9fb54395516ab55ab53779a0e93b795d0fe00011b6c7911b1f6",
-      "runtime_sha256": "1626ae92af7bd6cb4d163cc9bed1d0ec60ed104950e96cb8cd56884ace51034d",
+      "deploy_sha256": "be7a3c759215bea5a64ce57512fe6eaa2b4b36dc5dc6239daeea5f477c3e1010",
+      "runtime_sha256": "9782c83dd176690b5070a52a5b8d569076a3c86545ca05c7d97cf414b708894b",
       "source": "python-o1-no-asm-opt-sources/scalar_convert_bytes_dynamic.vy",
       "source_sha256": "026c58ff1ae332205ec0c8ec6b1f300dbfdf3038a172b6f11fd0f599867f1f29"
     },
@@ -631,6 +631,6 @@
     "venom_ir_pipeline": "O1"
   },
   "uv_version": "0.10.11",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b"
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1"
 }

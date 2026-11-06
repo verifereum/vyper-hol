@@ -1,11 +1,11 @@
 (* Word and fixed-copy encoders under enclosing variable freshness. *)
 Theory abiEncoderReentryLeaves
 Ancestors
-  abiEncoderLeaves abiEncoderInput abiEncoderWrites abiEncoderBytes abiEncoderBytesPrefix
-  abiEncoderMemory abiBuiltinPrefix abiDecoderArrayHeader abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderContract abiDecoderGuards abiEncoder emitHelperProps
-  exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps contractABI
-  venomState venomExecSemantics venomInst words list arithmetic
+  abiEncoderInput abiEncoderBytes abiEncoderMemory abiEncoderLeafRaw
+  abiDecoderArrayHeader abiDecoderReentry abiDecoderContract abiDecoderGuards
+  abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
+  valueEncoding valueEncodingProps contractABI venomState venomExecSemantics
+  venomInst words list arithmetic ssaOperandFrame abiBytestringCode abiDecoderReentryAddress
 
 Theorem abi_encode_word_trace:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>
@@ -42,39 +42,28 @@ Theorem abi_encode_word_reentry:
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op actual = SOME w)
 Proof
-  strip_tac >> drule abi_encode_word_trace >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
-  `loaded_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
-  drule_all abi_builtin_emit_load >> strip_tac >>
-  rename1 `abi_builtin_prefix st loaded_st limit_st s loaded` >>
-  `eval_operand value loaded = SOME (mload sb s)` by fs[w2n_n2w] >>
-  `eval_operand dst loaded = SOME (n2w db)` by
-    (mp_tac (Q.INST [`st'` |-> `loaded_st`, `t` |-> `loaded:venom_state`,
-      `op` |-> `dst`, `w` |-> `n2w db:bytes32`] abi_encoder_prefix_eval) >> asm_simp_tac bool_ss []) >>
-  qpat_assum `abi_builtin_prefix _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_prefix_def]) >>
-  qpat_assum `abi_decoder_address_frame _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  mp_tac (Q.INST [`ptr_op` |-> `dst`, `value_op` |-> `value`, `p` |-> `db`,
-    `w` |-> `mload sb s`, `st` |-> `loaded_st`, `s` |-> `loaded:venom_state`]
-    abi_encoder_emit_store) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qabbrev_tac `actual = mstore db (mload sb s) loaded` >>
-  `run_inst_seq (emitted_insts st st') s = OK actual /\ inst_extends st st'` by
-    (mp_tac (Q.INST [`st1` |-> `loaded_st`, `st2` |-> `st'`, `s1` |-> `loaded:venom_state`,
-      `s2` |-> `actual:venom_state`] abi_decode_sequence_chain) >> asm_simp_tac bool_ss [Abbr`actual`]) >>
-  `actual.vs_memory = (mstore db (mload sb s) s).vs_memory` by
-    (simp_tac bool_ss [Abbr`actual`] >> irule abi_encoder_store_memory >> asm_simp_tac bool_ss []) >>
-  `abi_decode_frame db 32 s actual` by
-    (mp_tac (Q.INST [`t` |-> `mstore db (mload sb s) s`, `u` |-> `actual:venom_state`, `sz` |-> `32`]
-      abi_encoder_frame_memory) >>
-     asm_simp_tac (srw_ss()) [abi_decode_mstore_frame, Abbr`actual`]) >>
-  `mem_bytes_at db 32 actual.vs_memory = mem_bytes_at sb 32 s.vs_memory` by
-    (simp_tac bool_ss [abi_encoder_word_window] >>
-     asm_simp_tac (srw_ss()) [mstore_mem_word_at_same, GSYM mem_word_at_eq_mload]) >>
-  qexists_tac `actual` >> asm_simp_tac (srw_ss()) [Abbr`actual`, eval_operand_def] >>
-  rpt strip_tac >> irule eval_operand_mstore >>
-  first_x_assum irule >> asm_simp_tac bool_ss []
+  strip_tac >>
+  `compile_abi_encode_static dst src st = (out,st')` by
+    fs[Once compile_abi_encode_child_def] >>
+  drule compile_abi_encode_static_code >> strip_tac >>
+  `dst <> Var (STRING #"%" (toString st.cs_next_var))` by
+    (mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `op` |-> `dst`, `num_names` |-> `1`]
+      abi_encoder_live_names) >> simp[compiler_var_names_def, GENLIST]) >>
+  drule_all compile_abi_encode_static_execution >>
+  disch_then (fn th => ASSUM_LIST (fn asl =>
+    strip_assume_tac (SIMP_RULE (srw_ss()) (w2n_n2w::asl) th))) >>
+  qmatch_asmsub_abbrev_tac `OK (mstore db (mload sb s) loaded)` >>
+  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `t` |-> `loaded:venom_state`,
+    `w` |-> `mload sb s`] abi_decoder_register_update) >>
+  impl_tac >- (simp[Abbr`loaded`, update_var_def] >> decide_tac) >> strip_tac >>
+  `abi_decode_frame db 32 s (mstore db (mload sb s) loaded)` by
+    (mp_tac (Q.INST [`d` |-> `db`, `w` |-> `mload sb s`] abi_decode_mstore_frame) >>
+     simp[abi_decode_frame_def, Abbr`loaded`, mstore_update_var, update_var_def]) >>
+  qexists_tac `mstore db (mload sb s) loaded` >>
+  asm_simp_tac (srw_ss()) [inst_extends_def, abi_encoder_word_window,
+    mstore_mem_word_at_same, mem_word_at_eq_mload, eval_operand_lit,
+    eval_operand_mstore_eq, fresh_vars_wrt_mstore] >>
+  simp[Abbr`loaded`, update_var_def]
 QED
 
 Theorem abi_encode_copy_reentry:
@@ -90,15 +79,18 @@ Theorem abi_encode_copy_reentry:
     actual.vs_halted = s.vs_halted /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op actual = SOME w)
 Proof
-  strip_tac >> drule abi_encode_copy_code >> strip_tac >>
-  mp_tac (Q.INST [`len` |-> `Lit (n2w sz)`, `cnt` |-> `sz`] abi_encoder_emit_copy) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [eval_operand_def] >> strip_tac >>
+  strip_tac >> drule_all compile_abi_copy_execution >>
+  disch_then (fn th => ASSUM_LIST (fn asl =>
+    strip_assume_tac (SIMP_RULE (srw_ss()) (w2n_n2w::asl) th))) >>
   `abi_decode_frame db sz s (mcopy db sb sz s)` by
     (simp_tac bool_ss [abi_decode_frame_def] >> conj_tac
      >- (rpt strip_tac >> irule mcopy_mem_bytes_at_disjoint >> asm_simp_tac bool_ss []) >>
      simp[]) >>
+  `fresh_vars_wrt limit_st (mcopy db sb sz s)` by
+    fs[fresh_vars_wrt_def, mcopy_def, write_memory_with_expansion_def] >>
   qexists_tac `mcopy db sb sz s` >>
-  asm_simp_tac (srw_ss()) [mcopy_mem_bytes_at_same, abi_encoder_copy_eval, eval_operand_def]
+  asm_simp_tac (srw_ss()) [mcopy_mem_bytes_at_same, abi_encoder_copy_eval,
+    eval_operand_def, inst_extends_def]
 QED
 
 Theorem abi_encoder_word_input_reentry:

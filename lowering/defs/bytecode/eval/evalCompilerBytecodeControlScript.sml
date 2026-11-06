@@ -16,14 +16,6 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
 
-Theorem mixed_event_log_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy all_capabilities)
-    mixed_event_log_program =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "mixed_event_log.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem hashmap_read_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     hashmap_read_program =

@@ -4,12 +4,12 @@
 
 The parity theories in `../eval/` prove, by `EVAL`, that `compile_vyper`
 produces exactly the deployment and runtime bytes of the pinned Python
-compiler for each of the 101 fixtures in `../python-o1-no-asm-opt/`. They are
+compiler for each of the 89 retained fixtures in `../python-o1-no-asm-opt/`. They are
 kernel-checked and slow, which is why the rollup is opt-in.
 
 This directory runs the same check as compiled Standard ML. The equations
 `EVAL` uses for `compile_vyper` are printed by EmitML and compiled. The
-result is trusted rather than kernel-checked. It runs all 101 fixtures in
+result is trusted rather than kernel-checked. It runs all 89 fixtures in
 about half a second, so it can run on every change; the `EVAL` theories remain the
 proof.
 
@@ -38,7 +38,9 @@ cd lowering/defs/bytecode
 
 Each fixture prints `PASS` or `FAIL` with its time. The exit status is
 non-zero unless every selected fixture matches. A requested name, or a `.hex`
-file in the directory, without a compiled-in fixture also fails.
+file in the directory, without a compiled-in fixture also fails, except the
+main-corpus fixtures listed in [`pending-5127-port.md`](../pending-5127-port.md),
+which the run without names skips until their port lands.
 
 Run the `build` step first: the executable compiles `compilerNativeML.sml`,
 which the generator theory writes as an extra output rather than a declared

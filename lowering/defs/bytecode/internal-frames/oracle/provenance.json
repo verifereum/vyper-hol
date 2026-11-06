@@ -1,7 +1,7 @@
 {
   "producer": "pinned Python Vyper",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b+commit.9362e36b",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
   "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",
@@ -37,7 +37,7 @@
   "outputs": {
     "p01_int_local_word.hex": "8975b5a0122d5fc6343ef8612a98f53d5d8bef92b7d580ca9ab33e6b895542b9",
     "p01_int_local_word.json": "3692b0cfdb55a4675eae2dfc19adb1235ca66e10fd86a29610da9d801aa5ecff",
-    "p02_int_local_string.hex": "c419a101434cb21c3c9521b929267443ad58399467be943d6c9a33fd0d001372",
+    "p02_int_local_string.hex": "fddfa7cf270652e71b0483fdc17d383d97907d2e8525990625c36dc80ebdf61c",
     "p02_int_local_string.json": "a34e924b166cd0776ed88f43b3396577452f3a7b52a1faf4b965f1b9703ba29b",
     "p03_int_local_array.hex": "33711610dd56186a5e717a1e3320f650a5f4aaf88e979526cbe5acd5268d95e5",
     "p03_int_local_array.json": "5f6e1e4c32de5fdd8128f72861d413e49512caea1052795ced3c9953749d83b4",
@@ -57,11 +57,11 @@
     "p40_int_for_clobber.json": "48c9172dd154ac82cda34a1eedf9aea403ffab80c0e6703cbe5150d70c9dad77",
     "p41_int_local_and_call.hex": "a2bb75138a88d213023fb90e57085151a640237ea73c5db14f5146d8e7dc5604",
     "p41_int_local_and_call.json": "a79ba4af4510dbd33cfc1122ef7a4fa116963759a9f731017f0afcd94d9fc6f2",
-    "p47_len_of_string_call.hex": "1e49dba699396c13dadc51991f7e3e60117efb7e5cf4c52b0727dc2a98bf9148",
+    "p47_len_of_string_call.hex": "988fb10fecb3ac628c5b613abd27ef02ce06c7c81d88f5a6fbb1fe4daa099e6d",
     "p47_len_of_string_call.json": "979346b05da1f60b3636c554a3f53729092c64054ff25d78777b4f8743bfa264",
-    "p74_int_ext_call.hex": "eeb21d09f36c63af94411cfd35fbd4372c3c3b3f6a4f76c4fa182f7693a3ef12",
+    "p74_int_ext_call.hex": "3ad777e36aa83af52794e14a077daa2752076aca47d4d53e88a7fe40df05a042",
     "p74_int_ext_call.json": "368811dafbb6c9ce3ce00c50171c01f22adb910f7348badef06f24fc676d247b",
-    "p76_int_assert_raise.hex": "aeaeb38decbb427f113e848ecdc1e15b9f07b8d191de8543d0710f31d6b7259d",
+    "p76_int_assert_raise.hex": "bf873cd772fc1840c878e720f1fef76cc8303ea34f06cb0eea5d3f8352e230b3",
     "p76_int_assert_raise.json": "0ffa90923478e1020f017abce16ea54c4f77cb46b1c0b2364e9f2726b472d2fa",
     "p92_int_revert_branch.hex": "60cc90749b2e520c315a7d82c762118994a0d076f6fa4049bc281ac1903dc685",
     "p92_int_revert_branch.json": "c600b4441d07ae2470685ee4d8d7933771415b2bfc28659f13b39c2e16d9e515"

@@ -31,8 +31,8 @@ CASES = (
     Case("conditional_memory_view", "f(bool)", (1,), 1),
     Case("conditional_memory_view", "f(bool)", (0,), 1),
     Case("nested_retained_pop", "f()", (), 5),
-    Case("call_storage_read", "f()", (), 10),
-    Case("call_memory_pop", "f()", (), 1),
+    Case("call_storage_read", "f()", (), 0),
+    Case("call_memory_pop", "f()", (), 2),
     Case("builtin_eager_read", "f()", (), 0),
 )
 

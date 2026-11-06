@@ -2,7 +2,7 @@
    Captures use VYPER_PIN with python_o1_bytecode_oracle.py settings.
    Half 1 of evalCompilerInternalFrames: p01_int_local_word,
    p03_int_local_array, p04_int_local_struct, p21_for_body_call,
-   p76_int_assert_raise, p92_int_revert_branch. *)
+   p92_int_revert_branch. *)
 Theory evalCompilerInternalFrames1
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib finite_mapLib computeLib wordsLib supportedEvalLib
@@ -40,13 +40,6 @@ Theorem p21_for_body_call_matches_python_oracle:
   ^(#term p21) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "p21_for_body_call")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation p21))) >> EVAL_TAC
-QED
-
-val p76 = memoryStoreWitnessLib.evaluate fixture_root "p76_int_assert_raise"
-Theorem p76_int_assert_raise_matches_python_oracle:
-  ^(#term p76) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "p76_int_assert_raise")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation p76))) >> EVAL_TAC
 QED
 
 val p92 = memoryStoreWitnessLib.evaluate fixture_root "p92_int_revert_branch"

@@ -38,13 +38,6 @@ Proof
   Cases >> Cases >> simp[const_meet_def] >> rw[] >> simp[const_meet_def]
 QED
 
-(* const_meet is idempotent *)
-Theorem const_meet_idem[local]:
-  !x. const_meet x x = x
-Proof
-  Cases >> simp[const_meet_def]
-QED
-
 (* const_val_measure is monotone under const_meet *)
 Theorem const_val_measure_mono[local]:
   !a b. const_val_measure a <= const_val_measure (const_meet a b)
@@ -832,48 +825,6 @@ Proof
   simp[const_lookup_sccp_join, const_val_measure_mono]
 QED
 
-(* Per-variable measure: strict if const_meet differs *)
-Triviality sccp_join_per_var_strict[local]:
-  !a b v.
-    const_meet (const_lookup a.sl_vals v) (const_lookup b.sl_vals v) <>
-    const_lookup a.sl_vals v ==>
-    const_val_measure (const_lookup a.sl_vals v) <
-    const_val_measure (const_lookup (sccp_join a b).sl_vals v)
-Proof
-  rpt strip_tac >>
-  simp[const_lookup_sccp_join] >>
-  irule const_val_measure_strict >> simp[]
-QED
-
-(* sccp_val_measure is weakly monotone under sccp_join *)
-Triviality sccp_val_measure_join_mono[local]:
-  !fn a b.
-    FDOM a.sl_vals SUBSET set (fn_all_assignments fn) /\
-    a.sl_targets SUBSET set (fn_labels fn) /\
-    FDOM b.sl_vals SUBSET set (fn_all_assignments fn) /\
-    b.sl_targets SUBSET set (fn_labels fn) ==>
-    sccp_val_measure fn a <= sccp_val_measure fn (sccp_join a b)
-Proof
-  rpt strip_tac >>
-  simp[sccp_val_measure_def] >>
-  `SUM (MAP (\v. const_val_measure (const_lookup a.sl_vals v))
-            (fn_all_assignments fn)) <=
-   SUM (MAP (\v. const_val_measure (const_lookup (sccp_join a b).sl_vals v))
-            (fn_all_assignments fn))` by (
-    irule sum_map_le >> simp[EVERY_MEM] >> rpt strip_tac >>
-    simp[sccp_join_per_var_mono]) >>
-  `CARD (FDOM a.sl_vals INTER set (fn_all_assignments fn)) <=
-   CARD (FDOM (sccp_join a b).sl_vals INTER set (fn_all_assignments fn))` by (
-    irule CARD_SUBSET >> simp[FINITE_INTER, FINITE_LIST_TO_SET] >>
-    simp[sccp_join_def, FUN_FMAP_DEF, FDOM_FINITE, SUBSET_DEF, IN_INTER] >>
-    metis_tac[]) >>
-  `CARD (a.sl_targets INTER set (fn_labels fn)) <=
-   CARD ((sccp_join a b).sl_targets INTER set (fn_labels fn))` by (
-    irule CARD_SUBSET >> simp[FINITE_INTER, FINITE_LIST_TO_SET] >>
-    simp[sccp_join_def, SUBSET_DEF, IN_INTER] >> metis_tac[]) >>
-  simp[]
-QED
-
 (* Helper: 3-component strict increase when at least one is strict *)
 Triviality three_component_strict[local]:
   !(a1:num) a2 a3 b1 b2 b3.
@@ -903,14 +854,6 @@ Proof
   rpt strip_tac >>
   `(k + 1) * a + k < (k + 1) * a'` by (irule mult_strict_bound >> simp[]) >>
   DECIDE_TAC
-QED
-
-Triviality boundary_measure_inst_irrelevant[local]:
-  !fn di1 di2 bnd.
-    sccp_boundary_measure fn <|ds_inst := di1; ds_boundary := bnd|> =
-    sccp_boundary_measure fn <|ds_inst := di2; ds_boundary := bnd|>
-Proof
-  simp[sccp_boundary_measure_def, df_boundary_def]
 QED
 
 Triviality const_lookup_in_dom[local]:
@@ -1118,18 +1061,6 @@ Proof
     simp[]) >>
   simp[fmap_eq_flookup] >> gen_tac >> simp[FLOOKUP_FUNION] >>
   Cases_on `FLOOKUP inst_map x` >> simp[]
-QED
-
-(* joined boundary eq *)
-Triviality sccp_joined_boundary_eq[local]:
-  !fn st bnd di.
-    (!x. df_boundary sccp_bottom <|ds_inst := di; ds_boundary := bnd|> x =
-         df_boundary sccp_bottom st x) ==>
-    !x. sccp_joined fn <|ds_inst := di; ds_boundary := bnd|> x =
-        sccp_joined fn st x
-Proof
-  rpt strip_tac >>
-  simp[sccp_joined_def, LET_THM]
 QED
 
 Triviality fresh_count_mono[local]:
@@ -1539,26 +1470,6 @@ Proof
 QED
 
 (* All inst keys in populated result have (lbl,0) present (key closure) *)
-(* Helper: in a FOLDL of disjoint FUNIONs, if (lbl,j) is a key then
-   (lbl,0) is also a key, provided each f(l) has that closure property
-   and keys from f(l) have FST = l. *)
-Triviality foldl_funion_key_closure[local]:
-  !lbls (f : string -> (string # num, 'b) fmap) lbl j.
-    (lbl, j) IN FDOM (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls) /\
-    ALL_DISTINCT lbls /\
-    (!l. (lbl,j) IN FDOM (f l) ==> lbl = l) /\
-    (!l. (lbl,0n) IN FDOM (f l) ==> lbl = l) /\
-    (lbl, 0n) IN FDOM (f lbl) /\
-    (!l1 l2. l1 <> l2 ==> DISJOINT (FDOM (f l1)) (FDOM (f l2))) ==>
-    (lbl, 0n) IN FDOM (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls)
-Proof
-  rpt strip_tac >>
-  drule foldl_funion_mem >> (impl_tac >- simp[]) >> strip_tac >>
-  `lbl = l` by metis_tac[] >> gvs[] >>
-  `f l SUBMAP FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls` by (
-    irule foldl_funion_submap >> metis_tac[]) >>
-  fs[SUBMAP_DEF, FLOOKUP_DEF]
-QED
 
 Triviality populate_inst_key_closure[local]:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st lbl j.

@@ -20,49 +20,6 @@ val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* ===== Definitions and main theorem ===== *)
 
-(* Freshness: push_version produces a name distinct from all existing
-   latest_version entries for other variables *)
-Triviality push_version_fresh[local]:
-  !rs base x ver rs'.
-    push_version rs base = (rs', ver) /\
-    colon_free base /\ colon_free x /\ x <> base ==>
-    latest_version rs x <> version_var base ver
-Proof
-  rpt gen_tac >> PairCases_on `rs` >> strip_tac >>
-  fs[latest_version_def] >>
-  rename1 `ALOOKUP rs1 x` >>
-  (* Helper: x <> version_var base ver when colon_free x, colon_free base, x <> base *)
-  `colon_free x ==> x <> version_var base' ver` by (
-    strip_tac >>
-    Cases_on `ver` >- simp[version_var_def] >>
-    spose_not_then (ASSUME_TAC o GSYM) >>
-    `SUC n > 0` by DECIDE_TAC >>
-    imp_res_tac version_var_has_colon >> gvs[]) >>
-  Cases_on `ALOOKUP rs1 x` >> fs[] >>
-  rename1 `SOME stk` >> Cases_on `stk` >> fs[] >>
-  strip_tac >> imp_res_tac version_var_inj
-QED
-
-(* latest_version after push_version: only base changes *)
-Triviality latest_version_push_version[local]:
-  !rs base ver rs'.
-    push_version rs base = (rs', ver) ==>
-    !x. latest_version rs' x =
-        if x = base then version_var base ver
-        else latest_version rs x
-Proof
-  rpt gen_tac >> PairCases_on `rs` >>
-  simp[push_version_def] >> strip_tac >> gvs[] >>
-  gen_tac >> simp[latest_version_def] >>
-  Cases_on `x = base'` >> simp[] >- (
-    (* x = base: ALOOKUP finds base at the head *)
-    Cases_on `ALOOKUP rs1 base'` >> simp[]
-  ) >>
-  (* x <> base: ALOOKUP skips base entry *)
-  Cases_on `ALOOKUP rs1 base'` >> simp[] >>
-  simp[ALOOKUP_FILTER]
-QED
-
 (* ssa_sim preservation through update_var with fresh output *)
 Triviality ssa_sim_update_fresh[local]:
   !sigma s1 s2 base out w.

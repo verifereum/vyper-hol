@@ -175,8 +175,8 @@ QED
 Theorem ci_mono_list_helpers:
   (!cenv es sa. ci_mono sa (SND (compile_log_eval_all cenv es sa))) /\
   (!xs sa. ci_mono sa (SND (compile_log_topic_ops xs sa))) /\
-  (!cenv xs b off sa.
-     ci_mono sa (SND (compile_log_store_data cenv xs b off sa))) /\
+  (!cenv xs tys b off sa.
+     ci_mono sa (SND (compile_log_store_data cenv xs tys b off sa))) /\
   (!cenv s tys off sa.
      ci_mono sa (SND (compile_tuple_load_all cenv s tys off sa))) /\
   (!cenv tys ts vs sa.
@@ -185,11 +185,12 @@ Theorem ci_mono_list_helpers:
      ci_mono sa (SND (compile_load_tuple_elements cenv b tys off sa)))
 Proof
   rpt conj_tac
-  >- (gen_tac >> Induct >> simp[compile_log_eval_all_def] >>
-      ci_mono_chain_tac ci_mono_stmt_rws)
+  >- (gen_tac >> Induct >>
+      simp[compile_log_eval_all_def, compile_log_save_arg_def] >>
+      ci_mono_chain_tac (ci_mono_compile_materialize_vv :: ci_mono_stmt_rws))
   >- (Induct >> simp[compile_log_topic_ops_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
-  >- (gen_tac >> Induct >> simp[compile_log_store_data_def] >>
+  >- (gen_tac >> Induct >> Cases_on `tys` >> simp[compile_log_store_data_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
   >- (gen_tac >> gen_tac >> Induct >> simp[compile_tuple_load_all_def] >>
       ci_mono_chain_tac (ci_mono_context_helpers :: ci_mono_stmt_rws))
@@ -201,6 +202,13 @@ Proof
          ci_mono_stmt_rws)) >>
   gen_tac >> gen_tac >> Induct >> simp[compile_load_tuple_elements_def] >>
   ci_mono_chain_tac ci_mono_stmt_rws
+QED
+
+Theorem ci_mono_compile_return_unlock:
+  !cenv sa. ci_mono sa (SND (compile_return_unlock cenv sa))
+Proof
+  rpt gen_tac >> simp[compile_return_unlock_def] >>
+  pairarg_tac >> rw[ci_mono_context_helpers, ci_mono_comp_return]
 QED
 
 Theorem ci_mono_return_helpers:
@@ -217,7 +225,8 @@ Proof
   simp[compile_internal_return_def, compile_internal_return_from_env_def,
        compile_external_return_def, compile_tuple_unpack_def] >>
   ci_mono_chain_tac
-    (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)
+    (ci_mono_compile_return_unlock :: ci_mono_list_helpers ::
+     ci_mono_stmt_helpers :: ci_mono_stmt_rws)
 QED
 
 (* ===== compile_stmt ===== *)
@@ -227,7 +236,8 @@ QED
 val stmt_ci_tac =
   let val chain =
         ci_mono_chain_tac
-          (ci_mono_return_helpers :: ci_mono_list_helpers ::
+          (ci_mono_compile_return_unlock :: ci_mono_return_helpers ::
+           ci_mono_list_helpers ::
            ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
            ci_mono_stmt_rws)
   in
