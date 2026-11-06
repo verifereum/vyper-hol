@@ -18,6 +18,7 @@ Ancestors
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
   makeSsaCurrentCutTransport makeSsaCurrentPrefixSuffixOwner
+  makeSsaCurrentLockstepShape
   makeSsaCurrentPrefixMaps makeSsaCurrentPrefixOwner makeSsaCurrentCleanupShape
   makeSsaCurrentLockstepShape makeSsaCurrentPrefixRuntime
   makeSsaCurrentRetainedContext
@@ -156,7 +157,7 @@ Theorem current_cut_inv_ordinary_step:
              (EL (LENGTH pre + i) bb'.bb_instructions).inst_outputs
              (current_cut_sg fn A renamed H events l (SUC i)))
 Proof
-  cheat
+  suspend "ordinary_transport"
 QED
 
 (* Entering h from p: the output's retained PHIs are matched by the
@@ -698,3 +699,124 @@ Proof
     metis_tac[current_retained_context_effect] >>
   simp[] >> irule current_cut_inserted_phi_edge_resolution >> metis_tac[]
 QED
+
+Resume current_cut_inv_ordinary_step[ordinary_transport]:
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by fs[current_wf_phi_context_def] >>
+  `?eb. entry_block fn = SOME eb` by
+    (drule venomExecPropsTheory.lookup_block_MEM >>
+     Cases_on `fn.fn_blocks` >> simp[venomInstTheory.entry_block_def]) >>
+  `?new. lookup_block l renamed = SOME new` by
+    (drule current_wf_precleanup_labels >> strip_tac >>
+     `ALL_DISTINCT (MAP (\bb. bb.bb_label) renamed)` by
+       fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def] >>
+     `MEM l (MAP (\bb. bb.bb_label) renamed)` by
+       metis_tac[venomExecPropsTheory.lookup_block_MEM,
+         makeSsaHelperTheory.lookup_block_label, listTheory.MEM_MAP] >>
+     fs[listTheory.MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
+  `MEM new renamed /\ new.bb_label = l` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      makeSsaHelperTheory.lookup_block_label] >>
+  drule_all current_wf_precleanup_block_shape >> strip_tac >>
+  drule current_wf_precleanup_structural >> strip_tac >>
+  `lookup_block (current_event_label ev) fn.fn_blocks = SOME old` by simp[] >>
+  drule_all current_wf_certificate_actual_prefix >> strip_tac >>
+  `LENGTH pre = LENGTH pre'` by
+    (`LENGTH (current_block_annotations old pre) =
+      LENGTH (current_block_annotations old pre')` by metis_tac[] >>
+     qpat_x_assum `LENGTH (current_block_annotations _ _) = _` mp_tac >>
+     simp[current_block_annotations_def, current_inserted_annotations_def]) >>
+  `bb_well_formed old` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomWfTheory.wf_function_def] >>
+  `(EL i old.bb_instructions).inst_opcode <> PHI` by
+    (fs[venomWfTheory.bb_well_formed_def] >>
+     metis_tac[current_phi_index_before_prefix, arithmeticTheory.NOT_LESS]) >>
+  drule_all current_wf_edge_shape_ordinary_index >> strip_tac >>
+  `?rs E. current_source_cut A ev (LENGTH pre + i) rs E` by
+    metis_tac[current_wf_event_source_cut_exists, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  `LENGTH pre + i < LENGTH (current_event_input_block ev).bb_instructions` by simp[] >>
+  drule_all current_wf_event_source_cut_step >> strip_tac >>
+  `LIST_REL (op_rename (current_cut_sg fn A renamed H events l i))
+     (EL i old.bb_instructions).inst_operands
+     (rename_current_operands rs (EL i old.bb_instructions).inst_operands)` by
+    (irule current_cut_ordinary_operands_rel >> metis_tac[]) >>
+  drule makeSsaCurrentRenameTraceTheory.current_inst_trace_projection >> strip_tac >>
+  drule rename_current_inst_signature >> strip_tac >>
+  drule makeSsaCurrentRenameTraceTheory.current_inst_trace_operands >> strip_tac >>
+  `inst_pair (current_cut_sg fn A renamed H events l i)
+     (EL i old.bb_instructions)
+     (EL (LENGTH pre + i) (current_event_renamed_block ev).bb_instructions)` by
+    (gvs[inst_pair_def, arithmeticTheory.ADD_COMM]) >>
+  suspend "ordinary_cleanup"
+QED
+
+Resume current_cut_inv_ordinary_step[ordinary_cleanup]:
+  `LENGTH (current_event_renamed_block ev).bb_instructions =
+     LENGTH pre + LENGTH old.bb_instructions` by
+    (`LENGTH (current_event_renamed_block ev).bb_instructions =
+       LENGTH (current_event_input_block ev).bb_instructions` by
+       (qpat_x_assum `current_event_trace A H ev` mp_tac >>
+        PairCases_on `ev` >>
+        simp[makeSsaCurrentTreeTraceTheory.current_event_trace_def,
+          makeSsaCurrentFinalBlockTheory.current_event_renamed_block_def,
+          current_event_input_block_def] >>
+        metis_tac[current_local_trace_lengths]) >>
+     fs[makeSsaCurrentFinalBlockTheory.current_edge_shape_def,
+        listTheory.LIST_REL_EL_EQN]) >>
+  `EL (LENGTH pre + i) new.bb_instructions =
+   EL (LENGTH pre + i) (current_event_renamed_block ev).bb_instructions` by
+    (fs[makeSsaCurrentFinalBlockTheory.current_edge_shape_def,
+        listTheory.LIST_REL_EL_EQN, inst_pair_def] >> metis_tac[]) >>
+  suspend "ordinary_final_lookup"
+QED
+
+Resume current_cut_inv_ordinary_step[ordinary_final_lookup]:
+  `LENGTH new.bb_instructions = LENGTH pre + LENGTH old.bb_instructions /\
+   (EL (LENGTH pre + i) new.bb_instructions).inst_opcode <> PHI` by
+    (fs[makeSsaCurrentFinalBlockTheory.current_edge_shape_def,
+        listTheory.LIST_REL_EL_EQN, inst_pair_def] >> metis_tac[]) >>
+  drule_all current_wf_phi_context_cleanup_split >> strip_tac >>
+  qpat_x_assum `new.bb_instructions = _` (fn th => assume_tac th) >>
+  rename1 `new.bb_instructions = bp ++ bt` >>
+  `LENGTH bp <= LENGTH pre + i` by
+    (Cases_on `LENGTH pre + i < LENGTH bp` >> simp[] >>
+     `MEM (EL (LENGTH pre + i) bp) bp` by metis_tac[listTheory.EL_MEM] >>
+     fs[listTheory.EL_APPEND_EQN, listTheory.EVERY_MEM]) >>
+  `bt <> [] /\ (HD bt).inst_opcode <> PHI` by
+    (Cases_on `bt` >> fs[listTheory.EVERY_DEF] >> gvs[]) >>
+  `LENGTH pre + i - LENGTH bp < LENGTH bt` by fs[] >>
+  `?bb'. lookup_block l
+     (simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed) = SOME bb' /\
+     LENGTH bb'.bb_instructions = LENGTH new.bb_instructions /\
+     current_inst_no_id (EL (LENGTH bp + (LENGTH pre + i - LENGTH bp)) bb'.bb_instructions) =
+     current_inst_no_id (EL (LENGTH pre + i - LENGTH bp) bt)` by
+    (irule makeSsaCurrentCleanupShapeTheory.current_cleanup_if_ordinary_index >>
+     metis_tac[]) >>
+  `current_inst_no_id (EL (LENGTH pre + i) bb'.bb_instructions) =
+   current_inst_no_id (EL (LENGTH pre + i) new.bb_instructions)` by
+    (gvs[listTheory.EL_APPEND_EQN, arithmeticTheory.ADD_COMM]) >>
+  `phi_prefix_length new.bb_instructions = LENGTH bp` by
+    (simp[phi_prefix_length_prepend] >>
+     Cases_on `bt` >> fs[venomExecSemanticsTheory.phi_prefix_length_def]) >>
+  qpat_assum `lookup_block l renamed = SOME new`
+    (mp_then Any mp_tac simplify_current_phis_if_lookup_shape) >>
+  disch_then (qspec_then `blocks_have_leading_phi fn.fn_blocks` mp_tac) >>
+  strip_tac >>
+  `inst_pair (current_cut_sg fn A renamed H events l i)
+     (EL i old.bb_instructions) (EL (LENGTH pre + i) bb'.bb_instructions)` by
+    (gvs[inst_pair_def,
+       makeSsaCurrentCleanupShapeTheory.current_inst_no_id_def,
+       venomInstTheory.instruction_component_equality,
+       arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+  qexists_tac `bb'` >>
+  simp[] >>
+  suspend "ordinary_runtime"
+QED
+
+Resume current_cut_inv_ordinary_step[ordinary_runtime]:
+  cheat
+QED
+
+Finalise current_cut_inv_ordinary_step
