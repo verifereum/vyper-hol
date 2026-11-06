@@ -165,3 +165,29 @@ Proof
     generate_regular_jmp_plan_signed_balance >>
   simp[instruction_correction_def, is_param_opcode_def]
 QED
+
+Theorem regional_ready_step_signed_balance:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  ((inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP) ==>
+    regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+      spill_base bb i ps) /\
+  generate_inst_plan (liveness_analyze fn) (dfg_build_function fn) cfg fn inst
+    nl halting next_term bb.bb_label ps = SOME (ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops +
+    instruction_correction inst
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (drule_all generate_inst_plan_phi_signed_balance >> simp[]) >>
+  Cases_on `inst.inst_opcode = JMP`
+  >- (`inst_wf inst` by
+        (gvs[codegen_ready_fn_def, fn_inst_wf_def] >>
+         metis_tac[lookup_block_mem, EL_MEM]) >>
+      `?target. inst.inst_operands = [Label target] /\ inst.inst_outputs = []` by
+        gvs[inst_wf_def] >>
+      drule_all generate_inst_plan_jmp_signed_balance >> simp[]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    regional_body_lower_inv_signed_balance >> simp[] >> metis_tac[]
+QED
