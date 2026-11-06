@@ -56,13 +56,15 @@ Theorem log_allocated_tuple_raw_path_ptr[local]:
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) = SOME w) /\
-    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
+    actual.vs_halted = s.vs_halted /\ actual.vs_current_bb = s.vs_current_bb
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all log_allocated_tuple_sequence_ptr >>
   disch_then (qspecl_then [`PG`,`D`]
     (qx_choose_then `actual` (qx_choose_then `db` (qx_choose_then `H`
       (qx_choose_then `tm` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))) >>
+  drule_all entrySinkExtractionTheory.run_inst_seq_preserves_entry_control >> strip_tac >>
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> disch_tac >>
   qexistsl_tac [`actual`,`db`,`H`,`tm`] >>
   asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx,
@@ -110,7 +112,9 @@ Theorem log_allocated_tuple_path_ptr:
     (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv v outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op v = SOME w) /\
-    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
+    v.vs_halted = s.vs_halted /\ v.vs_current_bb = s.vs_current_bb /\
+    v.vs_inst_idx = j + LENGTH (emitted_insts st end_st)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := j`]

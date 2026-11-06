@@ -21,14 +21,15 @@ QED
 Theorem log_source_store_encode_path_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
   compile_log_store_data ce xs buf.buf_operand 0 start = ((),mid) /\
-  compile_alloc_buffer (abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs))) mid =
+  compile_alloc_buffer outcap mid =
     (dst,prepared) /\ fn_has_code mid prepared func /\
   compile_abi_encode_to_buf dst.buf_operand buf.buf_operand
     (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs))) prepared =
     (out,end_st) /\ fn_has_code prepared end_st func /\
   stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ cap < dimword(:256) /\
-  abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs)) < dimword(:256) /\
+  outcap < dimword(:256) /\
+  abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs)) <= outcap /\
   start.cs_next_var <= mid.cs_next_var /\
   mid.cs_next_var <= limit_st.cs_next_var /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st s /\ ~ctx_has_dalloca ctx /\ ghost_inv d ce cx es G tn s /\
@@ -67,11 +68,13 @@ Theorem log_source_store_encode_path_ptr:
       (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) ==>
       i NOTIN tm.t_mem) /\
     ghost_inv d ce cx es H tm v /\ ghost_kept ce es st G tn s H tm /\
-    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv v
-      (abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs)))) /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv v outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op v = SOME w) /\
-    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
+    ~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb /\
+    v.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts st start) +
+      LENGTH (emitted_insts start mid) + LENGTH (emitted_insts mid end_st)
 Proof
   strip_tac >>
   drule_all log_source_store_run_path_ptr >>
@@ -103,6 +106,8 @@ Proof
      simp[ASCIInumbersTheory.toString_inj]) >>
   `~t.vs_halted /\ lookup_block t.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   qpat_assum `buf.buf_operand = Var src` (fn eq => RULE_ASSUM_TAC (REWRITE_RULE [eq])) >>
+  `LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs)))
+    (ListV avs)) <= outcap` by decide_tac >>
   drule_all log_allocated_tuple_path_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   suspend "post"
