@@ -191,3 +191,62 @@ Proof
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     regional_body_lower_inv_signed_balance >> simp[] >> metis_tac[]
 QED
+
+Theorem reachable_suffix_all_signed_balance:
+  !xs a ps0 ops psn.
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  a <= LENGTH bb.bb_instructions /\ start <= a /\
+  xs = DROP a bb.bb_instructions /\
+  (!j q pre. a <= j /\ j < LENGTH bb.bb_instructions /\
+    generate_block_insts_prefix (liveness_analyze fn) (dfg_build_function fn)
+      cfg fn bb.bb_label (bb_is_halting bb) start (LENGTH bb.bb_instructions)
+      (a-start) (j-a) xs ps0 = SOME (pre,q) /\
+    (EL j bb.bb_instructions).inst_opcode <> PHI /\
+    (EL j bb.bb_instructions).inst_opcode <> JMP ==>
+    regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+      spill_base bb j q) /\
+  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn)
+    cfg fn bb.bb_label (bb_is_halting bb) start (LENGTH bb.bb_instructions)
+    (a-start) xs ps0 = SOME (ops,psn) ==>
+  &(LENGTH psn.ps_stack) = (&(LENGTH ps0.ps_stack):int) + trace_weight ops +
+    FOLDR ($+) (0:int) (MAP instruction_correction xs)
+Proof
+  Induct
+  >- (simp[generate_block_insts_plan_def] >> rpt strip_tac >> gvs[trace_weight_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `a < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `_ = DROP _ _` (mp_tac o AP_TERM ``LENGTH:instruction list->num``) >>
+     simp[] >> decide_tac) >>
+  `h = EL a bb.bb_instructions /\ xs = DROP (SUC a) bb.bb_instructions` by
+    (drule DROP_CONS_EL >> simp[] >> strip_tac >>
+     qpat_x_assum `h::xs = _` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_block_insts_plan_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `generate_inst_plan _ _ _ _ _ next_live _ next_term _ _` >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ ps0 = SOME (step_ops,ps1)` >>
+  `&(LENGTH ps1.ps_stack) = (&(LENGTH ps0.ps_stack):int) +
+    trace_weight step_ops + instruction_correction (EL a bb.bb_instructions)` by
+    (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+       regional_ready_step_signed_balance >> simp[] >>
+     disch_then (qspecl_then [`spill_base`, `a`] mp_tac) >>
+     impl_tac >- (rpt strip_tac >>
+     qpat_x_assum `!j q pre. a <= j /\ _ ==> _`
+       (qspecl_then [`a`, `ps0`, `[]`] mp_tac) >>
+     simp[generate_block_insts_prefix_def]) >> simp[]) >>
+  `&(LENGTH psn.ps_stack) = (&(LENGTH ps1.ps_stack):int) +
+    trace_weight rest_ops + FOLDR ($+) (0:int)
+      (MAP instruction_correction (DROP (SUC a) bb.bb_instructions))` by
+    (first_x_assum irule >> simp[] >>
+     reverse conj_tac >- fs[arithmeticTheory.ADD1] >> rpt strip_tac >>
+     qpat_x_assum `!j q pre. a <= j /\ _ ==> _`
+       (qspecl_then [`j`, `q`, `step_ops ++ pre`] mp_tac) >>
+     impl_tac >- (simp[] >>
+       `j - a = SUC (j - SUC a)` by decide_tac >>
+       pop_assum SUBST1_TAC >>
+       gvs[Abbr `next_live`, Abbr `next_term`] >>
+       qpat_x_assum `_ :: _ = DROP a _` (fn th => once_rewrite_tac[GSYM th]) >>
+       fs[Once generate_block_insts_prefix_def, arithmeticTheory.ADD1]) >> simp[]) >>
+  simp[trace_weight_append] >> intLib.ARITH_TAC
+QED
