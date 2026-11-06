@@ -6,7 +6,7 @@ Ancestors
   exprSimHyps exprSimUnwrap exprSimUnwrapProps exprSimMemoryRead
   exprLoweringProps loweringPosts compileEnv placeTypedCopyRecursivePath
   placeMemoryPrimitiveForward localMemoryStorePath freshWrites exprSimProps
-  vyperAST vyperTypeCallGraph
+  vyperAST vyperTypeCallGraph aggregateStoreSizePath
 Libs
   monadsyntax
 
@@ -226,3 +226,32 @@ Proof
        rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Resume aggregate_store_body_rebased_slice_path[same_layout]:
+  `type_memory_size tv + 64 < dimword (:256)` by
+    (Cases_on `is_word_type (expr_type e)`
+     >- (drule_all word_tv_memory_size >> simp[wordsTheory.dimword_def]) >>
+     drule_all expr_body_pre_copy_ok >> simp[wordsTheory.dimword_def]) >>
+  `?sw. eval_operand op s = SOME sw /\
+    (if is_word_type (expr_type e) then sw = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n sw) s.vs_memory)` by
+    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb)` by
+    metis_tac[] >>
+  drule compile_store_memory_same_type_size_forward >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = SOME tv`)) >>
+  disch_then (drule_at (Pat `eval_operand op s = SOME sw`)) >>
+  disch_then (qspecl_then [`v`, `func`, `w`, `ctx`] mp_tac) >>
+  (impl_tac >- simp[venomStateTheory.eval_operand_def]) >>
+  strip_tac >> qexists_tac `t` >> simp[] >>
+  drule aggregate_store_rebased_control_frame >>
+  disch_then (qspecl_then [`t`, `type_memory_size tv`, `w2n w`] mp_tac) >>
+  (impl_tac >- (simp[] >> conj_tac
+    >- (qpat_x_assum `t with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = s`
+          (mp_tac o Q.AP_TERM `\z. z with <|vs_prev_bb := s.vs_prev_bb;
+            vs_current_bb := s.vs_current_bb|>`) >> simp[]) >>
+    rpt conj_tac >> first_assum (ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM]))) >>
+  strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise aggregate_store_body_rebased_slice_path
