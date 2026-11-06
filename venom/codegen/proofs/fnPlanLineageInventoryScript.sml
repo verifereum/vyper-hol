@@ -5334,3 +5334,118 @@ Proof
       (mp_tac o ONCE_REWRITE_RULE [th])) >>
   simp[elem_count_append]
 QED
+
+Theorem stack_pop_elem_count_le:
+  !n xs x. LIST_ELEM_COUNT x (stack_pop n xs) <= LIST_ELEM_COUNT x xs
+Proof
+  rpt gen_tac >>
+  `LIST_ELEM_COUNT x xs =
+    LIST_ELEM_COUNT x (TAKE (LENGTH xs - n) xs) +
+    LIST_ELEM_COUNT x (DROP (LENGTH xs - n) xs)` by
+    metis_tac[TAKE_DROP, elem_count_append] >>
+  simp[stack_pop_def]
+QED
+
+Theorem do_swap_resource_count:
+  !n ps x. n < LENGTH ps.ps_stack ==>
+    LIST_ELEM_COUNT x (SND (do_swap n ps)).ps_stack +
+      (if x IN FDOM (SND (do_swap n ps)).ps_spilled then 1 else 0) =
+    LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt strip_tac >> drule do_swap_multiplicity >>
+  simp[do_swap_spilled_unchanged]
+QED
+
+Theorem popmany_individual_resource_nonincrease:
+  !items ps ops qs.
+    popmany_individual items ps = (ops,qs) ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack + (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> simp[popmany_individual_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f acc sorted` >>
+  `!items acc x.
+    LIST_ELEM_COUNT x (SND (FOLDL f acc items)).ps_stack +
+      (if x IN FDOM (SND (FOLDL f acc items)).ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x (SND acc).ps_stack +
+      (if x IN FDOM (SND acc).ps_spilled then 1 else 0)` suffices_by
+    (rpt strip_tac >> first_x_assum (qspecl_then [`sorted`, `acc`, `x`] mp_tac) >>
+     gvs[Abbr `acc`]) >>
+  Induct >> simp[] >> rpt gen_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists_tac `LIST_ELEM_COUNT x (SND (f acc' h)).ps_stack +
+    (if x IN FDOM (SND (f acc' h)).ps_spilled then 1 else 0)` >>
+  conj_tac >- simp[] >>
+  PairCases_on `acc'` >> simp[Abbr `f`] >>
+  rename1 `stack_get_depth h p.ps_stack` >>
+  Cases_on `stack_get_depth h p.ps_stack` >> simp[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  rename1 `stack_get_depth h p.ps_stack = SOME dist` >>
+  Cases_on `dist = 0` >> simp[]
+  >- irule stack_pop_elem_count_le >>
+  pairarg_tac >> simp[] >>
+  drule do_swap_resource_count >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >>
+  qspecl_then [`1`, `ps'.ps_stack`, `x`] mp_tac stack_pop_elem_count_le >>
+  rpt strip_tac >>
+  qpat_x_assum `LIST_ELEM_COUNT x ps'.ps_stack + _ = _`
+    (fn th => once_rewrite_tac [GSYM th]) >> simp[]
+QED
+
+Theorem popmany_plan_resource_nonincrease:
+  !items ps ops qs.
+    popmany_plan items ps = (ops,qs) ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack + (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  Cases >- (simp[popmany_plan_def] >> rpt strip_tac >> gvs[]) >>
+  simp[popmany_plan_def] >> rpt gen_tac >>
+  reverse IF_CASES_TAC >- metis_tac[popmany_individual_resource_nonincrease] >>
+  reverse IF_CASES_TAC >- metis_tac[popmany_individual_resource_nonincrease] >>
+  qmatch_asmsub_abbrev_tac `is_contiguous_top depths` >>
+  `!v. IS_SOME (stack_get_depth v ps.ps_stack) ==>
+    THE (stack_get_depth v ps.ps_stack) < LENGTH ps.ps_stack` by
+    (rpt strip_tac >> Cases_on `stack_get_depth v ps.ps_stack` >> gvs[] >>
+     drule stack_get_depth_props >> simp[]) >>
+  `!d. MEM d depths ==> d < LENGTH ps.ps_stack` by
+    (simp[Abbr `depths`, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+     gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  `MEM (SUC (LENGTH t)) depths` by
+    (`LENGTH depths = SUC (LENGTH t)` by simp[Abbr `depths`] >>
+     `MEM (SUC (LENGTH t)) (QSORT (\a b. a <= b) depths)` by
+       gvs[is_contiguous_top_def, LET_THM, MEM_GENLIST] >>
+     metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]) >>
+  `SUC (LENGTH t) < LENGTH ps.ps_stack` by metis_tac[] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >> gen_tac >>
+  qspecl_then [`SUC (LENGTH t)`, `ps`, `x`] mp_tac do_swap_resource_count >>
+  impl_tac >- metis_tac[] >> simp[] >> strip_tac >>
+  qpat_x_assum `LIST_ELEM_COUNT x ps'.ps_stack + _ = _`
+    (fn th => once_rewrite_tac [GSYM th]) >> simp[stack_pop_elem_count_le]
+QED
+
+Theorem optimistic_swap_plan_resource_count:
+  !dfg inst nl term ps ops qs.
+    optimistic_swap_plan dfg inst nl term ps = (ops,qs) ==>
+    !x. LIST_ELEM_COUNT x qs.ps_stack + (if x IN FDOM qs.ps_spilled then 1 else 0) =
+      LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> simp[optimistic_swap_plan_def] >> strip_tac >> gen_tac >>
+  Cases_on `term` >> gvs[] >>
+  Cases_on `inst.inst_outputs = []` >> gvs[] >>
+  Cases_on `nl = []` >> gvs[] >>
+  Cases_on `operand_equiv dfg (Var (LAST inst.inst_outputs)) (Var (LAST nl))` >> gvs[] >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> gvs[] >>
+  drule stack_get_depth_props >> strip_tac >>
+  drule do_swap_resource_count >> simp[]
+QED
+
+Theorem release_dead_spills_resource_nonincrease:
+  !nl ps x.
+    LIST_ELEM_COUNT x (release_dead_spills nl ps).ps_stack +
+      (if x IN FDOM (release_dead_spills nl ps).ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> simp[release_dead_spills_stack, release_dead_spills_domain] >>
+  Cases_on `x IN FDOM ps.ps_spilled` >> simp[] >>
+  Cases_on `MEM x (MAP Var nl)` >> simp[]
+QED
