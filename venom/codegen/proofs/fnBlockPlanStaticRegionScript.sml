@@ -2582,3 +2582,90 @@ Theorem regional_prepare_params_initial_distinct:
 Proof
   strip_tac >> drule_all regional_prepare_params_initial_exact >> simp[]
 QED
+
+Theorem regional_entry_structure[local]:
+  codegen_ready_fn fn ==>
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  fn_reachable fn (HD fn.fn_blocks).bb_label /\
+  collect_phis (HD fn.fn_blocks).bb_instructions = [] /\
+  bb_well_formed (HD fn.fn_blocks)
+Proof
+  strip_tac >>
+  `wf_function fn /\ block_entries_ready (cfg_analyze fn) fn` by
+    gvs[codegen_ready_fn_def] >>
+  `fn.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `bb_well_formed (HD fn.fn_blocks)` by
+    (Cases_on `fn.fn_blocks` >> gvs[wf_function_def]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def, lookup_block_def, FIND_thm,
+      block_entries_ready_def, NULL_EQ, fn_reachable_def, relationTheory.RTC_REFL]
+QED
+
+Theorem regional_entry_dominator[local]:
+  fn_entry_label fn = SOME entry /\ fn_dominates fn dom entry ==> dom = entry
+Proof
+  simp[fn_dominates_def] >> strip_tac >>
+  first_x_assum (qspec_then `[entry]` mp_tac) >> simp[is_fn_path_def]
+QED
+
+Theorem regional_entry_no_phi[local]:
+  codegen_ready_fn fn /\ j < LENGTH (HD fn.fn_blocks).bb_instructions ==>
+  (EL j (HD fn.fn_blocks).bb_instructions).inst_opcode <> PHI
+Proof
+  strip_tac >> drule_all regional_entry_structure >> strip_tac >>
+  `(EL 0 (HD fn.fn_blocks).bb_instructions).inst_opcode <> PHI` by
+    (Cases_on `(HD fn.fn_blocks).bb_instructions` >>
+     gvs[livenessDefsTheory.collect_phis_def] >> rename1 `if head_inst.inst_opcode = PHI then _ else _` >>
+     Cases_on `head_inst.inst_opcode = PHI` >> gvs[]) >>
+  Cases_on `j = 0` >- gvs[] >>
+  gvs[bb_well_formed_def] >>
+  qpat_x_assum `!i j. _` (qspecl_then [`0`,`j`] mp_tac) >> simp[]
+QED
+
+Theorem regional_entry_params_live_heads:
+  codegen_ready_fn fn /\
+  MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+  MEM (Var v) (MAP (\i. Var (HD i.inst_outputs))
+    (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  strip_tac >> drule_all regional_entry_structure >> strip_tac >>
+  qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+  `LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <=
+    LENGTH (HD fn.fn_blocks).bb_instructions` by metis_tac[LENGTH_APPEND, arithmeticTheory.LE_ADD] >>
+  `!j. LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= j /\
+    j < LENGTH (HD fn.fn_blocks).bb_instructions /\
+    (EL j (HD fn.fn_blocks).bb_instructions).inst_opcode = PHI ==>
+    ~MEM (Var v) (EL j (HD fn.fn_blocks).bb_instructions).inst_operands` by
+    metis_tac[regional_entry_no_phi] >>
+  drule_all fnLiveDefDomTheory.live_def_dominates >> strip_tac >>
+  `def_bb.bb_label = (HD fn.fn_blocks).bb_label` by
+    metis_tac[regional_entry_dominator] >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  `MEM def_inst (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[EL_APPEND1, EL_MEM] >>
+  `param_insts_from 0 (get_params (HD fn.fn_blocks).bb_instructions)` by
+    (irule (cj 1 canonical_get_params_layout) >> qexists_tac `fn` >> simp[]) >>
+  drule param_insts_flat_outputs >> strip_tac >>
+  `MEM v (MAP (\i. HD i.inst_outputs) (get_params (HD fn.fn_blocks).bb_instructions))` by
+    metis_tac[MEM_FLAT, MEM_MAP] >>
+  gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem regional_prepare_params_initial_live_coverage:
+  codegen_ready_fn fn /\
+  prepare_params_plan (liveness_analyze fn) fn
+    ((init_cleanup_plan_state ch growth sb ctr) with
+      <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) = (ops,qs) ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+      MEM (Var v) qs.ps_stack
+Proof
+  strip_tac >> drule_all regional_prepare_params_initial_membership >>
+  strip_tac >> rpt strip_tac >>
+  `MEM (Var v) (MAP (\i. Var (HD i.inst_outputs))
+    (get_params (HD fn.fn_blocks).bb_instructions))` by
+    metis_tac[regional_entry_params_live_heads] >>
+  gvs[stackPlanTypesTheory.operand_to_string_def]
+QED
