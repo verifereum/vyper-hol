@@ -26,6 +26,18 @@ Proof
   simp[passSharedDefsTheory.MEM_operand_vars_eq_Var]
 QED
 
+Theorem regional_emit_input_capacity:
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  LENGTH operands <= LENGTH (SND (emit_input_plan opc operands nl ps)).ps_stack
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan opc operands nl ps` >> simp[] >>
+  irule fnFrameStepsRevertForwardTheory.list_elem_count_dom_length >>
+  irule reorderSimTheory.emit_input_plan_materialised >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem regional_body_lower_inv_wf:
   regional_body_lower_inv lv dfg sb bb k ps ==>
   generated_plan_state_wf_marked sb ps
@@ -97,6 +109,18 @@ Theorem regional_body_lower_inv_spills_fresh:
 Proof
   strip_tac >> simp[EVERY_MEM] >> qx_gen_tac `op` >> strip_tac >>
   Cases_on `op` >> simp[] >> metis_tac[regional_body_lower_inv_output_roots]
+QED
+
+Theorem regional_body_lower_inv_input_capacity:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions /\
+  regional_body_lower_inv (liveness_analyze fn) dfg sb bb k ps ==>
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack
+Proof
+  strip_tac >> irule regional_emit_input_capacity >>
+  metis_tac[regional_body_lower_inv_operands]
 QED
 
 Theorem regional_body_lower_inv_step:
