@@ -250,16 +250,31 @@ Proof
     (qspecl_then [`get_tenv cx`, `typ`, `tyv`, `0`, `(mstore 0 0w s).vs_memory`]
        mp_tac memory_length_word_layout >>
      simp[mstore_mem_word_at_same]) >>
+  `!aid off z'. FLOOKUP s.vs_allocas aid = SOME (off, z') /\ aid < sa0.cs_next_id ==>
+     mem_bytes_at off z' u.vs_memory = mem_bytes_at off z' s.vs_memory` by
+    (mp_tac (Q.SPECL [`s`, `inst.inst_id`, `w`, `sz`] mstore_alloca_others) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+     rpt strip_tac >>
+     `aid <> inst.inst_id` by decide_tac >>
+     qpat_x_assum `!wd aid off z'. _` (qspecl_then [`0w`, `aid`, `off`, `z'`] mp_tac) >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `u.vs_memory = _` (fn th => REWRITE_TAC [th]) >>
+     disch_then ACCEPT_TAC) >>
+  `((ee with gas_obs := []) with scopes :=
+      (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest).scopes =
+   (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest` by
+    simp[] >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by simp[] >>
   `alloca_frame old es sa0 salloc c ((ee with gas_obs := []) with scopes :=
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) u` by
-    (mp_tac (Q.INST [`ee` |-> `ee2`, `es1` |-> `ee with gas_obs := []`,
+    (mp_tac (Q.INST [`ee` |-> `(ee with gas_obs := []) with scopes :=
+         (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest`,
+       `es1` |-> `ee with gas_obs := []`,
        `s0` |-> `salloc`, `aid0` |-> `inst.inst_id`, `z` |-> `sz`,
        `entry` |-> `<|assignable := T; type := tyv; value := v; popped := []|>`,
        `sa1` |-> `sa`, `t` |-> `u`] alloca_frame_declare_local_store) >>
-     disch_then irule >> simp[] >>
-     mp_tac (Q.SPECL [`s`, `inst.inst_id`, `w`, `sz`] mstore_alloca_others) >>
-     impl_tac >- simp[] >> strip_tac >> rpt strip_tac >>
-     first_x_assum irule >> qexists_tac `aid` >> simp[]) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   qexistsl [`(ee with gas_obs := []) with scopes :=
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest`, `u`] >>
   conj_tac
@@ -416,5 +431,8 @@ Proof
   qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs,
        immutable_alloca_sep_def] >> strip_tac >> simp[] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  `alloca_frame cenv es sa salloc c (ff with gas_obs := []) u` by
+    (qpat_x_assum `alloca_frame cenv es sa salloc c ff u` mp_tac >>
+     simp[alloca_frame_def]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

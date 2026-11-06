@@ -1707,7 +1707,26 @@ Resume compile_for_range_checked_frag_active[tail_transport]:
   fs[gas_summary_at_def]
   >- (qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       disj1_tac >>
-      irule stmt_post_entry_frame >> qexistsl_tac [`t'`, `s2`] >>
+      `alloca_frame cenv es sa s0 cenv mid t` by
+        (mp_tac (Q.INST [`e` |-> `e1`, `ee` |-> `mid`, `sb` |-> `s1`,
+                         `v` |-> `IntV n1`, `op` |-> `op1`] expr_post_alloca_frame) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+      `alloca_frame cenv mid s1 t cenv (mid' with gas_obs := []) t'` by
+        (mp_tac (Q.INST [`e` |-> `e2`, `es` |-> `mid with gas_obs := []`,
+                         `sa` |-> `s1`, `sb` |-> `s2`, `s0` |-> `t`, `ee` |-> `mid'`,
+                         `t` |-> `t'`, `v` |-> `IntV n2`, `op` |-> `op2`]
+                   expr_post_alloca_frame) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[alloca_frame_def]) >>
+      `alloca_frame cenv es sa s0 cenv (mid' with gas_obs := []) t'` by
+        (qpat_assum `alloca_frame cenv es sa s0 cenv mid t` (fn th1 =>
+           qpat_assum `alloca_frame cenv mid s1 t _ _ _` (fn th2 =>
+             mp_tac (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+               alloca_frame_trans) th1) th2))) >>
+         impl_tac >- decide_tac >>
+         impl_tac >- fs[expr_post_def] >> simp[]) >>
+      `sa.cs_next_id <= s2.cs_next_id` by decide_tac >>
+      irule stmt_post_entry_frame >>
+      qexistsl_tac [`mid' with gas_obs := []`, `t'`, `s2`] >>
       fs[expr_post_def] >> rpt strip_tac >>
       `not_fresh_at s1 x` by
         (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
