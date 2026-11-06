@@ -3,6 +3,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs
+  fnFrameBoundaryEntryParams
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
