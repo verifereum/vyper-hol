@@ -1,5 +1,6 @@
 Theory concretizePtrOwnedReadAudit
 Ancestors concretizePtrHistoricalWriteExclusion concretizePtrOperationalBytes
+  concretizePtrActualByteFrame
   concretizePtrPairedFields concretizePtrPrefixLedger
   concretizePtrOwnedActualInitializer concretizePtrProtectedLivesets
   concretizePtrActiveWriteOwner concretizePtrMstoreProducer words

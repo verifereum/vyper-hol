@@ -1,5 +1,7 @@
 Theory concretizePtrActualByteFrame
-Ancestors regularCallEmitSim stepWriteFootprintBase ptrDiscipline venomMemProps venomExecSemantics
+Ancestors concretizePtrOperationalBytes concretizePtrChronologicalHistory
+  concretizePtrLifetime calleeTransport opcodeClass
+  regularCallEmitSim stepWriteFootprintBase ptrDiscipline venomMemProps venomExecSemantics
   venomCallOracleDefs codegenRel venomState venomInst list pred_set arithmetic
 
 Theorem ptr_extract_venom_result_actual_byte_frame:
@@ -54,4 +56,66 @@ Proof
   irule step_inst_base_OK_byte_frame >>
   qexists `inst` >> simp[] >>
   gvs[step_writes_def, range_bytes_def] >> metis_tac[ADD_COMM]
+QED
+
+Theorem ptr_chrono_step_actual_byte_frame:
+  !ctx a z. ptr_chrono_step ctx a z ==>
+  !x. x NOTIN range_bytes (step_writes a.po_inst a.po_state z.po_state) ==>
+    read_byte x z.po_state.vs_memory = read_byte x a.po_state.vs_memory
+Proof
+  ho_match_mp_tac ptr_chrono_step_ind >> rpt conj_tac >>
+  simp[ptr_observe_def] >> rpt strip_tac
+  >- (gvs[step_inst_non_invoke] >>
+      irule ptr_step_inst_base_OK_actual_byte_frame >>
+      qexists `inst` >> simp[] >> gvs[step_writes_def])
+  >- (`inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+       inst.inst_opcode <> DELEGATECALL /\ inst.inst_opcode <> INVOKE` by
+        (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+      gvs[step_inst_non_invoke, step_writes_def] >>
+      drule enters_block_memory >> strip_tac >> asm_rewrite_tac[] >>
+      irule step_inst_base_OK_byte_frame >>
+      qexists `inst` >> simp[] >> gvs[range_bytes_def] >> metis_tac[ADD_COMM])
+  >- (drule setup_callee_shared_fields >> strip_tac >>
+      drule enters_block_memory >> simp[]) >>
+  `rinst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[step_inst_def, AllCaseEqs()]) >>
+  gvs[step_inst_non_invoke] >>
+  `MEM rinst.inst_opcode [RET;RETFMP;DRET]` by
+    (drule step_inst_base_intret_opcodes >> simp[] >> metis_tac[]) >>
+  gvs[step_writes_def] >>
+  drule bind_outputs_shared_fields >> simp[] >> strip_tac >>
+  irule step_inst_base_IntRet_byte_frame >>
+  qexistsl [`rinst`, `ret`] >> gvs[range_bytes_def] >> metis_tac[ADD_COMM]
+QED
+
+Theorem ptr_chrono_history_actual_byte_frame:
+  ptr_chrono_history vs0 ctx h a /\ SUC k < LENGTH h /\
+  x NOTIN range_bytes (step_writes (EL k h).po_inst
+    (EL k h).po_state (EL (SUC k) h).po_state) ==>
+  read_byte x (EL (SUC k) h).po_state.vs_memory =
+    read_byte x (EL k h).po_state.vs_memory
+Proof
+  metis_tac[ptr_chrono_history_adjacent, ptr_chrono_step_actual_byte_frame]
+QED
+
+Theorem ptr_chrono_history_actual_interval_byte_frame:
+  !hi lo. ptr_chrono_history vs0 ctx h a /\
+    lo <= hi /\ hi < LENGTH h /\
+    (!k. lo <= k /\ k < hi ==>
+      x NOTIN range_bytes (step_writes (EL k h).po_inst
+        (EL k h).po_state (EL (SUC k) h).po_state)) ==>
+    read_byte x (EL hi h).po_state.vs_memory =
+      read_byte x (EL lo h).po_state.vs_memory
+Proof
+  Induct >> rpt strip_tac
+  >- (`lo = 0` by decide_tac >> simp[]) >>
+  Cases_on `lo = SUC hi` >- simp[] >>
+  `lo <= hi` by decide_tac >>
+  `read_byte x (EL (SUC hi) h).po_state.vs_memory =
+   read_byte x (EL hi h).po_state.vs_memory` by
+    (irule ptr_chrono_history_actual_byte_frame >> simp[] >> metis_tac[]) >>
+  `read_byte x (EL hi h).po_state.vs_memory =
+   read_byte x (EL lo h).po_state.vs_memory` by
+    (first_x_assum irule >> simp[] >> metis_tac[LESS_TRANS]) >>
+  metis_tac[]
 QED
