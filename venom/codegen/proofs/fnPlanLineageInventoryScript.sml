@@ -5099,3 +5099,238 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   metis_tac[]
 QED
+
+(* Pointwise resource accounting permits stale/dead stack--spill overlap. *)
+Theorem do_spill_at_resource_nonincrease:
+  !d ps ops qs x.
+    d < LENGTH ps.ps_stack /\ d <= 16 /\
+    do_spill_at d ps = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all do_spill_at_stack_count >>
+  disch_then (qspec_then `x` assume_tac) >>
+  drule_all do_spill_at_spilled_update >> strip_tac >>
+  Cases_on `x = stack_peek d ps.ps_stack` >>
+  Cases_on `x IN FDOM ps.ps_spilled` >>
+  gvs[FDOM_FUPDATE, LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem reduce_depth_plan_resource_nonincrease:
+  !fuel pending target f n ps ops qs x.
+    reduce_depth_plan fuel pending target f n ps = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_unfixed_depth target f n ps.ps_stack` >> gvs[] >>
+  Cases_on `f + 1 < n` >> gvs[] >>
+  Cases_on `x' <= 16` >> gvs[] >>
+  Cases_on `select_spill_candidate ps.ps_stack pending x' n` >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `do_spill_at cand ps = (spill_ops,ps1)` >>
+  `1 <= LENGTH ps.ps_stack` by
+    (drule stack_get_unfixed_depth_bound >> simp[]) >>
+  `cand <= 16 /\ cand < LENGTH ps.ps_stack` by
+    metis_tac[planWfTheory.select_spill_candidate_bound] >>
+  drule_all do_spill_at_resource_nonincrease >>
+  disch_then (qspec_then `x` assume_tac) >>
+  Cases_on `reduce_depth_plan fuel pending target f n ps1` >> gvs[] >>
+  first_x_assum drule >> disch_then (qspec_then `x` assume_tac) >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem reorder_restore_other_resource[local]:
+  !op f n ps ops qs x.
+    x <> op /\
+    (case stack_get_unfixed_depth op f n ps.ps_stack of
+       SOME _ => ([],ps)
+     | NONE => case FLOOKUP ps.ps_spilled op of
+                 SOME _ => do_restore op ps | NONE => ([],ps)) = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) =
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
+  strip_tac >> gvs[do_restore_def, stack_push_def, AllCaseEqs()] >>
+  simp[FDOM_DOMSUB, SNOC_APPEND, elem_count_append, LIST_ELEM_COUNT_THM]
+QED
+
+Theorem reorder_one_other_resource_nonincrease:
+  !dfg pending idx op ps ops qs x.
+    idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+    x <> op /\ reorder_one dfg pending idx op ps = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  strip_tac >> qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gnvs[] >>
+  `LIST_ELEM_COUNT x ps1.ps_stack +
+    (if x IN FDOM ps1.ps_spilled then 1 else 0) =
+   LIST_ELEM_COUNT x ps.ps_stack +
+    (if x IN FDOM ps.ps_spilled then 1 else 0)` by
+    (drule_all reorder_restore_other_resource >> simp[]) >>
+  `LENGTH pending <= LENGTH ps1.ps_stack` by
+    (drule reorder_restore_length_mono >> decide_tac) >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH pending - (idx + 1)) (LENGTH pending) ps1.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
+  pairarg_tac >> simp[] >>
+  `LENGTH pending <= LENGTH ps2.ps_stack /\
+   LIST_ELEM_COUNT x ps2.ps_stack +
+    (if x IN FDOM ps2.ps_spilled then 1 else 0) <=
+   LIST_ELEM_COUNT x ps1.ps_stack +
+    (if x IN FDOM ps1.ps_spilled then 1 else 0)` by
+    (Cases_on `dist > 16` >> gvs[] >>
+     conj_tac
+     >- (drule reduce_depth_plan_target_len_floor >> simp[]) >>
+     drule reduce_depth_plan_resource_nonincrease >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH pending - (idx + 1)) (LENGTH pending) ps2.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
+  `dist' < LENGTH ps2.ps_stack /\ stack_peek dist' ps2.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  `LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  Cases_on `dist' = LENGTH pending - (idx + 1)` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  Cases_on `operand_equiv dfg op
+    (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)` >> simp[]
+  >- (strip_tac >> simp[] >>
+      `LIST_ELEM_COUNT x
+         (stack_poke (LENGTH pending - (idx + 1)) op
+           (stack_poke dist' (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
+             ps2.ps_stack)) = LIST_ELEM_COUNT x ps2.ps_stack` by
+        (qpat_assum `stack_peek dist' ps2.ps_stack = op`
+           (fn th => once_rewrite_tac[GSYM th]) >>
+         irule stack_poke_exchange_multiplicity >> simp[]) >>
+      gvs[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
+    (drule planWfTheory.do_swap_length >> simp[]) >>
+  `LIST_ELEM_COUNT x ps3.ps_stack = LIST_ELEM_COUNT x ps2.ps_stack` by
+    (drule do_swap_multiplicity >> simp[]) >>
+  `LIST_ELEM_COUNT x ps4.ps_stack = LIST_ELEM_COUNT x ps3.ps_stack` by
+    (qspecl_then [`LENGTH pending - (idx + 1)`, `ps3`, `x`]
+       mp_tac do_swap_multiplicity >> simp[]) >>
+  `ps3.ps_spilled = ps2.ps_spilled /\ ps4.ps_spilled = ps3.ps_spilled` by
+    (conj_tac
+     >- (qspec_then `dist'` (qspec_then `ps2` mp_tac) do_swap_spilled_unchanged >> simp[]) >>
+     qspec_then `LENGTH pending - (idx + 1)`
+       (qspec_then `ps3` mp_tac) do_swap_spilled_unchanged >> simp[]) >>
+  gvs[]
+QED
+
+Theorem plan_steps_reorder_other_resource_nonincrease[local]:
+  !items dfg pending ps ops qs x.
+    EVERY (\(idx,op). idx < LENGTH pending /\ x <> op) items /\
+    LENGTH pending <= LENGTH ps.ps_stack /\
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps =
+      (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
+  Cases_on `h` >> rename1 `(idx,op)` >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `reorder_one dfg pending idx op ps = (step_ops,ps1)` >>
+  `LENGTH pending <= LENGTH ps1.ps_stack` by
+    metis_tac[reorder_one_length_floor] >>
+  `LIST_ELEM_COUNT x ps1.ps_stack +
+    (if x IN FDOM ps1.ps_spilled then 1 else 0) <=
+   LIST_ELEM_COUNT x ps.ps_stack +
+    (if x IN FDOM ps.ps_spilled then 1 else 0)` by
+    metis_tac[reorder_one_other_resource_nonincrease] >>
+  first_x_assum drule >> disch_then drule_all >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem reorder_plan_other_resource_nonincrease:
+  !dfg pending ps ops qs x.
+    ~MEM x pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+    reorder_plan dfg pending ps = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack +
+      (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule plan_steps_reorder_other_resource_nonincrease >>
+  qexistsl [`dfg`, `MAPi (\i op. (i,op)) pending`, `ops`, `pending`] >>
+  simp[GSYM reorder_plan_eq_plan_steps, EVERY_EL,
+       indexedListsTheory.EL_MAPi, indexedListsTheory.LENGTH_MAPi] >>
+  metis_tac[EL_MEM]
+QED
+
+Theorem emit_reorder_pop_next_live_upper:
+  !opc operands selected nl dfg ps iops ps1 rops ps2.
+    LENGTH operands <= 16 /\ PERM operands selected /\
+    (!v. MEM v (operand_vars operands ++ nl) ==>
+      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+        (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) /\
+    (!v. MEM (Var v) operands ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    !v. MEM v nl ==>
+      LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) +
+        (if Var v IN FDOM ps2.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `LENGTH selected <= 16 /\ LENGTH selected <= LENGTH ps1.ps_stack` by simp[] >>
+  `!x. MEM x selected ==>
+    LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x ps1.ps_stack` by metis_tac[] >>
+  drule_all reorder_plan_bounded_materialised_suffix >> strip_tac >>
+  gen_tac >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) ps1.ps_stack +
+    (if Var v IN FDOM ps1.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) selected + 1` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_relevant_variable_upper >>
+     disch_then (qspec_then `v` mp_tac) >> simp[]) >>
+  `LIST_ELEM_COUNT (Var v) ps2.ps_stack +
+    (if Var v IN FDOM ps2.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) selected + 1` by
+    (Cases_on `MEM (Var v) selected`
+     >- (`MEM (Var v) operands` by metis_tac[sortingTheory.PERM_MEM_EQ] >>
+         `Var v NOTIN FDOM ps1.ps_spilled` by
+           (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+              emit_input_plan_vars_not_spilled >>
+            simp[stackPlanTypesTheory.is_var_operand_def]) >>
+         `Var v NOTIN FDOM ps2.ps_spilled` by
+           (qspecl_then [`dfg`, `selected`, `ps1`, `Var v`]
+              mp_tac reorder_plan_pending_not_spilled >> simp[]) >>
+         `LIST_ELEM_COUNT (Var v) ps2.ps_stack =
+          LIST_ELEM_COUNT (Var v) ps1.ps_stack` by
+           metis_tac[reorder_plan_materialised_counts] >> gvs[]) >>
+     drule_all reorder_plan_other_resource_nonincrease >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qpat_x_assum `ps2.ps_stack = _` (fn th =>
+    qpat_x_assum `LIST_ELEM_COUNT (Var v) ps2.ps_stack + _ <= _`
+      (mp_tac o ONCE_REWRITE_RULE [th])) >>
+  simp[elem_count_append]
+QED
