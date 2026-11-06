@@ -1611,7 +1611,7 @@ Proof
       fs[array_elements_def, LET_THM, EVERY_GENLIST] >>
       rpt strip_tac >>
       Cases_on `ALOOKUP l i` >> simp[]
-      >- (match_mp_tac default_value_well_typed >> fs[well_formed_type_value_def]) >>
+      >- (simp[default_value_well_typed]) >>
       metis_tac[ALOOKUP_sparse_has_type])
 QED
 
