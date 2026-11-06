@@ -1,6 +1,6 @@
 Theory aggregateCodeTrace
 Ancestors
-  exprSimAbiGasBridge compileEnv emitHelper context list rich_list pair sum
+  exprSimAbiGasBridge fragExec compileEnv emitHelper context list rich_list pair sum
 
 Definition code_patch_def:
   code_patch B L insts (s:compile_state) =
@@ -276,3 +276,70 @@ Resume code_trace_typed_copy_family[struct]:
 QED
 
 Finalise code_trace_typed_copy_family
+
+Theorem code_replay_shape:
+  !tr. (?suffix. !s B L insts.
+      code_replay tr (code_patch B L insts s) =
+        code_patch B L (insts ++ suffix) s) \/
+    (?blocks lab ins suffix. !s B L insts.
+      code_replay tr (code_patch B L insts s) =
+        code_patch (blocks ++ [<|bb_label := L;
+          bb_instructions := insts ++ suffix|>] ++ B) lab ins s)
+Proof
+  Induct using SNOC_INDUCT
+  >- (disj1_tac >> qexists_tac `[]` >> simp[code_replay_def]) >>
+  strip_tac >> Cases_on `x` >>
+  gvs[SNOC_APPEND, code_replay_append, code_replay_def,
+      code_event_def, emit_def, new_block_def, code_patch_def]
+  >- (disj1_tac >> qexists_tac `suffix ++ [x']` >> simp[APPEND_ASSOC])
+  >- (disj2_tac >> qexistsl_tac [`blocks`, `lab`, `ins ++ [x']`, `suffix`] >> simp[])
+  >- (disj2_tac >> qexistsl_tac [`[]`, `y`, `[]`, `suffix`] >> simp[])
+  >> disj2_tac >>
+  qexistsl_tac [`<|bb_label := lab; bb_instructions := ins|> :: blocks`,
+    `y`, `[]`, `suffix`] >> simp[]
+QED
+
+Theorem code_replay_start_swap:
+  code_replay tr (code_patch sa.cs_blocks L
+    (MAP (\id. mk_inst id NOP [] []) ids) sb) =
+  start_swap sa L ids
+    (code_replay tr (code_patch sa.cs_blocks sa.cs_current_bb sa.cs_current_insts sb))
+Proof
+  qspec_then `tr` strip_assume_tac code_replay_shape >>
+  simp[start_swap_def, emitted_blocks_def, code_patch_def,
+    TAKE_LENGTH_APPEND, DROP_LENGTH_APPEND, FRONT_APPEND, APPEND_ASSOC] >>
+  rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[TAKE_APPEND, DROP_APPEND, FRONT_APPEND, LAST_APPEND,
+    TAKE_LENGTH_TOO_LONG, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem code_trace_start_oblivious:
+  code_trace_parametric m ==> frag_start_oblivious m
+Proof
+  simp[code_trace_parametric_def, frag_start_oblivious_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `sa` strip_assume_tac) >>
+  `m sa = (x',code_replay tr
+    (code_patch sa.cs_blocks sa.cs_current_bb sa.cs_current_insts sb'))` by
+    metis_tac[code_patch_self] >>
+  gvs[] >>
+  `start_relabel L ids sa = code_patch sa.cs_blocks L
+     (MAP (\id. mk_inst id NOP [] []) ids) sa` by
+    simp[start_relabel_def, code_patch_def] >>
+  simp[code_replay_start_swap]
+QED
+
+Theorem compile_typed_copy_start_oblivious_family:
+  (!ce dst dt src st. frag_start_oblivious (compile_store_memory_typed ce dst dt src st)) /\
+  (!ce dst src dts sts doff soff.
+     frag_start_oblivious (compile_typed_copy_fields ce dst src dts sts doff soff)) /\
+  (!ce dst dt src st n.
+     frag_start_oblivious (compile_copy_sarray_typed ce dst dt src st n)) /\
+  (!ce dst dt cap src st.
+     frag_start_oblivious (compile_copy_dynarray_typed ce dst dt cap src st)) /\
+  (!ce dst src dfs sfs doff soff.
+     frag_start_oblivious (compile_struct_typed_copy ce dst src dfs sfs doff soff))
+Proof
+  rpt conj_tac >> rpt gen_tac >> irule code_trace_start_oblivious >>
+  simp[code_trace_typed_copy_family]
+QED
