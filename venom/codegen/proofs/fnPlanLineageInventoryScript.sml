@@ -3111,7 +3111,7 @@ QED
 
 (* Diagnostic only: malformed short storage reaches native bulk swap.
    This equation does not assign a value to out-of-range EL reads. *)
-Theorem reorder_one_short_bulk_branch[local]:
+Theorem reorder_one_short_bulk_branch:
   !dfg ps x. ps.ps_stack = [Var x] ==>
     reorder_one dfg (REPLICATE 18 (Var x)) 0 (Var x) ps = do_swap 17 ps
 Proof

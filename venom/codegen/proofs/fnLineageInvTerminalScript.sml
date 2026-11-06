@@ -312,3 +312,26 @@ Proof
   simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_EQ, EQ_SYM_EQ] >>
   disch_then (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >> simp[]
 QED
+
+(* Exact selector obstruction: HD [] alone does not simplify other ELs. *)
+Theorem constant_target_first_overflow_iff:
+  !dfg ps v.
+    ps.ps_stack = [Var v] ==>
+    ((SND (reorder_one dfg (REPLICATE 18 (Var v)) 0 (Var v) ps)).ps_stack =
+       REPLICATE 18 (Var v) <=>
+     EVERY (\i. EL i ([]:operand list) = Var v) (GENLIST I 17)) /\
+    (SND (reorder_one dfg (REPLICATE 18 (Var v)) 0 (Var v) ps)).ps_spilled =
+      ps.ps_spilled
+Proof
+  rpt strip_tac >>
+  drule reorder_one_short_bulk_branch >>
+  disch_then (qspec_then `dfg` assume_tac) >>
+  simp[] >>
+  qspecl_then [`17`, `ps`] mp_tac do_swap_deep_out_of_range >>
+  simp[] >>
+  disch_then (qspecl_then [`FST (do_swap 17 ps)`, `SND (do_swap 17 ps)`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[GENLIST_CONS, EL, REPLICATE] >>
+  CONV_TAC (LAND_CONV (RAND_CONV EVAL)) >>
+  pure_rewrite_tac[CONS_11] >> metis_tac[]
+QED
