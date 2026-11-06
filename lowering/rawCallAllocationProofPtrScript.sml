@@ -204,12 +204,14 @@ Theorem raw_call_alloca_state_frame:
   step_inst_base (mk_inst id ALLOCA [Lit nw] [out]) s = OK u ==>
   u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
-  u.vs_current_bb = s.vs_current_bb /\ u.vs_halted = s.vs_halted
+  u.vs_current_bb = s.vs_current_bb /\ u.vs_halted = s.vs_halted /\
+  (!aid. aid <> id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
+  u.vs_returndata = s.vs_returndata
 Proof
   PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
   simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
-  >- (strip_tac >> gvs[venomStateTheory.update_var_def]) >>
+  >- (strip_tac >> gvs[venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   rename1 `SOME site` >> PairCases_on `site` >>
   strip_tac >> gvs[venomStateTheory.update_var_def]
 QED
@@ -279,7 +281,9 @@ Theorem raw_call_alloc_buffer_ghost_stage:
     H = G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)) /\
     (?dirty. dirty SUBSET {i | b <= i /\ i < b+n} /\
       un = tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
-        t_mem := tn.t_mem UNION dirty|>)
+        t_mem := tn.t_mem UNION dirty|>) /\
+    (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
+    u.vs_returndata = s.vs_returndata
 Proof
   strip_tac >> drule_all raw_call_alloc_buffer_stage >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>

@@ -1667,3 +1667,149 @@ Resume raw_call_pair_copy_stage[robust]:
 QED
 
 Finalise raw_call_pair_copy_stage
+
+(* The tuple head is written only after allocating the tuple.  The frame is
+   against the pre-allocation checkpoint, not against the new tuple itself. *)
+Theorem raw_call_tuple_head_stage:
+  (do buf <- compile_alloc_buffer capacity;
+      emit_void MSTORE [buf.buf_operand;ok]; return buf.buf_operand od) sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  32 <= capacity /\ capacity < dimword(:256) /\
+  (?success. ok = Var success /\ not_fresh_at sa success) /\
+  eval_operand ok s = SOME (val_to_w256 (BoolV flag)) /\ op_taint tn ok = {} ==>
+  ?H un t x b.
+    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    result = Var x /\ not_fresh_at sb x /\
+    lookup_var x t = SOME (n2w b) /\ FLOOKUP H x = SOME (b,capacity) /\
+    op_taint un (Var x) = {} /\ b+capacity < dimword(:256) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    t.vs_returndata = s.vs_returndata /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
+    (!m. mem_agree_outside un.t_mem t.vs_memory m ==>
+      val_in_memory (BaseTV BoolT) (BoolV flag) b m) /\
+    (!name off len. local_region cenv es.scopes s name off len ==>
+      regions_disjoint b capacity off len) /\
+    (!aid off len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+      regions_disjoint b capacity off len)
+Proof
+  strip_tac >>
+  `?buf sm. compile_alloc_buffer capacity sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand;ok] sm = ((),sb) /\ result = buf.buf_operand` by
+    (qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+      exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split, exprLoweringPropsTheory.ci_mono_def] >>
+  drule_all rawCallAllocationProofPtrTheory.raw_call_alloc_buffer_ghost_stage >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  suspend "store"
+QED
+
+Resume raw_call_tuple_head_stage[store]:
+  drule rawCallAllocationProofPtrTheory.raw_call_alloc_buffer_metadata >> strip_tac >>
+  `lookup_var x u = SOME (n2w b) /\ FLOOKUP H x = SOME (b,capacity) /\
+   op_taint un (Var x) = {}` by
+    fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
+  `eval_operand ok u = SOME (val_to_w256 (BoolV flag)) /\ op_taint un ok = {}` by
+    (Cases_on `ok` >>
+     fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def,
+       bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
+  `ptr_covers H un x u 32` by
+    (simp[bodyPtrDefsTheory.ptr_covers_def] >>
+     qexistsl_tac [`b`, `capacity`, `n2w b`] >> simp[] >>
+     simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac) >>
+  qpat_assum `buf.buf_operand = Var x` (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
+  drule_all raw_call_emit_mstore_path_ptr >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] assume_tac) >>
+  `step_prov PG H (mk_inst sm.cs_next_id MSTORE [Var x;ok] [])
+      (mstore b (val_to_w256 (BoolV flag)) u) = H` by
+    simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+      finite_mapTheory.DRESTRICT_UNIV, venomInstTheory.mk_inst_def] >>
+  `w2n (n2w b : bytes32) = b` by
+    (simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac) >>
+  `step_taint (mk_inst sm.cs_next_id MSTORE [Var x;ok] []) u
+      (mstore b (val_to_w256 (BoolV flag)) u) un =
+    un with t_mem := un.t_mem DIFF {i | b <= i /\ i < b+32}` by
+    metis_tac[raw_call_mstore_clean_effect] >>
+  qabbrev_tac `v = mstore b (val_to_w256 (BoolV flag)) u with
+    vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  qabbrev_tac `vn = un with t_mem := un.t_mem DIFF {i | b <= i /\ i < b+32}` >>
+  suspend "frames"
+QED
+
+Resume raw_call_tuple_head_stage[frames]:
+  `!name off len. local_region cenv es.scopes u name off len ==>
+     regions_disjoint b 32 off len` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes s name off len` by
+       (fs[local_region_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+     `regions_disjoint b capacity off len` by metis_tac[] >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `!aid off len. aid < sa.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (off,len) ==>
+     regions_disjoint b 32 off len` by
+    (rpt strip_tac >>
+     `FLOOKUP s.vs_allocas aid = SOME (off,len)` by
+       metis_tac[] >>
+     `regions_disjoint b capacity off len` by metis_tac[] >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `local_ptrs_rel func cenv es.scopes u` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `ghost_inv dep cenv cx es H vn v /\
+   ghost_kept cenv es sa H un u H vn /\ wb_frame cenv es sa u v` by
+    (qunabbrev_tac `v` >> qunabbrev_tac `vn` >>
+     irule raw_call_mstore_ghost_write_frame >> simp[] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx es v` by
+    (qunabbrev_tac `v` >> irule raw_call_mstore_state_frame >> simp[] >> metis_tac[]) >>
+  suspend "compose"
+QED
+
+Resume raw_call_tuple_head_stage[compose]:
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG H un u 0 H vn (OK v)` by
+    metis_tac[] >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H vn (OK v)` by
+    (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
+  `wb_frame cenv es sa s v` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     qexistsl_tac [`u`, `sa`, `es`] >> simp[]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `ghost_kept cenv es sa G tn s H vn` by
+    metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
+  `not_fresh_at sb x /\ sb.cs_current_bb = sm.cs_current_bb` by
+    (conj_tac
+     >- (irule stmtFragPtrTheory.not_fresh_at_mono >>
+         qexists_tac `sm` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, emit_def, comp_return_def]) >>
+  `!m. mem_agree_outside vn.t_mem v.vs_memory m ==>
+    val_in_memory (BaseTV BoolT) (BoolV flag) b m` by
+    (rpt strip_tac >> irule rawCallBufferPtrTheory.bool_mstore_robust >>
+     fs[NoAsms, Abbr `vn`, Abbr `v`] >>
+     goal_assum (drule_at (Pat `mem_agree_outside _ _ _`))) >>
+  `(!z. lookup_var z v = lookup_var z u) /\
+   op_taint vn (Var x) = op_taint un (Var x) /\
+   v.vs_current_bb = u.vs_current_bb /\
+   v.vs_inst_idx = LENGTH sb.cs_current_insts /\ v.vs_halted = u.vs_halted /\
+   v.vs_returndata = u.vs_returndata` by
+    simp[NoAsms, Abbr `v`, Abbr `vn`, venomStateTheory.mstore_def,
+      venomStateTheory.lookup_var_def, venomStateTheory.write_memory_with_expansion_def,
+      venomStateTheory.write_memory_def, ptrDisciplineTheory.op_taint_def] >>
+  qexistsl_tac [`H`, `vn`, `v`, `x`, `b`] >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise raw_call_tuple_head_stage
