@@ -2,7 +2,7 @@
 Theory reasonSlotResourcesPtr
 Ancestors allocationPtr reasonEncoderTailPtr reasonPrefixPtr exprSimAlloc normalizationAllocPtr
   robustCopyTransportPtr compileEnv venomState venomExecSemantics venomInst
-  finite_map ptrDiscipline exprLoweringProps emitHelperProps exprSimProps loweringHalt
+  finite_map ptrDiscipline exprLoweringProps emitHelperProps exprSimProps loweringHalt bodyPtrDefs ghostPcTransportPtr
 
 Theorem reason_alloca_exterior_effects:
   stmt_state_rel ctx func cenv cx es s /\
@@ -157,8 +157,8 @@ Resume reason_slot_initialize_resources_ptr[cursor]:
   `c1.cs_current_bb = sa.cs_current_bb /\
    LENGTH c1.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
     (gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-         emitHelperTheory.fresh_var_def, emitHelperTheory.emit_inst_def,
-         emitHelperTheory.fresh_id_def, emitHelperTheory.emit_def,
+         fresh_var_def, emitHelperTheory.emit_inst_def,
+         fresh_id_def, emit_def,
          comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   gvs[Abbr `s1`, lookup_var_def, ptr_covers_def]
 QED
@@ -178,12 +178,69 @@ QED
 
 Resume reason_slot_initialize_resources_ptr[covers]:
   rpt strip_tac >>
-  `ptr_covers G1 tn1 p t k` by
-    (simp[Abbr `G1`, Abbr `tn1`] >> irule alloca_step_old_ptr_covers >>
-     simp[wordsTheory.dimword_def] >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]) >>
-  `ptr_covers G1 tn1 p s1 k` by gvs[Abbr `s1`, ptr_covers_def, lookup_var_def] >>
-  metis_tac[]
+  qpat_x_assum `!p k. ptr_covers _ _ p s1 k ==> _` irule >>
+  simp[Abbr `s1`] >>
+  irule alloca_step_old_ptr_covers >> simp[wordsTheory.dimword_def] >>
+  qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]
 QED
 
 Finalise reason_slot_initialize_resources_ptr
+
+Theorem reason_slot_tuple_resources_ptr:
+  compile_alloc_buffer 32 sa = (buf,c1) /\ buf.buf_operand = Var slot /\
+  emit_void MSTORE [Var slot;Lit 32w] c1 = ((),sb) /\
+  fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,capacity) /\
+  32 <= capacity /\ not_fresh_at sa tuple /\ tuple <> slot /\
+  lookup_var tuple s = SOME (n2w b) /\ ptr_covers G tn tuple s capacity /\
+  mload b s = n2w len /\
+  (!i. b <= i /\ i < b+32 ==> i NOTIN tn.t_mem) ==>
+  ?Gf tnf sf a.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var slot sf = SOME a /\ ptr_covers Gf tnf slot sf 32 /\
+    mload (w2n a) sf = 32w /\
+    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnf.t_mem) /\
+    lookup_var tuple sf = SOME (n2w b) /\ ptr_covers Gf tnf tuple sf capacity /\
+    mload b sf = n2w len /\
+    (!i. b <= i /\ i < b+32 ==> i NOTIN tnf.t_mem) /\
+    (!p k. p <> slot /\ ptr_covers G tn p s k ==> ptr_covers Gf tnf p sf k)
+Proof
+  strip_tac >> drule_all reason_slot_initialize_resources_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [slot]) (fn_insts func)` by
+    (drule_all buffer_alloc_code >> drule compile_alloc_buffer_parts >> gvs[]) >>
+  `regions_disjoint (w2n a) 32 b capacity` by metis_tac[] >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `t.vs_memory = s.vs_memory /\
+   (!i. ~(w2n a <= i /\ i < w2n a+32) ==>
+     (i IN tn1.t_mem <=> i IN tn.t_mem))` by
+    (qpat_x_assum `tn1 = _` SUBST_ALL_TAC >>
+     irule reason_alloca_exterior_effects >> simp[wordsTheory.dimword_def] >>
+     qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]) >>
+  `lookup_var tuple t = lookup_var tuple s` by suspend "lookup" >>
+  qexistsl_tac [`G1`, `tnf`, `sf`, `a`] >> simp[] >>
+  conj_tac >- suspend "length" >>
+  rpt strip_tac >> gvs[regions_disjoint_def] >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Resume reason_slot_tuple_resources_ptr[lookup]:
+  drule_all reason_slot_alloc_run >> strip_tac >>
+  gvs[]
+QED
+
+Resume reason_slot_tuple_resources_ptr[length]:
+  `mload b sf = mload b (mstore (w2n a) 32w t)` by simp[mload_def] >>
+  `mload b (mstore (w2n a) 32w t) = mload b t` by
+    (irule venomMemProofsTheory.mload_mstore_disjoint_proof >>
+     gvs[regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  gvs[mload_def]
+QED
+
+Finalise reason_slot_tuple_resources_ptr
