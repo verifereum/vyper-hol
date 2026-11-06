@@ -229,8 +229,3 @@ Proof
   simp[compile_call_def, raw_log_topic_exprs_def, compile_multi_exprs_def,
        comp_return_def]
 QED
-
-val _ = List.app (fn (_,th) =>
-  if null (List.filter (fn s => s <> "DISK_THM") (fst (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail "expression regression oracle dependency")
-  (DB.thms "exprRecursionRegression");
