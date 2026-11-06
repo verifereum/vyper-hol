@@ -24,14 +24,14 @@ Theorem reason_tuple_copy_compiler_ptr:
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
   not_local_ptr cenv es.scopes dst /\ n <= capacity /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,capacity) /\
-  fresh_vars_wrt sa s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   not_fresh_at sa src /\ not_fresh_at sa dst ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     stmt_state_rel ctx func cenv cx es sf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    fresh_vars_wrt sb sf /\ local_ptrs_reserved cenv sb /\
+    local_ptrs_reserved cenv sb /\
     sf.vs_allocas = s.vs_allocas /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + n}) UNION
@@ -55,15 +55,17 @@ Proof
    fn_has_code (c3 with cs_next_var := 0) (c4 with cs_next_var := 0) func /\
    fn_has_code (c4 with cs_next_var := 0) (sb with cs_next_var := 0) func` by
     simp[reason_fn_has_code_counter] >>
-  drule_all reason_tuple_copy_fresh_names >> strip_tac >>
+  drule_all reason_tuple_copy_names >> strip_tac >>
+  `!p. MEM p [v1;v2;v3;v4] ==> not_local_ptr cenv es.scopes p` by
+    (rpt strip_tac >>
+     qpat_x_assum `!p. MEM p _ ==> ?n. _` drule >> strip_tac >> gvs[] >>
+     irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `!p. p = src \/ p = dst ==> p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4` by
+    metis_tac[] >>
   `s.vs_current_bb = (sa with cs_next_var := 0).cs_current_bb /\
    s.vs_inst_idx = LENGTH (sa with cs_next_var := 0).cs_current_insts` by simp[] >>
   drule_all reason_tuple_copy_state_path_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `!q. ~MEM q [v1;v2;v3;v4] ==> lookup_var q sf = lookup_var q s` by
-    (simp[] >> metis_tac[]) >>
-  `fresh_vars_wrt sb sf` by
-    (drule_all reason_fresh_vars_lookup_frame >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (drule_all local_ptrs_reserved_next_var >> simp[]) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]

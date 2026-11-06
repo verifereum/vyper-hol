@@ -62,7 +62,7 @@ Theorem reason_normalized_finish_resources_ptr:
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [tuple] /\ not_local_ptr cenv es.scopes tuple /\
   inst.inst_id < sm.cs_next_id /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,m) /\
-  fresh_vars_wrt sa s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!p. MEM p [src;tuple;payload;outer] ==> not_fresh_at sa p) ==>
   ?Gf tnf sf slot_addr.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
@@ -98,14 +98,9 @@ Proof
 QED
 
 Resume reason_normalized_finish_resources_ptr[resources]:
-  drule_all reason_tuple_copy_fresh_names >> strip_tac >>
+  drule_all reason_tuple_copy_names >> strip_tac >>
   `!p. MEM p [src;tuple;payload;outer] ==>
-     p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4` by
-    (qpat_x_assum `!p. MEM p [v1;v2;v3;v4] ==> lookup_var p s = NONE` mp_tac >>
-     map_every (fn pat => qpat_x_assum pat mp_tac)
-       [`lookup_var src s = _`, `lookup_var tuple s = _`,
-        `lookup_var payload s = _`, `lookup_var outer s = _`] >>
-     rpt (pop_assum kall_tac) >> simp[] >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
+     p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4` by metis_tac[] >>
   `!p. MEM p [src;tuple;payload;outer] ==> not_fresh_at sm p` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `lookup_var tuple sf = SOME (n2w b) /\
@@ -169,7 +164,7 @@ Theorem reason_normalized_suffix_path_ptr:
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [tuple] /\ not_local_ptr cenv es.scopes tuple /\
   inst.inst_id < sm.cs_next_id /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,m) /\
-  fresh_vars_wrt sa s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!p. MEM p [src;tuple;payload;outer] ==> not_fresh_at sa p) /\
   reason_encode_finish (Var outer) (Var payload) (Var tuple) (Var slot) sb = ((),se) /\
   fn_has_code sb se func /\ 64+m < dimword (:256) /\

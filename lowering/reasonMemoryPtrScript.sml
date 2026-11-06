@@ -70,7 +70,7 @@ Theorem reason_memory_suffix_path_ptr:
   MEM (mk_inst p3.cs_next_id ALLOCA [Lit (n2w m)] [tuple]) (fn_insts func) /\
   not_local_ptr cenv es.scopes tuple /\
   FLOOKUP t.vs_allocas p3.cs_next_id = SOME (b2,m) /\
-  fresh_vars_wrt sa t /\ local_ptrs_reserved cenv sa /\ not_fresh_at cc src /\
+  local_ptrs_reserved cenv sa /\ not_fresh_at cc src /\
   reason_encode_finish (Var outer) (Var payload) (Var tuple) (Var slot) sb = ((),se) /\
   fn_has_code sb se func ==>
   ?Gf tnf sf. gas_path_ptr D 0 ctx func PG G4 tn4 t 0 Gf tnf (Abort Revert_abort sf)

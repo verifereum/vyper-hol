@@ -24,7 +24,7 @@ Theorem reason_tuple_copy_state_path_ptr:
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
   not_local_ptr cenv es.scopes dst /\ n <= capacity /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,capacity) /\
-  (!q. MEM q [v1;v2;v3;v4] ==> lookup_var q s = NONE) ==>
+  (!q. MEM q [v1;v2;v3;v4] ==> not_local_ptr cenv es.scopes q) ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     stmt_state_rel ctx func cenv cx es sf /\
@@ -45,6 +45,6 @@ Proof
   `stmt_state_rel ctx func cenv cx es sf` by
     (`!q. ~MEM q [v1;v2;v3;v4] ==> lookup_var q sf = lookup_var q s` by
        (simp[] >> metis_tac[]) >>
-     drule_all reason_scratch_fresh_copy_state_rel >> simp[]) >>
+     drule_all reason_scratch_nonlocal_copy_state_rel >> simp[]) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
 QED
