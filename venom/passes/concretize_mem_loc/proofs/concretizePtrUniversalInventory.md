@@ -1116,3 +1116,129 @@ and the new event is INVOKE, excluded by the write coverage definition.
 This theorem covers call ENTRY only. Return restoration, callee execution,
 read recovery, historical exclusion and universal prefix coverage remain
 separate obligations; this checked assembly supplies none of them implicitly.
+
+## 2026-11-06: installed-certificate sufficiency for X (.67.23)
+
+**Result: a checked question and a supplier audit, NOT a proof of X.**
+`concretizePtrPairedJumpSchemaScript.sml:51-76` now typechecks the owned-byte
+question, in the existing acyclic schema theory. `holbuild` target
+`concretizePtrPairedJumpSchemaTheory` passed (product output
+TO_concretize_ptr-20261105T174221Z_m12860_t001). The first parse attempt used
+`W`, which resolves to the combinator; renaming it `ws` fixed this. The quotation
+introduces no theorem, constant, admission, invariant or oracle. All its free
+variables are schematic/universally quantified in the proposed obligation.
+The paired prefix and demand interval use exactly the same C,C',vs,h,endpoint,
+ht,at,done,tokens,registry,births,PT,TG,saved,entries,H. It repeats the frozen
+static antecedent (names witnessed explicitly), retains successful placement
+`FLOOKUP positions (Allocation aid) = SOME (pa,sz)`, and asks, for
+`w < EL q done /\ q < LENGTH done`, for
+`pa+k NOTIN range_bytes (step_writes (EL q ht).po_inst
+ (EL q ht).po_state (EL (SUC q) ht).po_state)`.
+There is NO extra source-success, transport, exclusion or memory-equality premise.
+
+### Indices and exact historical suppliers
+
+Use n=EL q done, A=EL n h, T=EL q ht, Z=EL (SUC n) h,
+U=EL (SUC q) ht, and destruct EL n H=(tsn,rn,bn,PTn,TGn,sn,en).
+These are notation in this report, NOT new constants or fresh witness choices.
+
+| Required fact at this use site | Actual supplier / missing implication |
+|---|---|
+| n+1<LENGTH h, q+1<LENGTH ht | Transcript erasure then `ptr_structural_trace_embedding` (StructuralTrace:105); strict event embedding of done++[LENGTH h-1]. No extra index restriction is needed. |
+| w<n, same initializing writer, no later source write of b+k | DemandWriteExclusion:97-144 `ptr_demand_interval_def`, with the original w. No re-selection. |
+| Interval owner presence, constant bottom-depth token, owner allocation | Same demand interval:138-144, from `ptr_demand_protected_token_interval`:25-93. Retained births alone are NOT the supplier. |
+| Exact snapshot ownership at n, taint/access discipline | `ptr_structural_transcript_ownership`:92-96 and erasure/reachability; access already in demand interval:108; taint from ptr_discipline on reachable source observations. Use the same P obtained from ptr_discipline when constructing the interval; an arbitrary unrelated P is not a substitute. |
+| Production destination placement and strict word bound | `ptr_transcript_historical_placement`, `ptr_stage_placements_strict_bound`; MCOPY assembly is already checked in HistoricalWriteClassification:7-64. This uses bn, not endpoint births. |
+| Mixed pre-event variable transport | PairedPrefix:30-40 `ptr_paired_samples_mixed`, via `ptr_paired_prefix_samples`:180-187. Since q<LENGTH done, EL q (done++[LENGTH h-1])=n. |
+| Labels, relevant shared fields | PairedPrefix:43-52 `ptr_paired_samples_core`; core/shared field projection. This does not equate memory or allocator metadata. |
+| Unrestricted `ptr_vars_transport bn positions TGn A.po_taint A.po_state T.po_state` | **NOT supplied**, and not a valid consequence of mixed variables: opaque own return-PC tokens can differ. This is the first blocked application of `ptr_demand_ordinary_write_exclusion`:706 and `ptr_demand_mcopy_write_exclusion`:17. Do not add it to the quotation. |
+| Transport of actual ordinary write operands | Available route, but not the interface used by the old exclusion theorem: `ptr_nonopaque_instruction_operands` (OpaqueRetpc:340-349), `ptr_mixed_vars_eval`:291-309 or paired_samples_eval_operands:54-73. Obtain opaque_use_ok from source shape, membership from the actual source history; ordinary writes are outside ASSIGN/PHI/RET/RETFMP/DRET. |
+| Offset/size evals, size scalar and untainted, address fixed-or-owned classification | Historical source step already exists in the prefix, so source eval success is not a future-success premise here. `ptr_write_max_size_untainted`, `ptr_write_max_size_no_provenance`, actual reachability and fn_ptr_ok supply purity. HistoricalWriteClassification:7-64 supplies the MCOPY classification from these source evals and access_ok. Other ordinary families still require assembly with the same evidence. |
+| Local/import production conflicts relative to later demanded owner | Checked conditional `ptr_demand_other_owner_separation` plus demand interval, exact snapshot and historical placement. No disjointness by sibling-token inequality is assumed. |
+| Source chrono-write equivalence | ChronologicalHistory:132-149 and actual adjacent step; MCOPY instance HistoricalMcopyExclusion:73-78. Requested source ranges and actual step_writes differ for external CALL; handle its MIN rather than equating them blindly. |
+| Target opcode/operands vs source instruction used by exclusion theorem | Existing production cursor/alignment and positions rewrite facts (reuse StepStructure/StepShape/StepCallChecks/StepRetpc/StageShape). Need historical event instantiation; equal ids by itself is insufficient. No duplicate structural theorem was introduced. |
+| Immediate source poststate vs next normalized sample | Z is at n+1, whereas next mixed sample is at E[q+1], E=done++[LENGTH h-1]. They need not be equal. Deleted NOP scan fields (DeletedGapHistory:75-85) preserve memory/returndata while changing cursor. A historical adjacent-event + intervening-NOP inversion/assembly is needed for arbitrary existing certificate; endpoint scan theorems alone do not assert this historical equation. |
+| CALL post returndata lengths | Shared fields at E[q+1] plus the preceding historical gap bridge can supply LENGTH Z.po_state.vs_returndata = LENGTH U.po_state.vs_returndata. Neither mixed prestate nor equal pre-returndata proves equal post lengths. Ordinary exclusion:713-714 explicitly requires them. |
+| W immediate equality / write ownership | PairedFields:91-114, PrefixLedger:16-29. Only source-to-target footprint inclusion, not reverse inclusion; only equality on source written bytes minus POST-taint. Even W's owner choice is a byte-map witness, not the historical instruction destination tag. It cannot supply suffix exclusion or exclude extra target writes. |
+
+### Exact first missing semantic interface (not another invariant)
+
+The installed certificate is not a direct client of the old exclusion signatures.
+The gap is not solved by RET integration. The smallest durable repair to review
+is **in-place** generalization of the write transport/exclusion interface, not a
+new wrapper assuming unrestricted transport. The exact proposed quantified
+replacement at the lowest exact-footprint boundary is:
+
+Take `ptr_write_transport_owner_exact` (ExactWriteTransport:51-64), universally
+quantified over its existing variables. Keep its conclusion and every premise
+except `ptr_vars_transport births positions TG tn s t`. Replace that premise by:
+
+```
+ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+  (op_taint tn ops.iao_ofst)
+  (eval_operand ops.iao_ofst s) (eval_operand ops.iao_ofst t) /\
+ptr_lookup_transport births positions (op_prov TG sizeop)
+  (op_taint tn sizeop) (eval_operand sizeop s) (eval_operand sizeop t) /\
+(!op. IS_SOME (eval_operand op s) = IS_SOME (eval_operand op t))
+```
+
+This statement is an interface proposal, not installed or proved here. Offset
+and size lookup transport come from mixed/nonopaque operand transport. The
+last clause is presence parity, not value equality: even opaque variables have
+presence parity in `ptr_mixed_vars_def`:259-263 (use
+`ptr_mixed_vars_opaque_lookup`:280-289). Labels are already equal. The existing
+proof at ExactWriteTransport:67-84 uses unrestricted transport ONLY to derive
+these facts; the remaining exact interval proof is geometric. Its fixed-exact
+sibling and containment consumers need the analogous in-place propagation,
+not duplicate lemmas. This proposed supplier must still be formally proved and
+its callers repaired by an authorized component. It is not credited as X.
+For MCOPY in particular, operand-restricted transport of [dop;sop;nop] suffices;
+no opaque return-PC value equality is needed. Source MCOPY success in the already
+constructed historical prefix is available before X; the *new endpoint read*
+success remains downstream of X. These are different uses of source success.
+
+### Exhaustive chronological-footprint partition
+
+ChronologicalHistory:29-72 has exactly next/block/call/ret; root is not a
+transition. `step_writes` (ptrDiscipline:267-274) is an instruction footprint,
+NOT automatically the set of all state changes of a chronological event.
+`source_memory_write_ranges` (codegenRel:131-225) has exactly the nonempty
+families listed below; all other opcodes return [].
+
+| Event/family | Footprint and supplier obligation |
+|---|---|
+| ordinary next: MSTORE, MSTORE8, ISTORE | Fixed 32/1/32 range only when BOTH destination and value evaluate; mixed nonopaque eval parity and classified destination required. Actual source post differs only in cursor from chrono successor. |
+| ordinary next: MCOPY, CALLDATACOPY, RETURNDATACOPY, DLOADBYTES, CODECOPY | Sized destination range only when destination/source/count evaluate; zero count has empty range. MCOPY conditional exclusion exists but still has old unrestricted signature. Copy content and source read success are not needed merely to classify an already executed historical footprint. |
+| ordinary next: EXTCODECOPY | Same sized range, with additional addr evaluation guard. Include its presence parity, not just dst/count. |
+| ordinary next: CALL, STATICCALL, DELEGATECALL | All operand evaluation guards, requested destination range clipped by MIN(requested size,LENGTH actual post returndata). Needs immediate-source/normalized-sample bridge above. Not an INVOKE entry. |
+| ordinary next: every other opcode, including ALLOCA rewritten to ASSIGN and deleted NOP | source_memory_write_ranges=[]; allocas change taint/allocator, not a step_writes interval. Use existing rewrite facts to identify target opcode. |
+| block entry JMP/JNZ/DJMP | step_writes=[]; enters_block/PHIs change variables, not memory. Accepted jump integration is not a memory exclusion proof for ordinary writes. |
+| call entry INVOKE | step_writes=[] by opcode; setup/entry preserve memory. Do not substitute completed big-step INVOKE execution or a callee's later footprint. |
+| return merge RET | step_writes=[]; merge keeps current callee memory, restores caller fields and binds outputs. There is no hidden rollback to saved caller memory. |
+| return DRET | Syntactically can have multiple write ranges from dynamic return packing (codegenRel:212-223); NOT empty by being a terminator. Excluded by source fn_ptr_ok, then target production preimage. RETFMP also excluded by fn_ptr_ok (though its write ranges are []). This is a syntax exclusion, not ordinary-write consumer coverage. |
+| root entry | No prior write; sentinel supplies identity agreement on x<lo only. |
+
+### Fixed-byte path and dependency order
+
+PairedFields:117-125 supplies `ptr_paired_initial_origin` and
+`ptr_paired_initial_sentinel`: initial agreement on {x | x<lo}. For a current
+untainted fixed read byte, one must still choose either that initial sentinel
+(no source writer) or its last actual source writer and then exclude all later
+target writes. W has immediate content for a selected ordinary writer, not
+that choice or fixed-byte suffix exclusion. Fixed/fixed writes use exact
+identity footprint matching; owned writes use allocation positions disjoint
+from reserved intervals via fixed_region_reserved and production reservations.
+`max_live_eom` bounds reserved ends for the final static consumer; it supplies
+neither last-writer selection nor equality. The owned-byte quotation does not
+assert this separate fixed-byte path is done.
+
+Dependency verdict: SAME historical source prefix + access/taint + mixed
+used-operand transport -> historical classification -> exact/contained target
+footprint -> existing same-w geometry -> X over the existing prefix -> read
+agreement -> new source step -> new W entry. The first non-applicable checked
+consumer is the unrestricted transport premise; historical poststate/gap
+assembly and external-call clipping remain explicit secondary bridges. No
+universal source-prefix coverage is used to supply X, no new invariant was
+installed, and no task falsehood is claimed. Stop this diagnostic here for
+strategist selection of the next durable interface; do not append RET or a
+queue of conditional opcode wrappers.

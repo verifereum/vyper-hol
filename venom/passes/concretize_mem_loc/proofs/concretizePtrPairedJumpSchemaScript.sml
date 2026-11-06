@@ -5,6 +5,7 @@ Ancestors
   concretizePtrMixedPhi concretizeStepStructure concretizeStepShape
   concretizeStepCallChecks concretizeStepRetpc concretizeStageShape
   venomExecSemantics venomWf unitShapeDefs ptrDiscipline finite_map list
+  concretizePtrDemandWriteExclusion stackPlanGen unitMemInv
 
 (* Audit only: parse and typecheck a proposed obligation. This asserts no
    theorem, introduces no constant and registers no oracle. *)
@@ -44,4 +45,31 @@ val _ = type_of ``
       (ptr_gap_scan bb n b).po_inst /\
     (ptr_gap_scan bb n b).po_prov = b.po_prov /\
     (ptr_gap_scan bb n b).po_taint = b.po_taint
+``;
+
+(* C1.5.90.67.23 certificate audit, 2026-11-06.
+   This is a typechecked question, NOT an asserted or proved theorem.
+   In particular there is no independent historical transport premise. *)
+val _ = type_of ``
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  w < EL q done /\ q < LENGTH done ==>
+  pa+k NOTIN range_bytes
+    (step_writes (EL q ht).po_inst (EL q ht).po_state
+      (EL (SUC q) ht).po_state)
 ``;
