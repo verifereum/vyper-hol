@@ -29,7 +29,7 @@ Ancestors
   unitShapeDefs o1PassContract
   bodyStmtsSimPtr extEntryReachesBodyPtr extFrameRetOkPtr bodyAbiDecodeTarget
   fragGasPathPtr gasPathPtrExec gasSummary gasExemptCert loweringPtrBodySource
-  externalBodySourceOk
+  externalBodySourceOk externalBodyFrame
 
 val _ = Parse.hide "body";
 

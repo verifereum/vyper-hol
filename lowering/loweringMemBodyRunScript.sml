@@ -24,7 +24,7 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
   bodyAbiDecodeTarget loweringMemEntryReach loweringMemFrameRet gasSummary
   bodyMemory loweringMemBodySourceGas
-  gasOutcome gasExemptCert gasContext vyperTypeSelectedEntrySoundness
+  gasOutcome gasExemptCert gasContext vyperTypeSelectedEntrySoundness externalBodyFrame
 
 val _ = Parse.hide "body";
 
