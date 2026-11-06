@@ -2640,19 +2640,6 @@ Proof
   gvs[m2v_inv_noix_def]
 QED
 
-(* make_venom_delegatecall_state agrees under m2v_inv_noix *)
-Triviality make_venom_delegatecall_state_m2v_inv:
-  m2v_inv_noix fn s1 s2 ==>
-  make_venom_delegatecall_state s1 tgt gas cd code st =
-  make_venom_delegatecall_state s2 tgt gas cd code st
-Proof
-  strip_tac >>
-  simp[make_venom_delegatecall_state_def] >>
-  `venom_to_tx_params s1 = venom_to_tx_params s2`
-    by metis_tac[venom_to_tx_params_m2v_inv] >>
-  gvs[m2v_inv_noix_def]
-QED
-
 (* make_venom_create_state agrees under m2v_inv_noix *)
 Triviality make_venom_create_state_m2v_inv:
   m2v_inv_noix fn s1 s2 ==>
@@ -2678,9 +2665,6 @@ Proof
   rpt strip_tac >> gvs[m2v_inv_noix_def]
 QED
 
-(* extract_venom_result: same run_result on both sides gives
-   same output, and result states preserve m2v_inv_noix
-   when the write range is nonpromoted *)
 (* Setting non-semantic fields (transient, returndata, accounts, logs, deletions)
    to equal values preserves m2v_inv_noix. All semantic functions
    (lookup_var, mem_byte, mload, in_promoted_region, allocas_non_overlapping)
@@ -2735,56 +2719,6 @@ Proof
            vs_pending_deletions := pending |>)`
     by (irule m2v_inv_noix_set_fields >> simp[]) >>
   gvs[wmwe_preserves, write_memory_with_expansion_def, LET_THM]
-QED
-
-(* Strengthened: only requires s1 extraction succeeds.
-   Since extract_venom_result's SOME/NONE depends only on rr
-   (not s), s2 extraction must also succeed. *)
-Triviality extract_venom_result_m2v_inv:
-  !fn s1 s2 ov retOff retSz rr out1 s1'.
-  m2v_inv_noix fn s1 s2 /\
-  m2v_non32_ok fn s1 s2 /\
-  extract_venom_result s1 ov retOff retSz rr = SOME (out1, s1') /\
-  (!addr. retOff <= addr /\ addr < retOff + retSz ==>
-          ~in_promoted_region fn s1 addr) ==>
-  ?s2'. extract_venom_result s2 ov retOff retSz rr = SOME (out1, s2') /\
-        m2v_inv_noix fn s1' s2'
-Proof
-  rpt strip_tac >>
-  `s1.vs_transient = s2.vs_transient /\
-   s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_logs = s2.vs_logs /\
-   s1.vs_pending_deletions = s2.vs_pending_deletions /\
-   s1.vs_returndata = s2.vs_returndata`
-    by gvs[m2v_inv_noix_def] >>
-  gvs[extract_venom_result_def, CaseEq "option", CaseEq "prod",
-      CaseEq "list"] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[CaseEq "sum", CaseEq "option"] >>
-  simp[LENGTH_TAKE_EQ] >>
-  FIRST
-    [irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ],
-     `m2v_inv_noix fn
-        (s1 with
-          <|vs_memory :=
-              (write_memory_with_expansion retOff
-                 (TAKE retSz ctxt.returnData) s1).vs_memory;
-            vs_transient := s2.vs_transient;
-            vs_returndata := ctxt.returnData;
-            vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs;
-            vs_pending_deletions := s2.vs_pending_deletions|>)
-        (s2 with
-          <|vs_memory :=
-              (write_memory_with_expansion retOff
-                 (TAKE retSz ctxt.returnData) s2).vs_memory;
-            vs_transient := s2.vs_transient;
-            vs_returndata := ctxt.returnData;
-            vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs;
-            vs_pending_deletions := s2.vs_pending_deletions|>)` by
-       (irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ]) >>
-     gvs[]]
 QED
 
 (* ================================================================
@@ -2935,16 +2869,16 @@ Proof
   `read_memory (w2n ao) (w2n as_) s1 =
    read_memory (w2n ao) (w2n as_) s2` by
     metis_tac[read_memory_m2v_inv] >>
-  `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
-    by gvs[m2v_inv_noix_def] >>
-  gvs[exec_delegatecall_def, LET_THM] >>
-  `make_venom_delegatecall_state s1 = make_venom_delegatecall_state s2` by
-    metis_tac[make_venom_delegatecall_state_m2v_inv] >>
-  gvs[] >>
-  qpat_x_assum `_ = OK v1` mp_tac >> simp[AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule_all extract_venom_result_m2v_inv >> strip_tac >> gvs[] >>
-  simp[AllCaseEqs()] >>
+  qabbrev_tac `rq = venom_call_request s2 addr 0w ao as_ F with
+                      cr_kind := DelegateMessageCall` >>
+  `venom_call_request s1 addr 0w ao as_ F with cr_kind := DelegateMessageCall = rq`
+    by fs[Abbr`rq`, m2v_inv_noix_def, venom_call_request_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
+  `m2v_inv_noix fn
+    (SND (consume_call_outcome rq (w2n ro) (w2n rs) s1))
+    (SND (consume_call_outcome rq (w2n ro) (w2n rs) s2))` by
+    (irule consume_call_outcome_m2v_inv >> simp[]) >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >>
   irule m2v_inv_noix_update_var >> simp[]
 QED
 
@@ -5325,40 +5259,6 @@ QED
 
 
 
-(* When extract_venom_result is called with the same args on two states,
-   both produce the same wmwe expansion D.
-   This is the key lemma for showing nao equality across ext_call. *)
-Triviality extract_venom_result_same_D:
-  !s1 s2 ov retOff retSize rr out1 s1' out2 s2'.
-    extract_venom_result s1 ov retOff retSize rr = SOME (out1, s1') /\
-    extract_venom_result s2 ov retOff retSize rr = SOME (out2, s2') ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  simp[LENGTH_write_memory_with_expansion] >>
-  metis_tac[]
-QED
-
-(* extract_venom_result preserves alloca_next and has predictable memory length *)
-Triviality extract_venom_result_nao:
-  !s output_val retOff retSize run_result out s'.
-    extract_venom_result s output_val retOff retSize run_result =
-      SOME (out, s') ==>
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    ?D. LENGTH s'.vs_memory = MAX (LENGTH s.vs_memory) D
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  simp[LENGTH_write_memory_with_expansion] >>
-  metis_tac[]
-QED
-
 (* exec_ext_call preserves alloca_next and memory length = MAX old D *)
 Triviality exec_ext_call_nao:
   !inst s gas addr value ao as_ ro rs st s'.
@@ -5381,7 +5281,7 @@ Triviality exec_delegatecall_nao:
 Proof
   simp[exec_delegatecall_def, LET_THM, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_nao]
+  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
 QED
 
 (* exec_create preserves alloca_next and memory length = MAX old D *)
@@ -5426,26 +5326,6 @@ Proof
     simp[venom_call_request_def] >>
   gvs[exec_ext_call_def, AllCaseEqs(), update_var_def] >>
   simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
-QED
-
-Triviality exec_delegatecall_same_D:
-  !inst s1 s2 g a ao as_ ro rs s1' s2'.
-    exec_delegatecall inst s1 g a ao as_ ro rs = OK s1' /\
-    exec_delegatecall inst s2 g a ao as_ ro rs = OK s2' /\
-    read_memory (w2n ao) (w2n as_) s1 = read_memory (w2n ao) (w2n as_) s2 /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_transient = s2.vs_transient /\
-    venom_to_tx_params s1 = venom_to_tx_params s2 ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[exec_delegatecall_def, LET_THM, AllCaseEqs(),
-       make_venom_delegatecall_state_def] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_same_D]
 QED
 
 Triviality exec_create_same_D:

@@ -908,9 +908,9 @@ QED
 
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
-   A call or staticcall takes its outcome from the external-call oracle when
-   st.outcomes is SOME, as extcall does (eval_ext_call_effects); a delegate
-   call, and any call without the oracle, runs the callee. *)
+   Every raw call, delegate or not, takes its outcome from the external-call
+   oracle when st.outcomes is SOME, as extcall does (eval_ext_call_effects);
+   without the oracle it runs the callee. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
@@ -921,9 +921,11 @@ Definition eval_raw_call_def:
       (if flags.rcf_is_static then NONE else SOME amount);
     outcomes <- (λst. return st.outcomes st);
     (success, returnData) <-
-      if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
-        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
-          value_opt;
+      if IS_SOME outcomes then do
+        (rq, outcome) <-
+          if flags.rcf_is_delegate then
+            vyperCallOutcome$take_delegate_outcome target_addr calldata value_opt
+          else vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
@@ -971,7 +973,8 @@ Proof
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac frame_call_value_state >>
-  imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
+  imp_res_tac take_call_outcome_frame >> imp_res_tac take_delegate_outcome_frame >>
+  imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
 

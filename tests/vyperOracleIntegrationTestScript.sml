@@ -213,13 +213,14 @@ QED
 
 (* The fixture above makes every non-delegate call static, so adopt_call_outcome
    leaves the state alone.  A plain raw_call(target, data) is a CALL with value
-   0: a successful outcome's accounts, transient storage and logs are adopted,
-   and a failed one changes nothing but the request and outcome lists. *)
+   0, and a delegate one a DELEGATECALL: a successful outcome's accounts,
+   transient storage and logs are adopted, and a failed one changes nothing but
+   the request and outcome lists. *)
 Definition integration_raw_call_adopt_observe_def:
-  integration_raw_call_adopt_observe rof outsize target os expected
+  integration_raw_call_adopt_observe delegate rof outsize target os expected
       balance nonce code persistent transient logs rqs rest =
     let e = Call NoneT (RawCallTarget
-      <|rcf_is_static := F; rcf_is_delegate := F;
+      <|rcf_is_static := F; rcf_is_delegate := delegate;
         rcf_revert_on_failure := rof; rcf_max_outsize := outsize;
         rcf_kws := []|>)
       [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]));
@@ -231,11 +232,11 @@ End
 val () = cv_auto_trans integration_raw_call_adopt_observe_def;
 
 Theorem RawCall_call_adopts_source_oracle:
-  integration_raw_call_adopt_observe T 1 20w
+  integration_raw_call_adopt_observe F T 1 20w
     (SOME [send_outcome T [5w; 6w] 17; cpscv_tail])
     (INL (Value (BytesV [5w]))) 17 5 [0w] 9w 8w cpscv_adopted_logs
     (send_requests 20w 0) cpscv_tail_snapshot /\
-  integration_raw_call_adopt_observe F 0 20w
+  integration_raw_call_adopt_observe F F 0 20w
     (SOME [send_outcome F [7w] (2 ** 256); cpscv_tail])
     (INL (Value (BoolV F))) 3 0 [] 2w 4w cpscv_initial_logs
     (send_requests 20w 0) cpscv_tail_snapshot
@@ -243,16 +244,37 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* With the oracle, a delegate raw_call takes the next outcome too, under a
+   request with no value and the frame's static flag, and adopts it as a CALL
+   does: its accounts carry the effects on self's storage.  A failed or
+   missing outcome changes nothing but the request and outcome lists. *)
+Theorem RawCall_delegate_adopts_source_oracle:
+  integration_raw_call_adopt_observe T T 1 20w
+    (SOME [send_outcome T [5w; 6w] 17; cpscv_tail])
+    (INL (Value (BytesV [5w]))) 17 5 [0w] 9w 8w cpscv_adopted_logs
+    (send_requests 20w 0) cpscv_tail_snapshot /\
+  integration_raw_call_adopt_observe T F 0 20w
+    (SOME [send_outcome F [7w] (2 ** 256); cpscv_tail])
+    (INL (Value (BoolV F))) 3 0 [] 2w 4w cpscv_initial_logs
+    (send_requests 20w 0) cpscv_tail_snapshot /\
+  integration_raw_call_adopt_observe T T 0 20w (SOME [])
+    (INR (Error (RevertData []))) 3 0 [] 2w 4w cpscv_initial_logs
+    (send_requests 20w 0) (SOME [])
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* A computed precompile (here SHA-256 at Address2) takes its success bit
-   from the head outcome and records no request; a delegate raw_call runs
-   the callee, ignoring the oracle. *)
-Theorem RawCall_precompile_takes_outcome_delegate_skips_oracle:
+   from the head outcome and records no request.  A delegate raw_call to the
+   same address is no computed precompile: it records its request and takes
+   the head outcome as is. *)
+Theorem RawCall_precompile_takes_outcome:
   integration_raw_call_observe F F 0 2w (SOME [send_outcome F [] 0])
     (INL (Value (BoolV F))) (SOME 0) send_initial_requests /\
   integration_raw_call_observe F F 0 2w (SOME [send_outcome T [] 0])
     (INL (Value (BoolV T))) (SOME 0) send_initial_requests /\
-  integration_raw_call_observe T T 0 20w (SOME [send_outcome F [] 0])
-    (INL (Value NoneV)) (SOME 1) send_initial_requests
+  integration_raw_call_observe T F 0 2w (SOME [send_outcome T [] 0])
+    (INL (Value (BoolV T))) (SOME 0) (send_requests 2w 0)
 Proof
   CONV_TAC cv_eval
 QED

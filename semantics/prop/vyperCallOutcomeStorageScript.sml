@@ -173,7 +173,7 @@ Proof
 QED
 
 Theorem take_adopt_create_outcome_storage_suffix:
-  kind <> MessageCall /\
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   take_create_outcome kind value code st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>
