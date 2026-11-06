@@ -376,12 +376,55 @@ val ld_recursive_entry_goal =
        (list_mk_forall (rest, body))
   end;
 
-Theorem ld_entry_geometry_history_clause[local]:
+(* Shared term builder, used on historical and operational bases separately. *)
+val ld_indexed_saved_geometry = ``\lo E astk gstk savedkeys.
+  !q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry E owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))``;
+fun ld_refine_saved candidate =
+  let
+    val (args,body) = strip_abs candidate
+    val (normal,exceptional) = dest_disj body
+    val (ws,b) = strip_exists normal
+    fun named name =
+      case List.filter (fn v => fst(dest_var v) = name) ws of
+        [v] => v | _ => raise Fail ("missing unique normal witness: " ^ name)
+    val astk = named "astk" and gstk = named "gstk"
+    val E = named "E" and savedkeys = named "savedkeys"
+    val _ = if length args = 7 andalso length ws > 0 andalso is_conj b
+            then () else raise Fail "unexpected recursive candidate shape"
+    val slice = rhs (concl (DEPTH_CONV BETA_CONV
+      (list_mk_comb(ld_indexed_saved_geometry,
+        [``lo:num``,E,astk,gstk,savedkeys]))))
+    val refined = list_mk_abs(args,
+      mk_disj(list_mk_exists(ws,mk_conj(b,slice)),exceptional))
+    val (_,result) = strip_abs refined
+    val _ = if aconv (snd(dest_disj result)) exceptional then ()
+            else raise Fail "changed exceptional arm"
+  in refined end;
+val ld_historical_combined_candidate =
+  ld_refine_geometry (ld_refine_saved ld_recursive_candidate);
+val ld_historical_combined_entry_goal =
+  let
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses,_) = dest_imp body
+    val clause = subst [p |-> ld_historical_combined_candidate] (hd(strip_conj clauses))
+    val (v0::ct::rest,b) = strip_forall clause
+  in subst [v0 |-> mk_var("vs0",type_of v0),
+            ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_historical_combined_entry_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
-  ^ld_entry_geometry_history_goal
+  ^ld_historical_combined_entry_goal
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all lower_dload_stage_lookup_indexed >> strip_tac >>
@@ -434,7 +477,7 @@ Proof
   >> suspend "normal"
 QED
 
-Resume ld_entry_geometry_history_clause[normal]:
+Resume ld_historical_combined_entry_clause[normal]:
   disj1_tac >>
   qexistsl_tac [`[]`, `[]`, `0`, `FEMPTY`, `[]`, `FEMPTY`,
     `entry_taint`, `f`, `i`, `s1`, `s1`, `entry_taint`,
@@ -487,7 +530,7 @@ Resume ld_entry_geometry_history_clause[normal]:
   metis_tac[]
 QED
 
-Resume ld_entry_geometry_history_clause[revert]:
+Resume ld_historical_combined_entry_clause[revert]:
   `s1.vs_inst_idx = 0` by
     (qpat_x_assum `s1 = z` SUBST_ALL_TAC >> simp[Abbr `z`]) >>
   `?endpos. revert_forward_pair bb' 0 endpos` by
@@ -508,7 +551,7 @@ Resume ld_entry_geometry_history_clause[revert]:
   simp[get_instruction_def, NoAsms] >> metis_tac[]
 QED
 
-Resume ld_entry_geometry_history_clause[data]:
+Resume ld_historical_combined_entry_clause[data]:
   `CS.ctx_entry = SOME f.fn_name /\ entry_fn_no_params f` by
     (qpat_x_assum `o1_ctx_shape CS` mp_tac >>
      qpat_x_assum `lookup_function name CS.ctx_functions = SOME f` mp_tac >>
@@ -535,7 +578,29 @@ Resume ld_entry_geometry_history_clause[data]:
   simp[lowerDloadLifetimeTheory.ld_site_bytes_def, entry_taint_def, op_taint_def]
 QED
 
-Finalise ld_entry_geometry_history_clause
+Finalise ld_historical_combined_entry_clause
+Theorem ld_entry_geometry_history_clause[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_entry_geometry_history_goal
+Proof
+  strip_tac >> mp_tac ld_historical_combined_entry_clause >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`name`,`fn`,`lbl`,`inst`,`s1`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac []) >> BETA_TAC >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  ho_match_mp_tac MONO_OR >> conj_tac
+  >- (rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      disch_then (fn th => assume_tac (CONJUNCT1 (CONJUNCT1 th)) >>
+        assume_tac (CONJUNCT2 th)) >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
 
 Theorem ld_recursive_entry_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
@@ -3388,38 +3453,7 @@ val ld_proposed_return_normal_restore =
 
 (* Shared-witness saved geometry refinement. Old candidates and theorem
    statements above are deliberately unchanged. *)
-val ld_indexed_saved_geometry = ``\lo E astk gstk savedkeys.
-  !q. q < LENGTH astk ==>
-    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
-      f <= (EL q gstk).lf_state.vs_alloca_next /\
-      (!owner bs bt sz.
-        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
-          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
-        ld_site_entry E owner bs bt sz ==>
-        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
-          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))``;
-
-val ld_recursive_saved_candidate =
-  let
-    val (args,body) = strip_abs ld_recursive_candidate
-    val (normal,exceptional) = dest_disj body
-    val (ws,b) = strip_exists normal
-    fun named name =
-      case List.filter (fn v => fst(dest_var v) = name) ws of
-        [v] => v | _ => raise Fail ("missing unique normal witness: " ^ name)
-    val astk = named "astk" and gstk = named "gstk"
-    val E = named "E" and savedkeys = named "savedkeys"
-    val _ = if length args = 7 andalso length ws > 0 andalso is_conj b
-            then () else raise Fail "unexpected recursive candidate shape"
-    val slice = rhs (concl (DEPTH_CONV BETA_CONV
-      (list_mk_comb(ld_indexed_saved_geometry,
-        [``lo:num``,E,astk,gstk,savedkeys]))))
-    val refined = list_mk_abs(args,
-      mk_disj(list_mk_exists(ws,mk_conj(b,slice)),exceptional))
-    val (_,result) = strip_abs refined
-    val _ = if aconv (snd(dest_disj result)) exceptional then ()
-            else raise Fail "changed exceptional arm"
-  in refined end;
+val ld_recursive_saved_candidate = ld_refine_saved ld_recursive_candidate;
 
 Theorem ld_recursive_saved_forget:
   !vs0 CT stk un gn j t.
@@ -3639,4 +3673,39 @@ Proof
          venomMemDefsTheory.alloca_next_valid_def])) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   disj1_tac >> pop_assum mp_tac >> simp[CONJ_ASSOC]
+QED
+
+
+Theorem ld_historical_combined_operational[local]:
+  (^ld_historical_combined_candidate) vs0 CT stk un gn j t ==>
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t
+Proof
+  BETA_TAC >>
+  rpt (FIRST [disch_then ACCEPT_TAC,
+              disch_then (ACCEPT_TAC o CONJUNCT2),
+              ho_match_mp_tac MONO_OR, ho_match_mp_tac MONO_AND,
+              ho_match_mp_tac MONO_EXISTS, ho_match_mp_tac MONO_ALL,
+              ho_match_mp_tac MONO_IMP, conj_tac, gen_tac]) >>
+  simp[]
+QED
+
+(* As with ld_entry_geometry_history_goal, specialize only the rule's two
+   environment parameters; the five raw projected clause terms stay intact. *)
+val ld_recursive_combined_entry_fixed_goal =
+  let val (v0::ct::rest,b) = strip_forall ld_recursive_combined_entry_goal
+  in subst [v0 |-> mk_var("vs0",type_of v0),
+            ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
+
+Theorem ld_recursive_combined_entry_clause:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  ^ld_recursive_combined_entry_fixed_goal
+Proof
+  strip_tac >> mp_tac ld_historical_combined_entry_clause >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  irule ld_historical_combined_operational >>
+  first_x_assum irule >> simp[]
 QED
