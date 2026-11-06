@@ -6933,6 +6933,27 @@ Proof
   gvs[non_param_insts_def, callLayoutDefsTheory.no_param_insts_def])
 QED
 
+Theorem alias_ready_entry_body:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  bb = HD fn.fn_blocks ==>
+  cfg_preds_of (cfg_analyze fn) bb.bb_label = [] /\
+  collect_phis bb.bb_instructions = [] /\
+  EVERY (\inst. inst_wf inst /\ inst.inst_opcode <> PHI /\
+               ~is_param_opcode inst.inst_opcode) (non_param_insts bb)
+Proof
+  strip_tac >>
+  `cfg_preds_of (cfg_analyze fn) bb.bb_label = [] /\
+   collect_phis bb.bb_instructions = []` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, block_entries_ready_def, entry_block_def, NULL_EQ,
+         lookup_block_def, FIND_thm]) >>
+  simp[] >>
+  `EVERY (\inst. inst_wf inst /\ inst.inst_opcode <> PHI) bb.bb_instructions` by
+    (drule_all alias_ready_phi_suffix >> simp[]) >>
+  drule_all alias_ready_param_partition >> strip_tac >>
+  gvs[EVERY_MEM, non_param_insts_def, MEM_FILTER] >> metis_tac[]
+QED
+
 Theorem alias_phi_prefix_plan_state:
   !phis i body ps ops qs.
     EVERY (\inst. inst.inst_opcode = PHI) phis /\
