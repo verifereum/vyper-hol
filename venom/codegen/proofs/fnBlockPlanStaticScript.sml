@@ -22,7 +22,7 @@ Ancestors
   stackPlanGen stackPlanOps stackPlanTypes venomExecSemantics venomWf
   livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion fnBlockPlanStaticInventory
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
-  fnBlockPlanStaticAccounting simplifyCfgStruct venomExecProps venomInst
+  fnBlockPlanStaticAccounting fnBlockPlanStaticBalance simplifyCfgStruct venomExecProps venomInst
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
@@ -391,6 +391,73 @@ Proof
   irule regional_replay_ret_body_signed_balance >>
   rpt (first_assum $ irule_at Any) >>
   qexistsl [`ps_dfs.ps_cleanup_promised`, `param_ops`, `ps_dfs.ps_cleanup_height`] >> gvs[]
+QED
+
+Theorem regional_replay_ret_block_signed_balance:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_l /\ MEM ret bb.bb_instructions /\ ret.inst_opcode = RET /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (block_ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps_l.ps_stack):int) + trace_weight block_ops +
+    &(LENGTH (get_params bb.bb_instructions)) +
+    FOLDR ($+) (0:int) (MAP instruction_correction (non_param_insts bb))
+Proof
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `generate_block_plan _ _ _ _ _ pin` >>
+  Cases_on `if bb = HD fn.fn_blocks then prepare_params_plan lv fn pin else ([],pin)` >>
+  rename1 `_ = (param_ops,ps1)` >>
+  Cases_on `if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+    then clean_stack_plan lv cfg fn bb ps1 else ([],ps1)` >>
+  rename1 `_ = (clean_ops,ps2)` >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `_ = (inst_ops,qs)` SUBST_ALL_TAC >>
+  `&(LENGTH qs.ps_stack) = (&(LENGTH ps2.ps_stack):int) + trace_weight inst_ops +
+    FOLDR ($+) (0:int) (MAP instruction_correction (non_param_insts bb))` by
+    (gvs[Abbr `pin`] >> irule regional_replay_ret_body_signed_balance >>
+     rpt (first_assum $ irule_at Any) >>
+     gvs[]) >>
+  `&(LENGTH ps1.ps_stack) = (&(LENGTH pin.ps_stack):int) + trace_weight param_ops +
+    &(LENGTH (get_params bb.bb_instructions))` by
+    (Cases_on `bb = HD fn.fn_blocks`
+     >- (gvs[] >> drule prepare_params_plan_signed_balance >> simp[]) >>
+     `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     drule_all regional_canonical_body_layout >> strip_tac >>
+     gvs[trace_weight_def]) >>
+  `&(LENGTH ps2.ps_stack) = (&(LENGTH ps1.ps_stack):int) + trace_weight clean_ops` by
+    (Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[trace_weight_def] >>
+     drule clean_stack_plan_signed_balance >> simp[]) >>
+  gvs[trace_weight_def, trace_weight_append, stack_op_weight_def, Abbr `pin`] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem regional_dfs_ret_block_signed_balance:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret bb.bb_instructions /\ ret.inst_opcode = RET /\
+  generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (block_ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps_dfs.ps_stack):int) + trace_weight block_ops +
+    &(LENGTH (get_params bb.bb_instructions)) +
+    FOLDR ($+) (0:int) (MAP instruction_correction (non_param_insts bb))
+Proof
+  strip_tac >> drule dfs_block_state_lineage_state >> strip_tac >>
+  irule regional_replay_ret_block_signed_balance >>
+  rpt (first_assum $ irule_at Any) >>
+  qexistsl [`ps_dfs.ps_cleanup_promised`, `ps_dfs.ps_cleanup_height`] >> gvs[]
 QED
 
 (* Used at each instruction of the block body's induction, for the
