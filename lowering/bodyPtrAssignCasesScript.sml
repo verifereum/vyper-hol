@@ -18,6 +18,8 @@ Ancestors
   supportedStmts exprLoweringProps compileEnv vyperTypeEnv
   stmtSimDefs
   vyperState vyperContext vyperTypeCallGraph list
+  augAssignPtrLocalBody augAssignPtrToplevelBody augAssignPtrFieldBody
+  augAssignPtrStorageFieldBody
 
 val _ = Parse.hide "body";
 
@@ -110,5 +112,18 @@ Theorem body_augassign_case_ptr:
        body_expr_ptr_ok cx e) /\ body_base_target_ptr_ok cx t ==>
     body_stmt_ptr_ok cx (AugAssign ty t bop e)
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_augassign_local_ptr >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_augassign_toplevel_word_ptr >> metis_tac[]) >>
+  Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
+  >- (gvs[] >> irule body_augassign_attr_local_ptr >> metis_tac[]) >>
+  Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                       supported_storage_field_write tops nsid fld`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_augassign_attr_storage_ptr >> metis_tac[]) >>
+  irule body_augassign_other_ptr >> metis_tac[]
 QED
