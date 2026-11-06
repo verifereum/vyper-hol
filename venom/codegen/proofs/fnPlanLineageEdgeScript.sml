@@ -47,7 +47,7 @@ Proof
   simp[FILTER_APPEND, is_param_opcode_def]
 QED
 
-Theorem ready_join_edge_terminator[local]:
+Theorem ready_join_edge_terminator:
   codegen_ready_fn fn /\
   lookup_block pred fn.fn_blocks = SOME pb /\
   lookup_block succ fn.fn_blocks = SOME sb /\
