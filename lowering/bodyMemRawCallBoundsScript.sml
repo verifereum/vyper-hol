@@ -2,7 +2,7 @@
 Theory bodyMemRawCallBounds
 Ancestors
   bodyMemBiKeccakBounds exprSimMemDefs exprLoweringProps loweringPosts
-  exprSimProps compileEnv words instMemFrontier venomInst
+  exprSimProps compileEnv words instMemFrontier venomInst venomMemDefs
 
 Theorem raw_call_input_bounds:
   expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
@@ -40,4 +40,22 @@ Proof
   Cases_on `stat` >>
   simp[below_frontier_CALL, below_frontier_STATICCALL] >>
   rpt strip_tac >> gvs[]
+QED
+
+Theorem raw_call_output_allocated_bounds:
+  alloca_inv s /\
+  FLOOKUP s.vs_allocas aid = SOME (b, ((cap + 31) DIV 32) * 32 + 32) /\
+  b + (((cap + 31) DIV 32) * 32 + 32) < dimword (:256) ==>
+  b + 32 <= s.vs_alloca_next /\
+  b + 32 + cap <= s.vs_alloca_next /\
+  w2n (n2w b + 32w : bytes32) = b + 32 /\
+  w2n (n2w b + 32w : bytes32) + cap <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  `b + (((cap + 31) DIV 32) * 32 + 32) <= s.vs_alloca_next` by
+    (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  qspec_then `cap` mp_tac le_word_size_mul >>
+  simp[vfmConstantsTheory.word_size_def] >> strip_tac >>
+  `b + 32 < dimword (:256)` by decide_tac >>
+  simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w] >> decide_tac
 QED
