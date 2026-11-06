@@ -110,7 +110,8 @@ Theorem annassign_memory_staged_source_ptr:
  FLOOKUP s0.vs_allocas aid = SOME (w2n w,cap) ==>
  ?sn tmp s G tn b.
  compile_store_memory cenv (Var tmp) (Var p) dty dty sn = ((),sb) /\
- fn_has_code sn sb func /\ cs_extends sa sn /\ not_fresh_at sn tmp /\
+ fn_has_code sn sb func /\ cs_extends sa sn /\
+ sa.cs_next_var <= sn.cs_next_var /\ not_fresh_at sn tmp /\
  gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G tn (OK s) /\
  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\
