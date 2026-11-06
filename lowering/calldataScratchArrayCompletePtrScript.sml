@@ -1,6 +1,6 @@
 Theory calldataScratchArrayCompletePtr
 Ancestors
-  calldataScratchLoopPtr normalizationPrefixPtr pred_set
+  calldataScratchLoopPtr calldataScratchLoopEntryPtr normalizationPrefixPtr pred_set
   abiScratchDecoderLoopContext abiDecoderReentry ptrDiscipline
   abiScratchDecoderLoopInvariant abiDecoderValidArrayMemory abiDecoderExecution bodyPtrDefs
   abiDecoderLoop
