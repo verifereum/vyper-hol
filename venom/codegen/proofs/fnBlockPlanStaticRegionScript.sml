@@ -3039,6 +3039,20 @@ Proof
   irule regional_popmany_individual_survives >> simp[]
 QED
 
+Theorem regional_nonphi_input_boundary:
+  !pred instrs live v.
+    MEM v live /\
+    ~MEM (Var v) (FLAT (MAP (\phi. phi.inst_operands) (collect_phis instrs))) ==>
+    MEM v (input_vars_from pred instrs live)
+Proof
+  rpt strip_tac >> irule input_vars_from_non_phi >> simp[] >>
+  rpt strip_tac >> gvs[MEM_MAP] >>
+  drule cfgNormSupplyProofsTheory.MEM_phi_pairs_SND_operand_vars_pair >>
+  strip_tac >>
+  gvs[passSharedDefsTheory.MEM_operand_vars_eq_Var, MEM_FLAT, MEM_MAP] >>
+  metis_tac[]
+QED
+
 Theorem regional_clean_stack_protected_ownership:
   generated_plan_state_wf_marked sb ps /\
   clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
