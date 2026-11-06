@@ -16,7 +16,7 @@ Theory stmtSimDeclEmpty
 Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
-  stmtSimDecl stmtSimDeclMem valueCopyBytes
+  stmtSimDecl stmtSimDeclMem valueCopyBytes memoryValueEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperTyping
@@ -55,6 +55,7 @@ Proof
   qspecl_then [`tenv`, `t`, `tyv`, `w2n w`, `(mstore (w2n w) 0w s).vs_memory`]
     mp_tac memory_length_word_layout >>
   impl_tac >- fs[mstore_mem_word_at_same] >> strip_tac >>
+  drule (CONJUNCT1 default_memory_layout) >> strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s`, `id`, `p`, `sz`, `w`,
                `inst`, `default_value tyv`, `tyv`, `sc`, `rest`, `a`,
                `Lit 0w`, `st`, `st'`, `0w`] mp_tac annassign_word_store_run >>

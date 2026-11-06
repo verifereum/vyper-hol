@@ -221,9 +221,11 @@ Theorem abi_encoder_array_exit_step_readonly[local]:
   (i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD) /\
   step_inst_base i s = OK t ==>
   (t.vs_memory,t.vs_allocas,t.vs_alloca_next,t.vs_accounts,t.vs_transient,
-   t.vs_logs,t.vs_requests,t.vs_pending_deletions) =
+   t.vs_logs,t.vs_requests,t.vs_tx_ctx,t.vs_block_ctx,t.vs_immutables,
+   t.vs_outcomes,t.vs_pending_deletions) =
   (s.vs_memory,s.vs_allocas,s.vs_alloca_next,s.vs_accounts,s.vs_transient,
-   s.vs_logs,s.vs_requests,s.vs_pending_deletions)
+   s.vs_logs,s.vs_requests,s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,
+   s.vs_outcomes,s.vs_pending_deletions)
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
@@ -240,18 +242,24 @@ Theorem abi_encoder_array_exit_readonly:
   ready.vs_allocas = initial.vs_allocas /\ ready.vs_alloca_next = initial.vs_alloca_next /\
   ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+  ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+  ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
   ready.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   strip_tac >> drule abi_encoder_array_exit_opcodes >> strip_tac >>
   gvs[abi_encoder_member_phase_raw_def] >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK u` >>
-  ` (u.vs_memory,u.vs_allocas,u.vs_alloca_next,u.vs_accounts,u.vs_transient,u.vs_logs,
-      u.vs_requests,u.vs_pending_deletions) =
+  ` (u.vs_memory,u.vs_allocas,u.vs_alloca_next,u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,
+      u.vs_tx_ctx,u.vs_block_ctx,u.vs_immutables,u.vs_outcomes,u.vs_pending_deletions) =
     (initial.vs_memory,initial.vs_allocas,initial.vs_alloca_next,initial.vs_accounts,
-      initial.vs_transient,initial.vs_logs,initial.vs_requests,initial.vs_pending_deletions)` by
+      initial.vs_transient,initial.vs_logs,initial.vs_requests,
+      initial.vs_tx_ctx,initial.vs_block_ctx,initial.vs_immutables,initial.vs_outcomes,
+      initial.vs_pending_deletions)` by
     (irule (BETA_RULE (Q.ISPEC
        `\s:venom_state. (s.vs_memory,s.vs_allocas,s.vs_alloca_next,s.vs_accounts,
-         s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)` run_inst_seq_preserves_field)) >>
+         s.vs_transient,s.vs_logs,s.vs_requests,s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,
+         s.vs_outcomes,s.vs_pending_deletions)`
+       run_inst_seq_preserves_field)) >>
      qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >> rpt strip_tac >>
      `i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD` by
        (fs[EVERY_MEM] >> metis_tac[]) >>
