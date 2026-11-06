@@ -2332,6 +2332,30 @@ Proof
   simp[alias_var_mass_def, do_swap_spilled_unchanged]
 QED
 
+Theorem alias_do_swap_deep_length:
+  16 < d ==>
+  LENGTH (SND (do_swap d ps)).ps_stack = MAX (LENGTH ps.ps_stack) (d + 1)
+Proof
+  strip_tac >> simp[do_swap_def] >> pairarg_tac >> simp[] >>
+  simp[listTheory.LENGTH_TAKE, arithmeticTheory.MAX_DEF] >>
+  IF_CASES_TAC >> decide_tac
+QED
+
+Theorem alias_restore_spilled_domain:
+  !targets ps.
+  FDOM (SND (restore_spilled_plan targets ps)).ps_spilled =
+    FDOM ps.ps_spilled DIFF set targets
+Proof
+  Induct >- simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  Cases_on `h IN FDOM ps.ps_spilled` >>
+  simp[Once restore_spilled_plan_def, do_restore_def, finite_mapTheory.FLOOKUP_DEF] >>
+  pairarg_tac >> gvs[] >>
+  qpat_x_assum `restore_spilled_plan _ _ = _`
+    (mp_tac o AP_TERM ``\p:stack_op list # plan_state. FDOM (SND p).ps_spilled``) >>
+  simp[finite_mapTheory.FDOM_DOMSUB] >> disch_then (SUBST1_TAC o SYM) >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
 Theorem alias_var_mass_restore_spilled:
   !ops ps x.
   alias_var_mass x (SND (restore_spilled_plan ops ps)) = alias_var_mass x ps
