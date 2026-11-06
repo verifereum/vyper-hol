@@ -1288,3 +1288,145 @@ still needs exact event operands and footprints, immediate poststate fields
 (where applicable), and the actual same-history access/taint suppliers.
 MCOPY source-success for the read consumer, fixed-byte suffix exclusion,
 and universal target-prefix coverage remain unresolved.
+
+## Current universal-step checkpoint (.67.67, after exact MLOAD producer)
+
+This section supersedes historical statements above that D/X, actual footprint
+framing, writer retention, or owned/fixed byte recovery are still missing.
+It does NOT certify universal coverage. Specification quotations are in
+`concretizePtrUniversalStepSchemaScript.sml`; they typecheck without assertions,
+cheats, definitions, or axioms. The two ML values are terms, NOT theorems.
+
+### Common consumer and production bridge
+
+`universal_normalized_step_schema` spells out the frozen antecedent (with a
+chosen `names` witness), an existing normalized six-field paired prefix, actual
+target chronological step, and static production bridges. Its conclusion
+existentially supplies a nonempty finite source extension, all new ghost data,
+write/call ledgers, and a normalized complete prefix at the actual target
+successor. `done` grows by the departing source endpoint; snapshots grow by
+exactly the source extension length. Source execution, post-state mixedness,
+source memory agreement, and target suffix exclusion are NOT hypotheses.
+
+The production bridges are deliberately explicit, not claimed to follow merely
+from an arbitrary prefix: LIST_REL paired_code on context functions, code-name
+preservation, source fn_inst_wf/retpc_shape_ok/opaque_use_ok/first_block_no_phi/
+block wf/distinct labels/ALLOCA coverage, and target distinct labels. They are
+static supplier obligations at the eventual stage consumer. `ptr_paired_code`
+alone relates current function blocks and map entries; it is not a context-wide
+stage decomposition or ALLOCA coverage theorem. In particular choosing R/lp and
+proving the context-wide bridge from the frozen stage remains integration work.
+The existing root and call producers use precisely this sort of static bridge.
+These are NOT proposed added hypotheses to concretize_stage_static_mem.
+
+### Exhaustive current supplier table
+
+Rows N1--N18, J/C/R, X1--X5/T refer to the disjoint, exhaustive opcode sets in
+the original dispatch table (lines 154--182). The four actual transition
+constructors are next, block, call, ret in ChronologicalHistory lines 29--72;
+root entry is a history constructor, not a fifth step. No error/halt event is
+silently included in next. All theorem files below are run-owned helpers unless
+explicitly qualified as contract suppliers.
+
+| Event/family | Installed supplier and exact scope | Remaining consumer premise / status |
+|---|---|---|
+| Root B | PairedRoot: `ptr_paired_root`, `ptr_paired_root_normalized` | Full root certificate and normalization checked. Actual root inversion, matching production function, wf/no-PHI/coverage premises must be supplied from stage. Not an arbitrary-target-history theorem. |
+| Source gap G | PairedPrefixProbe: `ptr_paired_prefix_gap_scan`, `ptr_paired_prefix_normalize` | Full six-field gap preservation checked; needs fn_inst_wf and current prefix. No opcode simulation missing for deleted NOPs. |
+| N1 ADD/SUB | OwnedAffinePrefix: `ptr_affine_prefix_aligned_next`, `ptr_affine_owned_prefix` | Ownership/unrestricted variable-transport prefix, not a full mixed six-field certificate. Historical samples/callers/writes assembly and mixed input adaptation still required. |
+| N2 scalar/masked arithmetic (entire original row) | AffineTransport and value/taint boundaries are conditional semantic ingredients | No full-prefix producer. Need exact success/selection and mask transport for each semantic family, not just result arithmetic. OFFSET stays in this row. |
+| N3 EQ/LT/GT | ComparisonTransport: `ptr_comparison_eq_transport`, `ptr_comparison_lt_transport`, `ptr_comparison_gt_transport` | Conditional comparison values, with provenance/displacement and closed-end bounds. No full-prefix producer or universal derivation of its displacement premises. |
+| N4 ASSIGN | OwnedAssignPrefix: `ptr_assign_prefix_aligned_next`, `ptr_assign_owned_prefix`; OpaqueRetpc: `ptr_retpc_assign_selection` | Restricted/unrestricted prefix results are not mixed paired-prefix extensions. Source ALLOCA preimage goes to N17, not this row. |
+| N5 PARAM | ValueSelection selection boundaries; installed ptr_paired_params at endpoint | Actual PT/masks relation available; conditional selection still needs full mixed step/certificate assembly. |
+| N6 INITIAL_FMP/BUMP/RETPC_PARAM | OpaqueRetpc: `ptr_mixed_vars_retpc_step_transport` for RETPC_PARAM | No full-prefix supplier for this row. BUMP/INITIAL_FMP not excluded by discipline; two-output/control-state semantics cannot be dropped. |
+| N7 MLOAD | MloadProducer: `ptr_paired_prefix_mload` | Exact full immediate extension, arbitrary target chrono successor, frozen stage premises including max_live_eom, no extra source-success or read agreement premise. TG'=step_prov; other ghost maps and ws unchanged. Normalize afterward by PairedPrefixProbe. |
+| N7 ILOAD | Conditional read/value interfaces only | Not covered by MLOAD theorem. Requires its own semantic read/taint mapping and certificate attachment. |
+| N8 MSTORE | MstoreProducer: `ptr_paired_prefix_mstore` | Exact full immediate extension from current prefix and stage premises, arbitrary target chrono successor. Adds one actual ledger record; normalizer then applies. No source-success premise. |
+| N8 MSTORE8/ISTORE | Existing byte-content/footprint boundaries only | Not covered by MSTORE's exact opcode hypothesis. Full mixed/write-ledger extension missing. |
+| N9 MCOPY | McopyContent masked content; HistoricalMcopyExclusion conditional exclusion | Need mixed-compatible source success/read recovery consumer plus actual write record/certificate extension. The historical consumer's stronger transport hypothesis is not supplied by mixed variables. |
+| N10 buffer copies | BufferCopyContent: conditional payload and returndata-bound content | No full-prefix producer; successful operand evaluation, exact payload/shared fields and RETURNDATACOPY guard must be derived, not assumed. |
+| N11 EXTCODECOPY | Footprint/content ingredients | No full-prefix producer; account-code payload and complete shared-field preservation still consumers. |
+| N12 SLOAD/SSTORE/TLOAD/TSTORE | Shared core and masked operand ingredients | No full-prefix producer. Successful static-frame branch inversion needed; memory read recovery does not itself prove storage equality. |
+| N13 environment/scalar outputs (entire original row) | Shared/core fields and scalar value transport ingredients | No full-prefix producer for the whole row. GAS must use current semantics; opaque parameter/environment facts are not unrestricted variable equality. |
+| N14 SHA3/LOG | Owned/fixed read recovery plus conditional value/log ingredients | Need actual untainted payload and topics/static guard, exact effects and certificate assembly. No full producer. |
+| N15 CALL/STATICCALL | ExternalCallContent conditional content, exact footprint clipping, post-returndata and core boundaries | Need whole request agreement derived from discipline/read recovery and actual outcomes/shared poststate. No full producer; clipped actual footprint is already available, not a new exclusion gap. |
+| N16 DELEGATECALL/CREATE/CREATE2 | Existing request/footprint ingredients | No full producer. Distinct request/outcome/rollback semantics; cannot infer from CALL. |
+| N17 ALLOCA -> ASSIGN | AllocationTransport: `ptr_alloca_transport`; OwnedAllocationPrefix: `ptr_owned_alloca_prefix_back_next`, `ptr_owned_alloca_prefix_aligned_next` | Fresh/cached ownership and retained birth overlay checked under unrestricted ptr_vars_transport. This premise is NOT implied by mixed variables (opaque return-PC values differ). Selected next boundary below removes this interface gap. No complete six-field ALLOCA extension exists. |
+| N18 ASSERT/ASSERT_UNREACHABLE | Scalar/untainted restrictions from discipline are the intended suppliers | No full-prefix producer. Target continuing branch must force matching successful source condition. |
+| J/JMP | PairedJump: `ptr_paired_jump_prefix_normalize` | Full normalized six-field extension checked. Static wf/retpc/coverage, actual target block-event premises and non-DALLOCA must be supplied/inverted. No assumed source success. |
+| J/JNZ | PairedJump: `ptr_paired_jnz_prefix_normalize`; PairedJumpEntry: `ptr_owned_jnz_scalar` | Full normalized extension with explicit cond/yes/no syntax and scalar/nonopaque/empty-taint restrictions. Restriction supplier derives them from ownership+discipline+fn_ptr_ok+inst_wf+no-DALLOCA+opaque_use_ok; these must actually be matched in dispatch. Not unconditional coverage by itself. |
+| J/DJMP | PHI-entry/cursor transport available | No full normalized producer; successor selection and scalar label-index restriction remain. |
+| C/INVOKE | PairedCallSchema: `ptr_paired_invoke_prefix_normalize`, with InvokeArgs/CallEntry | Full immediate and normalized prefix checked; target decode/eval/lookup/setup/entry/event inversion and static context code bridge explicit. New token LENGTH h, registry and entries insertion, empty callee TG, saved (PT,TG) and call indices pushed, ws retained. Root/call entry uses no body execution. |
+| R/RET | OpaqueRetpc: `ptr_mixed_return_bind`, `ptr_retpc_invoke_outputs`; ValueSelection return bind; PairedFields saved caller relation | Conditional bind/merge transport, NOT complete source return or restored six-field prefix. Equal iret_values and no-adopt-FMP are premises of bind lemma; source success, scalar return values, saved caller restoration, token/PT/TG pop and ledger preservation still must be proved together. |
+| X1 forbidden FMP family; X2 DALLOCA; X3 DRET/RETFMP | OperationalOpcodes: `ptr_stage_no_dret`, `ptr_stage_observation_no_dret`; contract positions preimages/no-ALLOCA/var-opcode facts | Syntax/discipline exclusions, not producers. Distinguish forbidden family from allowed N6; no-DALLOCA is separate task premise. Need dispatch contradiction at actual target preimage. |
+| X4 PHI | Atomic production entry/PHI transport in MixedPhi and PairedEntry | No successful ordinary PHI next step. Already accounted for at B/J/C; not a residual opcode requiring ordinary simulation. |
+| X5 NOP | Contract concretize_positions_nop; executed coverage/gap interfaces | Output NOP excluded via actual production preimage/coverage. Source-only deleted gaps handled by G. |
+| T RETURN/REVERT/STOP/SINK/SELFDESTRUCT/INVALID | No continuing chronological step for halt/abort/error; successful terminal access uses eventual endpoint static bound | Not an extension branch. A reachable active terminal observation still needs memory access bound/revert-forward exemption; cannot delete it from final stage proof. |
+
+### Structural priorities: ALLOCA and RET
+
+First precise unsupported implication selected:
+`mixed_allocation_success_schema` in UniversalStepSchema. It retains the frozen
+stage assumptions plus the current actual prefix and normalized production
+instruction correspondence, source ALLOCA opcode, source fn_inst_wf and
+retpc_shape_ok, and actual target chronological successor. It concludes source
+`step_inst 0 ... = OK s'`, a genuine tagged successor b at the adjacent source
+cursor, the computed birth overlay B, retention of every old birth entry,
+computed tagged TG', mixed variable transport, core sharing and actual paired
+cursor at zt. It does not yet assert all six post-prefix fields. The quotation
+is fully explicit, including existential witnesses, without executable macros.
+
+Supplier ledger for this selected boundary:
+
+* Endpoint source ownership and mixed/core sharing: PairedPrefix endpoint,
+  transcript erasure and StructuralTrace ownership (already used by MLOAD).
+* Actual source reachability, membership and cached-size equality:
+  ChronologicalHistory reachability, AllocationSize `ptr_frame_sizes` and
+  `ptr_alloca_inst_size`; normalized instruction activity/coverage from current
+  cursor and contract rewrite/preimage. Source fn_inst_wf yields literal size
+  and single output; source retpc_shape_ok forbids ALLOCA writing own retpc.
+* Target next inversion: source ALLOCA rewrites to target ASSIGN on covered
+  production path; it is not an arbitrary source ASSIGN. Actual target successor
+  and cursor alignment give the next retained index and adjacent source activity.
+* Fresh and cached source execution and owner tag: AllocationTransport contains
+  the correct branch proof but its consumer requires ptr_vars_transport. Adapt
+  this existing theorem in place, or provide the genuinely mixed semantic
+  boundary, rather than assume unrestricted transport or duplicate it locally.
+  Old nonopaque lookups should extend under retained births; opaque lookup
+  presence/env are unchanged except the proven nonopaque allocation output.
+* Birth retention: ActivationBirths `ptr_source_birth_caches_snoc_retained` and
+  ownership extension, with the SAME HD tokens and actual allocation cache.
+  Cached execution reuses its birth. This does not require fresh bases or
+  vs_alloca_next=0. No new activation token or entry index is allocated here.
+* Target ASSIGN changes no memory/core state; source ALLOCA changes allocator
+  bookkeeping, which core deliberately does not equate. Use core boundary, not
+  whole-state equality. Cursor advancement is separate from value updates.
+* Then (later consumer) transcript/sample extension can use the new mixed
+  endpoint; alignment/parameter/caller/W retention must be checked under the
+  changed births and TG. Existing full MSTORE/MLOAD proofs do NOT supply this
+  allocation-specific extension automatically.
+
+This is a missing mixed semantic boundary plus later finite integration; the
+audit has not found a necessary new invariant. That is a bounded conclusion,
+not a proof of satisfiability of the proposed universal theorem.
+
+RET is the next structural risk, not claimed solved by the ALLOCA quotation.
+`ptr_mixed_return_bind` consumes already equal returned scalar lists and
+adopt_fmp=NONE. Its input is saved caller mixedness, not callee endpoint mixedness.
+The paired caller record must select the historical caller's PT/TG and current
+memory taint, derive actual source RET and matching returned list from target
+IntRet and source discipline, then bind/restack/cursor/normalize. `calls` and
+`saved` must pop together; births and registry retain completed activations,
+whereas tokens pop. Existing return-bind and retention lemmas cannot be renamed
+as this whole theorem. No source return step or equal returned values should
+be added as a hypothesis to a final return producer. Before authorizing that
+integration the exact caller relation and memory-taint rebase should be inspected.
+
+### Verification and scope
+
+`holbuild(targets=["concretizePtrUniversalStepSchemaTheory"])` passed. This also
+rebuilt AllocationTransport, OwnedAffinePrefix, OwnedAllocationPrefix, PairedEntry,
+PairedCallEntry, PairedCallSchema, PairedJumpEntry and PairedJump on the current
+base without dropping lemmas. MloadProducer separately passed at session start.
+No semantic theorem was asserted here, and no frozen contract file was edited.
+No new positions-rewrite lemma was proposed: all such needs use existing
+concretizeStepStructure/StepShape/StepCallChecks/StepRetpc/StageShape imports.
