@@ -3,7 +3,7 @@ Theory exprSimAbiDecodeOwnedContext
 Ancestors
   exprSimAbiDecodeMemberExecute exprSimAbiDecodeSiteOwnership
   exprSimAbiDecodeScratchCover exprSimAbiDecodeSiteProvenance
-  abiDecoderSiteEffect finite_map pred_set arithmetic
+  abiDecoderSiteEffect abiBuiltinDecodeSetup finite_map pred_set arithmetic
 
 Definition abi_decode_owned_def:
   abi_decode_owned sites scratch d n s <=>
@@ -71,4 +71,64 @@ Theorem abi_decode_context_result_widen:
 Proof
   simp_tac bool_ss [abi_decode_context_result_def] >>
   metis_tac[decode_site_effect_weaken]
+QED
+
+(* Caller audit: after setup, the registered output owns its entire region.
+   No allocation-site resources are required for the executing observer. *)
+Theorem abi_decode_registered_output_owned:
+  alloca_inv s /\ FLOOKUP s.vs_allocas output = SOME(d,n) /\
+  output NOTIN sites ==>
+  abi_decode_owned sites
+    ({a | s.vs_alloca_next <= a} UNION
+     {a | ?id b sz. id IN sites /\
+       FLOOKUP s.vs_allocas id = SOME(b,sz) /\ b <= a /\ a < b+sz}) d n s
+Proof
+  strip_tac >> drule_all abi_decode_registered_output_scratch >>
+  simp[abi_decode_owned_def]
+QED
+
+Theorem abi_decode_setup_source_sites:
+  abi_builtin_allocation_frame next output outsz s t /\ output NOTIN sites /\
+  B+cnt <= s.vs_alloca_next /\
+  (!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = SOME(b,sz) ==>
+    abi_footprint_disjoint B cnt [(b,sz)]) ==>
+  (!id b sz. id IN sites /\ FLOOKUP t.vs_allocas id = SOME(b,sz) ==>
+    abi_footprint_disjoint B cnt [(b,sz)]) /\
+  (!a. B <= a /\ a < B+cnt ==>
+    a NOTIN ({a | t.vs_alloca_next <= a} UNION
+      {a | ?id b sz. id IN sites /\
+        FLOOKUP t.vs_allocas id = SOME(b,sz) /\ b <= a /\ a < b+sz}))
+Proof
+  strip_tac >>
+  `!id. id IN sites ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id` by
+    metis_tac[abiBuiltinAllocationTheory.abi_builtin_allocation_frame_outside] >>
+  `s.vs_alloca_next <= t.vs_alloca_next` by
+    (fs[abiBuiltinAllocationTheory.abi_builtin_allocation_frame_def,
+        abiBuiltinAllocationTheory.abi_builtin_allocate_state_def] >>
+     Cases_on `FLOOKUP s.vs_allocas output = NONE` >> gvs[]) >>
+  conj_asm1_tac >- metis_tac[] >>
+  fs[abiDecoderFrameTheory.abi_footprint_disjoint_def] >>
+  simp[] >> rpt strip_tac >> metis_tac[LESS_LESS_EQ_TRANS, NOT_LESS_EQUAL]
+QED
+
+Theorem abi_decode_setup_output_owned:
+  abi_builtin_allocation_frame next output outsz s t /\ alloca_inv s /\
+  ((FLOOKUP s.vs_allocas output = NONE /\ d = s.vs_alloca_next) \/
+   FLOOKUP s.vs_allocas output = SOME(d,outsz)) /\ output NOTIN sites ==>
+  abi_decode_owned sites
+    ({a | t.vs_alloca_next <= a} UNION
+     {a | ?id b sz. id IN sites /\
+       FLOOKUP t.vs_allocas id = SOME(b,sz) /\ b <= a /\ a < b+sz}) d outsz t
+Proof
+  strip_tac >> irule abi_decode_registered_output_owned >>
+  metis_tac[abi_decode_setup_alloca_inv, abi_decode_setup_output_registered]
+QED
+
+Theorem abi_decode_setup_output_excluded:
+  abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) ==>
+  abi_builtin_decode_output_site st min_size max_size NOTIN
+    abi_decode_sites ready.cs_next_id last
+Proof
+  strip_tac >> drule abi_builtin_decode_setup_shape >>
+  simp[abi_decode_sites_def]
 QED

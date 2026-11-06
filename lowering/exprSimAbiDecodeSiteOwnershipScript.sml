@@ -79,3 +79,16 @@ Proof
   >- metis_tac[alloca_site_registered_below] >>
   irule alloca_site_registered_disjoint >> metis_tac[]
 QED
+
+Theorem abi_decode_setup_alloca_inv:
+  abi_builtin_allocation_frame next site outsz s t /\ alloca_inv s ==>
+  alloca_inv t
+Proof
+  simp_tac bool_ss [abi_builtin_allocation_frame_def] >> strip_tac >>
+  Cases_on `FLOOKUP s.vs_allocas site = NONE` >>
+  gvs[abi_builtin_allocate_state_def, alloca_inv_def,
+      allocas_non_overlapping_def, alloca_next_valid_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_assum `!aid base sz. FLOOKUP s.vs_allocas aid = SOME(base,sz) ==> _`
+    (fn th => imp_res_tac th) >> fs[] >> metis_tac[]
+QED
