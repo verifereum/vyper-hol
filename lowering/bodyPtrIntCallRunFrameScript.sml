@@ -1,7 +1,7 @@
 Theory bodyPtrIntCallRunFrame
-Ancestors bodyPtrIntCallAllocation bodyPtrIntCallLowRegion
+Ancestors bodyPtrIntCallAllocation bodyPtrIntCallConfinement bodyPtrIntCallLowRegion
   bodyPtrIntCallTaintBounds venomExecSemantics ptrDiscipline
-  finite_map pred_set arithmetic words list venomInst venomExecProps unitShapeDefs vyperCompiler compileVyper bodySim
+  finite_map pred_set arithmetic words list venomInst venomExecProps venomMemProps venomInstProofs1 venomState unitShapeDefs vyperCompiler compileVyper bodySim
 
 (* SETFMP can introduce taint below the static allocation frontier. *)
 Theorem intcall_setfmp_frame_probe:
@@ -77,4 +77,84 @@ Proof
   `MEM inst bb.bb_instructions` by
     (fs[get_instruction_def, AllCaseEqs()] >> metis_tac[EL_MEM]) >>
   fs[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
+QED
+
+Theorem intcall_step_alloc_outside:
+  step_inst fuel ctx inst s = OK t /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+  intcall_alloc_outside P s ==> intcall_alloc_outside P t
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK t` by fs[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (fs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      metis_tac[intcall_alloc_exec_alloca]) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+    metis_tac[step_inst_base_preserves_allocas,
+              step_inst_base_preserves_alloca_next] >>
+  fs[intcall_alloc_outside_def] >> metis_tac[]
+QED
+
+
+Theorem intcall_ordinary_fmp[local]:
+  step_inst_base inst s = OK t /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
+  inst.inst_opcode <> SETFMP ==> w2n t.vs_fmp <= w2n s.vs_fmp
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[jump_to_def] >>
+      pairarg_tac >> gvs[]) >>
+  `~is_alloca_op inst.inst_opcode` by
+    (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
+  drule step_inst_base_preserves_all >> simp[] >> strip_tac >> simp[]
+QED
+
+Theorem intcall_step_new_site_outside:
+  step_inst fuel ctx inst s = OK t /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+  intcall_alloc_outside P s ==> new_site_bytes s t SUBSET COMPL P
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK t` by fs[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (fs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      metis_tac[intcall_alloc_new_site_bytes]) >>
+  `t.vs_allocas = s.vs_allocas` by
+    metis_tac[step_inst_base_preserves_allocas] >>
+  `w2n t.vs_fmp <= w2n s.vs_fmp` by metis_tac[intcall_ordinary_fmp] >>
+  fs[new_site_bytes_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem intcall_step_mem_frame:
+  step_inst fuel ctx inst s = OK t /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+  intcall_alloc_outside P s /\ intcall_prov_outside P PG G /\
+  intcall_word_taint_bounded tn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ access_ok 0 G fn inst s ==>
+  intcall_mem_frame P tn (step_taint inst s t tn)
+Proof
+  strip_tac >> irule intcall_mem_frame_step >> conj_tac
+  >- metis_tac[intcall_step_new_site_outside] >>
+  drule intcall_word_taint_operands >> strip_tac >>
+  metis_tac[intcall_written_taint_outside_zero]
+QED
+
+Theorem intcall_body_step_mem_frame:
+  step_inst fuel ctx inst s = OK t /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> DALLOCA /\
+  body_inv tops ctx ce cx /\ ~ce.ce_is_ctor /\
+  lookup_function name ctx.ctx_functions = SOME fn /\
+  intcall_alloc_outside P s /\ intcall_prov_outside P PG G /\
+  intcall_word_taint_bounded tn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ access_ok 0 G fn inst s ==>
+  intcall_mem_frame P tn (step_taint inst s t tn)
+Proof
+  strip_tac >> irule intcall_step_mem_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[intcall_body_instruction_no_setfmp]
 QED
