@@ -296,3 +296,67 @@ Theorem halting_phi_retains_dead_output_probe:
 Proof
  EVAL_TAC >> simp[]
 QED
+
+Theorem released_phi_inventory_delta:
+ !inst nl halting ps d x ops qs final.
+ stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+ stack_peek d ps.ps_stack = x /\ is_var_operand x /\
+ LENGTH (FILTER (\op. op = x) ps.ps_stack) = 1 /\
+ ~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+ Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled /\
+ generate_phi_plan inst nl halting ps = (ops,qs) /\
+ final = release_dead_spills nl qs ==>
+ !op. ((MEM op final.ps_stack /\ op <> dead_stack_marker) \/
+       op IN FDOM final.ps_spilled) <=>
+      ((MEM op ps.ps_stack /\ op <> dead_stack_marker /\
+          (op <> x \/ MEM (operand_to_string x) nl)) \/
+       (op IN FDOM ps.ps_spilled /\ MEM op (MAP Var nl)) \/
+       (op = Var (HD inst.inst_outputs) /\
+          (halting \/ MEM (HD inst.inst_outputs) nl)))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `d < LENGTH ps.ps_stack` by metis_tac[stack_get_phi_depth_var_not_marker] >>
+ `qs.ps_spilled = ps.ps_spilled` by
+   (mp_tac (Q.SPECL [`inst`, `nl`, `halting`, `ps`] generate_phi_plan_state_frame) >>
+    simp[] >> disch_then (mp_tac o AP_TERM ``\p:plan_state. p.ps_spilled``) >> simp[]) >>
+ `LIST_ELEM_COUNT x ps.ps_stack <= 1` by
+   gvs[LIST_ELEM_COUNT_DEF] >>
+ drule generate_phi_plan_write_phase >>
+ disch_then (qspecl_then [`nl`, `halting`] mp_tac) >>
+ simp[phi_write_phase_def] >>
+ Cases_on `MEM (operand_to_string x) nl` >> simp[]
+ >- (Cases_on `do_dup d ps` >> simp[] >>
+     `r.ps_stack = ps.ps_stack ++ [x]` by
+       (drule do_dup_stack_exact >> simp[]) >>
+     `stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack =
+        ps.ps_stack ++ [Var (HD inst.inst_outputs)]` by
+       simp[stack_poke_def, LUPDATE_APPEND2, LUPDATE_def] >>
+     simp[] >>
+     IF_CASES_TAC
+     >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+         qspecl_then [`Var (HD inst.inst_outputs)`,
+           `r with ps_stack := ps.ps_stack ++ [Var (HD inst.inst_outputs)]`]
+           mp_tac phi_popmany_singleton_mem >>
+         simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND, MEM_APPEND] >>
+         `LENGTH (FILTER (\z. z = Var (HD inst.inst_outputs)) ps.ps_stack) = 0` by
+           (simp[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
+         simp[] >> strip_tac >>
+         simp[release_dead_spills_stack, phi_release_dead_spills_domain, MEM_MAP] >>
+         metis_tac[]) >>
+     strip_tac >> gvs[] >>
+     simp[release_dead_spills_stack, phi_release_dead_spills_domain, MEM_APPEND,
+          dead_stack_marker_def, MEM_MAP] >>
+     gen_tac >> Cases_on `op = Var (HD inst.inst_outputs)` >> gvs[]) >>
+ IF_CASES_TAC
+ >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+     drule_at (Pos last) phi_stack_poke_pop_mem >> simp[] >>
+     simp[release_dead_spills_stack, phi_release_dead_spills_domain, MEM_MAP] >>
+     metis_tac[]) >>
+ strip_tac >> gvs[] >>
+ `!op. MEM op (stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack) <=>
+    (MEM op ps.ps_stack /\ op <> stack_peek d ps.ps_stack) \/
+    op = Var (HD inst.inst_outputs)` by metis_tac[phi_stack_poke_mem] >>
+ simp[release_dead_spills_stack, phi_release_dead_spills_domain, MEM_MAP,
+      dead_stack_marker_def] >>
+ gen_tac >> Cases_on `op = Var (HD inst.inst_outputs)` >> gvs[] >> metis_tac[]
+QED
