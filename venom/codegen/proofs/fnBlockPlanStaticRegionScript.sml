@@ -3701,6 +3701,45 @@ Proof
   strip_tac >> gvs[] >> irule regional_release_marked_wf >> simp[]
 QED
 
+Theorem regional_offset_marked_wf[local]:
+  inst_wf inst /\ inst.inst_opcode = OFFSET /\
+  generated_plan_state_wf_marked sb ps /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs ==>
+  generated_plan_state_wf_marked sb (SND (generate_offset_plan inst ps))
+Proof
+  strip_tac >> drule_all inst_wf_offset_shape >> strip_tac >>
+  gvs[generate_offset_plan_def] >>
+  irule regional_push_marked_wf >> simp[]
+QED
+
+Theorem regional_body_marked_wf:
+  inst_wf inst /\ inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+  generated_plan_state_wf_marked sb ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs /\
+  generate_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = SOME (ops,qs)
+  ==> generated_plan_state_wf_marked sb qs
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def] >>
+  Cases_on `is_pre_codegen_opcode inst.inst_opcode` >> simp[] >>
+  Cases_on `inst.inst_opcode = INVOKE /\ ~invoke_operands_wf inst` >> simp[] >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (strip_tac >>
+      `generated_plan_state_wf_marked sb (SND (generate_offset_plan inst ps))` by
+        (irule regional_offset_marked_wf >> simp[]) >> gvs[]) >>
+  Cases_on `is_param_opcode inst.inst_opcode` >> simp[] >>
+  Cases_on `inst.inst_opcode = NOP` >> simp[] >> strip_tac >> gvs[] >>
+  irule regional_regular_marked_wf >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem regional_dead_outputs_marked_owned[local]:
   !outputs nl ps v.
   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\ MEM v nl /\
