@@ -1926,3 +1926,46 @@ Proof
   metis_tac[current_cut_inherited_endpoint,
     current_cut_local_inserted_endpoint, current_cut_local_original_endpoint]
 QED
+
+Theorem current_cut_prefix_semantic_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\ A h = current_block_annotations old pre /\
+  bb = simplify_current_phi_block new /\
+  current_prefix_back
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) -
+       phi_prefix_length bb.bb_instructions)
+      (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions))
+    (current_cut_sg fn A renamed H events h
+      (LENGTH (collect_phis old.bb_instructions))) z x ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  rpt strip_tac >>
+  drule current_prefix_back_endpoint_cases >> strip_tac
+  >- (irule current_cut_terminal_endpoint >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `TAKE (n - q) (DROP q is) = before ++ inst::after` >>
+  `LENGTH before < n - q /\ LENGTH before < LENGTH (DROP q is)` by
+    (qpat_x_assum `TAKE _ _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF] >>
+     rw[] >> decide_tac) >>
+  `EL (q + LENGTH before) is = inst` by
+    (`EL (LENGTH before) (TAKE (n-q) (DROP q is)) = inst` by
+       (simp[EL_APPEND_EQN] >> metis_tac[EL_LENGTH_APPEND]) >>
+     gvs[EL_TAKE, EL_DROP]) >>
+  `after = TAKE (n - SUC (q + LENGTH before))
+    (DROP (SUC (q + LENGTH before)) is)` by
+    (qpat_x_assum `TAKE _ _ = _` (mp_tac o Q.AP_TERM `DROP (SUC (LENGTH before))`) >>
+     simp[DROP_TAKE, DROP_DROP_T, DROP_APPEND, DROP_LENGTH_TOO_LONG,
+       arithmeticTheory.ADD_CLAUSES] >>
+     `n - q - SUC (LENGTH before) = n - SUC (q + LENGTH before)` by decide_tac >>
+     `SUC (LENGTH before) + q = SUC (q + LENGTH before)` by decide_tac >>
+     `SUC (LENGTH before) - (LENGTH before + 1) = 0` by decide_tac >>
+     simp[]) >>
+  irule current_cut_actual_copy_source_endpoint >>
+  simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  qexistsl_tac [`dst`, `q + LENGTH before`, `pre`] >>
+  simp[] >>
+  gvs[Abbr `n`, Abbr `q`, Abbr `is`] >> decide_tac
+QED
