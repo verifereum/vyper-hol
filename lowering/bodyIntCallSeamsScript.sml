@@ -72,7 +72,9 @@ End
      function's package (any nonreentrancy keys and transient flag, the
      caller's target) whose label is the INVOKE's and whose return-buffer
      flag matches the call's, the premises of
-     compile_internal_prologue_entry hold for argv. *)
+     compile_internal_prologue_entry hold for argv, and each memory
+     parameter's region (the pointer argv passes, the parameter's size)
+     lies in an ALLOCA of the call's own code: the staging buffer. *)
 Definition intcall_entry_def:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
                 (mut,args,ret,ss,rr) prev penv rtv es1 t <=>
@@ -156,6 +158,15 @@ Definition intcall_entry_def:
         internal_immutable_regions ce cx es1 t.vs_alloca_next /\
         internal_args_rel ce params penv (if has_rb then 1 else 0) argv
           t.vs_alloca_next t.vs_memory /\
+        (!i po psz.
+           i < LENGTH params /\ ~SND (EL i params) /\
+           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
+           ?aid off asz.
+             FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+             sa.cs_next_id <= aid /\
+             off <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
+             w2n (EL ((if has_rb then 1 else 0) + i) argv) + psz <=
+               off + asz) /\
         (ce.ce_is_ctor ==> !i po psz nm tv iv io.
           i < LENGTH params /\ ~SND (EL i params) /\
           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
