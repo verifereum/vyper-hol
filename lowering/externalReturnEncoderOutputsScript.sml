@@ -1,7 +1,7 @@
 (* Task-owned singleton/fresh output certificate for encoder scratch cells. *)
 Theory externalReturnEncoderOutputs
 Ancestors
-  externalReturnEncoderSites abiEncoder abiEncoderAppend abiEncoderCounters
+  externalReturnEncoderSitesCert abiEncoder abiEncoderAppend abiEncoderCounters
   abiEncoderProps localPtrsProps exprLoweringProps emitHelperProps fragExec
   compileEnv context venomInst list arithmetic pred_set pair emitHelper rich_list
 
