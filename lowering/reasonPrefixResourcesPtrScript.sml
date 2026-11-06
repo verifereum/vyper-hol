@@ -1,7 +1,7 @@
 (* Resource transport across the reason encoder's allocation prefix. *)
 Theory reasonPrefixResourcesPtr
 Ancestors
-  reasonBufferPtr allocationPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
+  reasonAllocationFramePtr reasonBufferPtr allocationPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
   bodyPtrDefs ptrDiscipline venomState venomInst pred_set arithmetic
   loweringPosts compileEnv exprLoweringProps exprSimProps exprSimAlloc emitHelperProps exprSimHash loweringHalt venomExecSemantics
 
@@ -270,7 +270,10 @@ Theorem reason_encoder_alloc_buffer_resources:
       (!m. mem_agree_outside tn1.t_mem t.vs_memory m ==>
         val_in_memory tv v (w2n ow) m) /\
       (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn1 p t k) /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 t)
+      MEM i (fn_insts func) /\ not_local_ptr cenv es'.scopes out /\
+      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 t) /\
+      (!p. p <> out ==> FLOOKUP G1 p = FLOOKUP G p /\
+        op_taint tn1 (Var p) = op_taint tn (Var p))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all reason_encoder_alloc_buffer_post >> strip_tac >>
@@ -294,8 +297,10 @@ Proof
   >- suspend "sites"
   >- suspend "separation"
   >- suspend "robust"
-  >- suspend "oldptr" >>
-  strip_tac >> drule_all alloca_step_stor_taint_ok >> simp[expr_post_def]
+  >- suspend "oldptr"
+  >- (strip_tac >> drule_all alloca_step_stor_taint_ok >> simp[expr_post_def]) >>
+  gen_tac >> disch_tac >> drule_all reason_alloca_old_metadata >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] mp_tac) >> simp[]
 QED
 
 Resume reason_encoder_alloc_buffer_resources[sites]:
@@ -439,7 +444,9 @@ Theorem reason_encoder_selector_resources:
       ptr_covers G1 tn2 out u n /\
       (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn2 p u k) /\
       (!m. mem_agree_outside tn2.t_mem u.vs_memory m ==>
-        val_in_memory tv v (w2n ow) m)
+        val_in_memory tv v (w2n ow) m) /\
+      (!p. p <> out ==> FLOOKUP G1 p = FLOOKUP G p /\
+        op_taint tn2 (Var p) = op_taint tn (Var p))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all reason_encoder_alloc_buffer_resources >>
@@ -482,8 +489,9 @@ Resume reason_encoder_selector_resources[finish]:
   >- (qpat_assum `w2n (n2w b : bytes32) = b`
         (fn th => once_rewrite_tac[GSYM th]) >>
       irule step_MSTORE >> simp[eval_operand_def])
-  >- simp[eval_operand_mstore] >>
-  metis_tac[]
+  >- simp[eval_operand_mstore]
+  >- metis_tac[] >>
+  gvs[op_taint_def] >> metis_tac[]
 QED
 
 Resume reason_encoder_selector_resources[post]:
@@ -549,6 +557,9 @@ Theorem reason_encoder_add_post:
         (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_mem = tn.t_mem /\
         (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_stor = tn.t_stor /\
         (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_trans = tn.t_trans /\
+        (!p. p <> x ==>
+          FLOOKUP (step_prov PG G (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) t) p = FLOOKUP G p /\
+          op_taint (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn) (Var p) = op_taint tn (Var p)) /\
         (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
           ptr_covers
             (step_prov PG G (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) t)
@@ -665,7 +676,12 @@ Theorem reason_encoder_prefix_post:
       (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
         ptr_covers G3 tn4 p z k) /\
       (!mem. mem_agree_outside tn4.t_mem z.vs_memory mem ==>
-        val_in_memory tv v (w2n ow) mem)
+        val_in_memory tv v (w2n ow) mem) /\
+      MEM (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) (fn_insts func) /\
+      not_local_ptr cenv es'.scopes out2 /\
+      (!p. not_fresh_at cc p ==> FLOOKUP G3 p = FLOOKUP G p /\
+        op_taint tn4 (Var p) = op_taint tn (Var p)) /\
+      op_prov G3 op = op_prov G op /\ op_taint tn4 op = op_taint tn op
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all reason_encoder_selector_resources >>
@@ -714,6 +730,10 @@ Resume reason_encoder_prefix_post[allocate]:
      ptr_covers G1' tn1' p t'' k)` by metis_tac[] >>
   `eval_operand (Var out) t'' = SOME (n2w b) /\
    eval_operand (Var x) t'' = SOME (n2w b + 32w)` by suspend "addresses" >>
+  `!p. not_fresh_at cc p ==> FLOOKUP G1' p = FLOOKUP G p /\
+    op_taint tn1' (Var p) = op_taint tn (Var p)` by suspend "metadata" >>
+  `op_prov G1' op = op_prov G op /\ op_taint tn1' op = op_taint tn op` by
+    (Cases_on `op` >> simp[op_prov_def, op_taint_def] >> metis_tac[]) >>
   qexistsl_tac [`t''`, `out'`, `b'`, `G2`, `tn3`, `G1'`, `tn1'`] >>
   pure_asm_rewrite_tac[] >>
   qpat_x_assum `t' = update_var _ _ _` SUBST_ALL_TAC >>
@@ -780,6 +800,23 @@ Resume reason_encoder_prefix_post[addresses]:
     (rpt strip_tac >> irule alloca_step_operand_preserved >>
      qexistsl_tac [`c3.cs_next_id`, `m`, `out'`] >> gvs[]) >>
   simp[]
+QED
+
+Resume reason_encoder_prefix_post[metadata]:
+  gen_tac >> disch_tac >>
+  qpat_assum `compile_alloc_buffer n cc = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  qpat_assum `compile_alloc_buffer m c3 = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  `not_fresh_at c2 p /\ not_fresh_at c3 p` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `p <> out /\ p <> x /\ p <> out'` by (gvs[] >> metis_tac[]) >>
+  `FLOOKUP G1 p = FLOOKUP G p /\ op_taint tn2 (Var p) = op_taint tn (Var p)` by metis_tac[] >>
+  `FLOOKUP G2 p = FLOOKUP G1 p /\ op_taint tn3 (Var p) = op_taint tn2 (Var p)` by
+    (simp[Abbr `G2`, Abbr `tn3`, Abbr `ai`] >>
+     qpat_x_assum `!PG G tn. _` (qspecl_then [`PG`, `G1`, `tn2`] mp_tac) >> simp[]) >>
+  metis_tac[]
 QED
 
 Finalise reason_encoder_prefix_post

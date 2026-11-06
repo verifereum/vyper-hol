@@ -135,7 +135,13 @@ Theorem reason_encoder_prefix_path_ptr:
       (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
         ptr_covers G4 tn4 p t k) /\
       (!mem. mem_agree_outside tn4.t_mem t.vs_memory mem ==>
-        val_in_memory tv v (w2n ow) mem)
+        val_in_memory tv v (w2n ow) mem) /\
+      ~t.vs_halted /\
+      MEM (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) (fn_insts func) /\
+      not_local_ptr cenv es'.scopes out2 /\
+      (!p. not_fresh_at cc p ==> FLOOKUP G4 p = FLOOKUP G p /\
+        op_taint tn4 (Var p) = op_taint tn (Var p)) /\
+      op_prov G4 op = op_prov G op /\ op_taint tn4 op = op_taint tn op
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all reason_encoder_prefix_post >>
@@ -151,16 +157,37 @@ Proof
   `step_inst_base (mk_inst c2.cs_next_id ADD [Var out; Lit 32w] [x]) u = OK r` by
     (qpat_x_assum `run_inst_seq (emitted_insts c2 c3) _ = _` mp_tac >>
      simp[run_inst_seq_def, AllCaseEqs()]) >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 G3 tn4
+    (OK (z with vs_inst_idx := LENGTH c4.cs_current_insts))` by suspend "path" >>
+  `~z.vs_halted` by (drule gas_path_ptr_ok_not_halted >> simp[]) >>
   qexistsl_tac [`z with vs_inst_idx := LENGTH c4.cs_current_insts`,
     `out`, `x`, `out2`, `b2`, `G3`, `tn4`, `b`] >>
   conj_tac >- (qpat_x_assum `eval_operand buf.buf_operand z = _` mp_tac >>
                simp[eval_operand_def, lookup_var_def]) >>
   conj_tac >- (qpat_x_assum `eval_operand payload z = _` mp_tac >>
                simp[eval_operand_def, lookup_var_def]) >>
-  asm_rewrite_tac[] >> rpt conj_tac
-  >~ [`gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`] >- suspend "path"
-  >~ [`_.vs_current_bb = _`] >- suspend "block" >>
-  gs[fresh_vars_wrt_def]
+  suspend "endpoint"
+QED
+
+Resume reason_encoder_prefix_path_ptr[endpoint]:
+  `z.vs_current_bb = c4.cs_current_bb` by suspend "block" >>
+  map_every (fn q => qpat_x_assum q mp_tac)
+    [`buf.buf_operand = Var out`, `payload = Var x`, `tuple.buf_operand = Var out2`,
+     `b + n < _`, `b2 + m < _`,
+     `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`, `z.vs_current_bb = _`,
+     `eval_operand tuple.buf_operand z = _`, `FLOOKUP z.vs_allocas _ = _`,
+     `expr_post _ _ _ _ _ _ _ _ _ _ _ _ z`, `fresh_vars_wrt c4 z`,
+     `local_ptrs_reserved cenv c4`, `eval_operand op z = _`,
+     `ptr_covers G3 tn4 out2 z m`, `ptr_covers G3 tn4 out z n`,
+     `ptr_covers G3 tn4 x z _`,
+     `!p k. not_fresh_at cc p /\ _ ==> _`,
+     `!mem. mem_agree_outside tn4.t_mem z.vs_memory mem ==> _`,
+     `~z.vs_halted`, `MEM (mk_inst c3.cs_next_id _ _ _) _`,
+     `not_local_ptr cenv es'.scopes out2`,
+     `!p. not_fresh_at cc p ==> _`,
+     `op_prov G3 op = _`, `op_taint tn4 op = _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  gvs[fresh_vars_wrt_def]
 QED
 
 Resume reason_encoder_prefix_path_ptr[block]:
