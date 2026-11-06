@@ -4,6 +4,7 @@ Ancestors
   externalNormalizePremises typedNormalizeRankMem typedNormalizeContinuation
   actualAllocExec memContinuation allocaFootprint fragExecMem typedStoreEndpoint localPtrsProps
   externalReturnBounds abiBuiltinAllocation finite_map allocaSiteResource
+  typedNormalizeEntryBoundary
   venomExecSemantics venomState venomInst compileEnv context
   exprLoweringProps exprSimDefs exprSimProps loweringPosts valueEncoding vyperTypeSystem loweringHalt
 
@@ -84,9 +85,8 @@ Theorem normalize_return_store_mem_cont:
     ALL_DISTINCT (MAP FST fields) /\
     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
       sz = type_memory_size tv) fields) /\
-  phi_prefix_length sc.cs_current_insts = 0 /\
-  (?bb. lookup_block sd.cs_current_bb func.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
+  compile_external_return ret prim raw info msz nr nkey ut iv sd = (x,se) /\
+  (nr ==> iv) /\ fn_has_code sd se func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   eval_operand src s = SOME p /\
@@ -104,7 +104,13 @@ Theorem normalize_return_store_mem_cont:
     (!aid. aid <> sb.cs_next_id ==>
       FLOOKUP t.vs_allocas aid = FLOOKUP s.vs_allocas aid)
 Proof
-  strip_tac >> drule_all normalize_return_typed_windows >>
+  strip_tac >>
+  Q.SUBGOAL_THEN
+    `emitted_blocks sc sd <> [] ==>
+      ?bb. lookup_block sd.cs_current_bb func.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0` assume_tac
+    >- metis_tac[normalize_typed_external_return_entry] >>
+  drule_all normalize_return_typed_windows >>
   disch_then (qx_choose_then `dtv` (qx_choose_then `t`
     (qx_choose_then `b` (map_every assume_tac o CONJUNCTS)))) >>
   `b < dimword (:256)` by decide_tac >>
@@ -134,9 +140,7 @@ Proof
    w2n (n2w b : bytes32) + type_memory_size dtv < dimword (:256) /\
    w2n p + type_memory_size stv < dimword (:256) /\
    (w2n p + type_memory_size stv <= w2n (n2w b : bytes32) \/
-    w2n (n2w b : bytes32) + type_memory_size dtv <= w2n p) /\
-   (?bb. lookup_block sd.cs_current_bb func.fn_blocks = SOME bb /\
-     phi_prefix_length bb.bb_instructions = 0)`
+    w2n (n2w b : bytes32) + type_memory_size dtv <= w2n p)`
     (map_every assume_tac o CONJUNCTS) >- metis_tac[] >>
   drule_all typed_store_mem_cont_resources >>
   disch_then (qx_choose_then `z` (map_every assume_tac o CONJUNCTS)) >>

@@ -123,6 +123,20 @@ Resume typed_dynarray_child_states[initial_lookup]:
 QED
 Finalise typed_dynarray_child_states
 
+Theorem typed_dynarray_emits_blocks:
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\ dt = st) /\
+  compile_copy_dynarray_typed ce dst dt cap src st sa = ((),sb) /\
+  fn_has_code sa sb fn ==> emitted_blocks sa sb <> []
+Proof
+  strip_tac >> drule_all typed_dynarray_child_states >> strip_tac >>
+  `cs_extends sa ec` by
+    (irule cs_extends_trans >> qexists_tac `sc` >> fs[ci_mono_def]) >>
+  qpat_x_assum `cs_extends sa ec` mp_tac >>
+  qpat_x_assum `sb = _` SUBST1_TAC >>
+  simp_tac (srw_ss()) [cs_extends_def, emitted_blocks_def] >>
+  strip_tac >> gvs[LENGTH_APPEND] >> decide_tac
+QED
+
 (* Code certificates for the opaque child's entry and its returned backedge. *)
 Theorem typed_dynarray_child_block_code:
   fn_has_code sa sc fn /\ fn_has_code ec sb fn /\

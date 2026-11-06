@@ -209,6 +209,22 @@ QED
 
 (* A child overwrites only its own destination slot.  Memory locality, not
    recursive knowledge of the enclosing prefix, transports earlier slots. *)
+Theorem typed_sarray_emits_blocks:
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\
+  fn_has_code sa sb fn ==> emitted_blocks sa sb <> []
+Proof
+  strip_tac >> drule_all typed_sarray_child_decompose >> strip_tac >>
+  `cs_extends sa ec` by
+    (irule cs_extends_trans >> qexists_tac `sc` >> simp[] >>
+     fs[ci_mono_def]) >>
+  qpat_x_assum `cs_extends sa ec` mp_tac >>
+  qpat_x_assum `sb = _` SUBST1_TAC >>
+  simp_tac (srw_ss()) [cs_extends_def, emitted_blocks_def] >>
+  strip_tac >> gvs[LENGTH_APPEND] >> decide_tac
+QED
+
 Theorem typed_array_local_prefix_step[local]:
   (!j a m m'. j < n /\ mem_bytes_at a stride m = mem_bytes_at a stride m' ==>
     (D j a m <=> D j a m')) /\

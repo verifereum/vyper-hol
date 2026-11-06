@@ -130,13 +130,17 @@ Theorem val_in_memory_word:
     (val_in_memory tv v off mem <=>
      mem_word_at off mem = typed_val_to_w256 tv v)
 Proof
-  rpt gen_tac >> Cases_on `ty` >> simp[is_word_type_def]
-  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-      simp[evaluate_type_def] >> rw[] >> Cases_on `v` >>
-      gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]) >>
-  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >> Cases_on `v` >>
-  gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]
+  rpt strip_tac >>
+  `(?n. ty = BaseT (UintT n)) \/ (?n. ty = BaseT (IntT n)) \/
+   ty = BaseT BoolT \/ ty = BaseT AddressT \/ ty = BaseT DecimalT \/
+   (?m. ty = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. ty = FlagT n)` by
+    (Cases_on `ty` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
+      typed_val_to_w256_def]
 QED
 
 (* A word-typed value's ABI encoding is its word. *)

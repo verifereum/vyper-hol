@@ -21,9 +21,9 @@ Theorem typed_store_mem_cont:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
+  (emitted_blocks sa sb <> [] ==>
+    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -65,9 +65,9 @@ Theorem typed_store_mem_cont_resources:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
+  (emitted_blocks sa sb <> [] ==>
+    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
