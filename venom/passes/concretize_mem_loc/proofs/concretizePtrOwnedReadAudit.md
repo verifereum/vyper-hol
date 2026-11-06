@@ -157,15 +157,15 @@ remain separate gaps. No universal prefix-extension theorem is certified.
 Checked export `audit_retained_write_owner_ambiguity` in OwnedReadAuditTheory:
 lo=0, actual-byte set={0}, births {(0,10)->(0,1),(1,20)->(0,1)}, positions
 {Allocation 10->(100,1),Allocation 20->(200,1)}, rho=constant 200 satisfy
-`ptr_paired_write_owner` for arbitrary remaining snapshot fields. Yet the
+the explicit former owner formula (before active-token membership). Yet the
 first birth covers byte 0 and has position 100, not rho 0. This is ONLY a
 predicate-level calculation. It supplies no chronological history, active
 geometry, stage fixture, or counterexample to the TASK. A search of helper
 sources found no equivalent checked calculation before this addition.
 
-### Candidate repair (NOT implemented)
+### Active-token repair (.38 implemented; consumption still pending)
 
-Keep the fixed branch unchanged. Replace the owned branch by
+The fixed branch is unchanged. The owned branch is now
 ```
 ?token aid base sz pos k.
   MEM token tokens /\ k < sz /\ x = base+k /\ rho x = pos+k /\
@@ -243,3 +243,16 @@ then separately prove active certificate generation for future nonempty write
 extensions. Active membership alone does not prove production positions or
 paired bytes; those remain obligations of that producer. This audit authorizes
 no recovery theorem and changes no invariant.
+
+### .38 consumer verification
+
+Both byte projections now expose `MEM token tokens`. Historical retention,
+gap extension and writes_pair keep their existing public hypotheses and use
+the same immediate-successor snapshot; no endpoint membership was added.
+The old ambiguity theorem states the former formula explicitly and is not a
+claim about the repaired predicate. PairedFields, PairedPrefix, PairedRoot,
+PairedEntry, PairedCallEntry, PairedJumpEntry, PairedJumpSchema, PairedJump,
+PairedCallSchema, HistoricalWriteExclusion, PairedPrefixProbe and
+OwnedReadAudit rebuilt successfully after the change. This validates the
+refactor and existing empty-extra normalizers, not nonempty certificate
+production or live-owner relocation consumption.

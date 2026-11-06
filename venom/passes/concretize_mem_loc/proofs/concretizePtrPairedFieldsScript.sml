@@ -83,7 +83,7 @@ Definition ptr_paired_write_owner_def:
       (tokens,registry,births,PT,TG,saved,entries) <=>
     !x. x IN xs ==>
       (x < lo /\ rho x = x) \/
-      (?token aid base sz pos k. k < sz /\ x = base + k /\ rho x = pos + k /\
+      (?token aid base sz pos k. MEM token tokens /\ k < sz /\ x = base + k /\ rho x = pos + k /\
         FLOOKUP births (token,aid) = SOME (base,sz) /\
         FLOOKUP positions (Allocation aid) = SOME (pos,sz))
 End
@@ -130,7 +130,7 @@ Theorem ptr_paired_write_owner_byte:
   ptr_paired_write_owner lo positions rho xs
     (tokens,registry,births,PT,TG,saved,entries) /\ x IN xs ==>
   (x < lo /\ rho x = x) \/
-  (?token aid base sz pos k. k < sz /\ x = base + k /\ rho x = pos + k /\
+  (?token aid base sz pos k. MEM token tokens /\ k < sz /\ x = base + k /\ rho x = pos + k /\
     FLOOKUP births (token,aid) = SOME (base,sz) /\
     FLOOKUP positions (Allocation aid) = SOME (pos,sz))
 Proof
@@ -262,7 +262,7 @@ Theorem ptr_paired_write_owned_byte:
   x IN range_bytes (step_writes (EL n h).po_inst (EL n h).po_state
     (EL (SUC n) h).po_state) ==>
   (x < lo /\ rho x = x) \/
-  (?token aid base sz pos k. k < sz /\ x = base + k /\ rho x = pos + k /\
+  (?token aid base sz pos k. MEM token tokens /\ k < sz /\ x = base + k /\ rho x = pos + k /\
     FLOOKUP births (token,aid) = SOME (base,sz) /\
     FLOOKUP positions (Allocation aid) = SOME (pos,sz))
 Proof
