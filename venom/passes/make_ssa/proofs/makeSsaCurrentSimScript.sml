@@ -525,3 +525,89 @@ Resume current_exec_block_reverse[invoke_cont]:
 QED
 
 Finalise current_exec_block_reverse
+
+Theorem current_run_blocks_reverse[local]:
+  !fuel raw raw'.
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks) /\
+  lockstep_sim L C C fn fn' pos R /\
+  (!post' j'. enters_block fn' raw' post' /\ active_inst fn' j' post' ==>
+    ?p j post sg. enters_block fn raw post /\ R p (j,post) sg (j',post')) /\
+  terminates (run_blocks fuel C fn' raw') ==>
+  frame_result_rel (run_blocks fuel C fn raw) (run_blocks fuel C fn' raw')
+Proof
+  Induct >- simp[Once run_blocks_def, terminates_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `terminates _` mp_tac >>
+  simp[run_blocks_unfold] >>
+  Cases_on `lookup_block raw'.vs_current_bb fn'.fn_blocks` >>
+  simp[terminates_def] >>
+  rename1 `lookup_block raw'.vs_current_bb fn'.fn_blocks = SOME bb'` >>
+  mp_tac (Q.SPECL [`raw'`, `bb'.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> simp[run_block_def, terminates_def] >>
+  rename1 `eval_phis raw' bb'.bb_instructions = OK ph'` >>
+  qmatch_goalsub_abbrev_tac `exec_block fuel C bb' post'` >>
+  strip_tac >>
+  `terminates (exec_block fuel C bb' post')` by
+    (Cases_on `exec_block fuel C bb' post'` >> fs[terminates_def]) >>
+  `enters_block fn' raw' post'` by
+    (simp[contextCodegenRelTheory.enters_block_def, Abbr `post'`] >> metis_tac[]) >>
+  `post'.vs_current_bb = raw'.vs_current_bb` by
+    (simp[Abbr `post'`] >> metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb]) >>
+  `?j'. active_inst fn' j' post'` by
+    (irule current_terminating_suffix_active >> metis_tac[]) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `?bb. lookup_block raw.vs_current_bb fn.fn_blocks = SOME bb` by
+    fs[contextCodegenRelTheory.enters_block_def] >>
+  `post.vs_current_bb = raw.vs_current_bb` by
+    (fs[contextCodegenRelTheory.enters_block_def] >>
+     metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb]) >>
+  `run_block fuel C bb raw = exec_block fuel C bb post` by
+    (irule scfg_enters_block_run_block >> qexists `fn` >> simp[]) >>
+  `lookup_block post.vs_current_bb fn.fn_blocks = SOME bb /\
+   lookup_block post'.vs_current_bb fn'.fn_blocks = SOME bb'` by simp[] >>
+  `LENGTH bb'.bb_instructions - post'.vs_inst_idx =
+    LENGTH bb'.bb_instructions - post'.vs_inst_idx` by simp[] >>
+  drule_all current_exec_block_reverse >> simp[] >> strip_tac >>
+  suspend "results"
+QED
+
+Resume current_run_blocks_reverse[results]:
+  pure_rewrite_tac[GSYM run_block_def] >>
+  simp[] >>
+  Cases_on `exec_block fuel C bb' post'` >> gvs[]
+  >- suspend "ok_result" >>
+  Cases_on `exec_block fuel C bb post` >> fs[frame_result_rel_def]
+QED
+
+Resume current_run_blocks_reverse[ok_result]:
+  Cases_on `t.vs_halted`
+  >- simp[frame_result_rel_def] >>
+  simp[] >> first_x_assum irule >>
+  conj_tac >- metis_tac[] >>
+  fs[terminates_def]
+QED
+
+Finalise current_run_blocks_reverse
+
+Theorem current_entry_run_reverse[local]:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') /\ fn_entry_state fn st /\
+  terminates (run_blocks fuel C fn' st) ==>
+  frame_result_rel (run_blocks fuel C fn st) (run_blocks fuel C fn' st)
+Proof
+  strip_tac >>
+  `ctx_bisim C C` by metis_tac[simplifyCfgSimToolsTheory.ctx_bisim_refl] >>
+  drule_all make_ssa_current_fn_frame_lockstep >>
+  simp[frame_lockstep_def] >> strip_tac >>
+  qpat_x_assum `!L. ?R. _` (qspec_then `st.vs_labels` strip_assume_tac) >>
+  `wf_function fn'` by metis_tac[o1MakeSsaStructuralShapeTheory.make_ssa_current_fn_wf_function] >>
+  irule current_run_blocks_reverse >>
+  conj_tac >- fs[wf_function_def, fn_labels_def] >>
+  conj_tac >- fs[wf_function_def, fn_labels_def] >>
+  conj_tac >- simp[] >>
+  qexistsl [`st.vs_labels`, `R`, `make_ssa_pos fn fn'`] >>
+  simp[] >> rpt strip_tac >> drule lockstep_entry >> simp[]
+QED
