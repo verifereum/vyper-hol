@@ -107,8 +107,13 @@ Theorem external_frame_ret_run_mem:
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
        ~t.vs_halted ==>
-       ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
-                mem_safe_run fuel unit.cu_context func t)
+       (?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
+                mem_safe_run fuel unit.cu_context func t) \/
+       stmt_frag_mem NONE unit.cu_context func
+         (initial_evaluation_context am.sources am.layouts tx NONE) lctx (\v es r. T) cenv'
+         (stmt_env cenv' lctx ret (Return (SOME e)))
+         (eval_stmt (initial_evaluation_context am.sources am.layouts tx NONE)
+           (Return (SOME e))) es)
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
   >- metis_tac[return_value_code_prefix]
@@ -119,8 +124,11 @@ Proof
             is_bytestring_type (expr_type e) /\
             is_bytestring_type (lowered_value_type cenv' e) /\
             arg_type_fits (lowered_value_type cenv' e) (expr_type e)`
-  >- (drule_all (Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS] external_frame_ret_value_run_mem) >>
-      simp[])
-  >> drule_all (Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS] external_frame_ret_widened_call_mem) >>
-      simp[]
+  >- (disj1_tac >>
+      drule_all (Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS] external_frame_ret_value_run_mem) >>
+      simp[]) >>
+  disj2_tac >>
+  `expr_vv_sim_mem unit.cu_context func cenv'
+    (initial_evaluation_context am.sources am.layouts tx NONE) ret e es` by fs[] >>
+  drule_all external_frame_ret_widened_call_mem >> simp[]
 QED
