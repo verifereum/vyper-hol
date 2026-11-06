@@ -3,6 +3,7 @@ Ancestors
   lowerDloadOpaqueExecution lowerDloadControlPosition lowerDloadOwnership
   contextCodegenRel ptrDiscipline venomExecProofs venomInst
   unitShapeDefs lowerDloadPairedBoundary venomState list pred_set
+  lowerDloadOrdinaryExecution lowerDloadDefs
 
 Theorem ld_nonopaque_block_entry_backward:
   lower_dload_function_supply a fn = (gn,b) /\
@@ -44,4 +45,36 @@ Proof
   qpat_x_assum `s' = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
   qpat_x_assum `s_phi = t with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
   fs[lookup_var_def]
+QED
+
+Theorem ld_lowered_entry_prov:
+  lower_dload_function_supply a fn = (gn,b) ==>
+  ld_entry_prov gn s AG = ld_entry_prov fn s AG
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `lower_dload_blocks_supply a fn.fn_blocks = (bbs,b)` >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- (`lookup_block s.vs_current_bb bbs = NONE` by
+        (Cases_on `lookup_block s.vs_current_bb bbs` >> simp[] >>
+         drule_all lower_dload_blocks_supply_lookup >> simp[]) >>
+      simp[ld_entry_prov_def]) >>
+  drule_all lower_dload_blocks_supply_lookup_forward >> strip_tac >>
+  gvs[ld_entry_prov_def, lower_dload_block_supply_def, AllCaseEqs()] >>
+  drule ld_lowered_phis_annotations >> simp[]
+QED
+
+Theorem ld_lowered_entry_taint:
+  lower_dload_function_supply a fn = (gn,b) ==>
+  entry_taint_vars gn s tn = entry_taint_vars fn s tn
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `lower_dload_blocks_supply a fn.fn_blocks = (bbs,b)` >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- (`lookup_block s.vs_current_bb bbs = NONE` by
+        (Cases_on `lookup_block s.vs_current_bb bbs` >> simp[] >>
+         drule_all lower_dload_blocks_supply_lookup >> simp[]) >>
+      simp[entry_taint_vars_def]) >>
+  drule_all lower_dload_blocks_supply_lookup_forward >> strip_tac >>
+  gvs[entry_taint_vars_def, lower_dload_block_supply_def, AllCaseEqs()] >>
+  drule ld_lowered_phis_annotations >> simp[]
 QED
