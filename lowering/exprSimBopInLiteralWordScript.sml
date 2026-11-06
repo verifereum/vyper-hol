@@ -897,6 +897,8 @@ Resume literal_word_args_sim[tail_normal]:
       BETA_TAC >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
+  qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`
+    (assume_tac o REWRITE_RULE [wb_frame_gas_obs]) >>
   `stmt_state_rel ctx func cenv cx es_end' t' /\
    LIST_REL (\x v. eval_operand x t' = SOME (typed_val_to_w256 tv v)) (x::ys) (v::vs) /\
    wb_frame cenv es es_end' sa s0 t'` by

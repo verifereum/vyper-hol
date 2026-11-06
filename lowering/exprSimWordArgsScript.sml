@@ -275,6 +275,15 @@ Proof
   simp[wb_frame_def]
 QED
 
+(* A frame reads its end env only through its scopes. *)
+Theorem wb_frame_gas_obs:
+  !cenv es es' sa s0 s gs.
+    wb_frame cenv es (es' with gas_obs := gs) sa s0 s <=>
+    wb_frame cenv es es' sa s0 s
+Proof
+  simp[wb_frame_def, locals_kept_def, popped_kept_def]
+QED
+
 Theorem wb_frame_vars:
   !cenv es es' sa s0 s x w.
     wb_frame cenv es es' sa s0 s /\ not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
