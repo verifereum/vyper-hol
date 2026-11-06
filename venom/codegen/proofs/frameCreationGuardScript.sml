@@ -3,10 +3,10 @@
 Theory frameCreationGuard
 Ancestors
   vfmExecution vfmExecutionProp vfmAccountFrame vfmRunCall vfmRunWithinFrame
-  vfmState vfmContext vfmTypes list arithmetic evmCreationGuard
+  vfmState vfmContext vfmTypes list arithmetic pair While evmCreationGuard
 
 Definition creation_guard_inv_def:
-  creation_guard_inv d self created (q:unit + exception) s <=>
+  creation_guard_inv d self created (q:unit + exception option) s <=>
     wf_state s /\
     (created = account_empty (lookup_account self s.originalAccounts)) /\
     (created \/ account_already_created (lookup_account self s.rollback.accounts)) /\
@@ -61,6 +61,33 @@ Proof
   Cases_on `SUC (SUC (LENGTH t)) - MAX 2 d` >> gvs[]
 QED
 
+Theorem creation_guard_inv_step:
+  0 < d /\ d <= LENGTH s.contexts /\
+  creation_guard_inv d self created (INL ()) s /\ step s = (r,t) ==>
+  creation_guard_inv d self created r t
+Proof
+  strip_tac >>
+  `wf_state s /\ s.contexts <> []` by gvs[creation_guard_inv_def, wf_state_def] >>
+  `wf_state t` by metis_tac[step_preserves_wf_state, SND] >>
+  Cases_on `created`
+  >- (gvs[creation_guard_inv_def] >>
+      metis_tac[step_creation_original_empty]) >>
+  drule creation_guard_inv_pre >> simp[] >> strip_tac >>
+  `account_empty (lookup_account self t.originalAccounts) =
+   account_empty (lookup_account self s.originalAccounts)`
+    by (irule step_creation_original_empty >>
+        gvs[creation_guard_inv_def] >> metis_tac[]) >>
+  gvs[] >>
+  `account_already_created (lookup_account self t.rollback.accounts)`
+    by (irule step_creation_live_guard >> metis_tac[]) >>
+  gvs[creation_guard_inv_def] >> strip_tac >>
+  conj_tac
+  >- (irule step_creation_active_rollbacks >> metis_tac[]) >>
+  Cases_on `r` >> gvs[] >>
+  drule step_creation_code_prefix >> simp[] >>
+  disch_then (qspecl_then [`t`, `s`, `self`] mp_tac) >> fs[]
+QED
+
 Theorem run_call_creation_guard:
   wf_state es /\ es.contexts <> [] /\
   (created = account_empty (lookup_account self es.originalAccounts)) /\
@@ -73,5 +100,21 @@ Theorem run_call_creation_guard:
   (created = account_empty (lookup_account self post.originalAccounts)) /\
   (created \/ account_already_created (lookup_account self post.rollback.accounts))
 Proof
-  cheat
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `creation_guard_inv (LENGTH es.contexts) self created (INL ()) es`
+    by (irule creation_guard_inv_initial >> metis_tac[]) >>
+  `creation_guard_inv (LENGTH es.contexts) self created r post`
+    suffices_by metis_tac[creation_guard_inv_post] >>
+  qpat_x_assum `run_call es = _` mp_tac >>
+  rewrite_tac[run_call_def] >> disch_tac >>
+  `(\p. creation_guard_inv (LENGTH es.contexts) self created (FST p) (SND p))
+    (r,post)` suffices_by simp[] >>
+  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
+  goal_assum (first_assum o mp_then Any mp_tac) >> simp[] >>
+  conj_tac >- gvs[] >>
+  qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> strip_tac >>
+  Cases_on `p0` >> gvs[] >>
+  Cases_on `step p1` >> simp[] >>
+  `0 < LENGTH es.contexts` by (Cases_on `es.contexts` >> gvs[]) >>
+  irule creation_guard_inv_step >> metis_tac[GREATER_EQ]
 QED

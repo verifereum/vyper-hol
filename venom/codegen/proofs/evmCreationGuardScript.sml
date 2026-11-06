@@ -3,7 +3,7 @@ Theory evmCreationGuard
 Ancestors
   vfmAccountDeletion vfmExecution vfmExecutionProp vfmState vfmContext
   vfmTypes vfmPreserves vfmRunCall vfmRunWithinFrame vfmAccountFrame
-  vfmStepLength vfmSameFrame list combin finite_map pair arithmetic
+  vfmStepLength vfmSameFrame vfmStoragePredicates list combin finite_map pair arithmetic
 
 Theorem step_inst_creation_original_empty:
   s.contexts <> [] /\
@@ -170,4 +170,71 @@ Proof
    lookup_account a (SND (EL n s.contexts)).accounts`
     by (irule step_growth_old_snapshot_lookup >>
         gvs[account_already_created_def]) >> simp[]
+QED
+
+Theorem step_creation_growth_head:
+  wf_state s /\ step s = (r,t) /\
+  LENGTH s.contexts < LENGTH t.contexts /\
+  account_already_created (lookup_account a s.rollback.accounts) ==>
+  (FST (HD t.contexts)).msgParams.outputTo <> Code a
+Proof
+  strip_tac >> `s.contexts <> []` by gvs[wf_state_def] >>
+  drule_all step_grow_dispatch >> strip_tac
+  >- (drule_all step_call_reaches_proceed_call >> strip_tac >>
+      drule_all call_prefix_contexts >> strip_tac >>
+      drule_all proceed_call_memory_output >> simp[]) >>
+  drule_all step_create_growth_effects >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem step_creation_code_prefix:
+  0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
+  step s = (INL x,t) /\ d <= LENGTH t.contexts /\
+  account_already_created (lookup_account a s.rollback.accounts) /\
+  EVERY (\p. (FST p).msgParams.outputTo <> Code a)
+    (TAKE (LENGTH s.contexts-d+1) s.contexts) ==>
+  EVERY (\p. (FST p).msgParams.outputTo <> Code a)
+    (TAKE (LENGTH t.contexts-d+1) t.contexts)
+Proof
+  strip_tac >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s /\
+   EVERY (wf_context o FST) s.contexts` by gvs[wf_state_def] >>
+  `LENGTH s.contexts-d+1 = LENGTH s.contexts-(d-1) /\
+   LENGTH t.contexts-d+1 = LENGTH t.contexts-(d-1)` by decide_tac >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (`same_frame_rel s t` by (irule step_same_frame >>
+        metis_tac[outputTo_consistent_stack_imp_consistent]) >>
+      drule (Q.INST [`d` |-> `d-1`,
+        `P` |-> `\mp. mp.outputTo <> Code a`]
+        protected_frames_same_frame_transport) >>
+      simp[EVERY_MAP] >>
+      disch_then (qspecl_then [`d`, `a`] mp_tac) >> fs[]) >>
+  Cases_on `LENGTH t.contexts < LENGTH s.contexts`
+  >- (drule_all step_pop_structure >> strip_tac >>
+      mp_tac (Q.INST [`d` |-> `d-1`, `child` |-> `HD s.contexts`,
+        `P` |-> `\mp. mp.outputTo <> Code a`]
+        protected_frames_pop_transport) >>
+      simp[EVERY_MAP] >> disch_then irule >> gvs[] >> metis_tac[]) >>
+  `LENGTH s.contexts < LENGTH t.contexts` by decide_tac >>
+  `LENGTH t.contexts > LENGTH s.contexts` by simp[] >>
+  ` (FST (HD t.contexts)).msgParams.outputTo <> Code a` by
+    (irule step_creation_growth_head >> metis_tac[]) >>
+  drule_all step_push_structure >> strip_tac >>
+  Cases_on `d = 1`
+  >- (gvs[] >> Cases_on `s.contexts` >> gvs[] >>
+      Cases_on `t.contexts` >> gvs[] >>
+      rename1 `t.contexts = child::cs` >>
+      Cases_on `cs` >> gvs[] >>
+      `LENGTH t'' = LENGTH t'` by decide_tac >>
+      `MAP (\c:context. c.msgParams.outputTo) (MAP FST t'') =
+       MAP (\c:context. c.msgParams.outputTo) (MAP FST t')` by simp[] >>
+      `EVERY (\out. out <> Code a)
+        (MAP (\c:context. c.msgParams.outputTo) (MAP FST t''))`
+        by (pure_asm_rewrite_tac[] >> simp[EVERY_MAP]) >>
+      qpat_x_assum `LENGTH t'' = LENGTH t'`
+        (fn th => rewrite_tac[GSYM th]) >> fs[EVERY_MAP]) >>
+  mp_tac (Q.INST [`d` |-> `d-1`,
+    `P` |-> `\mp. mp.outputTo <> Code a`]
+    protected_frames_push_transport) >>
+  simp[EVERY_MAP, ADD1] >> disch_then irule >> fs[]
 QED
