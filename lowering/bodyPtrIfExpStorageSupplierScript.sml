@@ -23,3 +23,14 @@ Proof
      simp[type_slot_size_def]) >>
   gvs[slots_in_range_def]
 QED
+
+Theorem ifexp_storage_range_dead_bytes:
+  storage_range_agree st rt w ty ==>
+  (dead_bytes rt (w2n w) ty j b <=> dead_bytes st (w2n w) ty j b)
+Proof
+  strip_tac >> irule (cj 1 dead_bytes_live_frame) >>
+  gvs[storage_range_agree_def] >> rpt strip_tac >>
+  `i < dimword (:256)` by decide_tac >>
+  first_x_assum (qspec_then `n2w i : bytes32` mp_tac) >>
+  simp[w2n_n2w, LESS_MOD]
+QED
