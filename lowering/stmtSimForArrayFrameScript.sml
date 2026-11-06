@@ -332,35 +332,43 @@ Proof
 QED
 
 Theorem typed_array_root_access[local]:
-  !target env name elem bound vt attrs.
-    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+  !target env root elem bound vt attrs.
+    ((?name. root = NameTarget name) \/
+     (?nsid. root = TopLevelNameTarget nsid)) /\
+    (type_place_target env root = NONE \/
+     type_place_target env root = SOME (Type (ArrayT elem bound))) /\
     type_place_target env target = SOME vt /\
-    FST (place_access target attrs) = NameTarget name ==>
-    target = NameTarget name \/
-    place_access target attrs = (NameTarget name,[])
+    FST (place_access target attrs) = root ==>
+    target = root \/ place_access target attrs = (root,[])
 Proof
   measureInduct_on `base_assignment_target_size target` >> Cases_on `target` >>
   simp[place_access_def, well_typed_expr_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-  >~ [`subscript_vtype _ _ = SOME _`] >- suspend "subscript"
-  >> suspend "attribute"
-QED
-
-Resume typed_array_root_access[subscript]:
-  rename1 `type_place_target env inner = SOME inner_ty` >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `place_access inner access_attrs` >>
   first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
-  disch_then drule_all >>
-  strip_tac >> gvs[place_access_def]
-QED
-
-Resume typed_array_root_access[attribute]:
-  rename1 `type_place_target env inner = SOME (Type inner_ty)` >>
-  first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
-  disch_then drule_all >> strip_tac >> gvs[] >>
+  disch_then (qspecl_then
+    [`env`, `elem`, `bound`, `THE (type_place_target env inner)`, `access_attrs`]
+    mp_tac) >>
+  simp[Abbr `access_attrs`] >>
+  strip_tac >> gvs[place_access_def] >>
   gvs[well_typed_expr_def, AllCaseEqs(), attribute_type_def]
 QED
 
-Finalise typed_array_root_access
+Theorem typed_guarded_array_root:
+  !env root elem bound target vt.
+    ((?name. root = NameTarget name) \/
+     (?nsid. root = TopLevelNameTarget nsid)) /\
+    (type_place_target env root = NONE \/
+     type_place_target env root = SOME (Type (ArrayT elem bound))) /\
+    type_place_target env target = SOME vt /\
+    ~place_contains target root ==>
+    FST (place_access target []) <> root
+Proof
+  rpt strip_tac >>
+  qspecl_then [`target`, `env`, `root`, `elem`, `bound`, `vt`, `[]`]
+    assume_tac typed_array_root_access >>
+  gvs[place_contains_def, place_access_def]
+QED
 
 Theorem typed_guarded_array_target_root:
   !env name elem bound target vt.
@@ -369,9 +377,12 @@ Theorem typed_guarded_array_target_root:
     ~place_contains target (NameTarget name) ==>
     FST (place_access target []) <> NameTarget name
 Proof
-  rpt strip_tac >>
-  drule_all typed_array_root_access >>
-  strip_tac >> gvs[place_contains_def, place_access_def]
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL
+    [`env`, `NameTarget name`, `elem`, `bound`, `target`, `vt`]
+    typed_guarded_array_root) >> simp[] >>
+  Cases_on `FLOOKUP env.var_assignable name` >>
+  simp[well_typed_expr_def, AllCaseEqs()]
 QED
 
 Theorem place_access_root_attrs[local]:
