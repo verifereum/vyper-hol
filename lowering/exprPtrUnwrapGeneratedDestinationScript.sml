@@ -66,7 +66,7 @@ Proof
   strip_tac >>
   `op_taint tm (Var root) = {} /\
    op_taint tm (Var (slot_copy_var cs 4)) = {}` by
-    (gvs[] >> simp[copy_mul_ghost_frame, out_taint_def, mk_inst_def, op_taint_def, eval_operand_def, wordsTheory.dimword_def] >> fs[ptr_covers_def]) >>
+    (gvs[] >> simp[copy_mul_ghost_frame, out_taint_def, mk_inst_def, op_taint_def, eval_operand_def, wordsTheory.dimword_def] >> fs[ptr_covers_def, op_taint_def]) >>
   `step_inst_base (mk_inst (cs.cs_next_id+6) MUL
      [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) s = OK u` by
     (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
