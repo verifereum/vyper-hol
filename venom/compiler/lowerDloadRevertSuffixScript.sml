@@ -367,3 +367,28 @@ Proof
   simp[REVERSE_APPEND] >>
   irule ld_inst_supply_assign_continuation >> metis_tac[]
 QED
+
+Theorem ld_resolve_block_assigns_support:
+  !ins op used.
+  EVERY (\v. MEM v used) (FLAT (MAP inst_ir_vars ins)) /\
+  EVERY (\v. MEM v used) (venomInst$operand_vars [op]) ==>
+  EVERY (\v. MEM v used)
+    (venomInst$operand_vars [resolve_block_assigns ins op])
+Proof
+  Induct >- simp[resolve_block_assigns_def] >>
+  rpt gen_tac >> Cases_on `op` >>
+  simp[resolve_block_assigns_def] >>
+  rpt strip_tac >>
+  Cases_on `MEM s h.inst_outputs`
+  >- (simp[] >> IF_CASES_TAC
+      >- (gvs[] >>
+          first_x_assum (qspecl_then [`HD h.inst_operands`, `used`] mp_tac) >>
+          disch_then irule >> simp[] >>
+          Cases_on `h.inst_operands` >>
+          gvs[inst_ir_vars_def, inst_uses_def,
+              venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def]) >>
+      simp[]) >>
+  simp[] >> first_x_assum (qspecl_then [`Var s`, `used`] mp_tac) >>
+  disch_then irule >> simp[]
+QED
+
