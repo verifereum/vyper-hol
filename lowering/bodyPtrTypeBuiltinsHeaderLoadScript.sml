@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsHeaderLoad
 Ancestors
   bodyPtrTypeBuiltinsLoad bodyPtrTypeBuiltinsBytesRead exprSimPtrProps
-  bodyPtrDefs ptrDiscipline venomState venomInst
+  bodyPtrDefs ptrDiscipline venomState venomInst finite_map
 
 Theorem mload_counted_ghost_frame:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
@@ -25,14 +25,19 @@ Theorem mload_counted_ghost_frame:
     (!p. p <> out ==> lookup_var p t = lookup_var p s /\
       FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
+    t = (update_var out (mload (w2n a) s) s) with
+      vs_inst_idx := SUC s.vs_inst_idx
 Proof
   strip_tac >> drule_all mload_counted_clean_ambient >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   qexistsl_tac [`G'`,`tn'`,`t`] >> simp[] >> conj_tac
-  >- (irule ghost_inv_fresh_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  >- (irule ghost_inv_fresh_frame >>
+      qexistsl_tac [`G`,`es`,`s`,`sa`,`tn`] >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   conj_tac >- (simp[ghost_kept_def] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]
+  rpt strip_tac >> gvs[ptr_covers_def, update_var_def, lookup_var_def,
+    FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 Theorem ptr_buf_ok_covers:

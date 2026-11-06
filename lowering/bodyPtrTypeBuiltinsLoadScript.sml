@@ -60,6 +60,8 @@ Theorem mload_counted_clean_ambient:
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?G' tn' t.
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+      t = (update_var out (mload (w2n a) s) s) with
+        vs_inst_idx := SUC s.vs_inst_idx /\
       lookup_var out t = SOME (mload (w2n a) s) /\
       op_taint tn' (Var out) = {} /\ op_prov G' (Var out) = NONE /\
       t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\

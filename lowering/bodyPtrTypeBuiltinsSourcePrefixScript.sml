@@ -107,6 +107,7 @@ Proof
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G1` (qx_choose_then `tn1`
       (qx_choose_then `s1` strip_assume_tac)))) >>
+  qpat_x_assum `s1 = update_var _ _ _ with vs_inst_idx := _` kall_tac >>
   `~s1.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
   `lookup_var src s1 = SOME a /\ op_taint tn1 (Var src) = {} /\
    ptr_covers G1 tn1 src s1 capacity` by
