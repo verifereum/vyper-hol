@@ -112,3 +112,73 @@ Proof
   qpat_x_assum `t = _` (mp_tac o Q.AP_TERM `state_frame`) >>
   simp[state_frame_def]
 QED
+
+Theorem blockhash_counted_normal_post:
+  compile_blockhash arg sa = (op,sb) /\ fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  op_taint tn arg = {} /\ op_prov G arg = NONE /\
+  (!x. arg = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s ==>
+  ?G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    stmt_state_rel ctx fn cenv cx es t
+Proof
+  strip_tac >> drule_all blockhash_suffix_code >> strip_tac >>
+  `?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by
+    (irule blockhash_compile_certificate >> simp[] >>
+     qexistsl_tac [`arg`, `op`] >> simp[]) >>
+  drule_all blockhash_checked_output_clean >> strip_tac >>
+  drule_all blockhash_checked_normal_ghosts >> strip_tac >>
+  drule_all blockhash_checked_state_rel >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  drule_all run_inst_seq_gas_path_ptr >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    fs[FILTER_EQ_NIL, EVERY_MEM] >>
+  simp[] >> strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[]
+QED
+
+Theorem blockhash_normal_suffix_run:
+  compile_blockhash arg sa = (op,sb) /\ fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  op_taint tn arg = {} /\ op_prov G arg = NONE /\
+  (!x. arg = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK u /\ eval_operand op u = SOME w /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    eval_operand op t = SOME w /\
+    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >> drule_all blockhash_counted_normal_post >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  drule_all blockhash_raw_register_frame >> strip_tac >>
+  drule compile_blockhash_shape >> strip_tac >>
+  qexistsl_tac [`G'`, `tn'`, `u with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  simp[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def] >>
+  qpat_x_assum `u = _`
+    (mp_tac o Q.AP_TERM `\z. (z.vs_halted,z.vs_current_bb,z.vs_memory,z.vs_allocas)`) >>
+  simp[] >> gvs[lookup_var_def]
+QED
