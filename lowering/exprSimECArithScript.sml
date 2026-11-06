@@ -533,7 +533,7 @@ Proof
   simp[ec_precompile_words, padded_num_to_be_bytes_word32]
 QED
 
-Theorem ec_points_code_shape[local]:
+Theorem ec_points_code_shape:
   (!p1 p2 sa op sb.
   compile_ecadd_points p1 p2 sa = (op,sb) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
@@ -1486,7 +1486,7 @@ Proof
       AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ec_source_tail_cases[local]:
+Theorem ec_source_tail_cases:
   (bt = ECAdd \/ bt = ECMul) ==>
   ec_source_tail cx ann bt tys vs es =
     case exprSimWordArgs$builtin_result cx es.accounts ann bt tys vs of
@@ -1637,7 +1637,7 @@ Proof
   conj_tac >- (qexists `aid` >> gvs[] >> metis_tac[]) >> gvs[]
 QED
 
-Theorem ec_points_run[local]:
+Theorem ec_points_run:
   (!p scalar sf res sb func cenv cx es s point wscalar lo v e.
   compile_ecmul_point p scalar sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -1924,7 +1924,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ec_memory_semantics[local]:
+Theorem ec_memory_semantics:
   (!v1 v2 cx p1 p2 s.
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v1 /\
   value_has_type (BaseTV (UintT 256)) v2 /\
