@@ -7,7 +7,7 @@ Ancestors
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
   reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
-  deepResidualSim deepResidualBudget genericInputReady
+  deepResidualSim deepResidualBudget genericInputReady fnAliasStep
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -1139,6 +1139,114 @@ Proof
       irule normalize_operand_codegen_assign >> simp[] >>
       qexists_tac `inst` >> simp[]) >>
   disj1_tac >> gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
+QED
+
+Theorem regional_block_outputs_distinct[local]:
+  !bbs bb. MEM bb bbs ==>
+    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) (fn_insts_blocks bbs))) ==>
+    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  Induct >> rw[fn_insts_blocks_def] >>
+  gvs[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
+QED
+
+Theorem regional_outputs_unique_position[local]:
+  !insts v i j.
+    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) /\
+    i < LENGTH insts /\ j < LENGTH insts /\
+    MEM v (EL i insts).inst_outputs /\ MEM v (EL j insts).inst_outputs ==>
+    i = j
+Proof
+  Induct >> rw[] >> Cases_on `i` >> Cases_on `j` >> gvs[] >>
+  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL]
+QED
+
+Theorem regional_indexed_outputs_separate[local]:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  i < j /\ j < LENGTH bb.bb_instructions /\
+  MEM v (EL i bb.bb_instructions).inst_outputs ==>
+  ~MEM v (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    (irule regional_block_outputs_distinct >> qexists_tac `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, ssa_form_def, fn_insts_def]) >>
+  strip_tac >>
+  `i = j` by (irule regional_outputs_unique_position >>
+    qexistsl_tac [`bb.bb_instructions`, `v`] >> simp[]) >> gvs[]
+QED
+
+Theorem regional_nonvar_root[local]:
+  ~is_var_operand op ==>
+  op <> Var v /\ normalize_operand dfg [] op <> Var v
+Proof
+  Cases_on `op` >> simp[is_var_operand_def, normalize_operand_def]
+QED
+
+Theorem regional_new_output_fresh[local]:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  (!v. MEM v inst.inst_outputs ==> ~MEM v later.inst_outputs) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+    ~MEM v later.inst_outputs) /\ MEM out inst.inst_outputs ==>
+  !v. (Var out = Var v \/
+    normalize_operand (dfg_build_function fn) [] (Var out) = Var v) ==>
+    ~MEM v later.inst_outputs
+Proof
+  strip_tac >>
+  drule_all regional_output_root_origin >> strip_tac
+  >- (gvs[] >> metis_tac[]) >>
+  Cases_on `is_var_operand op`
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[regional_nonvar_root]
+QED
+
+Theorem regional_indexed_body_suffix_freshness:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_inst_plan lv (dfg_build_function fn) cfg fn inst nl halting next_term
+    bb.bb_label ps = SOME (ops,qs) /\
+  (!j op v. i <= j /\ j < LENGTH bb.bb_instructions /\
+    (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+    ~MEM v (EL j bb.bb_instructions).inst_outputs) ==>
+  !j op v. SUC i <= j /\ j < LENGTH bb.bb_instructions /\
+    (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) /\
+    (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+    ~MEM v (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM]) >>
+  `inst_wf inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  `inst.inst_opcode = OFFSET ==> ?out. inst.inst_outputs = [out]` by
+    metis_tac[inst_wf_offset_shape] >>
+  drule generate_inst_plan_inventory >> simp[] >>
+  disch_then assume_tac >>
+  rpt gen_tac >> disch_tac >>
+  `i < j /\ i <= j` by gvs[] >>
+  `!out. MEM out inst.inst_outputs ==> ~MEM out (EL j bb.bb_instructions).inst_outputs` by
+    (gen_tac >> disch_tac >> irule regional_indexed_outputs_separate >>
+     simp[] >> conj_tac >- (qexists_tac `fn` >> simp[]) >>
+     qexists_tac `i` >> gvs[]) >>
+  `!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+    ~MEM v (EL j bb.bb_instructions).inst_outputs` by metis_tac[] >>
+  `!out v. MEM out inst.inst_outputs /\
+    (Var out = Var v \/ normalize_operand (dfg_build_function fn) [] (Var out) = Var v) ==>
+    ~MEM v (EL j bb.bb_instructions).inst_outputs` by
+    (rpt gen_tac >> strip_tac >> irule regional_new_output_fresh >>
+     goal_assum (drule_at (Pat `MEM _ _.inst_outputs`)) >> simp[] >>
+     qexistsl_tac [`fn`, `ps`] >> gvs[] >> metis_tac[]) >>
+  metis_tac[regional_nonvar_root]
 QED
 
 Theorem regional_fresh_exemption_transfer:
