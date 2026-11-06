@@ -36,7 +36,8 @@ Theorem memory_nonword_unwrap_continuation:
   vv_post ctx fn cenv cx e es sa sm s0 ee tv (LocatedValue ty p) s /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue ty p) ee G tn s /\
   unwrap_value cenv (LocatedValue ty p) sm = (out,sb) /\ ~s.vs_halted /\
-  ~is_word_type ty /\ p.ptr_location = LocMemory ==>
+  ~is_word_type ty /\ p.ptr_location = LocMemory /\
+  (is_word_type (expr_type e) ==> op_prov G p.ptr_operand = NONE) ==>
   sb = sm /\ out = p.ptr_operand /\
   ?v. read_result cx tv ee = (INL v,ee) /\
     gas_marked_exec_ptr D (ctx,fn) PG (read_result cx tv)

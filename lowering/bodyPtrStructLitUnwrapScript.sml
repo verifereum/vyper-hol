@@ -27,6 +27,7 @@ Theorem memory_nonword_unwrap_counted:
     ~is_word_type ty /\ p.ptr_location = LocMemory /\
     unwrap_value cenv (LocatedValue ty p) sa = (out,sb) /\
     ptr_vv_ok cx t tv (LocatedValue ty p) ee G tn s /\
+    (is_word_type t ==> op_prov G p.ptr_operand = NONE) /\
     ~s.vs_halted ==>
     out = p.ptr_operand /\ sb = sa /\
     ?v. gas_marked_exec_ptr D (ctx,fn) PG (read_result cx tv)
