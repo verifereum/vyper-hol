@@ -15,6 +15,10 @@
  *     its operands' judgments
  *
  * ADMITTED:
+ *   expr_sim_inv_func_return_type — cenv.ce_func_return_type is
+ *     build_func_return_type of the program.  Held for the
+ *     shared-interface wave that adds it to expr_sim_inv_def; only
+ *     extcall_request_setup uses it.
  *   vv_post_storage_live — what the conjunct
  *     (~expr_has_effect e ==> vv_storage_live cx vv es' s) that vv_post_def
  *     is to gain gives, written out: an effect-free operand's storage or
@@ -42,7 +46,7 @@
 Theory exprSimExtCallCase
 Ancestors
   list rich_list loweringPosts supportedExprTraverse exprSimHypsDefs exprSimHyps vyperAST
-  vyperInterpreter vyperState exprSimDefs
+  vyperInterpreter vyperState exprSimDefs compileVyper
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -61,6 +65,22 @@ Theorem vv_post_storage_live:
 Proof
   (* Held for the posts-interface round: follows from vv_post_def once it
      has the vv_storage_live conjunct. *)
+  cheat
+QED
+
+(* The compile environment's return types are the program's: an internal
+   call's lowered value type (lowered_value_type) is its declared return
+   type.  Only extcall_request_setup may use it, for an internal-call
+   default. *)
+Theorem expr_sim_inv_func_return_type:
+  !cenv cx env es.
+    expr_sim_inv cenv cx env es ==>
+    ?tops. get_module_code cx NONE = SOME tops /\
+           cenv.ce_func_return_type = build_func_return_type tops
+Proof
+  (* Held for the shared-interface wave that adds this conjunct to
+     expr_sim_inv_def; bodySim and bodySimStmtCases already carry it as a
+     hypothesis. *)
   cheat
 QED
 
