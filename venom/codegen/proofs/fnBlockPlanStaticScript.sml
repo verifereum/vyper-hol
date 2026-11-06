@@ -1060,3 +1060,74 @@ Proof
     (Cases_on `pre` >> gvs[listTheory.EVERY_DEF]) >>
   gvs[] >> metis_tac[]
 QED
+
+Theorem regional_ret_reaching_dfs_edge_join_exact:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin /\
+  generate_block_plan lv dfg cfg fn pb pin = SOME (ops,pout) /\
+  MEM succ (cfg_succs_of cfg pred) /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) succ sin /\
+  LENGTH (cfg_preds_of cfg succ) <> 1 /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret retbb.bb_instructions /\ ret.inst_opcode = RET /\
+  cfg_path cfg succ target ==>
+  pout.ps_stack = MAP Var (input_vars_from pred bb.bb_instructions
+    (live_vars_at lv succ 0))
+Proof
+  strip_tac >>
+  `bb.bb_label = succ` by metis_tac[lookup_block_label] >>
+  `cfg_path cfg pred target` by metis_tac[cfg_path_predecessor_closed] >>
+  `~MEM dead_stack_marker pin.ps_stack` by
+    (irule regional_ret_reaching_dfs_marker_free >> metis_tac[]) >>
+  `~MEM dead_stack_marker pout.ps_stack` by
+    (irule regional_dfs_block_marker_free >> metis_tac[]) >>
+  `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin`
+    by metis_tac[dfs_block_state_lineage_state] >>
+  `lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    pred succ (sin with <|ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled|>)`
+    by (simp[lineage_entry_def] >>
+        qexistsl_tac [`pin`, `pin`, `ops`, `pout`,
+          `pin.ps_cleanup_height`, `pin.ps_cleanup_promised`, `pout`, `sin`] >>
+        gvs[]) >>
+  qpat_x_assum `bb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
+  drule_all lineage_entry_join_stack >> simp[] >> strip_tac >>
+  `pre = []` by (Cases_on `pre` >> gvs[listTheory.EVERY_DEF]) >> gvs[]
+QED
+
+Theorem regional_ret_reaching_dfs_edge_height:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,pend) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME bb /\ fn_entry_label fn <> SOME succ /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin /\
+  generate_block_plan lv dfg cfg fn pb pin = SOME (ops,pout) /\
+  MEM succ (cfg_succs_of cfg pred) /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) succ sin /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret retbb.bb_instructions /\ ret.inst_opcode = RET /\
+  cfg_path cfg succ target ==>
+  LENGTH pout.ps_stack = LENGTH sin.ps_stack
+Proof
+  strip_tac >> Cases_on `LENGTH (cfg_preds_of cfg succ) = 1`
+  >- (`cfg_preds_of cfg succ = [pred]` by
+        (Cases_on `cfg_preds_of cfg succ` >> gvs[] >>
+         metis_tac[cfg_edge_symmetry_uncond, listTheory.MEM]) >>
+      drule_all regional_dfs_unique_predecessor_endpoint >> simp[]) >>
+  `pout.ps_stack = MAP Var (input_vars_from pred bb.bb_instructions
+    (live_vars_at lv succ 0))` by
+    (irule regional_ret_reaching_dfs_edge_join_exact >> metis_tac[]) >>
+  drule_all regional_ret_reaching_dfs_join_exact >>
+  disch_then (qx_choose_then `origin` (qx_choose_then `origin_bb` strip_assume_tac)) >>
+  `bb.bb_label = succ /\ MEM bb fn.fn_blocks` by
+    metis_tac[lookup_block_label, livenessTransferProofsTheory.lookup_block_mem] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_cfg_edge fn pred bb.bb_label /\ fn_cfg_edge fn origin bb.bb_label` by
+    metis_tac[codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze] >>
+  gvs[listTheory.LENGTH_MAP] >>
+  irule ready_input_vars_from_edge_length >> qexists_tac `fn` >> simp[]
+QED
