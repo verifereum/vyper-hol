@@ -6676,6 +6676,16 @@ QED
      outputs are their own roots.  For return-PC variables, copy_phi_var
      and retpc_shape_ok keep every link of the chain a return-PC
      variable, so both sides read ra. *)
+(* The old all-name support obstructions do not themselves obstruct the
+   alias-only availability candidate: each distinguished name is its root. *)
+Theorem alias_support_obstruction_names_reflexive:
+  normalize_operand (dfg_build_function alias_retired_fn) [] (Var "b") = Var "b" /\
+  normalize_operand (dfg_build_function alias_halting_cut_fn) [] (Var "dead") = Var "dead" /\
+  normalize_operand (dfg_build_function alias_offset_branch_fn) [] (Var "v") = Var "v"
+Proof
+  EVAL_TAC
+QED
+
 Theorem lineage_alias_successor:
   !fuel ctx lo liveness dfg cfg ch growth spill_base lbl_ctr fn lbl bb ps h
    promised block_ops ps_after ra vs vs'.
