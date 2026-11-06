@@ -36,8 +36,9 @@ Theorem word_ptr_val_ok_kept:
   (!p. op = Var p ==> not_fresh_at sa p) ==>
   ptr_val_ok cx ty v op G tn u
 Proof
-  strip_tac >> drule_all ghost_kept_operand_taint >>
-  gvs[ptr_val_ok_def]
+  strip_tac >> drule_all ghost_kept_operand_taint >> strip_tac >>
+  Cases_on `op` >> gvs[ptr_val_ok_def, ptrDisciplineTheory.op_prov_def] >>
+  drule_all ghost_kept_provenance >> simp[]
 QED
 
 Theorem ec_point_clean_kept:
