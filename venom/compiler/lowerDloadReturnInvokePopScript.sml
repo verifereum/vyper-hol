@@ -506,7 +506,7 @@ Proof
   metis_tac[ld_sync_source]
 QED
 
-Theorem ld_invoke_guarded_pop:
+Theorem ld_invoke_active_pop:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
@@ -522,7 +522,7 @@ Theorem ld_invoke_guarded_pop:
     callee cs (f::fs) fc A Sigma names rt u /\
   bind_outputs inst.inst_outputs rt.iret_values
     (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
-  ^ld_probe_guard C' j bb (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
     (q with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
@@ -555,11 +555,13 @@ Proof
     fs[ld_image_def] >>
   `sr.vs_current_bb = s.vs_current_bb /\ q.vs_current_bb = t.vs_current_bb` by
     metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn'.fn_blocks)` by
+    (drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >>
+     simp[venomInstTheory.fn_labels_def]) >>
   `?ti. get_instruction bb (SUC t.vs_inst_idx) = SOME ti` by
-    (mp_tac (Q.INST [`C` |-> `C'`, `k` |-> `j`,
-      `t` |-> `q with vs_inst_idx := SUC t.vs_inst_idx`]
-      lowerDloadReturnAlignmentTheory.ld_successful_body_fetch) >>
-     fs[Abbr `Guard`] >> metis_tac[]) >>
+    (drule_all lowerDloadSafetyAmbientTheory.ld_active_lookup >>
+     simp[] >> strip_tac >>
+     gvs[venomInstTheory.get_instruction_def]) >>
   `?next Y. active_inst fn next (sr with vs_inst_idx := SUC s.vs_inst_idx) /\
     ld_envelope f.lf_supply fn (sr with vs_inst_idx := SUC s.vs_inst_idx)
       (SUC s.vs_inst_idx) Y (p+1)` by
@@ -803,3 +805,50 @@ Proof
   qpat_assum `fn' = ld_image f` mp_tac >>
   rpt (pop_assum kall_tac) >> simp[]
 QED
+
+Theorem ld_invoke_guarded_pop:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn caller_cs s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  ^ld_probe_guard C' j bb (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Stable = ^ld_probe_stable` >>
+  qabbrev_tac `Terminal = ^ld_probe_terminal` >>
+  qabbrev_tac `Point = ^ld_probe_point` >>
+  qabbrev_tac `Guard = ^ld_probe_guard` >> strip_tac >>
+  `q.vs_current_bb = t.vs_current_bb` by
+    metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control] >>
+  `?ti. get_instruction bb (SUC t.vs_inst_idx) = SOME ti` by
+    (mp_tac (Q.INST [`C` |-> `C'`, `k` |-> `j`,
+      `t` |-> `q with vs_inst_idx := SUC t.vs_inst_idx`]
+      lowerDloadReturnAlignmentTheory.ld_successful_body_fetch) >>
+     fs[Abbr `Guard`] >> metis_tac[]) >>
+  `active_inst fn' ti (q with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (simp[contextCodegenRelTheory.active_inst_def] >>
+     qexists_tac `bb` >>
+     gvs[venomInstTheory.get_instruction_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       venomExecPropsTheory.lookup_block_label]) >>
+  qunabbrev_tac `Ambient` >> qunabbrev_tac `Stable` >>
+  qunabbrev_tac `Terminal` >> qunabbrev_tac `Point` >>
+  drule_all ld_invoke_active_pop >> simp[NoAsms]
+QED
+
+val _ = List.app (fn th => if null (hyp th) then ()
+  else raise Fail "caller pop has kernel hypotheses")
+  [ld_invoke_active_pop, ld_invoke_guarded_pop];
