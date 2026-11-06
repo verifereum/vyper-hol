@@ -3,7 +3,7 @@ Ancestors
   bodyPtrBytestringBuiltinsUintGhost bodyPtrBytestringBuiltinsBounds
   fragGasSeqPtr fragGasPathPtr gasCount ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   venomExecProofs exprSimPtrProps bodyPtrDefs wordArgsPtr compileEnv
-  venomExecSemantics venomInst venomState finite_map exprSimUint2Str fragExec exprLoweringProps words list rich_list
+  venomExecSemantics venomInst venomState finite_map exprSimUint2Str fragExec exprLoweringProps words list rich_list typedCopyPtr fragExecPtr
 
 Theorem uint_scalar_inst_check:
   MEM opc [Mod; Div; EQ; ADD] /\
@@ -393,4 +393,77 @@ Proof
   conj_tac >- simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
                    lookup_var_def, FLOOKUP_UPDATE, update_var_def] >>
   irule (cj 1 gas_path_ptr_rules) >> simp[]
+QED
+
+Theorem uint_pointer_add_counted_edge:
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [left;right] [out]) /\
+  eval_operand left s = SOME x /\ eval_operand right s = SOME y /\
+  op_taint tn left = {} /\ op_taint tn right = {} ==>
+  gas_path_ptr_edge D 0 ctx fn PG G tn s 0
+    (step_prov PG G (mk_inst id ADD [left;right] [out]) (update_var out (x+y) s))
+    (step_taint (mk_inst id ADD [left;right] [out]) s (update_var out (x+y) s) tn)
+    (OK (update_var out (x+y) s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ADD [left;right] [out]) s =
+     OK (update_var out (x+y) s)` by
+    simp[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  mp_tac (Q.INST [`i` |-> `mk_inst id ADD [left;right] [out]`, `lo` |-> `0`,
+    `u` |-> `update_var out (x+y) s`] straight_line_ptr_edge) >>
+  simp[mk_inst_def, is_terminator_def] >> disch_then irule >>
+  simp[GSYM mk_inst_def] >> irule ptr_inst_ok_copy_len_binop >> simp[]
+QED
+
+Theorem uint_mstore_counted_edge:
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var p;v] []) /\
+  lookup_var p s = SOME (n2w addr) /\ addr < dimword(:256) /\
+  eval_operand v s = SOME w /\ op_taint tn v = {} /\
+  ptr_covers G tn p s 32 ==>
+  gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G
+    (tn with t_mem := tn.t_mem DIFF {i | addr <= i /\ i < addr+32})
+    (OK (mstore addr w s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MSTORE [Var p;v] []) s = OK (mstore addr w s)` by
+    simp[mk_inst_def, step_inst_base_def, exec_write2_def, eval_operand_def,
+         w2n_n2w] >>
+  `step_prov PG G (mk_inst id MSTORE [Var p;v] []) (mstore addr w s) = G /\
+   step_taint (mk_inst id MSTORE [Var p;v] []) s (mstore addr w s) tn =
+      (tn with t_mem := tn.t_mem DIFF {i | addr <= i /\ i < addr+32})` by
+    (drule_all mstore_ghost_frame >> simp[w2n_n2w] >> strip_tac >>
+     drule_all clean_mstore_taint_state >> simp[w2n_n2w]) >>
+  mp_tac (Q.INST [`i` |-> `mk_inst id MSTORE [Var p;v] []`, `lo` |-> `0`,
+    `u` |-> `mstore addr w s`] straight_line_ptr_edge) >>
+  simp[mk_inst_def, is_terminator_def] >> disch_then irule >>
+  simp[GSYM mk_inst_def] >> irule ptr_inst_ok_mstore >> simp[]
+QED
+
+Theorem u2s_body_store_counted_ptr:
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 2) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
+  s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 4 /\
+  lookup_var (u2s_var a 8) s = SOME (n2w (b+n-i)) /\
+  b+n-i < dimword(:256) /\
+  lookup_var (u2s_var a 6) s = SOME (n2w (48+x MOD 10)) /\
+  op_taint tn (Var (u2s_var a 6)) = {} /\ ptr_covers G tn (u2s_var a 8) s 32 ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G
+    (tn with t_mem := tn.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32})
+    (OK (mstore (b+n-i) (n2w (48+x MOD 10)) s with vs_inst_idx := 5))
+Proof
+  strip_tac >>
+  `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G
+     (tn with t_mem := tn.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32})
+     (OK (mstore (b+n-i) (n2w (48+x MOD 10)) s with vs_inst_idx := 5))` by
+    (`5 = SUC s.vs_inst_idx` by simp[] >> pop_assum (fn th => once_rewrite_tac[th]) >>
+     irule uint_mstore_counted_edge >> simp[] >>
+     qexistsl_tac [`a.cs_next_id+12`, `u2s_var a 8`, `Var (u2s_var a 6)`] >>
+     simp[get_instruction_def, u2s_body_def, u2s_inst_def, eval_operand_def]) >>
+  `~(mstore (b+n-i) (n2w (48+x MOD 10)) s with vs_inst_idx := 5).vs_halted` by
+    simp[mstore_def, write_memory_with_expansion_def] >>
+  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
 QED
