@@ -163,7 +163,7 @@ Theorem abi_encoder_array_spine_shared_effects:
   p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_encoder_member_phase_raw st p initial ready /\
   abi_decoder_address_frame next initial ready /\
-  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (p,ce,len,limit_st)
     (first,last,b,cap) (at,av,q) ready encoded /\
   abi_encode_child_suffix head dp offset len ce = (out,en) /\
   eval_operand head encoded = SOME (n2w h) /\ eval_operand dp encoded = SOME (n2w slot) /\
@@ -173,16 +173,16 @@ Theorem abi_encoder_array_spine_shared_effects:
   abi_encoder_member_phase_raw ce en encoded actual /\
   first <= lo /\ hi <= last /\ lo <= p.cs_next_id /\ ce.cs_next_id <= hi /\
   next <= p.cs_next_var /\ next <= ce.cs_next_var /\
-  site IN abi_decoder_ids lo hi /\ FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
+  site IN abi_sites_decoder_ids sites lo hi /\ FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
   d <= h /\ h+32 <= d+extent /\ d <= q /\ q+LENGTH (enc at av) <= d+extent ==>
-  abi_scratch_effect first last lo hi next limit_st d extent b cap initial actual /\
-  abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] initial actual /\
+  abi_sites_scratch_effect sites first last lo hi next limit_st d extent b cap initial actual /\
+  abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] initial actual /\
   (alloca_inv initial ==> alloca_inv actual)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand len encoded = SOME (n2w (LENGTH (enc at av))) /\
    fresh_vars_wrt limit_st encoded /\ (alloca_inv ready ==> alloca_inv encoded)` by
-    fs[abi_encoder_shared_endpoint_def, abi_scratch_effect_def] >>
+    fs[abi_sites_encoder_shared_endpoint_def, abi_sites_scratch_effect_def] >>
   drule_all abi_encoder_spine_cursor_post >> disch_tac >>
   drule abi_encoder_shared_endpoint_scratch >> disch_tac >>
   conj_tac
@@ -191,12 +191,12 @@ Proof
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
       qexists_tac `site` >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] initial ready /\
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] initial ready /\
    (alloca_inv initial ==> alloca_inv ready)` by
     (drule_all abi_encoder_array_spine_tail_registered >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] ready encoded` by
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] ready encoded` by
     (drule_all abi_encoder_spine_shared_registered_window >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] encoded actual /\
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] encoded actual /\
    (alloca_inv encoded ==> alloca_inv actual)` by
     (drule_all abi_encoder_member_cursor_registered >> simp[]) >>
   conj_tac >- (irule abi_encoder_registered_effect_trans >>
