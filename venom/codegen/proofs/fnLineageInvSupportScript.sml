@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup livenessProofs cfgAnalysisProps venomWf
+  fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
   stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -149,4 +149,23 @@ Proof
   qpat_x_assum `_ SUBSET set (MAP Var (_ ++ _))` mp_tac >>
   simp[SUBSET_DEF, MEM_MAP, reorderSimTheory.input_mem_operand_vars,
     MEM_operand_vars_eq_Var]
+QED
+
+Theorem analyzed_suffix_inventory_demand:
+  !fn bb i ps m core.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    fn_reachable fn bb.bb_label /\ i <= LENGTH bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode <> PHI) (DROP i bb.bb_instructions) /\
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    set core UNION FDOM ps.ps_spilled SUBSET
+      set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label i)) ==>
+    !v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      demand_available fn bb i v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all analyzed_ordinary_suffix_demand >>
+  simp[EVERY_MEM] >> strip_tac >>
+  gvs[SUBSET_DEF, MEM_MAP, MEM_APPEND, dead_stack_marker_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  first_x_assum drule >> simp[]
 QED
