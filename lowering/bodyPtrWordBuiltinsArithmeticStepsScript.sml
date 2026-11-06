@@ -39,7 +39,7 @@ QED
 
 Theorem word_arithmetic_out_taint:
   MEM inst.inst_opcode
-    [SUB; MUL; Div; Exp; ADDMOD; MULMOD; SGT; SLT; ISZERO; OR; AND; ASSERT; LT; GT; EQ] ==>
+    [SUB; Div; Exp; ADDMOD; MULMOD; SGT; SLT; ISZERO; OR; AND; ASSERT; LT; GT; EQ] ==>
   out_taint tn inst s = {}
 Proof
   simp[MEM] >> strip_tac >>
@@ -54,7 +54,7 @@ QED
 
 Theorem word_arithmetic_output_clean:
   MEM inst.inst_opcode
-    [SUB; MUL; Div; Exp; ADDMOD; MULMOD; SGT; SLT; ISZERO; OR; AND; ASSERT; LT; GT; EQ] /\
+    [SUB; Div; Exp; ADDMOD; MULMOD; SGT; SLT; ISZERO; OR; AND; ASSERT; LT; GT; EQ] /\
   inst.inst_outputs = [out] ==>
   op_taint (step_taint inst s t tn) (Var out) = {}
 Proof

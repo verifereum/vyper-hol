@@ -32,7 +32,7 @@ Proof
   `lookup_var root w = SOME a /\
    eval_operand (Var (slot_copy_var cs 4)) w = SOME (n2w off) /\
    op_taint tm (Var (slot_copy_var cs 4)) = {}` by
-    (gvs[] >> simp[copy_mul_ghost_frame] >>
+    (gvs[] >> simp[copy_mul_ghost_frame, out_taint_def, mk_inst_def, op_taint_def, eval_operand_def, wordsTheory.dimword_def] >>
      gvs[lookup_var_def, update_var_def, eval_operand_def, FLOOKUP_UPDATE]) >>
   qpat_x_assum `Gf = _` SUBST1_TAC >>
   qpat_x_assum `tnf = _` SUBST1_TAC >>
@@ -66,7 +66,7 @@ Proof
   strip_tac >>
   `op_taint tm (Var root) = {} /\
    op_taint tm (Var (slot_copy_var cs 4)) = {}` by
-    (gvs[] >> simp[copy_mul_ghost_frame] >> fs[ptr_covers_def]) >>
+    (gvs[] >> simp[copy_mul_ghost_frame, out_taint_def, mk_inst_def, op_taint_def, eval_operand_def, wordsTheory.dimword_def] >> fs[ptr_covers_def, op_taint_def]) >>
   `step_inst_base (mk_inst (cs.cs_next_id+6) MUL
      [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) s = OK u` by
     (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
@@ -105,7 +105,7 @@ Proof
   strip_tac >>
   `tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm` by
-    (gvs[] >> simp[copy_mul_ghost_frame]) >>
+    (gvs[] >> simp[copy_mul_ghost_frame, out_taint_def, mk_inst_def, op_taint_def, eval_operand_def, wordsTheory.dimword_def]) >>
   `tnf.t_mem = tm.t_mem /\ tnf.t_stor = tm.t_stor /\
    tnf.t_trans = tm.t_trans /\ tnf.t_imm = tm.t_imm` by
     (qpat_x_assum `tnf = _` SUBST1_TAC >>

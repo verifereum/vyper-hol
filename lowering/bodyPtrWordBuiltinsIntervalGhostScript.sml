@@ -5,10 +5,10 @@ Ancestors bodyPtrDefs stmtFragPtr ptrDiscipline finite_map venomState
 Theorem word_interval_temp_observations:
   p <> x ==>
   lookup_var p (update_var x w s) = lookup_var p s /\
-  op_taint (tn with t_var := set_var_taint tn.t_var [x] {}) (Var p) =
+  op_taint (tn with t_var := set_var_taint tn.t_var [x] m) (Var p) =
     op_taint tn (Var p) /\
   (ptr_covers (DRESTRICT G (COMPL {x}))
-    (tn with t_var := set_var_taint tn.t_var [x] {}) p (update_var x w s) sz <=>
+    (tn with t_var := set_var_taint tn.t_var [x] m) p (update_var x w s) sz <=>
    ptr_covers G tn p s sz)
 Proof
   simp[lookup_var_def, update_var_def, op_taint_def, set_var_taint_def,
@@ -22,7 +22,7 @@ Theorem word_interval_ghost_inv_temp:
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
   ghost_inv d cenv cx es (DRESTRICT G (COMPL {x}))
-    (tn with t_var := set_var_taint tn.t_var [x] {}) (update_var x w s)
+    (tn with t_var := set_var_taint tn.t_var [x] m) (update_var x w s)
 Proof
   strip_tac >> fs[ghost_inv_def] >>
   conj_tac
@@ -49,7 +49,7 @@ Theorem word_interval_ghost_kept_temp:
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!y. not_fresh_at sa y ==> y <> x) ==>
   ghost_kept cenv es sa G0 tn0 s0 (DRESTRICT G (COMPL {x}))
-    (tn with t_var := set_var_taint tn.t_var [x] {})
+    (tn with t_var := set_var_taint tn.t_var [x] m)
 Proof
   strip_tac >> fs[ghost_kept_def] >>
   conj_tac

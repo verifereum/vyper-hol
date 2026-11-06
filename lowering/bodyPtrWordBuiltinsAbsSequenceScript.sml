@@ -10,9 +10,9 @@ Theorem word_abs_ghost_step:
   new_site_bytes s t = {} ==>
   step_prov PG G inst t = set_prov G inst.inst_outputs
     (if inst.inst_opcode = SUB then first_prov G inst.inst_operands else NONE) /\
-  step_taint inst s t tn = tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}
+  step_taint inst s t tn = tn with t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s)
 Proof
-  strip_tac >> drule word_abs_out_taint >> strip_tac >>
+  strip_tac >>
   Cases_on `inst.inst_outputs` >> gvs[MEM] >>
   simp[step_prov_def, out_prov_def, set_prov_def,
        step_taint_def, mem_taint_def, store_taint_def,

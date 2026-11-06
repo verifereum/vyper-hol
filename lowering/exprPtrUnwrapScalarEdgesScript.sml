@@ -7,7 +7,7 @@ Ancestors
 Theorem copy_mul_ghost_frame:
   !PG G tn s id left right tmp w.
     op_taint (step_taint (mk_inst id MUL [left;right] [tmp]) s
-      (update_var tmp w s) tn) (Var tmp) = {} /\
+      (update_var tmp w s) tn) (Var tmp) = out_taint tn (mk_inst id MUL [left;right] [tmp]) s /\
     (step_taint (mk_inst id MUL [left;right] [tmp]) s
       (update_var tmp w s) tn).t_mem = tn.t_mem /\
     (step_taint (mk_inst id MUL [left;right] [tmp]) s
