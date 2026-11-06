@@ -6,7 +6,7 @@ Ancestors
   abiEncoderBytesCode bodyPtrDefs fragGasSeqPtr
   emitHelperProps emitHelper exprLoweringProps compileEnv
   venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
-  finite_map words arithmetic list rich_list
+  finite_map words arithmetic list rich_list typedCopyPtr venomMemProps
 
 Theorem abi_encode_child_prefix_seq_ptr:
   abi_encode_child_prefix (Var dst) ho (Var dp) sa = (ops,sb) /\
@@ -336,23 +336,10 @@ Theorem abi_bytes_child_suffix_ready_ptr:
       lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >>
-  `?H tm t.
-    run_inst_seq (emitted_insts sa sb) s = OK t /\
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
-    eval_operand out t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
-    (!i. dest <= i /\ i < dest+32+contractABI$ceil32 cnt ==> i NOTIN tm.t_mem) /\
-    (!i. ~(dest <= i /\ i < dest+32+contractABI$ceil32 cnt) ==>
-      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    mem_agree_outside {i | dest <= i /\ i < dest+32+contractABI$ceil32 cnt}
-      t.vs_memory s.vs_memory /\
-    (!x. not_fresh_at sa x ==>
-      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x))` by
-    (irule compile_abi_bytes_seq_ptr >> asm_simp_tac bool_ss [] >>
-     qexistsl_tac [`dst`,`maxlen`,`src`,`a`] >> asm_simp_tac bool_ss []) >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all compile_abi_bytes_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t` strip_assume_tac)))) >>
   drule abi_encode_bytes_result_var_live >> strip_tac >> gvs[] >>
   drule abi_encode_bytes_shape >> strip_tac >>
   `not_fresh_at sb hd /\ not_fresh_at sb dp /\ not_fresh_at sb off` by
@@ -421,4 +408,55 @@ Proof
   simp[lookup_var_def] >>
   qpat_x_assum `!x. not_fresh_at sc x ==> _` mp_tac >>
   gvs[Abbr `v1`, lookup_var_def, op_prov_def] >> metis_tac[]
+QED
+
+Theorem abi_child_two_store_memory_frame:
+  t.vs_memory = (mstore p (r+n) (mstore h r v)).vs_memory /\
+  regions_disjoint (h,32) (p,32) /\
+  mem_agree_outside writes v.vs_memory s.vs_memory ==>
+  mload h t = r /\ mload p t = r+n /\
+  mem_agree_outside
+    (writes UNION {i | h <= i /\ i < h+32} UNION {i | p <= i /\ i < p+32})
+    t.vs_memory s.vs_memory
+Proof
+  strip_tac >>
+  `mload h t = mload h (mstore p (r+n) (mstore h r v)) /\
+   mload p t = mload p (mstore p (r+n) (mstore h r v))` by
+    simp[mload_def] >>
+  `regions_disjoint (p,32) (h,32)` by
+    (gvs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  conj_tac >- simp[mload_mstore_disjoint, mload_mstore_same] >>
+  conj_tac >- simp[mload_mstore_same] >>
+  qspecl_then [`v`,`h`,`r`] assume_tac mstore_memory_frame >>
+  qspecl_then [`mstore h r v`,`p`,`r+n`] assume_tac mstore_memory_frame >>
+  gvs[mem_agree_outside_def] >> rpt strip_tac >>
+  fs[pred_setTheory.IN_UNION] >> metis_tac[]
+QED
+
+Theorem abi_child_tail_and_cells_frame:
+  t.vs_memory = (mstore p (r+n) (mstore h r v)).vs_memory /\
+  regions_disjoint (h,32) (p,32) /\
+  mem_agree_outside {i | dest <= i /\ i < dest+len} v.vs_memory s.vs_memory /\
+  (!i. dest <= i /\ i < dest+len ==> i NOTIN tk.t_mem) /\
+  (!i. ~(dest <= i /\ i < dest+len) ==> (i IN tk.t_mem <=> i IN tn.t_mem)) /\
+  tm.t_mem = tk.t_mem DIFF
+    ({i | h <= i /\ i < h+32} UNION {i | p <= i /\ i < p+32}) ==>
+  mload h t = r /\ mload p t = r+n /\
+  mem_agree_outside
+    {i | (h <= i /\ i < h+32) \/ (dest <= i /\ i < dest+len) \/
+         (p <= i /\ i < p+32)} t.vs_memory s.vs_memory /\
+  (!i. (h <= i /\ i < h+32) \/ (dest <= i /\ i < dest+len) \/
+       (p <= i /\ i < p+32) ==> i NOTIN tm.t_mem) /\
+  (!i. ~((h <= i /\ i < h+32) \/ (dest <= i /\ i < dest+len) \/
+         (p <= i /\ i < p+32)) ==> (i IN tm.t_mem <=> i IN tn.t_mem))
+Proof
+  strip_tac >> drule_all abi_child_two_store_memory_frame >> strip_tac >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >-
+    (qpat_x_assum `mem_agree_outside (_ UNION _ UNION _) _ _` mp_tac >>
+     `({i | dest <= i /\ i < dest+len} UNION
+       {i | h <= i /\ i < h+32} UNION {i | p <= i /\ i < p+32}) =
+      {i | (h <= i /\ i < h+32) \/ (dest <= i /\ i < dest+len) \/
+           (p <= i /\ i < p+32)}` by SET_TAC[] >> simp[]) >>
+  simp[pred_setTheory.IN_DIFF, pred_setTheory.IN_UNION] >> metis_tac[]
 QED
