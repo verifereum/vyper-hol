@@ -73,6 +73,44 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+(* Copy-independent boundary: only old roots and the exterior region matter. *)
+Theorem unwrap_endpoint_ghost_inv:
+  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  local_ptrs_rel func cenv es.scopes s /\
+  (!name b len. local_region cenv es.scopes s name b len ==>
+    start+nb <= b \/ b+len <= start) /\
+  (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s /\
+    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  (!a k. a+k <= start \/ start+nb <= a ==>
+    mem_bytes_at a k z.vs_memory = mem_bytes_at a k s.vs_memory) /\
+  (!j. j < start \/ start+nb <= j ==> (j IN tf.t_mem <=> j IN tn.t_mem)) /\
+  stor_taint_ok cx tf z ==>
+  ghost_inv ret cenv cx es H tf z
+Proof
+  strip_tac >>
+  `!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
+    ptr_covers H tf x z k` by
+    (rpt strip_tac >> fs[ptr_covers_def] >> metis_tac[]) >>
+  `!name entry p sz w.
+    lookup_scopes name es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME w ==>
+    !mem. mem_agree_outside tf.t_mem z.vs_memory mem ==>
+      val_in_memory entry.type entry.value (w2n w) mem` by
+    (rpt strip_tac >> irule unwrap_local_robust_frame >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `lookup_scopes _ _ = _`)) >>
+     goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
+     goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)) >>
+     goal_assum (drule_at (Pat `lookup_var _ _ = _`)) >>
+     qexistsl [`nb`, `start`] >> asm_rewrite_tac[]) >>
+  irule unwrap_ghost_inv_transport >> (conj_tac >- simp[]) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  qexists `sa` >> simp[] >> metis_tac[]
+QED
+
 Theorem unwrap_copy_ghost_inv:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -112,24 +150,13 @@ Proof
   `!name off len. local_region cenv es.scopes s name off len ==>
     w2n d+nb <= off \/ off+len <= w2n d` by
     (rpt strip_tac >> drule_all unwrap_alloc_local_separation >> simp[]) >>
-  `!name entry p sz w.
-    lookup_scopes name es.scopes = SOME entry /\
-    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME w ==>
-    !mem. mem_agree_outside tf.t_mem z.vs_memory mem ==>
-      val_in_memory entry.type entry.value (w2n w) mem` by
-    (rpt strip_tac >> irule unwrap_local_robust_frame >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)) >>
-     goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `lookup_scopes _ _ = _`)) >>
-     goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
-     qexistsl [`nb`, `w2n d`] >> asm_rewrite_tac[]) >>
   `stor_taint_ok cx tf z` by
     (irule exprPtrUnwrapPostFramesTheory.copy_stor_taint_frame >>
      qexistsl [`s`, `tn`] >> fs[ghost_inv_def, slot_copy_runtime_frame_def]) >>
-  irule unwrap_ghost_inv_transport >> simp[] >>
+  irule unwrap_endpoint_ghost_inv >> (conj_tac >- simp[]) >>
   goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
-  qexists `sa` >> simp[] >> metis_tac[]
+  goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+  qexistsl [`nb`, `sa`, `w2n d`] >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
 (* Retained roots use the exterior frame directly; no intermediate taint
