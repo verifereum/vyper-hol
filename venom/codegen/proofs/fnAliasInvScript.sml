@@ -6808,6 +6808,60 @@ Proof
   irule (cj 5 alias_certificate_rules) >> metis_tac[]
 QED
 
+Theorem alias_cut_closure_coverage:
+  Q SUBSET alias_cut_closure Z safe repair H <=>
+  (!a. a IN Q /\ a NOTIN Z ==>
+    (safe a /\ a IN H) \/ ?src. src IN H /\ repair a src)
+Proof
+  rw[alias_cut_closure_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem alias_cut_closure_barrier:
+  a NOTIN Z /\ ~safe a /\ (!src. ~repair a src) ==>
+  a NOTIN alias_cut_closure Z safe repair H
+Proof
+  simp[alias_cut_closure_def]
+QED
+
+Theorem alias_cut_closure_repair:
+  repair a src /\ src IN H ==> a IN alias_cut_closure Z safe repair H
+Proof
+  rw[alias_cut_closure_def] >> metis_tac[]
+QED
+
+Theorem alias_cut_closure_two_cut_repair:
+  src IN Z /\ repair2 a src ==>
+  a IN alias_cut_closure Z safe2 repair2 (alias_cut_closure Z safe1 repair1 H)
+Proof
+  rw[alias_cut_closure_def] >> metis_tac[]
+QED
+
+Theorem alias_cut_root_write_barrier:
+  normalize_operand dfg [] a <> a /\
+  normalize_operand dfg [] a = Var r /\ MEM r inst.inst_outputs /\
+  (!src. ~repair a src) ==>
+  a NOTIN alias_cut_closure {a | normalize_operand dfg [] a = a}
+    (\a. (!x. a = Var x ==> ~MEM x inst.inst_outputs) /\
+         (!x. normalize_operand dfg [] a = Var x ==> ~MEM x inst.inst_outputs)) repair H
+Proof
+  strip_tac >> irule alias_cut_closure_barrier >> simp[] >>
+  metis_tac[alias_certificate_root_write_blocks_survival]
+QED
+
+Theorem alias_cut_phi_root_write_barrier:
+  normalize_operand dfg [] a <> a /\
+  normalize_operand dfg [] a = Var r /\ MEM inst instructions /\
+  inst.inst_opcode = PHI /\ MEM r inst.inst_outputs ==>
+  a NOTIN alias_cut_closure {a | normalize_operand dfg [] a = a}
+    (\a. (!x t. a = Var x /\ MEM t instructions /\ t.inst_opcode = PHI ==>
+            ~MEM x t.inst_outputs) /\
+         (!x t. normalize_operand dfg [] a = Var x /\
+            MEM t instructions /\ t.inst_opcode = PHI ==> ~MEM x t.inst_outputs))
+    (\dst src. F) H
+Proof
+  strip_tac >> irule alias_cut_closure_barrier >> simp[] >> metis_tac[]
+QED
+
 Theorem alias_support_obstruction_names_reflexive:
   normalize_operand (dfg_build_function alias_retired_fn) [] (Var "b") = Var "b" /\
   normalize_operand (dfg_build_function alias_halting_cut_fn) [] (Var "dead") = Var "dead" /\
