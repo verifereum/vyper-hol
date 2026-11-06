@@ -21,6 +21,18 @@ Theorem copy_len_literal_endpoint:
     op_taint tnf (Var tmp) = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
+    sf.vs_call_ctx = s.vs_call_ctx /\ sf.vs_tx_ctx = s.vs_tx_ctx /\
+    sf.vs_block_ctx = s.vs_block_ctx /\
+    sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_returndata = s.vs_returndata /\
+    sf.vs_logs = s.vs_logs /\ sf.vs_outcomes = s.vs_outcomes /\
+    sf.vs_requests = s.vs_requests /\
+    sf.vs_pending_deletions = s.vs_pending_deletions /\
+    sf.vs_immutables = s.vs_immutables /\ sf.vs_code = s.vs_code /\
+    sf.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+    sf.vs_initial_fmp = s.vs_initial_fmp /\
     (!x. x <> tmp ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tnf (Var x) = op_taint tn (Var x))
@@ -54,6 +66,18 @@ Theorem copy_len_round_endpoint:
     op_taint tnf (Var d) = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
+    sf.vs_call_ctx = s.vs_call_ctx /\ sf.vs_tx_ctx = s.vs_tx_ctx /\
+    sf.vs_block_ctx = s.vs_block_ctx /\
+    sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_returndata = s.vs_returndata /\
+    sf.vs_logs = s.vs_logs /\ sf.vs_outcomes = s.vs_outcomes /\
+    sf.vs_requests = s.vs_requests /\
+    sf.vs_pending_deletions = s.vs_pending_deletions /\
+    sf.vs_immutables = s.vs_immutables /\ sf.vs_code = s.vs_code /\
+    sf.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+    sf.vs_initial_fmp = s.vs_initial_fmp /\
     (!x. x <> b /\ x <> c /\ x <> d ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tnf (Var x) = op_taint tn (Var x))
@@ -86,7 +110,7 @@ Proof
   qexistsl_tac [`G3`, `tn3`, `s3`] >>
   conj_tac >- (metis_tac[SRULE []
     (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)]) >>
-  simp[arithmeticTheory.ADD1] >> metis_tac[]
+  simp[arithmeticTheory.ADD1, update_var_def] >> metis_tac[]
 QED
 
 Theorem bytestring_copy_len_counted:
@@ -105,6 +129,18 @@ Theorem bytestring_copy_len_counted:
     op_taint tnf out = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
+    sf.vs_call_ctx = s.vs_call_ctx /\ sf.vs_tx_ctx = s.vs_tx_ctx /\
+    sf.vs_block_ctx = s.vs_block_ctx /\
+    sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_returndata = s.vs_returndata /\
+    sf.vs_logs = s.vs_logs /\ sf.vs_outcomes = s.vs_outcomes /\
+    sf.vs_requests = s.vs_requests /\
+    sf.vs_pending_deletions = s.vs_pending_deletions /\
+    sf.vs_immutables = s.vs_immutables /\ sf.vs_code = s.vs_code /\
+    sf.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+    sf.vs_initial_fmp = s.vs_initial_fmp /\
     (!x. not_fresh_at sa x ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tnf (Var x) = op_taint tn (Var x))
@@ -137,7 +173,7 @@ Proof
   qexistsl_tac [`G2`, `tn2`, `s2`] >>
   conj_tac >- (metis_tac[SRULE []
     (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)]) >>
-  simp[arithmeticTheory.ADD1] >> metis_tac[]
+  simp[arithmeticTheory.ADD1, update_var_def] >> metis_tac[]
 QED
 
 Theorem bytestring_copy_len_counted_exact:
@@ -158,6 +194,18 @@ Theorem bytestring_copy_len_counted_exact:
     eval_operand out sf = SOME (n2w n) /\ op_taint tnf out = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
+    sf.vs_call_ctx = s.vs_call_ctx /\ sf.vs_tx_ctx = s.vs_tx_ctx /\
+    sf.vs_block_ctx = s.vs_block_ctx /\
+    sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_returndata = s.vs_returndata /\
+    sf.vs_logs = s.vs_logs /\ sf.vs_outcomes = s.vs_outcomes /\
+    sf.vs_requests = s.vs_requests /\
+    sf.vs_pending_deletions = s.vs_pending_deletions /\
+    sf.vs_immutables = s.vs_immutables /\ sf.vs_code = s.vs_code /\
+    sf.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+    sf.vs_initial_fmp = s.vs_initial_fmp /\
     (!x. not_fresh_at sa x ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tnf (Var x) = op_taint tn (Var x))

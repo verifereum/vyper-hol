@@ -58,6 +58,7 @@ Theorem copy_len_binop_endpoint:
     op_taint tnf (Var tmp) = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
     (!x. x <> tmp ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tnf (Var x) = op_taint tn (Var x))
@@ -72,7 +73,8 @@ Proof
   conj_tac >- (irule copy_len_binop_path >> metis_tac[]) >>
   `opc = ADD \/ opc = AND` by metis_tac[] >>
   simp[copy_len_binop_ghost_frame, eval_operand_def, lookup_var_def,
-       update_var_def, FLOOKUP_UPDATE]
+       update_var_def, FLOOKUP_UPDATE, step_taint_def, mk_inst_def,
+       set_var_taint_def, imm_taint_def]
 QED
 
 Theorem copy_len_header_endpoint:
@@ -90,6 +92,7 @@ Theorem copy_len_header_endpoint:
     op_taint tnf (Var tmp) = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
     (!x. x <> tmp ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tnf (Var x) = op_taint tn (Var x))
