@@ -17,13 +17,13 @@ Theorem abi_decoder_recursive_dyn_loop:
   final.cs_next_id <= hi /\ hi <= last /\ next <= start.cs_next_var /\
   final.cs_next_var <= limit_st.cs_next_var /\
   abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
-    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
+    B sb d slot b cap next initial /\ abi_sites_decoder_correct sites ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_sites_decoder_recursive_loop_inv sites opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial
     (fresh_label_output "dec_dyn_hdr" start.cs_next_label) i s ==>
   ?t. val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d t.vs_memory /\
-    abi_decoder_effect first last lo hi next limit_st
+    abi_sites_decoder_effect sites first last lo hi next limit_st
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial t /\
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = n2w (LENGTH vs) /\
     t.vs_current_bb = final.cs_current_bb /\

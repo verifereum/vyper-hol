@@ -322,7 +322,7 @@ Theorem abi_decoder_member_body_helper:
   (middle.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_sites_decoder_correct sites ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_members ce env sf pretys pretvs preavs prevs /\
   abi_decoder_members ce env sf (ty::tys) (tv::tvs) (av::avs) (v::vs) /\
   abi_decoder_ranges opc base_op hi src dst B sb
@@ -335,13 +335,13 @@ Theorem abi_decoder_member_body_helper:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) actual.vs_memory /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
@@ -358,7 +358,7 @@ Proof
   strip_tac >> rename1 `abi_decode_sim ctx func initial prepared` >>
   qpat_assum `abi_decoder_address_frame _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  `abi_decoder_budget first last b cap prepared` by
+  `abi_sites_decoder_budget sites first last b cap prepared` by
     (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
       abi_decoder_budget_transport) >> asm_simp_tac bool_ss []) >>
   `first <= abi_decoder_entry_floor middle` by
@@ -371,7 +371,7 @@ Proof
     `d` |-> `d + SUM (MAP (type_memory_bytes ce) pretys)`] abi_decoder_correct_run) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) actual.vs_memory` >>
-  `abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+  `abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
     (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial actual` by
     (mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
       `next` |-> `st.cs_next_var`, `child_lo` |-> `middle.cs_next_id`,
@@ -401,12 +401,12 @@ Theorem abi_decoder_empty_canonical_member:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\
+  abi_sites_decoder_budget sites first last b cap initial /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) actual.vs_memory /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
@@ -434,7 +434,7 @@ Proof
     `vo` |-> `SUM (MAP (type_memory_bytes ce) pretys)`, `dynamic` |-> `T`]
     abi_decode_empty_member_reach) >> impl_tac >- asm_simp_tac bool_ss [] >>
   disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  `abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+  `abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
     (d + SUM (MAP (type_memory_bytes ce) pretys)) 0 b cap initial actual` by
     (irule abi_decoder_address_effect >> asm_simp_tac bool_ss [] >>
      qexists_tac `st.cs_next_var` >> simp[]) >>
@@ -451,7 +451,7 @@ Theorem abi_decoder_member_body:
   (middle.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_sites_decoder_correct sites ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_members ce env sf pretys pretvs preavs prevs /\
   abi_decoder_members ce env sf (ty::tys) (tv::tvs) (av::avs) (v::vs) /\
   abi_decoder_ranges opc base_op hi src dst B sb
@@ -464,13 +464,13 @@ Theorem abi_decoder_member_body:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) actual.vs_memory /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\

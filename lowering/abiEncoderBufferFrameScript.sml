@@ -7,14 +7,14 @@ Ancestors
 
 Theorem abi_encoder_buffer_pre_effect:
   abi_encoder_buffer_pre ei at av st src dst sb source_cap d output_size b cap initial /\
-  abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual ==>
+  abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual ==>
   abi_encoder_buffer_pre ei at av st src dst sb source_cap d output_size b cap actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_encoder_buffer_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_buffer_pre_def]) >>
-  qpat_assum `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
+  qpat_assum `abi_sites_decoder_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_effect_def]) >>
   `abi_footprint_disjoint sb source_cap [(d,output_size);(b,cap)]` by
     asm_simp_tac (srw_ss()) [abi_footprint_disjoint_def, DISJ_IMP_THM, FORALL_AND_THM] >>
   drule_all abi_encoder_input_frame >> strip_tac >>

@@ -9,19 +9,19 @@ Ancestors
   rich_list arithmetic
 
 Theorem abi_encoder_correct_word:
-  abi_encoder_correct AbiPrimWord
+  abi_sites_encoder_correct sites AbiPrimWord
 Proof
   irule abi_encoder_shared_correct >> irule abi_encoder_shared_word
 QED
 
 Theorem abi_encoder_correct_copy:
-  abi_encoder_correct (AbiCopy sz)
+  abi_sites_encoder_correct sites (AbiCopy sz)
 Proof
   irule abi_encoder_shared_correct >> irule abi_encoder_shared_copy
 QED
 
 Theorem abi_encoder_correct_bytes:
-  abi_encoder_correct (AbiBytestring maxlen)
+  abi_sites_encoder_correct sites (AbiBytestring maxlen)
 Proof
   irule abi_encoder_shared_correct >> irule abi_encoder_shared_bytes
 QED
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem abi_encoder_correct_empty:
-  abi_encoder_correct (AbiComplex [])
+  abi_sites_encoder_correct sites (AbiComplex [])
 Proof
   irule abi_encoder_shared_correct >> irule abi_encoder_shared_empty
 QED

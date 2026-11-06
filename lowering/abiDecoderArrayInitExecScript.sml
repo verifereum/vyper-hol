@@ -66,9 +66,9 @@ QED
 (* Execute all straight-line initialization preceding a loop-based array decode. *)
 Theorem abi_decoder_budget_transport:
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next ==>
-  (abi_decoder_budget first last b cap t <=> abi_decoder_budget first last b cap s)
+  (abi_sites_decoder_budget sites first last b cap t <=> abi_sites_decoder_budget sites first last b cap s)
 Proof
-  strip_tac >> simp[abi_decoder_budget_def, abi_decoder_missing_def]
+  strip_tac >> simp[abi_sites_decoder_budget_def, abi_sites_decoder_missing_def]
 QED
 
 Theorem abi_decoder_arena_disjoint:
@@ -122,12 +122,12 @@ Theorem abi_decode_array_loop_init_sequence:
   abi_decode_load opc (n2w (B + sb):bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap s /\ first <= loop_st.cs_next_id - 2 /\ loop_st.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap s /\ first <= loop_st.cs_next_id - 2 /\ loop_st.cs_next_id <= last /\
   (d + 32 <= b \/ b + cap <= d) /\ fresh_vars_wrt st s ==>
   ?t p. run_inst_seq (emitted_insts st loop_st) s = OK t /\
     eval_operand (FST setup) t = SOME (n2w p) /\ eval_operand (SND setup) t = SOME (n2w n) /\
     mload p t = 0w /\ mem_word_at d t.vs_memory = n2w n /\ b <= p /\ p + 32 <= b + cap /\
-    abi_decoder_budget first last b cap t /\ fresh_vars_wrt loop_st t /\
+    abi_sites_decoder_budget sites first last b cap t /\ fresh_vars_wrt loop_st t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     abi_decode_footprint_frame [(d,32);(b,cap)] s t /\
     abi_decode_footprint_frame [(d,32);(p,32)] s t /\
@@ -142,10 +142,10 @@ Proof
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule_all abi_decode_array_prepare_sequence >> strip_tac >>
-  `abi_decoder_budget first last b cap prepared` by
+  `abi_sites_decoder_budget sites first last b cap prepared` by
     (drule_all abi_decoder_budget_transport >> simp[]) >>
-  `header_st.cs_next_id IN abi_decoder_ids first last` by
-    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  `header_st.cs_next_id IN abi_sites_decoder_ids sites first last` by
+    (simp_tac std_ss [abi_sites_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
   `fresh_vars_wrt loop_st prepared` by
     (mp_tac (Q.SPECL [`header_st`, `loop_st`, `prepared`] fresh_vars_wrt_mono) >>
      simp[GREATER_EQ]) >>

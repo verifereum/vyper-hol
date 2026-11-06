@@ -9,7 +9,23 @@ Ancestors
   abiDecoderReentry abiDecoderLoop abiDecoderContract abiEncoderInput abiEncoder
   compileEnv valueEncoding contractABI instIdxIndep venomState finite_map words list arithmetic
 
-Definition abi_scratch_input_def:
+Definition abi_sites_scratch_input_def:
+  abi_sites_scratch_input sites ei at av st src dst sb source_cap d output_size first last b cap s <=>
+    abi_encoder_input ei at av sb source_cap s.vs_memory /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+    abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+    LENGTH (enc at av) <= output_size /\
+    sb+source_cap < dimword (:256) /\ d+output_size < dimword (:256) /\
+    (sb+source_cap <= d \/ d+output_size <= sb) /\
+    abi_footprint_disjoint sb source_cap
+      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s) /\
+    abi_footprint_disjoint d output_size
+      (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)
+End
+
+Overload abi_scratch_input = “abi_sites_scratch_input UNIV”
+
+Theorem abi_scratch_input_def:
   abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap s <=>
     abi_encoder_input ei at av sb source_cap s.vs_memory /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -21,9 +37,25 @@ Definition abi_scratch_input_def:
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
     abi_footprint_disjoint d output_size
       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)
+Proof
+  rewrite_tac[abi_sites_scratch_input_def]
+QED
+
+Definition abi_sites_scratch_effect_def:
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap s t <=>
+    fresh_vars_wrt limit_st t /\ abi_sites_decoder_budget sites first last b cap t /\
+    abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap s t /\
+    (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w) /\
+    abi_decode_footprint_frame
+      ((d,sz)::abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap s) s t /\
+    (!id. id < lo \/ hi <= id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    t.vs_halted = s.vs_halted
 End
 
-Definition abi_scratch_effect_def:
+Overload abi_scratch_effect = “abi_sites_scratch_effect UNIV”
+
+Theorem abi_scratch_effect_def:
   abi_scratch_effect first last lo hi next limit_st d sz b cap s t <=>
     fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap t /\
     abi_scratch_evolution (abi_decoder_ids first last) b cap s t /\
@@ -33,9 +65,36 @@ Definition abi_scratch_effect_def:
       ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap s) s t /\
     (!id. id < lo \/ hi <= id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     t.vs_halted = s.vs_halted
+Proof
+  rewrite_tac[abi_sites_scratch_effect_def]
+QED
+
+Definition abi_sites_scratch_encoder_def:
+  abi_sites_scratch_encoder sites ei <=>
+    !dst src start end_st out func ctx first last b cap limit_st initial at av sb source_cap d.
+    compile_abi_encode_to_buf dst src ei start = (out,end_st) /\ fn_has_code start end_st func /\
+    (start.cs_blocks = end_st.cs_blocks \/
+      !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    abi_sites_scratch_input sites ei at av start src dst sb source_cap d (LENGTH (enc at av))
+      first last b cap initial /\
+    abi_sites_decoder_budget sites first last b cap initial /\
+    first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+    end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+    ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
+    initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
+    ?actual. mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+      eval_operand out actual = SOME (n2w (LENGTH (enc at av))) /\
+      abi_sites_scratch_effect sites first last start.cs_next_id end_st.cs_next_id start.cs_next_var
+        limit_st d (LENGTH (enc at av)) b cap initial actual /\
+      actual.vs_current_bb = end_st.cs_current_bb /\
+      actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
+      ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 End
 
-Definition abi_scratch_encoder_def:
+Overload abi_scratch_encoder = “abi_sites_scratch_encoder UNIV”
+
+Theorem abi_scratch_encoder_def:
   abi_scratch_encoder ei <=>
     !dst src start end_st out func ctx first last b cap limit_st initial at av sb source_cap d.
     compile_abi_encode_to_buf dst src ei start = (out,end_st) /\ fn_has_code start end_st func /\
@@ -56,14 +115,16 @@ Definition abi_scratch_encoder_def:
       actual.vs_current_bb = end_st.cs_current_bb /\
       actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
       ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
-End
+Proof
+  rewrite_tac[abi_sites_scratch_encoder_def]
+QED
 
 Theorem abi_scratch_effect_inst_idx[simp]:
-  abi_scratch_effect first last lo hi next limit_st d sz b cap initial
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap initial
     (actual with vs_inst_idx := ix) <=>
-  abi_scratch_effect first last lo hi next limit_st d sz b cap initial actual
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap initial actual
 Proof
-  simp[abi_scratch_effect_def, abi_scratch_evolution_def, fresh_vars_wrt_def,
-    eval_op_inst_idx, abi_decode_footprint_frame_def, abi_decoder_budget_def,
-    abi_decoder_missing_def]
+  simp[abi_sites_scratch_effect_def, abi_scratch_evolution_def, fresh_vars_wrt_def,
+    eval_op_inst_idx, abi_decode_footprint_frame_def, abi_sites_decoder_budget_def,
+    abi_sites_decoder_missing_def]
 QED

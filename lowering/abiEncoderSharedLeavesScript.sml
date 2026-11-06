@@ -39,10 +39,10 @@ Theorem abi_encoder_shared_leaf_sequence:
   raw.vs_accounts = initial.vs_accounts /\ raw.vs_transient = initial.vs_transient /\
   raw.vs_logs = initial.vs_logs /\ raw.vs_requests = initial.vs_requests /\
   raw.vs_pending_deletions = initial.vs_pending_deletions /\
-  fn_has_code start end_st func /\ abi_decoder_budget first last b cap initial /\
+  fn_has_code start end_st func /\ abi_sites_decoder_budget sites first last b cap initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st)
     (first,last,b,cap) (at,av,d) initial
     (raw with vs_inst_idx := LENGTH end_st.cs_current_insts)
 Proof
@@ -51,17 +51,17 @@ Proof
   disch_then (qspec_then `ctx` assume_tac) >>
   drule_all abi_encoder_run_sequence_reach >>
   disch_then (qspec_then `ctx` strip_assume_tac) >> gvs[] >>
-  `abi_scratch_effect first last start.cs_next_id end_st.cs_next_id start.cs_next_var
+  `abi_sites_scratch_effect sites first last start.cs_next_id end_st.cs_next_id start.cs_next_var
     limit_st d (LENGTH (enc at av)) b cap initial raw` by
     (irule abi_scratch_sequence_post_effect >> simp[] >> qexists_tac `out` >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids start.cs_next_id end_st.cs_next_id)
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites start.cs_next_id end_st.cs_next_id)
     [(d,LENGTH (enc at av))] initial raw` by
     (irule abi_encoder_sequence_post_registered >> simp[] >>
      qexistsl_tac [`limit_st`, `out`, `start`] >> simp[]) >>
   `(alloca_inv initial ==> alloca_inv raw)` by
     (metis_tac[abi_encoder_sequence_post_alloca_inv]) >>
-  fs[abi_encoder_shared_endpoint_def, abi_encoder_sequence_post_def,
-    abi_scratch_effect_def, abi_encoder_registered_effect_def,
+  fs[abi_sites_encoder_shared_endpoint_def, abi_encoder_sequence_post_def,
+    abi_sites_scratch_effect_def, abi_encoder_registered_effect_def,
     eval_op_inst_idx, alloca_inv_def, allocas_non_overlapping_def,
     alloca_next_valid_def] >> metis_tac[]
 QED
@@ -90,12 +90,12 @@ Proof
 QED
 
 Theorem abi_encoder_shared_word:
-  abi_encoder_shared AbiPrimWord
+  abi_sites_encoder_shared sites AbiPrimWord
 Proof
-  simp_tac bool_ss [abi_encoder_shared_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_sites_encoder_shared_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   drule abi_encoder_open_word_typed >> strip_tac >>
   `sb < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
   drule_all abi_encoder_word_input_reentry >> strip_tac >>
@@ -112,12 +112,12 @@ Proof
 QED
 
 Theorem abi_encoder_shared_copy:
-  abi_encoder_shared (AbiCopy sz)
+  abi_sites_encoder_shared sites (AbiCopy sz)
 Proof
-  simp_tac bool_ss [abi_encoder_shared_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_sites_encoder_shared_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   drule abi_encoder_open_copy_typed >> strip_tac >>
   `LENGTH (enc at av) = sz` by
     (qpat_assum `abi_encoder_input _ _ _ _ _ _`
@@ -138,12 +138,12 @@ Proof
 QED
 
 Theorem abi_encoder_shared_bytes:
-  abi_encoder_shared (AbiBytestring maxlen)
+  abi_sites_encoder_shared sites (AbiBytestring maxlen)
 Proof
-  simp_tac bool_ss [abi_encoder_shared_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_sites_encoder_shared_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   drule abi_encoder_open_bytes_typed >> strip_tac >>
   `sb < dimword (:256)` by decide_tac >>
   `sb + source_cap <= d \/ d + LENGTH (enc at av) <= sb` by
@@ -170,20 +170,20 @@ Proof
 QED
 
 Theorem abi_encoder_shared_empty:
-  abi_encoder_shared (AbiComplex [])
+  abi_sites_encoder_shared sites (AbiComplex [])
 Proof
-  simp_tac bool_ss [abi_encoder_shared_def] >> rpt gen_tac >>
+  simp_tac bool_ss [abi_sites_encoder_shared_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   gvs[Once compile_abi_encode_child_def, comp_return_def] >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   `enc at av = []` by
     (fs[abi_encoder_open_complex_iff, abi_encoder_tuple_type_def,
        abi_encoder_member_span_def, enc_def, LET_THM, REV_DEF]) >>
-  `abi_scratch_effect first last end_st.cs_next_id end_st.cs_next_id end_st.cs_next_var
+  `abi_sites_scratch_effect sites first last end_st.cs_next_id end_st.cs_next_id end_st.cs_next_var
     limit_st d (LENGTH (enc at av)) b cap initial initial` by
     (irule abi_scratch_leaf_effect >> simp[abi_decode_frame_def]) >>
   qexists_tac `initial` >>
-  simp[abi_encoder_shared_endpoint_def, mem_bytes_at_def, eval_operand_def,
+  simp[abi_sites_encoder_shared_endpoint_def, mem_bytes_at_def, eval_operand_def,
     abi_encoder_registered_effect_refl, abi_encoder_extend_sim_refl]
 QED

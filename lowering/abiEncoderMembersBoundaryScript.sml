@@ -33,21 +33,21 @@ Theorem abi_encoder_members_initial_inv:
   hl = head_lengths tys 0 /\ LENGTH (enc (Tuple tys) (ListV avs)) <= output_size /\
   abi_encoder_cursor active dyn_ptr site slot first lo st hl initial /\
   (active \/ EVERY (\(_,_,_,dyn). ~dyn) infos) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ lo <= st.cs_next_id /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ lo <= st.cs_next_id /\
   st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  abi_encoder_members_inv infos tys avs [] [] active dyn_ptr site slot first last lo st limit_st
+  abi_sites_encoder_members_inv sites infos tys avs [] [] active dyn_ptr site slot first last lo st limit_st
     src dst sb 0 0 d hl output_size b cap initial
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `hl = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  asm_simp_tac (srw_ss()) [abi_encoder_members_inv_def, has_type_def, abi_tuple_tails_def,
+  asm_simp_tac (srw_ss()) [abi_sites_encoder_members_inv_def, has_type_def, abi_tuple_tails_def,
     Excl "enc_def"]
 QED
 
 Theorem abi_encoder_members_final_output:
-  abi_encoder_members_inv [] [] [] tys avs active dyn_ptr site slot first last lo st limit_st
+  abi_sites_encoder_members_inv sites [] [] [] tys avs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap actual ==>
   mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) actual.vs_memory =
     enc (Tuple tys) (ListV avs) /\
@@ -55,7 +55,7 @@ Theorem abi_encoder_members_final_output:
     (LENGTH (enc (Tuple tys) (ListV avs))) actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS o
-    SIMP_RULE bool_ss [abi_encoder_members_inv_def, APPEND_NIL]) >>
+    SIMP_RULE bool_ss [abi_sites_encoder_members_inv_def, APPEND_NIL]) >>
   drule has_types_length >> strip_tac >>
   `LENGTH (enc (Tuple tys) (ListV avs)) = hl+LENGTH (FLAT (abi_tuple_tails tys avs))` by
     asm_simp_tac bool_ss [canonical_tuple_length, abi_tuple_tails_length, head_lengths_acc, ADD_CLAUSES] >>

@@ -294,12 +294,12 @@ Theorem abi_encoder_array_count_prepare:
   abi_encoder_buffer_pre (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size b cap initial /\
   LENGTH (enc (Array NONE ty) (ListV avs)) <= output_size /\
-  abi_decoder_budget first last b cap initial /\ st'.cs_next_var <= limit_st.cs_next_var /\
+  abi_sites_decoder_budget sites first last b cap initial /\ st'.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. abi_encoder_array_memory ei asz msz active ty avs st' src dst sb source_cap d output_size b cap 0 actual /\
     abi_decoder_operand_live st'.cs_next_var cnt /\ eval_operand cnt actual = SOME (n2w (LENGTH avs)) /\
-    abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
+    abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
@@ -312,7 +312,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `abi_decode_frame d output_size initial actual` by
     (irule abi_decode_frame_widen >> qexistsl_tac [`d`, `32`] >> asm_simp_tac (srw_ss()) []) >>
-  `abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual` by
+  `abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual` by
     (irule abi_decoder_scratch_free_effect >> asm_simp_tac (srw_ss()) []) >>
   `abi_encoder_buffer_pre (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size b cap actual` by
@@ -337,7 +337,7 @@ Theorem abi_encoder_array_parent_finish:
   abi_decoder_operand_live st.cs_next_var parent_ptr /\ abi_decoder_operand_live st.cs_next_var size_op /\
   mem_bytes_at d len initial.vs_memory = bytes /\ len <= output_size /\
   (d+output_size <= b \/ b+cap <= d) /\
-  abi_decoder_budget first last b cap initial /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -346,15 +346,15 @@ Theorem abi_encoder_array_parent_finish:
     eval_operand out actual = SOME (n2w len) /\ mload slot actual = n2w len /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
     abi_decode_footprint_frame [(slot,32)] initial actual /\
-    abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
+    abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
+  `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  qpat_assum `abi_decoder_budget _ _ _ _ _`
-    (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_decoder_budget_def]) >>
+  qpat_assum `abi_sites_decoder_budget sites _ _ _ _ _`
+    (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_decoder_budget_def]) >>
   `slot < dimword (:256)` by decide_tac >>
   mp_tac (Q.INST [`old_word` |-> `0w:bytes32`, `size_word` |-> `n2w len:bytes32`]
     abi_encode_array_finish_reach) >>
@@ -365,7 +365,7 @@ Proof
   `abi_decoder_scratch_frame first last lo hi initial actual` by
     (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`,
       `sz` |-> `output_size:num`] abi_encoder_owned_scratch_frame) >> asm_simp_tac bool_ss []) >>
-  `abi_decoder_budget first last b cap actual` by
+  `abi_sites_decoder_budget sites first last b cap actual` by
     (drule_all abi_decoder_budget_transport >> asm_simp_tac bool_ss []) >>
   `abi_decode_frame b cap initial actual` by
     (irule abi_decode_frame_widen >> qexistsl_tac [`slot`, `32`] >> asm_simp_tac bool_ss []) >>
@@ -376,7 +376,7 @@ Proof
        (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
      `d+len <= slot \/ slot+32 <= d` by decide_tac >>
      qpat_x_assum `!p n. _` (qspecl_then [`d`, `len`] mp_tac) >> asm_simp_tac bool_ss []) >>
-  qexists_tac `actual` >> asm_simp_tac (srw_ss()) [abi_decoder_effect_def]
+  qexists_tac `actual` >> asm_simp_tac (srw_ss()) [abi_sites_decoder_effect_def]
 QED
 
 (* ===== Prepare ===== *)
@@ -411,7 +411,7 @@ Theorem abi_encoder_array_parent_prepare:
   abi_encoder_buffer_pre (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
     st src dst sb source_cap d output_size b cap initial /\
   LENGTH (enc (Array NONE ty) (ListV avs)) <= output_size /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\
   loop_st.cs_next_id <= hi /\ hi <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -420,7 +420,7 @@ Theorem abi_encoder_array_parent_prepare:
     abi_encoder_cursor T (FST ops) st.cs_next_id slot first st.cs_next_id loop_st 0 actual /\
     abi_decoder_operand_live loop_st.cs_next_var (SND ops) /\
     eval_operand (SND ops) actual = SOME (n2w (LENGTH avs)) /\
-    abi_decoder_effect first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap initial actual /\
+    abi_sites_decoder_effect sites first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = loop_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
@@ -435,8 +435,8 @@ Proof
     abi_encoder_zero_cursor_prepare) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial allocated_state` >>
-  `fresh_vars_wrt limit_st allocated_state /\ abi_decoder_budget first last b cap allocated_state` by
-    fs[abi_decoder_effect_def] >>
+  `fresh_vars_wrt limit_st allocated_state /\ abi_sites_decoder_budget sites first last b cap allocated_state` by
+    fs[abi_sites_decoder_effect_def] >>
   mp_tac (Q.INST [`st` |-> `allocated`, `st'` |-> `loop_st`,
     `initial` |-> `allocated_state:venom_state`, `lo` |-> `allocated.cs_next_id`]
     abi_encoder_array_count_prepare) >>
@@ -449,11 +449,11 @@ Proof
       abi_encoder_cursor_effect_protected) >> impl_tac >- asm_simp_tac (srw_ss()) [] >> simp[]) >>
   `abi_encoder_cursor T parent_ptr st.cs_next_id slot first st.cs_next_id loop_st 0 actual` by
     (drule_all abi_encoder_cursor_mono >> asm_simp_tac bool_ss []) >>
-  `abi_decoder_effect first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap allocated_state actual` by
+  `abi_sites_decoder_effect sites first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap allocated_state actual` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `hi`, `allocated.cs_next_id`, `allocated.cs_next_var`, `output_size`] >>
      asm_simp_tac (srw_ss()) [] >> decide_tac) >>
-  `abi_decoder_effect first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap initial actual` by
+  `abi_sites_decoder_effect sites first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap initial actual` by
     (irule abi_decoder_effect_trans >> qexists_tac `allocated_state` >> asm_simp_tac bool_ss []) >>
   qpat_assum `loop_st.cs_next_var = _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>

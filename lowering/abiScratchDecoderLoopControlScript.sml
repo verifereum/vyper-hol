@@ -7,16 +7,16 @@ Ancestors
   arithmetic
 
 Theorem abi_scratch_effect_refl:
-  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s ==>
-  abi_scratch_effect first last lo hi next limit_st d sz b cap s s
+  fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s ==>
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap s s
 Proof
   strip_tac >> irule abi_scratch_leaf_effect >> simp[abi_decode_frame_def]
 QED
 
 Theorem abi_scratch_decoder_header_effect:
   next <= first_var /\ first_var + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s ==>
-  abi_scratch_effect first last lo hi next limit_st d sz b cap s
+  fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s ==>
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap s
     (jump_to lbl (abi_decode_position_header_state base_op first_var B sb i ncount s))
 Proof
   strip_tac >> drule_all abi_decoder_position_header_registers >> strip_tac >>

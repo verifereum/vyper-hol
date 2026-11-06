@@ -13,19 +13,19 @@ Ancestors
    and the owned frame without excluding the whole numeric scratch arena. *)
 
 Theorem abi_scratch_prefix_effect:
-  abi_encoder_complex_prefix_post infos dyn_ptr next site limit_st first last b cap initial actual /\
-  abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual /\
+  abi_sites_encoder_complex_prefix_post sites infos dyn_ptr next site limit_st first last b cap initial actual /\
+  abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual /\
   abi_decode_footprint_frame
-    (abi_decoder_child_scratch (abi_decoder_ids site stop) b cap initial) initial actual /\ site < stop ==>
-  abi_scratch_effect first last site stop next limit_st d sz b cap initial actual
+    (abi_decoder_child_scratch (abi_sites_decoder_ids sites site stop) b cap initial) initial actual /\ site < stop ==>
+  abi_sites_scratch_effect sites first last site stop next limit_st d sz b cap initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decode_footprint_frame
-    ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids site stop) b cap initial) initial actual` by
+    ((d,sz)::abi_decoder_child_scratch (abi_sites_decoder_ids sites site stop) b cap initial) initial actual` by
     (irule abi_encoder_frame_extra_window >> asm_simp_tac bool_ss []) >>
-  qpat_assum `abi_encoder_complex_prefix_post _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o PURE_REWRITE_RULE [abi_encoder_complex_prefix_post_def]) >>
-  asm_simp_tac bool_ss [abi_scratch_effect_def] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `abi_sites_encoder_complex_prefix_post sites _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_sites_encoder_complex_prefix_post_def]) >>
+  asm_simp_tac bool_ss [abi_sites_scratch_effect_def] >> rpt gen_tac >> strip_tac >>
   `id <> site` by decide_tac >> simp[]
 QED
 

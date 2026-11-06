@@ -14,14 +14,14 @@ Theorem abi_encoder_array_static_body_reach:
     st src dst sb source_cap d output_size b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\ j < LENGTH avs /\
   LENGTH (enc (Array NONE ty) (ListV avs)) <= output_size /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. mem_bytes_at (d+32+j*asz) (LENGTH (enc ty (EL j avs))) actual.vs_memory = enc ty (EL j avs) /\
     eval_operand out actual = SOME (n2w j) /\
     abi_decode_footprint_frame [(d+32+j*asz,LENGTH (enc ty (EL j avs)));(b,cap)] initial actual /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -33,7 +33,7 @@ Proof
   mp_tac (Q.INST [`dyn` |-> `F`] abi_encoder_array_prepare) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial ready` >>
-  `abi_decoder_budget first last b cap ready` by
+  `abi_sites_decoder_budget sites first last b cap ready` by
     (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
       abi_decoder_budget_transport) >>
      impl_tac >- full_simp_tac bool_ss [abi_decoder_address_frame_def] >> asm_simp_tac bool_ss []) >>
@@ -78,13 +78,13 @@ Theorem abi_encoder_array_static_iteration:
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\ j < LENGTH avs /\
   LENGTH (enc (Array NONE ty) (ListV avs)) <= output_size /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
     eval_operand out actual = SOME (n2w j) /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual

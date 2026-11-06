@@ -11,9 +11,9 @@ Ancestors
    to scratch evolution and arbitrary observational memory frames. *)
 
 Theorem abi_scratch_address:
-  abi_decoder_address_frame next s t /\ abi_decoder_budget first last b cap s ==>
+  abi_decoder_address_frame next s t /\ abi_sites_decoder_budget sites first last b cap s ==>
   abi_scratch_evolution ids b cap s t /\ abi_decode_footprint_frame fp s t /\
-  abi_decoder_budget first last b cap t /\
+  abi_sites_decoder_budget sites first last b cap t /\
   abi_decoder_child_scratch ids b cap t = abi_decoder_child_scratch ids b cap s
 Proof
   strip_tac >>
@@ -23,7 +23,7 @@ Proof
     (drule abi_decoder_budget_frontier >> simp[]) >>
   `abi_scratch_evolution ids b cap s t` by
     (rw[abi_scratch_evolution_def] >> gvs[]) >>
-  `(abi_decoder_budget first last b cap t <=> abi_decoder_budget first last b cap s)` by
+  `(abi_sites_decoder_budget sites first last b cap t <=> abi_sites_decoder_budget sites first last b cap s)` by
     (irule abi_decoder_budget_transport >> simp[]) >>
   simp[abi_decode_footprint_frame_def, abi_decoder_child_scratch_def]
 QED
@@ -36,18 +36,18 @@ QED
 
 Theorem abi_scratch_address_effect:
   abi_decoder_address_frame next initial actual /\ fresh_vars_wrt limit_st actual /\
-  abi_decoder_budget first last b cap initial ==>
-  abi_scratch_effect first last lo hi next limit_st d sz b cap initial actual
+  abi_sites_decoder_budget sites first last b cap initial ==>
+  abi_sites_scratch_effect sites first last lo hi next limit_st d sz b cap initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_decoder_address_frame _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  `abi_decoder_budget first last b cap actual` by
+  `abi_sites_decoder_budget sites first last b cap actual` by
     (drule_all abi_decoder_budget_transport >> simp[]) >>
   `initial.vs_alloca_next <= b+cap` by
-    (qpat_assum `abi_decoder_budget _ _ _ _ initial`
-       (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o PURE_REWRITE_RULE [abi_decoder_budget_def]) >> decide_tac) >>
-  `abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual` by
+    (qpat_assum `abi_sites_decoder_budget sites _ _ _ _ initial`
+       (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o PURE_REWRITE_RULE [abi_sites_decoder_budget_def]) >> decide_tac) >>
+  `abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial actual` by
     (simp[abi_scratch_evolution_def] >> rpt strip_tac >> gvs[]) >>
-  asm_simp_tac bool_ss [abi_scratch_effect_def, abi_decode_footprint_frame_def] >> first_assum ACCEPT_TAC
+  asm_simp_tac bool_ss [abi_sites_scratch_effect_def, abi_decode_footprint_frame_def] >> first_assum ACCEPT_TAC
 QED

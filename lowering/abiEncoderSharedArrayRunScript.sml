@@ -8,7 +8,7 @@ Ancestors
   compileEnv valueEncoding contractABI venomState words list arithmetic
 
 Theorem abi_encoder_shared_array_prepared_run:
-  abi_encoder_shared ei /\
+  abi_sites_encoder_shared sites ei /\
   ((active = F /\ abi_encoder_static_leaf ei /\
     abi_encode_array_static_body ip src dst ei asz msz body_st = (out,body_end)) \/
    (active = T /\
@@ -16,7 +16,7 @@ Theorem abi_encoder_shared_array_prepared_run:
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\
   body_end.cs_next_var+1 <= limit_st.cs_next_var /\
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   mem_word_at d initial.vs_memory = n2w (LENGTH avs) /\
   abi_encoder_cursor T ip site slot first site owner_st 0 initial /\
@@ -24,10 +24,10 @@ Theorem abi_encoder_shared_array_prepared_run:
     (LENGTH avs*abi_member_head_size ty) initial /\
   (active ==> site < cursor_site) /\ abi_decoder_operand_live owner_st.cs_next_var count_op /\
   eval_operand count_op initial = SOME (n2w (LENGTH avs)) /\
-  fresh_vars_wrt limit_st initial /\ abi_decoder_budget first last b cap initial /\
+  fresh_vars_wrt limit_st initial /\ abi_sites_decoder_budget sites first last b cap initial /\
   initial.vs_current_bb = owner_st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH owner_st.cs_current_insts /\ ~initial.vs_halted ==>
-  ?actual. abi_encoder_shared_array_index (ctx,func) (ei,asz,msz,active,ty,avs)
+  ?actual. abi_sites_encoder_shared_array_index sites (ctx,func) (ei,asz,msz,active,ty,avs)
     (owner_st,limit_st,src,dst,ip,dp,count_op) (site,slot,cursor_site,cursor_slot)
     (first,last,hi,b,cap) (sb,source_cap,d,sz) (SND (SND labels)) (LENGTH avs) initial actual /\
     mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) actual.vs_memory =
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem abi_encoder_shared_array_prepared_complete:
-  abi_encoder_shared ei /\
+  abi_sites_encoder_shared sites ei /\
   ((active = F /\ abi_encoder_static_leaf ei /\
     abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end)) \/
    (active = T /\
@@ -59,7 +59,7 @@ Theorem abi_encoder_shared_array_prepared_complete:
   fn_has_code exit_st final func /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\
   body_end.cs_next_var+1 <= limit_st.cs_next_var /\ final.cs_next_var <= limit_st.cs_next_var /\
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   mem_word_at d initial.vs_memory = n2w (LENGTH avs) /\
   abi_encoder_cursor T ip site slot first site owner_st 0 initial /\
@@ -67,14 +67,14 @@ Theorem abi_encoder_shared_array_prepared_complete:
     (LENGTH avs*abi_member_head_size ty) initial /\
   (active ==> site < cursor_site) /\ abi_decoder_operand_live owner_st.cs_next_var count_op /\
   eval_operand count_op initial = SOME (n2w (LENGTH avs)) /\
-  fresh_vars_wrt limit_st initial /\ abi_decoder_budget first last b cap initial /\
+  fresh_vars_wrt limit_st initial /\ abi_sites_decoder_budget sites first last b cap initial /\
   initial.vs_current_bb = owner_st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH owner_st.cs_current_insts /\ ~initial.vs_halted ==>
   ?actual. mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) actual.vs_memory =
       enc (Array NONE ty) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
-    abi_scratch_effect first last site hi owner_st.cs_next_var limit_st d sz b cap initial actual /\
-    abi_encoder_registered_effect (abi_decoder_ids site hi) [(d,sz)] initial actual /\
+    abi_sites_scratch_effect sites first last site hi owner_st.cs_next_var limit_st d sz b cap initial actual /\
+    abi_encoder_registered_effect (abi_sites_decoder_ids sites site hi) [(d,sz)] initial actual /\
     (alloca_inv initial ==> alloca_inv actual) /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_encoder_extend_sim ctx func initial actual

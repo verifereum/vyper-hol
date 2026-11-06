@@ -35,12 +35,12 @@ QED
 
 Theorem abi_decoder_alloc_buffer_reentry:
   compile_alloc_buffer 32 st = (buf,st') /\
-  abi_decoder_budget first last b cap s /\
-  st.cs_next_id IN abi_decoder_ids first last /\
+  abi_sites_decoder_budget sites first last b cap s /\
+  st.cs_next_id IN abi_sites_decoder_ids sites first last /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?t p. run_inst_seq (emitted_insts st st') s = OK t /\
     eval_operand buf.buf_operand t = SOME (n2w p) /\ buf.buf_size = 32 /\
-    abi_decoder_budget first last b cap t /\ fresh_vars_wrt limit_st t /\
+    abi_sites_decoder_budget sites first last b cap t /\ fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     b <= p /\ p + 32 <= b + cap /\
@@ -55,7 +55,7 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   qabbrev_tac `alloc_inst = mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]` >>
-  `alloc_inst.inst_id IN abi_decoder_ids first last /\
+  `alloc_inst.inst_id IN abi_sites_decoder_ids sites first last /\
    alloc_inst.inst_outputs = [STRING #"%" (toString st.cs_next_var)]` by
     simp[Abbr`alloc_inst`, mk_inst_def] >>
   drule_all abi_decoder_alloca32 >> strip_tac >>

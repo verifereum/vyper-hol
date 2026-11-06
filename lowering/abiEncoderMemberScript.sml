@@ -52,7 +52,7 @@ QED
 (* Actual static/dynamic child compilation advances the tuple-prefix invariant. *)
 
 Theorem abi_encoder_static_member_step:
-  abi_encoder_correct ei /\ compile_abi_encode_child dst src ei F heads dyn_ptr st = (out,end_st) /\
+  abi_sites_encoder_correct sites ei /\ compile_abi_encode_child dst src ei F heads dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -63,14 +63,14 @@ Theorem abi_encoder_static_member_step:
   tails = LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
   heads+LENGTH (enc ty av) <= hl /\ hl+tails <= output_size /\
   abi_encoder_tuple_prefix hl pre pvs d initial.vs_memory /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. abi_encoder_tuple_prefix hl (pre++[ty]) (pvs++[av]) d t.vs_memory /\
     eval_operand out t = SOME (n2w (LENGTH (enc ty av))) /\
     abi_decode_footprint_frame [(d+heads,LENGTH (enc ty av));(b,cap)] initial t /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial t /\
     t.vs_current_bb = end_st.cs_current_bb /\ t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func initial t
@@ -87,7 +87,7 @@ Proof
 QED
 
 Theorem abi_encoder_dynamic_member_step:
-  abi_encoder_correct ei /\ compile_abi_encode_child dst src ei T heads dyn_ptr st = (out,end_st) /\
+  abi_sites_encoder_correct sites ei /\ compile_abi_encode_child dst src ei T heads dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -100,7 +100,7 @@ Theorem abi_encoder_dynamic_member_step:
   abi_encoder_tuple_prefix hl pre pvs d initial.vs_memory /\
   eval_operand dyn_ptr initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
   abi_decoder_operand_live st.cs_next_var dyn_ptr /\
-  abi_decoder_budget first last b cap initial /\ first <= site /\ site < st.cs_next_id /\ lo <= site /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < st.cs_next_id /\ lo <= site /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -109,7 +109,7 @@ Theorem abi_encoder_dynamic_member_step:
     mload slot t = n2w (off+LENGTH (enc ty av)) /\ FLOOKUP t.vs_allocas site = SOME (slot,32) /\
     eval_operand out t = SOME (n2w (LENGTH (enc ty av))) /\
     abi_decode_footprint_frame [(d+heads,32);(d+off,LENGTH (enc ty av));(b,cap)] initial t /\
-    abi_decoder_effect first last lo end_st.cs_next_id st.cs_next_var
+    abi_sites_decoder_effect sites first last lo end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial t /\
     t.vs_current_bb = end_st.cs_current_bb /\ t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~t.vs_halted /\ abi_decode_sim ctx func initial t

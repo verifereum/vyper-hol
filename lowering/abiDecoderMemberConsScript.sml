@@ -163,10 +163,10 @@ QED
 (* Nonempty member-list execution from head and suffix correctness.
    TOP-LEVEL: abi_decoder_members_correct_cons. *)
 Theorem abi_decoder_members_correct_cons:
-  abi_decoder_correct ce env sf ty tv /\ abi_decoder_members_correct ce env sf tys tvs ==>
-  abi_decoder_members_correct ce env sf (ty::tys) (tv::tvs)
+  abi_sites_decoder_correct sites ce env sf ty tv /\ abi_sites_decoder_members_correct sites ce env sf tys tvs ==>
+  abi_sites_decoder_members_correct sites ce env sf (ty::tys) (tv::tvs)
 Proof
-  strip_tac >> rewrite_tac [abi_decoder_members_correct_def] >>
+  strip_tac >> rewrite_tac [abi_sites_decoder_members_correct_def] >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.SPECL [`ty::tys`, `tv::tvs`, `avs`, `vs`] abi_decoder_members_lengths) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -206,8 +206,8 @@ Proof
 QED
 
 Theorem abi_decoder_members_correct_list:
-  !tys tvs. LIST_REL (abi_decoder_correct ce env sf) tys tvs ==>
-    abi_decoder_members_correct ce env sf tys tvs
+  !tys tvs. LIST_REL (abi_sites_decoder_correct sites ce env sf) tys tvs ==>
+    abi_sites_decoder_members_correct sites ce env sf tys tvs
 Proof
   Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >> simp[abi_decoder_members_correct_nil] >>
   strip_tac >> irule abi_decoder_members_correct_cons >> simp[]

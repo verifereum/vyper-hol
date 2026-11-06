@@ -8,28 +8,28 @@ Ancestors
 
 (* Primitive word decoders satisfy the same recursive allocation/frame contract. *)
 Theorem abi_decoder_scratch_free_effect:
-  fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap s /\
+  fresh_vars_wrt limit_st t /\ abi_sites_decoder_budget sites first last b cap s /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
     eval_operand op t = SOME w) /\
   abi_decode_frame d sz s t /\ t.vs_halted = s.vs_halted /\ (d + sz <= b \/ b + cap <= d) ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_decoder_budget first last b cap t` by
+  `abi_sites_decoder_budget sites first last b cap t` by
     (mp_tac abi_decoder_budget_transport >> asm_simp_tac bool_ss []) >>
   `abi_decode_footprint_frame [(d,sz);(b,cap)] s t` by
     (irule abi_decoder_frame_from_output >> simp[]) >>
   mp_tac (Q.INST [`outsz` |-> `sz:num`] abi_decoder_bulk_scratch_preservation) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then assume_tac >>
-  asm_simp_tac bool_ss [abi_decoder_effect_def, abi_decoder_scratch_frame_def] >>
-  rpt strip_tac >> `id IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >> metis_tac[]
+  asm_simp_tac bool_ss [abi_sites_decoder_effect_def, abi_decoder_scratch_frame_def] >>
+  rpt strip_tac >> `id IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >> metis_tac[]
 QED
 
 Theorem abi_decoder_correct_word:
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> abi_decoder_correct ce env sf ty tv
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> abi_sites_decoder_correct sites ce env sf ty tv
 Proof
-  strip_tac >> simp_tac bool_ss [abi_decoder_correct_def] >> rpt gen_tac >>
+  strip_tac >> simp_tac bool_ss [abi_sites_decoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[Excl "enc_def"] >>
   (drule abi_decoder_primitive_source >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qhdtm_assum `abi_decoder_recursive_pre`
@@ -48,9 +48,9 @@ QED
 
 (* Bytes and String satisfy the recursive decoder contract without allocation. *)
 Theorem abi_decoder_correct_bytestring:
-  type_to_abi_dec_info sf ce ty = DecBytestring n ==> abi_decoder_correct ce env sf ty tv
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> abi_sites_decoder_correct sites ce env sf ty tv
 Proof
-  strip_tac >> simp_tac bool_ss [abi_decoder_correct_def] >> rpt gen_tac >>
+  strip_tac >> simp_tac bool_ss [abi_sites_decoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[Excl "enc_def"] >>
   (qhdtm_assum `abi_decoder_recursive_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
@@ -71,7 +71,7 @@ QED
 
 (* Primitive, Bytes, String and flag cases of the recursive correctness theorem. *)
 Theorem abi_decoder_correct_base:
-  abi_decoder_correct ce env sf (BaseT bt) (BaseTV bt)
+  abi_sites_decoder_correct sites ce env sf (BaseT bt) (BaseTV bt)
 Proof
   `(?clamp. type_to_abi_dec_info sf ce (BaseT bt) = DecPrimWord clamp) \/
    (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
@@ -82,7 +82,7 @@ Proof
 QED
 
 Theorem abi_decoder_correct_flag:
-  abi_decoder_correct ce env sf (FlagT nsid) (FlagTV n)
+  abi_sites_decoder_correct sites ce env sf (FlagT nsid) (FlagTV n)
 Proof
   irule abi_decoder_correct_word >> simp[Once type_to_abi_dec_info_def]
 QED

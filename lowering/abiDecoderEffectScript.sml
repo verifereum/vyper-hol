@@ -38,29 +38,42 @@ Proof
   `id < child_lo \/ child_hi <= id` by decide_tac >> metis_tac[]
 QED
 
-Definition abi_decoder_effect_def:
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t <=>
-    fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap t /\
+Definition abi_sites_decoder_effect_def:
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t <=>
+    fresh_vars_wrt limit_st t /\ abi_sites_decoder_budget sites first last b cap t /\
     (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
       eval_operand op t = SOME w) /\
     abi_decode_footprint_frame [(d,sz);(b,cap)] s t /\
     t.vs_halted = s.vs_halted /\ abi_decoder_scratch_frame first last lo hi s t
 End
 
-Theorem abi_decoder_effect_refl:
-  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s s
+Overload abi_decoder_effect = “abi_sites_decoder_effect UNIV”
+
+Theorem abi_decoder_effect_def:
+  abi_decoder_effect first last lo hi next limit_st d sz b cap s t <=>
+    fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap t /\
+    (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w) /\
+    abi_decode_footprint_frame [(d,sz);(b,cap)] s t /\
+    t.vs_halted = s.vs_halted /\ abi_decoder_scratch_frame first last lo hi s t
 Proof
-  simp[abi_decoder_effect_def, abi_decode_footprint_frame_refl,
+  rewrite_tac[abi_sites_decoder_effect_def]
+QED
+
+Theorem abi_decoder_effect_refl:
+  fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s ==>
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s s
+Proof
+  simp[abi_sites_decoder_effect_def, abi_decode_footprint_frame_refl,
     abi_decoder_scratch_frame_refl]
 QED
 
 Theorem abi_decoder_effect_trans:
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t /\
-  abi_decoder_effect first last lo hi next limit_st d sz b cap t u ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s u
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t /\
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap t u ==>
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s u
 Proof
-  simp_tac bool_ss [abi_decoder_effect_def] >> strip_tac >>
+  simp_tac bool_ss [abi_sites_decoder_effect_def] >> strip_tac >>
   metis_tac[abi_decode_footprint_frame_trans, abi_decoder_scratch_frame_trans]
 QED
 
@@ -74,12 +87,12 @@ Proof
 QED
 
 Theorem abi_decoder_effect_widen:
-  abi_decoder_effect first last child_lo child_hi child_next limit_st child_d child_sz b cap s t /\
+  abi_sites_decoder_effect sites first last child_lo child_hi child_next limit_st child_d child_sz b cap s t /\
   lo <= child_lo /\ child_hi <= hi /\ next <= child_next /\
   d <= child_d /\ child_d + child_sz <= d + sz ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t
 Proof
-  simp_tac bool_ss [abi_decoder_effect_def] >> strip_tac >> asm_simp_tac bool_ss [] >>
+  simp_tac bool_ss [abi_sites_decoder_effect_def] >> strip_tac >> asm_simp_tac bool_ss [] >>
   rpt conj_tac >|
   [rpt strip_tac >> `abi_decoder_operand_live child_next op` by
      (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >> metis_tac[],
@@ -89,32 +102,32 @@ QED
 
 Theorem abi_decoder_address_effect:
   abi_decoder_address_frame child_next s t /\ next <= child_next /\
-  fresh_vars_wrt limit_st t /\ abi_decoder_budget first last b cap s ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t
+  fresh_vars_wrt limit_st t /\ abi_sites_decoder_budget sites first last b cap s ==>
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t
 Proof
   strip_tac >> qpat_assum `abi_decoder_address_frame _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
   drule_all abi_decoder_budget_transport >> strip_tac >>
-  asm_simp_tac bool_ss [abi_decoder_effect_def, abi_decode_footprint_frame_def,
+  asm_simp_tac bool_ss [abi_sites_decoder_effect_def, abi_decode_footprint_frame_def,
     abi_decoder_scratch_frame_def, mload_def] >> rpt strip_tac >>
   `abi_decoder_operand_live child_next op` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >> metis_tac[]
 QED
 
 Theorem abi_decoder_effect_protected_slot:
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t /\
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t /\
   first <= site /\ site < last /\ (site < lo \/ hi <= site) /\
   FLOOKUP s.vs_allocas site = SOME (slot,32) ==>
   FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = mload slot s
 Proof
-  simp_tac bool_ss [abi_decoder_effect_def, abi_decoder_scratch_frame_def] >>
+  simp_tac bool_ss [abi_sites_decoder_effect_def, abi_decoder_scratch_frame_def] >>
   strip_tac >> metis_tac[]
 QED
 
 Theorem abi_decoder_header_effect:
   next <= first_var /\ first_var + 4 <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s
+  fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s ==>
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s
     (jump_to lbl (abi_decode_header_state (STRING #"%" (toString first_var))
       (STRING #"%" (toString (first_var+1))) (STRING #"%" (toString (first_var+2)))
       (STRING #"%" (toString (first_var+3))) i ncount s))
@@ -140,7 +153,7 @@ Proof
 QED
 
 Theorem abi_decoder_scratch_slot_frame:
-  abi_decoder_budget first last b cap s /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap s /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP s.vs_allocas site = SOME (slot,32) /\
   t.vs_allocas = s.vs_allocas /\ abi_decode_footprint_frame [(slot,32)] s t ==>
   abi_decoder_scratch_frame first last lo hi s t
@@ -148,8 +161,8 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   asm_simp_tac bool_ss [abi_decoder_scratch_frame_def] >>
   MAP_EVERY qx_gen_tac [`id`, `p`] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_decoder_ids first last /\ id IN abi_decoder_ids first last`
-    by simp[abi_decoder_ids_def] >>
+  `site IN abi_sites_decoder_ids sites first last /\ id IN abi_sites_decoder_ids sites first last`
+    by simp[abi_sites_decoder_ids_def] >>
   `site <> id` by decide_tac >>
   irule abi_decode_footprint_frame_mload >> qexists_tac `[(slot,32)]` >>
   asm_simp_tac bool_ss [] >> simp[abi_footprint_disjoint_def] >>
@@ -159,21 +172,21 @@ Proof
 QED
 
 Theorem abi_decoder_index_effect:
-  abi_decoder_budget first last b cap s /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap s /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP s.vs_allocas site = SOME (slot,32) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   fresh_vars_wrt limit_st t /\ t.vs_halted = s.vs_halted /\
   (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
     eval_operand op t = SOME w) /\
   abi_decode_footprint_frame [(slot,32)] s t ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
+  `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   drule_all abi_decoder_scratch_slot_frame >> strip_tac >>
   drule_all abi_decoder_budget_transport >> strip_tac >>
   `abi_decode_footprint_frame [(d,sz);(b,cap)] s t` by
     (drule_all abi_decoder_arena_footprint >> simp[]) >>
-  asm_simp_tac bool_ss [abi_decoder_effect_def]
+  asm_simp_tac bool_ss [abi_sites_decoder_effect_def]
 QED

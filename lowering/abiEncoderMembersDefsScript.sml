@@ -52,14 +52,14 @@ QED
 
 Theorem abi_encoder_members_pre_effect:
   abi_encoder_members_pre infos tys avs st src dst sb so d output_size b cap initial /\
-  abi_decoder_effect first last lo hi st.cs_next_var limit_st d output_size b cap initial actual ==>
+  abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d output_size b cap initial actual ==>
   abi_encoder_members_pre infos tys avs st src dst sb so d output_size b cap actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_encoder_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_pre_def]) >>
-  qpat_assum `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
+  qpat_assum `abi_sites_decoder_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_effect_def]) >>
   `abi_footprint_disjoint (sb+so) (abi_encoder_member_span infos) [(d,output_size);(b,cap)]` by
     asm_simp_tac (srw_ss()) [abi_footprint_disjoint_def, DISJ_IMP_THM, FORALL_AND_THM] >>
   drule_all abi_encoder_input_frame >> strip_tac >>
@@ -85,7 +85,7 @@ QED
 
 Theorem abi_encoder_cursor_finish:
   abi_encoder_cursor T dyn_ptr site slot first lo st off initial /\
-  abi_decoder_effect first last owned_lo owned_hi st.cs_next_var limit_st d sz b cap initial actual /\
+  abi_sites_decoder_effect sites first last owned_lo owned_hi st.cs_next_var limit_st d sz b cap initial actual /\
   st.cs_next_var <= end_st.cs_next_var /\ st.cs_next_id <= end_st.cs_next_id /\
   FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ mload slot actual = n2w next_off ==>
   abi_encoder_cursor T dyn_ptr site slot first lo end_st next_off actual
@@ -100,7 +100,7 @@ QED
 
 Theorem abi_encoder_cursor_static:
   abi_encoder_cursor active dyn_ptr site slot first lo st off initial /\
-  abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+  abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
     limit_st d sz b cap initial actual /\
   st.cs_next_var <= end_st.cs_next_var /\ st.cs_next_id <= end_st.cs_next_id /\
   end_st.cs_next_id <= last ==>

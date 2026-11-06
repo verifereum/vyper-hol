@@ -20,7 +20,7 @@ Theorem abi_decoder_member_after_head:
   mem_bytes_at (B + sb) (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs)))) (abi_decode_source opc initial) =
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs)) /\
-  abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+  abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
     (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial after_head /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -32,7 +32,7 @@ Theorem abi_decoder_member_after_head:
   mem_bytes_at (B + sb) (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs)))) (abi_decode_source opc after_head) =
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs)) /\
-  fresh_vars_wrt limit_st after_head /\ abi_decoder_budget first last b cap after_head /\
+  fresh_vars_wrt limit_st after_head /\ abi_sites_decoder_budget sites first last b cap after_head /\
   abi_decoder_operand_live end_st.cs_next_var src /\ abi_decoder_operand_live end_st.cs_next_var dst /\
   abi_decoder_operand_live end_st.cs_next_var base_op /\
   abi_decoder_operand_live end_st.cs_next_var hi_op
@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem abi_decoder_member_tail_execute:
-  abi_decoder_members_correct ce env sf tys tvs /\
+  abi_sites_decoder_members_correct sites ce env sf tys tvs /\
   (base_op = Lit 0w \/ opc = MLOAD) /\
   compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)) +
@@ -77,12 +77,12 @@ Theorem abi_decoder_member_tail_execute:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. tuple_in_memory (v::vs) (tv::tvs) (d + SUM (MAP (type_memory_bytes ce) pretys)) t.vs_memory /\
-    abi_decoder_effect first last st.cs_next_id final.cs_next_id st.cs_next_var limit_st
+    abi_sites_decoder_effect sites first last st.cs_next_id final.cs_next_id st.cs_next_var limit_st
       (d + SUM (MAP (type_memory_bytes ce) pretys) + type_memory_bytes ce ty)
       (SUM (MAP (type_memory_bytes ce) tys)) b cap initial t /\
     t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts /\

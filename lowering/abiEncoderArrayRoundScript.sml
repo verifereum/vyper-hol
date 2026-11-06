@@ -43,7 +43,7 @@ Theorem abi_encoder_array_static_body_memory:
   abi_encoder_array_memory ei asz msz F ty avs owner_st src dst sb source_cap d output_size b cap j initial /\
   abi_encoder_cursor T ip site slot first lo owner_st j initial /\ j < LENGTH avs /\
   owner_st.cs_next_var <= st.cs_next_var /\ owner_st.cs_next_id <= st.cs_next_id /\
-  abi_decoder_budget first last b cap initial /\ end_st.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -51,7 +51,7 @@ Theorem abi_encoder_array_static_body_memory:
       d output_size b cap (SUC j) actual /\
     abi_encoder_cursor T ip site slot first lo owner_st j actual /\
     eval_operand out actual = SOME (n2w j) /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id owner_st.cs_next_var
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id owner_st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -71,7 +71,7 @@ Proof
   mp_tac (Q.INST [`p` |-> `n2w slot:bytes32`] abi_encoder_array_static_iteration) >>
   impl_tac >- asm_simp_tac (srw_ss()) [w2n_n2w, Excl "enc_def"] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  `abi_decoder_effect first last st.cs_next_id end_st.cs_next_id owner_st.cs_next_var
+  `abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id owner_st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`, `output_size`] >> simp[]) >>
@@ -102,14 +102,14 @@ QED
 Theorem abi_encoder_array_index_prepare:
   abi_decode_index_init st = (ip,owner_st) /\ fn_has_code st owner_st func /\
   abi_encoder_array_memory ei asz msz active ty avs st src dst sb source_cap d output_size b cap j initial /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\
   owner_st.cs_next_id <= hi /\ hi <= last /\ owner_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?ready slot.
     abi_encoder_array_memory ei asz msz active ty avs owner_st src dst sb source_cap d output_size b cap j ready /\
     abi_encoder_cursor T ip st.cs_next_id slot first st.cs_next_id owner_st 0 ready /\
-    abi_decoder_effect first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap initial ready /\
+    abi_sites_decoder_effect sites first last st.cs_next_id hi st.cs_next_var limit_st d output_size b cap initial ready /\
     ready.vs_current_bb = owner_st.cs_current_bb /\ ready.vs_inst_idx = LENGTH owner_st.cs_current_insts /\
     ~ready.vs_halted /\ abi_decode_sim ctx func initial ready
 Proof
@@ -123,7 +123,7 @@ Proof
     `av` |-> `ListV avs`, `cursor_op` |-> `ip`, `prepared` |-> `owner_st`]
     abi_encoder_zero_cursor_prepare) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  `abi_decoder_budget first last b cap ready` by fs[abi_decoder_effect_def] >>
+  `abi_sites_decoder_budget sites first last b cap ready` by fs[abi_sites_decoder_effect_def] >>
   `owner_st.cs_next_id <= last` by decide_tac >>
   drule_all abi_encoder_cursor_bounds >> strip_tac >>
   `abi_decode_footprint_frame [(slot,32)] initial ready` by
@@ -150,8 +150,8 @@ Theorem abi_encoder_array_index_update:
   abi_encoder_cursor T ip site slot first lo st j initial /\
   abi_encoder_cursor active dyn_ptr cursor_site cursor_slot first lo st off initial /\
   (active ==> site < cursor_site) /\ st.cs_next_id <= last /\
-  abi_decoder_budget first last b cap initial /\
-  abi_decoder_effect first last site (site+1) st.cs_next_var limit_st d output_size b cap initial actual /\
+  abi_sites_decoder_budget sites first last b cap initial /\
+  abi_sites_decoder_effect sites first last site (site+1) st.cs_next_var limit_st d output_size b cap initial actual /\
   abi_decode_footprint_frame [(slot,32)] initial actual /\
   actual.vs_allocas = initial.vs_allocas /\ mload slot actual = n2w new_j ==>
   abi_encoder_array_memory ei asz msz active ty avs st src dst sb source_cap d output_size b cap k actual /\
@@ -259,26 +259,26 @@ Proof
 QED
 
 Theorem abi_encoder_single_scratch_effect:
-  abi_decoder_budget first last b cap initial /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
   actual.vs_halted = initial.vs_halted /\ fresh_vars_wrt limit_st actual /\
   (!op. abi_decoder_operand_live next op ==> eval_operand op actual = eval_operand op initial) /\
   abi_decode_footprint_frame [(slot,32)] initial actual /\ (d+sz <= b \/ b+cap <= d) ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap initial actual
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
+  `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   `abi_decode_footprint_frame [(d,sz);(slot,32)] initial actual` by
     (irule abi_encoder_frame_extra_window >> asm_simp_tac bool_ss []) >>
   drule_all abi_encoder_owned_scratch_frame >> disch_tac >>
-  `abi_decoder_budget first last b cap actual` by
+  `abi_sites_decoder_budget sites first last b cap actual` by
     (drule_all abi_decoder_budget_transport >> asm_simp_tac bool_ss []) >>
   `abi_decode_footprint_frame [(d,sz);(b,cap)] initial actual` by
     (irule abi_decode_footprint_frame_weaken >> qexists_tac `[(slot,32)]` >>
      asm_simp_tac (srw_ss()) [] >> qexistsl_tac [`b`, `cap`] >> asm_simp_tac (srw_ss()) []) >>
-  asm_simp_tac bool_ss [abi_decoder_effect_def]
+  asm_simp_tac bool_ss [abi_sites_decoder_effect_def]
 QED
 
 (* ===== Memory ===== *)
@@ -297,12 +297,12 @@ Theorem abi_encoder_array_backedge_memory:
   abi_encoder_cursor active dyn_ptr cursor_site cursor_slot first lo owner_st off initial /\
   (active ==> site < cursor_site) /\ owner_st.cs_next_id <= last /\
   owner_st.cs_next_var <= next /\ next < limit_st.cs_next_var /\
-  j < LENGTH avs /\ fresh_vars_wrt limit_st initial /\ abi_decoder_budget first last b cap initial ==>
+  j < LENGTH avs /\ fresh_vars_wrt limit_st initial /\ abi_sites_decoder_budget sites first last b cap initial ==>
   ?actual. abi_encoder_array_memory ei asz msz active ty avs owner_st src dst sb source_cap
       d output_size b cap k actual /\
     abi_encoder_cursor T ip site slot first lo owner_st (SUC j) actual /\
     abi_encoder_cursor active dyn_ptr cursor_site cursor_slot first lo owner_st off actual /\
-    abi_decoder_effect first last site (site+1) owner_st.cs_next_var
+    abi_sites_decoder_effect sites first last site (site+1) owner_st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = hdr /\ actual.vs_inst_idx = 0 /\ ~actual.vs_halted /\
     abi_decode_sim ctx func initial actual
@@ -326,7 +326,7 @@ Proof
   mp_tac (Q.INST [`lo` |-> `site:num`, `hi` |-> `site+1`, `sz` |-> `output_size:num`]
     abi_encoder_single_scratch_effect) >>
   impl_tac >- asm_simp_tac (srw_ss()) [Excl "enc_def"] >> disch_tac >>
-  `abi_decoder_effect first last site (site+1) owner_st.cs_next_var
+  `abi_sites_decoder_effect sites first last site (site+1) owner_st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_decoder_effect_widen >> qexistsl_tac [`d`, `site+1`, `site`, `next`, `output_size`] >> simp[]) >>
   mp_tac (Q.INST [`st` |-> `owner_st`, `new_j` |-> `SUC j`] abi_encoder_array_index_update) >>
@@ -345,14 +345,14 @@ Theorem abi_encoder_array_static_round:
   abi_encoder_array_memory ei asz msz F ty avs owner_st src dst sb source_cap d output_size b cap j initial /\
   abi_encoder_cursor T ip site slot first lo owner_st j initial /\ j < LENGTH avs /\
   owner_st.cs_next_var <= st.cs_next_var /\ owner_st.cs_next_id <= st.cs_next_id /\
-  abi_decoder_budget first last b cap initial /\ end_st.cs_next_id+3 <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ end_st.cs_next_id+3 <= last /\
   end_st.cs_next_var+1 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. abi_encoder_array_memory ei asz msz F ty avs owner_st src dst sb source_cap
       d output_size b cap (SUC j) actual /\
     abi_encoder_cursor T ip site slot first lo owner_st (SUC j) actual /\
-    abi_decoder_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+    abi_sites_decoder_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = hdr /\ actual.vs_inst_idx = 0 /\ ~actual.vs_halted /\
     abi_decode_sim ctx func initial actual
@@ -368,25 +368,25 @@ Proof
   mp_tac abi_encoder_array_static_body_memory >> impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial encoded` >>
   qpat_assum `out = Var _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  qpat_assum `abi_decoder_effect _ _ st.cs_next_id end_st.cs_next_id _ _ _ _ _ _ initial encoded`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
+  qpat_assum `abi_sites_decoder_effect sites _ _ st.cs_next_id end_st.cs_next_id _ _ _ _ _ _ initial encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_effect_def]) >>
   mp_tac (Q.INST [`initial` |-> `encoded:venom_state`, `active` |-> `F`, `k` |-> `SUC j`,
     `dyn_ptr` |-> `Lit 0w`, `cursor_site` |-> `0:num`, `cursor_slot` |-> `0:num`, `off` |-> `0:num`,
     `prefix` |-> `end_st.cs_current_insts`, `id` |-> `end_st.cs_next_id`, `next` |-> `end_st.cs_next_var`,
     `iv` |-> `STRING #"%" (toString st.cs_next_var)`] abi_encoder_array_backedge_memory) >>
   impl_tac >- full_simp_tac bool_ss [abi_encoder_cursor_def] >> strip_tac >>
   rename1 `abi_decode_sim ctx func encoded actual` >>
-  `abi_decoder_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+  `abi_sites_decoder_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
     limit_st d output_size b cap initial encoded` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `end_st.cs_next_id`, `st.cs_next_id`, `owner_st.cs_next_var`, `output_size`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
-  `abi_decoder_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+  `abi_sites_decoder_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
     limit_st d output_size b cap encoded actual` by
     (irule abi_decoder_effect_widen >>
      qexistsl_tac [`d`, `site+1`, `site`, `owner_st.cs_next_var`, `output_size`] >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
-  `abi_decoder_effect first last site (end_st.cs_next_id+3) owner_st.cs_next_var
+  `abi_sites_decoder_effect sites first last site (end_st.cs_next_id+3) owner_st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_decoder_effect_trans >> qexists_tac `encoded` >> asm_simp_tac bool_ss []) >>
   `abi_decode_sim ctx func initial actual` by

@@ -13,33 +13,33 @@ Ancestors
    equality is used: the actual two-instruction array preparation is retained. *)
 Theorem abi_encoder_array_spine_shared_pre:
   abi_encode_array_tail data_op dp st = (ops,p) /\
-  abi_encoder_shared ei /\
-  abi_encoder_shared_input (ei,at,av) (st,src,data_op) (sb,source_cap)
+  abi_sites_encoder_shared sites ei /\
+  abi_sites_encoder_shared_input sites (ei,at,av) (st,src,data_op) (sb,source_cap)
     (d,output_size) (first,last,b,cap) initial /\
   eval_operand dp initial = SOME (n2w slot) /\
   mload slot initial = n2w off /\ slot < dimword (:256) /\
   off+LENGTH (enc at av) <= output_size /\
-  abi_decoder_budget first last b cap initial /\
+  abi_sites_decoder_budget sites first last b cap initial /\
   first <= p.cs_next_id /\ ce.cs_next_id <= last /\
   p.cs_next_var <= limit_st.cs_next_var /\ ce.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   abi_encoder_member_phase_raw st p initial ready ==>
-  abi_encoder_spine_shared_pre (at,av,sb,source_cap,d+off)
+  abi_sites_encoder_spine_shared_pre sites (at,av,sb,source_cap,d+off)
     (first,last,b,cap,limit_st) (ei,SND ops,src,p,ce,len) ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand data_op initial = SOME (n2w d) /\
-   abi_decoder_operand_live st.cs_next_var data_op` by fs[abi_encoder_shared_input_def] >>
+   abi_decoder_operand_live st.cs_next_var data_op` by fs[abi_sites_encoder_shared_input_def] >>
   drule_all abi_encoder_member_tail_transport >> strip_tac >>
   drule_all abi_encoder_array_tail_raw_control >> strip_tac >>
   drule abi_encode_array_tail_shape >> strip_tac >>
   `st.cs_next_var <= p.cs_next_var` by decide_tac >>
   drule_all abi_encoder_spine_shared_input_address >> disch_tac >>
-  `abi_decoder_budget first last b cap ready` by
+  `abi_sites_decoder_budget sites first last b cap ready` by
     (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
        abi_decoder_budget_transport) >> fs[abi_decoder_address_frame_def]) >>
-  simp[abi_encoder_spine_shared_pre_def]
+  simp[abi_sites_encoder_spine_shared_pre_def]
 QED
 
 Theorem abi_encoder_array_spine_cursor_saved:
@@ -82,14 +82,14 @@ Theorem abi_encoder_array_spine_shared_run:
   p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   h < dimword (:256) /\ en.cs_next_var <= limit_st.cs_next_var /\
   (!ready. abi_encoder_member_phase_raw st p initial ready ==>
-    abi_encoder_shared_member_dynamic_pre (at,av,sb,source_cap,d+off)
+    abi_sites_encoder_shared_member_dynamic_pre sites (at,av,sb,source_cap,d+off)
       (first,last,b,cap,limit_st) (head,FST ops,dp,h,off,slot,site)
       (ei,SND ops,src,p,ce,len) ready) ==>
   ?ready encoded actual.
     abi_encoder_member_phase_raw st p initial ready /\
     abi_encoder_spine_call (\c. abi_encoder_extend_sim ctx func)
       (ei,SND ops,src,p,ce,len) ready encoded /\
-    abi_encoder_shared_member_dynamic_post (ctx,func) (at,av,sb,source_cap,d+off)
+    abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (at,av,sb,source_cap,d+off)
       (first,last,b,cap,limit_st) (head,FST ops,dp,h,off,slot,site)
       (ei,SND ops,src,p,ce,len) ready encoded /\
     abi_encoder_member_phase_raw ce en encoded actual
@@ -97,7 +97,7 @@ Proof
   strip_tac >>
   irule abi_encoder_array_spine_dynamic_run >>
   conj_tac
-  >- (qexistsl_tac [`abi_encoder_shared_member_dynamic_pre
+  >- (qexistsl_tac [`abi_sites_encoder_shared_member_dynamic_pre sites
         (at,av,sb,source_cap,d+off) (first,last,b,cap,limit_st)
         (head,FST ops,dp,h,off,slot,site)`, `func`] >>
       asm_rewrite_tac [] >> rpt strip_tac >>
@@ -162,7 +162,7 @@ Theorem abi_encoder_array_spine_shared_effects:
   p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_encoder_member_phase_raw st p initial ready /\
   abi_decoder_address_frame next initial ready /\
-  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (p,ce,len,limit_st)
     (first,last,b,cap) (at,av,q) ready encoded /\
   abi_encode_child_suffix head dp offset len ce = (out,en) /\
   eval_operand head encoded = SOME (n2w h) /\ eval_operand dp encoded = SOME (n2w slot) /\
@@ -172,16 +172,16 @@ Theorem abi_encoder_array_spine_shared_effects:
   abi_encoder_member_phase_raw ce en encoded actual /\
   first <= lo /\ hi <= last /\ lo <= p.cs_next_id /\ ce.cs_next_id <= hi /\
   next <= p.cs_next_var /\ next <= ce.cs_next_var /\
-  site IN abi_decoder_ids lo hi /\ FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
+  site IN abi_sites_decoder_ids sites lo hi /\ FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
   d <= h /\ h+32 <= d+extent /\ d <= q /\ q+LENGTH (enc at av) <= d+extent ==>
-  abi_scratch_effect first last lo hi next limit_st d extent b cap initial actual /\
-  abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] initial actual /\
+  abi_sites_scratch_effect sites first last lo hi next limit_st d extent b cap initial actual /\
+  abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] initial actual /\
   (alloca_inv initial ==> alloca_inv actual)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand len encoded = SOME (n2w (LENGTH (enc at av))) /\
    fresh_vars_wrt limit_st encoded /\ (alloca_inv ready ==> alloca_inv encoded)` by
-    fs[abi_encoder_shared_endpoint_def, abi_scratch_effect_def] >>
+    fs[abi_sites_encoder_shared_endpoint_def, abi_sites_scratch_effect_def] >>
   drule_all abi_encoder_spine_cursor_post >> disch_tac >>
   drule abi_encoder_shared_endpoint_scratch >> disch_tac >>
   conj_tac
@@ -190,12 +190,12 @@ Proof
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
       qexists_tac `site` >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] initial ready /\
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] initial ready /\
    (alloca_inv initial ==> alloca_inv ready)` by
     (drule_all abi_encoder_array_spine_tail_registered >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] ready encoded` by
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] ready encoded` by
     (drule_all abi_encoder_spine_shared_registered_window >> simp[]) >>
-  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] encoded actual /\
+  `abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,extent)] encoded actual /\
    (alloca_inv encoded ==> alloca_inv actual)` by
     (drule_all abi_encoder_member_cursor_registered >> simp[]) >>
   conj_tac >- (irule abi_encoder_registered_effect_trans >>
@@ -209,7 +209,7 @@ Theorem abi_encoder_array_spine_shared_sim:
   abi_encoder_member_phase_raw st p initial ready /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (p,ce,len,limit_st)
     (first,last,b,cap) (at,av,q) ready encoded /\
   abi_encode_child_suffix head dp offset len ce = (out,en) /\ fn_has_code ce en func /\
   abi_encoder_member_phase_raw ce en encoded actual ==>
@@ -221,7 +221,7 @@ Proof
   `~encoded.vs_halted /\ encoded.vs_current_bb = ce.cs_current_bb /\
    encoded.vs_inst_idx = LENGTH ce.cs_current_insts /\
    abi_encoder_extend_sim ctx func ready encoded` by
-    fs[abi_encoder_shared_endpoint_def] >>
+    fs[abi_sites_encoder_shared_endpoint_def] >>
   drule_all abi_encoder_spine_suffix_extend_sim >>
   disch_then (qspec_then `ctx` assume_tac) >>
   irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[] >>
@@ -231,11 +231,11 @@ QED
 (* Concrete rich array-tail reach, using the same neutral driver as both old
    window and physical-scratch wrappers. *)
 Theorem abi_encoder_shared_array_tail_reach:
-  abi_encoder_shared ei /\
+  abi_sites_encoder_shared sites ei /\
   abi_encode_array_tail data_op dp st = (ops,p) /\
   abi_encoder_spine_core_code func (ei,SND ops,src,p,ce,len) /\
   abi_encode_child_suffix head dp (FST ops) len ce = (out,en) /\
-  abi_encoder_shared_input (ei,at,av) (st,src,data_op) (sb,source_cap)
+  abi_sites_encoder_shared_input sites (ei,at,av) (st,src,data_op) (sb,source_cap)
     (d,output_size) (first,last,b,cap) initial /\
   eval_operand head initial = SOME (n2w h) /\
   abi_decoder_operand_live st.cs_next_var head /\
@@ -243,7 +243,7 @@ Theorem abi_encoder_shared_array_tail_reach:
   abi_decoder_operand_live st.cs_next_var dp /\
   mload slot initial = n2w off /\ slot < dimword (:256) /\ h < dimword (:256) /\
   off+LENGTH (enc at av) <= output_size /\
-  abi_decoder_budget first last b cap initial /\
+  abi_sites_decoder_budget sites first last b cap initial /\
   first <= site /\ site < last /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   ce.cs_next_id <= last /\ en.cs_next_var <= limit_st.cs_next_var /\
@@ -251,7 +251,7 @@ Theorem abi_encoder_shared_array_tail_reach:
   initial.vs_current_bb = st.cs_current_bb ==>
   ?ready encoded actual.
     abi_encoder_member_phase_raw st p initial ready /\
-    abi_encoder_shared_member_dynamic_post (ctx,func) (at,av,sb,source_cap,d+off)
+    abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (at,av,sb,source_cap,d+off)
       (first,last,b,cap,limit_st) (head,FST ops,dp,h,off,slot,site)
       (ei,SND ops,src,p,ce,len) ready encoded /\
     abi_encoder_member_phase_raw ce en encoded actual
@@ -264,12 +264,12 @@ Proof
   `p.cs_next_var <= limit_st.cs_next_var /\ ce.cs_next_var <= limit_st.cs_next_var /\
    first <= p.cs_next_id` by decide_tac >>
   `eval_operand data_op initial = SOME (n2w d) /\
-   abi_decoder_operand_live st.cs_next_var data_op` by fs[abi_encoder_shared_input_def] >>
+   abi_decoder_operand_live st.cs_next_var data_op` by fs[abi_sites_encoder_shared_input_def] >>
   `!ready. abi_encoder_member_phase_raw st p initial ready ==>
-    abi_encoder_shared_member_dynamic_pre (at,av,sb,source_cap,d+off)
+    abi_sites_encoder_shared_member_dynamic_pre sites (at,av,sb,source_cap,d+off)
       (first,last,b,cap,limit_st) (head,FST ops,dp,h,off,slot,site)
       (ei,SND ops,src,p,ce,len) ready` by
-    (rpt strip_tac >> simp_tac bool_ss [abi_encoder_shared_member_dynamic_pre_def] >>
+    (rpt strip_tac >> simp_tac bool_ss [abi_sites_encoder_shared_member_dynamic_pre_def] >>
      conj_tac
      >- (irule abi_encoder_array_spine_shared_pre >>
          goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
@@ -289,7 +289,7 @@ QED
 (* Pure observations at the driver's actual suffix state.  The zero-byte
    branch deliberately needs no disjointness of the empty child window. *)
 Theorem abi_encoder_shared_array_tail_observations:
-  abi_encoder_shared_member_dynamic_post (ctx,func) (at,av,sb:num,source_cap:num,q)
+  abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (at,av,sb:num,source_cap:num,q)
     (first,last,b,cap,limit_st) (head,offset,dp,h,off,slot,site)
     (ei:abi_enc_info,dst:operand,src:operand,p,ce,len) ready encoded /\
   abi_encode_child_suffix head dp offset len ce = (out,en) /\
@@ -314,11 +314,11 @@ Proof
   `abi_decoder_operand_live ce.cs_next_var dp /\
    abi_decoder_operand_live ce.cs_next_var len` by fs[abi_encoder_spine_cursor_input_def] >>
   `eval_operand len encoded = SOME (n2w (LENGTH (enc at av)))` by
-    fs[abi_encoder_shared_member_dynamic_post_def, abi_encoder_spine_shared_post_def,
-       abi_encoder_shared_endpoint_def] >>
+    fs[abi_sites_encoder_shared_member_dynamic_post_def, abi_sites_encoder_spine_shared_post_def,
+       abi_sites_encoder_shared_endpoint_def] >>
   drule_all abi_encoder_member_cursor_transport >> strip_tac >>
   `mem_bytes_at q (LENGTH (enc at av)) encoded.vs_memory = enc at av` by
-    (fs[abi_encoder_shared_member_dynamic_post_def, abi_encoder_spine_shared_post_def] >>
+    (fs[abi_sites_encoder_shared_member_dynamic_post_def, abi_sites_encoder_spine_shared_post_def] >>
      drule abi_encoder_shared_endpoint_bytes >> simp[]) >>
   `mem_bytes_at q (LENGTH (enc at av)) actual.vs_memory = enc at av` by
     (Cases_on `LENGTH (enc at av) = 0`

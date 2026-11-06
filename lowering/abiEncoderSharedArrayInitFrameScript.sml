@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem abi_encoder_shared_array_input_facts:
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s ==>
   valid_length NONE avs /\ LENGTH avs < dimword (:256) /\
   asz = abi_member_head_size ty /\ active = is_dynamic ty /\
@@ -35,25 +35,25 @@ Theorem abi_encoder_shared_array_input_facts:
     abi_encoder_open_input ei ty (EL i avs) (sb+32+i*msz) msz s.vs_memory) /\
   LIST_REL abi_encoder_structural_valid (REPLICATE (LENGTH avs) ty) avs
 Proof
-  simp_tac bool_ss [abi_encoder_shared_input_def, abi_encoder_open_array_iff] >>
+  simp_tac bool_ss [abi_sites_encoder_shared_input_def, abi_encoder_open_array_iff] >>
   strip_tac >> gvs[Excl "enc_def"] >>
   asm_simp_tac (srw_ss()) [valid_length_def, LIST_REL_EL_EQN, EL_REPLICATE] >>
   metis_tac[abi_encoder_open_input_valid]
 QED
 
 Theorem abi_encoder_shared_array_selected_input:
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s /\
   j < LENGTH avs /\ LENGTH (enc ty (EL j avs)) <= output_size /\
   eval_operand child_src s = SOME (n2w (sb+32+j*msz)) /\
   abi_decoder_operand_live st.cs_next_var child_src ==>
-  abi_encoder_shared_input (ei,ty,EL j avs) (st,child_src,dst)
+  abi_sites_encoder_shared_input sites (ei,ty,EL j avs) (st,child_src,dst)
     (sb+32+j*msz,msz) (d,output_size) (first,last,b,cap) s
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_encoder_shared_array_input_facts >> strip_tac >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   `sb+32+j*msz+msz <= sb+source_cap` by
     (`SUC j*msz <= LENGTH avs*msz` by simp[] >>
      pop_assum mp_tac >> pure_rewrite_tac[MULT_CLAUSES] >>
@@ -61,9 +61,9 @@ Proof
   `regions_disjoint (sb+32+j*msz,msz) (d,output_size)` by
     (gvs[abi_encoder_zero_aware_separation] >> decide_tac) >>
   `abi_footprint_disjoint (sb+32+j*msz) msz
-    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap s)` by
     (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`,`source_cap`] >> simp[] >> decide_tac) >>
-  asm_simp_tac bool_ss [abi_encoder_shared_input_def] >> decide_tac
+  asm_simp_tac bool_ss [abi_sites_encoder_shared_input_def] >> decide_tac
 QED
 
 Theorem abi_encoder_open_array_length:
@@ -204,22 +204,22 @@ Theorem abi_encoder_shared_array_count_effect:
   abi_decoder_operand_live st.cs_next_var dst /\ sb < dimword (:256) /\ d < dimword (:256) /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_encoder_member_phase_raw st final initial ready /\ 32 <= sz /\
-  abi_decoder_budget first last b cap initial /\ ~initial.vs_halted /\
+  abi_sites_decoder_budget sites first last b cap initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  abi_scratch_effect first last lo hi st.cs_next_var limit_st d sz b cap initial ready /\
-  abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,sz)] initial ready /\
+  abi_sites_scratch_effect sites first last lo hi st.cs_next_var limit_st d sz b cap initial ready /\
+  abi_encoder_registered_effect (abi_sites_decoder_ids sites lo hi) [(d,sz)] initial ready /\
   (alloca_inv initial ==> alloca_inv ready) /\ abi_encoder_extend_sim ctx func initial ready
 Proof
   strip_tac >> drule_all abi_encoder_array_count_raw_transport >> strip_tac >>
   drule_all abi_encoder_array_count_registered >>
-  disch_then (qspec_then `abi_decoder_ids lo hi` strip_assume_tac) >>
+  disch_then (qspec_then `abi_sites_decoder_ids sites lo hi` strip_assume_tac) >>
   drule_all abi_encoder_array_count_extend >> disch_then (qspec_then `ctx` assume_tac) >>
   asm_simp_tac bool_ss [] >> irule abi_scratch_leaf_effect >> asm_simp_tac bool_ss [] >>
   irule abi_decode_frame_widen >> qexistsl_tac [`d`,`32`] >> simp[]
 QED
 
 Theorem abi_encoder_shared_array_count_input_facts:
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) s ==>
   mload sb s = n2w (LENGTH avs) /\ sb < dimword (:256) /\ d < dimword (:256) /\
   32 <= sz /\ abi_footprint_disjoint sb source_cap [(d,32)]
@@ -228,26 +228,26 @@ Proof
   `LIST_REL abi_encoder_layout_valid (REPLICATE (LENGTH avs) ty) avs` by
     (drule abi_encoder_structural_list_layout >> simp[]) >>
   drule abi_encoder_open_array_length >> disch_tac >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   gvs[mem_word_at_eq_mload, abi_encoder_zero_aware_separation, Excl "enc_def"] >>
   simp[abi_footprint_disjoint_def] >> decide_tac
 QED
 
 Theorem abi_encoder_shared_array_count_input:
   abi_decode_array_header dst src MLOAD st = (cnt,final) /\
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_encoder_member_phase_raw st final initial ready ==>
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (final,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) ready /\
   abi_encoder_array_prefix ty avs 0 d ready.vs_memory /\
   abi_decoder_operand_live final.cs_next_var cnt /\ eval_operand cnt ready = SOME (n2w (LENGTH avs))
 Proof
   strip_tac >> drule abi_encoder_shared_array_count_input_facts >> strip_tac >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
   drule_all abi_encoder_array_count_raw_transport >> strip_tac >>
   drule abi_encoder_array_count_live >> disch_tac >>
   `abi_decode_footprint_frame [(d,32)] initial ready` by fs[abi_decode_frame_footprint] >>
@@ -263,7 +263,7 @@ Proof
     (conj_tac >> first_x_assum irule >> simp[]) >>
   `abi_decoder_operand_live final.cs_next_var src /\ abi_decoder_operand_live final.cs_next_var dst` by
     (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
-  asm_simp_tac bool_ss [abi_encoder_shared_input_def, abi_encoder_array_prefix_empty] >>
+  asm_simp_tac bool_ss [abi_sites_encoder_shared_input_def, abi_encoder_array_prefix_empty] >>
   fs[abi_decoder_child_scratch_def]
 QED
 
@@ -360,19 +360,19 @@ QED
 
 (* Open-array prefix preservation across a restricted initializer scratch frame. *)
 Theorem abi_encoder_shared_array_prefix_scratch:
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+  abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
   abi_decode_footprint_frame
-    (abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial) initial actual /\
+    (abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap initial) initial actual /\
   first <= lo /\ hi <= last ==>
   abi_encoder_array_prefix ty avs j d actual.vs_memory
 Proof
   strip_tac >> irule abi_encoder_open_array_prefix_output_frame >>
   conj_tac >- (drule abi_encoder_shared_array_input_facts >> strip_tac >>
     irule abi_encoder_structural_list_layout >> simp[]) >>
-  qexistsl_tac [`abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial`,`initial`,`sz`] >>
-  asm_simp_tac bool_ss [] >> conj_tac >- fs[abi_encoder_shared_input_def] >>
-  irule abi_scratch_disjoint_subset >> qexists_tac `abi_decoder_ids first last` >>
-  fs[abi_encoder_shared_input_def, SUBSET_DEF, abi_decoder_ids_def] >> decide_tac
+  qexistsl_tac [`abi_decoder_child_scratch (abi_sites_decoder_ids sites lo hi) b cap initial`,`initial`,`sz`] >>
+  asm_simp_tac bool_ss [] >> conj_tac >- fs[abi_sites_encoder_shared_input_def] >>
+  irule abi_scratch_disjoint_subset >> qexists_tac `abi_sites_decoder_ids sites first last` >>
+  fs[abi_sites_encoder_shared_input_def, SUBSET_DEF, abi_sites_decoder_ids_def] >> decide_tac
 QED

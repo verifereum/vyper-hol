@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem abi_encoder_owned_scratch_frame:
-  abi_decoder_budget first last b cap s /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap s /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP s.vs_allocas site = SOME (slot,32) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   abi_decode_footprint_frame [(d,sz);(slot,32)] s t /\
@@ -36,14 +36,14 @@ Theorem abi_encoder_owned_scratch_frame:
   abi_decoder_scratch_frame first last lo hi s t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_decoder_budget first last b cap t` by
+  `abi_sites_decoder_budget sites first last b cap t` by
     (drule_all abi_decoder_budget_transport >> simp[]) >>
   asm_simp_tac bool_ss [abi_decoder_scratch_frame_def] >>
   MAP_EVERY qx_gen_tac [`id`, `p`] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `site <> id` by decide_tac >>
   mp_tac (Q.INST [`other` |-> `id:num`, `protected` |-> `p:num`, `outsz` |-> `sz:num`]
     abi_decoder_private_scratch_preserves_slot) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [abi_decoder_ids_def] >> simp[]
+  impl_tac >- asm_simp_tac (srw_ss()) [abi_sites_decoder_ids_def] >> simp[]
 QED
 
 Theorem abi_encoder_head_scratch_footprint:
@@ -57,14 +57,14 @@ QED
 
 Theorem abi_encoder_child_suffix_effect:
   abi_encoder_child_suffix_post out st limit_st h slot off len initial actual /\
-  abi_decoder_budget first last b cap initial /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   d <= h /\ h+32 <= d+sz /\ (d+sz <= b \/ b+cap <= d) ==>
-  abi_decoder_effect first last lo hi st.cs_next_var limit_st d sz b cap initial actual
+  abi_sites_decoder_effect sites first last lo hi st.cs_next_var limit_st d sz b cap initial actual
 Proof
   simp_tac bool_ss [abi_encoder_child_suffix_post_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
+  `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   `abi_decode_footprint_frame [(d,sz);(slot,32)] initial actual` by
     (irule abi_decoder_output_footprint_widen >> qexistsl_tac [`h`, `32`] >> simp[]) >>
@@ -72,5 +72,5 @@ Proof
   drule_all abi_decoder_budget_transport >> strip_tac >>
   `abi_decode_footprint_frame [(d,sz);(b,cap)] initial actual` by
     (drule_all abi_encoder_head_scratch_footprint >> simp[]) >>
-  asm_simp_tac bool_ss [abi_decoder_effect_def]
+  asm_simp_tac bool_ss [abi_sites_decoder_effect_def]
 QED

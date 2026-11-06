@@ -86,7 +86,7 @@ QED
 Theorem abi_decoder_recursive_slot_separation:
   abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
     B sb d slot b cap next initial /\
-  abi_decoder_budget first last b cap s /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap s /\ first <= site /\ site < last /\
   FLOOKUP s.vs_allocas site = SOME (slot,32) ==>
   (slot + 32 <= d \/ d + 32 + LENGTH vs * type_memory_size tv <= slot) /\
   (opc = MLOAD ==> B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <= slot \/
@@ -94,7 +94,7 @@ Theorem abi_decoder_recursive_slot_separation:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
-  `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
+  `site IN abi_sites_decoder_ids sites first last` by simp[abi_sites_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   `LENGTH vs * type_memory_size tv <= maxn * type_memory_size tv`
     by simp[LE_MULT_RCANCEL] >>

@@ -8,13 +8,13 @@ Ancestors
   vyperABI vyperValue venomState words list rich_list arithmetic
 
 Theorem abi_decoder_effect_ranges:
-  abi_decoder_effect first last lo hi next limit_st out outsz b cap s t /\
+  abi_sites_decoder_effect sites first last lo hi next limit_st out outsz b cap s t /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
   abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next base_op /\
   abi_decoder_ranges opc base_op hi_op src dst B sb len d sz b cap s ==>
   abi_decoder_ranges opc base_op hi_op src dst B sb len d sz b cap t
 Proof
-  rw[abi_decoder_ranges_def, abi_decoder_effect_def] >> metis_tac[]
+  rw[abi_decoder_ranges_def, abi_sites_decoder_effect_def] >> metis_tac[]
 QED
 
 Theorem abi_decoder_array_body_at_index:
@@ -25,7 +25,7 @@ Theorem abi_decoder_array_body_at_index:
   fn_has_code st end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_sites_decoder_correct sites ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
@@ -37,13 +37,13 @@ Theorem abi_decoder_array_body_at_index:
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var ip /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\
   st.cs_next_id <= middle.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. val_in_memory tv (EL j vs) (d + 32 + j * type_memory_bytes ce ty) actual.vs_memory /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + 32 + j * type_memory_bytes ce ty) (type_memory_bytes ce ty) b cap initial actual /\
     eval_operand (FST ops) actual = SOME (n2w j) /\ eval_operand ip actual = SOME p /\
     actual.vs_current_bb = end_st.cs_current_bb /\
@@ -70,7 +70,7 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_body_inputs:
-  abi_decoder_recursive_loop_inv opc aty avs tv vs (B+sb) d outsz slot site
+  abi_sites_decoder_recursive_loop_inv sites opc aty avs tv vs (B+sb) d outsz slot site
     first last lo hi next limit_st b cap initial body_lbl j s /\
   abi_decoder_ranges opc base_op hi_op src dst B sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     d outsz b cap initial /\
@@ -80,19 +80,19 @@ Theorem abi_decoder_recursive_body_inputs:
   abi_decoder_array_memory opc aty avs tv vs (B+sb) d j s /\
   abi_decoder_ranges opc base_op hi_op src dst B sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     d outsz b cap s /\
-  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s /\
+  fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s /\
   eval_operand ip s = SOME (n2w slot) /\ mload (w2n (n2w slot:bytes32)) s = n2w j /\
   abi_decoder_operand_live body_next src /\ abi_decoder_operand_live body_next dst /\
   abi_decoder_operand_live body_next hi_op /\ abi_decoder_operand_live body_next base_op /\ abi_decoder_operand_live body_next ip /\
   s.vs_current_bb = body_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_recursive_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_inv_def]) >>
+  qpat_assum `abi_sites_decoder_recursive_loop_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_recursive_loop_inv_def]) >>
   drule_all abi_decoder_effect_ranges >> strip_tac >>
-  `fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s /\
+  `fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s /\
     eval_operand ip s = SOME (n2w slot)` by
-    (fs[abi_decoder_effect_def, Excl "enc_def"] >> metis_tac[]) >>
+    (fs[abi_sites_decoder_effect_def, Excl "enc_def"] >> metis_tac[]) >>
   asm_simp_tac bool_ss [w2n_n2w, LESS_MOD] >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
@@ -107,11 +107,11 @@ Theorem abi_decoder_recursive_array_iteration:
   fn_has_code st end_st func /\ st.cs_current_insts = [] /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_sites_decoder_correct sites ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
+  abi_sites_decoder_recursive_loop_inv sites opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial st.cs_current_bb j s /\ j < LENGTH vs /\
   abi_decoder_ranges opc base_op hi_op src dst B sb
@@ -125,7 +125,7 @@ Theorem abi_decoder_recursive_array_iteration:
   first <= site /\ site < last /\ (site < st.cs_next_id \/ end_st.cs_next_id <= site) /\
   end_st.cs_next_var <= limit_st.cs_next_var ==>
   ?actual. abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d (SUC j) actual /\
-    abi_decoder_effect first last lo hi next limit_st
+    abi_sites_decoder_effect sites first last lo hi next limit_st
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ mload slot actual = n2w j /\
     eval_operand (FST ops) actual = SOME (n2w j) /\

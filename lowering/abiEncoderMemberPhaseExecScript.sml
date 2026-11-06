@@ -16,23 +16,23 @@ Ancestors
 
 Theorem abi_scratch_members_prepare_raw_transport:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\
-  abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_sites_scratch_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
   prepared.cs_next_var <= limit_st.cs_next_var /\
   abi_encoder_member_phase_raw st prepared initial ready ==>
-  abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+  abi_sites_scratch_members_inv sites ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo prepared limit_st
     src dst sb so ho d hl output_size b cap ready /\
-  abi_scratch_input ei ty av prepared elem_src dst (sb+so) mem_sz d output_size first last b cap ready /\
+  abi_sites_scratch_input sites ei ty av prepared elem_src dst (sb+so) mem_sz d output_size first last b cap ready /\
   abi_decoder_address_frame st.cs_next_var initial ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_scratch_members_inv_layout >> strip_tac >>
   `LENGTH (enc ty av) <= output_size` by (Cases_on `dyn` >> fs[] >> decide_tac) >>
-  qpat_assum `abi_scratch_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_inv_def]) >>
-  `eval_operand src initial = SOME (n2w sb)` by fs[abi_scratch_members_pre_def] >>
+  qpat_assum `abi_sites_scratch_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_members_inv_def]) >>
+  `eval_operand src initial = SOME (n2w sb)` by fs[abi_sites_scratch_members_pre_def] >>
   drule abi_encoder_emit_address_shape >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >> drule abi_decoder_operand_live_emit >> strip_tac >>
   `st.cs_next_var <= prepared.cs_next_var /\ st.cs_next_id <= prepared.cs_next_id` by decide_tac >>
@@ -57,23 +57,23 @@ Proof
      gvs[Excl "enc_def"]) >>
   qpat_assum `hl = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   qpat_assum `ho = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  asm_simp_tac bool_ss [abi_scratch_members_inv_def] >> decide_tac
+  asm_simp_tac bool_ss [abi_sites_scratch_members_inv_def] >> decide_tac
 QED
 
 
 Theorem abi_scratch_member_static_place_raw_transport:
   emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
-  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
-  abi_decoder_budget first last b cap initial /\
+  abi_sites_scratch_input sites ei at av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_sites_decoder_budget sites first last b cap initial /\
   offset+LENGTH (enc at av) <= output_size /\
   prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_encoder_member_phase_raw st prepared initial ready ==>
-  abi_scratch_input ei at av prepared src head sb source_cap (d+offset)
+  abi_sites_scratch_input sites ei at av prepared src head sb source_cap (d+offset)
     (LENGTH (enc at av)) first last b cap ready /\
   fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `eval_operand dst initial = SOME (n2w d)` by fs[abi_scratch_input_def] >>
+  `eval_operand dst initial = SOME (n2w d)` by fs[abi_sites_scratch_input_def] >>
   `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >> strip_tac >>
   drule abi_decoder_operand_live_emit >> strip_tac >>
@@ -81,13 +81,13 @@ Proof
   `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
   `eval_operand head ready = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
   drule_all abi_scratch_address >>
-  disch_then (qspecl_then [`abi_decoder_ids first last`, `[]`] strip_assume_tac) >>
+  disch_then (qspecl_then [`abi_sites_decoder_ids sites first last`, `[]`] strip_assume_tac) >>
   drule_all abi_scratch_child_input_address >> simp[]
 QED
 
 
 Theorem abi_scratch_complex_finish_raw_transport:
-  abi_scratch_members_inv [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
+  abi_sites_scratch_members_inv sites [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap encoded /\
   emit_op MLOAD [dyn_ptr] st = (out,end_st) /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
@@ -102,12 +102,12 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule emitted_insts_emit_op >> strip_tac >>
   drule abi_scratch_members_final_output >> strip_tac >>
-  qpat_assum `abi_scratch_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_members_inv_def]) >>
+  qpat_assum `abi_sites_scratch_members_inv sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_members_inv_def]) >>
   qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
-  `site IN abi_decoder_ids first last` by
-    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  `site IN abi_sites_decoder_ids sites first last` by
+    (simp_tac std_ss [abi_sites_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
   drule abi_decoder_budget_word_bound >> strip_tac >> `slot < dimword (:256)` by decide_tac >>
   drule_all abi_encoder_member_load_transport >> strip_tac >>

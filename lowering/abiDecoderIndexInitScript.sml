@@ -54,16 +54,16 @@ Proof
 QED
 
 Theorem abi_decoder_budget_word_bound:
-  abi_decoder_budget first last b cap s ==> b + cap < dimword (:256)
+  abi_sites_decoder_budget sites first last b cap s ==> b + cap < dimword (:256)
 Proof
-  simp_tac bool_ss [abi_decoder_budget_def] >> strip_tac >> first_assum ACCEPT_TAC
+  simp_tac bool_ss [abi_sites_decoder_budget_def] >> strip_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_decoder_budget_mstore[simp]:
-  abi_decoder_budget first last b cap (mstore p w s) <=>
-  abi_decoder_budget first last b cap s
+  abi_sites_decoder_budget sites first last b cap (mstore p w s) <=>
+  abi_sites_decoder_budget sites first last b cap s
 Proof
-  simp[abi_decoder_budget_def, abi_decoder_missing_def, mstore_def,
+  simp[abi_sites_decoder_budget_def, abi_sites_decoder_missing_def, mstore_def,
        write_memory_with_expansion_def]
 QED
 
@@ -83,12 +83,12 @@ QED
 
 Theorem abi_decode_index_init_sequence:
   abi_decode_index_init st = (ip,st') /\
-  abi_decoder_budget first last b cap s /\ st.cs_next_id IN abi_decoder_ids first last /\
+  abi_sites_decoder_budget sites first last b cap s /\ st.cs_next_id IN abi_sites_decoder_ids sites first last /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?t p. run_inst_seq (emitted_insts st st') s = OK t /\
     eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
     b <= p /\ p + 32 <= b + cap /\
-    abi_decoder_budget first last b cap t /\ fresh_vars_wrt limit_st t /\
+    abi_sites_decoder_budget sites first last b cap t /\ fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     abi_decode_frame p 32 s t /\
@@ -115,7 +115,7 @@ Proof
     (drule_all abi_decode_sequence_chain >> simp[]) >>
   `abi_decode_frame p 32 allocated (mstore p 0w allocated)` by
     irule abi_decode_mstore_frame >>
-  `abi_decoder_budget first last b cap (mstore p 0w allocated)` by simp[] >>
+  `abi_sites_decoder_budget sites first last b cap (mstore p 0w allocated)` by simp[] >>
   `mload p (mstore p 0w allocated) = 0w` by simp[mload_mstore_same] >>
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     eval_operand op (mstore p 0w allocated) = eval_operand op s` by

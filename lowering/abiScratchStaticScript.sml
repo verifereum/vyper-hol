@@ -18,22 +18,22 @@ Ancestors
    derive the contract for word/copy/empty static leaves. *)
 
 Theorem abi_scratch_static_leaf:
-  abi_encoder_static_leaf ei ==> abi_scratch_encoder ei
+  abi_encoder_static_leaf ei ==> abi_sites_scratch_encoder sites ei
 Proof
   rw[abi_encoder_static_leaf_def] >>
   simp[abi_scratch_encoder_word, abi_scratch_encoder_copy, abi_scratch_encoder_empty]
 QED
 
 Theorem abi_scratch_input_offset:
-  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
-  abi_decoder_budget first last b cap initial /\ abi_decoder_operand_live st.cs_next_var head /\
+  abi_sites_scratch_input sites ei at av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_sites_decoder_budget sites first last b cap initial /\ abi_decoder_operand_live st.cs_next_var head /\
   eval_operand head initial = SOME (n2w (d+offset)) /\ offset+LENGTH (enc at av) <= output_size ==>
-  abi_scratch_input ei at av st src head sb source_cap (d+offset) (LENGTH (enc at av))
+  abi_sites_scratch_input sites ei at av st src head sb source_cap (d+offset) (LENGTH (enc at av))
     first last b cap initial
 Proof
   strip_tac >>
   `abi_decoder_address_frame st.cs_next_var initial initial` by simp[abi_decoder_address_frame_def] >>
-  `abi_scratch_evolution (abi_decoder_ids first last) b cap initial initial` by
+  `abi_scratch_evolution (abi_sites_decoder_ids sites first last) b cap initial initial` by
     (irule abi_scratch_evolution_refl >> drule abi_decoder_budget_frontier >> simp[]) >>
   mp_tac (Q.INST [`prepared` |-> `st:compile_state`, `actual` |-> `initial:venom_state`,
     `child_dst` |-> `head:operand`, `off` |-> `offset:num`] abi_scratch_child_input_address) >>
@@ -43,10 +43,10 @@ QED
 Theorem abi_scratch_static_info_reach:
   abi_encoder_static_leaf ei /\ compile_abi_encode_static_info head src ei st = (out,end_st) /\
   fn_has_code st end_st func /\
-  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_sites_scratch_input sites ei at av st src dst sb source_cap d output_size first last b cap initial /\
   abi_decoder_operand_live st.cs_next_var head /\
   eval_operand head initial = SOME (n2w (d+offset)) /\ offset+LENGTH (enc at av) <= output_size /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -54,8 +54,8 @@ Theorem abi_scratch_static_info_reach:
     eval_operand out actual = SOME (n2w (LENGTH (enc at av))) /\
     abi_decode_footprint_frame
       ((d+offset,LENGTH (enc at av))::abi_decoder_child_scratch
-        (abi_decoder_ids st.cs_next_id end_st.cs_next_id) b cap initial) initial actual /\
-    abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+        (abi_sites_decoder_ids sites st.cs_next_id end_st.cs_next_id) b cap initial) initial actual /\
+    abi_sites_scratch_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
       limit_st d output_size b cap initial actual /\
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -71,9 +71,9 @@ Proof
     abi_scratch_encoder_run) >>
   impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
-  `abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
+  qpat_assum `abi_sites_scratch_effect sites _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_scratch_effect_def]) >>
+  `abi_sites_scratch_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var
     limit_st d output_size b cap initial actual` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d+offset`, `end_st.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`, `LENGTH (enc at av)`] >>

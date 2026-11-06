@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem abi_decoder_budget_child_reservation:
-  abi_decoder_budget first last b cap s /\ first <= child_id ==>
+  abi_sites_decoder_budget sites first last b cap s /\ first <= child_id ==>
   abi_decoder_reservation child_id last b cap s
 Proof
   strip_tac >> drule abi_decoder_budget_reservation >> strip_tac >>
@@ -37,16 +37,16 @@ QED
 
 Theorem abi_decoder_address_then_effect:
   abi_decoder_address_frame next s prepared /\ fresh_vars_wrt limit_st prepared /\
-  abi_decoder_budget first last b cap s /\
-  abi_decoder_effect first last child_lo hi child_next limit_st d sz b cap prepared t /\
+  abi_sites_decoder_budget sites first last b cap s /\
+  abi_sites_decoder_effect sites first last child_lo hi child_next limit_st d sz b cap prepared t /\
   lo <= child_lo /\ next <= child_next ==>
-  abi_decoder_effect first last lo hi next limit_st d sz b cap s t
+  abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s t
 Proof
   strip_tac >>
-  `abi_decoder_effect first last lo hi next limit_st d sz b cap s prepared` by
+  `abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap s prepared` by
     (irule abi_decoder_address_effect >> asm_simp_tac bool_ss [] >>
      qexists_tac `next` >> simp[]) >>
-  `abi_decoder_effect first last lo hi next limit_st d sz b cap prepared t` by
+  `abi_sites_decoder_effect sites first last lo hi next limit_st d sz b cap prepared t` by
     (drule_all (SIMP_RULE (srw_ss()) []
       (Q.INST [`child_hi` |-> `hi:num`, `child_d` |-> `d:num`, `child_sz` |-> `sz:num`]
         abi_decoder_effect_widen)) >> simp[]) >>
@@ -61,7 +61,7 @@ Theorem abi_decoder_array_body:
   fn_has_code st end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_sites_decoder_correct sites ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
@@ -76,13 +76,13 @@ Theorem abi_decoder_array_body:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var ip /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\
   st.cs_next_id <= middle.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. val_in_memory tv v (d + 32 + LENGTH pre * type_memory_bytes ce ty) actual.vs_memory /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + 32 + LENGTH pre * type_memory_bytes ce ty) (type_memory_bytes ce ty) b cap initial actual /\
     eval_operand (FST ops) actual = SOME (n2w (LENGTH pre)) /\ eval_operand ip actual = SOME p /\
     actual.vs_current_bb = end_st.cs_current_bb /\
@@ -100,13 +100,13 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_array_entry_def]) >>
   qpat_assum `abi_decoder_address_frame _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  `abi_decoder_budget first last b cap prepared` by
+  `abi_sites_decoder_budget sites first last b cap prepared` by
     (drule_all abi_decoder_budget_transport >> simp[]) >>
   `first <= abi_decoder_entry_floor middle` by
     simp[abi_decoder_entry_floor_def] >>
   drule_all abi_decoder_correct_run_simple >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `val_in_memory tv v (d + 32 + LENGTH pre * type_memory_bytes ce ty) actual.vs_memory` >>
-  `abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+  `abi_sites_decoder_effect sites first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + 32 + LENGTH pre * type_memory_bytes ce ty) (type_memory_bytes ce ty) b cap initial actual` by
     (mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
       `next` |-> `st.cs_next_var`, `child_lo` |-> `middle.cs_next_id`,
@@ -116,7 +116,7 @@ Proof
       `sz` |-> `type_memory_bytes ce ty`] abi_decoder_address_then_effect) >>
      asm_simp_tac bool_ss []) >>
   `eval_operand (FST ops) actual = SOME (n2w (LENGTH pre)) /\ eval_operand ip actual = SOME p`
-    by (fs[abi_decoder_effect_def, Excl "enc_def"] >> metis_tac[]) >>
+    by (fs[abi_sites_decoder_effect_def, Excl "enc_def"] >> metis_tac[]) >>
   `abi_decode_sim ctx func initial actual` by metis_tac[abi_decode_sim_trans] >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
