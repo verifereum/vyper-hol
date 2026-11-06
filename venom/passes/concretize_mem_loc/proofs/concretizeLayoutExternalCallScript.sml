@@ -17,7 +17,12 @@ Theorem call_completion_fields:
   post.vs_memory = (write_memory_with_expansion ro (TAKE rs oc.co_returnData) s).vs_memory /\
   post.vs_call_ctx = s.vs_call_ctx /\
   post.vs_immutables = s.vs_immutables /\
-  post.vs_halted = s.vs_halted
+  post.vs_halted = s.vs_halted /\
+  post.vs_vars = s.vs_vars /\ post.vs_allocas = s.vs_allocas /\
+  post.vs_fmp = s.vs_fmp /\ post.vs_labels = s.vs_labels /\
+  post.vs_gas_readings = s.vs_gas_readings /\
+  post.vs_tx_ctx = s.vs_tx_ctx /\ post.vs_block_ctx = s.vs_block_ctx /\
+  post.vs_code = s.vs_code /\ post.vs_data_section = s.vs_data_section
 Proof
   strip_tac >>
   qpat_x_assum `consume_call_outcome _ _ _ _ = _` mp_tac >>
@@ -277,6 +282,29 @@ Proof
        store_taint_def, imm_taint_def, update_var_def,
        Excl "consume_call_outcome_eq"] >>
   strip_tac >> fs[Excl "consume_call_outcome_eq"]
+QED
+
+Theorem ext_call_execution_fields:
+  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  ?out w. inst.inst_outputs = [out] /\ (w = 0w \/ w = 1w) /\
+    post.vs_vars = (update_var out w s).vs_vars /\
+    post.vs_memory = (write_memory_with_expansion (w2n ro)
+      (TAKE (w2n rs) post.vs_returndata) s).vs_memory /\
+    post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp /\
+    post.vs_labels = s.vs_labels /\ post.vs_call_ctx = s.vs_call_ctx /\
+    post.vs_gas_readings = s.vs_gas_readings /\
+    post.vs_tx_ctx = s.vs_tx_ctx /\ post.vs_block_ctx = s.vs_block_ctx /\
+    post.vs_code = s.vs_code /\ post.vs_data_section = s.vs_data_section
+Proof
+  strip_tac >> drule ext_call_success_envelope >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >> drule_all call_completion_fields >> strip_tac >>
+  qexistsl_tac [`out`,`w`] >>
+  gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
+  Cases_on `oc.co_success` >> simp[]
 QED
 
 val _ = export_theory();
