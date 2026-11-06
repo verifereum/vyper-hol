@@ -47,3 +47,10 @@ Proof
     metis_tac[val_store_size_le] >>
   gvs[val_store_size_def, type_slot_size_def, type_memory_size_def]
 QED
+
+Theorem ptr_covers_mono:
+  ptr_covers G tn root s cap /\ sz <= cap ==>
+  ptr_covers G tn root s sz
+Proof
+  simp[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_MONO_ADD_EQ]
+QED
