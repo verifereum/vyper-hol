@@ -461,3 +461,91 @@ Proof
     namedCases_on `inst.inst_outputs` ["", "out outs"] >> gvs[exit_result_def] >>
     Cases_on `outs` >> gvs[exit_result_def]
 QED
+
+Theorem raw_eval_operand_control[local]:
+  !op s b p. eval_operand op (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem raw_eval_operands_control[local]:
+  !ops s b p. eval_operands ops (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def, raw_eval_operand_control]
+QED
+
+Theorem raw_mcopy_control[local]:
+  mcopy dst src sz (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    mcopy dst src sz s with <|vs_prev_bb := p; vs_current_bb := b|>
+Proof
+  simp[mcopy_def, read_memory_def, write_memory_with_expansion_def]
+QED
+
+Theorem raw_pack_dret_control[local]:
+  !pairs cursor s b p.
+    pack_dret_dynamic cursor pairs (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    (FST (pack_dret_dynamic cursor pairs s),
+     FST (SND (pack_dret_dynamic cursor pairs s)),
+     SND (SND (pack_dret_dynamic cursor pairs s)) with
+       <|vs_prev_bb := p; vs_current_bb := b|>)
+Proof
+  Induct >- simp[pack_dret_dynamic_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[pack_dret_dynamic_def, raw_mcopy_control] >>
+  first_x_assum (fn th => rewrite_tac[th]) >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem raw_ext_call_not_exit[local]:
+  !inst s gas addr value ao az ro rz is_static.
+    ~exit_result (exec_ext_call inst s gas addr value ao az ro rz is_static)
+Proof
+  rpt gen_tac >> simp[exec_ext_call_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[exit_result_def] >>
+  Cases_on `outs` >> simp[exit_result_def]
+QED
+
+Theorem raw_delegatecall_not_exit[local]:
+  !inst s gas addr ao az ro rz.
+    ~exit_result (exec_delegatecall inst s gas addr ao az ro rz)
+Proof
+  rpt gen_tac >> simp[exec_delegatecall_def] >>
+  BasicProvers.TOP_CASE_TAC >> simp[exit_result_def] >>
+  rename1 `SOME pair` >> PairCases_on `pair` >> simp[] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[exit_result_def] >>
+  Cases_on `outs` >> simp[exit_result_def]
+QED
+
+Theorem raw_exit_control[local]:
+  inst.inst_opcode <> INVOKE /\ step_inst_base inst s = r /\
+  exit_result r /\ (!h. r <> Halt h) ==>
+  step_inst_base inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>) r
+Proof
+  strip_tac >>
+  `MEM inst.inst_opcode
+      [INVOKE; STOP; RETURN; SINK; RET; RETFMP; DRET; REVERT;
+       ASSERT; ASSERT_UNREACHABLE; RETURNDATACOPY; LOG; SELFDESTRUCT;
+       INVALID; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; SSTORE; TSTORE]` by
+    metis_tac[step_inst_exit_opcodes] >>
+  Cases_on `r` >> gvs[exit_result_def] >>
+  fs[MEM] >> gvs[] >> first_assum raw_opcode_eq >>
+  simp[raw_eval_operand_control, raw_eval_operands_control, instIdxIndepTheory.exec_result_map_def,
+       halt_state_def, revert_state_def, set_returndata_def] >>
+  gvs[AllCaseEqs()] >>~-
+    ([`inst.inst_opcode = DRET`],
+     qpat_x_assum `_ (pack_dret_dynamic _ _ _) = _` mp_tac >>
+     pairarg_tac >> simp[] >> strip_tac >>
+     simp[raw_pack_dret_control] >> gvs[]) >>
+  simp[halt_state_def, revert_state_def, set_returndata_def] >>
+  gvs[exec_create_abort_iff, exec_create_not_IntRet] >>
+  all_tac >>~-
+    ([`exec_ext_call _ _ _ _ _ _ _ _ _ _ = _`],
+     metis_tac[raw_ext_call_not_exit, exit_result_def]) >>~-
+    ([`exec_delegatecall _ _ _ _ _ _ _ _ = _`],
+     metis_tac[raw_delegatecall_not_exit, exit_result_def]) >>
+  simp[halt_state_def, set_returndata_def] >>
+  metis_tac[exec_write2_not_exit, exit_result_def]
+QED
