@@ -5,6 +5,7 @@ Ancestors forPtrAdmin typedCopyPtr fragGasSeqPtr ghostPcTransportPtr
   venomExecSemantics venomInst venomState finite_map instIdxIndep
   fragExecPtr bodyPtrDefs fragExec exprLoweringProps ptrSafeRun ptrDiscipline
   valueEncodingProps valueEncoding valueEncodingProofs list venomMemProofs
+  vyperTyping vyperValue context compileEnv
 
 Theorem for_word_copy_steps:
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\ tmp <> dst ==>
@@ -126,9 +127,40 @@ Proof
       lookup_var_def, mstore_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
+(* Typed word encodings include right-aligned addresses and left-aligned
+   fixed bytes, not just the four arithmetic value constructors. *)
+Theorem for_typed_word_in_memory:
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v ==>
+  (val_in_memory tv v a mem <=>
+    mem_word_at a mem = typed_val_to_w256 tv v)
+Proof
+  Cases_on `ty` >> simp[is_word_type_def, evaluate_type_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  TRY (rename1 `is_word_type (BaseT bt)` >> Cases_on `bt` >>
+    gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()]) >>
+  TRY (rename1 `is_word_type (BaseT (BytesT bd))` >> Cases_on `bd` >>
+    gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()]) >>
+  Cases_on `v` >>
+  gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]
+QED
+
+Theorem for_typed_word_robust_clean:
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\
+  (!mem. mem_agree_outside taints memory mem ==>
+    val_in_memory tv v a mem) ==>
+  !i. a <= i /\ i < a + 32 ==> i NOTIN taints
+Proof
+  strip_tac >> gen_tac >> disch_tac >> irule robust_mem_word_at_clean >>
+  qexistsl_tac [`a`, `memory`, `typed_val_to_w256 tv v`] >> simp[] >>
+  rpt strip_tac >> drule_all for_typed_word_in_memory >>
+  metis_tac[]
+QED
+
 Theorem for_word_store_robust:
-  ((?x. v = BoolV x) \/ (?x. v = IntV x) \/
-   (?x. v = FlagV x) \/ (?x. v = DecimalV x)) /\
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n (a:256 word)) m) /\
   mem' = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
@@ -150,15 +182,17 @@ Proof
     asm_simp_tac bool_ss [mem_word_at_def, GSYM mem_bytes_at_def] >>
   `mem_word_at (w2n b) m = mload (w2n a) s` by
     metis_tac[mstore_mem_word_at_same] >>
-  gvs[val_in_memory_def, mem_word_at_eq_mload]
+  drule_all for_typed_word_in_memory >>
+  disch_then (fn th => fs[th]) >>
+  fs[mem_word_at_eq_mload]
 QED
 
 Theorem for_word_copy_robust_checked:
   ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\ tmp <> dst /\
   ~ctx_has_dalloca ctx /\
-  ((?x. v = BoolV x) \/ (?x. v = IntV x) \/
-   (?x. v = FlagV x) \/ (?x. v = DecimalV x)) /\
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n a) m) ==>
   ?Gf tnf sf.
@@ -179,7 +213,8 @@ Theorem for_word_copy_robust_checked:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem` by
-    metis_tac[robust_val_in_memory_prim_clean] >>
+    (gen_tac >> disch_tac >> irule for_typed_word_robust_clean >>
+     qexistsl_tac [`w2n a`, `s.vs_memory`, `tenv`, `tv`, `ty`, `v`] >> simp[]) >>
   drule_all for_word_copy_checked_seq >>
   disch_then (qspecl_then [`id`, `fn`, `PG`, `D`] strip_assume_tac) >>
   qexistsl [`Gf`, `tnf`,
@@ -205,6 +240,7 @@ Proof
   qpat_x_assum `tnf = _` kall_tac >> qpat_x_assum `Gf = _` kall_tac >>
   simp[mstore_memory_frame] >>
   rpt strip_tac >> irule for_word_store_robust >> simp[] >>
+  conj_tac >- (qexistsl_tac [`tenv`, `ty`] >> simp[]) >>
   qexistsl [`a`, `s`, `tn`] >> simp[]
 QED
 
@@ -215,8 +251,8 @@ Theorem for_compile_word_copy_checked:
   ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ~ctx_has_dalloca ctx /\
-  ((?x. v = BoolV x) \/ (?x. v = IntV x) \/
-   (?x. v = FlagV x) \/ (?x. v = DecimalV x)) /\
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n a) m) ==>
   ?tmp id Gf tnf sf.
