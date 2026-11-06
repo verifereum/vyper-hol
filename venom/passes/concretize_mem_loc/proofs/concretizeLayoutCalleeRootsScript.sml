@@ -11,6 +11,45 @@ Definition clean_resolved_root_def:
     | SOME (tok,(b,sz)) => x - n2w b = y - n2w (L tok)
 End
 
+(* Missing annotations are scalar roots, matching PARAM provenance. *)
+Definition resolved_parameter_entry_def:
+  resolved_parameter_entry rp i = if i < LENGTH rp then EL i rp else NONE
+End
+
+Theorem resolved_parameter_entry_empty[simp]:
+  resolved_parameter_entry [] i = NONE
+Proof
+  simp[resolved_parameter_entry_def]
+QED
+
+Theorem resolved_parameter_entry_bound[simp]:
+  i < LENGTH rp ==> resolved_parameter_entry rp i = EL i rp
+Proof
+  simp[resolved_parameter_entry_def]
+QED
+
+Theorem resolved_parameter_entry_unbound[simp]:
+  ~(i < LENGTH rp) ==> resolved_parameter_entry rp i = NONE
+Proof
+  simp[resolved_parameter_entry_def]
+QED
+
+Theorem parameter_roots_empty_annotations[simp]:
+  parameter_roots (\i x y. clean_resolved_root L
+    (resolved_parameter_entry [] i) x y) xs xs
+Proof
+  simp[parameter_roots_def, clean_resolved_root_def]
+QED
+
+Theorem parameter_roots_bounded_annotations:
+  LENGTH rp = LENGTH xs ==>
+  (parameter_roots (\i x y. clean_resolved_root L
+    (resolved_parameter_entry rp i) x y) xs ys <=>
+   parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y) xs ys)
+Proof
+  simp[parameter_roots_def, resolved_parameter_entry_def]
+QED
+
 Theorem decoded_invoke_argument_clean:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\ inst.inst_opcode = INVOKE /\

@@ -29,9 +29,9 @@ Theorem concretize_param_local_complete:
   MEM inst (fn_insts fn) /\ step_inst_base inst s = OK post /\
   parameter_roots (\i x y. clean_resolved_root
     (activation_lookup (0:num) (concretize_positions C')
-      (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (EL i rp) x y)
+      (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (resolved_parameter_entry rp i) x y)
     s.vs_params t.vs_params /\
-  LENGTH rp = LENGTH s.vs_params /\ PG = MAP (OPTION_MAP SND) rp /\
+  PG = MAP (OPTION_MAP SND) rp /\
   resolution ct rp om rv /\
   relocation_env s t /\ relocation_reader_context s t /\
   local_rel (\u. F)
@@ -45,7 +45,7 @@ Theorem concretize_param_local_complete:
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un ==>
   ?idx rv' tpost. inst.inst_operands = [Lit idx] /\
     w2n idx < LENGTH s.vs_params /\
-    rv' = origin_set rv [out] (EL (w2n idx) rp) /\
+    rv' = origin_set rv [out] (resolved_parameter_entry rp (w2n idx)) /\
     step_inst_base inst t = OK tpost /\
     resolution ct rp (origin_step PG om inst post) rv' /\
     step_prov PG (SND o_f rv) inst post = SND o_f rv' /\
@@ -61,7 +61,7 @@ Theorem concretize_param_local_complete:
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     parameter_roots (\i x y. clean_resolved_root
       (activation_lookup (0:num) (concretize_positions C')
-        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (EL i rp) x y)
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (resolved_parameter_entry rp i) x y)
       post.vs_params tpost.vs_params /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
@@ -81,7 +81,7 @@ Proof
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   simp[] >> strip_tac >>
   `step_prov PG (SND o_f rv) inst post =
-    SND o_f (origin_set rv [out] (EL (w2n idx) rp))` by
+    SND o_f (origin_set rv [out] (resolved_parameter_entry rp (w2n idx)))` by
     (imp_res_tac resolution_erasure >> gvs[origin_step_erase]) >>
   `relocation_env post post' /\ relocation_reader_context post post'` by
     (drule_all parameter_execution_shape >> strip_tac >>

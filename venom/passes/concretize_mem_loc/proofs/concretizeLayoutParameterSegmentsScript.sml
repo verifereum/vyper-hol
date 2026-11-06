@@ -25,8 +25,8 @@ QED
 Theorem resolved_parameter_segment:
   inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [out] /\
-  parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y)
-    s.vs_params t.vs_params /\ LENGTH rp = LENGTH s.vs_params /\
+  parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
+    s.vs_params t.vs_params /\
   PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R Obs s t /\
@@ -52,7 +52,7 @@ Theorem resolved_parameter_segment:
       (guarded_bytes Opaque rv' (step_taint inst s post tn)) R Obs post post' /\
     relocation_taint_le R (step_taint inst s post tn)
       (step_taint inst t post' un) /\
-    parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y)
+    parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
       post.vs_params post'.vs_params
 Proof
   strip_tac >>

@@ -54,7 +54,12 @@ Theorem layout_run_block_state:
   relocation_env post tpost /\ relocation_reader_context post tpost /\
   post.vs_current_bb = tpost.vs_current_bb /\ post.vs_prev_bb = tpost.vs_prev_bb /\
   concretize_supplement D tn post tpost /\
-  post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section ==>
+  post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section /\
+  parameter_roots (\i x y. clean_resolved_root
+    (activation_lookup (0:num) (concretize_positions C')
+      (birth::ids) (fn::MAP (\f. f.cf_fn) stk))
+    (resolved_parameter_entry rp i) x y) post.vs_params tpost.vs_params /\
+  post.vs_initial_fmp = tpost.vs_initial_fmp ==>
   ?tentry b.
     enters_block (concretize_function_with_positions positions fn)
       tpost tentry /\
@@ -73,7 +78,9 @@ Proof
   drule_all concretize_origin_block_transport >>
   disch_then (qspec_then `positions` strip_assume_tac) >>
   `sentry.vs_code = tentry.vs_code /\
-   sentry.vs_data_section = tentry.vs_data_section` by
+   sentry.vs_data_section = tentry.vs_data_section /\
+   sentry.vs_params = post.vs_params /\ tentry.vs_params = tpost.vs_params /\
+   sentry.vs_initial_fmp = tentry.vs_initial_fmp` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_block_iff] >> strip_tac >>
      gvs[enters_block_def] >>

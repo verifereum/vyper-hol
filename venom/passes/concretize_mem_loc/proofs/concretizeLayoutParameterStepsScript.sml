@@ -22,16 +22,18 @@ QED
 
 Theorem parameter_step_resolution:
   inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
-  inst.inst_outputs = [out] /\ w2n idx < LENGTH rp /\
+  inst.inst_outputs = [out] /\
   PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv ==>
   resolution ct rp (origin_step PG om inst post)
-    (origin_set rv [out] (EL (w2n idx) rp))
+    (origin_set rv [out] (resolved_parameter_entry rp (w2n idx)))
 Proof
-  strip_tac >>
-  simp[origin_step_def, origin_out_def, EL_MAP] >>
-  irule resolution_origin_set >> simp[] >>
-  Cases_on `EL (w2n idx) rp` >> simp[] >>
-  PairCases_on `x` >> simp[resolve_tag_def]
+  strip_tac >> Cases_on `w2n idx < LENGTH rp`
+  >- (simp[origin_step_def, origin_out_def, EL_MAP] >>
+      irule resolution_origin_set >> simp[] >>
+      Cases_on `EL (w2n idx) rp` >> simp[] >>
+      PairCases_on `x` >> simp[resolve_tag_def]) >>
+  simp[origin_step_def, origin_out_def] >>
+  irule resolution_origin_set >> simp[resolve_tag_def]
 QED
 
 Theorem parameter_root_write:
@@ -58,8 +60,8 @@ QED
 Theorem resolved_parameter_step:
   inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [out] /\
-  parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y)
-    s.vs_params t.vs_params /\ LENGTH rp = LENGTH s.vs_params /\
+  parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
+    s.vs_params t.vs_params /\
   PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R Obs s t /\
@@ -67,17 +69,17 @@ Theorem resolved_parameter_step:
   (!a b x y. Obs a b ==> Obs (update_var out x a) (update_var out y b)) /\
   step_inst_base inst s = OK post ==>
   ?post' rv'. step_inst_base inst t = OK post' /\
-    rv' = origin_set rv [out] (EL (w2n idx) rp) /\
+    rv' = origin_set rv [out] (resolved_parameter_entry rp (w2n idx)) /\
     resolution ct rp (origin_step PG om inst post) rv' /\
     local_rel (\u. F) (guarded_ptr Opaque L rv')
       (guarded_bytes Opaque rv' (step_taint inst s post tn)) R Obs post post' /\
     relocation_taint_le R (step_taint inst s post tn)
       (step_taint inst t post' un) /\
-    parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y)
+    parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
       post.vs_params post'.vs_params
 Proof
   strip_tac >>
-  `w2n idx < LENGTH rp` by
+  `w2n idx < LENGTH s.vs_params` by
     (qpat_x_assum `step_inst_base inst s = OK post` mp_tac >>
      pure_once_rewrite_tac[step_inst_base_def] >>
      asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
@@ -103,7 +105,7 @@ Theorem resolved_call_parameter_step:
   inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [out] /\
   parameter_roots (\i x y. clean_resolved_root L
-    (EL i (MAP (resolved_op caller_rv) ops)) x y) s.vs_params t.vs_params /\
+    (resolved_parameter_entry (MAP (resolved_op caller_rv) ops) i) x y) s.vs_params t.vs_params /\
   LENGTH ops = LENGTH s.vs_params /\
   resolution ct (MAP (resolved_op caller_rv) ops) om rv /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
@@ -112,7 +114,7 @@ Theorem resolved_call_parameter_step:
   (!a b x y. Obs a b ==> Obs (update_var out x a) (update_var out y b)) /\
   step_inst_base inst s = OK post ==>
   ?post' rv'. step_inst_base inst t = OK post' /\
-    rv' = origin_set rv [out] (EL (w2n idx) (MAP (resolved_op caller_rv) ops)) /\
+    rv' = origin_set rv [out] (resolved_parameter_entry (MAP (resolved_op caller_rv) ops) (w2n idx)) /\
     resolution ct (MAP (resolved_op caller_rv) ops)
       (origin_step (MAP (op_prov (origin_erase caller_om)) ops) om inst post) rv' /\
     local_rel (\u. F) (guarded_ptr Opaque L rv')
@@ -120,7 +122,7 @@ Theorem resolved_call_parameter_step:
     relocation_taint_le R (step_taint inst s post tn)
       (step_taint inst t post' un) /\
     parameter_roots (\i x y. clean_resolved_root L
-      (EL i (MAP (resolved_op caller_rv) ops)) x y) post.vs_params post'.vs_params
+      (resolved_parameter_entry (MAP (resolved_op caller_rv) ops) i) x y) post.vs_params post'.vs_params
 Proof
   strip_tac >>
   qpat_assum `resolution caller_ct caller_rp caller_om caller_rv`

@@ -60,7 +60,8 @@ Proof
   `concretize_supplement D (step_taint inst s post tn) post tpost /\
    relocation_reader_context post tpost /\ relocation_env post tpost /\
    post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section /\
-   post.vs_inst_idx = s.vs_inst_idx /\ post.vs_initial_fmp = tpost.vs_initial_fmp` by
+   post.vs_inst_idx = s.vs_inst_idx /\ post.vs_initial_fmp = tpost.vs_initial_fmp /\
+   post.vs_params = s.vs_params /\ tpost.vs_params = t.vs_params` by
     (fs[venom_state_component_equality] >> rpt conj_tac
      >- (irule concretize_supplement_fields >>
          goal_assum (drule_at (Pat `concretize_supplement _ _ _ _`)) >>

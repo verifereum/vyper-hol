@@ -1,16 +1,17 @@
 Theory concretizeLayoutPhaseInputs
 Ancestors concretizeLayoutCalleeRoots concretizeLayoutPhaseOrigin
   frameActivationLookup concretizeLayoutParameterRoots venomExecSemantics
+  concretizeLayoutArgumentRoots
 
 Theorem parameter_roots_lookup_transport:
-  parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y) xs ys /\
-  (!i tok site. i < LENGTH xs /\ EL i rp = SOME (tok,site) ==>
+  parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y) xs ys /\
+  (!i tok site. i < LENGTH xs /\ resolved_parameter_entry rp i = SOME (tok,site) ==>
     L' tok = L tok) ==>
-  parameter_roots (\i x y. clean_resolved_root L' (EL i rp) x y) xs ys
+  parameter_roots (\i x y. clean_resolved_root L' (resolved_parameter_entry rp i) x y) xs ys
 Proof
   simp[parameter_roots_def] >> rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH xs ==> _` (qspec_then `i` mp_tac) >>
-  Cases_on `EL i rp`
+  Cases_on `resolved_parameter_entry rp i`
   >- gvs[clean_resolved_root_def] >>
   PairCases_on `x` >> gvs[clean_resolved_root_def] >>
   metis_tac[]
@@ -34,12 +35,12 @@ QED
 
 Theorem parameter_roots_activation_push:
   parameter_roots (\i x y. clean_resolved_root
-    (activation_lookup default positions ids owners) (EL i rp) x y) xs ys /\
+    (activation_lookup default positions ids owners) (resolved_parameter_entry rp i) x y) xs ys /\
   (!i token aid site. i < LENGTH xs /\
-    EL i rp = SOME ((token,aid),site) ==> token <> birth) ==>
+    resolved_parameter_entry rp i = SOME ((token,aid),site) ==> token <> birth) ==>
   parameter_roots (\i x y. clean_resolved_root
     (activation_lookup default positions (birth::ids) (owner::owners))
-    (EL i rp) x y) xs ys
+    (resolved_parameter_entry rp i) x y) xs ys
 Proof
   rpt strip_tac >> irule parameter_roots_lookup_transport >>
   goal_assum (drule_at Any) >> rpt strip_tac >> PairCases_on `tok` >>
@@ -62,10 +63,16 @@ Theorem disciplined_invoke_setup_pushed_roots:
     setup_callee target args' t = SOME tc /\
     parameter_roots (\i x y. clean_resolved_root
       (activation_lookup default positions (birth::ids) (owner::owners))
-      (EL i (MAP (resolved_op rv) ops)) x y) sc.vs_params tc.vs_params
+      (resolved_parameter_entry (MAP (resolved_op rv) ops) i) x y)
+      sc.vs_params tc.vs_params
 Proof
-  rpt strip_tac >> drule_all disciplined_invoke_setup_roots >> strip_tac >>
+  rpt strip_tac >>
+  `LENGTH args = LENGTH ops` by
+    (drule_all argument_roots_evaluation >> strip_tac >> simp[]) >>
+  drule_all disciplined_invoke_setup_roots >> strip_tac >>
+  `LENGTH sc.vs_params = LENGTH ops` by gvs[setup_callee_def] >>
   qexistsl_tac [`args'`, `tc`] >> simp[] >>
-  irule parameter_roots_activation_push >> simp[] >>
-  gvs[setup_callee_def]
+  irule parameter_roots_activation_push >>
+  simp[parameter_roots_bounded_annotations, resolved_parameter_entry_def] >>
+  rpt strip_tac >> gvs[setup_callee_def] >> metis_tac[]
 QED

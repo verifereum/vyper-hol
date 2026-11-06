@@ -54,7 +54,7 @@ Proof
   `p.vs_halted = s.vs_halted /\ q.vs_halted = t.vs_halted` by
     (qpat_x_assum `step_inst_base i s = OK p` mp_tac >>
      qpat_x_assum `step_inst_base i t = OK q` mp_tac >>
-     simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >>
+     simp[Ntimes step_inst_base_def 2, AllCaseEqs()] >> rpt strip_tac >>
      gvs[update_var_def]) >>
   qexists_tac `q` >>
   gvs[layout_corridor_entry_def, layout_phase_normalize_def]
@@ -97,7 +97,7 @@ Proof
   `p.vs_halted = q.vs_halted` by
     (qpat_x_assum `step_inst_base i s = OK p` mp_tac >>
      qpat_x_assum `step_inst_base i t = OK q` mp_tac >>
-     simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >>
+     simp[Ntimes step_inst_base_def 2, AllCaseEqs()] >> rpt strip_tac >>
      gvs[write_memory_with_expansion_def, write_memory_def]) >>
   simp[layout_corridor_entry_def, layout_phase_normalize_def]
 QED

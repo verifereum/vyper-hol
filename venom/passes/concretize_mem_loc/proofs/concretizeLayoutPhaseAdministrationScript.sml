@@ -14,7 +14,8 @@ Theorem layout_var_gas_administration:
   concretize_supplement D tn' post tpost /\
   post.vs_inst_idx = s.vs_inst_idx /\ relocation_reader_context post tpost /\
   post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section /\
-  post.vs_initial_fmp = tpost.vs_initial_fmp
+  post.vs_initial_fmp = tpost.vs_initial_fmp /\
+  post.vs_params = s.vs_params /\ tpost.vs_params = t.vs_params
 Proof
   strip_tac >> gvs[] >> conj_tac
   >- (irule concretize_supplement_fields >>
@@ -59,5 +60,5 @@ Proof
    s.vs_initial_fmp = t.vs_initial_fmp` by
     gvs[layout_ordinary_entry_def, layout_ordinary_state_def] >>
   drule_all layout_var_gas_administration >> strip_tac >>
-  irule layout_ordinary_success_phase >> gvs[] >> metis_tac[]
+  irule layout_ordinary_success_phase >> gvs[update_var_def] >> metis_tac[]
 QED

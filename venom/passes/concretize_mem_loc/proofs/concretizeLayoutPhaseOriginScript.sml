@@ -5,6 +5,7 @@ Ancestors concretizeLayoutLocalReturnCopy frameTerminalCallOrigins
   frameResolvedTrace frameActivationLifetime frameRelocationLocal
   frameRelocationTaintOrder frameRelocationGuardedValues frameActivationLookup
   ptrDiscipline venomExecSemantics venomState venomInst finite_map ctxLookupAgreeHelpers
+  concretizeLayoutCalleeRoots venomInstProps
 
 Datatype:
   layout_block_origin = <| lbo_source : basic_block;
@@ -37,6 +38,10 @@ Definition layout_ordinary_state_def:
       a = layout_phase_normalize g.lop_pending s /\
       ?birth ids rp rv anns.
         g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+        parameter_roots (\i x y. clean_resolved_root
+          (activation_lookup (0:num) (concretize_positions C')
+            (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (resolved_parameter_entry rp i) x y)
+          s.vs_params t.vs_params /\
         local_rel (\u. F)
           (guarded_ptr (retpc_var fn)
             (activation_lookup (0:num) (concretize_positions C')
@@ -283,6 +288,10 @@ Theorem layout_ordinary_state_intro:
   k.lop_config = JointConfig stk PG G tn fn inst
     (layout_phase_normalize k.lop_pending s) oms om hs h /\
   k.lop_ids = birth::ids /\ k.lop_anns = (rp,rv)::anns /\
+  parameter_roots (\i x y. clean_resolved_root
+    (activation_lookup (0:num) (concretize_positions C')
+      (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (resolved_parameter_entry rp i) x y)
+    s.vs_params t.vs_params /\
   local_rel (\u. F)
     (guarded_ptr (retpc_var fn)
       (activation_lookup (0:num) (concretize_positions C')
@@ -361,6 +370,12 @@ Proof
   drule_all concretize_returncopy_local_complete >> strip_tac >>
   `post.vs_initial_fmp = tpost.vs_initial_fmp` by
     metis_tac[step_inst_initial_fmp, step_inst_base_initial_fmp] >>
+  `post.vs_params = s.vs_params /\ tpost.vs_params = t.vs_params` by
+    (conj_tac >- (irule step_preserves_params >> goal_assum (drule_at Any) >>
+      simp[is_terminator_def]) >>
+     irule step_preserves_params >>
+     qexistsl_tac [`C`, `0`, `inst`] >>
+     simp[step_inst_non_invoke, is_terminator_def]) >>
   qexists_tac `tpost` >> asm_rewrite_tac[] >>
   irule layout_ordinary_pending_outcome >>
   simp[layout_phase_origin_def] >>

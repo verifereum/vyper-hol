@@ -72,5 +72,6 @@ Proof
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   simp[resolved_out_def, ETA_AX] >>
   disch_then (qspec_then `tpost` mp_tac) >> gvs[] >>
-  metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp]
+  metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp,
+    venomInstPropsTheory.step_preserves_params]
 QED

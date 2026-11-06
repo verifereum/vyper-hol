@@ -52,7 +52,8 @@ Proof
   `concretize_supplement D (step_taint inst s post tn) post tpost /\
    post.vs_inst_idx = s.vs_inst_idx /\ relocation_reader_context post tpost /\
    post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section /\
-   post.vs_initial_fmp = tpost.vs_initial_fmp` by
+   post.vs_initial_fmp = tpost.vs_initial_fmp /\
+   post.vs_params = s.vs_params /\ tpost.vs_params = t.vs_params` by
     (irule layout_var_gas_administration >>
      simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
      metis_tac[]) >>

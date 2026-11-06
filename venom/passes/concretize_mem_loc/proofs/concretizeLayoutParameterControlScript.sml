@@ -9,8 +9,8 @@ Ancestors concretizeLayoutParameterSegments concretizeLayoutParameterSteps
 Theorem resolved_parameter_continuation:
   inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [out] /\
-  parameter_roots (\i x y. clean_resolved_root L (EL i rp) x y)
-    s.vs_params t.vs_params /\ LENGTH rp = LENGTH s.vs_params /\
+  parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
+    s.vs_params t.vs_params /\
   PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R Obs s t /\
