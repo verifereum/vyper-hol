@@ -116,7 +116,7 @@ Theorem inv_joint_interval_class:
      (GENLIST (\k. SUC c + k) (r - c))) inv_joint_cases
 Proof
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``inv_joint_class``]) >>
-  simp_tac bool_ss [EVERY_DEF] >> rpt conj_tac >> EVAL_TAC
+  simp_tac bool_ss [EVERY_DEF] >> rpt conj_tac >> TRY EVAL_TAC
 QED
 
 Theorem inv_joint_use_origins:
@@ -140,7 +140,7 @@ Theorem inv_joint_use_origins:
       (inv_joint_prefix (EL b inv_joint_blocks).bb_instructions r)
       (EL j (EL b inv_joint_blocks).bb_instructions)) inv_joint_cases
 Proof
-  simp_tac bool_ss [inv_joint_cases_def, EVERY_DEF] >> rpt conj_tac >> EVAL_TAC
+  simp_tac bool_ss [inv_joint_cases_def, EVERY_DEF] >> rpt conj_tac >> TRY EVAL_TAC
 QED
 
 Theorem inv_joint_snapshots:
@@ -205,7 +205,7 @@ Theorem inv_joint_markers:
     HD (inv_cone_state (EL b inv_joint_blocks).bb_instructions [] r).ds_stack =
       DfsEmit (EL j (EL b inv_joint_blocks).bb_instructions)) inv_joint_cases
 Proof
-  simp_tac bool_ss [inv_joint_cases_def, EVERY_DEF] >> rpt conj_tac >> EVAL_TAC
+  simp_tac bool_ss [inv_joint_cases_def, EVERY_DEF] >> rpt conj_tac >> TRY EVAL_TAC
 QED
 
 (* Candidate universal contract (NOT proved by these finite tests).
