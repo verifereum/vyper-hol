@@ -24,7 +24,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
   fnBlockPlanStaticAccounting fnBlockPlanStaticBalance simplifyCfgStruct venomExecProps venomInst
   fnBlockPlanStaticDfsTrace cfgAnalysisProps fnPlanLineageJoin
-  fnBlockPlanStaticJoinCardinality
+  fnBlockPlanStaticJoinCardinality fnBlockPlanStaticDistinct fnAliasStep
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
@@ -1635,4 +1635,43 @@ Proof
   first_x_assum drule >>
   drule_all regional_spill_supply_le >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem regional_jmp_target_static:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  fn_reachable fn bb.bb_label /\ fn_cfg_edge fn bb.bb_label target /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lookup_block target fn.fn_blocks = SOME target_bb /\
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb k ps /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions /\
+  inst.inst_opcode = JMP /\
+  targets = MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) target 0)) ==>
+  pending_inventory_wf targets ps /\
+  LENGTH targets <= LENGTH (SND (restore_spilled_plan targets ps)).ps_stack /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv (dfg_build_function fn) op at ==> at <> dead_stack_marker) targets
+Proof
+  strip_tac >>
+  `ALL_DISTINCT targets` by
+    (gvs[] >> irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[] >>
+     metis_tac[ready_edge_inputs_ALL_DISTINCT]) >>
+  `pending_inventory_wf targets ps` by
+    (irule regional_distinct_covered_inventory >> simp[] >>
+     qx_gen_tac `op` >> gvs[listTheory.MEM_MAP] >> strip_tac >> gvs[] >>
+     irule regional_jmp_target_operand_owned >>
+     rpt (first_assum $ irule_at Any) >> simp[]) >>
+  simp[] >> conj_tac
+  >- (Cases_on `restore_spilled_plan targets ps` >> gvs[] >>
+      drule_all restore_spilled_plan_length_floor >> simp[]) >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> rpt strip_tac >>
+  `normalize_operand (dfg_build_function fn) [] dead_stack_marker = dead_stack_marker` by
+    simp[dead_stack_marker_def, Once normalize_operand_def] >>
+  gvs[operand_equiv_def] >>
+  gvs[dead_stack_marker_def] >>
+  rename1 `normalize_operand _ [] (Var v) = _` >>
+  `Var v <> dead_stack_marker` by simp[NoAsms, dead_stack_marker_def] >>
+  drule_all fnFrameStepsRevertForwardTheory.codegen_normalize_operand_not_dead_marker >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  simp[dead_stack_marker_def]
 QED

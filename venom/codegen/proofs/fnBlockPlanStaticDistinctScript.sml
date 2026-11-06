@@ -234,3 +234,13 @@ Proof
   simp[init_df_state_def, distinct_live_state_def, EVERY_MEM] >>
   metis_tac[ready_phi_uses_disjoint]
 QED
+
+Theorem ready_edge_inputs_ALL_DISTINCT:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME target_bb ==>
+  ALL_DISTINCT (input_vars_from src target_bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) target 0))
+Proof
+  strip_tac >> irule input_vars_from_ALL_DISTINCT >>
+  simp[analyzed_live_vars_ALL_DISTINCT] >>
+  irule ready_phi_uses_disjoint >> metis_tac[selected_block_mem]
+QED
