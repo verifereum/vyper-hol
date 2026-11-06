@@ -4033,7 +4033,8 @@ QED
    ========================================================================== *)
 
 (* mem_ssa_phi_at_frontier: DROPPED — FALSE as stated (Phase 4 removes
-   redundant src phi). See memSSACexScript.sml. No consumer needs it. *)
+   redundant src phi). No consumer needs it. See
+   docs/deleted-counterexamples.md. *)
 
 (* ==========================================================================
    Property 6: Reaching-def chain is acyclic
@@ -5495,13 +5496,13 @@ QED
    Property 7: Clobber walk soundness
    ========================================================================== *)
 
-(* access_id must not be MnPhi — see memSSACexScript.sml for counterexample. *)
+(* access_id must not be MnPhi. *)
 (* Clobber soundness: if the walk returns LiveOnEntry (SOME 0), no
    strictly-dominating MnDef completely_contains the access location.
    Uses strict_dominates (not dominates) because same-block defs AFTER
    the access are not on the reaching chain — walk_clobber follows
    ms_reaching backward and find_prev_def only finds defs BEFORE
-   the access. See memSSACexScript.sml for the same-block counterexample. *)
+   the access. *)
 (* Visited monotonicity for collect_phi_clobbers, given walker monotonicity *)
 Triviality collect_phi_visited_mono:
   ∀ops walker visited clobbers visited'.
