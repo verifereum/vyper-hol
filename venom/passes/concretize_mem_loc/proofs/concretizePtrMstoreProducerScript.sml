@@ -7,12 +7,13 @@ Ancestors
   concretizePtrTaggedSupport concretizePtrDeletedGapHistory concretizePtrLedgerProbe
   concretizePtrSourceOwnership concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology
-  concretizePtrChronologicalHistory
+  concretizePtrChronologicalHistory concretizePtrHistoricalWriteClassification
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape o1PassContract
   o1ScheduleDecomp venomWf cfgWf ptrDiscipline unitMemInv
-  contextCodegenRel venomExecSemantics venomState venomInst
-  finite_map list arithmetic
+  contextCodegenRel codegenRel memLocDefs venomExecSemantics venomState venomInst
+  concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrBytes
+  concretizePtrComparisonTransport finite_map list arithmetic
 
 Theorem ptr_mstore_transcript_successor:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -137,3 +138,288 @@ Resume ptr_mstore_transcript_successor[tagged_step]:
 QED
 
 Finalise ptr_mstore_transcript_successor
+
+Theorem ptr_mstore_write_producer:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  a.po_inst.inst_opcode = MSTORE /\ ptr_chrono_step C' at zt ==>
+  ?z reloc.
+    ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) /\
+    ptr_paired_write lo positions C C' (h ++ [z]) (ht ++ [zt])
+      (done ++ [LENGTH h - 1])
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
+      (LENGTH h - 1,LENGTH done,reloc)
+Proof
+  strip_tac >>
+  drule_all ptr_mstore_transcript_successor >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by
+    (drule_all ptr_frame_sizes >> simp[]) >>
+  `~in_revert_forward a.po_fn a.po_state` by
+    suspend "nonrevert" >>
+  suspend "certificate"
+QED
+
+Resume ptr_mstore_write_producer[nonrevert]:
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `ALL_DISTINCT (fn_labels a.po_fn)` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  qpat_x_assum `active_inst a.po_fn a.po_inst a.po_state` mp_tac >>
+  simp[active_inst_def] >> strip_tac >>
+  `lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> fs[fn_labels_def]) >>
+  `get_instruction bb a.po_state.vs_inst_idx = SOME a.po_inst` by
+    simp[get_instruction_def] >>
+  simp[in_revert_forward_def] >> strip_tac >>
+  drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
+QED
+
+Resume ptr_mstore_write_producer[certificate]:
+  `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+   taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `opaque_use_ok a.po_fn /\ MEM a.po_inst (fn_insts a.po_fn)` by
+    suspend "shape" >>
+  `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> simp[]) >>
+  `at.po_inst = a.po_inst` by
+    (qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
+     simp[ptr_paired_cursor_def] >> strip_tac >>
+     `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
+       (spose_not_then assume_tac >>
+        `a.po_state.vs_inst_idx < EL at.po_state.vs_inst_idx indices` by decide_tac >>
+        qpat_x_assum `!k. _ ==> _.inst_opcode = NOP`
+          (qspec_then `a.po_state.vs_inst_idx` mp_tac) >> simp[] >>
+        qpat_x_assum `a.po_inst = _` (SUBST_ALL_TAC) >> gvs[]) >>
+     drule ptr_ledger_alignment_cursor >> strip_tac >>
+     first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[] >>
+     strip_tac >> gvs[concretize_inst_with_positions_def]) >>
+  qpat_assum `ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved` mp_tac >>
+  once_rewrite_tac[ptr_tagged_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality] >>
+  strip_tac >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst _ C _ _ = OK _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  strip_tac >>
+  gvs[] >>
+  `ptr_lookup_transport births positions (op_prov TG op1) (op_taint a.po_taint op1)
+    (eval_operand op1 a.po_state) (eval_operand op1 at.po_state) /\
+   ptr_lookup_transport births positions (op_prov TG op2) (op_taint a.po_taint op2)
+    (eval_operand op2 a.po_state) (eval_operand op2 at.po_state)` by
+    (conj_tac >>
+     (irule ptr_mixed_vars_eval >>
+      conj_tac
+      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+      qexistsl_tac [`a.po_fn`,`at.po_fn`] >> fs[ptr_paired_sample_def])) >>
+  suspend "classified"
+QED
+
+Resume ptr_mstore_write_producer[shape]:
+  conj_tac
+  >- (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >>
+      metis_tac[]) >>
+  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[Once frame_reachable_cases] >> rpt strip_tac >>
+  gvs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]
+QED
+
+Resume ptr_mstore_write_producer[classified]:
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
+  `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def, EVERY_MEM,
+        fn_insts_MEM] >> metis_tac[]) >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
+    (rpt strip_tac >>
+     `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>
+     drule_all ptr_source_tagged_var_support >> simp[]) >>
+  `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
+  qpat_assum `ptr_structural_transcript R vs C C' h a ht at done tokens registry births PT TG saved entries H`
+    (mp_tac o MATCH_MP ptr_structural_transcript_endpoint) >> strip_tac >>
+  `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (`H <> []` by (Cases_on `H` >> gvs[]) >>
+     qpat_x_assum `LAST H = _` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  `EL (LENGTH h - 1) h = a` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_end >> strip_tac >>
+     qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  `mem_write_ops a.po_inst = SOME <|iao_ofst := op1; iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w)|>` by
+    simp[mem_write_ops_def] >>
+  `MEM (w2n addr,32) (source_memory_write_ranges a.po_inst a.po_state)` by
+    simp[source_memory_write_ranges_def, fixed_source_write_range_def, mem_write_ops_def] >>
+  qabbrev_tac `ops = <|iao_ofst := op1; iao_size := SOME (Lit 32w);
+    iao_max_size := SOME (Lit 32w)|>` >>
+  `(op_prov TG ops.iao_ofst = NONE /\
+    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\ w2n addr + 32 <= lo) \/
+   (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
+    FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
+    FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
+    w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))` by
+    (irule ptr_historical_write_classification >>
+     simp[Abbr `ops`] >>
+     conj_tac
+     >- (qexists_tac `a.po_fn` >> simp[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) 
+  >- (fs[Abbr `ops`] >> suspend "fixed") >>
+  fs[Abbr `ops`] >> suspend "owned"
+QED
+
+Resume ptr_mstore_write_producer[fixed]:
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  `SUC (LENGTH h - 1) = LENGTH h /\ SUC (LENGTH done) = LENGTH ht` by decide_tac >>
+  `EL (LENGTH done) ht = at` by
+    (`LENGTH ht - 1 = LENGTH done` by decide_tac >>
+     qpat_x_assum `LAST ht = at` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  qexistsl_tac [`z`,`\x:num. x`] >> simp[] >>
+  simp[ptr_paired_write_def, EL_APPEND_EQN] >>
+  conj_tac
+  >- (simp[step_writes_def, source_memory_write_ranges_def,
+        fixed_source_write_range_def, range_bytes_def, pred_setTheory.EXTENSION] >>
+      qexists_tac `w2n addr` >> simp[]) >>
+  reverse conj_tac
+  >- (simp[ptr_paired_write_owner_def, step_writes_def,
+        source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
+      rpt strip_tac >> disj1_tac >> decide_tac) >>
+  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
+  strip_tac
+  >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+      simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+      strip_tac >> suspend "fixed_bytes") >>
+  qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()]
+QED
+
+Resume ptr_mstore_write_producer[fixed_bytes]:
+  `op_prov TG op2 = NONE` by
+    (drule_all concretizePtrWritePurityTheory.ptr_mstore_value_no_provenance >> simp[]) >>
+  `addr' = addr /\ word_agree_except (op_taint a.po_taint op2) val val'` by
+    (gvs[ptr_lookup_transport_def, ptr_value_transport_def] >>
+     gvs[word_agree_except_bits, fcpTheory.CART_EQ]) >>
+  `ptr_chrono_step C a z` by
+    (drule ptr_tagged_chrono_step_projection >> simp[]) >>
+  simp[ptr_ledger_write_pair_def, is_terminator_def] >>
+  conj_tac
+  >- simp[step_writes_def, source_memory_write_ranges_def,
+          fixed_source_write_range_def] >>
+  simp[ptr_bytes_agree_def, step_writes_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, range_bytes_def, step_taint_def,
+       mem_taint_def, written_taint_def] >>
+  rpt strip_tac >>
+  `x = w2n addr + (x - w2n addr)` by decide_tac >>
+  `x - w2n addr < 32 /\ x - w2n addr NOTIN op_taint a.po_taint op2` by
+    (conj_tac >- decide_tac >>
+     first_x_assum (qspec_then `x - w2n addr` mp_tac) >> simp[ADD_COMM]) >>
+  `EL (x - w2n addr) (word_to_bytes val T) =
+   EL (x - w2n addr) (word_to_bytes val' T)` by
+    metis_tac[word_agree_except_def] >>
+  qpat_x_assum `mstore _ _ _ = s'` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `addr' = addr` SUBST_ALL_TAC >>
+  qpat_x_assum `x = w2n addr + (x - w2n addr)` (fn th => once_rewrite_tac[th]) >>
+  irule ptr_mstore_written_bytes >> simp[]
+QED
+
+Resume ptr_mstore_write_producer[owned]:
+  `MEM token tokens` by
+    (drule_all ptr_source_ownership_live_prov >> simp[]) >>
+  `FLOOKUP births (token,bid) = SOME (db,sb)` by
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[ptr_ledger_erases_def] >> strip_tac >>
+     first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  `SUC (LENGTH h - 1) = LENGTH h /\ SUC (LENGTH done) = LENGTH ht` by decide_tac >>
+  `EL (LENGTH done) ht = at` by
+    (`LENGTH ht - 1 = LENGTH done` by decide_tac >>
+     qpat_x_assum `LAST ht = at` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  qexistsl_tac [`z`,`\x:num. pb + (x - db)`] >> simp[] >>
+  simp[ptr_paired_write_def, EL_APPEND_EQN] >>
+  conj_tac
+  >- (simp[step_writes_def, source_memory_write_ranges_def,
+        fixed_source_write_range_def, range_bytes_def, pred_setTheory.EXTENSION] >>
+      qexists_tac `w2n addr` >> simp[]) >>
+  reverse conj_tac
+  >- (simp[ptr_paired_write_owner_def, step_writes_def,
+        source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
+      rpt strip_tac >> disj2_tac >>
+      qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
+  suspend "owned_ledger"
+QED
+
+Resume ptr_mstore_write_producer[owned_ledger]:
+  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
+  strip_tac
+  >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+      simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+      strip_tac >> suspend "owned_bytes") >>
+  qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()]
+QED
+
+Resume ptr_mstore_write_producer[owned_bytes]:
+  `op_prov TG op2 = NONE` by
+    (drule_all concretizePtrWritePurityTheory.ptr_mstore_value_no_provenance >> simp[]) >>
+  `addr' = addr - n2w db + n2w pb /\
+   word_agree_except (op_taint a.po_taint op2) val val'` by
+    gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
+  `w2n addr' = pb + (w2n addr - db)` by
+    (irule ptr_closed_relocation_value >> simp[] >> qexists_tac `sb` >> simp[] >> decide_tac) >>
+  qpat_x_assum `addr' = addr - n2w db + n2w pb` kall_tac >>
+  `ptr_chrono_step C a z` by
+    (drule ptr_tagged_chrono_step_projection >> simp[]) >>
+  simp[ptr_ledger_write_pair_def, is_terminator_def] >>
+  conj_tac
+  >- (simp[step_writes_def, source_memory_write_ranges_def,
+           fixed_source_write_range_def, range_bytes_def] >>
+      rpt strip_tac >> decide_tac) >>
+  simp[ptr_bytes_agree_def, step_writes_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, range_bytes_def, step_taint_def,
+       mem_taint_def, written_taint_def] >>
+  rpt strip_tac >>
+  `x = w2n addr + (x - w2n addr)` by decide_tac >>
+  `x - w2n addr < 32 /\ x - w2n addr NOTIN op_taint a.po_taint op2` by
+    (conj_tac >- decide_tac >>
+     first_x_assum (qspec_then `x - w2n addr` mp_tac) >> simp[ADD_COMM]) >>
+  `EL (x - w2n addr) (word_to_bytes val T) =
+   EL (x - w2n addr) (word_to_bytes val' T)` by
+    metis_tac[word_agree_except_def] >>
+  `pb + x - db = w2n addr' + (x - w2n addr)` by decide_tac >>
+  qpat_x_assum `mstore _ _ _ = s'` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `pb + x - db = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `x = w2n addr + (x - w2n addr)`
+    (fn th => CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [th]))) >>
+  irule ptr_mstore_written_bytes >> simp[]
+QED
+
+Finalise ptr_mstore_write_producer
