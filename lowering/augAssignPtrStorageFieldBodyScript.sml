@@ -57,7 +57,7 @@ Proof
         is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
      irule stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
+         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def, optionTheory.IS_SOME_EXISTS] >>
      qexists_tac `[]` >> simp[]) >>
   `?tgt_ty. type_place_target env (TopLevelNameTarget (NONE,id)) = SOME (Type tgt_ty) /\
      attribute_type env.type_defs tgt_ty fld = SOME ty /\
