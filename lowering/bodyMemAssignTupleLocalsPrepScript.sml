@@ -151,7 +151,7 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
     metis_tac[body_expr_mem_ok_def] >>
-  drule expr_sim_mem_room >>
+  drule_at (Pat `expr_vv_sim_mem _ _ _ _ _ _ _`) expr_sim_mem_room >> simp[] >>
   disch_then (qspecl_then [`sa`, `sm`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
   impl_tac >- (rpt strip_tac >> gvs[]) >> strip_tac >>
   irule gas_outcome_post_mono >>
