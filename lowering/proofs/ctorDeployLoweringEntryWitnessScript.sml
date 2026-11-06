@@ -3,7 +3,7 @@ Ancestors
   ctorDeployLoweringEntrySource ctorDeployLoweringDefs vyperInterpreter
   vyperContext vyperState asmOracleRegression asmSem vfmContext vfmState e2eDefs e2eDeployDefs
   vfmExecution vfmExecutionProp vfmConstants vfmOperation venomExecSemantics
-  stackPlanTypes venomCompilerTypes stackPlanGen asmIR asmParseProofs
+  stackPlanTypes venomCompilerTypes stackPlanGen asmIR asmParseProofs stmtSimDefs
   vyperTypeEntryReadiness vyperTypeInitialState vyperTypeContractSoundness
 Libs finite_mapLib wordsLib
 
@@ -190,4 +190,62 @@ Proof
             deploy_ctor_noninit_evm_exists]
 QED
 
+Theorem deploy_ctor_entry_counterexample:
+  ?policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut nr' body' am_c es0.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
+       st_epilogue, st_final, func) /\
+    deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) /\
+    body' <> body
+Proof
+  irule_at Any deploy_ctor_noninit_phases >>
+  irule_at Any deploy_ctor_noninit_code >>
+  mp_tac deploy_ctor_noninit_joint_compatibility >>
+  strip_tac >>
+  metis_tac[o1PassContractTheory.gas_variant_refl, listTheory.NOT_CONS_NIL]
+QED
+
 end
+
+(* Negation of the frozen task statement; independent of the admitted target. *)
+Theorem deploy_ctor_entry_reaches_body_false:
+  ~(!policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut nr' body' am_c es0.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
+       st_epilogue, st_final, func) /\
+    deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) ==>
+    nr' = nr /\ body' = body /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+    ?s0.
+      stmt_state_rel dunit.cu_context func cenv (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = vs.vs_gas_readings /\
+      s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
+      !fuel r. run_from fuel dunit.cu_context func s0 = r /\
+               (!e. r <> Error e) ==>
+               ?fuel'. run_context fuel' dunit.cu_context vs = r)
+Proof
+  mp_tac deploy_ctor_entry_counterexample >>
+  strip_tac >> metis_tac[]
+QED
+
+val _ = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail "non-clean constructor counterexample"
+  end) [deploy_ctor_entry_counterexample, deploy_ctor_entry_reaches_body_false];
