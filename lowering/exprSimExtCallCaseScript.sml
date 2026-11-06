@@ -23,8 +23,9 @@
  *     still read live slots.  Held for the posts-interface round after the
  *     branch merge, which adds the conjunct to vv_post_def; then it
  *     follows from vv_post_def.
- *   vv_post_pure_memory_frame — an effect-free operand's fragment writes
- *     memory only inside its own allocations.  It lets a positional memory
+ *   vv_post_pure_memory_frame — an effect-free operand's fragment keeps
+ *     the live locals' bytes and writes memory only inside its own
+ *     allocations.  It lets a positional memory
  *     or immutable operand, read only after the later operands, keep its
  *     value.  Held for the same posts-interface round.
  *
@@ -71,21 +72,25 @@ Proof
   cheat
 QED
 
-(* An effect-free operand's fragment writes memory only inside allocations
-   its own ALLOCA instructions make (func's ALLOCAs with ids from
-   sa.cs_next_id): any region clear of those keeps its bytes, the live locals' dynamic-array length words and the
-   constructor's immutable staging included.  A positional operand captured
-   in memory, read only after the later operands, keeps its value. *)
+(* An effect-free operand's fragment pops no scope and writes memory only
+   inside allocations its own ALLOCA instructions make (func's ALLOCAs with
+   ids from sa.cs_next_id): the live locals keep their bytes, and so does
+   any region clear of those allocations, the constructor's immutable
+   staging included.  A positional operand captured in memory, read only
+   after the later operands, keeps its value. *)
 Theorem vv_post_pure_memory_frame:
-  !ctx func cenv cx e es sa sb s0 es' tv vv s off len.
+  !ctx func cenv cx e es sa sb s0 es' tv vv s.
     vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
-    ~expr_has_effect e /\
-    (!inst b sz.
-       MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-       sa.cs_next_id <= inst.inst_id /\
-       FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-       compileEnv$regions_disjoint off len b sz) ==>
-    mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
+    ~expr_has_effect e ==>
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    (!off len.
+       (!inst b sz.
+          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+          compileEnv$regions_disjoint off len b sz) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
 Proof
   (* Held for the posts-interface round: follows from vv_post_def once it
      frames an effect-free operand's memory writes to its own allocations. *)
@@ -629,6 +634,7 @@ Theorem extcall_return_values:
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
     extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
     ?marks. gas_summary_at F (ctx,func) marks
