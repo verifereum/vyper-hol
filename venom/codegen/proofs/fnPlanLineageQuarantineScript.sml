@@ -25,3 +25,27 @@ Theorem native_quarantine_offset_empty_outputs_obstruction:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+Theorem ready_member_instruction_shape:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst bb.bb_instructions ==> inst_wf inst /\ codegen_ready_inst inst
+Proof
+  simp[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
+    listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ready_non_phi_operand_bound:
+  codegen_ready_inst inst /\ inst.inst_opcode <> PHI ==>
+  LENGTH (compute_operands inst) <= 16
+Proof
+  simp[codegen_ready_inst_def]
+QED
+
+Theorem offset_declared_output_stack_support:
+  inst_wf inst /\ inst.inst_opcode = OFFSET /\
+  generate_offset_plan inst ps = (ops,qs) /\ MEM (Var v) qs.ps_stack ==>
+  MEM (Var v) ps.ps_stack \/ MEM v inst.inst_outputs
+Proof
+  strip_tac >> drule_all venomWfTheory.inst_wf_offset_shape >> strip_tac >>
+  gvs[generate_offset_plan_def, stackModelTheory.stack_push_def]
+QED
