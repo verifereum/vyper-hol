@@ -683,6 +683,8 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_hashmap_info = cenv.ce_hashmap_info /\
     cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     cenv'.ce_module_vars = cenv.ce_module_vars /\
+    cenv'.ce_func_return_type = cenv.ce_func_return_type /\
+    cenv'.ce_method_id = cenv.ce_method_id /\
     cenv'.ce_module = cenv.ce_module /\
     cenv'.ce_event_info = cenv.ce_event_info /\
     cenv'.ce_is_external = cenv.ce_is_external
@@ -723,6 +725,56 @@ Proof
   gvs[set_constructor_package_target_def, package_constructor_def,
       update_cenv_nonreentrant_def] >>
   simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* The constructor's env reads the module's variables and the internal
+   functions' return types as build_compile_env does, as fn_allocs_ok_body
+   needs. *)
+Theorem deploy_ctor_alloc_env_agree:
+  !tops rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl
+   sa sb sj st_exit st_epilogue st_final func.
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
+       st_epilogue,st_final,func) ==>
+    ?exts ints fb mut nr0 rr fname args dflts ret.
+      classify_functions tops =
+        (exts,ints,fb,SOME (mut,nr0,rr,fname,args,dflts,ret,body)) /\
+      alloc_env_agree (build_compile_env tops Internal mut fname args ret body F)
+        cenv
+Proof
+  rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
+  drule deploy_frame_register_static_fields >> strip_tac >>
+  PairCases_on `cf` >>
+  gvs[set_constructor_package_target_def, package_constructor_def,
+      alloc_env_agree_def] >>
+  rw[update_cenv_nonreentrant_def] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* The constructor's method ids are the selectors over the deploy context's
+   type environment, as expr_sim_inv asks. *)
+Theorem deploy_ctor_method_id:
+  !tops am tx rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl
+   sa sb sj st_exit st_epilogue st_final func.
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
+       st_epilogue,st_final,func) ==>
+    !fname tys.
+      cenv.ce_method_id fname tys =
+      w2n (calldata_method_id
+             (function_selector fname
+                (vyper_to_abi_types
+                   (get_tenv (deploy_evaluation_context tops am tx)) tys)))
+Proof
+  rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
+  drule deploy_frame_register_static_fields >> strip_tac >>
+  PairCases_on `cf` >>
+  gvs[set_constructor_package_target_def, package_constructor_def] >>
+  rw[update_cenv_nonreentrant_def] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[deploy_evaluation_context_def, get_tenv_def,
+       initial_evaluation_context_def, get_module_code_def,
+       type_env_all_modules_def, GSYM type_env_def]
 QED
 
 Theorem deploy_ctor_defined_map_agreement:
@@ -1072,6 +1124,9 @@ Proof
     (irule lower_vyper_deploy_unit_allocs_ok >>
      conj_tac >- metis_tac[] >>
      goal_assum (drule_at Any) >> simp[]) >>
+  `alloc_env_agree
+     (build_compile_env tops Internal mut "__init__" args NoneT stmts F) cenv` by
+    (drule deploy_ctor_alloc_env_agree >> strip_tac >> gvs[]) >>
   drule_all fn_allocs_ok_body >>
   simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]
 QED
@@ -1089,10 +1144,11 @@ QED
 Theorem deploy_frame_package_body_inv:
   !tops am tx rpolicy runtime_bc dunit
    (cf : function_mutability # bool # bool # string # (string # type) list #
-         expr list # type # stmt list) cenv args rest art.
+         expr list # type # stmt list) cenv args rest art exts ints fb.
     supported_program tops /\
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME art /\
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    classify_functions tops = (exts,ints,fb,SOME cf) /\
     set_constructor_package_target rpolicy.rpol_target
       (package_constructor tops F (assign_nkeys tops 0) cf) = (cenv,args,rest) ==>
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx)
@@ -1113,7 +1169,9 @@ Proof
        type_env_all_modules_def, GSYM type_env_def,
        build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  qexistsl [`rpolicy`, `dunit`] >> simp[] >> metis_tac[]
+  rpt conj_tac >>
+  TRY (qexistsl [`rpolicy`, `dunit`] >> simp[] >> metis_tac[] >> NO_TAC) >>
+  gvs[]
 QED
 
 Theorem deploy_ctor_body_inv:
@@ -1129,7 +1187,8 @@ Proof
                       deploy_ctor_code_def] >> strip_tac >>
   `body_inv tops dunit.cu_context cenv0 (deploy_evaluation_context tops am tx)` by
     (irule deploy_frame_package_body_inv >> simp[] >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any)) >>
   `body_inv tops dunit.cu_context
      (cenv0 with ce_imm_alloca :=
         (if imm_len tops > 0 then SOME imm else NONE))
@@ -1209,7 +1268,16 @@ Theorem deploy_frame_typed_allocated_stmts_exprs_ok:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_frame_typed_stmts_no_bad_widths >> strip_tac >>
-  simp[stmts_exprs_ok_EVERY, DE_MORGAN_THM, deploy_frame_stmt_exists_disj]
+  `~supported_stmts_expr_exists
+     (\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) ss` by
+    fs[deploy_frame_stmt_exists_disj] >>
+  `(\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) =
+   (\e. (~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) \/
+        (is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)))` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  fs[deploy_frame_stmt_exists_disj] >>
+  fs[stmts_exprs_ok_EVERY, DE_MORGAN_THM]
 QED
 
 Theorem deploy_ctor_typed_allocation_frame:
@@ -1383,6 +1451,7 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- (drule deploy_ctor_method_id >> simp[]) >>
   conj_tac >- metis_tac[] >>
   conj_tac
   >- (drule_at (Pat `env_consistent _ _ _`)

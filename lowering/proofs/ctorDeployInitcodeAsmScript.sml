@@ -10,6 +10,7 @@ Theory ctorDeployInitcodeAsm
 Ancestors
   ctorDeployDefs ctorDeployShape ctorDeployDefsReach o1PipelineCorrect
   codegen codegenEncodingWf asmToBytecodeProofs asmWf symbolResolve list
+  rich_list
 
 Theorem deploy_encoding_total_length:
   asm_encoding_wf prog ==>
