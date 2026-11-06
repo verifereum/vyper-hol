@@ -2,9 +2,20 @@
    Nonzero inactive slots deliberately remain present, including on empty pop. *)
 Theory vyperStoragePopTest
 Ancestors
-  vyperState vyperStorageBackend
+  vyperState vyperStorageBackend vyperStorage
 Libs
   cv_transLib wordsLib finite_mapLib
+
+(* A missing static-array member defaults to an empty dynamic array.
+   Neither that default nor a present member clears its inactive tail. *)
+Theorem static_array_encoding_preserves_dynamic_tails:
+  encode_value
+    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) (Fixed 2))
+    (ArrayV (SArrayV [(1, ArrayV (DynArrayV [IntV 7]))])) =
+  SOME [(0,0w); (3,1w); (4,7w)]
+Proof
+  EVAL_TAC >> simp[]
+QED
 
 Definition pop_test_context_def:
   pop_test_context b = empty_evaluation_context with
