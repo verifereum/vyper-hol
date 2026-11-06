@@ -48,3 +48,29 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs(), extCallOracleTheory.failed_outcome_def] >>
   drule raw_call_precompile_length_probe >> simp[]
 QED
+
+Theorem take_outcome_returnData_length:
+  EVERY (\oc. LENGTH oc.co_returnData < dimword(:256)) os /\
+  take_outcome rq os = (outcome,rest) ==>
+  LENGTH outcome.co_returnData < dimword(:256)
+Proof
+  Cases_on `computed_precompile rq`
+  >- (strip_tac >> drule_all raw_call_computed_outcome_length_probe >>
+      simp[wordsTheory.dimword_def] >> decide_tac) >>
+  Cases_on `os` >>
+  simp[extCallOracleTheory.take_outcome_def, extCallOracleTheory.failed_outcome_def,
+    wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem take_call_outcome_returnData_length:
+  outcomes_accounts_typed es.outcomes /\
+  take_call_outcome target data value_opt es = (INL (rq,outcome),es1) ==>
+  LENGTH outcome.co_returnData < dimword(:256)
+Proof
+  Cases_on `es.outcomes` >>
+  simp[vyperCallOutcomeTheory.take_call_outcome_def] >>
+  pairarg_tac >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  irule (SRULE [wordsTheory.dimword_def] take_outcome_returnData_length) >>
+  goal_assum (drule_at Any) >>
+  fs[exprSimHypsDefsTheory.outcomes_accounts_typed_def, listTheory.EVERY_MEM]
+QED
