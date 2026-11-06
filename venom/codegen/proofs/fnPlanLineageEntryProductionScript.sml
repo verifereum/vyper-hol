@@ -312,3 +312,69 @@ Proof
     (fn th => fs[th])) >>
   asm_simp_tac bool_ss []
 QED
+
+Theorem jmp_no_target_state:
+  !lv dfg cfg fn inst next halt term cur ps ops qs succ.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    inst.inst_operands = [Label succ] /\
+    join_target_ops lv fn cur inst = NONE /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs) ==>
+    qs = release_dead_spills next ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_param_opcode_def] >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
+       stackModelTheory.stack_pop_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem entry_jmp_no_target_boundary_step:
+  !fn bb i ps dfg cfg halting term ops qs succ.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = JMP /\
+    (EL i bb.bb_instructions).inst_outputs = [] /\
+    (EL i bb.bb_instructions).inst_operands = [Label succ] /\
+    join_target_ops (liveness_analyze fn) fn bb.bb_label
+      (EL i bb.bb_instructions) = NONE /\
+    entry_boundary_resources fn bb i ps /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn
+      (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+      halting term bb.bb_label ps = SOME (ops,qs) ==>
+    entry_boundary_resources fn bb (SUC i) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all jmp_no_target_state >> strip_tac >> gvs[] >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+    (rpt strip_tac >> irule analyzed_computed_operand_demand >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  simp_tac bool_ss [entry_boundary_resources_def] >>
+  conj_tac
+  >- (gvs[entry_boundary_resources_def, prefix_inventory_origins_def,
+          fnPlanLineageInventoryTheory.release_dead_spills_stack,
+          fnPlanLineageInventoryTheory.release_dead_spills_domain] >>
+      rpt strip_tac >>
+      qpat_x_assum `!v. MEM (Var v) ps.ps_stack \/ _ ==> _`
+        (qspec_then `v` mp_tac) >> simp[] >>
+      strip_tac >> qexists_tac `j` >> simp[]) >>
+  conj_tac
+  >- (gvs[entry_boundary_resources_def,
+          fnPlanLineageInventoryTheory.release_dead_spills_stack,
+          fnPlanLineageInventoryTheory.release_dead_spills_domain,
+          MEM_MAP] >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  irule_at Any fnPlanLineageInventoryTheory.release_dead_spills_resource_nonincrease >>
+  gvs[entry_boundary_resources_def]
+QED
