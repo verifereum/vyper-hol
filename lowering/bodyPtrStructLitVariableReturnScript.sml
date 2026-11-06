@@ -699,3 +699,45 @@ Proof
   Cases_on `h = x` >> simp[] >>
   Cases_on `x = h'` >> simp[] >> Cases_on `MEM x t` >> simp[]
 QED
+
+Theorem structlit_variable_taint_checks:
+  !n fn. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
+    taint_ok fn (structlit_variable_taint n)
+      (EL n (SND structlit_variable_compiled).cs_current_insts)
+      (structlit_variable_state n)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `n <= 14` by (gvs[] >> decide_tac) >>
+  `!op. op_taint (structlit_variable_taint n) op = {}` by
+    (Cases >> simp[structlit_variable_vars_clean, op_taint_def] >>
+     metis_tac[structlit_variable_vars_clean, op_taint_def]) >>
+  gvs[] >>
+  simp[structlit_variable_instructions, structlit_return_instructions] >>
+  simp[taint_ok_def, mk_inst_def, source_memory_read_ranges_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[structlit_variable_vars_clean] >> gvs[op_taint_def]
+QED
+
+Theorem structlit_variable_access_checks:
+  !n fn. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
+    access_ok 0 (structlit_variable_prov n) fn
+      (EL n (SND structlit_variable_compiled).cs_current_insts)
+      (structlit_variable_state n)
+Proof
+  rpt gen_tac >> simp[] >> strip_tac >> gvs[] >>
+  simp[structlit_variable_instructions, structlit_return_instructions] >>
+  simp[access_ok_def, mk_inst_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def,
+       fixed_source_write_range_def,
+       sized_source_write_range_def, eval_operand_def,
+       structlit_variable_store_2_fields, structlit_variable_load_4_fields,
+       structlit_variable_copy_8_fields, structlit_variable_store_10_fields,
+       structlit_variable_copy_12_fields, structlit_variable_copy_13_fields,
+       structlit_variable_prov_2, structlit_variable_prov_3,
+       structlit_variable_prov_4, structlit_variable_prov_8,
+       structlit_variable_prov_10, structlit_variable_prov_12,
+       structlit_variable_prov_13, memLocDefsTheory.mem_read_ops_def,
+       memLocDefsTheory.mem_write_ops_def,
+       FLOOKUP_UPDATE]
+QED
+
