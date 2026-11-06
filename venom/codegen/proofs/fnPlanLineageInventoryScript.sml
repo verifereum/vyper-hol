@@ -4545,7 +4545,7 @@ Proof
   metis_tac[do_restore_inventory_subset]
 QED
 
-Theorem stack_poke_mem_subset_nb[local]:
+Theorem stack_poke_mem_subset_nb:
   !d op stk at. MEM at (stack_poke d op stk) ==> at = op \/ MEM at stk
 Proof
   simp[stack_poke_def, MEM_LUPDATE] >> metis_tac[EL_MEM]
@@ -5487,4 +5487,20 @@ Proof
   >- (`~(LIST_ELEM_COUNT h xs > 0)` by
         metis_tac[LIST_ELEM_COUNT_MEM] >> decide_tac)
   >> first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
+(* Exact copy of reorderSim.do_dup_inventory_subset; importing that
+   frame-level theory here would cross the planner-leaf boundary.
+   Use the already imported deepResidualBudget spill projection. *)
+Theorem do_dup_inventory_subset:
+  !d ps ops ps'.
+    d < LENGTH ps.ps_stack /\ do_dup d ps = (ops,ps') ==>
+    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule do_dup_stack_exact >> simp[] >> strip_tac >>
+  drule deepResidualBudgetTheory.do_dup_spilled_eq >> strip_tac >>
+  rpt strip_tac >> gvs[stack_dup_def, MEM_SNOC] >>
+  metis_tac[stack_peek_mem]
 QED

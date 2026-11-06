@@ -111,3 +111,38 @@ Proof
   >- (drule_all dead_phi_stack_inventory >> strip_tac >> gvs[] >> metis_tac[]) >>
   metis_tac[]
 QED
+
+(* Origin test for the full native PHI, including live-input duplication
+   and dead-output popping. No distinctness or multiplicity premise. *)
+Theorem generate_phi_plan_inventory_origins:
+  !inst next halting ps ops qs.
+    generate_phi_plan inst next halting ps = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+      at = Var (HD inst.inst_outputs) \/
+      MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by
+    (fs[stack_get_phi_depth_def] >> drule stack_find_bound >> simp[]) >>
+  drule generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`next`, `halting`] mp_tac) >>
+  Cases_on `phi_write_phase inst next d ps` >> simp[] >> strip_tac >>
+  rename1 `phi_write_phase inst next d ps = (wops,ws)` >>
+  `!at. MEM at ws.ps_stack \/ at IN FDOM ws.ps_spilled ==>
+      at = Var (HD inst.inst_outputs) \/
+      MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (qpat_x_assum `phi_write_phase _ _ _ _ = _` mp_tac >>
+     simp[phi_write_phase_def] >> IF_CASES_TAC
+     >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+         drule_at (Pat `do_dup _ _ = _`) do_dup_inventory_subset >>
+         simp[] >> strip_tac >>
+         metis_tac[stack_poke_mem_subset_nb]) >>
+     strip_tac >> gvs[] >> metis_tac[stack_poke_mem_subset_nb]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next` >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[popmany_plan_inventory_subset]) >>
+  strip_tac >> gvs[]
+QED

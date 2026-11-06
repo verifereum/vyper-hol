@@ -294,3 +294,102 @@ Proof
   gvs[join_target_ops_def, MEM_MAP] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
+
+(* Parameter seeding is an explicitly processed entry prefix, not an
+   unexplained external set of variables in the chronological invariant. *)
+Theorem initial_parameter_origins:
+  !fn ch growth spill_base lbl_ctr ps v.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    ps = SND (prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    MEM v (MAP (\inst. HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_parameter_inventory >> strip_tac >>
+  drule_all post_parameter_demand_ready >>
+  gvs[EVERY_MEM, pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[]
+QED
+
+(* Chronological producer design audit (not a proved global invariant).
+
+   Proposed exact predicates, with inventory(ps,v) abbreviating
+     MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled:
+
+   compiled_origin(fn,visited,v) <=>
+     ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+       MEM v di.inst_outputs /\ MEM db.bb_label visited.
+
+   prefix_origin(fn,visited,bb,i,v) <=>
+     compiled_origin(fn,visited,v) \/
+     ?di. MEM di (TAKE i bb.bb_instructions) /\ MEM v di.inst_outputs.
+
+   Fresh block contract: for lookup_block lbl ... = SOME bb, lbl NOTIN
+   visited and inventory(ps) supported by compiled_origin(fn,visited),
+   block setup and each processed position i support prefix_origin at i.
+   The position counts original instructions, including the parameter
+   prefix (ready_block_suffix_index). On return inventory is supported by
+   compiled_origin(fn,lbl::visited). This is an ORIGIN contract only.
+
+   Checked stage tests:
+   * initial_parameter_origins accounts for every parameter-seeded variable
+     by HD outputs of get_params, not by an external assumed parameter set.
+     For ready functions each of these singleton parameter outputs is a
+     definition in the processed prefix. Initialization itself is empty.
+   * generate_phi_plan_inventory_origins (fnPlanLineagePhiInventory) handles
+     BOTH physical rename branches, deep duplication, and dead-output pop.
+     It adds only Var (HD inst_outputs); fn_inst_wf supplies nonempty PHI
+     outputs. It requires no uniqueness, liveness distinctness, or freshness.
+   * generate_inst_plan_jmp_inventory_subset (fnPlanLineageInventory) already
+     is the symbolic successful-JMP test. With target coverage and empty
+     JMP outputs, no new inventory operand appears, even for deep targets.
+     restore_spilled_plan_inventory_subset covers restore alone. We do not
+     duplicate these tests. analyzed_terminal_jmp_target_coverage supplies
+     their target premise from live-out coverage, for an analyzed ready
+     reachable terminal JMP. The source coverage remains a separate producer.
+   * native_regular_variable_origins requires operand availability and the
+     ready <=16 operand bound; available operands reduce its alternatives
+     to old inventory or current outputs. OFFSET only pushes its output;
+     parameter/NOP steps are identities. Cleanup only pops or replaces by
+     dead_stack_marker (a Label), so introduces no Var.
+
+   Mutual trace induction ledger (plan_aux_trace_ind):
+   AUX needs support of input ps by compiled_origin(visited).
+   SUCCS needs support of BOTH saved stack/spills and ps's own inventory.
+   Both conclusions must include visited SUBSET visited' and support of
+   result inventory by compiled_origin(visited'); event entry support must
+   be indexed by the visited set BEFORE that individual fresh event.
+   - empty aux/succs: identity.
+   - visited aux head: no block execution, same support and event list.
+   - missing aux head: unchanged inventory, enlarge visited monotonically;
+     its recorded event has no block or instruction freshness obligation.
+   - present fresh head: block contract above adds current block origins;
+     call succs with that state as BOTH saved and current inventory; feed
+     succs result and its visited' into rest aux. Thread rest result.
+   - successor cons: resetting stack/spills uses saved support. After first
+     child, visited only grows, so saved support survives sibling reset.
+     The sibling's current ps retains its old stack/spills (only allocator
+     and label fields change); this explains the second SUCCS premise.
+     Thread sibling result. No block is executed at a visited head.
+
+   SSA's global distinct output positions plus lbl NOTIN visited excludes
+   current outputs from compiled_origin; prefix indices < i exclude them
+   from prefix_origin. This can produce FIRST-COMPILATION output absence,
+   without requiring earlier compiled blocks to dominate the current one.
+
+   Limit: lineage_state_step is NOT a fresh compilation event. Its premise
+   allows a backedge to a previously compiled label, and its stack/spills
+   come from runtime predecessor replay. Thus the proposed chronological
+   predicate cannot be asserted there, nor can it alone close replay's
+   input-side output-freshness premise. Canonical DFS freshness and runtime
+   replay resources must remain separate certificates. The checked trace
+   visited-head theorem is precisely the symbolic no-recompilation test;
+   no concrete loop fixture is needed for that distinction.
+
+   Still unproved independently: actual live-variable coverage at native
+   stages, liveness transport for next-live upper bounds, deep JMP resource
+   closure, PHI resource closure, and runtime revisit freshness or an
+   alternative observation relation that avoids requiring it. In particular
+   an origin bound is neither physical availability nor a count bound.
+*)
