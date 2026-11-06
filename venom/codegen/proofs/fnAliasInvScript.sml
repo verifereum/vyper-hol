@@ -2544,6 +2544,111 @@ Proof
   metis_tac[MEM_EL]
 QED
 
+Theorem alias_do_swap_length_ceiling:
+  !ps n d. LENGTH ps.ps_stack <= n /\ d < n ==>
+  LENGTH (SND (do_swap d ps)).ps_stack <= n
+Proof
+  rpt strip_tac >> Cases_on `16 < d`
+  >- (simp[alias_do_swap_deep_length, arithmeticTheory.MAX_DEF] >>
+      IF_CASES_TAC >> decide_tac) >>
+  `d <= 16` by decide_tac >>
+  Cases_on `d = 0` >> simp[do_swap_def, planWfTheory.stack_swap_length]
+QED
+
+Theorem alias_reduce_depth_short:
+  LENGTH ps.ps_stack <= n ==>
+  reduce_depth_plan fuel targets op f n ps = ([],ps)
+Proof
+  strip_tac >> Cases_on `fuel` >> simp[Once reduce_depth_plan_def] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets x n` >> simp[] >>
+  drule_then assume_tac stack_get_unfixed_depth_bound >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all_then strip_assume_tac planWfTheory.select_spill_candidate_bound >>
+  drule_then assume_tac planWfTheory.select_spill_candidate_below_target >>
+  `F` by decide_tac
+QED
+
+Theorem alias_reorder_one_short:
+  MEM op targets /\ idx < LENGTH targets /\
+  LENGTH ps.ps_stack <= LENGTH targets /\
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  LENGTH (SND (reorder_one dfg targets idx op ps)).ps_stack <= LENGTH targets /\
+  (SND (reorder_one dfg targets idx op ps)).ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >>
+  `FLOOKUP ps.ps_spilled op = NONE` by
+    (gvs[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  simp[reorder_one_def, LET_THM] >> pairarg_tac >> simp[] >>
+  `ps1 = ps` by
+    (Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps.ps_stack` >> gvs[]) >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps.ps_stack` >> simp[] >>
+  pairarg_tac >> simp[] >>
+  `ps2 = ps` by
+    (Cases_on `x > 16` >> gvs[alias_reduce_depth_short]) >> gvs[] >>
+  Cases_on `x = LENGTH targets - (idx + 1)` >> simp[] >>
+  Cases_on `LENGTH targets - (idx + 1) < LENGTH ps.ps_stack` >> simp[]
+  >- (Cases_on `operand_equiv dfg op
+       (stack_peek (LENGTH targets - (idx + 1)) ps.ps_stack)` >>
+      simp[stack_poke_def, LENGTH_LUPDATE] >> suspend "exchange") >>
+  suspend "exchange"
+QED
+
+Resume alias_reorder_one_short[exchange]:
+  markerLib.RESUME_TAC >> rpt disch_tac >>
+  drule_then assume_tac stack_get_unfixed_depth_bound >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  `LENGTH ps3.ps_stack <= LENGTH targets` by
+    (qspecl_then [`ps`, `LENGTH targets`, `x`] mp_tac
+       alias_do_swap_length_ceiling >> gvs[] >> decide_tac) >>
+  `LENGTH ps4.ps_stack <= LENGTH targets` by
+    (qspecl_then [`ps3`, `LENGTH targets`, `LENGTH targets - (idx + 1)`]
+       mp_tac alias_do_swap_length_ceiling >> gvs[] >> decide_tac) >>
+  simp[] >> qspecl_then [`x`, `ps`] mp_tac do_swap_spilled_unchanged >>
+  qspecl_then [`LENGTH targets - (idx + 1)`, `ps3`] mp_tac
+    do_swap_spilled_unchanged >> simp[]
+QED
+
+Finalise alias_reorder_one_short
+
+Theorem alias_reorder_fold_short:
+  !steps ops ps.
+  EVERY (\p. FST p < LENGTH targets /\ MEM (SND p) targets) steps /\
+  LENGTH ps.ps_stack <= LENGTH targets /\
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  LENGTH (SND (FOLDL
+    (\(ops, ps) (idx, op).
+      (\(step_ops, ps'). (ops ++ step_ops, ps'))
+        (reorder_one dfg targets idx op ps)) (ops, ps) steps)).ps_stack <= LENGTH targets /\
+  (SND (FOLDL
+    (\(ops, ps) (idx, op).
+      (\(step_ops, ps'). (ops ++ step_ops, ps'))
+        (reorder_one dfg targets idx op ps)) (ops, ps) steps)).ps_spilled = ps.ps_spilled
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >> gvs[] >> pairarg_tac >> simp[] >>
+  `LENGTH ps'.ps_stack <= LENGTH targets /\ ps'.ps_spilled = ps.ps_spilled` by
+    (drule_all alias_reorder_one_short >>
+     disch_then (qspec_then `dfg` mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`ops ++ step_ops`, `ps'`] mp_tac) >> simp[]
+QED
+
+Theorem alias_reorder_plan_short:
+  LENGTH ps.ps_stack <= LENGTH targets /\
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  LENGTH (SND (reorder_plan dfg targets ps)).ps_stack <= LENGTH targets /\
+  (SND (reorder_plan dfg targets ps)).ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> simp[reorder_plan_def] >>
+  irule alias_reorder_fold_short >> simp[] >>
+  simp[EVERY_MEM, indexedListsTheory.MEM_MAPi, pairTheory.FORALL_PROD] >>
+  metis_tac[MEM_EL]
+QED
+
 Theorem alias_var_mass_reduce_depth:
   !fuel targets op f n ps x.
   alias_var_mass x (SND (reduce_depth_plan fuel targets op f n ps)) <=
