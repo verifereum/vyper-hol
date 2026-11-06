@@ -2,7 +2,8 @@ Theory bodyPtrPopFullFrameProbe
 Ancestors
   supportedProgram vyperTypeContract vyperValue words compileEnv compileVyper
   venomCompilerTypes alist integer_word fragExec exprLowering
-  bodySim vyperContext
+  bodySim vyperContext vyperState vyperStorageBackend vyperInterpreter
+  exprSimHypsDefs vyperTypeInvariants
 Libs finite_mapLib computeLib
 
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
@@ -223,3 +224,27 @@ Proof
        is_word_type_def] >>
   pairarg_tac >> simp[] >> EVAL_TAC
 QED
+
+(* Concrete length-one store and source typing environment for the control. *)
+Definition pop_full_frame_storage_def:
+  pop_full_frame_storage : bytes32 -> bytes32 = (0w =+ 1w) (K 0w)
+End
+Definition pop_full_frame_es_def:
+  pop_full_frame_es = set_storage pop_full_frame_cx
+    (empty_state with <|scopes := [FEMPTY]; outcomes := SOME []|>)
+    F pop_full_frame_storage
+End
+Definition pop_full_frame_env_def:
+  pop_full_frame_env = function_entry_env
+    (build_contract_type_artifact F [(NONE,pop_full_frame_tops)])
+    [(NONE,pop_full_frame_tops)] NONE Internal []
+End
+
+Theorem pop_full_frame_source_eval:
+  eval_expr pop_full_frame_cx pop_full_frame_expr pop_full_frame_es =
+    (INL (PlaceR (StoragePlace F 1w (BaseTV (UintT 256)))), set_storage pop_full_frame_cx pop_full_frame_es F ((0w =+ 0w) (K 0w)))
+Proof
+  EVAL_TAC >> simp[SF wordsLib.SIZES_ss, type_slot_size_def] >> EVAL_TAC >>
+  simp[FUN_EQ_THM, combinTheory.UPDATE_APPLY]
+QED
+
