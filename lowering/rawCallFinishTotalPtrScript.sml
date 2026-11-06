@@ -68,7 +68,7 @@ Theorem raw_call_case_emit_facts:
    | DelegateCall => emit_op DELEGATECALL [gas_op;addr;dp;dl;op;rz_op]
    | StaticCall => emit_op STATICCALL [gas_op;addr;dp;dl;op;rz_op]) sa = (result,sc) /\
   fn_has_code sa sc func ==>
-  ?out. result = Var out /\ ~not_fresh_at sa out
+  ?out. result = Var out /\ ~not_fresh_at sa out /\ not_fresh_at sc out
 Proof
   Cases_on `stat` >> simp[] >> strip_tac >>
   drule_all raw_call_emit_code >> metis_tac[]
