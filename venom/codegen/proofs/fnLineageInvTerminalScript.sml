@@ -1,7 +1,8 @@
 Theory fnLineageInvTerminal
 Ancestors
   fnPlanLineageReorder fnPlanLineageInventory stackPlanOps stackModel
-  reorderSim planWf list pred_set stackPlanGen venomInst finite_map rich_list indexedLists
+  reorderSim planWf generatedPrefixSim planSpillBounds
+  list pred_set stackPlanGen venomInst finite_map rich_list indexedLists
 
 Theorem full_support_select_spill_candidate_none:
   !stk targets dist n.
@@ -199,4 +200,63 @@ Proof
   drule_all full_inventory_reorder_fold_preservation >>
   disch_then (qspecl_then [`dfg`, `[]`] mp_tac) >>
   gvs[reorder_plan_def]
+QED
+
+Theorem restore_spilled_plan_resources:
+  !targets base ps ops qs.
+    plan_slots_bounded base ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    restore_spilled_plan targets ps = (ops,qs) ==>
+    plan_slots_bounded base qs /\
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  Induct >- (simp[restore_spilled_plan_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `do_restore h ps` >>
+  Cases_on `restore_spilled_plan targets r` >>
+  gvs[restore_spilled_plan_def] >>
+  drule_all do_restore_slots_bounded >> strip_tac >>
+  drule_all do_restore_layout_wf >> strip_tac >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem full_inventory_restore_reorder_preservation:
+  !base targets dfg ps rops rs qops qs.
+    ALL_DISTINCT targets /\ lineage_inventory (set targets) ps /\
+    plan_slots_bounded base ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    restore_spilled_plan targets ps = (rops,rs) /\
+    reorder_plan dfg targets rs = (qops,qs) ==>
+    lineage_inventory (set targets) qs /\ qs.ps_spilled = FEMPTY /\
+    plan_slots_bounded base qs /\
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule restore_spilled_plan_inventory_exhausted >>
+  disch_then (qspec_then `targets` mp_tac) >> simp[] >> strip_tac >>
+  drule restore_spilled_plan_lineage_inventory >>
+  disch_then (qspec_then `targets` mp_tac) >> simp[] >> strip_tac >>
+  drule_all restore_spilled_plan_resources >> strip_tac >>
+  drule_all full_inventory_reorder_plan_preservation >> simp[]
+QED
+
+Theorem full_inventory_restore_reorder_budget:
+  !base targets dfg ps rops rs qops qs.
+    ALL_DISTINCT targets /\ lineage_inventory (set targets) ps /\
+    plan_slots_bounded base ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    restore_spilled_plan targets ps = (rops,rs) /\
+    reorder_plan dfg targets rs = (qops,qs) ==>
+    lineage_inventory (set targets) qs /\ qs.ps_spilled = FEMPTY /\
+    ?m core. lineage_core m core qs /\ EVERY is_var_operand core /\
+      residual_budget_wf base [] (qs with ps_stack := core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all full_inventory_restore_reorder_preservation >> strip_tac >>
+  simp[] >>
+  qpat_x_assum `lineage_inventory _ qs` mp_tac >>
+  simp[lineage_inventory_def] >> strip_tac >>
+  qexistsl_tac [`m`, `core`] >> simp[] >>
+  irule residual_budget_wf_canonical >>
+  gvs[lineage_core_def]
 QED
