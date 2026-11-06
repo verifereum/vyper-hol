@@ -209,6 +209,28 @@ Proof
     emit_def] >> strip_tac >> gvs[]
 QED
 
+Theorem slice_out_buf_runtime_frame[local]:
+  compile_slice_out_buf n sa = ((Var r,Var p),sb) /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [r]) s = OK u /\
+  lookup_var r u = SOME a /\
+  t = ((update_var p (a + 32w) u) with vs_inst_idx := s.vs_inst_idx + 2) ==>
+  (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t) /\
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_code = s.vs_code /\
+  t.vs_accounts = s.vs_accounts /\
+  lookup_var r t = SOME a /\ lookup_var p t = SOME (a + 32w)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_slice_out_buf _ _ = _` mp_tac >>
+  simp[compile_slice_out_buf_def, compile_alloc_buffer_def, emit_op_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+    fresh_var_def, emit_def] >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  strip_tac >> gvs[update_var_def, lookup_var_def, fresh_vars_wrt_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem compile_slice_out_buf_counted:
   compile_slice_out_buf n sa = ((root,data),sb) /\
   fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
@@ -244,7 +266,12 @@ Theorem compile_slice_out_buf_counted:
     stmt_state_rel ctx func cenv cx es t /\ t.vs_memory = s.vs_memory /\
     (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
       eval_operand op t = eval_operand op s /\
-      op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op)
+      op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op) /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t) /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_code = s.vs_code /\
+    t.vs_accounts = s.vs_accounts /\
+    lookup_var r t = SOME a /\ lookup_var p t = SOME (a + 32w) /\
+    tn2.t_stor = tn.t_stor /\ tn2.t_trans = tn.t_trans /\ tn2.t_imm = tn.t_imm
 Proof
   strip_tac >> drule compile_slice_out_buf_compiler_parts >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
@@ -337,9 +364,13 @@ Resume compile_slice_out_buf_counted[frame]:
     eval_operand op t = eval_operand op s /\
     op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op` by
     (Cases >> simp[eval_operand_def, op_prov_def, op_taint_def]) >>
+  `compile_slice_out_buf n sa = ((Var r,Var p),sb)` by simp[] >>
+  drule_all slice_out_buf_runtime_frame >> strip_tac >>
   qexistsl_tac [`buf`, `sm`, `r`, `p`, `u`, `n2w a`, `G1`, `tn1`,
     `G2`, `tn2`, `t`] >>
-  gvs[Abbr `G2`, Abbr `tn2`, Abbr `uh`, w2n_n2w]
+  gvs[Abbr `G2`, Abbr `tn2`, Abbr `uh`, w2n_n2w] >>
+  simp[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def,
+    imm_taint_def]
 QED
 
 Finalise compile_slice_out_buf_counted
