@@ -1922,3 +1922,141 @@ Proof
   simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
   imp_res_tac first_emission_uint2str >> metis_tac[]
 QED
+
+Theorem make_tuple_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce es buf off. cs_appends (compile_make_tuple cfn ce es buf off)
+Proof
+  strip_tac >> gen_tac >> Induct >> rpt gen_tac >>
+  simp_tac (srw_ss()) [compile_make_tuple_def, LET_THM]
+  >- simp[cs_appends_return] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >>
+      first_x_assum (qspecl_then [`ce`, `expr_type h`, `h`, `st`] mp_tac) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- simp[cs_appends_emit_helpers] >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 unwrap_value_labels, pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_store_memory_labels, pairTheory.SND]) >>
+  first_x_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem make_array_elems_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce es et sz lw buf idx.
+    cs_appends (compile_make_array_elems cfn ce es et sz lw buf idx)
+Proof
+  strip_tac >> gen_tac >> Induct >> rpt gen_tac >>
+  simp_tac (srw_ss()) [compile_make_array_elems_def, LET_THM]
+  >- simp[cs_appends_return] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >>
+      first_x_assum (qspecl_then [`ce`, `expr_type h`, `h`, `st`] mp_tac) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- simp[cs_appends_emit_helpers] >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 unwrap_value_labels, pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_store_memory_labels, pairTheory.SND]) >>
+  first_x_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem make_array_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce es et sz lw buf. cs_appends (compile_make_array cfn ce es et sz lw buf)
+Proof
+  strip_tac >> rpt gen_tac >> rewrite_tac[compile_make_array_def] >>
+  irule cs_appends_ignore_bind >> conj_tac
+  >- (Cases_on `lw` >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  irule make_array_elems_extension_only >> first_assum ACCEPT_TAC
+QED
+
+Theorem concat_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce es data infos off. cs_appends (compile_concat cfn ce es data infos off)
+Proof
+  strip_tac >> Induct_on `es` >> rpt gen_tac
+  >- simp[compile_concat_def, cs_appends_return] >>
+  Cases_on `infos` >- simp[compile_concat_def, cs_appends_return] >>
+  PairCases_on `h'` >> once_rewrite_tac[compile_concat_def] >>
+  Cases_on `h'0` >> simp_tac (srw_ss()) [] >>
+  (irule cs_appends_bind >> reverse conj_tac
+   >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC)) >>
+  rpt (rpt gen_tac >> BETA_TAC >>
+       FIRST [irule cs_appends_bind >> reverse conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac] >-
+       simp[cs_appends_emit_helpers]) >>
+  first_x_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem first_emission_builtin_make_array:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty et bnd args a x b.
+  compile_builtin_dispatch_body cfn ce ret_ty ty (MakeArray et bnd) args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >>
+  `!ce ty e s. cs_extends s (SND (cfn ce ty e s))` by
+    (rpt gen_tac >> Cases_on `cfn ce ty e s` >> first_x_assum drule >> simp[]) >>
+  rpt gen_tac >> Cases_on `et` >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `compile_alloc_buffer sz a` >>
+  Cases_on `compile_alloc_buffer sz a` >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (tail r)` >>
+  `cs_appends tail` by
+    (simp[Abbr `tail`] >>
+     FIRST [irule make_tuple_extension_only, irule make_array_extension_only] >>
+     first_assum ACCEPT_TAC) >>
+  Cases_on `tail r` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  `cs_extends r b` by (fs[cs_appends_def] >> metis_tac[]) >>
+  drule first_emission_alloc_buffer >> strip_tac >>
+  (conj_tac >- metis_tac[cs_extends_trans]) >>
+  disj2_tac >> rpt strip_tac >> irule first_emission_preserved >> metis_tac[]
+QED
+
+Theorem first_emission_builtin_concat:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty n args a x b.
+  compile_builtin_dispatch_body cfn ce ret_ty ty (Concat n) args a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  strip_tac >>
+  `!ce ty e s. cs_extends s (SND (cfn ce ty e s))` by
+    (rpt gen_tac >> Cases_on `cfn ce ty e s` >> first_x_assum drule >> simp[]) >>
+  rpt gen_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rewrite_tac[state_pair_let_bind] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac >- metis_tac[first_emission_alloc_buffer]) >>
+  gen_tac >> simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_prims, GSYM cs_appends_def])
+  >~ [`cs_appends ($, _)`] >- simp[cs_appends_def, cs_extends_refl]
+  >~ [`cs_appends (compile_alloc_buffer _)`]
+  >- MATCH_ACCEPT_TAC abiDecoderAppendTheory.cs_appends_abi_alloc_buffer >>
+  irule concat_extension_only >> first_assum ACCEPT_TAC
+QED
