@@ -782,3 +782,43 @@ Resume store_load_clean_checks[coverage]:
 QED
 
 Finalise store_load_clean_checks
+
+(* Successful-run boundary for the two numeric ADD phases of the ABI suffix. *)
+Theorem clean_add_checks:
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ADD [left;right] [out]] s Gf tnf /\
+    op_taint tnf (Var out) = {} /\
+    (!t. run_inst_seq [mk_inst id ADD [left;right] [out]] s = OK t ==>
+      lookup_var out t = SOME (a+b) /\
+      (!x. x <> out ==>
+        lookup_var x t = lookup_var x s /\
+        op_taint tnf (Var x) = op_taint tn (Var x) /\
+        (!C. ptr_covers G tn x s C ==> ptr_covers Gf tnf x t C)))
+Proof
+  strip_tac >>
+  qabbrev_tac `i = mk_inst id ADD [left;right] [out]` >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
+  `step_inst_base i s = OK (update_var out (a+b) s)` by
+    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def]) >>
+  simp[inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `op_taint tf (Var out)` >>
+  conj_tac >- simp[Abbr `tf`, Abbr `i`, copy_len_binop_ghost_frame] >>
+  gen_tac >> strip_tac >>
+  `t = update_var out (a+b) s` by
+    (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
+     rewrite_tac[run_inst_seq_def] >> asm_rewrite_tac[] >> simp[]) >>
+  gvs[] >>
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  gen_tac >> strip_tac >>
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[Abbr `tf`, Abbr `i`, copy_len_binop_ghost_frame] >>
+  rpt strip_tac >> simp[Abbr `tf`] >>
+  irule ptr_covers_step_frame >>
+  simp[Abbr `i`, lookup_var_def, update_var_def, FLOOKUP_UPDATE, mk_inst_def]
+QED
