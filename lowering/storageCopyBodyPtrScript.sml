@@ -3,6 +3,7 @@
 Theory storageCopyBodyPtr
 Ancestors
   storageCopyControlPtr typedCopyLoopHeaderPtr payloadLoadStorePtr
+  exprLoweringProps exprSimStorageCopy decoderGhostFramePtr fragExec
   stmtAppendStorageRunPtr fragGasSeqPtr fragGasPathPtr ptrSafeRun ptrDiscipline
   venomExecSemantics venomExecProofs venomInst venomState bodyPtrDefs
   codegenRel contextCodegenRel finite_map pred_set words list arithmetic
@@ -424,3 +425,284 @@ Proof
     (strip_tac >> decide_tac) >>
   gvs[] >> eq_tac >- (strip_tac >> gvs[] >> decide_tac) >> simp[]
 QED
+
+(* Chunk summaries attach the ordinary witness to the checked construction.
+   No independent semantic execution is selected. *)
+Theorem storage_copy_source_chunk_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv]] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\
+  eval_operand src s = SOME a /\ lookup_var cv s = SOME (n2w k) /\
+  op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?G' tn' t u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    run_inst_seq
+      [mk_inst id ADD [src;Var cv] [sv];
+       mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv]] s = OK u /\
+    t = (u with vs_inst_idx := s.vs_inst_idx+2) /\
+    lookup_var vv t = SOME (if tr then tload (a+n2w k) s else sload (a+n2w k) s) /\
+    op_taint tn' (Var vv) = key_taint (if tr then tn.t_trans else tn.t_stor) (a+n2w k) /\
+    copy_static t = copy_static s /\ t.vs_memory = s.vs_memory /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+2 /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x <> sv /\ x <> vv ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all storage_copy_source_path_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t)` >>
+  qexistsl [`G'`, `tn'`, `t`,
+    `update_var vv (if tr then tload (a+n2w k) s else sload (a+n2w k) s)
+      (update_var sv (a+n2w k) s)`] >>
+  simp[] >> conj_tac >-
+    (`step_inst_base (mk_inst id ADD [src;Var cv] [sv]) s =
+       OK (update_var sv (a+n2w k) s)` by
+       (irule storage_copy_add_step >> simp[eval_operand_def]) >>
+     simp[run_inst_seq_def] >>
+     `step_inst_base (mk_inst (id+1) (if tr then TLOAD else SLOAD)
+        [Var sv] [vv]) (update_var sv (a+n2w k) s) =
+       OK (update_var vv (if tr then tload (a+n2w k) s else sload (a+n2w k) s)
+         (update_var sv (a+n2w k) s))` by
+       (`eval_operand (Var sv) (update_var sv (a+n2w k) s) =
+          SOME (a+n2w k)` by
+          simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+        drule storage_copy_load_step >>
+        disch_then (qspecl_then [`tr`, `vv`, `id+1`] mp_tac) >>
+        simp[update_var_def, sload_def, tload_def,
+             contract_storage_def, contract_transient_def]) >>
+     simp[]) >>
+  simp[Abbr `t`, Abbr `tn'`, Abbr `G'`, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, op_taint_def, copy_static_def,
+       FLOOKUP_DRESTRICT, step_prov_other_output, mk_inst_def]
+QED
+
+Theorem storage_copy_store_chunk_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id ADD [Var root;offset] [out];
+     mk_inst (id+1) MSTORE [Var out;Var vv] []] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\ lookup_var root s = SOME a /\
+  eval_operand offset s = SOME (n2w off) /\ lookup_var vv s = SOME value /\
+  ptr_covers G tn root s span /\ op_taint tn offset = {} /\
+  off < span /\ off+32 <= span /\ w2n a+off < dimword(:256) /\
+  root <> out /\ vv <> out /\ ~ctx_has_dalloca ctx ==>
+  ?G' tn' t u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    run_inst_seq [mk_inst id ADD [Var root;offset] [out];
+      mk_inst (id+1) MSTORE [Var out;Var vv] []] s = OK u /\
+    t = (u with vs_inst_idx := s.vs_inst_idx+2) /\
+    copy_static t = copy_static s /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+2 /\
+    tn'.t_mem = (tn.t_mem DIFF
+      {i | w2n (a+n2w off) <= i /\ i < w2n (a+n2w off)+32}) UNION
+      {w2n (a+n2w off)+h | h IN op_taint tn (Var vv)} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x <> out ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all storage_copy_address_store_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn2 (OK t)` >>
+  qexistsl [`G1`, `tn2`, `t`, `mstore (w2n (a+n2w off)) value
+    (update_var out (a+n2w off) s)`] >>
+  conj_tac >- simp[] >> conj_tac >-
+    (`step_inst_base (mk_inst id ADD [Var root;offset] [out]) s =
+       OK (update_var out (a+n2w off) s)` by
+       (irule storage_copy_add_step >> simp[eval_operand_def]) >>
+     `step_inst_base (mk_inst (id+1) MSTORE [Var out;Var vv] [])
+        (update_var out (a+n2w off) s) =
+       OK (mstore (w2n (a+n2w off)) value (update_var out (a+n2w off) s))` by
+       (irule storage_copy_store_step >>
+        simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+        metis_tac[lookup_var_def]) >>
+     simp[run_inst_seq_def]) >>
+  gvs[] >>
+  simp[Abbr `t`, Abbr `tn2`, update_var_def, mstore_def, copy_static_def,
+       lookup_var_def, FLOOKUP_UPDATE, op_taint_def,
+       step_prov_other_output, mk_inst_def, ADD1]
+QED
+
+Theorem storage_copy_scale_chunk_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id MUL [Var cv;Lit 32w] [mv]) /\
+  lookup_var cv s = SOME (n2w k) /\ op_taint tn (Var cv) = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ?G' tn' t u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    run_inst_seq [mk_inst id MUL [Var cv;Lit 32w] [mv]] s = OK u /\
+    t = (u with vs_inst_idx := s.vs_inst_idx+1) /\
+    lookup_var mv t = SOME (n2w (32*k)) /\
+    FLOOKUP G' mv = NONE /\ op_taint tn' (Var mv) = {} /\
+    copy_static t = copy_static s /\ t.vs_memory = s.vs_memory /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+1 /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x <> mv ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `eval_operand (Var cv) s = SOME (n2w k) /\
+   eval_operand (Lit 32w) s = SOME 32w /\ op_taint tn (Lit 32w) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all storage_copy_mul_path_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t)` >>
+  qexistsl [`G'`, `tn'`, `t`, `update_var mv (n2w k * 32w) s`] >>
+  conj_tac >- simp[] >> conj_tac >-
+    (`step_inst_base (mk_inst id MUL [Var cv;Lit 32w] [mv]) s =
+      OK (update_var mv (n2w k * 32w) s)` by simp[storage_copy_mul_step] >>
+     simp[run_inst_seq_def]) >>
+  simp[Abbr `t`, Abbr `tn'`, Abbr `G'`, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def, copy_static_def,
+       word_mul_n2w, ADD1] >> simp[Once MULT_COMM]
+QED
+
+Theorem storage_copy_increment_chunk_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+1) ASSIGN [Var nv] [cv]] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\
+  lookup_var cv s = SOME (n2w k) /\ FLOOKUP G cv = NONE /\
+  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  ?G' tn' t u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    run_inst_seq [mk_inst id ADD [Var cv;Lit 1w] [nv];
+      mk_inst (id+1) ASSIGN [Var nv] [cv]] s = OK u /\
+    t = (u with vs_inst_idx := s.vs_inst_idx+2) /\
+    lookup_var cv t = SOME (n2w (k+1)) /\
+    FLOOKUP G' cv = NONE /\ op_taint tn' (Var cv) = {} /\
+    copy_static t = copy_static s /\ t.vs_memory = s.vs_memory /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+2 /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x <> nv /\ x <> cv ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all storage_copy_increment_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t)` >>
+  qexistsl [`G'`, `tn'`, `t`,
+    `update_var cv (n2w (k+1)) (update_var nv (n2w (k+1)) s)`] >>
+  conj_tac >- simp[] >> conj_tac >-
+    (`step_inst_base (mk_inst id ADD [Var cv;Lit 1w] [nv]) s =
+       OK (update_var nv (n2w (k+1)) s)` by
+       (simp[GSYM word_add_n2w] >> irule storage_copy_add_step >>
+        simp[eval_operand_def]) >>
+     `step_inst_base (mk_inst (id+1) ASSIGN [Var nv] [cv])
+       (update_var nv (n2w (k+1)) s) =
+       OK (update_var cv (n2w (k+1)) (update_var nv (n2w (k+1)) s))` by
+       (irule copy_loop_scalar_assign_step >>
+        simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+     simp[run_inst_seq_def]) >>
+  simp[Abbr `t`, Abbr `tn'`, Abbr `G'`, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def, copy_static_def]
+QED
+
+Theorem run_inst_seq_cursor_append:
+  run_inst_seq code s = OK u /\ t = (u with vs_inst_idx := i) /\
+  run_inst_seq more t = OK v /\ t' = (v with vs_inst_idx := j) /\
+  EVERY (\inst. ~is_terminator inst.inst_opcode) more ==>
+  ?w. run_inst_seq (code ++ more) s = OK w /\
+      t' = (w with vs_inst_idx := j)
+Proof
+  strip_tac >> gvs[] >>
+  qpat_assum `run_inst_seq code s = OK u`
+    (mp_then Any (qspec_then `more` assume_tac) run_inst_seq_append) >>
+  drule run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`u`, `i`] mp_tac) >>
+  Cases_on `run_inst_seq more u` >>
+  gvs[instIdxIndepTheory.exec_result_map_def, run_inst_seq_append] >> metis_tac[]
+QED
+
+Theorem storage_copy_destination_chunk_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+1) ADD [Var root;Var mv] [dv];
+     mk_inst (id+2) MSTORE [Var dv;Var vv] []] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\ lookup_var root s = SOME a /\
+  lookup_var cv s = SOME (n2w k) /\ lookup_var vv s = SOME value /\
+  ptr_covers G tn root s span /\ op_taint tn (Var cv) = {} /\
+  32*k+32 <= span /\ w2n a+32*k < dimword(:256) /\
+  ALL_DISTINCT [root;cv;vv;mv;dv] /\ ~ctx_has_dalloca ctx ==>
+  ?G' tn' t u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    run_inst_seq
+      [mk_inst id MUL [Var cv;Lit 32w] [mv];
+       mk_inst (id+1) ADD [Var root;Var mv] [dv];
+       mk_inst (id+2) MSTORE [Var dv;Var vv] []] s = OK u /\
+    t = (u with vs_inst_idx := s.vs_inst_idx+3) /\
+    copy_static t = copy_static s /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+3 /\
+    tn'.t_mem = (tn.t_mem DIFF
+      {i | w2n (a+n2w (32*k)) <= i /\ i < w2n (a+n2w (32*k))+32}) UNION
+      {w2n (a+n2w (32*k))+h | h IN op_taint tn (Var vv)} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x <> mv /\ x <> dv ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id MUL [Var cv;Lit 32w] [mv])` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  drule_all storage_copy_scale_chunk_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t1)` >>
+  `~t1.vs_halted /\ lookup_var root t1 = SOME a /\
+   lookup_var vv t1 = SOME value /\ ptr_covers G1 tn1 root t1 span` by
+    (drule copy_static_fields >> strip_tac >>
+     gvs[ALL_DISTINCT, ptr_covers_def, lookup_var_def] >> metis_tac[]) >>
+  `?G2 tn2 t2 u2.
+    gas_path_ptr D 0 ctx fn PG G1 tn1 t1 0 G2 tn2 (OK t2) /\
+    run_inst_seq [mk_inst (id+1) ADD [Var root;Var mv] [dv];
+      mk_inst ((id+1)+1) MSTORE [Var dv;Var vv] []] t1 = OK u2 /\
+    t2 = (u2 with vs_inst_idx := t1.vs_inst_idx+2) /\
+    copy_static t2 = copy_static t1 /\
+    t2.vs_current_bb = t1.vs_current_bb /\ t2.vs_inst_idx = t1.vs_inst_idx+2 /\
+    tn2.t_mem = (tn1.t_mem DIFF
+      {i | w2n (a+n2w (32*k)) <= i /\ i < w2n (a+n2w (32*k))+32}) UNION
+      {w2n (a+n2w (32*k))+h | h IN op_taint tn1 (Var vv)} /\
+    tn2.t_stor = tn1.t_stor /\ tn2.t_trans = tn1.t_trans /\ tn2.t_imm = tn1.t_imm /\
+    (!x. x <> dv ==> lookup_var x t2 = lookup_var x t1 /\
+      FLOOKUP G2 x = FLOOKUP G1 x /\ op_taint tn2 (Var x) = op_taint tn1 (Var x))` by
+    (irule storage_copy_store_chunk_ptr >>
+     fs[ALL_DISTINCT] >> simp[eval_operand_def] >>
+     conj_tac >-
+       (qexistsl [`post`, `pre ++ [mk_inst id MUL [Var cv;Lit 32w] [mv]]`] >>
+        simp[APPEND_ASSOC]) >>
+     conj_tac >- gvs[lookup_var_def] >>
+     qexists `span` >> gvs[ptr_covers_def, lookup_var_def] >> decide_tac) >>
+  suspend "assemble"
+QED
+
+Resume storage_copy_destination_chunk_ptr[assemble]:
+  `EVERY (\inst. ~is_terminator inst.inst_opcode)
+    [mk_inst (id+1) ADD [Var root;Var mv] [dv];
+     mk_inst ((id+1)+1) MSTORE [Var dv;Var vv] []]` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_cursor_append >> strip_tac >>
+  drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
+  qexistsl [`G2`, `tn2`, `w`] >>
+  simp[] >>
+  `op_taint tn1 (Var vv) = op_taint tn (Var vv)` by
+    (fs[ALL_DISTINCT] >> metis_tac[]) >>
+  fs[] >> conj_tac >- (gvs[] >> simp[]) >>
+  gvs[lookup_var_def] >> metis_tac[]
+QED
+Finalise storage_copy_destination_chunk_ptr
