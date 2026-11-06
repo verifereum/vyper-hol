@@ -3,9 +3,9 @@ Theory exprSimPtrTopLevelImmutableBranch
 Ancestors
   exprSimPtrTopLevelImmutablePost exprSimPtrTopLevelImmutableCopy exprSimTopLevelImmutable exprSimPtrTopLevelStorageAlloc
   exprSimSource exprSimUnwrapProps vyperInterpreter vyperState vyperValueOperation
-  exprSimHyps exprSimHypsDefs exprSimCopy exprLowering exprLoweringProps
+  exprSimHyps exprSimHypsDefs exprSimCopy exprSimStorageCopy exprLowering exprLoweringProps
   exprSimProps context compileEnv fragExec emitHelperProps immutableCopyExecution
-  vyperAST venomState words
+  loweringPosts vyperAST venomState words list venomInst venomExecSemantics instIdxIndep rich_list
 
 Theorem toplevel_immutable_branch_compile:
   expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
@@ -77,4 +77,85 @@ Proof
       evaluate_subscripts_def, lift_sum_def] >>
   drule vv_post_read_result >> disch_then (fn th => rewrite_tac[GSYM th]) >>
   irule toplevel_immutable_post >> simp[] >> metis_tac[]
+QED
+
+Theorem toplevel_immutable_expr_post_inst_idx[local,simp]:
+  expr_post ctx fn ce cx e es sa sb s0 es' v op (s with vs_inst_idx := k) <=>
+  expr_post ctx fn ce cx e es sa sb s0 es' v op s
+Proof
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def, lookup_var_def,
+       stmt_state_rel_inst_idx, local_region_def]
+QED
+
+Theorem toplevel_immutable_run_expr_post:
+  unwrap_value cenv (LocatedValue ann p) sm = (op,sb) /\
+  p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type ann /\
+  local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+  (!tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
+        type_memory_bytes cenv ann = type_memory_size tv) /\
+  vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) (LocatedValue ann p) s /\
+  run_inst_seq (emitted_insts sm sb) (s with vs_inst_idx := k) = OK t ==>
+  expr_post ctx fn cenv cx e es sa sb s0 es' v op t
+Proof
+  strip_tac >> drule_all runtime_code_copy_run_post >> strip_tac >>
+  `code = emitted_insts sm sb` by gvs[emitted_insts_def, DROP_LENGTH_APPEND] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by
+    (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+     gvs[is_terminator_def]) >>
+  drule run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`s`,`k`] mp_tac) >>
+  simp[exec_result_map_def] >> strip_tac >> gvs[]
+QED
+
+Theorem toplevel_immutable_alloc_copy_sequence:
+  compile_alloc_buffer nb sa = (buf,sm) /\
+  run_inst_seq (emitted_insts sa sm) s = OK u /\
+  immutable_copy_ghost_frame sm (u with vs_inst_idx := k)
+    (Ga:(string,num # num) fmap) ta sb t H tm off nb (w:bytes32) ==>
+  run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := k) = OK t
+Proof
+  strip_tac >> drule storage_copy_alloc_layout >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `run_inst_seq (emitted_insts sa sm) (s with vs_inst_idx := k) =
+    OK (u with vs_inst_idx := k)` by
+    (drule run_inst_seq_inst_idx >>
+     disch_then (qspecl_then [`s`,`k`] mp_tac) >> simp[exec_result_map_def]) >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >>
+     gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def,
+         IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  simp[] >> drule run_inst_seq_append >>
+  disch_then (qspec_then `emitted_insts sm sb` mp_tac) >>
+  fs[immutable_copy_ghost_frame_def, copy_runtime_frame_def]
+QED
+
+Theorem toplevel_immutable_alloc_copy_code:
+  compile_alloc_buffer nb sa = (buf,sm) /\
+  compile_imm_copy_to_memory F imm src buf.buf_operand n off sm = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  fn_has_code sa sm fn /\ fn_has_code sm sb fn
+Proof
+  strip_tac >> drule storage_copy_alloc_layout >> strip_tac >>
+  drule code_copy_insts >> strip_tac >>
+  gvs[fn_has_code_def, same_blocks_def, emitted_blocks_def] >>
+  metis_tac[IS_PREFIX_APPEND, IS_PREFIX_TRANS]
+QED
+
+Theorem toplevel_immutable_alloc_endpoint_bound:
+  compile_alloc_buffer nb sa = (buf,sm) /\ fn_has_code sa sm fn /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ nb < dimword (:256) /\
+  run_inst_seq (emitted_insts sa sm) s = OK u /\
+  eval_operand buf.buf_operand u = SOME w ==>
+  w2n w+nb < dimword (:256)
+Proof
+  strip_tac >>
+  drule_all (runtime_code_copy_alloc_run |>
+    Q.INST [`src` |-> `Lit (0w:bytes32)`, `a` |-> `0w:bytes32`] |>
+    SRULE[eval_operand_def]) >> strip_tac >> gvs[]
 QED
