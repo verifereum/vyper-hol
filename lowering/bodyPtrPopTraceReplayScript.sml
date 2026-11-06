@@ -85,3 +85,12 @@ Proof
   Cases_on `step_inst_base (pop_trace_inst n) (pop_trace_state n)` >>
   simp[pop_step_prov_empty]
 QED
+
+Theorem pop_trace_final_operand_provenance:
+  op_prov (pop_trace_prov 37) (FST pop_saved_lowered) = NONE /\
+  op_prov (pop_trace_prov 37) (FST (FST pop_saved_cut)) = NONE
+Proof
+  simp[pop_trace_prov_empty] >>
+  Cases_on `FST pop_saved_lowered` >>
+  Cases_on `FST (FST pop_saved_cut)` >> simp[op_prov_def]
+QED
