@@ -361,9 +361,10 @@ Proof
   >> irule do_swap_stack_perm >> simp[]
 QED
 
-Theorem bounded_full_support_reorder_one_perm:
+Theorem safe_full_support_reorder_one_perm:
   !targets dfg ps idx op ops qs.
-    LENGTH targets <= 17 /\ ps.ps_spilled = FEMPTY /\
+    (!d:num. d < LENGTH targets /\ 16 < d ==> d < LENGTH ps.ps_stack) /\
+    ps.ps_spilled = FEMPTY /\
     (!x. MEM x ps.ps_stack /\ is_var_operand x ==> MEM x targets) /\
     idx < LENGTH targets /\ MEM op targets /\
     reorder_one dfg targets idx op ps = (ops,qs) ==>
@@ -378,7 +379,7 @@ Proof
     (LENGTH targets) ps.ps_stack` >> simp[] >> strip_tac >> gvs[] >>
   `x < LENGTH ps.ps_stack /\ stack_peek x ps.ps_stack = op` by
     metis_tac[stack_get_unfixed_depth_bound, stack_get_unfixed_depth_peek] >>
-  `LENGTH targets - (idx + 1) <= 16` by decide_tac >>
+
   Cases_on `x = LENGTH targets - (idx + 1)` >> gvs[] >>
   Cases_on `LENGTH targets < idx + (LENGTH ps.ps_stack + 1) /\
             0 < LENGTH ps.ps_stack` >> gvs[]
@@ -390,22 +391,28 @@ Proof
   suspend "swaps"
 QED
 
-Resume bounded_full_support_reorder_one_perm[swaps]:
+Resume safe_full_support_reorder_one_perm[swaps]:
   markerLib.RESUME_TAC >> rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   `PERM ps3.ps_stack ps.ps_stack` by
     (qspec_then `x` (qspec_then `ps` mp_tac) do_swap_stack_perm >> gvs[]) >>
+  `LENGTH ps3.ps_stack = LENGTH ps.ps_stack` by metis_tac[PERM_LENGTH] >>
   `PERM ps4.ps_stack ps3.ps_stack` by
     (qspec_then `LENGTH (targets:operand list) - (idx + 1)`
        (qspec_then `ps3` mp_tac) bounded_do_swap_stack_perm >>
-     simp[] >> gvs[]) >>
+     (impl_tac >- (
+       `0 < LENGTH targets` by (Cases_on `targets` >> gvs[]) >>
+       qpat_x_assum `!d. d < _ /\ _ ==> _`
+         (qspec_then `LENGTH (targets:operand list) - (idx + 1)` mp_tac) >>
+       decide_tac)) >> gvs[]) >>
   metis_tac[PERM_TRANS, do_swap_spilled_unchanged, pairTheory.SND]
 QED
 
-Finalise bounded_full_support_reorder_one_perm
+Finalise safe_full_support_reorder_one_perm
 
-Theorem bounded_full_support_reorder_fold_perm[local]:
+Theorem safe_full_support_reorder_fold_perm[local]:
   !pairs targets dfg acc ps.
-    LENGTH targets <= 17 /\ ps.ps_spilled = FEMPTY /\
+    (!d:num. d < LENGTH targets /\ 16 < d ==> d < LENGTH ps.ps_stack) /\
+    ps.ps_spilled = FEMPTY /\
     (!x. MEM x ps.ps_stack /\ is_var_operand x ==> MEM x targets) /\
     EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets) pairs ==>
     PERM (SND (FOLDL (\(ops,st) (idx,op).
@@ -418,20 +425,22 @@ Proof
   Induct >- simp[] >>
   gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `reorder_one dfg targets h0 h1 ps` >>
-  drule_all bounded_full_support_reorder_one_perm >> strip_tac >>
+  drule_all safe_full_support_reorder_one_perm >> strip_tac >>
   qpat_assum `reorder_one _ _ _ _ _ = _`
     (fn th => pure_rewrite_tac[th, pairTheory.pair_case_thm]) >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   rule_assum_tac (CONV_RULE (DEPTH_CONV PairRules.PBETA_CONV)) >>
   `!x. MEM x r.ps_stack /\ is_var_operand x ==> MEM x targets` by
     metis_tac[PERM_MEM_EQ] >>
+  `LENGTH r.ps_stack = LENGTH ps.ps_stack` by metis_tac[PERM_LENGTH] >>
   first_x_assum (qspecl_then [`targets`, `dfg`, `acc ++ q`, `r`] mp_tac) >>
   simp[] >> metis_tac[PERM_TRANS]
 QED
 
-Theorem bounded_full_support_reorder_perm:
+Theorem safe_full_support_reorder_perm:
   !targets dfg ps ops qs.
-    LENGTH targets <= 17 /\ ps.ps_spilled = FEMPTY /\
+    (!d:num. d < LENGTH targets /\ 16 < d ==> d < LENGTH ps.ps_stack) /\
+    ps.ps_spilled = FEMPTY /\
     (!x. MEM x ps.ps_stack /\ is_var_operand x ==> MEM x targets) /\
     reorder_plan dfg targets ps = (ops,qs) ==>
     PERM qs.ps_stack ps.ps_stack /\ qs.ps_spilled = FEMPTY
@@ -441,14 +450,15 @@ Proof
     (MAPi (\i op. (i,op)) targets)` by
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> metis_tac[MEM_EL]) >>
-  drule_all bounded_full_support_reorder_fold_perm >>
+  drule_all safe_full_support_reorder_fold_perm >>
   disch_then (qspecl_then [`dfg`, `[]`] mp_tac) >>
   gvs[reorder_plan_def]
 QED
 
-Theorem bounded_restore_reorder_suffix_distinct:
+Theorem safe_restore_reorder_suffix_distinct:
   !targets dfg ps rops rs qops qs.
-    LENGTH targets <= 17 /\ lineage_inventory (set targets) ps /\
+    (!d:num. d < LENGTH targets /\ 16 < d ==> d < LENGTH rs.ps_stack) /\
+    lineage_inventory (set targets) ps /\
     restore_spilled_plan targets ps = (rops,rs) /\
     reorder_plan dfg targets rs = (qops,qs) /\
     stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
@@ -464,7 +474,7 @@ Proof
      simp[SUBSET_DEF, stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
      rpt strip_tac >> Cases_on `x` >> gvs[stackPlanTypesTheory.is_var_operand_def] >>
      first_x_assum drule >> simp[]) >>
-  drule_all bounded_full_support_reorder_perm >> strip_tac >>
+  drule_all safe_full_support_reorder_perm >> strip_tac >>
   qpat_x_assum `lineage_inventory _ rs` mp_tac >>
   simp[lineage_inventory_def, lineage_core_def] >> strip_tac >>
   `FILTER (\op. op <> dead_stack_marker) core = core` by
@@ -488,9 +498,10 @@ Proof
   simp[FILTER_APPEND] >> metis_tac[ALL_DISTINCT_APPEND]
 QED
 
-Theorem bounded_restore_reorder_suffix_preservation:
+Theorem safe_restore_reorder_suffix_preservation:
   !base targets dfg ps rops rs qops qs.
-    LENGTH targets <= 17 /\ lineage_inventory (set targets) ps /\
+    (!d:num. d < LENGTH targets /\ 16 < d ==> d < LENGTH rs.ps_stack) /\
+    lineage_inventory (set targets) ps /\
     plan_slots_bounded base ps /\
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
     restore_spilled_plan targets ps = (rops,rs) /\
@@ -501,7 +512,7 @@ Theorem bounded_restore_reorder_suffix_preservation:
     spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all bounded_restore_reorder_suffix_distinct >> strip_tac >>
+  drule_all safe_restore_reorder_suffix_distinct >> strip_tac >>
   irule full_inventory_restore_reorder_preservation >>
   metis_tac[]
 QED
