@@ -1609,7 +1609,6 @@ Theorem log_monad_primitives[local]:
   log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
   log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
   log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
-  log_monad (update_pending_deletions deletions_upd) /\
   log_monad (adopt_call_outcome rq co)
 Proof
   simp[log_monad_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -1618,12 +1617,19 @@ Proof
        vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
        vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
-       append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
+       append_logs_def, adopt_call_outcome_equation] >>
   rpt strip_tac >> rpt CASE_TAC >>
   gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
       vyperStateTheory.return_def, vyperStateTheory.raise_def,
       log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_update_pending_deletions[local]:
+  log_monad (update_pending_deletions deletions_upd)
+Proof
+  rw[log_monad_def, update_pending_deletions_def, vyperStateTheory.return_def,
+     log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem log_monad_take[local]:
@@ -1644,7 +1650,8 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
        MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: CONJUNCTS log_monad_primitives)
+      (log_monad_take :: log_monad_update_pending_deletions ::
+       CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
   end;
