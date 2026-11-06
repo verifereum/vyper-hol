@@ -9,6 +9,7 @@ Ancestors
   abiDecoderBytestringOutcome abiDecoderSiteEffect exprSimAbiDecodeSiteProvenance
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   venomState venomInst words list rich_list arithmetic
+  abiDecoderCoherence abiDecodeRanges valueEncodingProps vyperTypeSystem vyperValue
 
 Theorem abi_decode_complex_guard_abort_opcodes[local]:
   abi_decode_complex_head_guard src hi k st = ((),st') ==>
@@ -135,3 +136,60 @@ Proof
   simp_tac bool_ss [exprSimAbiDecodeOwnedRowsTheory.abi_decode_owned_rows_pre_def] >>
   fs[abi_decoder_address_frame_def] >> metis_tac[LESS_EQ_TRANS]
 QED
+
+(* A source-view boundary must account for zero-width types past the end. *)
+Theorem abi_decode_empty_tuple_past_end_source_probe:
+  LENGTH ([]:word8 list) < 1 + 0 /\
+  abi_decode_source_accepts FEMPTY (TupleT [])
+    (abi_decode_source_view (vyper_to_abi_type FEMPTY (TupleT [])) [] 1)
+    (ArrayV (TupleV []))
+Proof
+  EVAL_TAC >> simp[dimword_def]
+QED
+
+Theorem abi_decode_assignable_embedded_head_positive:
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty ==>
+  0 < abi_embedded_static_size ce.ce_struct_fields ty
+Proof
+  strip_tac >> drule abi_decoder_coherent_header >>
+  simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+  `0 < type_slot_size tv` by metis_tac[assignable_type_slot_size_pos] >>
+  `0 < type_memory_size tv` by metis_tac[type_memory_size_pos] >>
+  Cases_on `is_dynamic (vyper_to_abi_type env ty)` >>
+  gvs[abi_member_head_size_def]
+QED
+
+Theorem abi_decode_assignable_empty_tuple_excluded:
+  ~assignable_type env (TupleT [])
+Proof
+  simp[assignable_type_def]
+QED
+
+Theorem abi_decode_evaluated_zero_fixed_array_excluded:
+  evaluate_type env (ArrayT ty (Fixed 0)) <> SOME tv
+Proof
+  simp[Once evaluate_type_def] >> Cases_on `evaluate_type env ty` >> simp[]
+QED
+
+Theorem abi_decode_positive_head_short_drop:
+  0 < k /\ LENGTH bs < p+k ==> LENGTH (DROP p bs) < k
+Proof
+  simp[LENGTH_DROP] >> decide_tac
+QED
+
+Theorem abi_decode_nonempty_positive_head_sum:
+  !xs. xs <> [] /\ EVERY (\x. 0 < f x) xs ==> 0 < SUM (MAP f xs)
+Proof
+  Cases >> simp[] >> rpt strip_tac >> decide_tac
+QED
+
+(* Position audit: entry is zero. Static children lie inside the checked
+   parent head; dynamic offsets have only a wrap check before child entry,
+   so malformed offsets need not be within the source. For accepted dynamic
+   children, abi_valid_dynamic_member_window supplies offset+32<=length.
+   Fixed-array heads and runtime-array heads bound count*element-head;
+   dynamic element offsets have the same conditional classification.
+   Zero-width counterexamples do not satisfy the contextual type premises:
+   assignable_type_slot_size_pos and coherence give positive member heads.
+   Thus short-head rejection should use a positive constructor head, rather
+   than impose an unconditional child-position invariant. *)
