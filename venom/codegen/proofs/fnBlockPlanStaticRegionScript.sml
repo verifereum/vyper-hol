@@ -4670,3 +4670,44 @@ Proof
   qpat_x_assum `ds.ps_spilled = _` (SUBST_ALL_TAC o SYM) >>
   gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem regional_lineage_single_successor_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\ fn_reachable fn pred /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    pred bb.bb_label ps /\ cfg_succs_of cfg pred = [bb.bb_label] /\
+  ~MEM dead_stack_marker ps.ps_stack ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))) ps.ps_stack
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by metis_tac[fn_reachable_cfg_analyze] >>
+  drule_all lineage_entry_inventory >> strip_tac >> gvs[] >>
+  drule_all regional_single_successor_exit_input >>
+  simp[pred_setTheory.SUBSET_DEF] >> strip_tac >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `op <> dead_stack_marker` by metis_tac[] >>
+  qpat_x_assum `!op. _ \/ _ ==> _` (qspec_then `op` mp_tac) >> simp[] >>
+  strip_tac >> goal_assum (drule_at Any) >> gvs[]
+QED
+
+Theorem regional_lineage_single_successor_cleanup_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\ fn_reachable fn pred /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    pred bb.bb_label ps /\ cfg_succs_of cfg pred = [bb.bb_label] /\
+  ~MEM dead_stack_marker ps.ps_stack /\ cfg_preds_of cfg bb.bb_label = [pred] /\
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))) qs.ps_stack
+Proof
+  strip_tac >>
+  `qs = ps` by gvs[clean_stack_plan_def] >> gvs[] >>
+  irule regional_lineage_single_successor_upper >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
