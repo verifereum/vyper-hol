@@ -233,15 +233,6 @@ Proof
   irule bb_succs_in_cfg_succs >> gvs[wf_function_def]
 QED
 
-Theorem wf_lookup_block[local]:
-  !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
-    lookup_block bb.bb_label fn.fn_blocks = SOME bb
-Proof
-  rpt strip_tac >>
-  irule MEM_lookup_block >> simp[] >>
-  gvs[wf_function_def, fn_labels_def]
-QED
-
 (* lookup_block returns a block with matching label *)
 Theorem lookup_block_label[local]:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
@@ -249,39 +240,6 @@ Proof
   rw[lookup_block_def] >>
   pop_assum mp_tac >> Induct_on `bbs` >> simp[listTheory.FIND_thm] >>
   rpt strip_tac >> Cases_on `h.bb_label = lbl` >> gvs[]
-QED
-
-(* is_fn_path can be extended by one edge *)
-Theorem is_fn_path_snoc[local]:
-  !fn path lbl. is_fn_path fn path /\ path <> [] /\
-    fn_cfg_edge fn (LAST path) lbl ==>
-    is_fn_path fn (path ++ [lbl])
-Proof
-  Induct_on `path` >> simp[is_fn_path_def] >>
-  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def]
-QED
-
-(* fn_dominates predecessor: if d dominates n, d ≠ n, and p → n is CFG edge,
-   and p is reachable, then d dominates p *)
-Theorem fn_dominates_predecessor[local]:
-  !fn d n p.
-    fn_dominates fn d n /\ d <> n /\
-    fn_cfg_edge fn p n /\ fn_reachable fn p ==>
-    fn_dominates fn d p
-Proof
-  rw[fn_dominates_def] >> rpt strip_tac >>
-  (* path goes from entry to p; extend by edge p → n to get path to n *)
-  `is_fn_path fn (path ++ [n])` by (
-    irule is_fn_path_snoc >> simp[]) >>
-  `MEM d (path ++ [n])` by (
-    first_x_assum (qspec_then `path ++ [n]` mp_tac) >>
-    impl_tac >- (
-      simp[listTheory.LAST_APPEND_CONS] >>
-      Cases_on `path` >> gvs[]
-    ) >>
-    simp[]
-  ) >>
-  gvs[listTheory.MEM_APPEND]
 QED
 
 (* phi_pairs produces only vars present in the operand list *)

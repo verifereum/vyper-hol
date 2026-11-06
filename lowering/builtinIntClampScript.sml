@@ -12,7 +12,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE] >> rw[]
 QED
 
-Theorem fresh_var_name_eq[local]:
+Theorem fresh_var_name_eq:
   !m n. (STRING #"%" (toString m) = STRING #"%" (toString n)) <=> (m = n)
 Proof
   metis_tac[fresh_var_distinct]

@@ -721,16 +721,6 @@ QED
 (*  Part 9b: Block-level exact equality for SCCP substitution        *)
 (* ================================================================= *)
 
-Theorem sccp_inst_is_terminator:
-  !st inst. is_terminator (sccp_inst st inst).inst_opcode =
-            is_terminator inst.inst_opcode
-Proof
-  rpt gen_tac >> simp[sccp_inst_def, LET_THM] >>
-  IF_CASES_TAC >> simp[] >>
-  BasicProvers.every_case_tac >> simp[] >>
-  gvs[is_terminator_def, mk_nop_inst_def]
-QED
-
 (* non_terminator_not_last: now in venomExecPropsTheory *)
 
 (* Helper: derive cond_const_sound from nophi conditions + phi_bottom tracker
@@ -1238,15 +1228,6 @@ Proof
   simp[] >> first_x_assum irule >> simp[]
 QED
 
-Triviality sccp_transfer_phi_bottom_local[local]:
-  !f inst lat y.
-    inst.inst_opcode = PHI /\ MEM y inst.inst_outputs ==>
-    FLOOKUP (sccp_transfer_inst f inst lat).sl_vals y = SOME CL_Bottom
-Proof
-  rpt strip_tac >> simp[sccp_transfer_inst_def] >>
-  metis_tac[cj 1 foldl_fupdate_bottom]
-QED
-
 Triviality sccp_phi_prefix_df_phi_bottom[local]:
   !idx f bb k y.
     wf_function f /\ wf_ssa f /\ MEM bb f.fn_blocks /\
@@ -1270,7 +1251,7 @@ Proof
   Cases_on `k = idx`
   >- (
     `((EL idx bb.bb_instructions).inst_opcode = PHI)` by gvs[] >>
-    metis_tac[sccp_transfer_phi_bottom_local]) >>
+    metis_tac[sccp_transfer_phi_bottom]) >>
   `k < idx` by simp[] >>
   first_x_assum (qspecl_then [`f`, `bb`, `k`, `y`] mp_tac) >>
   simp[] >> strip_tac >>

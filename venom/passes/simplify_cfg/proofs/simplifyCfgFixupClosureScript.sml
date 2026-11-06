@@ -16,7 +16,7 @@ Theorem scfg_restriction_fix_phis_inst_wf:
   fn_inst_wf fn ==> fn_inst_wf (fix_all_phis (remove_unreachable_blocks fn))
 Proof
   metis_tac[simplifyCfgReachusesTheory.fix_all_phis_fn_inst_wf,
-            simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf]
+            simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf]
 QED
 
 Theorem scfg_fix_phi_retained_opcode:
@@ -34,7 +34,7 @@ Proof
   `wf_function r /\ fn_inst_wf r /\ all_reachable r /\ scfg_phi_safe r /\
    fn_defs_reach_uses r` by
     simp[Abbr `r`, remove_unreachable_blocks_wf,
-         simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf,
+         simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf,
          remove_unreachable_blocks_reachable, remove_unreachable_blocks_phi_safe,
          remove_unreachable_blocks_defs_reach_uses] >>
   simp[fix_all_phis_phi_safe, fix_all_phis_defs_reach_uses]

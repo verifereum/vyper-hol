@@ -23,7 +23,7 @@
 
 Theory simplifyCfgDefs
 Ancestors
-  cfgTransform venomWf venomExecSemantics rich_list list relation pred_set arithmetic
+  cfgTransform venomWf venomExecSemantics rich_list list relation pred_set arithmetic venomInst
 Libs
   Defn TotalDefn pairLib
 
@@ -812,3 +812,24 @@ Definition simplify_cfg_fn_ok_def:
        ?op. resolve_phi pred_bb.bb_label inst.inst_operands = SOME op) /\
     fn_defs_reach_uses fn
 End
+
+Theorem canon_jnz_inst_var_subset:
+  MEM (Var v) (canon_jnz_inst inst).inst_operands ==>
+  MEM (Var v) inst.inst_operands
+Proof
+  simp[canon_jnz_inst_def] >> rpt CASE_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem canon_jnz_inst_wf:
+  inst_wf inst ==> inst_wf (canon_jnz_inst inst)
+Proof
+  simp[canon_jnz_inst_def] >> rpt CASE_TAC >> gvs[inst_wf_def] >>
+  metis_tac[]
+QED
+
+Theorem remove_unreachable_blocks_fn_inst_wf:
+  fn_inst_wf fn ==> fn_inst_wf (remove_unreachable_blocks fn)
+Proof
+  simp[fn_inst_wf_def, remove_unreachable_blocks_def] >>
+  Cases_on `fn_entry_label fn` >> simp[MEM_FILTER] >> metis_tac[]
+QED

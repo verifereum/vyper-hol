@@ -15,7 +15,7 @@ Proof
   strip_tac >>
   `off + n <= LENGTH mem /\ off + n <= LENGTH (TAKE cap mem)` by
     (simp[LENGTH_TAKE_EQ] >> decide_tac) >>
-  simp[immutable_memory_bytes_full, immutable_prefix_slice]
+  simp[mem_bytes_at_bounded, immutable_prefix_slice]
 QED
 
 Theorem immutable_memory_prefix_value:

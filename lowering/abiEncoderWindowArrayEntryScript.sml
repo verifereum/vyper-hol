@@ -435,7 +435,7 @@ Proof
      simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule_all window_array_root_transition >> strip_tac >>
   qexistsl_tac [`t`, `b`] >> asm_rewrite_tac[] >> conj_tac
-  >- metis_tac[window_array_prefix_zero] >>
+  >- metis_tac[abi_encoder_array_prefix_empty] >>
   conj_tac >- (simp_tac bool_ss [window_array_cursor_def] >>
     asm_rewrite_tac[] >>
     qpat_x_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>

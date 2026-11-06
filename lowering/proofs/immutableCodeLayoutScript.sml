@@ -17,14 +17,6 @@ Proof
   pairarg_tac >> simp[]
 QED
 
-Theorem immutable_compiled_runtime_nonempty:
-  compile_vyper (K SOME) policy tops = SOME (deploy_bc,runtime_bc) ==>
-  runtime_bc <> []
-Proof
-  strip_tac >> drule compile_vyper_runtime_phases >> strip_tac >>
-  gvs[] >> drule immutable_runtime_codegen_nonempty >> simp[]
-QED
-
 Theorem immutable_installed_prefix_guard:
   codegen_assembly policy unit = SOME prog ==>
   ((~?tail. assemble prog ++ section = 0xEFw::tail) <=>

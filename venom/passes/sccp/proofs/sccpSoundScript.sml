@@ -499,7 +499,7 @@ Proof
   gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem sccp_transfer_terminator_vals[local]:
+Theorem sccp_transfer_terminator_vals:
   !fn inst lat. is_terminator inst.inst_opcode ==>
     (sccp_transfer_inst fn inst lat).sl_vals = lat.sl_vals
 Proof

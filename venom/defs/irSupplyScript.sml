@@ -6,7 +6,7 @@ Theory irSupply
 Ancestors
   venomCompilerWf
   ASCIInumbers
-  pred_set
+  pred_set arithmetic list
 Libs
   listTheory
 
@@ -540,4 +540,12 @@ Proof
   qpat_assum `fresh_ir_label s1 = (l2,s2)`
     (mp_tac o MATCH_MP fresh_ir_label_contract) >> strip_tac >>
   metis_tac[]
+QED
+
+Theorem fresh_ir_var_inst_ok:
+  ir_supply_inst_ok s /\ fresh_ir_var s = (v,s') ==>
+  ir_supply_inst_ok s'
+Proof
+  strip_tac >> drule fresh_ir_var_contract >> strip_tac >>
+  gvs[ir_supply_inst_ok_def]
 QED

@@ -589,20 +589,6 @@ Proof
 QED
 
 (* =========================================================================
-   memory_rel through MSTORE in spill region
-   ========================================================================= *)
-
-(* memory_rel through asm_expand_memory *)
-Theorem memory_rel_expand[local]:
-  !alloc vm am n.
-    memory_rel alloc vm am ==>
-    memory_rel alloc vm (asm_expand_memory n am)
-Proof
-  rw[memory_rel_def] >> rpt strip_tac >>
-  res_tac >> simp[read_byte_expand]
-QED
-
-(* =========================================================================
    SOSpill preserves venom_asm_rel
    ========================================================================= *)
 
