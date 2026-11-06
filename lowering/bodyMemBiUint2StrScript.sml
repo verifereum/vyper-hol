@@ -3,7 +3,7 @@
    for the trunk's buffer-size change to compile_uint2str_def. *)
 Theory bodyMemBiUint2Str
 Ancestors
-  bodyMemoryPreds bodyMemBiUint2StrPost
+  bodyMemoryPreds bodyMemBiUint2StrCompose
 
 Theorem body_builtin_uint2str_mem:
   !cx ty n es.
