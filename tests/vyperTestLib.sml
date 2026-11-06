@@ -8,6 +8,9 @@ open HolKernel boolLib bossLib cv_transLib wordsLib intLib
      jsonASTLib jsonToVyperTheory
 open JSONDecode
 
+(* Translation evaluates constants with EVAL. *)
+local open vyperConstEvalLib in end
+
 (* ===== jsonAST Translation Pipeline ===== *)
 (* Parse JSON to jsonAST, then translate to vyperAST using EVAL *)
 

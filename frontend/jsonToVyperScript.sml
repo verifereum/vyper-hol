@@ -283,26 +283,6 @@ Definition build_all_import_maps_def:
     build_all_import_maps rest
 End
 
-(* Resolve a module expression (possibly nested) to a source_id.
-   e.g. lib1 -> SOME src_id_of_lib1
-        lib2.lib1 -> SOME src_id_of_lib1 (via lib2's import_map)
-   all_import_maps: source_id -> import_map for each module
-   import_map: current module's alias -> source_id map *)
-Definition resolve_module_expr_def:
-  (resolve_module_expr all_import_maps import_map (JE_Name alias _ _ _) =
-     ALOOKUP import_map alias) ∧
-  (resolve_module_expr all_import_maps import_map (JE_Attribute inner alias _ _ _ _ _) =
-     case resolve_module_expr all_import_maps import_map inner of
-     | NONE => NONE
-     | SOME parent_src_id =>
-         case ALOOKUP all_import_maps parent_src_id of
-         | NONE => NONE
-         | SOME parent_import_map => ALOOKUP parent_import_map alias) ∧
-  (resolve_module_expr _ _ _ = NONE)
-Termination
-  WF_REL_TAC `measure (λ(_,_,e). json_expr_size e)` >> simp[]
-End
-
 (* Get function names from an inline interface definition *)
 Definition get_interface_func_names_def:
   get_interface_func_names [] = [] ∧
@@ -360,8 +340,8 @@ End
    import_map: alias map for the current module *)
 Definition expand_single_export_def:
   expand_single_export exports_map all_import_maps all_inline_maps import_map
-    (JE_Attribute base func_name _ _ _ _ _) =
-    (case resolve_module_expr all_import_maps import_map base of
+    (JE_Attribute obj func_name _ _ _ _ _) =
+    (case resolve_module_expr all_import_maps import_map obj of
      | NONE => []
      | SOME src_id =>
          if func_name = "__interface__" then
@@ -394,8 +374,8 @@ End
 Definition expand_export_annotation_def:
   expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Tuple exprs) =
     expand_tuple_exports exports_map all_import_maps all_inline_maps import_map exprs ∧
-  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) =
-    expand_single_export exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) ∧
+  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Attribute obj attr tc btn btc sid ty) =
+    expand_single_export exports_map all_import_maps all_inline_maps import_map (JE_Attribute obj attr tc btn btc sid ty) ∧
   expand_export_annotation _ _ _ _ _ = []
 End
 
@@ -571,134 +551,195 @@ End
 
 (* Validate syntax-derived declaration types against every compiler type claim
    before constructing canonical declarations. *)
+(* The expression context of a module body. *)
+Definition module_expr_ctx_def:
+  module_expr_ctx all_import_maps main_src_id nsid body toplevel_types
+      override_map constants =
+    (main_src_id,
+     (nsid,
+      (build_import_map (collect_imports body),
+       (collect_consts_and_immutables body,
+        ([], (toplevel_types, (override_map, (constants, all_import_maps))))))))
+End
+
+(* One pass over a module's constants evaluates each one not yet evaluated,
+   using the constants evaluated so far.  An initializer that does not
+   evaluate (a decimal, an array, a runtime value) leaves its constant a
+   top-level name for the semantics to evaluate. *)
+Definition module_constants_def:
+  module_constants ctx [] = expr_constants ctx ∧
+  module_constants ctx (JTL_VariableDecl name _ _ _ _ _ (SOME init) :: rest) =
+    (if IS_SOME (ALOOKUP (expr_constants ctx) (expr_current_nsid ctx, name))
+     then module_constants ctx rest else
+     let e = translate_expr ctx init in
+     let constants =
+       case OPTION_BIND (eval_constant e) constant_literal of
+       | SOME l => ((expr_current_nsid ctx, name), l) :: expr_constants ctx
+       | NONE => expr_constants ctx in
+     module_constants (expr_with_constants ctx constants) rest) ∧
+  module_constants ctx (_ :: rest) = module_constants ctx rest
+End
+
+Definition imported_constants_def:
+  imported_constants all_import_maps main_src_id constants [] = constants ∧
+  imported_constants all_import_maps main_src_id constants
+      (JImportedModule src_id _ _ _ body :: rest) =
+    imported_constants all_import_maps main_src_id
+      (module_constants
+        (module_expr_ctx all_import_maps main_src_id (SOME (source_id_to_module_id src_id))
+          body [] [] constants) body)
+      rest
+End
+
+(* A constant may refer to constants declared after it, so passes over every
+   module repeat until one evaluates nothing new; each pass that does not stop
+   evaluates at least one more of the n declarations. *)
+Definition evaluated_constants_def:
+  evaluated_constants (n : num) all_import_maps main_src_id toplevels imports constants =
+    let constants' =
+      module_constants
+        (module_expr_ctx all_import_maps main_src_id NONE toplevels [] []
+          (imported_constants all_import_maps main_src_id constants imports)) toplevels in
+    if n = 0 ∨ LENGTH constants' = LENGTH constants then constants'
+    else evaluated_constants (n - 1) all_import_maps main_src_id toplevels imports constants'
+End
+
+Definition annotated_constants_def:
+  annotated_constants all_import_maps main_src_id toplevels imports =
+    evaluated_constants
+      (LENGTH toplevels +
+       SUM (MAP (λm. case m of JImportedModule _ _ _ _ body => LENGTH body)
+              imports))
+      all_import_maps main_src_id toplevels imports []
+End
+
 Definition arg_type_valid_def:
-  arg_type_valid nominal_index all_import_maps type_ctx (JArg _ inferred ann) =
-    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann
+  arg_type_valid nominal_index all_import_maps ctx (JArg _ inferred ann) =
+    declaration_type_valid nominal_index all_import_maps ctx inferred ann
 End
 
 Definition stmt_decl_types_valid_def:
-  stmt_decl_types_valid nominal_index all_import_maps type_ctx [] = T ∧
-  stmt_decl_types_valid nominal_index all_import_maps type_ctx
+  stmt_decl_types_valid nominal_index all_import_maps ctx [] = T ∧
+  stmt_decl_types_valid nominal_index all_import_maps ctx
       (JS_AnnAssign _ inferred ann _ :: rest) =
-    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
-     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
-  stmt_decl_types_valid nominal_index all_import_maps type_ctx
-      (JS_For _ inferred ann _ body :: rest) =
-    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
-     stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
-     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
-  stmt_decl_types_valid nominal_index all_import_maps type_ctx
+    (declaration_type_valid nominal_index all_import_maps ctx inferred ann ∧
+     stmt_decl_types_valid nominal_index all_import_maps ctx rest) ∧
+  stmt_decl_types_valid nominal_index all_import_maps ctx
+      (JS_For _ inferred ann iter body :: rest) =
+    (declaration_type_valid nominal_index all_import_maps ctx inferred ann ∧
+     iter_bound_resolved ctx iter ∧
+     stmt_decl_types_valid nominal_index all_import_maps ctx body ∧
+     stmt_decl_types_valid nominal_index all_import_maps ctx rest) ∧
+  stmt_decl_types_valid nominal_index all_import_maps ctx
       (JS_If _ body orelse :: rest) =
-    (stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
-     stmt_decl_types_valid nominal_index all_import_maps type_ctx orelse ∧
-     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
-  stmt_decl_types_valid nominal_index all_import_maps type_ctx (_ :: rest) =
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx rest
+    (stmt_decl_types_valid nominal_index all_import_maps ctx body ∧
+     stmt_decl_types_valid nominal_index all_import_maps ctx orelse ∧
+     stmt_decl_types_valid nominal_index all_import_maps ctx rest) ∧
+  stmt_decl_types_valid nominal_index all_import_maps ctx (_ :: rest) =
+    stmt_decl_types_valid nominal_index all_import_maps ctx rest
 Termination
   WF_REL_TAC `measure (λ(_,_,_,stmts). list_size json_stmt_size stmts)` >> simp[]
 End
 
 Definition interface_func_types_valid_def:
-  interface_func_types_valid nominal_index all_import_maps type_ctx
+  interface_func_types_valid nominal_index all_import_maps ctx
       (JInterfaceFunc _ args ret_ann _) =
-    (EVERY (arg_type_valid nominal_index all_import_maps type_ctx) args ∧
-     annotation_resolved nominal_index all_import_maps type_ctx ret_ann)
+    (EVERY (arg_type_valid nominal_index all_import_maps ctx) args ∧
+     annotation_resolved nominal_index all_import_maps ctx ret_ann)
 End
 
 Definition function_arg_types_valid_def:
-  function_arg_types_valid nominal_index all_import_maps type_ctx [] [] = T ∧
-  function_arg_types_valid nominal_index all_import_maps type_ctx
+  function_arg_types_valid nominal_index all_import_maps ctx [] [] = T ∧
+  function_arg_types_valid nominal_index all_import_maps ctx
       (JArg _ inferred ann :: args) (func_inferred :: tys) =
-    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
-     inferred_type_consistent type_ctx
-       (canonical_decl_type nominal_index all_import_maps type_ctx inferred ann)
+    (declaration_type_valid nominal_index all_import_maps ctx inferred ann ∧
+     inferred_type_consistent (expr_type_ctx ctx)
+       (canonical_decl_type nominal_index all_import_maps ctx inferred ann)
        func_inferred ∧
-     function_arg_types_valid nominal_index all_import_maps type_ctx args tys) ∧
-  function_arg_types_valid nominal_index all_import_maps type_ctx _ _ = F
+     function_arg_types_valid nominal_index all_import_maps ctx args tys) ∧
+  function_arg_types_valid nominal_index all_import_maps ctx _ _ = F
 End
 
 Definition toplevel_decl_types_valid_def:
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_FunctionDef _ _ _ args _ (JFuncType arg_tys ret_ty) ret_ann body) =
-    (function_arg_types_valid nominal_index all_import_maps type_ctx args arg_tys ∧
-     annotation_resolved nominal_index all_import_maps type_ctx ret_ann ∧
-     (ret_ann = JTA_None ∨ inferred_type_consistent type_ctx
-       (elaborate_annotation nominal_index all_import_maps type_ctx ret_ann)
+    (function_arg_types_valid nominal_index all_import_maps ctx args arg_tys ∧
+     annotation_resolved nominal_index all_import_maps ctx ret_ann ∧
+     (ret_ann = JTA_None ∨ inferred_type_consistent (expr_type_ctx ctx)
+       (elaborate_annotation nominal_index all_import_maps ctx ret_ann)
        ret_ty) ∧
-     stmt_decl_types_valid nominal_index all_import_maps type_ctx body)) ∧
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+     stmt_decl_types_valid nominal_index all_import_maps ctx body)) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_VariableDecl _ inferred ann _ _ _ _) =
-    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann) ∧
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+    declaration_type_valid nominal_index all_import_maps ctx inferred ann) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_EventDef _ fields) =
-    EVERY (λ(arg,_). arg_type_valid nominal_index all_import_maps type_ctx arg)
+    EVERY (λ(arg,_). arg_type_valid nominal_index all_import_maps ctx arg)
       fields) ∧
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_StructDef _ fields) =
-    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+    EVERY (arg_type_valid nominal_index all_import_maps ctx) fields) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_ErrorDef _ fields) =
-    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+    EVERY (arg_type_valid nominal_index all_import_maps ctx) fields) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_InterfaceDef _ funcs) =
-    EVERY (interface_func_types_valid nominal_index all_import_maps type_ctx)
+    EVERY (interface_func_types_valid nominal_index all_import_maps ctx)
       funcs) ∧
-  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx _ = T)
+  (toplevel_decl_types_valid nominal_index all_import_maps ctx _ = T)
 End
 
 Definition module_decl_types_valid_def:
-  module_decl_types_valid nominal_index all_import_maps type_ctx body =
-    EVERY (toplevel_decl_types_valid nominal_index all_import_maps type_ctx) body
+  module_decl_types_valid nominal_index all_import_maps ctx body =
+    EVERY (toplevel_decl_types_valid nominal_index all_import_maps ctx) body
 End
 
 Definition imported_decl_types_valid_def:
-  imported_decl_types_valid nominal_index all_import_maps main_src_id [] = T ∧
-  imported_decl_types_valid nominal_index all_import_maps main_src_id
+  imported_decl_types_valid nominal_index all_import_maps constants main_src_id [] = T ∧
+  imported_decl_types_valid nominal_index all_import_maps constants main_src_id
       (JImportedModule src_id _ _ _ body :: rest) =
-    (let nsid = source_id_to_module_id src_id in
-     let import_map = build_import_map (collect_imports body) in
-     let type_ctx = (main_src_id, SOME nsid, import_map) in
-     module_decl_types_valid nominal_index all_import_maps type_ctx body ∧
-     imported_decl_types_valid nominal_index all_import_maps main_src_id rest)
+    (let ctx = module_expr_ctx all_import_maps main_src_id
+                 (SOME (source_id_to_module_id src_id)) body [] [] constants in
+     module_decl_types_valid nominal_index all_import_maps ctx body ∧
+     imported_decl_types_valid nominal_index all_import_maps constants main_src_id rest)
 End
 
 Definition all_decl_types_valid_def:
-  all_decl_types_valid nominal_index all_import_maps main_src_id toplevels imports =
-    (let import_map = build_import_map (collect_imports toplevels) in
-     let type_ctx = (main_src_id, NONE, import_map) in
-     module_decl_types_valid nominal_index all_import_maps type_ctx toplevels ∧
-     imported_decl_types_valid nominal_index all_import_maps main_src_id imports)
+  all_decl_types_valid nominal_index all_import_maps constants main_src_id
+      toplevels imports =
+    (let ctx = module_expr_ctx all_import_maps main_src_id NONE toplevels [] [] constants in
+     module_decl_types_valid nominal_index all_import_maps ctx toplevels ∧
+     imported_decl_types_valid nominal_index all_import_maps constants main_src_id imports)
 End
 
 (* Canonical top-level value types are computed before expression bodies. *)
 Definition collect_toplevel_types_def:
-  collect_toplevel_types nominal_index all_import_maps type_ctx [] = [] ∧
-  collect_toplevel_types nominal_index all_import_maps type_ctx
+  collect_toplevel_types nominal_index all_import_maps ctx [] = [] ∧
+  collect_toplevel_types nominal_index all_import_maps ctx
       (JTL_VariableDecl name inferred ann _ _ _ _ :: rest) =
-    (((tctx_current_nsid type_ctx, name),
-       canonical_decl_type nominal_index all_import_maps type_ctx inferred ann) ::
-     collect_toplevel_types nominal_index all_import_maps type_ctx rest) ∧
-  collect_toplevel_types nominal_index all_import_maps type_ctx (_ :: rest) =
-    collect_toplevel_types nominal_index all_import_maps type_ctx rest
+    (((expr_current_nsid ctx, name),
+       canonical_decl_type nominal_index all_import_maps ctx inferred ann) ::
+     collect_toplevel_types nominal_index all_import_maps ctx rest) ∧
+  collect_toplevel_types nominal_index all_import_maps ctx (_ :: rest) =
+    collect_toplevel_types nominal_index all_import_maps ctx rest
 End
 
 Definition collect_imported_toplevel_types_def:
-  collect_imported_toplevel_types nominal_index all_import_maps main_src_id [] = [] ∧
-  collect_imported_toplevel_types nominal_index all_import_maps main_src_id
+  collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id [] = [] ∧
+  collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id
       (JImportedModule src_id _ _ _ body :: rest) =
-    let nsid = source_id_to_module_id src_id in
-    let import_map = build_import_map (collect_imports body) in
-    let type_ctx = (main_src_id, SOME nsid, import_map) in
-    collect_toplevel_types nominal_index all_import_maps type_ctx body ++
-    collect_imported_toplevel_types nominal_index all_import_maps main_src_id rest
+    let ctx = module_expr_ctx all_import_maps main_src_id
+                (SOME (source_id_to_module_id src_id)) body [] [] constants in
+    collect_toplevel_types nominal_index all_import_maps ctx body ++
+    collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id rest
 End
 
 Definition build_all_toplevel_types_def:
-  build_all_toplevel_types nominal_index all_import_maps main_src_id toplevels imports =
-    let import_map = build_import_map (collect_imports toplevels) in
-    let type_ctx = (main_src_id, NONE, import_map) in
-    collect_toplevel_types nominal_index all_import_maps type_ctx toplevels ++
-    collect_imported_toplevel_types nominal_index all_import_maps main_src_id imports
+  build_all_toplevel_types nominal_index all_import_maps constants main_src_id
+      toplevels imports =
+    let ctx = module_expr_ctx all_import_maps main_src_id NONE toplevels [] [] constants in
+    collect_toplevel_types nominal_index all_import_maps ctx toplevels ++
+    collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id imports
 End
 
 Definition filter_some_def:
@@ -838,7 +879,7 @@ Definition override_function_compatible_def:
   override_function_compatible _ _ = F
 End
 
-(* Defaults retain source syntax rather than folded values. Resolve aliases
+(* Defaults are compared as source syntax. Resolve aliases
    and local constants by module identity; inferred expression metadata is
    irrelevant to structural equivalence. *)
 Definition canonical_default_aux_def:
@@ -846,7 +887,6 @@ Definition canonical_default_aux_def:
   canonical_default_aux (SUC fuel) imports nsid consts e =
     let recur = canonical_default_aux fuel imports nsid consts in
     case e of
-    | JE_Folded original _ => recur original
     | JE_Name name tc src ty =>
         (case ALOOKUP imports name of
          | SOME sid =>
@@ -855,9 +895,9 @@ Definition canonical_default_aux_def:
              JE_Name name NONE
                (if MEM name consts then JExplicitSource nsid
                 else JMissingSource) JT_None)
-    | JE_Attribute base name tc btn btc src ty =>
-        JE_Attribute (recur base) name NONE NONE NONE JMissingSource JT_None
-    | JE_Subscript base idx _ => JE_Subscript (recur base) (recur idx) JT_None
+    | JE_Attribute obj name tc btn btc src ty =>
+        JE_Attribute (recur obj) name NONE NONE NONE JMissingSource JT_None
+    | JE_Subscript obj idx _ => JE_Subscript (recur obj) (recur idx) JT_None
     | JE_NamedExpr lhs rhs => JE_NamedExpr (recur lhs) (recur rhs)
     | JE_BinOp lhs op rhs _ => JE_BinOp (recur lhs) op (recur rhs) JT_None
     | JE_Compare lhs op rhs => JE_Compare (recur lhs) op (recur rhs)
@@ -1015,15 +1055,10 @@ End
 
 Definition translate_module_def:
   translate_module nominal_index all_import_maps all_toplevel_types override_map
-      (JModule main_src_id nr_default toplevels) =
-    let import_map = build_import_map (collect_imports toplevels) in
-    let expr_ctx =
-      (main_src_id,
-       (NONE,
-        (import_map,
-         (collect_consts_and_immutables toplevels,
-          ([], (all_toplevel_types, override_map)))))) in
-    let type_ctx = (main_src_id, NONE, import_map) in
+      constants (JModule main_src_id nr_default toplevels) =
+    let expr_ctx = module_expr_ctx all_import_maps main_src_id NONE toplevels
+                     all_toplevel_types override_map constants in
+    let type_ctx = expr_type_ctx expr_ctx in
     filter_some
       (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default)
         toplevels)
@@ -1038,16 +1073,12 @@ End
    ellipsis-bodied function stubs are not executable module implementations. *)
 Definition translate_imported_module_def:
   translate_imported_module nominal_index all_import_maps all_toplevel_types
-      override_map main_src_id (JImportedModule src_id path _ nr_default body) =
+      override_map constants main_src_id
+      (JImportedModule src_id path _ nr_default body) =
     let nsid = source_id_to_module_id src_id in
-    let import_map = build_import_map (collect_imports body) in
-    let expr_ctx =
-      (main_src_id,
-       (SOME nsid,
-        (import_map,
-         (collect_consts_and_immutables body,
-          ([], (all_toplevel_types, override_map)))))) in
-    let type_ctx = (main_src_id, SOME nsid, import_map) in
+    let expr_ctx = module_expr_ctx all_import_maps main_src_id (SOME nsid) body
+                     all_toplevel_types override_map constants in
+    let type_ctx = expr_type_ctx expr_ctx in
     let declaration_only = is_interface_path path in
     (SOME nsid, filter_some
       (MAP (λtop.
@@ -1058,13 +1089,13 @@ End
 
 Definition translate_imported_modules_def:
   translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      override_map main_src_id [] = [] ∧
+      override_map constants main_src_id [] = [] ∧
   translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      override_map main_src_id (imp::imports) =
+      override_map constants main_src_id (imp::imports) =
     translate_imported_module nominal_index all_import_maps all_toplevel_types
-      override_map main_src_id imp ::
+      override_map constants main_src_id imp ::
     translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      override_map main_src_id imports
+      override_map constants main_src_id imports
 End
 
 (* ===== Annotate Storage Slots ===== *)
@@ -1187,19 +1218,20 @@ Definition translate_annotated_ast_canonical_def:
     let import_map = compact_index_import_map main_index in
     let nominal_index = build_nominal_index toplevels imports in
     let override_map = build_override_map toplevels imports in
-    if ¬all_decl_types_valid nominal_index all_import_maps main_src_id
+    let constants = annotated_constants all_import_maps main_src_id toplevels imports in
+    if ¬all_decl_types_valid nominal_index all_import_maps constants main_src_id
         toplevels imports ∨
        ¬abstract_overrides_valid toplevels imports override_map ∨
        ¬module_override_declarations_valid toplevels ∨
        ¬imported_override_declarations_valid imports
     then NONE else
     let all_toplevel_types = build_all_toplevel_types nominal_index
-      all_import_maps main_src_id toplevels imports in
+      all_import_maps constants main_src_id toplevels imports in
     let sources =
       (NONE, translate_module nominal_index all_import_maps all_toplevel_types
-        override_map main) ::
+        override_map constants main) ::
       translate_imported_modules nominal_index all_import_maps
-        all_toplevel_types override_map main_src_id imports in
+        all_toplevel_types override_map constants main_src_id imports in
     let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
     SOME (sources, exports,
           layout_import_map all_import_maps imports import_map toplevels)
