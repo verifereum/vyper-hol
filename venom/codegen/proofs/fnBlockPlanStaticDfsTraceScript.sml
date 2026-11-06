@@ -248,3 +248,43 @@ Proof
   drule_all aux_trace_block_mem >>
   fs[SUBSET_DEF]
 QED
+
+Theorem dfs_block_state_unique_from_root:
+  fn_entry_label fn = SOME entry /\
+  generate_fn_plan_aux lv dfg cfg fn [entry] [] ps0 = SOME result /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn ps0 lbl p /\
+  dfs_block_state lv dfg cfg fn ps0 lbl q ==> p = q
+Proof
+  rpt strip_tac >> drule (cj 1 dfs_trace_exists) >> strip_tac >>
+  `MEM (lbl,p) tr /\ MEM (lbl,q) tr` by
+    metis_tac[dfs_block_state_trace_mem] >>
+  drule (cj 1 dfs_trace_label_functional) >> metis_tac[]
+QED
+
+Theorem dfs_call_entry_exists:
+  (!wl visited ps.
+    dfs_aux_call lv dfg cfg fn ps0 wl visited ps ==>
+    ?entry. fn_entry_label fn = SOME entry) /\
+  (!ss sp succs visited pg.
+    dfs_succs_call lv dfg cfg fn ps0 ss sp succs visited pg ==>
+    ?entry. fn_entry_label fn = SOME entry)
+Proof
+  ho_match_mp_tac dfs_aux_call_ind >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem dfs_block_state_unique:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (ops,pend) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl p /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl q ==> p = q
+Proof
+  rpt strip_tac >>
+  `?entry. fn_entry_label fn = SOME entry` by
+    (gvs[dfs_block_state_def] >> metis_tac[dfs_call_entry_exists]) >>
+  gvs[generate_fn_plan_with_cleanup_analyzed_def, AllCaseEqs()] >>
+  metis_tac[dfs_block_state_unique_from_root]
+QED
