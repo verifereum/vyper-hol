@@ -78,3 +78,85 @@ Proof
       drule_at (Pat `emit_void _ _ _ = _`) pop_emit_void_boundary >> simp[]) >>
   rpt strip_tac >> first_x_assum drule_all >> simp[]
 QED
+
+Theorem pop_fresh_var_boundary:
+  pop_comp_boundary sa /\ fresh_var sa = (r,sb) ==> pop_comp_boundary sb
+Proof
+  simp[fresh_var_def] >> rpt strip_tac >> gvs[pop_comp_boundary_def]
+QED
+
+Theorem pop_fresh_label_boundary:
+  pop_comp_boundary sa /\ fresh_label suffix sa = (r,sb) ==> pop_comp_boundary sb
+Proof
+  simp[fresh_label_def] >> rpt strip_tac >> gvs[pop_comp_boundary_def]
+QED
+
+Theorem pop_emit_inst_boundary:
+  op <> ASSERT /\ pop_comp_boundary sa /\ emit_inst op args outs sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, emit_def] >> rpt strip_tac >>
+  gvs[pop_comp_boundary_def] >>
+  irule pop_boundary_clean_snoc_no_assert >> simp[mk_inst_def]
+QED
+
+Theorem pop_word_copy_boundary:
+  pop_comp_boundary sa /\
+  compile_word_copy_loop src dst n ll sl ctor sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  Cases_on `word_scale ll = 1` >> Cases_on `word_scale sl = 1` >>
+  simp[compile_word_copy_loop_def, comp_ignore_bind_def] >> rpt strip_tac >>
+  rpt (drule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+       disch_then irule >> simp[] >> conj_tac >> rpt gen_tac >> strip_tac) >>
+  FIRST [drule_all pop_fresh_label_boundary,
+    drule_all pop_fresh_var_boundary,
+    drule_at (Pat `emit_inst _ _ _ _ = _`) pop_emit_inst_boundary,
+    drule_at (Pat `emit_op _ _ _ = _`) pop_emit_op_boundary,
+    drule_all pop_ptr_load_boundary, drule_all pop_ptr_store_boundary,
+    drule_all pop_comp_boundary_new_block] >> simp[]
+QED
+
+Theorem pop_ensure_in_memory_boundary:
+  pop_comp_boundary sa /\
+  compile_ensure_in_memory ptr_op loc bytes n ctor imm sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  Cases_on `loc` >> Cases_on `n = 1` >>
+  simp[compile_ensure_in_memory_def, compile_storage_to_memory_def,
+    compile_transient_to_memory_def, comp_ignore_bind_def] >> rpt strip_tac >>
+  rpt (drule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+       disch_then irule >> simp[] >> conj_tac >> rpt gen_tac >> strip_tac) >>
+  FIRST [drule_all pop_compile_alloc_buffer_boundary,
+    drule_at (Pat `emit_void _ _ _ = _`) pop_emit_void_boundary,
+    drule_at (Pat `emit_op _ _ _ = _`) pop_emit_op_boundary,
+    drule_all pop_word_copy_boundary, drule_all pop_imm_copy_boundary,
+    drule_all pop_comp_boundary_return] >> simp[]
+QED
+
+Theorem pop_unwrap_value_boundary:
+  pop_comp_boundary sa /\ unwrap_value cenv vv sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  Cases_on `vv` >> simp[unwrap_value_def]
+  >- (rpt strip_tac >> drule_all pop_comp_boundary_return >> simp[]) >>
+  rename1 `is_word_type ty` >> Cases_on `is_word_type ty` >> simp[]
+  >- (rpt strip_tac >> drule_all pop_ptr_load_boundary >> simp[]) >>
+  Cases_on `p.ptr_location` >> simp[] >> rpt strip_tac >>
+  FIRST [drule_all pop_comp_boundary_return,
+         drule_all pop_ensure_in_memory_boundary] >> simp[]
+QED
+
+Theorem pop_lower_value_boundary:
+  (!s v t. pop_comp_boundary s /\ cfn cenv ty e s = (v,t) ==>
+            pop_comp_boundary t) /\
+  pop_comp_boundary sa /\ lower_value cfn cenv ty e sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  simp[lower_value_def] >> rpt strip_tac >>
+  drule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  rpt strip_tac >> drule_all pop_unwrap_value_boundary >> simp[]
+QED
