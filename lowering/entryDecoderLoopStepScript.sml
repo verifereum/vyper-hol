@@ -5,13 +5,16 @@ Ancestors
   entryDecoderHistoryFrame successfulSequenceEndpoint
   abiDecoderTypedContract instIdxIndep calldataValidOwnedStep calldataDynOwned
   abiDecoderLoopRegisters abiDecoderArrayBackedge decoderPrefixEdges
+  calldataSafeIteration
   calldataOwnedSuccessorEndpoint entryDecoderEndpointValidation
   entryDecoderRelationIteration entryDecoderSetupEndpoint
   calldataOwnedLoopClosure entryDecoderStateFrame abiDecoderExecution
   abiDecoderContract abiDecoderDynamicLoopSetup abiDecoderLoopSetup
   abiDecoderReentry abiDecoderReentryAddress abiDecoderArraySetupInputs
   compileEnv exprLoweringProps allocaHistory fragExecMem
-  words list arithmetic finite_map venomState venomExecSemantics
+  words list rich_list arithmetic finite_map venomState venomExecSemantics venomInstProofs1
+  abiDecoderDynamic abiDecoderIndexedAddress abiEncoder emitHelper venomInst
+  pred_set
 
 Theorem entry_owned_fixed_successor_frame:
   let Own = \lo hi s.
@@ -147,6 +150,67 @@ Proof
   drule_all calldata_static_valid_array_setup_sequence >> strip_tac >> gvs[]
 QED
 
+Theorem entry_sequence_nonoutput_lookup[local]:
+  !insts s t x.
+    EVERY (\i. ~is_terminator i.inst_opcode /\ ~MEM x i.inst_outputs) insts /\
+    run_inst_seq insts s = OK t ==> lookup_var x t = lookup_var x s
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  drule_all step_inst_base_preserves_all >> strip_tac >>
+  qpat_x_assum `!s t x. _` drule_all >> simp[]
+QED
+
+Theorem entry_element_setup_outputs[local]:
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+    abi_sz mem_sz st = (ops,ready) /\ abi_decoder_older_vars st.cs_next_var x ==>
+  EVERY (\i. ~MEM x i.inst_outputs) (emitted_insts st ready)
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `dec_info_needs_offset di` >>
+  asm_simp_tac bool_ss [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
+    compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+    comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[emitted_insts_def, mk_inst_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp_tac bool_ss [DROP_LENGTH_APPEND, APPEND, EVERY_DEF, MEM] >>
+  fs[abi_decoder_older_vars_def]
+QED
+
+Theorem entry_sequence_nonterminator_labels[local]:
+  !insts s t. EVERY (\i. ~is_terminator i.inst_opcode) insts /\
+    run_inst_seq insts s = OK t ==> t.vs_labels = s.vs_labels
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  drule_all step_inst_base_preserves_all >> strip_tac >>
+  qpat_x_assum `!s t. _` drule_all >> simp[]
+QED
+
+Theorem entry_element_setup_total_frame[local]:
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+    abi_sz mem_sz st = (ops,ready) /\
+  run_inst_seq (emitted_insts st ready) s = OK t ==>
+  !op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_element_setup_shape >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready)` by
+    fs[EVERY_MEM] >>
+  drule_all entry_sequence_nonterminator_labels >> strip_tac >>
+  Cases >> simp[abi_decoder_operand_live_def, eval_operand_def] >> strip_tac >>
+  irule entry_sequence_nonoutput_lookup >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `_ IN abi_decoder_older_vars _`
+    (assume_tac o REWRITE_RULE [IN_APP]) >>
+  drule_all entry_element_setup_outputs >> strip_tac >> fs[EVERY_MEM]
+QED
+
 Theorem entry_source_valid_element_setup_endpoint:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
@@ -173,6 +237,8 @@ Theorem entry_source_valid_element_setup_endpoint:
       (Lit 0w) sb d b cap st.cs_next_var limit_st s t /\
     abi_decoder_address_frame st.cs_next_var s t /\ fresh_vars_wrt limit_st t /\
     inst_extends st ready /\ entry_decoder_obs s t /\ alloca_history fn t /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
     ((!fuel. mem_safe_run fuel ctx fn t) ==> !fuel. mem_safe_run fuel ctx fn s) /\
     (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_from fuel' ctx fn s = r /\
@@ -185,6 +251,9 @@ Proof
   `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
     simp[abi_decoder_operand_live_def] >>
   drule_all entry_array_setup_chosen_valid >> strip_tac >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+     eval_operand op t = eval_operand op s` by
+    (rpt strip_tac >> drule_all entry_element_setup_total_frame >> simp[]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
   drule entry_element_setup_reentry_code >> strip_tac >>
@@ -208,6 +277,135 @@ Proof
   fs[abi_decoder_address_frame_def, eval_op_inst_idx, fresh_vars_wrt_def]
 QED
 
+Theorem entry_header_body_transfer_frame[local]:
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_header_insts hid ip src CALLDATALOAD
+        (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
+        (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3)))
+        body_lbl exit_lbl|> /\
+  lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  ~u.vs_halted /\ u.vs_inst_idx = 0 /\ j < n /\ n < dimword (:256) /\
+  eval_operand ip u = SOME (n2w p) /\ mload p u = n2w j /\
+  eval_operand src u = SOME srcword /\
+  abi_decode_load CALLDATALOAD srcword u = n2w n /\
+  p < dimword (:256) /\ p+32 <= u.vs_alloca_next /\
+  abi_decoder_operand_live next src /\ alloca_history fn u /\
+  head = jump_to body_lbl
+    (abi_decode_header_state (STRING #"%" (toString next))
+      (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+      (STRING #"%" (toString (next+3))) j n u) ==>
+  entry_decoder_obs u head /\ alloca_history fn head /\
+  ((!fuel. mem_safe_run fuel ctx fn head) ==> !fuel. mem_safe_run fuel ctx fn u)
+Proof
+  strip_tac >>
+  `src <> Var (STRING #"%" (toString next))` by
+    (irule abi_decoder_live_excludes_output >> qexists_tac `next` >> simp[]) >>
+  `STRING #"%" (toString next) <> STRING #"%" (toString (next+1))` by simp[] >>
+  `j <= n /\ mload (w2n (n2w p:bytes32)) u = n2w j /\
+   w2n (n2w p:bytes32)+32 <= u.vs_alloca_next` by simp[] >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] calldata_header_all_fuel_pullback) >>
+  disch_then (drule_at (Pat `eval_operand ip u = _`)) >>
+  disch_then (drule_at (Pat `eval_operand src u = _`)) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  conj_tac
+  >- (qpat_assum `head = _` (fn th => pure_rewrite_tac[th]) >>
+      simp[entry_decoder_obs_def, abi_decode_header_state_def, jump_to_def,
+           update_var_def]) >>
+  conj_tac
+  >- (qpat_assum `head = _` (fn th => pure_rewrite_tac[th]) >>
+      irule alloca_history_jump >> simp[jump_to_def] >> qexists_tac `u` >>
+      simp[abi_decode_header_state_def, jump_to_def, update_var_def]) >>
+  first_x_assum (qspecl_then [`head`, `body_bb`, `n`, `j`] mp_tac) >>
+  asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Theorem entry_valid_header_child_frame:
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_header_insts hid ip src CALLDATALOAD
+        (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
+        (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3)))
+        body_lbl exit_lbl|> /\
+  lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty)
+    (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
+    st0 = (ops,ready) /\ fn_has_code st0 ready fn /\
+  st0.cs_current_bb = body_lbl /\ st0.cs_current_insts = [] /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
+    (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  ~u.vs_halted /\ u.vs_inst_idx = 0 /\ j < LENGTH vs /\
+  LENGTH vs < dimword (:256) /\
+  eval_operand ip u = SOME (n2w p) /\ mload p u = n2w j /\
+  eval_operand src u = SOME srcword /\
+  abi_decode_load CALLDATALOAD srcword u = n2w (LENGTH vs) /\
+  p < dimword (:256) /\ p+32 <= u.vs_alloca_next /\
+  alloca_inv u /\ alloca_history fn u /\ fn_inst_ids_distinct fn /\
+  abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next ip /\ next <= st0.cs_next_var /\
+  next+4 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st u /\
+  ready.cs_next_var <= limit_st.cs_next_var /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap u /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD u) = bs ==>
+  ?head entry.
+    head = jump_to body_lbl
+      (abi_decode_header_state (STRING #"%" (toString next))
+        (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+        (STRING #"%" (toString (next+3))) j (LENGTH vs) u) /\
+    abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
+      (Lit 0w) sb d b cap st0.cs_next_var limit_st head entry /\
+    ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+    entry.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    entry.vs_memory = u.vs_memory /\ entry.vs_call_ctx = u.vs_call_ctx /\
+    entry.vs_data_section = u.vs_data_section /\ entry.vs_allocas = u.vs_allocas /\
+    entry.vs_alloca_next = u.vs_alloca_next /\
+    (!op. abi_decoder_operand_live next op ==> eval_operand op entry = eval_operand op u) /\
+    (!fuel r. run_from fuel ctx fn entry = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' ctx fn u = r /\
+        (mem_safe_run fuel ctx fn entry ==> mem_safe_run fuel' ctx fn u)) /\
+    ((!fuel. mem_safe_run fuel ctx fn entry) ==> !fuel. mem_safe_run fuel ctx fn u) /\
+    entry_decoder_obs u entry /\ alloca_history fn entry
+Proof
+  strip_tac >> drule_all calldata_valid_header_prepare >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all entry_header_body_transfer_frame >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `abi_decoder_operand_live st0.cs_next_var src /\
+   abi_decoder_operand_live st0.cs_next_var dst` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `alloca_inv head` by
+    metis_tac[cj 1 calldata_alloca_invariants_fields] >>
+  `head.vs_current_bb = st0.cs_current_bb /\
+   head.vs_inst_idx = LENGTH st0.cs_current_insts /\
+   mload (w2n (n2w p:bytes32)) head = n2w j /\
+   w2n (n2w p:bytes32)+32 <= head.vs_alloca_next` by
+    (qpat_x_assum `head = _` kall_tac >> simp[]) >>
+  drule_all entry_source_valid_element_setup_endpoint >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `entry.vs_current_bb = ready.cs_current_bb` >>
+  `entry_decoder_obs u entry` by metis_tac[entry_decoder_obs_trans] >>
+  qexistsl_tac [`head`, `entry`] >> asm_rewrite_tac[] >>
+  conj_tac >- fs[abi_decoder_address_frame_def] >>
+  conj_tac >- fs[abi_decoder_address_frame_def] >>
+  conj_tac >- fs[abi_decoder_address_frame_def] >>
+  conj_tac >- fs[abi_decoder_address_frame_def] >>
+  conj_tac >- fs[abi_decoder_address_frame_def] >>
+  conj_tac >-
+    (qpat_x_assum `!op. abi_decoder_operand_live st0.cs_next_var op ==> _` mp_tac >>
+     qpat_x_assum `!op. abi_decoder_operand_live next op ==> _` mp_tac >>
+     qpat_x_assum `next <= st0.cs_next_var` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[abi_decoder_operand_live_mono]) >>
+  conj_tac >- metis_tac[calldata_safe_transfer_trans] >> metis_tac[]
+QED
+
 val () =
   List.app (fn th =>
     let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
@@ -215,4 +413,7 @@ val () =
           List.all (fn name => name = "DISK_THM") oracles
        then () else raise Fail "entry loop successor inherited admission"
     end) [entry_owned_fixed_successor_frame, entry_array_setup_chosen_valid,
-          entry_source_valid_element_setup_endpoint];
+          entry_source_valid_element_setup_endpoint, entry_sequence_nonoutput_lookup,
+          entry_element_setup_outputs, entry_sequence_nonterminator_labels,
+          entry_element_setup_total_frame, entry_header_body_transfer_frame,
+          entry_valid_header_child_frame];
