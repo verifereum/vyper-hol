@@ -36,3 +36,25 @@ Proof
     pop_trace_taint_ok, pop_allocas_from_zero,
     pop_trace_storage_empty, pop_trace_transient_empty]
 QED
+
+Theorem pop_trace_cursor:
+  n <= 37 ==> (pop_trace_state n).vs_inst_idx = n
+Proof
+  strip_tac >> mp_tac pop_saved_runtime_index >> strip_tac >>
+  drule (Q.GEN `n` pop_run_prefix_success) >>
+  disch_then (qspec_then `n` strip_assume_tac) >>
+  simp[pop_trace_state_def]
+QED
+
+Theorem pop_trace_ghost_successor:
+  n < 37 ==>
+  ?u. step_inst_base (pop_trace_inst n) (pop_trace_state n) = OK u /\
+    (u with vs_inst_idx := SUC n) = pop_trace_state (SUC n) /\
+    step_prov [] (pop_trace_prov n) (pop_trace_inst n) u =
+      pop_trace_prov (SUC n) /\
+    step_taint (pop_trace_inst n) (pop_trace_state n) u (pop_trace_taint n) =
+      pop_trace_taint (SUC n)
+Proof
+  strip_tac >> drule pop_trace_runtime_successor >> strip_tac >>
+  qexists_tac `u` >> simp[Once pop_trace_prov_def, Once pop_trace_taint_def]
+QED
