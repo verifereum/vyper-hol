@@ -1,6 +1,7 @@
 (* Completed semantic prefixes survive a recursive child's exterior frame. *)
 Theory normalizationPrefixPtr
 Ancestors robustCopyTransportPtr exprSimAggregateEncoding arithmetic list
+  bodyPtrDefs valueEncoding valueEncodingProofs venomState venomMemProofs
 
 Theorem robust_array_prefix_extend:
   !tv vs d i tn tn' mem mem'.
@@ -53,4 +54,27 @@ Theorem robust_dynarray_assemble:
 Proof
   rpt strip_tac >> simp[valueEncodingTheory.val_in_memory_def] >>
   irule elems_in_memory_intro >> simp[]
+QED
+
+Theorem robust_dynarray_clean_count_assemble:
+  !tv vs capacity d tn mem.
+    mem_word_at d mem = n2w (LENGTH vs) /\
+    DISJOINT {a | d <= a /\ a < d+32} tn /\
+    (!j. j < LENGTH vs ==> !m.
+      mem_agree_outside tn mem m ==>
+      val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) m) ==>
+    !m. mem_agree_outside tn mem m ==>
+      val_in_memory (ArrayTV tv (Dynamic capacity)) (ArrayV (DynArrayV vs)) d m
+Proof
+  rpt gen_tac >> strip_tac >> match_mp_tac robust_dynarray_assemble >>
+  asm_simp_tac bool_ss [] >> rpt strip_tac >>
+  `mem_bytes_at d 32 m = mem_bytes_at d 32 mem` by
+    (irule LIST_EQ >> simp[EL_mem_bytes_at] >> rpt strip_tac >>
+     rename1 `i < 32` >>
+     `d+i NOTIN tn` by
+       (fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[DECIDE ``i < 32 ==> d <= d+i /\ d+i < d+32``]) >>
+     `mem_bytes_at (d+i) 1 mem = mem_bytes_at (d+i) 1 m` by
+       fs[mem_agree_outside_def] >>
+     pop_assum (mp_tac o Q.AP_TERM `EL 0`) >> simp[EL_mem_bytes_at]) >>
+  fs[mem_word_at_def, GSYM mem_bytes_at_def]
 QED
