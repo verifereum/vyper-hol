@@ -1,7 +1,9 @@
 Theory concretizeLayoutExternalCall
 Ancestors concretizeLayoutExternalRequests concretizeLayoutSupplement
   venomCallOracleDefs extCallOracle ptrDiscipline venomState venomExecSemantics
-  venomInst list pred_set
+  venomInst list pred_set frameRelocationStoreSteps frameRelocationGhostCopy
+  frameRelocationAllocationSteps frameRelocationLocal frameRelocationValues
+  frameRelocationOpaque frameRelocationMemory
 
 (* Expose state fields without expanding oracle selection or adoption. *)
 Theorem call_completion_fields:
@@ -311,6 +313,40 @@ Proof
   qexistsl_tac [`out`,`w`] >>
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   Cases_on `oc.co_success` >> simp[]
+QED
+
+
+Theorem ext_call_memory[local]:
+  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  post.vs_memory = (write_memory_with_expansion (w2n ro)
+    (TAKE (w2n rs) post.vs_returndata) s).vs_memory
+Proof
+  metis_tac[ext_call_execution_fields]
+QED
+
+Theorem concretize_ext_call_demand:
+  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post /\
+  exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
+  post.vs_returndata = post'.vs_returndata /\
+  demand_agree R (\a. read_byte a s.vs_memory) (\b. read_byte b t.vs_memory) /\
+  (!a b. next a b /\ w2n ro <= a /\
+     a < w2n ro + LENGTH (TAKE (w2n rs) post.vs_returndata) ==>
+     b = w2n roT + (a-w2n ro)) /\
+  (!a b. next a b /\ ~(w2n ro <= a /\
+     a < w2n ro + LENGTH (TAKE (w2n rs) post.vs_returndata)) ==>
+     R a b /\ ~(w2n roT <= b /\
+       b < w2n roT + LENGTH (TAKE (w2n rs) post.vs_returndata))) ==>
+  demand_agree next (\a. read_byte a post.vs_memory)
+    (\b. read_byte b post'.vs_memory)
+Proof
+  strip_tac >>
+  drule ext_call_memory >> disch_then SUBST1_TAC >>
+  rev_drule ext_call_memory >> disch_then SUBST1_TAC >>
+  gvs[] >> irule demand_agree_write_memory >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    qpat_x_assum `!a b. _ ==> b = _`
+      (qspecl_then [`a`,`b`] mp_tac) >> simp[] >> strip_tac >> gvs[]) >>
+  qexists_tac `R` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 
