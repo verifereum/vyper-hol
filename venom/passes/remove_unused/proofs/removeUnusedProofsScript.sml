@@ -886,7 +886,7 @@ QED
 
 (* ----- CFG reachability helpers ----- *)
 
-Theorem wf_lookup_block[local]:
+Theorem wf_lookup_block:
   !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
     lookup_block bb.bb_label fn.fn_blocks = SOME bb
 Proof

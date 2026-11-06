@@ -83,12 +83,6 @@ val peel_alloca_impl_tac =
 
 (* One-instruction stages preserve the old arm_tac proof while allowing
    bounded feedback for long bytestring conversion chains. *)
-Theorem fresh_var_name_eq[local]:
-  !m n. (STRING #"%" (toString m) = STRING #"%" (toString n)) <=> (m = n)
-Proof
-  metis_tac[fresh_var_distinct]
-QED
-
 Theorem conversion_mload_step[local]:
   !id ops outs ss. step_inst_base (mk_inst id MLOAD ops outs) ss =
     exec_read1 (\w ss. mload (w2n w) ss) (mk_inst id MLOAD ops outs) ss

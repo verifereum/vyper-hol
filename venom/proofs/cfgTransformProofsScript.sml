@@ -10,7 +10,7 @@
  * names during the transition.
  *
  * TOP-LEVEL (block ops, technical extras):
- *   MEM_remove_block/_iff       -- membership in remove_block
+ *   MEM_remove_block            -- membership in remove_block
  *   LENGTH/remove idempotence   -- small remove_block facts
  *   ALL_DISTINCT_replace_block  -- distinctness preserved by replace
  *   LENGTH_replace_block        -- replace_block preserves length
@@ -18,7 +18,6 @@
  * TOP-LEVEL (label substitution, technical extras):
  *   subst_label_op_id           -- subst_label_op old old = identity
  *   subst_label_op_Var/Lit      -- subst on non-labels is identity
- *   subst_label_inst_fields     -- subst preserves id/opcode/outputs
  *   subst_label_block_label     -- subst preserves block label
  *   ALL_DISTINCT_subst_label_fn -- label subst preserves distinct labels
  *
@@ -41,13 +40,6 @@ Theorem MEM_remove_block:
     MEM bb (remove_block lbl bbs) ==> MEM bb bbs
 Proof
   rw[remove_block_def, MEM_FILTER]
-QED
-
-Theorem MEM_remove_block_iff:
-  !bb lbl bbs.
-    MEM bb (remove_block lbl bbs) <=> MEM bb bbs /\ bb.bb_label <> lbl
-Proof
-  rw[remove_block_def, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem LENGTH_remove_block:
@@ -128,15 +120,6 @@ Theorem MAP_subst_label_op_id:
   !l ops. MAP (subst_label_op l l) ops = ops
 Proof
   Induct_on `ops` >> rw[subst_label_op_id]
-QED
-
-Theorem subst_label_inst_fields:
-  !old new inst.
-    (subst_label_inst old new inst).inst_id = inst.inst_id /\
-    (subst_label_inst old new inst).inst_opcode = inst.inst_opcode /\
-    (subst_label_inst old new inst).inst_outputs = inst.inst_outputs
-Proof
-  rw[subst_label_inst_def]
 QED
 
 Theorem subst_label_inst_id:

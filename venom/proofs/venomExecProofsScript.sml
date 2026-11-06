@@ -1953,7 +1953,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_two_blocks_proof:
+Theorem run_blocks_two_blocks:
   ∀ fuel ctx fn bb_A ss ss_mid result.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
     run_block fuel ctx bb_A ss = OK ss_mid ∧
@@ -1965,7 +1965,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_halt_proof:
+Theorem run_blocks_halt:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
     run_block fuel ctx bb ss = OK ss' ∧
@@ -1976,7 +1976,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_abort_proof:
+Theorem run_blocks_abort:
   ∀ fuel ctx fn bb ss a ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
     run_block fuel ctx bb ss = Abort a ss'

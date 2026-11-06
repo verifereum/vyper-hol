@@ -9,9 +9,9 @@
 Theory venomInst
 Ancestors
   venomState
-  venomPolicyTypes
+  venomPolicyTypes list finite_map
 Libs
-  listTheory
+  listTheory BasicProvers pairLib
 
 (* --------------------------------------------------------------------------
    Instruction Opcodes
@@ -789,3 +789,29 @@ End
 Definition ctx_fn_names_def:
   ctx_fn_names ctx = MAP (\f. f.fn_name) ctx.ctx_functions
 End
+
+Theorem selected_block_mem:
+  !bbs lbl bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
+Proof
+  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >>
+  gvs[lookup_block_def] >> metis_tac[]
+QED
+
+Theorem fmp_fn_insts_blocks_intro:
+  MEM bb blocks /\ MEM inst bb.bb_instructions ==>
+  MEM inst (fn_insts_blocks blocks)
+Proof
+  Induct_on `blocks`
+  >> simp[fn_insts_blocks_def]
+  >> metis_tac[]
+QED
+
+Theorem terminator_opcode_cases:
+  !op.
+    is_terminator op ==>
+    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
+    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
+    op = SELFDESTRUCT \/ op = INVALID \/ op = DRET \/ op = RETFMP
+Proof
+  Cases \\ gvs[is_terminator_def]
+QED

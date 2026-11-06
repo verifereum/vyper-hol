@@ -253,7 +253,7 @@ QED
 val exec_pos_thms = [exec_pure1_pos, exec_pure2_pos, exec_pure3_pos,
                      exec_read0_pos, exec_read1_pos, exec_write2_pos];
 
-Triviality exec_gas_inst_operands[local]:
+Theorem exec_gas_inst_operands:
   !inst ops s. exec_gas (inst with inst_operands := ops) s = exec_gas inst s
 Proof rw[exec_gas_def]
 QED

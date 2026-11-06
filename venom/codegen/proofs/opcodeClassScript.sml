@@ -171,16 +171,6 @@ Proof
 QED
 (* ===== Main classification theorems ===== *)
 
-Triviality terminator_opcode_cases[local]:
-  !op.
-    is_terminator op ==>
-    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
-    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
-    op = DRET \/ op = RETFMP \/ op = SELFDESTRUCT \/ op = INVALID
-Proof
-  Cases >> gvs[is_terminator_def]
-QED
-
 Triviality step_inst_base_halt_terminator_opcodes[local]:
   !inst vs vs'.
     is_terminator inst.inst_opcode /\
@@ -191,15 +181,8 @@ Proof
   rpt strip_tac >>
   drule terminator_opcode_cases >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst vs = Halt vs'` mp_tac >>
-  step_inst_base_opcode_tac
-  >- gvs[AllCaseEqs()]
-  >- gvs[AllCaseEqs()]
-  >- gvs[AllCaseEqs()]
-  >- gvs[AllCaseEqs()]
-  >- gvs[AllCaseEqs()]
-  >- (gvs[AllCaseEqs()] >> rpt strip_tac >> pairarg_tac >> gvs[])
-  >- gvs[AllCaseEqs()]
-  >- gvs[AllCaseEqs()]
+  step_inst_base_opcode_tac >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >> pairarg_tac >> gvs[]
 QED
 
 Triviality step_inst_base_abort_terminator_opcodes[local]:
