@@ -169,3 +169,50 @@ Proof
     (gvs[copy_runtime_frame_def, not_fresh_at_def] >> metis_tac[]) >>
   metis_tac[]
 QED
+
+Theorem compile_imm_load_word_checked:
+  compile_imm_load_word ctor imm op sa = (r,sb) /\
+  eval_operand op s = SOME a /\ op_taint tn op = {} /\
+  (!region. ctor /\ imm = SOME region ==>
+    eval_operand region s = SOME 0w /\ op_taint tn region = {}) /\
+  (ctor ==> ?lo sz.
+    (case imm of NONE => op_prov G op | SOME region => first_prov G [op;region]) =
+      SOME (lo,sz) /\ lo <= w2n a /\ w2n a + 32 <= lo + sz) /\
+  ~ctx_has_dalloca ctx ==>
+  ?t Gf tf.
+    copy_runtime_frame sa s sb t /\ copy_old_operand sb r /\
+    eval_operand r t = SOME (immutable_copy_read ctor a s) /\
+    t.vs_memory = s.vs_memory /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tf) /\
+    op_prov Gf r = NONE /\
+    op_taint tf r = (if ctor then mem_word_taint tn.t_mem (w2n a) else {}) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> Cases_on `ctor`
+  >- (Cases_on `imm`
+      >- (gvs[] >>
+          `?p. op = Var p /\ ptr_covers G tn p s 32` by
+            (Cases_on `op` >>
+             gvs[ptr_covers_def, op_prov_def, eval_operand_def]) >>
+          gvs[] >>
+          drule_all (SRULE [] (Q.INST [`ctor` |-> `T`, `imm` |-> `NONE`,
+            `op` |-> `Var p`] compile_imm_load_word_direct_checked)) >>
+          disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+          qexistsl [`update_var out (immutable_copy_read T a s) s`,
+                    `DRESTRICT G (COMPL {out})`, `tf`] >>
+          simp[update_var_def]) >>
+      gvs[] >>
+      drule_all (SRULE [WORD_ADD_0] (Q.INST [`b` |-> `0w`]
+        compile_imm_load_word_region_checked)) >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+      metis_tac[wordsTheory.WORD_ADD_0]) >>
+  gvs[] >>
+  drule_all (SRULE [] (Q.INST [`ctor` |-> `F`]
+    compile_imm_load_word_direct_checked)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  qexistsl [`update_var out (immutable_copy_read F a s) s`,
+            `DRESTRICT G (COMPL {out})`, `tf`] >> simp[update_var_def]
+QED
