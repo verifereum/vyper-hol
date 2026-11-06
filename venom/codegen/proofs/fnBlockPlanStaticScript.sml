@@ -671,3 +671,158 @@ Proof
   rename1 `regional_selected_phi_inv _ _ _ _ 0 initial` >>
   qexistsl [`cfg_analyze fn`,`pre`,`initial`,`sb`] >> simp[]
 QED
+
+Theorem regional_actual_dfs_phi_body_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret_inst bb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  collect_phis bb.bb_instructions <> [] /\
+  LENGTH (collect_phis bb.bb_instructions) <= k /\ k < LENGTH bb.bb_instructions /\
+  block_plan_state lv dfg cfg fn bb ps_dfs k ps ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label k)) ps.ps_stack
+Proof
+  strip_tac >>
+  `?mid tail_ops. regional_body_lower_inv lv dfg sb bb
+      (LENGTH (collect_phis bb.bb_instructions)) mid /\
+    EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label
+      (LENGTH (collect_phis bb.bb_instructions)))) mid.ps_stack /\
+    generate_block_insts_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb) 0
+      (LENGTH bb.bb_instructions) (LENGTH (collect_phis bb.bb_instructions))
+      (k - LENGTH (collect_phis bb.bb_instructions))
+      (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions) mid =
+      SOME (tail_ops,ps)` by
+    (irule regional_actual_dfs_phi_upper_cut >> simp[] >> metis_tac[]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (`cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+       metis_tac[dfs_block_state_cfg_reachable] >>
+     `wf_function fn` by gvs[codegen_ready_fn_def] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `~bb_is_halting bb` by metis_tac[ready_block_ret_not_halting] >>
+  `k = LENGTH (collect_phis bb.bb_instructions) +
+    (k - LENGTH (collect_phis bb.bb_instructions))` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  qpat_x_assum `lv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
+  irule regional_body_upper_prefix >> simp[] >>
+  conj_tac >- metis_tac[regional_phi_body_layout] >>
+  qexistsl [`cfg_analyze fn`,`tail_ops`,`mid`,`sb`,`0`] >> gvs[]
+QED
+
+Theorem regional_actual_dfs_no_phi_start_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret_inst bb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  collect_phis bb.bb_instructions = [] /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps_dfs
+   else ([],ps_dfs)) = (param_ops,ps1) /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then clean_stack_plan lv cfg fn bb ps1
+   else ([],ps1)) = (clean_ops,ps2) ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label
+    (LENGTH (get_params bb.bb_instructions)))) ps2.ps_stack
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  Cases_on `bb = HD fn.fn_blocks`
+  >- (`ps_dfs = init_cleanup_plan_state ch growth sb ctr` by
+        (gvs[] >> metis_tac[regional_entry_dfs_initial]) >>
+      `cfg_preds_of (cfg_analyze fn) bb.bb_label = []` by
+        metis_tac[regional_entry_no_preds] >>
+      gvs[] >> irule regional_prepare_params_initial_upper >> simp[] >>
+      qexistsl [`ch`,`ctr`,`growth`,`ch`,`param_ops`,`F`,`sb`] >>
+      gvs[init_cleanup_plan_state_def]) >>
+  `fn_entry_label fn <> SOME bb.bb_label` by
+    (drule regional_entry_structure >> strip_tac >> strip_tac >> gvs[] >> metis_tac[]) >>
+  `cfg_path cfg bb.bb_label bb.bb_label` by simp[cfg_path_def] >>
+  gvs[] >>
+  `?pred pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    fn_reachable fn pred /\ MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+    EVERY (\op. ?v. op = Var v /\ MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0))) ps2.ps_stack` by
+    (irule regional_dfs_nonentry_cleanup_upper >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all regional_edge_input_upper >>
+  simp[regional_phi_remaining_source_def]
+QED
+
+Theorem regional_actual_dfs_no_phi_body_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret_inst bb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  collect_phis bb.bb_instructions = [] /\
+  LENGTH (get_params bb.bb_instructions) <= k /\ k < LENGTH bb.bb_instructions /\
+  block_plan_state lv dfg cfg fn bb ps_dfs k ps ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label k)) ps.ps_stack
+Proof
+  strip_tac >>
+  `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs` by metis_tac[dfs_block_state_lineage_state] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (`cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+       metis_tac[dfs_block_state_cfg_reachable] >>
+     `wf_function fn` by gvs[codegen_ready_fn_def] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `~bb_is_halting bb` by metis_tac[ready_block_ret_not_halting] >>
+  qpat_x_assum `block_plan_state _ _ _ _ _ _ _ _` mp_tac >>
+  simp[block_plan_state_def] >> strip_tac >>
+  `EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label
+    (LENGTH (get_params bb.bb_instructions)))) ps2.ps_stack` by
+    (irule regional_actual_dfs_no_phi_start_upper >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `regional_body_lower_inv lv dfg sb bb (LENGTH (get_params bb.bb_instructions)) ps2` by
+    (Cases_on `bb = HD fn.fn_blocks`
+     >- (gvs[] >> irule regional_entry_lower_start >>
+         rpt (first_assum $ irule_at Any) >> simp[] >>
+         qexistsl [`ps_dfs.ps_cleanup_promised`,`param_ops`,`ps_dfs.ps_cleanup_height`] >> simp[]) >>
+     gvs[] >> irule regional_nonentry_no_phi_lower_start >>
+     rpt (first_assum $ irule_at Any) >> simp[] >>
+     rename1 `initial = initial with <|ps_cleanup_height := _; ps_cleanup_promised := _|>` >>
+     qexistsl [`initial.ps_cleanup_promised`,`initial.ps_cleanup_height`] >> simp[]) >>
+  qpat_x_assum `lv = _` SUBST_ALL_TAC >> qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
+  `k = LENGTH (get_params bb.bb_instructions) +
+    (k - LENGTH (get_params bb.bb_instructions))` by simp[] >> pop_assum SUBST1_TAC >>
+  irule regional_body_upper_prefix >> simp[] >>
+  conj_tac >- metis_tac[regional_no_phi_body_layout] >>
+  qexistsl [`cfg`,`pre_ops`,`ps2`,`sb`,`LENGTH (get_params bb.bb_instructions)`] >> gvs[]
+QED
+
+Theorem regional_actual_dfs_body_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret_inst bb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  MAX (LENGTH (get_params bb.bb_instructions))
+    (LENGTH (collect_phis bb.bb_instructions)) <= k /\ k < LENGTH bb.bb_instructions /\
+  block_plan_state lv dfg cfg fn bb ps_dfs k ps ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label k)) ps.ps_stack
+Proof
+  strip_tac >>
+  `LENGTH (get_params bb.bb_instructions) <= k /\
+   LENGTH (collect_phis bb.bb_instructions) <= k` by
+    gvs[arithmeticTheory.MAX_DEF] >>
+  Cases_on `collect_phis bb.bb_instructions = []`
+  >- (irule regional_actual_dfs_no_phi_body_upper >>
+      rpt (first_assum $ irule_at Any) >> simp[]) >>
+  irule regional_actual_dfs_phi_body_upper >>
+  rpt (first_assum $ irule_at Any) >> simp[]
+QED
