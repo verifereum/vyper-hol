@@ -4,7 +4,7 @@ Ancestors
   exprPtrUnwrapStorage ptrDiscipline bodyPtrDefs exprSimPtrProps
   abiDecodeStaticProps words pred_set exprSimMemorySource loweringPosts
   exprPtrUnwrapStorageSource slotCopyExecution vyperStorage accountsRelProps venomState arithmetic
-  exprPtrUnwrapCopySemantic exprSimUnwrapProps
+  exprPtrUnwrapCopySemantic exprSimUnwrapProps exprSimProps
 
 (* The copied prefix may be tainted, but only in its type's dead bytes. *)
 Theorem copy_prefix_storage_dead:
@@ -119,4 +119,24 @@ Proof
   goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexistsl [`buf`, `k`, `mid`, `type_slot_size ty`, `nb`, `root`] >>
   gvs[]
+QED
+
+(* Coverage of the full allocation is stronger than the value's store extent. *)
+Theorem unwrap_storage_pointer_posts:
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+  eval_operand (Var root) z = SOME w /\ ptr_covers G tn root z nb /\
+  val_wf ty v /\ type_memory_size ty <= nb /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\
+  (!mem. mem_agree_outside tn.t_mem z.vs_memory mem ==>
+    val_in_memory ty v (w2n w) mem) ==>
+  ptr_val_ok cx (expr_type e) v (Var root) G tn z /\
+  ptr_buf_ok cenv e (Var root) G z
+Proof
+  strip_tac >> `val_store_size ty v <= nb` by
+    metis_tac[val_store_size_le, LESS_EQ_TRANS] >>
+  gvs[ptr_covers_def, eval_operand_def] >>
+  simp[ptr_val_ok_def, ptr_mem_ok_def, ptr_buf_ok_def, eval_operand_def] >>
+  rpt conj_tac >> rpt strip_tac >> gvs[] >>
+  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >> simp[] >> decide_tac
 QED
