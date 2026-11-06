@@ -383,3 +383,72 @@ Proof
   qexists `t` >> simp[scratch_four_word_stores] >>
   fs[venom_state_component_equality]
 QED
+
+Theorem add_payload_callback:
+  (do src <- emit_op ADD [point; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 0w]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [point; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [dst; value] od)
+    sa = ((),sm) /\
+  (do src <- emit_op ADD [other; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 64w]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [other; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 96w]; emit_void MSTORE [dst; value] od)
+    sm = ((),sb) /\
+  eval_operand point s = SOME p /\ eval_operand other s = SOME q /\
+  eval_operand buf s = SOME b /\
+  (!x. MEM (Var x) [point;other;buf] ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  w2n p + 64 < dimword (:256) /\ w2n q + 64 < dimword (:256) /\
+  w2n b + 128 < dimword (:256) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vp point s /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vq other s /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,128) /\
+  (!name a sz. local_region cenv es.scopes s name a sz ==>
+     regions_disjoint (w2n b) 128 a sz) /\
+  (!aid a sz. aid < sf.cs_next_id /\
+     FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
+     regions_disjoint (w2n b) 128 a sz) ==>
+  ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
+    mem_bytes_at (w2n b) 128 t.vs_memory =
+      word_to_bytes (mload (w2n p) s) T ++ word_to_bytes (mload (w2n p+32) s) T ++
+      word_to_bytes (mload (w2n q) s) T ++ word_to_bytes (mload (w2n q+32) s) T
+Proof
+  strip_tac >>
+  `regions_disjoint (w2n b) 128 (w2n p) 64` by
+    (qpat_assum `expr_val_at _ _ _ _ _ _ vp point s`
+       (mp_then Any mp_tac allocated_scratch_point_disjoint) >>
+     disch_then drule >> disch_then irule >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists `sf` >> simp[] >>
+     first_assum ACCEPT_TAC) >>
+  `regions_disjoint (w2n b) 128 (w2n q) 64` by
+    (qpat_assum `expr_val_at _ _ _ _ _ _ vq other s`
+       (mp_then Any mp_tac allocated_scratch_point_disjoint) >>
+     disch_then drule >> disch_then irule >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists `sf` >> simp[] >>
+     first_assum ACCEPT_TAC) >>
+  drule_all add_payload_stages_run >> strip_tac >>
+  drule precompile_alloca_immutable_disjoint >> disch_tac >>
+  `!a len. regions_disjoint (w2n b) 128 a len ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+    (rpt strip_tac >>
+     `a + len <= w2n b \/ w2n b + 128 <= a` by
+       gvs[compileEnvTheory.regions_disjoint_def] >>
+     simp[mstore_mem_bytes_at_disjoint]) >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (simp[immutable_mstore_capacity] >> decide_tac) >>
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t` by
+    (irule scratch_memory_frame >> simp[] >>
+     conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
+  qexists `t` >> simp[] >> conj_tac
+  >- (drule bodyPtrPrecompileBuiltinsPayloadFramesTheory.scratch_reset_allocations >> simp[]) >>
+  irule EQ_TRANS >> goal_assum (drule_at Any) >>
+  irule payload_operand_preserved >> goal_assum (drule_at Any) >>
+  qexists `sa` >> simp[] >> metis_tac[listTheory.MEM]
+QED
