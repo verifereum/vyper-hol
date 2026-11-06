@@ -72,6 +72,14 @@ Proof
   rpt strip_tac >> (eq_tac >- (strip_tac >> gvs[FLOOKUP_DEF])) >> simp[]
 QED
 
+Theorem mk_inst_fields[local]:
+  (mk_inst id opc ops outs).inst_opcode = opc /\
+  (mk_inst id opc ops outs).inst_operands = ops /\
+  (mk_inst id opc ops outs).inst_outputs = outs
+Proof
+  simp[mk_inst_def]
+QED
+
 Theorem bop_compare_state_frame:
   ((opc = EQ /\ ops = [left; right]) \/ (opc = ISZERO /\ ops = [left])) /\
   step_inst_base (mk_inst id opc ops [tmp]) s = OK u ==>
@@ -80,6 +88,7 @@ Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  PURE_REWRITE_TAC[mk_inst_fields] >>
   simp[mk_inst_def, exec_pure2_def, exec_pure1_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), update_var_def]
 QED
