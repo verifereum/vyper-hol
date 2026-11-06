@@ -21,7 +21,7 @@ Ancestors
   makeSsaCurrentLockstepShape
   makeSsaCurrentPrefixMaps makeSsaCurrentPrefixOwner makeSsaCurrentCleanupShape
   makeSsaCurrentLockstepShape makeSsaCurrentPrefixRuntime
-  makeSsaCurrentRetainedContext
+  makeSsaCurrentRetainedContext makeSsaCurrentPrefixPayload
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -895,7 +895,36 @@ Resume current_cut_inv_block_entry_prefix[prefix_phi_relation]:
 QED
 
 Resume current_cut_inv_block_entry_prefix[prefix_copy_chain]:
-  cheat
+  `!k. phi_prefix_length b'.bb_instructions <= k /\
+       k < LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) ==>
+       current_copy_payload (EL k b'.bb_instructions)` by
+    (rpt strip_tac >> irule current_prefix_actual_payload >> metis_tac[]) >>
+  `LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) <=
+    LENGTH b'.bb_instructions` by
+    (qspec_then `new.bb_instructions` mp_tac
+      venomExecProofsTheory.phi_prefix_length_le >> simp[]) >>
+  `!k. phi_prefix_length b'.bb_instructions <= k /\
+       k < LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) ==>
+       copy_rename_ok
+         (current_prefix_map
+           (TAKE (LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) - k)
+             (DROP k b'.bb_instructions))
+           (current_cut_sg fn A renamed H events h
+             (LENGTH (collect_phis old_h.bb_instructions))))
+         (EL k b'.bb_instructions)
+         (current_prefix_map
+           (TAKE (LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) - SUC k)
+             (DROP (SUC k) b'.bb_instructions))
+           (current_cut_sg fn A renamed H events h
+             (LENGTH (collect_phis old_h.bb_instructions))))` by
+    (rpt strip_tac >> irule (cj 2 current_prefix_map_chain) >>
+     conj_tac >- simp[] >> reverse conj_tac >- simp[] >>
+     qexists_tac `phi_prefix_length b'.bb_instructions` >>
+     gvs[current_copy_payload_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (qpat_x_assum `!k. _ ==> current_copy_payload _` drule_all >>
+      simp[current_copy_payload_def] >> metis_tac[]) >>
+  first_x_assum irule >> simp[]
 QED
 
 Resume current_cut_inv_block_entry_prefix[prefix_enter_runtime]:
