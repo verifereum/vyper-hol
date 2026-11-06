@@ -406,3 +406,45 @@ Proof
       gvs[same_blocks_def]) >>
   match_mp_tac slice_bounds_ghost_frame >> simp[Abbr `names`]
 QED
+
+Theorem compile_assert_slice_bounds_prefix_run:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\ fresh_vars_wrt sa s /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl ==>
+  ?p. run_inst_seq (TAKE 5 (emitted_insts sa sb)) s = OK p /\
+    p = s with vs_vars := p.vs_vars /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w) /\
+    step_inst_base (EL 5 (emitted_insts sa sb)) p =
+      if w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn) then
+        Abort Revert_abort (revert_state (set_returndata [] p))
+      else OK p
+Proof
+  strip_tac >>
+  `!z op w. eval_operand op s = SOME w /\ op = Var z ==> not_fresh_at sa z` by
+    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
+  `!j w ss. sa.cs_next_var <= j ==>
+    eval_operand a (update_var (STRING #"%" (toString j)) w ss) = eval_operand a ss /\
+    eval_operand limit (update_var (STRING #"%" (toString j)) w ss) = eval_operand limit ss` by
+    (rpt strip_tac >> irule eval_operand_update_not_fresh >>
+     qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+  drule compile_assert_slice_bounds_layout >> strip_tac >>
+  `?p. run_inst_seq (TAKE 5 (emitted_insts sa sb)) s = OK p` by
+    simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_pure2_def, exec_pure1_def, eval_operand_def, lookup_var_update_var] >>
+  qexists_tac `p` >> simp[] >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure2_def, exec_pure1_def, eval_operand_def, lookup_var_update_var] >>
+  strip_tac >> gvs[] >>
+  conj_tac >- simp[update_var_def] >>
+  reverse conj_tac
+  >- (Cases_on `w2n (wa + wn) < w2n wa` >>
+      Cases_on `w2n wl < w2n (wa + wn)` >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+           lookup_var_update_var, bool_to_word_def, WORD_OR_CLAUSES, GREATER_DEF]) >>
+  rpt strip_tac >>
+  `!j v ss. sa.cs_next_var <= j ==>
+    eval_operand op (update_var (STRING #"%" (toString j)) v ss) = eval_operand op ss` by
+    (rpt strip_tac >> irule eval_operand_update_not_fresh >>
+     qexists_tac `sa` >> simp[] >> metis_tac[]) >> simp[]
+QED
