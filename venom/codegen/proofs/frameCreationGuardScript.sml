@@ -3,7 +3,7 @@
 Theory frameCreationGuard
 Ancestors
   vfmExecution vfmExecutionProp vfmAccountFrame vfmRunCall vfmRunWithinFrame
-  vfmState vfmContext vfmTypes list
+  vfmState vfmContext vfmTypes list evmCreationGuard
 
 Theorem run_call_creation_guard:
   wf_state es /\ es.contexts <> [] /\
