@@ -5889,6 +5889,30 @@ Proof
   drule_all alias_regular_plan_var_live_support >> metis_tac[]
 QED
 
+Theorem alias_regular_plan_var_residual_or_halting:
+  inst.inst_opcode <> JMP /\ alias_var_mass x ps <= 1 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LIST_ELEM_COUNT x inst.inst_outputs <= 1 /\
+  (MEM x inst.inst_outputs ==> ~plan_holds ps (Var x)) /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs) /\
+  plan_holds qs (Var x) ==>
+  MEM x live \/ (plan_holds ps (Var x) /\ ~MEM (Var x) (compute_operands inst)) \/
+  (is_halting /\ LENGTH inst.inst_outputs = 1 /\ MEM x inst.inst_outputs)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `~is_halting \/ LENGTH inst.inst_outputs > 1`
+  >- (drule_all alias_regular_plan_var_residual >> metis_tac[]) >>
+  Cases_on `MEM x live` >- simp[] >>
+  Cases_on `plan_holds ps (Var x) /\ ~MEM (Var x) (compute_operands inst)`
+  >- simp[] >>
+  `plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)` by
+    metis_tac[] >>
+  `MEM x inst.inst_outputs` by metis_tac[alias_regular_plan_var_support] >>
+  Cases_on `inst.inst_outputs` >> gvs[arithmeticTheory.GREATER_DEF] >>
+  Cases_on `t` >> gvs[]
+QED
+
 Theorem alias_regular_plan_live_support:
   inst.inst_opcode <> JMP /\ alias_var_budget [] ps /\
   (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) (compute_operands inst)) /\
