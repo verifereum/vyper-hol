@@ -364,8 +364,8 @@ Proof
       irule demand_available_before_use >> simp[] >>
       first_x_assum irule >> gvs[venomInstTheory.inst_uses_def] >>
       metis_tac[passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
-  gvs[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
-      MEM_FILTER, MEM_APPEND, venomInstTheory.inst_defs_def] >>
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem,
+      venomInstTheory.inst_defs_def] >>
   `EVERY (demand_available fn bb (SUC i))
      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
     (first_x_assum irule >> simp[] >> decide_tac) >>

@@ -39,8 +39,7 @@ Proof
      disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >> simp[]) >>
   simp[SUBSET_DEF, MEM_MAP] >>
   rpt strip_tac >> gvs[] >>
-  gvs[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
-      MEM_FILTER, MEM_APPEND] >>
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem] >>
   drule_all inst_uses_compute_operands_nonlog >>
   rewrite_tac[GSYM MEM_operand_vars_eq_Var] >>
   strip_tac >> metis_tac[]
@@ -82,8 +81,7 @@ Proof
      disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >> simp[]) >>
   simp[SUBSET_DEF, MEM_MAP] >>
   rpt strip_tac >> gvs[] >>
-  gvs[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
-      MEM_FILTER, MEM_APPEND] >>
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem] >>
   drule_all inst_uses_compute_operands_log >>
   rewrite_tac[GSYM MEM_operand_vars_eq_Var] >>
   strip_tac >> metis_tac[]
@@ -641,8 +639,8 @@ Proof
  `~MEM v (live_vars_at (liveness_analyze fn) lbl i)` by
    (drule livenessProofsTheory.live_vars_at_transfer >>
     disch_then (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >> simp[] >>
-    simp[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
-         venomInstTheory.inst_defs_def, MEM_FILTER]) >>
+    simp[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem,
+         venomInstTheory.inst_defs_def]) >>
  irule analyzed_dead_before_use_free_interval >>
  goal_assum (drule_at Any) >> simp[] >> qexists_tac `i` >> simp[]
 QED
@@ -1191,8 +1189,7 @@ Resume analyzed_join_released_phi_support[live_origin]:
     conj_tac >- metis_tac[EL_MEM] >>
     simp[MEM_MAP] >> qexists_tac `(l,v)` >> simp[]) >>
  disj1_tac >>
- fs[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
-    MEM_FILTER, livenessDefsTheory.MEM_ordered_inst_uses]
+ fs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem]
 QED
 
 Resume analyzed_join_released_phi_support[pending_origin]:
@@ -1225,8 +1222,7 @@ Resume analyzed_join_released_phi_support[processed_live]:
  `~MEM v (inst_uses (EL k (collect_phis sb.bb_instructions)))` by
    (irule reachable_phi_prefix_no_output_use_alias >> metis_tac[EL_MEM]) >>
  `MEM v (live_vars_at (liveness_analyze fn) succ (SUC k))` by
-   (fs[livenessDefsTheory.liveness_transfer_def, livenessDefsTheory.live_update_def,
-       MEM_FILTER, livenessDefsTheory.MEM_ordered_inst_uses]) >>
+   (fs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem]) >>
  qspec_then `collect_phis sb.bb_instructions` (qspec_then `k` mp_tac) TAKE_EL_SNOC >>
  simp[SNOC_APPEND, arithmeticTheory.ADD1] >> disch_then SUBST1_TAC >>
  simp[MAP_APPEND, FLAT_APPEND, MEM_APPEND]
