@@ -48,3 +48,22 @@ Proof
   rewrite_tac[gas_marked_exec_ptr_def] >> strip_tac >> simp[] >>
   drule_all gas_path_ptr_then >> simp[]
 QED
+
+(* Retain source evidence at normal posts so scope and P-preservation
+   consumers need not unfold counted-path executions. *)
+Theorem for_outcome_source_evidence_ptr:
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0) Q R ==>
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0)
+    (\res ee G tn t. Q res ee G tn t /\
+      ?obs. source (es with gas_obs := obs) = (res,ee)) R
+Proof
+  rewrite_tac[gas_outcome_ptr_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >>
+      gvs[gas_summary_ptr_at_marked, gas_marked_exec_ptr_def] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`res`, `es_end`] >> simp[] >>
+      disj1_tac >> qexists_tac `gas_explicit marks s.vs_gas_readings` >>
+      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
