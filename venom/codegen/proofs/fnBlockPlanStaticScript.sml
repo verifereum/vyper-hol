@@ -23,7 +23,7 @@ Ancestors
   livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion fnBlockPlanStaticInventory
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
   fnBlockPlanStaticAccounting fnBlockPlanStaticBalance simplifyCfgStruct venomExecProps venomInst
-  fnBlockPlanStaticDfsTrace cfgAnalysisProps
+  fnBlockPlanStaticDfsTrace cfgAnalysisProps fnPlanLineageJoin
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
@@ -1030,4 +1030,32 @@ Theorem regional_dfs_unique_predecessor_height:
 Proof
   strip_tac >>
   drule_all regional_dfs_unique_predecessor_endpoint >> simp[]
+QED
+
+Theorem regional_ret_reaching_dfs_join_exact:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  fn_entry_label fn <> SOME lbl /\ LENGTH (cfg_preds_of cfg lbl) <> 1 /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) lbl ds /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret retbb.bb_instructions /\ ret.inst_opcode = RET /\
+  cfg_path cfg lbl target ==>
+  ?pred pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    fn_reachable fn pred /\ MEM lbl (cfg_succs_of cfg pred) /\
+    ds.ps_stack = MAP Var (input_vars_from pred bb.bb_instructions
+      (live_vars_at lv lbl 0))
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `~MEM dead_stack_marker ds.ps_stack` by
+    (irule regional_ret_reaching_dfs_marker_free >> metis_tac[]) >>
+  drule_all regional_dfs_incoming_lineage_entry >> strip_tac >>
+  `?pre. ds.ps_stack = pre ++ MAP Var (input_vars_from pred bb.bb_instructions
+      (live_vars_at lv lbl 0)) /\ EVERY (\op. op = dead_stack_marker) pre` by
+    (qpat_x_assum `bb.bb_label = lbl` (SUBST_ALL_TAC o SYM) >>
+     drule_all lineage_entry_join_stack >> simp[]) >>
+  `pre = []` by
+    (Cases_on `pre` >> gvs[listTheory.EVERY_DEF]) >>
+  gvs[] >> metis_tac[]
 QED
