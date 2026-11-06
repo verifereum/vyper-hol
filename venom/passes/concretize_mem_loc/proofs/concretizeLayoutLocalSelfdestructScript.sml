@@ -6,7 +6,7 @@ Ancestors concretizeLayoutLocalAssertions concretizeLayoutLocalBalanceReaders
   concretizeLayoutOperandCleanliness pointerConfinedDefs memLocDefs ptrDiscipline
   venomExecSemantics venomState vfmState finite_map list
 
-Theorem selfdestruct_operands[local]:
+Theorem selfdestruct_operands:
   ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
