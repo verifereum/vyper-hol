@@ -1594,3 +1594,160 @@ Proof
   ho_match_mp_tac first_emission_rounding >>
       qexistsl [`v`, `10000000000`] >> simp[SF ETA_ss]
 QED
+
+Theorem first_emission_hash[local]:
+  !m v n.
+  (m = compile_keccak256_word v \/ m = compile_keccak256_bytes v \/
+   m = compile_keccak256_bytesm v n \/ m = compile_sha256_word v \/
+   m = compile_sha256_bytes v \/ m = compile_sha256_bytesm v n) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[builtinHashingTheory.compile_keccak256_word_def,
+      builtinHashingTheory.compile_keccak256_bytes_def,
+      builtinHashingTheory.compile_keccak256_bytesm_def,
+      builtinHashingTheory.compile_sha256_word_def,
+      builtinHashingTheory.compile_sha256_bytes_def,
+      builtinHashingTheory.compile_sha256_bytesm_def] >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac >- (rpt strip_tac >>
+    imp_res_tac first_emission_alloc_buffer >>
+    imp_res_tac (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> gvs[] >>
+    metis_tac[])) >>
+  gen_tac >> simp[GSYM cs_appends_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_return, cs_appends_emit_helpers,
+            GSYM cs_appends_def]) >>
+  rw[cs_appends_def] >>
+  mp_tac (Q.SPECL [`32`, `st`] (cj 1 compile_alloc_buffer_labels)) >> simp[]
+QED
+
+Theorem first_emission_builtin_hash:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty bi args a x b.
+  (bi = Keccak256 \/ bi = Sha256) /\
+  compile_builtin_dispatch_body cfn ce ret_ty ty bi args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  Cases_on `expr_type (HD args)` >> simp[] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
+       TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[])) >>
+  rpt IF_CASES_TAC >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  ho_match_mp_tac first_emission_as_stack_val >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_hash >>
+  simp[SF ETA_ss] >> metis_tac[]
+QED
+
+Theorem first_emission_ec[local]:
+  !m h v r sig.
+  (m = compile_ecrecover h v r sig \/
+   m = compile_ecadd_points h v \/ m = compile_ecmul_point h v) ==>
+  !a x b. m a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[builtinMiscTheory.compile_ecrecover_def,
+      builtinMiscTheory.compile_ecadd_points_def,
+      builtinMiscTheory.compile_ecmul_point_def] >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac >- metis_tac[first_emission_alloc_buffer]) >>
+  gen_tac >> simp[GSYM cs_appends_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[cs_appends_return, cs_appends_emit_helpers, GSYM cs_appends_def]) >>
+  rw[cs_appends_def] >>
+  qmatch_asmsub_rename_tac `compile_alloc_buffer sz st = _` >>
+  mp_tac (Q.SPECL [`sz`, `st`] (cj 1 compile_alloc_buffer_labels)) >> simp[]
+QED
+
+Theorem first_emission_builtin_ec:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty bi args a x b.
+  (bi = ECRecover \/ bi = ECAdd \/ bi = ECMul) /\
+  compile_builtin_dispatch_body cfn ce ret_ty ty bi args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`]
+  >- suspend "recover"
+  >- suspend "add" >> suspend "mul"
+QED
+
+Resume first_emission_builtin_ec[recover]:
+  ntac 4 (ho_match_mp_tac first_emission_pair_let >> conj_tac
+    >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  ho_match_mp_tac first_emission_as_stack_val >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_ec >> simp[SF ETA_ss] >> metis_tac[]
+QED
+
+Resume first_emission_builtin_ec[add]:
+  ntac 2 (ho_match_mp_tac first_emission_pair_let >> conj_tac
+    >- metis_tac[] >> gen_tac >>
+    ho_match_mp_tac first_emission_pair_let >> conj_tac
+    >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
+  qspecl_then [`compile_ecadd_points p1 p2`, `p1`, `p2`] mp_tac first_emission_ec >>
+  simp[] >> strip_tac >> rpt gen_tac >>
+  rename1 `compile_ecadd_points p1 p2 st` >>
+  Cases_on `compile_ecadd_points p1 p2 st` >>
+  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume first_emission_builtin_ec[mul]:
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- metis_tac[] >> gen_tac) >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  qspecl_then [`compile_ecmul_point p s`, `p`, `s`] mp_tac first_emission_ec >>
+  simp[] >> strip_tac >> rpt gen_tac >>
+  rename1 `compile_ecmul_point p s st` >>
+  Cases_on `compile_ecmul_point p s st` >>
+  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Finalise first_emission_builtin_ec
