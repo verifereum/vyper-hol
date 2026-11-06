@@ -4,6 +4,7 @@ Ancestors bodyPtrTypeBuiltinsSourceTyping bodyPtrTypeBuiltinsFrameProbe
   bodyPtrTypeBuiltinsUnsignedValue bodyPtrTypeBuiltinsLiteralPost
   exprSimConvert fragGasPathPtr gasSummaryComposePtr
   loweringPosts exprLoweringProps compileEnv vyperAST venomState bodyPtrDefs
+  exprSimProps loweringShapeDefs
 Libs monadsyntax
 
 Theorem zero_convert_child_post:
@@ -58,4 +59,44 @@ Proof
        valueEncodingTheory.typed_val_to_w256_def,
        valueEncodingTheory.val_to_w256_def, integer_wordTheory.i2w_def] >>
   goal_assum (drule_at Any)
+QED
+
+(* Semantic post transport for a memory-preserving scalar suffix. *)
+Theorem scalar_suffix_expr_post:
+  expr_post ctx func cenv cx e es sa s1 s0 ee v1 x t0 /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  evaluate_type (get_tenv cx) (expr_type eout) = SOME tv /\
+  eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+  (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
+         lookup_var z s = SOME w) /\
+  s.vs_allocas = t0.vs_allocas /\ s.vs_memory = t0.vs_memory /\
+  is_word_type (expr_type eout) /\ sa.cs_next_var <= s1.cs_next_var ==>
+  expr_post ctx func cenv cx eout es sa sb s0 ee v op s
+Proof
+  simp[expr_post_def] >> strip_tac >>
+  `locals_kept cenv es s0 s` by
+    (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
+  simp[expr_val_rel_def, expr_val_at_def] >> conj_tac
+  >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>
+      `not_fresh_at s1 z` by
+        (irule not_fresh_at_mono >> qexists_tac `sa` >> asm_rewrite_tac[]) >>
+      qpat_x_assum `!z w. not_fresh_at s1 z /\ lookup_var z t0 = _ ==> _`
+        irule >> asm_rewrite_tac[] >>
+      qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = _ ==> _`
+        irule >> asm_rewrite_tac[]) >>
+  rpt strip_tac >> fs[] >> metis_tac[]
+QED
+
+Theorem bytes_uint_read_length:
+  expr_body_pre cenv cx env e es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  valid_conversion (expr_type e) (BaseT (UintT b)) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
+  ?bs. v = BytesV bs /\ LENGTH bs <= 32
+Proof
+  strip_tac >>
+  `is_bytestring_type (expr_type e)` by simp[is_bytestring_type_def] >>
+  drule_all source_read_bytestring_view >>
+  gvs[is_bytestring_type_def, vyperTypeSystemTheory.valid_conversion_def] >>
+  strip_tac >> gvs[] >> decide_tac
 QED
