@@ -2873,6 +2873,37 @@ Proof
   simp[alias_release_dead_spills_domain]
 QED
 
+Theorem alias_regular_dispatch_spill_support:
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\
+  ~is_param_opcode inst.inst_opcode /\ inst.inst_opcode <> NOP /\
+  generate_inst_plan liveness dfg cfg fn inst live halting next_term lbl ps =
+    SOME (ops,qs) ==>
+  !at. at IN FDOM qs.ps_spilled ==> ?v. at = Var v /\ MEM v live
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[alias_regular_spill_support, pairTheory.SND]
+QED
+
+Theorem alias_block_insts_final_regular_spill_support:
+  !prefix i ps ops qs.
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\
+  ~is_param_opcode inst.inst_opcode /\ inst.inst_opcode <> NOP /\
+  generate_block_insts_plan liveness dfg cfg fn lbl halting np blen i
+    (prefix ++ [inst]) ps = SOME (ops,qs) ==>
+  !at. at IN FDOM qs.ps_spilled ==>
+    ?v. at = Var v /\ MEM v (live_vars_at liveness lbl blen)
+Proof
+  Induct
+  >- (simp[generate_block_insts_plan_def, AllCaseEqs()] >>
+      metis_tac[alias_regular_dispatch_spill_support]) >>
+  simp[Once generate_block_insts_plan_def] >>
+  rpt gen_tac >> simp[AllCaseEqs()] >> strip_tac >>
+  gvs[] >> first_x_assum drule >> simp[]
+QED
+
 Theorem alias_control_plan_spill_support:
   MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
   generate_inst_plan liveness dfg cfg fn inst live halting next_term lbl ps =
@@ -2880,9 +2911,9 @@ Theorem alias_control_plan_spill_support:
   !at. at IN FDOM qs.ps_spilled ==> ?v. at = Var v /\ MEM v live
 Proof
   simp[MEM] >> strip_tac >>
-  mp_tac alias_regular_spill_support >>
-  gvs[generate_inst_plan_def, is_param_opcode_def, AllCaseEqs()] >>
-  metis_tac[pairTheory.SND]
+  rpt strip_tac >> irule alias_regular_dispatch_spill_support >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[is_param_opcode_def]
 QED
 
 Theorem alias_block_insts_final_control_spill_support:
@@ -2893,12 +2924,10 @@ Theorem alias_block_insts_final_control_spill_support:
   !at. at IN FDOM qs.ps_spilled ==>
     ?v. at = Var v /\ MEM v (live_vars_at liveness lbl blen)
 Proof
-  Induct
-  >- (simp[generate_block_insts_plan_def, AllCaseEqs()] >>
-      metis_tac[alias_control_plan_spill_support, MEM]) >>
-  simp[Once generate_block_insts_plan_def] >>
-  rpt gen_tac >> simp[AllCaseEqs()] >> strip_tac >>
-  gvs[] >> first_x_assum drule >> simp[]
+  rpt gen_tac >> simp[MEM] >> strip_tac >>
+  rpt strip_tac >> irule alias_block_insts_final_regular_spill_support >>
+  goal_assum (drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[is_param_opcode_def]
 QED
 
 Theorem alias_block_plan_final_control_spill_support:
@@ -7067,7 +7096,11 @@ Proof
       CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
       CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
       CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 2] >>
+      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
   >- (rewrite_tac[Once alias_buried_path_def] >>
       CONV_TAC (RAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV
         (RAND_CONV computeLib.EVAL_CONV))))) >> EVAL_TAC)
