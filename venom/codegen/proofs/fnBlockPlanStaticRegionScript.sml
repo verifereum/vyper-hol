@@ -1261,14 +1261,14 @@ Proof
 QED
 
 Theorem regional_phi_owned_subtraction:
-  generate_phi_plan phi nl F ps = (ops,qs) /\ phi.inst_outputs = [out] /\
+  generate_phi_plan phi nl halting ps = (ops,qs) /\ phi.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
   d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
   ~MEM src nl /\ generated_plan_state_wf_marked sb ps /\
   ~MEM (Var out) ps.ps_stack ==>
   !op. (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) <=>
     ((MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\ op <> Var src) \/
-    (op = Var out /\ MEM out nl)
+    (op = Var out /\ (halting \/ MEM out nl))
 Proof
   strip_tac >>
   `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
@@ -1285,7 +1285,7 @@ Proof
 QED
 
 Theorem regional_phi_freshness_step:
-  generate_phi_plan phi nl F ps = (ops,qs) /\ phi.inst_outputs = [out] /\
+  generate_phi_plan phi nl halting ps = (ops,qs) /\ phi.inst_outputs = [out] /\
   stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
   d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
   ~MEM src nl /\ generated_plan_state_wf_marked sb ps /\
@@ -1499,7 +1499,7 @@ Theorem regional_selected_phi_next_coverage:
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb i ps /\
   (EL i bb.bb_instructions).inst_outputs = [out] /\
   generate_phi_plan (EL i bb.bb_instructions)
-    (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) F ps = (ops,qs) /\
+    (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) halting ps = (ops,qs) /\
   stack_get_phi_depth (FILTER is_var_operand (EL i bb.bb_instructions).inst_operands)
     ps.ps_stack = SOME d /\ d < LENGTH ps.ps_stack /\
   stack_peek d ps.ps_stack = Var src /\
@@ -1653,14 +1653,14 @@ Proof
 QED
 
 Theorem regional_selected_phi_inv_step:
-  !fn bb dfg sb i ps ops qs.
+  !fn bb dfg sb i ps ops qs halting.
   codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
   lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
   dfg = dfg_build_function fn /\
   i < LENGTH (collect_phis bb.bb_instructions) /\
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb i ps /\
   generate_phi_plan (EL i bb.bb_instructions)
-    (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) F ps = (ops,qs) ==>
+    (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) halting ps = (ops,qs) ==>
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb (i+1) qs
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1693,7 +1693,7 @@ Proof
   `MEM out (EL i bb.bb_instructions).inst_outputs` by simp[] >>
   mp_tac (Q.INST
     [`lv` |-> `liveness_analyze fn`,
-     `keep` |-> `MEM out (live_vars_at (liveness_analyze fn) bb.bb_label (i+1))`]
+     `keep` |-> `halting \/ MEM out (live_vars_at (liveness_analyze fn) bb.bb_label (i+1))`]
     (SPEC_ALL regional_selected_phi_remaining)) >>
   (impl_tac >- simp[]) >> disch_tac >>
   pure_rewrite_tac[regional_selected_phi_inv_def] >>
@@ -1718,14 +1718,14 @@ Proof
 QED
 
 Theorem regional_selected_phi_inv_prefix:
-  !fn bb dfg cfg sb i j ps ops qs.
+  !fn bb dfg cfg sb i j ps ops qs halting.
   codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
   lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
   dfg = dfg_build_function fn /\
   i + j <= LENGTH (collect_phis bb.bb_instructions) /\
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb i ps /\
   generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
-    F 0 (LENGTH bb.bb_instructions) i j (DROP i bb.bb_instructions) ps =
+    halting 0 (LENGTH bb.bb_instructions) i j (DROP i bb.bb_instructions) ps =
       SOME (ops, qs) ==>
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb (i+j) qs
 Proof
@@ -1754,7 +1754,7 @@ Proof
   rename1 `generate_phi_plan _ _ _ ps = (step_ops, mid)` >>
   `regional_selected_phi_inv (liveness_analyze fn) (dfg_build_function fn) sb bb (i+1) mid` by
     (irule regional_selected_phi_inv_step >> simp[] >>
-     qexistsl [`step_ops`, `ps`] >> gvs[]) >>
+     qexistsl [`halting`, `step_ops`, `ps`] >> gvs[]) >>
   `i + SUC j = (i+1)+j` by decide_tac >>
   pop_assum SUBST1_TAC >> first_x_assum irule >> simp[] >>
   metis_tac[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD1]
@@ -1766,7 +1766,7 @@ Theorem regional_selected_phi_inv_block_prefix:
   lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
   dfg = dfg_build_function fn /\
   LENGTH (get_params bb.bb_instructions) = 0 /\
-  non_param_insts bb = bb.bb_instructions /\ bb_is_halting bb = F /\
+  non_param_insts bb = bb.bb_instructions /\
   j <= LENGTH (collect_phis bb.bb_instructions) /\
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb 0 ps0 /\
   generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
@@ -1776,7 +1776,7 @@ Theorem regional_selected_phi_inv_block_prefix:
   regional_selected_phi_inv (liveness_analyze fn) dfg sb bb j qs
 Proof
   rpt strip_tac >>
-  mp_tac (Q.INST [`i` |-> `0`, `ps` |-> `ps0`]
+  mp_tac (Q.INST [`i` |-> `0`, `ps` |-> `ps0`, `halting` |-> `bb_is_halting bb`]
     (SPEC_ALL regional_selected_phi_inv_prefix)) >>
   gvs[]
 QED
@@ -1883,7 +1883,6 @@ Theorem regional_lineage_selected_phi_prefix:
     lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
     lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
       bb.bb_label ps_l /\ collect_phis bb.bb_instructions <> [] /\
-    ~bb_is_halting bb /\
     (if bb = HD fn.fn_blocks then prepare_params_plan lv fn
        (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
      else ([], ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
