@@ -4,7 +4,7 @@
    Helpers use the function's existing instruction-ID uniqueness condition. *)
 Theory allocaCacheProps
 Ancestors
-  venomWf venomInst venomState venomExecSemantics venomMemProofs venomInstProofs1 finite_map list words
+  venomFnInstsProofs venomWf venomInst venomState venomExecSemantics venomMemProofs venomInstProofs1 finite_map list words
 
 val alloca_step_rule = valOf (List.find (fn th =>
   let val guard = #1 (dest_imp (#2 (strip_forall (concl th))))
@@ -18,32 +18,6 @@ Definition alloca_cache_matches_def:
         inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit size_word] /\
         recorded_size = w2n size_word
 End
-
-Theorem fn_instruction_ids_map:
-  !blocks. MAP (\inst. inst.inst_id) (fn_insts_blocks blocks) =
-    FLAT (MAP (\bb. MAP (\inst. inst.inst_id) bb.bb_instructions) blocks)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-Theorem instruction_id_list_injective:
-  !insts left right.
-    ALL_DISTINCT (MAP (\inst. inst.inst_id) insts) /\ MEM left insts /\ MEM right insts /\
-    left.inst_id = right.inst_id ==> left = right
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]
-QED
-
-Theorem fn_instruction_id_injective:
-  !func left right.
-    fn_inst_ids_distinct func /\ MEM left (fn_insts func) /\ MEM right (fn_insts func) /\
-    left.inst_id = right.inst_id ==> left = right
-Proof
-  rpt gen_tac >> strip_tac >> irule instruction_id_list_injective >>
-  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
-  qexists_tac `fn_insts func` >>
-  fs[fn_inst_ids_distinct_def, fn_insts_def, fn_instruction_ids_map]
-QED
 
 Theorem alloca_cache_matches_empty:
   !func ss. ss.vs_allocas = FEMPTY ==> alloca_cache_matches func ss
@@ -72,7 +46,7 @@ Proof
   disch_then (qspecl_then [`inst.inst_id`, `region_base`, `recorded_size`] mp_tac) >>
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `cached_inst` (qx_choose_then `cached_word` strip_assume_tac)) >>
-  `cached_inst = inst` by (drule_all fn_instruction_id_injective >> simp[]) >> gvs[]
+  `cached_inst = inst` by (drule_all fn_insts_id_unique >> simp[]) >> gvs[]
 QED
 
 Theorem alloca_cache_matches_record:

@@ -7,7 +7,7 @@
 Theory passSimulationProps
 Ancestors
   passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
-  indexedLists list
+  stateEquiv stateEquivProps venomExecSemantics indexedLists list
 
 (* ===== Utilities ===== *)
 
@@ -607,6 +607,112 @@ Proof
   simp[MAP_EQ_f, abt_singleton_eq_mapi]
 QED
 
+(* Widen variant of abt_singleton_eq_mapi *)
+Theorem abtw_singleton_eq_mapi:
+  !bottom result (f : 'a -> instruction -> instruction) bb.
+    analysis_block_transform_widen bottom result (\ll inst. [f ll inst]) bb =
+    bb with bb_instructions :=
+      MAPi (\idx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
+           bb.bb_instructions
+Proof
+  simp[analysis_block_transform_widen_def, flat_mapi_singleton]
+QED
+
+(* Widen variant of aft_singleton_eq_fmt_mapi *)
+Theorem aftw_singleton_eq_fmt_mapi:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
+    function_map_transform
+      (\bb. bb with bb_instructions :=
+        MAPi (\idx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
+             bb.bb_instructions) fn
+Proof
+  simp[analysis_function_transform_widen_def, function_map_transform_def,
+       ir_function_component_equality] >>
+  simp[MAP_EQ_f, abtw_singleton_eq_mapi]
+QED
+
+(* A structural 1:1 transform keeps exactly the terminators *)
+Theorem inst_transform_structural_1_terminator:
+  !g v inst. inst_transform_structural_1 g ==>
+    (is_terminator (g v inst).inst_opcode <=> is_terminator inst.inst_opcode)
+Proof
+  rw[inst_transform_structural_1_def] >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- (res_tac >> simp[is_terminator_def]) >>
+  Cases_on `inst.inst_opcode = PHI` >> res_tac >> gvs[]
+QED
+
+(* A structural 1:1 transform keeps the PHI prefix, so PHI evaluation and
+   the prefix length are unchanged *)
+Theorem inst_transform_structural_1_mapi_phis:
+  !g lv l. inst_transform_structural_1 g ==>
+    (!s. eval_phis s (MAPi (\i inst. g (lv i) inst) l) = eval_phis s l) /\
+    phi_prefix_length (MAPi (\i inst. g (lv i) inst) l) = phi_prefix_length l
+Proof
+  gen_tac >> Induct_on `l` >>
+  simp[eval_phis_def, phi_prefix_length_def] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `lv o SUC` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  simp[combinTheory.o_DEF] >> strip_tac >>
+  `((g (lv 0) h).inst_opcode = PHI <=> h.inst_opcode = PHI) /\
+   (h.inst_opcode = PHI ==> g (lv 0) h = h)` by (
+    fs[inst_transform_structural_1_def] >>
+    rpt (first_x_assum (qspecl_then [`lv 0`, `h`] assume_tac)) >>
+    Cases_on `h.inst_opcode = PHI` >- gvs[] >>
+    Cases_on `is_terminator h.inst_opcode`
+    >- (simp[] >> strip_tac >> gvs[is_terminator_def]) >>
+    Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[combinTheory.o_DEF]
+QED
+
+(* Block simulation for a 1:1 transform g, from per-instruction simulation
+   under an index-indexed invariant P that each non-terminator step
+   preserves.  The transform must keep terminators and non-terminators. *)
+Theorem exec_block_mapi_sim:
+  !P g bb fuel ctx s.
+    (!i inst. is_terminator (g i inst).inst_opcode =
+              is_terminator inst.inst_opcode) /\
+    (!i t. i < LENGTH bb.bb_instructions /\ t.vs_inst_idx = i /\ P i t ==>
+       (?e. step_inst fuel ctx (EL i bb.bb_instructions) t = Error e) \/
+       lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+         (step_inst fuel ctx (EL i bb.bb_instructions) t)
+         (step_inst fuel ctx (g i (EL i bb.bb_instructions)) t)) /\
+    (!i t t'. i < LENGTH bb.bb_instructions /\ t.vs_inst_idx = i /\ P i t /\
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode /\
+       step_inst fuel ctx (EL i bb.bb_instructions) t = OK t' ==>
+       P (SUC i) (t' with vs_inst_idx := SUC i)) /\
+    P s.vs_inst_idx s ==>
+    (?e. exec_block fuel ctx bb s = Error e) \/
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx
+         (bb with bb_instructions := MAPi g bb.bb_instructions) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `P _ s` mp_tac >> qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [exec_block_def] >>
+  simp[get_instruction_def] >>
+  IF_CASES_TAC >> simp[] >>
+  qpat_assum `!i t. _ ==> (?e. _) \/ _`
+    (qspecl_then [`s.vs_inst_idx`, `s`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >- gvs[] >>
+  Cases_on `step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions) s` >>
+  Cases_on `step_inst fuel ctx
+              (g s.vs_inst_idx (EL s.vs_inst_idx bb.bb_instructions)) s` >>
+  gvs[lift_result_def] >>
+  imp_res_tac state_equiv_empty_eq >> gvs[] >>
+  IF_CASES_TAC >> gvs[]
+  >- rw[lift_result_def, state_equiv_refl, execution_equiv_refl] >>
+  first_x_assum (qspec_then `v with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then irule >>
+  qpat_x_assum `!i t t'. _` irule >> simp[] >>
+  qexists_tac `s` >> simp[]
+QED
+
 (* Helper: MAPi preserving inst_id gives same id list *)
 Triviality map_inst_id_mapi_eq[local]:
   !f g l.
@@ -705,18 +811,14 @@ Proof
        analysis_block_transform_def]
 QED
 
-(* fn_entry_label preservation for analysis_function_transform *)
-Theorem aft_preserves_entry_label:
-  !bottom result f fn.
-    fn_entry_label (analysis_function_transform bottom result f fn) =
-    fn_entry_label fn
+(* A label-preserving block map preserves the entry label. *)
+Theorem fmt_preserves_entry_label:
+  !bt fn. (!bb. (bt bb).bb_label = bb.bb_label) ==>
+    fn_entry_label (function_map_transform bt fn) = fn_entry_label fn
 Proof
-  simp[analysis_function_transform_def, function_map_transform_def,
-       fn_entry_label_def, entry_block_def] >>
-  Cases_on `fn.fn_blocks` >>
-  simp[analysis_block_transform_def]
+  rw[fn_entry_label_def, entry_block_def, function_map_transform_def] >>
+  Cases_on `fn.fn_blocks` >> simp[]
 QED
-
 (* wf_function implies non-terminator prefix — useful across all passes *)
 Theorem wf_non_terminator_prefix:
   !fn. wf_function fn ==>

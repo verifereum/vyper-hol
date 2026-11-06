@@ -1259,20 +1259,6 @@ Proof
     simp[])
 QED
 
-(* Key bridge: ALL_DISTINCT of FLAT(MAP f xs) means shared elements identify their source *)
-Triviality all_distinct_flat_map_unique:
-  !f xs x y v.
-    ALL_DISTINCT (FLAT (MAP f xs)) /\
-    MEM x xs /\ MEM y xs /\ MEM v (f x) /\ MEM v (f y) ==>
-    x = y
-Proof
-  gen_tac >> Induct >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  Cases_on `x = h` >> Cases_on `y = h` >> gvs[] >>
-  metis_tac[MEM_FLAT, MEM_MAP]
-QED
-
 (* Bridge: ALL_DISTINCT outputs of fn_insts => ssa_form *)
 Theorem all_distinct_outputs_ssa_form:
   !func.

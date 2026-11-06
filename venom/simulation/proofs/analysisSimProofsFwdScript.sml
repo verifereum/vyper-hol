@@ -16,7 +16,7 @@ Ancestors
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
-  venomState venomWf cfgAnalysisProps execEquivProofs
+  venomState venomWf cfgAnalysisProps cfgHelpers execEquivProofs
   list finite_map pred_set string cfgCorrectnessProof
 
 (* Forward-specialized dataflow theorems for fwd proofs *)
@@ -149,7 +149,7 @@ Proof
     metis_tac[venomExecProofsTheory.exec_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgHelpersTheory.bb_succs_in_cfg_succs] >>
-  imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
 QED
 
 (* ===== General forward analysis successor entry soundness =====
@@ -479,7 +479,7 @@ Proof
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgHelpersTheory.bb_succs_in_cfg_succs] >>
   conj_tac
-  >- (imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM])
+  >- (imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM])
   >- suspend "succ_sound"
 QED
 
@@ -487,7 +487,7 @@ Resume fwd_successor_entry_sound[succ_sound]:
   imp_res_tac (GSYM cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond) >>
   (* Step 7: df_at = joined at successor entry *)
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    (imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]) >>
+    (imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]) >>
   drule_all (SIMP_RULE std_ss [LET_THM] fwd_df_at_entry_eq_joined) >>
   disch_then (fn th => REWRITE_TAC [th]) >>
   (* Step 8: Use H7 (joined_sound_from_pred) *)

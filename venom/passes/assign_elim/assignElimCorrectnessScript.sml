@@ -458,7 +458,7 @@ Proof
   `EVERY (\lbl. MEM lbl wl0) wl0` by simp[Abbr `wl0`, listTheory.EVERY_MEM] >>
   `!lbl. MEM lbl wl0 ==> EVERY (\lbl'. MEM lbl' wl0) (deps lbl)` by
     (simp[Abbr `deps`, Abbr `wl0`] >>
-     metis_tac[analysisSimPropsTheory.cfg_dfs_pre_succs_closed,
+     metis_tac[cfgHelpersTheory.cfg_dfs_pre_succs_closed,
                listTheory.EVERY_MEM]) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>

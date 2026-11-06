@@ -9,7 +9,6 @@
  *   analysis_inst_sim_block_sim_inv     — per-block sim with state_inv
  *   df_analysis_pass_correct_sound_inv3  — inv3 variant (transfer_sound_block_inv)
  *   analysis_inst_simulates_from_1       — 1:1 special case of inst_simulates
- *   cfg_dfs_pre_succs_closed            — DFS pre-order closed under successors
  *   transfer_sound_exit_wf_len          — transfer_sound_exit_wf + bb_well_formed
  *   fwd_df_at_entry_eq_joined           — entry df_at equals joined value at fixpoint
  *   fwd_df_at_exit_not_none             — exit df_at non-NONE when entry non-NONE
@@ -198,16 +197,6 @@ Theorem analysis_inst_simulates_from_1:
     analysis_inst_simulates R_ok R_term sound (\v inst. [g v inst])
 Proof
   ACCEPT_TAC analysis_inst_simulates_from_1_proof
-QED
-
-(* DFS pre-order is closed under successors *)
-Theorem cfg_dfs_pre_succs_closed:
-  !fn lbl.
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
-    EVERY (\t. MEM t (cfg_analyze fn).cfg_dfs_pre)
-          (cfg_succs_of (cfg_analyze fn) lbl)
-Proof
-  ACCEPT_TAC cfg_dfs_pre_succs_closed
 QED
 
 (* Like transfer_sound_exit_wf but derives EVERY inst_wf from bb_well_formed
