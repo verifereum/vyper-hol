@@ -716,7 +716,7 @@ Proof
   drule_at (Pat `run_call _ = _`) asm_create_run_code_continuation >>
   simp[] >> strip_tac >>
   `?deleted. t.rollback.toDelete = deleted ++ a.as_pending_deletions` by
-    (drule_at (Pat `run_call v = _`) asm_call_run_pending_suffix_any_output >>
+    (drule_at (Pat `run_call v = _`) asm_call_run_pending_suffix >>
      simp[] >> metis_tac[]) >>
   drule_at (Pat `step _ = _`) frame_obs_call_enter >> simp[] >> strip_tac >>
   `run_call t = run_call s` by

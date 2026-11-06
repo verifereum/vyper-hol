@@ -28,8 +28,7 @@ Proof
             EL as.as_pc prog = AsmOp "CREATE2"`
   >- (irule asm_frame_create_step >> simp[]) >>
   Cases_on `EL as.as_pc prog = AsmOp "SELFDESTRUCT"`
-  >- (irule asm_frame_selfdestruct_step_created >>
-      simp[] >> fs[asm_frame_rel_def]) >>
+  >- (irule asm_frame_selfdestruct_step >> simp[]) >>
   irule asm_frame_noncall_step >> simp[] >> metis_tac[]
 QED
 

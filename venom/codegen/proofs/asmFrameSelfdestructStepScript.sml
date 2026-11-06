@@ -83,15 +83,15 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem asm_frame_selfdestruct_step_created:
+Theorem asm_frame_selfdestruct_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
-  as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "SELFDESTRUCT" /\
-  (as.as_call_ctx.cc_created_in_tx =
-   account_empty (lookup_account (FST (HD es.contexts)).msgParams.callee
-                  es.originalAccounts)) ==>
+  as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "SELFDESTRUCT" ==>
   asm_frame_step_ok prog data es0 as es
 Proof
   strip_tac >>
+  `as.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account (FST (HD es.contexts)).msgParams.callee
+                   es.originalAccounts)` by gvs[asm_frame_rel_def] >>
   Cases_on `as.as_stack`
   >- simp[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
           asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
