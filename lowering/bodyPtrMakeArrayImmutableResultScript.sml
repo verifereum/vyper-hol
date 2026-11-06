@@ -60,6 +60,11 @@ Theorem immutable_runtime_buffer_ptr_path:
     z.vs_data_section = u.vs_data_section /\ z.vs_immutables = u.vs_immutables /\
     z.vs_allocas = u.vs_allocas /\ z.vs_fmp = u.vs_fmp /\
     tnf.t_mem SUBSET tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ z.vs_call_ctx = u.vs_call_ctx /\
+    z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
+    (!i. i < w2n b \/ w2n b+type_memory_size tv <= i ==>
+      mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 u.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     (!p. not_fresh_at sa p ==>
       lookup_var p z = lookup_var p u /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -74,5 +79,8 @@ Proof
     fs[type_memory_size_slots] >>
   drule_all immutable_runtime_result_robust >> strip_tac >>
   qexistsl_tac [`z`, `Gf`, `tnf`] >> simp[] >>
-  qpat_x_assum `!p k. _` irule >> fs[copy_old_operand_def]
+  conj_tac
+  >- (qpat_x_assum `!p k. _` irule >> fs[copy_old_operand_def]) >>
+  qpat_x_assum `!i. _ \/ _ ==> _ /\ _` mp_tac >>
+  simp[type_memory_size_slots]
 QED

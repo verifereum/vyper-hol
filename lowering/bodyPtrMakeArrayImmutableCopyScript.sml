@@ -24,6 +24,11 @@ Theorem immutable_runtime_copy_checked:
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem SUBSET tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    (!i. i < w2n b+off \/ w2n b+off+32*n <= i ==>
+      mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     ((!k. k < off ==> w2n b+k NOTIN tn.t_mem) ==>
       (!k. k < off+32*n ==> w2n b+k NOTIN tnf.t_mem)) /\
     (!p. not_fresh_at sa p ==>
@@ -60,6 +65,11 @@ Proof
       irule (cj 1 immutable_transfers_cong) >>
       simp[immutable_word_transfer_fields, immutable_transfer_data]) >>
   conj_tac >- (qpat_x_assum `_ SUBSET _` mp_tac >> simp[SUBSET_DEF]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      ntac 2 (qpat_x_assum `!i. _ \/ _ ==> _ /\ _`
+        (qspec_then `i` mp_tac) >> (impl_tac >- decide_tac) >> strip_tac) >>
+      gvs[]) >>
   conj_tac
   >- (strip_tac >>
       `w2n (b+n2w off) = w2n b+off` by
@@ -110,6 +120,11 @@ Theorem immutable_runtime_copy_ptr_path:
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem SUBSET tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    (!i. i < w2n b+off \/ w2n b+off+32*n <= i ==>
+      mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     ((!k. k < off ==> w2n b+k NOTIN tn.t_mem) ==>
       (!k. k < off+32*n ==> w2n b+k NOTIN tnf.t_mem)) /\
     (!p. not_fresh_at sa p ==>
