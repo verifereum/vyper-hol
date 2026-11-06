@@ -7014,6 +7014,78 @@ Proof
   metis_tac[generate_block_insts_plan_split, arithmeticTheory.ADD_CLAUSES]
 QED
 
+Theorem alias_entry_block_plan_cut:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  bb = HD fn.fn_blocks /\
+  generate_block_plan liveness dfg (cfg_analyze fn) fn bb ps = SOME (ops, qs) ==>
+  ?param_ops ps_param body_ops.
+    prepare_params_plan liveness fn ps = (param_ops, ps_param) /\
+    generate_block_insts_plan liveness dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps_param =
+      SOME (body_ops, qs) /\
+    ops = SOLabel bb.bb_label :: param_ops ++ body_ops
+Proof
+  strip_tac >>
+  `cfg_preds_of (cfg_analyze fn) bb.bb_label = []` by
+    metis_tac[alias_ready_entry_body] >>
+  drule alias_block_plan_cut >> disch_then (qspec_then `0` mp_tac) >>
+  simp[generate_block_insts_prefix_def] >> metis_tac[]
+QED
+
+Theorem alias_nonentry_block_plan_cut:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  bb <> HD fn.fn_blocks /\
+  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, qs) ==>
+  ?clean_ops ps_clean phi_ops ps_phi body_ops.
+    bb.bb_instructions = non_param_insts bb /\
+    (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+     then clean_stack_plan liveness cfg fn bb ps else ([], ps)) =
+      (clean_ops, ps_clean) /\
+    ps_phi = FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p)
+      (bb_is_halting bb) s)) ps_clean
+      (MAP (\i. (EL i (collect_phis bb.bb_instructions),
+                 live_vars_at liveness bb.bb_label (SUC i)))
+        (COUNT_LIST (LENGTH (collect_phis bb.bb_instructions)))) /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions)
+      (LENGTH (collect_phis bb.bb_instructions))
+      (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)
+      ps_phi = SOME (body_ops, qs) /\
+    ops = SOLabel bb.bb_label :: clean_ops ++ phi_ops ++ body_ops
+Proof
+  strip_tac >>
+  drule_all alias_ready_param_partition >> strip_tac >>
+  `get_params bb.bb_instructions = [] /\
+   non_param_insts bb = bb.bb_instructions` by metis_tac[APPEND] >>
+  `?tail. bb.bb_instructions = collect_phis bb.bb_instructions ++ tail` by
+    metis_tac[alias_collect_phis_prefix] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH (non_param_insts bb)` by
+    (qpat_assum `bb.bb_instructions = collect_phis _ ++ _`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  drule_all alias_block_plan_cut >> strip_tac >>
+  gvs[] >>
+  `EVERY (\inst. inst.inst_opcode = PHI) (collect_phis bb.bb_instructions)` by
+    (simp[EVERY_MEM] >> metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+  `LENGTH bb.bb_instructions = 0 + 0 +
+     LENGTH (collect_phis bb.bb_instructions ++ tail)` by
+    (qpat_assum `bb.bb_instructions = collect_phis _ ++ _`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `generate_block_insts_prefix liveness dfg cfg fn bb.bb_label (bb_is_halting bb) 0
+     (LENGTH bb.bb_instructions) 0 (LENGTH (collect_phis bb.bb_instructions))
+     (collect_phis bb.bb_instructions ++ tail) ps_clean = SOME (prefix_ops, ps_cut)` by
+    metis_tac[] >>
+  drule_all alias_phi_prefix_plan_state >> simp[] >> strip_tac >>
+  `MAPi (\j inst. (inst, live_vars_at liveness bb.bb_label (SUC j)))
+      (collect_phis bb.bb_instructions) =
+   MAP (\i. (EL i (collect_phis bb.bb_instructions),
+             live_vars_at liveness bb.bb_label (SUC i)))
+      (COUNT_LIST (LENGTH (collect_phis bb.bb_instructions)))` by
+    (irule LIST_EQ >> simp[indexedListsTheory.LENGTH_MAPi,
+       indexedListsTheory.EL_MAPi, LENGTH_COUNT_LIST, EL_MAP, EL_COUNT_LIST]) >>
+  gvs[] >> metis_tac[]
+QED
+
 (* Lower-inventory probe ledger (not a universal lineage inventory theorem).
    Checked boundaries:
    - alias_prepare_params_entry_demand anchors the actual post-parameter cut.
@@ -7024,16 +7096,16 @@ QED
    - alias_clean_stack_holds_input preserves already-held selected inputs.
    - alias_ready_nonjoin_input_liveout transports ordinary nonjoin entry
      demand to its predecessor's block end.
+   - alias_entry_block_plan_cut excludes entry cleanup and exposes the
+     actual parameter preparation and full-lookahead body plan.
+   - alias_nonentry_block_plan_cut identifies non_param_insts with the
+     original instructions and the PHI prefix state with the indexed fold.
+   - alias_ready_entry_body and alias_ready_phi_suffix exclude body PHIs;
+     alias_ready_param_partition excludes nonentry parameters.
+   - alias_nonjoin_edge_preds identifies the unique analyzed predecessor
+     from the actual lineage edge.
    Remaining assembly obligations before lineage_state_ind can be closed:
-   (1) decompose generate_block_plan at its exact post-param/post-PHI cut;
-       identify non_param_insts with the corresponding original-index suffix,
-       and identify its PHI recursion prefix with the checked indexed fold;
-   (2) use canonical_param_prefix/entry readiness to exclude parameters in
-       non-entry blocks and PHIs in the body, and exclude entry cleanup;
-   (3) for a non-entry nonjoin, infer the unique analyzed predecessor from
-       the actual lineage edge, so its selected input list is ordinary
-       live-in; use this both for edge transport and singleton cleanup;
-   (4) combine (1)-(3) into conditional block-end lower coverage, then use
+   Combine these boundaries into conditional block-end lower coverage, then use
        lineage_state_ind: entry uses the parameter anchor, step uses the
        predecessor block-end result and the stack/spill record update.
    These are not supplied as hypotheses to an exported inventory claim.
