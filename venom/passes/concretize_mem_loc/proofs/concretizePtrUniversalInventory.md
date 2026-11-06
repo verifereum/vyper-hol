@@ -1668,3 +1668,77 @@ actual-target-success-only execution premise unchanged. Its source-success,
 transcript, mixedness and cursor proofs remain semantic obligations discharged
 inside that producer, not added premises. This refactoring adds infrastructure,
 not any additional opcode coverage or proof of the global static bridges.
+
+## Current mixed MCOPY supplier audit (C1.5.90.67.mixedCopyAudit)
+
+This section supersedes historical open-status prose, not checked theorems.
+ALLOCA and RET immediate certificates and StructuralDispatch normalization are
+accepted. PARAM and ASSIGN immediate producers are accepted. The exact accepted
+environment-read family is CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID,
+COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE,
+RETURNDATASIZE (EnvironmentReadProducer). This is fourteen opcodes, not all N13.
+The common stage-to-code/shape bridges and exhaustive normalized dispatch remain
+unproved. MCOPY is NOT covered by an immediate producer.
+
+`mixed_mcopy_immediate_prefix_schema` in UniversalStepSchema is a typechecked
+candidate for `ptr_paired_prefix_mcopy`, NOT a theorem. It uses the MLOAD/MSTORE
+common antecedent, max_live_eom, explicit normalized positions correspondence
+and arbitrary actual target successor. It constructs source success, tagged
+step and the full immediate certificate. Its ledger suffix is empty or one
+actual event; nonempty source footprint forces the latter. Zero-length writes
+need no fictitious positive write certificate. Old H and old ws are retained.
+
+| Required input / field | Supplier and exact limitation |
+| --- | --- |
+| positions correspondence and opcode/operand preservation | existing StepStructure/StepShape and `concretize_positions_unchanged`; no new positions lemma needed |
+| source operand presence from target | `ptr_mixed_vars_eval_presence` plus endpoint `ptr_paired_sample` and shared labels; applies even to opaque values, but gives presence only |
+| operand value transport | `ptr_nonopaque_instruction_operands` and `ptr_mixed_vars_eval`; MCOPY operands are nonopaque under source fn_shape_ok. `taint_ok` makes its operand masks empty. Do NOT infer unrestricted ptr_vars_transport |
+| equal count | `ptr_write_max_size_untainted`, `ptr_write_max_size_no_provenance`, and scalar-empty value transport; nop is max-size operand. Pure count, unlike relocated addresses, is equal |
+| source successful step | MCOPY step_inst_base uses only three successful evals, not memory bytes. Existing `ptr_mcopy_source_success` has the wrong unrestricted transport premise. Mixed presence permits direct construction of source evals/success; this assembly has not been proved |
+| non-revert-forward | active instruction, unique block lookup and `memSafeRunTheory.revert_forward_at_opcode`, as in MloadEndpoint:111-122. Must be discharged for MCOPY, not added to producer candidate |
+| nonzero source and destination classification | `access_ok_def`: read and write clauses bound evaluated (off,len), unless len=0. HistoricalWriteClassification covers destination with production placements; MloadEndpoint classification is hard-coded to MLOAD and 32 bytes and is not an MCOPY supplier |
+| input bytes | `ptr_paired_fixed_read_recovery` handles each untainted byte below lo. `ptr_paired_owned_read_recovery` (OwnedReadAudit:19-55) already handles arbitrary k<sz with selected inst_read_op variable and actual production owner witnesses, NOT just 32 bytes. For MCOPY inst_read_op selects sop. Current `ptr_paired_mload_masked_bytes` is restricted to MLOAD/32 and cannot be applied |
+| overlap-safe content | `ptr_mcopy_masked_content` (CopyContent:7-20): common count and equality of untainted PRESTATE source bytes imply equality of untainted POSTSTATE destination bytes. No disjointness premise. It consumes mem_taint, to be matched to successor step_taint.t_mem |
+| historical exclusion | HistoricalMcopyExclusion:9-29 retains unrestricted ptr_vars_transport; NOT directly applicable to mixed endpoints. Existing general historical exclusion infrastructure, not this old specialized wrapper, must discharge suffix exclusions inside recovery |
+| new actual write record | `ptr_paired_write` needs source/destination actual footprints, relocation and postwrite content. Historical classification and CopyContent are ingredients only; no checked MCOPY write producer or actual ledger insertion yet. Positive count requires the appended event; zero count has empty range |
+| other immediate fields | no variable outputs, unchanged allocas/stack/params, step_prov/TG unchanged; shared fields and cursor/transcript attachment remain finite assembly, not source-success premises |
+
+### First unsupplied semantic boundary and proposed interface
+
+The first old theorem application already fails at `ptr_mcopy_source_success`'s
+unrestricted transport premise. This is an interface mismatch, not evidence of
+falsehood: presence plus nonopaque restricted transport supplies the three evals
+without input byte recovery. After that routine assembly, the first substantive
+missing boundary is evaluated RANGE classification feeding the existing byte
+recoveries. Do not clone MloadRecovery with an MCOPY name.
+
+Proposed principled boundary: under the same common stage/paired-prefix premises,
+actual target successor, a non-revert-forward source endpoint, and
+`mem_read_ops a.po_inst = SOME ops`, source/target evaluations of ops.iao_ofst to
+x/y, plus an evaluated source read request `(w2n x,n)` in
+`source_memory_read_ranges a.po_inst a.po_state`, conclude
+
+```
+!j. j < n /\ w2n x+j NOTIN a.po_taint.t_mem ==>
+  read_byte (w2n x+j) a.po_state.vs_memory =
+  read_byte (w2n y+j) at.po_state.vs_memory
+```
+
+Operand nonopaque/untainted and ptr_lookup_transport must be derived from the
+opcode-relevant source restrictions, or explicitly supplied at this lower
+boundary (never at the full producer). First validate range classification
+against all mem_read_ops size encodings; MCOPY has evaluated count, MLOAD has
+constant 32. Strengthen the existing MLOAD boundary in place if authorized,
+retain its old exported consumer as needed, rather than introducing equivalent
+byte-recovery machinery. No global byte equality, source success, postulated
+ledger event, or disjoint ranges may become full-producer hypotheses.
+
+Adversarial cases checked by signatures/definitions: n=0 makes all byte demands
+vacuous (addresses may be otherwise unbounded); for n>0 fixed and owned cases
+are independent for source and destination; overlapping ranges read OLD memory;
+source tainted bytes impose no equality requirement; opaque values supply only
+presence and must be excluded before address transport. No concrete claim of
+MCOPY coverage or new counterexample is made by this diagnostic.
+
+Verification: `holbuild(targets=[concretizePtrUniversalStepSchemaTheory])` passes
+with the candidate quotation. This checks typing only, not the proposed producer.
