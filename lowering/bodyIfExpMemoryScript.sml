@@ -2,7 +2,7 @@ Theory bodyIfExpMemory
 Ancestors
   loweringPosts exprSimMemUnwrap bodyIfExpMemoryJoin bodyIfExpArmMemory
   bodyIfExpSelectedMemory bodyIfExpBytesCopy bodyIfExpDestination bodyIfExpBytesAdapter
-  bodyIfExpArmOutcome bodyIfExpRootSelection
+  bodyIfExpArmOutcome bodyIfExpRootSelection bodyIfExpSelectedEndpoint
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
@@ -394,105 +394,6 @@ Proof
        comp_bind_def] >> metis_tac[]
 QED
 
-Theorem ifexp_conditional_read_cases[local]:
-  !cx raw st res st'.
-    (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
-    read_result cx raw st = (res,st') \/
-    ?m. conditional_result cx raw st = (INR (Error (TypeError m)),st') /\
-        res = INR (Error (TypeError m))
-Proof
-  rpt gen_tac >> Cases_on `raw` >>
-  simp[conditional_result_def, read_result_def, bind_def, return_def, raise_def] >>
-  rename1 `place_type_value cx p st` >>
-  Cases_on `place_type_value cx p st` >> rename1 `place_type_value cx p st = (pr,pst)` >>
-  drule place_type_value_state >> strip_tac >> gvs[] >>
-  Cases_on `pr` >> simp[]
-  >- (IF_CASES_TAC >> simp[read_result_def, bind_def, return_def] >>
-      Cases_on `read_place cx p pst` >> rename1 `read_place cx p pst = (rr,ss)` >>
-      Cases_on `rr` >> simp[read_result_def, return_def]) >>
-  Cases_on `p` >>
-  gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-      get_address_immutables_def, bind_def, return_def, lift_option_type_def,
-      raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
-QED
-
-Theorem ifexp_arm_conditional_read[local]:
-  read_result cx raw ee = (INL v,ee) /\
-  conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
-  ?tv. res = INL tv /\ ss = ee /\
-       read_result cx tv ee = (INL v,ee)
-Proof
-  rpt strip_tac >>
-  Cases_on `(do r <- conditional_result cx raw; read_result cx r od) ee` >>
-  drule ifexp_conditional_read_cases >> strip_tac >>
-  imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
-  gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
-QED
-
-Theorem ifexp_arm_conditional_gas_obs[local]:
-  conditional_result cx raw ee = (INL tv,ee) ==>
-  !tail. conditional_result cx raw (ee with gas_obs := tail) =
-    (INL tv,ee with gas_obs := tail)
-Proof
-  Cases_on `raw`
-  >- simp[conditional_result_def, return_def]
-  >- (simp[conditional_result_def, bind_def] >>
-      Cases_on `place_type_value cx p ee` >>
-      rename1 `place_type_value cx p ee = (pr,pst)` >>
-      drule place_type_value_state >> strip_tac >> gvs[] >>
-      `!tail. place_type_value cx p (ee with gas_obs := tail) =
-         (pr,ee with gas_obs := tail)` by
-        (Cases_on `p` >>
-         gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-             get_address_immutables_def, bind_def, return_def,
-             lift_option_type_def, raise_def, AllCaseEqs()] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
-      simp[] >> Cases_on `pr` >> simp[] >>
-      IF_CASES_TAC >> simp[return_def] >>
-      Cases_on `read_place cx p ee` >>
-      rename1 `read_place cx p ee = (rr,ss)` >>
-      Cases_on `rr` >> simp[return_def] >> rpt strip_tac >>
-      gvs[bind_def, return_def] >>
-      rename1 `read_place cx p ee = (INL v,ee)` >>
-      `read_result cx (PlaceR p) ee = (INL v,ee)` by
-        simp[read_result_def] >>
-      drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[read_result_def]) >>
-  simp[conditional_result_def, raise_def]
-QED
-
-Theorem ifexp_marked_conditional_of_read_mem[local]:
-  gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
-  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
-  gas_marked_exec T (ctx,func) (read_result cx raw)
-    (ee with gas_obs := [],s) [] (INL v) (ee with gas_obs := []) (OK u) ==>
-  ?tv. gas_marked_exec T (ctx,func) (conditional_result cx raw)
-    (ee with gas_obs := [],s) [] (INL tv) (ee with gas_obs := []) (OK u) /\
-    read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := [])
-Proof
-  strip_tac >>
-  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-    (INL raw,ee with gas_obs := [])` by
-    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >> strip_tac >>
-     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  `read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := [])` by
-    (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >> strip_tac >>
-     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  Cases_on `conditional_result cx raw (ee with gas_obs := [])` >>
-  rename1 `_ = (cr,cs)` >>
-  `expr_vv_res_ok cr` by
-    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-     simp[gas_admissible_def] >>
-     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
-     simp[bind_def]) >>
-  drule_all ifexp_arm_conditional_read >> strip_tac >> gvs[] >>
-  qexists_tac `tv` >> simp[] >>
-  qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
-  simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
-  drule ifexp_arm_conditional_gas_obs >> simp[]
-QED
 
 Theorem ifexp_root_forced_branch_admissible[local]:
   gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
