@@ -255,7 +255,7 @@ QED
 Theorem abi_encoder_array_tail_init_raw_reach:
   abi_encode_array_tail_init count_op asz st = (dp,prepared) /\
   eval_operand count_op initial = SOME (n2w cnt) /\ abi_decoder_operand_live st.cs_next_var count_op /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ prepared.cs_next_id <= last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ st.cs_next_id IN sites /\ first <= st.cs_next_id /\ prepared.cs_next_id <= last /\
   prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. abi_encoder_member_phase_raw st prepared initial actual /\
     abi_sites_encoder_complex_prefix_post sites [(AbiPrimWord,cnt*asz,0,F)] dp st.cs_next_var st.cs_next_id
@@ -272,8 +272,54 @@ Proof
   qexists_tac `raw` >> simp[]
 QED
 
+(* An ALLOCA emitted into func's code is one of the covered sites. *)
+Theorem abi_sites_cover_code:
+  abi_sites_cover func sites /\ fn_has_code st en func /\
+  MEM inst en.cs_current_insts /\ inst.inst_opcode = ALLOCA ==>
+  inst.inst_id IN sites
+Proof
+  rw[abi_sites_cover_def] >> first_x_assum irule >> fs[fragExecTheory.fn_has_code_def] >>
+  irule fragExecTheory.lookup_block_fn_insts >> goal_assum (drule_at Any) >>
+  fs[IS_PREFIX_APPEND] >> simp[]
+QED
+
+Theorem abi_encode_complex_prefix_site:
+  abi_encode_complex_prefix infos st = (dp,prepared) /\ fn_has_code st prepared func /\
+  abi_sites_cover func sites ==> st.cs_next_id IN sites
+Proof
+  strip_tac >>
+  qspec_then `mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]`
+    (irule o SIMP_RULE (srw_ss()) [venomInstTheory.mk_inst_def]) abi_sites_cover_code >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_x_assum `abi_encode_complex_prefix _ _ = _` mp_tac >>
+  simp[abiEncoderComplexCodeTheory.abi_encode_complex_prefix_def,
+    contextTheory.compile_alloc_buffer_def, compileEnvTheory.comp_bind_def,
+    compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+    emitHelperTheory.emit_void_def, compileEnvTheory.fresh_var_def,
+    compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[venomInstTheory.mk_inst_def]
+QED
+
+Theorem abi_encode_array_tail_init_site:
+  abi_encode_array_tail_init count_op asz st = (dp,prepared) /\ fn_has_code st prepared func /\
+  abi_sites_cover func sites ==> st.cs_next_id IN sites
+Proof
+  strip_tac >>
+  qspec_then `mk_inst st.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString st.cs_next_var)]`
+    (irule o SIMP_RULE (srw_ss()) [venomInstTheory.mk_inst_def]) abi_sites_cover_code >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_x_assum `abi_encode_array_tail_init _ _ _ = _` mp_tac >>
+  simp[abiEncoderArrayTailInitTheory.abi_encode_array_tail_init_def,
+    contextTheory.compile_alloc_buffer_def, compileEnvTheory.comp_bind_def,
+    compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+    emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def, compileEnvTheory.fresh_var_def,
+    compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[venomInstTheory.mk_inst_def]
+QED
+
 Theorem abi_encoder_shared_array_tail_prepare:
   abi_encode_array_tail_init count_op asz st = (dp,prepared) /\ fn_has_code st prepared func /\
+  abi_sites_cover func sites /\
   eval_operand count_op initial = SOME (n2w (LENGTH avs)) /\
   abi_decoder_operand_live st.cs_next_var count_op /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
@@ -296,6 +342,7 @@ Theorem abi_encoder_shared_array_tail_prepare:
     ~actual.vs_halted /\ abi_encoder_extend_sim ctx func initial actual
 Proof
   strip_tac >> drule abi_encode_array_tail_init_shape >> strip_tac >>
+  `st.cs_next_id IN sites` by metis_tac[abi_encode_array_tail_init_site] >>
   drule_all abi_encoder_array_tail_init_raw_reach >>
   disch_then (qx_choose_then `actual` strip_assume_tac) >>
   `st.cs_next_id IN abi_sites_decoder_ids sites first last /\
@@ -335,7 +382,7 @@ QED
 Theorem abi_encoder_complex_prefix_raw_reach:
   abi_encode_complex_prefix (infos:(abi_enc_info # num # num # bool) list) st = (dp,prepared) /\
   abi_sites_decoder_budget sites first last b cap initial /\
-  first <= st.cs_next_id /\ prepared.cs_next_id <= last /\
+  st.cs_next_id IN sites /\ first <= st.cs_next_id /\ prepared.cs_next_id <= last /\
   prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. abi_encoder_member_phase_raw st prepared initial actual /\
     abi_sites_encoder_complex_prefix_post sites infos dp st.cs_next_var st.cs_next_id
@@ -362,7 +409,7 @@ QED
 
 Theorem abi_encoder_shared_cursor_prepare:
   abi_encode_complex_prefix (infos:(abi_enc_info # num # num # bool) list) st = (dp,prepared) /\
-  fn_has_code st prepared func /\
+  fn_has_code st prepared func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz)
     (first,last,b,cap) initial /\
   abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ prepared.cs_next_id <= last /\
@@ -382,6 +429,7 @@ Theorem abi_encoder_shared_cursor_prepare:
     ~actual.vs_halted /\ abi_encoder_extend_sim ctx func initial actual
 Proof
   strip_tac >> drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  `st.cs_next_id IN sites` by metis_tac[abi_encode_complex_prefix_site] >>
   drule_all abi_encoder_complex_prefix_raw_reach >>
   disch_then (qx_choose_then `actual` strip_assume_tac) >>
   `st.cs_next_id IN abi_sites_decoder_ids sites first last /\
@@ -410,7 +458,7 @@ QED
 
 (* Parent allocation/count composition with open source windows. *)
 Theorem abi_encoder_shared_array_parent_prepare:
-  abi_encode_array_prefix src dst st = (ops,loop_st) /\ fn_has_code st loop_st func /\
+  abi_encode_array_prefix src dst st = (ops,loop_st) /\ fn_has_code st loop_st func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_sites_decoder_budget sites first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\

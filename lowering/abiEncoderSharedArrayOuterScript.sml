@@ -15,7 +15,7 @@ Ancestors
 (* Dynamic initializer assembly: shared index and tail allocation boundaries. *)
 Theorem abi_encoder_shared_array_dynamic_init:
   abi_encode_array_dynamic_init count_op asz start = (ptrs,owner_st) /\
-  fn_has_code start owner_st func /\
+  fn_has_code start owner_st func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (start,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs 0 d initial.vs_memory /\
@@ -90,7 +90,7 @@ QED
 Theorem abi_encoder_shared_array_dynamic_loop:
   abi_sites_encoder_shared sites ei /\
   compile_abi_encode_dyn_loop dst src ei asz msz count_op start = (out,final) /\
-  fn_has_code start final func /\
+  fn_has_code start final func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (start,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs 0 d initial.vs_memory /\
@@ -147,7 +147,7 @@ QED
 Theorem abi_encoder_shared_array_static_loop:
   abi_sites_encoder_shared sites ei /\ abi_encoder_static_leaf ei /\
   compile_abi_encode_dyn_static_loop dst src ei asz msz count_op start = (out,final) /\
-  fn_has_code start final func /\
+  fn_has_code start final func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
     (start,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs 0 d initial.vs_memory /\
@@ -209,7 +209,7 @@ Theorem abi_encoder_shared_array_selected_loop:
   abi_sites_encoder_shared sites ei /\ (~active ==> abi_encoder_static_leaf ei) /\
   (if active then compile_abi_encode_dyn_loop dst src ei asz msz count_op start = (out,final)
    else compile_abi_encode_dyn_static_loop dst src ei asz msz count_op start = (out,final)) /\
-  fn_has_code start final func /\
+  fn_has_code start final func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (start,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs 0 d initial.vs_memory /\
@@ -436,7 +436,7 @@ QED
 Theorem abi_encoder_shared_array_outer:
   abi_sites_encoder_shared sites ei /\ (~active ==> abi_encoder_static_leaf ei) /\
   compile_abi_encode_to_buf dst src (AbiDynArray ei asz msz active) start = (out,final) /\
-  fn_has_code start final func /\
+  fn_has_code start final func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (start,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_sites_decoder_budget sites first last b cap initial /\ first <= start.cs_next_id /\ final.cs_next_id <= last /\

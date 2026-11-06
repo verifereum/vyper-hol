@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem abi_encoder_shared_complex_prepare:
-  abi_encode_complex_prefix infos st = (dp,prepared) /\ fn_has_code st prepared func /\
+  abi_encode_complex_prefix infos st = (dp,prepared) /\ fn_has_code st prepared func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiComplex infos,at,ListV avs) (st,src,dst) (sb,source_cap)
     (d,output_size) (first,last,b,cap) initial /\ abi_encoder_tuple_type at tys /\
   LENGTH (enc (Tuple tys) (ListV avs)) <= output_size /\

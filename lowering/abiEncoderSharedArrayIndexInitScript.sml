@@ -11,7 +11,7 @@ Ancestors
   compileEnv venomState instIdxIndep words list arithmetic pred_set valueEncoding contractABI
 
 Theorem abi_encoder_shared_array_index_prepare:
-  abi_decode_index_init st = (ip,prepared) /\ fn_has_code st prepared func /\
+  abi_decode_index_init st = (ip,prepared) /\ fn_has_code st prepared func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
@@ -35,6 +35,7 @@ Proof
   `abi_encode_complex_prefix ([]:(abi_enc_info # num # num # bool) list) st = (ip,prepared)` by
     asm_simp_tac bool_ss [GSYM abi_decode_index_init_complex_prefix] >>
   drule abi_encoder_complex_prefix_shape >> strip_tac >>
+  `st.cs_next_id IN sites` by metis_tac[abi_encode_complex_prefix_site] >>
   drule_all abi_encoder_complex_prefix_raw_reach >>
   disch_then (qx_choose_then `actual` strip_assume_tac) >>
   `st.cs_next_id IN abi_sites_decoder_ids sites first last /\

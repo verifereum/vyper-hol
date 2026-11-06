@@ -75,6 +75,7 @@ Definition abi_sites_encoder_shared_def:
   abi_sites_encoder_shared sites ei <=>
     !dst src start end_st out func ctx first last b cap limit_st initial at av sb source_cap d.
     compile_abi_encode_to_buf dst src ei start = (out,end_st) /\ fn_has_code start end_st func /\
+    abi_sites_cover func sites /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
@@ -106,7 +107,7 @@ Theorem abi_encoder_shared_def:
     initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
     ?actual. abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual
 Proof
-  rewrite_tac[abi_sites_encoder_shared_def]
+  rewrite_tac[abi_sites_encoder_shared_def, abi_sites_cover_univ]
 QED
 
 Theorem abi_scratch_input_shared:

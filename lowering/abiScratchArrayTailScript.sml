@@ -19,7 +19,7 @@ Theorem abi_scratch_array_tail_sequence:
   abi_encode_array_tail_init count_op asz st = (dyn_ptr,st') /\
   eval_operand count_op initial = SOME (n2w cnt) /\ abi_decoder_operand_live st.cs_next_var count_op /\
   abi_sites_decoder_budget sites first last b cap initial /\
-  first <= st.cs_next_id /\ st'.cs_next_id <= last /\
+  st.cs_next_id IN sites /\ first <= st.cs_next_id /\ st'.cs_next_id <= last /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
     abi_sites_encoder_complex_prefix_post sites [(AbiPrimWord,cnt*asz,0,F)] dyn_ptr st.cs_next_var st.cs_next_id
