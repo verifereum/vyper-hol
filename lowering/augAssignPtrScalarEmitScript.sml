@@ -63,3 +63,16 @@ Theorem scalar_available_after_code:
 Proof
   strip_tac >> irule scalar_available_mono >> qexists `A` >> simp[]
 QED
+
+Theorem scalar_available_lit:
+  scalar_available A (Lit w)
+Proof
+  simp[scalar_available_def]
+QED
+
+Theorem scalar_available_union:
+  scalar_available (A UNION B) op <=>
+  scalar_available A op \/ scalar_available B op
+Proof
+  simp[scalar_available_def] >> metis_tac[]
+QED
