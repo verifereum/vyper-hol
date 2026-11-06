@@ -3,6 +3,7 @@ Ancestors concretizeLayoutExternalRequests concretizeLayoutSupplement
   venomCallOracleDefs extCallOracle ptrDiscipline venomState venomExecSemantics
   venomInst list pred_set frameRelocationAllocationSteps frameRelocationGuardedValues
   frameOriginUpdates frameRelocationGhostCopy frameRelocationLocal finite_map
+  frameRelocationCleanOperands o1PassContract pointerConfinedDefs memLocDefs
 
 (* CREATE's clean-storage side condition makes the adopted external snapshot
    exact; immutable taint and historical request agreement are retained. *)
@@ -163,5 +164,34 @@ Resume concretize_create_local_execution[values]:
   rpt strip_tac >> gvs[op_taint_def, FLOOKUP_UPDATE]
 QED
 Finalise concretize_create_local_execution
+
+Theorem create_scalar_agreement[local]:
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst s /\
+  inst.inst_operands = opv::opd::opn::salts /\
+  ((inst.inst_opcode = CREATE /\ salts = []) \/
+   (inst.inst_opcode = CREATE2 /\ LENGTH salts = 1)) /\
+  (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
+    (guarded_bytes (retpc_var fn) rv tn) R Obs s t ==>
+  !op. MEM op (opv::opn::salts) ==> eval_operand op s = eval_operand op t
+Proof
+  strip_tac >> Cases_on `salts` >> gvs[] >> rpt strip_tac >>
+  `!v. op = Var v ==> FLOOKUP rv v = NONE` by
+    (rpt strip_tac >> spose_not_then assume_tac >>
+     `v IN fn_pv P fn` by metis_tac[] >>
+     `ptr_use_ok P (fn_pv P fn) inst` by metis_tac[fn_ptr_ok_def] >>
+     gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+         mem_write_ops_def, mem_read_ops_def] >>
+     qpat_x_assum `!v. _ ==> _` (qspec_then `v` mp_tac) >>
+     simp[] >> Cases_on `opd = Var v` >> gvs[] >>
+     Cases_on `opv = Var v` >> gvs[] >>
+     Cases_on `opn = Var v` >> gvs[]) >>
+  drule_at (Pat `local_rel _ _ _ _ _ _ _`) disciplined_scalar_operand >>
+  disch_then irule >> simp[] >>
+  (conj_tac >- metis_tac[]) >> (conj_tac >- metis_tac[]) >>
+  qexists_tac `inst` >> simp[] >> fs[] >> metis_tac[]
+QED
 
 val _ = export_theory();
