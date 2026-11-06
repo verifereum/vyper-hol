@@ -25,24 +25,30 @@ QED
 
 Theorem recovery_source_value:
   value_has_type (BaseTV (BytesT (Fixed 32))) vh /\
-  value_has_type (BaseTV (UintT 256)) vv /\
-  value_has_type (BaseTV (UintT 256)) vr /\
-  value_has_type (BaseTV (UintT 256)) vq /\
+  (tv = BaseT (UintT 8) \/ tv = BaseT (UintT 256) \/
+   tv = BaseT (BytesT (Fixed 32))) /\
+  (tr = BaseT (UintT 256) \/ tr = BaseT (BytesT (Fixed 32))) /\
+  (tq = BaseT (UintT 256) \/ tq = BaseT (BytesT (Fixed 32))) /\
+  evaluate_type (get_tenv cx) tv = SOME tvv /\
+  evaluate_type (get_tenv cx) tr = SOME trr /\
+  evaluate_type (get_tenv cx) tq = SOME tqq /\
+  value_has_type tvv vv /\ value_has_type trr vr /\ value_has_type tqq vq /\
   typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) vh = wh /\
-  typed_val_to_w256 (BaseTV (UintT 256)) vv = wv /\
-  typed_val_to_w256 (BaseTV (UintT 256)) vr = wr /\
-  typed_val_to_w256 (BaseTV (UintT 256)) vq = wq ==>
+  typed_val_to_w256 tvv vv = wv /\
+  typed_val_to_w256 trr vr = wr /\
+  typed_val_to_w256 tqq vq = wq ==>
   builtin_result cx acc ann ECRecover
-    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256);
-     BaseT (UintT 256); BaseT (UintT 256)] [vh;vv;vr;vq] =
+    [BaseT (BytesT (Fixed 32)); tv;tr;tq] [vh;vv;vr;vq] =
     INL (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
       NONE => 0w | SOME addr => addr))
 Proof
-  strip_tac >>
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   `ecrecover_arg_to_num vv = SOME (w2n wv) /\
    ecrecover_arg_to_num vr = SOME (w2n wr) /\
    ecrecover_arg_to_num vq = SOME (w2n wq)` by
-    (gvs[] >> rpt conj_tac >> irule recovery_arg_typed_encoding >> simp[]) >>
+    (gvs[evaluate_type_def] >> rpt conj_tac >>
+     irule recovery_arg_typed_encoding >> simp[]) >>
+  ntac 3 (qpat_x_assum `_ \/ _` kall_tac) >>
   Cases_on `vh` >> gvs[value_has_type_def, typed_val_to_w256_def] >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_ecrecover_def, PAD_RIGHT] >>
   CASE_TAC >> simp[]
@@ -106,18 +112,22 @@ Theorem recovery_source_tail_ptr_path:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   value_has_type (BaseTV (BytesT (Fixed 32))) vh /\
-  value_has_type (BaseTV (UintT 256)) vv /\
-  value_has_type (BaseTV (UintT 256)) vr /\
-  value_has_type (BaseTV (UintT 256)) vq /\
+  (tv = BaseT (UintT 8) \/ tv = BaseT (UintT 256) \/
+   tv = BaseT (BytesT (Fixed 32))) /\
+  (tr = BaseT (UintT 256) \/ tr = BaseT (BytesT (Fixed 32))) /\
+  (tq = BaseT (UintT 256) \/ tq = BaseT (BytesT (Fixed 32))) /\
+  evaluate_type (get_tenv cx) tv = SOME tvv /\
+  evaluate_type (get_tenv cx) tr = SOME trr /\
+  evaluate_type (get_tenv cx) tq = SOME tqq /\
+  value_has_type tvv vv /\ value_has_type trr vr /\ value_has_type tqq vq /\
   typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) vh = wh /\
-  typed_val_to_w256 (BaseTV (UintT 256)) vv = wv /\
-  typed_val_to_w256 (BaseTV (UintT 256)) vr = wr /\
-  typed_val_to_w256 (BaseTV (UintT 256)) vq = wq /\
+  typed_val_to_w256 tvv vv = wv /\
+  typed_val_to_w256 trr vr = wr /\
+  typed_val_to_w256 tqq vq = wq /\
   s.vs_current_bb = sf.cs_current_bb /\
   s.vs_inst_idx = LENGTH sf.cs_current_insts /\
   ec_source_tail cx ann ECRecover
-    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256);
-     BaseT (UintT 256); BaseT (UintT 256)] [vh;vv;vr;vq] es = (r,es') ==>
+    [BaseT (BytesT (Fixed 32)); tv;tr;tq] [vh;vv;vr;vq] es = (r,es') ==>
   ?n result G' tn'. gas_path_ptr D 0 ctx fn PG G tn s n G' tn' result /\
    ((?t value. result = OK t /\ r = INL (Value value) /\
       vv_post ctx fn cenv cx (Builtin (BaseT AddressT) ECRecover args)
@@ -131,10 +141,9 @@ Theorem recovery_source_tail_ptr_path:
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
     \/ (exit_result result /\ expr_exit r result))
 Proof
-  strip_tac >>
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   `builtin_result cx es.accounts ann ECRecover
-    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256);
-     BaseT (UintT 256); BaseT (UintT 256)] [vh;vv;vr;vq] =
+    [BaseT (BytesT (Fixed 32)); tv;tr;tq] [vh;vv;vr;vq] =
     INL (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
       NONE => 0w | SOME addr => addr))` by
     (irule recovery_source_value >> simp[]) >>
@@ -181,3 +190,4 @@ Resume recovery_source_tail_ptr_path[success]:
   disj1_tac >> goal_assum (drule_at Any) >> simp[]
 QED
 Finalise recovery_source_tail_ptr_path
+
