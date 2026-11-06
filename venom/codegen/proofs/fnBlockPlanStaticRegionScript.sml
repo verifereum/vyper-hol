@@ -4804,3 +4804,31 @@ Proof
   first_x_assum (qspec_then `op` mp_tac) >> simp[] >>
   strip_tac >> gvs[MEM_MAP, operand_to_string_def]
 QED
+
+Theorem regional_edge_input_upper_source:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)) ==>
+  regional_phi_remaining_source bb 0 v \/ MEM v (live_vars_at lv bb.bb_label 0)
+Proof
+  strip_tac >> drule input_vars_from_phi_correct_proof >> strip_tac
+  >- simp[] >>
+  disj1_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  drule_all ready_phi_use_location >> strip_tac >>
+  `MEM inst (collect_phis bb.bb_instructions)` by metis_tac[EL_MEM] >>
+  `MEM (Var v) inst.inst_operands` by metis_tac[phi_pairs_mem_var] >>
+  simp[regional_phi_remaining_source_def, MEM_FLAT, MEM_MAP] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem regional_edge_input_upper:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  EVERY (\op. ?v. op = Var v /\ MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))) ps.ps_stack ==>
+  EVERY (\op. ?v. op = Var v /\
+    (regional_phi_remaining_source bb 0 v \/ MEM v (live_vars_at lv bb.bb_label 0))) ps.ps_stack
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule_all regional_edge_input_upper_source >> simp[]
+QED

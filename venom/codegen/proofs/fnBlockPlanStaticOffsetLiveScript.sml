@@ -649,7 +649,7 @@ Proof
   first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
 QED
 
-Theorem ready_phi_use_location[local]:
+Theorem ready_phi_use_location:
   !fn ub use. codegen_ready_fn fn /\ MEM ub fn.fn_blocks /\
     MEM use ub.bb_instructions /\ use.inst_opcode = PHI ==>
     ?j. j < LENGTH (collect_phis ub.bb_instructions) /\
