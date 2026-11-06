@@ -6,7 +6,7 @@ Ancestors
   exprSimUnwrapProps loweringPosts exprLowering exprLoweringProps
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   vyperInterpreter vyperState vyperAST vyperTypeSystem
-  loweringSlice compileEnv venomState context exprSimMemoryPath
+  loweringSlice compileEnv venomState context exprSimMemoryPath exprSimCalldataSlice
 
 Theorem compile_calldata_slice_sim_mem:
   expr_body_pre cenv cx env

@@ -5,7 +5,7 @@ Theory bodyMemBiCalldataSlice
 Ancestors
   bodyMemoryPreds bodyMemBiCalldataSliceRead bodyMemBiCalldataSliceCompose
   bodyMemBiCalldataSliceFacts exprSimHypsDefs vyperTyping
-  exprSimSource vyperInterpreter vyperContext
+  exprSimSource vyperInterpreter vyperContext exprSimCalldataSlice
 
 Theorem body_builtin_calldata_slice_mem:
   !cx ty n es.
