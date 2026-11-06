@@ -182,7 +182,8 @@ Theorem concretize_call_completion_observation:
   s.vs_outcomes = t.vs_outcomes /\
   consume_call_outcome rq ro rs s = (w,post) /\
   consume_call_outcome rq' ro' rs t = (w',post') ==>
-  w = w' /\ concretize_local_obs post post'
+  w = w' /\ concretize_local_obs post post' /\
+  post.vs_vars = s.vs_vars /\ post'.vs_vars = t.vs_vars
 Proof
   strip_tac >>
   qabbrev_tac `M = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
@@ -249,7 +250,10 @@ Theorem concretize_ext_call_observation:
   exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
   ?post'. exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
     concretize_local_obs post post' /\
-    concretize_supplement D (step_taint inst s post tn) post post'
+    concretize_supplement D (step_taint inst s post tn) post post' /\
+    (?out w. inst.inst_outputs = [out] /\
+      post.vs_vars = (update_var out w s).vs_vars /\
+      post'.vs_vars = (update_var out w t).vs_vars)
 Proof
   strip_tac >>
   qabbrev_tac `rq = venom_call_request s addr value off sz is_static` >>
@@ -277,11 +281,13 @@ Proof
   conj_tac
   >- gvs[concretize_local_obs_def, dead_result_rel_def, update_var_def,
          Excl "consume_call_outcome_eq"] >>
-  qpat_x_assum `concretize_supplement D (step_taint _ _ _ _) _ _` mp_tac >>
+  conj_tac
+  >- (qpat_x_assum `concretize_supplement D (step_taint _ _ _ _) _ _` mp_tac >>
   simp[concretize_supplement_def, step_taint_def, adopt_reset_def,
        store_taint_def, imm_taint_def, update_var_def,
        Excl "consume_call_outcome_eq"] >>
-  strip_tac >> fs[Excl "consume_call_outcome_eq"]
+  strip_tac >> fs[Excl "consume_call_outcome_eq"]) >>
+  qexistsl_tac [`out`,`w`] >> simp[update_var_def]
 QED
 
 Theorem ext_call_execution_fields:
@@ -306,5 +312,6 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   Cases_on `oc.co_success` >> simp[]
 QED
+
 
 val _ = export_theory();
