@@ -24,7 +24,7 @@ Ancestors
   venomInstProps venomExecProps
   execEquivParamProps
   rangeAnalysisDefs rangeEvalDefs valueRangeDefs
-  variableRangeAnalysisProps rangeAnalysisProofs
+  rangeAnalysisProofs
   dfAnalyzeWidenDefs
   dfgDefs dfgAnalysisProps dfgSoundStep
   worklistDefs
@@ -756,15 +756,6 @@ Proof
   simp[overflow_elim_inst_eq_v, range_at_inst_def]
 QED
 
-Theorem FLAT_MAPi_SING:
-  !f l. FLAT (MAPi (\i x. [f i x]) l) = MAPi f l
-Proof
-  Induct_on `l` >> simp[indexedListsTheory.MAPi_def] >>
-  rpt gen_tac >>
-  first_x_assum (qspec_then `f o SUC` mp_tac) >>
-  simp[combinTheory.o_DEF]
-QED
-
 (* Transform equivalence: overflow_elim_function =
    clear_nops(analysis_function_transform_widen NONE ra
      (\v inst. [overflow_elim_inst_v dfg (range_unwrap v) inst]) fn) *)
@@ -791,7 +782,7 @@ Proof
   simp[overflow_elim_block_insts_eq_mapi] >>
   (* MAPi (\i inst. overflow_elim_inst dfg ra (EL x fn.fn_blocks).bb_label (0+i) inst) =
      FLAT (MAPi (\i inst. [overflow_elim_inst_v dfg (range_unwrap (df_widen_at NONE ra lbl i)) inst]) ...) *)
-  simp[FLAT_MAPi_SING, analysis_block_transform_widen_def,
+  simp[flat_mapi_singleton, analysis_block_transform_widen_def,
        analysis_block_transform_def, basic_block_component_equality] >>
   irule listTheory.LIST_EQ >>
   simp[indexedListsTheory.EL_MAPi] >>

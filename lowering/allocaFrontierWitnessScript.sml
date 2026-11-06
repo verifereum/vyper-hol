@@ -151,15 +151,13 @@ Proof
   `active_inst frontier_caller (instruction 3 JMP [Label "caller"] []) u` by
     simp[Abbr `u`, active_inst_def, frontier_caller_def, mk_raw_function_def] >>
   `Inv frontier_context frontier_caller (instruction 3 JMP [Label "caller"] []) u` by
-    (qpat_x_assum `reachability_closed _ _` mp_tac >>
-     simp[reachability_closed_def] >> rpt strip_tac >>
-     qpat_x_assum `!fn inst inst' s s' fuel.
-       _ /\ _ /\ ~is_terminator _ /\ _ ==> _`
-       (qspecl_then [`frontier_caller`, `instruction 2 INVOKE [Label "callee"] []`,
-                     `instruction 3 JMP [Label "caller"] []`, `s`,
-                     `s`, `1`] mp_tac) >>
-     simp[frontier_invoke_restores, is_terminator_def, Abbr `u`,
-          active_inst_def, frontier_caller_def, mk_raw_function_def]) >>
+    (qpat_x_assum `reachability_closed _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [reachability_closed_def]) >>
+     disch_then (qspecl_then [`frontier_caller`,
+                   `instruction 2 INVOKE [Label "callee"] []`,
+                   `instruction 3 JMP [Label "caller"] []`, `s`, `s`, `1`]
+                   mp_tac) >>
+     simp[frontier_invoke_restores, is_terminator_def, Abbr `u`]) >>
   qexists `jump_to "caller" u` >>
   reverse conj_tac
   >- simp[jump_to_def, Abbr `u`, active_inst_def, frontier_caller_def,

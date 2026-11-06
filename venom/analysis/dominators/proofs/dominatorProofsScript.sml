@@ -7,7 +7,7 @@
 
 Theory dominatorProofs
 Ancestors
-  dominatorDefs cfgAnalysisProps dfAnalyzeProps dfHelperProps
+  dominatorDefs cfgAnalysisProps dfAnalyzeProps cfgCorrectnessProof cfgHelpers dfHelperProofs dfHelperDefs
 Libs
   listTheory finite_mapTheory pred_setTheory pairTheory
 
@@ -75,7 +75,7 @@ QED
    Category A: FOLDL/domain properties
    ======================================================================== *)
 
-Theorem dom_analyze_domain_proof:
+Theorem dom_analyze_domain:
   !fn cfg lbl.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -87,7 +87,7 @@ Proof
   fs[foldl_fupdate_fdom, FDOM_FEMPTY]
 QED
 
-Theorem idom_entry_none_proof:
+Theorem idom_entry_none:
   !fn cfg bb.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -231,30 +231,6 @@ End
    Basic helpers
    ======================================================================== *)
 
-Theorem three_sum_strict[local]:
-  !a b c a' b' (c':num).
-    a <= a' /\ b <= b' /\ c <= c' /\
-    (a < a' \/ b < b' \/ c < c') ==>
-    a + b + c < a' + b' + c'
-Proof
-  rpt strip_tac >> fs[]
-QED
-
-Theorem all_distinct_psubset_length[local]:
-  !xs ys.
-    ALL_DISTINCT xs /\ ALL_DISTINCT ys /\
-    set xs SUBSET set ys /\ set xs <> set ys ==>
-    LENGTH xs < LENGTH ys
-Proof
-  rw[] >>
-  `FINITE (set ys)` by rw[FINITE_LIST_TO_SET] >>
-  `CARD (set xs) = LENGTH xs` by metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET] >>
-  `CARD (set ys) = LENGTH ys` by metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET] >>
-  `set xs PSUBSET set ys` by (rw[PSUBSET_DEF] >> metis_tac[]) >>
-  `CARD (set xs) < CARD (set ys)` by metis_tac[CARD_PSUBSET] >>
-  DECIDE_TAC
-QED
-
 (* Identity transfer: fold output = accumulator, all values = init_val *)
 Theorem identity_fold_block_values[local]:
   !lbl instrs init_val fv im.
@@ -301,18 +277,18 @@ Proof
   gvs[list_intersect_single_ad, SUBSET_REFL, list_intersect_single_subset]
   >> FIRST [
        (* ALL_DISTINCT (FOLDL ...) *)
-       match_mp_tac dfHelperPropsTheory.foldl_intersect_all_distinct >>
+       match_mp_tac dfHelperProofsTheory.foldl_intersect_all_distinct >>
        simp[dfHelperDefsTheory.list_intersect_def, FILTER_ALL_DISTINCT],
        (* set (list_intersect [x] (FOLDL ...)) SUBSET set fn_labels *)
        irule SUBSET_TRANS >>
        irule_at Any list_intersect_single_subset >>
        irule SUBSET_TRANS >>
-       irule_at Any dfHelperPropsTheory.foldl_list_intersect_subset >>
+       irule_at Any dfHelperProofsTheory.foldl_list_intersect_subset >>
        simp[dfHelperDefsTheory.list_intersect_def,
             LIST_TO_SET_FILTER, INTER_SUBSET],
        (* set (FOLDL ...) SUBSET set fn_labels *)
        irule SUBSET_TRANS >>
-       irule_at Any dfHelperPropsTheory.foldl_list_intersect_subset >>
+       irule_at Any dfHelperProofsTheory.foldl_list_intersect_subset >>
        simp[dfHelperDefsTheory.list_intersect_def,
             LIST_TO_SET_FILTER, INTER_SUBSET]
      ]
@@ -353,7 +329,7 @@ Proof
       simp[] >>
       (* entry_val wrapper preserves SUBSET when base does *)
       BasicProvers.EVERY_CASE_TAC >> gvs[SUBSET_REFL] >>
-      simp[dfHelperPropsTheory.list_intersect_set, SUBSET_DEF, IN_INTER] >>
+      simp[dfHelperProofsTheory.list_intersect_set, SUBSET_DEF, IN_INTER] >>
       rpt strip_tac >> gvs[] >>
       `set (FOLDL list_intersect (fn_labels fn)
          (MAP (\nbr. dom_edge_transfer () nbr lbl
@@ -364,7 +340,7 @@ Proof
        set (FOLDL list_intersect (fn_labels fn)
          (MAP (\nbr. dom_edge_transfer () nbr lbl
            (df_boundary (fn_labels fn) st nbr)) (h::t)))` by
-        (irule dfHelperPropsTheory.foldl_list_intersect_mono >>
+        (irule dfHelperProofsTheory.foldl_list_intersect_mono >>
          rw[listTheory.EL_MAP] >> metis_tac[edge_transfer_mono]) >>
       fs[SUBSET_DEF])
 QED
@@ -376,7 +352,7 @@ Triviality foldl_list_intersect_mem_all:
     MEM v (FOLDL list_intersect a xs)
 Proof
   Induct >> rw[FOLDL] >>
-  first_x_assum irule >> rw[dfHelperPropsTheory.list_intersect_mem]
+  first_x_assum irule >> rw[dfHelperProofsTheory.list_intersect_mem]
 QED
 
 (* dom_edge_transfer always adds lbl to the boundary *)
@@ -406,11 +382,11 @@ Proof
      rpt strip_tac >> simp[dom_edge_transfer_mem_lbl]) >>
   Cases_on `evs`
   >- (BasicProvers.EVERY_CASE_TAC >>
-      gvs[dfHelperPropsTheory.list_intersect_mem])
+      gvs[dfHelperProofsTheory.list_intersect_mem])
   >> `MEM lbl (FOLDL list_intersect (fn_labels fn) (h::t))` by
        (irule foldl_list_intersect_mem_all >> fs[listTheory.EVERY_DEF]) >>
      BasicProvers.EVERY_CASE_TAC >>
-     gvs[dfHelperPropsTheory.list_intersect_mem]
+     gvs[dfHelperProofsTheory.list_intersect_mem]
 QED
 
 (* Entry label is in every df_boundary when dom_extra_inv holds *)
@@ -449,7 +425,7 @@ Proof
   Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> simp[]
   >- (imp_res_tac fn_entry_mem_fn_labels >> fs[])
   >> irule foldl_list_intersect_mem_all >>
-  simp[dfHelperPropsTheory.list_intersect_mem,
+  simp[dfHelperProofsTheory.list_intersect_mem,
        listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
   imp_res_tac fn_entry_mem_fn_labels >> rw[] >> fs[]
 QED
@@ -566,9 +542,9 @@ Resume dom_inv_preserved[C1]:
   >- (qpat_x_assum `lbl = lbl'` (SUBST1_TAC o SYM) >>
       PURE_REWRITE_TAC [optionTheory.SOME_11] >>
       DISCH_THEN (SUBST1_TAC o SYM) >> conj_tac
-      >- (irule dfHelperPropsTheory.list_intersect_all_distinct >>
+      >- (irule dfHelperProofsTheory.list_intersect_all_distinct >>
           first_assum ACCEPT_TAC)
-      >> PURE_REWRITE_TAC [dfHelperPropsTheory.list_intersect_set] >>
+      >> PURE_REWRITE_TAC [dfHelperProofsTheory.list_intersect_set] >>
          irule SUBSET_TRANS >>
          qexists `set (dom_joined fn st lbl)` >> conj_tac
          >- REWRITE_TAC [INTER_SUBSET]
@@ -588,7 +564,7 @@ Resume dom_inv_preserved[C3]:
   irule SUBSET_TRANS >>
   qexists `set (dom_joined fn st lbl')` >> conj_tac
   >- (irule dom_joined_boundary_mono >>
-      REWRITE_TAC [dfHelperPropsTheory.list_intersect_set, INTER_SUBSET])
+      REWRITE_TAC [dfHelperProofsTheory.list_intersect_set, INTER_SUBSET])
   >> qpat_x_assum
        `!l v0. FLOOKUP st.ds_inst (l, 0n) = SOME v0 ==> _`
        (qspecl_then [`lbl'`, `v0`] match_mp_tac) >>
@@ -612,7 +588,7 @@ Resume dom_inv_preserved[C7]:
   >- (qpat_x_assum `lbl = lbl'` (SUBST1_TAC o SYM) >>
       simp_tac (srw_ss()) [dfAnalyzeDefsTheory.df_boundary_def,
                           FLOOKUP_UPDATE,
-                          dfHelperPropsTheory.list_intersect_mem] >>
+                          dfHelperProofsTheory.list_intersect_mem] >>
       conj_tac
       >- (qpat_assum
             `!l. MEM l (fn_labels fn) ==>
@@ -647,7 +623,7 @@ Proof
                    LENGTH (df_boundary (fn_labels fn) st lbl))
             (fn_labels fn)) <=
    LENGTH (fn_labels fn) * LENGTH (fn_labels fn)` by (
-    irule dfHelperPropsTheory.sum_map_bounded >>
+    irule dfAnalyzeProofsTheory.sum_map_le_bound >>
     rw[EVERY_MEM] >> rpt strip_tac >>
     `LENGTH (df_boundary (fn_labels fn) st x) <= LENGTH (fn_labels fn)` by (
       irule dfAnalyzeProofsTheory.df_boundary_length_le >>
@@ -690,36 +666,6 @@ Proof
 QED
 
 (* --- Convergence helpers for measure_increases --- *)
-
-Triviality sum_complement_mono[local]:
-  !f g (n:num) ls.
-    (!x. MEM x ls ==> g x <= f x /\ f x <= n) ==>
-    SUM (MAP (\x. n - f x) ls) <= SUM (MAP (\x. n - g x) ls)
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  `g h <= f h /\ f h <= n` by metis_tac[] >>
-  `!x. MEM x ls ==> g x <= f x /\ f x <= n` by metis_tac[] >>
-  res_tac >> DECIDE_TAC
-QED
-
-Triviality sum_complement_strict[local]:
-  !f g (n:num) ls x.
-    MEM x ls /\ g x < f x /\ f x <= n /\
-    (!y. MEM y ls ==> g y <= f y /\ f y <= n) ==>
-    SUM (MAP (\y. n - f y) ls) < SUM (MAP (\y. n - g y) ls)
-Proof
-  Induct_on `ls` >> rw[] >> fs[] >> (
-    `g h <= f h /\ f h <= n` by metis_tac[] >>
-    `!y. MEM y ls ==> g y <= f y /\ f y <= n` by metis_tac[]
-  )
-  >- (`SUM (MAP (\y. n - f y) ls) <= SUM (MAP (\y. n - g y) ls)` by
-        (irule sum_complement_mono >> metis_tac[]) >>
-      DECIDE_TAC)
-  >> `SUM (MAP (\y. n - f y) ls) < SUM (MAP (\y. n - g y) ls)` by
-       (first_x_assum (qspecl_then [`f`, `g`, `n`, `x`] mp_tac) >> simp[] >>
-        metis_tac[]) >>
-     DECIDE_TAC
-QED
 
 (* --- Measure strictly increases when state changes --- *)
 Theorem dom_measure_increases[local]:
@@ -766,7 +712,7 @@ Resume dom_measure_increases[measure_main]:
   `LENGTH (list_intersect (df_boundary (fn_labels fn) st lbl)
                            (dom_joined fn st lbl)) <
    LENGTH (df_boundary (fn_labels fn) st lbl)` by
-    (match_mp_tac dfHelperPropsTheory.list_intersect_strict_length >>
+    (match_mp_tac dfHelperProofsTheory.list_intersect_strict_length >>
      conj_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then [
     `\x. LENGTH (df_boundary (fn_labels fn) st x)`,
@@ -789,7 +735,7 @@ Resume dom_measure_increases[measure_main]:
         simp[dfAnalyzeDefsTheory.df_boundary_def, FLOOKUP_UPDATE] >>
         Cases_on `y = lbl` >> simp[] >>
         rewrite_tac[GSYM dfAnalyzeDefsTheory.df_boundary_def] >>
-        metis_tac[dfHelperPropsTheory.list_intersect_length_le],
+        metis_tac[dfHelperProofsTheory.list_intersect_length_le],
         metis_tac[dfAnalyzeProofsTheory.df_boundary_length_le,
                   venomWfTheory.wf_function_def]
       ]
@@ -813,16 +759,16 @@ Proof
   Cases_on `cfg_preds_of (cfg_analyze fn) lbl`
   >- ((* [] preds: base = fn_labels, entry wrapper ⊆ fn_labels *)
       BasicProvers.EVERY_CASE_TAC >> gvs[SUBSET_REFL] >>
-      simp[dfHelperPropsTheory.list_intersect_set,
+      simp[dfHelperProofsTheory.list_intersect_set,
            pred_setTheory.SUBSET_DEF, pred_setTheory.IN_INTER])
   >> (* h::t preds: FOLDL ⊆ fn_labels, then entry wrapper preserves *)
   simp[] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   metis_tac[SUBSET_TRANS,
-            dfHelperPropsTheory.foldl_list_intersect_subset,
+            dfHelperProofsTheory.foldl_list_intersect_subset,
             list_intersect_single_subset,
             pred_setTheory.INTER_SUBSET,
-            dfHelperPropsTheory.list_intersect_set]
+            dfHelperProofsTheory.list_intersect_set]
 QED
 
 (* --- dom_extra_inv: initial state --- *)
@@ -931,11 +877,11 @@ Proof
   rpt conj_tac
   >- ((* 1. MEM e (list_intersect bdy joined) *)
       rpt strip_tac >>
-      simp[dfHelperPropsTheory.list_intersect_mem] >>
+      simp[dfHelperProofsTheory.list_intersect_mem] >>
       metis_tac[entry_mem_df_boundary, dom_joined_contains_entry])
   >- ((* 2. non-entry: joined ⊆ list_intersect(bdy, joined) *)
       rpt strip_tac >>
-      simp[dfHelperPropsTheory.list_intersect_set,
+      simp[dfHelperProofsTheory.list_intersect_set,
            pred_setTheory.SUBSET_INTER] >>
       `lbl IN FDOM st.ds_boundary` by fs[dom_extra_inv_def] >>
       `?v. FLOOKUP st.ds_boundary lbl = SOME v` by
@@ -946,14 +892,14 @@ Proof
       rpt strip_tac >>
       irule SUBSET_TRANS >>
       qexists_tac `set (df_boundary (fn_labels fn) st lbl)` >>
-      simp[dfHelperPropsTheory.list_intersect_set, INTER_SUBSET] >>
+      simp[dfHelperProofsTheory.list_intersect_set, INTER_SUBSET] >>
       `lbl IN FDOM st.ds_boundary` by fs[dom_extra_inv_def] >>
       `?v. FLOOKUP st.ds_boundary lbl = SOME v` by
         fs[finite_mapTheory.FLOOKUP_DEF] >>
       simp[dfAnalyzeDefsTheory.df_boundary_def] >>
       fs[dom_extra_inv_def] >> res_tac >> fs[])
   >> (* 4. list_intersect(bdy, joined) ⊆ bdy — trivial *)
-  simp[dfHelperPropsTheory.list_intersect_set, INTER_SUBSET]
+  simp[dfHelperProofsTheory.list_intersect_set, INTER_SUBSET]
 QED
 
 (* Pre-strip LETs from key local theorems — avoids repeated SIMP_RULE *)
@@ -973,15 +919,6 @@ val df_process_deps_complete_fwd' =
   |> Q.SPEC `Forward`
   |> SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def];
 
-(* FOLDL that only touches ds_inst preserves ds_boundary *)
-Triviality foldl_inst_only_boundary[local]:
-  !lbls (f : 'a df_state -> string -> 'a df_state) acc.
-    (!st lbl. (f st lbl).ds_boundary = st.ds_boundary) ==>
-    (FOLDL f acc lbls).ds_boundary = acc.ds_boundary
-Proof
-  Induct >> simp[]
-QED
-
 (* df_populate_inst preserves ds_boundary *)
 Triviality populate_inst_ds_boundary[local]:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
@@ -990,7 +927,7 @@ Triviality populate_inst_ds_boundary[local]:
 Proof
   rpt gen_tac >>
   simp[dfAnalyzeDefsTheory.df_populate_inst_def] >>
-  irule foldl_inst_only_boundary >>
+  irule dfAnalyzeProofsTheory.foldl_inst_only_boundary >>
   simp[LET_THM] >>
   rpt gen_tac >> pairarg_tac >> simp[]
 QED
@@ -1122,7 +1059,7 @@ Proof
       >- metis_tac[dom_measure_increases]
       >- metis_tac[dom_init_state_inv])
   >> match_mp_tac df_process_deps_complete_fwd' >>
-  rw[dfHelperPropsTheory.list_intersect_absorption] >>
+  rw[dfHelperProofsTheory.list_intersect_absorption] >>
   metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
 QED
 
@@ -1146,7 +1083,7 @@ Triviality cfg_dfs_pre_mem_fn_labels:
            MEM lbl (fn_labels fn)
 Proof
   rpt strip_tac >>
-  irule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+  irule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >>
   `set (cfg_analyze fn).cfg_dfs_pre =
    {lbl | cfg_reachable_of (cfg_analyze fn) lbl}` by
     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_sets] >>
@@ -1202,7 +1139,7 @@ Proof
       `set (df_boundary (fn_labels fn) (dom_fixpoint fn) lbl) =
        set (df_boundary (fn_labels fn) (dom_fixpoint fn) lbl) INTER
        set (dom_joined fn (dom_fixpoint fn) lbl)` by
-        metis_tac[dfHelperPropsTheory.list_intersect_set] >>
+        metis_tac[dfHelperProofsTheory.list_intersect_set] >>
       fs[pred_setTheory.INTER_SUBSET_EQN])
   >> (* False branch: update = identity => contradiction *)
   strip_tac >>
@@ -1293,7 +1230,7 @@ Triviality foldl_list_intersect_mem_iff:
     MEM v (FOLDL list_intersect a xs) <=>
     MEM v a /\ EVERY (\x. MEM v x) xs
 Proof
-  Induct >> simp[dfHelperPropsTheory.list_intersect_mem] >>
+  Induct >> simp[dfHelperProofsTheory.list_intersect_mem] >>
   metis_tac[]
 QED
 
@@ -1331,7 +1268,7 @@ Proof
        pred_setTheory.IN_INTER,
        dominatorDefsTheory.dom_edge_transfer_def,
        cfgHelpersTheory.set_set_insert,
-       dfHelperPropsTheory.list_intersect_mem,
+       dfHelperProofsTheory.list_intersect_mem,
        cfgHelpersTheory.mem_set_insert] >>
   simp[CONJ_ASSOC]
 QED
@@ -1370,17 +1307,6 @@ Proof
             listTheory.MEM, pred_setTheory.SPECIFICATION]
 QED
 
-(* Reachable ⇒ MEM in cfg_dfs_pre *)
-Triviality reachable_mem_dfs_pre:
-  !fn lbl.
-    wf_function fn /\ cfg_reachable_of (cfg_analyze fn) lbl ==>
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre
-Proof
-  metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_sets_proof,
-            pred_setTheory.EXTENSION, pred_setTheory.IN_GSPEC_IFF,
-            listTheory.MEM, pred_setTheory.SPECIFICATION]
-QED
-
 (* df_boundary at fixpoint is always a subset of fn_labels *)
 Triviality dom_fixpoint_bdy_sub_fn_labels:
   !fn lbl.
@@ -1401,7 +1327,7 @@ QED
    Category B: Fixpoint-derived properties
    ======================================================================== *)
 
-Theorem dom_labels_bounded_proof:
+Theorem dom_labels_bounded:
   !fn cfg lbl d.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -1417,7 +1343,7 @@ Proof
   fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
-Theorem dom_self_proof:
+Theorem dom_self:
   !fn cfg lbl.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -1429,7 +1355,7 @@ Proof
   fs[dom_state_inv_bdy_def]
 QED
 
-Theorem dom_entry_self_proof:
+Theorem dom_entry_self:
   !fn cfg bb.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -1445,7 +1371,7 @@ Proof
   metis_tac[dom_fixpoint_entry_boundary]
 QED
 
-Theorem dom_fixpoint_equation_proof:
+Theorem dom_fixpoint_equation:
   !fn cfg bb lbl.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -1464,10 +1390,10 @@ Proof
     simp[venomInstTheory.fn_entry_label_def] >>
   `fn_entry_label fn <> SOME lbl` by (strip_tac >> fs[]) >>
   `MEM lbl (fn_labels fn)` by metis_tac[reachable_mem_fn_labels] >>
-  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[reachable_mem_dfs_pre] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[reachable_in_dfs_pre] >>
   `!p. MEM p (cfg_preds_of (cfg_analyze fn) lbl) ==>
        MEM p (fn_labels fn)` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_pred_labels] >>
+    metis_tac[cfgCorrectnessProofTheory.cfg_analyze_pred_labels] >>
   (* LHS chain: da_dominators → df_boundary → dom_joined → set expression *)
   drule_all dom_set_eq >> strip_tac >> simp[] >>
   drule dom_fixpoint_bdy_eq_joined >> disch_then drule >>
@@ -1508,7 +1434,7 @@ Proof
   mp_tac (Q.SPECL [`fn`, `h`] dom_fixpoint_bdy_sub_fn_labels) >> simp[]
 QED
 
-Theorem dom_entry_dominates_all_proof:
+Theorem dom_entry_dominates_all:
   !fn cfg bb lbl.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -1664,7 +1590,7 @@ QED
 
 Resume dom_gfp[process_bdy]:
   gvs[] >>
-  simp[dfHelperPropsTheory.list_intersect_set, pred_setTheory.SUBSET_INTER] >>
+  simp[dfHelperProofsTheory.list_intersect_set, pred_setTheory.SUBSET_INTER] >>
   (* Remaining: set (X c') ⊆ set (dom_joined fn st c') *)
   Cases_on `fn_entry_label fn = SOME c'`
   >- (irule SUBSET_TRANS >> qexists `{c'}` >> conj_tac
@@ -1686,7 +1612,7 @@ Resume dom_gfp[process_bdy]:
   >> (rw[pred_setTheory.SUBSET_DEF, pred_setTheory.IN_BIGINTER_IMAGE,
          pred_setTheory.IN_INSERT, pred_setTheory.IN_UNION] >>
       `MEM p (fn_labels fn)` by
-        metis_tac[cfgAnalysisPropsTheory.cfg_analyze_pred_labels] >>
+        metis_tac[cfgCorrectnessProofTheory.cfg_analyze_pred_labels] >>
       `set (X p) SUBSET set (df_boundary (fn_labels fn) st p)` by res_tac >>
       fs[pred_setTheory.SUBSET_DEF])
 QED
@@ -1694,8 +1620,8 @@ QED
 Finalise dom_gfp
 
 (* LET-stripped versions of key exported theorems *)
-val dom_labels_bounded' = strip_let dom_labels_bounded_proof;
-val dom_fixpoint_equation' = strip_let dom_fixpoint_equation_proof;
+val dom_labels_bounded' = strip_let dom_labels_bounded;
+val dom_fixpoint_equation' = strip_let dom_fixpoint_equation;
 
 (* Entry block existence from wf_function *)
 Triviality wf_entry_block_exists[local]:
@@ -1801,7 +1727,7 @@ Proof
       fs[listTheory.LRC_def] >>
       `set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators
               bb.bb_label) = {bb.bb_label}` by
-        metis_tac[dom_entry_self_proof] >>
+        metis_tac[dom_entry_self] >>
       gvs[pred_setTheory.EXTENSION])
   >> (* Step: ls = SNOC x ls'. Decompose into LRC ls' entry x, R x c *)
   `?mid. LRC (\a b. MEM b (cfg_succs_of (cfg_analyze fn) a)) ls bb.bb_label mid /\
@@ -1822,7 +1748,7 @@ Proof
     (strip_tac >> gvs[] >>
      `set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators
              bb.bb_label) = {bb.bb_label}` by
-       metis_tac[dom_entry_self_proof] >>
+       metis_tac[dom_entry_self] >>
      fs[pred_setTheory.EXTENSION]) >>
   `cfg_preds_of (cfg_analyze fn) c <> []` by
     (Cases_on `cfg_preds_of (cfg_analyze fn) c` >> fs[]) >>
@@ -1910,7 +1836,7 @@ QED
    Any path to c goes through b (dom_on_every_path), split at b gives
    prefix to b, a is on that prefix (dom_on_every_path), so a is on
    every path to c, hence a ∈ dom(c) (on_every_path_dom). *)
-Theorem dominates_trans_proof:
+Theorem dominates_trans:
   !fn cfg a b c.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -1934,7 +1860,7 @@ Proof
   metis_tac[dom_on_every_path, listTheory.MEM_APPEND]
 QED
 
-Theorem dominates_antisym_proof:
+Theorem dominates_antisym:
   !fn cfg a b.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -2097,7 +2023,7 @@ Proof
        dominatorDefsTheory.dom_analyze_def, LET_THM]
 QED
 
-Theorem idom_exists_proof:
+Theorem idom_exists:
   !fn cfg bb lbl.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -2183,7 +2109,7 @@ Proof
     `MEM c (fn_labels fn)` by metis_tac[reachable_mem_fn_labels] >>
     `MEM a (fn_labels fn)` by metis_tac[dom_labels_bounded'] >>
     `dominates (dom_analyze (cfg_analyze fn) fn) a a` by
-      metis_tac[dom_self_proof] >>
+      metis_tac[dom_self] >>
     fs[dominatorDefsTheory.dominates_def]) >>
   (* Sufficient to show by contradiction *)
   SPOSE_NOT_THEN strip_assume_tac >>
@@ -2299,7 +2225,7 @@ Triviality reachable_mem_dfs_post[local]:
     MEM lbl (cfg_analyze fn).cfg_dfs_post
 Proof
   rpt strip_tac >>
-  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[reachable_mem_dfs_pre] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[reachable_in_dfs_pre] >>
   `set ((cfg_analyze fn).cfg_dfs_post) = set ((cfg_analyze fn).cfg_dfs_pre)` by (
     simp[cfgHelpersTheory.cfg_analyze_dfs_post,
          cfgHelpersTheory.cfg_analyze_dfs_pre] >>
@@ -2499,7 +2425,7 @@ Proof
   simp[dominatorDefsTheory.post_order_index_def]
 QED
 
-Theorem idom_is_immediate_proof:
+Theorem idom_is_immediate:
   !fn cfg lbl d.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -2578,7 +2504,7 @@ Proof
   sg `h = lbl` >- (
     SPOSE_NOT_THEN ASSUME_TAC >>
     `dominates (dom_analyze (cfg_analyze fn) fn) lbl lbl` by
-      metis_tac[dom_self_proof] >>
+      metis_tac[dom_self] >>
     `dominates (dom_analyze (cfg_analyze fn) fn) h lbl` by metis_tac[] >>
     `post_order_index (cfg_analyze fn).cfg_dfs_post lbl <
      post_order_index (cfg_analyze fn).cfg_dfs_post h` by
@@ -2662,7 +2588,7 @@ Proof
   simp[cfgDefsTheory.fmap_lookup_list_def, finite_mapTheory.FLOOKUP_DEF]
 QED
 
-Theorem dominated_iff_idom_proof:
+Theorem dominated_iff_idom:
   !fn cfg n c.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -2915,7 +2841,7 @@ Proof
   Induct_on `k`
   >- (rpt strip_tac >> fs[arithmeticTheory.NRC, LET_THM] >>
       strip_tac >> gvs[] >>
-      irule dom_self_proof >> metis_tac[reachable_mem_fn_labels])
+      irule dom_self >> metis_tac[reachable_mem_fn_labels])
   >> rpt strip_tac >> gvs[LET_THM] >>
   fs[arithmeticTheory.NRC] >> strip_tac >>
   rename1 `idom_step _ p z` >>
@@ -2924,7 +2850,7 @@ Proof
     (mp_tac (idom_flookup_eq |> INST [``lbl:string`` |-> ``p:string``]) >>
      simp[] >> fs[idom_step_def]) >>
   mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `p`, `z`]
-            idom_is_immediate_proof) >>
+            idom_is_immediate) >>
   simp[LET_THM] >> strip_tac >>
   `cfg_reachable_of (cfg_analyze fn) z` by
     (irule dominates_reachable >>
@@ -2934,7 +2860,7 @@ Proof
   `dominates (dom_analyze (cfg_analyze fn) fn) z p` by
     fs[dominatorDefsTheory.strict_dominates_def] >>
   mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `n`, `z`, `p`]
-            dominates_trans_proof) >>
+            dominates_trans) >>
   simp[LET_THM]
 QED
 
@@ -2951,7 +2877,7 @@ Proof
   rw[dominatorDefsTheory.strict_dominates_def] >>
   `MEM d (fn_labels fn)` by metis_tac[reachable_mem_fn_labels] >>
   `MEM p (fn_labels fn)` by metis_tac[reachable_mem_fn_labels] >>
-  irule dfHelperPropsTheory.all_distinct_psubset_length >>
+  irule dfHelperProofsTheory.all_distinct_psubset_length >>
   `dom_state_inv_bdy fn (dom_fixpoint fn)` by metis_tac[dom_bridge] >>
   (* ALL_DISTINCT *)
   rpt conj_tac
@@ -2970,18 +2896,18 @@ Proof
     simp[pred_setTheory.EXTENSION] >> qexists_tac `p` >>
     (* Goal: MEM p doms(d) ⇎ MEM p doms(p) *)
     `dominates (dom_analyze (cfg_analyze fn) fn) p p` by
-      (irule dom_self_proof >> metis_tac[]) >>
+      (irule dom_self >> metis_tac[]) >>
     `~dominates (dom_analyze (cfg_analyze fn) fn) p d` by
       (strip_tac >>
        mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `p`, `d`]
-                 dominates_antisym_proof) >>
+                 dominates_antisym) >>
        simp[LET_THM]) >>
     fs[dominatorDefsTheory.dominates_def])
   (* Goal 2: set doms(d) ⊆ set doms(p) *)
   >- (
     rw[pred_setTheory.SUBSET_DEF, dominatorDefsTheory.dominates_def] >>
     mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `x`, `d`, `p`]
-              dominates_trans_proof) >>
+              dominates_trans) >>
     simp[LET_THM, dominatorDefsTheory.dominates_def])
 QED
 
@@ -3034,16 +2960,16 @@ Proof
   rpt strip_tac >> gvs[LET_THM] >>
   (* Establish idom exists *)
   `?d. idom_of (dom_analyze (cfg_analyze fn) fn) y = SOME d` by
-    (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `bb`, `y`] idom_exists_proof) >>
+    (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `bb`, `y`] idom_exists) >>
      simp[]) >>
   simp[] >>
   (* Get idom_is_immediate *)
-  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `y`, `d`] idom_is_immediate_proof) >>
+  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `y`, `d`] idom_is_immediate) >>
   simp[LET_THM] >> strip_tac >>
   simp[dominatorDefsTheory.strict_dominates_def] >>
   EQ_TAC >> strip_tac
   >- ((* Forward: dominates n y /\ n <> y ==> dominates n d *)
-      Cases_on `n = d` >- metis_tac[dom_self_proof, reachable_mem_fn_labels] >>
+      Cases_on `n = d` >- metis_tac[dom_self, reachable_mem_fn_labels] >>
       first_x_assum irule >> simp[dominatorDefsTheory.strict_dominates_def])
   >- ((* Backward: dominates n d ==> dominates n y /\ n <> y *)
       `dominates (dom_analyze (cfg_analyze fn) fn) d y` by
@@ -3051,7 +2977,7 @@ Proof
       conj_tac
       >- ((* dominates n y by transitivity via d *)
           mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `n`, `d`, `y`]
-                    dominates_trans_proof) >>
+                    dominates_trans) >>
           simp[LET_THM])
       >- ((* n <> y: if n=y, then y dom d and d dom y => d=y, contradicting d<>y *)
           strip_tac >> gvs[] >>
@@ -3063,7 +2989,7 @@ Proof
             fs[dominatorDefsTheory.strict_dominates_def] >>
           `d = n` by
             (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `d`, `n`]
-                       dominates_antisym_proof) >>
+                       dominates_antisym) >>
              simp[LET_THM]) >>
           fs[dominatorDefsTheory.strict_dominates_def]))
 QED
@@ -3135,7 +3061,7 @@ Proof
     (* 0 < LENGTH doms(p): p ∈ doms(p) by self-domination *)
     `MEM p (fn_labels fn)` by metis_tac[reachable_mem_fn_labels] >>
     `dominates (dom_analyze (cfg_analyze fn) fn) p p` by
-      (irule dom_self_proof >> metis_tac[]) >>
+      (irule dom_self >> metis_tac[]) >>
     fs[dominatorDefsTheory.dominates_def] >>
     Cases_on `fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators p` >>
     fs[listTheory.MEM])
@@ -3149,16 +3075,16 @@ Proof
     `p <> bb.bb_label` by
       (strip_tac >> gvs[] >>
        mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `bb`, `n`]
-                 dom_entry_dominates_all_proof) >> simp[] >>
+                 dom_entry_dominates_all) >> simp[] >>
        strip_tac >>
        mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `n`, `bb.bb_label`]
-                 dominates_antisym_proof) >>
+                 dominates_antisym) >>
        simp[LET_THM]) >>
     `MEM p (fn_labels fn)` by metis_tac[reachable_mem_fn_labels] >>
     (* idom(p) exists *)
     `?z. idom_of (dom_analyze (cfg_analyze fn) fn) p = SOME z` by
       (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `bb`, `p`]
-                 idom_exists_proof) >> simp[]) >>
+                 idom_exists) >> simp[]) >>
     (* idom_step p z *)
     `FLOOKUP (compute_idom (cfg_analyze fn).cfg_dfs_post (fn_entry_label fn)
        (dom_sets_of fn (dom_fixpoint fn)) (fn_labels fn)) p = SOME z` by
@@ -3167,7 +3093,7 @@ Proof
     (* strict_dom z p from idom_is_immediate *)
     `strict_dominates (dom_analyze (cfg_analyze fn) fn) z p` by
       (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `p`, `z`]
-                 idom_is_immediate_proof) >>
+                 idom_is_immediate) >>
        simp[LET_THM]) >>
     (* z is reachable *)
     `cfg_reachable_of (cfg_analyze fn) z` by
@@ -3273,7 +3199,7 @@ Proof
   simp[idom_step_def] >> metis_tac[optionTheory.SOME_11]
 QED
 
-(* dom_frontier_correct_proof — design note:
+(* dom_frontier_correct — design note:
    The existential requires cfg_reachable_of cfg p, matching the standard
    Cytron et al. (1991) definition which only considers reachable predecessors.
    Without this, the theorem is FALSE: unreachable predecessors have
@@ -3294,7 +3220,7 @@ val nrc_prefix_spec = nrc_deterministic_prefix
   |> Q.SPEC `idom_step ^the_idom`;
 val dominates_nrc_idom_rw = REWRITE_RULE [LET_THM] dominates_nrc_idom;
 
-Theorem dom_frontier_correct_proof:
+Theorem dom_frontier_correct:
   !fn cfg n y.
     wf_function fn /\
     cfg = cfg_analyze fn /\
@@ -3318,7 +3244,7 @@ Proof
     (strip_tac >> fs[venomInstTheory.fn_entry_label_def]) >>
   `?target_idom. idom_of (dom_analyze (cfg_analyze fn) fn) y = SOME target_idom` by
     (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `bb`, `y`]
-               idom_exists_proof) >> simp[]) >>
+               idom_exists) >> simp[]) >>
   `FLOOKUP (compute_idom (cfg_analyze fn).cfg_dfs_post (fn_entry_label fn)
      (dom_sets_of fn (dom_fixpoint fn)) (fn_labels fn)) y = SOME target_idom` by
     (mp_tac (idom_flookup_eq |> INST [``lbl:string`` |-> ``y:string``]) >>
@@ -3345,7 +3271,7 @@ Proof
      simp[LET_THM, venomInstTheory.fn_entry_label_def]) >>
   `strict_dominates (dom_analyze (cfg_analyze fn) fn) target_idom y` by
     (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `y`, `target_idom`]
-               idom_is_immediate_proof) >>
+               idom_is_immediate) >>
      simp[LET_THM, venomInstTheory.fn_entry_label_def]) >>
   `dominates (dom_analyze (cfg_analyze fn) fn) target_idom y` by
     fs[dominatorDefsTheory.strict_dominates_def] >>
@@ -3405,7 +3331,7 @@ Proof
            simp[LET_THM]) >>
         `n = target_idom` by
           (mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `n`, `target_idom`]
-                    dominates_antisym_proof) >>
+                    dominates_antisym) >>
            simp[LET_THM] >> metis_tac[dominates_reachable]) >>
         metis_tac[])))
   >- (
@@ -3427,7 +3353,7 @@ Proof
     conj_tac
     >- (strip_tac >> gvs[] >>
       mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `target_idom`]
-                dom_self_proof) >> simp[])
+                dom_self) >> simp[])
     >- (qexistsl_tac [`p`, `k0`] >> simp[] >>
       rpt gen_tac >> CCONTR_TAC >> fs[] >> metis_tac[]))
 QED
@@ -3536,10 +3462,10 @@ Proof
   (* ALL_DISTINCT pre *)
   `ALL_DISTINCT pre` by
     metis_tac[cfgHelpersTheory.dfs_pre_walk_distinct_disj] >>
-  (* Membership via dom_reachable + reachable_mem_dfs_pre *)
+  (* Membership via dom_reachable + reachable_in_dfs_pre *)
   `cfg_reachable_of (cfg_analyze fn) d` by metis_tac[dom_reachable] >>
   `MEM lbl pre /\ MEM d pre` by
-    metis_tac[reachable_mem_dfs_pre, markerTheory.Abbrev_def] >>
+    metis_tac[reachable_in_dfs_pre, markerTheory.Abbrev_def] >>
   (* Contradiction argument *)
   SPOSE_NOT_THEN ASSUME_TAC >>
   `?i. INDEX_OF d pre = SOME i` by
@@ -3577,7 +3503,7 @@ Proof
 QED
 
 (* Dominator chain: dominators of a node are totally ordered *)
-Theorem dominates_chain_proof:
+Theorem dominates_chain:
   ∀fn cfg a b c.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧

@@ -17,24 +17,24 @@ Definition log_pop_args_def:
 End
 
 Definition log_pop_source_state_def:
-  log_pop_source_state vs = empty_state with scopes :=
+  log_pop_source_state vs popped = empty_state with scopes :=
     [FEMPTY |+ ("xs", <| assignable := T;
       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
-      value := ArrayV (DynArrayV vs) |>)]
+      value := ArrayV (DynArrayV vs); popped := popped |>)]
 End
 
 Theorem log_pop_source_arguments:
   !cx.
-    eval_exprs cx log_pop_args (log_pop_source_state [IntV 1; IntV 2]) =
+    eval_exprs cx log_pop_args (log_pop_source_state [IntV 1; IntV 2] []) =
       (INL [ArrayV (DynArrayV [IntV 1; IntV 2]); IntV 2],
-       log_pop_source_state [IntV 1])
+       log_pop_source_state [IntV 1] [([ValueSubscript (IntV 1)], IntV 2)])
 Proof
   gen_tac >> simp[log_pop_args_def, log_pop_source_state_def,
     evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
     lookup_scopes_val_def, lookup_scopes_def, find_containing_scope_def,
-    return_def, materialise_def, type_check_def, lift_option_type_def,
-    lift_option_def, lift_sum_def, assign_target_def, assign_subscripts_def,
-    set_scopes_def, assign_result_def, pop_element_def, popped_value_def] >>
+    return_def, type_check_def, lift_option_type_def,
+    lift_option_def, lift_sum_def, assign_subscripts_def,
+    set_scopes_def, pop_element_def, popped_value_def] >>
   EVAL_TAC >> simp[finite_mapTheory.fmap_EXT, FLOOKUP_UPDATE]
 QED
 

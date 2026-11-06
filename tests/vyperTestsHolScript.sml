@@ -45,6 +45,8 @@ Ancestors
   vyperStoragePopTest
   vyperStringScopeTest
   vyperSystemHaltTest
+  vyperTestEmit
+  vyperTestEmitSmoke
   vyperTestLibTest
   vyperTestRunner
   vyperTupleSubscriptTest

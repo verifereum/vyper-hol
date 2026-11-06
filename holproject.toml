@@ -31,6 +31,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperExternalEntrySourceBehaviorScript.sml",
          "tests/vyperExternalHeadersTestScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeExternalEntriesScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerBytecodeAsmOptScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantMultiScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantPragmaScript.sml",
@@ -59,6 +60,7 @@ roots = ["vyperHolScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantFallbackEarlyReturnScript.sml",
          "venom/passes/concretize_mem_loc/proofs/concretizeCallFrameRegressionScript.sml",
          "tests/conversionProofAuditScript.sml",
+         "frontend/cv/jsonToVyperCVScript.sml",
          "lowering/targetPlaceTestScript.sml",
          "lowering/targetPlaceSimCasesScript.sml",
          "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
@@ -89,4 +91,23 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "2927181a5fdfb871a2cbe7913bfc9902c0143cde"
+rev = "837592d18c1ad4f9a040bd8dcc99cf35715803f3"
+
+# Functor parameter signatures are not inferred by HOL's module scanner.
+[actions.JsonASTDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonTraceDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonImportHol]
+loads = ["jsonImportTerm"]
+
+[actions.jsonASTLib]
+loads = ["jsonImportTerm", "JsonImportHol", "JsonASTDecodeFn"]
+
+[actions.vyperTestLib]
+loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
+
+[actions.vyperJsonReplayLib]
+loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn", "jsonDocumentLib"]

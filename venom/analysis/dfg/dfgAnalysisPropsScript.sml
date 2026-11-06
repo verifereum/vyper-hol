@@ -3,13 +3,12 @@
  *
  * Exported API for consumers of the DFG analysis.
  *
- * 1) Well-formedness — building a DFG preserves well_formed_dfg.
- * 2) Correctness — if dfg_get_def returns an instruction, it comes from
+ * 1) Correctness — if dfg_get_def returns an instruction, it comes from
  *    the original instruction list.
- * 3) Finiteness — dfg_def_ids is finite.
+ * 2) Finiteness — dfg_def_ids is finite.
  *
- * Internal proof machinery lives in proofs/dfgCorrectnessProofScript.sml.
- * Re-exported via ACCEPT_TAC.
+ * The well-formedness results (building a DFG preserves well_formed_dfg)
+ * live only in proofs/dfgCorrectnessProofScript.sml.
  *)
 
 Theory dfgAnalysisProps
@@ -17,125 +16,8 @@ Ancestors
   dfgCorrectnessProof
 
 (* ==========================================================================
-   1) Well-formedness preservation
+   1) Def-source correctness
    ========================================================================== *)
-
-Theorem well_formed_dfg_update:
-  !dfg inst v.
-    well_formed_dfg dfg /\ MEM v inst.inst_outputs
-    ==> well_formed_dfg (dfg with dfg_defs := dfg.dfg_defs |+ (v, inst))
-Proof
-  ACCEPT_TAC well_formed_dfg_update_proof
-QED
-
-Theorem dfg_add_defs_well_formed:
-  !dfg vs inst.
-    well_formed_dfg dfg /\ EVERY (\v. MEM v inst.inst_outputs) vs
-    ==> well_formed_dfg (dfg_add_defs dfg vs inst)
-Proof
-  ACCEPT_TAC dfg_add_defs_well_formed_proof
-QED
-
-Theorem dfg_add_use_get_def:
-  !dfg v inst u.
-    dfg_get_def (dfg_add_use dfg u inst) v = dfg_get_def dfg v
-Proof
-  ACCEPT_TAC dfg_add_use_get_def_proof
-QED
-
-Theorem dfg_add_uses_get_def:
-  !dfg vs inst v.
-    dfg_get_def (dfg_add_uses dfg vs inst) v = dfg_get_def dfg v
-Proof
-  ACCEPT_TAC dfg_add_uses_get_def_proof
-QED
-
-Theorem dfg_add_uses_preserve_wf:
-  !dfg vs inst.
-    well_formed_dfg dfg ==> well_formed_dfg (dfg_add_uses dfg vs inst)
-Proof
-  ACCEPT_TAC dfg_add_uses_preserve_wf_proof
-QED
-
-Theorem well_formed_dfg_update_ids:
-  !dfg ids. well_formed_dfg dfg ==> well_formed_dfg (dfg with dfg_ids := ids)
-Proof
-  ACCEPT_TAC well_formed_dfg_update_ids_proof
-QED
-
-Theorem dfg_add_inst_well_formed:
-  !dfg inst.
-    well_formed_dfg dfg ==> well_formed_dfg (dfg_add_inst dfg inst)
-Proof
-  ACCEPT_TAC dfg_add_inst_well_formed_proof
-QED
-
-Theorem dfg_build_insts_rev_well_formed:
-  !dfg insts.
-    well_formed_dfg dfg ==> well_formed_dfg (dfg_build_insts_rev dfg insts)
-Proof
-  ACCEPT_TAC dfg_build_insts_rev_well_formed_proof
-QED
-
-Theorem dfg_build_insts_well_formed:
-  !insts. well_formed_dfg (dfg_build_insts insts)
-Proof
-  ACCEPT_TAC dfg_build_insts_well_formed_proof
-QED
-
-Theorem dfg_build_function_well_formed:
-  !fn. well_formed_dfg (dfg_build_function fn)
-Proof
-  ACCEPT_TAC dfg_build_function_well_formed_proof
-QED
-
-(* ==========================================================================
-   2) Def-source correctness
-   ========================================================================== *)
-
-Theorem dfg_add_defs_lookup:
-  !dfg vs inst v inst'.
-    dfg_get_def (dfg_add_defs dfg vs inst) v = SOME inst' ==>
-    dfg_get_def dfg v = SOME inst' \/ (inst' = inst /\ MEM v vs)
-Proof
-  ACCEPT_TAC dfg_add_defs_lookup_proof
-QED
-
-Theorem dfg_add_inst_get_def:
-  !dfg inst0 v.
-    dfg_get_def (dfg_add_inst dfg inst0) v =
-    dfg_get_def
-      (dfg_add_defs
-         (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0)
-         inst0.inst_outputs inst0) v
-Proof
-  ACCEPT_TAC dfg_add_inst_get_def_proof
-QED
-
-Theorem dfg_add_inst_lookup:
-  !dfg inst0 v inst.
-    dfg_get_def (dfg_add_inst dfg inst0) v = SOME inst ==>
-    dfg_get_def dfg v = SOME inst \/ (inst = inst0 /\ MEM v inst0.inst_outputs)
-Proof
-  ACCEPT_TAC dfg_add_inst_lookup_proof
-QED
-
-Theorem dfg_build_insts_rev_correct:
-  !insts dfg v inst.
-    dfg_get_def (dfg_build_insts_rev dfg insts) v = SOME inst ==>
-    dfg_get_def dfg v = SOME inst \/
-    (MEM inst insts /\ MEM v inst.inst_outputs)
-Proof
-  ACCEPT_TAC dfg_build_insts_rev_correct_proof
-QED
-
-Theorem dfg_build_insts_correct:
-  !insts v inst.
-    dfg_get_def (dfg_build_insts insts) v = SOME inst ==>
-    MEM inst insts /\ MEM v inst.inst_outputs
-Proof
-  ACCEPT_TAC dfg_build_insts_correct_proof
-QED
 
 Theorem dfg_build_function_correct:
   !fn v inst.
@@ -147,7 +29,7 @@ Proof
 QED
 
 (* ==========================================================================
-   3) Finiteness / termination helpers
+   2) Finiteness / termination helpers
    ========================================================================== *)
 
 Theorem dfg_def_ids_finite:
@@ -163,7 +45,7 @@ Proof
 QED
 
 (* ==========================================================================
-   4) Uses correctness
+   3) Uses correctness
    ========================================================================== *)
 
 (* If dfg_get_uses reports inst as a user of v, then inst is from the
@@ -188,7 +70,7 @@ Proof
 QED
 
 (* ==========================================================================
-   5) Defs completeness
+   4) Defs completeness
    ========================================================================== *)
 
 (* If any instruction in the function lists v as an output, then
@@ -203,29 +85,7 @@ Proof
 QED
 
 (* ==========================================================================
-   6) ID map correctness
-   ========================================================================== *)
-
-(* If dfg_get_inst_by_id returns an instruction, it is from the function. *)
-Theorem dfg_build_function_ids_sound:
-  !fn id inst.
-    dfg_get_inst_by_id (dfg_build_function fn) id = SOME inst ==>
-    MEM inst (fn_insts fn)
-Proof
-  ACCEPT_TAC dfg_build_function_ids_sound_proof
-QED
-
-(* Every instruction in the function is retrievable by its ID. *)
-Theorem dfg_build_function_ids_complete:
-  !fn inst.
-    MEM inst (fn_insts fn) ==>
-    ?inst'. dfg_get_inst_by_id (dfg_build_function fn) inst.inst_id = SOME inst'
-Proof
-  ACCEPT_TAC dfg_build_function_ids_complete_proof
-QED
-
-(* ==========================================================================
-   7) Normalization correctness
+   5) Normalization correctness
    ========================================================================== *)
 
 (* dfg_assigns_sound: every ASSIGN in the DFG is faithfully reflected in
@@ -236,21 +96,5 @@ Theorem normalize_operand_eval:
     eval_operand (normalize_operand dfg visited op) s = eval_operand op s
 Proof
   ACCEPT_TAC normalize_operand_eval_proof
-QED
-
-(* Restricted version: only requires ASSIGN equalities for variables NOT
-   in the visited set.  Enables use at program points where
-   dfg_assigns_sound may not hold globally. *)
-Theorem normalize_operand_eval_restricted:
-  !dfg visited op s.
-    (!v inst. ~MEM v visited ==>
-       FLOOKUP dfg.dfg_defs v = SOME inst /\
-       inst.inst_opcode = ASSIGN ==>
-       case inst.inst_operands of
-         [op'] => lookup_var v s = eval_operand op' s
-       | _ => T) ==>
-    eval_operand (normalize_operand dfg visited op) s = eval_operand op s
-Proof
-  ACCEPT_TAC normalize_operand_eval_restricted_proof
 QED
 
