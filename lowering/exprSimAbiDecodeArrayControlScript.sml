@@ -2,7 +2,8 @@
 Theory exprSimAbiDecodeArrayControl
 Ancestors
   exprSimAbiDecodeArrayInvariant exprSimAbiDecodeMemberExecute abiDecoderFiniteControl
-  abiDecoderExecution abiDecoderLoopData abiDecoderContract
+  abiDecoderExecution abiDecoderLoopData abiDecoderContract abiDecoderReentryAddress
+  abiDecoderSiteEffect abiDecoderReentry
   exprSimAbiDecodeOwnedContext exprSimAbiDecodeScratchCover
   exprSimAbiDecodeSiteProvenance abiDecoderIndexInit
   venomMemProofs valueEncodingProps valueEncoding finite_map pred_set
@@ -144,4 +145,106 @@ Proof
   `bs = mem_bytes_at B (LENGTH bs) s.vs_memory` by
     (fs[abi_array_body_post_def] >> metis_tac[abi_array_runtime_source]) >>
   metis_tac[mstore_mem_bytes_at_disjoint]
+QED
+
+(* Control's only memory write is the registered index slot. *)
+Theorem abi_array_memory_prefix_store:
+  abi_array_memory_prefix tv d m k vs s /\ m = type_memory_size tv /\
+  k <= n /\
+  (!a. slot <= a /\ a < slot+32 ==> a NOTIN {a | d <= a /\ a < d+32+n*m}) ==>
+  abi_array_memory_prefix tv d m k vs (mstore slot w s)
+Proof
+  simp_tac bool_ss [abi_array_memory_prefix_def] >> strip_tac >>
+  gen_tac >> strip_tac >>
+  `val_wf tv (EL k' vs) /\ val_in_memory tv (EL k' vs) (d+32+k'*m) s.vs_memory` by
+    metis_tac[] >>
+  `k'*m+m <= n*m` by
+    (`k'*m+m = SUC k'*m` by simp[MULT_CLAUSES, ADD_COMM] >>
+     asm_rewrite_tac [] >> simp[LE_MULT_RCANCEL] >> decide_tac) >>
+  irule val_in_memory_mem_agree >> conj_tac >- simp[] >>
+  qexistsl_tac [`m`, `s.vs_memory`] >>
+  qpat_x_assum `m = _` (fn th => asm_simp_tac bool_ss [GSYM th]) >>
+  simp_tac bool_ss [LESS_EQ_REFL] >>
+  Cases_on `m = 0` >- fs[mem_bytes_at_def] >>
+  irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
+  qpat_x_assum `!a. _` (qspec_then `MAX slot (d+32+k'*m)` mp_tac) >>
+  simp[MAX_DEF] >> rpt IF_CASES_TAC >> simp[] >> decide_tac
+QED
+
+Theorem abi_array_backedge_effect:
+  decode_site_resources ctx func s /\ fresh_vars_wrt limit_st s /\
+  next < limit_st.cs_next_var /\ first <= next /\
+  {a | slot <= a /\ a < slot+32} SUBSET writes ==>
+  decode_site_effect ctx func first writes s
+    (jump_to hdr (mstore slot w (update_var (STRING #"%" (toString next)) w s))) /\
+  fresh_vars_wrt limit_st
+    (jump_to hdr (mstore slot w (update_var (STRING #"%" (toString next)) w s)))
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `decode_site_effect ctx func first writes s t` >>
+  `t.vs_vars = s.vs_vars |+ (STRING #"%" (toString next),w) /\
+   t.vs_labels = s.vs_labels` by
+    simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  drule_all abi_decoder_register_update >> strip_tac >>
+  reverse conj_tac >- simp[] >>
+  simp_tac bool_ss [decode_site_effect_def] >>
+  conj_tac
+  >- (irule decode_site_resources_fields >> qexists `s` >>
+      simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]) >>
+  conj_tac >- simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  conj_tac >- simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live next op` by metis_tac[abi_decoder_operand_live_mono] >>
+      metis_tac[]) >>
+  conj_tac
+  >- simp[decode_static_frame_def, Abbr `t`, jump_to_def, mstore_def,
+          update_var_def, write_memory_with_expansion_def] >>
+  `decode_memory_frame writes s (mstore slot w s)` suffices_by
+    (simp[decode_memory_frame_def, Abbr `t`, jump_to_def, update_var_def,
+      mstore_def, write_memory_with_expansion_def]) >>
+  simp_tac bool_ss [decode_memory_frame_def] >> rpt strip_tac >>
+  Cases_on `n = 0` >- simp[mem_bytes_at_def] >>
+  irule mstore_mem_bytes_at_disjoint >>
+  fs[SUBSET_DEF] >>
+  Cases_on `p+n <= slot` >- simp[] >>
+  Cases_on `slot+32 <= p` >- simp[] >>
+  qpat_x_assum `!a. _ ==> a NOTIN writes` (qspec_then `MAX p slot` mp_tac) >>
+  qpat_x_assum `!x. _ ==> x IN writes` (qspec_then `MAX p slot` mp_tac) >>
+  simp[MAX_DEF] >> rpt IF_CASES_TAC >> simp[] >> decide_tac
+QED
+
+Theorem abi_array_body_post_backedge_context:
+  abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  idx IN outer /\ st.cs_next_var <= next /\ next < limit_st.cs_next_var /\
+  first <= hdr_st.cs_next_var /\ hdr_st.cs_next_var <= limit_st.cs_next_var /\
+  EVERY (abi_decoder_operand_live hdr_st.cs_next_var) [dst;src;base_op;hi] ==>
+  abi_array_runtime_context ctx func ce env ty tv limit_st first
+    scratch sites hdr_st dst src base_op hi B bs p d n
+    (jump_to hdr (mstore slot w (update_var (STRING #"%" (toString next)) w s)))
+Proof
+  strip_tac >>
+  `bs = mem_bytes_at B (LENGTH bs) (mstore slot w s).vs_memory` by
+    metis_tac[abi_array_body_post_store_source] >>
+  qmatch_goalsub_abbrev_tac `abi_array_runtime_context ctx func ce env ty tv limit_st first
+    scratch sites hdr_st dst src base_op hi B bs p d n t` >>
+  qhdtm_x_assum `abi_array_body_post` mp_tac >>
+  simp_tac bool_ss [abi_array_body_post_def, abi_array_runtime_context_def] >> strip_tac >>
+  `t.vs_vars = s.vs_vars |+ (STRING #"%" (toString next),w) /\
+   t.vs_labels = s.vs_labels` by
+    simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  drule_all abi_decoder_register_update >> strip_tac >>
+  `!op. MEM op [dst;src;base_op;hi] ==> eval_operand op t = eval_operand op s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     irule abi_decoder_operand_live_mono >> qexists `st.cs_next_var` >> fs[EVERY_MEM]) >>
+  `decode_site_resources ctx func t` by
+    (irule decode_site_resources_fields >> qexists `s` >>
+     simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]) >>
+  `t.vs_memory = (mstore slot w s).vs_memory` by
+    simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  simp_tac bool_ss [abi_array_runtime_context_def] >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+    simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  fs[] >> metis_tac[]
 QED
