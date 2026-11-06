@@ -2947,6 +2947,47 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem regional_clean_stack_nonmarker_origin:
+  generated_plan_state_wf_marked sb ps /\
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
+  MEM op qs.ps_stack /\ op <> dead_stack_marker ==>
+  MEM op ps.ps_stack
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack)` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[] >>
+  rename1 `_ = pred::rest` >> Cases_on `rest` >> simp[]
+  >- (IF_CASES_TAC >> simp[] >>
+      Cases_on `lookup_block pred fn.fn_blocks` >> simp[] >>
+      IF_CASES_TAC >> simp[]
+      >- (strip_tac >> gvs[MEM_MAP, combinTheory.K_DEF]) >>
+      IF_CASES_TAC >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `popmany_plan victims ps` >>
+          pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+          drule regional_popmany_marked_inventory >>
+          disch_then (qspec_then `victims` mp_tac) >>
+          gvs[mark_dead_stack_def, MEM_MAP] >> metis_tac[]) >>
+      strip_tac >> drule regional_popmany_marked_inventory >>
+      metis_tac[SND]) >>
+  rename1 `rest = more::tail` >> Cases_on `tail` >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem regional_clean_stack_identity_predicate:
+  generated_plan_state_wf_marked sb ps /\
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
+  P dead_stack_marker /\
+  (!op. MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled ==> P op) ==>
+  (!op. MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled ==> P op)
+Proof
+  strip_tac >> drule regional_clean_stack_spilled >> strip_tac >>
+  rpt strip_tac >> Cases_on `op = dead_stack_marker` >> gvs[] >>
+  metis_tac[regional_clean_stack_nonmarker_origin]
+QED
+
 Theorem regional_prepare_params_slots_layout:
   prepare_params_plan lv fn ps = (ops,qs) /\
   plan_slots_bounded sb ps /\
