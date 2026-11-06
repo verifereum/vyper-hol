@@ -2,7 +2,7 @@ Theory entryReachBodyFirstEmissionExpr
 Ancestors
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionSupport
   compilerFirstEmission externalEntryShape
-  exprLowering compileEnv fragExec emitHelper venomInst finite_map list
+  exprLowering exprCallBounds compileEnv fragExec emitHelper venomInst finite_map list
 
 Theorem first_emission_expr_toplevelname[local]:
   !f g h ce ty t ns a x b.
@@ -131,3 +131,73 @@ Proof
   rw[cs_appends_def] >> Cases_on `is_word_type (expr_type (IfExp t c et ee))` >>
   gvs[cs_extends_refl]
 QED
+
+Theorem first_emission_expr_child_callback[local]:
+  (!ce ty e a x b. expr_size e < bound /\ f ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ty e a x b. expr_child_callback bound f ce ty e a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `expr_size e < bound` >> simp[expr_child_callback_def]
+  >- metis_tac[] >>
+  rewrite_tac[invalid_expr_call_def, LET_THM] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
+QED
+
+Theorem first_emission_builtin_child_callback[local]:
+  (!ce rt ty bi es a x b. list_size expr_size es < bound /\ g ce rt ty bi es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty bi es a x b. builtin_child_callback bound g ce rt ty bi es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `list_size expr_size es < bound` >> simp[builtin_child_callback_def]
+  >- metis_tac[] >>
+  rewrite_tac[invalid_expr_call_def, LET_THM] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
+QED
+
+Theorem first_emission_type_child_callback[local]:
+  (!ce vt ty tb rt es a x b. list_size expr_size es < bound /\ h ce vt ty tb rt es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce vt ty tb rt es a x b. type_child_callback bound h ce vt ty tb rt es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `list_size expr_size es < bound` >> simp[type_child_callback_def]
+  >- metis_tac[] >>
+  rewrite_tac[invalid_expr_call_def, LET_THM] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
+QED
+
