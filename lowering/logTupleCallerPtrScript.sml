@@ -5,30 +5,9 @@ Ancestors
   localPtrsProps abiBuiltinAllocation abiDecoderFrame bodyPtrDefs compileEnv
   allocationPtr emitHelperProps fragGasSeqPtr context ASCIInumbers string
   logDataAllocPtr abiEncoderCounters stmtFragPtr abiDecoderReentry
-  ghostPcTransportPtr instIdxIndep logInstSeqPtr
+  ghostPcTransportPtr instIdxIndep logInstSeqPtr logTupleOwnershipPtr
   exprLoweringProps logMembersInvariantPtr loweringHalt venomExecSemantics venomMemProps
   venomState venomInst venomMemDefs finite_map words list arithmetic
-
-(* Unlike variable freshness alone, the registered instruction and the
-   local-pointer invariant establish separation of the memory footprint. *)
-Theorem log_encoder_alloca_local_footprint:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce st /\ ~not_fresh_at st q /\
-  MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
-  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,cap) ==>
-  !name lo sz. local_region ce es.scopes s name lo sz ==>
-    abi_footprint_disjoint lo sz [(b,cap)]
-Proof
-  strip_tac >>
-  `not_local_ptr ce es.scopes q` by
-    (fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
-  `alloca_inv s /\ local_ptrs_rel func ce es.scopes s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  rpt strip_tac >>
-  `regions_disjoint b cap lo sz` by
-    (irule local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
-  fs[compileEnvTheory.regions_disjoint_def, abi_footprint_disjoint_def] >> decide_tac
-QED
 
 Theorem log_alloca_robust_encoder_input:
   stmt_state_rel ctx func ce cx es s /\
