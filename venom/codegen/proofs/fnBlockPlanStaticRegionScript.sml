@@ -1327,3 +1327,258 @@ Proof
       pred_setTheory.IN_INTER, pred_setTheory.EXTENSION] >>
   metis_tac[]
 QED
+
+Theorem regional_selected_phi_output_absent:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  regional_selected_phi_inv lv dfg sb bb i ps /\
+  MEM out (EL i bb.bb_instructions).inst_outputs ==>
+  ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM (EL i bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    metis_tac[collect_phis_index, EL_MEM] >>
+  `~MEM (Var out) (FLAT (MAP (\p. p.inst_operands)
+      (DROP i (collect_phis bb.bb_instructions))))` by
+    (strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+     rename1 `MEM usephi (DROP i _)` >>
+     `MEM usephi (collect_phis bb.bb_instructions)` by
+       (drule rich_listTheory.MEM_DROP_IMP >> simp[]) >>
+     `~MEM out (inst_uses usephi)` by
+       metis_tac[regional_phi_output_not_phi_source] >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `i < LENGTH bb.bb_instructions` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  `MEM out (FLAT (MAP (\p. p.inst_outputs) (DROP i bb.bb_instructions)))` by
+    (simp[MEM_FLAT, MEM_MAP] >>
+     qexists_tac `(EL i bb.bb_instructions).inst_outputs` >> simp[] >>
+     qexists_tac `EL i bb.bb_instructions` >> metis_tac[DROP_CONS_EL, MEM]) >>
+  gvs[regional_selected_phi_inv_def] >> metis_tac[]
+QED
+
+Theorem regional_selected_phi_next_coverage:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb i ps /\
+  (EL i bb.bb_instructions).inst_outputs = [out] /\
+  generate_phi_plan (EL i bb.bb_instructions)
+    (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) F ps = (ops,qs) /\
+  stack_get_phi_depth (FILTER is_var_operand (EL i bb.bb_instructions).inst_operands)
+    ps.ps_stack = SOME d /\ d < LENGTH ps.ps_stack /\
+  stack_peek d ps.ps_stack = Var src /\
+  MEM (Var src) (EL i bb.bb_instructions).inst_operands ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) /\
+    ~MEM (Var v) (FLAT (MAP (\p. p.inst_operands)
+      (DROP (i+1) (collect_phis bb.bb_instructions)))) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  strip_tac >>
+  `~MEM src (live_vars_at (liveness_analyze fn) bb.bb_label (i+1))` by
+    (irule regional_ready_phi_source_dead >> simp[] >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `~MEM (Var out) ps.ps_stack` by metis_tac[regional_selected_phi_output_absent, MEM] >>
+  `generated_plan_state_wf_marked sb ps` by gvs[regional_selected_phi_inv_def] >>
+  drule_all regional_phi_owned_subtraction >> disch_tac >>
+  qx_gen_tac `v` >> strip_tac >>
+  Cases_on `v = out` >- metis_tac[] >>
+  `~MEM v (inst_defs (EL i bb.bb_instructions))` by simp[inst_defs_def] >>
+  `i < LENGTH bb.bb_instructions` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+    (irule (SRULE [LET_THM] live_vars_at_propagate) >> simp[arithmeticTheory.ADD1] >>
+     metis_tac[ready_reachable_preorder, codegen_ready_fn_def]) >>
+  `~MEM (Var v) (EL i bb.bb_instructions).inst_operands` by
+    (strip_tac >>
+     `MEM v (inst_uses (EL i bb.bb_instructions))` by
+       gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+     metis_tac[regional_ready_phi_source_dead]) >>
+  `DROP i (collect_phis bb.bb_instructions) =
+    EL i bb.bb_instructions :: DROP (i+1) (collect_phis bb.bb_instructions)` by
+    metis_tac[DROP_CONS_EL, collect_phis_index, arithmeticTheory.ADD1] >>
+  gvs[regional_selected_phi_inv_def] >> metis_tac[]
+QED
+
+Theorem regional_indexed_phi_output:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH (collect_phis bb.bb_instructions) ==>
+  ?out. (EL i bb.bb_instructions).inst_outputs = [out]
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM (EL i bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    metis_tac[collect_phis_index, EL_MEM] >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions /\
+   (EL i bb.bb_instructions).inst_opcode = PHI` by metis_tac[collect_phis_mem] >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def] >> metis_tac[]) >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute]
+QED
+
+Theorem regional_selected_phi_remaining:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  regional_selected_phi_inv lv dfg sb bb i ps /\
+  MEM (Var src) (EL i bb.bb_instructions).inst_operands /\
+  MEM out (EL i bb.bb_instructions).inst_outputs /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ keep)) ==>
+  !phi. MEM phi (DROP (i+1) (collect_phis bb.bb_instructions)) ==>
+    ?v. MEM (Var v) phi.inst_operands /\ MEM (Var v) qs.ps_stack /\
+      (!w. MEM (Var w) phi.inst_operands /\
+        (MEM (Var w) qs.ps_stack \/ Var w IN FDOM qs.ps_spilled) ==> w = v)
+Proof
+  strip_tac >> qx_gen_tac `phi` >> disch_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    (drule_all ready_phi_block >> simp[phi_block_ready_def]) >>
+  `MEM phi (collect_phis bb.bb_instructions)` by
+    (drule rich_listTheory.MEM_DROP_IMP >> simp[]) >>
+  `MEM (EL i bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    metis_tac[collect_phis_index, EL_MEM] >>
+  `~MEM (Var out) phi.inst_operands` by
+    (strip_tac >>
+     `~MEM out (inst_uses phi)` by metis_tac[regional_phi_output_not_phi_source] >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `~MEM (Var src) phi.inst_operands` by
+    (`?j. j < LENGTH (DROP (i+1) (collect_phis bb.bb_instructions)) /\
+       EL j (DROP (i+1) (collect_phis bb.bb_instructions)) = phi` by
+       metis_tac[MEM_EL] >>
+     `i < j + (i+1) /\ j + (i+1) < LENGTH (collect_phis bb.bb_instructions)` by
+       (gvs[LENGTH_DROP] >> decide_tac) >>
+     `EL (j + (i+1)) (collect_phis bb.bb_instructions) = phi` by
+       metis_tac[EL_DROP] >>
+     `MEM src (inst_uses (EL i (collect_phis bb.bb_instructions)))` by
+       metis_tac[collect_phis_index, inst_uses_def,
+         passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+     drule_all regional_phi_later_uses >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `MEM phi (DROP i (collect_phis bb.bb_instructions))` by
+    metis_tac[DROP_CONS_EL, collect_phis_index, MEM, arithmeticTheory.ADD1] >>
+  `?v. MEM (Var v) phi.inst_operands /\ MEM (Var v) ps.ps_stack /\
+    (!w. MEM (Var w) phi.inst_operands /\
+      (MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) ==> w = v)` by
+    metis_tac[regional_selected_phi_inv_def] >>
+  qexists_tac `v` >> conj_tac >- simp[] >>
+  irule regional_phi_selected_frame >> simp[] >>
+  qexistsl_tac [`out`, `keep`, `ps`, `src`] >> simp[] >> metis_tac[]
+QED
+
+Theorem regional_indexed_output_not_later:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
+  MEM out (EL i bb.bb_instructions).inst_outputs ==>
+  ~MEM out (FLAT (MAP (\p. p.inst_outputs) (DROP (i+1) bb.bb_instructions)))
+Proof
+  strip_tac >> strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+  rename1 `MEM later (DROP (i+1) bb.bb_instructions)` >>
+  `?j. j < LENGTH (DROP (i+1) bb.bb_instructions) /\
+    EL j (DROP (i+1) bb.bb_instructions) = later` by metis_tac[MEM_EL] >>
+  `j + (i+1) < LENGTH bb.bb_instructions /\ i <> j + (i+1)` by
+    (gvs[LENGTH_DROP] >> decide_tac) >>
+  `EL (j + (i+1)) bb.bb_instructions = later` by metis_tac[EL_DROP] >>
+  metis_tac[ready_output_other_location]
+QED
+
+
+Theorem regional_indexed_phi_freshness:
+  regional_selected_phi_inv lv dfg sb bb i ps /\
+  DROP i (collect_phis bb.bb_instructions) =
+    phi :: DROP (i+1) (collect_phis bb.bb_instructions) /\
+  DROP i bb.bb_instructions = phi :: DROP (i+1) bb.bb_instructions /\
+  (!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src) /\
+  (!op. (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) ==>
+    op = Var out \/ ((MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\ op <> Var src)) /\
+  ~MEM out (FLAT (MAP (\p. p.inst_outputs) (DROP (i+1) bb.bb_instructions))) /\
+  normalize_operand dfg [] (Var out) = Var out ==>
+  !op v. (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) /\
+    ~MEM op (FLAT (MAP (\p. p.inst_operands)
+      (DROP (i+1) (collect_phis bb.bb_instructions)))) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\p. p.inst_outputs) (DROP (i+1) bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    ~MEM op (phi.inst_operands ++ FLAT (MAP (\p. p.inst_operands)
+      (DROP (i+1) (collect_phis bb.bb_instructions)))) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\p. p.inst_outputs) (DROP (i+1) bb.bb_instructions)))` by
+    (gvs[regional_selected_phi_inv_def] >> metis_tac[MEM]) >>
+  rpt gen_tac >> strip_tac >>
+  (Cases_on `op = Var out` >- gvs[] >>
+   `(MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\ op <> Var src` by
+     metis_tac[] >>
+   (Cases_on `MEM op phi.inst_operands`
+    >- (Cases_on `op` >> gvs[] >> metis_tac[normalize_operand_def]) >>
+    qpat_x_assum `!op v. _ ==> ~MEM v _` irule >>
+    qexists_tac `op` >> simp[]))
+QED
+
+Theorem regional_selected_phi_inv_step:
+  !fn bb dfg sb i ps ops qs.
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfg = dfg_build_function fn /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb i ps /\
+  generate_phi_plan (EL i bb.bb_instructions)
+    (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) F ps = (ops,qs) ==>
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb (i+1) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM (EL i bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    metis_tac[collect_phis_index, EL_MEM] >>
+  `DROP i (collect_phis bb.bb_instructions) =
+    EL i bb.bb_instructions :: DROP (i+1) (collect_phis bb.bb_instructions)` by
+    metis_tac[DROP_CONS_EL, collect_phis_index, arithmeticTheory.ADD1] >>
+  drule_all regional_indexed_phi_output >> strip_tac >>
+  `?src. MEM (Var src) (EL i bb.bb_instructions).inst_operands /\
+    MEM (Var src) ps.ps_stack /\
+    (!v. MEM (Var v) (EL i bb.bb_instructions).inst_operands /\
+      (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src)` by
+    (gvs[regional_selected_phi_inv_def] >> metis_tac[MEM]) >>
+  `?d. stack_get_phi_depth
+    (FILTER is_var_operand (EL i bb.bb_instructions).inst_operands) ps.ps_stack = SOME d /\
+    d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src` by
+    (irule regional_phi_physical_depth >> metis_tac[]) >>
+  `~MEM src (live_vars_at (liveness_analyze fn) bb.bb_label (i+1))` by
+    (irule regional_ready_phi_source_dead >> simp[] >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled` by
+    metis_tac[regional_selected_phi_output_absent, MEM] >>
+  `generated_plan_state_wf_marked sb ps /\
+   ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack)` by
+    gvs[regional_selected_phi_inv_def, generated_plan_state_wf_marked_def] >>
+  drule_all inventory_marked_phi_mem >> disch_tac >>
+  drule_all inventory_marked_phi_spilled >> disch_tac >>
+  `MEM out (EL i bb.bb_instructions).inst_outputs` by simp[] >>
+  mp_tac (Q.INST
+    [`lv` |-> `liveness_analyze fn`,
+     `keep` |-> `MEM out (live_vars_at (liveness_analyze fn) bb.bb_label (i+1))`]
+    (SPEC_ALL regional_selected_phi_remaining)) >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  pure_rewrite_tac[regional_selected_phi_inv_def] >>
+  conj_tac >- (irule regional_selected_phi_wf >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (rpt strip_tac >> irule regional_selected_phi_next_coverage >> metis_tac[]) >>
+  `i < LENGTH bb.bb_instructions` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  `~MEM out (FLAT (MAP (\p. p.inst_outputs) (DROP (i+1) bb.bb_instructions)))` by
+    metis_tac[regional_indexed_output_not_later] >>
+  `normalize_operand dfg [] (Var out) = Var out` by
+    metis_tac[regional_phi_output_normalize] >>
+  `DROP i bb.bb_instructions = EL i bb.bb_instructions :: DROP (i+1) bb.bb_instructions` by
+    metis_tac[DROP_CONS_EL, arithmeticTheory.ADD1] >>
+  drule_all regional_phi_owned_subtraction >> disch_tac >>
+  `!op. (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) ==>
+    op = Var out \/ ((MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\ op <> Var src)` by
+    metis_tac[] >>
+  mp_tac (Q.INST [`lv` |-> `liveness_analyze fn`,
+    `phi` |-> `EL i bb.bb_instructions`] (SPEC_ALL regional_indexed_phi_freshness)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
+QED
