@@ -382,6 +382,14 @@ Definition asm_call_prepare_def:
   od
 End
 
+(* Preparation depends only on the operand layout and charge, not on
+   whether the child inherits the message identities. *)
+Theorem asm_call_prepare_delegate:
+  asm_call_prepare DelegateCall = asm_call_prepare StaticCall
+Proof
+  simp[asm_call_prepare_def, call_has_value_def, static_gas_def]
+QED
+
 Definition asm_call_finish_def:
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) =
     if (lookup_account sender accounts).balance < value
@@ -857,6 +865,43 @@ QED
 
 Finalise asm_call_prepare_success_view
 
+Theorem asm_message_prepare_success_view:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  let vo = if call_has_value op then 1 else 0 in
+  let args = TAKE (6 + vo) c.stack in
+  6 + vo <= LENGTH c.stack /\
+  sender = c.msgParams.callee /\ accounts = s.rollback.accounts /\
+  address = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rs = w2n (EL (5 + vo) args) /\
+  ?charge acc d'.
+    stipend <= charge /\ c.gasUsed + charge <= c.msgParams.gasLimit /\
+    u = s with <| contexts :=
+      (c with <| stack := DROP (6 + vo) c.stack;
+                  gasUsed := c.gasUsed + charge;
+                  memory := buffer_extend
+                    (MAX (buffer_length c.memory)
+                      (let range = max_expansion_range (ao,az) (ro,rs) in
+                       if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+                     - buffer_length c.memory) c.memory |>,rb)::rest;
+      rollback := s.rollback with accesses := acc;
+      msdomain := Collect d' |>
+Proof
+  strip_tac
+  >- (irule asm_call_prepare_success_view >> simp[] >> metis_tac[])
+  >- (irule asm_call_prepare_success_view >> simp[] >> metis_tac[]) >>
+  gvs[asm_call_prepare_delegate] >>
+  drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
+  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+  asm_simp_tac (srw_ss()) [call_has_value_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  qexistsl_tac [`charge`,`acc`,`d'`] >> simp[]
+QED
+
 Theorem asm_call_prepare_contexts_wf:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
   ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
@@ -1006,9 +1051,9 @@ Proof
   simp[vfmContextTheory.context_component_equality]
 QED
 
-Theorem asm_call_step_terminal:
+Theorem asm_message_step_terminal:
   s.contexts = (c,rb)::rest /\
-  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   step_call op s = (INR e,t) ==>
   step s = handle_step e t
 Proof
@@ -1021,8 +1066,17 @@ Proof
   qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
   simp_tac (srw_ss()) [] >>
   qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+  qpat_x_assum `op = Call \/ op = StaticCall \/ op = DelegateCall` strip_assume_tac >>
   gvs[step_inst_def, bind_def, ignore_bind_def]
+QED
+
+Theorem asm_call_step_terminal:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INR e,t) ==>
+  step s = handle_step e t
+Proof
+  strip_tac >> irule asm_message_step_terminal >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_handle_step_memory:
@@ -1385,18 +1439,15 @@ Proof
        get_num_contexts_def, assert_def]
 QED
 
-Theorem asm_call_prepare_failure_starved:
-  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\ wf_state s /\
-  ~c.msgParams.static /\ next_opcode c = SOME op /\
-  (op = Call \/ op = StaticCall) /\
-  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+Theorem asm_step_oog_starved:
+  s.contexts = (c,rb)::rest /\ wf_state s /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
-  asm_call_prepare op s = (INR e,t) ==>
+  step s = handle_step (SOME OutOfGas) t /\
+  t.contexts = (c with stack := DROP n c.stack,rb)::rest /\
+  t.txParams = s.txParams ==>
   ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepare_failure_step >> disch_tac >>
-  drule_all asm_call_prepare_failure_view >> strip_tac >>
   `c.gasUsed <= c.msgParams.gasLimit` by
     (qpat_x_assum `wf_state s` mp_tac >> simp[wf_state_def, wf_context_def]) >>
   qmatch_asmsub_abbrev_tac `t.contexts = (popped,rb)::rest` >>
@@ -1415,7 +1466,7 @@ Proof
   suspend "nested"
 QED
 
-Resume asm_call_prepare_failure_starved[single]:
+Resume asm_step_oog_starved[single]:
   drule_all asm_handle_step_oog_singleton >> disch_tac >>
   `step s = (INR (SOME OutOfGas), t with contexts :=
     [(popped with <|gasUsed := popped.msgParams.gasLimit; returnData := []|>,rb)])`
@@ -1425,7 +1476,7 @@ Resume asm_call_prepare_failure_starved[single]:
   qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]
 QED
 
-Resume asm_call_prepare_failure_starved[nested]:
+Resume asm_step_oog_starved[nested]:
   `step s = (INL (), t with <| contexts :=
       (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
         memory := buffer_write mr.offset [] h0.memory|>,h1)::t'; rollback := rb|>)`
@@ -1434,7 +1485,22 @@ Resume asm_call_prepare_failure_starved[nested]:
   simp[frame_resource_starved_def, frame_outcome_def] >>
   metis_tac[]
 QED
-Finalise asm_call_prepare_failure_starved
+Finalise asm_step_oog_starved
+
+Theorem asm_call_prepare_failure_starved:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\ wf_state s /\
+  ~c.msgParams.static /\ next_opcode c = SOME op /\
+  (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
+  asm_call_prepare op s = (INR e,t) ==>
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_failure_step >> disch_tac >>
+  drule_all asm_call_prepare_failure_view >> strip_tac >>
+  drule_all asm_step_oog_starved >> simp[]
+QED
 Theorem asm_frame_call_prepare_failure_starved:
   asm_frame_rel prog data es0 as s /\
   s.contexts = (c,rb)::rest /\ next_opcode c = SOME op /\
@@ -1570,9 +1636,9 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem asm_call_prepare_abort_state:
+Theorem asm_message_prepare_abort_state:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   LENGTH c.stack <= stack_limit /\
   asm_call_prepare op s =
     (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
@@ -1593,7 +1659,7 @@ Theorem asm_call_prepare_abort_state:
       msdomain := Collect d' |>)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepare_success_view >>
+  drule_all asm_message_prepare_success_view >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   qmatch_asmsub_abbrev_tac `buffer_extend expansion c.memory` >>
   qexistsl_tac [`charge`,`acc`,`d'`] >>
@@ -1627,9 +1693,35 @@ Proof
   simp[Abbr `prepared`]
 QED
 
-Theorem asm_call_step_success:
+Theorem asm_call_prepare_abort_state:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  LENGTH c.stack <= stack_limit /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
+  let vo = if call_has_value op then 1 else 0 in
+  ?charge acc d'.
+    stipend <= charge /\ c.gasUsed + charge <= c.msgParams.gasLimit /\
+    step_call op s = (INL (), s with <| contexts :=
+      (c with <| stack := 0w :: DROP (6 + vo) c.stack;
+                  gasUsed := c.gasUsed + charge - stipend;
+                  returnData := []; pc updated_by SUC;
+                  memory := buffer_extend
+                    (MAX (buffer_length c.memory)
+                      (let range = max_expansion_range (ao,az) (ro,rs) in
+                       if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+                     - buffer_length c.memory) c.memory |>,rb)::rest;
+      rollback := s.rollback with accesses := acc;
+      msdomain := Collect d' |>)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  irule asm_message_prepare_abort_state >> fs[] >> metis_tac[]
+QED
+
+Theorem asm_message_step_success:
   s.contexts = (c,rb)::rest /\
-  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   step_call op s = (INL (),v) ==>
   step s = (INL (),v)
 Proof
@@ -1642,9 +1734,18 @@ Proof
   qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
   simp_tac (srw_ss()) [] >>
   qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+  qpat_x_assum `op = Call \/ op = StaticCall \/ op = DelegateCall` strip_assume_tac >>
   gvs[step_inst_def, inc_pc_or_jump_def, is_call_def, bind_def,
        ignore_bind_def, return_def]
+QED
+
+Theorem asm_call_step_success:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INL (),v) ==>
+  step s = (INL (),v)
+Proof
+  strip_tac >> irule asm_message_step_success >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_call_abort_outcome:
@@ -1882,6 +1983,45 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def]
 QED
 
+Theorem asm_frame_outcome_effects_restore:
+  asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+    asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
+  s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
+  ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+  (a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+  (~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)) /\
+  ct.pc = SUC c.pc /\
+  take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t)) /\
+  gas_readings t = gas_readings s /\
+  record_request (request_of s) a.as_requests ++ call_requests t = call_requests es0 /\
+  mem = asm_call_memory ao az ro rs a.as_memory /\
+  ct.stack = (if out.co_success then 1w else 0w)::
+    DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+  ct.returnData = out.co_returnData /\
+  buffer_to_list ct.memory = TAKE ro mem ++ TAKE rs out.co_returnData ++
+    DROP (ro + LENGTH (TAKE rs out.co_returnData)) mem /\
+  adopt_outcome (request_of s) out (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
+    t.rollback.toDelete /\
+  asm_consume_call_outcome (request_of s) ro rs
+    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+    (a with as_memory := mem) = AsmOK a1 ==>
+  asm_frame_rel prog data es0 a1 t
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
+  simp[asm_consume_call_outcome_eq] >> strip_tac >>
+  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
+  rewrite_tac[asm_frame_rel_def] >> strip_tac >>
+  gvs[] >> simp[asm_frame_rel_def, asm_next_def] >>
+  gvs[asm_evm_rel_def, asm_next_def]
+QED
+
 Theorem asm_frame_call_effects_restore:
   asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
@@ -1919,12 +2059,50 @@ Proof
      simp[arithmeticTheory.ADD1, EL_APPEND1] >>
      Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
      gvs[asm_inst_size_def]) >>
-  qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
-  simp[asm_consume_call_outcome_eq] >> strip_tac >>
-  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
-  rewrite_tac[asm_frame_rel_def] >> strip_tac >>
-  gvs[] >> simp[asm_frame_rel_def, asm_next_def] >>
-  gvs[asm_evm_rel_def, asm_next_def]
+  drule_all asm_frame_outcome_effects_restore >> simp[]
+QED
+
+Theorem asm_frame_outcome_effects_step_ok:
+  asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+    asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
+  s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  run_call t = run_call s /\
+  wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
+  ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+  (a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+  (~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)) /\
+  ct.pc = SUC c.pc /\
+  take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t)) /\
+  gas_readings t = gas_readings s /\
+  record_request (request_of s) a.as_requests ++ call_requests t = call_requests es0 /\
+  mem = asm_call_memory ao az ro rs a.as_memory /\
+  ct.stack = (if out.co_success then 1w else 0w)::
+    DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+  ct.returnData = out.co_returnData /\
+  buffer_to_list ct.memory = TAKE ro mem ++ TAKE rs out.co_returnData ++
+    DROP (ro + LENGTH (TAKE rs out.co_returnData)) mem /\
+  adopt_outcome (request_of s) out (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
+    t.rollback.toDelete /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a =
+    asm_consume_call_outcome (request_of s) ro rs
+      (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+      (a with as_memory := mem) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `?a1. asm_consume_call_outcome (request_of s) ro rs
+    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+    (a with as_memory := mem) = AsmOK a1` by
+    simp[asm_consume_call_outcome_eq] >>
+  drule_all asm_frame_outcome_effects_restore >> disch_tac >>
+  pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
+  gvs[] >> qexists_tac `t` >> asm_rewrite_tac[]
 QED
 
 Theorem asm_frame_call_effects_step_ok:
@@ -1960,13 +2138,17 @@ Theorem asm_frame_call_effects_step_ok:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_frame_call_consume >> disch_tac >>
-  `?a1. asm_consume_call_outcome (request_of s) ro rs
-    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
-    (a with as_memory := mem) = AsmOK a1` by
-    simp[asm_consume_call_outcome_eq] >>
-  drule_all asm_frame_call_effects_restore >> disch_tac >>
-  pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
-  gvs[] >> qexists_tac `t` >> asm_rewrite_tac[]
+  `asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+   asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1` by
+    (`a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+     drule asm_pc_to_offset_suc >>
+     simp[arithmeticTheory.ADD1, EL_APPEND1] >>
+     Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
+     gvs[asm_inst_size_def]) >>
+  qpat_x_assum `mem = _` SUBST_ALL_TAC >>
+  `asm_call_memory ao az ro rs a.as_memory =
+   asm_call_memory ao az ro rs a.as_memory` by simp[] >>
+  drule_all asm_frame_outcome_effects_step_ok >> simp[]
 QED
 
 Theorem asm_take_outcome_result_agrees:
@@ -2266,6 +2448,27 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem asm_message_prepared_terminal_kind:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR e,t) ==>
+  ~vfm_abort e /\ e <> SOME Reverted
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_message_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_terminal_kind >> simp[]
+QED
+
 Theorem asm_call_prepared_terminal_kind:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
   ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
@@ -2276,15 +2479,7 @@ Theorem asm_call_prepared_terminal_kind:
     (INR e,t) ==>
   ~vfm_abort e /\ e <> SOME Reverted
 Proof
-  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
-    rollback := _; msdomain := _ |>` >>
-  `u.contexts = (parent,rb)::rest` by simp[] >>
-  `LENGTH u.contexts <= 1024` by
-    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
-  drule_all asm_call_finish_terminal_kind >> simp[]
+  strip_tac >> irule asm_message_prepared_terminal_kind >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_frame_call_same_depth_transport:
@@ -2376,6 +2571,97 @@ Proof
   drule_all asm_frame_call_effects_step_ok >> simp[]
 QED
 
+Theorem asm_message_prepared_terminal_exception_view:
+  wf_state s /\ s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR (SOME exc),v) /\ exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
+  ?t ct. step s = (INL (),t) /\ t.contexts = (ct,rb)::rest /\
+    t.txParams = s.txParams /\ (?dt. t.msdomain = Collect dt) /\
+    ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
+    ct.stack = 0w::DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+    ct.returnData = [] /\
+    buffer_to_list ct.memory = asm_call_memory ao az ro rs (buffer_to_list c.memory) /\
+    t.rollback.accounts = s.rollback.accounts /\
+    t.rollback.tStorage = s.rollback.tStorage /\
+    t.rollback.toDelete = s.rollback.toDelete /\ ct.logs = c.logs
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
+  drule_all asm_message_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_proceed >>
+  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
+    rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
+  `p.contexts = (parent with returnData := [],rb)::rest /\ p.contexts <> []` by
+    simp[Abbr `p`] >>
+  `step_call op s = (INR (SOME exc),v)` by
+    (rewrite_tac[asm_step_call_factor, bind_def] >>
+     qpat_assum `asm_call_prepare _ _ = _` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [] >>
+     qpat_assum `asm_call_finish _ _ _ = _` (fn th => rewrite_tac[th])) >>
+  `stipend <= (parent with returnData := []).gasUsed /\
+   LENGTH (parent with returnData := []).stack < stack_limit` by
+    (`wf_context c` by gvs[] >>
+     simp[Abbr `parent`, LENGTH_DROP] >>
+     qpat_x_assum `wf_context c` mp_tac >>
+     simp[wf_context_def, vfmConstantsTheory.stack_limit_def] >>
+     Cases_on `call_has_value op` >> simp[] >> decide_tac) >>
+  `EVERY (wf_context o FST) p.contexts` by
+    (`wf_context c /\ EVERY (wf_context o FST) rest` by
+       (qpat_x_assum `EVERY _ s.contexts` mp_tac >>
+        qpat_assum `s.contexts = _` (fn th => rewrite_tac[th]) >> simp[]) >>
+     simp[wf_context_def, Abbr `parent`] >>
+     qpat_x_assum `wf_context c` mp_tac >>
+     simp[wf_context_def, LENGTH_DROP] >>
+     Cases_on `call_has_value op` >> simp[] >> decide_tac) >>
+  `(FST (HD v.contexts)).gasUsed <= (FST (HD v.contexts)).msgParams.gasLimit` by
+    (drule_all asm_proceed_call_child_gas >> simp[]) >>
+  drule_all asm_message_step_terminal >> disch_tac >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  drule_all asm_handle_step_memory >> disch_tac >>
+  drule_all asm_proceed_call_memory_exception >> strip_tac >>
+  suspend "returned"
+QED
+
+Resume asm_message_prepared_terminal_exception_view[returned]:
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`sender = _`, `accounts = _`, `address = _`, `value = _`,
+     `ao = _`, `az = _`, `ro = _`, `rs = _`] >>
+  drule_all asm_proceed_call_saved_checkpoint >> strip_tac >>
+  `child_rb' = s.rollback with accesses := acc /\
+   v.txParams = s.txParams /\ (?dt. v.msdomain = Collect dt)` by
+    (gvs[Abbr `p`, vfmSameFrameTheory.msdomain_compatible_def] >>
+     Cases_on `v.msdomain` >> gvs[]) >>
+  `step s = (INL (), v with <|
+    contexts := (parent with <| pc := SUC parent.pc;
+      stack := 0w::parent.stack; returnData := [];
+      memory := buffer_write ro [] parent.memory |>,rb)::rest;
+    rollback := child_rb' |>)` by gvs[] >>
+  qmatch_asmsub_abbrev_tac `step s = (INL (),t)` >>
+  qexists_tac `t` >>
+  simp[Abbr `t`, Abbr `parent`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+  rename1 `max_expansion_range (ao,az) (ro,rs) = (off,sz)` >>
+  simp_tac (srw_ss()) [] >>
+  irule asm_call_memory_buffer_extend >>
+  qexistsl_tac [`off`,`sz`] >> simp_tac (srw_ss()) [] >>
+  simp_tac std_ss [arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC
+QED
+
+Finalise asm_message_prepared_terminal_exception_view
+
 Theorem asm_frame_call_terminal_exception:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
   a.as_pc < LENGTH prog /\
@@ -2393,62 +2679,15 @@ Proof
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
    ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
-  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac >- metis_tac[]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall \/ op = DelegateCall` assume_tac
+    >- metis_tac[]) >>
   `next_opcode c = SOME op` by
     (drule_all asm_frame_call_decode >> simp[] >> metis_tac[]) >>
-  drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
-  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
-    rollback := _; msdomain := _ |>` >>
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`sender = _`, `accounts = _`, `address = _`, `value = _`,
-     `ao = _`, `az = _`, `ro = _`, `rs = _`] >>
-  `u.contexts = (parent,rb)::rest` by simp[] >>
-  `LENGTH u.contexts <= 1024` by
-    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
-  drule_all asm_call_finish_proceed >>
-  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
-    rewrite_tac[th]) >>
-  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >>
-  disch_tac >>
-  `p.contexts = (parent with returnData := [],rb)::rest /\ p.contexts <> []` by
-    simp[Abbr `p`] >>
-  `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
-  `stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit` by
-    (drule_all asm_call_prepare_stack_room >>
-     drule_all asm_call_prepare_stipend_paid >> simp[]) >>
-  `step_call op s = (INR (SOME exc),v)` by
-    (rewrite_tac[asm_step_call_factor, bind_def] >>
-     qpat_assum `asm_call_prepare _ _ = _` (fn th => rewrite_tac[th]) >>
-     simp_tac (srw_ss()) [] >>
-     qpat_assum `asm_call_finish _ _ _ = _` (fn th => rewrite_tac[th])) >>
-  `EVERY (wf_context o FST) p.contexts` by
-    (drule_all asm_call_prepare_contexts_wf >>
-     simp[Abbr `p`, wf_context_def]) >>
-  ` (FST (HD v.contexts)).gasUsed <= (FST (HD v.contexts)).msgParams.gasLimit` by
-    (drule_all asm_proceed_call_child_gas >> simp[]) >>
-  `stipend <= (parent with returnData := []).gasUsed /\
-   LENGTH (parent with returnData := []).stack < stack_limit` by
-    fs[vfmConstantsTheory.stack_limit_def] >>
-  drule_all asm_call_step_memory_exception >> strip_tac >>
-  suspend "returned"
-QED
-
-Resume asm_frame_call_terminal_exception[returned]:
-  drule_all asm_proceed_call_saved_checkpoint >> strip_tac >>
-  `child_rb = s.rollback with accesses := acc /\
-   v.txParams = s.txParams /\ (?dt. v.msdomain = Collect dt)` by
-    (gvs[Abbr `p`, vfmSameFrameTheory.msdomain_compatible_def] >>
-     Cases_on `v.msdomain` >> gvs[]) >>
-  qmatch_asmsub_abbrev_tac `step s = (INL (),t)` >>
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`asm_call_finish _ _ _ = _`, `proceed_call _ _ _ _ _ _ _ _ _ _ = _`,
-     `step_call _ _ = _`, `EVERY _ p.contexts`,
-     `stipend <= (parent with returnData := []).gasUsed`,
-     `LENGTH (parent with returnData := []).stack < stack_limit`] >>
-  `LENGTH t.contexts = LENGTH s.contexts` by simp[Abbr `t`] >>
+  drule_all asm_message_prepared_terminal_exception_view >> strip_tac >>
+  `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by
+    (drule_all asm_message_prepare_success_view >>
+     pure_rewrite_tac[LET_THM] >> BETA_TAC >> simp[]) >>
+  `LENGTH t.contexts = LENGTH s.contexts` by (asm_rewrite_tac[] >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `observable_call c` by
@@ -2457,13 +2696,7 @@ Resume asm_frame_call_terminal_exception[returned]:
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   `outcome_of (request_of s).cr_kind t (LENGTH c.logs)
      (LENGTH s.rollback.toDelete) = failed_outcome (request_of s)` by
-    (irule asm_call_abort_outcome >>
-     simp[Abbr `t`, Abbr `parent`] >>
-     Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[]) >>
-  suspend "effects"
-QED
-
-Resume asm_frame_call_terminal_exception[effects]:
+    (irule asm_call_abort_outcome >> simp[] >> metis_tac[]) >>
   `a.as_outcomes = failed_outcome (request_of s)::MAP SND (call_trace t)` by
     (fs[asm_frame_rel_def] >> gvs[]) >>
   `record_request (request_of s) a.as_requests ++ call_requests t =
@@ -2479,21 +2712,6 @@ Resume asm_frame_call_terminal_exception[effects]:
    a.as_accounts = s.rollback.accounts /\
    a.as_transient = s.rollback.tStorage /\ a.as_logs = c.logs /\
    a.as_pending_deletions = s.rollback.toDelete` by gvs[asm_evm_rel_def] >>
-  `buffer_to_list parent.memory = asm_call_memory ao az ro rs a.as_memory` by
-    (simp[Abbr `parent`] >>
-     qpat_assum `buffer_to_list c.memory = _`
-       (fn th => pure_rewrite_tac[GSYM th]) >>
-     Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
-     rename1 `max_expansion_range (ao,az) (ro,rs) = (off,sz)` >>
-     simp_tac (srw_ss()) [] >>
-     irule asm_call_memory_buffer_extend >>
-     qexistsl_tac [`off`,`sz`] >> simp_tac (srw_ss()) [] >>
-     simp_tac std_ss [arithmeticTheory.MULT_COMM] >>
-     first_assum ACCEPT_TAC) >>
-  suspend "apply"
-QED
-
-Resume asm_frame_call_terminal_exception[apply]:
   `a.as_call_ctx.cc_created_in_tx =
     account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
     gvs[asm_frame_rel_def] >>
@@ -2505,19 +2723,6 @@ Resume asm_frame_call_terminal_exception[apply]:
     (irule step_creation_original_empty >> metis_tac[]) >>
   `a.as_call_ctx.cc_created_in_tx =
     account_empty (lookup_account c.msgParams.callee t.originalAccounts)` by metis_tac[] >>
-  qpat_x_assum `Abbrev (t = _)` mp_tac >>
-  qmatch_goalsub_abbrev_tac `(ct,rb)::rest` >> disch_tac >>
-  `t.contexts = (ct,rb)::rest /\ t.txParams = s.txParams /\
-   t.msdomain = Collect dt /\
-   t.rollback.accounts = s.rollback.accounts /\
-   t.rollback.tStorage = s.rollback.tStorage /\
-   t.rollback.toDelete = s.rollback.toDelete` by simp[Abbr `t`] >>
-  `ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
-   ct.pc = SUC c.pc /\ ct.logs = c.logs /\ ct.returnData = [] /\
-   ct.stack = 0w::DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
-   ct.memory = parent.memory` by simp[Abbr `ct`, Abbr `parent`] >>
-  qpat_x_assum `Abbrev (t = _)` kall_tac >>
-  qpat_x_assum `Abbrev (ct = _)` kall_tac >>
   `ct.stack = (if (failed_outcome (request_of s)).co_success then 1w else 0w)::
        DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
    ct.returnData = (failed_outcome (request_of s)).co_returnData /\
@@ -2543,7 +2748,108 @@ Resume asm_frame_call_terminal_exception[apply]:
   drule_all asm_frame_call_effects_step_ok >> simp[]
 QED
 
-Finalise asm_frame_call_terminal_exception
+Theorem asm_message_prepared_terminal_success_view:
+  wf_state s /\ s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR NONE,v) ==>
+  ?t ct. step s = (INL (),t) /\ t.contexts = (ct,rb)::rest /\
+    t.txParams = s.txParams /\ (?dt. t.msdomain = Collect dt) /\
+    ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
+    ct.stack = 1w::DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+    ct.returnData = (FST (HD v.contexts)).returnData /\
+    buffer_to_list ct.memory =
+      TAKE ro (asm_call_memory ao az ro rs (buffer_to_list c.memory)) ++
+      TAKE rs ct.returnData ++
+      DROP (ro + LENGTH (TAKE rs ct.returnData))
+        (asm_call_memory ao az ro rs (buffer_to_list c.memory)) /\
+    t.rollback.accounts = v.rollback.accounts /\
+    t.rollback.tStorage = v.rollback.tStorage /\
+    t.rollback.toDelete = s.rollback.toDelete /\ ct.logs = c.logs /\
+    (value = 0 ==> t.rollback.accounts = s.rollback.accounts /\
+                  t.rollback.tStorage = s.rollback.tStorage) /\
+    (op = StaticCall ==> value = 0)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
+  drule_all asm_message_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_proceed >>
+  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
+    rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
+  `p.contexts = (parent with returnData := [],rb)::rest /\ p.contexts <> []` by
+    simp[Abbr `p`] >>
+  `step_call op s = (INR NONE,v)` by
+    (rewrite_tac[asm_step_call_factor, bind_def] >>
+     qpat_assum `asm_call_prepare _ _ = _` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [] >>
+     qpat_assum `asm_call_finish _ _ _ = _` (fn th => rewrite_tac[th])) >>
+  `stipend <= (parent with returnData := []).gasUsed /\
+   LENGTH (parent with returnData := []).stack < stack_limit` by
+    (`wf_context c` by gvs[] >>
+     simp[Abbr `parent`, LENGTH_DROP] >>
+     qpat_x_assum `wf_context c` mp_tac >>
+     simp[wf_context_def, vfmConstantsTheory.stack_limit_def] >>
+     Cases_on `call_has_value op` >> simp[] >> decide_tac) >>
+  drule_all asm_message_step_terminal >> disch_tac >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  drule_all asm_handle_step_memory >> disch_tac >>
+  drule_all asm_handle_exception_memory_success >> disch_tac >>
+  `step s = (INL (), v with contexts :=
+    (parent with <|
+      gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+      pc := SUC parent.pc; stack := b2w T :: parent.stack;
+      returnData := child.returnData;
+      memory := buffer_write ro (TAKE rs child.returnData) parent.memory;
+      logs := parent.logs ++ child.logs;
+      addRefund := parent.addRefund + child.addRefund;
+      subRefund := parent.subRefund + child.subRefund |>,rb)::rest)` by
+    gvs[vfm_abort_def] >>
+  suspend "returned"
+QED
+
+Resume asm_message_prepared_terminal_success_view[returned]:
+  drule_all asm_proceed_call_saved_checkpoint >> strip_tac >>
+  drule_all asm_proceed_call_terminal_effects >> strip_tac >>
+  `op = StaticCall ==> value = 0` by
+    (strip_tac >> qpat_x_assum `value = _` mp_tac >>
+     simp[call_has_value_def]) >>
+  `value = 0 ==> v.rollback.accounts = s.rollback.accounts /\
+                 v.rollback.tStorage = s.rollback.tStorage` by
+    (strip_tac >> qpat_x_assum `value = 0` SUBST_ALL_TAC >>
+     drule_all asm_proceed_call_zero_terminal_effects >>
+     simp[Abbr `p`]) >>
+  `child.logs = [] /\ v.txParams = s.txParams /\
+   v.rollback.toDelete = s.rollback.toDelete /\
+   ?dt. v.msdomain = Collect dt` by
+    (gvs[Abbr `p`, vfmSameFrameTheory.msdomain_compatible_def] >>
+     Cases_on `v.msdomain` >> gvs[]) >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`sender = _`, `accounts = _`, `address = _`, `value = _`,
+     `ao = _`, `az = _`, `ro = _`, `rs = _`,
+     `asm_call_prepare _ _ = _`, `asm_call_finish _ _ _ = _`,
+     `proceed_call _ _ _ _ _ _ _ _ _ _ = _`, `step_call _ _ = _`] >>
+  qmatch_asmsub_abbrev_tac `step s = (INL (),t)` >>
+  qexists_tac `t` >>
+  simp[Abbr `t`, Abbr `parent`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+  simp_tac (srw_ss()) [] >>
+  irule asm_call_memory_buffer_write >>
+  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
+QED
+
+Finalise asm_message_prepared_terminal_success_view
 
 Theorem asm_call_prepared_terminal_success_view:
   wf_state s /\ s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
@@ -2571,66 +2877,9 @@ Theorem asm_call_prepared_terminal_success_view:
                   t.rollback.tStorage = s.rollback.tStorage) /\
     (op = StaticCall ==> value = 0)
 Proof
-  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
-  drule_all asm_call_prepare_stack_room >> disch_tac >>
-  drule_all asm_call_prepare_stipend_paid >> disch_tac >>
-  drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
-    rollback := _; msdomain := _ |>` >>
-  `u.contexts = (parent,rb)::rest` by simp[] >>
-  `LENGTH u.contexts <= 1024` by
-    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
-  drule_all asm_call_finish_proceed >>
-  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
-    rewrite_tac[th]) >>
-  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
-  `p.contexts = (parent with returnData := [],rb)::rest /\ p.contexts <> []` by
-    simp[Abbr `p`] >>
-  `step_call op s = (INR NONE,v)` by
-    (rewrite_tac[asm_step_call_factor, bind_def] >>
-     qpat_assum `asm_call_prepare _ _ = _` (fn th => rewrite_tac[th]) >>
-     simp_tac (srw_ss()) [] >>
-     qpat_assum `asm_call_finish _ _ _ = _` (fn th => rewrite_tac[th])) >>
-  `stipend <= (parent with returnData := []).gasUsed /\
-   LENGTH (parent with returnData := []).stack < stack_limit` by
-    fs[vfmConstantsTheory.stack_limit_def] >>
-  drule_all asm_call_step_memory_success >> strip_tac >>
-  suspend "returned"
+  strip_tac >> irule asm_message_prepared_terminal_success_view >>
+  simp[] >> metis_tac[]
 QED
-
-Resume asm_call_prepared_terminal_success_view[returned]:
-  drule_all asm_proceed_call_saved_checkpoint >> strip_tac >>
-  drule_all asm_proceed_call_terminal_effects >> strip_tac >>
-  `op = StaticCall ==> value = 0` by
-    (strip_tac >> gvs[call_has_value_def]) >>
-  `value = 0 ==> v.rollback.accounts = s.rollback.accounts /\
-                 v.rollback.tStorage = s.rollback.tStorage` by
-    (strip_tac >> qpat_x_assum `value = 0` SUBST_ALL_TAC >>
-     drule_all asm_proceed_call_zero_terminal_effects >>
-     simp[Abbr `p`]) >>
-  `child.logs = [] /\ v.txParams = s.txParams /\
-   v.rollback.toDelete = s.rollback.toDelete /\
-   ?dt. v.msdomain = Collect dt` by
-    (gvs[Abbr `p`, vfmSameFrameTheory.msdomain_compatible_def] >>
-     Cases_on `v.msdomain` >> gvs[]) >>
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`sender = _`, `accounts = _`, `address = _`, `value = _`,
-     `ao = _`, `az = _`, `ro = _`, `rs = _`,
-     `asm_call_prepare _ _ = _`, `asm_call_finish _ _ _ = _`,
-     `proceed_call _ _ _ _ _ _ _ _ _ _ = _`, `step_call _ _ = _`] >>
-  qmatch_asmsub_abbrev_tac `step s = (INL (),t)` >>
-  qexists_tac `t` >>
-  simp[Abbr `t`, Abbr `parent`] >>
-  POP_ASSUM_LIST (K ALL_TAC) >>
-  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
-  simp_tac (srw_ss()) [] >>
-  irule asm_call_memory_buffer_write >>
-  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
-QED
-
-Finalise asm_call_prepared_terminal_success_view
 
 Theorem asm_call_terminal_success_selected_effects:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
@@ -5679,6 +5928,29 @@ Proof
   qexistsl_tac [`ex`,`u`,`c`,`rb`,`c'`] >> simp[]
 QED
 
+Theorem asm_call_returned_message_adoption:
+  (rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall) /\
+  t.contexts = (c,rb)::rest /\
+  out = outcome_of rq.cr_kind t (LENGTH logs) (LENGTH pending) /\
+  ((rq.cr_static \/ ~out.co_success) ==>
+    t.rollback.accounts = accounts /\ t.rollback.tStorage = ts /\
+    c.logs = logs /\ t.rollback.toDelete = pending) /\
+  ((~rq.cr_static /\ out.co_success) ==>
+    (?added. c.logs = logs ++ added) /\
+    (?added. t.rollback.toDelete = added ++ pending)) ==>
+  adopt_outcome rq out (accounts,ts,logs) =
+    (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+  adopt_outcome_deletions rq out pending = t.rollback.toDelete
+Proof
+  strip_tac >>
+  (Cases_on `rq.cr_static \/ ~out.co_success`
+   >- gvs[adopt_outcome_def, adopt_outcome_deletions_def]) >>
+  `~rq.cr_static /\ out.co_success` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[adopt_outcome_def, adopt_outcome_deletions_def, outcome_of_def,
+      TAKE_LENGTH_APPEND, DROP_APPEND]
+QED
+
 Theorem asm_call_returned_outcome_adoption:
   rq.cr_kind = MessageCall /\ t.contexts = (c,rb)::rest /\
   out = outcome_of MessageCall t (LENGTH logs) (LENGTH pending) /\
@@ -5692,12 +5964,8 @@ Theorem asm_call_returned_outcome_adoption:
     (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
   adopt_outcome_deletions rq out pending = t.rollback.toDelete
 Proof
-  strip_tac >> Cases_on `rq.cr_static \/ ~out.co_success`
-  >- (gvs[adopt_outcome_def, adopt_outcome_deletions_def]) >>
-  `~rq.cr_static /\ out.co_success` by metis_tac[] >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[adopt_outcome_def, adopt_outcome_deletions_def, outcome_of_def,
-      TAKE_LENGTH_APPEND, DROP_APPEND]
+  strip_tac >> irule asm_call_returned_message_adoption >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem asm_call_memory_pop_jumpDest:
@@ -6606,25 +6874,26 @@ Proof
   gvs[]
 QED
 
-Theorem asm_call_run_memory_adoption:
+Theorem asm_call_run_message_adoption:
   wf_state s /\ (?d. s.msdomain = Collect d) /\
   s.contexts = (child,crb)::(parent,prb)::rest /\
   child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
-  rq.cr_kind = MessageCall /\ (rq.cr_static ==> child.msgParams.static) /\
+  (rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall) /\
+  (rq.cr_static ==> child.msgParams.static) /\
   crb.accounts = accounts /\ crb.tStorage = ts /\ crb.toDelete = pending /\
   s.rollback.toDelete = pending /\
   (rq.cr_static ==> s.rollback.accounts = accounts /\ s.rollback.tStorage = ts) /\
   run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) /\
   t.contexts = (c,prb)::rest /\
-  out = outcome_of MessageCall t (LENGTH parent.logs) (LENGTH pending) ==>
+  out = outcome_of rq.cr_kind t (LENGTH parent.logs) (LENGTH pending) ==>
   adopt_outcome rq out (accounts,ts,parent.logs) =
     (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
   adopt_outcome_deletions rq out pending = t.rollback.toDelete
 Proof
-  strip_tac >>
+  strip_tac >> (
   drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
   simp[] >> strip_tac >>
-  irule asm_call_returned_outcome_adoption >>
+  irule asm_call_returned_message_adoption >>
   simp[] >> reverse conj_tac
   >- (disch_tac >> Cases_on `rq.cr_static`
       >- (`child.msgParams.static /\ crb.accounts = s.rollback.accounts /\
@@ -6640,11 +6909,31 @@ Proof
   conj_tac
   >- (drule_at (Pat `run_call _ = _`) asm_call_run_memory_success_logs >>
       simp[]) >>
-  drule_at (Pat `run_call _ = _`) asm_call_run_pending_suffix >> simp[]
+  drule_at (Pat `run_call _ = _`) asm_call_run_pending_suffix >> simp[])
 QED
 
-Theorem asm_proceed_call_enter_effects:
-  s.contexts = (parent,prb)::rest /\ (op = Call \/ op = StaticCall) /\
+Theorem asm_call_run_memory_adoption:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
+  rq.cr_kind = MessageCall /\ (rq.cr_static ==> child.msgParams.static) /\
+  crb.accounts = accounts /\ crb.tStorage = ts /\ crb.toDelete = pending /\
+  s.rollback.toDelete = pending /\
+  (rq.cr_static ==> s.rollback.accounts = accounts /\ s.rollback.tStorage = ts) /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) /\
+  t.contexts = (c,prb)::rest /\
+  out = outcome_of MessageCall t (LENGTH parent.logs) (LENGTH pending) ==>
+  adopt_outcome rq out (accounts,ts,parent.logs) =
+    (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+  adopt_outcome_deletions rq out pending = t.rollback.toDelete
+Proof
+  strip_tac >> irule asm_call_run_message_adoption >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem asm_proceed_message_enter_effects:
+  s.contexts = (parent,prb)::rest /\
+  (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   ~parent.msgParams.static /\
   proceed_call op sender address value ao az code stipend (Memory mr) s = (INL (),t) ==>
   ?child crb. t.contexts = (child,crb)::(parent,prb)::rest /\
@@ -6668,6 +6957,75 @@ Proof
   gvs[update_accounts_def, get_current_context_def, return_def] >>
   strip_tac >>
   gvs[vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem asm_proceed_call_enter_effects:
+  s.contexts = (parent,prb)::rest /\ (op = Call \/ op = StaticCall) /\
+  ~parent.msgParams.static /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (INL (),t) ==>
+  ?child crb. t.contexts = (child,crb)::(parent,prb)::rest /\
+    child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
+    child.msgParams.static = (op = StaticCall) /\ crb = s.rollback /\
+    t.rollback.toDelete = s.rollback.toDelete /\
+    (op = StaticCall /\ value = 0 ==>
+      t.rollback.accounts = s.rollback.accounts /\
+      t.rollback.tStorage = s.rollback.tStorage)
+Proof
+  strip_tac >> irule asm_proceed_message_enter_effects >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_message_prepared_enter_view:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) ==>
+  ?parent child crb. v.contexts = (child,crb)::(parent,rb)::rest /\
+    parent.msgParams = c.msgParams /\ parent.jumpDest = c.jumpDest /\ parent.pc = c.pc /\
+    parent.stack = DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+    parent.logs = c.logs /\
+    parent.memory = buffer_extend
+      (MAX (buffer_length c.memory)
+        (let range = max_expansion_range (ao,az) (ro,rs) in
+         if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+       - buffer_length c.memory) c.memory /\
+    buffer_to_list parent.memory = asm_call_memory ao az ro rs (buffer_to_list c.memory) /\
+    child.msgParams.outputTo = Memory <|offset := ro; size := rs|> /\
+    child.msgParams.static = (op = StaticCall) /\ child.logs = [] /\
+    crb.accounts = s.rollback.accounts /\ crb.tStorage = s.rollback.tStorage /\
+    crb.toDelete = s.rollback.toDelete /\ v.rollback.toDelete = s.rollback.toDelete /\
+    (op = StaticCall ==> v.rollback.accounts = s.rollback.accounts /\
+                         v.rollback.tStorage = s.rollback.tStorage)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_message_prepare_success_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
+    rollback := _; msdomain := _ |>` >>
+  `u.contexts = (parent,rb)::rest` by simp[] >>
+  `LENGTH u.contexts <= 1024` by
+    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  drule_all asm_call_finish_proceed >>
+  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
+    rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
+  `p.contexts = (parent with returnData := [],rb)::rest /\
+   ~(parent with returnData := []).msgParams.static` by simp[Abbr `p`, Abbr `parent`] >>
+  drule_all asm_proceed_message_enter_effects >> strip_tac >>
+  `op = StaticCall ==> value = 0` by
+    (strip_tac >> gvs[call_has_value_def]) >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`sender = _`, `accounts = _`, `address = _`, `value = _`,
+     `ao = _`, `az = _`, `ro = _`, `rs = _`] >>
+  qexistsl_tac [`parent with returnData := []`,`child`,`crb`] >>
+  simp[Abbr `p`, Abbr `parent`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+  simp_tac (srw_ss()) [] >>
+  irule asm_call_memory_buffer_extend >>
+  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
 QED
 
 Theorem asm_call_prepared_enter_view:
@@ -6695,33 +7053,35 @@ Theorem asm_call_prepared_enter_view:
     (op = StaticCall ==> v.rollback.accounts = s.rollback.accounts /\
                          v.rollback.tStorage = s.rollback.tStorage)
 Proof
+  strip_tac >> irule asm_message_prepared_enter_view >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_message_prepared_run_adoption:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\ next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) /\
+  wf_state v /\ (?dv. v.msdomain = Collect dv) /\
+  run_call v = SOME (INL (),t) /\ t.contexts = (ct,rb)::rest ==>
+  let out = outcome_of (request_of s).cr_kind t (LENGTH c.logs) (LENGTH s.rollback.toDelete) in
+  adopt_outcome (request_of s) out (s.rollback.accounts,s.rollback.tStorage,c.logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out s.rollback.toDelete = t.rollback.toDelete
+Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
-    rollback := _; msdomain := _ |>` >>
-  `u.contexts = (parent,rb)::rest` by simp[] >>
-  `LENGTH u.contexts <= 1024` by
-    (qpat_x_assum `LENGTH s.contexts <= 1024` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
-  drule_all asm_call_finish_proceed >>
-  disch_then (fn th => qpat_assum `asm_call_finish _ _ _ = _` mp_tac >>
-    rewrite_tac[th]) >>
-  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
-  `p.contexts = (parent with returnData := [],rb)::rest /\
-   ~(parent with returnData := []).msgParams.static` by simp[Abbr `p`, Abbr `parent`] >>
-  drule_all asm_proceed_call_enter_effects >> strip_tac >>
-  `op = StaticCall ==> value = 0` by
-    (strip_tac >> gvs[call_has_value_def]) >>
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`sender = _`, `accounts = _`, `address = _`, `value = _`,
-     `ao = _`, `az = _`, `ro = _`, `rs = _`] >>
-  qexistsl_tac [`parent with returnData := []`,`child`,`crb`] >>
-  simp[Abbr `p`, Abbr `parent`] >>
-  POP_ASSUM_LIST (K ALL_TAC) >>
-  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
-  simp_tac (srw_ss()) [] >>
-  irule asm_call_memory_buffer_extend >>
-  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
+  simp_tac (srw_ss()) [LET_THM] >>
+  `(request_of s).cr_static = (op = StaticCall) /\
+   ((request_of s).cr_kind = MessageCall \/
+    (request_of s).cr_kind = DelegateMessageCall)` by
+    (qpat_assum `op = Call \/ op = StaticCall \/ op = DelegateCall` strip_assume_tac >>
+     gvs[request_of_def]) >>
+  drule_all asm_message_prepared_enter_view >> strip_tac >>
+  `LENGTH t.contexts = SUC (LENGTH rest)` by simp[] >>
+  drule_at (Pat `run_call _ = _`) asm_call_run_message_adoption >>
+  simp[]
 QED
 
 Theorem asm_call_prepared_run_adoption:
@@ -6740,12 +7100,48 @@ Theorem asm_call_prepared_run_adoption:
   adopt_outcome_deletions (request_of s) out s.rollback.toDelete = t.rollback.toDelete
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  simp_tac (srw_ss()) [LET_THM] >>
-  drule_all asm_call_prepared_request >> strip_tac >>
-  drule_all asm_call_prepared_enter_view >> strip_tac >>
-  `LENGTH t.contexts = SUC (LENGTH rest)` by simp[] >>
-  drule_at (Pat `run_call _ = _`) asm_call_run_memory_adoption >>
-  simp[]
+  `(request_of s).cr_kind = MessageCall` by
+    (qpat_assum `op = Call \/ op = StaticCall` strip_assume_tac >> gvs[request_of_def]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall \/ op = DelegateCall`
+    assume_tac >- metis_tac[]) >>
+  drule_all asm_message_prepared_run_adoption >> simp[]
+QED
+
+Theorem asm_message_prepared_run_selectors:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) /\ wf_state v /\ (?dv. v.msdomain = Collect dv) /\
+  run_call v = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?ct. t.contexts = (ct,rb)::rest /\ ct.msgParams = c.msgParams /\
+    ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
+    ct.stack = (if (outcome_of MessageCall t n m).co_success then 1w else 0w)::
+      DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+    ct.returnData = (outcome_of MessageCall t n m).co_returnData /\
+    buffer_to_list ct.memory =
+      TAKE ro (asm_call_memory ao az ro rs (buffer_to_list c.memory)) ++
+      TAKE rs ct.returnData ++ DROP (ro + LENGTH (TAKE rs ct.returnData))
+        (asm_call_memory ao az ro rs (buffer_to_list c.memory))
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_message_prepared_enter_view >> strip_tac >>
+  drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
+  simp[] >> strip_tac >>
+  rename1 `t.contexts = (ct,rb)::rest` >>
+  `ct.jumpDest = parent.jumpDest` by
+    (drule_at (Pat `run_call _ = _`) asm_call_run_memory_jumpDest >> simp[]) >>
+  qexists_tac `ct` >> simp[outcome_of_def] >> conj_tac
+  >- (Cases_on `ex` >> simp[]) >>
+  qpat_x_assum `ct.memory = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `parent.memory = _` (fn th => rewrite_tac[th]) >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+  simp_tac (srw_ss()) [] >>
+  irule asm_call_memory_buffer_write >>
+  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
 QED
 
 Theorem asm_call_prepared_run_selectors:
@@ -6767,22 +7163,7 @@ Theorem asm_call_prepared_run_selectors:
       TAKE rs ct.returnData ++ DROP (ro + LENGTH (TAKE rs ct.returnData))
         (asm_call_memory ao az ro rs (buffer_to_list c.memory))
 Proof
-  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepared_enter_view >> strip_tac >>
-  drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
-  simp[] >> strip_tac >>
-  rename1 `t.contexts = (ct,rb)::rest` >>
-  `ct.jumpDest = parent.jumpDest` by
-    (drule_at (Pat `run_call _ = _`) asm_call_run_memory_jumpDest >> simp[]) >>
-  qexists_tac `ct` >> simp[outcome_of_def] >> conj_tac
-  >- (Cases_on `ex` >> simp[]) >>
-  qpat_x_assum `ct.memory = _` (fn th => rewrite_tac[th]) >>
-  qpat_x_assum `parent.memory = _` (fn th => rewrite_tac[th]) >>
-  POP_ASSUM_LIST (K ALL_TAC) >>
-  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
-  simp_tac (srw_ss()) [] >>
-  irule asm_call_memory_buffer_write >>
-  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
+  strip_tac >> irule asm_message_prepared_run_selectors >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_call_finite_txParams:

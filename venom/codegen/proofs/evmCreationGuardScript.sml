@@ -71,6 +71,27 @@ Proof
   metis_tac[SND, handle_step_deletion_projections]
 QED
 
+Theorem step_continuing_creation_guard:
+  wf_state s /\
+  created = account_empty (lookup_account self s.originalAccounts) /\
+  (~created ==> account_already_created (lookup_account self s.rollback.accounts)) /\
+  step s = (INL (),t) /\ LENGTH s.contexts <= LENGTH t.contexts ==>
+  created = account_empty (lookup_account self t.originalAccounts) /\
+  (~created ==> account_already_created (lookup_account self t.rollback.accounts))
+Proof
+  strip_tac >>
+  `0 < LENGTH s.contexts` by (Cases_on `s.contexts` >> gvs[wf_state_def]) >>
+  `account_empty (lookup_account self t.originalAccounts) =
+    account_empty (lookup_account self s.originalAccounts)` by
+    (irule step_creation_original_empty >> metis_tac[]) >>
+  `!addr. account_already_created (lookup_account addr s.rollback.accounts) ==>
+    account_already_created (lookup_account addr t.rollback.accounts)` by
+    (mp_tac (Q.INST [`d` |-> `LENGTH s.contexts`, `B` |-> `s.rollback`,
+                    `s` |-> `s`, `t` |-> `t`, `x` |-> `()`]
+      step_continuing_collision_current) >> simp[]) >>
+  metis_tac[]
+QED
+
 val creation_step_inner = ``do
   context <- get_current_context;
   case FLOOKUP context.msgParams.parsed context.pc of
