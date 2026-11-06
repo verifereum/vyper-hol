@@ -7,7 +7,7 @@ Ancestors
   bodyMemoryPreds bodyMemTbConvertWidened vyperContext vyperState
   bodyMemTbConvertOperand bodyMemTbConvertCompose bodyMemTbConvertIntSuffix
   bodyMemTbConvertScalarFlags bodyMemTbConvertLoadMemory
-  bodyMemTbConvertScalarDispatch bodyMemTbConvertSourceDispatch
+  bodyMemTbConvertScalarBranch bodyMemTbConvertSourceDispatch
   bodyMemTbConvertDestMemory bodyMemTbConvertDestPath
   bodyMemTbConvertCopyMemory bodyMemTbConvertCastMemory
 
