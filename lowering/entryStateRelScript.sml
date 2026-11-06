@@ -159,7 +159,8 @@ Theorem layouts_agree_lookup:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[layouts_agree_def, lookup_var_slot_from_layout_def] >>
-  Cases_on `ALOOKUP am.layouts tx.target` >> gvs[] >>
+  Cases_on `ALOOKUP am.layouts tx.target` >> gvs[]
+  >- (rpt conj_tac >> rpt gen_tac >> strip_tac >> res_tac >> fs[]) >>
   rename1 `SOME p` >> PairCases_on `p` >> gvs[] >>
   rpt conj_tac >> rpt gen_tac >> TRY (Cases_on `tr`) >> simp[] >> metis_tac[]
 QED

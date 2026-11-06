@@ -27,12 +27,12 @@ Definition layouts_agree_def:
   layouts_agree tops am tx <=>
     let (sl, tl) = (case ALOOKUP am.layouts tx.target of
                       SOME p => p | NONE => ([], [])) in
-      (!vis id ty n. MEM (VariableDecl vis Storage id ty (SOME n)) tops ==>
-                     ALOOKUP sl (NONE, id) = SOME n) /\
-      (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
-                     ALOOKUP tl (NONE, id) = SOME n) /\
-      (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
-                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n)
+      (!vis id ty slot_opt. MEM (VariableDecl vis Storage id ty slot_opt) tops ==>
+                            ALOOKUP sl (NONE, id) = slot_opt) /\
+      (!vis id ty slot_opt. MEM (VariableDecl vis Transient id ty slot_opt) tops ==>
+                            ALOOKUP tl (NONE, id) = slot_opt) /\
+      (!vis tr id kt vt slot_opt. MEM (HashMapDecl vis tr id kt vt slot_opt) tops ==>
+                                  ALOOKUP (if tr then tl else sl) (NONE, id) = slot_opt)
 End
 
 Definition source_deployment_rel_def:
