@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanLineageDemandSupport fnPlanLineagePhiMaps phiBlock fnLineageInvPhi fnPlanLineagePhiClasses cfgNormBase fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  fnLineageInvBoundary fnPlanLineageDemandSupport fnPlanLineagePhiMaps phiBlock fnLineageInvPhi fnPlanLineagePhiClasses cfgNormBase fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
   stackPlanTypes stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -476,6 +476,42 @@ Proof
  simp[MEM_APPEND, MEM_MAP] >> metis_tac[]
 QED
 
+Theorem analyzed_join_run_phi_witness:
+ !fn entry pred pb succ sb dfg ps0 ops ps j.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+ j < LENGTH (collect_phis sb.bb_instructions) ==>
+ ?w. MEM w (FILTER is_var_operand (EL j (collect_phis sb.bb_instructions)).inst_operands) /\
+     MEM w ps.ps_stack
+Proof
+ rpt gen_tac >> strip_tac >>
+ `wf_function fn` by gvs[codegen_ready_fn_def] >>
+ `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+   metis_tac[lookup_block_MEM, lookup_block_label] >>
+ `fn_cfg_edge fn pred sb.bb_label` by
+   metis_tac[codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze] >>
+ `MEM (EL j (collect_phis sb.bb_instructions)) (collect_phis sb.bb_instructions)` by
+   simp[EL_MEM] >>
+ drule_all phi_codegen_edge_wf >>
+ simp[phi_edge_uses_wf_def] >> strip_tac >>
+ `?v. MEM (pred,v) (phi_pairs (EL j (collect_phis sb.bb_instructions)).inst_operands)` by
+   metis_tac[pairTheory.PAIR, pairTheory.FST] >>
+ `FIND (\p. FST p = pred)
+    (phi_pairs (EL j (collect_phis sb.bb_instructions)).inst_operands) = SOME (pred,v)` by
+   (drule_all distinct_key_FIND_member >> simp[]) >>
+ `FIND (\(l,w). l = pred)
+    (phi_pairs (EL j (collect_phis sb.bb_instructions)).inst_operands) = SOME (pred,v)` by
+   gvs[pairTheory.LAMBDA_PROD] >>
+ qexists_tac `Var v` >> conj_tac
+ >- (simp[MEM_FILTER, is_var_operand_def] >> metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
+ drule_all analyzed_join_run_incoming_on_stack >> simp[]
+QED
+
 Theorem analyzed_join_released_phi_prefix_preservation:
  !fn entry pred pb succ sb dfg ps0 ops s m core spillbase steps.
  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
@@ -568,25 +604,7 @@ Resume analyzed_join_released_phi_prefix_preservation[disjoint]:
 QED
 
 Resume analyzed_join_released_phi_prefix_preservation[incoming]:
- rpt strip_tac >>
- `wf_function fn` by gvs[codegen_ready_fn_def] >>
- `fn_cfg_edge fn pred sb.bb_label` by
-   metis_tac[codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze] >>
- `MEM (EL j (collect_phis sb.bb_instructions)) (collect_phis sb.bb_instructions)` by
-   simp[EL_MEM] >>
- drule_all phi_codegen_edge_wf >>
- simp[phi_edge_uses_wf_def] >> strip_tac >>
- `?v. MEM (pred,v) (phi_pairs (EL j (collect_phis sb.bb_instructions)).inst_operands)` by
-   metis_tac[pairTheory.PAIR, pairTheory.FST] >>
- `FIND (\p. FST p = pred)
-    (phi_pairs (EL j (collect_phis sb.bb_instructions)).inst_operands) = SOME (pred,v)` by
-   (drule_all distinct_key_FIND_member >> simp[]) >>
- `FIND (\(l,w). l = pred)
-    (phi_pairs (EL j (collect_phis sb.bb_instructions)).inst_operands) = SOME (pred,v)` by
-   (gvs[pairTheory.LAMBDA_PROD]) >>
- qexists_tac `Var v` >> conj_tac
- >- (simp[MEM_FILTER, is_var_operand_def] >> metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
- drule_all analyzed_join_run_incoming_on_stack >> simp[]
+ rpt strip_tac >> irule analyzed_join_run_phi_witness >> metis_tac[]
 QED
 
 Finalise analyzed_join_released_phi_prefix_preservation
@@ -693,3 +711,196 @@ Proof
  disch_then (qspec_then `Var v` mp_tac) >> simp[] >>
  disch_tac >> disch_then (qspec_then `Var v` mp_tac) >> simp[]
 QED
+
+Theorem analyzed_phi_suffix_live_backward:
+ !fn lbl bb k v.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ k <= LENGTH (collect_phis bb.bb_instructions) /\
+ ~MEM v (FLAT (MAP (\phi. phi.inst_outputs)
+   (DROP k (collect_phis bb.bb_instructions)))) /\
+ MEM v (live_vars_at (liveness_analyze fn) lbl
+   (LENGTH (collect_phis bb.bb_instructions))) ==>
+ MEM v (live_vars_at (liveness_analyze fn) lbl k)
+Proof
+ rpt gen_tac >> strip_tac >>
+ qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+ irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
+ goal_assum drule >> simp[] >>
+ qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >> simp[] >>
+ reverse conj_tac
+ >- (qpat_x_assum `bb.bb_instructions = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+ rpt strip_tac >>
+ `EL k' bb.bb_instructions = EL k' (collect_phis bb.bb_instructions)` by
+   (qpat_assum `bb.bb_instructions = _` (mp_tac o Q.AP_TERM `EL k'`) >>
+    simp[EL_APPEND1]) >>
+ `MEM (EL k' (collect_phis bb.bb_instructions))
+    (DROP k (collect_phis bb.bb_instructions))` by
+   (simp[MEM_EL] >> qexists_tac `k' - k` >> simp[EL_DROP]) >>
+ qpat_x_assum `~MEM v (FLAT _)` mp_tac >>
+ simp[MEM_FLAT, MEM_MAP] >> metis_tac[venomInstTheory.inst_defs_def]
+QED
+
+Theorem analyzed_released_phi_schedule_coverage:
+ !fn lbl bb steps s n.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ MAP FST steps = collect_phis bb.bb_instructions /\ n = LENGTH steps /\
+ (!j. j < n ==> LENGTH (FST (EL j steps)).inst_outputs = 1) /\
+ (!j v. j < n /\ MEM v (live_vars_at (liveness_analyze fn) lbl (SUC j)) /\
+   (v = HD (FST (EL j steps)).inst_outputs \/
+    MEM (Var v) (s j).ps_stack \/ Var v IN FDOM (s j).ps_spilled) ==>
+   MEM (Var v) (s (SUC j)).ps_stack \/ Var v IN FDOM (s (SUC j)).ps_spilled) /\
+ (!v. MEM v (live_vars_at (liveness_analyze fn) lbl n) /\
+   ~MEM v (FLAT (MAP (\phi. phi.inst_outputs) (collect_phis bb.bb_instructions))) ==>
+   MEM (Var v) (s 0).ps_stack \/ Var v IN FDOM (s 0).ps_spilled) ==>
+ !v. MEM v (live_vars_at (liveness_analyze fn) lbl n) ==>
+   MEM (Var v) (s n).ps_stack \/ Var v IN FDOM (s n).ps_spilled
+Proof
+ rpt gen_tac >> strip_tac >>
+ `n = LENGTH (collect_phis bb.bb_instructions)` by
+   (qpat_assum `MAP FST steps = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+ `!j. j < n ==> FST (EL j steps) = EL j (collect_phis bb.bb_instructions)` by
+   (rpt strip_tac >> qpat_assum `MAP FST steps = _` (mp_tac o Q.AP_TERM `EL j`) >>
+    simp[EL_MAP]) >>
+ `!k. k <= n ==> !v. MEM v (live_vars_at (liveness_analyze fn) lbl n) /\
+   (!j. k <= j /\ j < n ==> ~MEM v (FST (EL j steps)).inst_outputs) ==>
+   MEM (Var v) (s k).ps_stack \/ Var v IN FDOM (s k).ps_spilled` suffices_by
+   (disch_then (qspec_then `n` mp_tac) >> simp[]) >>
+ Induct
+ >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+     qpat_x_assum `MEM _ (collect_phis _)` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+     metis_tac[]) >>
+ rpt strip_tac >>
+ `k < n /\ k <= n` by decide_tac >>
+ `MEM v (live_vars_at (liveness_analyze fn) lbl (SUC k))` by
+   suspend "backward" >>
+ first_x_assum irule >> simp[] >>
+ Cases_on `v = HD (EL k (collect_phis bb.bb_instructions)).inst_outputs` >> simp[] >>
+ first_x_assum irule >> simp[] >> rpt strip_tac >>
+ Cases_on `j = k` >- (gvs[] >>
+   `LENGTH (EL j (collect_phis bb.bb_instructions)).inst_outputs = 1` by metis_tac[] >>
+   Cases_on `(EL j (collect_phis bb.bb_instructions)).inst_outputs` >> gvs[]) >>
+ `SUC k <= j` by decide_tac >> metis_tac[]
+QED
+
+Resume analyzed_released_phi_schedule_coverage[backward]:
+ irule analyzed_phi_suffix_live_backward >> goal_assum drule >> simp[] >>
+ reverse conj_tac >- metis_tac[] >>
+ strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+ qpat_x_assum `MEM _ (DROP _ _)`
+   (qx_choose_then `idx` strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+ `SUC k + idx < LENGTH steps` by (fs[LENGTH_DROP] >> decide_tac) >>
+ `EL idx (DROP (SUC k) (collect_phis bb.bb_instructions)) =
+    FST (EL (SUC k + idx) steps)` by simp[EL_DROP] >>
+ qpat_x_assum `!j. SUC k <= j /\ _ ==> _` (qspec_then `SUC k + idx` mp_tac) >>
+ gvs[EL_DROP, arithmeticTheory.ADD_COMM]
+QED
+
+Finalise analyzed_released_phi_schedule_coverage
+
+Theorem analyzed_join_released_phi_coverage:
+ !fn entry pred pb succ sb dfg ps0 ops s m core spillbase steps n.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,s 0) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions)))) (s 0) /\
+ lineage_core m core (s 0) /\ EVERY is_var_operand core /\
+ residual_budget_wf spillbase [] ((s 0) with ps_stack := core) /\
+ MAP FST steps = collect_phis sb.bb_instructions /\ n = LENGTH steps /\
+ (!j. j < n ==> FST (SND (EL j steps)) =
+    live_vars_at (liveness_analyze fn) succ (SUC j)) /\
+ (!j. j < n ==>
+   s (SUC j) = release_dead_spills (FST (SND (EL j steps)))
+     (SND (generate_phi_plan (FST (EL j steps)) (FST (SND (EL j steps)))
+       (SND (SND (EL j steps))) (s j)))) ==>
+ !v. MEM v (live_vars_at (liveness_analyze fn) succ n) ==>
+   MEM (Var v) (s n).ps_stack \/ Var v IN FDOM (s n).ps_spilled
+Proof
+ rpt gen_tac >> strip_tac >>
+ `wf_function fn` by gvs[codegen_ready_fn_def] >>
+ `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+   metis_tac[lookup_block_MEM, lookup_block_label] >>
+ `MEM succ (cfg_analyze fn).cfg_dfs_pre` by
+   (drule cfg_analyze_reachable_sets >> simp[pred_setTheory.EXTENSION] >>
+    metis_tac[fn_reachable_cfg_analyze]) >>
+ `n = LENGTH (collect_phis sb.bb_instructions)` by
+   (qpat_assum `MAP FST steps = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+ `!j. j < n ==> FST (EL j steps) = EL j (collect_phis sb.bb_instructions)` by
+   (rpt strip_tac >> qpat_assum `MAP FST steps = _` (mp_tac o Q.AP_TERM `EL j`) >>
+    simp[EL_MAP]) >>
+ `!j. j < LENGTH steps ==>
+   ~MEM (Var (HD (FST (EL j steps)).inst_outputs)) (s 0).ps_stack /\
+   Var (HD (FST (EL j steps)).inst_outputs) NOTIN FDOM (s 0).ps_spilled` by
+   suspend "fresh" >>
+ `MEM succ (cfg_succs_of (cfg_analyze fn) pred)` by simp[] >>
+ `!j. j < LENGTH steps ==>
+   s (SUC j) = release_dead_spills (FST (SND (EL j steps)))
+     (SND (generate_phi_plan (FST (EL j steps)) (FST (SND (EL j steps)))
+       (SND (SND (EL j steps))) (s j)))` by metis_tac[] >>
+
+ gen_tac >> disch_tac >>
+ irule (INST_TYPE [alpha |-> ``:string list # bool``]
+   analyzed_released_phi_schedule_coverage) >> goal_assum (drule_at Any) >>
+ qexistsl_tac [`sb`, `steps`] >> simp[] >>
+ conj_tac >- suspend "initial" >>
+ conj_tac >- suspend "step" >>
+ rpt strip_tac >> irule (cj 2 phi_codegen_inst_shape) >>
+ qexistsl_tac [`sb`, `fn`] >> simp[EL_MEM]
+QED
+
+Resume analyzed_join_released_phi_coverage[fresh]:
+ drule_all analyzed_singleton_phi_outputs_fresh >>
+ simp[EVERY_MEM] >> strip_tac >> gen_tac >> disch_tac >>
+ `LENGTH (FST (EL j steps)).inst_outputs = 1` by
+   (irule (cj 2 phi_codegen_inst_shape) >> qexistsl_tac [`sb`, `fn`] >> simp[EL_MEM]) >>
+ `MEM (HD (FST (EL j steps)).inst_outputs) (FST (EL j steps)).inst_outputs` by
+   (Cases_on `(FST (EL j steps)).inst_outputs` >> gvs[]) >>
+ `MEM (FST (EL j steps)) (collect_phis sb.bb_instructions)` by
+   (qpat_assum `MAP FST steps = _` (mp_tac o Q.AP_TERM `EL j`) >>
+    simp[EL_MAP] >> metis_tac[EL_MEM]) >>
+ metis_tac[]
+QED
+
+Resume analyzed_join_released_phi_coverage[step]:
+ rpt gen_tac >> strip_tac >>
+ `j <= LENGTH steps /\ j < LENGTH steps` by decide_tac >>
+ drule_all analyzed_join_released_phi_prefix_preservation >> strip_tac >>
+ `?w. MEM w (FILTER is_var_operand (FST (EL j steps)).inst_operands) /\
+      MEM w (s 0).ps_stack` by
+   (drule_all analyzed_join_run_phi_witness >> simp[]) >>
+ `MEM w (s j).ps_stack` by
+   (qpat_x_assum `!j' w. _` (qspecl_then [`j`, `w`] mp_tac) >> simp[]) >>
+ Cases_on `generate_phi_plan (FST (EL j steps)) (FST (SND (EL j steps)))
+    (SND (SND (EL j steps))) (s j)` >>
+ irule released_phi_core_live_coverage >> goal_assum (drule_at Any) >>
+ qexistsl_tac [`spillbase`, `rest`, `m`] >> gvs[] >> metis_tac[]
+QED
+
+Resume analyzed_join_released_phi_coverage[initial]:
+ qx_gen_tac `u` >> strip_tac >>
+ `MEM u (live_vars_at (liveness_analyze fn) succ 0)` by
+   (irule analyzed_phi_suffix_live_backward >> goal_assum drule >> simp[]) >>
+ `MEM u (input_vars_from pred sb.bb_instructions
+   (live_vars_at (liveness_analyze fn) succ 0))` by
+   (irule livenessProofsTheory.input_vars_from_non_phi >> simp[] >> rpt strip_tac >>
+    `MEM u (inst_uses inst)` by
+      (simp[inst_uses_def, MEM_operand_vars_eq_Var] >>
+       gvs[MEM_MAP] >>
+       metis_tac[cfgNormBaseTheory.phi_pairs_mem_var, pairTheory.PAIR]) >>
+    drule_all phi_codegen_input_dead_after_prefix >> simp[] >> metis_tac[]) >>
+ drule_all analyzed_live_out_singleton >>
+ simp[pred_setTheory.EXTENSION] >> strip_tac >>
+ `MEM u (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+   metis_tac[] >>
+ drule lineage_inventory_live_membership >> metis_tac[]
+QED
+
+Finalise analyzed_join_released_phi_coverage

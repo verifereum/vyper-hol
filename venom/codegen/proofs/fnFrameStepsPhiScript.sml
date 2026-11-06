@@ -115,19 +115,6 @@ Proof
   drule_all phi_lineage_entry_spill_support >> simp[]
 QED
 
-Theorem phi_codegen_block_ready:
-  codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
-  phi_block_ready (liveness_analyze fn) bb
-Proof
-  simp[codegen_ready_fn_def, phi_operands_ready_def] >>
-  Cases_on `EVERY (\b. NULL (collect_phis b.bb_instructions)) fn.fn_blocks` >>
-  simp[listTheory.EVERY_MEM] >> rpt strip_tac
-  >- (`collect_phis bb.bb_instructions = []` by
-        (qpat_x_assum `EVERY _ fn.fn_blocks` mp_tac >>
-         simp[listTheory.EVERY_MEM] >> metis_tac[listTheory.NULL_EQ]) >>
-      simp[phi_block_ready_def, phi_uses_disjoint_def]) >>
-  metis_tac[]
-QED
 
 Theorem phi_codegen_uses_disjoint:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
@@ -136,15 +123,6 @@ Proof
   strip_tac >> drule_all phi_codegen_block_ready >> simp[phi_block_ready_def]
 QED
 
-Theorem phi_codegen_input_dead_after_prefix:
-  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
-  MEM phi (collect_phis bb.bb_instructions) /\ MEM v (inst_uses phi) ==>
-  ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
-    (LENGTH (collect_phis bb.bb_instructions)))
-Proof
-  strip_tac >> drule_all phi_codegen_block_ready >>
-  simp[phi_block_ready_def, listTheory.EVERY_MEM] >> metis_tac[]
-QED
 
 Theorem phi_lineage_entry_spills_empty:
   lineage_entry liveness dfg cfg fn ps0 pred succ ps /\

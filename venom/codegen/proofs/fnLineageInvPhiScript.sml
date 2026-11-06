@@ -360,3 +360,60 @@ Proof
       dead_stack_marker_def] >>
  gen_tac >> Cases_on `op = Var (HD inst.inst_outputs)` >> gvs[] >> metis_tac[]
 QED
+
+Theorem released_phi_live_coverage:
+ !inst nl halting ps d x ops qs final v.
+ stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+ stack_peek d ps.ps_stack = x /\ is_var_operand x /\
+ LENGTH (FILTER (\op. op = x) ps.ps_stack) = 1 /\
+ ~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+ Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled /\
+ generate_phi_plan inst nl halting ps = (ops,qs) /\
+ final = release_dead_spills nl qs /\ MEM v nl /\
+ (v = HD inst.inst_outputs \/ MEM (Var v) ps.ps_stack \/
+    Var v IN FDOM ps.ps_spilled) ==>
+ MEM (Var v) final.ps_stack \/ Var v IN FDOM final.ps_spilled
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all released_phi_inventory_delta >>
+ disch_then (qspec_then `Var v` mp_tac) >>
+ Cases_on `x` >> gvs[is_var_operand_def, operand_to_string_def,
+   dead_stack_marker_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem released_phi_core_live_coverage:
+ !inst nl halting ps m core base ops qs final v.
+ lineage_core m core ps /\ EVERY is_var_operand core /\
+ residual_budget_wf base [] (ps with ps_stack := core) /\
+ (?w. MEM w (FILTER is_var_operand inst.inst_operands) /\ MEM w ps.ps_stack) /\
+ ~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+ Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled /\
+ generate_phi_plan inst nl halting ps = (ops,qs) /\
+ final = release_dead_spills nl qs /\ MEM v nl /\
+ (v = HD inst.inst_outputs \/ MEM (Var v) ps.ps_stack \/
+    Var v IN FDOM ps.ps_spilled) ==>
+ MEM (Var v) final.ps_stack \/ Var v IN FDOM final.ps_spilled
+Proof
+ rpt gen_tac >> strip_tac >>
+ `?d. stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d` by
+   (Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >> simp[] >>
+    fs[stack_get_phi_depth_def, stack_find_NONE_EVERY, EVERY_MEM, MEM_REVERSE] >> metis_tac[]) >>
+ `d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack <> dead_stack_marker` by
+   metis_tac[stack_get_phi_depth_var_not_marker] >>
+ `MEM (stack_peek d ps.ps_stack) ps.ps_stack` by
+   (simp[stack_peek_def] >> irule EL_MEM >> decide_tac) >>
+ `is_var_operand (stack_peek d ps.ps_stack) /\
+  MEM (stack_peek d ps.ps_stack) core` by
+   (gvs[lineage_core_def] >> fs[MEM_APPEND, MEM_REPLICATE, EVERY_MEM] >> metis_tac[]) >>
+ `LENGTH (FILTER (\op. op = stack_peek d ps.ps_stack) ps.ps_stack) = 1` by
+   (`LIST_ELEM_COUNT (stack_peek d ps.ps_stack) core <= 1` by
+      (fs[residual_budget_wf_def, LIST_ELEM_COUNT_THM] >> metis_tac[]) >>
+    `0 < LIST_ELEM_COUNT (stack_peek d ps.ps_stack) core` by
+      (drule (iffRL LIST_ELEM_COUNT_MEM) >> decide_tac) >>
+    `FILTER (\op. op = stack_peek d ps.ps_stack) (REPLICATE m dead_stack_marker) = []` by
+      (simp[FILTER_EQ_NIL, EVERY_MEM, MEM_REPLICATE] >> metis_tac[]) >>
+    gvs[lineage_core_def] >> fs[FILTER_APPEND, LIST_ELEM_COUNT_DEF] >> decide_tac) >>
+ irule released_phi_live_coverage >> goal_assum (drule_at Any) >> simp[] >>
+ metis_tac[]
+QED
+
