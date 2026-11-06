@@ -608,6 +608,7 @@ Theorem raw_call_select_code:
     m = STRING #"%" (toString (sa.cs_next_var + 1)) /\
     out = STRING #"%" (toString (sa.cs_next_var + 2)) /\
     same_blocks sa sb /\
+    sb.cs_next_var = sa.cs_next_var + 3 /\ sb.cs_next_id = sa.cs_next_id + 3 /\
     sb.cs_current_insts = sa.cs_current_insts ++
       [mk_inst sa.cs_next_id XOR [tp;ep] [d];
        mk_inst (sa.cs_next_id + 1) MUL [condop;Var d] [m];
@@ -1281,7 +1282,11 @@ Theorem raw_call_bytes_suffix_stage:
     stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-    lookup_var dst t = SOME a /\ t.vs_returndata = s.vs_returndata /\ result = Var dst
+    lookup_var dst t = SOME a /\ t.vs_returndata = s.vs_returndata /\ result = Var dst /\
+    t.vs_allocas = s.vs_allocas /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule raw_call_bytes_suffix_steps >> strip_tac >>
   `?rz cmpx. z = Var rz /\ cmp = Var cmpx` by
@@ -1372,7 +1377,9 @@ Resume raw_call_bytes_suffix_stage[compose]:
     metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
   qexistsl_tac [`H`, `un'`, `t'`] >>
   simp[IgnAsm `bs = _`] >>
-  qpat_x_assum `t' = _` (fn th => once_rewrite_tac[th]) >> simp[]
+  qpat_x_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+  simp[ptrDisciplineTheory.op_taint_def] >>
+  fs[ptrDisciplineTheory.op_taint_def]
 QED
 
 Finalise raw_call_bytes_suffix_stage
@@ -2090,3 +2097,168 @@ Resume raw_call_tuple_construct_stage[frame_compose]:
 QED
 
 Finalise raw_call_tuple_construct_stage
+
+(* Compose the length/header repair with tuple construction.  The source
+   allocation is an actual old allocation, not merely a ghost site. *)
+Theorem raw_call_tuple_suffix_stage:
+  (do z <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [z;Lit (n2w n)];
+      cap <- compile_select cmp z (Lit (n2w n));
+      emit_void MSTORE [Var src;cap];
+      buf <- compile_alloc_buffer (32+ncopy);
+      emit_void MSTORE [buf.buf_operand;Var success];
+      dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+      emit_void MCOPY [dst;Var src;Lit (n2w ncopy)];
+      return buf.buf_operand od) sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  LENGTH s.vs_returndata < dimword(:256) /\ n < dimword(:256) /\
+  32+ncopy < dimword(:256) /\ 32 <= ncopy /\
+  not_fresh_at sa src /\ not_fresh_at sa success /\
+  lookup_var src s = SOME aw /\ ptr_covers G tn src s ncopy /\
+  eval_operand (Var success) s = SOME (val_to_w256 (BoolV flag)) /\
+  op_taint tn (Var success) = {} /\
+  aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) /\
+  off <= w2n aw /\ w2n aw+ncopy <= off+len /\
+  bs = TAKE n s.vs_returndata /\
+  mem_bytes_at (w2n aw+32) (LENGTH bs) s.vs_memory = bs /\
+  (!i. w2n aw+32 <= i /\ i < w2n aw+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
+  ~is_word_type bty /\ evaluate_type (get_tenv cx) bty = SOME (BaseTV (BytesT (Dynamic n))) /\
+  val_store_size (BaseTV (BytesT (Dynamic n))) (BytesV bs) <= ncopy /\
+  type_memory_bytes cenv (lowered_value_type cenv be) <= ncopy /\
+  (!name off len. local_region cenv es.scopes s name off len ==>
+    regions_disjoint (w2n aw) 32 off len) /\
+  (!aid off len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+    regions_disjoint (w2n aw) 32 off len) /\
+  ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
+  val_store_size (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
+    (ArrayV (TupleV [BoolV flag;BytesV bs])) <= 32+ncopy /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= 32+ncopy ==>
+  ?H un t x. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+    result = Var x /\
+    ptr_val_ok cx ty (ArrayV (TupleV [BoolV flag;BytesV bs])) result H un t /\
+    ptr_buf_ok cenv e result H t /\
+    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >>
+  `?s4.
+    (do z <- emit_op RETURNDATASIZE [];
+        cmp <- emit_op LT [z;Lit (n2w n)];
+        cap <- compile_select cmp z (Lit (n2w n));
+        emit_void MSTORE [Var src;cap]; return (Var src) od) sa = (Var src,s4) /\
+    (do buf <- compile_alloc_buffer (32+ncopy);
+        emit_void MSTORE [buf.buf_operand;Var success];
+        dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+        emit_void MCOPY [dst;Var src;Lit (n2w ncopy)];
+        return buf.buf_operand od) s4 = (result,sb)` by
+    (qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  suspend "prefix"
+QED
+
+Resume raw_call_tuple_suffix_stage[prefix]:
+  `ci_mono s4 sb` by
+    (qpat_x_assum `(do buf <- _; _ od) s4 = _` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     rename1 `compile_alloc_buffer _ s4 = (buf,sm)` >>
+     rename1 `emit_void MSTORE _ sm = ((),sh)` >>
+     rename1 `emit_op ADD _ sh = (dst,sd)` >>
+     rename1 `emit_void MCOPY _ sd = ((),se)` >>
+     `ci_mono s4 sm /\ ci_mono sm sh /\ ci_mono sh sd /\ ci_mono sd se` by
+       metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+         exprLoweringPropsTheory.ci_mono_emit_void,
+         exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND] >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  drule raw_call_bytes_suffix_steps >> strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s3 s4` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
+      exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND] >>
+  `ci_mono s2 s3` by
+    (drule raw_call_select_code >> strip_tac >>
+     simp[exprLoweringPropsTheory.ci_mono_def, cs_extends_def] >>
+     qexists_tac `[]` >> fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `ci_mono sa s4` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  `fn_has_code sa s4 func /\ fn_has_code s4 sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split, exprLoweringPropsTheory.ci_mono_def] >>
+  drule_all raw_call_bytes_suffix_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> suspend "tuple"
+QED
+
+Resume raw_call_tuple_suffix_stage[tuple]:
+  `local_ptrs_reserved cenv s4 /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s4 x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s4 x) /\
+   not_fresh_at s4 src /\ not_fresh_at s4 success /\ aid < s4.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+       stmtFragPtrTheory.not_fresh_at_mono, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `eval_operand (Var success) t = SOME (val_to_w256 (BoolV flag)) /\
+   op_taint un (Var success) = {} /\ ptr_covers H un src t ncopy` by
+    (gvs[venomStateTheory.eval_operand_def, bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
+  `val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
+   val_footprint (BaseTV (BytesT (Dynamic n))) (BytesV bs) <= ncopy` by
+    (conj_tac
+     >- (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+         mp_tac (Q.SPEC `n` valueTypingMemoryPropsTheory.word_size_capacity) >>
+         simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+     irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `val_store_size (BaseTV (BytesT (Dynamic n))) (BytesV bs)` >>
+     simp[exprSimPropsTheory.val_footprint_le_store_size]) >>
+  `!m. mem_agree_outside un.t_mem t.vs_memory m ==>
+     val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) (w2n aw) m` by
+    (fs[bodyPtrDefsTheory.ptr_val_ok_def, bodyPtrDefsTheory.ptr_mem_ok_def,
+       venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,len)` by simp[] >>
+  drule_all raw_call_tuple_construct_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> suspend "compose"
+QED
+
+Resume raw_call_tuple_suffix_stage[compose]:
+  `ci_mono protected s4` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  `wb_frame cenv es protected t t'` by
+    (qpat_x_assum `wb_frame _ _ s4 _ _` mp_tac >>
+     fs[loweringPostsTheory.wb_frame_def, exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[stmtFragPtrTheory.not_fresh_at_mono, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `wb_frame cenv es protected s t'` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     qexistsl_tac [`t`, `protected`, `es`] >> simp[]) >>
+  `ghost_kept cenv es protected H un t H' un'` by
+    (qpat_x_assum `ghost_kept _ _ s4 _ _ _ _ _` mp_tac >>
+     qpat_x_assum `ci_mono protected s4` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     strip_tac >>
+     `!x. not_fresh_at protected x ==> not_fresh_at s4 x` by
+       (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
+        qexists_tac `protected` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     rw[bodyPtrDefsTheory.ghost_kept_def] >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >>
+     `!aid. aid < protected.cs_next_id ==> aid < s4.cs_next_id` by decide_tac >>
+     metis_tac[]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `ghost_kept cenv es protected G tn s H' un'` by
+    metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK t')` by
+    (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
+  qexistsl_tac [`H'`, `un'`, `t'`, `x`] >> simp[]
+QED
+
+Finalise raw_call_tuple_suffix_stage
