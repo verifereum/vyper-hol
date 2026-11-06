@@ -248,6 +248,8 @@ Proof
   >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag]
   >~ [`cenv.ce_is_ctor`]
   >- (strip_tac >> gvs[immutable_root_def, expr_sim_pre_body, expr_body_pre_def] >>
+      `!ts. get_module_code cx src = SOME ts ==>
+            find_var_decl_by_name id ts = NONE` by (rpt strip_tac >> gvs[]) >>
       drule_all pop_nested_immutable_root_ctor >> simp[]) >>
   gvs[expr_sim_pre_body]
 QED
