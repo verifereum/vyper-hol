@@ -138,6 +138,56 @@ Proof
   disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]
 QED
 
+(* Endpoint-driven first definition. Deadness excludes explicit requests,
+   but does not imply physical erasure or exclude implicit JMP targets. *)
+Theorem analyzed_first_definition:
+  !fn lbl bb a b v.
+    wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    a <= b /\ b <= LENGTH bb.bb_instructions /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl a) /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl b) ==>
+    ?k. a <= k /\ k < b /\
+      MEM v (inst_defs (EL k bb.bb_instructions)) /\
+      (!r. a <= r /\ r <= k ==>
+        ~MEM v (live_vars_at (liveness_analyze fn) lbl r)) /\
+      (!r. a <= r /\ r <= k ==>
+        ~MEM (Var v) (EL r bb.bb_instructions).inst_operands) /\
+      (!r. a <= r /\ r < k ==>
+        ~MEM v (EL r bb.bb_instructions).inst_outputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?k. a <= k /\ k < b /\ MEM v (inst_defs (EL k bb.bb_instructions))` by
+    (spose_not_then assume_tac >>
+     `MEM v (live_vars_at (liveness_analyze fn) lbl a)` suffices_by simp[] >>
+     irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+     simp[] >> qexists_tac `b` >> simp[] >>
+     rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+  qexists_tac `LEAST k. a <= k /\ k < b /\ MEM v (inst_defs (EL k bb.bb_instructions))` >>
+  numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  `!r. a <= r /\ r <= n ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) lbl r)` by
+    (rpt strip_tac >>
+     `MEM v (live_vars_at (liveness_analyze fn) lbl a)` suffices_by simp[] >>
+     irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+     simp[] >> qexists_tac `r` >> simp[] >>
+     qx_gen_tac `t` >> strip_tac >>
+     qpat_x_assum `!m. _` (qspec_then `t` mp_tac) >>
+     `t < n /\ a <= t /\ t < b` by decide_tac >> simp[]) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM v (inst_uses (EL r bb.bb_instructions))` by
+        simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+      drule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_uses) >>
+      disch_then (qspecl_then [`lbl`, `bb`, `r`, `v`] mp_tac) >>
+      `r < LENGTH bb.bb_instructions` by decide_tac >>
+      simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!m. m < n ==> _` (qspec_then `r` mp_tac) >>
+  gvs[inst_defs_def]
+QED
+
 (* Logical first reactivation only: this does not assert physical erasure
    or shielding of residual stack copies by the defining instruction. *)
 Theorem analyzed_phi_incoming_first_reactivation:
@@ -157,21 +207,9 @@ Proof
   `~MEM v (live_vars_at (liveness_analyze fn) lbl (i+1))` by
     (irule analyzed_phi_incoming_dead_after >> simp[] >>
      qexists_tac `i` >> simp[]) >>
-  `?k. i < k /\ k < j /\ MEM v (inst_defs (EL k bb.bb_instructions))` by
-    (spose_not_then assume_tac >>
-     `MEM v (live_vars_at (liveness_analyze fn) lbl (i+1))` suffices_by simp[] >>
-     irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
-     simp[] >> qexists_tac `j` >> simp[] >>
-     rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
-  qexists_tac `LEAST k. i < k /\ k < j /\ MEM v (inst_defs (EL k bb.bb_instructions))` >>
-  numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[] >>
-  rpt strip_tac >> simp[] >>
-  `MEM v (live_vars_at (liveness_analyze fn) lbl (i+1))` suffices_by simp[] >>
-  irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
-  simp[] >> qexists_tac `r` >> simp[] >>
-  qx_gen_tac `t` >> strip_tac >>
-  qpat_x_assum `!m. _` (qspec_then `t` mp_tac) >>
-  `t < n /\ i < t /\ t < j` by decide_tac >> simp[]
+  drule analyzed_first_definition >>
+  disch_then (qspecl_then [`lbl`, `bb`, `i+1`, `j`, `v`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `k` >> simp[]
 QED
 
 Theorem analyzed_ready_phi_live_through_edge:
