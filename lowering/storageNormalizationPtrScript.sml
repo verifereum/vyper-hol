@@ -369,3 +369,56 @@ Proof
   drule compile_alloc_buffer_parts >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+(* Actual unwrap uses the checked allocation/copy endpoint, with no independent
+   ordinary-run witness.  The annotation sizing is supplied by the caller. *)
+Theorem storage_unwrap_resources_path_ptr:
+  vv_holds cenv cx ty tv (LocatedValue ann p) es0 s0 /\ ~is_word_type ty /\
+  type_memory_bytes cenv ann = 32*n /\
+  (type_memory_bytes cenv ann+31) DIV 32 = n /\
+  unwrap_value cenv (LocatedValue ann p) cc = (op,cb) /\
+  fn_has_code cc cb func /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  32*n < dimword(:256) /\ n < dimword(:256) /\
+  s.vs_current_bb = cc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at cc x) /\
+  p.ptr_location = (if tr then LocTransient else LocStorage) /\
+  ptr_vv_ok cx ty tv (LocatedValue ann p) es G tn s /\
+  eval_operand p.ptr_operand s = SOME a /\ storage_holds cx tr ty tv a es s /\
+  evaluate_type (get_tenv cx) ty = SOME (BaseTV (StringT max)) /\
+  read_result cx tv es = (INL (StringV str),es) /\
+  n = type_slot_size (BaseTV (StringT max)) ==>
+  ?root Gf tnf z b.
+    op = Var root /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK z) /\
+    z.vs_current_bb = cb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~z.vs_halted /\
+    stmt_state_rel ctx func cenv cx es z /\ local_ptrs_reserved cenv cb /\
+    (!old. not_fresh_at cc old \/ old = root ==> not_fresh_at cb old) /\
+    cc.cs_next_id < cb.cs_next_id /\ b+32*n < dimword(:256) /\
+    lookup_var root z = SOME (n2w b) /\
+    ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf z /\
+    val_wf (BaseTV (StringT max)) (StringV str) /\
+    ptr_covers Gf tnf root z (32+32*word_size (LENGTH str)) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP z.vs_allocas aid = SOME entry) /\
+    (!old. not_fresh_at cc old ==>
+      lookup_var old z = lookup_var old s /\ FLOOKUP Gf old = FLOOKUP G old /\
+      op_taint tnf (Var old) = op_taint tn (Var old)) /\
+    (!old k. not_fresh_at cc old /\ ptr_covers G tn old s k ==>
+      ptr_covers Gf tnf old z k)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Q.SUBGOAL_THEN `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+    assume_tac >- (Cases_on `tr` >> gvs[]) >>
+  drule_all storage_unwrap_compile_parts >> strip_tac >>
+  `cs_extends cc ca` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends ca cb` by (drule_all storage_copy_suffix_extends >> simp[]) >>
+  `fn_has_code cc ca func /\ fn_has_code ca cb func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule_all storage_normalization_alloc_copy_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`root`, `Gf`, `tnf`, `z`, `b`] >> asm_rewrite_tac[]
+QED
