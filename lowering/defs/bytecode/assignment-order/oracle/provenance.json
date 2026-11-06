@@ -23,9 +23,9 @@
       "source_sha256": "764a5546f63460716d163d08caa9966c6a20208e522cef09709ae3b57f4eddbf"
     },
     "assign_nested_popped_read": {
-      "deploy_sha256": "3654da706a1cfd0f6b0d899bbb1844cd6201d3a095864913ccdb39b5f2018337",
+      "deploy_sha256": "f4db7c75db14afff7c8aba39ecc43d1ef3371b0e47030ec4a6eb8fcf970c37fa",
       "frontend_sha256": "ad1aaf618eeeec5936f5b7b38373820c5892b4ff1e2e49a1a559aa58ea36f435",
-      "runtime_sha256": "a2fa39dc85579527a4b1a5db7e6597af7c1113b75b5a2c79f537c97f6b96fc69",
+      "runtime_sha256": "1f03db88ce86182ab0e1989085f0a3c5ad05a7f59ce1873268dd26d821b5ca20",
       "source": "sources/assign_nested_popped_read.vy",
       "source_sha256": "4717674c0c5295120a231faebc45ba3183a0a8ce4ff0c180b9a0e51d306935ae"
     },
