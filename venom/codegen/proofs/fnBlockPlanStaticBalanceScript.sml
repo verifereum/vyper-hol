@@ -311,3 +311,27 @@ Proof
   impl_tac >- metis_tac[emit_input_plan_no_push_var, pairTheory.FST] >>
   simp[]
 QED
+
+Theorem do_restore_signed_balance:
+  do_restore op ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[do_restore_def, stack_push_def, trace_weight_def, stack_op_weight_def] >>
+  rpt strip_tac >> gvs[trace_weight_def, stack_op_weight_def] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem restore_spilled_plan_signed_balance:
+  !items ps ops qs. restore_spilled_plan items ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Induct_on `items` >> rpt gen_tac
+  >- simp[restore_spilled_plan_def, trace_weight_def] >>
+  simp[restore_spilled_plan_def, LET_THM] >>
+  pairarg_tac >>
+  Cases_on `restore_spilled_plan items ps1` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule do_restore_signed_balance >> strip_tac >>
+  first_x_assum drule >> simp[trace_weight_append] >> intLib.ARITH_TAC
+QED
