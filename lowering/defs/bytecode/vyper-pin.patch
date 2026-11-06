@@ -59,6 +59,33 @@ index c834b2d0..e4690826 100644
  
          # === Contract Existence Check ===
          # If function returns nothing and skip_contract_check is False,
+diff --git a/vyper/codegen_venom/builtins/convert.py b/vyper/codegen_venom/builtins/convert.py
+index b9eebef..6e27f1a 100644
+--- a/vyper/codegen_venom/builtins/convert.py
++++ b/vyper/codegen_venom/builtins/convert.py
+@@ -182,6 +182,12 @@ def _to_int(
+         length = b.mload(val)
+         data_ptr = b.add(val, IRLiteral(32))
+         data = b.mload(data_ptr)
++        if out_t.is_signed:
++            # the data word of an empty bytestring may hold garbage (an
++            # emptied storage bytestring keeps its old data); mask it so sar
++            # of an empty value yields 0 (sar with shift >= 256 propagates
++            # the sign bit)
++            data = b.mul(data, b.iszero(b.iszero(length)))
+         # Right-shift to convert left-aligned bytes to right-aligned int
+         # num_zero_bits = (32 - len) * 8
+         num_zero_bits = b.mul(b.sub(IRLiteral(32), length), IRLiteral(8))
+@@ -264,6 +270,9 @@ def _to_decimal(
+         length = b.mload(val)
+         data_ptr = b.add(val, IRLiteral(32))
+         data = b.mload(data_ptr)
++        # the data word of an empty bytestring may hold garbage (see
++        # `_to_int`); mask it so sar of an empty value yields 0
++        data = b.mul(data, b.iszero(b.iszero(length)))
+         num_zero_bits = b.mul(b.sub(IRLiteral(32), length), IRLiteral(8))
+         val = b.sar(num_zero_bits, data)
+         # Clamp to decimal bounds if needed
 diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
 index 54af5494..9d623b53 100644
 --- a/vyper/venom/passes/dft.py
@@ -176,3 +203,4 @@ index 54af5494..9d623b53 100644
              if inst.is_bb_terminator:
                  for var in self.order:
                      dep = self.dfg.get_producing_instruction(var)
+||||||| b667f3b94
