@@ -172,5 +172,8 @@ Proof
   qpat_assum `expr_type src = _` (fn th => once_rewrite_tac[GSYM th]) >>
   qpat_assum `expr_type off = _` (fn th => once_rewrite_tac[GSYM th]) >>
   irule extract32_tail_ready_any_post >>
-  simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`dp`, `ee with gas_obs := gas_explicit marks' u.vs_gas_readings`,
+                `len`, `m`, `off_op`, `p`, `raw`, `u`, `cs''`, `src_op`, `st4`] >>
+  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]
 QED
