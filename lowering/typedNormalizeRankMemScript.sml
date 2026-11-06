@@ -2,7 +2,7 @@
 Theory typedNormalizeRankMem
 Ancestors
   typedNormalizeRecursiveMem typedNormalizeStructEntryMem
-  exprSimHyps typedMemoryCopy typedCopyMetadata typedNormalizeSemanticMem
+  typedMemoryCopy typedCopyMetadata typedNormalizeSemanticMem
   context compileEnv venomState memContinuation valueEncoding
   vyperTypeSystem vyperValue vyperTyping vyperTypeArgFits
   list rich_list arithmetic words valueCopy allocaFootprint typedBytesArrayMem
