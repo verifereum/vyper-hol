@@ -2,6 +2,7 @@
 Theory logTupleCallerPtr
 Ancestors
   logTupleDispatchPtr logTupleGhostPtr logAllocFramePtr stmtSimLogStoreEncode
+  stmtSimLogEncodeFields stmtSimLogExecFields
   localPtrsProps abiBuiltinAllocation abiDecoderFrame bodyPtrDefs compileEnv
   allocationPtr emitHelperProps fragGasSeqPtr context ASCIInumbers string
   logDataAllocPtr abiEncoderCounters stmtFragPtr abiDecoderReentry
@@ -196,7 +197,8 @@ Theorem log_allocated_tuple_sequence_ptr:
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     op_taint tm out = {} /\ op_prov H out = NONE /\
-    (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem)
+    (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
+    ghost_inv d ce cx es H tm actual /\ ghost_kept ce es st G tn s H tm
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule abi_encoder_counters >> strip_tac >>
@@ -223,6 +225,80 @@ Resume log_allocated_tuple_sequence_ptr[dispatch]:
       ptr_covers_inst_idx] >> metis_tac[]) >>
   disch_then (qx_choose_then `Gf` (qx_choose_then `tk` (qx_choose_then `u`
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)))) >>
+  suspend "ownership"
+QED
+Resume log_allocated_tuple_sequence_ptr[ownership]:
+  markerLib.RESUME_TAC >>
+  `?fp.
+    abi_decode_footprint_frame fp
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st prepared)) u /\
+    (!i. abi_footprint_disjoint i 1 fp ==> (i IN tk.t_mem <=> i IN tm.t_mem)) /\
+    (!name b sz. local_region ce es.scopes t name b sz ==> abi_footprint_disjoint b sz fp) /\
+    (!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+      aid < st.cs_next_id /\ off <= i /\ i < off+sz ==> abi_footprint_disjoint i 1 fp) /\
+    (!name b sz i. local_region ce es.scopes s name b sz /\ b <= i /\ i < b+sz ==>
+      abi_footprint_disjoint i 1 fp)` by
+    (qpat_x_assum `(_ /\ abi_decode_footprint_frame _ _ _ /\ _) \/ _`
+       (DISJ_CASES_THEN assume_tac)
+     >- (pop_assum (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+         drule_all log_output_protected_footprint >>
+         disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+         qexists_tac `[(db,outcap)]` >>
+         asm_simp_tac bool_ss [] >>
+         conj_tac >- (simp_tac bool_ss [abi_footprint_disjoint_def, MEM, pairTheory.PAIR_EQ] >>
+           rpt strip_tac >>
+           qpat_x_assum `!i. ~(_ /\ _) ==> _` irule >> decide_tac) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     pop_assum (qx_choose_then `p` (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+     qpat_x_assum `?infos. _` (qx_choose_then `infos`
+       (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+     `u.vs_allocas = (abi_builtin_allocate_state prepared.cs_next_id 32 t).vs_allocas` by
+       (qpat_x_assum `u.vs_allocas = _` mp_tac >>
+        Cases_on `FLOOKUP t.vs_allocas prepared.cs_next_id = NONE` >>
+        asm_simp_tac bool_ss [abi_builtin_allocate_state_def, venom_state_accfupds]) >>
+     `compile_abi_encode_to_buf dst.buf_operand (Var src) (AbiComplex infos) prepared = (out,end_st)` by
+       metis_tac[] >>
+     drule_all log_tuple_protected_footprint >>
+     disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+     qexists_tac `[(db,outcap);(p,32)]` >> asm_simp_tac bool_ss [] >>
+     conj_tac >- (simp_tac bool_ss [abi_footprint_disjoint_def, MEM, pairTheory.PAIR_EQ] >>
+       rpt strip_tac >>
+       qpat_x_assum `!i. ~(_ /\ _) /\ ~(_ /\ _) ==> _` irule >>
+       qpat_assum `!d sz. _` (qspecl_then [`db`,`outcap`] mp_tac) >>
+       qpat_x_assum `!d sz. _` (qspecl_then [`p`,`32`] mp_tac) >>
+       simp_tac bool_ss [] >> decide_tac) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "ghosts"
+QED
+Resume log_allocated_tuple_sequence_ptr[ghosts]:
+  markerLib.RESUME_TAC >>
+  `log_encode_external u = log_encode_external
+    (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st prepared))` by
+    (irule log_scalar_encode_external >> goal_assum (drule_at Any) >>
+     asm_simp_tac bool_ss [] >> metis_tac[]) >>
+  drule log_encode_external_fields >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `ghost_kept ce es st G tn s Gf tk` by
+    (irule ghost_kept_footprint_transport >>
+     qexistsl_tac [`H`,`fp`,`prepared`,`tm`] >> asm_simp_tac bool_ss [] >>
+     rpt conj_tac >- metis_tac[] >- metis_tac[] >>
+     drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  `ghost_inv d ce cx es Gf tk u` by
+    (irule ghost_inv_footprint_transport >>
+     qexistsl_tac [`H`,`fp`,`func`,
+       `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st prepared)`,
+       `prepared`,`tm`] >>
+     asm_simp_tac bool_ss [venom_state_accfupds] >>
+     conj_tac >- (simp_tac bool_ss [log_local_region_inst_idx] >> first_assum ACCEPT_TAC) >>
+     `st.cs_next_var <= prepared.cs_next_var` by
+       (drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+        drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+     conj_tac >- metis_tac[not_fresh_at_mono] >>
+     conj_tac >- metis_tac[not_fresh_at_mono] >>
+     qpat_x_assum `stmt_state_rel ctx func ce cx es t` mp_tac >>
+     simp_tac bool_ss [local_ptrs_rel_inst_idx, stmt_state_rel_def, state_rel_def] >>
+     metis_tac[]) >>
   suspend "compose"
 QED
 Resume log_allocated_tuple_sequence_ptr[compose]:
@@ -258,6 +334,15 @@ Resume log_allocated_tuple_sequence_ptr[result]:
   `db < dimword (:256)` by decide_tac >>
   `inst_extends st end_st` by metis_tac[inst_extends_trans] >>
   qexistsl_tac [`u with vs_inst_idx := t.vs_inst_idx`,`db`,`Gf`,`tk`] >>
-  asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx, eval_operand_def]
+  asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx, eval_operand_def] >>
+  qpat_x_assum `ghost_inv d ce cx es Gf tk u` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> Cases_on `d`
+  >- (simp_tac bool_ss [ghost_inv_def, ptr_covers_def, stor_taint_ok_def,
+       lookup_var_def, return_buf_ptr_def, venom_state_accfupds, optionTheory.option_CLAUSES] >>
+       metis_tac[]) >>
+  PairCases_on `x` >>
+  simp_tac bool_ss [ghost_inv_def, ptr_covers_def, stor_taint_ok_def,
+    lookup_var_def, return_buf_ptr_def, venom_state_accfupds, optionTheory.option_CLAUSES] >>
+  metis_tac[]
 QED
 Finalise log_allocated_tuple_sequence_ptr
