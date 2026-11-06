@@ -332,7 +332,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept cenv es es s0 u
+    locals_kept cenv es es1 s0 u
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -359,7 +359,7 @@ Proof
      first_x_assum irule >>
      `local_region cenv es.scopes s0 n b sz` by metis_tac[] >>
      metis_tac[]) >>
-  `locals_kept cenv es es s0 t2` by
+  `locals_kept cenv es es1 s0 t2` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
      asm_rewrite_tac[]) >>
   rpt conj_tac
