@@ -1,5 +1,5 @@
 Theory fnLineageInvOrdinarySuffix
-Ancestors fnLineageInvSupport fnPlanLineageInventory livenessProofs cfgAnalysisProps venomWf venomExecProps stackPlanGen list rich_list cfgDefs stackPlanTypes codegenReadyCompute
+Ancestors fnLineageInvOffset fnLineageInvSupport fnPlanLineageInventory livenessProofs cfgAnalysisProps venomWf venomExecProps stackPlanGen list rich_list cfgDefs stackPlanTypes codegenReadyCompute
 
 (* Kept in the new task-owned theory to respect the edit boundary. *)
 Theorem analyzed_nop_live_identity:
@@ -117,7 +117,7 @@ Theorem analyzed_ordinary_suffix_inventory:
  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
  j + p <= LENGTH bb.bb_instructions /\
  EVERY (\inst. inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
-   inst.inst_opcode <> OFFSET /\ ~is_param_opcode inst.inst_opcode)
+   ~is_param_opcode inst.inst_opcode)
    (DROP (j+p) bb.bb_instructions) /\
  lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (j+p)))) ps /\
  (?m core. lineage_core m core ps /\ residual_budget_wf base [] (ps with ps_stack := core)) /\
@@ -153,15 +153,20 @@ Proof
  `EVERY (\inst. inst.inst_opcode <> PHI) (DROP (j+p) bb.bb_instructions)` by
    (gvs[EVERY_MEM] >> metis_tac[]) >>
  ` (EL (j+p) bb.bb_instructions).inst_opcode <> JMP /\
-   (EL (j+p) bb.bb_instructions).inst_opcode <> OFFSET /\
    ~is_param_opcode (EL (j+p) bb.bb_instructions).inst_opcode` by
    (qpat_x_assum `EVERY (\inst. _ /\ _) _` mp_tac >>
     once_asm_rewrite_tac[] >> simp[]) >>
  rename1 `residual_budget_wf spillbase [] (ps with ps_stack := core)` >>
- drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-   analyzed_ordinary_inst_inventory >>
- disch_then (qspec_then `spillbase` mp_tac) >>
- (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+ `lineage_inventory
+    (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (j+p))))) ps' /\
+  (?n tail. lineage_core n tail ps' /\
+    residual_budget_wf spillbase [] (ps' with ps_stack := tail))` by
+   (Cases_on `(EL (j+p) bb.bb_instructions).inst_opcode = OFFSET`
+    >- suspend "offset_step" >>
+    drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+      analyzed_ordinary_inst_inventory >>
+    disch_then (qspec_then `spillbase` mp_tac) >>
+    (impl_tac >- (simp[] >> metis_tac[])) >> simp[]) >>
  first_x_assum (qspec_then `SUC (j+p)` mp_tac) >>
  (impl_tac >- decide_tac) >>
  disch_then (qspecl_then [`j+1`,`p`] mp_tac) >> simp[arithmeticTheory.ADD_CLAUSES] >>
@@ -169,3 +174,20 @@ Proof
  `j+(p+1) = SUC (j+p)` by decide_tac >>
  simp[] >> metis_tac[]
 QED
+
+Resume analyzed_ordinary_suffix_inventory[offset_step]:
+  `inst_wf (EL (j+p) bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def] >> metis_tac[EL_MEM]) >>
+  qpat_x_assum `inst_wf _` mp_tac >> simp[inst_wf_def] >> strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+    is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+    venomInstTheory.is_raw_fmp_opcode_def] >> strip_tac >>
+  `?x. (EL (j+p) bb.bb_instructions).inst_outputs = [x]` by
+    (qpat_x_assum `LENGTH _ = 1` mp_tac >>
+     simp[listTheory.LENGTH_EQ_NUM_compute]) >>
+  irule analyzed_offset_inventory >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Finalise analyzed_ordinary_suffix_inventory

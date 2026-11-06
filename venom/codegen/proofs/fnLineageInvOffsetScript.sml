@@ -1,5 +1,5 @@
 Theory fnLineageInvOffset
-Ancestors fnLineageInvPointLive fnLineageInvOrdinarySuffix fnPlanLineageStages fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState list pred_set
+Ancestors fnLineageInvPointLive reorderSim fnPlanLineageStages fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState list pred_set
 
 Theorem offset_lineage_inventory_iff:
   !inst w lab x before after ps ops qs.
