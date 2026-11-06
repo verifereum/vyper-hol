@@ -31,11 +31,6 @@ Theorem compile_assign_memory_forward_local_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of
-         ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes cenv et + 31) DIV 32,
-                 type_memory_bytes cenv et)
-       | _ => NONE)
       (type_memory_bytes cenv dty) sa = ((), sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\

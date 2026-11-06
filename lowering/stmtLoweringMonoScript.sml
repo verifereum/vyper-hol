@@ -77,16 +77,39 @@ Theorem ci_mono_context_helpers:
      ci_mono sa (SND (compile_slot_to_memory src dst n loc sa))) /\
   (!p b sa. ci_mono sa (SND (compile_load_memory p b sa))) /\
   (!v b sa. ci_mono sa (SND (compile_encode_log_topic v b sa))) /\
-  (!k t v sa. ci_mono sa (SND (compile_nonreentrant_unlock k t v sa))) /\
-  (!src dst ew ems t sa.
-     ci_mono sa (SND (compile_dynarray_to_storage src dst ew ems t sa)))
+  (!k t v sa. ci_mono sa (SND (compile_nonreentrant_unlock k t v sa)))
 Proof
   rpt conj_tac >> rpt gen_tac >>
   simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
        compile_slot_to_memory_def, compile_load_memory_def,
-       compile_encode_log_topic_def, compile_nonreentrant_unlock_def,
-       compile_dynarray_to_storage_def] >>
+       compile_encode_log_topic_def, compile_nonreentrant_unlock_def] >>
   ci_mono_chain_tac ci_mono_grows_rws
+QED
+
+Theorem ci_mono_compile_bytestring_word_count[local]:
+  !src sa. ci_mono sa (SND (compile_bytestring_word_count src sa))
+Proof
+  simp[compile_bytestring_word_count_def] >> ci_mono_chain_tac ci_mono_grows_rws
+QED
+
+Theorem ci_mono_compile_store_slots:
+  (!cenv src slot ty tr sa.
+     ci_mono sa (SND (compile_store_slots cenv src slot ty tr sa))) /\
+  (!cenv src slot members mo so tr sa.
+     ci_mono sa
+       (SND (compile_store_slots_members cenv src slot members mo so tr sa))) /\
+  (!cenv src slot elem cnt tr sa.
+     ci_mono sa
+       (SND (compile_copy_elements_to_slots cenv src slot elem cnt tr sa)))
+Proof
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >> once_rewrite_tac[compile_store_slots_def] >>
+  simp[LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY (Cases_on `ty` >> gvs[] >> TRY (rename1 `ArrayT _ bd` >> Cases_on `bd` >> gvs[])) >>
+  ci_mono_chain_tac (ci_mono_context_helpers :: ci_mono_compile_lit_byte_offset ::
+    ci_mono_compile_word_copy_loop_op :: ci_mono_compile_bytestring_word_count ::
+    ci_mono_grows_rws)
 QED
 
 Theorem ci_mono_compile_dynarray_append:
@@ -95,9 +118,7 @@ Theorem ci_mono_compile_dynarray_append:
       (SND (compile_dynarray_append cenv b v ws es dt st cap p lo so sa))
 Proof
   rpt gen_tac >> simp[compile_dynarray_append_def, LET_THM] >>
-  (* name the store location, so the case split does not go over opcodes *)
-  qmatch_goalsub_abbrev_tac `compile_word_copy_loop _ _ _ LocMemory dl F` >>
-  ci_mono_chain_tac ci_mono_grows_rws
+  ci_mono_chain_tac (ci_mono_compile_store_slots :: ci_mono_grows_rws)
 QED
 
 Theorem ci_mono_comp_get:
@@ -108,7 +129,7 @@ QED
 
 val ci_mono_stmt_rws =
   ci_mono_grows_rws @
-  [ci_mono_compile_expr_sa, ci_mono_context_helpers,
+  [ci_mono_compile_expr_sa, ci_mono_context_helpers, ci_mono_compile_store_slots,
    ci_mono_compile_dynarray_append, ci_mono_comp_get,
    ci_mono_compile_ptr_load, ci_mono_compile_imm_store_word,
    ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
@@ -121,8 +142,8 @@ Proof
 QED
 
 Theorem ci_mono_stmt_helpers:
-  (!cenv d l v p sl dt st da m sa.
-     ci_mono sa (SND (compile_assign_value cenv d l v p sl dt st da m sa))) /\
+  (!cenv d l v p sl dt st m sa.
+     ci_mono sa (SND (compile_assign_value cenv d l v p sl dt st m sa))) /\
   (!imm d v l sa. ci_mono sa (SND (compile_store_at_loc imm d v l sa))) /\
   (!cenv e sa. ci_mono sa (SND (compile_reason_message cenv e sa))) /\
   (!cenv m t sz sa.

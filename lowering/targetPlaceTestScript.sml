@@ -189,7 +189,7 @@ Definition target_transient_trace_def:
             (Literal (BaseT (UintT 256)) (IntL 3)));
         let loc = (case FST (SND r) of SOME l => l | NONE => LocMemory) in
         do compile_assign_value ce (FST r) loc (Lit 9w) T NONE
-             (BaseT (UintT 256)) (BaseT (UintT 256)) NONE 32;
+             (BaseT (UintT 256)) (BaseT (UintT 256)) 32;
            compile_ptr_load F ce.ce_imm_alloca loc (FST r)
         od
      od) target_test_state

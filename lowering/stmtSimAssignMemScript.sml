@@ -73,9 +73,6 @@ Theorem assign_local_memory_code_parts:
       lower_value compile_expr cenv (expr_type e) e sa = (op, sB) /\
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp vtyp
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf) /\
       cs_extends sa sB /\ cs_extends sB sf /\
       fn_has_code sa sB func /\ fn_has_code sB sf func
@@ -239,8 +236,8 @@ QED
    buffer when the source is in memory, then compile_store_memory. *)
 Theorem local_memory_assign_run:
   !ctx func cenv cx es s id p sz pre env entry rest v src ty sa sb sw tyv
-   loc info bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty ty info bytes sa =
+   loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty ty bytes sa =
       ((), sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\
@@ -313,8 +310,8 @@ QED
 
 Theorem local_memory_assign_path:
   !ctx func cenv cx es s id p sz pre env entry rest v src ty sa sb sw tyv
-   loc info bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty ty info bytes sa =
+   loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty ty bytes sa =
       ((), sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\
@@ -388,7 +385,7 @@ Proof
 QED
 
 Theorem assign_local_memory_normal_continuation:
-  !ctx func cenv cx lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc info bytes.
+  !ctx func cenv cx lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc bytes.
     gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
       (stmt_res_ok lctx) es /\
     ~is_word_type (expr_type e) /\
@@ -400,7 +397,7 @@ Theorem assign_local_memory_normal_continuation:
        lookup_scopes id es1.scopes = SOME entry ==>
        entry.type = tyv /\ value_has_type tyv v) /\
     compile_assign_value cenv (Var p) LocMemory op F loc
-      (expr_type e) (expr_type e) info bytes sb = ((), sf) /\
+      (expr_type e) (expr_type e) bytes sb = ((), sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
     sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
@@ -460,7 +457,7 @@ Theorem assign_local_memory_rhs_outcome:
      lookup_scopes id es1.scopes = SOME entry ==>
      entry.type = tyv /\ value_has_type tyv v) /\
   compile_assign_value cenv (Var p) LocMemory op F loc
-    (expr_type e) (expr_type e) info bytes sb = ((),sf) /\
+    (expr_type e) (expr_type e) bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
   sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
@@ -547,7 +544,7 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   irule assign_local_memory_rhs_outcome >> simp[] >>
   (conj_tac >- gvs[SF ETA_ss]) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
     (irule_at Any) >> simp[] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -569,9 +566,6 @@ Theorem assign_local_memory_widen_code_parts:
       lower_value compile_expr cenv (expr_type e) e sa = (op, sB) /\
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf) /\
       cs_extends sa sB /\ cs_extends sB sf /\
       fn_has_code sa sB func /\ fn_has_code sB sf func
@@ -601,8 +595,8 @@ QED
 
 Theorem local_memory_assign_widen_run:
   !ctx func cenv cx es s id p sz pre env entry rest v src ty sty sa sb sw tyv
-   loc info bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty sty info bytes sa = ((), sb) /\
+   loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((), sb) /\
     (sty = ty \/ is_bytestring_type ty) /\
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     val_footprint tyv v <= type_memory_bytes cenv sty /\
@@ -678,8 +672,8 @@ Finalise local_memory_assign_widen_run
 
 Theorem local_memory_assign_widen_path:
   !ctx func cenv cx es s id p sz pre env entry rest v src ty sty sa sb sw tyv
-   loc info bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty sty info bytes sa = ((), sb) /\
+   loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((), sb) /\
     (sty = ty \/ is_bytestring_type ty) /\
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     val_footprint tyv v <= type_memory_bytes cenv sty /\
@@ -776,7 +770,7 @@ Theorem assign_local_memory_widen_normal_continuation:
     lookup_scopes id es1.scopes = SOME entry ==>
     entry.type = tyv /\ value_has_type tyv v /\
     val_footprint tyv v <= type_memory_bytes cenv sty) /\
-  compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty info bytes sb = ((),sf) /\
+  compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sb.cs_next_var /\
@@ -847,7 +841,7 @@ Theorem assign_local_memory_widen_rhs_outcome:
     lookup_scopes id es1.scopes = SOME entry ==>
     entry.type = tyv /\ value_has_type tyv v /\
     val_footprint tyv v <= type_memory_bytes cenv sty) /\
-  compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty info bytes sb = ((),sf) /\
+  compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sb.cs_next_var /\
@@ -933,7 +927,7 @@ Proof
   `!x. op = Var x ==> not_fresh_at sB x` by
     (drule_then (drule_then assume_tac) compile_lower_value_var >> simp[]) >>
   irule assign_local_memory_widen_rhs_outcome >> simp[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `tyv` >> simp[] >>
   (conj_tac >- (gvs[SF ETA_ss] >> first_assum ACCEPT_TAC)) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`

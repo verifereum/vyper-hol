@@ -311,9 +311,6 @@ Theorem assign_storage_copy_code_parts[local]:
       compile_assign_value cenv (Lit slot)
         (if tr then LocTransient else LocStorage) op (is_word_type vtyp)
         (vv_location vv) vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -340,7 +337,7 @@ Theorem assign_storage_copy_suffix[local]:
     typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
     compile_assign_value cenv dst
       (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty NONE mem_size =
+      typ src_ty mem_size =
     (if mem_size <= 32 then
        do loaded <- emit_op MLOAD [src];
           emit_void (if tr then TSTORE else SSTORE) [dst; loaded]
@@ -361,7 +358,7 @@ Theorem storage_copy_loop_open[local]:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def, comp_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, comp_ignore_bind_def, comp_bind_def] >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
@@ -374,13 +371,13 @@ QED
 Theorem assign_storage_copy_suffix_open[local]:
   !cenv dst src tr loc typ src_ty mem_size sa sb.
     compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
-      src F loc typ src_ty NONE mem_size sa = ((),sb) /\
+      src F loc typ src_ty mem_size sa = ((),sb) /\
     ~is_word_type typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >> simp[] >>
   Cases_on `mem_size <= 32`
   >- (simp[comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
@@ -906,7 +903,7 @@ Theorem compile_store_copy_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_word_copy_loop_def, word_scale_def, compile_ptr_load_def,
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, word_scale_def, compile_ptr_load_def,
        compile_ptr_store_def, comp_ignore_bind_def, comp_bind_def,
        comp_return_def, fresh_label_def, fresh_var_def, emit_inst_def,
        emit_op_def, emit_void_def, fresh_id_def, emit_def, new_block_def] >>
@@ -1391,7 +1388,7 @@ Theorem storage_copy_suffix_run[local]:
   !ctx func cenv cx es' tr src k n typ src_ty loc sa sb s b.
     compile_assign_value cenv (Lit k)
       (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty NONE (32 * n) sa = ((),sb) /\
+      typ src_ty (32 * n) sa = ((),sb) /\
     ~is_word_type typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = 32 * n /\
     0 < n /\ n < dimword (:256) /\
@@ -1414,7 +1411,7 @@ Theorem storage_copy_suffix_run[local]:
                ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
     dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >> simp[] >>
   Cases_on `32 * n <= 32`
   >- (`n = 1` by decide_tac >> gvs[] >>
@@ -1580,7 +1577,7 @@ Theorem storage_copy_success_run[local]:
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
     compile_assign_value cenv (Lit (n2w slot))
       (if tr then LocTransient else LocStorage) op F loc
-      (expr_type e) (expr_type e) NONE (type_memory_size tv) sm = ((),sf) /\
+      (expr_type e) (expr_type e) (type_memory_size tv) sm = ((),sf) /\
     fn_has_code sa sm func /\ fn_has_code sm sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
@@ -1602,7 +1599,7 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   drule_all storage_copy_post_region >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     storage_copy_suffix_run >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s1`, `w`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>

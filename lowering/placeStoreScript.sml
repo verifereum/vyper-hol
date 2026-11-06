@@ -19,7 +19,7 @@
 
 Theory placeStore
 Ancestors
-  placeStoreMemory placeStoreStorage placeStoreDyn
+  placeStoreMemory placeStoreSlots
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
@@ -1630,11 +1630,6 @@ QED
 Theorem place_store_value_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of
-         ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes cenv et + 31) DIV 32,
-                 type_memory_bytes cenv et)
-       | _ => NONE)
       (type_memory_bytes cenv dty) sa = ((), sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
@@ -1699,14 +1694,6 @@ Proof
   `dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
    type_alloc_ok cenv dty` by
     (strip_tac >> qpat_x_assum `loc <> LocMemory /\ _ ==> _` irule >> fs[]) >>
-  Cases_on `?et n. dty = ArrayT et (Dynamic n)`
-  >- (qspecl_then
-      [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`, `dst_op`,
-       `op`, `src_loc`, `dty`, `sty`, `stv`, `v`, `sa`, `sb`]
-      mp_tac place_store_value_dyn_run >>
-    impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
-    simp[]) >>
-  `!et n. dty <> ArrayT et (Dynamic n)` by fs[] >>
   (qspecl_then
       [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`, `dst_op`,
        `op`, `src_loc`, `dty`, `sty`, `stv`, `v`, `sa`, `sb`]
