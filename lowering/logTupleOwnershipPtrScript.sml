@@ -2,7 +2,9 @@
 Theory logTupleOwnershipPtr
 Ancestors
   localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv exprLoweringProps abiBuiltinAllocation
-  venomMemDefs venomState venomInst finite_map list arithmetic
+  logTupleShapePtr abiEncoderComplexCode abiEncoderComplexPrefix
+  stmtSimLogTrace emitHelperProps context ASCIInumbers string
+  venomMemDefs venomState venomInst finite_map list words arithmetic
 
 Theorem log_alloca_candidate_other_region:
   alloca_inv s /\ id <> site /\
@@ -53,4 +55,63 @@ Proof
   Cases_on `FLOOKUP s.vs_allocas site = NONE` >>
   simp[abi_builtin_allocate_state_def, FLOOKUP_UPDATE] >>
   strip_tac >> gvs[FLOOKUP_UPDATE]
+QED
+
+Theorem log_tuple_cursor_instruction:
+  compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,end_st) /\
+  EXISTS (\(_,_,_,dyn). dyn) infos /\
+  EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei) infos /\
+  fn_has_code st end_st func /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all abi_encoder_complex_dynamic_trace >> strip_tac >>
+  drule abi_encoder_complex_prefix_trace >> strip_tac >> gvs[] >>
+  drule_all log_tuple_dynamic_prefix_code >> strip_tac >>
+  drule_all log_buffer_trace_code >> strip_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[]
+QED
+
+Theorem log_tuple_cursor_local_region:
+  compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,end_st) /\
+  EXISTS (\(_,_,_,dyn). dyn) infos /\
+  EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei) infos /\
+  fn_has_code st end_st func /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce st /\
+  t.vs_allocas = (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas /\
+  FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) ==>
+  !name lo sz. local_region ce es.scopes s name lo sz ==>
+    abi_footprint_disjoint lo sz [(p,32)]
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all log_tuple_cursor_instruction >> disch_tac >>
+  drule_all log_builtin_allocation_candidate >> disch_tac >>
+  rpt gen_tac >> disch_tac >>
+  irule log_alloca_candidate_local_region >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  qexistsl_tac [`STRING #"%" (toString st.cs_next_var)`,`st`] >>
+  asm_simp_tac bool_ss [mk_inst_def] >> simp[not_fresh_at_def]
+QED
+
+Theorem log_buffer_registered_local_region:
+  compile_alloc_buffer cap st = (buf,prepared) /\ fn_has_code st prepared func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce st /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,cap) ==>
+  !name lo sz. local_region ce es.scopes s name lo sz ==>
+    abi_footprint_disjoint lo sz [(p,cap)]
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all log_buffer_trace_code >> strip_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  rpt gen_tac >> disch_tac >> irule log_alloca_candidate_local_region >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  qexistsl_tac [`STRING #"%" (toString st.cs_next_var)`,`st`] >>
+  asm_simp_tac bool_ss [mk_inst_def] >> simp[not_fresh_at_def]
 QED

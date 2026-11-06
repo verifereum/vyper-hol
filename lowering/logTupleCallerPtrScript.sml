@@ -174,6 +174,9 @@ Theorem log_allocated_tuple_sequence_ptr:
   inputCap <= srcCap /\ sb+srcCap < dimword (:256) /\ outcap < dimword (:256) /\
   not_fresh_at st src /\ lookup_var src s = SOME (n2w sb) /\
   ptr_covers G tn src s srcCap /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d ce cx es G tn s /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
     abi_encoder_input ei (Tuple ats) (ListV avs) sb inputCap q) /\
   stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
@@ -203,6 +206,9 @@ Proof
     (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `H`
       (qx_choose_then `tm` (qx_choose_then `dv`
         (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))) >>
+  drule_all log_buffer_ghost_seq_ptr >>
+  disch_then (qspec_then `s.vs_inst_idx + LENGTH (emitted_insts st prepared)`
+    (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   suspend "dispatch"
 QED
 Resume log_allocated_tuple_sequence_ptr[dispatch]:
