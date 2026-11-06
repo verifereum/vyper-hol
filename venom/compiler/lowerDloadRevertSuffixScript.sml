@@ -502,3 +502,55 @@ Proof
   asm_rewrite_tac[] >>
   simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
 QED
+
+Theorem ld_revert_endpoint_prefix_length[local]:
+  revert_forward_pair bb i j /\
+  lower_dload_insts_supply q (TAKE i bb.bb_instructions) = (before,qi) /\
+  lower_dload_insts_supply q (TAKE j bb.bb_instructions) = (p,qj) ==>
+  LENGTH p = LENGTH before + (j-i)
+Proof
+  strip_tac >> drule ld_revert_pair_segment >> strip_tac >>
+  `i < j` by metis_tac[revert_forward_pair_def] >>
+  `j = LENGTH pre + SUC (LENGTH mid)` by decide_tac >>
+  qpat_x_assum `LENGTH mid = _` kall_tac >>
+  qpat_x_assum `LENGTH pre = i` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `j = _` SUBST_ALL_TAC >>
+  `TAKE (LENGTH pre) bb.bb_instructions = pre` by simp[TAKE_APPEND] >>
+  `TAKE (LENGTH pre + SUC (LENGTH mid)) bb.bb_instructions = pre ++ copy::mid` by
+    simp[TAKE_APPEND] >>
+  qpat_x_assum `lower_dload_insts_supply q (TAKE _ _) = (before,qi)` mp_tac >>
+  qpat_assum `TAKE (LENGTH pre) _ = _` (fn th => pure_rewrite_tac[th]) >>
+  strip_tac >>
+  `lower_dload_insts_supply qi (copy::mid) = (copy::mid,qi)` by
+    (irule ld_lower_unchanged_insts >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `lower_dload_insts_supply q (pre ++ copy::mid) = (before ++ copy::mid,qi)` by
+    (irule lower_dload_insts_supply_append_forward >> qexists_tac `qi` >> simp[]) >>
+  qpat_x_assum `lower_dload_insts_supply q (TAKE _ _) = (p,qj)` mp_tac >>
+  qpat_assum `TAKE (LENGTH pre + _) _ = _` (fn th => pure_rewrite_tac[th]) >>
+  asm_rewrite_tac[] >> strip_tac >> gvs[]
+QED
+
+Theorem ld_configured_revert_interval_entry:
+  in_revert_forward fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  EVERY (\v. MEM v q.irs_used_vars)
+    (FLAT (MAP inst_ir_vars bb.bb_instructions)) /\
+  lower_dload_block_supply q bb = (gb,qe) /\
+  lower_dload_insts_supply q (TAKE s.vs_inst_idx bb.bb_instructions) = (p,qi) /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+  t.vs_inst_idx = LENGTH p /\
+  get_instruction gb t.vs_inst_idx = SOME j ==>
+  ?copypos endpos.
+    lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+    revert_forward_pair gb copypos endpos /\
+    copypos <= t.vs_inst_idx /\ t.vs_inst_idx <= endpos /\
+    get_instruction gb t.vs_inst_idx = SOME j
+Proof
+  simp[in_revert_forward_def, revert_forward_at_def] >>
+  strip_tac >> gvs[]
+  >- (drule_all ld_lower_revert_pair_supported >> strip_tac >>
+      gvs[] >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all ld_lower_revert_pair_supported >> strip_tac >>
+  drule_all ld_revert_endpoint_prefix_length >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
