@@ -1,7 +1,7 @@
 Theory bodyIfExpMemory
 Ancestors
   loweringPosts exprSimMemUnwrap bodyIfExpMemoryJoin bodyIfExpArmMemory
-  bodyIfExpSelectedMemory
+  bodyIfExpSelectedMemory bodyIfExpBytesCopy
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
