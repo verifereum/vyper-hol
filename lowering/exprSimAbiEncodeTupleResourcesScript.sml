@@ -5,6 +5,9 @@ Ancestors
   exprSimAbiEncodeNonwordResources abiTupleEncodePrepare abiEncoderCounters
   abiBuiltinEncodeCode exprSimAbiEncodeSiteResources
   exprSimHash abiEncodeArgsSim abiTupleProps
+  exprSimAbiEncodeRuntimeInputs exprSimAbiEncodeCapacity
+  vyperABIValid vyperABI vyperTypeExprSoundness vyperTypeDefaults abiTypeBoundProps
+  exprSimHypsDefs abiEncoderWindow exprSimAbiEncodeSourceRoom
   exprSimAlloc localPtrsProps abiBuiltinAllocation compileEnv
   exprLoweringProps venomMemDefs venomInst venomState words list finite_map arithmetic
 
@@ -219,3 +222,174 @@ Resume abi_encode_args_registered_phase_rows[scratch]:
 QED
 
 Finalise abi_encode_args_registered_phase_rows
+
+Theorem abi_encode_args_length_bound:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+  eval_exprs cx args es = (INL vs,es') /\
+  vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs ==>
+  LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs)) <=
+    abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))
+Proof
+  strip_tac >> drule_all abi_encode_body_args_runtime_typed >>
+  simp_tac (srw_ss()) [exprs_runtime_typed_def] >> strip_tac >>
+  `LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv)
+    (MAP expr_type args) tvs` by gvs[LIST_REL_MAP1, combinTheory.o_DEF] >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
+    fs[expr_body_pre_def, expr_sim_inv_def] >>
+  `!ty. MEM ty (MAP expr_type args) ==>
+    is_abi_dynamic ce.ce_struct_fields ty = vyper_is_dynamic (get_tenv cx) ty /\
+    abi_size_bound ce.ce_struct_fields ty = vyper_abi_size_bound (get_tenv cx) ty /\
+    (~vyper_is_dynamic (get_tenv cx) ty ==>
+      abi_static_size ce.ce_struct_fields ty = vyper_abi_size_bound (get_tenv cx) ty)` by
+    (rpt strip_tac >>
+     `?tv. evaluate_type (get_tenv cx) ty = SOME tv` by
+       (gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
+     drule_all abi_encode_evaluated_metadata >> simp[]) >>
+  drule abi_props_vyper_list >> strip_tac >>
+  `values_have_types tvs vs` by simp[values_have_types_LIST_REL] >>
+  drule_all (cj 2 vyper_to_abi_enc_le_size_bound) >>
+  simp[abi_size_bound_def, vyper_abi_size_bound_def]
+QED
+
+Theorem abi_encode_args_numerical_capacity:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
+  eval_exprs cx args es = (INL vs,es') /\
+  vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs ==>
+  let bytes = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) in
+  let maxlen = abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) in
+  let m = case mid of NONE => 0 | SOME _ => 4 in
+  let outsz = 32+32*word_size (maxlen+m) in
+  LENGTH bytes <= maxlen /\ 32+m+LENGTH bytes <= outsz /\
+  outsz < dimword (:256) /\ LENGTH bytes+m < dimword (:256) /\
+  32+(case mid of NONE => 0 | SOME _ => 32) <= outsz
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_args_length_bound >> strip_tac >>
+  `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) +
+    (case mid of NONE => 0 | SOME _ => 4)) < dimword (:256)` by
+    (drule abi_encode_endpoint_output_size >>
+     Cases_on `LENGTH args = 1` >> Cases_on `mid0` >>
+     gvs[] >> simp[dimword_def] >> decide_tac) >>
+  drule abi_encode_payload_capacity >>
+  disch_then (qspec_then `(case mid of NONE => 0 | SOME _ => 4)` assume_tac) >>
+  qpat_x_assum `mid = OPTION_MAP _ _` (fn th => pure_rewrite_tac [GSYM th]) >>
+  Cases_on `mid` >> gvs[] >>
+  qspec_then `abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))` mp_tac
+    (GEN_ALL abi_builtin_rounded_selector_store) >> simp[]
+QED
+
+Theorem abi_encode_args_phase_resources:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
+  eval_exprs cx args es = (INL vs,es') /\
+  vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
+  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+  s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+  eval_operand buf.buf_operand s = SOME (n2w sb) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+    staged = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
+  fn_has_code st allocated func /\ fn_has_code staged ready func /\
+  fn_has_code ready body_end obs /\ fn_inst_ids_distinct obs /\ fn_inst_ids_distinct func /\
+  obs.fn_name = func.fn_name /\
+  (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
+    MEM j (fn_insts func)) /\ local_ptrs_reserved ce st ==>
+  let n = abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) in
+  let bytes = enc ct rv in
+  let m = case mid of NONE => 0 | SOME _ => 4 in
+  let mw = case mid of NONE => 0 | SOME _ => 32 in
+  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+m) in
+  let a = abi_builtin_allocate_state staged.cs_next_id outsz s in
+  ?p. abi_encoder_window_input ei ct rv sb n s.vs_memory /\
+    alloca_inv a /\ alloca_room ctx func a /\
+    alloca_room (ctx with ctx_functions := [obs]) obs a /\
+    ((FLOOKUP s.vs_allocas staged.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
+      FLOOKUP s.vs_allocas staged.cs_next_id = SOME (p,outsz)) /\
+    outsz < dimword (:256) /\ p < dimword (:256) /\
+    (mid <> NONE ==> p+32 < dimword (:256)) /\
+    sb+n <= a.vs_alloca_next /\ p+32+m+LENGTH bytes <= a.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,n) (p+32+m,LENGTH bytes) /\
+    (sb+n <= p+32 \/ p+32+mw <= sb) /\
+    venomMemDefs$regions_disjoint (p+32,m) (p+32+m,LENGTH bytes) /\
+    (!inst b sz. MEM inst (fn_insts obs) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids ready body_end /\ FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,n) (b,sz) /\
+      venomMemDefs$regions_disjoint (p+32+m,LENGTH bytes) (b,sz) /\
+      venomMemDefs$regions_disjoint (p+32,m) (b,sz))
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    abi_encode_args_registered_phase_rows >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_store_abi_tuple _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`s`, `obs`] mp_tac) >> (impl_tac >- simp[]) >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (qx_choose_then `sb0` (qx_choose_then `p` (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  `sb0 = sb` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  qpat_x_assum `sb0 = sb` SUBST_ALL_TAC >>
+  drule_at (Pat `expr_body_pre _ _ _ _ _`) abi_encode_args_numerical_capacity >>
+  disch_then (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `vyper_to_abi_list _ _ _ = _`)) >>
+  disch_then (qspec_then `mid` mp_tac) >>
+  (impl_tac >- (conj_tac >- (qpat_x_assum `LENGTH args = 1 ==> ensure` mp_tac >>
+      simp_tac bool_ss []) >> first_assum ACCEPT_TAC)) >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  qpat_assum `mid = OPTION_MAP _ _` (fn th => pure_rewrite_tac [GSYM th]) >>
+  qmatch_asmsub_abbrev_tac `alloca_inv (abi_builtin_allocate_state _ outsz _)` >>
+  qmatch_asmsub_abbrev_tac `alloca_inv a` >>
+  `alloca_room (ctx with ctx_functions := [obs]) obs a` by
+    (irule abi_encode_bridge_local_room >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `func` >> asm_rewrite_tac []) >>
+  `st.cs_next_id <> staged.cs_next_id` by
+    (drule_all abi_tuple_encode_stage_shape >> simp[]) >>
+  qexists `p` >>
+  `abi_encoder_window_input ei ct rv sb
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory` by
+    metis_tac[abi_encoder_open_input_window] >>
+  qpat_x_assum `s.vs_allocas = _` (fn th => pure_rewrite_tac [GSYM th]) >>
+  qpat_x_assum `s.vs_alloca_next = _` (fn th => pure_rewrite_tac [GSYM th]) >>
+  qpat_x_assum `mid = OPTION_MAP _ _` kall_tac >>
+  qpat_x_assum `enc ct rv = _` (fn th =>
+    rule_assum_tac (PURE_REWRITE_RULE [GSYM th]) >> pure_rewrite_tac [GSYM th]) >>
+  asm_rewrite_tac [] >>
+  conj_tac >- decide_tac >>
+  conj_tac >- (qpat_assum `32 + (case mid of NONE => 0 | SOME _ => 32) <= outsz` mp_tac >>
+    Cases_on `mid` >> simp_tac bool_ss [optionTheory.option_CLAUSES] >> decide_tac) >>
+  conj_tac >- decide_tac >>
+  conj_tac
+  >- (qpat_assum `venomMemDefs$regions_disjoint (sb,_) (p,outsz)` mp_tac >>
+      simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  conj_tac
+  >- (qpat_assum `alloca_inv a` mp_tac >>
+      simp_tac bool_ss [alloca_inv_def, allocas_non_overlapping_def] >> strip_tac >>
+      first_x_assum (qspecl_then [`st.cs_next_id`, `staged.cs_next_id`] mp_tac) >>
+      asm_simp_tac bool_ss [optionTheory.SOME_11, pairTheory.PAIR_EQ] >> decide_tac) >>
+  conj_tac >- (pure_rewrite_tac [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  suspend "scratch"
+QED
+
+Resume abi_encode_args_phase_resources[scratch]:
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!inst b sz. _` drule_all >> strip_tac >>
+  asm_rewrite_tac [] >>
+  drule_all abi_encode_setup_scratch_slices >>
+  strip_tac >> qpat_x_assum `sz = 32` SUBST_ALL_TAC >>
+  asm_rewrite_tac [] >>
+  qpat_x_assum `venomMemDefs$regions_disjoint (p+32,_) (b,32)` mp_tac >>
+  Cases_on `mid` >> simp_tac bool_ss [optionTheory.option_CLAUSES,
+    venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Finalise abi_encode_args_phase_resources
