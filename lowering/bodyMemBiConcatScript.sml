@@ -1,10 +1,7 @@
-(* Memory case of the body induction, one family of bodyMemBuiltinRest's
-   builtins: concat. HELD: its S1 case (exprSimBuiltins'
-   compile_concat_case, exprSimConcat on s1-builtins-aggregates) is still
-   admitted. *)
+(* Memory case of the body induction for concat. *)
 Theory bodyMemBiConcat
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemBiConcatFragments
 
 Theorem body_builtin_concat_mem:
   !cx ty n es.
