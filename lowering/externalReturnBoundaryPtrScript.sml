@@ -4,6 +4,7 @@ Ancestors
   compileVyper entryStateRel bodySim bodyPtrDefs fragExecPtr fragExec stmtSim
   ptrSafeRun ptrDiscipline venomState venomExecSemantics contextCodegenRelProps
   abiBuiltinAllocation allocationPtr finite_map words arithmetic list
+  exprOperandVar exprLoweringProps stmtSimReturn
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "base";
