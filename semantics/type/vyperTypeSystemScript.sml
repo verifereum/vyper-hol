@@ -839,7 +839,7 @@ Definition well_typed_expr_def:
      LENGTH args = 2 + LENGTH flags.rcf_kws /\
      raw_call_kws_ok flags (DROP 2 args) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\

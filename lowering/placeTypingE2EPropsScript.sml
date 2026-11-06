@@ -49,13 +49,8 @@ Theorem source_typing_ok_place_type:
 Proof
   rw[source_typing_ok_def] >> qexists `art` >> simp[] >>
   conj_tac
-  >- (rpt strip_tac >>
-      irule (INST_TYPE [``:'a`` |-> ``:160 word``, ``:'b`` |-> ``:num``]
-        build_compile_env_defined_map_agreement) >>
-      qexistsl [`tx.target`, `art`, `F`, `am.layouts`] >> simp[]) >>
-  rpt strip_tac >>
-  irule (INST_TYPE [``:'a`` |-> ``:160 word``, ``:'b`` |-> ``:num``] checked_contract_place_type) >>
-  qexistsl [`tx.target`, `art`, `F`, `env`, `am.layouts`] >> simp[]
+  >- metis_tac[build_compile_env_defined_map_agreement] >>
+  metis_tac[checked_contract_place_type]
 QED
 
 val _ = List.app (fn (name,th) =>

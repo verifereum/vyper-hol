@@ -3,7 +3,7 @@ Theory concatMemory
 Ancestors
   fragExecMem instMemFrontier allocaFootprint exprLoweringProps
   emitHelper emitHelperProps compileEnv context venomInst venomState
-  venomExecSemantics venomMemDefs words arithmetic finite_map list
+  venomExecSemantics venomMemDefs words arithmetic finite_map list abiDecoderIndexInit
 Libs
   monadsyntax
 
@@ -110,10 +110,10 @@ Proof
   pure_rewrite_tac[GSYM mk_inst_def] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq_mem_ok _ s3` >>
   `eval_operand off_ptr s3 = SOME off` by
-    simp[Abbr `s3`, eval_operand_mstore_eq, Abbr `s2`] >>
+    simp[Abbr `s3`, abi_decoder_operand_mstore, Abbr `s2`] >>
   `eval_operand (Var (STRING #"%" (toString sa.cs_next_var))) s3 =
       SOME (mload (w2n off) s)` by
-    simp[Abbr `s3`, eval_operand_mstore_eq, Abbr `s2`,
+    simp[Abbr `s3`, abi_decoder_operand_mstore, Abbr `s2`,
          eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_mem_ok_cons] >> conj_tac
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
@@ -121,7 +121,7 @@ Proof
        eval_operand_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >>
-  simp[Abbr `s3`, eval_operand_mstore_eq, Abbr `s2`,
+  simp[Abbr `s3`, abi_decoder_operand_mstore, Abbr `s2`,
        concat_store_frontier]
 QED
 

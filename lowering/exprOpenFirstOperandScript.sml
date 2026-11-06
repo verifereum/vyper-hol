@@ -25,8 +25,9 @@ Theorem expr_body_pre_builtin_head:
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm,
        supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+       supportedExprTraverseTheory.call_operands_effect_root_def] >>
   rpt strip_tac >>
   `alloc_limits_expr cenv arg` by
     (qpat_x_assum `alloc_limits_exprs _ _` mp_tac >> IF_CASES_TAC >>
@@ -41,8 +42,9 @@ Theorem expr_body_pre_type_builtin_head:
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm,
        supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+       supportedExprTraverseTheory.call_operands_effect_root_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 

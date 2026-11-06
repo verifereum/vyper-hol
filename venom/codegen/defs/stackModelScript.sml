@@ -94,7 +94,7 @@ Proof
   `PRE (x + 1) = x` by decide_tac >> simp[EL_CONS]
 QED
 
-Theorem stack_find_NONE_EVERY[local]:
+Theorem stack_find_NONE_EVERY:
   ∀p xs. stack_find p xs = NONE ⇔ EVERY (λx. ¬p x) xs
 Proof
   gen_tac >> Induct >> simp[stack_find_def] >>

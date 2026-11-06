@@ -295,7 +295,7 @@ Proof
   ntac 5 (pairarg_tac >> simp[]) >>
   ntac 5 (pairarg_tac >> simp[]) >>
   ntac 5 (pairarg_tac >> simp[]) >>
-  Cases_on `retsz = 0`
+  Cases_on `rty = NoneT`
   >- (simp[comp_return_def] >> strip_tac >> gvs[] >>
       drule new_block_open >> simp[]) >>
   simp[] >> Cases_on `has_default`

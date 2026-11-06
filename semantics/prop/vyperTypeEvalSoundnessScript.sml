@@ -7358,7 +7358,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallTarget]:
     (Cases_on `args_res`
     >- (gvs[no_type_error_result_def] >>
       rename1 `exprs_runtime_typed env es vs` >>
-      mp_tac raw_call_args_runtime_typed_dest >>
+      rename1 `EL 1 (MAP expr_type es) = BaseT (BytesT (Dynamic data_bound))` >>
+      mp_tac (Q.INST [`bd` |-> `Dynamic data_bound`]
+        raw_call_args_runtime_typed_dest) >>
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
       drule_then (qspec_then `2` assume_tac) exprs_runtime_typed_DROP >>

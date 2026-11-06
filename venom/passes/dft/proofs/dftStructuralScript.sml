@@ -444,6 +444,165 @@ Proof
   >> metis_tac[]
 QED
 
+(* ===== Abort-run edges (add_abort_run_deps, dft_eda) ===== *)
+
+Theorem abort_run_step_members:
+  !runs inst r.
+    (MEM r (FST (abort_run_step runs inst)) ==>
+     MEM r (FST runs) \/ MEM r (SND runs)) /\
+    (MEM r (SND (abort_run_step runs inst)) ==>
+     MEM r (SND runs) \/ r = inst)
+Proof
+  Cases >> rw[abort_run_step_def] >> gvs[]
+QED
+
+(* The abort-run fold only adds deps. *)
+Theorem abort_run_fold_mono:
+  !l acc runs k ds d.
+    FLOOKUP acc k = SOME ds /\ MEM d ds ==>
+    ?ds'. FLOOKUP (FST (FOLDL abort_run_dep_step (acc, runs) l)) k = SOME ds' /\
+          MEM d ds'
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  Cases_on `dft_abort_kind h.inst_opcode = NoFail` >>
+  simp[abort_run_dep_step_def, LET_THM] >>
+  first_x_assum irule >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]
+QED
+
+Theorem abort_run_fold_fdom:
+  !l acc runs.
+    FDOM acc SUBSET FDOM (FST (FOLDL abort_run_dep_step (acc, runs) l)) /\
+    FDOM (FST (FOLDL abort_run_dep_step (acc, runs) l)) SUBSET
+      FDOM acc UNION set (MAP (\i. i.inst_id) l)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `dft_abort_kind h.inst_opcode = NoFail` >>
+  simp[abort_run_dep_step_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `FOLDL _ (acc', runs')` >>
+  first_x_assum (qspecl_then [`acc'`, `runs'`] strip_assume_tac) >>
+  gvs[Abbr `acc'`, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem abort_run_dep_step_facts:
+  !acc runs h acc' runs'.
+  abort_run_dep_step (acc, runs) h = (acc', runs') ==>
+  (!r. MEM r (FST runs' ++ SND runs') ==>
+       MEM r (FST runs ++ SND runs) \/
+       (r = h /\ dft_abort_kind h.inst_opcode <> NoFail)) /\
+  (!k ds d. FLOOKUP acc' k = SOME ds /\ MEM d ds ==>
+       (?ds0. FLOOKUP acc k = SOME ds0 /\ MEM d ds0) \/
+       (k = h.inst_id /\ dft_abort_kind h.inst_opcode <> NoFail /\
+        MEM d (FST runs ++ SND runs)))
+Proof
+  rpt gen_tac >> Cases_on `dft_abort_kind h.inst_opcode = NoFail` >>
+  simp[abort_run_dep_step_def, LET_THM] >> strip_tac >> gvs[] >>
+  simp[listTheory.MEM_APPEND] >> rpt strip_tac >>
+  imp_res_tac abort_run_step_members >> gvs[] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `h.inst_id = k` >> gvs[] >>
+  Cases_on `FLOOKUP acc h.inst_id` >> gvs[] >>
+  imp_res_tac abort_run_step_members >> metis_tac[]
+QED
+
+(* Each dep the fold adds to key k comes from the previous run of an
+   aborting instruction y with id k, so it is an aborting instruction before
+   y (in pre, the instructions already folded, or in l before y). *)
+Theorem abort_run_fold_sources:
+  !l pre acc runs k ds' d.
+    EVERY (\r. MEM r pre /\ dft_abort_kind r.inst_opcode <> NoFail)
+      (FST runs ++ SND runs) /\
+    FLOOKUP (FST (FOLDL abort_run_dep_step (acc, runs) l)) k = SOME ds' /\
+    MEM d ds' ==>
+    (?ds. FLOOKUP acc k = SOME ds /\ MEM d ds) \/
+    ?p y s. l = p ++ [y] ++ s /\ y.inst_id = k /\
+            (MEM d pre \/ MEM d p) /\
+            dft_abort_kind d.inst_opcode <> NoFail /\
+            dft_abort_kind y.inst_opcode <> NoFail
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `abort_run_dep_step (acc, runs) h` >>
+  rename1 `_ = (acc', runs')` >> gvs[] >>
+  drule abort_run_dep_step_facts >> strip_tac >>
+  first_x_assum (qspecl_then [`pre ++ [h]`, `acc'`, `runs'`, `k`, `ds'`, `d`]
+    mp_tac) >>
+  impl_tac >- (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  strip_tac
+  >- (qpat_x_assum `!k ds d. FLOOKUP acc' _ = _ /\ _ ==> _` drule_all >>
+      strip_tac >- metis_tac[] >>
+      disj2_tac >> qexistsl [`[]`, `h`, `l`] >> gvs[listTheory.EVERY_MEM] >>
+      metis_tac[]) >>
+  disj2_tac >> qexistsl [`h::p`, `y`, `s`] >> gvs[]
+QED
+
+Theorem add_abort_run_deps_mono:
+  FLOOKUP eda k = SOME ds /\ MEM d ds ==>
+  ?ds'. FLOOKUP (add_abort_run_deps bi eda) k = SOME ds' /\ MEM d ds'
+Proof
+  simp[add_abort_run_deps_def, LET_THM] >> metis_tac[abort_run_fold_mono]
+QED
+
+Theorem add_abort_run_deps_fdom:
+  FDOM eda SUBSET FDOM (add_abort_run_deps bi eda) /\
+  FDOM (add_abort_run_deps bi eda) SUBSET
+    FDOM eda UNION
+    set (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))
+Proof
+  simp[add_abort_run_deps_def, LET_THM, abort_run_fold_fdom]
+QED
+
+Theorem add_abort_run_deps_sources:
+  FLOOKUP (add_abort_run_deps bi eda) k = SOME ds' /\ MEM d ds' ==>
+  (?ds. FLOOKUP eda k = SOME ds /\ MEM d ds) \/
+  ?p y s. FILTER (\i. ~is_pseudo i.inst_opcode) bi = p ++ [y] ++ s /\
+          y.inst_id = k /\ MEM d p /\
+          dft_abort_kind d.inst_opcode <> NoFail /\
+          dft_abort_kind y.inst_opcode <> NoFail
+Proof
+  simp[add_abort_run_deps_def, LET_THM] >> strip_tac >>
+  mp_tac (Q.SPECL [`FILTER (\i. ~is_pseudo i.inst_opcode) bi`, `[]`, `eda`,
+                   `([], [])`, `k`, `ds'`, `d`] abort_run_fold_sources) >>
+  simp[]
+QED
+
+Theorem dft_eda_wf:
+  !block_insts. eda_wf (dft_eda block_insts) block_insts
+Proof
+  simp[eda_wf_def, dft_eda_def] >> rpt gen_tac >> strip_tac >>
+  drule_all add_abort_run_deps_sources >> strip_tac
+  >- metis_tac[build_eda_wf, eda_wf_def] >>
+  `MEM dep (FILTER (\i. ~is_pseudo i.inst_opcode) block_insts)` by
+    (qpat_x_assum `FILTER _ _ = _` SUBST1_TAC >> simp[]) >>
+  gvs[listTheory.MEM_FILTER]
+QED
+
+Theorem dft_eda_sources:
+  FLOOKUP (dft_eda bi) k = SOME ds' /\ MEM d ds' ==>
+  (?ds. FLOOKUP (build_eda bi) k = SOME ds /\ MEM d ds) \/
+  ?p y s. FILTER (\i. ~is_pseudo i.inst_opcode) bi = p ++ [y] ++ s /\
+          y.inst_id = k /\ MEM d p /\
+          dft_abort_kind d.inst_opcode <> NoFail /\
+          dft_abort_kind y.inst_opcode <> NoFail
+Proof
+  simp[dft_eda_def, add_abort_run_deps_sources]
+QED
+
+Theorem dft_eda_mono:
+  FLOOKUP (build_eda bi) k = SOME ds /\ MEM d ds ==>
+  ?ds'. FLOOKUP (dft_eda bi) k = SOME ds' /\ MEM d ds'
+Proof
+  simp[dft_eda_def, add_abort_run_deps_mono]
+QED
+
+Theorem inst_all_deps_dft_eda_mono:
+  MEM d (inst_all_deps bi order (build_eda bi) i) ==>
+  MEM d (inst_all_deps bi order (dft_eda bi) i)
+Proof
+  simp[inst_all_deps_def, LET_THM] >> strip_tac >> simp[] >>
+  Cases_on `FLOOKUP (build_eda bi) i.inst_id` >> gvs[] >>
+  drule_all dft_eda_mono >> strip_tac >> simp[]
+QED
+
 (* ===== add_chain_deps preserves eda_wf ===== *)
 
 Triviality add_chain_deps_foldl_wf:
@@ -633,7 +792,7 @@ Proof
   (* pseudo case: contradicts ~is_pseudo *)
   >- gvs[listTheory.MEM_FILTER]
   (* scheduled case *)
-  >> metis_tac[schedule_output_from_block, build_eda_wf, entry_instructions_mem]
+  >> metis_tac[schedule_output_from_block, dft_eda_wf, entry_instructions_mem]
 QED
 
 (* ===== Phis are preserved by dft_block ===== *)
@@ -648,13 +807,13 @@ Proof
   simp[rich_listTheory.FILTER_FILTER] >>
   `FILTER (\i. is_pseudo i.inst_opcode)
     (schedule_from_entries bb.bb_instructions order
-      (build_eda bb.bb_instructions)
+      (dft_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
       (entry_instructions bb.bb_instructions order
-        (build_eda bb.bb_instructions))) = []` suffices_by simp[] >>
+        (dft_eda bb.bb_instructions))) = []` suffices_by simp[] >>
   simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
   rpt strip_tac >>
-  metis_tac[schedule_output_from_block, build_eda_wf, entry_instructions_mem]
+  metis_tac[schedule_output_from_block, dft_eda_wf, entry_instructions_mem]
 QED
 
 

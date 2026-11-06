@@ -1215,6 +1215,132 @@ Proof
   simp[]
 QED
 
+(* The function rows 4 to 8: SUE emits each pseudo-instruction (PHI, a
+   parameter) as it is, since it skips them, and puts only ASSIGNs in front
+   of every other instruction.  So it keeps every block's pseudo-instruction
+   prefix and adds no parameter instruction. *)
+
+Theorem every_prefix_split:
+  !P l. (!i j. i < j /\ j < LENGTH l /\ P (EL j l) ==> P (EL i l)) <=>
+        ?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs
+Proof
+  rpt gen_tac >> eq_tac
+  >- (qid_spec_tac `l` >> Induct >- simp[] >>
+      rpt strip_tac >>
+      `?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs` by
+        (first_x_assum irule >> rpt strip_tac >>
+         first_x_assum (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]) >>
+      Cases_on `P h`
+      >- (qexistsl [`h::ps`,`rs`] >> simp[]) >>
+      qexistsl [`[]`,`h::l`] >> simp[listTheory.EVERY_EL] >>
+      rpt strip_tac >>
+      first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `j < LENGTH ps`
+  >- (`i < LENGTH ps` by simp[] >>
+      gvs[rich_listTheory.EL_APPEND1, listTheory.EVERY_EL]) >>
+  gvs[rich_listTheory.EL_APPEND2, listTheory.EVERY_EL, arithmeticTheory.NOT_LESS] >>
+  first_x_assum (qspec_then `j - LENGTH ps` mp_tac) >> simp[]
+QED
+
+Theorem pseudos_prefix_split:
+  pseudos_prefix bb <=>
+  ?ps rs. bb.bb_instructions = ps ++ rs /\
+    EVERY (\i. is_pseudo i.inst_opcode) ps /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) rs
+Proof
+  simp[pseudos_prefix_def] >>
+  qspecl_then [`\i. is_pseudo i.inst_opcode`, `bb.bb_instructions`]
+    mp_tac every_prefix_split >>
+  simp[]
+QED
+
+Theorem is_pseudo_sue_should_skip:
+  is_pseudo opc ==> sue_should_skip opc
+Proof
+  Cases_on `opc` >> simp[is_pseudo_def] >>
+  simp[sue_should_skip_def, is_param_opcode_def]
+QED
+
+Theorem sue_expand_inst_supply_pseudo:
+  sue_expand_inst_supply dfg s inst = (out,s') ==>
+  (is_pseudo inst.inst_opcode ==> out = [inst]) /\
+  (~is_pseudo inst.inst_opcode ==> EVERY (\i. ~is_pseudo i.inst_opcode) out)
+Proof
+  strip_tac >> conj_tac
+  >- (strip_tac >> imp_res_tac is_pseudo_sue_should_skip >>
+      gvs[sue_expand_inst_supply_def]) >>
+  strip_tac >>
+  drule_at (Pat `sue_expand_inst_supply _ _ _ = _`)
+    sue_expand_inst_supply_opcodes >>
+  disch_then (qspec_then `\opc. ~is_pseudo opc` mp_tac) >>
+  simp[is_pseudo_def]
+QED
+
+Theorem sue_expand_insts_supply_pseudo:
+  !insts s outs s'.
+    sue_expand_insts_supply dfg s insts = (outs,s') ==>
+    (EVERY (\i. is_pseudo i.inst_opcode) insts ==> outs = insts) /\
+    (EVERY (\i. ~is_pseudo i.inst_opcode) insts ==>
+     EVERY (\i. ~is_pseudo i.inst_opcode) outs)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[sue_expand_insts_supply_def] >>
+  gvs[sue_expand_insts_supply_def, AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >>
+  drule sue_expand_inst_supply_pseudo >> strip_tac >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem sue_expand_block_supply_pseudos_prefix:
+  pseudos_prefix bb /\ sue_expand_block_supply dfg s bb = (bb',s') ==>
+  pseudos_prefix bb'
+Proof
+  rw[pseudos_prefix_split] >>
+  gvs[sue_expand_block_supply_def, sue_expand_insts_supply_append,
+      AllCaseEqs()] >>
+  imp_res_tac sue_expand_insts_supply_pseudo >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem sue_expand_blocks_supply_pseudos_prefix:
+  !bbs s bbs' s'.
+    EVERY pseudos_prefix bbs /\
+    sue_expand_blocks_supply dfg s bbs = (bbs',s') ==>
+    EVERY pseudos_prefix bbs'
+Proof
+  Induct >> rpt strip_tac
+  >- gvs[sue_expand_blocks_supply_def] >>
+  gvs[sue_expand_blocks_supply_def, AllCaseEqs()] >>
+  metis_tac[sue_expand_block_supply_pseudos_prefix]
+QED
+
+Theorem sue_expand_function_supply_pseudos_prefix:
+  fn_pseudos_prefix fn /\ sue_expand_function_supply s fn = (fn',s') ==>
+  fn_pseudos_prefix fn'
+Proof
+  strip_tac >>
+  gvs[sue_expand_function_supply_def, fn_pseudos_prefix_def, AllCaseEqs()] >>
+  drule_at Any sue_expand_blocks_supply_pseudos_prefix >>
+  simp[listTheory.EVERY_MEM]
+QED
+
+Theorem sue_expand_function_supply_tl_no_param_insts:
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) /\
+  sue_expand_function_supply s fn = (fn',s') ==>
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn'.fn_blocks)
+Proof
+  strip_tac >>
+  gvs[sue_expand_function_supply_def, AllCaseEqs()] >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[sue_expand_blocks_supply_def, AllCaseEqs(),
+      callLayoutDefsTheory.no_param_insts_def] >>
+  drule_at (Pat `sue_expand_blocks_supply _ _ _ = _`)
+    sue_expand_blocks_supply_opcodes >>
+  disch_then (qspec_then `\opc. ~is_param_opcode opc` mp_tac) >>
+  simp[is_param_opcode_def]
+QED
+
 Theorem sue_step_elim[local]:
   fn_pass_step rpolicy (CFP_Simple VP_SingleUseExpansion) observed s fn out /\
   o1_ctx_shape observed.cu_context ==>
@@ -1240,7 +1366,10 @@ Theorem sue_step_contract:
 Proof
   simp[o1_step_contract_at_def] >> rpt gen_tac >> strip_tac >>
   drule_all sue_step_elim >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn)` by
+  `EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) /\
+   fn_pseudos_prefix fn /\
+   EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) /\
+   wf_ssa fn /\ all_reachable fn` by
     gvs[o1_fn_row_def] >>
   `sue_supply_extends s out.fpo_supply` by
     metis_tac[sue_expand_function_supply_extends] >>
@@ -1263,8 +1392,14 @@ Proof
       simp[sue_ids_supply_ok_def] >> metis_tac[])
   >- simp[label_map_sources_ok_def]
   >- gvs[sue_supply_extends_def] >>
-  simp[o1_fn_row_def] >>
-  drule_at (Pat `sue_expand_function_supply _ _ = _`)
-    sue_expand_function_supply_opcodes >>
-  disch_then (qspec_then `\opc. opc <> ALLOCA` mp_tac) >> simp[]
+  simp[o1_fn_row_def] >> rpt conj_tac
+  >- (drule_at (Pat `sue_expand_function_supply _ _ = _`)
+        sue_expand_function_supply_opcodes >>
+      disch_then (qspec_then `\opc. opc <> ALLOCA` mp_tac) >> simp[])
+  >- metis_tac[sue_expand_function_supply_pseudos_prefix]
+  >- metis_tac[sue_expand_function_supply_tl_no_param_insts]
+  >- (`wf_function fn /\ fn_inst_wf fn` by gvs[o1_fn_shape_def] >>
+      metis_tac[sue_expand_function_supply_wf_ssa]) >>
+  drule fn_pass_step_fmp_sig_no_param >>
+  gvs[o1_fn_row_def, venomPassScheduleTheory.fn_pass_tag_def]
 QED
