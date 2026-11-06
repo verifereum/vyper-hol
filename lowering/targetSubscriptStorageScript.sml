@@ -270,14 +270,6 @@ Proof
   drule_all target_storage_dynamic_array_abort_path >> simp[]
 QED
 
-Theorem target_storage_array_capacity:
-  slots_in_range st (w2n slot) (ArrayTV etv (Dynamic cnt)) ==>
-  w2n (lookup_storage slot st) <= cnt
-Proof
-  simp[Once slots_in_range_def, read_slot_def] >>
-  rpt IF_CASES_TAC >> simp[]
-QED
-
 Theorem target_storage_array_range:
   evaluate_type tenv ity = SOME itv /\ value_has_type itv (IntV i) /\
   cnt < dimword(:256) /\
