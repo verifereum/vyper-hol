@@ -119,8 +119,7 @@ Theorem cenv_module_pins_immutable_section_layout:
   !tops cenv. cenv_module_pins tops cenv ==> immutable_section_layout cenv tops
 Proof
   rw[cenv_module_pins_def] >>
-  mp_tac (Q.SPECL [`tops`,`vis`,`mut`,`name`,`args`,`ret`,`body`,`locks`]
-            immutable_build_compile_env_layout) >>
+  mp_tac (SPEC_ALL immutable_build_compile_env_layout) >>
   simp[immutable_section_layout_def, build_compile_env_module_vars]
 QED
 
