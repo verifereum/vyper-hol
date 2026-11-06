@@ -1,7 +1,7 @@
 Theory lowerDloadSavedExtension
 Ancestors
   lowerDloadFrameCertificate lowerDloadLifetime lowerDloadPairedBoundary
-  lowerDloadOwnership finite_map pred_set list
+  lowerDloadOwnership lowerDloadOwnerTransport finite_map pred_set list
 
 Theorem ld_owned_selection_selected_transport[local]:
   ld_owned_selection E ps pt /\
@@ -142,4 +142,20 @@ Proof
   `owner <> (0,k)` by (strip_tac >> gvs[]) >>
   simp[ld_site_entry_def, FLOOKUP_UPDATE] >>
   gvs[ld_site_entry_def]
+QED
+
+Theorem ld_reachable_saved_param_owner_update:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn inst s /\
+  MEM sf astk /\ z < LENGTH sf.lf_params /\
+  ld_owned_value E (EL z sf.lf_params) pt Ms Mt x y ==>
+  ld_owned_value (E |+ ((0,k),entry)) (EL z sf.lf_params) pt Ms Mt x y
+Proof
+  strip_tac >> irule ld_owned_value_support >> qexists_tac `E` >>
+  simp[] >> rpt strip_tac >>
+  `MEM (SOME(owner,(bs,sz))) sf.lf_params` by metis_tac[MEM_EL] >>
+  `ld_live astk L AP AG (owner,(bs,sz))` by
+    (simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+  drule_all ld_annotated_serial >> simp[] >> strip_tac >>
+  `owner <> (0,k)` by (strip_tac >> gvs[]) >>
+  simp[FLOOKUP_UPDATE]
 QED
