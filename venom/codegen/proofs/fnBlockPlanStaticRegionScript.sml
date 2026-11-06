@@ -4232,3 +4232,29 @@ Proof
   drule_all (cj 1 regional_dfs_marker_mutual) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem regional_lineage_cleanup_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    pred bb.bb_label ps /\
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  ~MEM dead_stack_marker ps.ps_stack /\ ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth
+    cfg fn bb n) /\
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v (input_vars_from pred
+    bb.bb_instructions (live_vars_at lv bb.bb_label 0))) qs.ps_stack
+Proof
+  strip_tac >> drule_all lineage_entry_inventory >> strip_tac >>
+  `FILTER (\op. op <> dead_stack_marker) ps.ps_stack = ps.ps_stack` by
+    simp[FILTER_EQ_ID, EVERY_MEM] >>
+  `ALL_DISTINCT ps.ps_stack` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  `EVERY (\op. ?v. op = Var v /\ MEM v
+    (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))) ps.ps_stack` by
+    (simp[EVERY_MEM] >> metis_tac[]) >>
+  drule_all inventory_cleanup_support >> simp[]
+QED
