@@ -2,7 +2,7 @@
    ecmul. *)
 Theory bodyMemEcArith
 Ancestors
-  bodyMemoryPreds bodyMemEcArithContinuation
+  bodyMemoryPreds bodyMemEcArithInstructionSafety
 
 Theorem body_ec_arith_mem_case:
   !cx ty bt es.
