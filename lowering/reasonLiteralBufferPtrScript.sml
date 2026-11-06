@@ -2,7 +2,9 @@
 Theory reasonLiteralBufferPtr
 Ancestors exprSimPtrLiteralBuffer exprSimPtrLiteralPayload exprSimLiteralBuffer
   exprLowering exprLoweringProps context emitHelper compileEnv freshWrites
-  vfmConstants venomInst list pair
+  vfmConstants venomInst list pair exprSimPtrLiteralChunks exprSimPtrLiteralOps
+  fragExecPtr fragGasSeqPtr venomExecSemantics venomState ptrDiscipline words
+  finite_map pred_set allocationPtr instIdxIndep fragExec bodyPtrDefs
 
 Theorem reason_literal_compiler_parts:
   compile_bytelike_literal bs ml sa = (buf,sb) ==>
@@ -58,4 +60,71 @@ Proof
   gvs[ci_mono_def] >> rpt conj_tac
   >- (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   decide_tac
+QED
+
+(* Full allocation capacity can exceed the initialized payload. *)
+Theorem reason_literal_header_chunks_ptr:
+  compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
+  not_fresh_at sh p /\ lookup_var p s = SOME (n2w b) /\
+  FLOOKUP G p = SOME (b,n) /\ 32+32*word_size (LENGTH bs) <= n /\
+  op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
+  b+n < dimword (:256) ==>
+  ?t G' tn'.
+    run_inst_seq (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn
+      (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+       emitted_insts sh sb) s G' tn' /\
+    tn'.t_mem = tn.t_mem DIFF
+      {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sh v ==>
+      FLOOKUP G' v = FLOOKUP G v /\
+      FLOOKUP tn'.t_var v = FLOOKUP tn.t_var v)
+Proof
+  strip_tac >> `b < dimword (:256)` by decide_tac >>
+  `ptr_covers G tn p s 32` by
+    (simp[ptr_covers_def, w2n_n2w] >> decide_tac) >>
+  `step_inst_base (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] []) s =
+     OK (mstore b (n2w (LENGTH bs)) s)` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+  drule literal_mstore_ghost >>
+  disch_then (qspecl_then [`n2w (LENGTH bs)`, `tn`, `id`, `PG`, `G`]
+    strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `OK u` >>
+  `lookup_var p u = SOME (n2w b)` by
+    simp[Abbr `u`, mstore_def, lookup_var_def] >>
+  qabbrev_tac `uh = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `th = tn with t_mem := tn.t_mem DIFF {i | b <= i /\ i < b+32}` >>
+  `lookup_var p uh = SOME (n2w b) /\ op_taint th (Var p) = {}` by
+    (simp[Abbr `uh`, Abbr `th`, lookup_var_def, op_taint_def] >>
+     fs[lookup_var_def, op_taint_def]) >>
+  `?t G' tn'. run_inst_seq (emitted_insts sh sb) uh = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G th (emitted_insts sh sb) uh G' tn' /\
+    tn'.t_mem = th.t_mem DIFF
+      {i | b+32 <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
+    tn'.t_stor = th.t_stor /\ tn'.t_trans = th.t_trans /\
+    tn'.t_imm = th.t_imm /\
+    (!v. not_fresh_at sh v ==> lookup_var v t = lookup_var v uh /\
+      FLOOKUP G' v = FLOOKUP G v /\ FLOOKUP tn'.t_var v = FLOOKUP th.t_var v)` by
+    (irule (cj 6 literal_chunks_ptr) >> simp[] >>
+     qexistsl_tac [`b`, `n`, `p`] >> simp[] >> decide_tac) >>
+  `b+32+32*word_size (LENGTH bs) < dimword (:256)` by decide_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sh sb)` by
+    (drule_at (Pat `compile_store_byte_chunks _ _ _ _ = _`)
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] (cj 5 literal_chunks_ptr)) >>
+     rpt (disch_then drule) >> simp[] >>
+     disch_then (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
+     rpt (disch_then drule) >> simp[]) >>
+  Cases_on `run_inst_seq (emitted_insts sh sb) u` >>
+  fs[Abbr `uh`, run_inst_seq_inst_idx, exec_result_map_def] >>
+  qexistsl_tac [`v`, `G'`, `tn'`] >>
+  simp[run_inst_seq_def, inst_seq_ptr_def, literal_mstore_ptr_inst_ok] >>
+  gvs[Abbr `u`, Abbr `th`, w2n_n2w, mk_inst_def,
+      arithmeticTheory.LESS_MOD, is_terminator_def] >>
+  rpt conj_tac >> simp[] >>
+  simp[pred_setTheory.EXTENSION] >> rpt gen_tac >>
+  eq_tac >> simp[] >> decide_tac
 QED
