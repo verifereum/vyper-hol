@@ -8,9 +8,11 @@
  *   assert_elim_preserves_wf_function — assert elimination preserves well-formedness
  *
  * Helper (local):
- *   assert_elim_inst_cases / _id / _terminator / _not_terminator /
- *     _phi / _not_phi / _outputs  — structural lemmas on assert_elim_inst
- *   aftw_singleton_eq_fmt_mapi — widen-singleton transform = function_map_transform with MAPi
+ *   assert_elim_inst_outputs — assert_elim_inst keeps the outputs or drops them all
+ *
+ * The other structural lemmas on assert_elim_inst (_cases, _id, _terminator,
+ * _not_terminator, _phi, _not_phi) and aftw_singleton_eq_fmt_mapi are in
+ * assertElimProofs.
  *)
 
 Theory assertElimCorrectness
@@ -79,61 +81,7 @@ Proof
   metis_tac[]
 QED
 
-(* ===== Core structural lemma: identity or mk_nop ===== *)
-
-Theorem assert_elim_inst_cases[local]:
-  !v inst. assert_elim_inst v inst = inst \/
-           assert_elim_inst v inst = mk_nop_inst inst
-Proof
-  rpt gen_tac >> simp[assert_elim_inst_def] >>
-  rpt (BasicProvers.PURE_CASE_TAC >> simp[])
-QED
-
 (* ===== Derived structural properties ===== *)
-
-Theorem assert_elim_inst_id[local]:
-  !v inst. (assert_elim_inst v inst).inst_id = inst.inst_id
-Proof
-  rpt gen_tac >>
-  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
-                        assert_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
-QED
-
-Theorem assert_elim_inst_terminator[local]:
-  !v inst. is_terminator inst.inst_opcode ==> assert_elim_inst v inst = inst
-Proof
-  rpt strip_tac >> simp[assert_elim_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  fs[is_terminator_def]
-QED
-
-Theorem assert_elim_inst_not_terminator[local]:
-  !v inst. ~is_terminator inst.inst_opcode ==>
-           ~is_terminator (assert_elim_inst v inst).inst_opcode
-Proof
-  rpt gen_tac >> strip_tac >>
-  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
-                        assert_elim_inst_cases) >>
-  simp[mk_nop_inst_def, is_terminator_def]
-QED
-
-Theorem assert_elim_inst_phi[local]:
-  !v inst. inst.inst_opcode = PHI ==>
-           (assert_elim_inst v inst).inst_opcode = PHI
-Proof
-  rpt strip_tac >> simp[assert_elim_inst_def]
-QED
-
-Theorem assert_elim_inst_not_phi[local]:
-  !v inst. inst.inst_opcode <> PHI ==>
-           (assert_elim_inst v inst).inst_opcode <> PHI
-Proof
-  rpt gen_tac >> strip_tac >>
-  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
-                        assert_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
-QED
 
 Theorem assert_elim_inst_outputs[local]:
   !v inst. (assert_elim_inst v inst).inst_outputs = inst.inst_outputs \/
@@ -143,22 +91,6 @@ Proof
   DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
                         assert_elim_inst_cases) >>
   simp[mk_nop_inst_def]
-QED
-
-(* Key: the widen singleton transform equals function_map_transform with MAPi. *)
-Theorem aftw_singleton_eq_fmt_mapi[local]:
-  !bottom result (f : 'a -> instruction -> instruction) fn.
-    analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
-    function_map_transform
-      (\bb. bb with bb_instructions :=
-        MAPi (\idx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
-             bb.bb_instructions) fn
-Proof
-  rw[analysis_function_transform_widen_def, function_map_transform_def,
-     ir_function_component_equality] >>
-  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
-  simp[analysis_block_transform_widen_def,
-       basic_block_component_equality, flat_mapi_singleton]
 QED
 
 (* ===== Obligations ===== *)

@@ -1121,7 +1121,7 @@ Proof
   `succs_preserved bbs1 bbs2` by (
     ASM_REWRITE_TAC[] >>
     ACCEPT_TAC (Q.SPECL [`dtree`, `bbs1`, `rs0`, `succ_map`]
-      (CONJUNCT1 rename_blocks_succs_preserved_export))) >>
+      (CONJUNCT1 rename_blocks_succs_preserved))) >>
   (* bb_succs bb_mid = bb_succs bb *)
   `bb_succs bb_mid = bb_succs bb` by (
     mp_tac (Q.SPECL [`phis`, `(bb:basic_block).bb_instructions`, `bb_mid`, `bb`]

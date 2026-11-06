@@ -2,7 +2,7 @@
  * Analysis-Driven Simulation — Proofs (Part 4: Prepend Correctness)
  *
  * Main theorem:
- *   df_analysis_pass_correct_prepend_proof
+ *   df_analysis_pass_correct_prepend
  *)
 
 Theory analysisSimProofsPrepend
@@ -456,9 +456,9 @@ Proof
 QED
 
 (* Prepend-aware pass correctness.
-   Extends df_analysis_pass_correct_sound_proof for transforms that
+   Extends df_analysis_pass_correct_sound for transforms that
    add new instructions before each block. *)
-Theorem df_analysis_pass_correct_prepend_proof:
+Theorem df_analysis_pass_correct_prepend:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join transfer edge_transfer ctx

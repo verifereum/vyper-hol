@@ -184,16 +184,19 @@ val call_target_samples =
   , vyperASTSyntax.RawRevert_tm
   , vyperASTSyntax.SelfDestructTarget_tm
   , vyperASTSyntax.mk_CreateTarget_tm
-      (vyperASTSyntax.CreateMinimalProxy_tm, boolSyntax.F, boolSyntax.T)
+      (vyperASTSyntax.CreateMinimalProxy_tm, boolSyntax.F, boolSyntax.T,
+       listSyntax.mk_list ([numSyntax.term_of_int 1], numSyntax.num))
   ];
 val _ = List.app
   (fn tm => ignore (vyperASTSyntax.view_call_target tm))
   call_target_samples;
 val _ =
   case vyperASTSyntax.view_call_target (List.last call_target_samples) of
-    vyperASTSyntax.VCreateTarget (kind, has_salt, rof) =>
+    vyperASTSyntax.VCreateTarget (kind, has_salt, rof, kw_order) =>
       if same_term kind vyperASTSyntax.CreateMinimalProxy_tm andalso
-         same_term has_salt boolSyntax.F andalso same_term rof boolSyntax.T
+         same_term has_salt boolSyntax.F andalso same_term rof boolSyntax.T andalso
+         same_term kw_order
+           (listSyntax.mk_list ([numSyntax.term_of_int 1], numSyntax.num))
       then () else raise Fail "CreateTarget field order"
   | _ => raise Fail "CreateTarget view";
 val _ =

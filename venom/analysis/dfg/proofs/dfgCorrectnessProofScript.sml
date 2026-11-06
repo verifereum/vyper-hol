@@ -1,8 +1,8 @@
 (*
  * DFG Analysis Correctness Proofs
  *
- * Internal proof machinery for DFG analysis.
- * Re-exported via dfgAnalysisPropsScript.sml.
+ * DFG analysis proofs.  The well-formedness results live only here;
+ * dfgAnalysisProps re-exports the correctness and finiteness statements.
  *)
 
 Theory dfgCorrectnessProof
@@ -13,7 +13,7 @@ Ancestors
    Well-formedness preservation
    -------------------------------------------------------------------------- *)
 
-Theorem well_formed_dfg_update_proof:
+Theorem well_formed_dfg_update:
   !dfg inst v.
     well_formed_dfg dfg /\ MEM v inst.inst_outputs
     ==> well_formed_dfg (dfg with dfg_defs := dfg.dfg_defs |+ (v, inst))
@@ -22,7 +22,7 @@ Proof
   Cases_on `v' = v` >> fs[]
 QED
 
-Theorem dfg_add_defs_well_formed_proof:
+Theorem dfg_add_defs_well_formed:
   !dfg vs inst.
     well_formed_dfg dfg /\ EVERY (\v. MEM v inst.inst_outputs) vs
     ==> well_formed_dfg (dfg_add_defs dfg vs inst)
@@ -30,85 +30,85 @@ Proof
   Induct_on `vs` >> rw[dfg_add_defs_def] >>
   first_x_assum match_mp_tac >>
   conj_tac >- (
-    match_mp_tac well_formed_dfg_update_proof >>
+    match_mp_tac well_formed_dfg_update >>
     simp[]
   ) >>
   simp[]
 QED
 
-Theorem dfg_add_use_get_def_proof:
+Theorem dfg_add_use_get_def:
   !dfg v inst u.
     dfg_get_def (dfg_add_use dfg u inst) v = dfg_get_def dfg v
 Proof
   rw[dfg_add_use_def, dfg_get_def_def]
 QED
 
-Theorem dfg_add_uses_get_def_proof:
+Theorem dfg_add_uses_get_def:
   !dfg vs inst v.
     dfg_get_def (dfg_add_uses dfg vs inst) v = dfg_get_def dfg v
 Proof
   Induct_on `vs` >> rw[dfg_add_uses_def] >>
-  rw[dfg_add_use_get_def_proof]
+  rw[dfg_add_use_get_def]
 QED
 
-Theorem dfg_add_uses_preserve_wf_proof:
+Theorem dfg_add_uses_preserve_wf:
   !dfg vs inst.
     well_formed_dfg dfg ==> well_formed_dfg (dfg_add_uses dfg vs inst)
 Proof
   rw[well_formed_dfg_def] >>
   qpat_x_assum `dfg_get_def (dfg_add_uses dfg vs inst) v = SOME inst'` mp_tac >>
-  simp[dfg_add_uses_get_def_proof] >>
+  simp[dfg_add_uses_get_def] >>
   metis_tac[well_formed_dfg_def]
 QED
 
-Theorem well_formed_dfg_update_ids_proof:
+Theorem well_formed_dfg_update_ids:
   !dfg ids. well_formed_dfg dfg ==> well_formed_dfg (dfg with dfg_ids := ids)
 Proof
   rw[well_formed_dfg_def, dfg_get_def_def]
 QED
 
-Theorem dfg_add_inst_well_formed_proof:
+Theorem dfg_add_inst_well_formed:
   !dfg inst.
     well_formed_dfg dfg ==> well_formed_dfg (dfg_add_inst dfg inst)
 Proof
   rw[dfg_add_inst_def] >>
-  match_mp_tac well_formed_dfg_update_ids_proof >>
-  match_mp_tac dfg_add_defs_well_formed_proof >>
+  match_mp_tac well_formed_dfg_update_ids >>
+  match_mp_tac dfg_add_defs_well_formed >>
   conj_tac >- (
-    match_mp_tac dfg_add_uses_preserve_wf_proof >>
+    match_mp_tac dfg_add_uses_preserve_wf >>
     simp[]
   ) >>
   simp[EVERY_MEM]
 QED
 
-Theorem dfg_build_insts_rev_well_formed_proof:
+Theorem dfg_build_insts_rev_well_formed:
   !dfg insts.
     well_formed_dfg dfg ==> well_formed_dfg (dfg_build_insts_rev dfg insts)
 Proof
   Induct_on `insts` >> rw[dfg_build_insts_rev_def] >>
   first_x_assum match_mp_tac >>
-  metis_tac[dfg_add_inst_well_formed_proof]
+  metis_tac[dfg_add_inst_well_formed]
 QED
 
-Theorem dfg_build_insts_well_formed_proof:
+Theorem dfg_build_insts_well_formed:
   !insts. well_formed_dfg (dfg_build_insts insts)
 Proof
   rw[dfg_build_insts_def, dfg_empty_def] >>
-  match_mp_tac dfg_build_insts_rev_well_formed_proof >>
+  match_mp_tac dfg_build_insts_rev_well_formed >>
   rw[well_formed_dfg_def, dfg_get_def_def, dfg_empty_def]
 QED
 
-Theorem dfg_build_function_well_formed_proof:
+Theorem dfg_build_function_well_formed:
   !fn. well_formed_dfg (dfg_build_function fn)
 Proof
-  rw[dfg_build_function_def, dfg_build_insts_well_formed_proof]
+  rw[dfg_build_function_def, dfg_build_insts_well_formed]
 QED
 
 (* --------------------------------------------------------------------------
    Def-source correctness
    -------------------------------------------------------------------------- *)
 
-Theorem dfg_add_defs_lookup_proof:
+Theorem dfg_add_defs_lookup:
   !dfg vs inst v inst'.
     dfg_get_def (dfg_add_defs dfg vs inst) v = SOME inst' ==>
     dfg_get_def dfg v = SOME inst' \/ (inst' = inst /\ MEM v vs)
@@ -121,7 +121,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dfg_add_inst_get_def_proof:
+Theorem dfg_add_inst_get_def:
   !dfg inst0 v.
     dfg_get_def (dfg_add_inst dfg inst0) v =
     dfg_get_def
@@ -132,15 +132,15 @@ Proof
   rw[dfg_add_inst_def, dfg_get_def_def]
 QED
 
-Theorem dfg_add_inst_lookup_proof:
+Theorem dfg_add_inst_lookup:
   !dfg inst0 v inst.
     dfg_get_def (dfg_add_inst dfg inst0) v = SOME inst ==>
     dfg_get_def dfg v = SOME inst \/ (inst = inst0 /\ MEM v inst0.inst_outputs)
 Proof
-  metis_tac[dfg_add_inst_get_def_proof, dfg_add_defs_lookup_proof, dfg_add_uses_get_def_proof]
+  metis_tac[dfg_add_inst_get_def, dfg_add_defs_lookup, dfg_add_uses_get_def]
 QED
 
-Theorem dfg_build_insts_rev_correct_proof:
+Theorem dfg_build_insts_rev_correct:
   !insts dfg v inst.
     dfg_get_def (dfg_build_insts_rev dfg insts) v = SOME inst ==>
     dfg_get_def dfg v = SOME inst \/
@@ -149,19 +149,19 @@ Proof
   Induct_on `insts` >> rw[dfg_build_insts_rev_def] >>
   first_x_assum drule >>
   disch_then strip_assume_tac >- (
-    drule dfg_add_inst_lookup_proof >> simp[] >>
+    drule dfg_add_inst_lookup >> simp[] >>
     strip_tac >> metis_tac[]
   ) >>
   metis_tac[]
 QED
 
-Theorem dfg_build_insts_correct_proof:
+Theorem dfg_build_insts_correct:
   !insts v inst.
     dfg_get_def (dfg_build_insts insts) v = SOME inst ==>
     MEM inst insts /\ MEM v inst.inst_outputs
 Proof
   rw[dfg_build_insts_def] >>
-  drule (Q.SPECL [`REVERSE insts`, `dfg_empty`, `v`, `inst`] dfg_build_insts_rev_correct_proof) >>
+  drule (Q.SPECL [`REVERSE insts`, `dfg_empty`, `v`, `inst`] dfg_build_insts_rev_correct) >>
   simp[dfg_get_def_def, dfg_empty_def] >>
   metis_tac[MEM_REVERSE]
 QED
@@ -173,7 +173,7 @@ Theorem dfg_build_function_correct_proof:
     MEM v inst.inst_outputs /\ MEM inst (fn_insts fn)
 Proof
   rw[dfg_build_function_def] >>
-  drule dfg_build_insts_correct_proof >>
+  drule dfg_build_insts_correct >>
   simp[]
 QED
 
@@ -429,7 +429,7 @@ Theorem dfg_add_inst_defs_preserve[local]:
 Proof
   rw[dfg_add_inst_def, LET_THM] >>
   `dfg_get_def (dfg_add_uses dfg (operand_vars inst0.inst_operands) inst0) v =
-   SOME inst'` by metis_tac[dfg_add_uses_get_def_proof] >>
+   SOME inst'` by metis_tac[dfg_add_uses_get_def] >>
   drule dfg_add_defs_preserve >>
   rw[dfg_get_def_def]
 QED
@@ -532,7 +532,7 @@ Proof
   qexists_tac `inst` >> simp[MEM_REVERSE]
 QED
 
-Theorem dfg_build_function_ids_sound_proof:
+Theorem dfg_build_function_ids_sound:
   !fn id inst.
     dfg_get_inst_by_id (dfg_build_function fn) id = SOME inst ==>
     MEM inst (fn_insts fn)
@@ -543,7 +543,7 @@ Proof
   metis_tac[MEM_REVERSE]
 QED
 
-Theorem dfg_build_function_ids_complete_proof:
+Theorem dfg_build_function_ids_complete:
   !fn inst.
     MEM inst (fn_insts fn) ==>
     ?inst'. dfg_get_inst_by_id (dfg_build_function fn) inst.inst_id = SOME inst'
@@ -579,7 +579,7 @@ End
    Key use: at an intermediate block point where dfg_assigns_sound may
    not hold globally, we can still use normalize_operand_eval provided
    the specific variables in the normalize chain satisfy the equality. *)
-Theorem normalize_operand_eval_restricted_proof:
+Theorem normalize_operand_eval_restricted:
   !dfg visited op s.
     (!v inst. ~MEM v visited ==>
        FLOOKUP dfg.dfg_defs v = SOME inst /\
@@ -627,6 +627,6 @@ Theorem normalize_operand_eval_proof:
     eval_operand (normalize_operand dfg visited op) s = eval_operand op s
 Proof
   rpt strip_tac >>
-  irule normalize_operand_eval_restricted_proof >>
+  irule normalize_operand_eval_restricted >>
   fs[dfg_assigns_sound_def]
 QED

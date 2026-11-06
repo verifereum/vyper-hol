@@ -64,12 +64,12 @@ QED
 Theorem gas_step_stack[local]:
   (FST (HD (SND (step gas_counter_evm)).contexts)).stack = [98w]
 Proof
-  simp[gas_counter_evm_def, gas_counter_asm_def, asm_oracle_initial_def,
-       make_asm_call_state_def, empty_call_context_def, empty_tx_context_def,
-       empty_block_context_def, asm_to_tx_params_def, make_sub_tx_def,
-       make_rollback_def, initial_context_def, initial_msg_params_def,
-       transfer_value_def, empty_return_destination_def] >>
-  gas_eval_tac
+  simp[gas_counter_step, gas_counter_evm_def, gas_counter_asm_def,
+       asm_oracle_initial_def, make_asm_call_state_def,
+       empty_call_context_def, empty_tx_context_def, empty_block_context_def,
+       asm_to_tx_params_def, make_sub_tx_def, make_rollback_def,
+       initial_context_def, initial_msg_params_def,
+       transfer_value_def, empty_return_destination_def]
 QED
 
 Theorem gas_step_unrelated[local]:

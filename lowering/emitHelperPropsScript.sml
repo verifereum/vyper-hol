@@ -87,7 +87,7 @@ Theorem step_SIGNEXTEND:
     step_inst_base (mk_inst id SIGNEXTEND [op1; op2] [out]) ss =
       OK (update_var out (sign_extend v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_EQ:
@@ -97,7 +97,7 @@ Theorem step_EQ:
     step_inst_base (mk_inst id EQ [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (v1 = v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SHR:
@@ -107,7 +107,7 @@ Theorem step_SHR:
     step_inst_base (mk_inst id SHR [op1; op2] [out]) ss =
       OK (update_var out (word_lsr v2 (w2n v1)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SHL:
@@ -117,7 +117,7 @@ Theorem step_SHL:
     step_inst_base (mk_inst id SHL [op1; op2] [out]) ss =
       OK (update_var out (word_lsl v2 (w2n v1)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_ISZERO:
@@ -126,7 +126,7 @@ Theorem step_ISZERO:
     step_inst_base (mk_inst id ISZERO [op1] [out]) ss =
       OK (update_var out (bool_to_word (v1 = 0w)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure1_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure1_ok >> rw[]
 QED
 
 Theorem step_ADD:
@@ -136,7 +136,7 @@ Theorem step_ADD:
     step_inst_base (mk_inst id ADD [op1; op2] [out]) ss =
       OK (update_var out (v1 + v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_MUL:
@@ -146,7 +146,7 @@ Theorem step_MUL:
     step_inst_base (mk_inst id MUL [op1; op2] [out]) ss =
       OK (update_var out (v1 * v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_GT:
@@ -168,7 +168,7 @@ Theorem step_LT:
     step_inst_base (mk_inst id LT [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (w2n v1 < w2n v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_AND:
@@ -178,7 +178,7 @@ Theorem step_AND:
     step_inst_base (mk_inst id AND [op1; op2] [out]) ss =
       OK (update_var out (word_and v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SUB:
@@ -188,7 +188,7 @@ Theorem step_SUB:
     step_inst_base (mk_inst id SUB [op1; op2] [out]) ss =
       OK (update_var out (v1 - v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SLT:
@@ -198,7 +198,7 @@ Theorem step_SLT:
     step_inst_base (mk_inst id SLT [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (word_lt v1 v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SGT:
@@ -208,7 +208,7 @@ Theorem step_SGT:
     step_inst_base (mk_inst id SGT [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (word_gt v1 v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_XOR:
@@ -218,7 +218,7 @@ Theorem step_XOR:
     step_inst_base (mk_inst id XOR [op1; op2] [out]) ss =
       OK (update_var out (word_xor v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SAR:
@@ -228,7 +228,7 @@ Theorem step_SAR:
     step_inst_base (mk_inst id SAR [op1; op2] [out]) ss =
       OK (update_var out (word_asr v2 (w2n v1)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_NOT:
@@ -237,7 +237,7 @@ Theorem step_NOT:
     step_inst_base (mk_inst id NOT [op1] [out]) ss =
       OK (update_var out (word_1comp v1) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure1_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure1_ok >> rw[]
 QED
 
 Theorem step_OR:
@@ -247,7 +247,7 @@ Theorem step_OR:
     step_inst_base (mk_inst id OR [op1; op2] [out]) ss =
       OK (update_var out (word_or v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_Div:
@@ -257,7 +257,7 @@ Theorem step_Div:
     step_inst_base (mk_inst id Div [op1; op2] [out]) ss =
       OK (update_var out (safe_div v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_Mod:
@@ -267,7 +267,7 @@ Theorem step_Mod:
     step_inst_base (mk_inst id Mod [op1; op2] [out]) ss =
       OK (update_var out (safe_mod v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SDIV:
@@ -277,7 +277,7 @@ Theorem step_SDIV:
     step_inst_base (mk_inst id SDIV [op1; op2] [out]) ss =
       OK (update_var out (safe_sdiv v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_SMOD:
@@ -287,7 +287,7 @@ Theorem step_SMOD:
     step_inst_base (mk_inst id SMOD [op1; op2] [out]) ss =
       OK (update_var out (safe_smod v1 v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 (* ===== Memory Opcodes ===== *)
 
@@ -1436,7 +1436,8 @@ Theorem step_CALLDATALOAD:
         (let data = ss.vs_call_ctx.cc_calldata in
          word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ss)
 Proof
-  rpt strip_tac >> simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rpt strip_tac >> simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[exec_read1_def]
 QED
 
 Theorem step_SSTORE:
@@ -2057,7 +2058,7 @@ Theorem step_OFFSET:
     step_inst_base (mk_inst id OFFSET [op1; op2] [out]) ss =
       OK (update_var out (v1 + v2) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[step_inst_base_opcode_eqs] >> irule exec_pure2_ok >> rw[]
 QED
 
 Theorem emit_op_OFFSET_correct:

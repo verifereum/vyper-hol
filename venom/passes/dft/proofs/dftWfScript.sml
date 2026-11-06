@@ -1083,17 +1083,6 @@ Proof
   simp[]
 QED
 
-Triviality foldl_add_mem:
-  !prev init x.
-    MEM x (FOLDL (\ds (p:instruction). if MEM p ds then ds else p :: ds)
-             init prev) ==>
-    MEM x init \/ MEM x prev
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `MEM h init` >> gvs[] >>
-  first_x_assum drule >> strip_tac >> gvs[]
-QED
-
 (* FOLDL lemma for add_deps_from_barrier backward property *)
 Triviality add_deps_from_barrier_foldl_backward:
   !to_process prefix nps prev_insts acc.

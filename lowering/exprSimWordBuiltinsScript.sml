@@ -381,7 +381,7 @@ Proof
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   conj_tac >> strip_tac >> simp[] >>
   simp[Once run_inst_seq_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure3_def] >>
@@ -401,7 +401,7 @@ Proof
   strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   simp[run_inst_seq_def, eval_operand_update_var]
 QED
 
@@ -607,15 +607,15 @@ Proof
      Cases_on `va = 0w` >> simp[safe_div_def, arithmeticTheory.MULT_COMM]) >>
   conj_tac >> strip_tac >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``MUL``, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``Div``, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_update_not_fresh] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``EQ``, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``ISZERO``, mk_inst_def, exec_pure1_def] >>
   simp[] >>
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``OR``, mk_inst_def, exec_pure2_def,

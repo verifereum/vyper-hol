@@ -6,16 +6,16 @@
  *   bp_handle_inst_no_output_unchanged_proof — no-output identity
  *   bp_ptr_sound_init_proof               — FEMPTY is trivially sound
  *   bp_handle_inst_sound_proof            — transfer preserves bp_ptr_sound
- *   bp_process_block_sound_proof          — block-level soundness
+ *   bp_process_block_sound          — block-level soundness
  *   bp_ptr_from_op_sound_proof            — singleton pointer ⇒ exact address
  *   bp_segment_from_ops_sound_proof       — alloca-backed mem_loc soundness
  *   bp_normalize_covers, bp_normalize_matches — normalisation keeps matches
- *   bp_eval_phis_sound_proof              — PHI prefix preserves bp_ptr_sound
- *   bp_handle_inst_phi_stable_proof       — stable PHI covers its operands
+ *   bp_eval_phis_sound              — PHI prefix preserves bp_ptr_sound
+ *   bp_handle_inst_phi_stable       — stable PHI covers its operands
  *   bp_phis_closed_eval_phis_proof        — closed, stable PHIs preserve
  *                                           soundness
- *   bp_one_pass_unchanged_stable_proof    — unchanged pass ⇒ stable insts
- *   bp_derives_complete_proof             — derived variables list the alloca
+ *   bp_one_pass_unchanged_stable    — unchanged pass ⇒ stable insts
+ *   bp_derives_complete             — derived variables list the alloca
  *)
 
 Theory basePtrProofs
@@ -1126,7 +1126,7 @@ QED
 Finalise bp_process_block_sound_gen;
 
 (* Block-level: processing a block preserves soundness through exec_block. *)
-Theorem bp_process_block_sound_proof:
+Theorem bp_process_block_sound:
   ∀bp bb c bp' fuel ctx s s'.
     bp_ptr_sound bp s ∧
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
@@ -1175,7 +1175,7 @@ QED
    blocks entered past their PHI prefix.  At block entry, each PHI output
    takes the value of the operand from the actual predecessor.  This is
    sound when the result covers every operand's pointers, which holds
-   once the analysis has converged (bp_handle_inst_phi_stable_proof).
+   once the analysis has converged (bp_handle_inst_phi_stable).
    =================================================================== *)
 
 (* After eval_phis, a variable keeps its value or holds the value of the
@@ -1197,7 +1197,7 @@ Proof
   rw[] >> metis_tac[]
 QED
 
-Theorem bp_eval_phis_sound_proof:
+Theorem bp_eval_phis_sound:
   ∀insts bp s s'.
     bp_ptr_sound bp s ∧
     eval_phis s insts = OK s' ∧
@@ -1234,7 +1234,7 @@ Proof
 QED
 
 (* Once a PHI is stable, its result covers the pointers of every operand. *)
-Theorem bp_handle_inst_phi_stable_proof:
+Theorem bp_handle_inst_phi_stable:
   ∀bp inst out v p.
     FST (bp_handle_inst bp inst) = F ∧
     inst.inst_opcode = PHI ∧ inst_output inst = SOME out ∧
@@ -1272,7 +1272,7 @@ Theorem bp_phis_closed_eval_phis_proof:
     bp_ptr_sound bp s'
 Proof
   rpt strip_tac >>
-  irule bp_eval_phis_sound_proof >>
+  irule bp_eval_phis_sound >>
   qexistsl_tac [`insts`, `s`] >> simp[] >>
   rpt strip_tac >>
   `inst_wf inst ∧ (∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
@@ -1281,7 +1281,7 @@ Proof
   gvs[venomWfTheory.inst_wf_def]
   >~ [`bp_get_ptrs bp v ≠ []`]
   >- (gvs[bp_phis_closed_def] >> metis_tac[]) >>
-  irule bp_handle_inst_phi_stable_proof >>
+  irule bp_handle_inst_phi_stable >>
   qexistsl_tac [`inst`, `v`] >> simp[venomInstTheory.inst_output_def] >>
   metis_tac[MEM]
 QED
@@ -1501,7 +1501,7 @@ QED
 
 (* A pass that reports no change leaves the instructions of every block it
    visits stable. *)
-Theorem bp_one_pass_unchanged_stable_proof:
+Theorem bp_one_pass_unchanged_stable:
   ∀fn order bp.
     FST (bp_one_pass fn order bp) = F ⇒
     ∀lbl bb inst.
@@ -1536,7 +1536,7 @@ Proof
 QED
 
 (* Every variable derived through stable instructions lists the allocation. *)
-Theorem bp_derives_complete_proof:
+Theorem bp_derives_complete:
   ∀bp P v a.
     bp_derives bp P v a ⇒
     (∀inst. P inst ⇒ FST (bp_handle_inst bp inst) = F) ⇒

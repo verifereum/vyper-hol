@@ -2,7 +2,9 @@
  * Base Pointer Analysis — Properties
  *
  * Public API for base pointer analysis consumers.
- * Re-exports proven properties from basePtrProofs via ACCEPT_TAC.
+ * Re-exports some results from basePtrProofs via ACCEPT_TAC; the rest
+ * (bp_process_block_sound, bp_eval_phis_sound, bp_handle_inst_phi_stable,
+ * bp_derives_complete, bp_one_pass_unchanged_stable) live only there.
  * Soundness definitions (ptr_matches_var, bp_ptr_sound, bp_ptrs_bounded)
  * are in basePtrDefs.
  *
@@ -13,21 +15,13 @@
  * Soundness:
  *   bp_ptr_sound_init         — FEMPTY is trivially sound
  *   bp_handle_inst_sound      — transfer function preserves bp_ptr_sound
- *   bp_process_block_sound    — block-level soundness preservation
  *   bp_ptr_from_op_sound      — singleton pointer ⇒ exact runtime address
  *   bp_segment_from_ops_sound — alloca-backed mem_loc ⇒ runtime address
  *   bp_segment_from_ops_lit_offset — literal offset mem_loc (trivial)
- *   bp_eval_phis_sound        — PHI prefix preserves soundness when every
- *                               PHI result covers its operands' pointers
- *   bp_handle_inst_phi_stable — a stable PHI result covers its operands
  *   bp_phis_closed_eval_phis  — eval_phis preserves soundness under
  *                               bp_phis_closed when tracked PHIs are stable
  *
  * Completeness:
- *   bp_derives_complete       — a variable derived from an allocation
- *                               through stable instructions lists it
- *   bp_one_pass_unchanged_stable — a pass that reports no change leaves
- *                               the instructions it visits stable
  *   bp_converged_complete     — completeness of a converged analysis
  *)
 
@@ -104,41 +98,6 @@ Theorem bp_handle_inst_sound:
 Proof ACCEPT_TAC basePtrProofsTheory.bp_handle_inst_sound_proof
 QED
 
-Theorem bp_process_block_sound:
-  ∀bp bb c bp' fuel ctx s s'.
-    bp_ptr_sound bp s ∧
-    bp_process_block bp bb.bb_instructions = (c, bp') ∧
-    exec_block fuel ctx bb s = OK s' ∧
-    s.vs_inst_idx = 0 ∧
-    bb_well_formed bb ∧
-    (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
-    ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
-    (∀inst out. MEM inst bb.bb_instructions ∧
-               inst_output inst = SOME out ⇒
-               bp_get_ptrs bp out = []) ∧
-    (∀inst. MEM inst bb.bb_instructions ∧
-           inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
-    (* Inst ids globally unique across context — ensures ALLOCAs in this
-       block and in INVOKE callees don't collide with tracked alloca ids *)
-    ctx_inst_ids_distinct ctx ∧
-    (* ALLOCA freshness: inst_ids don't collide with initial bp pointers *)
-    (∀inst v aid off. MEM inst bb.bb_instructions ∧
-       inst.inst_opcode = ALLOCA ∧
-       MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
-       aid ≠ inst.inst_id) ∧
-    (* ALLOCA inst_ids within the block are pairwise distinct *)
-    ALL_DISTINCT (MAP (λi. i.inst_id)
-      (FILTER (λi. i.inst_opcode = ALLOCA) bb.bb_instructions)) ∧
-    (* PHI sources that are defined must have tracked ptrs *)
-    (∀inst v. MEM inst bb.bb_instructions ∧
-       inst.inst_opcode = PHI ∧
-       MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
-       IS_SOME (lookup_var v s) ⇒
-       bp_get_ptrs bp v ≠ []) ⇒
-    bp_ptr_sound bp' s'
-Proof ACCEPT_TAC basePtrProofsTheory.bp_process_block_sound_proof
-QED
-
 Theorem bp_ptr_from_op_sound:
   ∀bp v aid off s.
     bp_ptr_sound bp s ∧
@@ -176,35 +135,6 @@ Proof
   simp[bp_segment_from_ops_def, LET_THM]
 QED
 
-Theorem bp_eval_phis_sound:
-  ∀insts bp s s'.
-    bp_ptr_sound bp s ∧
-    eval_phis s insts = OK s' ∧
-    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
-       phi_well_formed inst.inst_operands) ∧
-    (∀inst out v.
-       MEM inst insts ∧ inst.inst_opcode = PHI ∧
-       inst.inst_outputs = [out] ∧ bp_get_ptrs bp out ≠ [] ∧
-       MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
-       IS_SOME (lookup_var v s) ⇒
-       bp_get_ptrs bp v ≠ [] ∧
-       ∀p. MEM p (bp_get_ptrs bp v) ⇒
-         ∃q. MEM q (bp_get_ptrs bp out) ∧
-             (q = p ∨ q = Ptr (ptr_base p) NONE)) ⇒
-    bp_ptr_sound bp s'
-Proof ACCEPT_TAC basePtrProofsTheory.bp_eval_phis_sound_proof
-QED
-
-Theorem bp_handle_inst_phi_stable:
-  ∀bp inst out v p.
-    FST (bp_handle_inst bp inst) = F ∧
-    inst.inst_opcode = PHI ∧ inst_output inst = SOME out ∧
-    MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
-    MEM p (bp_get_ptrs bp v) ⇒
-    ∃q. MEM q (bp_get_ptrs bp out) ∧ (q = p ∨ q = Ptr (ptr_base p) NONE)
-Proof ACCEPT_TAC basePtrProofsTheory.bp_handle_inst_phi_stable_proof
-QED
-
 Theorem bp_phis_closed_eval_phis:
   ∀bp fn insts s s'.
     bp_phis_closed bp fn ∧
@@ -217,24 +147,6 @@ Theorem bp_phis_closed_eval_phis:
     eval_phis s insts = OK s' ⇒
     bp_ptr_sound bp s'
 Proof ACCEPT_TAC basePtrProofsTheory.bp_phis_closed_eval_phis_proof
-QED
-
-Theorem bp_derives_complete:
-  ∀bp P v a.
-    bp_derives bp P v a ⇒
-    (∀inst. P inst ⇒ FST (bp_handle_inst bp inst) = F) ⇒
-    ∃off. MEM (Ptr a off) (bp_get_ptrs bp v)
-Proof ACCEPT_TAC basePtrProofsTheory.bp_derives_complete_proof
-QED
-
-Theorem bp_one_pass_unchanged_stable:
-  ∀fn order bp.
-    FST (bp_one_pass fn order bp) = F ⇒
-    ∀lbl bb inst.
-      MEM lbl order ∧ FIND (λbb. bb.bb_label = lbl) fn.fn_blocks = SOME bb ∧
-      MEM inst bb.bb_instructions ⇒
-      FST (bp_handle_inst bp inst) = F
-Proof ACCEPT_TAC basePtrProofsTheory.bp_one_pass_unchanged_stable_proof
 QED
 
 (* Completeness of a converged analysis: when one more pass over the blocks
