@@ -206,18 +206,18 @@ Proof
 QED
 
 Theorem for_alloca_scalar_write_separation:
-  !ctx func cenv cx es s inst dst off cap.
+  !ctx func cenv cx es s inst dst off cap len.
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [dst] /\
   not_local_ptr cenv es.scopes dst /\
-  FLOOKUP s.vs_allocas inst.inst_id = SOME (off,cap) /\ 32 <= cap ==>
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (off,cap) /\ len <= cap ==>
   !name entry p sz.
     lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     val_wf entry.type entry.value /\
     !b i. lookup_var p s = SOME b /\
       w2n b <= i /\ i < w2n b + val_footprint entry.type entry.value ==>
-      i < off \/ off+32 <= i
+      i < off \/ off+len <= i
 Proof
   rpt gen_tac >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by

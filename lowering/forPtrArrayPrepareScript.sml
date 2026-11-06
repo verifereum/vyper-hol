@@ -144,3 +144,58 @@ Proof
   qexistsl_tac [`G`, `tf`, `sf`] >> fs[arithmeticTheory.ADD_COMM] >>
   first_assum ACCEPT_TAC
 QED
+
+(* The recorded allocation separates the whole element write, even on a
+   re-executed site. Install the new binding only after the finite copy. *)
+Theorem for_array_element_install_checked:
+  compile_iter_elem_copy cenv (Var src) (Var dst) stride LocMemory F ty ty
+    sa = ((),sb) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  ptr_covers G tn src s (type_memory_size tv) /\
+  ptr_covers G tn dst s cap /\ ~ctx_has_dalloca ctx /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n a) m) /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
+  inst.inst_outputs = [dst] /\ not_local_ptr cenv es.scopes dst /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,cap) /\
+  type_memory_size tv <= cap /\ local_ptrs_reserved cenv sa /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) \/
+    cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var dst) cap) ==>
+  ?gf tf sf.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s gf tf /\
+    run_inst_seq (emitted_insts sa sb) s = OK sf /\
+    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
+      gf tf sf /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `ptr_covers G tn dst s (type_memory_size tv)` by
+    (gvs[ptr_covers_def] >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all for_array_element_copy_checked >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`gf`, `tf`, `sf`] >> simp[] >>
+  irule ghost_inv_install_after_separated_write >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      `lookup_var dst sf = lookup_var dst s /\ FLOOKUP gf dst = FLOOKUP G dst /\
+       op_taint tf (Var dst) = op_taint tn (Var dst)` by metis_tac[] >>
+      drule_all for_ptr_covers_transport >> simp[]) >>
+  qexistsl_tac [`G`, `cenv`, `{p | not_fresh_at sa p}`, `s`, `tn`,
+    `{i | w2n b <= i /\ i < w2n b + type_memory_size tv}`] >>
+  simp[] >> conj_tac >- (first_assum ACCEPT_TAC) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      simp[] >> drule_all for_alloca_scalar_write_separation >>
+      simp[arithmeticTheory.ADD_COMM, arithmeticTheory.NOT_LESS_EQUAL,
+           arithmeticTheory.NOT_LESS]) >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
