@@ -1,6 +1,6 @@
 (* Counted source certificate transport for local field updates. *)
 Theory augAssignPtrFieldCertificates
-Ancestors
+Ancestors augAssignPtrStorageCommon
   augAssignPtrFieldSource augAssignPtrLocalCertificates augAssignPtrStorageSource
   bodyPtrDefs gasSummaryComposePtr gasSummaryCompose gasOutcome
   gasSummary gasCount gasContext gasExemptCert fragGasMode fragGasPath fragGasPathPtr

@@ -1,6 +1,6 @@
 (* Scalar storage/transient augmented-assignment pointer pipeline. *)
 Theory augAssignPtrToplevelCase
-Ancestors
+Ancestors augAssignPtrStorageCommon
   vyperScopePreservation venomExecSemantics venomInst venomState
   stmtSimAssignStorage vyperStorageBackend augAssignPtrStorageStore
   vyperTypeBuiltins augAssignPtrOperator vyperTypeSystem exprReasonOperand exprOperandVar exprSimHyps

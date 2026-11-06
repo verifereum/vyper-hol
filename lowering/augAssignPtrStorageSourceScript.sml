@@ -1,6 +1,8 @@
 (* Declared-storage source representation at the initial AugAssign load. *)
 Theory augAssignPtrStorageSource
 Ancestors
+  augAssignPtrStorageCommon augAssignPtrStoragePlaceSource
+  augAssignPtrStoragePlaceCertificates
   exprSimTopLevelProps accountsRelProps vyperStorageLayoutSafety
   vyperLookupStorage exprSimDefs stmtSimDefs loweringPosts codegenRel
   vyperState vyperInterpreter vfmState compileEnv exprLoweringProps
@@ -53,18 +55,6 @@ Proof
   gen_tac >> irule (cj 1 eval_target_place_toplevel) >> metis_tac[]
 QED
 
-Theorem read_storage_slot_gas_obs_ptr:
-  read_storage_slot cx tr slot tv es = (res,ee) ==>
-  read_storage_slot cx tr slot tv (es with gas_obs := gs) =
-    (res,ee with gas_obs := gs)
-Proof
-  Cases_on `tr` >>
-  simp[read_storage_slot_def, get_storage_backend_def, get_accounts_def,
-       get_transient_storage_def, bind_def, return_def, lift_option_def,
-       AllCaseEqs()] >>
-  qmatch_goalsub_abbrev_tac `decode_value storage offset tv` >>
-  Cases_on `decode_value storage offset tv` >> simp[return_def, raise_def] >> rpt strip_tac >> gvs[]
-QED
 
 Theorem augassign_toplevel_rhs_exempt_ptr:
   read_storage_slot cx tr slot tvt es = (INL v0,es) /\
@@ -80,30 +70,8 @@ Theorem augassign_toplevel_rhs_exempt_ptr:
       (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (return ()))
     (es,s0) marks (err,ee) (leaf,fin)
 Proof
-  strip_tac >> drule gas_marked_exec_ptr_exec >> strip_tac >>
-  `ignore_bind (eval_stmt cx
-     (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (return ()) =
-   do p <- eval_target_place cx (TopLevelNameTarget (src,id));
-      cur <- read_place cx p;
-      ptv <- place_type_value cx p;
-      v <- bind (eval_expr cx e) (read_result cx);
-      r <- lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-        ptv bop cur v);
-      ignore_bind (write_place cx p r) (return ()) od` by
-    simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
-  pop_assum SUBST1_TAC >>
-  drule gas_exempt_cert_bind_place >> simp[] >> disch_then irule >>
-  `gas_marked_exec F (ctx,func) (read_place cx (StoragePlace tr slot tvt))
-     (es with gas_obs := [],t) [] (INL v0)
-     (es with gas_obs := []) (OK t)` by
-    (simp[gas_marked_exec_def, gas_explicit_def] >> conj_tac
-     >- (gen_tac >> simp[read_place_def] >>
-         metis_tac[read_storage_slot_gas_obs_ptr]) >>
-     simp[gas_marked_path_def, gas_path_rules]) >>
-  drule gas_exempt_cert_bind_value >> simp[] >> disch_then irule >>
-  simp[place_type_value_def, bind_return] >>
-  irule gas_exempt_cert_error_value >> simp[]
+  strip_tac >> irule augassign_storage_place_exempt_ptr >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem eval_augassign_toplevel_forced_ptr:
@@ -121,10 +89,8 @@ Theorem eval_augassign_toplevel_forced_ptr:
 Proof
   strip_tac >> drule_all eval_target_place_toplevel >>
   disch_then (qspec_then `es` strip_assume_tac) >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, read_place_def,
-       write_place_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,st)` >>
-  Cases_on `raw` >> simp[bind_def]
+  irule eval_augassign_storage_place_ptr >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem augassign_toplevel_rhs_exception_ptr:
@@ -136,8 +102,10 @@ Theorem augassign_toplevel_rhs_exception_ptr:
   bind (eval_expr cx e) (read_result cx) es = (INR ex,ee) ==>
   eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es = (INR ex,ee)
 Proof
-  strip_tac >> drule_all eval_augassign_toplevel_forced_ptr >>
-  disch_then (qspecl_then [`ty`, `e`, `bop`] mp_tac) >> simp[Once bind_def]
+  strip_tac >> drule_all eval_target_place_toplevel >>
+  disch_then (qspec_then `es` strip_assume_tac) >>
+  irule augassign_storage_place_exception_ptr >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem augassign_toplevel_rhs_normal_ptr:
@@ -152,22 +120,12 @@ Theorem augassign_toplevel_rhs_normal_ptr:
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
     tvt bop v0 v)) (write_storage_slot cx tr (n2w slot) tvt) ee
 Proof
-  strip_tac >> drule_all eval_augassign_toplevel_forced_ptr >>
-  disch_then (qspecl_then [`ty`, `e`, `bop`] mp_tac) >>
-  simp[Once bind_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  strip_tac >> drule_all eval_target_place_toplevel >>
+  disch_then (qspec_then `es` strip_assume_tac) >>
+  irule augassign_storage_place_normal_ptr >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem gas_marked_exec_ptr_zero_prefix:
-  gas_path_ptr D 0 ctx func PG G tn s0 0 H tm (OK t) /\
-  gas_marked_exec_ptr D (ctx,func) PG source
-    (es with gas_obs := [],t,H,tm) marks res ee J un r ==>
-  gas_marked_exec_ptr D (ctx,func) PG source
-    (es,s0,G,tn) marks res ee J un r
-Proof
-  strip_tac >> drule gas_path_ptr_ok_suffix >> simp[] >> strip_tac >>
-  gvs[gas_marked_exec_ptr_def] >>
-  metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
-QED
 
 Theorem augassign_toplevel_rhs_exception_exec_ptr:
   get_module_code cx src = SOME ts /\
@@ -183,10 +141,13 @@ Theorem augassign_toplevel_rhs_exception_exec_ptr:
     (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
     (es,s0,G,tn) marks (INR ex) ee J un r
 Proof
-  strip_tac >> drule_all gas_marked_exec_ptr_zero_prefix >>
-  simp[gas_marked_exec_ptr_def] >> strip_tac >> simp[] >>
-  gen_tac >> irule augassign_toplevel_rhs_exception_ptr >> simp[] >>
-  qexists_tac `v0` >> metis_tac[read_storage_slot_gas_obs_ptr]
+  strip_tac >>
+  `!gs. eval_target_place cx (TopLevelNameTarget (src,id))
+      (es with gas_obs := gs) =
+      (INL (StoragePlace tr (n2w slot) tvt),es with gas_obs := gs)` by
+    (gen_tac >> drule_all eval_target_place_toplevel >>
+     disch_then (qspec_then `es with gas_obs := gs` mp_tac) >> simp[]) >>
+  drule_all augassign_storage_place_exception_exec_ptr >> simp[]
 QED
 
 Theorem augassign_toplevel_rhs_normal_exec_ptr:
@@ -208,18 +169,13 @@ Theorem augassign_toplevel_rhs_normal_exec_ptr:
     (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
     (es,s0,G,tn) marks res fin Hfin uk r
 Proof
-  strip_tac >> drule_all gas_marked_exec_ptr_zero_prefix >> strip_tac >>
-  gvs[gas_marked_exec_ptr_def] >> conj_tac
-  >- (gen_tac >>
-      qpat_x_assum `!tail. bind (eval_expr cx e) _ _ = _`
-        (qspec_then `tail` assume_tac) >>
-      `read_storage_slot cx tr (n2w slot) tvt
-         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-         (INL v0,es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)` by
-        metis_tac[read_storage_slot_gas_obs_ptr] >>
-      drule_all augassign_toplevel_rhs_normal_ptr >>
-      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >> simp[]) >>
-  metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+  strip_tac >>
+  `!gs. eval_target_place cx (TopLevelNameTarget (src,id))
+      (es with gas_obs := gs) =
+      (INL (StoragePlace tr (n2w slot) tvt),es with gas_obs := gs)` by
+    (gen_tac >> drule_all eval_target_place_toplevel >>
+     disch_then (qspec_then `es with gas_obs := gs` mp_tac) >> simp[]) >>
+  drule_all augassign_storage_place_normal_exec_ptr >> simp[]
 QED
 
 Theorem augassign_storage_continuation_exec_ptr:

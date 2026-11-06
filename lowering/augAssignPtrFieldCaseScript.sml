@@ -10,7 +10,7 @@ Ancestors
   gasSummaryComposePtr fragGasPathPtr fragGasPath gasSummary gasCount gasContext
   vyperInterpreter vyperState vyperTypeSystem vyperAST loweringPosts compileEnv
   emitHelper list rich_list stmtSimProps exprReasonOperand exprOperandVar
-  exprBopSimProps ptrDiscipline venomState venomExecSemantics vyperTypeBuiltins
+  exprBopSimProps ptrDiscipline venomState venomExecSemantics vyperTypeBuiltins stmtSimDeclMem
 
 Theorem compile_augassign_attr_local_case_ptr:
   body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\
@@ -352,12 +352,8 @@ Resume compile_augassign_attr_local_case_ptr[field_frames]:
 QED
 Resume compile_augassign_attr_local_case_ptr[normal_outcome]:
   `~block_is_terminated sb` by
-    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
-     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, emit_def, comp_return_def] >> strip_tac >>
-     Cases_on `s3.cs_current_insts` >>
-     gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
-       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+    (irule emit_void_nonterminator_open >>
+     goal_assum (drule_at Any) >> simp[venomInstTheory.is_terminator_def]) >>
   simp[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj1_tac >>
   simp[gas_summary_ptr_at_marked] >> goal_assum (drule_at Any) >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl, ghost_inv_gas_obs]

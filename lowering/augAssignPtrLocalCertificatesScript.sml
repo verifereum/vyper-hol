@@ -1,6 +1,6 @@
 (* Source certificate transport, independent of local store pointer safety. *)
 Theory augAssignPtrLocalCertificates
-Ancestors
+Ancestors augAssignPtrStorageCommon
   augAssignPtrLocalSource augAssignPtrStorageSource stmtSimAugAssign stmtSimAssignSource
   bodyPtrDefs gasSummaryComposePtr gasSummaryCompose gasOutcome
   gasSummary gasCount gasContext gasExemptCert fragGasMode fragGasPath fragGasPathPtr
