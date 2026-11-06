@@ -112,4 +112,61 @@ Proof
       Excl "consume_call_outcome_eq"]
 QED
 
+Theorem concretize_call_completion_supplement:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  concretize_supplement D tn s t /\
+  rq.cr_kind = MessageCall /\
+  rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
+  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
+  rq with <| cr_accounts := rq'.cr_accounts; cr_tStorage := rq'.cr_tStorage |> = rq' /\
+  request_agree_except D rq rq' /\ s.vs_logs = t.vs_logs /\
+  consume_call_outcome rq ro rs s = (w,post) /\
+  consume_call_outcome rq' ro' rs t = (w',post') ==>
+  w = w' /\ concretize_supplement D (step_taint inst s post tn) post post'
+Proof
+  strip_tac >>
+  qabbrev_tac `M = D with <|
+    d_stor := (\a st. if a = s.vs_call_ctx.cc_address then tn.t_stor else {});
+    d_trans := (\a st. if a = s.vs_call_ctx.cc_address then tn.t_trans else {}) |>` >>
+  `request_agree_except M rq rq'` by
+    fs[request_agree_except_def, concretize_supplement_def, Abbr `M`,
+       accounts_agree_except_def, transient_agree_except_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  Cases_on `take_outcome rq' s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  rename1 `take_outcome rq' s.vs_outcomes = (ocT,restT)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >>
+  rename1 `adopt_outcome rq oc _ = (ac,ats,alg)` >>
+  Cases_on `adopt_outcome rq' ocT (t.vs_accounts,t.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >>
+  rename1 `adopt_outcome rq' ocT _ = (acT,atsT,algT)` >>
+  drule_all call_completion_fields >> strip_tac >>
+  `take_outcome rq' t.vs_outcomes = (ocT,restT)` by metis_tac[] >>
+  `adopt_outcome rq' ocT (t.vs_accounts,t.vs_transient,t.vs_logs) = (acT,atsT,algT)` by
+    metis_tac[] >>
+  drule_all call_completion_fields >> strip_tac >>
+  drule request_agree_take_outcome >>
+  disch_then (qspec_then `s.vs_outcomes` mp_tac) >> simp[] >> strip_tac >>
+  drule_all call_completion_taint_masks >>
+  disch_then (qspec_then `tn` strip_assume_tac) >>
+  `adopt_outcome rq oc (rq.cr_accounts,rq.cr_tStorage,s.vs_logs) = (ac,ats,alg)` by
+    metis_tac[] >>
+  `adopt_outcome rq' ocT (rq'.cr_accounts,rq'.cr_tStorage,s.vs_logs) = (acT,atsT,algT)` by
+    metis_tac[] >>
+  drule_all call_adoption_reset_agreement >> strip_tac >>
+  `LIST_REL (request_agree_except D)
+    (record_request rq s.vs_requests) (record_request rq' t.vs_requests)` by
+    (irule request_agree_record_request >> fs[concretize_supplement_def]) >>
+  qpat_x_assum `consume_call_outcome rq _ _ _ = _` kall_tac >>
+  qpat_x_assum `consume_call_outcome rq' _ _ _ = _` kall_tac >>
+  qpat_x_assum `MEM _ _` kall_tac >>
+  Cases_on `~rq.cr_static /\ ~computed_precompile rq /\ s.vs_outcomes <> [] /\
+            (HD s.vs_outcomes).co_success` >>
+  gvs[concretize_supplement_def, Abbr `M`, accounts_agree_except_def,
+      transient_agree_except_def, Excl "consume_call_outcome_eq"]
+QED
+
 val _ = export_theory();
