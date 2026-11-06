@@ -2140,3 +2140,42 @@ Proof
   gvs[reorder_plan_eq_plan_steps] >>
   drule_all regional_reorder_steps_ownership >> metis_tac[]
 QED
+
+Theorem regional_live_ownership_residual:
+  !inputs pending ps opc nl iops mid dfg rops arranged v.
+    LENGTH inputs <= 16 /\ PERM pending inputs /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc inputs nl ps = (iops,mid) /\
+    reorder_plan dfg pending mid = (rops,arranged) /\
+    MEM v nl /\ (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    MEM (Var v) (stack_pop (LENGTH inputs) arranged.ps_stack) \/
+    Var v IN FDOM arranged.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  (Cases_on `MEM (Var v) inputs`
+   >- (disj1_tac >> irule regional_live_input_residual >> metis_tac[])) >>
+  `LENGTH pending = LENGTH inputs /\ ~MEM (Var v) pending` by
+    metis_tac[PERM_LENGTH, PERM_MEM_EQ] >>
+  `!x. LIST_ELEM_COUNT x pending = LIST_ELEM_COUNT x inputs` by
+    (simp[LIST_ELEM_COUNT_DEF] >> metis_tac[PERM_FILTER, PERM_LENGTH]) >>
+  `LENGTH pending <= LENGTH mid.ps_stack` by
+    (drule available_input_plan_length >> simp[] >> metis_tac[]) >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (drule_all emit_input_plan_materialised >> simp[]) >>
+  `MEM (Var v) mid.ps_stack \/ Var v IN FDOM mid.ps_spilled` by
+    (drule regional_emit_live_reserve >>
+     disch_then (qspec_then `v` mp_tac) >> simp[] >>
+     Cases_on `Var v IN FDOM mid.ps_spilled` >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  `MEM (Var v) arranged.ps_stack \/ Var v IN FDOM arranged.ps_spilled` by
+    (irule regional_reorder_materialised_ownership >> metis_tac[]) >>
+  `!i. i < LENGTH pending ==>
+    stack_peek (LENGTH pending - 1 - i) arranged.ps_stack = EL i pending` by
+    metis_tac[reorder_plan_materialised_order] >>
+  `LENGTH pending <= LENGTH arranged.ps_stack` by
+    (irule reorder_plan_materialised_length_floor >> metis_tac[]) >>
+  `arranged.ps_stack = stack_pop (LENGTH pending) arranged.ps_stack ++ pending` by
+    (irule fixed_suffix_decompose >> simp[]) >>
+  metis_tac[MEM_APPEND]
+QED
