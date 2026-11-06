@@ -2438,6 +2438,112 @@ Proof
   mp_tac (Q.INST [`op` |-> `h`] alias_var_mass_restore) >> gvs[]
 QED
 
+Theorem alias_select_spill_candidate_not_target:
+  select_spill_candidate stk targets d n = SOME cand /\ cand < LENGTH stk ==>
+  ~MEM (stack_peek cand stk) targets
+Proof
+  rpt strip_tac >> gvs[select_spill_candidate_def, LET_THM] >>
+  drule FIND_SOME_MEM >> simp[]
+QED
+
+Theorem alias_spill_at_domain:
+  d < LENGTH ps.ps_stack ==>
+  FDOM (SND (do_spill_at d ps)).ps_spilled =
+    stack_peek d ps.ps_stack INSERT FDOM ps.ps_spilled
+Proof
+  strip_tac >> Cases_on `d = 0`
+  >- (simp[do_spill_at_def, do_spill_tos_def] >> pairarg_tac >> simp[]) >>
+  simp[do_spill_at_def, do_spill_tos_def] >> pairarg_tac >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >>
+  simp[stack_peek_def, stack_swap_def, EL_LUPDATE] >>
+  `LENGTH ps.ps_stack - 1 < LENGTH ps.ps_stack` by decide_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem alias_restore_spilled_target_exclusion:
+  set targets INTER FDOM (SND (restore_spilled_plan targets ps)).ps_spilled = {}
+Proof
+  simp[alias_restore_spilled_domain] >> SET_TAC[]
+QED
+
+Theorem alias_reduce_depth_target_exclusion:
+  !fuel targets op f n ps.
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  set targets INTER FDOM (SND (reduce_depth_plan fuel targets op f n ps)).ps_spilled = {}
+Proof
+  Induct >> simp[Once reduce_depth_plan_def] >> rpt gen_tac >> strip_tac >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets x n` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  drule_then assume_tac stack_get_unfixed_depth_bound >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all_then strip_assume_tac planWfTheory.select_spill_candidate_bound >>
+  drule_all_then assume_tac alias_select_spill_candidate_not_target >>
+  `set targets INTER FDOM ps'.ps_spilled = {}` by
+    (qpat_assum `x' < LENGTH ps.ps_stack`
+       (mp_then Any mp_tac alias_spill_at_domain) >> simp[] >>
+     disch_then SUBST1_TAC >>
+     gvs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`op`, `f`, `n`] mp_tac) >> simp[]
+QED
+
+Theorem alias_reorder_one_target_exclusion:
+  MEM op targets /\ set targets INTER FDOM ps.ps_spilled = {} ==>
+  set targets INTER FDOM (SND (reorder_one dfg targets idx op ps)).ps_spilled = {}
+Proof
+  strip_tac >>
+  `FLOOKUP ps.ps_spilled op = NONE` by
+    (gvs[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  simp[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  `ps1 = ps` by
+    (Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps.ps_stack` >> gvs[]) >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps.ps_stack` >> simp[] >>
+  pairarg_tac >> simp[] >>
+  `set targets INTER FDOM ps2.ps_spilled = {}` by
+    (Cases_on `x > 16` >> gvs[] >>
+     drule alias_reduce_depth_target_exclusion >>
+     disch_then (qspecl_then [`LENGTH ps.ps_stack`, `op`,
+       `LENGTH targets - (idx + 1)`, `LENGTH targets`] mp_tac) >> simp[]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps2.ps_stack` >> simp[] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  metis_tac[do_swap_spilled_unchanged, pairTheory.SND]
+QED
+
+Theorem alias_reorder_fold_target_exclusion:
+  !steps ops ps.
+  EVERY (\p. MEM (SND p) targets) steps /\
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  set targets INTER FDOM (SND (FOLDL
+    (\(ops, ps) (idx, op).
+      (\(step_ops, ps'). (ops ++ step_ops, ps'))
+        (reorder_one dfg targets idx op ps)) (ops, ps) steps)).ps_spilled = {}
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >> gvs[] >> pairarg_tac >> simp[] >>
+  `set targets INTER FDOM ps'.ps_spilled = {}` by
+    (drule_all alias_reorder_one_target_exclusion >>
+     disch_then (qspecl_then [`h0`, `dfg`] mp_tac) >> simp[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem alias_reorder_plan_target_exclusion:
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  set targets INTER FDOM (SND (reorder_plan dfg targets ps)).ps_spilled = {}
+Proof
+  strip_tac >> simp[reorder_plan_def] >>
+  irule alias_reorder_fold_target_exclusion >> simp[] >>
+  simp[EVERY_MEM, indexedListsTheory.MEM_MAPi, pairTheory.FORALL_PROD] >>
+  metis_tac[MEM_EL]
+QED
+
 Theorem alias_var_mass_reduce_depth:
   !fuel targets op f n ps x.
   alias_var_mass x (SND (reduce_depth_plan fuel targets op f n ps)) <=
