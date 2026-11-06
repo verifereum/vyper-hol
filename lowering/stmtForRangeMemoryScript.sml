@@ -258,8 +258,9 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by
-    (irule exprBopSimPropsTheory.eval_operand_frame >>
-     qexistsl_tac [`s1`, `t1`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (qspecl_then [`op1`, `s1`, `t1`, `t2`, `i2w n1`] mp_tac
+       exprBopSimPropsTheory.eval_operand_frame >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var] >>
   qabbrev_tac `bad = (
