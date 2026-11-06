@@ -74,7 +74,7 @@ Theorem abi_encoder_shared_array_index_facts:
   j <= LENGTH avs /\ LENGTH avs < dimword (:256) /\
   LIST_REL abi_encoder_structural_valid (REPLICATE (LENGTH avs) ty) avs /\
   asz = abi_member_head_size ty /\ active = is_dynamic ty /\
-  first <= site /\ fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s
+  site IN sites /\ first <= site /\ fresh_vars_wrt limit_st s /\ abi_sites_decoder_budget sites first last b cap s
 Proof
   simp_tac bool_ss [abi_sites_encoder_shared_array_index_def] >> strip_tac >>
   drule abi_encoder_shared_array_input_facts >> strip_tac >>

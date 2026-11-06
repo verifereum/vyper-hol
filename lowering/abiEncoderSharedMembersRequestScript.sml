@@ -81,7 +81,7 @@ Theorem abi_encoder_shared_member_dynamic_input:
   eval_operand dp initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
   abi_decoder_operand_live st.cs_next_var dp /\
   ho+32 <= off /\ off+LENGTH (enc at av) <= output_size /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < st.cs_next_id /\
+  abi_sites_decoder_budget sites first last b cap initial /\ site IN sites /\ first <= site /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ en.cs_next_id <= last /\
   en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\

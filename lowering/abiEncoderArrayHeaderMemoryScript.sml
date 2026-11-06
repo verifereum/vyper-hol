@@ -49,7 +49,7 @@ QED
 Theorem abi_encoder_cursor_bounds:
   abi_sites_encoder_cursor sites T cursor_op site slot first lo st off s /\
   abi_sites_decoder_budget sites first last b cap s /\ st.cs_next_id <= last ==>
-  first <= site /\ site < last /\ b <= slot /\ slot+32 <= b+cap /\ slot < dimword (:256)
+  site IN sites /\ first <= site /\ site < last /\ b <= slot /\ slot+32 <= b+cap /\ slot < dimword (:256)
 Proof
   simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>

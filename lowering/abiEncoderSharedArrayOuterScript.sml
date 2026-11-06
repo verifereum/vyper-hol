@@ -308,7 +308,7 @@ Theorem abi_encoder_shared_array_finish_effect:
   abi_decoder_operand_live st.cs_next_var parent_ptr /\ abi_decoder_operand_live st.cs_next_var size_op /\
   slot < dimword (:256) /\ final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   abi_encoder_member_phase_raw st final initial ready /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ site IN sites /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -354,7 +354,7 @@ Theorem abi_encoder_shared_array_finish_run:
   abi_decoder_operand_live st.cs_next_var parent_ptr /\ abi_decoder_operand_live st.cs_next_var size_op /\
   mem_bytes_at d len initial.vs_memory = bytes /\ len <= sz /\
   abi_footprint_disjoint d sz (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial) /\
-  abi_sites_decoder_budget sites first last b cap initial /\ first <= site /\ site < last /\
+  abi_sites_decoder_budget sites first last b cap initial /\ site IN sites /\ first <= site /\ site < last /\
   lo <= site /\ site < hi /\ FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
