@@ -34,7 +34,8 @@ Theorem bop_ptr_val_readonly_frame:
   FLOOKUP tn'.t_var r = FLOOKUP tn.t_var r ==>
   ptr_val_ok cx ty v (Var r) G' tn' t
 Proof
-  simp[ptr_val_ok_def, ptr_mem_ok_def, op_taint_def, eval_operand_def] >>
+  simp[ptr_val_ok_def, ptr_mem_ok_def, op_taint_def, op_prov_def,
+       eval_operand_def] >>
   metis_tac[]
 QED
 
