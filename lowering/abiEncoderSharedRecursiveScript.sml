@@ -190,7 +190,7 @@ Proof
   qpat_x_assum `abi_sites_decoder_budget sites _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_budget_def]) >>
   `site IN abi_sites_decoder_ids sites first last` by
-    (simp_tac (srw_ss()) [abi_sites_decoder_ids_def] >> decide_tac) >>
+    (simp_tac (srw_ss()) [abi_sites_decoder_ids_def] >> asm_rewrite_tac [] >> decide_tac) >>
   qpat_x_assum `!id off sz. _ /\ FLOOKUP _ id = SOME (off,sz) ==> _`
     (qspecl_then [`site`,`slot`,`32`] mp_tac) >>
   asm_simp_tac bool_ss [] >> decide_tac
