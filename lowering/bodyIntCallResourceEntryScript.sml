@@ -3,6 +3,7 @@
 Theory bodyIntCallResourceEntry
 Ancestors
   bodySim bodySimEntry compileEnv intCallCallee compileVyper
+  bodyIntCallResourceAllocation
   vyperInterpreter vyperContext vyperState list finite_map
   vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants
 
