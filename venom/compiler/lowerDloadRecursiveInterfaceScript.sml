@@ -655,3 +655,93 @@ Proof
   simp[venomStateTheory.next_inst_def, venomInstTheory.get_instruction_def] >>
   rpt strip_tac >> simp[]
 QED
+
+(* Entry diagnostic: the raw supply boundary needs separation from the source
+   variables. Both DLOAD and DLOADBYTES occur before the forwarding copy. *)
+Theorem ld_revert_entry_supply_collision_probe[local]:
+  let bb = <| bb_label := "entry"; bb_instructions :=
+    [mk_inst 0 ASSIGN [Lit 0w] ["formal_var_0"];
+     mk_inst 1 DLOAD [Lit 0w] ["loaded"];
+     mk_inst 2 DLOADBYTES [Lit 0w; Lit 0w; Lit 0w] [];
+     mk_inst 3 RETURNDATACOPY [Lit 0w; Var "formal_var_0"; Lit 0w] [];
+     mk_inst 4 REVERT [Lit 0w; Lit 0w] []] |> in
+  let a = <| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
+    irs_used_inst_ids := []; irs_used_vars := []; irs_used_labels := [] |> in
+  revert_forward_pair bb 3 4 /\
+  ~revert_forward_pair (FST (lower_dload_block_supply a bb)) 7 8 /\
+  revert_forward_pair
+    (FST (lower_dload_block_supply
+      (a with irs_used_vars := ["formal_var_0"; "loaded"]) bb)) 7 8
+Proof
+  CONV_TAC EVAL >> simp[] >> CONV_TAC EVAL >> simp[]
+QED
+
+(* EXCEPTIONAL ENTRY AUDIT (not a theorem or an assumed closure).
+
+   The collision probe above refutes transport for arbitrary raw supplies:
+   ASSIGN formal_var_0 = 0; DLOAD 0 -> loaded; DLOADBYTES 0 0 0;
+   RETURNDATACOPY 0 formal_var_0 0; REVERT 0 0.
+   Empty used-vars lets the inserted ALLOCA overwrite formal_var_0. Source
+   (3,4) is a pair; target (7,8) is not. Reserving the two source variables
+   restores the pair. This is NOT a counterexample to the configured pass.
+
+   Required semantic interface for a general proof:
+   For source operands x,y whose variables belong to block_ir_vars bb,
+     same_after_assigns (REVERSE (TAKE c bb.bb_instructions)) x y
+       ==> same_after_assigns (REVERSE before) x y.
+   Generated ALLOCA/ADD outputs must be separated from these variables.
+   Non-ASSIGN writes are NOT ignored: step_back_assign returns NONE on a
+   matching output. DLOAD's final MLOAD has exactly its original outputs;
+   generated writes can be skipped only with freshness. DLOADBYTES removes
+   any malformed original outputs, so a universal resolution EQUALITY is
+   not justified without shape; forward same_after_assigns transport is the
+   appropriate prospective interface. Malformed lowering branches are kept.
+
+   Literal suffix from ld_lower_revert_pair_suffix:
+     before ++ copy :: (mid ++ rev :: after), EVERY ASSIGN mid.
+   The three pair clauses reduce separately to:
+     same_after_assigns (REVERSE before) src (Lit 0w);
+     same_after_assigns (REVERSE before) p
+       (resolve_block_assigns (REVERSE mid) p');
+     same_after_assigns (REVERSE before) rds
+       (resolve_block_assigns (REVERSE mid) rds').
+   The middle resolution is literally unchanged. Its resulting operands
+   are either original operands or ASSIGN sources in mid, hence supported
+   by block_ir_vars bb. Each clause needs the forward prefix interface;
+   none follows just from interval opcode preservation.
+
+   CFGNorm supply_*_cong lemmas require equal-length LIST_REL with equal
+   opcodes/outputs and identical ASSIGNs. They do not apply to a 1:N DLOAD
+   expansion. supply_block_image_revert_forward_pair is CFGNorm-specific.
+
+   Premise producers for the quotation below:
+   - fn_pass_step: lookup_unique_function in observed, and covers_unit fa
+     observed. Together these supply coverage of fn_ir_vars fn.
+   - fn.fn_blocks=bpre++bb::bpost: block variables are function variables.
+   - lower_dload_blocks_supply fa bpre=(qpre,a0): used-vars monotonicity
+     (lower_dload_blocks_supply_vars) transports coverage to block supply.
+   - segment decomposition: existing candidate and supply append lemmas
+     provide the block and TAKE-prefix equations; fresh_ir_var_contract
+     separates each generated name from initial used-vars, monotonically.
+   No new source shape assumption is needed merely for the intended forward
+   same_after_assigns transport. It remains UNPROVED, not a premise available
+   to later proofs. Configuration must produce the coverage premise.
+
+   Consumer cases still distinct:
+   - ordinary completion arriving at copy: this boundary gives pair syntax
+     only; source/target successor positions and lookup still need producers.
+   - block entry at copy index zero: ld_lower_revert_pair_zero already gives
+     pair syntax. Actual PHI execution and entry positions remain separate.
+   - entry at REVERT endpoint: in_revert_forward includes this endpoint too.
+     Same pair transport would locate the shifted endpoint, not copypos.
+     A prefix lowering length equation and actual endpoint position are
+     still needed. A copy-only entry argument cannot cover this branch.
+   Thus neither full NEXT/BLOCK closure nor normal-to-exceptional execution
+   is asserted by this ledger or its typechecked prospective quotation.
+*)
+val ld_revert_entry_prospective = ``
+  EVERY (\v. MEM v a.irs_used_vars) (block_ir_vars bb) /\
+  revert_forward_pair bb c e /\
+  lower_dload_block_supply a bb = (gb,b) /\
+  lower_dload_insts_supply a (TAKE c bb.bb_instructions) = (before,q) ==>
+  revert_forward_pair gb (LENGTH before) (LENGTH before + (e-c))``;
