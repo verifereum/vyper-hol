@@ -14,7 +14,7 @@ Ancestors
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   callTrace frameOutcome vfmExecution vfmExecutionProp list rich_list
   vfmOperation alist asmEncodeParse vfmState vfmSameFrame vfmRunWithinFrame
-  vfmRunCall vfmContext vfmContextLength
+  vfmRunCall vfmContext vfmContextLength evmCreationGuard
 
 Theorem frame_rel_singleton[local]:
   asm_evm_rel p a es /\ es.contexts = (c,rb)::rest ==>
@@ -162,6 +162,7 @@ Theorem frame_continue_rel[local]:
   step es = (INL (),es1) /\
   LENGTH es1.contexts = LENGTH es.contexts /\
   asm_evm_rel (prog ++ [AsmDataItem data]) a1 es1 /\
+  a1.as_call_ctx = a.as_call_ctx /\
   a1.as_requests = a.as_requests /\ call_trace es1 = call_trace es /\
   a1.as_outcomes = MAP SND (call_trace es1) /\
   a1.as_gas_readings = gas_readings es1 ==>
@@ -176,6 +177,14 @@ Proof
   `same_frame_rel es es1` by (irule step_same_frame >> simp[]) >>
   `wf_state es1` by
     (drule step_preserves_wf_state >> simp[]) >>
+  `account_empty (lookup_account c.msgParams.callee es1.originalAccounts) =
+   account_empty (lookup_account c.msgParams.callee es.originalAccounts)` by
+    (irule step_creation_original_empty >> metis_tac[]) >>
+  `!addr. account_already_created (lookup_account addr es.rollback.accounts) ==>
+      account_already_created (lookup_account addr es1.rollback.accounts)` by
+    (mp_tac (Q.INST [`d` |-> `LENGTH es.contexts`, `B` |-> `es.rollback`,
+                    `s` |-> `es`, `t` |-> `es1`, `x` |-> `()`]
+       step_continuing_collision_current) >> simp[]) >>
   Cases_on `es1.contexts` >> gvs[same_frame_rel_def] >>
   PairCases_on `h` >> gvs[] >>
   `?d1. es1.msdomain = Collect d1` by
@@ -308,7 +317,7 @@ Theorem frame_asm_stack_observers[local]:
          asm_state_unop k a] /\
   (r = AsmOK a1 \/ r = AsmHalt a1) ==>
   a1.as_requests = a.as_requests /\ a1.as_outcomes = a.as_outcomes /\
-  a1.as_gas_readings = a.as_gas_readings
+  a1.as_gas_readings = a.as_gas_readings /\ a1.as_call_ctx = a.as_call_ctx
 Proof
   simp[MEM] >> strip_tac >>
   gvs[asm_binop_def, asm_unop_def, asm_ternop_def, asm_push_val_def,
@@ -324,7 +333,7 @@ Theorem frame_asm_memory_observers[local]:
          asm_returndatacopy a; asm_extcodecopy a; asm_mcopy a] /\
   (r = AsmOK a1 \/ r = AsmHalt a1) ==>
   a1.as_requests = a.as_requests /\ a1.as_outcomes = a.as_outcomes /\
-  a1.as_gas_readings = a.as_gas_readings
+  a1.as_gas_readings = a.as_gas_readings /\ a1.as_call_ctx = a.as_call_ctx
 Proof
   simp[MEM] >> strip_tac >>
   gvs[asm_mload_def, asm_mstore_def, asm_mstore8_def, asm_sload_def,
@@ -360,7 +369,7 @@ Theorem frame_asm_group_observers:
     asm_step_copy name a; asm_step_context name a] /\
   (r = AsmOK a1 \/ r = AsmHalt a1) ==>
   a1.as_requests = a.as_requests /\ a1.as_outcomes = a.as_outcomes /\
-  a1.as_gas_readings = a.as_gas_readings
+  a1.as_gas_readings = a.as_gas_readings /\ a1.as_call_ctx = a.as_call_ctx
 Proof
   simp[MEM, is_evm_call_name_def] >> strip_tac >>
   all_tac
@@ -408,7 +417,7 @@ Resume frame_asm_group_observers[context]:
   qspec_then `\v. !r a1. v = SOME r /\
     (r = AsmOK a1 \/ r = AsmHalt a1) ==>
     a1.as_requests = a.as_requests /\ a1.as_outcomes = a.as_outcomes /\
-    a1.as_gas_readings = a.as_gas_readings` mp_tac frame_context_pred >>
+    a1.as_gas_readings = a.as_gas_readings /\ a1.as_call_ctx = a.as_call_ctx` mp_tac frame_context_pred >>
   disch_then (qspecl_then [`name`,`a`] mp_tac) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   (impl_tac >-
@@ -426,7 +435,7 @@ Theorem frame_asm_step_observers[local]:
   (asm_step labels pc inst a = AsmOK a1 \/
    asm_step labels pc inst a = AsmHalt a1) ==>
   a1.as_requests = a.as_requests /\ a1.as_outcomes = a.as_outcomes /\
-  a1.as_gas_readings = a.as_gas_readings
+  a1.as_gas_readings = a.as_gas_readings /\ a1.as_call_ctx = a.as_call_ctx
 Proof
   Cases_on `inst` >> simp[asm_step_def] >> strip_tac >>
   gvs[asm_next_def, AllCaseEqs()] >>
@@ -510,7 +519,7 @@ Resume frame_plain_step[ok]:
     (drule_all frame_local_instruction >> strip_tac >>
      gvs[asm_frame_prog_ok_def] >> metis_tac[]) >>
   `a'.as_requests = a.as_requests /\ a'.as_outcomes = a.as_outcomes /\
-   a'.as_gas_readings = a.as_gas_readings` by
+   a'.as_gas_readings = a.as_gas_readings /\ a'.as_call_ctx = a.as_call_ctx` by
     (irule frame_asm_step_observers >> metis_tac[]) >>
   disj2_tac >> goal_assum (drule_at Any) >>
   irule frame_continue_rel >> simp[] >>

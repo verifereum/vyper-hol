@@ -39,6 +39,11 @@ Definition asm_frame_rel_def:
     ?c0 c rb rest.
       es0.contexts = (c0, rb) :: rest /\ es.contexts = (c, rb) :: rest /\
       c0.logs = [] /\ c.msgParams = c0.msgParams /\ ~c0.msgParams.static /\
+      (as.as_call_ctx.cc_created_in_tx =
+        account_empty (lookup_account c.msgParams.callee es.originalAccounts)) /\
+      (~as.as_call_ctx.cc_created_in_tx ==>
+        account_already_created (lookup_account c.msgParams.callee
+          es.rollback.accounts)) /\
       es.txParams = es0.txParams /\ wf_state es /\
       (?d. es.msdomain = Collect d) /\
       asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
@@ -99,7 +104,12 @@ QED
 
 (* The frame starts in the relation with its own entry assembly state. *)
 Theorem asm_frame_rel_entry:
-  initial_ctx_rel cplan prog ctx vs es ==>
+  initial_ctx_rel cplan prog ctx vs es /\
+  (vs.vs_call_ctx.cc_created_in_tx = account_empty
+    (lookup_account (FST (HD es.contexts)).msgParams.callee es.originalAccounts)) /\
+  (vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+    (lookup_account (FST (HD es.contexts)).msgParams.callee
+      es.rollback.accounts)) ==>
   asm_frame_rel prog vs.vs_data_section es (entry_asm_state vs es) es
 Proof
   rw[initial_ctx_rel_def, initial_state_rel_def, asm_frame_rel_def,
