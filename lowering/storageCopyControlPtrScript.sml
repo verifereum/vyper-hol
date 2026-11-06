@@ -151,3 +151,131 @@ Proof
      qexistsl [`id+1`, `tv`] >> simp[]) >>
   gvs[jump_to_def] >> metis_tac[gas_path_ptr_then, ADD_CLAUSES]
 QED
+
+(* Scalar ASSIGN covers both the zero initializer and counter backedge. *)
+Theorem copy_loop_scalar_assign_step:
+  eval_operand a s = SOME w ==>
+  step_inst_base (mk_inst id ASSIGN [a] [cv]) s = OK (update_var cv w s)
+Proof
+  strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >> simp[]
+QED
+
+Theorem copy_loop_scalar_assign_ghost:
+  op_prov G a = NONE /\ op_taint tn a = {} ==>
+  step_prov PG G (mk_inst id ASSIGN [a] [cv]) (update_var cv w s) =
+    DRESTRICT G (COMPL {cv}) /\
+  step_taint (mk_inst id ASSIGN [a] [cv]) s (update_var cv w s) tn =
+    tn with t_var := tn.t_var |+ (cv,{})
+Proof
+  strip_tac >>
+  simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def,
+       mk_inst_def, step_taint_def, set_var_taint_def,
+       mem_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+       range_bytes_def, new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+       EXTENSION, SF CONJ_ss, out_taint_def, taint_component_equality,
+       DRESTRICT_UNIV] >>
+  Cases_on `eval_operand a s` >> simp[]
+QED
+
+Theorem copy_loop_scalar_assign_check:
+  op_taint tn a = {} /\ ~ctx_has_dalloca ctx /\ eval_operand a s = SOME w ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id ASSIGN [a] [cv]) s
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ASSIGN [a] [cv]) s = OK (update_var cv w s)`
+    by metis_tac[copy_loop_scalar_assign_step] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, copy_loop_scalar_assign_step,
+       update_var_def]
+QED
+
+Theorem copy_loop_scalar_assign_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [a] [cv]) /\
+  eval_operand a s = SOME w /\ op_prov G a = NONE /\ op_taint tn a = {} /\
+  ~ctx_has_dalloca ctx ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
+    (OK (update_var cv w s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [a] [cv]) s` by
+    metis_tac[copy_loop_scalar_assign_check] >>
+  `step_inst_base (mk_inst id ASSIGN [a] [cv]) s =
+     OK (update_var cv w s)` by simp[copy_loop_scalar_assign_step] >>
+  `~is_terminator (mk_inst id ASSIGN [a] [cv]).inst_opcode /\
+   (mk_inst id ASSIGN [a] [cv]).inst_opcode <> INVOKE` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `step_prov PG G (mk_inst id ASSIGN [a] [cv]) (update_var cv w s) =
+     DRESTRICT G (COMPL {cv}) /\
+   step_taint (mk_inst id ASSIGN [a] [cv]) s (update_var cv w s) tn =
+     tn with t_var := tn.t_var |+ (cv,{})` by
+    (irule copy_loop_scalar_assign_ghost >> simp[]) >>
+  drule_all straight_line_ptr_edge >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  simp[mk_inst_def, is_terminator_def] >>
+  simp[GSYM mk_inst_def] >> strip_tac >>
+  drule (cj 2 gas_path_ptr_rules) >>
+  disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 gas_path_ptr_rules) >> simp[update_var_def]
+QED
+
+Theorem copy_loop_init_frame:
+  t = update_var cv 0w s /\
+  G' = DRESTRICT G (COMPL {cv}) /\
+  tn' = (tn with t_var := tn.t_var |+ (cv,{})) ==>
+  lookup_var cv t = SOME 0w /\ FLOOKUP G' cv = NONE /\
+  op_taint tn' (Var cv) = {} /\
+  t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+  tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+  tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  (!p. p <> cv ==>
+    lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
+    op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
+      op_taint_def]
+QED
+
+Theorem copy_loop_entry_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id ASSIGN [Lit 0w] [cv]; mk_inst (id+1) JMP [Label hdr] []] /\
+  s.vs_inst_idx = LENGTH pre /\ ~ctx_has_dalloca ctx ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
+    (OK (jump_to hdr (update_var cv 0w s)))
+Proof
+  strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst id ASSIGN [Lit 0w] [cv])` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  `eval_operand (Lit 0w) s = SOME 0w /\ op_prov G (Lit 0w) = NONE /\
+   op_taint tn (Lit 0w) = {}` by
+    simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  drule_all copy_loop_scalar_assign_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
+  `gas_path_ptr D 0 ctx fn PG (DRESTRICT G (COMPL {cv}))
+    (tn with t_var := tn.t_var |+ (cv,{}))
+    (update_var cv 0w s with vs_inst_idx := SUC (LENGTH pre)) 0
+    (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
+    (OK (jump_to hdr
+      (update_var cv 0w s with vs_inst_idx := SUC (LENGTH pre))))` by
+    (irule copy_loop_jump_path_ptr >>
+     simp[update_var_def, get_instruction_def, EL_APPEND_EQN, ADD1] >>
+     simp[mk_inst_def, op_taint_def] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                     combinTheory.K_THM, opcode_case_def] >>
+     simp[]) >>
+  gvs[jump_to_def] >> metis_tac[gas_path_ptr_then, ADD_CLAUSES]
+QED
