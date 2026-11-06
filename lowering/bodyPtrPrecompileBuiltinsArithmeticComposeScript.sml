@@ -2,6 +2,7 @@ Theory bodyPtrPrecompileBuiltinsArithmeticCompose
 Ancestors bodyPtrPrecompileBuiltinsECMulRunner bodyPtrPrecompileBuiltinsOperandCompose
           bodyPtrDefs bodyPtrPreds exprSimHypsDefs exprSimDefs stmtSimProps
           gasSummaryComposePtr exprLowering compileEnv vyperState
+          exprSimWordArgs wordArgsPtr exprSimCalldataSlice
 
 Theorem precompile_operand_bind_ptr:
   expr_sim_ptr d ctx PG fn cenv cx ty e es /\
@@ -48,3 +49,37 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+
+Theorem precompile_two_operand_entry_rebase:
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  MAP FDOM ee.scopes = MAP FDOM ee'.scopes /\
+  sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+  s1.cs_next_var <= sm.cs_next_var /\ s1.cs_next_id <= sm.cs_next_id /\
+  expr_post ctx fn cenv cx a es sa s1 s0 ee va opa t /\
+  expr_post ctx fn cenv cx b ee s1 sm t ee' vb opb t' /\
+  ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept cenv ee s1 G1 tn1 t G2 tn2 /\
+  vv_post ctx fn cenv cx e ee' sm sb t' fin tv vv u /\
+  ghost_kept cenv ee' sm G2 tn2 t' Gf tnf ==>
+  vv_post ctx fn cenv cx e es sa sb s0 fin tv vv u /\
+  ghost_kept cenv es sa G0 tn0 s0 Gf tnf
+Proof
+  strip_tac >>
+  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv ee s1 t t'` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es sa s0 t'` by
+    (irule wb_frame_trans >>
+     qpat_assum `wb_frame _ ee s1 t t'` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by decide_tac >>
+  `MAP FDOM es.scopes = MAP FDOM ee'.scopes` by metis_tac[] >>
+  `ghost_kept cenv es sa G0 tn0 s0 G2 tn2` by
+    (irule ghost_kept_wb_trans >>
+     qpat_assum `ghost_kept _ ee s1 _ _ _ G2 tn2` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  reverse conj_tac >-
+    (irule ghost_kept_wb_trans >>
+     qpat_assum `ghost_kept _ ee' sm _ _ _ Gf tnf` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  irule vv_post_prefix_frame >>
+  qpat_assum `vv_post _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
