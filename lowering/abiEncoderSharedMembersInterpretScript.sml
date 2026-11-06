@@ -205,7 +205,8 @@ QED
 
 Theorem abi_encoder_shared_members_generate:
   hi <= last /\
-  abi_sites_cover func sites /\\n  abi_encoder_spine_code func limit_st hi (dst,src,dp) infos (st,so,ho) (out,en) /\
+  abi_sites_cover func sites /\
+  abi_encoder_spine_code func limit_st hi (dst,src,dp) infos (st,so,ho) (out,en) /\
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     (all_tys,all_avs,end_so,end_ho) infos (st,so,ho) x s ==>

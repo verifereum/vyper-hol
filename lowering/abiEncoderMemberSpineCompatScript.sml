@@ -66,7 +66,8 @@ QED
 
 Theorem abi_encoder_spine_shared_core_run:
   abi_encoder_spine_core_code func c /\
-  abi_sites_cover func sites /\\n  abi_sites_encoder_spine_shared_pre sites value resources c s ==>
+  abi_sites_cover func sites /\
+  abi_sites_encoder_spine_shared_pre sites value resources c s ==>
   ?t. abi_sites_encoder_spine_shared_post sites (ctx,func) value resources c s t
 Proof
   PairCases_on `c` >> PairCases_on `value` >> PairCases_on `resources` >>

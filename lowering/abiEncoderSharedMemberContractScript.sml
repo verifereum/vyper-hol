@@ -7,7 +7,8 @@ Ancestors
   fragExec compileEnv valueEncoding venomState finite_map
 
 Theorem abi_encoder_shared_member_core_run:
-  abi_sites_cover func sites /\\n  abi_encoder_spine_core_code func c /\
+  abi_sites_cover func sites /\
+  abi_encoder_spine_core_code func c /\
   abi_sites_encoder_spine_shared_pre sites value resources c s ==>
   ?t. abi_encoder_extend_sim ctx func s t /\
     abi_sites_encoder_spine_shared_post sites (ctx,func) value resources c s t
@@ -55,7 +56,8 @@ Proof
 QED
 
 Theorem abi_encoder_shared_member_dynamic_run:
-  abi_sites_cover func sites /\\n  abi_encoder_spine_core_code func c /\
+  abi_sites_cover func sites /\
+  abi_encoder_spine_core_code func c /\
   abi_sites_encoder_shared_member_dynamic_pre sites value resources cursor c s ==>
   ?t. abi_encoder_extend_sim ctx func s t /\
     abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) value resources cursor c s t

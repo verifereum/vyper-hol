@@ -204,7 +204,8 @@ QED
 Theorem abi_encoder_shared_run:
   abi_sites_encoder_shared sites ei /\
   compile_abi_encode_to_buf dst src ei start = (out,end_st) /\ fn_has_code start end_st func /\
-  abi_sites_cover func sites /\\n  (start.cs_blocks = end_st.cs_blocks \/
+  abi_sites_cover func sites /\
+  (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_sites_encoder_shared_input sites (ei,at,av) (start,src,dst) (sb,source_cap) (d,LENGTH (enc at av))
