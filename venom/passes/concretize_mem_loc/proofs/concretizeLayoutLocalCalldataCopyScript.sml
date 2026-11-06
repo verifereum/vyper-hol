@@ -50,7 +50,7 @@ val _ = if null (hyp calldatacopy_execution) then ()
 
 Theorem calldatacopy_scalar_origin_free[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;RETURNDATACOPY] /\ inst.inst_operands = [opd;ops;opn] /\
   (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
   MEM op [ops;opn] ==>
   !v. op = Var v ==> FLOOKUP rv v = NONE
@@ -68,7 +68,7 @@ QED
 Theorem calldatacopy_scalar_agreement:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
-  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;RETURNDATACOPY] /\ inst.inst_operands = [opd;ops;opn] /\
   (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
   s.vs_labels = t.vs_labels /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
@@ -97,7 +97,7 @@ Theorem joint_calldatacopy_scalar_agreement:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\ inst.inst_operands = [opd;ops;opn] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;RETURNDATACOPY] /\ inst.inst_operands = [opd;ops;opn] /\
   s.vs_labels = t.vs_labels /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
     (guarded_bytes (retpc_var fn) rv tn) R Obs s t ==>
@@ -325,7 +325,7 @@ QED
 Finalise concretize_calldatacopy_execution_geometry
 
 Theorem clean_copy_ghosts:
-  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;EXTCODECOPY] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;EXTCODECOPY;RETURNDATACOPY] /\
   inst.inst_outputs = [] /\ step_writes inst s post = [(dst,len)] /\
   post = write_memory_with_expansion dst xs s ==>
   step_prov PG G inst post = G /\
@@ -341,7 +341,7 @@ Proof
 QED
 
 Theorem clean_copy_taint_order:
-  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;EXTCODECOPY] /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;EXTCODECOPY;RETURNDATACOPY] /\
   inst.inst_outputs = [] /\ step_writes inst s post = [(dst,len)] /\
   step_writes inst t tpost = [(dstT,len)] /\
   post = write_memory_with_expansion dst xs s /\
