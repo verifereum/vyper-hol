@@ -2,7 +2,7 @@
    to a target. *)
 Theory bodyMemRawCall
 Ancestors
-  bodyMemoryPreds bodyMemRawCallRevert bodyMemRawCallBounds
+  bodyMemoryPreds bodyMemRawCallRevert bodyMemRawCallBounds bodyMemRawCallFinish
 
 Theorem body_raw_call_mem_case:
   !cx ty flags es v18.
