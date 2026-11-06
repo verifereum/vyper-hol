@@ -3,7 +3,7 @@ Theory bodyPtrBopScalarRun
 Ancestors exprSimArith exprSimBinopFrag exprBopSimDefs exprLowering
   freshWrites compileEnv valueEncoding vyperInterpreter loweringSlice
   vyperContext vyperValueOperation varsExt appendStorageStageTransportPtr
-  fragGasFresh list arithmeticProps builtinProps
+  fragGasFresh list arithmeticProps builtinProps exprBopBitwise exprSimCompare
 
 Theorem bop_checked_fresh_run:
   MEM bop [Add; Sub; Mul] /\
@@ -207,4 +207,261 @@ Proof
   irule compile_unsafe_binop_correct >>
   goal_assum (drule_at (Pat `compile_unsafe_binop`)) >>
   simp[] >> rpt strip_tac >> irule step_unsafe_opcode >> simp[]
+QED
+
+Theorem bop_power_fresh_run:
+  type_to_int_bound ty = SOME u /\ type_to_int_bound ann = SOME u /\
+  0 < type_bits ty /\ type_bits ty <= 256 /\ type_bits ty MOD 8 = 0 /\
+  within_int_bound u i1 /\ within_int_bound u i2 /\
+  (IS_SOME bl \/ ?n. el = SOME n /\ 0 <= n) /\
+  (!n. bl = SOME n ==> i1 = n) /\ (!n. el = SOME n ==> i2 = n) /\
+  compile_binop Exp x y ty bl el sa = (op,sb) /\
+  fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (i2w i1) /\ eval_operand y s = SOME (i2w i2) ==>
+  (?v t. bop_result cx ann Exp tys (IntV i1) (IntV i2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann Exp tys (IntV i1) (IntV i2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  strip_tac >>
+  qpat_assum `type_to_int_bound ty = _`
+    (strip_assume_tac o MATCH_MP type_to_int_bound_bits) >>
+  `compile_safe_pow x y ty bl el sa = (op,sb)` by gvs[compile_binop_def] >>
+  `((0 <= i2 /\ within_int_bound u (i1 ** Num i2) ==> ?t.
+       run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand op t = SOME (i2w (i1 ** Num i2))) /\
+    (~(0 <= i2 /\ within_int_bound u (i1 ** Num i2)) ==> ?t.
+       run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t))` by
+    (drule_at (Pat `compile_safe_pow _ _ _ _ _ _ = _`) compile_safe_pow_run >>
+     disch_then (qspecl_then [`i1`, `i2`, `s`] mp_tac) >> gvs[] >> metis_tac[]) >>
+  qpat_assum `type_to_int_bound ann = _`
+    (assume_tac o MATCH_MP bop_result_power) >>
+  asm_rewrite_tac[] >> Cases_on `i2 < 0`
+  >- (gvs[] >> metis_tac[integerTheory.INT_NOT_LE]) >>
+  Cases_on `within_int_bound u (i1 ** Num i2)` >>
+  gvs[word_value_def, val_to_w256_def] >> metis_tac[integerTheory.INT_NOT_LE]
+QED
+
+Theorem bop_power_run:
+  type_to_int_bound ty = SOME u /\ type_to_int_bound ann = SOME u /\
+  0 < type_bits ty /\ type_bits ty <= 256 /\ type_bits ty MOD 8 = 0 /\
+  within_int_bound u i1 /\ within_int_bound u i2 /\
+  (IS_SOME bl \/ ?n. el = SOME n /\ 0 <= n) /\
+  (!n. bl = SOME n ==> i1 = n) /\ (!n. el = SOME n ==> i2 = n) /\
+  compile_binop Exp x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (i2w i1) /\ eval_operand y s = SOME (i2w i2) ==>
+  (?v t. bop_result cx ann Exp tys (IntV i1) (IntV i2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann Exp tys (IntV i1) (IntV i2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_run_drop_fresh_transport >> conj_tac
+  >- (`straight_fresh (compile_binop Exp x y ty bl el)` by
+        simp[compile_binop_def, straight_fresh_compile_safe_pow] >>
+      `writes_fresh sa (emitted_insts sa sb)` by
+        metis_tac[straight_fresh_def] >>
+      drule writes_fresh_path_opcodes >> simp[EVERY_MEM]) >>
+  qexists_tac `sa` >> irule bop_power_fresh_run >>
+  simp[fresh_vars_wrt_drop_fresh] >>
+  goal_assum (drule_at Any) >> gvs[eval_operand_drop_fresh]
+QED
+
+Theorem bop_bitwise_fresh_run:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
+  (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
+    within_int_bound
+      (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
+    within_int_bound
+      (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (val_to_w256 v1) /\
+  eval_operand y s = SOME (val_to_w256 v2) ==>
+  ?v t. bop_result cx ann bop tys v1 v2 es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bop_result_bitwise >> strip_tac >>
+  qexists_tac `v` >> simp[] >> drule_all compile_bitwise_run >> simp[]
+QED
+
+Theorem bop_bitwise_run:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
+  (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
+    within_int_bound
+      (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
+    within_int_bound
+      (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (val_to_w256 v1) /\
+  eval_operand y s = SOME (val_to_w256 v2) ==>
+  (?v t. bop_result cx ann bop tys v1 v2 es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys v1 v2 es = INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_run_drop_fresh_transport >> conj_tac
+  >- (`straight_fresh (compile_binop bop x y ty bl el)` by
+        metis_tac[straight_fresh_compile_bitwise] >>
+      `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+      drule writes_fresh_path_opcodes >> simp[EVERY_MEM]) >>
+  qexists_tac `sa` >> disj1_tac >> irule bop_bitwise_fresh_run >>
+  simp[fresh_vars_wrt_drop_fresh] >>
+  goal_assum (drule_at Any) >> gvs[eval_operand_drop_fresh]
+QED
+
+Theorem bop_compare_words_fresh_run:
+  MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
+  res = INL (BoolV (eval_compare bop ty w1 w2)) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2 ==>
+  ?v t. res = INL v /\ word_value v /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)
+Proof
+  strip_tac >>
+  `compile_compare bop x y ty sa = (op,sb)` by
+    (gvs[compile_binop_def]) >>
+  drule_all compile_compare_correct >> strip_tac >>
+  qexists_tac `BoolV (eval_compare bop ty w1 w2)` >>
+  Cases_on `eval_compare bop ty w1 w2` >>
+  gvs[word_value_def, val_to_w256_def, venomExecSemanticsTheory.bool_to_word_def] >> metis_tac[]
+QED
+
+Theorem bop_compare_words_run:
+  MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
+  res = INL (BoolV (eval_compare bop ty w1 w2)) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2 ==>
+  (?v t. res = INL v /\ word_value v /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. res = INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_run_drop_fresh_transport >> conj_tac
+  >- (`straight_fresh (compile_binop bop x y ty bl el)` by
+        metis_tac[straight_fresh_compare] >>
+      `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+      drule writes_fresh_path_opcodes >> simp[EVERY_MEM]) >>
+  qexists_tac `sa` >> disj1_tac >> irule bop_compare_words_fresh_run >>
+  simp[fresh_vars_wrt_drop_fresh] >>
+  goal_assum (drule_at Any) >> gvs[eval_operand_drop_fresh]
+QED
+
+Theorem bop_compare_run:
+  MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
+  word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+  (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
+  (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
+       m <= 256) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (val_to_w256 v1) /\
+  eval_operand y s = SOME (val_to_w256 v2) ==>
+  (?v t. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys v1 v2 es = INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_compare_words_run >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> gvs[] >>
+  irule bop_result_compare >> simp[] >> qexists_tac `tv` >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem bop_compare_bytes_run:
+  (bop = Eq \/ bop = NotEq) /\
+  (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
+  value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (typed_val_to_w256 tv (BytesV b1)) /\
+  eval_operand y s = SOME (typed_val_to_w256 tv (BytesV b2)) ==>
+  (?v t. bop_result cx ann bop tys (BytesV b1) (BytesV b2) es = INL v /\
+    word_value v /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys (BytesV b1) (BytesV b2) es =
+      INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(typed_val_to_w256 tv (BytesV b1) = typed_val_to_w256 tv (BytesV b2)
+       <=> b1 = b2)` by
+    (irule typed_val_to_w256_bytes_11 >> simp[]) >>
+  irule bop_compare_words_run >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> gvs[] >>
+  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+      binop_negate_def, eval_compare_def]
+QED
+
+Theorem bop_minmax_fresh_run:
+  (bop = Min \/ bop = Max) /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
+  word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+  (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
+  (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
+       m <= 256) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (val_to_w256 v1) /\
+  eval_operand y s = SOME (val_to_w256 v2) ==>
+  ?v t. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bop_result_minmax >> strip_tac >>
+  qexists_tac `v` >> simp[] >> drule_all compile_minmax_correct >> simp[]
+QED
+
+Theorem bop_minmax_run:
+  (bop = Min \/ bop = Max) /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
+  word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+  (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
+  (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
+       m <= 256) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (val_to_w256 v1) /\
+  eval_operand y s = SOME (val_to_w256 v2) ==>
+  (?v t. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (val_to_w256 v)) \/
+  (?m t. bop_result cx ann bop tys v1 v2 es = INR (Error (RuntimeError m)) /\
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_run_drop_fresh_transport >> conj_tac
+  >- (`straight_fresh (compile_binop bop x y ty bl el)` by
+        metis_tac[straight_fresh_minmax] >>
+      `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+      drule writes_fresh_path_opcodes >> simp[EVERY_MEM]) >>
+  qexists_tac `sa` >> disj1_tac >> irule bop_minmax_fresh_run >>
+  simp[fresh_vars_wrt_drop_fresh] >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  gvs[eval_operand_drop_fresh] >> qexists_tac `tv` >> simp[] >>
+  first_assum ACCEPT_TAC
 QED
