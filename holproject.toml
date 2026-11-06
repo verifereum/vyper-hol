@@ -9,6 +9,7 @@ version = "0.2.3"
 roots = ["venom/codegen/proofs/fnLineageInvDuplicateTargetsScript.sml",
          "venom/codegen/proofs/fnLineageInvCleanupCoherenceScript.sml",
          "venom/codegen/proofs/fnLineageInvOwnerOriginScript.sml",
+         "venom/codegen/proofs/fnLineageInvReorderMultiplicityScript.sml",
          "venom/codegen/proofs/fnLineageInvSpillReplayScript.sml",
          "venom/codegen/proofs/fnLineageInvLiteralScript.sml",
          "venom/codegen/proofs/fnLineageInvCleanupSpliceProbeScript.sml",
