@@ -3,9 +3,11 @@ Ancestors
   concretizePtrPairedEntry concretizePtrPairedPrefix concretizePtrPairedPrefixProbe
   concretizePtrPairedFields concretizePtrMixedPhi concretizePtrOpaqueRetpc
   concretizePtrSharedFields concretizePtrPrefixLedger concretizePtrChronologicalHistory
+  concretizePtrDeletedGapHistory concretizePtrStructuralTranscript
+  concretizePtrStructuralTrace concretizePtrActivationChronology frameCfgBoundary
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape
-  venomExecSemantics venomState venomWf unitShapeDefs ptrDiscipline
+  venomExecSemantics venomState venomWf unitShapeDefs ptrDiscipline ptrDisciplineEmptyTaint
   unitLabelMapIdentity frameHistoryInstructions contextCodegenRel passSimulationDefs passSimulationProps venomExecProofs venomInst finite_map list
 
 Theorem ptr_paired_jump_entry:
@@ -88,4 +90,34 @@ Proof
   simp[Abbr `ae`, ptr_observe_def] >>
   fs[entry_prov_def, entry_taint_vars_def] >>
   metis_tac[]
+QED
+
+Theorem ptr_paired_jump_entry_overlay:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  a.po_inst.inst_opcode = JMP /\
+  step_inst fuel C a.po_inst a.po_state = OK sj /\
+  enters_block a.po_fn sj se /\
+  b = ptr_observe a.po_stack a.po_params
+    (entry_prov a.po_fn sj a.po_prov)
+    (entry_taint_vars a.po_fn sj a.po_taint) a.po_fn i se ==>
+  ptr_birth_overlay (HD (ptr_activation_tokens h a b tokens))
+    b.po_state.vs_allocas births = births
+Proof
+  strip_tac >>
+  `ptr_birth_overlay (HD tokens) a.po_state.vs_allocas births = births` by
+    (qpat_x_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[ptr_paired_prefix_def] >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_ownership >>
+     metis_tac[ptr_ownership_overlay_fixed]) >>
+  `sj.vs_allocas = a.po_state.vs_allocas` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[step_inst_def, step_inst_base_def] >>
+     namedCases_on `a.po_inst.inst_operands` ["", "x xs"] >> simp[] >>
+     Cases_on `x` >> simp[] >> Cases_on `xs` >> simp[] >>
+     rpt strip_tac >> gvs[jump_to_def]) >>
+  `se.vs_allocas = sj.vs_allocas` by metis_tac[enters_block_allocas] >>
+  gvs[ptr_observe_def, ptr_activation_tokens_def]
 QED
