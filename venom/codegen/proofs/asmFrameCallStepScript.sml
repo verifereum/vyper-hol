@@ -1926,6 +1926,41 @@ Proof
   simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def]
 QED
 
+Theorem asm_frame_outcome_effects_restore:
+  asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+    asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
+  s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
+  ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+  ct.pc = SUC c.pc /\
+  take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t)) /\
+  gas_readings t = gas_readings s /\
+  record_request (request_of s) a.as_requests ++ call_requests t = call_requests es0 /\
+  mem = asm_call_memory ao az ro rs a.as_memory /\
+  ct.stack = (if out.co_success then 1w else 0w)::
+    DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+  ct.returnData = out.co_returnData /\
+  buffer_to_list ct.memory = TAKE ro mem ++ TAKE rs out.co_returnData ++
+    DROP (ro + LENGTH (TAKE rs out.co_returnData)) mem /\
+  adopt_outcome (request_of s) out (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
+    t.rollback.toDelete /\
+  asm_consume_call_outcome (request_of s) ro rs
+    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+    (a with as_memory := mem) = AsmOK a1 ==>
+  asm_frame_rel prog data es0 a1 t
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
+  simp[asm_consume_call_outcome_eq] >> strip_tac >>
+  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
+  rewrite_tac[asm_frame_rel_def] >> strip_tac >>
+  gvs[] >> simp[asm_frame_rel_def, asm_next_def] >>
+  gvs[asm_evm_rel_def, asm_next_def]
+QED
+
 Theorem asm_frame_call_effects_restore:
   asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
@@ -1959,12 +1994,46 @@ Proof
      simp[arithmeticTheory.ADD1, EL_APPEND1] >>
      Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
      gvs[asm_inst_size_def]) >>
-  qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
-  simp[asm_consume_call_outcome_eq] >> strip_tac >>
-  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
-  rewrite_tac[asm_frame_rel_def] >> strip_tac >>
-  gvs[] >> simp[asm_frame_rel_def, asm_next_def] >>
-  gvs[asm_evm_rel_def, asm_next_def]
+  drule_all asm_frame_outcome_effects_restore >> simp[]
+QED
+
+Theorem asm_frame_outcome_effects_step_ok:
+  asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+    asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
+  s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  run_call t = run_call s /\
+  wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
+  ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+  ct.pc = SUC c.pc /\
+  take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t)) /\
+  gas_readings t = gas_readings s /\
+  record_request (request_of s) a.as_requests ++ call_requests t = call_requests es0 /\
+  mem = asm_call_memory ao az ro rs a.as_memory /\
+  ct.stack = (if out.co_success then 1w else 0w)::
+    DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+  ct.returnData = out.co_returnData /\
+  buffer_to_list ct.memory = TAKE ro mem ++ TAKE rs out.co_returnData ++
+    DROP (ro + LENGTH (TAKE rs out.co_returnData)) mem /\
+  adopt_outcome (request_of s) out (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
+    t.rollback.toDelete /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a =
+    asm_consume_call_outcome (request_of s) ro rs
+      (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+      (a with as_memory := mem) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `?a1. asm_consume_call_outcome (request_of s) ro rs
+    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
+    (a with as_memory := mem) = AsmOK a1` by
+    simp[asm_consume_call_outcome_eq] >>
+  drule_all asm_frame_outcome_effects_restore >> disch_tac >>
+  pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
+  gvs[] >> qexists_tac `t` >> asm_rewrite_tac[]
 QED
 
 Theorem asm_frame_call_effects_step_ok:
@@ -1996,13 +2065,17 @@ Theorem asm_frame_call_effects_step_ok:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_frame_call_consume >> disch_tac >>
-  `?a1. asm_consume_call_outcome (request_of s) ro rs
-    (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
-    (a with as_memory := mem) = AsmOK a1` by
-    simp[asm_consume_call_outcome_eq] >>
-  drule_all asm_frame_call_effects_restore >> disch_tac >>
-  pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
-  gvs[] >> qexists_tac `t` >> asm_rewrite_tac[]
+  `asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+   asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1` by
+    (`a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+     drule asm_pc_to_offset_suc >>
+     simp[arithmeticTheory.ADD1, EL_APPEND1] >>
+     Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
+     gvs[asm_inst_size_def]) >>
+  qpat_x_assum `mem = _` SUBST_ALL_TAC >>
+  `asm_call_memory ao az ro rs a.as_memory =
+   asm_call_memory ao az ro rs a.as_memory` by simp[] >>
+  drule_all asm_frame_outcome_effects_step_ok >> simp[]
 QED
 
 Theorem asm_take_outcome_result_agrees:
