@@ -729,10 +729,8 @@ Proof
 QED
 
 Theorem emit_reorder_output_live_coverage:
-  !ps m core spillbase operands selected opc nl outputs dfg iops ps1 rops ps4.
-    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
-    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
-    EVERY (\x. x <> dead_stack_marker) operands /\ LENGTH operands <= 16 /\
+  !ps operands selected opc nl outputs dfg iops ps1 rops ps4.
+    LENGTH operands <= 16 /\
     (!v. MEM (Var v) operands \/ (MEM v nl /\ ~MEM v outputs) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
     PERM operands selected /\ emit_input_plan opc operands nl ps = (iops,ps1) /\
@@ -747,11 +745,11 @@ Proof
   `!v. MEM (Var v) operands \/ MEM v keep ==>
      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
     (simp_tac bool_ss [Abbr `keep`, MEM_FILTER] >> metis_tac[]) >>
-  drule emit_reorder_pop_marker_core_protected_reserve >>
-  disch_then drule >> disch_then drule >> disch_then drule >>
-  disch_then drule >> disch_then drule >> disch_then drule >>
-  disch_then drule >> disch_then drule >>
-  simp[] >> strip_tac >>
+  `!v. MEM v keep ==>
+    MEM (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) \/
+    Var v IN FDOM ps4.ps_spilled` by
+    metis_tac[emit_reorder_plan_bounded_protected_consumption] >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
   rpt strip_tac >> Cases_on `MEM v outputs` >- simp[MEM_MAP] >>
   `MEM v keep` by simp[Abbr `keep`, MEM_FILTER] >>
   first_x_assum drule >> simp[MEM_MAP] >> metis_tac[]
@@ -820,11 +818,8 @@ Proof
 QED
 
 Theorem native_regular_live_lower:
-  !liveness dfg cfg fn inst nl halting term lbl ps m core spillbase ops qs.
-    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
-    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+  !liveness dfg cfg fn inst nl halting term lbl ps ops qs.
     inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
-    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
     (!v. MEM (Var v) (compute_operands inst) \/
       (MEM v nl /\ ~MEM v inst.inst_outputs) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
@@ -836,10 +831,7 @@ Proof
   `!v. MEM v nl ==>
     MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack ++ MAP Var inst.inst_outputs) \/
     Var v IN FDOM ps4.ps_spilled` by
-    (drule emit_reorder_output_live_coverage >>
-     disch_then drule >> disch_then drule >> disch_then drule >>
-     disch_then drule >> disch_then drule >> disch_then drule >>
-     disch_then drule >> simp[]) >>
+    metis_tac[emit_reorder_output_live_coverage] >>
   drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
   disch_then (strip_assume_tac o SRULE [parameter_push_fold]) >>
   `!v. MEM v nl ==> MEM (Var v) ps7.ps_stack \/ Var v IN FDOM ps7.ps_spilled` by
@@ -924,10 +916,7 @@ Resume native_regular_live_inventory[tail]:
   `!v. MEM v nl ==>
     MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack ++ MAP Var inst.inst_outputs) \/
     Var v IN FDOM ps4.ps_spilled` by
-    (qpat_assum `ps.ps_stack = _` (mp_then Any mp_tac emit_reorder_output_live_coverage) >>
-     disch_then drule >> disch_then drule >> disch_then drule >>
-     disch_then drule >> disch_then drule >> disch_then drule >>
-     disch_then drule >> simp[]) >>
+    metis_tac[emit_reorder_output_live_coverage] >>
   drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> strip_tac >>
   `ps7.ps_stack = REPLICATE m dead_stack_marker ++ (rest ++ MAP Var inst.inst_outputs)` by metis_tac[] >>
   `stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack =
