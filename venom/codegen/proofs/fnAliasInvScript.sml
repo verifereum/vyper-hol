@@ -7174,6 +7174,191 @@ Proof
   drule_all alias_selected_input_liveout >> simp[]
 QED
 
+Theorem alias_do_dup_cleanup_update:
+  do_dup dist ps = (ops, qs) ==>
+  do_dup dist (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+    (ops, qs with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+Proof
+  simp[do_dup_def] >> IF_CASES_TAC >> simp[]
+  >- simp[plan_state_component_equality] >>
+  pairarg_tac >> simp[plan_state_component_equality]
+QED
+
+Theorem alias_do_swap_cleanup_update:
+  do_swap dist ps = (ops, qs) ==>
+  do_swap dist (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+    (ops, qs with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+Proof
+  Cases_on `dist = 0` >- simp[do_swap_def] >>
+  simp[do_swap_def] >> IF_CASES_TAC >> simp[]
+  >- simp[plan_state_component_equality] >>
+  pairarg_tac >> simp[plan_state_component_equality]
+QED
+
+Theorem alias_popmany_singleton_cleanup_update:
+  popmany_plan [v] ps = (ops, qs) ==>
+  popmany_plan [v] (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+    (ops, qs with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+Proof
+  simp[popmany_plan_def, popmany_individual_def, QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  Cases_on `stack_get_depth v ps.ps_stack` >>
+  simp[is_contiguous_top_def, QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  Cases_on `x = 1` >> gvs[]
+  >- (Cases_on `do_swap 1 ps` >>
+      drule alias_do_swap_cleanup_update >>
+      disch_then (qspecl_then [`promised`, `h`] mp_tac) >>
+      simp[] >> strip_tac >> simp[plan_state_component_equality]) >>
+  Cases_on `x = 0` >> gvs[]
+  >- simp[plan_state_component_equality] >>
+  Cases_on `do_swap x ps` >>
+  drule alias_do_swap_cleanup_update >>
+  disch_then (qspecl_then [`promised`, `h`] mp_tac) >>
+  simp[] >> strip_tac >> simp[plan_state_component_equality]
+QED
+
+Theorem alias_phi_cleanup_update:
+  SND (generate_phi_plan inst live halting
+    (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+  (SND (generate_phi_plan inst live halting ps)) with
+    <|ps_cleanup_height := h; ps_cleanup_promised := promised|>
+Proof
+  simp[generate_phi_plan_def] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >> simp[] >>
+  Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) live` >> simp[]
+  >- (Cases_on `do_dup x ps` >>
+      drule alias_do_dup_cleanup_update >>
+      disch_then (qspecl_then [`promised`, `h`] mp_tac) >>
+      simp[] >> strip_tac >>
+      IF_CASES_TAC >> simp[] >>
+      Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+        (r with ps_stack := stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack)` >>
+      drule alias_popmany_singleton_cleanup_update >>
+      disch_then (qspecl_then [`promised`, `h`] mp_tac) >> simp[]) >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+    (ps with ps_stack := stack_poke x (Var (HD inst.inst_outputs)) ps.ps_stack)` >>
+  drule alias_popmany_singleton_cleanup_update >>
+  disch_then (qspecl_then [`promised`, `h`] mp_tac) >> simp[]
+QED
+
+Theorem alias_phi_fold_cleanup_update:
+  !pairs ps.
+  FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s))
+    (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) pairs =
+  (FOLDL (\s p. SND (generate_phi_plan (FST p) (SND p) halting s)) ps pairs) with
+    <|ps_cleanup_height := h; ps_cleanup_promised := promised|>
+Proof
+  Induct >> simp[alias_phi_cleanup_update]
+QED
+
+Theorem alias_block_plan_conditional_liveout:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  (fn_entry_label fn <> SOME lbl /\ LENGTH (cfg_preds_of cfg lbl) <= 1 ==>
+    !x. MEM x (live_vars_at liveness lbl 0) ==> plan_holds ps (Var x)) /\
+  generate_block_plan liveness dfg cfg fn bb
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (ops, qs) ==>
+  !x. MEM x (live_vars_at liveness lbl (LENGTH bb.bb_instructions)) ==>
+    plan_holds qs (Var x)
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (`cfg_reachable_of (cfg_analyze fn) lbl` by
+       metis_tac[alias_lineage_reachable] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  Cases_on `bb = HD fn.fn_blocks`
+  >- (gvs[] >>
+      drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`) alias_entry_block_plan_cut >>
+      simp[] >> disch_then drule >> strip_tac >>
+      drule_all alias_ready_param_partition >> strip_tac >>
+      drule alias_ready_entry_body >> simp[] >> disch_then drule >> strip_tac >>
+      `!y. MEM y (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+           (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+           plan_holds ps_param (Var y)` by
+        (rpt strip_tac >> drule_all alias_prepare_params_entry_demand >>
+         disch_then (qspec_then
+           `ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>` mp_tac) >>
+         simp[]) >>
+      drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+        alias_body_plan_live_cut_coverage >>
+      disch_then (qspec_then `get_params (HD fn.fn_blocks).bb_instructions` mp_tac) >>
+      simp[]) >>
+  suspend "nonentry"
+QED
+
+Resume alias_block_plan_conditional_liveout[nonentry]:
+  gvs[] >> drule_all alias_nonentry_block_plan_cut >> strip_tac >>
+  `EVERY (\inst. inst_wf inst /\ inst.inst_opcode <> PHI /\
+           ~is_param_opcode inst.inst_opcode)
+      (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)` by
+    (drule_all alias_ready_phi_suffix >> strip_tac >>
+     drule_all alias_ready_param_partition >> strip_tac >>
+     gvs[EVERY_CONJ] >> metis_tac[EVERY_DROP]) >>
+  `fn_entry_label fn <> SOME bb.bb_label` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def, lookup_block_def, FIND_thm] >>
+     strip_tac >> gvs[]) >>
+  Cases_on `1 < LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label)`
+  >- suspend "join" >>
+  `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <= 1` by decide_tac >>
+  `collect_phis bb.bb_instructions = []` by
+    metis_tac[alias_ready_nonjoin_no_phis] >>
+  `?pred. MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred)` by
+    (qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+     simp[Once lineage_state_cases] >> metis_tac[]) >>
+  `cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred]` by
+    metis_tac[alias_nonjoin_edge_preds] >>
+  `!y. MEM y (live_vars_at (liveness_analyze fn) bb.bb_label 0) ==>
+     plan_holds ps_clean (Var y)` by
+    (rpt strip_tac >>
+     `plan_holds (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+       (Var y)` by simp[] >>
+     `MEM y (input_vars_from pred bb.bb_instructions
+        (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+       simp[alias_input_vars_no_phis] >>
+     drule_all alias_clean_stack_holds_input >>
+     disch_then (qspec_then `fn` mp_tac) >> gvs[]) >>
+  qpat_x_assum `bb.bb_instructions = non_param_insts bb` (assume_tac o SYM) >>
+  gvs[COUNT_LIST_def] >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    alias_body_plan_live_cut_coverage >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[]
+QED
+
+Resume alias_block_plan_conditional_liveout[join]:
+  qpat_x_assum `bb.bb_instructions = non_param_insts bb` (assume_tac o SYM) >>
+  `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1` by decide_tac >>
+  `ps_clean = ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> simp[]) >>
+  `!y. MEM y (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (collect_phis bb.bb_instructions))) ==> plan_holds ps_phi (Var y)` by
+    (rpt strip_tac >>
+     qpat_assum `ps_phi = _` (fn th => rewrite_tac[th]) >>
+     simp[alias_phi_fold_cleanup_update] >>
+     drule_at (Pat `lineage_state _ _ _ _ _ _ _`)
+       alias_lineage_join_phi_cut_coverage >>
+     simp[] >> disch_then drule >> simp[]) >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    alias_body_plan_live_cut_coverage >>
+  disch_then (qspec_then `collect_phis bb.bb_instructions` mp_tac) >>
+  `bb.bb_instructions = collect_phis bb.bb_instructions ++
+      DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+     qpat_assum `bb.bb_instructions = _ ++ rest`
+       (fn th => CONV_TAC (RAND_CONV (RAND_CONV (RAND_CONV (REWR_CONV th))))) >>
+     simp[DROP_APPEND]) >>
+  simp[]
+QED
+
+Finalise alias_block_plan_conditional_liveout
+
 Theorem alias_run_without_predecessor_no_phis:
   s.vs_prev_bb = NONE /\ run_block fuel ctx bb s = OK s' ==>
   collect_phis bb.bb_instructions = []
