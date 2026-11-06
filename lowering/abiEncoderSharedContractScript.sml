@@ -136,10 +136,10 @@ Proof
 QED
 
 Theorem abi_encoder_shared_endpoint_output:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
   eval_operand out actual = SOME (n2w (LENGTH (enc at av)))
 Proof
-  simp[abi_encoder_shared_endpoint_def]
+  simp[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_shared_endpoint_scratch:
@@ -151,39 +151,39 @@ Proof
 QED
 
 Theorem abi_encoder_shared_endpoint_registered:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
-  abi_encoder_registered_effect (abi_decoder_ids start.cs_next_id end_st.cs_next_id)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
+  abi_encoder_registered_effect (abi_sites_decoder_ids sites start.cs_next_id end_st.cs_next_id)
     [(d,LENGTH (enc at av))] initial actual
 Proof
-  simp[abi_encoder_shared_endpoint_def]
+  simp[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_shared_endpoint_alloca_inv:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual /\
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual /\
   alloca_inv initial ==> alloca_inv actual
 Proof
-  simp[abi_encoder_shared_endpoint_def]
+  simp[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_shared_endpoint_block:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
   actual.vs_current_bb = end_st.cs_current_bb
 Proof
-  simp[abi_encoder_shared_endpoint_def]
+  simp[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_shared_endpoint_index:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
   actual.vs_inst_idx = LENGTH end_st.cs_current_insts
 Proof
-  simp[abi_encoder_shared_endpoint_def]
+  simp[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_shared_endpoint_nonhalted:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
   ~actual.vs_halted
 Proof
-  simp[abi_encoder_shared_endpoint_def]
+  simp[abi_sites_encoder_shared_endpoint_def]
 QED
 
 Theorem abi_encoder_shared_endpoint_extend_sim:
@@ -194,7 +194,7 @@ Proof
 QED
 
 Theorem abi_encoder_shared_endpoint_sim:
-  abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
   abi_decode_sim ctx func initial actual
 Proof
   strip_tac >> drule abi_encoder_shared_endpoint_extend_sim >>

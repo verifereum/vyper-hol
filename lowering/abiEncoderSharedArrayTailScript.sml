@@ -210,7 +210,7 @@ Theorem abi_encoder_array_spine_shared_sim:
   abi_encoder_member_phase_raw st p initial ready /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+  abi_sites_encoder_shared_endpoint sites (ctx,func) (p,ce,len,limit_st)
     (first,last,b,cap) (at,av,q) ready encoded /\
   abi_encode_child_suffix head dp offset len ce = (out,en) /\ fn_has_code ce en func /\
   abi_encoder_member_phase_raw ce en encoded actual ==>
@@ -222,7 +222,7 @@ Proof
   `~encoded.vs_halted /\ encoded.vs_current_bb = ce.cs_current_bb /\
    encoded.vs_inst_idx = LENGTH ce.cs_current_insts /\
    abi_encoder_extend_sim ctx func ready encoded` by
-    fs[abi_encoder_shared_endpoint_def] >>
+    fs[abi_sites_encoder_shared_endpoint_def] >>
   drule_all abi_encoder_spine_suffix_extend_sim >>
   disch_then (qspec_then `ctx` assume_tac) >>
   irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[] >>
