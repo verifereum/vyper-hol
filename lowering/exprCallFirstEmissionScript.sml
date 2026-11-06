@@ -392,3 +392,94 @@ Proof
    ho_match_mp_tac first_emission_bind >> conj_tac
    >- first_assum ACCEPT_TAC >> gen_tac >> metis_tac[first_emission_return])
 QED
+
+Theorem cs_appends_store_multi_results[local]:
+  !ops off. cs_appends (store_multi_results buf ops off)
+Proof
+  Induct >> simp_tac bool_ss [store_multi_results_def]
+  >- MATCH_ACCEPT_TAC cs_appends_return >>
+  rpt gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- simp[cs_appends_emit_helpers] >> gen_tac >>
+  ho_match_mp_tac cs_appends_ignore_bind >> simp[cs_appends_emit_helpers]
+QED
+
+Theorem first_emission_fresh_vars[local]:
+  !n a x b. fresh_vars n a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct >> simp_tac bool_ss [fresh_vars_def]
+  >- metis_tac[first_emission_return] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[first_emission_fresh] >> gen_tac >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- first_assum ACCEPT_TAC >> gen_tac >> metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_multi_op:
+  opc <> PHI ==>
+  !a x b. emit_multi_op opc ops n a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  strip_tac >> rewrite_tac[emit_multi_op_def] >>
+  ho_match_mp_tac entry_first_emission_then_strong >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_fresh_vars >> gen_tac >>
+  ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule_at (Pos (el 2)) (cj 1 first_emission_emit_helpers) >> simp[]) >>
+  metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_intcall:
+  (!e ty a x b. MEM e args /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rty ty (IntCall fid) args defret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> simp_tac bool_ss [compile_call_def, LET_THM] >>
+  pairarg_tac >> asm_simp_tac bool_ss [LET_THM, pairTheory.UNCURRY_DEF, pairTheory.FST, pairTheory.SND] >>
+  qmatch_goalsub_abbrev_tac `Label ilbl` >>
+  qmatch_goalsub_abbrev_tac `StackValue cty` >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (Cases_on `returns_count > 0` >> asm_simp_tac bool_ss []
+      >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+          >- (POP_ASSUM_LIST (K all_tac) >>
+              simp_tac bool_ss [compile_alloc_buffer_def] >> call_weak_tac) >>
+          gen_tac >> simp[cs_extends_refl]) >>
+      Cases_on `return_buf_size > 0` >> asm_simp_tac bool_ss []
+      >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+          >- (POP_ASSUM_LIST (K all_tac) >>
+              simp_tac bool_ss [compile_alloc_buffer_def] >> call_weak_tac) >>
+          gen_tac >> simp[cs_extends_refl]) >>
+      simp[cs_extends_refl]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_stage_intcall_args >>
+  gen_tac >> POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `returns_count > 0` >> Cases_on `return_buf` >>
+  asm_simp_tac (srw_ss()) [] >>
+  (rewrite_tac[state_pair_let_bind] >>
+   ho_match_mp_tac first_emission_strong >>
+   ho_match_mp_tac first_emission_strong_bind >> conj_tac
+   >- FIRST [call_emit_tac, match_mp_tac first_emission_multi_op >> simp[]] >>
+   rpt gen_tac >> simp_tac bool_ss [comp_bind_def] >>
+   simp[cs_extends_refl] >> pairarg_tac >>
+   gvs[] >> metis_tac[cs_appends_store_multi_results, cs_appends_def])
+QED
