@@ -42,6 +42,31 @@ Proof
   rpt (first_x_assum drule_all >> strip_tac) >> gvs[]
 QED
 
+Theorem replace_popped_length[local]:
+  !history tv path replacement history'.
+    replace_popped tv path replacement history = SOME history' ==>
+    LENGTH history' = LENGTH history
+Proof
+  Induct >> simp[Once replace_popped_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[Once replace_popped_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem scopes_progress_update[local]:
+  find_containing_scope id sc = SOME (pre,env,entry,rest) /\
+  (entry' = entry \/ LENGTH entry.popped < LENGTH entry'.popped) ==>
+  scopes_progress sc (pre ++ (env |+ (id,entry'))::rest)
+Proof
+  strip_tac >>
+  drule find_containing_scope_lookup >> strip_tac >>
+  drule find_containing_scope_pre_none >> strip_tac >>
+  drule find_containing_scope_structure >> strip_tac >>
+  rw[scopes_progress_def] >> Cases_on `n = id` >>
+  gvs[lookup_scopes_update, lookup_scopes_update_other] >> metis_tac[]
+QED
+
 Theorem eval_scopes_progress:
   (!cx e st res st'. eval_expr cx e st = (res,st') ==>
      scopes_progress st.scopes st'.scopes) /\
