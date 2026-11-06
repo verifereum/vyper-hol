@@ -2641,3 +2641,64 @@ Proof
     metis_tac[inventory_deep_swap_length] >>
   gvs[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
+
+Theorem inventory_two_swaps_phase[local]:
+  (EVERY P ps.ps_stack \/ LENGTH ps.ps_stack <= n) /\
+  d < LENGTH ps.ps_stack /\ f < n /\
+  do_swap d ps = (ops,mid) /\ do_swap f mid = (ops',qs) ==>
+  EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= n
+Proof
+  disch_tac >>
+  `EVERY P mid.ps_stack \/ LENGTH mid.ps_stack <= n` by
+    metis_tac[inventory_swap_phase] >>
+  metis_tac[inventory_swap_phase]
+QED
+
+Theorem inventory_reorder_one_phase:
+  EVERY P targets /\ MEM op targets /\ idx < LENGTH targets /\
+  (!x. MEM x targets ==> FLOOKUP ps.ps_spilled x = NONE) /\
+  (EVERY P ps.ps_stack \/ LENGTH ps.ps_stack <= LENGTH targets) /\
+  reorder_one dfg targets idx op ps = (ops,qs) ==>
+  EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= LENGTH targets
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP ps.ps_spilled op = NONE /\ P op` by
+    metis_tac[EVERY_MEM] >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [reorder_one_def, LET_THM] >>
+  pairarg_tac >>
+  `ps1 = ps` by (gvs[AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `ps1 = ps` SUBST_ALL_TAC >>
+  qmatch_goalsub_abbrev_tac `stack_get_unfixed_depth op f n` >>
+  `f < n` by (simp[Abbr `f`, Abbr `n`] >> decide_tac) >>
+  asm_simp_tac (srw_ss()) [] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  asm_simp_tac (srw_ss()) [] >> pairarg_tac >>
+  asm_simp_tac (srw_ss()) [] >>
+  `EVERY P ps2.ps_stack \/ LENGTH ps2.ps_stack <= n` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     IF_CASES_TAC >> simp_tac bool_ss [] >> strip_tac
+     >- (irule inventory_reduce_phase >> metis_tac[]) >>
+     gvs[]) >>
+  (Cases_on `stack_get_unfixed_depth op f n ps2.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  qmatch_asmsub_rename_tac `stack_get_unfixed_depth op f n ps2.ps_stack = SOME found` >>
+  `found < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >>
+  simp[] >> Cases_on `found = f`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `f < LENGTH ps2.ps_stack` >> simp[] >>
+  TRY (rename1 `operand_equiv dfg op _` >>
+       Cases_on `operand_equiv dfg op (stack_peek f ps2.ps_stack)` >> simp[]) >>
+  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[]
+  >>~- ([`EVERY _ (stack_poke _ _ _)`],
+      (Cases_on `LENGTH ps2.ps_stack <= n`
+       >- simp[stack_poke_def] >>
+       `MEM (stack_peek f ps2.ps_stack) ps2.ps_stack` by
+         metis_tac[stack_peek_mem] >>
+       disj1_tac >> gvs[EVERY_MEM] >>
+       metis_tac[inventory_poke_physical_origin])) >>
+  irule inventory_two_swaps_phase >>
+  qexistsl [`found`, `f`, `ps3`] >> simp[] >>
+  qexistsl [`swap1_ops`, `ps2`] >> simp[])
+QED
