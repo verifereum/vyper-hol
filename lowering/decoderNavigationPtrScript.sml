@@ -118,26 +118,12 @@ Proof
      conj_tac >- gvs[Abbr `t`, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
      simp[Abbr `H`, Abbr `u`, Abbr `t`, update_var_def] >>
      rpt strip_tac >> gvs[] >>
-     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
-     conj_tac >- metis_tac[] >>
-     simp[step_inst_non_invoke] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
-       combinTheory.K_THM, opcode_case_def] >>
-     simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
-     rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  `new_site_bytes s t = {}` by
-    simp[Abbr `t`, new_site_bytes_def, update_var_def, FLOOKUP_DEF,
-      EXTENSION, SF CONJ_ss] >>
-  gvs[] >>
-  simp[Abbr `H`, Abbr `u`, step_prov_def, step_taint_def,
-    out_prov_def, first_prov_def, set_prov_def, mk_inst_def, op_prov_def,
-    set_var_taint_def, out_taint_def, op_taint_def, mem_taint_def,
-    new_site_bytes_def, step_writes_def, written_taint_def, store_taint_def,
-    imm_taint_def, adopt_reset_def,
-    FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, source_memory_write_ranges_def,
-    range_bytes_def, EXTENSION, SF CONJ_ss])
+     irule setup_scalar_binop_safe >> simp[allocas_from_def]) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `opc = ADD \/ opc = MUL` by metis_tac[] >>
+  drule_at (Pat `H = step_prov _ _ _ _`) setup_scalar_binop_ghost >>
+  disch_then (qspecl_then [`f a b`, `u`, `tn`, `s`] mp_tac) >>
+  asm_rewrite_tac [] >> strip_tac >> metis_tac[])
 QED
 
 (* Exact scalar successors, independent of stale output-register contents. *)
