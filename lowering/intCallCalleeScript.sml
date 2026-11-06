@@ -2331,7 +2331,7 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `cenv2.ce_module_var_type = cenv.ce_module_var_type` mp_tac >>
   qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  simp[immutable_alloca_sep_def] >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
   conj_tac >> strip_tac >> (
   rpt gen_tac >> strip_tac >>
   `FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =

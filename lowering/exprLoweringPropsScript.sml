@@ -276,19 +276,48 @@ End
    initialized immutable, at its value's type, misses every recorded ALLOCA
    of this function.  Runtime reads use the data section and impose no memory
    separation obligation. *)
-Definition immutable_alloca_sep_def:
-  immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
+Definition immutable_decl_sep_def:
+  immutable_decl_sep cenv cx scopes (vars:var_env)
+      (allocas:num |-> num # num) (next:num) <=>
+    cenv.ce_is_ctor ==>
+    !name ty tv off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+        SOME (ImmutableLoc off) /\
+      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      off + type_memory_size tv <= next /\
+      (!aid b sz. FLOOKUP allocas aid = SOME (b,sz) ==>
+        regions_disjoint off (type_memory_size tv) b sz) /\
+      (!id sz entry p w.
+        lookup_scopes id scopes = SOME entry /\
+        FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+        FLOOKUP vars p = SOME w ==>
+        regions_disjoint off (type_memory_size tv) (w2n w) sz)
+End
+
+(* The same, with the live locals read through local_region. *)
+Theorem immutable_decl_sep_alt:
+  !cenv cx scopes ss allocas next.
+    immutable_decl_sep cenv cx scopes ss.vs_vars allocas next <=>
     (cenv.ce_is_ctor ==>
      !name ty tv off.
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
          SOME (ImmutableLoc off) /\
        cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
        evaluate_type (get_tenv cx) ty = SOME tv ==>
-       off + type_memory_size tv <= ss.vs_alloca_next /\
-       (!aid b sz. FLOOKUP ss.vs_allocas aid = SOME (b,sz) ==>
+       off + type_memory_size tv <= next /\
+       (!aid b sz. FLOOKUP allocas aid = SOME (b,sz) ==>
          regions_disjoint off (type_memory_size tv) b sz) /\
-       (!id b sz. local_region cenv vs.scopes ss id b sz ==>
-         regions_disjoint off (type_memory_size tv) b sz)) /\
+       (!id b sz. local_region cenv scopes ss id b sz ==>
+         regions_disjoint off (type_memory_size tv) b sz))
+Proof
+  simp[immutable_decl_sep_def, local_region_def, lookup_var_def, PULL_EXISTS]
+QED
+
+Definition immutable_alloca_sep_def:
+  immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
+    immutable_decl_sep cenv cx vs.scopes ss.vs_vars ss.vs_allocas
+      ss.vs_alloca_next /\
     (cenv.ce_is_ctor ==>
      !name tv v off.
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
@@ -328,7 +357,7 @@ Theorem immutable_alloca_sep_borrowed_probe[local]:
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[local_region_def, lookup_scopes_def, lookup_var_def,
-       immutable_alloca_sep_def, get_source_immutables_def,
+       immutable_alloca_sep_def, immutable_decl_sep_alt, get_source_immutables_def,
        finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
        type_memory_size_def, compileEnvTheory.regions_disjoint_def, wordsTheory.dimword_def,
        venomMemPropsTheory.dimindex_256] >>
@@ -348,7 +377,7 @@ Theorem immutable_alloca_sep_fields:
        ?id0. local_region cenv vs.scopes ss id0 b sz) ==>
     immutable_alloca_sep func cenv cx vs' ss'
 Proof
-  rw[immutable_alloca_sep_def] >> metis_tac[]
+  rw[immutable_alloca_sep_def, immutable_decl_sep_alt] >> metis_tac[]
 QED
 
 Theorem immutable_alloca_sep_cenv_cong:
@@ -362,7 +391,7 @@ Theorem immutable_alloca_sep_cenv_cong:
        ?id0. local_region cenv' vs.scopes ss id0 b sz) ==>
     immutable_alloca_sep func cenv cx vs ss
 Proof
-  rw[immutable_alloca_sep_def] >> metis_tac[]
+  rw[immutable_alloca_sep_def, immutable_decl_sep_alt] >> metis_tac[]
 QED
 
 (* The general frame: the frontier grows, every allocation is an old one or
@@ -382,7 +411,7 @@ Theorem immutable_alloca_sep_frame:
        ss.vs_alloca_next <= b) ==>
     immutable_alloca_sep func cenv cx vs' ss'
 Proof
-  rpt gen_tac >> rewrite_tac[immutable_alloca_sep_def] >> strip_tac >>
+  rpt gen_tac >> rewrite_tac[immutable_alloca_sep_def, immutable_decl_sep_alt] >> strip_tac >>
   conj_tac >> strip_tac >> (
   rpt (qpat_x_assum `cenv.ce_is_ctor ==> _`
          (fn th => first_assum (assume_tac o MP th))) >>
@@ -887,7 +916,7 @@ Proof
     (irule fmp_room_fields_cong >> simp[jump_to_def]) >>
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_alt,
        local_region_def, lookup_var_def, immutable_base_zero_alt]
 QED
 
@@ -904,7 +933,7 @@ Proof
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_alt,
        immutable_base_zero_alt]
 QED
 
@@ -920,7 +949,7 @@ Proof
        contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
        venomMemDefsTheory.alloca_next_valid_def, alloca_room_def, fmp_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def, accounts_rel_def, immutable_base_zero_alt] >>
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_alt, accounts_rel_def, immutable_base_zero_alt] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -929,7 +958,7 @@ Theorem stmt_state_rel_push_scope:
     stmt_state_rel ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
     stmt_state_rel ctx func cenv cx es s
 Proof
-  simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def,
+  simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def, immutable_decl_sep_alt,
        local_region_def, lookup_scopes_def]
 QED
 
