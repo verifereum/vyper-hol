@@ -937,6 +937,7 @@ Resume canonical_eval_no_control_with_results[Builtin]:
   imp_res_tac lift_option_type_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[type_check_def, assert_def, return_def] >>
+  imp_res_tac lift_option_type_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[no_control_exc_def] >> metis_tac[]
 QED
