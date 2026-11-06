@@ -1,6 +1,6 @@
 Theory bodyPtrMakeArrayAllocatedOne
 Ancestors
-  bodyPtrMakeArrayAllocCursor bodyPtrMakeArrayCopyStateFrame
+  bodyPtrMakeArrayAllocCursor bodyPtrMakeArrayCopyStateFrame bodyPtrMakeArrayExternalPost bodyPtrMakeArrayBufferPost
   bodyPtrMakeArrayOneSlotRuntime bodyPtrMakeArrayMaterialiseFrame
   bodyPtrDefs valueEncodingProofs exprSimCopy exprSimStorageCopy ptrDiscipline fragGasPathPtr
   emitHelperProps emitHelper context compileEnv venomState finite_map pred_set words list
@@ -30,7 +30,7 @@ Proof
   strip_tac >> gvs[not_fresh_at_def] >> decide_tac
 QED
 
-Theorem allocated_one_slot_endpoint:
+Theorem allocated_one_slot_endpoint_frame:
   compile_alloc_buffer 32 sa = (buf,sm) /\ buf.buf_operand = Var dst /\
   emit_op (if tr then TLOAD else SLOAD) [src] sm = (Var tmp,sl) /\
   emit_void MSTORE [Var dst; Var tmp] sl = ((),sb) /\ fn_has_code sm sb func /\
@@ -59,7 +59,21 @@ Theorem allocated_one_slot_endpoint:
     stmt_state_rel ctx func cenv cx es z /\
     lookup_var dst z = SOME (n2w b) /\ ptr_covers H tm dst z 32 /\
     (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> val_in_memory tv v b m) /\
-    ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm
+    ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm /\
+    (!esi si e raw vv base.
+      vv_post ctx func cenv cx e esi si sa base es raw vv s /\
+      read_result cx raw es = (INL v,es) /\
+      MAP FDOM esi.scopes = MAP FDOM es.scopes /\
+      local_ptrs_reserved cenv si /\
+      si.cs_next_var <= sa.cs_next_var /\ si.cs_next_id <= sa.cs_next_id /\
+      ~is_word_type (expr_type e) /\
+      evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+      val_wf tv v /\ val_footprint tv v <= 32 ==>
+      expr_post ctx func cenv cx e esi si sb base es v (Var dst) z /\
+      (type_memory_size tv <= 32 /\
+       type_memory_bytes cenv (lowered_value_type cenv e) <= 32 ==>
+       ptr_val_ok cx (expr_type e) v (Var dst) H tm z /\
+       ptr_buf_ok cenv e (Var dst) H z))
 Proof
   strip_tac >>
   `32 < dimword(:256)` by simp[dimword_def] >>
@@ -91,7 +105,7 @@ Proof
   suspend "post"
 QED
 
-Resume allocated_one_slot_endpoint[post]:
+Resume allocated_one_slot_endpoint_frame[post]:
   `stmt_state_rel ctx func cenv cx es z` by
     (irule literal_copy_window_stmt_state_rel >>
      qexistsl_tac [`sa.cs_next_id`, `w2n w`, `32`,
@@ -133,7 +147,68 @@ Resume allocated_one_slot_endpoint[post]:
      qexistsl_tac [`ctx`, `func`] >> simp[]) >>
   qexistsl_tac [`z`, `H2`, `tm2`, `w2n w`] >>
   simp[IgnAsm `tm2.t_mem = _`] >>
-  drule_all gas_path_ptr_then >> simp[]
+  conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >> suspend "semantic"
 QED
 
-Finalise allocated_one_slot_endpoint
+Resume allocated_one_slot_endpoint_frame[semantic]:
+  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >-
+    (strip_tac >> `lookup_var dst z = SOME w` by simp[] >>
+     drule_all literal_buffer_pointer_post >> simp[]) >>
+  `val_in_memory tv v (w2n w) z.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `ci_mono sa sm` by
+    (qspecl_then [`32`, `sa`] mp_tac exprLoweringPropsTheory.ci_mono_compile_alloc_buffer >> simp[]) >>
+  `sa.cs_next_var <= sm.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    gvs[emit_op_def, fresh_var_def, emit_inst_def, fresh_id_def,
+        emit_void_def, emit_def, comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  `!off len. off + len <= w2n w \/ w2n w + 32 <= off ==>
+    mem_bytes_at off len z.vs_memory = mem_bytes_at off len a.vs_memory` by
+    (rpt strip_tac >> irule literal_copy_exterior_bytes >>
+     qexistsl_tac [`w2n w`, `32`] >> simp[]) >>
+  `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = sa.cs_next_id` by
+    (qexists_tac `mk_inst sa.cs_next_id ALLOCA [Lit (n2w 32)]
+       [STRING #"%" (toString sa.cs_next_var)]` >> simp[venomInstTheory.mk_inst_def]) >>
+  `(!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x a) /\
+    eval_operand (Var dst) z = SOME w` by
+    (simp[eval_operand_def] >> metis_tac[]) >>
+  drule_all copy_buffer_read_post_transport >> simp[]
+QED
+
+Finalise allocated_one_slot_endpoint_frame
+
+Theorem allocated_one_slot_endpoint:
+  compile_alloc_buffer 32 sa = (buf,sm) /\ buf.buf_operand = Var dst /\
+  emit_op (if tr then TLOAD else SLOAD) [src] sm = (Var tmp,sl) /\
+  emit_void MSTORE [Var dst; Var tmp] sl = ((),sb) /\ fn_has_code sm sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w 32)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  copy_old_operand sa src /\ op_taint tn src = {} /\ eval_operand src s = SOME key /\
+  well_formed_type_value tv /\ slots_in_range st (w2n key) tv /\
+  decode_value st (w2n key) tv = SOME v /\ type_slot_size tv <= 1 /\
+  storage_range_agree st (if tr then contract_transient s else contract_storage s) key tv /\
+  (!k j. w2n key <= w2n k /\ w2n k < w2n key+type_slot_size tv /\
+    j < 32 /\ j IN key_taint (if tr then tn.t_trans else tn.t_stor) k ==>
+    dead_bytes (if tr then contract_transient s else contract_storage s)
+      (w2n key) tv (w2n k) j) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?z H tm b.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+    z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx func cenv cx es z /\
+    lookup_var dst z = SOME (n2w b) /\ ptr_covers H tm dst z 32 /\
+    (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> val_in_memory tv v b m) /\
+    ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm
+Proof
+  strip_tac >> drule_all allocated_one_slot_endpoint_frame >> metis_tac[]
+QED
