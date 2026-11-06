@@ -75,3 +75,53 @@ Proof
   fs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
     write_memory_mem_bytes_at_same]
 QED
+
+Theorem ghost_kept_scopes_cong:
+  ee.scopes = es.scopes ==>
+  (ghost_kept cenv ee protected G tn s H un <=>
+   ghost_kept cenv es protected G tn s H un)
+Proof
+  simp[bodyPtrDefsTheory.ghost_kept_def]
+QED
+
+Theorem wb_frame_scopes_cong:
+  ee.scopes = es.scopes ==>
+  (wb_frame cenv ee protected s t <=> wb_frame cenv es protected s t)
+Proof
+  simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def]
+QED
+
+Theorem oracle_suffix_frames_compose:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
+  ee.scopes = es.scopes /\ ci_mono protected sa /\
+  ghost_kept cenv es protected G tn s H un /\
+  wb_frame cenv es protected s t /\
+  ghost_kept cenv ee sa H un t J vn /\ wb_frame cenv ee sa t u ==>
+  ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es protected s u
+Proof
+  strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `protected.cs_next_var <= sa.cs_next_var /\
+   protected.cs_next_id <= sa.cs_next_id` by
+    fs[exprLoweringPropsTheory.ci_mono_def] >>
+  conj_tac
+  >- (irule wordOperandsPtrTheory.ghost_kept_trans >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  irule exprSimWordArgsTheory.wb_frame_trans >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem oracle_taken_suffix_frames:
+  take_call_outcome target data value_opt es = (INL (rq,outcome),es1) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
+  ci_mono protected sa /\ ghost_kept cenv es protected G tn s H un /\
+  wb_frame cenv es protected s t /\
+  ghost_kept cenv (SND (adopt_call_outcome rq outcome es1)) sa H un t J vn /\
+  wb_frame cenv (SND (adopt_call_outcome rq outcome es1)) sa t u ==>
+  ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es protected s u
+Proof
+  strip_tac >> drule_all oracle_take_adoption_locals >> strip_tac >>
+  irule oracle_suffix_frames_compose >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
