@@ -12,7 +12,8 @@ Theorem code_copy_source_offset:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf t.
     copy_runtime_frame sa s sb t /\
-    inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tnf) /\
     eval_operand op t = SOME (a + n2w off) /\ op_taint tnf op = {} /\
     copy_old_operand sb op /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\

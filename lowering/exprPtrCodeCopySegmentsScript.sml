@@ -3,7 +3,7 @@ Theory exprPtrCodeCopySegments
 Ancestors
   exprPtrUnwrapCodeEdges exprPtrUnwrapOffsetSegment exprPtrUnwrapFrames
   exprPtrUnwrapScalarEdges exprPtrUnwrapCopyEdges decoderGhostFramePtr typedCopyPtr fragGasSeqPtr fragExec
-  ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState finite_map exprLoweringProps immutableCopyExecution bodyPtrDefs venomExecProps codegenRel
+  ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState finite_map exprLoweringProps immutableCopyExecution bodyPtrDefs venomExecProps codegenRel instIdxIndep ghostPcTransportPtr
 
 Theorem code_copy_source_add_segment:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -11,8 +11,9 @@ Theorem code_copy_source_add_segment:
   run_inst_seq [mk_inst id ADD [src; Lit (n2w off)] [out]] s = OK t /\
   (!p. P p ==> p <> out) ==>
   ?Gf tnf.
-    inst_seq_ptr D lo ctx fn PG G tn
-      [mk_inst id ADD [src; Lit (n2w off)] [out]] s Gf tnf /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn
+      [mk_inst id ADD [src; Lit (n2w off)] [out]]
+        (s with vs_inst_idx := k) Gf tnf) /\
     op_taint tnf (Var out) = {} /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
     tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
@@ -31,9 +32,11 @@ Proof
     `step_taint (mk_inst id ADD [src; Lit (n2w off)] [out]) s
       (update_var out (a+n2w off) s) tn`] >>
   simp[inst_seq_ptr_def, ptr_inst_ok_copy_arith, op_taint_def,
-       copy_len_binop_ghost_frame, copy_mk_immutable_taint] >>
+       step_inst_inst_idx_indep, exec_result_map_def, mk_inst_def,
+       is_terminator_def, copy_len_binop_ghost_frame, copy_mk_immutable_taint] >>
   conj_tac
   >- (rpt strip_tac >> `p <> out` by metis_tac[] >>
+      pure_rewrite_tac[GSYM mk_inst_def] >>
       simp[copy_len_binop_ghost_frame, step_taint_def, set_var_taint_def,
            mk_inst_def, FLOOKUP_UPDATE]) >>
   rpt strip_tac >> `p <> out` by metis_tac[] >>
@@ -63,8 +66,8 @@ Theorem code_copy_load_segment:
   run_inst_seq [mk_inst id DLOAD [arg] [out]] s = OK t /\
   (!p. P p ==> p <> out) ==>
   ?Gf tnf.
-    inst_seq_ptr D lo ctx fn PG G tn [mk_inst id DLOAD [arg] [out]]
-      s Gf tnf /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn [mk_inst id DLOAD [arg] [out]]
+      (s with vs_inst_idx := k) Gf tnf) /\
     op_taint tnf (Var out) = {} /\ op_prov Gf (Var out) = NONE /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
     tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
@@ -83,7 +86,10 @@ Proof
     `step_taint (mk_inst id DLOAD [arg] [out]) s
       (update_var out (immutable_copy_read F a s) s) tn`] >>
   simp[inst_seq_ptr_def, ptr_inst_ok_code_load,
-    runtime_code_load_clean, code_copy_load_taint_frame] >>
+    step_inst_inst_idx_indep, exec_result_map_def, mk_inst_def,
+    is_terminator_def, runtime_code_load_clean, code_copy_load_taint_frame] >>
+  pure_rewrite_tac[GSYM mk_inst_def] >>
+  simp[runtime_code_load_clean, code_copy_load_taint_frame] >>
   conj_tac
   >- (irule step_prov_out_none >> simp[mk_inst_def] >>
       irule out_prov_other_none >> simp[mk_inst_def]) >>

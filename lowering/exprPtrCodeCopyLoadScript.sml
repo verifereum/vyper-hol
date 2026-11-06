@@ -11,7 +11,8 @@ Theorem code_copy_runtime_load:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf t.
     copy_runtime_frame sa s sb t /\
-    inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tnf) /\
     eval_operand op t = SOME (immutable_copy_read F a s) /\
     op_taint tnf op = {} /\ op_prov Gf op = NONE /\
     copy_old_operand sb op /\
