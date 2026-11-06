@@ -123,3 +123,65 @@ Proof
   simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+Theorem copy_jnz_counted_edge:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id JNZ [op; Label yes; Label no] []) /\
+  eval_operand op s = SOME (if b then 1w else 0w) /\
+  op_taint tn op = {} /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_path_ptr_edge D lo ctx fn PG G tn s 0 G tn
+    (OK (jump_to (if b then yes else no) s))
+Proof
+  strip_tac >>
+  `step_inst 0 ctx (mk_inst id JNZ [op; Label yes; Label no] []) s =
+     OK (jump_to (if b then yes else no) s)` by
+    (simp[step_inst_non_invoke, mk_inst_def] >>
+     drule step_jnz_behavior >>
+     disch_then (qspecl_then [`yes`, `no`, `id`] mp_tac) >>
+     simp[mk_inst_def] >> Cases_on `b` >> simp[]) >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn
+     (mk_inst id JNZ [op; Label yes; Label no] []) s` by
+    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[mk_inst_def, op_taint_def] >>
+     qx_gen_tac `x` >> Cases_on `x = op` >> gvs[op_taint_def] >>
+     Cases_on `x` >> simp[]) >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+  qexists_tac `0` >>
+  simp[gas_count_step_def, mk_inst_def, is_terminator_def] >>
+  disj2_tac >> disj1_tac >> qexists_tac `if b then yes else no` >> simp[]
+QED
+
+Theorem copy_eq_counted_edge:
+  eval_operand (Var ctr) s = SOME x /\ op_taint tn (Var ctr) = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id EQ [Var ctr; Lit n] [out]) ==>
+  gas_path_ptr_edge D lo ctx fn PG G tn s 0
+    (step_prov PG G (mk_inst id EQ [Var ctr; Lit n] [out])
+      (update_var out (bool_to_word (x = n)) s))
+    (step_taint (mk_inst id EQ [Var ctr; Lit n] [out]) s
+      (update_var out (bool_to_word (x = n)) s) tn)
+    (OK (update_var out (bool_to_word (x = n)) s
+       with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id EQ [Var ctr; Lit n] [out]) s =
+     OK (update_var out (bool_to_word (x = n)) s)` by
+    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id EQ [Var ctr; Lit n] [out]) s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def,
+          op_taint_def] >>
+     conj_tac >-
+       (gen_tac >> Cases_on `op = Var ctr` >> gvs[op_taint_def] >>
+        Cases_on `op` >> gvs[]) >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     asm_rewrite_tac[update_var_def]) >>
+  drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_ptr_edge >>
+  simp[mk_inst_def, is_terminator_def]
+QED
