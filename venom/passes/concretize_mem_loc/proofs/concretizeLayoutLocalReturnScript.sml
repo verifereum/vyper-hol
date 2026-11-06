@@ -9,7 +9,7 @@ Ancestors concretizeLayoutHaltExit concretizeLayoutSupplement frameRelocationLoc
   pointerConfinedDefs contextCodegenRel frameRelocationDemand memSafeRun venomExecProofs
   venomInst venomWf
 
-Theorem return_execution_envelope[local]:
+Theorem return_execution_envelope:
   inst.inst_opcode = RETURN /\ step_inst_base inst s = Halt post ==>
   ?opd opn off sz.
     inst.inst_operands = [opd;opn] /\
