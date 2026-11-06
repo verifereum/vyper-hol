@@ -303,7 +303,10 @@ Proof
   gvs[expr_map_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND,
       Once supported_expr_exists_def] >>
-  metis_tac[call_evaluation_safe_append_left]
+  conj_tac >- metis_tac[call_evaluation_safe_append_left] >>
+  rpt strip_tac >>
+  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _` irule >>
+  simp[Once supported_expr_exists_def]
 QED
 
 Theorem expr_subscript_pre_index:
@@ -316,8 +319,8 @@ Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, expr_map_pre_def, well_typed_expr_def,
        byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-       expr_has_evm_run_thm, EVERY_APPEND, Once supported_expr_exists_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), Once supported_expr_exists_def] >>
+       expr_has_evm_run_thm, EVERY_APPEND, supported_expr_exists_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
 
@@ -340,7 +343,7 @@ Proof
   rename1 `type_place_expr env obj = SOME bty` >>
   Cases_on `bty` >> gvs[value_type_place_def] >>
   simp[expr_map_pre_def] >>
-  gvs[Once supported_expr_exists_def] >>
+  gvs[supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
@@ -390,7 +393,7 @@ Proof
   `contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'` by
     (irule expr_pre_storage_preserved >>
      qexistsl_tac [`cenv`, `e`, `env`, `es`, `res`] >>
-     gvs[expr_map_pre_def]) >>
+     gvs[expr_map_pre_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `IS_SOME es'.outcomes` by
     (irule eval_expr_outcomes_some >>
      gvs[expr_map_pre_def, expr_sim_inv_def] >> metis_tac[]) >>

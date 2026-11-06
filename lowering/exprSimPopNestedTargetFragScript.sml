@@ -25,6 +25,7 @@ Theorem target_indices_pre_static[local]:
     alloc_limits_target cenv bt /\ int_calls_target bt = [] /\
     call_evaluation_safe cx [] /\
     ~supported_target_exists expr_evm_run_root bt /\
+    ~supported_target_exists call_operands_effect_root bt /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) bt ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -58,6 +59,7 @@ Proof
   fs[target_case_def] >> first_x_assum irule >>
   simp[target_pre_def] >>
   gvs[well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
-      expr_has_evm_run_def, supported_expr_exists_def] >>
+      expr_has_evm_run_def, supported_expr_exists_def,
+      call_operands_effect_root_def] >>
   irule target_indices_pre_static >> simp[] >> metis_tac[]
 QED

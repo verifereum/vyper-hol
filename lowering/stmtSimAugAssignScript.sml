@@ -963,9 +963,8 @@ Resume compile_augassign_local_case[write_safe]:
   `?current. lookup_scopes id (ee with gas_obs := []).scopes = SOME current` by
     metis_tac[expr_sim_inv_local] >>
   `?ptr. lookup_var p s = SOME ptr` by
-    (qpat_assum `stmt_state_rel _ _ _ _ ee s`
-       (mp_then Any mp_tac local_word_pointer_live) >>
-     fs[] >> metis_tac[]) >>
+    (`lookup_scopes id ee.scopes = SOME current` by fs[] >>
+     metis_tac[local_word_pointer_live]) >>
   `!current. lookup_scopes id (ee with gas_obs := []).scopes = SOME current ==>
      store_lays_out entry.type current.type result` by
     (drule_all augassign_current_store_layout >> simp[]) >>

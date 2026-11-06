@@ -898,7 +898,10 @@ Proof
    taint_within
      (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
      unit.cu_context vs_in` by
-    (drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >> simp[] >>
+    (drule lower_vyper_runtime_unit_memory_ok >>
+     disch_then (qspecl_then [`am`, `tx`, `ret`, `vs_in`] mp_tac) >>
+     impl_tac >- fs[] >>
+     strip_tac >> simp[] >>
      metis_tac[external_call_dead_observations]) >>
   `mem_inv dload_offset_ok unit.cu_context vs_in` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>

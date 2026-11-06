@@ -116,8 +116,11 @@ Proof
      disch_then (qspec_then `0` mp_tac) >> simp[] >>
      disch_then irule >> irule (cj 1 gas_path_rules) >>
      gvs[Abbr `s3`, Abbr `u3`, update_var_def]) >>
-  `gas_marked_path F ctx func s 0 (OK s3)` by
-    metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
+  `gas_marked_path F ctx func s (0 + 0) (OK s2)` by
+    (irule gas_marked_path_then >> qexists_tac `s1` >> fs[]) >>
+  `gas_marked_path F ctx func s (0 + 0 + 0) (OK s3)` by
+    (irule gas_marked_path_then >> qexists_tac `s2` >> fs[]) >>
+  `gas_marked_path F ctx func s 0 (OK s3)` by fs[] >>
   qexists_tac `s3` >> simp[] >>
   gvs[Abbr `s3`, Abbr `u3`, Abbr `s2`, Abbr `u2`, Abbr `s1`, Abbr `u1`,
       eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
