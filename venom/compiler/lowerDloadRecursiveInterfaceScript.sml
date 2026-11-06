@@ -717,14 +717,35 @@ val ld_recursive_anchor_inside =
     val code = named "code"
   in list_mk_abs(args,list_mk_exists(ws,mk_conj(b,``SUC ^n < LENGTH ^code``))) end;
 
-Theorem ld_recursive_anchor_prefix_next[local]:
-  !P.
+(* The packaging parameter sees the witnesses that remain fixed across a
+   strict prefix. This is not a predicate on the anchor alone: saved geometry
+   must refer to the very same environment and stack witnesses. *)
+val ld_recursive_witness_normal =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (ws,b) = strip_exists (fst(dest_disj body))
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val fixed = map named ["E","astk","gstk","savedkeys","ta"]
+    val q = mk_var("Q",type_of (list_mk_abs(fixed,``T``)))
+  in list_mk_abs(q::args,
+       list_mk_exists(ws,mk_conj(b,list_mk_comb(q,fixed)))) end;
+val ld_recursive_witness_inside =
+  let
+    val (args,body) = strip_abs ld_recursive_witness_normal
+    val (ws,b) = strip_exists body
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n" and code = named "code"
+  in list_mk_abs(args,list_mk_exists(ws,
+       mk_conj(b,``SUC ^n < LENGTH ^code``))) end;
+
+Theorem ld_recursive_witness_prefix_next[local]:
+  !Q.
   o1_ctx_shape CS /\
-  (^ld_recursive_anchor_inside) P vs0 CT stk un gn j t /\
+  (^ld_recursive_witness_inside) Q vs0 CT stk un gn j t /\
   ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
   step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  (^ld_recursive_anchor_normal) P vs0 CT stk (step_taint j t z un) gn j'
+  (^ld_recursive_witness_normal) Q vs0 CT stk (step_taint j t z un) gn j'
     (z with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
   gen_tac >> BETA_TAC >> strip_tac >>
@@ -773,6 +794,22 @@ Proof
   asm_rewrite_tac [] >> simp[] >>
   qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
   asm_rewrite_tac []
+QED
+
+Theorem ld_recursive_anchor_prefix_next[local]:
+  !P.
+  o1_ctx_shape CS /\
+  (^ld_recursive_anchor_inside) P vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_anchor_normal) P vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  gen_tac >>
+  qspec_then `\E astk gstk savedkeys ta. P ta` mp_tac
+    ld_recursive_witness_prefix_next >>
+  BETA_TAC >> simp[]
 QED
 
 Theorem ld_recursive_prefix_next:
@@ -2783,11 +2820,15 @@ Resume ld_recursive_geometry_load_next[revert_successor]:
     (simp[get_instruction_def, EL_APPEND2] >>
      Cases_on `nextcode` >- metis_tac[] >> simp[EL_APPEND2, EL_APPEND1]) >>
   `EVERY (\v. MEM v fa.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
-    (fs[venomFnScheduleRunnerTheory.ir_supply_covers_unit_def,
-        venomFnScheduleRunnerTheory.list_subset_def, irSupplyTheory.unit_ir_vars_def,
-        irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
-        EVERY_MEM, MEM_FLAT, MEM_MAP] >>
-     fs[lambdify irSupplyTheory.block_ir_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+    (`MEM bb fn.fn_blocks` by simp[] >>
+     qpat_assum `ir_supply_covers_unit fa observed` mp_tac >>
+     qpat_assum `MEM fn observed.cu_context.ctx_functions` mp_tac >>
+     qpat_assum `MEM bb fn.fn_blocks` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomFnScheduleRunnerTheory.ir_supply_covers_unit_def,
+       venomFnScheduleRunnerTheory.list_subset_def, irSupplyTheory.unit_ir_vars_def,
+       irSupplyTheory.fn_ir_vars_def, lambdify irSupplyTheory.block_ir_vars_def,
+       EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
      metis_tac[MEM_APPEND, MEM]) >>
   `EVERY (\v. MEM v a0.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
     (qpat_assum `lower_dload_blocks_supply fa bpre = (qpre,a0)`
@@ -3505,3 +3546,97 @@ val [ld_recursive_saved_entry_goal,ld_recursive_saved_next_goal,
 val _ = if length ld_recursive_saved_clause_goals = 5 andalso
   List.all (fn t => type_of t = bool) ld_recursive_saved_clause_goals
   then () else raise Fail "saved projected clause audit: expected five booleans";
+
+
+(* Sole combined prospective closure candidate: geometry and saved slices
+   share the normal arm's witnesses. Clause terms below are not proofs. *)
+val ld_recursive_combined_candidate =
+  ld_refine_geometry ld_recursive_saved_candidate;
+
+Theorem ld_recursive_combined_saved_forget:
+  !vs0 CT stk un gn j t.
+    (^ld_recursive_combined_candidate) vs0 CT stk un gn j t ==>
+    (^ld_recursive_saved_candidate) vs0 CT stk un gn j t
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  disch_then (mp_tac o CONJUNCT2 o CONJUNCT2) >>
+  disch_then (DISJ_CASES_THEN2 mp_tac mp_tac)
+  >- (disch_tac >> disj1_tac >> pop_assum mp_tac >>
+      rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >> simp[]) >>
+  disch_tac >> disj2_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_recursive_combined_geometry_forget:
+  !vs0 CT stk un gn j t.
+    (^ld_recursive_combined_candidate) vs0 CT stk un gn j t ==>
+    (^ld_recursive_geometry_candidate) vs0 CT stk un gn j t
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  disch_then (fn th => assume_tac (CONJUNCT1 th) >>
+    assume_tac (CONJUNCT1 (CONJUNCT2 th)) >>
+    mp_tac (CONJUNCT2 (CONJUNCT2 th))) >>
+  disch_then (DISJ_CASES_THEN2 mp_tac mp_tac)
+  >- (disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      disj1_tac >> pop_assum mp_tac >>
+      rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >> simp[]) >>
+  disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  disj2_tac >> first_assum ACCEPT_TAC
+QED
+
+val ld_recursive_combined_clause_goals =
+  let
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses,_) = dest_imp body
+    val originals = strip_conj clauses
+    val _ = if length originals = 5 then ()
+            else raise Fail "expected five projected constructor clauses"
+  in map (subst [p |-> ld_recursive_combined_candidate]) originals end;
+val [ld_recursive_combined_entry_goal,ld_recursive_combined_next_goal,
+     ld_recursive_combined_block_goal,ld_recursive_combined_call_goal,
+     ld_recursive_combined_return_goal] = ld_recursive_combined_clause_goals;
+
+val ld_recursive_combined_inside =
+  let
+    val (args,body) = strip_abs ld_recursive_combined_candidate
+    val [current,saved,alternatives] = strip_conj body
+    val (ws,b) = strip_exists (fst(dest_disj alternatives))
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n" and code = named "code"
+  in list_mk_abs(args,list_mk_conj [current,saved,
+       list_mk_exists(ws,mk_conj(b,``SUC ^n < LENGTH ^code``))]) end;
+
+Theorem ld_recursive_combined_prefix_next:
+  o1_ctx_shape CS /\
+  (^ld_recursive_combined_inside) vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_combined_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  qspec_then `\E astk gstk savedkeys ta.
+    (^ld_indexed_saved_geometry) lo E astk gstk savedkeys /\ alloca_inv ta`
+    mp_tac ld_recursive_witness_prefix_next >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  (impl_tac >-
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `?astk gstk. _` mp_tac >>
+        rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+        CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+        pure_rewrite_tac [CONJ_ASSOC] >> disch_then ACCEPT_TAC) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_tac >>
+  (conj_tac
+   >- (`alloca_inv z` by
+         metis_tac[venomMemPropsTheory.alloca_inv_step_inst] >>
+       qpat_x_assum `alloca_inv z` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+       simp[venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.allocas_non_overlapping_def,
+         venomMemDefsTheory.alloca_next_valid_def])) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  disj1_tac >> pop_assum mp_tac >> simp[CONJ_ASSOC]
+QED
