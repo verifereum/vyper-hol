@@ -354,6 +354,26 @@ Proof
   simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 
+(* Older allocations are disjoint from the counter allocation. *)
+Theorem for_counter_store_older_alloca[local]:
+  !ctx func cenv cx es s counter base size cutoff aid off len value.
+  stmt_state_rel ctx func cenv cx es s /\
+  FLOOKUP s.vs_allocas counter = SOME (base, size) /\
+  cutoff <= counter /\ 32 <= size /\
+  FLOOKUP s.vs_allocas aid = SOME (off, len) /\ aid < cutoff ==>
+  mem_bytes_at off len (mstore base value s).vs_memory =
+  mem_bytes_at off len s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+  `allocas_non_overlapping s` by
+    fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+  `aid <> counter` by decide_tac >>
+  fs[venomMemDefsTheory.allocas_non_overlapping_def] >>
+  rename1 `FLOOKUP s.vs_allocas counter = SOME (b, z)` >>
+  first_x_assum (qspecl_then [`aid`, `counter`, `off`, `len`, `b`, `z`] mp_tac) >>
+  simp[] >> decide_tac
+QED
+
 (* ===== The range loop ===== *)
 
 (* A range loop's iteration starts: the condition block finds the counter
