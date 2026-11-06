@@ -2,6 +2,8 @@ Theory makeSsaCurrentExecRuntime
 Ancestors
   makeSsaCurrentRuntime o1FrameLockstep venomExecProps venomExecProofs
   venomInstProps venomWf venomState venomExecSemantics stateFrame finite_map list pred_set
+Libs
+  stepInstBaseLib
 
 Theorem current_exec_lookup_unwritten:
   step_inst fuel C inst st = OK t /\ ~MEM v inst.inst_outputs ==>
@@ -181,3 +183,42 @@ Proof
   simp[bind_outputs_def, Once step_inst_base_def] >> metis_tac[]
 QED
 
+
+Theorem current_exec_read0_opcodes_pair:
+  MEM inst.inst_opcode
+    [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID; COINBASE;
+     TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; BLOBBASEFEE;
+     SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  ho_match_mp_tac current_exec_read0_pair >> asm_rewrite_tac[] >>
+  rpt strip_tac >> fs[execution_frame_def]
+QED
+
+Theorem current_exec_read1_opcodes_pair:
+  MEM inst.inst_opcode
+    [MLOAD; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; BALANCE; CALLDATALOAD;
+     EXTCODESIZE; EXTCODEHASH; ILOAD; DLOAD] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
+  ho_match_mp_tac current_exec_read1_pair >> asm_rewrite_tac[] >>
+  rpt strip_tac >>
+  fs[execution_frame_def, mload_def, sload_def, tload_def,
+     contract_storage_def, contract_transient_def]
+QED
