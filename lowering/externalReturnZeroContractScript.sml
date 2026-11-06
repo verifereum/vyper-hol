@@ -122,13 +122,15 @@ Proof
     (irule abi_encoder_registered_effect_enlarge >>
      qexistsl_tac [`window_alloca_sites func (frag_ids st st')`, `[(d,0)]`] >>
      simp[window_alloca_sites_subset]) >>
+  mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `sb MOD dimword (:256)`, `n` |-> `0`,
+    `ix` |-> `LENGTH st'.cs_current_insts`] window_copy_state_resources) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   qexists_tac `(mcopy d (sb MOD dimword (:256)) 0 s)
     with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
-  simp[eval_operand_def, mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
-  mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `sb MOD dimword (:256)`, `n` |-> `0`,
-    `ix` |-> `LENGTH st'.cs_current_insts`] window_copy_state_resources) >>
-  simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
+  asm_simp_tac (srw_ss())
+    [eval_operand_def, mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
+  conj_tac >- asm "sizes" ACCEPT_TAC >>
   simp[mcopy_def, write_memory_with_expansion_def]
 QED
 
