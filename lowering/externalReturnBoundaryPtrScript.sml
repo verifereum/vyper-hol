@@ -602,3 +602,59 @@ Proof
   qexists `fuel` >> Cases_on `r1` >> gvs[stmt_exit_ptr_def] >>
   disj1_tac >> metis_tac[expr_exit_INR_type]
 QED
+
+Theorem compile_external_return_raw_state_rel_halt_ptr:
+  !op prim ei msz nr nkey ut iv sa x sb func s ctx cenv cx es ty ea eb
+   v tv w G tn n PG.
+    compile_external_return (SOME op) prim T ei msz nr nkey ut iv sa = (x,sb) /\
+    (nr ==> iv) /\ (!p. op = Var p ==> not_fresh_at sa p) /\
+    fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s /\
+    expr_val_at cenv cx ty ea eb es v op s /\ ptr_val_ok cx ty v op G tn s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand op s = SOME w /\
+    ((?bs. v = BytesV bs /\ n = LENGTH bs /\ tv <> BaseTV AddressT /\
+           (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
+     (?str. v = StringV str /\ n = LENGTH str)) /\
+    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
+    !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s /\
+      ?ss. run_from fuel ctx func s = Halt ss
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?src. op = Var src /\ lookup_var src s = SOME w /\
+      ptr_covers G tn src s (32+n) /\ n < dimword (:256) /\
+      w2n w + 32 + n <= dimword (:256) /\
+      mem_word_at (w2n w) s.vs_memory = n2w n /\
+      (!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tn.t_mem)` by
+    (irule expr_val_at_raw_return_resources >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> gvs[] >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_external_return_def, optional_unlock_view,
+       emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[] >>
+  drule fn_has_code_same_block >>
+  disch_then (qspec_then
+    `[mk_inst sa.cs_next_id MLOAD [Var src] [STRING #"%" (toString sa.cs_next_var)];
+      mk_inst (sa.cs_next_id+1) ADD [Var src; Lit 32w]
+        [STRING #"%" (toString (sa.cs_next_var+1))];
+      mk_inst (sa.cs_next_id+2) RETURN
+        [Var (STRING #"%" (toString (sa.cs_next_var+1)));
+         Var (STRING #"%" (toString sa.cs_next_var))] []]` mp_tac) >>
+  simp[GSYM APPEND_ASSOC] >> strip_tac >>
+  irule ptr_safe_run_raw_return_halt >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[] >> goal_assum (drule_at Any) >>
+  qpat_assum `!i. i < 3 ==> _` (qspec_then `0` assume_tac) >>
+  qpat_assum `!i. i < 3 ==> _` (qspec_then `1` assume_tac) >>
+  qpat_x_assum `!i. i < 3 ==> _` (qspec_then `2` assume_tac) >>
+  gvs[] >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[ADD_COMM, ADD_ASSOC, ASCIInumbersTheory.toString_inj] >>
+  qexistsl_tac [`STRING #"%" (toString (sa.cs_next_var+1))`,
+                `sa.cs_next_id`, `STRING #"%" (toString sa.cs_next_var)`] >>
+  simp[ASCIInumbersTheory.toString_inj] >>
+  fs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL, LESS_EQ_ADD]
+QED
