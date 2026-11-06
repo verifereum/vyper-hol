@@ -703,10 +703,18 @@ Theorem abi_array_ready_dynamic_child_outcome:
   last.cs_next_var <= limit_st.cs_next_var /\
   abi_decode_sites middle.cs_next_id last.cs_next_id SUBSET sites /\
   fn_has_code st middle fn /\ abi_decode_code_context func fn middle last ==>
-  abi_decode_context_result ctx func fn tv limit_st st.cs_next_var
-    (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
-    sites last (abi_array_member_view (vyper_to_abi_type env ty) bs p j) env ty
-    (d+32+j*type_memory_bytes ce ty) s
+  (?t v. Dreach ctx fn s t /\
+    abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v /\
+    val_in_memory tv v (d+32+j*type_memory_bytes ce ty) t.vs_memory /\
+    fresh_vars_wrt limit_st t /\
+    decode_site_effect ctx func st.cs_next_var
+      (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
+    abi_decode_alloc_progress sites s t /\ abi_decode_entry last t /\
+    eval_operand (FST ops) t = SOME(n2w j)) \/
+  (?u. Dabort ctx fn s Revert_abort u /\
+    ~(?v. abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v))
 Proof
   strip_tac >>
   drule_all abi_array_ready_dynamic_setup_outcome >>
@@ -737,11 +745,31 @@ Proof
         simp_tac bool_ss [abi_array_cell_def, RIGHT_ADD_DISTRIB, MULT_CLAUSES, ADD_ASSOC] >>
       qhdtm_x_assum `abi_decode_owned_child_contract`
         (assume_tac o REWRITE_RULE [abi_decode_owned_child_contract_def]) >>
+      `abi_decode_context_pre ctx func ce env ty tv limit_st middle.cs_next_var
+        (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+        sites middle (SND (SND ops)) (FST (SND ops)) base_op hi B bs pos
+        (d+32+j*type_memory_bytes ce ty) t` by
+        (qhdtm_assum `abi_decode_context_pre` mp_tac >>
+         simp_tac bool_ss [abi_decode_context_pre_def, LESS_EQ_REFL] >> metis_tac[]) >>
+      qpat_x_assum `abi_decode_context_pre _ _ _ _ _ _ _ st.cs_next_var _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
       qhdtm_x_assum `abi_decode_context_pre` mp_tac >>
       asm_simp_tac bool_ss [] >> strip_tac >>
-      first_x_assum drule_all >> strip_tac >>
-      irule abi_decode_context_result_prefix >>
-      asm_simp_tac bool_ss [] >> metis_tac[]) >>
+      first_x_assum drule_all >>
+      simp_tac bool_ss [abi_decode_context_result_def] >>
+      disch_then (DISJ_CASES_THEN strip_assume_tac)
+      >- (`eval_operand (FST ops) t' = SOME(n2w j)` by
+            (fs[EVERY_DEF] >> metis_tac[decode_site_effect_live]) >>
+          `abi_decode_alloc_progress sites t t'` by
+            (irule abi_decode_alloc_progress_widen >> metis_tac[]) >>
+          `decode_site_effect ctx func st.cs_next_var
+            (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) t t'` by
+            (irule decode_site_effect_threshold >> metis_tac[]) >>
+          disj1_tac >> qexistsl_tac [`t'`,`v`] >>
+          asm_simp_tac bool_ss [] >> rpt conj_tac
+          >- metis_tac[Dreach_trans]
+          >- metis_tac[decode_site_effect_trans, UNION_IDEMPOT] >>
+          metis_tac[abi_decode_alloc_progress_trans]) >>
+      disj2_tac >> metis_tac[Dreach_abort]) >>
   simp_tac bool_ss [abi_decode_context_result_def] >> metis_tac[]
 QED
 
@@ -880,7 +908,8 @@ Theorem abi_array_ready_dynamic_body_outcome:
       (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
     abi_decode_alloc_progress sites s t /\
     abi_array_body_post ctx func ce env ty tv limit_st first writes origin
-      outer scratch sites idx slot ip last dst src base_op hi B bs p d n j (vs ++ [v]) t) \/
+      outer scratch sites idx slot ip last dst src base_op hi B bs p d n j (vs ++ [v]) t /\
+    eval_operand (FST ops) t = SOME(n2w j)) \/
   (?u. Dabort ctx fn s Revert_abort u /\
     ~(?v. abi_decode_source_accepts env ty
       (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v))
@@ -952,10 +981,18 @@ Theorem abi_array_ready_static_child_outcome:
   last.cs_next_var <= limit_st.cs_next_var /\
   abi_decode_sites middle.cs_next_id last.cs_next_id SUBSET sites /\
   fn_has_code st middle fn /\ abi_decode_code_context func fn middle last ==>
-  abi_decode_context_result ctx func fn tv limit_st st.cs_next_var
-    (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
-    sites last (abi_array_member_view (vyper_to_abi_type env ty) bs p j) env ty
-    (d+32+j*type_memory_bytes ce ty) s
+  (?t v. Dreach ctx fn s t /\
+    abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v /\
+    val_in_memory tv v (d+32+j*type_memory_bytes ce ty) t.vs_memory /\
+    fresh_vars_wrt limit_st t /\
+    decode_site_effect ctx func st.cs_next_var
+      (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
+    abi_decode_alloc_progress sites s t /\ abi_decode_entry last t /\
+    eval_operand (FST ops) t = SOME(n2w j)) \/
+  (?u. Dabort ctx fn s Revert_abort u /\
+    ~(?v. abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v))
 Proof
   strip_tac >> drule_all abi_array_ready_static_setup >> strip_tac >>
   drule abi_array_ready_runtime_context >>
@@ -994,9 +1031,31 @@ Proof
      asm_simp_tac bool_ss [] ) >>
   qhdtm_x_assum `abi_decode_owned_child_contract`
     (assume_tac o REWRITE_RULE [abi_decode_owned_child_contract_def]) >>
+  `abi_decode_context_pre ctx func ce env ty tv limit_st middle.cs_next_var
+    (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j)
+    sites middle (SND (SND ops)) (FST (SND ops)) base_op hi B bs
+    (p+32+j*abi_member_head_size (vyper_to_abi_type env ty))
+    (d+32+j*type_memory_bytes ce ty) t` by
+    (qhdtm_assum `abi_decode_context_pre` mp_tac >>
+     simp_tac bool_ss [abi_decode_context_pre_def, LESS_EQ_REFL] >> metis_tac[]) >>
+  qpat_x_assum `abi_decode_context_pre _ _ _ _ _ _ _ st.cs_next_var _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qhdtm_x_assum `abi_decode_context_pre` mp_tac >>
-  asm_simp_tac bool_ss [] >> strip_tac >> first_x_assum drule_all >> strip_tac >>
-  irule abi_decode_context_result_prefix >> asm_simp_tac bool_ss [] >> metis_tac[]
+  asm_simp_tac bool_ss [] >> strip_tac >> first_x_assum drule_all >>
+  simp_tac bool_ss [abi_decode_context_result_def] >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (`eval_operand (FST ops) t' = SOME(n2w j)` by
+        (fs[EVERY_DEF] >> metis_tac[decode_site_effect_live]) >>
+      `abi_decode_alloc_progress sites t t'` by
+        (irule abi_decode_alloc_progress_widen >> metis_tac[]) >>
+      `decode_site_effect ctx func st.cs_next_var
+        (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) t t'` by
+        (irule decode_site_effect_threshold >> metis_tac[]) >>
+      disj1_tac >> qexistsl_tac [`t'`,`v`] >>
+      asm_simp_tac bool_ss [] >> rpt conj_tac
+      >- metis_tac[Dreach_trans]
+      >- metis_tac[decode_site_effect_trans, UNION_IDEMPOT] >>
+      metis_tac[abi_decode_alloc_progress_trans]) >>
+  disj2_tac >> metis_tac[Dreach_abort]
 QED
 
 Theorem abi_array_ready_static_body_outcome:
@@ -1026,7 +1085,8 @@ Theorem abi_array_ready_static_body_outcome:
       (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
     abi_decode_alloc_progress sites s t /\
     abi_array_body_post ctx func ce env ty tv limit_st first writes origin
-      outer scratch sites idx slot ip last dst src base_op hi B bs p d n j (vs ++ [v]) t) \/
+      outer scratch sites idx slot ip last dst src base_op hi B bs p d n j (vs ++ [v]) t /\
+    eval_operand (FST ops) t = SOME(n2w j)) \/
   (?u. Dabort ctx fn s Revert_abort u /\
     ~(?v. abi_decode_source_accepts env ty
       (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v))
