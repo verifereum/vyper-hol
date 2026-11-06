@@ -196,25 +196,9 @@ fun mk_JE_UnaryOp (op_tm, e, ty) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e, ty])
 fun mk_JE_IfExp (test, body, els, ty) = list_mk_comb(JE_IfExp_tm, [test, body, els, ty])
 fun mk_JE_Tuple es = mk_comb(JE_Tuple_tm, mk_list(es, json_expr_ty))
 fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), ty])
-(* The logical interface constructor takes HD args; HD [] has no concrete
-   value. Reject that undefined compiler-input case in both import backends. *)
-fun interface_constructor func = let
-  val (head,args) = strip_comb func
-  val interface = mk_some (fromMLstring "interface")
-in
-  case args of
-    [_,tc,_,_] => aconv head JE_Name_tm andalso aconv tc interface
-  | [_,name,tc,_,_,_,_] =>
-      aconv head JE_Attribute_tm andalso
-      (aconv tc interface orelse aconv name (fromMLstring "__at__") orelse
-       aconv name (fromMLstring "__interface__"))
-  | _ => false
-end
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
-  if List.null args andalso interface_constructor func then
-    raise Fail "interface constructor requires an argument"
-  else list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
-                               mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
+  list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
+                            mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
 fun mk_JE_ExtCall (func_name, func_src, arg_types, ret_ty, target, args, keywords) =
   list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name, func_src,
                                mk_list(arg_types, json_type_ty),
