@@ -47,31 +47,31 @@ Proof
        fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_MSTORE,
-       step_inst_base_def, mk_inst_def, exec_write2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        bind_outputs_def, eval_operand_def, ecrecover_operand_mstore,
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_MSTORE,
-       step_inst_base_def, mk_inst_def, exec_write2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, lookup_var_update_var, ecrecover_operand_mstore,
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        bind_outputs_def, eval_operand_def, ecrecover_operand_mstore,
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_MSTORE,
-       step_inst_base_def, mk_inst_def, exec_write2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, lookup_var_update_var, ecrecover_operand_mstore,
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        bind_outputs_def, eval_operand_def, ecrecover_operand_mstore,
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
@@ -220,7 +220,7 @@ Proof
       qexists_tac `s3` >> simp[]) >>
   `run_inst_seq (emitted_insts sc sm) s3 = OK (mstore (w2n w) 0w s3)` by
     (drule emitted_insts_emit_void >> strip_tac >>
-     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_write2_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
           eval_operand_def]) >>
   qexistsl_tac [`mstore (w2n w) 0w s3`, `wi`, `w`] >>
   conj_tac
@@ -264,14 +264,14 @@ Proof
   qpat_x_assum `emitted_insts sm sb = _` SUBST1_TAC >>
   Cases_on `s.vs_gas_readings` >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
-       step_inst_base_def, mk_inst_def, bind_outputs_def,
+       step_inst_base_opcode_eqs, mk_inst_def, bind_outputs_def,
        inst_dload_in_section_def, exec_gas_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_STATICCALL,
        wordsTheory.dimword_def,
        eval_operand_def, lookup_var_update_var] >>
   pure_rewrite_tac[GSYM update_var_def] >>
-  simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_update_var, exec_ext_call_def, inst_dload_in_section_def,
        Excl "consume_call_outcome_eq", pairTheory.UNCURRY_DEF] >>
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
@@ -279,7 +279,7 @@ Proof
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
        Excl "consume_call_outcome_eq"] >>
-  simp[NoAsms, step_inst_base_def, mk_inst_def, eval_operand_def,
+  simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_update_var, Excl "consume_call_outcome_eq",
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
