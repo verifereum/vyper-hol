@@ -194,3 +194,41 @@ Proof
     `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
   simp[bind_def] >> metis_tac[]
 QED
+
+Theorem vv_at_alloc_mono_frame:
+  vv_at cenv cx ty sa sm es tv vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP t.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes t n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_at cenv cx ty sa sn es tv vv t
+Proof
+  Cases_on `vv` >>
+  simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem vv_own_alloc_mono_frame:
+  vv_own cenv cx ty sa sm es tv vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP t.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes t n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_own cenv cx ty sa sn es tv vv t
+Proof
+  Cases_on `vv` >>
+  simp[vv_own_def, vv_operand_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[]) >>
+  metis_tac[]
+QED
