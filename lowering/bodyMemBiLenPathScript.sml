@@ -1,13 +1,19 @@
 (* Memory-checked, read-only len suffix. *)
 Theory bodyMemBiLenPath
 Ancestors
-  bodyMemBiLenSafety bodyMemBiLenFacts exprSimBopRestWordLoadPath
-  fragGasSeqMem fragGasPathMem fragExecMem fragExec allocaHistoryFragment
-  allocaHistory exprLoweringProps exprLowering exprSimProps loweringPosts
-  emitHelperProps emitHelper context compileEnv loweringSlice
-  venomExecSemantics venomInst venomState words list rich_list finite_map
-  exprSimLen exprSimBopRestWordLayout stmtSimAppendStorageCompose stateFrame
-  vyperInterpreter vyperValue builtinSimple builtinProps
+  bodyMemBiLenSafety exprSimLen exprSimSource exprSimProps exprSimHypsDefs
+  exprSimDefs loweringPosts list fragExec exprSimHyps exprSimWordBuiltins
+  exprBopLowering exprLowering exprLoweringProps builtinSimple emitHelper
+  compileEnv accountsRelProps valueEncoding venomExecSemantics venomInst
+  venomState vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
+  vyperTypeBuiltins vyperValue vyperTyping vyperStorage builtinProps
+  vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
+  exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness
+  vyperExprNoControl gasContext gasOutcome gasSummary gasSummaryCompose
+  gasExemptCert fragGasMode fragGasPath exprSimBopRestWordLoadPath
+  fragGasSeqMem fragGasPathMem fragExecMem allocaHistoryFragment allocaHistory
+  words rich_list finite_map exprSimBopRestWordLayout
+  stmtSimAppendStorageCompose stateFrame
 
 Theorem len_ptr_load_path_mem:
   compile_ptr_load ctor imm loc addr sa = (op,sb) /\

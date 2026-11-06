@@ -30,34 +30,6 @@ Proof
   simp[exprLoweringPropsTheory.stmt_state_rel_def]
 QED
 
-(* Restatement of local history_phi_prefix_opcode and history_phi_entry
-   from venom/proofs/allocaHistoryScript.sml; that ancestor is read-only. *)
-Theorem rest_word_phi_prefix_opcode[local]:
-  !insts k. k < phi_prefix_length insts ==> (EL k insts).inst_opcode = PHI
-Proof
-  Induct >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >> rpt gen_tac >>
-  Cases_on `h.inst_opcode = PHI` >>
-  simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
-  Cases_on `k` >> simp[]
-QED
-
-Theorem rest_word_phi_history[local]:
-  alloca_history fn s /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  eval_phis s bb.bb_instructions = OK u ==>
-  alloca_history fn (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-Proof
-  strip_tac >>
-  `u.vs_allocas = s.vs_allocas` by
-    metis_tac[venomExecProofsTheory.eval_phis_preserves_alloca_fields] >>
-  `u.vs_current_bb = s.vs_current_bb` by
-    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
-  rw[allocaHistoryTheory.alloca_history_def]
-  >- (gvs[allocaHistoryTheory.alloca_history_def] >> metis_tac[]) >>
-  gvs[venomInstTheory.get_instruction_def, AllCaseEqs()] >>
-  drule rest_word_phi_prefix_opcode >> simp[]
-QED
-
 Theorem rest_word_edge_alloca:
   gas_path_edge ctx fn s n (OK t) /\ fn_inst_ids_distinct fn /\
   alloca_history fn s /\ alloca_inv s ==>
@@ -72,7 +44,7 @@ Proof
         venomMemDefsTheory.alloca_next_valid_def])
   >- (`alloca_history fn t'` by
         metis_tac[allocaHistoryTheory.alloca_history_step] >>
-      irule rest_word_phi_history >> goal_assum (drule_at Any) >> simp[])
+      irule history_phi_entry >> goal_assum (drule_at Any) >> simp[])
   >- (drule_all venomMemProofsTheory.alloca_inv_step_inst_proof >> strip_tac >>
       drule venomExecProofsTheory.eval_phis_preserves_alloca_fields >> strip_tac >>
       gvs[venomMemDefsTheory.alloca_inv_def,

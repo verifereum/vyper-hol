@@ -359,7 +359,7 @@ Proof
   simp[] >> disch_then irule >> metis_tac[]
 QED
 
-Theorem history_phi_prefix_opcode[local]:
+Theorem history_phi_prefix_opcode:
   !insts k. k < phi_prefix_length insts ==> (EL k insts).inst_opcode = PHI
 Proof
   Induct >> simp[phi_prefix_length_def] >> rpt gen_tac >>
@@ -367,7 +367,7 @@ Proof
   Cases_on `k` >> simp[]
 QED
 
-Theorem history_phi_entry[local]:
+Theorem history_phi_entry:
   !func s bb u.
     alloca_history func s /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\

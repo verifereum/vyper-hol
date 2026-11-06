@@ -1,24 +1,17 @@
 (* Header-load safety for captured len operands, including empty payloads. *)
 Theory bodyMemBiLenSafety
 Ancestors
-  bodyMemBiLenFacts exprSimBopRestWordLoadSafety exprSimMemDefs
-  exprSimLen exprSimProps loweringPosts exprLoweringProps compileEnv
-  valueEncoding vyperValue vyperAST vyperTypeSystem vyperTypeBuiltins
-  venomState context builtinSimple loweringSlice words list
-
-(* Restatement of inaccessible exprSimLen.sized_type_cases. *)
-Theorem sized_type_cases[local]:
-  !t. is_sized_type t ==>
-    (?et k. t = ArrayT et (Dynamic k)) \/
-    (?k. t = BaseT (StringT k)) \/
-    (?k. t = BaseT (BytesT (Dynamic k)))
-Proof
-  Cases >> gvs[is_sized_type_def]
-  >~ [`is_sized_type (BaseT bt)`]
-  >- (Cases_on `bt` >> gvs[is_sized_type_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >> gvs[]) >>
-  rename1 `ArrayT et bd` >> Cases_on `bd` >> gvs[]
-QED
+  exprSimLen exprSimSource exprSimProps exprSimHypsDefs exprSimDefs
+  loweringPosts list fragExec exprSimHyps exprSimWordBuiltins exprBopLowering
+  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
+  accountsRelProps valueEncoding venomExecSemantics venomInst venomState
+  vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
+  vyperTypeBuiltins vyperValue vyperTyping vyperStorage builtinProps
+  vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
+  exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness
+  vyperExprNoControl gasContext gasOutcome gasSummary gasSummaryCompose
+  gasExemptCert fragGasMode fragGasPath exprSimBopRestWordLoadSafety
+  exprSimMemDefs words
 
 Theorem len_sized_store_header:
   is_sized_type t /\ evaluate_type tenv t = SOME vt ==>
