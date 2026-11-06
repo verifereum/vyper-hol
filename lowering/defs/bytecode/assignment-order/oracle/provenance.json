@@ -16,9 +16,9 @@
       "source_sha256": "4e6d700a985b762bc24593666864bc7723b2ca71bf311dd57a910e75349e2d36"
     },
     "assign_delayed_storage_read": {
-      "deploy_sha256": "0cfd0ec6a5f7b33b59941e96b545e680fd47755d4c3b9e361c1c5f0beb09378b",
+      "deploy_sha256": "3268e0e4d3fa94a43edcd8012feafd47dbc462ddfc24b08dfd5b6986ca2a521d",
       "frontend_sha256": "551af4c0f0c7c0e85693da10a5538e01da2aca2bd49516d5a82f457e59820f75",
-      "runtime_sha256": "8fd19e380a416861f2a590bb8b6c44d0b4040da9ffd3c1f350e8a3b3ec97cf26",
+      "runtime_sha256": "74614b9abad984ab7738f7f245f502df63c27d6780629196a54e99423a73e4b7",
       "source": "sources/assign_delayed_storage_read.vy",
       "source_sha256": "764a5546f63460716d163d08caa9966c6a20208e522cef09709ae3b57f4eddbf"
     },
@@ -44,9 +44,9 @@
       "source_sha256": "28cdda8848ca437ca4f273752d63bb155d375d0a63e5e4e78395f441bf0dee7d"
     },
     "aug_storage_shrink": {
-      "deploy_sha256": "c97a7adf0585b0ac864b4a16fa44b94ea4edc09a052a4d4365a2d8c104625d8d",
+      "deploy_sha256": "ae4abea3c83dc302753942a8010f9c49a78988bf25aa30dc84be05386389f554",
       "frontend_sha256": "7752285e7091949836642b0ebc64ff18eb5d222986374535e1faf2b2f9f2b885",
-      "runtime_sha256": "32aab328024cfb0492bb70e1419e1acb83114204910137e4a9b086d6bbc11220",
+      "runtime_sha256": "d7fe6d15a84992d8342136130a1b518e1e5206f767596dda09e0ac542b866a6e",
       "source": "sources/aug_storage_shrink.vy",
       "source_sha256": "9a279cf23d50c5f67c67de7760f67c3910200c5ca46e7c6d9262157270611f4a"
     },
@@ -65,9 +65,9 @@
       "source_sha256": "bc1558a1eeba9256865104c16c9598b4c5e46611e1700e57d82565525aafa333"
     },
     "g19_aug_rhs_modifies_target": {
-      "deploy_sha256": "d2d2b795a3912c58b7e740ac2eda5275325fbf0b0cab8de8fb7f42447079f284",
+      "deploy_sha256": "0ab2a3867a9094b754c78315ebbaa9e84b06da79e44a5a0c2f59d21f87da0509",
       "frontend_sha256": "4eddc88335451a9af2875559b004234e4ba40c0fd1a98bb9260157305db6a1de",
-      "runtime_sha256": "dfa44e3fec3c68b8974992c83f5d9ae7951f15bef4fea8e667e53802ddfd0d58",
+      "runtime_sha256": "ded823f81a650f9621015585ae64b4d598069aa2085918350e84bb6ab484c139",
       "source": "sources/g19_aug_rhs_modifies_target.vy",
       "source_sha256": "28fc550b7ded2bf3a8f0ff08e292272c3778d86308f04ca05e2f2e78c2e9f740"
     },
