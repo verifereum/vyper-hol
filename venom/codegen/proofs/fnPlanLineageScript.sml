@@ -29,6 +29,7 @@ Theory fnPlanLineage
 Ancestors
   stackPlanGen stackPlanTypes fnPlanLineageJoinEntry fnPlanLineageLiveness
   fnPlanLineagePhiSchedule fnPlanLineagePhiTemporal codegenReadyCompute
+  fnPlanLineageCallTrace
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -142,6 +143,121 @@ Proof
       simp[dfs_block_state_def, plan_state_component_equality] >>
       qexistsl_tac [`[]`, `[]`] >> simp[dfs_aux_call_entry])
   >> qexists_tac `ps_succ` >> simp[]
+QED
+
+Theorem dfs_calls_trace_embedding[local]:
+  !lv dfg cfg fn ps0.
+  (!wl visited ps. dfs_aux_call lv dfg cfg fn ps0 wl visited ps ==>
+    !entry root_result root_events.
+    fn_entry_label fn = SOME entry /\
+    plan_aux_trace lv dfg cfg fn [entry] [] ps0 root_result root_events ==>
+    ?result events. plan_aux_trace lv dfg cfg fn wl visited ps result events /\
+      set events SUBSET set root_events) /\
+  (!stack spilled wl visited ps. dfs_succs_call lv dfg cfg fn ps0 stack spilled wl visited ps ==>
+    !entry root_result root_events.
+    fn_entry_label fn = SOME entry /\
+    plan_aux_trace lv dfg cfg fn [entry] [] ps0 root_result root_events ==>
+    ?result events. plan_succs_trace lv dfg cfg fn stack spilled wl visited ps result events /\
+      set events SUBSET set root_events)
+Proof
+  rpt gen_tac >> ho_match_mp_tac dfs_aux_call_ind >> rpt strip_tac >> gvs[]
+  >- (goal_assum (drule_at Any) >> simp[]) >>
+  first_x_assum drule >> strip_tac
+  >- (drule_all plan_aux_trace_visited_head >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[])
+  >- (drule_all plan_aux_trace_missing_head >> strip_tac >>
+      goal_assum (drule_at Any) >> metis_tac[pred_setTheory.SUBSET_TRANS])
+  >- (drule_all plan_aux_trace_present_head >> strip_tac >>
+      goal_assum (drule_at Any) >> metis_tac[pred_setTheory.SUBSET_TRANS])
+  >- (drule_all plan_aux_trace_present_head >> strip_tac >>
+      drule (cj 2 plan_trace_erasure) >> strip_tac >> gvs[] >>
+      goal_assum (drule_at Any) >> metis_tac[pred_setTheory.SUBSET_TRANS])
+  >- (drule plan_succs_trace_cons >> strip_tac >>
+      goal_assum (drule_at Any) >> metis_tac[pred_setTheory.SUBSET_TRANS]) >>
+  drule plan_succs_trace_cons >> strip_tac >>
+  drule (cj 1 plan_trace_erasure) >> strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem dfs_block_state_trace_event[local]:
+  fn_entry_label fn = SOME entry /\
+  plan_aux_trace lv dfg cfg fn [entry] [] ps0 result events /\
+  dfs_block_state lv dfg cfg fn ps0 lbl ps ==> MEM (lbl,ps) events
+Proof
+  rpt strip_tac >> gvs[dfs_block_state_def] >>
+  drule (cj 1 dfs_calls_trace_embedding) >>
+  disch_then drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all plan_aux_trace_fresh_event >>
+  fs[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem dfs_block_state_unique:
+  fn_entry_label fn = SOME entry /\
+  generate_fn_plan_aux lv dfg cfg fn [entry] [] ps0 = SOME result /\
+  dfs_block_state lv dfg cfg fn ps0 lbl psD /\
+  dfs_block_state lv dfg cfg fn ps0 lbl psE ==> psD = psE
+Proof
+  rpt strip_tac >> drule (cj 1 plan_trace_complete) >> strip_tac >>
+  `MEM (lbl,psD) events` by metis_tac[dfs_block_state_trace_event] >>
+  `MEM (lbl,psE) events` by metis_tac[dfs_block_state_trace_event] >>
+  metis_tac[plan_aux_trace_event_unique]
+QED
+
+Theorem lineage_state_has_entry[local]:
+  !lv dfg cfg fn ps0 lbl ps.
+    lineage_state lv dfg cfg fn ps0 lbl ps ==>
+    ?entry. fn_entry_label fn = SOME entry
+Proof
+  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
+  ho_match_mp_tac lineage_state_ind >> metis_tac[]
+QED
+
+Theorem lineage_state_actual_dfs_fields:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn
+    spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
+  ps = psD with <| ps_stack := ps.ps_stack; ps_spilled := ps.ps_spilled |>
+Proof
+  rpt strip_tac >>
+  drule lineage_state_has_entry >> strip_tac >>
+  qpat_x_assum `generate_fn_plan_with_cleanup_analyzed _ _ _ _ _ _ _ _ = _`
+    mp_tac >>
+  simp[generate_fn_plan_with_cleanup_analyzed_def, AllCaseEqs()] >>
+  strip_tac >>
+  drule lineage_state_dfs_fields >> strip_tac >>
+  `ps_dfs = psD` by (irule dfs_block_state_unique >> goal_assum (drule_at Any) >>
+    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[]
+QED
+
+Theorem lineage_state_actual_dfs_alloc:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn
+    spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
+  ps.ps_alloc = psD.ps_alloc
+Proof
+  strip_tac >> drule_all lineage_state_actual_dfs_fields >>
+  simp[plan_state_component_equality]
+QED
+
+Theorem lineage_state_actual_dfs_label_counter:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn
+    spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
+  ps.ps_label_counter = psD.ps_label_counter
+Proof
+  strip_tac >> drule_all lineage_state_actual_dfs_fields >>
+  simp[plan_state_component_equality]
 QED
 
 (* Projection-only provenance: this predicate adds no reachability rules. *)
