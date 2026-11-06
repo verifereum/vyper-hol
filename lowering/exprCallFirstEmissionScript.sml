@@ -138,6 +138,8 @@ fun call_append_tac g =
   (FIRST [FIRST_PROVE [asm_simp_tac (srw_ss()) call_append_simps],
     (rename1 `cs_appends (compile_extcall_store_values _ _ _ _)` >>
       simp[cs_appends_def] >> metis_tac[first_emission_extcall_store_values]),
+    (rename1 `cs_appends (unwrap_value _ _)` >>
+      simp[cs_appends_def] >> metis_tac[first_emission_unwrap_value]),
     (rename1 `cs_appends (compile_store_memory _ _ _ _ _)` >>
       simp[cs_appends_def] >> metis_tac[first_emission_store_memory]),
     (rename1 `cs_appends (compile_word_copy_loop _ _ _ _ _ _)` >>
@@ -278,4 +280,73 @@ Proof
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- MATCH_ACCEPT_TAC first_emission_create_snapshot >>
   simp_tac bool_ss [compile_copy_memory_dynamic_def] >> creation_tail_tac
+QED
+
+Theorem first_emission_materialize_vv:
+  !a x b. compile_materialize_vv ce ty vv a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  simp_tac bool_ss [compile_materialize_vv_def, compile_alloc_buffer_def, LET_THM] >>
+  call_strong_tac
+QED
+
+Theorem first_emission_ext_call_kwarg:
+  (!ty a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_ext_call_kwarg cfn ce rty k e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> simp_tac bool_ss [compile_ext_call_kwarg_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[] >> gen_tac >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> MATCH_ACCEPT_TAC first_emission_materialize_vv) >>
+      gen_tac >> metis_tac[first_emission_return]) >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  gen_tac >> metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_ext_call_kwargs:
+  !es ks.
+  (!e ty a x b. MEM e es /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_ext_call_kwargs cfn ce rty ks es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct >> Cases_on `ks` >> simp_tac bool_ss [compile_ext_call_kwargs_def]
+  >- metis_tac[first_emission_return]
+  >- metis_tac[first_emission_return]
+  >- metis_tac[first_emission_return] >>
+  rpt gen_tac >> strip_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_ext_call_kwarg >> metis_tac[listTheory.MEM]) >>
+  qx_gen_tac `res` >> PairCases_on `res` >> simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (first_x_assum match_mp_tac >> metis_tac[listTheory.MEM]) >>
+  qx_gen_tac `out` >> PairCases_on `out` >> simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
+  metis_tac[first_emission_return]
 QED
