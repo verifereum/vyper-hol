@@ -21,9 +21,11 @@ Theorem target_indices_pre_of_body[local]:
     alloc_limits_target cenv bt /\
     call_evaluation_safe cx (int_calls_target bt) /\
     ~supported_target_exists expr_evm_run_root bt /\
+    ~supported_target_exists call_operands_effect_root bt /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops)
+                      get_module_code cx NONE = SOME tops /\
+                      IS_SOME (supported_function_decl tops c Internal))
           (int_calls_target bt) /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) bt ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
@@ -52,6 +54,7 @@ Proof
   rw[expr_body_pre_def, target_pre_def] >>
   gvs[Once well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
-      expr_abi_decode_target_root_def, expr_evm_run_root_def] >>
+      expr_abi_decode_target_root_def, expr_evm_run_root_def,
+      call_operands_effect_root_def] >>
   irule target_indices_pre_of_body >> simp[] >> metis_tac[]
 QED
