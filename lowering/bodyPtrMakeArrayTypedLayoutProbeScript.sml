@@ -131,8 +131,10 @@ QED
 
    Widened-call seam: lowered_value_type cenv (Call _ (IntCall f) _ _) is
    ce_func_return_type (nsid_to_string f), NOT expr_type of the call.
-   A child expr_post supplies its robust source representation at that
-   lowered evaluated type; ptr_buf_ok supplies its FULL lowered buffer.
+   A child expr_post represents the declared expr_type, whereas ptr_buf_ok
+   covers the FULL lowered buffer capacity. Neither supplies robust source
+   representation at the lowered evaluated type: SourceLayoutProbe's checked
+   displaced-field tuple counterexample rules out generic layout transport.
    To instantiate (1), body_inv's return-type environment agreement and
    source well-typedness must separately imply arg_type_fits of that return
    type into the declared literal element, evaluation/size coherence, and
