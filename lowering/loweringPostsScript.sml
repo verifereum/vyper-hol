@@ -7,7 +7,7 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext vyperValue vyperAST
   valueEncoding valueEncodingProofs vyperTypeSystem
-  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps
+  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps supportedExprTraverse
 Libs
   monadsyntax
 
@@ -468,6 +468,52 @@ Definition vv_own_def:
             val_footprint tvt v = 0))
 End
 
+(* expr_has_effect by constructor, for the expressions whose posts the
+   simulation cases build. *)
+Theorem expr_has_effect_thm[simp]:
+  (expr_has_effect (Pop ty tgt) <=> T) /\
+  (expr_has_effect (Call ty ct es d) <=> T) /\
+  (expr_has_effect (Literal ty l) <=> F) /\
+  (expr_has_effect (Name ty n) <=> F) /\
+  (expr_has_effect (TopLevelName ty id) <=> F) /\
+  (expr_has_effect (FlagMember ty id f) <=> F) /\
+  (expr_has_effect (Attribute ty e1 f) <=> expr_has_effect e1) /\
+  (expr_has_effect (Subscript ty e1 e2) <=>
+     expr_has_effect e1 \/ expr_has_effect e2)
+Proof
+  simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def]
+QED
+
+(* A storage or transient pointer reads live slots at es: no byte of the
+   slots it reads is dead but those its own type leaves dead
+   (storage_read_live). *)
+Definition vv_storage_live_def[simp]:
+  (vv_storage_live cx (StackValue _ _) es s <=> T) /\
+  (vv_storage_live cx (LocatedValue t p) es s <=>
+     (p.ptr_location = LocStorage ==>
+      !w tvt. eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME tvt ==>
+        storage_read_live cx F (get_storage cx es F) w tvt) /\
+     (p.ptr_location = LocTransient ==>
+      !w tvt. eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME tvt ==>
+        storage_read_live cx T (get_storage cx es T) w tvt))
+End
+
+Theorem vv_storage_live_gas_obs[simp]:
+  vv_storage_live cx vv (es with gas_obs := gs) s <=> vv_storage_live cx vv es s
+Proof
+  Cases_on `vv` >> simp[get_storage_def]
+QED
+
+Theorem vv_storage_live_inst_idx[simp]:
+  vv_storage_live cx vv es (s with vs_inst_idx := n) <=> vv_storage_live cx vv es s
+Proof
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  Cases_on `vv` >> simp[]
+QED
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
@@ -476,6 +522,7 @@ Definition vv_post_def:
     vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
     (post_value_type cenv e <> expr_type e ==>
      vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
+    (~expr_has_effect e ==> vv_storage_live cx vv es' s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
