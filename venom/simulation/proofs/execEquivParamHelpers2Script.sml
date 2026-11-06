@@ -72,7 +72,10 @@ Proof
     (vsr_irule vsr_eval_operands >> simp[]) >>
   vsr_eval_rewrite_tac () >>
   IF_CASES_TAC >- (REWRITE_TAC [] >> irule vsr_static_abort >> simp[]) >>
-  rpt (CASE_TAC >> gvs[lift_result_def, halt_state_def, set_returndata_def]) >>
+  Cases_on `inst.inst_operands` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand h s2` >>
+  gvs[lift_result_def, halt_state_def, set_returndata_def] >>
   vsr_terminal_tac ()
 QED
 
