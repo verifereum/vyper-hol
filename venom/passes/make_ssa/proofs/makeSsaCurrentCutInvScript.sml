@@ -29,7 +29,7 @@ Ancestors
   makeSsaCurrentNonphiDemandEdge makeSsaCurrentSingletonDemandEdge
   makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentExternalExclusion
   makeSsaCurrentScanOrigin makeSsaCurrentEntryProvenance
-  makeSsaCurrentCarrierExternal
+  makeSsaCurrentCarrierExternal makeSsaCurrentLastOutput makeSsaCurrentRuntime
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -451,6 +451,39 @@ Proof
     arithmeticTheory.ADD_COMM]
 QED
 
+Theorem current_cut_pair_written_last_slot:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  lookup_block l renamed = SOME new /\
+  A l = current_block_annotations old pre /\ i < LENGTH old.bb_instructions /\
+  current_cut_pair fn A renamed H events l (SUC i) n v /\
+  MEM v (EL i old.bb_instructions).inst_outputs ==>
+  ?k. k < LENGTH (EL i old.bb_instructions).inst_outputs /\
+    EL k (EL i old.bb_instructions).inst_outputs = v /\
+    ~MEM v (DROP (SUC k) (EL i old.bb_instructions).inst_outputs) /\
+    EL k (EL (LENGTH pre + i) new.bb_instructions).inst_outputs = n
+Proof
+  strip_tac >>
+  `old.bb_label = l` by metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  qpat_x_assum `current_cut_pair _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_cut_pair_def] >> strip_tac >>
+  `old' = old` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+  `LENGTH pre' = LENGTH pre` by
+    (qpat_x_assum `current_block_annotations _ _ = current_block_annotations _ _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[current_block_annotations_def, current_inserted_annotations_def]) >>
+  `?k. k < LENGTH (EL i old.bb_instructions).inst_outputs /\
+    EL k (EL i old.bb_instructions).inst_outputs = v /\
+    ~MEM v (DROP (SUC k) (EL i old.bb_instructions).inst_outputs) /\
+    E v = CurrentOriginal old.bb_label i k` by
+    (irule current_source_cut_last_output >> metis_tac[]) >>
+  `current_token_name H (CurrentOriginal old.bb_label i k) =
+    SOME (EL k (EL (i + LENGTH pre) new.bb_instructions).inst_outputs)` by
+    (irule current_precleanup_original_output_slot >> metis_tac[]) >>
+  qexists_tac `k` >> gvs[arithmeticTheory.ADD_COMM]
+QED
+
 Theorem current_cut_pair_unaffected_predecessor:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\
@@ -484,6 +517,55 @@ Proof
   simp[current_cut_pair_def] >>
   qexistsl_tac [`ev`, `pre`, `rs'`, `E'`] >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem current_cut_last_output_slots:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  lookup_block l renamed = SOME new /\
+  A l = current_block_annotations old pre /\
+  LENGTH (collect_phis old.bb_instructions) <= i /\
+  i < LENGTH old.bb_instructions ==>
+  current_last_output_slots (current_cut_sg fn A renamed H events l i)
+    (EL i old.bb_instructions).inst_outputs
+    (EL (LENGTH pre + i) new.bb_instructions).inst_outputs
+    (current_cut_sg fn A renamed H events l (SUC i))
+Proof
+  strip_tac >> rewrite_tac[current_last_output_slots_def] >>
+  conj_tac
+  >- (drule_all current_transport_precleanup_output_names >>
+      metis_tac[LIST_REL_LENGTH, arithmeticTheory.ADD_COMM]) >>
+  conj_tac
+  >- (drule_all current_wf_phi_context_ssa_form >>
+      rewrite_tac[venomWfTheory.ssa_form_def] >> strip_tac >>
+      `MEM new renamed` by metis_tac[lookup_block_MEM] >>
+      `LENGTH pre + i < LENGTH new.bb_instructions` by
+        (drule_all current_wf_precleanup_output_alignment >>
+         disch_then (mp_tac o Q.AP_TERM `LENGTH`) >>
+         `LENGTH (current_original_annotations old.bb_label 0 old.bb_instructions) =
+           LENGTH old.bb_instructions` by
+           metis_tac[current_original_annotations_owners, LIST_REL_LENGTH] >>
+         simp[current_block_annotations_def, current_inserted_annotations_def]) >>
+      `MEM (EL (LENGTH pre + i) new.bb_instructions)
+        (fn_insts (fn with fn_blocks := renamed))` by
+        (simp[fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+         qexists_tac `new` >> simp[] >>
+         metis_tac[EL_MEM, arithmeticTheory.ADD_COMM]) >>
+      `?xs ys. fn_insts (fn with fn_blocks := renamed) =
+        xs ++ EL (LENGTH pre + i) new.bb_instructions :: ys` by
+        metis_tac[MEM_SPLIT] >>
+      gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
+  rpt strip_tac >>
+  `current_cut_pair fn A renamed H events l (SUC i) n v` by
+    metis_tac[current_cut_sg_lookup] >>
+  Cases_on `MEM v (EL i old.bb_instructions).inst_outputs`
+  >- (disj1_tac >> drule_all current_cut_pair_written_last_slot >> metis_tac[]) >>
+  disj2_tac >> simp[] >> conj_tac
+  >- (drule_all current_cut_pair_precleanup_output_exclusion >>
+      simp[arithmeticTheory.ADD_COMM]) >>
+  drule_all current_cut_pair_unaffected_predecessor >>
+  metis_tac[current_cut_sg_lookup]
 QED
 
 Theorem current_cut_rename_operands_rel[local]:
