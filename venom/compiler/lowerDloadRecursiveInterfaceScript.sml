@@ -1,6 +1,7 @@
 Theory lowerDloadRecursiveInterface
 Ancestors
   lowerDloadProjectedReachability lowerDloadNormalData lowerDloadReachability
+  lowerDloadTargetValidity
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
   lowerDloadNormalJump lowerDloadNormalEntry lowerDloadReachableJump
   o1LowerDloadEntryFetch o1LowerDloadJointEntry lowerDloadNonhalted
@@ -609,16 +610,34 @@ Proof
     (irule MEM_lookup_block >> simp[]) >> gvs[]
 QED
 
-Theorem ld_recursive_prefix_next:
+(* One fixed-anchor intermediate transition, generalized over its invariant. *)
+val ld_recursive_anchor_normal =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (ws,b) = strip_exists (fst(dest_disj body))
+    val ta = hd (filter (fn v => fst(dest_var v) = "ta") ws)
+    val p = ``P:venom_state->bool``
+  in list_mk_abs(p::args,list_mk_exists(ws,mk_conj(b,mk_comb(p,ta)))) end;
+val ld_recursive_anchor_inside =
+  let
+    val (args,body) = strip_abs ld_recursive_anchor_normal
+    val (ws,b) = strip_exists body
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n"
+    val code = named "code"
+  in list_mk_abs(args,list_mk_exists(ws,mk_conj(b,``SUC ^n < LENGTH ^code``))) end;
+
+Theorem ld_recursive_anchor_prefix_next[local]:
+  !P.
   o1_ctx_shape CS /\
-  (^ld_recursive_inside) vs0 CT stk un gn j t /\
+  (^ld_recursive_anchor_inside) P vs0 CT stk un gn j t /\
   ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
   step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  (^ld_recursive_candidate) vs0 CT stk (step_taint j t z un) gn j'
+  (^ld_recursive_anchor_normal) P vs0 CT stk (step_taint j t z un) gn j'
     (z with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  BETA_TAC >> strip_tac >>
+  gen_tac >> BETA_TAC >> strip_tac >>
   `ld_target_prefix CT code ta ua n t un` by
     asm_simp_tac (srw_ss()) [ld_target_prefix_empty] >>
   `j = EL n code` by (asm_simp_tac (srw_ss()) [EL]) >>
@@ -656,7 +675,6 @@ Proof
   strip_tac >>
   `j' = EL (SUC n) code` by
     (qpat_x_assum `j' = EL _ _` mp_tac >> asm_rewrite_tac []) >>
-  disj1_tac >>
   qexistsl_tac [`astk`,`gstk`,`k`,`L`,`AP`,`AG`,`tn`,`fn`,`i`,`s`,
     `ta`,`ua`,`V`,`U`,`E`,`H`,`BP`,`BH`,`live`,`keys`,`A`,`suspended`,
     `f`,`fa`,`fb`,`bb`,`gb`,`a0`,`a1`,`a2`,`a3`,`pre`,`post`,`p`,
@@ -665,6 +683,25 @@ Proof
   asm_rewrite_tac [] >> simp[] >>
   qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
   asm_rewrite_tac []
+QED
+
+Theorem ld_recursive_prefix_next:
+  o1_ctx_shape CS /\
+  (^ld_recursive_inside) vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  qspec_then `\_. T` mp_tac ld_recursive_anchor_prefix_next >>
+  BETA_TAC >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  (impl_tac >- (pure_rewrite_tac [AND_CLAUSES] >> asm_rewrite_tac [])) >>
+  disch_tac >> BETA_TAC >> disj1_tac >>
+  pop_assum (mp_tac o BETA_RULE) >>
+  pure_rewrite_tac [AND_CLAUSES] >> disch_then ACCEPT_TAC
 QED
 
 Theorem ld_recursive_exceptional_next:
@@ -1879,4 +1916,108 @@ Finalise ld_recursive_bytes_next
    geometry. The remaining cardinality and saved-envelope differences have
    existing interfaces as listed above. No additional local load producer
    or duplicate normal_data wrapper is called for by this audit.
+*)
+
+(* Conservative refinement for the geometry probe. The old operational quote
+   remains unchanged. Validity of ta is inside precisely its old witnesses. *)
+val ld_recursive_geometry_candidate =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (normal,exceptional) = dest_disj body
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val ta = named "ta"
+    val stk = List.nth(args,2)
+    val t = List.last args
+    val refined = list_mk_exists(ws,mk_conj(b,``alloca_inv ^ta``))
+  in list_mk_abs(args,
+       list_mk_conj [``alloca_inv ^t``,
+         ``!f i st tv. MEM (f,i,st,tv) ^stk ==> alloca_inv st``,
+         mk_disj(refined,exceptional)]) end;
+
+Theorem ld_recursive_geometry_forget[local]:
+  (^ld_recursive_geometry_candidate) vs0 CT stk un gn j t ==>
+  (^ld_recursive_candidate) vs0 CT stk un gn j t
+Proof
+  BETA_TAC >> disch_then (mp_tac o CONJUNCT2 o CONJUNCT2) >>
+  ho_match_mp_tac MONO_OR >> reverse conj_tac >- simp[] >>
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >> simp[]
+QED
+
+val ld_recursive_geometry_inside =
+  let
+    val (args,body) = strip_abs ld_recursive_geometry_candidate
+    val [current,saved,alternatives] = strip_conj body
+    val (normal,_) = dest_disj alternatives
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n"
+    val code = named "code"
+    val restricted = list_mk_exists(ws,mk_conj(b,``SUC ^n < LENGTH ^code``))
+  in list_mk_abs(args,list_mk_conj [current,saved,restricted]) end;
+
+Theorem ld_recursive_geometry_prefix_next:
+  o1_ctx_shape CS /\
+  (^ld_recursive_geometry_inside) vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_geometry_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  qspec_then `alloca_inv` mp_tac ld_recursive_anchor_prefix_next >>
+  BETA_TAC >>
+  (impl_tac >- asm_simp_tac (srw_ss()) []) >>
+  disch_tac >>
+  (conj_tac
+   >- ( `alloca_inv z` by
+          metis_tac[venomMemPropsTheory.alloca_inv_step_inst] >>
+        qpat_x_assum `alloca_inv z` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[venomMemDefsTheory.alloca_inv_def,
+          venomMemDefsTheory.allocas_non_overlapping_def,
+          venomMemDefsTheory.alloca_next_valid_def])) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  disj1_tac >> first_assum ACCEPT_TAC
+QED
+
+(* ANCHOR GEOMETRY PROBE LEDGER -- not a global closure assertion.
+   ld_recursive_geometry_candidate is a conservative refinement of the
+   operational quotation. Forgetting is proved only in the forward direction.
+   alloca_inv ta is retained INSIDE the normal existential, whereas actual
+   current/saved target validity is external and also applies to revert mode.
+   ld_target_prefix_alloca_inv checks forward validity along a prefix; it
+   does not invert validity of its endpoint to validity of its anchor.
+
+   Checked: intermediate NEXT retains the SAME ta and its validity, extends
+   the same prefix, and advances current validity by alloca_inv_step_inst.
+   No memory producer or source simulation is duplicated by this check.
+
+   Remaining constructor obligations for the refined quotation:
+   ENTRY: the existing entry producer chooses ta=current entered target state.
+     Initial alloca_inv follows from empty initial allocation map; entry block
+     preserves allocation fields. Empty projected stack validates saved clause.
+   COMPLETED NEXT: ordinary/ALLOCA/bytes/load production must be packaged with
+     ta'=actual target successor, ua'=actual successor taint, n'=0. The actual
+     geometry supplied by the enriched projected induction and target step
+     proves alloca_inv ta'. It does NOT justify using the old existential
+     candidate conclusion as if it selected this anchor; retain the explicit
+     producer witnesses. DLOAD must additionally expose source headroom from
+     o1_src_inv, and uses OLD anchor validity for its load-producer premises.
+   JUMP: choose ta'=actual entered target successor and n'=0. Preserve allocation
+     validity through the target step and enters_block allocation-field lemma.
+     Existing positional/normal-data jump obligations remain independent.
+   CALL: save the actual target caller state with its current validity; setup
+     initializes the new callee allocation map to empty, enters_block preserves
+     it. The callee normal anchor is that actual entered state. Existing call
+     control/parameter-envelope producers are still required.
+   RETURN: saved caller validity and return allocation-field transport supply
+     actual returned target state validity (as in TargetValidity); choose that
+     state as ta' at n'=0, pop saved validity. Existing matching completed-source
+     callee run, output, normal-data and control obligations are NOT proved here.
+   REVERT: only external actual/saved validity remains. Successful exceptional
+     NEXT preserves it by alloca_inv_step_inst; no source anchor is introduced.
+     Entry from a configured revert pair need not fabricate normal_data.
+   Observation consumers may forget geometry using the checked implication.
+   No global induction or completed DLOAD assembly is authorized by this probe.
 *)

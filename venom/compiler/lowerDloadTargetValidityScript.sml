@@ -1,6 +1,6 @@
 Theory lowerDloadTargetValidity
 Ancestors
-  lowerDloadProjectedReachability lowerDloadOwnership
+  lowerDloadProjectedReachability lowerDloadOwnership lowerDloadPhaseBoundary
   venomMemProps venomMemDefs venomExecProofs venomExecSemantics calleeTransport
   ptrDiscipline list
 
@@ -104,3 +104,14 @@ QED
    The geometry-enriched induction intentionally has no normal-data anchor:
    it supplies validity only of the actual current and suspended states.
    A segment anchor must separately retain its validity when it is chosen. *)
+
+Theorem ld_target_prefix_alloca_inv:
+  !CT code ta ua n t un.
+    ld_target_prefix CT code ta ua n t un ==>
+    (alloca_inv ta ==> alloca_inv t)
+Proof
+  ho_match_mp_tac ld_target_prefix_ind >> simp[] >> rpt strip_tac >>
+  `alloca_inv z` by metis_tac[alloca_inv_step_inst] >>
+  qpat_x_assum `alloca_inv z` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
+QED
