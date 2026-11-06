@@ -12,7 +12,9 @@ Theorem concretize_clean_create_completion:
   consume_create_outcome rq s = (w,post) /\
   consume_create_outcome rq t = (w',post') ==>
   w = w' /\ concretize_local_obs post post' /\
-  concretize_supplement D tn post post'
+  concretize_supplement D tn post post' /\
+  post.vs_vars = s.vs_vars /\ post'.vs_vars = t.vs_vars /\
+  post.vs_memory = s.vs_memory /\ post'.vs_memory = t.vs_memory
 Proof
   strip_tac >> drule_all concretize_supplement_clean_accounts >> strip_tac >>
   `s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
@@ -55,7 +57,11 @@ Theorem concretize_create_observation:
   exec_create inst s value off sz salt = OK post ==>
   ?post'. exec_create inst t value offT sz salt = OK post' /\
     concretize_local_obs post post' /\
-    concretize_supplement D (step_taint inst s post tn) post post'
+    concretize_supplement D (step_taint inst s post tn) post post' /\
+    post.vs_memory = s.vs_memory /\ post'.vs_memory = t.vs_memory /\
+    (?out w. inst.inst_outputs = [out] /\
+      post.vs_vars = (update_var out w s).vs_vars /\
+      post'.vs_vars = (update_var out w t).vs_vars)
 Proof
   strip_tac >> drule_all concretize_supplement_clean_accounts >> strip_tac >>
   `venom_create_request s value off sz salt =
@@ -78,9 +84,10 @@ Proof
           Excl "consume_create_outcome_eq"] >>
   `concretize_supplement D tn (update_var out w p) (update_var out wT pT)` by
     metis_tac[concretize_supplement_update_var] >>
-  gvs[concretize_supplement_def, step_taint_def, adopt_reset_def,
+  (conj_tac >- gvs[concretize_supplement_def, step_taint_def, adopt_reset_def,
      store_taint_def, imm_taint_def, update_var_def, MEM,
-     Excl "consume_create_outcome_eq"]
+     Excl "consume_create_outcome_eq"]) >>
+  simp[update_var_def] >> qexists_tac `wT` >> simp[]
 QED
 
 Theorem concretize_create_abort_observation:
@@ -97,6 +104,22 @@ Proof
   gvs[concretize_local_obs_def, dead_result_rel_def, concretize_supplement_def,
       halt_state_def, set_returndata_def, step_taint_def, adopt_reset_def,
       store_taint_def, imm_taint_def, MEM, Excl "consume_create_outcome_eq"]
+QED
+
+Theorem create_execution_fields:
+  exec_create inst s value off sz salt = OK post ==>
+  ?out w. inst.inst_outputs = [out] /\
+    post.vs_vars = (update_var out w s).vs_vars /\
+    post.vs_memory = s.vs_memory /\
+    post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp /\
+    post.vs_labels = s.vs_labels /\ post.vs_call_ctx = s.vs_call_ctx /\
+    post.vs_gas_readings = s.vs_gas_readings /\
+    post.vs_tx_ctx = s.vs_tx_ctx /\ post.vs_block_ctx = s.vs_block_ctx /\
+    post.vs_code = s.vs_code /\ post.vs_data_section = s.vs_data_section
+Proof
+  strip_tac >> drule create_success_envelope >> strip_tac >>
+  qexistsl_tac [`out`,`w`] >>
+  gvs[consume_create_outcome_eq, update_var_def]
 QED
 
 val _ = export_theory();
