@@ -235,7 +235,7 @@ Theorem storage_copy_store_chunk_path_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G'
       (tn' with t_mem :=
         (tn'.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
-        {b+32*k+r | r < 32 /\ (slot,r) IN X})
+        IMAGE (\r. b+32*k+r) {r | r < 32 /\ (slot,r) IN X})
       (OK (mstore (b+32*k) w u with vs_inst_idx := s.vs_inst_idx+3)) /\
     u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+2 /\
     ~u.vs_halted
@@ -262,20 +262,158 @@ Resume storage_copy_store_chunk_path_ptr[store]:
      >- simp[] >>
      irule storage_copy_mstore_path_ptr >> simp[eval_operand_def] >>
      qexistsl_tac [`bb`, `n2w (b+32*k)`] >> simp[]) >>
+  `{b+32*k+r | r < 32 /\ (slot,r) IN X} =
+    IMAGE (\r. b+32*k+r) {r | r < 32 /\ (slot,r) IN X}` by
+    (simp[EXTENSION, IN_IMAGE] >> metis_tac[]) >>
   `step_taint (mk_inst (id+2) MSTORE [Var dv;Var vv] []) u
     (mstore (b+32*k) w u) tn' =
     tn' with t_mem :=
       (tn'.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
-      {b+32*k+r | r < 32 /\ (slot,r) IN X}` by
+      IMAGE (\r. b+32*k+r) {r | r < 32 /\ (slot,r) IN X}` by
     (`eval_operand (Var dv) u = SOME (n2w (b+32*k)) /\
       eval_operand (Var vv) u = SOME w` by simp[eval_operand_def] >>
      qpat_assum `eval_operand (Var dv) u = _`
        (mp_then Any mp_tac storage_copy_mstore_ghost) >>
      disch_then drule >> simp[] >>
-     disch_then (qspec_then `id+2` mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`tn'`, `slot`, `id+2`, `X`] mp_tac) >>
+     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> asm_rewrite_tac[]) >>
   qexistsl_tac [`G'`, `tn'`, `u`] >> simp[] >>
   drule_all gas_path_ptr_then >> simp[arithmeticTheory.ADD1]
 QED
 
 Finalise storage_copy_store_chunk_path_ptr
 
+
+Theorem storage_copy_source_store_chunk_path_ptr:
+  storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G tn s /\
+  mv IN scratch /\ dv IN scratch /\ mv <> dv /\
+  mv <> cv /\ dv <> cv /\ mv <> root /\ dv <> root /\
+  src <> Var mv /\ src <> Var dv /\ vv <> mv /\ vv <> dv /\
+  k < n /\ b+32*n < dimword(:256) /\
+  lookup_var vv s = SOME (copy_runtime_word loc sbase (a+n2w k)) /\
+  op_taint tn (Var vv) = key_taint
+    (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) (a+n2w k) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var cv; Lit 32w] [mv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME
+    (mk_inst (id+1) ADD [Var root; Var mv] [dv]) /\
+  get_instruction bb (s.vs_inst_idx+2) = SOME
+    (mk_inst (id+2) MSTORE [Var dv; Var vv] []) ==>
+  ?G' tn' u.
+    storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G' tn' u /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G'
+      (tn' with t_mem :=
+        (tn'.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
+        IMAGE (\r. b+32*k+r) {r | r < 32 /\
+          (a+n2w k,r) IN (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans)})
+      (OK (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) u
+        with vs_inst_idx := s.vs_inst_idx+3)) /\
+    u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+2 /\
+    ~u.vs_halted
+Proof
+  strip_tac >> irule storage_copy_store_chunk_path_ptr >> simp[] >>
+  qexistsl_tac [`dv`, `id`, `mv`, `vv`] >> simp[]
+QED
+
+Theorem storage_copy_body_path_ptr:
+  storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G tn s /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  ALL_DISTINCT [sv;vv;mv;dv;nv;cv;root] /\
+  EVERY (\x. x IN scratch /\ src <> Var x) [sv;vv;mv;dv;nv;cv] /\
+  k < n /\ b+32*n < dimword(:256) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [src; Var cv] [sv]) /\
+  get_instruction bb (s.vs_inst_idx+1) = SOME
+    (mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]) /\
+  get_instruction bb (s.vs_inst_idx+2) = SOME
+    (mk_inst (id+2) MUL [Var cv; Lit 32w] [mv]) /\
+  get_instruction bb (s.vs_inst_idx+3) = SOME
+    (mk_inst (id+3) ADD [Var root; Var mv] [dv]) /\
+  get_instruction bb (s.vs_inst_idx+4) = SOME
+    (mk_inst (id+4) MSTORE [Var dv; Var vv] []) /\
+  get_instruction bb (s.vs_inst_idx+5) = SOME
+    (mk_inst (id+5) ADD [Var cv; Lit 1w] [nv]) /\
+  get_instruction bb (s.vs_inst_idx+6) = SOME
+    (mk_inst (id+6) ASSIGN [Var nv] [cv]) ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase (k+1) G' tn' t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+7 /\
+    ~t.vs_halted
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) [listTheory.ALL_DISTINCT, listTheory.EVERY_DEF]) >>
+  RULE_L_ASSUM_TAC CONJUNCTS >>
+  `vv <> sv /\ dv <> mv` by metis_tac[] >>
+  `get_instruction bb (SUC s.vs_inst_idx) = SOME
+    (mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv])` by
+    simp[arithmeticTheory.ADD1] >>
+  drule_all storage_copy_load_pair_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK s1)` >>
+  suspend "store_chunk"
+QED
+
+Resume storage_copy_body_path_ptr[store_chunk]:
+  `vv <> mv /\ vv <> dv` by metis_tac[] >>
+  `get_instruction bb s1.vs_inst_idx = SOME
+     (mk_inst (id+2) MUL [Var cv; Lit 32w] [mv]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) = SOME
+     (mk_inst ((id+2)+1) ADD [Var root; Var mv] [dv]) /\
+   get_instruction bb (s1.vs_inst_idx+2) = SOME
+     (mk_inst ((id+2)+2) MSTORE [Var dv; Var vv] []) /\
+   lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb` by
+    simp[arithmeticTheory.ADD1] >>
+  drule_all storage_copy_source_store_chunk_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qabbrev_tac `s2 = mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) u
+    with vs_inst_idx := s1.vs_inst_idx+3` >>
+  qabbrev_tac `tn2 = tn' with t_mem :=
+    (tn'.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
+    IMAGE (\r. b+32*k+r) {r | r < 32 /\
+      (a+n2w k,r) IN (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans)}` >>
+  suspend "increment"
+QED
+
+Resume storage_copy_body_path_ptr[increment]:
+  `lookup_var cv u = SOME (n2w k) /\ op_prov G' (Var cv) = NONE /\
+   op_taint tn' (Var cv) = {}` by
+    fs[storage_copy_inv_ptr_def] >>
+  qabbrev_tac `G3 = DRESTRICT (DRESTRICT G' (COMPL {nv})) (COMPL {cv})` >>
+  qabbrev_tac `tn3 = tn2 with t_var := (tn2.t_var |+ (nv,{})) |+ (cv,{})` >>
+  qabbrev_tac `t = update_var cv (n2w (k+1)) (update_var nv (n2w (k+1)) s2)
+    with vs_inst_idx := s2.vs_inst_idx+2` >>
+  `gas_path_ptr D 0 ctx fn PG G' tn2 s2 0 G3 tn3 (OK t)` by
+    (map_every qunabbrev_tac [`G3`, `tn3`, `t`] >>
+     irule storage_copy_increment_path_ptr >>
+     simp[Abbr `s2`, Abbr `tn2`, lookup_var_def, mstore_def,
+          write_memory_with_expansion_def, op_taint_def, arithmeticTheory.ADD1] >>
+     fs[lookup_var_def, op_taint_def] >> qexists_tac `id+5` >> simp[]) >>
+  suspend "successor"
+QED
+
+Resume storage_copy_body_path_ptr[successor]:
+  `IMAGE (\r. b+32*k+r) {r | r < 32 /\
+     (a+n2w k,r) IN (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans)} =
+   {x | ?r. r < 32 /\
+     (a+n2w k,r) IN (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) /\
+     x = b+32*k+r}` by
+    (simp[EXTENSION, IN_IMAGE] >> metis_tac[]) >>
+  `storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase (k+1)
+     G3 tn3 t` by
+    (simp[Abbr `G3`, Abbr `tn3`, Abbr `t`, Abbr `s2`, Abbr `tn2`] >>
+     mp_tac (Q.INST [`s` |-> `u with vs_inst_idx := s1.vs_inst_idx+3`,
+       `G` |-> `G'`, `tn` |-> `tn'`] storage_copy_inv_ptr_store_increment) >>
+     simp[update_var_def, mstore_def, write_memory_with_expansion_def,
+          arithmeticTheory.LEFT_ADD_DISTRIB]) >>
+  qexistsl_tac [`G3`, `tn3`, `t`] >> conj_tac
+  >- (drule_all gas_path_ptr_then >> simp[] >> disch_then assume_tac >>
+      irule (SRULE[] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+      qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[]) >>
+  simp[Abbr `t`, Abbr `s2`, update_var_def, mstore_def,
+       write_memory_with_expansion_def]
+QED
+
+Finalise storage_copy_body_path_ptr
