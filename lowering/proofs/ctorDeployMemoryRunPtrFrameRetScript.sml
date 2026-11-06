@@ -28,17 +28,6 @@ fun opcode_eq opc =
 fun opc_tac opc =
   FIRST_ASSUM (fn th => rewrite_tac [MATCH_MP (opcode_eq opc) th]);
 
-Theorem storage_dead_in_deploy[local]:
-  !cx d tr st j b.
-    storage_dead (cx with in_deploy := d) tr st j b <=> storage_dead cx tr st j b
-Proof
-  rpt gen_tac >>
-  `!mid n subs. declared_storage_region (cx with in_deploy := d) mid n subs =
-                declared_storage_region cx mid n subs` by
-    simp[declared_storage_region_def, get_module_code_def, get_tenv_def,
-         lookup_var_slot_from_layout_def] >>
-  simp[storage_dead_def]
-QED
 
 (* A copy of ctorReturnFrame's local constructor_exit_code. *)
 Theorem constructor_exit_code_ptr[local]:

@@ -97,6 +97,44 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem compile_register_constructor_args_return_buf:
+  !args cenv off dsz st cenv' st'.
+    compile_register_constructor_args cenv args off dsz st = (cenv', st') ==>
+    cenv'.ce_return_buf = cenv.ce_return_buf
+Proof
+  Induct >- simp[moduleLoweringTheory.compile_register_constructor_args_def,
+                 comp_return_def] >>
+  PairCases >> rpt gen_tac >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >>
+  simp[Once moduleLoweringTheory.compile_register_constructor_args_def]
+  >- metis_tac[] >>
+  rename1 `FLOOKUP cenv.ce_vars h0 = SOME loc` >>
+  Cases_on `var_location_memory_size loc` >> simp[] >- metis_tac[] >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+(* The constructor frame has no return buffer: deploy_ctor_return_metadata's
+   companion. *)
+Theorem deploy_ctor_return_buf:
+  !tops rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl sa sb sj
+   st_exit st_epilogue st_final func.
+  deploy_ctor_code tops rpolicy runtime_bc dunit
+    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
+     st_epilogue,st_final,func) ==>
+  cenv.ce_return_buf = NONE
+Proof
+  simp[deploy_ctor_code_def] >> rpt strip_tac >>
+  drule compile_register_constructor_args_return_buf >>
+  rpt strip_tac >>
+  qpat_x_assum `set_constructor_package_target _ _ = _` mp_tac >>
+  PairCases_on `cf` >>
+  simp[set_constructor_package_target_def, package_constructor_def,
+       update_cenv_nonreentrant_def] >> strip_tac >> gvs[] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
 Theorem deploy_ctor_return_metadata:
   !tops rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl sa sb sj
    st_exit st_epilogue st_final func.
