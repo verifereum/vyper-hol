@@ -288,3 +288,199 @@ Proof
   drule_all scalar_checked_pair_uniform_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >> simp[]
 QED
+
+Theorem convert_int_bytes_prefix_certificate:
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  (if m*8 < bits then
+     ?a b. emitted_insts sa mid =
+       (if signed then
+         [mk_inst sa.cs_next_id SIGNEXTEND [Lit (n2w (m-1));x] [a];
+          mk_inst (sa.cs_next_id+1) EQ [x;Var a] [b];
+          mk_inst (sa.cs_next_id+2) ASSERT [Var b] []]
+        else
+         [mk_inst sa.cs_next_id GT [x;Lit (n2w (2 ** (m*8)-1))] [a];
+          mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+          mk_inst (sa.cs_next_id+2) ASSERT [Var b] []]) /\
+       (!p. not_fresh_at sa p ==> p <> a /\ p <> b)
+   else mid = sa) /\
+  (run_inst_seq (emitted_insts sa mid) s = OK t \/
+   run_inst_seq (emitted_insts sa mid) s = Abort err t) ==>
+  !k. ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa mid)
+      (s with vs_inst_idx := k) H th /\
+    (!op. op_prov G op = NONE /\ op_taint tn op = {} ==>
+      op_prov H op = NONE /\ op_taint th op = {}) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  Cases_on `m*8 < bits` >> simp[] >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- (qpat_x_assum `?a b. _` strip_assume_tac >>
+      drule_all scalar_byte_check_uniform_certificate >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+      strip_tac >> gen_tac >> first_x_assum (qspec_then `k` strip_assume_tac) >>
+      qexistsl_tac [`H`,`th`] >> simp[] >> metis_tac[]) >>
+  gvs[emitted_insts_def] >> gen_tac >> qexistsl_tac [`G`,`tn`] >>
+  simp[inst_seq_ptr_def]
+QED
+
+Theorem scalar_emit_uniform_certificate:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  emit_op opc [x;y] sa = (out,sb) /\
+  op_prov G x = NONE /\ op_prov G y = NONE /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  !k. ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) H th /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!op. op_prov G op = NONE /\ op_taint tn op = {} ==>
+      op_prov H op = NONE /\ op_taint th op = {}) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >>
+  drule_all scalar_emit_instruction_filter >> strip_tac >>
+  irule scalar_emit_fixed_certificate >> simp[] >>
+  reverse conj_tac >- (qexistsl_tac [`opc`,`x`,`y`] >> gvs[MEM]) >>
+  qexists_tac `t with vs_inst_idx := k` >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    gvs[EVERY_MEM] >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def]
+QED
+
+Theorem convert_int_bytes_fixed_certificate:
+  compile_type_convert x (ConvIntToBytesM signed bits m) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule convert_int_bytes_decompose >> strip_tac >>
+  drule convert_int_bytes_instruction_filter >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa mid)` by
+    gvs[EVERY_APPEND, EVERY_MEM] >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  asm_rewrite_tac[] >> rewrite_tac[scalar_seq_append_ok_iff] >> strip_tac >>
+  drule_all (cj 1 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+    convert_int_bytes_prefix_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+  disch_then (qspec_then `s.vs_inst_idx` strip_assume_tac) >> gvs[] >>
+  `op_prov H x = NONE /\ op_taint th x = {} /\
+   op_prov H (Lit (n2w (8*(32-m)))) = NONE /\
+   op_taint th (Lit (n2w (8*(32-m)))) = {} /\
+   MEM SHL [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by
+    (simp[op_prov_def, op_taint_def] >> metis_tac[]) >>
+  drule_all scalar_emit_uniform_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] assume_tac) >>
+  pop_assum (qspec_then `s.vs_inst_idx + LENGTH (emitted_insts sa mid)`
+    strip_assume_tac) >>
+  qexistsl_tac [`H'`,`th'`] >> reverse conj_tac
+  >- (simp[] >> metis_tac[]) >>
+  irule scalar_seq_ptr_append_at >> goal_assum (drule_at Any) >>
+  simp[] >> goal_assum (drule_at Any) >>
+  once_rewrite_tac[ADD_COMM] >> first_assum ACCEPT_TAC
+QED
+
+Theorem convert_int_bytes_abort_fixed_certificate:
+  compile_type_convert x (ConvIntToBytesM signed bits m) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
+  ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule convert_int_bytes_decompose >> strip_tac >>
+  drule convert_int_bytes_instruction_filter >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa mid)` by
+    gvs[EVERY_APPEND, EVERY_MEM] >>
+  `MEM SHL [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_emit_no_abort >> strip_tac >>
+  `run_inst_seq (emitted_insts sa mid) s = Abort err t` by
+    (qpat_x_assum `run_inst_seq _ s = Abort err t` mp_tac >>
+     asm_rewrite_tac[] >> rewrite_tac[scalar_seq_append_abort_iff] >> metis_tac[]) >>
+  drule_all (cj 2 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+    convert_int_bytes_prefix_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+  disch_then (qspec_then `s.vs_inst_idx` strip_assume_tac) >> fs[] >>
+  qexistsl_tac [`H`,`th`] >> reverse conj_tac >- simp[] >>
+  qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
+  irule inst_seq_ptr_abort_append >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem convert_int_bytes_counted_certificate:
+  compile_type_convert x (ConvIntToBytesM signed bits m) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all convert_int_bytes_fixed_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`th`] >> simp[] >>
+  drule convert_int_bytes_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Theorem convert_int_bytes_abort_counted_certificate:
+  compile_type_convert x (ConvIntToBytesM signed bits m) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th n j.
+    gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all convert_int_bytes_abort_fixed_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  drule convert_int_bytes_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
+  qexistsl_tac [`H`,`th`,`n`,`j`] >> simp[]
+QED
+
+Theorem convert_int_bytes_runtime_frame:
+  compile_type_convert x (ConvIntToBytesM signed bits m) sa = (out,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s /\
+  (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s)
+Proof
+  strip_tac >> drule convert_int_bytes_decompose >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  asm_rewrite_tac[] >> rewrite_tac[scalar_seq_append_ok_iff] >> strip_tac >>
+  `MEM SHL [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_emit_runtime_frame >> strip_tac >>
+  `(u with vs_vars := s.vs_vars) = s /\
+   (!p. not_fresh_at sa p ==> lookup_var p u = lookup_var p s)` by
+    (Cases_on `m*8 < bits` >> gvs[]
+     >- (Cases_on `signed` >> gvs[]
+         >- (drule scalar_signed_byte_runtime_frame >> strip_tac >> simp[] >> metis_tac[]) >>
+         `MEM GT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+         drule_all scalar_checked_pair_runtime_frame >> strip_tac >> simp[] >> metis_tac[]) >>
+     gvs[emitted_insts_def, run_inst_seq_def]) >>
+  irule scalar_seq_runtime_frame_trans >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
