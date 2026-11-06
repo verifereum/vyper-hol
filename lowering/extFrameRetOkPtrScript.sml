@@ -28,6 +28,7 @@ Ancestors
   extRetBufferStatePtr extRetCursorResourcePtr extRetBufferCursorStatePtr
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
+  extRetFrameFactsPtr extRetNoneFramePtr
 
 val _ = Parse.hide "body";
 
@@ -73,5 +74,9 @@ Theorem external_frame_ret_ok_ptr:
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (\v es gt r. T) cenv ret
 Proof
+  rpt gen_tac >> strip_tac >> rw[frame_ret_ok_ptr_def] >>
+  drule_all external_frame_control_metadata >> strip_tac >>
+  Cases_on `eo`
+  >- (irule external_return_none_stmt_frag_ptr >> simp[] >> metis_tac[]) >>
   cheat
 QED
