@@ -1763,3 +1763,120 @@ Resume ld_recursive_bytes_next[revert_successor]:
 QED
 
 Finalise ld_recursive_bytes_next
+
+(* DLOAD COMPLETION AUDIT (diagnostic, not a closure theorem).
+   This ledger refers to the OPERATIONAL ld_recursive_candidate rebound above
+   (the saved out.fpo_supply=sb equation is absent), not the entry-history quote.
+   No theorem, new definition, or additional invariant is asserted here.
+
+   ENVIRONMENT / FIRST RESIDUAL:
+   ld_recursive_bytes_next assumes ptr_discipline, o1_ctx_shape,
+   o1_run_state_ok, mem_inv dload_offset_ok, callee_first, and the fn_ptr_ok
+   family. These are NOT the full resource premises of the existing load
+   producer. The frozen theorem additionally supplies
+     mem_inv dload_headroom_ok CS vs0
+   by o1_src_inv_def. ld_annotated_headroom instantiates this at
+     astk,k,L,AP,AG,tn,fn,i,s.
+   Thus a load closure using the headroom interface must explicitly take this
+   extra environmental projection; it is not a consequence already supplied
+   by the bytes theorem's hypothesis list. This is an interface residual,
+   not a counterexample to the frozen task statement.
+
+   PRODUCER INPUT LEDGER (CoverageLoad.ld_configured_load_next_backward):
+   1. normal_data and source annotated reachability: literal candidate fields,
+      with t0=ta, u0=ua and d0=32*SUM(MAP CARD suspended).
+   2. ptr_discipline / fn_ptr_ok: environmental premises, unchanged.
+   3. DLOAD arity: ld_annotated_inst_wf and inst_wf_def give [off]/[out].
+      lower_dload_inst_supply_def then gives code=[a;b;c;d], with the exact
+      ALLOCA/ADD/CODECOPY/MLOAD opcodes, operands and outputs in the producer.
+      The completed restriction forces n=3; n=0 is impossible.
+   4. off support: ld_original_nonopaque_operand_support, using opaque_use_ok
+      projected from o1_ctx_shape and MEM i (fn_insts fn), gives off=Var v ==> v IN U.
+      out IN V: ld_original_output_support. out IN U additionally uses the
+      writer clause of retpc_shape_ok_def from source shape: a DLOAD writer
+      cannot write a retpc variable (allowed writers are RETPC_PARAM/ASSIGN/PHI).
+      Operand support alone does NOT establish the output condition.
+   5. fresh av,bv: fn_pass_step_def gives membership of fn in observed and
+      ir_supply_covers_unit fa observed; expanding the covers predicates
+      restricts this to ir_supply_covers_fn fa fn. Reservation monotonicity
+      through bpre/pre and fresh_ir_var_contract yield av<>bv and av,bv NOTIN V,
+      hence NOTIN U. As in bytes-next, ld_annotated_prov_ir_vars gives
+      FDOM AG SUBSET V; ld_frame_data_provenance and ld_owned_selection_def
+      then give av,bv NOTIN FDOM BH. These are filtered BH facts, not assertions
+      about the raw target provenance.
+   6. prefix: append the actual last successful target step by
+      ld_target_prefix_rules, obtaining length-four prefix at
+        tplus = z with vs_inst_idx := SUC t.vs_inst_idx,
+        uplus = step_taint j t z un.
+      This uses the last actual j=EL 3 code; no source run is guessed.
+   7. offset/layout/code_end: same interfaces as bytes-next:
+      ld_annotated_erasure -> ld_frame_reachable_raw -> mem_inv_raw_reachable;
+      ld_raw_code_layout with o1_run_state_ok; shared environment and owned
+      definedness plus eval_operand_def for Label "code_end" at ta.
+   8. a.inst_id IN keys: lower_dload_configured_scratch_member, instantiated
+      at fa,fn,gn,fb,bpre,bb,bpost,qpre,a0,gb,a3,pre,i,post,p,a1,code,a2,
+      using ir_supply_covers_fn fa fn from item 5 and a=HD code.
+   9. STRICT FRONTIER: ld_normal_data_geometry supplies the account.
+      Candidate LIST_REL tails, mapped through ld_erase_frame, give the saved
+      CARD bounds over MAP ld_erase_frame astk. With item 8, source origin,
+      callee_first and the EXTRA headroom projection, use
+      ld_configured_scratch_headroom at q=a.inst_id, ss=suspended, s=s, t=ta.
+      Its FLOOKUP ta.vs_allocas q=NONE condition is equivalent to q NOTIN A
+      by ld_alloc_account_scratch_absent. This supplies BOTH strict bounds
+      required by the producer. Cached case q IN A needs only ta.next<dimword;
+      fresh case q NOTIN A needs ta.next+32<dimword, not merely <=.
+  10. UNMATCHED GEOMETRY INPUT:
+        allocas_non_overlapping ta /\ alloca_next_valid ta.
+      These are explicit CoverageLoad and NormalLoad premises. The candidate
+      has allocas_from f ta, frame/stack bounds and an allocation account,
+      but no alloca_inv ta or target reachability conjunct. The account gives
+      scratch sizes and domain, not scratch endpoint/disjointness geometry.
+      ld_annotated_alloca_inv supplies SOURCE geometry at s only.
+      ld_raw_reachable_alloca_inv would supply target geometry given an
+      actual raw_reachable target anchor plus alloca_inv vs0; that anchor is
+      NOT among the bytes-style environmental premises or projected NEXT
+      induction premises. Successful cached ALLOCA alone is not such a proof.
+      Smallest outstanding semantic boundary to resolve before assembly:
+        [current normal alternative at anchor s,ta; actual CT configuration]
+          ==> allocas_non_overlapping ta /\ alloca_next_valid ta.
+      This is a requested interface shape, NOT a proved implication; review
+      must decide whether target geometry needs separate induction threading
+      or can be derived by a narrower existing invariant. No candidate change
+      is made in this diagnostic.
+  11. next configured instruction: source well-formed block and nonterminating
+      DLOAD imply post<>[] exactly as in bytes-next. Split post=i'::rest and
+      split its supply to provide next/tail. Candidate supplies all remaining
+      block supply/lookups/index hypotheses literally.
+
+   SUCCESSOR OUTPUT LEDGER (conditional on resolving items 9-10):
+   CoverageLoad supplies source OK step zs, updated annotated reachability,
+   active target HD next and advanced pre++[i], p++code/index equations.
+   normal_data updates only AG to ld_set_prov AG [out] NONE, BH to
+   ld_set_prov (ld_set_prov BH [bv] NONE) [out] NONE, source taint and A to
+   a.inst_id INSERT A. E,L,H,AP,BP,live,astk,gstk,keys,f,suspended are unchanged.
+   FINITE(insert A) follows from account finiteness. CARD(insert A) is NOT
+   discharged by the old CARD A bound plus CARD_INSERT alone: use the new
+   account's capacity, INSERT A SUBSET keys, CARD_SUBSET and
+   lower_dload_configured_cap_bound to bound it by the function DLOAD count.
+   This works for cached and fresh cases without counting loop executions.
+   Saved tail LIST_REL is unchanged. Source origin is unchanged since fn and
+   astk are unchanged. The entire operational ld_recursive_saved clause is
+   unchanged: it depends on E and saved witnesses, NOT active AG/BH/A. Thus
+   saved parameter envelopes and corrected saved supply certificates reuse
+   their literal witnesses; no owner extension or saved-support transport.
+   Active envelope is part of the producer's normal_data conclusion already.
+   All function/context certificates and bpre/bpost supplies reuse witnesses.
+   Control equality uses NormalLoad's restoration record equations (not
+   shared_state, which excludes block control); source DLOAD preserves control.
+   Distinct target labels identify supplied active j' with HD next as in bytes.
+   Non-revert successor packages n=0, ta=tplus, ua=uplus. Revert successor uses
+   ld_recursive_configured_revert_entry at advanced TAKE/supply positions,
+   again as in bytes-next. No target raw PG/G equality is needed anywhere.
+
+   RESULT: no completed-DLOAD closure is claimed. Two explicit prerequisites
+   precede such a theorem: expose the already-available source headroom
+   projection in its environment, and resolve target anchor allocation
+   geometry. The remaining cardinality and saved-envelope differences have
+   existing interfaces as listed above. No additional local load producer
+   or duplicate normal_data wrapper is called for by this audit.
+*)
