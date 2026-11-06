@@ -33,7 +33,9 @@ QED
 Theorem frame_local_instruction[local]:
   asm_frame_prog_ok prog /\ i < LENGTH prog /\
   ~is_data_inst (EL i prog) /\
-  EL i prog <> AsmOp "CALL" /\ EL i prog <> AsmOp "STATICCALL" ==>
+  EL i prog <> AsmOp "CALL" /\ EL i prog <> AsmOp "STATICCALL" /\
+  EL i prog <> AsmOp "DELEGATECALL" /\ EL i prog <> AsmOp "CREATE" /\
+  EL i prog <> AsmOp "CREATE2" /\ EL i prog <> AsmOp "SELFDESTRUCT" ==>
   asm_encoding_wf prog /\
   (!j. j <= i ==> ~is_data_inst (EL j prog)) /\
   (!name. EL i prog = AsmOp name ==> ~is_evm_call_name name)
@@ -101,7 +103,11 @@ Theorem frame_local_opcode[local]:
   es.contexts = (c,rb)::rest /\ a.as_pc < LENGTH prog /\
   ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
-  EL a.as_pc prog <> AsmOp "STATICCALL" ==>
+  EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL a.as_pc prog <> AsmOp "CREATE" /\
+  EL a.as_pc prog <> AsmOp "CREATE2" /\
+  EL a.as_pc prog <> AsmOp "SELFDESTRUCT" ==>
   (!op. next_opcode c = SOME op ==>
      ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   ~observable_call c /\
@@ -436,6 +442,10 @@ Theorem frame_plain_singleton_sim[local]:
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
   EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL a.as_pc prog <> AsmOp "CREATE" /\
+  EL a.as_pc prog <> AsmOp "CREATE2" /\
+  EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
   EL a.as_pc prog <> AsmOp "GAS" ==>
   (?t exc. step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
      (exc = OutOfGas \/ exc = StackOverflow)) \/
@@ -463,6 +473,10 @@ Theorem frame_plain_step:
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
   EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL a.as_pc prog <> AsmOp "CREATE" /\
+  EL a.as_pc prog <> AsmOp "CREATE2" /\
+  EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
   EL a.as_pc prog <> AsmOp "GAS" ==>
   asm_frame_step_ok prog data es0 a es
 Proof
@@ -557,6 +571,10 @@ Theorem frame_gas_step:
   asm_frame_step_ok prog data es0 a es
 Proof
   strip_tac >>
+  `EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+   EL a.as_pc prog <> AsmOp "CREATE" /\
+   EL a.as_pc prog <> AsmOp "CREATE2" /\
+   EL a.as_pc prog <> AsmOp "SELFDESTRUCT"` by simp[] >>
   `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a es /\ wf_state es` by
     gvs[asm_frame_rel_def] >>
@@ -597,10 +615,14 @@ Resume frame_gas_step[continue]:
 QED
 Finalise frame_gas_step[local]
 
-Theorem asm_frame_local_step:
+Theorem asm_frame_noncall_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
-  EL as.as_pc prog <> AsmOp "CALL" /\ EL as.as_pc prog <> AsmOp "STATICCALL" ==>
+  EL as.as_pc prog <> AsmOp "CALL" /\ EL as.as_pc prog <> AsmOp "STATICCALL" /\
+  EL as.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL as.as_pc prog <> AsmOp "CREATE" /\
+  EL as.as_pc prog <> AsmOp "CREATE2" /\
+  EL as.as_pc prog <> AsmOp "SELFDESTRUCT" ==>
   asm_frame_step_ok prog data es0 as es
 Proof
   Cases_on `EL as.as_pc prog = AsmOp "GAS"`
