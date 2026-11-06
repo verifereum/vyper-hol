@@ -3,7 +3,8 @@ Ancestors concretizeLayoutExternalRequests concretizeLayoutSupplement
   venomCallOracleDefs extCallOracle ptrDiscipline venomState venomExecSemantics
   venomInst list pred_set frameRelocationStoreSteps frameRelocationGhostCopy
   frameRelocationAllocationSteps frameRelocationLocal frameRelocationValues
-  frameRelocationOpaque frameRelocationMemory
+  frameRelocationOpaque frameRelocationMemory frameRelocationGuardedValues
+  frameOriginUpdates finite_map
 
 (* Expose state fields without expanding oracle selection or adoption. *)
 Theorem call_completion_fields:
@@ -229,7 +230,8 @@ Proof
 QED
 
 Theorem ext_call_success_envelope[local]:
-  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
   ?out w p. inst.inst_outputs = [out] /\
     consume_call_outcome (venom_call_request s addr value off sz is_static)
       (w2n ro) (w2n rs) s = (w,p) /\ post = update_var out w p
@@ -248,9 +250,10 @@ Theorem concretize_ext_call_observation:
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
     (s.vs_transient s.vs_call_ctx.cc_address) /\
-  read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
-  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
-  ?post'. exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n (offT:bytes32)) (w2n sz) t /\
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
+  ?post'. exec_ext_call inst t gas addr value (offT:bytes32) sz (roT:bytes32) rs is_static = OK post' /\
     concretize_local_obs post post' /\
     concretize_supplement D (step_taint inst s post tn) post post' /\
     (?out w. inst.inst_outputs = [out] /\
@@ -293,7 +296,8 @@ Proof
 QED
 
 Theorem ext_call_execution_fields:
-  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
   ?out w. inst.inst_outputs = [out] /\ (w = 0w \/ w = 1w) /\
     post.vs_vars = (update_var out w s).vs_vars /\
     post.vs_memory = (write_memory_with_expansion (w2n ro)
@@ -317,37 +321,95 @@ QED
 
 
 Theorem ext_call_memory[local]:
-  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post ==>
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
   post.vs_memory = (write_memory_with_expansion (w2n ro)
     (TAKE (w2n rs) post.vs_returndata) s).vs_memory
 Proof
   metis_tac[ext_call_execution_fields]
 QED
 
-Theorem concretize_ext_call_demand:
-  exec_ext_call inst s gas addr value off sz ro rs is_static = OK post /\
-  exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
-  post.vs_returndata = post'.vs_returndata /\
-  demand_agree R (\a. read_byte a s.vs_memory) (\b. read_byte b t.vs_memory) /\
+
+
+Theorem concretize_ext_call_local_execution:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  is_static = (inst.inst_opcode = STATICCALL) /\
+  local_rel (\u. F) (guarded_ptr Opaque L rv)
+    (guarded_bytes Opaque rv tn) R concretize_local_obs s t /\
+  concretize_supplement D tn s t /\
+  s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n (offT:bytes32)) (w2n sz) t /\
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post /\
   (!a b. next a b /\ w2n ro <= a /\
      a < w2n ro + LENGTH (TAKE (w2n rs) post.vs_returndata) ==>
-     b = w2n roT + (a-w2n ro)) /\
+     b = w2n (roT:bytes32) + (a-w2n ro)) /\
   (!a b. next a b /\ ~(w2n ro <= a /\
      a < w2n ro + LENGTH (TAKE (w2n rs) post.vs_returndata)) ==>
      R a b /\ ~(w2n roT <= b /\
        b < w2n roT + LENGTH (TAKE (w2n rs) post.vs_returndata))) ==>
-  demand_agree next (\a. read_byte a post.vs_memory)
-    (\b. read_byte b post'.vs_memory)
+  ?post'. exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
+    local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv inst.inst_outputs NONE))
+      (guarded_bytes Opaque (origin_set rv inst.inst_outputs NONE) (step_taint inst s post tn))
+      next concretize_local_obs post post' /\
+    concretize_supplement D (step_taint inst s post tn) post post'
 Proof
   strip_tac >>
-  drule ext_call_memory >> disch_then SUBST1_TAC >>
-  rev_drule ext_call_memory >> disch_then SUBST1_TAC >>
-  gvs[] >> irule demand_agree_write_memory >>
+  `concretize_local_obs s t` by metis_tac[local_rel_observation] >>
+  `?post'. exec_ext_call inst t gas addr value offT sz roT rs is_static = OK post' /\
+    concretize_local_obs post post' /\
+    concretize_supplement D (step_taint inst s post tn) post post' /\
+    (?out w. inst.inst_outputs = [out] /\
+      post.vs_vars = (update_var out w s).vs_vars /\
+      post'.vs_vars = (update_var out w t).vs_vars)` by
+    (irule concretize_ext_call_observation >>
+     simp[] >> qexistsl_tac [`off`,`ro`] >> gvs[]) >>
+  qexists_tac `post'` >> asm_rewrite_tac[] >>
+  `post.vs_returndata = post'.vs_returndata` by
+    (fs[concretize_local_obs_def, dead_result_rel_def] >>
+     irule listTheory.LIST_EQ >> simp[]) >>
+  `demand_agree next (\a. read_byte a post.vs_memory)
+    (\b. read_byte b post'.vs_memory)` by suspend "memory" >>
+  `local_rel (\u. F) (guarded_ptr Opaque L rv)
+    (guarded_bytes Opaque rv tn) R (\s t. T) s t` by fs[local_rel_def] >>
+  `local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv [out] NONE))
+    (guarded_bytes Opaque (origin_set rv [out] NONE) (step_taint inst s post tn))
+    R (\s t. T) (update_var out w s) (update_var out w t)` by suspend "values" >>
+  fs[local_rel_def, variable_domains_def, variables_agree_on_def,
+     local_values_def, lookup_var_def, update_var_def]
+QED
+Resume concretize_ext_call_local_execution[memory]:
+  qpat_assum `exec_ext_call _ s _ _ _ _ _ _ _ _ = OK post`
+    (mp_tac o MATCH_MP ext_call_memory) >>
+  qpat_assum `exec_ext_call _ t _ _ _ _ _ _ _ _ = OK post'`
+    (mp_tac o MATCH_MP ext_call_memory) >>
+  rpt strip_tac >>
+  qpat_x_assum `post.vs_returndata = post'.vs_returndata` SUBST_ALL_TAC >>
+  asm_rewrite_tac[] >> irule demand_agree_write_memory >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     qpat_x_assum `!a b. _ ==> b = _`
       (qspecl_then [`a`,`b`] mp_tac) >> simp[] >> strip_tac >> gvs[]) >>
-  qexists_tac `R` >> simp[] >> first_assum ACCEPT_TAC
+  qexists_tac `R` >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!a b. _ ==> R a b /\ _`
+        (qspecl_then [`a`,`b`] mp_tac) >> simp[] >> metis_tac[]) >>
+  metis_tac[local_rel_demand]
 QED
-
+Resume concretize_ext_call_local_execution[values]:
+  irule local_rel_update >> simp[] >>
+  (conj_tac >- simp[guarded_bytes_def, frameRelocationGhostCopyTheory.copy_bytes_def,
+    word_agree_except_def]) >>
+  (conj_tac >- simp[guarded_ptr_def, copy_ptr_def, origin_set_lookup]) >>
+  goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
+  simp[guarded_ptr_def, guarded_bytes_def, copy_ptr_def,
+    frameRelocationGhostCopyTheory.copy_bytes_def, origin_set_lookup,
+    step_taint_def, set_var_taint_def, out_taint_def, MEM, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[op_taint_def, FLOOKUP_UPDATE]
+QED
+Finalise concretize_ext_call_local_execution
 
 val _ = export_theory();
