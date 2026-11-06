@@ -2,7 +2,7 @@
    run endpoints; subsequent pointer checks use counted endpoint cursors. *)
 Theory revertReasonSuffixPathPtr
 Ancestors
-  revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
+  finalAbortSeqPtr revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
   instSeqComposePtr ghostPcTransportPtr valueEncodingProps pred_set instIdxIndep
   revertReasonPrefixPtr revertAllocationPtr
   typedCopyPtr decoderGhostFramePtr typedCopyLoopHeaderPtr finite_map ptrDiscipline
@@ -886,9 +886,10 @@ Resume revert_reason_suffix_checks[offset_store_post]:
     (simp[NoAsms, Abbr `offstore`, Abbr `rest3`, Abbr `rest2`, Abbr `rest`,
        Abbr `zs`, Abbr `ys`, revert_reason_suffix_def] >>
      irule mstore_clean_checks >>
-     gnvs[Abbr `s16c`, lookup_var_def, eval_operand_def] >>
+     rule_assum_tac (PURE_REWRITE_RULE [lookup_var_def]) >>
+     simp[Abbr `s16c`, lookup_var_def, eval_operand_def] >>
      first_x_assum irule >>
-     qpat_x_assum `ptr_covers g7 tn7 ap s7 (ms+32)` mp_tac >>
+     qpat_x_assum `ptr_covers g7 tn7 ap s7 (32+ms)` mp_tac >>
      pure_rewrite_tac[ptr_covers_def] >> disch_then strip_assume_tac >>
      conj_tac >- simp[] >> qexistsl [`w`, `b'`, `sz'`] >> simp[] >> decide_tac) >>
   first_x_assum (drule_then strip_assume_tac) >>
@@ -1122,3 +1123,74 @@ Resume revert_reason_suffix_checks[compose_cell]:
 QED
 
 Finalise revert_reason_suffix_checks
+
+Theorem revert_reason_suffix_path_ptr:
+  lookup_var b s = SOME B /\ lookup_var p s = SOME P /\
+  lookup_var q s = SOME Q /\
+  ptr_covers G tn b s (64+ms) /\
+  ptr_covers G tn p s (32+ms) /\ ptr_covers G tn q s ms /\
+  mload (w2n Q) s = n2w L /\
+  (!j. w2n Q <= j /\ j < w2n Q+32 ==> j NOTIN tn.t_mem) /\
+  32 + contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
+  64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
+  w2n P+32+ms < dimword(:256) /\
+  (!k. 4 <= k /\ k <= 20 ==>
+    b <> STRING #"%" (toString ((v:num)+k)) /\
+    p <> STRING #"%" (toString (v+k)) /\
+    q <> STRING #"%" (toString (v+k))) /\
+  ~ctx_has_dalloca ctx /\
+  (FLOOKUP s.vs_allocas (id+5) = NONE ==>
+     s.vs_alloca_next+32 < dimword(:256)) /\
+  (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>
+     sz=32 /\ a+32 < dimword(:256)) /\
+  step_inst_base (mk_inst (id+5) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (v+4))]) s = OK sa /\
+  FLOOKUP sa.vs_allocas (id+5) = SOME (c,32) /\
+  (w2n Q+32 <= c \/ c+32 <= w2n Q) /\
+  run_inst_seq (TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (revert_reason_suffix id v (Var b) (Var p) (Var q))
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  run_inst_seq (revert_reason_suffix id v (Var b) (Var p) (Var q)) s = Abort a z ==>
+  ?Gf tnf j. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
+    (Abort a (z with vs_inst_idx := j))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all revert_reason_suffix_checks >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
+  qabbrev_tac `xs = TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))` >>
+  qabbrev_tac `i = mk_inst (id+27) REVERT
+    [Var (STRING #"%" (toString (v+19))); Var (STRING #"%" (toString (v+20)))] []` >>
+  `xs ++ [i] = revert_reason_suffix id v (Var b) (Var p) (Var q)` by
+    simp[NoAsms, Abbr `xs`, Abbr `i`, revert_reason_suffix_def] >>
+  `!j opc ops outs. (mk_inst j opc ops outs).inst_opcode = opc` by
+    simp[mk_inst_def] >>
+  `MAP (\h. h.inst_opcode) xs =
+    [ALLOCA; MSTORE; ADD; ADD; MLOAD; ADD; MLOAD; ADD; AND; ADD; MSTORE;
+     ADD; MCOPY; ADD; AND; ADD; MSTORE; ADD; MSTORE; MLOAD; ADD; ADD]` by
+    (simp[NoAsms, Abbr `xs`, GSYM MAP_TAKE] >>
+     pure_rewrite_tac[revert_reason_suffix_def, MAP] >>
+     BETA_TAC >>
+     qpat_assum `!j opc ops outs. _ = opc` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms]) >>
+  `EVERY (\h. h.inst_opcode <> INVOKE /\ ~is_terminator h.inst_opcode) xs` by
+    (`EVERY (\opc. opc <> INVOKE /\ ~is_terminator opc)
+       (MAP (\h. h.inst_opcode) xs)` by simp[is_terminator_def] >>
+     qpat_x_assum `EVERY _ (MAP _ xs)` mp_tac >>
+     simp[NoAsms, EVERY_MAP, combinTheory.o_DEF]) >>
+  `LENGTH (FILTER (\h. h.inst_opcode = GAS) xs) = 0` by
+    (`EVERY (\opc. opc <> GAS) (MAP (\h. h.inst_opcode) xs)` by simp[] >>
+     qpat_x_assum `EVERY _ (MAP _ xs)` mp_tac >>
+     simp[NoAsms, EVERY_MAP, combinTheory.o_DEF, EVERY_MEM,
+          LENGTH_NIL, FILTER_EQ_NIL]) >>
+  `i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS` by
+    simp[NoAsms, Abbr `i`, mk_inst_def] >>
+  qspecl_then [`xs`, `i`] mp_tac
+    (Q.INST [`lo` |-> `0`] run_inst_seq_final_abort_gas_path_ptr) >>
+  qpat_assum `xs ++ [i] = _` (fn th => pure_rewrite_tac[th]) >>
+  disch_then drule_all >> strip_tac >>
+  qexistsl [`Gf`, `tnf`, `j`] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `LENGTH (FILTER _ xs) = 0` (fn th => pure_rewrite_tac[th]) >>
+  simp[NoAsms]
+QED

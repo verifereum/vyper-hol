@@ -83,3 +83,7 @@ All paths are relative to this directory (the vyper-hol project root).
 - The encoder's buffers are all ALLOCAs, so `out_prov` gives each a G site, and ADD-derived addresses keep it.
 - The encoder's first MCOPY copies `32 + ceil32(len)` bytes from the reason; `ptr_mem_ok`'s bound `val_store_size` equals that for strings.
 - The reason's length word feeds ADD, so it must be untainted. For a memory reason that follows from `ghost_inv`'s `val_in_memory`. For a storage or transient reason, `ptr_vv_ok` of the located value says every `(k,b)` of `t_stor`/`t_trans` within its slots is `dead_bytes` of its type at that offset, which makes the head slot untainted.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
