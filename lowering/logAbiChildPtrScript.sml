@@ -144,3 +144,144 @@ Resume abi_encode_child_prefix_seq_ptr[frame]:
   gvs[op_prov_def] >> metis_tac[]
 QED
 Finalise abi_encode_child_prefix_seq_ptr
+
+Theorem abi_encode_child_suffix_seq_ptr:
+  abi_encode_child_suffix (Var hd) (Var dp) (Var off) (Var len) sa = (out,sb) /\
+  not_fresh_at sa hd /\ not_fresh_at sa dp /\
+  not_fresh_at sa off /\ not_fresh_at sa len /\
+  ptr_covers G tn hd s 32 /\ ptr_covers G tn dp s 32 /\
+  lookup_var hd s = SOME h /\ lookup_var dp s = SOME p /\
+  lookup_var off s = SOME r /\ lookup_var len s = SOME n /\
+  op_taint tn (Var off) = {} /\ op_taint tn (Var len) = {} /\
+  op_prov G (Var off) = NONE /\ op_prov G (Var len) = NONE /\
+  ~ctx_has_dalloca ctx ==>
+  ?H tm t.
+    out = Var len /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
+    t.vs_memory = (mstore (w2n p) (r+n) (mstore (w2n h) r s)).vs_memory /\
+    tm.t_mem = tn.t_mem DIFF
+      ({i | w2n h <= i /\ i < w2n h+32} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v t = lookup_var v s /\ FLOOKUP H v = FLOOKUP G v /\
+      op_taint tm (Var v) = op_taint tn (Var v))
+Proof
+  simp_tac bool_ss [abi_encode_child_suffix_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_void MSTORE [Var hd;Var off] sa = ((),sm)` >>
+  rename1 `emit_op ADD [Var off;Var len] sm = (next,sc)` >>
+  `?nv. next = Var nv` by
+    (imp_res_tac emitted_insts_emit_op >> metis_tac[]) >> gvs[] >>
+  `eval_operand (Var off) s = SOME r` by simp[eval_operand_def] >>
+  drule_all emit_mstore_clean_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `tk` (qx_choose_then `u` strip_assume_tac))) >>
+  suspend "add"
+QED
+Resume abi_encode_child_suffix_seq_ptr[add]:
+  markerLib.RESUME_TAC >>
+  qabbrev_tac `u1 = u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)` >>
+  `eval_operand (Var off) u1 = SOME r /\ eval_operand (Var len) u1 = SOME n /\
+   op_taint tk (Var off) = {} /\ op_taint tk (Var len) = {}` by
+    gvs[Abbr `u1`, eval_operand_def, lookup_var_def, mstore_def, op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
+    emit_copy_len_binop_seq_ptr)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`G`,`D`]
+    (qx_choose_then `H` (qx_choose_then `tl` (qx_choose_then `v` strip_assume_tac)))) >>
+  suspend "store"
+QED
+Resume abi_encode_child_suffix_seq_ptr[store]:
+  markerLib.RESUME_TAC >>
+  rename1 `emit_void MSTORE [Var dp;Var nv] sc = ((),sb)` >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (qpat_x_assum `emit_void _ _ sa = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, emit_def, not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
+  qabbrev_tac `v1 = v with vs_inst_idx := u1.vs_inst_idx + LENGTH (emitted_insts sm sc)` >>
+  `ptr_covers H tl dp v1 32 /\ lookup_var dp v1 = SOME p /\
+   eval_operand (Var nv) v1 = SOME (r+n)` by
+    (gvs[ptr_covers_def, Abbr `v1`, Abbr `u1`, mstore_def,
+      lookup_var_def, eval_operand_def, op_taint_def] >> metis_tac[]) >>
+  drule_all emit_mstore_clean_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `tm` (qx_choose_then `w` strip_assume_tac))) >>
+  suspend "compose"
+QED
+Resume abi_encode_child_suffix_seq_ptr[compose]:
+  markerLib.RESUME_TAC >>
+  `emitted_insts sm sb = emitted_insts sm sc ++ emitted_insts sc sb /\
+   emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sm) /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm sc) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sc sb)` by
+    suspend "code" >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+    (simp[EVERY_APPEND] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  qunabbrev_tac `v1` >> drule_all successful_seq_ptr_append >> strip_tac >>
+  `run_inst_seq (emitted_insts sm sb) u1 = OK (w with vs_inst_idx := v.vs_inst_idx) /\
+   inst_seq_ptr D 0 ctx fn PG G tk (emitted_insts sm sb) u1 H tm` by metis_tac[] >>
+  `run_inst_seq (emitted_insts sa sb) s = OK (w with vs_inst_idx := u.vs_inst_idx) /\
+   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm` by
+    suspend "outer" >>
+  qexistsl_tac [`H`,`tm`,`w with vs_inst_idx := u.vs_inst_idx`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> suspend "frame"
+QED
+Resume abi_encode_child_suffix_seq_ptr[outer]:
+  markerLib.RESUME_TAC >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`run_inst_seq (emitted_insts sa sm) _ = _`,
+     `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts sa sm) _ _ _`,
+     `run_inst_seq (emitted_insts sm sb) _ = _`,
+     `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts sm sb) _ _ _`,
+     `emitted_insts sa sb = _`,
+     `EVERY _ (emitted_insts sa sm)`, `EVERY _ (emitted_insts sm sb)`,
+     `Abbrev (u1 = _)`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qpat_x_assum `emitted_insts sa sb = _` (fn th => once_rewrite_tac[th]) >>
+  `w with vs_inst_idx := u.vs_inst_idx =
+    (w with vs_inst_idx := v.vs_inst_idx) with vs_inst_idx := u.vs_inst_idx` by
+    simp[venom_state_fupdfupds, combinTheory.K_o_THM] >>
+  pop_assum SUBST1_TAC >> irule successful_seq_ptr_append >>
+  simp[Abbr `u1`] >> qexistsl_tac [`G`,`tk`] >> metis_tac[ADD_COMM]
+QED
+Resume abi_encode_child_suffix_seq_ptr[code]:
+  markerLib.RESUME_TAC >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`emit_void _ _ sc = _`, `emit_op _ _ sm = _`, `emit_void _ _ sa = _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+  simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, DROP_APPEND, mk_inst_def, is_terminator_def]
+QED
+Resume abi_encode_child_suffix_seq_ptr[frame]:
+  markerLib.RESUME_TAC >>
+  `tm.t_imm = tn.t_imm` by
+    (irule inst_seq_ptr_immutable_taint_frame >> goal_assum (drule_at Any) >>
+     map_every (fn pat => qpat_x_assum pat mp_tac)
+       [`emit_void _ _ sc = _`, `emit_op _ _ sm = _`, `emit_void _ _ sa = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  rpt (qpat_x_assum `run_inst_seq _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `ptr_covers _ _ _ _ _` kall_tac) >>
+  conj_tac >- suspend "memory" >>
+  conj_tac >- (simp[pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF,
+    pred_setTheory.IN_UNION] >> metis_tac[]) >>
+  gvs[Abbr `u1`, mstore_def, lookup_var_def, op_taint_def] >> metis_tac[]
+QED
+Resume abi_encode_child_suffix_seq_ptr[memory]:
+  markerLib.RESUME_TAC >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`w = _`, `u = _`, `v.vs_memory = _`, `Abbrev (u1 = _)`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qunabbrev_tac `u1` >>
+  asm_simp_tac (pure_ss ++ boolSimps.BOOL_ss)
+    [mstore_def, venom_state_accfupds, combinTheory.K_THM, LET_THM]
+QED
+Finalise abi_encode_child_suffix_seq_ptr
