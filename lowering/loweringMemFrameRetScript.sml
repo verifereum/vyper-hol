@@ -141,12 +141,19 @@ Theorem return_value_counted_mem[local]:
      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
      ~t.vs_halted ==>
-     ?fuel r. run_from fuel ctx func t = r /\ exit_result r /\
-              mem_safe_run fuel ctx func t) ==>
+     (?fuel r. run_from fuel ctx func t = r /\ exit_result r /\
+              mem_safe_run fuel ctx func t) \/
+     stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
+       (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es) ==>
   stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
     (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es
 Proof
-  strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  Cases_on `stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
+    (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es`
+  >- simp[] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `lower_value compile_expr cenv ty e sa` >> rename1 `_ = (op, s1)` >>
   `cs_extends s1 sb` by metis_tac[] >>
   `cs_extends sa s1` by

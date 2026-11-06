@@ -4,7 +4,8 @@ Ancestors
   externalReturnPrefix compileVyper moduleLowering entryStateRel bodySim
   externalNormalizePremises supportedNames vyperInterpreter compileEnv loweringShapeProps
   memoryLocalRhsProps supportedProgram supportedDecls e2eDefs vyperTypeContractSoundness
-  exprSimHypsDefs vyperTypeInvariants vyperContext
+  exprSimHypsDefs exprSimHyps vyperTypeArgFits vyperTypeInvariants vyperContext
+  vyperTypeContractStaticMaps vyperTypeContract vyperTypeSystem
 
 Theorem external_package_frame_internal_maps:
   set_external_package_target tgt
@@ -132,4 +133,51 @@ Proof
        vyperTypeSystemTheory.well_typed_expr_def, AllCaseEqs()] >>
   rpt strip_tac >> drule_all source_signature_internal_decl >>
   simp[] >> metis_tac[]
+QED
+
+Theorem source_function_return_evaluates:
+  !tops am tx vis mut nr rr name args dflts declared body.
+  source_typing_ok tops am tx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts declared body) tops ==>
+  ?tv. evaluate_type
+    (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+    declared = SOME tv
+Proof
+  rpt gen_tac >> simp[source_typing_ok_def] >> strip_tac >>
+  drule check_contract_toplevel_decl_MEM >>
+  simp[] >> disch_then (drule_at Any) >>
+  simp[check_toplevel_decl_def, well_formed_type_def] >>
+  fs[checked_contract_runtime_ready_def, get_tenv_def,
+     initial_evaluation_context_def] >>
+  simp[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem typed_widened_internal_convention:
+  !tops am tx c env es ret ann id xs drv ret_count rbs pvs.
+  supported_program tops /\ source_typing_ok tops am tx /\
+  expr_sim_inv c
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+  IS_SOME (type_stmt env ret (Return (SOME (Call ann (IntCall id) xs drv)))) /\
+  c.ce_func_info = build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
+  c.ce_func_return_type = build_func_return_type tops /\
+  c.ce_struct_fields = make_struct_fields_map tops /\
+  c.ce_func_return_type (nsid_to_string id) <> ann /\
+  c.ce_func_info (nsid_to_string id) = (ret_count,rbs,pvs) ==>
+  0 < ret_count \/ 0 < rbs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_return_internal_decl >> strip_tac >>
+  drule_all supported_internal_return_type >> strip_tac >>
+  drule supported_internal_function_lookup >> strip_tac >>
+  drule_all source_function_return_evaluates >> strip_tac >>
+  `env.type_defs = get_tenv
+     (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `0 < type_memory_size tv` by
+    (irule normalize_return_source_positive >> metis_tac[]) >>
+  `type_memory_bytes c declared = type_memory_size tv` by
+    (irule expr_sim_inv_memory_size >> metis_tac[]) >>
+  `declared <> NoneT` by (strip_tac >> gvs[]) >>
+  drule_all supported_internal_call_info >> strip_tac >>
+  irule positive_compute_func_info >> metis_tac[]
 QED
