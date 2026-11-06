@@ -7,9 +7,9 @@ Ancestors
   bodyMemoryPreds bodyMemTbConvertWidened vyperContext vyperState
   bodyMemTbConvertOperand bodyMemTbConvertCompose bodyMemTbConvertIntSuffix
   bodyMemTbConvertScalarFlags bodyMemTbConvertLoadMemory
-  bodyMemTbConvertScalarDispatch
+  bodyMemTbConvertScalarDispatch bodyMemTbConvertSourceDispatch
   bodyMemTbConvertDestMemory bodyMemTbConvertDestPath
-  bodyMemTbConvertCopyMemory
+  bodyMemTbConvertCopyMemory bodyMemTbConvertCastMemory
 
 Theorem body_type_builtin_convert_plain_mem_case:
   !cx v11 typ es.
