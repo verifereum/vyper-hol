@@ -13,6 +13,7 @@ Ancestors calldataScratchBytesPtr decoderMemberPrefixPtr abiScratchDecoderTuple 
   robustCopyTransportPtr valueEncodingProps valueEncodingTyping exprSim freshWrites vyperTyping abiScratchEffect abiScratchFootprint pred_set abiDecoderMembers
   abiDecoderValidMemberCursor abiDecoderMembersCode abiScratchDecoderMemberFrames
   venomState venomExecSemantics bodyPtrDefs ptrDiscipline list arithmetic
+  abiScratchDecoderRecursive abiDecoderFixedMemory rich_list
 
 (* The empty suffix executes no instructions, even after an arbitrary prefix.
    Keep the entire root allocation and arbitrary protected memory in the interface. *)
@@ -891,5 +892,112 @@ Proof
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   qexistsl_tac [`actual`,`H`,`u`] >>
   asm_simp_tac bool_ss [val_in_memory_tuple] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+(* Fixed arrays share complex traversal, including the empty member list. *)
+Theorem calldata_scratch_fixed_array_decoder_ptr:
+  (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
+      G tn lower P D PG.
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+    fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
+    (start.cs_blocks = end_st.cs_blocks \/
+      !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
+      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
+    end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+    fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+    initial.vs_current_bb = start.cs_current_bb /\
+    initial.vs_inst_idx = LENGTH start.cs_current_insts /\
+    ptr_covers G tn root initial (type_memory_bytes ce ty) /\
+    op_taint tn src = {} /\ op_prov G src = NONE /\
+    allocas_from lower initial /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+    ?actual H u.
+      val_in_memory tv v d actual.vs_memory /\
+      (!mem. mem_agree_outside u.t_mem actual.vs_memory mem ==>
+        val_in_memory tv v d mem) /\
+      abi_scratch_effect first last start.cs_next_id end_st.cs_next_id
+        start.cs_next_var limit_st d (type_memory_bytes ce ty) b cap initial actual /\
+      actual.vs_current_bb = end_st.cs_current_bb /\
+      actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+      abi_decode_sim ctx func initial actual /\
+      ptr_covers H u root actual (type_memory_bytes ce ty) /\
+      u.t_mem SUBSET tn.t_mem /\ DISJOINT P u.t_mem /\
+      u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+      (!x. not_fresh_at start x ==> lookup_var x actual = lookup_var x initial /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      allocas_from lower actual /\
+      (!site slot. site IN abi_decoder_ids first last /\
+        ~(site IN abi_decoder_ids start.cs_next_id end_st.cs_next_id) /\
+        FLOOKUP initial.vs_allocas site = SOME (slot,32) ==>
+        FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+        mload slot actual = mload slot initial) /\
+      ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+        !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
+  (0 < n /\ is_dynamic (vyper_to_abi_type env ty) ==>
+    !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce (ArrayT ty (Fixed n))) start = ((),end_st) /\
+  fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
+  (start.cs_blocks = end_st.cs_blocks \/
+    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_scratch_decoder_input ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+    bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
+  end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = start.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH start.cs_current_insts /\
+  ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Fixed n))) /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  allocas_from lower initial /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+  ?actual H u.
+    val_in_memory (ArrayTV tv (Fixed n)) v d actual.vs_memory /\
+    (!mem. mem_agree_outside u.t_mem actual.vs_memory mem ==>
+      val_in_memory (ArrayTV tv (Fixed n)) v d mem) /\
+    abi_scratch_effect first last start.cs_next_id end_st.cs_next_id
+      start.cs_next_var limit_st d (type_memory_bytes ce (ArrayT ty (Fixed n)))
+      b cap initial actual /\
+    actual.vs_current_bb = end_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+    abi_decode_sim ctx func initial actual /\
+    ptr_covers H u root actual (type_memory_bytes ce (ArrayT ty (Fixed n))) /\
+    u.t_mem SUBSET tn.t_mem /\ DISJOINT P u.t_mem /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at start x ==> lookup_var x actual = lookup_var x initial /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    allocas_from lower actual /\
+    (!site slot. site IN abi_decoder_ids first last /\
+      ~(site IN abi_decoder_ids start.cs_next_id end_st.cs_next_id) /\
+      FLOOKUP initial.vs_allocas site = SOME (slot,32) ==>
+      FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+      mload slot actual = mload slot initial) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
+  gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+    (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
+  mp_tac (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,
+    `tvs` |-> `REPLICATE (LENGTH vs) tv`,
+    `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`]
+    calldata_scratch_complex_decoder_ptr) >>
+  impl_tac >- (asm_simp_tac (srw_ss()) [map_replicate, SUM_REPLICATE,
+    MEM_ZIP, EL_REPLICATE] >> rpt gen_tac >> strip_tac >>
+    gvs[EL_REPLICATE] >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  rule_assum_tac (PURE_REWRITE_RULE [map_replicate, SUM_REPLICATE]) >>
+  qexistsl_tac [`actual`,`H`,`u`] >>
+  asm_simp_tac bool_ss [] >>
+  rpt conj_tac
+  >- (irule abi_decoder_fixed_array_memory >> simp[])
+  >- (rpt strip_tac >> irule abi_decoder_fixed_array_memory >>
+      simp[] >> first_x_assum irule >> simp[]) >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
