@@ -852,3 +852,82 @@ Proof
   >- (rw[cs_appends_def] >> metis_tac[cj 1 (CONJUNCT1 (CONJUNCT2 compile_abi_encode_labels)), pairTheory.SND]) >>
   simp[cs_appends_return]
 QED
+
+Theorem raw_create_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce bytecode value es salt rof.
+    cs_appends (compile_raw_create cfn ce bytecode value es salt rof)
+Proof
+  strip_tac >> rpt gen_tac >>
+  simp_tac (srw_ss()) [compile_raw_create_def, LET_THM] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_create_snapshot_labels, pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+  ntac 2 (gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+    >- simp[cs_appends_emit_helpers]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[cs_appends_return] >>
+      irule cs_appends_bind >> reverse conj_tac
+      >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_alloc_buffer_labels, pairTheory.SND]) >>
+      gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
+      >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_copy_memory_dynamic_labels, pairTheory.SND]) >>
+      irule cs_appends_bind >> reverse conj_tac
+      >- (irule create_ctor_tuple_extension_only >> first_assum ACCEPT_TAC) >>
+      gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+      >- simp[cs_appends_emit_helpers] >>
+      gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+      >- (rw[cs_appends_def] >> metis_tac[cj 1 (CONJUNCT1 (CONJUNCT2 compile_abi_encode_labels)), pairTheory.SND]) >>
+      gen_tac >> BETA_TAC >> irule cs_appends_bind >>
+      simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  gen_tac >> PairCases_on `a` >> simp_tac (srw_ss()) [] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> rw[cs_appends_def] >>
+  metis_tac[cj 1 compile_create_dispatch_labels, pairTheory.SND]
+QED
+
+Theorem create_call_extension_only[local]:
+  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
+  !ce ck salt rof es. cs_appends (compile_create_call cfn ce ck salt rof es)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `es`
+  >- (simp[compile_create_call_def] >> irule cs_appends_ignore_bind >>
+      simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  Cases_on `t`
+  >- (simp[compile_create_call_def] >> irule cs_appends_ignore_bind >>
+      simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  simp_tac (srw_ss()) [compile_create_call_def] >> IF_CASES_TAC
+  >- (irule cs_appends_ignore_bind >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  Cases_on `ck` >> simp_tac (srw_ss()) [LET_THM]
+  >~ [`cs_appends (compile_raw_create _ _ _ _ _ _ _)`]
+  >- (irule raw_create_extension_only >> first_assum ACCEPT_TAC) >>
+  ntac 2 (irule cs_appends_bind >> reverse conj_tac
+    >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+    gen_tac >> BETA_TAC)
+  >~ [`cs_appends (comp_bind (compile_create_proxy_buf _) _)`]
+  >- (irule cs_appends_bind >> reverse conj_tac
+      >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_create_proxy_buf_labels, pairTheory.SND]) >>
+      gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+      >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
+      gen_tac >> BETA_TAC >> rw[cs_appends_def] >>
+      metis_tac[cj 1 compile_create_dispatch_labels, pairTheory.SND])
+  >~ [`cs_appends (comp_bind _ (\salt. compile_create_copy _ _ salt _))`]
+  >- (irule cs_appends_bind >> reverse conj_tac
+      >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
+      gen_tac >> BETA_TAC >> rw[cs_appends_def] >>
+      metis_tac[cj 1 compile_create_copy_labels, pairTheory.SND]) >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_create_blueprint_check_labels, pairTheory.SND]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
+  >- (irule create_blueprint_args_extension_only >> first_assum ACCEPT_TAC) >>
+  qx_gen_tac `pl` >> PairCases_on `pl` >> simp_tac (srw_ss()) [] >>
+  rw[cs_appends_def] >> metis_tac[cj 1 compile_create_blueprint_append_labels, pairTheory.SND]
+QED
+
