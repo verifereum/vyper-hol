@@ -293,8 +293,7 @@ Theorem rest_word_widened_array_shape[local]:
   !tenv pt u bd.
     type_widens_to tenv pt (ArrayT u bd) /\ is_word_type u ==>
     ?pbd. pt = ArrayT u pbd /\
-          ((?n. bd = Fixed n /\ pbd = Fixed n) \/
-           (?n m. bd = Dynamic n /\ pbd = Dynamic m))
+          case bd of Fixed n => pbd = Fixed n | Dynamic n => ?m. pbd = Dynamic m
 Proof
   rpt strip_tac >>
   qpat_x_assum `type_widens_to _ _ _`
@@ -440,15 +439,15 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
      (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by gvs[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >> strip_tac >>
   `?pbd. post_value_type cenv e2 = ArrayT (expr_type e1) pbd /\
-         ((?n. bd = Fixed n /\ pbd = Fixed n) \/
-          (?n m. bd = Dynamic n /\ pbd = Dynamic m))` by
+         case bd of Fixed n => pbd = Fixed n | Dynamic n => ?m. pbd = Dynamic m` by
     (irule rest_word_widened_array_shape >> simp[] >>
      qexists `env.type_defs` >>
      qpat_assum `expr_type e2 = _` (SUBST1_TAC o SYM) >>
      irule exprSimHypsTheory.post_value_type_widens >>
-     qexistsl [`cx`, `mid with gas_obs := []`] >> simp[] >>
-     qpat_x_assum `expr_body_pre _ _ _ e2 (mid with gas_obs := [])`
-       (strip_assume_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
+     conj_tac
+     >- (qpat_x_assum `expr_body_pre _ _ _ e2 (mid with gas_obs := [])`
+           (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
+     qexistsl [`cx`, `mid with gas_obs := []`] >> first_assum ACCEPT_TAC) >>
   `vv_holds cenv cx (ArrayT (expr_type e1) pbd) tv arr_vv (fin with gas_obs := []) u` by
     (qpat_x_assum `post_value_type cenv e2 = _` (assume_tac o SYM) >>
      fs[loweringPostsTheory.vv_post_def]) >>
@@ -461,7 +460,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
   gnvs[] >>
   `evaluate_type (get_tenv cx) (post_value_type cenv e2) = SOME (ArrayTV et pbd)` by
-    (qpat_assum `expr_body_pre _ _ _ e2 (mid with gas_obs := [])`
+    (qpat_assum `expr_body_pre _ _ _ e2 _`
        (strip_assume_tac o MATCH_MP exprSimHypsTheory.post_type_evaluates) >>
      pop_assum mp_tac >>
      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
@@ -524,6 +523,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
                   (SPEC_ALL exprSimBopRestWordTailTheory.rest_word_fixed_tail)) >>
          simp[] >> disch_then drule >> simp[] >> disch_then drule >>
          simp[] >> disch_then (qspec_then `v1` mp_tac) >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `?m. pbd = Dynamic m` (qx_choose_then `pcap` SUBST_ALL_TAC) >>
      drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`,
                     `memory` |-> `F`, `execctx` |-> `ctx`]
               (SPEC_ALL exprSimBopRestWordTailTheory.rest_word_dynamic_tail)) >>
