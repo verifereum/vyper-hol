@@ -315,8 +315,8 @@ Proof
   Cases_on `bop` >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  drule_all reason_stack_result >> simp[]
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  metis_tac[reason_stack_result]
 QED
 
 Theorem reason_ensure_memory_operand[local]:
