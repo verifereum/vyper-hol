@@ -3116,6 +3116,8 @@ Proof
   disch_then drule >>
   strip_tac >>
   gvs[checked_contract_runtime_ready_def] >>
+  `art.cta_bare_global_assignable = FEMPTY` by
+    (drule check_contract_runtime_assignable >> simp[]) >>
   `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
      (initial_evaluation_context am.sources am.layouts tx src) am.immutables` by
     metis_tac[immutables_ready_initial_evaluation_context_source] >>
