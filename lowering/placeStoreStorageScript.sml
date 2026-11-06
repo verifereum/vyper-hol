@@ -6964,6 +6964,35 @@ Proof
     arithmeticTheory.ADD_COMM]
 QED
 
+Theorem place_store_storage_write_inv:
+  write_place cx (StoragePlace tr k tv) v ee = (INL (),ff) /\
+  stmt_state_rel ctx func cenv cx ee s ==>
+  ?writes. encode_value tv v = SOME writes /\
+    ff = set_storage cx ee tr (apply_writes k writes (get_storage cx ee tr)) /\
+    ~s.vs_call_ctx.cc_static
+Proof
+  strip_tac >>
+  fs[write_place_def, vyperStorageBackendTheory.write_storage_slot_eq,
+     AllCaseEqs()] >>
+  fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]
+QED
+
+Theorem place_store_storage_leaf_bounds:
+  expr_sim_inv cenv cx env ee /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+  storage_subregion root path delta tv /\ 0 < type_slot_size tv ==>
+  w2n rootk + delta + type_slot_size tv <= dimword (:256) /\
+  w2n (rootk + n2w delta) = w2n rootk + delta
+Proof
+  strip_tac >> drule_all place_store_root_layout >> strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `w2n rootk + delta + type_slot_size tv <= dimword (:256)` by decide_tac >>
+  `w2n rootk + delta < dimword (:256)` by decide_tac >>
+  simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+       arithmeticTheory.MOD_PLUS, arithmeticTheory.LESS_MOD] >>
+  fs[wordsTheory.dimword_def] >> decide_tac
+QED
+
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
