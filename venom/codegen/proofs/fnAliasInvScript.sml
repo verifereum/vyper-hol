@@ -1639,6 +1639,46 @@ Proof
   metis_tac[alias_definition_not_available, inst_defs_def]
 QED
 
+Theorem alias_local_assign_normalize:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn lbl /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = ASSIGN /\
+  (EL i bb.bb_instructions).inst_outputs = [x] /\
+  (EL i bb.bb_instructions).inst_operands = [op] ==>
+  normalize_operand (dfg_build_function fn) [] (Var x) =
+  normalize_operand (dfg_build_function fn) [] op
+Proof
+  strip_tac >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     qexists_tac `bb` >> simp[EL_MEM] >> metis_tac[lookup_block_MEM]) >>
+  `MEM x (EL i bb.bb_instructions).inst_outputs` by simp[] >>
+  `dfg_get_def (dfg_build_function fn) x = SOME (EL i bb.bb_instructions)` by
+    (drule_all dfg_build_function_defs_complete >> strip_tac >>
+     drule dfg_build_function_correct >> strip_tac >>
+     `inst' = EL i bb.bb_instructions` by
+       (irule ssa_unique_output >> metis_tac[]) >> gvs[]) >>
+  `~alias_path_available fn lbl i x` by
+    (strip_tac >>
+     `i <= i` by simp[] >>
+     metis_tac[alias_available_suffix_not_output]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [normalize_operand_def])) >>
+  gvs[dfg_get_def_def] >>
+  irule normalize_operand_closed_visited_cong >>
+  qexists_tac `\a. !v. a = Var v ==> alias_path_available fn lbl i v` >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `lbl = bb.bb_label` by metis_tac[lookup_block_label] >> gvs[] >>
+      irule alias_ordinary_use_available >>
+      simp[inst_uses_def, operand_vars_def, operand_var_def] >>
+      metis_tac[lookup_block_MEM]) >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `a` >> gvs[alias_assign_step_def] >>
+  irule alias_assign_source_available >>
+  simp[alias_assign_step_def] >> metis_tac[]
+QED
+
 Theorem alias_available_root_suffix_not_output:
   wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
   fn_reachable fn l /\ lookup_block l fn.fn_blocks = SOME bb /\
