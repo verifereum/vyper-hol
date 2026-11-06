@@ -8,6 +8,7 @@ Ancestors
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
   reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
   deepResidualSim deepResidualBudget genericInputReady fnAliasStep fnBlockPlanStaticRetRegion
+  livenessConvergenceProofs livenessBlockProofs livenessDefs
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -4371,4 +4372,30 @@ Proof
   gvs[] >>
   rename1 `generate_block_plan _ _ _ _ pred_bb origin_in = SOME _` >>
   `origin_in = pin` by metis_tac[dfs_block_state_unique] >> gvs[]
+QED
+
+Theorem regional_single_successor_recompute_out:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) lbl /\
+  cfg_succs_of (cfg_analyze fn) lbl = [succ] ==>
+  set (df_at [] (liveness_recompute fn) lbl
+    (LENGTH (liveness_instrs fn.fn_blocks lbl))) =
+  set (liveness_edge_transfer fn.fn_blocks succ lbl
+    (df_at [] (liveness_recompute fn) succ 0))
+Proof
+  strip_tac >> drule_all liveness_recompute_convergence >>
+  simp[livenessDefsTheory.same_vars_set, liveness_out_def, list_union_set]
+QED
+
+Theorem regional_single_successor_exit_input:
+  wf_function fn /\ cfg_reachable_of (cfg_analyze fn) lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block succ fn.fn_blocks = SOME target /\
+  cfg_succs_of (cfg_analyze fn) lbl = [succ] ==>
+  set (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) SUBSET
+  set (input_vars_from lbl target.bb_instructions
+    (live_vars_at (liveness_analyze fn) succ 0))
+Proof
+  strip_tac >> drule_all regional_single_successor_recompute_out >>
+  simp[liveness_instrs_def, liveness_edge_transfer_def,
+    liveness_analyze_def, live_vars_at_def]
 QED
