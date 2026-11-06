@@ -628,3 +628,69 @@ Proof
       drule_all scalar_checked_pair_runtime_frame >> strip_tac >> simp[] >> metis_tac[]) >>
   gvs[emitted_insts_def, run_inst_seq_def]
 QED
+
+Theorem scalar_two_checks_fixed_certificate:
+  comp_ignore_bind
+    (if c1 then comp_bind (emit_op op1 [x;Lit w1]) (\a.
+       comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+     else comp_return ())
+    (comp_ignore_bind
+      (if c2 then comp_bind (emit_op op2 [x;Lit w2]) (\a.
+         comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+       else comp_return ())
+      (emit_op opc [x;Lit scale])) sa = (out,sb) /\
+  MEM op1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM op2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule scalar_two_checks_decompose >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa s1) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s1 s2)` by
+    (drule_all scalar_optional_check_instruction_filter >> strip_tac >>
+     rev_drule_all scalar_optional_check_instruction_filter >> strip_tac >>
+     qpat_x_assum `EVERY _ (emitted_insts sa s1)` mp_tac >>
+     qpat_x_assum `EVERY _ (emitted_insts s1 s2)` mp_tac >>
+     simp_tac pure_ss [EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  asm_rewrite_tac[] >> rewrite_tac[scalar_seq_append_ok_iff] >> strip_tac >>
+  rev_drule_all (cj 1 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+    scalar_optional_check_uniform_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+  disch_then (qspec_then `s.vs_inst_idx` strip_assume_tac) >>
+  `op_prov H x = NONE /\ op_taint th x = {}` by metis_tac[] >>
+  drule_all (cj 1 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+    scalar_optional_check_uniform_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+  disch_then (qspec_then `s.vs_inst_idx + LENGTH (emitted_insts sa s1)` strip_assume_tac) >>
+  `op_prov H' x = NONE /\ op_taint th' x = {} /\
+   op_prov H' (Lit scale) = NONE /\ op_taint th' (Lit scale) = {}` by
+    (simp[op_prov_def, op_taint_def] >> metis_tac[]) >>
+  drule_all scalar_emit_uniform_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+  disch_then (qspec_then `s.vs_inst_idx + LENGTH (emitted_insts sa s1) +
+    LENGTH (emitted_insts s1 s2)` strip_assume_tac) >>
+  qexistsl_tac [`H''`,`th''`] >> reverse conj_tac
+  >- (simp[] >> metis_tac[]) >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ G tn _ _ _ _`
+    (assume_tac o SRULE []) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule scalar_seq_ptr_append_at >> simp[] >> qexistsl_tac [`H`,`th`] >>
+  simp[] >> once_rewrite_tac[ADD_COMM] >>
+  irule scalar_seq_ptr_append_at >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`H'`,`th'`,`u with vs_inst_idx :=
+    s.vs_inst_idx + LENGTH (emitted_insts sa s1)`] >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ H' th' _ _ _ _` mp_tac >>
+  simp_tac (pure_ss ++ boolSimps.BOOL_ss) [AC ADD_ASSOC ADD_COMM]
+QED
