@@ -14,7 +14,7 @@
 
 Theory stackPlanOps
 Ancestors
-  stackPlanTypes dfgDefs sorting
+  stackPlanTypes dfgDefs sorting list rich_list arithmetic
 
 (* ===== Basic Spill/Restore Operations ===== *)
 
@@ -59,6 +59,12 @@ Definition top_n_def:
   top_n n stk = REVERSE (TAKE n (REVERSE stk))
 End
 
+Theorem reverse_top_n:
+  REVERSE (top_n n stk) = TAKE n (REVERSE stk)
+Proof
+  simp[top_n_def]
+QED
+
 (* Swap at distance from TOS (0-based). Returns (ops, updated state).
    dist=0: noop. dist 1..16: SWAP{dist}. dist>16: bulk spill/restore.
    EVM SWAPn swaps position 0 with position n. *)
@@ -94,35 +100,92 @@ Definition do_swap_def:
                   ps_alloc := alloc'' |>)
 End
 
+(* Load order for rebuilding a prefix around the duplicate. *)
+Definition dup_restore_indices_def:
+  dup_restore_indices prefix_len =
+    let indices = REVERSE (GENLIST I prefix_len) in
+    if prefix_len ≤ 16 then TL indices ++ TAKE 1 indices else indices
+End
+
+Theorem dup_restore_indices_length:
+  0 < prefix_len ==> LENGTH (dup_restore_indices prefix_len) = prefix_len
+Proof
+  strip_tac >>
+  `LENGTH (REVERSE (GENLIST I prefix_len)) = prefix_len` by simp[] >>
+  rw[dup_restore_indices_def] >>
+  Cases_on `REVERSE (GENLIST I prefix_len)` >> gvs[]
+QED
+
+Theorem dup_restore_indices_bound:
+  0 < prefix_len ==>
+  EVERY (\i. i < prefix_len) (dup_restore_indices prefix_len)
+Proof
+  strip_tac >>
+  `EVERY (\i. i < prefix_len) (REVERSE (GENLIST I prefix_len))` by
+    simp[EVERY_REVERSE, EVERY_GENLIST] >>
+  rw[dup_restore_indices_def] >>
+  Cases_on `REVERSE (GENLIST I prefix_len)` >> gvs[]
+QED
+
+(* Compatibility with the explicit Python index schedule, also used by
+   spill-map/frame proofs.  The reusable schedule remains the definition. *)
+Theorem dup_restore_indices_explicit:
+  !k. 0 < k ==>
+    dup_restore_indices k =
+      if k <= 16 then GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1]
+      else GENLIST (\i. k - 1 - i) k
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[dup_restore_indices_def, REVERSE_GENLIST, combinTheory.I_THM,
+     PRE_SUB1] >>
+  Cases_on `k` >> gvs[] >>
+  simp[TL_GENLIST, GENLIST_CONS, combinTheory.o_DEF] >>
+  AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM] >> decide_tac
+QED
+
+Theorem dup_restore_indices_boundary[simp]:
+  dup_restore_indices 1 = [0] /\ dup_restore_indices 2 = [0;1]
+Proof
+  EVAL_TAC
+QED
+
 (* Dup at distance from TOS (0-based). Returns (ops, updated state).
-   dist≤15: DUP{dist+1}. dist>15: bulk spill/restore with dup. *)
+   Spill the inaccessible prefix, use DUP16, then restore the prefix while
+   keeping the duplicate on top. Mirrors pinned StackSpiller.dup. *)
 Definition do_dup_def:
   do_dup dist ps =
     if dist ≤ 15 then
       ([SODup (dist + 1)],
        ps with ps_stack := stack_dup dist ps.ps_stack)
     else
-      let k = dist - 15 in
-      (* Python spill_ops: TOS first *)
-      let items = REVERSE (top_n k ps.ps_stack) in
+      let chunk = dist - 15 in
+      (* Python spill_ops: TOS first; equivalently TAKE chunk (REVERSE ...). *)
+      let items = REVERSE (top_n chunk ps.ps_stack) in
       let (spill_ops, offsets, alloc') =
         FOLDL (λ(ops, offs, al) item.
           let (off, al') = alloc_spill_slot al in
           (ops ++ [SOSpill off], SNOC off offs, al'))
         ([], [] : num list, ps.ps_alloc) items in
-      let restore_idx =
-        if k ≤ 16 then GENLIST (λi. k - 2 - i) (k - 1) ++ [k - 1]
-        else GENLIST (λi. k - 1 - i) k in
-      let restore_ops =
-        FLAT (MAP (λidx. SORestore (EL idx offsets) ::
-                         (if k ≤ 16 then [] else [SOSwap 1])) restore_idx) in
+      let single_swap = (chunk ≤ 16) in
+      let restore_indices = dup_restore_indices chunk in
+      let restore_ops = FLAT (MAP (λidx.
+        [SORestore (EL idx offsets)] ++
+        if single_swap then [] else [SOSwap 1]) restore_indices) in
+      let finish_ops = if single_swap then [SOSwap chunk] else [] in
       let alloc'' =
         FOLDL (λal off. free_spill_slot off al) alloc' offsets in
-      (spill_ops ++ [SODup 16] ++ restore_ops ++
-         (if k ≤ 16 then [SOSwap k] else []),
+      (spill_ops ++ [SODup 16] ++ restore_ops ++ finish_ops,
        ps with <| ps_stack := stack_dup dist ps.ps_stack;
                   ps_alloc := alloc'' |>)
 End
+
+Theorem do_dup_stack[simp]:
+  !dist ps. (SND (do_dup dist ps)).ps_stack = stack_dup dist ps.ps_stack
+Proof
+  rpt gen_tac >> simp[do_dup_def, LET_THM] >>
+  IF_CASES_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[])
+QED
 
 (* ===== Reduce Depth via Selective Spilling ===== *)
 

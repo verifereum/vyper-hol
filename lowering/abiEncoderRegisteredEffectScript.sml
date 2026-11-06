@@ -14,6 +14,8 @@ Definition abi_encoder_registered_effect_def:
       mem_bytes_at a 1 s.vs_memory = mem_bytes_at a 1 s0.vs_memory) /\
     s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
     s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests /\
+    s.vs_tx_ctx = s0.vs_tx_ctx /\ s.vs_block_ctx = s0.vs_block_ctx /\
+    s.vs_immutables = s0.vs_immutables /\ s.vs_outcomes = s0.vs_outcomes /\
     s.vs_pending_deletions = s0.vs_pending_deletions
 End
 

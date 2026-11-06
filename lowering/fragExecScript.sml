@@ -484,7 +484,7 @@ Proof
   simp[exec_result_map_def]
 QED
 
-Theorem run_inst_seq_preserves_halted[local]:
+Theorem run_inst_seq_preserves_halted:
   !is s s'.
     run_inst_seq is s = OK s' /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is ==>

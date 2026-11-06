@@ -39,7 +39,7 @@ Ancestors
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimBuffer
   exprSimAttributeFields
   stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
-  stmtSimAugAssign stmtSimAssignAttr
+  stmtSimAugAssign stmtSimAssignAttr memoryValueEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperTyping
@@ -184,7 +184,8 @@ Proof
    val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
-     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[] >>
+     irule memory_value_rel_val_in_memory >> simp[value_has_type_def]) >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `struct_field_offset flds fld + type_memory_size ftv <=
      type_memory_size_fields fs` by metis_tac[struct_field_offset_le] >>
@@ -600,7 +601,8 @@ Proof
     (qpat_x_assum `!x u. not_fresh_at sa x /\ _ ==> lookup_var x t = _`
        irule >> simp[]) >>
   `store_lays_out ftv ftv v` by
-    (irule store_lays_out_word_value >> fs[] >> metis_tac[]) >>
+    (irule store_lays_out_word_value >> fs[] >>
+     metis_tac[evaluate_word_memory_type]) >>
   `eval_operand res_op t = SOME (typed_val_to_w256 ftv v)` by
     fs[typed_val_to_w256_word_value] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es1`, `t`, `d`, `res_op`, `s3`,
