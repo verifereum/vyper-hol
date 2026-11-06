@@ -2628,7 +2628,9 @@ Definition compile_call_def:
       (if returns_count > 0 then
          let (rbuf, st_b) = compile_alloc_buffer (32 * returns_count) st1 in
          (SOME rbuf, st_b)
-       else if return_buf_size > 0 then
+       else if call_ty <> NoneT then
+         (* Mirrors Python: a memory return gets its buffer whenever the
+            callee returns a value, as package_internal_fn's has_ret_buf. *)
          let (rbuf, st_b) = compile_alloc_buffer return_buf_size st1 in
          (SOME rbuf, st_b)
        else (NONE, st1)) in
