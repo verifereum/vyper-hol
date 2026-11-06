@@ -4503,3 +4503,116 @@ Proof
   qpat_x_assum `!t src out. _` (qspecl_then [`t`, `src`, `out`] mp_tac) >>
   simp[]
 QED
+
+Definition regional_phi_remaining_source_def:
+  regional_phi_remaining_source bb i v <=>
+    MEM (Var v) (FLAT (MAP (\p. p.inst_operands)
+      (DROP i (collect_phis bb.bb_instructions))))
+End
+
+Definition regional_phi_upper_family_def:
+  regional_phi_upper_family lv bb selected i v <=>
+    (MEM v (live_vars_at lv bb.bb_label i) /\
+     ~regional_phi_remaining_source bb i v) \/
+    (selected v /\ regional_phi_remaining_source bb i v)
+End
+
+Theorem regional_phi_upper_family_endpoint:
+  ~regional_phi_remaining_source bb (LENGTH (collect_phis bb.bb_instructions)) v /\
+  (regional_phi_upper_family lv bb selected (LENGTH (collect_phis bb.bb_instructions)) v <=>
+   MEM v (live_vars_at lv bb.bb_label (LENGTH (collect_phis bb.bb_instructions))))
+Proof
+  simp[regional_phi_remaining_source_def, regional_phi_upper_family_def]
+QED
+
+Theorem regional_phi_remaining_source_step:
+  i < LENGTH (collect_phis bb.bb_instructions) ==>
+  (regional_phi_remaining_source bb i v <=>
+   MEM (Var v) (EL i bb.bb_instructions).inst_operands \/
+   regional_phi_remaining_source bb (i+1) v)
+Proof
+  strip_tac >>
+  `DROP i (collect_phis bb.bb_instructions) =
+    EL i (collect_phis bb.bb_instructions) ::
+    DROP (i+1) (collect_phis bb.bb_instructions)` by
+    metis_tac[DROP_CONS_EL, arithmeticTheory.ADD1] >>
+  simp[regional_phi_remaining_source_def, collect_phis_index]
+QED
+
+Theorem regional_phi_remaining_source_mem:
+  regional_phi_remaining_source bb i v ==>
+  ?phi. MEM phi (collect_phis bb.bb_instructions) /\ MEM v (inst_uses phi)
+Proof
+  simp[regional_phi_remaining_source_def, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> rename1 `MEM phi (DROP i (collect_phis bb.bb_instructions))` >>
+  qexists_tac `phi` >>
+  gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  drule rich_listTheory.MEM_DROP_IMP >> simp[]
+QED
+
+Theorem regional_phi_upper_family_live_step[local]:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) /\
+  ~regional_phi_remaining_source bb i v ==>
+  MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (i+1)) /\
+  ~regional_phi_remaining_source bb (i+1) v
+Proof
+  strip_tac >>
+  `~MEM (Var v) (EL i bb.bb_instructions).inst_operands /\
+   ~regional_phi_remaining_source bb (i+1) v` by
+    metis_tac[regional_phi_remaining_source_step] >>
+  `~MEM v (inst_uses (EL i bb.bb_instructions))` by
+    gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[ready_reachable_preorder] >>
+  `SUC i <= LENGTH bb.bb_instructions` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  drule live_vars_at_transfer >> simp[] >>
+  disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >>
+  simp[livenessDefsTheory.liveness_transfer_def, arithmeticTheory.ADD1] >>
+  strip_tac >> gvs[live_update_mem]
+QED
+
+Theorem regional_phi_upper_family_transition:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  t < LENGTH (collect_phis bb.bb_instructions) /\
+  (!phi x y. MEM phi (collect_phis bb.bb_instructions) /\ selected x /\ selected y /\
+    MEM (Var x) phi.inst_operands /\ MEM (Var y) phi.inst_operands ==> x=y) /\
+  MEM (Var src) (EL t bb.bb_instructions).inst_operands /\
+  regional_phi_upper_family (liveness_analyze fn) bb selected t src /\
+  (EL t bb.bb_instructions).inst_outputs = [out] ==>
+  (!v. regional_phi_upper_family (liveness_analyze fn) bb selected t v /\ v<>src ==>
+    regional_phi_upper_family (liveness_analyze fn) bb selected (t+1) v) /\
+  (MEM out (live_vars_at (liveness_analyze fn) bb.bb_label (t+1)) ==>
+    regional_phi_upper_family (liveness_analyze fn) bb selected (t+1) out)
+Proof
+  strip_tac >>
+  `MEM (EL t bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    metis_tac[collect_phis_index, EL_MEM] >>
+  `regional_phi_remaining_source bb t src` by
+    metis_tac[regional_phi_remaining_source_step] >>
+  `selected src` by gvs[regional_phi_upper_family_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `regional_phi_remaining_source bb t v`
+      >- (`selected v` by gvs[regional_phi_upper_family_def] >>
+          `~MEM (Var v) (EL t bb.bb_instructions).inst_operands` by metis_tac[] >>
+          `regional_phi_remaining_source bb (t+1) v` by
+            metis_tac[regional_phi_remaining_source_step] >>
+          simp[regional_phi_upper_family_def]) >>
+      `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label t)` by
+        gvs[regional_phi_upper_family_def] >>
+      drule_all regional_phi_upper_family_live_step >>
+      simp[regional_phi_upper_family_def]) >>
+  strip_tac >>
+  `~regional_phi_remaining_source bb (t+1) out` by
+    (strip_tac >> drule regional_phi_remaining_source_mem >> strip_tac >>
+     `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+     `MEM out (EL t bb.bb_instructions).inst_outputs` by simp[] >>
+     drule_all regional_phi_output_not_phi_source >> simp[]) >>
+  simp[regional_phi_upper_family_def]
+QED
