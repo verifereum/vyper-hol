@@ -110,6 +110,7 @@ QED
 (* Capacity and live-byte representation are independent: padding need not
    be clean. These folds work for output bytes and inline result tuples. *)
 Theorem ptr_val_ok_from_covers:
+  ~is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   ptr_covers G tn p s capacity /\ val_store_size tv v <= capacity /\
   (!w mem. lookup_var p s = SOME w /\
@@ -336,6 +337,7 @@ Proof
 QED
 
 Theorem ptr_val_ok_from_type_covers:
+  ~is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
   ptr_covers G tn p s (type_memory_size tv) /\
   (!w mem. lookup_var p s = SOME w /\
@@ -344,6 +346,7 @@ Theorem ptr_val_ok_from_type_covers:
   ptr_val_ok cx ty v (Var p) G tn s
 Proof
   strip_tac >> irule ptr_val_ok_from_covers >>
+  conj_tac >- simp[] >>
   goal_assum (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
   simp[val_store_size_le] >> metis_tac[]
 QED

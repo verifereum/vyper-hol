@@ -80,3 +80,7 @@ All paths are relative to this directory (the vyper-hol project root).
 - With `max_outsize > 0` the result is a `LocatedValue` in memory (a fresh tuple buffer, or the out buffer), so `ptr_vv_ok` needs `ptr_mem_ok` of it: only the bytes the value occupies must be untainted; the padding past the returned data may keep the fresh ALLOCA's taint.
 - The data operand's bytes must stay intact and untainted while the keyword operands are evaluated: the operands' `ghost_kept` and S1's memory frame.
 - `ptr_buf_ok` of the memory result: its pointer's site (in `G`) must cover `type_memory_bytes cenv (lowered_value_type cenv e)` from the pointer on, the whole buffer of the lowered `Bytes[max_outsize]` (or tuple) type, not only the returned bytes.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
