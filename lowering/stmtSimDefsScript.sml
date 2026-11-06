@@ -350,3 +350,18 @@ Proof
     metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
   fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
+
+(* A non-local register update cannot move a live local region. *)
+Theorem alloca_frame_update_var:
+  alloca_frame c0 es sa s0 c ee t /\ not_local_ptr c ee.scopes q ==>
+  alloca_frame c0 es sa s0 c ee (update_var q w t)
+Proof
+  rewrite_tac[alloca_frame_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  conj_tac >- simp[update_var_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
+  qexists_tac `n` >> gvs[local_region_def] >>
+  `p <> q` by (fs[not_local_ptr_def] >> metis_tac[]) >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED

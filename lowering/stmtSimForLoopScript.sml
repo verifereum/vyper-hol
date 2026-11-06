@@ -374,6 +374,41 @@ Proof
   simp[] >> decide_tac
 QED
 
+Theorem for_counter_entry_frame[local]:
+  !ctx func cenv bc cx es s t id entry p dv w sz counter sa value.
+  stmt_state_rel ctx func cenv cx es s /\
+  FLOOKUP s.vs_allocas counter = SOME (w2n w, sz) /\
+  sa.cs_next_id <= counter /\ 32 <= sz /\
+  lookup_scopes id es.scopes = NONE /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+  not_local_ptr cenv es.scopes dv /\ p <> dv /\
+  lookup_var p s = SOME w /\
+  (!q. q <> dv ==> lookup_var q t = lookup_var q s) /\
+  t.vs_memory = (mstore (w2n w) value s).vs_memory ==>
+  alloca_frame cenv es sa s bc (es with scopes := (FEMPTY |+ (id, entry)) :: es.scopes) t
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[alloca_frame_def] >>
+  rpt gen_tac >> strip_tac >>
+  `aid <> counter` by decide_tac >>
+  Q.SUBGOAL_THEN `off + sz' <= w2n w \/ w2n w + sz <= off` assume_tac
+  >- (`allocas_non_overlapping s` by
+       fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+     qpat_x_assum `allocas_non_overlapping s` mp_tac >>
+     rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def] >>
+     disch_then (qspecl_then [`aid`, `counter`, `off`, `sz'`, `w2n w`, `sz`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  conj_tac
+  >- (asm_rewrite_tac[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `n = id`
+  >- (gvs[local_region_def] >> metis_tac[]) >>
+  `local_region cenv es.scopes s n b sz''` suffices_by metis_tac[] >>
+  gvs[local_region_def, lookup_scopes_def, FLOOKUP_UPDATE] >>
+  `p' <> dv` by (fs[not_local_ptr_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 (* ===== The range loop ===== *)
 
 (* A range loop's iteration starts: the condition block finds the counter
@@ -419,6 +454,11 @@ Theorem for_body_entry_alloca[local]:
          (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
          s2.vs_allocas = cc.vs_allocas /\
          gas_marked_path F ctx func cc 0 (OK s2) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+           alloca_frame cenv esk frame_start cc bc
+             (esk with scopes :=
+               (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) s2) /\
          !fuel rr. run_from fuel ctx func s2 = rr /\ (!e. rr <> Error e) ==>
                    ?fuel'. run_from fuel' ctx func cc = rr
 Proof
@@ -470,7 +510,13 @@ Proof
   >- simp[mstore_def, LET_THM]
   >- simp[mstore_def, LET_THM]
   >- (rpt strip_tac >> fs[mstore_def, LET_THM, lookup_var_def])
-  >- simp[mstore_def, LET_THM] >>
+  >- simp[mstore_def, LET_THM]
+  >- (rpt strip_tac >> irule for_counter_entry_frame >>
+      simp[] >> conj_tac
+      >- (qexistsl_tac [`ainst.inst_id`, `dv`, `i2w (n1 + &k)`] >>
+          simp[Abbr `s1`, mstore_def, jump_to_def, update_var_def, LET_THM,
+               lookup_var_def, FLOOKUP_UPDATE]) >>
+      metis_tac[]) >>
   metis_tac[]
 QED
 
