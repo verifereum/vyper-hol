@@ -186,6 +186,7 @@ QED
 Definition pop_full_frame_cx_def:
   pop_full_frame_cx = empty_evaluation_context with
     <| stk := [(NONE,"take")];
+       txn := empty_call_txn with <| block_number := 1; block_hashes := [0w] |>;
        sources := [(0w,[(NONE,pop_full_frame_tops)])];
        layouts := [(0w,([((NONE,"a"),0)],[]))] |>
 End
