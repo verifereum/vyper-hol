@@ -9,6 +9,7 @@
 Theory bodyPtrMakeArray
 Ancestors
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
+  bodyPtrMakeArrayWidened
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";

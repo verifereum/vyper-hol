@@ -23,7 +23,8 @@ Theorem make_array_expr_ptr_ok:
 ## Completion Criteria
 
 1. `holbuild -j4 build bodyPtrMakeArrayTheory` passes, with `make_array_expr_ptr_ok` proved with no `cheat` in its proof or in any theory you add (CHEAT warnings inherited from the locally admitted ancestors are expected; see Domain Constraints).
-2. No duplicate lemmas: search before adding one; each helper exists once, in its most general form, in a new leaf theory under `lowering/`.
+2. Exactly one admission is permitted besides the inherited ones: the RESIDUAL `body_make_array_widened_call_elem_ptr` in `lowering/bodyPtrMakeArrayWidenedScript.sml` (owner Decision 18, added 2026-11-06). It covers an array literal with an element `e` such that `int_calls_expr e <> [] /\ lowered_value_type cenv e <> expr_type e` (a widened internal call), mirroring S1's `body_make_array_widened_call_elem`. Use it for that case, as S1's `body_make_array_case` does (`Cases_on `!e. MEM e es ==> int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e``). Do not edit its statement or add a proof to it. Every other case is proved with no `cheat`.
+3. No duplicate lemmas: search before adding one; each helper exists once, in its most general form, in a new leaf theory under `lowering/`.
 
 **If the theorem is false as stated:** give a concrete counterexample, state the tightest sufficient fix, and stop. Do not weaken the statement.
 
@@ -40,6 +41,8 @@ The S3 pointer-safety proof of the Vyper-to-Venom lowering is a pointer twin of 
 S1 proves its case from the operands' judgments through a shared case lemma (`exprSimHyps`' `expr_sim_case`/`expr_vv_case`/`exprs_case`, instantiated by `bodySimExprCases`' `body_expr_ok_case`). The pointer twins of that machinery mostly don't exist yet: building the ones this case needs, as reusable lemmas in leaf theories, is part of this task. `lowering/exprPtrUnwrapScript.sml` has `expr_sim_ptr_of_vv` (an `expr_vv_sim_ptr` gives the `expr_sim_ptr`; proved by a sibling task, use it as is) and `expr_vv_sim_ptr_stack` (proved: an `expr_sim_ptr` gives the `expr_vv_sim_ptr` when `compile_expr` leaves a stack value).
 
 S1's proof: `body_make_array_case`, `body_make_array_widened_call_elem` (`bodySimExprCases`), over `compile_make_array_case` (`exprSimAggregates`, `exprSimAggregateLoops`, `exprSimAggregateChildren`, `exprSimTuple`); see `alan-ref/s1-builtins-aggregates/`.
+
+Decision 18 (owner, 2026-11-06), why the main case is in reach: when an element `e` satisfies `int_calls_expr e = []` but `lowered_value_type cenv e <> expr_type e`, `lowered_value_type_def` (`lowering/defs/exprLoweringScript.sml`) leaves only dynamic bytestrings (`Literal (StringL/BytesL)`, `Concat`, `AbiEncode`). For those, `val_in_memory_def` (`valueEncodingScript.sml`), `val_footprint_def` (`loweringPostsScript.sml`) and `val_store_size_def` (`exprSimPropsScript.sml`) ignore the capacity bound. So `ptr_mem_ok cx (expr_type e) v op G tn t` gives `ptr_mem_ok cx (lowered_value_type cenv e) v op G tn t`, which is the layout the literal's copy reads at. The earlier block (no producer relation at lowered-layout offsets) applies only to the widened-internal-call case, which is now the residual.
 
 ## Domain Constraints
 
