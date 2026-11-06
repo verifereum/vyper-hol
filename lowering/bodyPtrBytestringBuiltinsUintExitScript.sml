@@ -93,7 +93,9 @@ Theorem u2s_final_address_invariant_ptr:
         (update_var (u2s_var a 14) (n2w (b+n)) s) with vs_inst_idx := 2) /\
     ptr_covers G' tn' (u2s_var a 15)
       (update_var (u2s_var a 15) (n2w (b+n-i))
-        (update_var (u2s_var a 14) (n2w (b+n)) s) with vs_inst_idx := 2) buf_size
+        (update_var (u2s_var a 14) (n2w (b+n)) s) with vs_inst_idx := 2) buf_size /\
+    FLOOKUP G' (u2s_var a 15) = SOME (b,buf_size+n) /\
+    op_taint tn' (Var (u2s_var a 15)) = {} /\ tn'.t_mem = tn.t_mem
 Proof
   strip_tac >> drule u2s_ptr_state_buffer >> strip_tac >>
   drule u2s_ptr_state_suffix >> strip_tac >>
@@ -308,4 +310,108 @@ Proof
   qexistsl_tac [`gr`, `tr`] >>
   gvs[Abbr `stored`, Abbr `ts`, update_var_def, jump_to_def] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem u2s_final_address_safe:
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  local_ptrs_reserved cenv a /\ not_fresh_at a p ==>
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr
+    (update_var (u2s_var a 15) w15 (update_var (u2s_var a 14) w14 s)
+      with vs_inst_idx := idx)
+Proof
+  strip_tac >> irule u2s_safe_index >>
+  ntac 2 (irule u2s_safe_update >> simp[])
+QED
+
+Theorem u2s_final_counted_invariant_ptr:
+  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i G tn s /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  b+(buf_size+n) < dimword(:256) /\ 32 <= buf_size /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 4) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a (Var p) n|> /\
+  s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\
+  lookup_var (u2s_var a 1) s = SOME (n2w i) ==>
+  ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i G' tn' t /\
+    ptr_covers G' tn' (u2s_var a 2) t buf_size /\
+    tn'.t_mem = tn.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32} /\
+    t = jump_to (u2s_label a 5) (update_var (u2s_var a 2) (n2w (b+n-i))
+      (mstore (b+n-i) (n2w i)
+        (update_var (u2s_var a 15) (n2w (b+n-i))
+          (update_var (u2s_var a 14) (n2w (b+n)) s))))
+Proof
+  strip_tac >> drule_all u2s_final_address_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ ga ta (OK addr)` >>
+  `u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr addr` by
+    (simp[Abbr `addr`] >> irule u2s_final_address_safe >> simp[]) >>
+  drule u2s_safe_store_frame >> strip_tac >>
+  `lookup_var (u2s_var a 15) addr = SOME (n2w (b+n-i)) /\
+   lookup_var (u2s_var a 1) addr = SOME (n2w i) /\
+   addr.vs_current_bb = u2s_label a 4 /\ addr.vs_inst_idx = 2 /\
+   ~addr.vs_halted /\ n+32 <= buf_size+n` by
+    (simp[Abbr `addr`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     gvs[lookup_var_def]) >>
+  drule_all u2s_final_tail_invariant_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_rename_tac `gas_path_ptr _ _ _ _ _ ga ta addr _ gr tr _` >>
+  qexistsl_tac [`gr`, `tr`] >> goal_assum (drule_at Any) >>
+  gvs[Abbr `addr`, update_var_def, jump_to_def,
+      mstore_def, write_memory_with_expansion_def] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ gr tr _` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem u2s_final_endpoint_memory:
+  (jump_to lbl (update_var (u2s_var a 2) w2
+    (mstore at w (update_var (u2s_var a 15) w15
+      (update_var (u2s_var a 14) w14 s))))).vs_memory =
+  (mstore at w s).vs_memory
+Proof
+  simp[jump_to_def, update_var_def, mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem u2s_final_endpoint_robust:
+  u2s_digits a b n X 0 str s ==>
+  u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n (LENGTH str) G tn s ==>
+  LENGTH str+32 <= type_memory_size (BaseTV (StringT cap)) ==>
+  tn'.t_mem = tn.t_mem DIFF
+    {j | b+n-LENGTH str <= j /\ j < b+n-LENGTH str+32} ==>
+  !mem'. mem_agree_outside tn'.t_mem
+    (jump_to lbl (update_var (u2s_var a 2) w2
+      (mstore (b+n-LENGTH str) (n2w (LENGTH str))
+        (update_var (u2s_var a 15) w15
+          (update_var (u2s_var a 14) w14 s))))).vs_memory mem' ==>
+    val_in_memory (BaseTV (StringT cap)) (StringV (num_to_dec_string X))
+      (b+n-LENGTH str) mem'
+Proof
+  ntac 4 strip_tac >> drule u2s_ptr_state_suffix >> strip_tac >>
+  `!j. b+n-LENGTH str+32 <= j /\ j < b+n+32 ==> j NOTIN tn.t_mem` by
+    (rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac) >>
+  simp[u2s_final_endpoint_memory] >> rpt strip_tac >>
+  irule uint_digits_header_robust >> goal_assum (drule_at Any) >>
+  simp[] >> qexistsl_tac [`a`, `s`, `tn`] >> simp[]
+QED
+
+Theorem u2s_final_endpoint_safe:
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  local_ptrs_reserved cenv a /\ not_fresh_at a p /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+  b <= at /\ at+32 <= b+sz ==>
+  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr
+    (jump_to lbl (update_var (u2s_var a 2) (n2w at)
+      (mstore at w (update_var (u2s_var a 15) (n2w at)
+        (update_var (u2s_var a 14) w14 s)))))
+Proof
+  strip_tac >> irule u2s_safe_jump >>
+  irule u2s_final_safe >> simp[] >> metis_tac[]
 QED
