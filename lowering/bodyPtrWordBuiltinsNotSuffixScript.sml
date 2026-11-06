@@ -73,7 +73,9 @@ Theorem word_not_output_frame:
     (step_prov PG G (mk_inst id opc args [x]) (update_var x w s))
     (step_taint (mk_inst id opc args [x]) s (update_var x w s) tn) /\
   op_taint (step_taint (mk_inst id opc args [x]) s (update_var x w s) tn)
-    (Var x) = {}
+    (Var x) = {} /\
+  op_prov (step_prov PG G (mk_inst id opc args [x]) (update_var x w s))
+    (Var x) = NONE
 Proof
   strip_tac >>
   `new_site_bytes s (update_var x w s) = {}` by
@@ -83,7 +85,9 @@ Proof
   >- (irule word_neg_temp_ghost_inv >> simp[] >> metis_tac[]) >>
   conj_tac
   >- (irule word_neg_temp_ghost_kept >> simp[] >> metis_tac[]) >>
-  simp[op_taint_def, set_var_taint_def, FLOOKUP_UPDATE]
+  simp[op_taint_def, set_var_taint_def, FLOOKUP_UPDATE,
+    op_prov_def, set_prov_def, FLOOKUP_DRESTRICT] >>
+  gvs[MEM] >> simp[FLOOKUP_DRESTRICT]
 QED
 
 Theorem word_not_normal_update:
@@ -149,7 +153,8 @@ Theorem word_not_counted_frame:
   ?G' tn'. gas_path_ptr D lo ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx)) /\
     ghost_inv d cenv cx es G' tn' (t with vs_inst_idx := SUC s.vs_inst_idx) /\
-    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var x) = {}
+    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var x) = {} /\
+    op_prov G' (Var x) = NONE
 Proof
   strip_tac >> drule_all word_not_counted_step >> strip_tac >>
   drule_all word_not_normal_update >>
@@ -178,7 +183,8 @@ Theorem word_not_step_outcome:
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
     (\r ee G' tn' u. H r ee u /\
       ghost_inv d cenv cx es G' tn' u /\
-      ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var x) = {}) R
+      ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var x) = {} /\
+    op_prov G' (Var x) = NONE) R
 Proof
   strip_tac >> drule_all word_not_counted_frame >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -229,7 +235,8 @@ Theorem word_not_emit_outcome:
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
     (\r ee G' tn' u. H r ee u /\
       ghost_inv d cenv cx es G' tn' u /\
-      ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {}) R
+      ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {} /\
+      op_prov G' op = NONE) R
 Proof
   strip_tac >> drule_all word_not_emit_cursor >> strip_tac >>
   asm_rewrite_tac[] >> irule word_not_step_outcome >> simp[] >>
