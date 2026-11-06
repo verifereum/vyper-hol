@@ -26,32 +26,25 @@ Proof
 QED
 
 Theorem pointer_outcome_bind_success:
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) P
+  gas_outcome_ptr D tops (ctx,func) PG
+    (source : evaluation_state -> value evaluation_result) (es,s0,G0,tn0) P
     (\res ee gt r. ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
   (!res ee G tn t ss tt.
      P res ee G tn t /\ source ss = (res,tt) ==>
      ?v. res = INL v /\
-       gas_outcome_ptr D tops (ctx,func) PG (next v) (ee,t,G,tn) Q R) /\
-  (!marks err ee leaf fstate.
-     gas_exempt_cert F tops (ctx,func) (ignore_bind source (return ()))
-       (es,s0) marks (err,ee) (leaf,fstate) ==>
-     gas_exempt_cert F tops (ctx,func)
-       (bind source (\v. ignore_bind (next v) (return ())))
-       (es,s0) marks (err,ee) (leaf,fstate)) /\
-  (!left v mid t right err ee leaf fstate.
-     gas_marked_exec F (ctx,func) source (es,s0) left (INL v) mid (OK t) /\
-     gas_exempt_cert F tops (ctx,func) (ignore_bind (next v) (return ()))
-       (mid with gas_obs := [],t) right (err,ee) (leaf,fstate) ==>
-     gas_exempt_cert F tops (ctx,func)
-       (bind source (\v. ignore_bind (next v) (return ())))
-       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
+       gas_outcome_ptr D tops (ctx,func) PG (next v) (ee,t,G,tn) Q R) ==>
   gas_outcome_ptr D tops (ctx,func) PG (bind source next)
     (es,s0,G0,tn0) Q R
 Proof
   strip_tac >>
   drule pointer_outcome_source_witness >> strip_tac >>
-  irule gas_outcome_ptr_bind >> simp[] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  irule gas_outcome_ptr_bind >>
+  conj_tac
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+      first_assum ACCEPT_TAC) >>
   irule gas_outcome_ptr_conseq >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
