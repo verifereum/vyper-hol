@@ -2,7 +2,7 @@
 Theory exprSimAggregateBodySource
 Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState exprSimMemorySource
 
 Theorem aggregate_body_cons_outcome:
   gas_outcome F tops (ctx,func) (eval_expr cx e) (es,s0)
@@ -58,3 +58,65 @@ Resume aggregate_body_cons_outcome[exempt]:
   irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC
 QED
 Finalise aggregate_body_cons_outcome
+
+Theorem aggregate_body_read_cons_outcome:
+  read_result cx tv es = (INL v,es) /\
+  gas_marked_path F ctx func t 0 (OK q) /\
+  gas_outcome F tops (ctx,func) (eval_exprs cx args)
+    (es with gas_obs := [],q)
+    (\res ee r. ?vs. res = INL vs /\ P vs ee r)
+    (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) /\ 
+  (!vs ee r. P vs ee r ==> Q (INL (v::vs)) ee r) ==>
+  gas_outcome F tops (ctx,func)
+    (bind (read_result cx tv)
+      (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))
+    (es,t) Q R
+Proof
+  strip_tac >>
+  `gas_marked_exec F (ctx,func) (read_result cx tv) (es,t)
+      [] (INL v) es (OK q)` by
+    (simp[gas_marked_exec_def] >> metis_tac[read_result_gas_obs]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+      >- suspend "normal"
+      >> suspend "exit") >>
+  suspend "exempt"
+QED
+
+Resume aggregate_body_read_cons_outcome[normal]:
+  gvs[] >>
+  `gas_marked_exec F (ctx,func)
+      (bind (eval_exprs cx args) (\vs. return (v::vs)))
+      (es with gas_obs := [],q) marks (INL (v::vs)) es_end (OK t')` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     simp[bind_def, return_def]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL (v::vs)`, `es_end`, `OK t'`] >> simp[] >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_marked_exec_bind_normal))) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume aggregate_body_read_cons_outcome[exit]:
+  gvs[] >>
+  `gas_marked_exec F (ctx,func)
+      (bind (eval_exprs cx args) (\vs. return (v::vs)))
+      (es with gas_obs := [],q) marks (INR exc) es_end r` by
+    (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_marked_exec_bind_normal))) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume aggregate_body_read_cons_outcome[exempt]:
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
+  simp[bind_assoc, bind_return] >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_exempt_cert_bind_value))) >>
+  goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def]
+QED
+Finalise aggregate_body_read_cons_outcome
