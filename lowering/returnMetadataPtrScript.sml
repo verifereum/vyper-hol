@@ -268,5 +268,24 @@ Proof
   rpt gen_tac >> simp[Once abi_enc_plan_cases] >> strip_tac >>
   drule_all (cj 1 static_length_memory_size) >> strip_tac >>
   drule (cj 1 vyper_to_abi_type_dynamic) >> strip_tac >>
+  `~vyper_is_dynamic tenv ty` by fs[contractABITheory.is_dynamic_def] >>
   drule_all (cj 1 vyper_to_abi_static_length) >> simp[]
+QED
+
+Theorem source_external_frame_copy_size:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,defaults,ret,fbody) /\
+  set_external_package_target target
+    (package_external_fn tops use_trans keys
+      (mut,nr,rr,tx.function_name,args,defaults,ret,fbody)) =
+    (lbl,cenv0,pos,cds,payable,nr',key,ut,view,body',rt) /\
+  compile_register_positional_args cenv0 pos off st = (cenv,sa) /\
+  same_frame cenv next /\ ret <> NoneT /\ next.ce_ret_enc_info = AbiCopy m ==>
+  m = next.ce_max_return_size
+Proof
+  strip_tac >>
+  drule_all source_external_frame_ret_abi_plan >> strip_tac >>
+  drule_all source_external_frame_return_size >> strip_tac >>
+  gvs[] >> drule abi_copy_plan_size >> simp[]
 QED
