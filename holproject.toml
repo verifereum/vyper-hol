@@ -159,6 +159,7 @@ roots = ["lowering/msgGasOriginPostScript.sml",
          "venom/passes/shared/proofs/remainingOracleSimScript.sml",
          "venom/passes/shared/proofs/remainingOracleTransportScript.sml",
          "venom/passes/shared/proofs/remainingOracleUpdatesScript.sml",
+         "venom/passes/shared/proofs/allocaRemapRegressionScript.sml",
          "lowering/placeTypingE2EPropsScript.sml"]
 
 [[executable]]
