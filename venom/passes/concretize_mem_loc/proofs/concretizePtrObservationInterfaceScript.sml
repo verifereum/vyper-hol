@@ -2,7 +2,8 @@ Theory concretizePtrObservationInterface
 Ancestors
   concretizePtrHistoryCoverage concretizePtrStageBounds
   concretizePtrComparisonTransport ptrDiscipline unitMemInv
-  concretizePtrPairedFields list finite_map words arithmetic
+  concretizePtrPairedFields pointerConfinedDefs memLocDefs
+  list finite_map words arithmetic
 
 (* access_ok retains ownership even when a provenance-bearing range lies
    numerically below lo. The absent-provenance alternative is explicit. *)
@@ -63,3 +64,43 @@ val observation_range_transport_schema = ``
     (?aid p sz. FLOOKUP positions (Allocation aid) = SOME (p,sz) /\
       p <= off /\ off + len <= p + sz))
 ``;
+
+Theorem ptr_terminal_length_prov:
+  ptr_use_ok P pv inst /\ FDOM G SUBSET pv /\
+  (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
+  inst.inst_operands = [addr;lenop] ==>
+  op_prov G lenop = NONE
+Proof
+  strip_tac >> Cases_on `lenop` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP G v = NONE` >>
+  Cases_on `FLOOKUP G v` >> simp[] >>
+  `v IN FDOM G` by fs[FLOOKUP_DEF] >>
+  `v IN pv` by fs[pred_setTheory.SUBSET_DEF] >>
+  qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+  simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+       mem_read_ops_def, mem_write_ops_def] >>
+  qexists_tac `v` >> Cases_on `addr = Var v` >> gvs[]
+QED
+
+Theorem ptr_terminal_length_taint:
+  taint_ok fn tn inst s /\
+  (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
+  inst.inst_operands = [addr;lenop] ==>
+  op_taint tn lenop = {}
+Proof
+  strip_tac >> gvs[taint_ok_def] >>
+  first_x_assum (qspec_then `lenop` mp_tac) >> simp[]
+QED
+
+Theorem ptr_terminal_repeated_operand_probe:
+  ~ptr_use_ok P {"p"}
+    <|inst_id := 1; inst_opcode := RETURN;
+      inst_operands := [Var "p"; Var "p"]; inst_outputs := []|> /\
+  ~ptr_use_ok P {"p"}
+    <|inst_id := 1; inst_opcode := REVERT;
+      inst_operands := [Var "p"; Var "p"]; inst_outputs := []|>
+Proof
+  simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+       mem_read_ops_def, mem_write_ops_def] >>
+  conj_tac >> qexists_tac `"p"` >> simp[]
+QED

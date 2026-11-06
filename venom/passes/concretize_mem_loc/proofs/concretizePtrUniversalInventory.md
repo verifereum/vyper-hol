@@ -169,6 +169,66 @@ Remaining lifting obligations, not proved here:
   block lookup/alignment witnesses. This is still a missing theorem, not a
   consequence credited to the local probes. No successful source departure or
   about_to_revert premise is involved.
+### Occurrence-sensitive scalar-slot checkpoint (2026-11-06)
+
+ObservationInterface now exports separate `ptr_terminal_length_prov` and
+`ptr_terminal_length_taint`: RETURN/REVERT [addr;lenop] have numerical length
+provenance NONE under ptr_use_ok plus FDOM G SUBSET pv, and empty length taint
+under taint_ok. No departure premise occurs. `ptr_terminal_repeated_operand_probe`
+checks that RETURN and REVERT [Var "p";Var "p"] fail ptr_use_ok when "p" is in pv.
+Thus the proof is occurrence-sensitive, not an assumption that addr and length
+are different. Taint exceptions for about_to_revert do not allow tainted lengths.
+
+Support premise supplier: `ptr_frame_current_static` (ParamSupport) from actual
+source frame_reachable plus EVERY(fn_ptr_ok P) and EVERY(EVERY inst_wf o fn_insts)
+yields `ptr_static_support P fn G`; its definition says every SOME lookup in G
+is in fn_pv P fn, equivalently FDOM G SUBSET fn_pv P fn. Source fn_ptr_ok in turn
+supplies ptr_use_ok P (fn_pv P fn) for its actual instruction. These projections
+must be assembled from discipline/history; FDOM inclusion is NOT a new global
+hypothesis. Imported token support already has `ptr_source_tagged_var_support`.
+For scalar transport, use `ptr_source_ownership_prov_erases`: ptr_ledger_erases
+also requires each SOME tag in TG to belong to FDOM births, so a numerical NONE
+cannot conceal a dangling SOME tag. `ptr_owner_op_projection` is local to
+OwnershipErasure, so consumers must use the exported erasure relation interface
+or request an appropriate exported boundary, not cite that local ML binding.
+Then use ptr_mixed_vars_eval and ptr_value_transport_scalar_empty, separately
+checking nonopaque and equal-label prerequisites. Eval presence alone is weaker.
+
+Definition audit of range slots (all still need a unified proved extractor):
+
+| Range constructor | Offset/length and guard | Scalar/occurrence obligation |
+|---|---|---|
+| MLOAD/ILOAD read | singleton offset operand, constant 32; eval offset | no variable length; opaque offset prohibited by instruction operand interface |
+| MSTORE/MSTORE8/ISTORE write | [dst;value], constant 32/1/32; both eval | value presence only; its taint may be nonempty for MSTORE/ISTORE, so do not demand scalar value equality merely to extract range |
+| MCOPY read/write | [dst;src;size], read src/write dst, same evaluated size; all eval | size provenance excluded by singleton occurrence and offset selection (either address slot); taint_ok excludes size/address taint. Even coincident dst/src/size must be checked by occurrences |
+| CALLDATACOPY/CODECOPY/DLOADBYTES/RETURNDATACOPY write | [dst;src;size], both src and size eval for sized_source_write_range | length must be scalar and untainted; source-data offset is only a presence guard for memory range, not memory address |
+| EXTCODECOPY write | [account;dst;src;size], account eval then sized range | length scalar/untainted; all extra eval guards need presence reflection |
+| RETURN/REVERT/SHA3 read | [offset;size], memory_range_of_operands | terminal length lemmas proved for first two; same occurrence argument needed for SHA3; source forwarding separated before access classification |
+| LOG read | Lit topic count :: tail, LENGTH tail=count+2, reversed tail has offset then size, remaining topics eval | mem_read_ops takes last/penultimate operands by reversing whole list; need exact reversed-tail slot correspondence and topic-guard presence. Topic count must be literal as required by actual range definition |
+| CALL read/write | 7 operands; read slots 3/4, write slots 5/6 (zero-based); read guards gas/account/value/ret offset/ret size plus its range eval; write guards all 7 eval | both lengths excluded from BOTH allowed offset slots by occurrence uniqueness. gas/account/value need presence, not numerical equality for mere range extraction |
+| STATICCALL/DELEGATECALL read/write | 6 operands; read slots 2/3, write 4/5; read extra gas/account/ret offset/ret size; write all eval | both lengths scalar/untainted; actual guards must be matched separately |
+| CREATE/CREATE2 read | offset/size slots 1/2; guard value (and salt for CREATE2) | size scalar/untainted, additional value/salt eval presence; no write range |
+| DRET | special dynamic read/write ranges | excluded by source fn_ptr_ok; cannot silently fit ordinary single-range ops |
+| all other opcodes | ranges empty | exclusion/reflection from actual same instruction or existing unchanged facts; no new rewrite-structure lemma |
+
+Proposed shared extraction signature (design only, no new executable definition):
+Given source/target matching instruction and operand lists, eval-presence
+reflection for ALL operands, source ptr_use_ok/static support/taint_ok and
+mixed operand lookup transport, each target range of a selected read/write
+family has a source range with equal length, plus either equal evaluated
+unowned offset or an owned offset with the exact birth/placement word equation.
+It should expose the selected mem_*_ops and actual evaluated offset values to
+apply ptr_access_range_classification and ptr_owned_range_relocation_probe.
+For zero length it may conclude immediately without selecting an owner. This
+interface must retain the original range guards, rather than assume source
+success or equality of store values/topics. Its final integration must derive
+all operand premises from the normalized prefix, not add them to that prefix.
+
+Still missing: a proved generic slot/guard extractor, exported numerical/tag
+NONE bridge if erasure cannot be consumed conveniently, and full forwarding
+index/slice lift. The terminal probes validate the hardest repeated occurrence
+edge case but do not establish arbitrary-opcode observation safety.
+
 
 The older inventory below is retained as historical reasoning, not current proof
 status; in particular its claims that H/W types remain unresolved are superseded
