@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsPayloadCallbacks
-Ancestors bodyPtrPrecompileBuiltinsPayloadRuns
+Ancestors bodyPtrPrecompileBuiltinsPayloadRuns bodyPtrPrecompileBuiltinsPayloadCompose
           bodyPtrPrecompileBuiltinsPayloadNormalize dftCommutation
           emitHelper context compileEnv venomState exprLoweringProps
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
@@ -169,17 +169,6 @@ Proof
     (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = s`
       (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
   Cases_on `op` >> simp[eval_operand_def]
-QED
-
-Theorem payload_reset_trans:
-  (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u ==>
-  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
-Proof
-  strip_tac >>
-  qpat_x_assum `_ = u`
-    (mp_tac o Q.AP_TERM `\z. z with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>`) >>
-  simp[]
 QED
 
 Theorem mul_payload_stages_run:
@@ -378,6 +367,19 @@ Proof
     metis_tac[listTheory.MEM] >>
   drule (point_pair_payload_run |> SPEC_ALL |> Q.INST [`off` |-> `64w`] |>
     SRULE [wordsTheory.word_add_n2w]) >>
-  simp[] >> (impl_tac >- (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
-  strip_tac >> FAIL_TAC "add composition"
+  simp[] >> disch_then (qspecl_then [`u`,`q`,`b`] mp_tac) >>
+  (impl_tac >- (simp[] >> gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
+  strip_tac >>
+  `run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
+   (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)` by
+    (irule payload_run_frame_compose >> qexistsl [`not_fresh_at sm`,`u`] >> simp[]) >>
+  `t.vs_memory = (mstore (w2n b+96) (mload (w2n q+32) s)
+    (mstore (w2n b+64) (mload (w2n q) s)
+      (mstore (w2n b+32) (mload (w2n p+32) s)
+        (mstore (w2n b) (mload (w2n p) s) s)))).vs_memory` by
+    (simp[] >> irule immutable_mstore_memory_cong >>
+     irule immutable_mstore_memory_cong >> simp[]) >>
+  qexists `t` >> simp[scratch_four_word_stores] >>
+  fs[venom_state_component_equality]
 QED
