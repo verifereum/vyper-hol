@@ -31,5 +31,7 @@ Theorem body_create_mem_case:
     (kind = RawCreate ==> body_exprs_mem_ok cx (TAKE 2 es)) ==>
     body_expr_mem_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
-  cheat
+  rw[body_expr_mem_ok_def, exprSimHypsDefsTheory.expr_body_pre_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
+     supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
