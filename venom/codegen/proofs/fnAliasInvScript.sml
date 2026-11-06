@@ -11096,6 +11096,29 @@ Proof
   conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
 QED
 
+(* C1.102.2.2 destructive-PHI branch audit (not a target proof):
+   The first-PHI-keeps-its-source branch in
+   alias_history_unselected_phi_cut cannot have analyzed ready liveness:
+   alias_ready_phi_selected_dead rules out the do_dup guard, and
+   alias_ready_phi_source_dead_cuts rules out that source's later demand
+   throughout the prefix. This restriction does not depend on vs_prev_bb.
+   If a is instead an unselected old residue, generate_phi_plan does not
+   collect it: alias_phi_plan_retains_stack covers that branch. A later
+   PHI r <- b with an independent old b value can then break a = r.
+   Entry held-alias equations force neutrality when normalize(b) = r
+   (alias_phi_selected_root_old_value); when normalize(b) differs, mere
+   input coverage supplies no equality between b and r. In particular no
+   frozen premise identifies the runtime predecessor with the lineage
+   witness's final predecessor. Both choices must be checked separately.
+   The regular planner only pops consumed operands/dead newly produced
+   outputs and releases dead spills; it is not a dead-stack sweep. Thus
+   the unresolved branch is an unselected nonreflexive old stack residue,
+   not the impossible live selected source. A universal producer must
+   show that such a residue cannot arise from initialized lineage when an
+   independent root source is selected, or identify an actual later
+   consuming/repairing transition. Neither the arbitrary cut above nor
+   deadness, a singleton bound, or the neutral boundary establishes this.
+   No actual-lineage destructive counterexample is asserted here. *)
 Theorem alias_eval_phis_neutral_lookup:
   !insts s t r.
     eval_phis s insts = OK t /\
