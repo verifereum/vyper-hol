@@ -20,6 +20,8 @@ Theorem immutable_runtime_load_raw_frame:
     u.vs_immutables = s.vs_immutables /\
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
@@ -64,7 +66,9 @@ Theorem immutable_runtime_store_raw_frame:
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     u.vs_data_section = s.vs_data_section /\
     u.vs_immutables = s.vs_immutables /\
-    u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp
+    u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient
 Proof
   strip_tac >>
   `eval_operand (Var dst) s = SOME b` by simp[eval_operand_def] >>

@@ -5,16 +5,6 @@ Ancestors
   immutableCopyExecution immutableMemoryFrame typedCopyPtr valueEncodingProps
   bodyPtrDefs venomState venomExecSemantics words arithmetic pred_set
 
-Theorem immutable_destination_address_no_wrap:
-  ptr_covers G tn root s m /\ lookup_var root s = SOME b /\
-  FLOOKUP G root = SOME (blo,cap) /\ blo + cap <= dimword(:256) /\
-  off + 32 <= m ==>
-  w2n (b+n2w off) = w2n b + off
-Proof
-  strip_tac >>
-  `w2n b + off < dimword(:256)` by (gvs[ptr_covers_def] >> decide_tac) >>
-  metis_tac[immutable_word_address_no_wrap, wordsTheory.n2w_w2n]
-QED
 
 Theorem immutable_runtime_word_observations:
   u.vs_memory = (immutable_word_transfer F F a b off s).vs_memory ==>

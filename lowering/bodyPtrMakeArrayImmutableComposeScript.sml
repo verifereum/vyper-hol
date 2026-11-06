@@ -3,10 +3,42 @@ Theory bodyPtrMakeArrayImmutableCompose
 Ancestors
   bodyPtrMakeArrayUniformStages bodyPtrMakeArraySeqCompose
   bodyPtrMakeArrayImmutableOne bodyPtrMakeArrayOffsetFrame
-  bodyPtrMakeArrayImmutableStep exprSimCopy immutableCopyExecution
+  bodyPtrMakeArrayImmutableStep exprSimCopy immutableCopyExecution immutableMemoryFrame
   freshWrites context compileEnv exprLoweringProps ptrDiscipline typedCopyPtr bodyPtrDefs
   venomState venomInst venomExecSemantics finite_map emitHelper emitHelperProps
   fragGasSeqPtr fragGasPathPtr
+
+Theorem immutable_destination_address_no_wrap:
+  ptr_covers G tn root s m /\ lookup_var root s = SOME b /\
+  FLOOKUP G root = SOME (blo,cap) /\ blo + cap <= dimword(:256) /\
+  off + 32 <= m ==>
+  w2n (b+n2w off) = w2n b + off
+Proof
+  strip_tac >>
+  `w2n b + off < dimword(:256)` by (gvs[ptr_covers_def] >> decide_tac) >>
+  metis_tac[immutable_word_address_no_wrap, wordsTheory.n2w_w2n]
+QED
+
+Theorem immutable_runtime_one_exterior:
+  u.vs_memory = (immutable_word_transfer F F a b off s).vs_memory /\
+  tnf.t_mem = tn.t_mem DIFF {i | w2n (b+n2w off) <= i /\
+                                   i < w2n (b+n2w off)+32} /\
+  w2n (b+n2w off) = w2n b + off ==>
+  !i. i < w2n b+off \/ w2n b+off+32 <= i ==>
+    mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tnf.t_mem <=> i IN tn.t_mem)
+Proof
+  strip_tac >>
+  `mem_agree_outside {i | w2n (b+n2w off) <= i /\
+                         i < w2n (b+n2w off)+32}
+     u.vs_memory s.vs_memory` by
+    (qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+     pure_rewrite_tac[immutable_word_transfer_fields] >>
+     irule mstore_memory_frame) >>
+  fs[mem_agree_outside_def] >> rpt strip_tac >>
+  `mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (first_x_assum irule >> decide_tac) >> gvs[]
+QED
 
 Theorem immutable_runtime_source_pair:
   compile_lit_byte_offset src off sa = (op,sb) /\
@@ -23,6 +55,8 @@ Theorem immutable_runtime_source_pair:
     u.vs_immutables = s.vs_immutables /\
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -68,6 +102,8 @@ Theorem immutable_runtime_destination_pair:
     tnf.t_mem = tn.t_mem DIFF {i | w2n (b+n2w off) <= i /\
                                       i < w2n (b+n2w off) + 32} /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -130,11 +166,16 @@ Theorem immutable_runtime_one_checked:
     (!j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := j) Gf tnf) /\
     u.vs_memory = (immutable_word_transfer F F a b off s).vs_memory /\
+    (!i. i < w2n b+off \/ w2n b+off+32 <= i ==>
+      mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n (b+n2w off) <= i /\
                                       i < w2n (b+n2w off) + 32} /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -159,9 +200,18 @@ Proof
   rename1 `copy_runtime_frame sd u sb v` >>
   drule_all immutable_runtime_source_opcodes >> strip_tac >>
   drule_all copy_runtime_checked_append_uniform >> strip_tac >>
+  `v.vs_memory = (immutable_word_transfer F F a b off s).vs_memory` by
+    fs[immutable_word_transfer_def, immutable_copy_read_def, mstore_def] >>
+  `w2n (b+n2w off) = w2n b+off` by
+    (drule_all immutable_destination_address_no_wrap >> simp[]) >>
+  `tnf'.t_mem = tn.t_mem DIFF {i | w2n (b+n2w off) <= i /\
+                                      i < w2n (b+n2w off)+32}` by metis_tac[] >>
+  `!i. i < w2n b+off \/ w2n b+off+32 <= i ==>
+     mem_bytes_at i 1 v.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+     (i IN tnf'.t_mem <=> i IN tn.t_mem)` by
+    metis_tac[immutable_runtime_one_exterior] >>
   qexistsl_tac [`v`, `Gf'`, `tnf'`] >> simp[] >>
-  conj_tac
-  >- (fs[immutable_word_transfer_def, immutable_copy_read_def, mstore_def]) >>
+  conj_tac >- (qpat_x_assum `!i. _ \/ _ ==> _ /\ _` mp_tac >> simp[]) >>
   rpt strip_tac >>
   `not_fresh_at sd p` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> fs[copy_runtime_frame_def]) >>
@@ -210,11 +260,16 @@ Theorem immutable_runtime_one_ptr_path:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
       (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     u.vs_memory = (immutable_word_transfer F F a b off s).vs_memory /\
+    (!i. i < w2n b+off \/ w2n b+off+32 <= i ==>
+      mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n (b+n2w off) <= i /\
                                       i < w2n (b+n2w off) + 32} /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
