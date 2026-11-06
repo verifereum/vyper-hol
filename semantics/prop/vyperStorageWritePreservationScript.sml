@@ -616,9 +616,8 @@ Proof
     (qpat_x_assum
        `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
      simp[slots_in_range_def, Abbr `len`]) >>
-  `MIN len max = len` by
-    (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv len` by
+  `i < max` by (gvs[Abbr `len`] >> decide_tac) >>
+  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv max` by
     (qpat_x_assum
        `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
      simp[slots_in_range_def, Abbr `len`]) >>
@@ -634,13 +633,13 @@ Proof
      disch_then irule >>
      irule contained_dynamic_child_disjoint_header >>
      gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
-  `!j. j < len /\ j <> i ==>
+  `!j. j < max /\ j <> i ==>
        slots_in_range (get_storage cx st' b)
          (off + 1 + j * type_slot_size tv) tv` by
     (rpt strip_tac >>
      `slots_in_range (get_storage cx st b)
         (off + 1 + j * type_slot_size tv) tv` by
-       (irule dyn_slots_in_range_index >> qexists `len` >> simp[]) >>
+       (irule dyn_slots_in_range_index >> qexists `max` >> simp[]) >>
      `j * type_slot_size tv + type_slot_size tv <=
       max * type_slot_size tv` by
        (irule arithmeticTheory.LESS_EQ_TRANS >>
@@ -669,7 +668,7 @@ Proof
      disch_then drule >>
      disch_then drule >>
      disch_then irule >> simp[]) >>
-  `dyn_slots_in_range (get_storage cx st' b) (off + 1) tv len` by
+  `dyn_slots_in_range (get_storage cx st' b) (off + 1) tv max` by
     (irule dyn_slots_in_range_reconstruct_selected >>
      qexists `i` >> simp[]) >>
   simp[slots_in_range_def, Abbr `len`] >> gvs[]
@@ -799,9 +798,8 @@ Proof
     (qpat_x_assum
        `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
      simp[slots_in_range_def, Abbr `len`]) >>
-  `MIN len max = len` by
-    (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv len` by
+  `i < max` by (gvs[Abbr `len`] >> decide_tac) >>
+  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv max` by
     (qpat_x_assum
        `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
      simp[slots_in_range_def, Abbr `len`]) >>
@@ -821,13 +819,13 @@ Proof
     (irule typed_two_writes_preserve_disjoint_read_slot >> simp[] >>
      qexistsl [`slot1`, `slot2`, `st1`, `tv1`, `tv2`, `v1`, `v2`] >>
      simp[]) >>
-  `!j. j < len /\ j <> i ==>
+  `!j. j < max /\ j <> i ==>
        slots_in_range (get_storage cx st2 b)
          (off + 1 + j * type_slot_size tv) tv` by
     (rpt strip_tac >>
      `slots_in_range (get_storage cx st b)
         (off + 1 + j * type_slot_size tv) tv` by
-       (irule dyn_slots_in_range_index >> qexists `len` >> simp[]) >>
+       (irule dyn_slots_in_range_index >> qexists `max` >> simp[]) >>
      `j * type_slot_size tv + type_slot_size tv <=
       max * type_slot_size tv` by
        (irule arithmeticTheory.LESS_EQ_TRANS >>
@@ -863,7 +861,7 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl [`b`, `b`, `slot1`, `slot2`, `st`, `st1`, `tv1`, `tv2`,
                 `v1`, `v2`] >> simp[]) >>
-  `dyn_slots_in_range (get_storage cx st2 b) (off + 1) tv len` by
+  `dyn_slots_in_range (get_storage cx st2 b) (off + 1) tv max` by
     (irule dyn_slots_in_range_reconstruct_selected >>
      qexists `i` >> simp[]) >>
   simp[slots_in_range_def, Abbr `len`] >> gvs[]
@@ -1042,12 +1040,9 @@ Proof
      `slots_in_range (get_storage cx s'' b)
         (w2n base' + 1 + Num idx * type_slot_size tv) tv` by
        (irule dyn_slots_in_range_index >>
-        qexists `w2n (read_slot (get_storage cx s'' b) (w2n base'))` >>
+        qexists `n` >>
         gvs[slots_in_range_def, vyperStorageTheory.read_slot_def] >>
-        `MIN (w2n (lookup_storage base' (get_storage cx s'' b))) n =
-         w2n (lookup_storage base' (get_storage cx s'' b))` by
-          (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-        gvs[]) >>
+        decide_tac) >>
      `base' + n2w (1 + Num idx * type_slot_size tv) =
       base' + n2w (Num idx * type_slot_size tv + 1)` by
        (AP_TERM_TAC >> AP_TERM_TAC >>
@@ -1157,12 +1152,9 @@ Proof
      `slots_in_range (get_storage cx s'' b)
         (w2n base' + 1 + Num idx * type_slot_size tv) tv` by
        (irule dyn_slots_in_range_index >>
-        qexists `w2n (read_slot (get_storage cx s'' b) (w2n base'))` >>
+        qexists `n` >>
         gvs[slots_in_range_def, vyperStorageTheory.read_slot_def] >>
-        `MIN (w2n (lookup_storage base' (get_storage cx s'' b))) n =
-         w2n (lookup_storage base' (get_storage cx s'' b))` by
-          (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-        gvs[]) >>
+        decide_tac) >>
      `base' + n2w (1 + Num idx * type_slot_size tv) =
       base' + n2w (Num idx * type_slot_size tv + 1)` by
        (AP_TERM_TAC >> AP_TERM_TAC >>
@@ -1346,12 +1338,9 @@ Proof
      `slots_in_range (get_storage cx s'' b)
         (w2n base' + 1 + Num idx * type_slot_size tv) tv` by
        (irule dyn_slots_in_range_index >>
-        qexists `w2n (read_slot (get_storage cx s'' b) (w2n base'))` >>
+        qexists `n` >>
         gvs[slots_in_range_def, vyperStorageTheory.read_slot_def] >>
-        `MIN (w2n (lookup_storage base' (get_storage cx s'' b))) n =
-         w2n (lookup_storage base' (get_storage cx s'' b))` by
-          (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-        gvs[]) >>
+        decide_tac) >>
      `base' + n2w (1 + Num idx * type_slot_size tv) =
       base' + n2w (Num idx * type_slot_size tv + 1)` by
        (AP_TERM_TAC >> AP_TERM_TAC >>
@@ -1517,8 +1506,7 @@ Theorem dynamic_array_append_element_write_prefix[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `len <= max` by decide_tac >>
-  `MIN len max = len` by simp[arithmeticTheory.MIN_DEF] >>
-  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv len` by
+  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv max` by
     (qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
      simp[slots_in_range_def]) >>
   `len * type_slot_size tv + type_slot_size tv <=
@@ -1546,51 +1534,41 @@ Proof
          first_assum ACCEPT_TAC) >>
      conj_tac >- decide_tac >>
      disj2_tac >> decide_tac) >>
-  `!j. j < len ==>
+  `slots_in_range (get_storage cx st b)
+     (off + 1 + len * type_slot_size tv) tv` by
+    (irule dyn_slots_in_range_index >> qexists `max` >> simp[]) >>
+  `slots_in_range (get_storage cx st' b)
+     (off + 1 + len * type_slot_size tv) tv` by
+    (drule typed_write_storage_slot_establishes_region_forward >>
+     asm_rewrite_tac[]) >>
+  `!j. j < max /\ j <> len ==>
        slots_in_range (get_storage cx st' b)
          (off + 1 + j * type_slot_size tv) tv` by
     (rpt strip_tac >>
      `slots_in_range (get_storage cx st b)
         (off + 1 + j * type_slot_size tv) tv` by
-       (irule dyn_slots_in_range_index >> qexists `len` >> simp[]) >>
+       (irule dyn_slots_in_range_index >> qexists `max` >> simp[]) >>
      `j * type_slot_size tv + type_slot_size tv <=
       max * type_slot_size tv` by
-       (irule array_index_element_end_bound >> decide_tac) >>
-     `off + 1 + j * type_slot_size tv + type_slot_size tv <=
-      dimword(:256)` by
-       (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+       (irule array_index_element_end_bound >> simp[]) >>
+     `off + 1 + (j * type_slot_size tv + type_slot_size tv) <=
+      dimword(:256)` by gvs[vyperValueTheory.type_slot_size_def] >>
      `off + 1 + j * type_slot_size tv < dimword(:256)` by decide_tac >>
-     `off + (type_slot_size tv + (j * type_slot_size tv + 1)) =
-      off + 1 + j * type_slot_size tv + type_slot_size tv` by decide_tac >>
+     `ranges_disjoint
+        (w2n (n2w (off + 1 + len * type_slot_size tv) : bytes32))
+        (type_slot_size tv) (off + 1 + j * type_slot_size tv)
+        (type_slot_size tv)` by
+       (irule contained_array_child_disjoint_sibling >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qexists `len` >> asm_rewrite_tac[] >> decide_tac) >>
      drule typed_write_storage_slot_preserves_disjoint_num_region >>
      disch_then drule >> disch_then drule >>
-     disch_then drule >> disch_then irule >>
-     disj2_tac >>
-     qpat_assum
-       `w2n (n2w (off + 1 + len * type_slot_size tv) : bytes32) = _`
-       (fn th => rewrite_tac [th]) >>
-     rewrite_tac[ranges_disjoint_def] >>
-     conj_tac
-     >- (qpat_assum
-           `off + (type_slot_size tv + (len * type_slot_size tv + 1)) = _`
-           (fn th => once_rewrite_tac [th]) >>
-         first_assum ACCEPT_TAC) >>
-     conj_tac
-     >- (qpat_assum
-           `off + (type_slot_size tv + (j * type_slot_size tv + 1)) = _`
-           (fn th => once_rewrite_tac [th]) >>
-         first_assum ACCEPT_TAC) >>
-     disj2_tac >>
-     `j * type_slot_size tv + type_slot_size tv <=
-      len * type_slot_size tv` by
-       (irule array_index_element_end_bound >> simp[]) >>
-     decide_tac) >>
-  conj_tac
-  >- (simp[slots_in_range_def] >>
-      irule dyn_slots_in_range_reconstruct >> simp[]) >>
-  conj_tac
-  >- (drule typed_write_storage_slot_establishes_region_forward >> simp[]) >>
-  first_assum ACCEPT_TAC
+     disch_then drule >> disch_then irule >> simp[]) >>
+  `dyn_slots_in_range (get_storage cx st' b) (off + 1) tv max` by
+    (irule dyn_slots_in_range_reconstruct_selected >>
+     qexists `len` >> simp[]) >>
+  simp[slots_in_range_def]
 QED
 
 Theorem dynamic_array_append_header_write_reconstruct_forward[local]:
@@ -1618,17 +1596,16 @@ Proof
   `w2n (n2w off : bytes32) = off` by simp[] >>
   `read_slot (get_storage cx st' b) off = n2w (len + 1)` by
     (drule_at (Pat `write_storage_slot`) uint256_header_write_read_exact >> simp[]) >>
-  `!j. j < len + 1 ==>
+  `!j. j < max ==>
        slots_in_range (get_storage cx st' b)
          (off + 1 + j * type_slot_size tv) tv` by
     (rpt strip_tac >>
      `slots_in_range (get_storage cx st b)
         (off + 1 + j * type_slot_size tv) tv` by
-       (Cases_on `j = len` >- gvs[] >>
-        irule dyn_slots_in_range_index >> qexists `len` >>
+       (irule dyn_slots_in_range_index >> qexists `max` >>
         qpat_x_assum
           `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
-        simp[slots_in_range_def] >> decide_tac) >>
+        simp[slots_in_range_def]) >>
      `j < max` by decide_tac >>
      `j * type_slot_size tv + type_slot_size tv <=
       max * type_slot_size tv` by
@@ -1900,9 +1877,15 @@ Proof
   `off + 1 + (len - 1) * type_slot_size tv < dimword(:256)` by decide_tac >>
   `w2n (n2w (off + 1 + (len - 1) * type_slot_size tv) : bytes32) =
    off + 1 + (len - 1) * type_slot_size tv` by simp[] >>
+  `slots_in_range (get_storage cx st b)
+     (off + 1 + (len - 1) * type_slot_size tv) tv` by
+    (irule dyn_slots_in_range_index >> qexists `max` >>
+     qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
   `slots_in_range (get_storage cx st' b)
      (off + 1 + (len - 1) * type_slot_size tv) tv` by
-    (drule typed_write_storage_slot_establishes_region_forward >> simp[]) >>
+    (drule typed_write_storage_slot_establishes_region_forward >>
+     asm_rewrite_tac[]) >>
   conj_tac
   >- (drule dynamic_array_typed_leaf_write_reconstruct_curried >>
       disch_then irule >> simp[] >>
@@ -1946,19 +1929,19 @@ Proof
   `w2n (n2w off : bytes32) = off` by simp[] >>
   `MIN old_len max = old_len` by
     (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv old_len` by
+  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv max` by
     (qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
      simp[slots_in_range_def]) >>
   `read_slot (get_storage cx st' b) off = n2w new_len` by
     (drule_at (Pat `write_storage_slot`) uint256_header_write_read_exact >>
      simp[]) >>
-  `!j. j < new_len ==>
+  `!j. j < max ==>
        slots_in_range (get_storage cx st' b)
          (off + 1 + j * type_slot_size tv) tv` by
     (rpt strip_tac >>
      `slots_in_range (get_storage cx st b)
         (off + 1 + j * type_slot_size tv) tv` by
-       (irule dyn_slots_in_range_index >> qexists `old_len` >> simp[]) >>
+       (irule dyn_slots_in_range_index >> qexists `max` >> simp[]) >>
      `j < max` by decide_tac >>
      `j * type_slot_size tv + type_slot_size tv <=
       max * type_slot_size tv` by
@@ -1978,7 +1961,7 @@ Proof
   irule dyn_slots_in_range_reconstruct >> simp[]
 QED
 
-(* A pop need only shrink the header: unused elements are not inspected. *)
+(* A pop may shrink only the header: every capacity child remains valid. *)
 Theorem dynamic_array_pop_header_write_preserves:
   slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
   w2n (read_slot (get_storage cx st b) off) = len /\
