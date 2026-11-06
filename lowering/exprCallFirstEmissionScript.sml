@@ -521,3 +521,50 @@ Proof
   >- (ho_match_mp_tac first_emission_strong >> MATCH_ACCEPT_TAC first_emission_external_call_kwargs) >>
   gen_tac >> rpt gen_tac >> IF_CASES_TAC >> simp[cs_extends_refl]
 QED
+
+Theorem first_emission_send:
+  (!e ty a x b. MEM e args /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rty ty (Send has_gas) args defret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Cases_on `args` >> simp_tac (srw_ss()) [compile_call_def, LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+      gen_tac >> simp[cs_extends_refl]) >>
+  Cases_on `t` >> simp_tac (srw_ss()) []
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+      gen_tac >> simp[cs_extends_refl]) >>
+  Cases_on `LENGTH t' = (if has_gas then 1 else 0)` >> asm_simp_tac bool_ss []
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (Cases_on `t'` >> simp_tac (srw_ss()) []
+          >- simp[cs_extends_refl] >>
+          Cases_on `t` >> simp_tac (srw_ss()) []
+          >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+          simp[cs_extends_refl]) >>
+      gen_tac >> POP_ASSUM_LIST (K all_tac) >>
+      rewrite_tac[state_pair_let_bind] >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- call_emit_tac >>
+      rpt gen_tac >> simp_tac bool_ss [comp_bind_def, LET_THM] >> pairarg_tac >>
+      gvs[] >> metis_tac[cs_appends_emit_helpers, cs_appends_def]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+  gen_tac >> simp[cs_extends_refl]
+QED
