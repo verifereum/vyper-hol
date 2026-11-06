@@ -6,6 +6,7 @@ Ancestors
   vyperTypeEnvPreservation vyperEvalPreservesImmutablesDom
   vyperEvalPreservesScopes vyperExprNoControl
   vyperTypeContract vyperTypeContractFunction vyperTypeContractContext
+  vyperTypeContractStaticMaps
   vyperTypeBindArguments vyperContext vyperTyping vyperTypeSystem
   vyperTypeStmtResult vyperTypeEnvExtension
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
@@ -342,8 +343,10 @@ Proof
 QED
 
 Theorem defaults_env_function_entry_env:
+  art.cta_bare_global_assignable = FEMPTY \/ vis = Deploy ==>
   defaults_env (function_entry_env art mods src vis args) = artifact_env art mods src
 Proof
+  strip_tac >>
   simp[function_entry_env_def, defaults_env_FOLDL_extend_local] >>
   simp[defaults_env_def, artifact_env_def]
 QED
@@ -389,11 +392,16 @@ Theorem checked_external_suffix_static:
   call_evaluation_safe cx (int_calls_exprs (DROP k dflts))
 Proof
   strip_tac >>
+  `art.cta_bare_global_assignable = FEMPTY` by
+    (drule check_contract_runtime_assignable >> simp[]) >>
   `External <> Deploy` by simp[] >>
   drule_all check_contract_runtime_function_body_MEM >> strip_tac >>
   conj_tac
-  >- (irule well_typed_exprs_DROP >>
-      fs[check_function_body_def, defaults_env_function_entry_env]) >>
+  >- (`defaults_env (function_entry_env art mods src External args) =
+       artifact_env art mods src` by
+        (irule defaults_env_function_entry_env >> simp[]) >>
+      irule well_typed_exprs_DROP >>
+      fs[check_function_body_def]) >>
   gvs[] >> drule_all checked_external_suffix_call_evaluation_safe >> simp[]
 QED
 

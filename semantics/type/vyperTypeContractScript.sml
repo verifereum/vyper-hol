@@ -58,11 +58,15 @@ End
 (* Vyper rejects writes to the arguments of external and deploy functions
    ("Cannot write to calldata", _handle_modification in
    vyper/semantics/analysis/local.py); internal-function arguments are
-   writable. *)
+   writable.  Only the constructor itself may write immutables
+   ("Immutable value cannot be written to" unless func_t.is_constructor,
+   same function), so other functions start with none assignable. *)
 Definition function_entry_env_def:
   function_entry_env art mods src vis args =
     FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
-      (artifact_env art mods src) args
+      (artifact_env art mods src with bare_global_assignable :=
+         if vis = Deploy then art.cta_bare_global_assignable else FEMPTY)
+      args
 End
 
 (* ===== Static map construction ===== *)

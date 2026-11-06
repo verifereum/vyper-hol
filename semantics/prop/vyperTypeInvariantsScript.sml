@@ -392,6 +392,12 @@ Definition functions_well_typed_def:
           env_body.flag_members = flag_members /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\
           type_stmts env_body ret body = SOME env_after /\
+          (* Only the constructor may write immutables (Vyper's
+             "Immutable value cannot be written to"), so an internal
+             function's body also types with none assignable. *)
+          (lookup_function NONE fn Internal ts <> NONE ==>
+           IS_SOME (type_stmts (env_body with bare_global_assignable := FEMPTY)
+                      ret body)) /\
           (ret = NoneT \/ stmts_no_fallthrough body) /\
           stmts_no_control_escape body /\
           well_typed_exprs (defaults_env env_body) dflts /\

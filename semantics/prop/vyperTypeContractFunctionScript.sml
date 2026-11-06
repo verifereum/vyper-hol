@@ -36,7 +36,8 @@ Definition static_maps_transfer_env_def:
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==>
        FLOOKUP env2.bare_global_assignable k = SOME ty) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
-            FLOOKUP env1.bare_global_assignable k = NONE ==>
+            FLOOKUP env1.bare_global_assignable k = NONE /\
+            FLOOKUP env1.bare_globals k = NONE ==>
        FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
        FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
@@ -55,7 +56,7 @@ Theorem well_typed_defaults_static_maps_transfer[local]:
   (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
   (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
   (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
-  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
+  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
   (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
   (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
   (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -299,6 +300,14 @@ Proof
 QED
 
 
+Theorem static_maps_transfer_env_empty_permissions[local]:
+  static_maps_transfer_env env1 env2 /\
+  env1.bare_global_assignable = FEMPTY ==>
+  static_maps_transfer_env env1 (env2 with bare_global_assignable := FEMPTY)
+Proof
+  rw[static_maps_transfer_env_def] >> gvs[]
+QED
+
 Theorem type_stmts_static_maps_transfer[local]:
   type_stmts env1 ret body = SOME env_after /\
   static_maps_transfer_env env1 env2 ==>
@@ -457,24 +466,35 @@ Proof
   `deploy_art.cta_event_fields = runtime_art.cta_event_fields` by
     (gvs[check_contract_def] >>
      metis_tac[build_contract_type_artifact_nonsig_mode_irrelevant]) >>
+  `!k. FLOOKUP deploy_art.cta_bare_globals k = NONE ==>
+     FLOOKUP env.bare_global_assignable k = NONE` by
+    (rpt strip_tac >>
+     `FLOOKUP deploy_art.cta_bare_global_assignable k = NONE` by
+       (PairCases_on `k` >>
+        Cases_on `FLOOKUP deploy_art.cta_bare_global_assignable (k0,k1)` >>
+        simp[] >>
+        drule_all check_contract_bare_global_assignable_consistent_deploy >>
+        simp[]) >>
+     metis_tac[]) >>
   qpat_assum `check_contract T _ _ _ = _`
     (strip_assume_tac o MATCH_MP check_contract_artifact_fields) >>
   qpat_assum `check_contract F _ _ _ = _`
     (strip_assume_tac o MATCH_MP check_contract_artifact_fields) >>
   mp_tac build_contract_type_artifact_nonsig_mode_irrelevant >>
   strip_tac >>
+  Cases_on `vis = Deploy` >>
   gvs[static_maps_transfer_env_def, function_entry_env_def, artifact_env_def,
       FOLDL_extend_local_args_static] >>
-  conj_tac
-  >- (irule (cj 1 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
-  conj_tac
-  >- (irule (cj 2 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
-  rpt strip_tac >>
-  irule artifact_fn_sigs_lookup_transfer_mode >>
+  (conj_tac
+   >- (irule (cj 1 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
+   conj_tac
+   >- (irule (cj 2 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
+   rpt strip_tac >>
+   irule artifact_fn_sigs_lookup_transfer_mode >>
   qexistsl [`tx.target`, `args`, `deploy_art`, `env.current_src`,
             `T`, `layouts`, `mods`, `sources`, `src`, `tx`, `vis`] >>
   simp[function_entry_env_def, artifact_env_def,
-       FOLDL_extend_local_args_static]
+       FOLDL_extend_local_args_static])
 QED
 
 Theorem check_function_body_static_maps_transfer_initial[local]:
@@ -503,6 +523,8 @@ Theorem check_function_body_static_maps_transfer_initial[local]:
     (ret = NoneT \/ stmts_no_fallthrough body) /\
     stmts_no_control_escape body /\
     well_typed_exprs (defaults_env env_body) dflts /\
+    (vis = Internal ==> IS_SOME (type_stmts
+      (env_body with bare_global_assignable := FEMPTY) ret body)) /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types id = SOME typ /\
        IS_SOME (FLOOKUP env_body.var_assignable id)) /\
@@ -544,6 +566,15 @@ Proof
   conj_tac >- (irule well_typed_defaults_static_maps_transfer >>
                  qexists `function_entry_env art mods entry_src vis args` >>
                  gvs[static_maps_transfer_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+  conj_tac >-
+   (strip_tac >>
+    simp[IS_SOME_EXISTS] >>
+    irule type_stmts_static_maps_transfer >>
+    qexistsl [`function_entry_env art mods entry_src vis args`, `env_after_art`] >>
+    simp[] >>
+    irule static_maps_transfer_env_empty_permissions >>
+    gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
+        get_tenv_def, initial_evaluation_context_def]) >>
   conj_tac >- (rpt strip_tac >> gvs[params_ok_def] >>
                  drule_all FOLDL_extend_local_args_formal_lookup >> simp[]) >>
   conj_tac >- (rpt strip_tac >> gvs[params_ok_def] >>
@@ -607,7 +638,9 @@ Proof
     (simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
   `T <=> Internal = Internal` by simp[] >>
   drule_all check_function_body_static_maps_transfer_initial >>
-  simp[]
+  simp[] >> strip_tac >>
+  (qexistsl [`env_body`, `ret_tv`, `env_after`] >> simp[] >>
+   rpt strip_tac >> first_x_assum drule >> simp[])
 QED
 
 Theorem fn_sigs_declared_complete_deploy_implies_nondeploy[local]:
@@ -646,6 +679,71 @@ Theorem bare_globals_consistency_deploy_implies_runtime[local]:
           find_var_decl_by_name id ts = NONE /\ ty <> NoneT)
 Proof
   simp[get_module_code_def]
+QED
+
+Theorem lookup_function_Internal_NONE_not_key_T[local]:
+  ~MEM (src,fn) (FLAT (MAP (fn_sig_keys_toplevel T (src : num option)) ts)) ==>
+  lookup_function NONE fn Internal ts = NONE
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  gen_tac >> Cases_on `h` >>
+  gvs[lookup_function_def, fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  FIRST
+   [rename1 `include_fn_sig T visibility` >> Cases_on `visibility`,
+    rename1 `VariableDecl visibility mut id ty init` >>
+      Cases_on `visibility` >> Cases_on `mut`,
+    rename1 `HashMapDecl visibility trans id kt vt init` >> Cases_on `visibility`] >>
+  gvs[lookup_function_def, include_fn_sig_def]
+QED
+
+Theorem module_fn_sig_key_MEM_T_Deploy[local]:
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  MEM (src,fn) (FLAT (MAP (fn_sig_keys_toplevel T (src : num option)) ts))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `fn_sig_keys_toplevel T src
+    (FunctionDecl Deploy fm nr raw fn args dflts ret body)` >>
+  simp[fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  qexists `FunctionDecl Deploy fm nr raw fn args dflts ret body` >>
+  simp[fn_sig_keys_toplevel_def, include_fn_sig_def]
+QED
+
+Theorem lookup_function_Internal_NONE_for_Deploy_MEM[local]:
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T (src : num option)) ts)) /\
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  lookup_function NONE fn Internal ts = NONE
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[lookup_function_def, fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  FIRST
+   [metis_tac[lookup_function_Internal_NONE_not_key_T],
+    rename1 `include_fn_sig T visibility` >> Cases_on `visibility`,
+    rename1 `VariableDecl visibility mut id ty init` >>
+      Cases_on `visibility` >> Cases_on `mut`,
+    rename1 `HashMapDecl visibility trans id kt vt init` >> Cases_on `visibility`] >>
+  gvs[lookup_function_def, include_fn_sig_def] >>
+  TRY (rename1 `s = fn` >> Cases_on `s = fn` >> gvs[]) >>
+  FIRST
+    [metis_tac[lookup_function_Internal_NONE_not_key_T],
+     qpat_x_assum `ALL_DISTINCT _ ==> lookup_function _ _ Internal ts = _` irule >> simp[],
+     drule module_fn_sig_key_MEM_T_Deploy >>
+     disch_then (qspec_then `src` assume_tac) >> gvs[]]
+QED
+
+Theorem checked_deploy_MEM_Internal_NONE[local]:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  lookup_function NONE fn Internal ts = NONE
+Proof
+  strip_tac >>
+  irule lookup_function_Internal_NONE_for_Deploy_MEM >>
+  reverse conj_tac >- (goal_assum $ drule_at Any) >>
+  qexists `src` >> irule contract_keys_module_distinct >>
+  qexists `mods` >>
+  gvs[check_contract_def, contract_namespaces_ok_def] >>
+  metis_tac[ALOOKUP_MEM]
 QED
 
 Theorem check_contract_functions_well_typed_deploy:
@@ -736,8 +834,10 @@ Proof
              toplevel_vtypes := toplevel_vtypes;
              type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
              flag_members := flag_members; event_fields := deploy_art.cta_event_fields|>`] >>
-      simp[get_tenv_def, Once type_stmt_def,
+      simp[get_tenv_def, Ntimes type_stmt_def 2,
            Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
+  `lookup_function NONE fn Internal ts = NONE` by
+    (drule_all checked_deploy_MEM_Internal_NONE >> simp[]) >>
   `check_function_body layouts tx.target mods deploy_art src_id_opt Deploy fm nr
      args dflts ret body` by
     (irule check_contract_live_deploy_function_body_MEM >>
