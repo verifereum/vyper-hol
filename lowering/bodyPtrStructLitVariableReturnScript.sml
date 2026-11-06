@@ -2,7 +2,7 @@
    keep executable certificates small; no universal body judgment is assumed. *)
 Theory bodyPtrStructLitVariableReturn
 Ancestors bodyPtrStructLitReturnCertificate bodyPtrStructLitReturnBoundary
-  bodyPtrStructLitRequestFrame
+  bodyPtrStructLitRequestFrame ghostPcTransportPtr
   fragGasSeqPtr finite_map ptrSafeRun ptrDiscipline venomInst typedCopyPtr bodyPtrStructLitGhostNormalize
   venomState venomExecSemantics instIdxIndep codegenRel contextCodegenRel list rich_list allocationPtr exprLoweringProps
 Libs wordsLib intLib
@@ -702,10 +702,10 @@ Proof
 QED
 
 Theorem structlit_variable_taint_checks:
-  !n fn. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
+  !n fn k. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
     taint_ok fn (structlit_variable_taint n)
       (EL n (SND structlit_variable_compiled).cs_current_insts)
-      (structlit_variable_state n)
+      (structlit_variable_state n with vs_inst_idx := k)
 Proof
   rpt gen_tac >> strip_tac >>
   `n <= 14` by (gvs[] >> decide_tac) >>
@@ -720,10 +720,10 @@ Proof
 QED
 
 Theorem structlit_variable_access_checks:
-  !n fn. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
+  !n fn k. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
     access_ok 0 (structlit_variable_prov n) fn
       (EL n (SND structlit_variable_compiled).cs_current_insts)
-      (structlit_variable_state n)
+      (structlit_variable_state n with vs_inst_idx := k)
 Proof
   rpt gen_tac >> simp[] >> strip_tac >> gvs[] >>
   simp[structlit_variable_instructions, structlit_return_instructions] >>
@@ -752,13 +752,28 @@ Proof
   rpt gen_tac >> simp[] >> strip_tac >> gvs[] >> simp[mk_inst_def]
 QED
 
+Theorem structlit_variable_steps_at_cursor:
+  !n k. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
+    step_inst_base
+      (EL n (SND structlit_variable_compiled).cs_current_insts)
+      (structlit_variable_state n with vs_inst_idx := k) =
+    OK (structlit_variable_state (SUC n) with vs_inst_idx := k)
+Proof
+  rpt strip_tac >>
+  drule structlit_variable_ordinary_opcodes >> strip_tac >>
+  `~is_terminator
+    (EL n (SND structlit_variable_compiled).cs_current_insts).inst_opcode` by
+    (gvs[] >> EVAL_TAC) >>
+  simp[step_inst_inst_idx_indep, structlit_variable_steps, exec_result_map_def]
+QED
+
 Theorem structlit_variable_ptr_checks:
-  !n D fuel ctx fn.
+  !n D fuel ctx fn k.
     MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] /\ ~ctx_has_dalloca ctx ==>
     ptr_inst_ok D 0 fuel ctx fn (structlit_variable_prov n)
       (structlit_variable_taint n)
       (EL n (SND structlit_variable_compiled).cs_current_insts)
-      (structlit_variable_state n)
+      (structlit_variable_state n with vs_inst_idx := k)
 Proof
   rpt strip_tac >>
   drule structlit_variable_access_checks >>
@@ -770,5 +785,32 @@ Proof
   drule_all structlit_ordinary_step_requests >> strip_tac >>
   `~((EL n (SND structlit_variable_compiled).cs_current_insts).inst_opcode = INVOKE)` by
     (gvs[] >> simp[]) >>
-  simp[ptr_inst_ok_def, allocas_from_def, step_inst_non_invoke]
+  simp[ptr_inst_ok_def, allocas_from_def, step_inst_non_invoke,
+       structlit_variable_steps_at_cursor]
+QED
+
+Theorem structlit_variable_prefix_ptr:
+  !m n k D ctx fn. n + m = 14 /\ ~ctx_has_dalloca ctx ==>
+    inst_seq_ptr D 0 ctx fn [] (structlit_variable_prov n)
+      (structlit_variable_taint n)
+      (TAKE m (DROP n (SND structlit_variable_compiled).cs_current_insts))
+      (structlit_variable_state n with vs_inst_idx := k)
+      (structlit_variable_prov 14) (structlit_variable_taint 14)
+Proof
+  Induct >- simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> strip_tac >>
+  `n < 14` by decide_tac >>
+  `MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13]` by
+    (simp[] >> decide_tac) >>
+  `n < LENGTH (SND structlit_variable_compiled).cs_current_insts` by
+    simp[structlit_variable_instructions, structlit_return_instructions] >>
+  `DROP n (SND structlit_variable_compiled).cs_current_insts =
+    EL n (SND structlit_variable_compiled).cs_current_insts ::
+    DROP (SUC n) (SND structlit_variable_compiled).cs_current_insts` by
+    simp[DROP_EL_CONS, arithmeticTheory.ADD1] >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  simp[inst_seq_ptr_def, structlit_variable_ptr_checks,
+       structlit_variable_steps_at_cursor] >>
+  simp[GSYM structlit_variable_prov_def, GSYM structlit_variable_taint_def] >>
+  first_x_assum irule >> simp[] >> decide_tac
 QED
