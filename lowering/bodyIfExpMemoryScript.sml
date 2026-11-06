@@ -1,6 +1,8 @@
 Theory bodyIfExpMemory
 Ancestors
   loweringPosts exprSimMemUnwrap bodyIfExpMemoryJoin bodyIfExpArmMemory
+  bodyIfExpSelectedMemory bodyIfExpBytesCopy bodyIfExpDestination bodyIfExpBytesAdapter
+  bodyIfExpArmOutcome bodyIfExpRootSelection bodyIfExpSelectedEndpoint
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
@@ -138,79 +140,6 @@ Proof
      valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def]
 QED
 
-Theorem ifexp_root_eval_forced[local]:
-  eval_expr cx (IfExp t c a b) =
-  vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
-    (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
-         else if v = BoolV F then vyperState$bind (eval_expr cx b) (conditional_result cx)
-         else raise (Error (TypeError "not BoolV")))
-Proof
-  simp[Once evaluate_def, switch_BoolV_def, vyperStateTheory.bind_assoc] >>
-  simp[FUN_EQ_THM, vyperStateTheory.bind_def] >> gen_tac >>
-  Cases_on `eval_expr cx c x` >> rename1 `_ = (raw,st)` >>
-  Cases_on `raw` >> simp[] >>
-  rename1 `read_result cx captured st` >>
-  Cases_on `read_result cx captured st` >> rename1 `_ = (forced,sf)` >>
-  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >>
-  simp[raise_def, vyperStateTheory.bind_def]
-QED
-
-Theorem ifexp_root_condition_admissible[local]:
-  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
-  gas_admissible (vyperState$bind (eval_expr cx c) (read_result cx)) expr_res_ok es
-Proof
-  rw[gas_admissible_def] >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
-  simp[ifexp_root_eval_forced, vyperStateTheory.bind_def] >>
-  fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
-QED
-
-Theorem ifexp_root_branch_admissible[local]:
-  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-  (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
-    (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
-  gas_admissible
-    (vyperState$bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
-    expr_vv_res_ok (mid with gas_obs := [])
-Proof
-  rewrite_tac[gas_admissible_def] >> strip_tac >>
-  rpt gen_tac >> disch_tac >>
-  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
-  simp[ifexp_root_eval_forced, vyperStateTheory.bind_def] >>
-  Cases_on `sel` >> gvs[]
-QED
-
-Theorem ifexp_root_condition_bool[local]:
-  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-  vyperState$bind (eval_expr cx c) (read_result cx)
-    (es with gas_obs := gs) = (INL v,mid) ==>
-  ?sel. v = BoolV sel
-Proof
-  strip_tac >>
-  Cases_on `v = BoolV T` >- metis_tac[] >>
-  Cases_on `v = BoolV F` >- metis_tac[] >>
-  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-  simp[gas_admissible_def, ifexp_root_eval_forced] >>
-  disch_then (qspec_then `gs` mp_tac) >>
-  simp[vyperStateTheory.bind_def, raise_def, expr_vv_res_ok_def]
-QED
-
-Theorem ifexp_root_condition_cert[local]:
-  gas_exempt_cert memory tops (ctx,func)
-    (vyperState$ignore_bind
-      (vyperState$bind (eval_expr cx c) (read_result cx)) (return ()))
-    (es,s0) marks (err,ee) (leaf,finalst) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (vyperState$ignore_bind (eval_expr cx (IfExp t c a b)) (return ()))
-    (es,s0) marks (err,ee) (leaf,finalst)
-Proof
-  strip_tac >> rewrite_tac[ifexp_root_eval_forced] >>
-  pure_once_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
-  irule gas_exempt_cert_error_value >> simp[]
-QED
 
 Theorem ifexp_root_code_layout[local]:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
@@ -258,27 +187,6 @@ Proof
                `s11`,`bv`,`s11a`,`bop`,`s12`,`s13`,`s14`] >> simp[]
 QED
 
-Theorem ifexp_outcome_suffix_mem[local]:
-  gas_outcome T tops (ctx,func) source (es,s0) Q R /\
-  (!res ee u. Q res ee u /\ ~u.vs_halted ==>
-     ?v. gas_path_mem ctx func u 0 (OK v) /\ Q' res ee v) ==>
-  gas_outcome T tops (ctx,func) source (es,s0) Q' R
-Proof
-  simp[gas_outcome_def] >> strip_tac >> qexists_tac `marks` >>
-  Cases_on `gas_summary_at T (ctx,func) marks source (es,s0) Q R`
-  >- (disj1_tac >>
-      fs[gas_summary_at_def] >>
-      Cases_on `?u. r = OK u /\ Q res (es_end with gas_obs := []) u`
-      >- (gvs[] >>
-          `~t.vs_halted` by
-            (fs[gas_marked_exec_def, gas_marked_path_def] >>
-             drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
-          first_x_assum drule_all >> strip_tac >>
-          qexistsl_tac [`res`,`es_end`,`OK v`] >> simp[] >>
-          gvs[gas_marked_exec_def, gas_marked_path_def] >>
-          metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
-      metis_tac[]) >> metis_tac[]
-QED
 
 Theorem ifexp_suffix_path_mem[local]:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
@@ -352,25 +260,6 @@ Proof
   Cases_on `sel` >> fs[GSYM vyperStateTheory.ignore_bind_def]
 QED
 
-Theorem ifexp_condition_exit_mem[local]:
-  gas_marked_exec T (ctx,func)
-    (vyperState$bind (eval_expr cx c) (read_result cx))
-    (es,s0) marks res mid r /\ expr_exit res r ==>
-  gas_outcome T tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\res ee r. expr_exit res r)
-Proof
-  Cases_on `res` >> simp[] >> strip_tac >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR y`,`mid`,`r`] >> simp[] >>
-  conj_tac
-  >- (rewrite_tac[ifexp_root_eval_forced] >>
-      irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >>
-  Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
-  Cases_on `y` >> fs[expr_exit_def] >>
-  rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
-QED
 
 Theorem ifexp_vv_post_of_expr_post_read[local]:
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
@@ -505,105 +394,6 @@ Proof
        comp_bind_def] >> metis_tac[]
 QED
 
-Theorem ifexp_conditional_read_cases[local]:
-  !cx raw st res st'.
-    (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
-    read_result cx raw st = (res,st') \/
-    ?m. conditional_result cx raw st = (INR (Error (TypeError m)),st') /\
-        res = INR (Error (TypeError m))
-Proof
-  rpt gen_tac >> Cases_on `raw` >>
-  simp[conditional_result_def, read_result_def, bind_def, return_def, raise_def] >>
-  rename1 `place_type_value cx p st` >>
-  Cases_on `place_type_value cx p st` >> rename1 `place_type_value cx p st = (pr,pst)` >>
-  drule place_type_value_state >> strip_tac >> gvs[] >>
-  Cases_on `pr` >> simp[]
-  >- (IF_CASES_TAC >> simp[read_result_def, bind_def, return_def] >>
-      Cases_on `read_place cx p pst` >> rename1 `read_place cx p pst = (rr,ss)` >>
-      Cases_on `rr` >> simp[read_result_def, return_def]) >>
-  Cases_on `p` >>
-  gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-      get_address_immutables_def, bind_def, return_def, lift_option_type_def,
-      raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
-QED
-
-Theorem ifexp_arm_conditional_read[local]:
-  read_result cx raw ee = (INL v,ee) /\
-  conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
-  ?tv. res = INL tv /\ ss = ee /\
-       read_result cx tv ee = (INL v,ee)
-Proof
-  rpt strip_tac >>
-  Cases_on `(do r <- conditional_result cx raw; read_result cx r od) ee` >>
-  drule ifexp_conditional_read_cases >> strip_tac >>
-  imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
-  gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
-QED
-
-Theorem ifexp_arm_conditional_gas_obs[local]:
-  conditional_result cx raw ee = (INL tv,ee) ==>
-  !tail. conditional_result cx raw (ee with gas_obs := tail) =
-    (INL tv,ee with gas_obs := tail)
-Proof
-  Cases_on `raw`
-  >- simp[conditional_result_def, return_def]
-  >- (simp[conditional_result_def, bind_def] >>
-      Cases_on `place_type_value cx p ee` >>
-      rename1 `place_type_value cx p ee = (pr,pst)` >>
-      drule place_type_value_state >> strip_tac >> gvs[] >>
-      `!tail. place_type_value cx p (ee with gas_obs := tail) =
-         (pr,ee with gas_obs := tail)` by
-        (Cases_on `p` >>
-         gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-             get_address_immutables_def, bind_def, return_def,
-             lift_option_type_def, raise_def, AllCaseEqs()] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
-      simp[] >> Cases_on `pr` >> simp[] >>
-      IF_CASES_TAC >> simp[return_def] >>
-      Cases_on `read_place cx p ee` >>
-      rename1 `read_place cx p ee = (rr,ss)` >>
-      Cases_on `rr` >> simp[return_def] >> rpt strip_tac >>
-      gvs[bind_def, return_def] >>
-      rename1 `read_place cx p ee = (INL v,ee)` >>
-      `read_result cx (PlaceR p) ee = (INL v,ee)` by
-        simp[read_result_def] >>
-      drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[read_result_def]) >>
-  simp[conditional_result_def, raise_def]
-QED
-
-Theorem ifexp_marked_conditional_of_read_mem[local]:
-  gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
-  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
-  gas_marked_exec T (ctx,func) (read_result cx raw)
-    (ee with gas_obs := [],s) [] (INL v) (ee with gas_obs := []) (OK u) ==>
-  ?tv. gas_marked_exec T (ctx,func) (conditional_result cx raw)
-    (ee with gas_obs := [],s) [] (INL tv) (ee with gas_obs := []) (OK u) /\
-    read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := [])
-Proof
-  strip_tac >>
-  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-    (INL raw,ee with gas_obs := [])` by
-    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >> strip_tac >>
-     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  `read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := [])` by
-    (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >> strip_tac >>
-     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  Cases_on `conditional_result cx raw (ee with gas_obs := [])` >>
-  rename1 `_ = (cr,cs)` >>
-  `expr_vv_res_ok cr` by
-    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-     simp[gas_admissible_def] >>
-     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
-     simp[bind_def]) >>
-  drule_all ifexp_arm_conditional_read >> strip_tac >> gvs[] >>
-  qexists_tac `tv` >> simp[] >>
-  qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
-  simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
-  drule ifexp_arm_conditional_gas_obs >> simp[]
-QED
 
 Theorem ifexp_root_forced_branch_admissible[local]:
   gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
@@ -629,17 +419,6 @@ Proof
       gvs[bind_def, expr_res_ok_def])
 QED
 
-Theorem ifexp_root_condition_scopes[local]:
-  vyperState$bind (eval_expr cx c) (read_result cx)
-    (es with gas_obs := gs) = (INL v,mid) ==>
-  MAP FDOM es.scopes = MAP FDOM mid.scopes
-Proof
-  simp[vyperStateTheory.bind_def] >>
-  Cases_on `eval_expr cx c (es with gas_obs := gs)` >>
-  rename1 `_ = (raw,st)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-  drule read_result_state >> strip_tac >> gvs[] >>
-  drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]
-QED
 
 Theorem ifexp_forced_arm_source[local]:
   gas_admissible
@@ -882,6 +661,10 @@ Resume compile_ifexp_word_vv_sim_mem[selected]:
      drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
   `gas_path_mem ctx func t 0 (OK (jump_to se.cs_current_bb t))` by
     (asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >> simp[] >> metis_tac[]) >>
+  suspend "selected_entry"
+QED
+
+Resume compile_ifexp_word_vv_sim_mem[selected_entry]:
   irule ifexp_selected_outcome_prefix_mem >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >>
@@ -992,8 +775,8 @@ QED
 
 Finalise compile_ifexp_word_vv_sim_mem
 
-(* The non-word case: the arms are converted to the lowered type
-   (compile_ifexp_arm) and the result is a memory pointer.  Open. *)
+(* The non-word case: selected arms are converted by compile_ifexp_arm
+   and the result is routed to the join as a bounded memory pointer. *)
 Theorem compile_ifexp_nonword_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     ~is_word_type t /\
@@ -1006,6 +789,11 @@ Theorem compile_ifexp_nonword_vv_sim_mem:
          is_bytestring_type (lowered_value_type cenv e) /\
          arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!e tvt. ~is_word_type t /\ (e = a \/ e = b) /\
+       same_memory_layout cenv (lowered_value_type cenv e) t /\
+       evaluate_type (get_tenv cx) t = SOME tvt ==>
+       ?lvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME lvt /\
+         type_memory_size tvt <= type_memory_size lvt) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2 ** 64) /\
@@ -1030,8 +818,157 @@ Theorem compile_ifexp_nonword_vv_sim_mem:
          ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v) ==>
     expr_vv_sim_mem ctx func cenv cx ty (IfExp t c a b) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
+    (irule ifexp_root_condition_admissible >> goal_assum (drule_at Any)) >>
+  drule_all ifexp_root_code_layout >>
+  disch_then (qspec_then `T` strip_assume_tac) >>
+  qpat_x_assum `emit_inst JNZ _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst ASSIGN _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_inst JMP _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_expr cenv ty (if T then a else b) _ = _` kall_tac >>
+  qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` kall_tac >>
+  gvs[] >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ c _` mp_tac >>
+  simp[expr_sim_mem_def] >> disch_then drule_all >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ root_post root_exit` >>
+  simp[Abbr `root_exit`] >>
+  irule ifexp_root_condition_dispatch_mem >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> suspend "selected"
 QED
+
+Resume compile_ifexp_nonword_vv_sim_mem[selected]:
+  gvs[] >>
+  qpat_x_assum `sj.cs_current_bb = _` kall_tac >>
+  qpat_x_assum `sj.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `se.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `fn_has_code sj sn func` kall_tac >>
+  qpat_x_assum `fn_has_code se sx func` kall_tac >>
+  qpat_x_assum `fn_has_code sx sy func` kall_tac >>
+  qpat_x_assum `fn_has_code sy sz func` kall_tac >>
+  qpat_x_assum `local_ptrs_reserved cenv se` kall_tac >>
+  qpat_x_assum `cs_extends se sx` kall_tac >>
+  qpat_x_assum `sc.cs_next_var <= se.cs_next_var` kall_tac >>
+  qpat_x_assum `sc.cs_next_id <= se.cs_next_id` kall_tac >>
+  qpat_x_assum `sx.cs_next_id <= sb.cs_next_id` kall_tac >>
+  drule_all ifexp_root_code_layout >>
+  disch_then (qspec_then `sel` strip_assume_tac) >> gvs[] >>
+  `~u.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+  `gas_path_mem ctx func u 0 (OK (jump_to se.cs_current_bb u))` by
+    (asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >> simp[] >> metis_tac[]) >>
+  irule ifexp_selected_outcome_prefix_mem >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >>
+  `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
+    (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+  drule ifexp_selected_entry_facts_mem >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`ty`,`se`,`marks`,`se.cs_current_bb`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  suspend "raw_arm"
+QED
+
+Resume compile_ifexp_nonword_vv_sim_mem[raw_arm]:
+  drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
+  `cs_extends sea sx` by
+    (`ci_mono sea (SND (compile_ifexp_arm cenv (expr_type a)
+       (lowered_value_type cenv (if sel then a else b)) av sea))` by
+       irule ci_mono_compile_ifexp_arm >> gvs[ci_mono_def]) >>
+  `fn_has_code se sea func /\ fn_has_code sea sx func` by
+    metis_tac[fn_has_code_split] >>
+  `!x. vv_operand av = Var x ==> not_fresh_at sea x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  `gas_admissible (eval_expr cx (if sel then a else b)) expr_vv_res_ok
+      (mid with gas_obs := [])` by
+    (qpat_x_assum `gas_admissible (bind _ (conditional_result _)) _ _` mp_tac >>
+     simp[gas_admissible_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `gs` mp_tac) >>
+     simp[bind_def] >> Cases_on `res`
+     >- (rename1 `eval_expr _ _ _ = (INL raw,ee)` >>
+         Cases_on `raw` >> simp[expr_vv_res_ok_def] >>
+         simp[conditional_result_def, raise_def, expr_vv_res_ok_def]) >> simp[]) >>
+  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ (if _ then _ else _) _` mp_tac >>
+  simp[expr_vv_sim_mem_def] >> disch_then drule >>
+  disch_then (qspec_then `jump_to se.cs_current_bb u` mp_tac) >>
+  impl_tac
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) _` mp_tac >>
+      simp[jump_to_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  strip_tac >> gvs[] >>
+  drule ifexp_raw_conditional_outcome_mem >> disch_then irule >> simp[] >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >> suspend "converted_endpoint"
+QED
+
+Resume compile_ifexp_nonword_vv_sim_mem[converted_endpoint]:
+  `~s.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+  `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>
+  `MAP FDOM mid.scopes = MAP FDOM ee.scopes` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
+     drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `!gs v st. bind (eval_expr cx (if sel then a else b)) (read_result cx)
+      (mid with gas_obs := gs) = (INL v,st) ==>
+      ?tv. evaluate_type (get_tenv cx) (expr_type a) = SOME tv /\ value_has_type tv v` by
+    (`bind (eval_expr cx c) (read_result cx)
+       (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+       (INL (BoolV sel),mid with gas_obs := [])` by
+       (fs[gas_marked_exec_def] >> metis_tac[listTheory.APPEND_NIL]) >>
+     qpat_x_assum `!gs tv es1. _ ==> _ /\ _ /\ _ /\ _ /\ _`
+       (qspecl_then [`gas_explicit marks s0.vs_gas_readings`,`BoolV sel`,
+         `mid with gas_obs := []`] mp_tac) >>
+     simp[SF ETA_ss] >> strip_tac >> rpt strip_tac >>
+     first_x_assum irule >> Cases_on `sel` >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`) ifexp_selected_marked_endpoint_mem >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspec_then `marks'` mp_tac) >>
+  impl_tac >- (simp[] >> conj_tac
+    >- (Cases_on `sel` >> gvs[] >> strip_tac >>
+        rename1 `~same_memory_layout cenv (lowered_value_type cenv arm) _` >>
+        qpat_x_assum `!e. e = a \/ e = b ==> _` (qspec_then `arm` mp_tac) >>
+        metis_tac[ifexp_copy_types]) >>
+    conj_tac >- metis_tac[] >> Cases_on `sel` >> gvs[] >> metis_tac[]) >>
+  strip_tac >> suspend "route_result"
+QED
+
+Resume compile_ifexp_nonword_vv_sim_mem[route_result]:
+  `~u'.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ (conditional_result _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+  `?w. eval_operand aop u' = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
+  qexistsl_tac [`tv`, `jump_to sb.cs_current_bb
+    (update_var rv' w u' with vs_inst_idx := LENGTH sy.cs_current_insts)`] >>
+  conj_tac
+  >- (irule ifexp_marked_zero_suffix_mem >> goal_assum (drule_at Any) >>
+      irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
+  simp[Abbr `root_post`, vyperASTTheory.expr_type_def, lowered_value_type_def] >>
+  conj_tac
+  >- (`sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
+        (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+      qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
+        (mp_then Any mp_tac ifexp_finish_post) >>
+      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+      simp[] >> disch_then irule >> gvs[]) >>
+  conj_tac >- (irule ifexp_pointer_bound_assign >> metis_tac[]) >>
+  `alloca_inv u'` by fs[expr_post_def, stmt_state_rel_def] >>
+  `alloca_history func (update_var rv' w u' with
+      vs_inst_idx := LENGTH sy.cs_current_insts)` by
+    (irule assign_history >> metis_tac[]) >>
+  drule ifexp_history_jump >> disch_then (qspec_then `sb.cs_current_bb` assume_tac) >>
+  gvs[jump_to_def, update_var_def] >> decide_tac
+QED
+
+Finalise compile_ifexp_nonword_vv_sim_mem
 
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
@@ -1044,6 +981,11 @@ Theorem compile_ifexp_vv_sim_mem:
          is_bytestring_type (lowered_value_type cenv e) /\
          arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!e tvt. ~is_word_type t /\ (e = a \/ e = b) /\
+       same_memory_layout cenv (lowered_value_type cenv e) t /\
+       evaluate_type (get_tenv cx) t = SOME tvt ==>
+       ?lvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME lvt /\
+         type_memory_size tvt <= type_memory_size lvt) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2 ** 64) /\
@@ -1177,6 +1119,10 @@ Resume compile_ifexp_word_sim_mem[selected_arm]:
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >>
   qexistsl_tac [`marks`,`es_end`,`sel`] >> simp[] >>
+  suspend "forced_entry"
+QED
+
+Resume compile_ifexp_word_sim_mem[forced_entry]:
   `lower_value compile_expr cenv ty (if sel then a else b) se = (aop,sx)` by
     (irule ifexp_arm_lower_value >> simp[] >> metis_tac[]) >>
   `gas_admissible

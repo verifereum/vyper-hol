@@ -8,7 +8,7 @@ Theory bodyMemIfExp
 Ancestors
   bodyMemIfExpWidened bodyIfExpMemory exprSimMemUnwrap
   bodyMemoryPreds exprSimOperators exprSimIfExp exprSimSource exprSimHyps
-  exprSimHypsDefs
+  exprSimHypsDefs bodyIfExpArmLayout
 
 Theorem body_ifexp_mem_ok:
   !cx v5 e1 e2 e3.
@@ -47,6 +47,10 @@ Proof
      expr_vv_sim_mem ctx func cenv cx ty e3 es1` by
     (rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
      metis_tac[body_expr_mem_ok_def]) >>
+  suspend "arm_compiler_facts"
+QED
+
+Resume body_ifexp_mem_ok[arm_compiler_facts]:
   `!sa sb op. lower_value compile_expr cenv (BaseT BoolT) e1 sa = (op, sb) ==>
      cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
      sa.cs_next_id <= sb.cs_next_id` by
@@ -73,13 +77,17 @@ Proof
        same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
     (rpt strip_tac >> irule ifexp_body_pre_lowered_type_compatible >>
      metis_tac[]) >>
+  suspend "arm_source_typing"
+QED
+
+Resume body_ifexp_mem_ok[arm_source_typing]:
   `!gs tv es1.
      (do result <- eval_expr cx e1; read_result cx result od)
        (es with gas_obs := gs) = (INL tv, es1) ==>
      expr_sim_mem ctx func cenv cx ty e2 es1 /\
      expr_sim_mem ctx func cenv cx ty e3 es1 /\
      expr_vv_sim_mem ctx func cenv cx ty e2 es1 /\
-     expr_vv_sim_mem ctx func cenv cx ty e3 es1 /\
+     expr_vv_sim_mem ctx func cenv cx ty e3 es1 /\ 
      !e gs' v es2. ~is_word_type v5 /\ (e = e2 \/ e = e3) /\
        (do r <- eval_expr cx e; read_result cx r od)
          (es1 with gas_obs := gs') = (INL v, es2) ==>
@@ -95,6 +103,15 @@ Proof
      `expr_body_pre cenv cx env e (es1 with gas_obs := gs')` by gvs[] >>
      `v5 = expr_type e` by gvs[] >> pop_assum SUBST1_TAC >>
      irule ifexp_body_pre_read_typed >> metis_tac[]) >>
+  `!e tvt. ~is_word_type v5 /\ (e = e2 \/ e = e3) /\
+     same_memory_layout cenv (lowered_value_type cenv e) v5 /\
+     evaluate_type (get_tenv cx) v5 = SOME tvt ==>
+     ?lvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME lvt /\
+       type_memory_size tvt <= type_memory_size lvt` by
+    (rpt gen_tac >> strip_tac >>
+     `expr_body_pre cenv cx env e2 es /\ expr_body_pre cenv cx env e3 es` by
+       metis_tac[] >>
+     metis_tac[ifexp_body_arm_runtime_sizes]) >>
   `expr_vv_sim_mem ctx func cenv cx ty (IfExp v5 e1 e2 e3) es` by
     (`is_word_type v5 ==> ?tvt. evaluate_type (get_tenv cx) v5 = SOME tvt` by
        (qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
@@ -106,3 +123,5 @@ Proof
   irule expr_sim_mem_of_vv_sim_mem >> simp[vyperASTTheory.expr_type_def] >>
   rpt strip_tac >> drule compile_expr_ifexp >> strip_tac >> gvs[]
 QED
+
+Finalise body_ifexp_mem_ok

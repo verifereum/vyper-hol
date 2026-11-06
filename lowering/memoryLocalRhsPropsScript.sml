@@ -267,7 +267,7 @@ Proof
     (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >> gvs[] >> decide_tac
 QED
 
-Theorem frame_signature_return_well_formed[local]:
+Theorem frame_signature_return_well_formed:
   !cenv cx env es id sig.
     expr_sim_inv cenv cx env es /\ FLOOKUP env.fn_sigs id = SOME sig ==>
     well_formed_type env.type_defs sig.ret_ty

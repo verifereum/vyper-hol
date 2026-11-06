@@ -3,6 +3,7 @@
 Theory exprSimMemUnwrap
 Ancestors
   exprSimMemDefs exprSimUnwrap exprSimDefs loweringPosts gasOutcome
+  bodyUnwrapCapacity
   exprLowering compileEnv vyperInterpreter vyperState
   exprSimUnwrapProps exprSimProps exprSimMemorySource bodyFieldMemoryProps
   gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
@@ -402,7 +403,7 @@ Proof
 QED
 
 (* The buffer's ALLOCA, memory-checked. *)
-Theorem alloc_buffer_source_path_mem:
+Theorem alloc_buffer_source_path_mem_endpoint:
   !ctx func cenv cx es sm mid buf sz s src a.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -432,7 +433,9 @@ Theorem alloc_buffer_source_path_mem:
       s.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
       contract_storage u = contract_storage s /\
       contract_transient u = contract_transient s /\
-      u.vs_labels = s.vs_labels
+      u.vs_labels = s.vs_labels /\
+      (?q. run_inst_seq (emitted_insts sm mid) s = OK q /\
+           u = q with vs_inst_idx := LENGTH mid.cs_current_insts)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -473,6 +476,43 @@ Proof
   gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
       local_region_def, venomStateTheory.contract_storage_def,
       venomStateTheory.contract_transient_def] >> metis_tac[]
+QED
+
+Theorem alloc_buffer_source_path_mem:
+  !ctx func cenv cx es sm mid buf sz s src a.
+    compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
+    eval_operand src s = SOME a /\
+    (!x. src = Var x ==> not_fresh_at sm x) /\ alloca_history func s /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u w. gas_path_mem ctx func s 0 (OK u) /\
+      ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
+      u.vs_inst_idx = LENGTH mid.cs_current_insts /\
+      eval_operand src u = SOME a /\
+      stmt_state_rel ctx func cenv cx es u /\
+      eval_operand buf.buf_operand u = SOME w /\
+      FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\ w2n w + sz <= u.vs_alloca_next /\
+      u.vs_memory = s.vs_memory /\ sm.cs_next_id < mid.cs_next_id /\
+      (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+         FLOOKUP u.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sm.cs_next_id /\
+         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (!name b len. local_region cenv es.scopes u name b len ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p) /\
+      s.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
+      contract_storage u = contract_storage s /\
+      contract_transient u = contract_transient s /\
+      u.vs_labels = s.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >>
+  qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
 QED
 
 (* ----- storage and transient ----- *)
@@ -799,6 +839,38 @@ Proof
 QED
 
 (* The shared ending: compose the two paths and bound the buffer. *)
+Theorem copy_finish_capacity[local]:
+  !ctx func s u z cenv cx e es sa sb s0 es' v op w tv t.
+  gas_path_mem ctx func s 0 (OK u) /\ gas_path_mem ctx func u 0 (OK z) /\
+  expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
+  eval_operand op z = SOME w /\
+  w2n w + type_memory_size tv <= z.vs_alloca_next /\
+  evaluate_type (get_tenv cx) t = SOME tv /\ t = expr_type e /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\
+  s.vs_alloca_next <= u.vs_alloca_next /\
+  z.vs_alloca_next = u.vs_alloca_next /\
+  alloca_history func z /\ z.vs_current_bb = sb.cs_current_bb /\
+  z.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  ?u. gas_path_mem ctx func s 0 (OK u) /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_store_bound cx t v op u /\
+      (~is_word_type t ==> vv_store_bound cx t t es' (Value v)
+        (LocatedValue t (mk_ptr op LocMemory)) u) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  rpt gen_tac >> strip_tac >> qexists_tac `z` >> simp[] >> rpt conj_tac
+  >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
+      irule gas_path_mem_then >> qexists_tac `u` >> simp[])
+  >- (qpat_x_assum `t = _` SUBST_ALL_TAC >>
+      drule expr_store_bound_capacity >> impl_tac
+      >- (rpt strip_tac >> gvs[]) >>
+      simp[])
+  >- (strip_tac >> gvs[] >> irule unwrap_expr_post_capacity >> fs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+  decide_tac
+QED
+
 Theorem copy_finish[local]:
   !ctx func s u z cenv cx e es sa sb s0 es' v op w tv t.
   gas_path_mem ctx func s 0 (OK u) /\ gas_path_mem ctx func u 0 (OK z) /\
@@ -818,17 +890,10 @@ Theorem copy_finish[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
 Proof
-  rpt gen_tac >> strip_tac >> qexists_tac `z` >> simp[] >> rpt conj_tac
-  >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
-      irule gas_path_mem_then >> qexists_tac `u` >> simp[])
-  >- (qpat_x_assum `t = _` SUBST_ALL_TAC >>
-      drule expr_store_bound_capacity >> impl_tac
-      >- (rpt strip_tac >> gvs[]) >>
-      simp[]) >>
-  decide_tac
+  metis_tac[copy_finish_capacity]
 QED
 
-Theorem unwrap_storage_copy_path_mem[local]:
+Theorem unwrap_storage_copy_capacity_path_mem[local]:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
@@ -848,6 +913,8 @@ Theorem unwrap_storage_copy_path_mem[local]:
     ?u. gas_path_mem ctx func s 0 (OK u) /\
         expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx t v op u /\
+        (~is_word_type t ==> vv_store_bound cx t t es' (Value v)
+          (LocatedValue t (mk_ptr op LocMemory)) u) /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
@@ -875,7 +942,7 @@ Proof
     `mid`, `()`, `sb`, `ctx`, `func`, `cenv`, `cx`, `es'`, `u`, `t`, `v`,
     `a`, `w`] mp_tac storage_unwrap_typed_suffix_path_mem >>
   impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+  >- (asm_rewrite_tac [] >> gvs[]) >>
   strip_tac >>
   `expr_post ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z` by
     (irule buffer_post_transport >>
@@ -886,8 +953,35 @@ Proof
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
   qspecl_then [`ctx`, `func`, `s`, `u`, `z`, `cenv`, `cx`, `e`, `es`, `sa`,
-    `sb`, `s0`, `es'`, `v`, `op`, `w`, `tv`, `t`] mp_tac copy_finish >>
+    `sb`, `s0`, `es'`, `v`, `op`, `w`, `tv`, `t`] mp_tac copy_finish_capacity >>
   impl_tac >- gvs[] >> simp[]
+QED
+
+Theorem unwrap_storage_copy_path_mem[local]:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+    ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+           type_memory_bytes cenv t = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path_mem ctx func s 0 (OK u) /\
+        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_store_bound cx t v op u /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  metis_tac[unwrap_storage_copy_capacity_path_mem]
 QED
 
 (* ----- code ----- *)
@@ -1156,7 +1250,7 @@ Proof
   simp[valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint]
 QED
 
-Theorem unwrap_code_copy_path_mem[local]:
+Theorem unwrap_code_copy_capacity_path_mem[local]:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~is_word_type t /\
@@ -1174,6 +1268,8 @@ Theorem unwrap_code_copy_path_mem[local]:
     ?u. gas_path_mem ctx func s 0 (OK u) /\
         expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx t v op u /\
+        (~is_word_type t ==> vv_store_bound cx t t es' (Value v)
+          (LocatedValue t (mk_ptr op LocMemory)) u) /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
@@ -1210,6 +1306,10 @@ Proof
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
   drule_all alloc_buffer_source_path_mem >> strip_tac >>
+  suspend "allocated"
+QED
+
+Resume unwrap_code_copy_capacity_path_mem[allocated]:
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
     (rw[copy_old_operand_def] >> gvs[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
@@ -1238,7 +1338,13 @@ Proof
        val_in_memory tv v (w2n w) z.vs_memory /\
        val_footprint tv v <= type_memory_size tv` by
     (Cases_on `cenv.ce_is_ctor` >> fs[]
-     >- (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
+     >- suspend "constructor_contents" >>
+     suspend "runtime_contents") >>
+  suspend "finish"
+QED
+
+Resume unwrap_code_copy_capacity_path_mem[constructor_contents]:
+  `immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
          `!region. cenv.ce_imm_alloca = SOME region ==>
              eval_operand region u = SOME 0w /\ copy_old_operand mid region` by
            (rpt strip_tac >>
@@ -1264,6 +1370,10 @@ Proof
            mp_tac ctor_code_copy_path_mem >>
          impl_tac >- simp[] >> strip_tac >>
          qexists_tac `t'` >> simp[] >>
+         suspend "constructor_post"
+QED
+
+Resume unwrap_code_copy_capacity_path_mem[constructor_post]:
          `immutable_holds cenv cx t (Value v) a es' u` by
            (qpat_x_assum `immutable_holds _ _ _ _ _ _ s` mp_tac >>
             simp[immutable_holds_def]) >>
@@ -1279,8 +1389,11 @@ Proof
          mp_tac (copy_ctor_contents
                  |> Q.INST [`uu` |-> `u`, `zz` |-> `t'`, `es` |-> `es'`]) >>
          impl_tac
-         >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
-         strip_tac >> gvs[] >> first_assum ACCEPT_TAC) >>
+         >- (asm_rewrite_tac [] >> fs[]) >>
+         strip_tac >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Resume unwrap_code_copy_capacity_path_mem[runtime_contents]:
      `w2n a + type_memory_size tv <= LENGTH u.vs_data_section` by
        (irule runtime_immutable_data_section >> metis_tac[]) >>
      `w2n a + 0 + 32 * type_slot_size tv <= LENGTH u.vs_data_section` by
@@ -1296,8 +1409,11 @@ Proof
              |> Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `es'`, `u`, `t`, `v`,
                          `a`, `tv`, `w`, `t'`, `s`]) >>
      impl_tac
-     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
-     strip_tac >> gvs[] >> first_assum ACCEPT_TAC) >>
+     >- (asm_rewrite_tac [] >> fs[]) >>
+     strip_tac >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Resume unwrap_code_copy_capacity_path_mem[finish]:
   `eval_operand buf.buf_operand z = SOME w` by
     (qsuff_tac `eval_operand buf.buf_operand z = eval_operand buf.buf_operand u`
      >- gvs[] >>
@@ -1313,12 +1429,74 @@ Proof
     (drule copy_static_fields >> simp[]) >>
   qspecl_then [`ctx`, `func`, `s`, `u`, `z`, `cenv`, `cx`, `e`, `es`, `sa`,
     `sc`, `s0`, `es'`, `v`, `buf.buf_operand`, `w`, `tv`, `t`] mp_tac
-    copy_finish >>
+    copy_finish_capacity >>
   impl_tac >- gvs[] >> simp[]
+QED
+
+Finalise unwrap_code_copy_capacity_path_mem
+
+Theorem unwrap_code_copy_path_mem[local]:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocCode /\ ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+           type_memory_bytes cenv t = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path_mem ctx func s 0 (OK u) /\
+        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_store_bound cx t v op u /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  metis_tac[unwrap_code_copy_capacity_path_mem]
 QED
 
 (* The copies into a fresh buffer: storage/transient and both kinds of
    code. *)
+Theorem unwrap_copy_capacity_path_mem:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+     p.ptr_location = LocCode) /\ ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+           type_memory_bytes cenv t = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path_mem ctx func s 0 (OK u) /\
+        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_store_bound cx t v op u /\
+        (~is_word_type t ==> vv_store_bound cx t t es' (Value v)
+          (LocatedValue t (mk_ptr op LocMemory)) u) /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  rpt gen_tac >> strip_tac
+  >- (irule unwrap_storage_copy_capacity_path_mem >> asm_rewrite_tac [] >>
+       qexistsl_tac [`p`, `sm`] >> fs[])
+  >- (irule unwrap_storage_copy_capacity_path_mem >> asm_rewrite_tac [] >>
+       qexistsl_tac [`p`, `sm`] >> fs[]) >>
+  irule unwrap_code_copy_capacity_path_mem >> simp[] >> metis_tac[]
+QED
+
 Theorem unwrap_copy_path_mem:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -1343,12 +1521,7 @@ Theorem unwrap_copy_path_mem:
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
 Proof
-  rpt gen_tac >> strip_tac
-  >- (irule unwrap_storage_copy_path_mem >> rpt conj_tac >>
-       TRY (first_assum ACCEPT_TAC) >> qexistsl_tac [`p`, `sm`] >> fs[])
-  >- (irule unwrap_storage_copy_path_mem >> rpt conj_tac >>
-       TRY (first_assum ACCEPT_TAC) >> qexistsl_tac [`p`, `sm`] >> fs[]) >>
-  irule unwrap_code_copy_path_mem >> simp[] >> metis_tac[]
+  metis_tac[unwrap_copy_capacity_path_mem]
 QED
 
 (* unwrap_value_path's memory-checked form: every value_vv's code, one
