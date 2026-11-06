@@ -64,3 +64,58 @@ Proof
        exprLoweringTheory.type_to_abi_enc_info_def] >>
   Cases_on `needs_external_call_wrap (BaseT (BytesT (Dynamic 1)))` >> simp[]
 QED
+
+Theorem order_unit_guard_free:
+  lower_vyper_runtime_unit order_unit_tops order_frame_policy =
+    run_lowering
+      (build_selectors (type_env order_unit_tops)
+        (FST (classify_functions order_unit_tops)))
+      (MAP (set_external_package_target order_frame_policy.rpol_target o
+            package_external_fn order_unit_tops F (assign_nkeys order_unit_tops 0))
+        (FST (classify_functions order_unit_tops)))
+      []
+      (set_fallback_package_target order_frame_policy.rpol_target
+        (package_fallback_fn order_unit_tops F (assign_nkeys order_unit_tops 0) NONE))
+      order_frame_policy 0 0 []
+      (build_dense_entry_info
+        (build_selectors (type_env order_unit_tops)
+          (FST (classify_functions order_unit_tops)))
+        (MAP (set_external_package_target order_frame_policy.rpol_target o
+              package_external_fn order_unit_tops F (assign_nkeys order_unit_tops 0))
+          (FST (classify_functions order_unit_tops)))) "__entry"
+Proof
+  simp[lower_vyper_runtime_unit_def, order_unit_classification,
+       order_unit_immutable_guard, order_unit_allocation_guard,
+       order_unit_return_guard, package_fallback_fn_def]
+QED
+
+Theorem order_unit_selectors_boundary:
+  build_selectors (type_env order_unit_tops)
+    (FST (classify_functions order_unit_tops)) =
+  [compute_selector (type_env order_unit_tops) "probe"
+    [ArrayT (BaseT AddressT) (Dynamic 2)]]
+Proof
+  simp[order_unit_classification, build_selectors_def]
+QED
+
+Theorem order_unit_policy_guard:
+  lowering_policy_ok order_frame_policy
+Proof
+  EVAL_TAC
+QED
+
+Theorem order_unit_selector_abi:
+  vyper_to_abi_types (type_env order_unit_tops)
+    [ArrayT (BaseT AddressT) (Dynamic 2)] = [Array NONE Address]
+Proof
+  simp[vyperABITheory.vyper_to_abi_type_def,
+       vyperABITheory.vyper_base_to_abi_type_def]
+QED
+
+Theorem order_unit_fallback_boundary:
+  set_fallback_package_target order_frame_policy.rpol_target
+    (package_fallback_fn order_unit_tops F (assign_nkeys order_unit_tops 0) NONE) = NONE
+Proof
+  simp[package_fallback_fn_def, set_fallback_package_target_def]
+QED
+
