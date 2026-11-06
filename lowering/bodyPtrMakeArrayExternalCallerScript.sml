@@ -1,7 +1,7 @@
 Theory bodyPtrMakeArrayExternalCaller
 Ancestors
   bodyPtrMakeArrayExternalSize exprReasonOperand exprLoweringProps exprLowering
-  context compileEnv vyperAST list bodyPtrMakeArrayConsumerPost
+  context compileEnv vyperAST list bodyPtrMakeArrayConsumerPost exprCallBounds
   vyperTypeStatePreservation valueEncodingTyping exprSimProps
 
 Theorem external_located_lowered_type:
@@ -15,7 +15,18 @@ Proof
       drule reason_compile_literal >> simp[reason_result_shape_def])
   >~ [`Call ann target args default_ret`]
   >- (simp[Once compile_expr_def] >> strip_tac >>
-      drule reason_compile_call >> simp[reason_result_shape_def]) >>
+      drule reason_compile_call >> simp[reason_result_shape_def])
+  >~ [`Builtin ann bi args`]
+  >- (Cases_on `bi` >> simp[lowered_value_type_def, expr_type_def] >>
+      pure_rewrite_tac[Once compile_expr_raw_def] >> strip_tac >>
+      drule reason_compile_expr_builtin_shape_classify >>
+      strip_tac >> gvs[reason_result_shape_def] >>
+      gvs[builtin_child_callback_def, invalid_expr_call_def, expr_type_def,
+        AllCaseEqs()] >>
+      qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
+      pure_rewrite_tac[Once compile_expr_raw_def] >> strip_tac >>
+      drule_at (Pos last) reason_builtin_fresh >>
+      simp[reason_result_shape_def]) >>
   rename1 `TypeBuiltin ann tb rt args` >>
   Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def] >>
   simp[Once compile_expr_def] >>
