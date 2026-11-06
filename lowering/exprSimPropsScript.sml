@@ -366,6 +366,12 @@ Proof
   rw[locals_kept_def, popped_kept_def] >> metis_tac[]
 QED
 
+Theorem popped_kept_refl[simp]:
+  !cenv es es' s. es'.scopes = es.scopes ==> popped_kept cenv es es' s s
+Proof
+  rw[popped_kept_def] >> gvs[] >> metis_tac[]
+QED
+
 Theorem locals_kept_refl[simp]:
   !cenv es es' s. es'.scopes = es.scopes ==> locals_kept cenv es es' s s
 Proof
