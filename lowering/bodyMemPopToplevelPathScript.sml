@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps memSafeRun venomInst list
   bodyDeclMemoryCounted bodyDeclMemoryCore fragGasPathMem
   venomExecSemantics venomState fragGasSeqAbort fragGasMode
-  instIdxIndep venomInstProofs fragExec rich_list
+  instIdxIndep venomInstProofs fragExec rich_list bodyUnopFragMemory
 
 Theorem dynarray_pop_storage_mem_ok:
   compile_dynarray_pop (Lit slot) 1 esz ctor imm
@@ -89,39 +89,6 @@ Proof
 QED
 
 (* Zero GAS sites on an aborting straight-line memory-checked prefix. *)
-Theorem run_inst_seq_abort_zero_path_mem:
-  !code s t a ctx func bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               ~is_terminator i.inst_opcode) code /\
-    run_inst_seq_mem_ok code s /\
-    run_inst_seq code s = Abort a t ==>
-    ?j. gas_marked_path T ctx func s 0
-      (Abort a (t with vs_inst_idx := j))
-Proof
-  Induct_on `code` >- simp[run_inst_seq_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
-  >- (rename1 `step_inst_base h s = OK u` >>
-      `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-      disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def, run_inst_seq_mem_ok_inst_idx] >>
-      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-      simp[] >> strip_tac >> qexists_tac `j` >>
-      drule_at (Pat `step_inst_base _ _ = OK _`) gas_marked_path_step >>
-      simp[] >> disch_then irule >> metis_tac[]) >>
-  qexists_tac `t.vs_inst_idx` >> simp[] >>
-  drule gas_marked_path_abort >> simp[] >> metis_tac[]
-QED
-
 Theorem dynarray_pop_storage_empty_path_mem:
   compile_dynarray_pop (Lit slot) 1 esz ctor imm
     (if tr then LocTransient else LocStorage) sa = (r,sb) /\

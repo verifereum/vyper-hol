@@ -1,13 +1,16 @@
-(* Restatements of the local compile_ecrecover_run and
-   compile_ecrecover_oracle_failure in exprSimPrecompilesScript.sml.
-   Compiler splitting is shared below; semantic boundaries are reused. *)
+(* ECRecover compiler splitting for the memory proof. *)
 Theory bodyMemBiECRecoverRun
 Ancestors
-  bodyMemBiECRecoverBuffers bodyMemBiECRecoverEncoding
-  bodyMemBiECRecoverSuffix exprSimPrecompiles exprSimDefs exprSimProps
-  exprSimWordArgs exprLoweringProps builtinMisc compileEnv context emitHelper
-  venomExecSemantics venomState venomMemDefs venomCallOracleDefs
-  extCallOracle valueEncoding words byte list rich_list
+  exprSimPrecompiles exprSimDefs exprSimProps exprLowering exprLoweringProps
+  exprSimWordArgs exprSimHypsDefs vyperTyping vyperAST vyperTypeSystem
+  compileEnv list rich_list builtinMisc loweringPosts exprBopLowering
+  vyperInterpreter vyperState vyperContext vyperValue vyperTypeInvariants
+  valueEncoding integer_word words byte exprSimAlloc exprSimLiteralBuffer
+  exprSimOps emitHelper emitHelperProps fragExec venomExecSemantics
+  venomMemDefs venomState venomInst ASCIInumbers dftCommutation
+  abiDecodeStaticProps immutableMemoryFrame valueEncodingProps context
+  loweringHalt exprSimHash valueEncodingProofs valueCopy extCallOracle
+  venomCallOracleDefs vfmTypes
 Libs
   monadsyntax
 
@@ -48,96 +51,3 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem compile_ecrecover_run:
-  compile_ecrecover h v r sig sf = (res,sb) /\
-  s.vs_outcomes = co::rest /\ co.co_success /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sf /\
-  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
-  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
-  eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
-  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sf x) ==>
-  ?t. run_inst_seq (emitted_insts sf sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
-    wb_frame cenv es sf s t /\
-    eval_operand res t = SOME
-      (typed_val_to_w256 (BaseTV AddressT)
-        (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
-          NONE => 0w | SOME addr => addr)))
-Proof
-  strip_tac >> drule compile_ecrecover_split >> strip_tac >>
-  drule ecrecover_suffix_shape >> strip_tac >>
-  `!i. MEM i (emitted_insts sf sm) ==> MEM i (fn_insts func)` by
-    (rpt strip_tac >> first_x_assum irule >>
-     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND] >> simp[]) >>
-  drule_all ecrecover_buffers_run >> strip_tac >>
-  rename1 `eval_operand ip t = SOME wi` >>
-  `local_ptrs_reserved cenv sm /\
-   sf.cs_next_var <= sm.cs_next_var /\ sf.cs_next_id <= sm.cs_next_id` by
-    (drule_all ecrecover_buffers_prefix_shape >> strip_tac >> simp[] >> decide_tac) >>
-  `(!y. ip = Var y ==> not_fresh_at sm y) /\
-   (!y. op = Var y ==> not_fresh_at sm y)` by simp[] >>
-  drule ecrecover_request_result >> strip_tac >>
-  `?data. precompile_result (venom_call_request t 1w 0w wi 128w T).cr_target
-      (venom_call_request t 1w 0w wi 128w T).cr_data = SOME (SOME data) /\
-    mem_word_at (w2n po)
-      (write_memory_with_expansion (w2n po) (TAKE 32 data) t).vs_memory =
-      typed_val_to_w256 (BaseTV AddressT)
-        (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
-          NONE => 0w | SOME addr => addr))` by
-    (Cases_on `vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws)`
-     >- (gvs[] >> drule ecrecover_output_write >>
-         disch_then (qspecl_then [`[]`, `0w:address`] mp_tac) >> simp[]) >>
-     rename1 `_ = SOME addr` >> gvs[] >> drule ecrecover_output_write >>
-     disch_then (qspecl_then [`PAD_LEFT 0w 32 (word_to_bytes addr T)`, `addr`] mp_tac) >>
-     simp[]) >>
-  `t.vs_outcomes = co::rest` by
-    (gvs[stmt_state_rel_def, state_rel_def]) >>
-  drule_all ecrecover_suffix_run >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sm sb) t = OK tf` >>
-  drule_all ecrecover_suffix_preserves >> strip_tac >>
-  `LENGTH sf.cs_current_insts - LENGTH sm.cs_current_insts = 0` by decide_tac >>
-  qexists_tac `tf` >> simp[] >>
-  conj_tac
-  >- (`emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb` by
-        simp[emitted_insts_def, rich_listTheory.DROP_APPEND,
-             arithmeticTheory.SUB_EQ_0] >>
-      metis_tac[run_inst_seq_append]) >>
-  conj_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with outcomes := _) tf` mp_tac >> simp[]) >>
-  irule wb_frame_trans >>
-  conj_tac >- simp[] >>
-  conj_tac >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[]) >>
-  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
-QED
-
-Theorem compile_ecrecover_oracle_failure:
-  compile_ecrecover h v r sig sf = (res,sb) /\
-  ~(?co rest. s.vs_outcomes = co::rest /\ co.co_success) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sf /\
-  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
-  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
-  eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
-  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sf x) ==>
-  ?u. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort u
-Proof
-  strip_tac >> drule compile_ecrecover_split >> strip_tac >>
-  drule ecrecover_suffix_shape >> strip_tac >>
-  `!i. MEM i (emitted_insts sf sm) ==> MEM i (fn_insts func)` by
-    (rpt strip_tac >> first_x_assum irule >>
-     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND] >> simp[]) >>
-  drule_all ecrecover_buffers_run >> strip_tac >>
-  rename1 `eval_operand ip t = SOME wi` >>
-  `~(?co rest. t.vs_outcomes = co::rest /\ co.co_success)` by
-    (gvs[stmt_state_rel_def, state_rel_def]) >>
-  `(!y. ip = Var y ==> not_fresh_at sm y) /\
-   (!y. op = Var y ==> not_fresh_at sm y)` by simp[] >>
-  drule_all ecrecover_suffix_oracle_failure >> strip_tac >>
-  `LENGTH sf.cs_current_insts - LENGTH sm.cs_current_insts = 0` by decide_tac >>
-  `emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb` by
-    simp[emitted_insts_def, rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0] >>
-  drule run_inst_seq_append >>
-  disch_then (qspec_then `emitted_insts sm sb` mp_tac) >>
-  simp[] >> metis_tac[]
-QED

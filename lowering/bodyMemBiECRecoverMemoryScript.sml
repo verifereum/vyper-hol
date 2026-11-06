@@ -1,14 +1,17 @@
 (* Memory checks for ECRecover's finite instruction sequence. *)
 Theory bodyMemBiECRecoverMemory
 Ancestors
-  bodyMemBiECRecoverStores bodyMemBiECRecoverBuffers
-  bodyMemBiECRecoverSuffix bodyMemBiECRecoverRun
-  exprSimAlloc loweringHalt allocaFootprint exprSimWordArgs valueEncodingProps
-  exprSimPrecompiles bodyLiteralBufferMemory venomCallOracleDefs
-  fragExecMem instMemFrontier memSafeRun exprSimDefs exprSimProps exprLoweringProps
-  compileEnv context emitHelper emitHelperProps abiDecodeStaticProps
-  venomExecSemantics venomMemDefs venomState venomInst
-  words rich_list list
+  exprSimPrecompiles exprSimDefs exprSimProps exprLowering exprLoweringProps
+  exprSimWordArgs exprSimHypsDefs vyperTyping vyperAST vyperTypeSystem
+  compileEnv list rich_list builtinMisc loweringPosts exprBopLowering
+  vyperInterpreter vyperState vyperContext vyperValue vyperTypeInvariants
+  valueEncoding integer_word words byte exprSimAlloc exprSimLiteralBuffer
+  exprSimOps emitHelper emitHelperProps fragExec venomExecSemantics
+  venomMemDefs venomState venomInst ASCIInumbers dftCommutation
+  abiDecodeStaticProps immutableMemoryFrame valueEncodingProps context
+  loweringHalt venomCallOracleDefs extCallOracle bodyMemBiECRecoverRun
+  allocaFootprint bodyLiteralBufferMemory fragExecMem instMemFrontier
+  memSafeRun
 Libs
   monadsyntax
 

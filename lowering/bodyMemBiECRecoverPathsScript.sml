@@ -1,30 +1,14 @@
 Theory bodyMemBiECRecoverPaths
 Ancestors
-  bodyMemBiECRecoverMemory bodyMemBiECRecoverRun bodyMemBiECRecoverSuffix
-  compileEnv exprLoweringProps fragExec fragGasSeqAbort fragGasSeqMem
-  allocaHistoryFragment exprSimHash exprSimProps exprSimDefs
-  venomMemProps venomExecSemantics venomInstProofs venomInst venomState
-  fragGasMode exprSimPrecompiles exprSimWordArgs loweringPosts vyperAST list rich_list
-
-Theorem ecrecover_seq_frontier:
-  !code s t.
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
-    run_inst_seq code s = OK t ==>
-    s.vs_alloca_next <= t.vs_alloca_next
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  rename1 `step_inst_base h s = OK u` >>
-  `s.vs_alloca_next <= u.vs_alloca_next` by
-    (Cases_on `h.inst_opcode = ALLOCA`
-     >- (irule step_inst_alloca_alloca_next_mono >>
-         qexistsl_tac [`ARB`, `0`, `h`] >>
-         simp[step_inst_non_invoke, is_alloca_op_def]) >>
-     `u.vs_alloca_next = s.vs_alloca_next` by
-       (irule step_inst_base_preserves_alloca_next >>
-        qexists_tac `h` >> simp[]) >> simp[]) >>
-  first_x_assum drule >> decide_tac
-QED
+  bodyMemBiECRecoverMemory bodyMemBiECRecoverRun exprSimPrecompiles exprSimDefs
+  exprSimProps exprLowering exprLoweringProps exprSimWordArgs exprSimHypsDefs
+  vyperTyping vyperAST vyperTypeSystem compileEnv list rich_list builtinMisc
+  loweringPosts exprBopLowering vyperInterpreter vyperState vyperContext
+  vyperValue vyperTypeInvariants valueEncoding integer_word words byte context
+  emitHelper emitHelperProps venomExecSemantics venomInst venomState
+  venomMemDefs venomCallOracleDefs extCallOracle fragExec fragGasSeqAbort
+  fragGasSeqMem allocaHistoryFragment exprSimHash venomMemProps venomInstProofs
+  fragGasMode bodyMemBiSha256Compose
 
 Theorem ecrecover_seq_path_mem:
   !code s t ctx func bb.
@@ -46,7 +30,7 @@ Proof
       irule alloca_history_run_inst_seq >>
       goal_assum (drule_at Any) >> simp[] >>
       fs[EVERY_MEM]) >>
-  simp[] >> irule ecrecover_seq_frontier >>
+  simp[] >> irule sha256_run_inst_seq_alloca_next_mono >>
   goal_assum drule >> simp[]
 QED
 

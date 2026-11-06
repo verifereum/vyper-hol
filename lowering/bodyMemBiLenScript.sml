@@ -2,8 +2,16 @@
    builtins: len (S1: exprSimBuiltins' compile_len_case, exprSimLen). *)
 Theory bodyMemBiLen
 Ancestors
-  bodyMemoryPreds bodyMemBiLenCompose bodyMemBiLenFacts
-  exprSimSource exprSimHypsDefs builtinProps vyperTypeBuiltins vyperContext
+  bodyMemoryPreds bodyMemBiLenCompose exprSimLen exprSimSource exprSimProps
+  exprSimHypsDefs exprSimDefs loweringPosts list fragExec exprSimHyps
+  exprSimWordBuiltins exprBopLowering exprLowering exprLoweringProps
+  builtinSimple emitHelper compileEnv accountsRelProps valueEncoding
+  venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
+  vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping
+  vyperStorage builtinProps vyperTypeInvariants context freshWrites
+  loweringSlice emitHelperProps exprSimUnwrap exprSimCopy vyperTypeExprResult
+  vyperTypeExprSoundness vyperExprNoControl gasContext gasOutcome gasSummary
+  gasSummaryCompose gasExemptCert fragGasMode fragGasPath
 
 Theorem body_builtin_len_mem:
   !cx ty es.
