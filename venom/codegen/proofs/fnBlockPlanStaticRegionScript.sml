@@ -1,6 +1,6 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
-  fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
+  fnBlockPlanStaticDfsTrace fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
