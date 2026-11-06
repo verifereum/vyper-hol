@@ -1439,7 +1439,19 @@ Proof
           apply_tv_def, bind_def, ignore_bind_def, liftk1]
     >> simp[get_accounts_def, return_def]
     >> CASE_TAC \\ CASE_TAC
-    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"] )
+    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"]
+    >~ [`type_check _ "Membership args" _ = (args_res,_)`]
+    >- (Cases_on `args_res` >> simp[] >>
+        rename1 `lift_option_type _ _ _ = (ty_res,_)` >>
+        Cases_on `ty_res` >> simp[])
+    >~ [`type_check _ "Membership args" _ = (args_res,_)`]
+    >- (Cases_on `args_res` >> simp[] >>
+        rename1 `lift_option_type _ _ _ = (ty_res,_)` >>
+        Cases_on `ty_res` >> simp[])
+    \\ rename1 `lift_sum (evaluate_builtin _ _ _ _ _ _) _ = (builtin_res,_)`
+    \\ Cases_on `builtin_res` \\ simp[]
+    \\ rename1 `precompile_call_success _ _ = (pc_res,_)`
+    \\ Cases_on `pc_res` \\ simp[] )
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
     rpt gen_tac >> strip_tac
     >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
