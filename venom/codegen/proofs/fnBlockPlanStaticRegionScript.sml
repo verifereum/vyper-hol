@@ -2742,6 +2742,56 @@ Proof
   irule do_swap_plan_slots_bounded >> metis_tac[PAIR]
 QED
 
+Theorem regional_clean_stack_slots_layout:
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
+  plan_slots_bounded sb ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+  plan_slots_bounded sb qs /\ spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  strip_tac >> qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `_ = pred::rest` >> Cases_on `rest` >> simp[]
+  >- (IF_CASES_TAC >> simp[]
+      >- (strip_tac >> gvs[]) >>
+      Cases_on `lookup_block pred fn.fn_blocks` >> simp[]
+      >- (strip_tac >> gvs[]) >>
+      IF_CASES_TAC >> simp[]
+      >- (strip_tac >> gvs[plan_slots_bounded_def] >> metis_tac[]) >>
+      IF_CASES_TAC >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `popmany_plan victims ps` >>
+          pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+          drule_all regional_popmany_slots_layout >>
+          disch_then (qspec_then `victims` mp_tac) >>
+          simp[plan_slots_bounded_def] >> metis_tac[]) >>
+      qmatch_goalsub_abbrev_tac `popmany_plan victims ps` >>
+      strip_tac >> drule_all regional_popmany_slots_layout >>
+      disch_then (qspec_then `victims` mp_tac) >> simp[]) >>
+  rename1 `rest = more::tail` >>
+  Cases_on `tail` >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem regional_clean_stack_spilled:
+  clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[] >>
+  rename1 `_ = pred::rest` >> Cases_on `rest` >> simp[]
+  >- (IF_CASES_TAC >> simp[] >>
+      Cases_on `lookup_block pred fn.fn_blocks` >> simp[] >>
+      IF_CASES_TAC >> simp[]
+      >- (strip_tac >> gvs[]) >>
+      IF_CASES_TAC >> simp[]
+      >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+          metis_tac[rf_popmany_spilled, SND]) >>
+      strip_tac >> metis_tac[rf_popmany_spilled, SND]) >>
+  rename1 `rest = more::tail` >>
+  Cases_on `tail` >> simp[]
+QED
+
 Theorem regional_prepare_params_slots_layout:
   prepare_params_plan lv fn ps = (ops,qs) /\
   plan_slots_bounded sb ps /\
