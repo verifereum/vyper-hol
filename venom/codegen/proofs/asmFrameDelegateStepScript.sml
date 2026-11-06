@@ -3,7 +3,7 @@ Theory asmFrameDelegateStep
 Ancestors
   asmFrameRel asmFrameCallStep frameObsStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
-  vfmExecution vfmExecutionProp asmEncodeParse vfmOperation rich_list list regularMemorySim
+  vfmExecution vfmExecutionProp vfmRunCall asmEncodeParse vfmOperation rich_list list regularMemorySim
 
 (* Check the delegated request boundary without equating its zero value
    with the inherited EVM message value. *)
@@ -153,6 +153,161 @@ Proof
   drule_all asm_frame_delegate_request >> disch_tac >>
   gvs[] >> simp[asm_step_delegate, asm_exec_delegatecall_def]
 QED
+
+Theorem asm_frame_delegate_prepare_exit[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare DelegateCall s = (INR e,t) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
+   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
+  Cases_on `6 <= LENGTH c.stack`
+  >- (`next_opcode c = SOME DelegateCall` by
+        (drule_all asm_frame_delegate_decode >> simp[]) >>
+      `asm_call_prepare StaticCall s = (INR e,t)` by
+        fs[asm_call_prepare_delegate] >>
+      `e = SOME OutOfGas` by
+        (qpat_x_assum `asm_call_prepare DelegateCall _ = _` kall_tac >>
+         drule_at (Pat `asm_call_prepare _ _ = _`)
+           asm_call_prepare_failure_kind >>
+         disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+         simp[call_has_value_def] >> metis_tac[]) >>
+      `t.contexts = (c with stack := DROP 6 c.stack,rb)::rest /\
+       t.txParams = s.txParams` by
+        (qpat_x_assum `asm_call_prepare DelegateCall _ = _` kall_tac >>
+         drule_at (Pat `asm_call_prepare _ _ = _`)
+           asm_call_prepare_failure_view >>
+         disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+         simp[call_has_value_def] >> metis_tac[]) >>
+      `step_call DelegateCall s = (INR (SOME OutOfGas),t)` by
+        simp[asm_step_call_factor, bind_def] >>
+      `step s = handle_step (SOME OutOfGas) t` by
+        (irule asm_message_step_terminal >> simp[] >> metis_tac[]) >>
+      `rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)` by
+        (fs[asm_frame_rel_def, asm_evm_rel_def] >>
+         Cases_on `c.msgParams.outputTo` >> gvs[]) >>
+      drule_at (Pat `step _ = _`) asm_step_oog_starved >>
+      disch_then (qspecl_then [`rest`,`rb`,`6`,`c`] mp_tac) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+      `frame_resource_starved es0 r s'` by
+        (fs[asm_frame_rel_def] >> drule_all frame_resource_starved_mid >> simp[]) >>
+      simp[asm_frame_step_ok_def] >> metis_tac[]) >>
+  `LENGTH a.as_stack < 6` by metis_tac[arithmeticTheory.NOT_LESS_EQUAL] >>
+  drule asm_delegate_underflow >>
+  disch_then (qspecl_then [`build_offset_to_pc prog`,
+    `SND (compute_label_offsets prog)`] assume_tac) >>
+  simp[asm_frame_step_ok_def]
+QED
+
+Theorem asm_frame_delegate_abort[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare DelegateCall s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
+   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  `LENGTH c.stack <= stack_limit` by gvs[wf_state_def, wf_context_def] >>
+  `next_opcode c = SOME DelegateCall` by
+    (drule_all asm_frame_delegate_decode >> simp[]) >>
+  drule_at (Pat `asm_call_prepare _ _ = _`) asm_message_prepare_abort_state >>
+  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  simp_tac (srw_ss()) [LET_THM, call_has_value_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `step_call DelegateCall s = (INL (),t)` >>
+  `step s = (INL (),t)` by
+    (irule asm_message_step_success >> simp[] >> metis_tac[]) >>
+  `LENGTH t.contexts = LENGTH s.contexts` by simp[Abbr `t`] >>
+  `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
+  `6 <= LENGTH c.stack` by
+    (drule_at (Pat `asm_call_prepare _ _ = _`) asm_message_prepare_success_view >>
+     disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+     simp[call_has_value_def] >> metis_tac[]) >>
+  `observable_call c` by simp[observable_call_def] >>
+  drule frame_obs_call_same_depth >>
+  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
+  `outcome_of (request_of s).cr_kind t (LENGTH c.logs)
+     (LENGTH s.rollback.toDelete) = failed_outcome (request_of s)` by
+    simp[outcome_of_def, request_of_def, failed_outcome_def, Abbr `t`] >>
+  suspend "effects"
+QED
+
+Resume asm_frame_delegate_abort[effects]:
+  `a.as_outcomes = failed_outcome (request_of s) :: MAP SND (call_trace t)` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  `take_outcome (request_of s) a.as_outcomes =
+    (failed_outcome (request_of s),MAP SND (call_trace t))` by
+    simp[asm_take_outcome_failed_head] >>
+  `record_request (request_of s) a.as_requests ++ call_requests t =
+    call_requests es0` by
+    (fs[asm_frame_rel_def, call_requests_def, record_request_def] >>
+     gvs[] >> IF_CASES_TAC >> gvs[]) >>
+  `asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+    asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1` by
+    (irule asm_frame_delegate_pc_increment >> simp[]) >>
+  drule_all asm_frame_delegate_consume >> disch_tac >>
+  `buffer_to_list c.memory = a.as_memory` by gvs[asm_evm_rel_def] >>
+  `buffer_to_list (FST (HD t.contexts)).memory =
+    asm_call_memory ao az ro rs a.as_memory` by
+    (simp[Abbr `t`] >>
+     qpat_x_assum `buffer_to_list c.memory = _` (fn th => rewrite_tac[GSYM th]) >>
+     Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+     irule asm_call_memory_buffer_extend >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `Abbrev (t = _)` mp_tac >>
+  qmatch_goalsub_abbrev_tac `(ct,rb)::rest` >> disch_tac >>
+  `t.contexts = (ct,rb)::rest /\ t.txParams = s.txParams /\
+   (?d. t.msdomain = Collect d) /\
+   t.rollback.accounts = s.rollback.accounts /\
+   t.rollback.tStorage = s.rollback.tStorage /\
+   t.rollback.toDelete = s.rollback.toDelete` by simp[Abbr `t`] >>
+  `ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+   ct.pc = SUC c.pc /\ ct.logs = c.logs /\ ct.returnData = [] /\
+   ct.stack = 0w::DROP 6 c.stack` by simp[Abbr `ct`] >>
+  qpat_x_assum `Abbrev (ct = _)` kall_tac >>
+  qpat_x_assum `Abbrev (t = _)` kall_tac >>
+  suspend "package"
+QED
+
+Resume asm_frame_delegate_abort[package]:
+  `(request_of s).cr_kind = DelegateMessageCall` by simp[request_of_def] >>
+  `adopt_outcome (request_of s) (failed_outcome (request_of s))
+      (a.as_accounts,a.as_transient,a.as_logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+   adopt_outcome_deletions (request_of s) (failed_outcome (request_of s))
+      a.as_pending_deletions = t.rollback.toDelete` by
+    (simp[failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def] >>
+     gvs[asm_evm_rel_def]) >>
+  `buffer_to_list ct.memory =
+    TAKE ro (asm_call_memory ao az ro rs a.as_memory) ++
+    TAKE rs (failed_outcome (request_of s)).co_returnData ++
+    DROP (ro + LENGTH (TAKE rs (failed_outcome (request_of s)).co_returnData))
+      (asm_call_memory ao az ro rs a.as_memory)` by
+    (gvs[failed_outcome_def, TAKE_DROP]) >>
+  `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a =
+   asm_consume_call_outcome (request_of s) ro rs
+     (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
+     (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
+    simp[call_has_value_def] >>
+  drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_outcome_effects_step_ok >>
+  disch_then (qspec_then `t` mp_tac) >>
+  disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `s.contexts = _`)) >>
+  disch_then (qspecl_then [`failed_outcome (request_of s)`,`c`,`az`,`ao`] mp_tac) >>
+  simp[call_has_value_def, failed_outcome_def] >> metis_tac[]
+QED
+Finalise asm_frame_delegate_abort
 
 Theorem asm_frame_delegate_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\

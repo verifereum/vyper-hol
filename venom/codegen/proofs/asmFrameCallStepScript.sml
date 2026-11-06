@@ -1429,18 +1429,15 @@ Proof
        get_num_contexts_def, assert_def]
 QED
 
-Theorem asm_call_prepare_failure_starved:
-  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\ wf_state s /\
-  ~c.msgParams.static /\ next_opcode c = SOME op /\
-  (op = Call \/ op = StaticCall) /\
-  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+Theorem asm_step_oog_starved:
+  s.contexts = (c,rb)::rest /\ wf_state s /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
-  asm_call_prepare op s = (INR e,t) ==>
+  step s = handle_step (SOME OutOfGas) t /\
+  t.contexts = (c with stack := DROP n c.stack,rb)::rest /\
+  t.txParams = s.txParams ==>
   ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepare_failure_step >> disch_tac >>
-  drule_all asm_call_prepare_failure_view >> strip_tac >>
   `c.gasUsed <= c.msgParams.gasLimit` by
     (qpat_x_assum `wf_state s` mp_tac >> simp[wf_state_def, wf_context_def]) >>
   qmatch_asmsub_abbrev_tac `t.contexts = (popped,rb)::rest` >>
@@ -1459,7 +1456,7 @@ Proof
   suspend "nested"
 QED
 
-Resume asm_call_prepare_failure_starved[single]:
+Resume asm_step_oog_starved[single]:
   drule_all asm_handle_step_oog_singleton >> disch_tac >>
   `step s = (INR (SOME OutOfGas), t with contexts :=
     [(popped with <|gasUsed := popped.msgParams.gasLimit; returnData := []|>,rb)])`
@@ -1469,7 +1466,7 @@ Resume asm_call_prepare_failure_starved[single]:
   qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]
 QED
 
-Resume asm_call_prepare_failure_starved[nested]:
+Resume asm_step_oog_starved[nested]:
   `step s = (INL (), t with <| contexts :=
       (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
         memory := buffer_write mr.offset [] h0.memory|>,h1)::t'; rollback := rb|>)`
@@ -1478,7 +1475,22 @@ Resume asm_call_prepare_failure_starved[nested]:
   simp[frame_resource_starved_def, frame_outcome_def] >>
   metis_tac[]
 QED
-Finalise asm_call_prepare_failure_starved
+Finalise asm_step_oog_starved
+
+Theorem asm_call_prepare_failure_starved:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\ wf_state s /\
+  ~c.msgParams.static /\ next_opcode c = SOME op /\
+  (op = Call \/ op = StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
+  (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
+  asm_call_prepare op s = (INR e,t) ==>
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_failure_step >> disch_tac >>
+  drule_all asm_call_prepare_failure_view >> strip_tac >>
+  drule_all asm_step_oog_starved >> simp[]
+QED
 Theorem asm_frame_call_prepare_failure_starved:
   asm_frame_rel prog data es0 as s /\
   s.contexts = (c,rb)::rest /\ next_opcode c = SOME op /\
@@ -1614,9 +1626,9 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem asm_call_prepare_abort_state:
+Theorem asm_message_prepare_abort_state:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   LENGTH c.stack <= stack_limit /\
   asm_call_prepare op s =
     (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
@@ -1637,7 +1649,7 @@ Theorem asm_call_prepare_abort_state:
       msdomain := Collect d' |>)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepare_success_view >>
+  drule_all asm_message_prepare_success_view >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   qmatch_asmsub_abbrev_tac `buffer_extend expansion c.memory` >>
   qexistsl_tac [`charge`,`acc`,`d'`] >>
@@ -1671,9 +1683,35 @@ Proof
   simp[Abbr `prepared`]
 QED
 
-Theorem asm_call_step_success:
+Theorem asm_call_prepare_abort_state:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  LENGTH c.stack <= stack_limit /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
+  let vo = if call_has_value op then 1 else 0 in
+  ?charge acc d'.
+    stipend <= charge /\ c.gasUsed + charge <= c.msgParams.gasLimit /\
+    step_call op s = (INL (), s with <| contexts :=
+      (c with <| stack := 0w :: DROP (6 + vo) c.stack;
+                  gasUsed := c.gasUsed + charge - stipend;
+                  returnData := []; pc updated_by SUC;
+                  memory := buffer_extend
+                    (MAX (buffer_length c.memory)
+                      (let range = max_expansion_range (ao,az) (ro,rs) in
+                       if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+                     - buffer_length c.memory) c.memory |>,rb)::rest;
+      rollback := s.rollback with accesses := acc;
+      msdomain := Collect d' |>)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  irule asm_message_prepare_abort_state >> fs[] >> metis_tac[]
+QED
+
+Theorem asm_message_step_success:
   s.contexts = (c,rb)::rest /\
-  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   step_call op s = (INL (),v) ==>
   step s = (INL (),v)
 Proof
@@ -1686,9 +1724,18 @@ Proof
   qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
   simp_tac (srw_ss()) [] >>
   qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+  qpat_x_assum `op = Call \/ op = StaticCall \/ op = DelegateCall` strip_assume_tac >>
   gvs[step_inst_def, inc_pc_or_jump_def, is_call_def, bind_def,
        ignore_bind_def, return_def]
+QED
+
+Theorem asm_call_step_success:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INL (),v) ==>
+  step s = (INL (),v)
+Proof
+  strip_tac >> irule asm_message_step_success >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_call_abort_outcome:
