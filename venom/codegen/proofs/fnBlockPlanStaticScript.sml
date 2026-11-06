@@ -884,3 +884,110 @@ Proof
   irule (INST_TYPE [alpha |-> ``:cfg_analysis``] regional_ret_operand_support_empty) >>
   rpt (first_assum $ irule_at Any) >> gvs[] >> metis_tac[]
 QED
+
+Theorem regional_ret_step_block_endpoint:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb pin = SOME (block_ops,qs) /\
+  block_plan_state lv dfg cfg fn bb pin k ps /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = RET /\
+  generate_inst_plan lv dfg cfg fn inst
+    (live_vars_at lv bb.bb_label (k+1)) (bb_is_halting bb) F bb.bb_label ps =
+    SOME (ops,ps') ==> ps' = qs
+Proof
+  strip_tac >>
+  `k + 1 = LENGTH bb.bb_instructions` by metis_tac[ready_block_ret_index_last] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  gvs[block_plan_state_def] >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  `k - LENGTH (get_params bb.bb_instructions) <=
+    LENGTH (DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions)` by
+    (simp[listTheory.LENGTH_DROP] >> decide_tac) >>
+  mp_tac (Q.SPECL [`k - LENGTH (get_params bb.bb_instructions)`,
+    `DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions`]
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] generate_block_insts_plan_split)) >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th =>
+    qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    pure_rewrite_tac[th]) >> strip_tac >>
+  gvs[rich_listTheory.DROP_DROP_T] >>
+  `DROP k bb.bb_instructions = [EL k bb.bb_instructions]` by
+    (irule listTheory.LIST_EQ >>
+     reverse conj_tac >- (simp[listTheory.LENGTH_DROP] >> decide_tac) >>
+     simp[NoAsms, listTheory.LENGTH_DROP, listTheory.EL_DROP] >>
+     qx_gen_tac `idx` >> strip_tac >> `idx = 0` by decide_tac >> gvs[]) >>
+  gvs[generate_block_insts_plan_def, AllCaseEqs()]
+QED
+
+Theorem regional_ret_block_last_step:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  MEM ret bb.bb_instructions /\ ret.inst_opcode = RET /\
+  generate_block_plan lv dfg cfg fn bb pin = SOME (block_ops,qs) ==>
+  ?k ps ops.
+    LENGTH (get_params bb.bb_instructions) <= k /\
+    phi_prefix_length bb.bb_instructions <= k /\ k < LENGTH bb.bb_instructions /\
+    EL k bb.bb_instructions = ret /\
+    block_plan_state lv dfg cfg fn bb pin k ps /\
+    generate_inst_plan lv dfg cfg fn ret
+      (live_vars_at lv bb.bb_label (k+1)) (bb_is_halting bb) F bb.bb_label ps =
+      SOME (ops,qs)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM ret (non_param_insts bb)` by
+    simp[non_param_insts_def, listTheory.MEM_FILTER, is_param_opcode_def] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  qpat_x_assum `MEM ret (non_param_insts bb)` mp_tac >>
+  simp[listTheory.MEM_EL] >> disch_then (qx_choose_then `j` strip_assume_tac) >>
+  qabbrev_tac `k = j + LENGTH (get_params bb.bb_instructions)` >>
+  `k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = ret` by
+    (gvs[listTheory.LENGTH_DROP, listTheory.EL_DROP, Abbr `k`] >> decide_tac) >>
+  `k+1 = LENGTH bb.bb_instructions` by metis_tac[ready_block_ret_index_last] >>
+  `phi_prefix_length bb.bb_instructions <= k` by
+    (irule non_phi_index_after_prefix >> gvs[]) >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  mp_tac (Q.SPECL [`j`,
+    `DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions`]
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] generate_block_insts_plan_split)) >>
+  (impl_tac >- (simp[listTheory.LENGTH_DROP] >> gvs[Abbr `k`] >> decide_tac)) >>
+  disch_then (fn th =>
+    qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    pure_rewrite_tac[th]) >> strip_tac >>
+  gvs[rich_listTheory.DROP_DROP_T] >>
+  `DROP k bb.bb_instructions = [EL k bb.bb_instructions]` by
+    (irule listTheory.LIST_EQ >>
+     reverse conj_tac >- (simp[listTheory.LENGTH_DROP] >> decide_tac) >>
+     simp[NoAsms, listTheory.LENGTH_DROP, listTheory.EL_DROP] >>
+     qx_gen_tac `idx` >> strip_tac >> `idx = 0` by decide_tac >> gvs[]) >>
+  gvs[generate_block_insts_plan_def, CaseEq "option", CaseEq "prod"] >>
+  qexists_tac `k` >>
+  `LENGTH (get_params bb.bb_instructions) <= k` by simp[Abbr `k`] >>
+  simp[] >>
+  qexistsl_tac [`ps_mid`, `post`] >> simp[] >>
+  simp[block_plan_state_def, Abbr `k`] >> metis_tac[]
+QED
+
+Theorem regional_actual_dfs_ret_block_empty:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret bb.bb_instructions /\ ret.inst_opcode = RET /\
+  generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (block_ops,qs) ==>
+  qs.ps_stack = []
+Proof
+  strip_tac >> drule_all regional_ret_block_last_step >> strip_tac >>
+  irule regional_actual_dfs_ret_step_empty >>
+  rpt (first_assum $ irule_at Any) >>
+  gvs[arithmeticTheory.MAX_DEF, regional_collect_phis_length]
+QED
