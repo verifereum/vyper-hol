@@ -6,6 +6,7 @@
  * public theorem names below and proves them directly when the proof is short.
  *
  * TOP-LEVEL (block ops):
+ *   MEM_remove_block_iff        -- membership after removal
  *   lookup_block_remove_neq/eq  -- remove_block preserves/removes lookup
  *   fn_labels_remove_block      -- labels after removing a block
  *   ALL_DISTINCT_remove_block   -- distinctness preserved by removal
@@ -13,6 +14,7 @@
  *   fn_labels_replace_block     -- labels preserved by same-label replace
  *
  * TOP-LEVEL (label substitution):
+ *   subst_label_inst_fields     -- id, opcode and outputs unchanged by subst
  *   fn_labels_subst_label_fn    -- block labels unchanged by subst
  *   lookup_block_subst_label_fn -- lookup finds substituted block
  *
@@ -59,15 +61,6 @@ Proof
   Cases_on `P h` >> fs[]
 QED
 
-Theorem subst_label_inst_fields[local]:
-  !old new inst.
-    (subst_label_inst old new inst).inst_id = inst.inst_id /\
-    (subst_label_inst old new inst).inst_opcode = inst.inst_opcode /\
-    (subst_label_inst old new inst).inst_outputs = inst.inst_outputs
-Proof
-  rw[subst_label_inst_def]
-QED
-
 Theorem ALL_DISTINCT_FLAT_MAP_FILTER[local]:
   !P f l. ALL_DISTINCT (FLAT (MAP f l)) ==>
           ALL_DISTINCT (FLAT (MAP f (FILTER P l)))
@@ -78,14 +71,14 @@ Proof
   fs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
-Theorem MEM_remove_block_iff[local]:
+(* ===== Block List Operations: remove_block ===== *)
+
+Theorem MEM_remove_block_iff:
   !bb lbl bbs.
     MEM bb (remove_block lbl bbs) <=> MEM bb bbs /\ bb.bb_label <> lbl
 Proof
   rw[remove_block_def, MEM_FILTER] >> metis_tac[]
 QED
-
-(* ===== Block List Operations: remove_block ===== *)
 
 Theorem lookup_block_remove_neq:
   !lbl other bbs.
@@ -156,6 +149,15 @@ Proof
 QED
 
 (* ===== Label Substitution ===== *)
+
+Theorem subst_label_inst_fields:
+  !old new inst.
+    (subst_label_inst old new inst).inst_id = inst.inst_id /\
+    (subst_label_inst old new inst).inst_opcode = inst.inst_opcode /\
+    (subst_label_inst old new inst).inst_outputs = inst.inst_outputs
+Proof
+  rw[subst_label_inst_def]
+QED
 
 Theorem fn_labels_subst_label_fn:
   !old new fn.

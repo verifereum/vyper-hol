@@ -2400,24 +2400,6 @@ Definition cfg_block_invoke_labels_def:
     MAP FST (get_invoke_targets bb.bb_instructions)
 End
 
-Theorem cfg_invoke_labels_cons:
-  MAP FST (get_invoke_targets (inst::insts)) =
-  MAP FST (get_invoke_targets [inst]) ++
-  MAP FST (get_invoke_targets insts)
-Proof
-  simp[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
-QED
-
-Theorem cfg_invoke_labels_append:
-  !xs ys.
-    MAP FST (get_invoke_targets (xs ++ ys)) =
-    MAP FST (get_invoke_targets xs) ++ MAP FST (get_invoke_targets ys)
-Proof
-  Induct >- simp[get_invoke_targets_def] >> rpt gen_tac >>
-  pure_once_rewrite_tac[listTheory.APPEND] >>
-  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
-QED
-
 Theorem cfg_fn_insts_blocks_invoke_labels:
   !bbs.
     MAP FST (get_invoke_targets (fn_insts_blocks bbs)) =
@@ -2532,19 +2514,6 @@ Proof
 QED
 
 
-
-Theorem MEM_FLAT_MAP_replace_block_subset:
-  !bbs lbl new_bb C x.
-    MEM x (FLAT (MAP C (replace_block lbl new_bb bbs))) ==>
-    MEM x (C new_bb) \/ MEM x (FLAT (MAP C bbs))
-Proof
-  Induct_on `bbs`
-  >> simp[replace_block_def, listTheory.MEM_APPEND]
-  >> rpt strip_tac
-  >> Cases_on `h.bb_label = lbl`
-  >> gvs[replace_block_def, listTheory.MEM_APPEND]
-  >> metis_tac[]
-QED
 
 Theorem insert_split_supply_invoke_labels_subset:
   MEM pred_bb fn.fn_blocks /\ MEM target_bb fn.fn_blocks /\

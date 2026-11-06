@@ -2,7 +2,9 @@
  * DFT Pass — Correctness
  *
  * TOP-LEVEL:
- *   dft_pass_correct — DFT preserves execution semantics (pass_correct)
+ *   dft_pass_correct — DFT preserves execution semantics (pass_correct);
+ *                      proved in dftCorrectnessFinal
+ *   dft_fn_pseudos_prefix — DFT output keeps pseudo instructions first
  *
  * Proof strategy:
  *   1. dft_fn only changes bb_instructions of each block (labels preserved)
@@ -8712,7 +8714,7 @@ Proof
   simp[] >> disch_then (qspec_then `bb` mp_tac) >> simp[Abbr `tripn`]
 QED
 
-Triviality dft_fn_pseudos_prefix:
+Theorem dft_fn_pseudos_prefix:
   !fn. fn_pseudos_prefix fn ==> fn_pseudos_prefix (dft_fn fn)
 Proof
   rw[dft_fn_def, fn_pseudos_prefix_def, LET_THM] >>

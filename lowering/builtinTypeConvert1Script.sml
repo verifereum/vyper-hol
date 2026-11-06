@@ -36,14 +36,6 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE] >> rw[]
 QED
 
-(* Unconditional equality avoids repeatedly proving the conditional
-   distinctness premise while simplifying generated-variable reads. *)
-Theorem fresh_var_name_eq[local]:
-  !m n. (STRING #"%" (toString m) = STRING #"%" (toString n)) <=> (m = n)
-Proof
-  metis_tac[fresh_var_distinct]
-QED
-
 Theorem conversion_step_equations:
   (!id ops outs ss. step_inst_base (mk_inst id SHL ops outs) ss =
     exec_pure2 (\n w. word_lsl w (w2n n)) (mk_inst id SHL ops outs) ss) /\

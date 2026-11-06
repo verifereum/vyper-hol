@@ -9,7 +9,7 @@ Ancestors
   venomExecSemantics venomState venomInst venomMemDefs
   words list finite_map pred_set arithmetic
   ctorAbiActualArrayRun loweringHalt abiDecoderLoop exprLoweringProps
-  abiDecoderReentryAddress abiDecoderMemberSlice abiDecoderMemberBody rich_list
+  abiDecoderReentryAddress abiDecoderMemberSlice abiDecoderMemberBody rich_list abiDecoderMembers
 
 Theorem ctor_type_memory_bytes_vars[simp]:
   !ce ty vars. type_memory_bytes (ce with ce_vars := vars) ty =
@@ -765,17 +765,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> conj_tac >> metis_tac[]
 QED
 
-Theorem ctor_word_dec_descriptor[local]:
-  is_word_type ty ==>
-  ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp
-Proof
-  Cases_on `ty` >> simp[is_word_type_def, type_to_abi_dec_info_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_word_type_def, type_to_abi_dec_info_def] >>
-  rename1 `BytesT b` >> Cases_on `b` >>
-  simp[is_word_type_def, type_to_abi_dec_info_def]
-QED
-
 Theorem ctor_singleton_decode_code:
   !ptr. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ptr) (type_memory_bytes ce ty)) ==>
   compile_decode_args ce [build_positional_arg ce (name,ty)] off
@@ -791,7 +780,7 @@ Theorem ctor_singleton_decode_code:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty`
   >- (`?clamp. type_to_abi_dec_info ce.ce_struct_fields ce ty = DecPrimWord clamp` by
-        metis_tac[ctor_word_dec_descriptor] >>
+        metis_tac[ctor_arg_word_descriptor] >>
       simp[build_positional_arg_def, compile_decode_args_def,
         var_location_decode_operand_def, compile_abi_decode_to_buf_def,
         compile_abi_decode_static_def, FUN_EQ_THM,
@@ -1274,12 +1263,6 @@ Proof
   metis_tac[LESS_EQ_LESS_TRANS, LESS_EQ_TRANS]
 QED
 
-Theorem ctor_register_abi_types_map[local]:
-  !tys. vyper_to_abi_types env tys = MAP (vyper_to_abi_type env) tys
-Proof
-  Induct >> simp[vyper_to_abi_type_def]
-QED
-
 Theorem ctor_effect_scratch_extend[local]:
   abi_encoder_registered_effect (ctor_actual_sites fn child) outs s t /\
   ctor_actual_scratch fn child d n t /\
@@ -1352,7 +1335,7 @@ Theorem ctor_decode_constructor_arg_old_prefix:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH atys = LENGTH fargs /\ EL i atys = vyper_to_abi_type env ty` by
-    simp[ctor_register_abi_types_map, MAP_COMPOSE, EL_MAP] >>
+    simp[vyper_to_abi_types_MAP, MAP_COMPOSE, EL_MAP] >>
   `i < LENGTH atys /\ LENGTH avs = LENGTH atys` by metis_tac[] >>
   drule_all ctor_canonical_singleton_prefix >>
   disch_then (qspec_then `ctx`
@@ -1723,7 +1706,7 @@ QED
 
 Resume ctor_register_suffix_actual[recurse]:
   `LENGTH atys = LENGTH fargs /\ EL i atys = vyper_to_abi_type env h1` by
-    simp[ctor_register_abi_types_map, MAP_COMPOSE, EL_MAP] >>
+    simp[vyper_to_abi_types_MAP, MAP_COMPOSE, EL_MAP] >>
   `abi_embedded_static_size ce0.ce_struct_fields h1 = abi_member_head_size (EL i atys)` by
     (drule ctor_coherent_head_size >> simp[]) >>
   `SUM (MAP abi_member_head_size (TAKE (SUC i) atys)) =

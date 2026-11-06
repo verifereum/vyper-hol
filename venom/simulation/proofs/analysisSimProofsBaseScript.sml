@@ -65,22 +65,6 @@ Proof
   Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
 QED
 
-(* PHI is an error in step_inst_base (PHIs are evaluated by eval_phis at block entry) *)
-Triviality step_inst_base_phi_error[local]:
-  !inst s. inst.inst_opcode = PHI ==> step_inst_base inst s = Error "phi outside prefix"
-Proof
-  rpt strip_tac >> simp[step_inst_base_def]
-QED
-
-Triviality step_inst_phi_error[local]:
-  !fuel ctx inst s. inst.inst_opcode = PHI ==> step_inst fuel ctx inst s = Error "phi outside prefix"
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  drule step_inst_non_invoke >>
-  simp[step_inst_base_phi_error]
-QED
-
 (* R_ok preservation for run_insts (simpler than exec_block — no terminator handling) *)
 Theorem run_insts_preserves_R:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -511,7 +495,7 @@ QED
 
 (* Halt-wrapping preserves lift_result when valid_state_rel holds.
    Avoids 5x5 case explosion in terminator proofs. *)
-Triviality lift_result_halt_wrap:
+Theorem lift_result_halt_wrap:
   !R_ok R_term r1 r2.
     valid_state_rel R_ok R_term ==>
     lift_result R_ok R_term R_term r1 r2 ==>
@@ -1397,7 +1381,7 @@ Proof
     (* PHI gives Error in step_inst_base, so exec_block errors out.
        The conclusion (?e. exec_block ... = Error e) \/ ... is satisfied
        by the first disjunct. *)
-    DISJ1_TAC >> simp[step_inst_phi_error]
+    DISJ1_TAC >> simp[venomExecProofsTheory.step_inst_phi_error]
   ) >>
   (* === Non-term non-INVOKE non-PHI case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -1830,7 +1814,7 @@ Proof
     (* PHI gives Error in step_inst_base, so exec_block errors out.
        The conclusion (?e. exec_block ... = Error e) \/ ... is satisfied
        by the first disjunct. *)
-    DISJ1_TAC >> simp[step_inst_phi_error]
+    DISJ1_TAC >> simp[venomExecProofsTheory.step_inst_phi_error]
   ) >>
   (* === Non-term non-INVOKE non-PHI case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -2622,7 +2606,7 @@ Proof
     (* PHI gives Error in step_inst_base, so exec_block errors out.
        The conclusion (?e. exec_block ... = Error e) \/ ... is satisfied
        by the first disjunct. *)
-    DISJ1_TAC >> simp[step_inst_phi_error]
+    DISJ1_TAC >> simp[venomExecProofsTheory.step_inst_phi_error]
   ) >>
   (* === Non-term non-INVOKE non-PHI case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -3121,9 +3105,9 @@ Proof
     simp[] >>
   rpt strip_tac >>
   `h.inst_opcode = PHI` by fs[] >>
-  simp[step_inst_phi_error] >>
+  simp[venomExecProofsTheory.step_inst_phi_error] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_phi_error]
+  simp[venomExecProofsTheory.step_inst_phi_error]
 QED
 
 (* Extract conditions from inst_transform_structural for use in

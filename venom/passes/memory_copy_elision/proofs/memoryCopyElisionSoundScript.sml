@@ -27,7 +27,7 @@ Ancestors
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   dfgAnalysisProps dfgDefs dfAnalyzeDefs
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
-  finite_map list pred_set
+  finite_map list pred_set copyFwdEquiv
 Libs
   pairLib fcpLib stepInstBaseLib
 
@@ -1160,16 +1160,6 @@ QED
 (* Terminators that return OK preserve memory, call_ctx, data_section, code, returndata.
    JMP/JNZ/DJMP go through jump_to which only modifies control flow.
    STOP/REVERT return non-OK (Halt/Revert), so don't appear here. *)
-Triviality terminator_opcode_cases[local]:
-  !op.
-    is_terminator op ==>
-    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
-    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
-    op = SELFDESTRUCT \/ op = INVALID \/ op = DRET \/ op = RETFMP
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
 val terminator_tuple_tac =
   with_opcode_clause (fn ths =>
     fs (ths @ [jump_to_def, halt_state_def, revert_state_def,
@@ -2447,14 +2437,6 @@ QED
 
 Finalise cf_alloca_ok_opt_transfer
 
-(* LENGTH of the TAKE/DROP/REPLICATE bytes used in MCOPY *)
-Triviality mcopy_bytes_length[local]:
-  !src sz mem. LENGTH (TAKE sz (DROP src mem ++ REPLICATE sz 0w)) = sz
-Proof
-  simp[LENGTH_TAKE_EQ, LENGTH_APPEND, LENGTH_DROP,
-       rich_listTheory.LENGTH_REPLICATE]
-QED
-
 Resume copy_fact_transfer_sound_thm[fu_sound]:
   (* Abbreviate for readability *)
   qabbrev_tac `s' = write_memory_with_expansion (w2n dst_val)
@@ -2482,7 +2464,7 @@ Resume copy_fact_transfer_sound_thm[inval_sound]:
 QED
 
 Resume copy_fact_transfer_sound_thm[discharge_cft]:
-  simp[Abbr `bytes`, mcopy_bytes_length, Abbr `write_loc`] >>
+  simp[Abbr `bytes`, mcopy_data_length, Abbr `write_loc`] >>
   gvs[] >> metis_tac[ml_is_fixed_eval_size, cf_alloca_ok_opt_unwrap]
 QED
 

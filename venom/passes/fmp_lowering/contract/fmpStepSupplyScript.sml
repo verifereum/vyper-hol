@@ -67,14 +67,6 @@ Proof
   simp[fresh_inst_id_def] >> strip_tac >> gvs[ir_id_interval_singleton]
 QED
 
-Theorem fresh_ir_var_inst_ok:
-  ir_supply_inst_ok s /\ fresh_ir_var s = (v,s') ==>
-  ir_supply_inst_ok s'
-Proof
-  strip_tac >> drule fresh_ir_var_contract >> strip_tac >>
-  gvs[ir_supply_inst_ok_def]
-QED
-
 Theorem fresh_ir_label_inst_ok:
   ir_supply_inst_ok s /\ fresh_ir_label s = (v,s') ==>
   ir_supply_inst_ok s'

@@ -48,7 +48,7 @@ Ancestors
   abiEncoderWrites builtinHashing exprLowering
   context emitHelper emitHelperProps exprLoweringProps compileEnv
   venomState venomInst venomExecSemantics venomMemDefs memSafeRun
-  finite_map list rich_list words arithmetic
+  finite_map list rich_list words arithmetic abiDecoderIndexInit
 
 (* ===== State facts ===== *)
 
@@ -74,12 +74,6 @@ Theorem eval_operand_same_vars:
     eval_operand op s' = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem eval_operand_mstore_eq[simp]:
-  eval_operand op (mstore p w s) = eval_operand op s
-Proof
-  irule eval_operand_same_vars >> simp[]
 QED
 
 Theorem allocate_state_fields[simp]:

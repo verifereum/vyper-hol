@@ -5,7 +5,7 @@ Ancestors
   simplifyCfgLabelProps o1PassLift simplifyCfgDefs venomInst cfgTransform
   venomWf venomExecProps list relation simplifyCfgPhiSemantics
   simplifyCfgAvailability simplifyCfgPhiConsumer unitShapeDefs unitLabelMapIdentity
-  simplifyCfgStruct simplifyCfgReachuses
+  simplifyCfgStruct
   simplifyCfgDataflow
 
 Theorem scfg_restriction_mem:
@@ -233,7 +233,7 @@ Proof
   `wf_function (remove_unreachable_blocks fn) /\
    fn_inst_wf (remove_unreachable_blocks fn) /\
    simplify_cfg_fn_ok (remove_unreachable_blocks fn)` by
-    metis_tac[remove_unreachable_blocks_wf, simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf, scfg_restriction_ok] >>
+    metis_tac[remove_unreachable_blocks_wf, simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf, scfg_restriction_ok] >>
   `!qb. MEM qb (remove_unreachable_blocks fn).fn_blocks ==>
      fn_reachable (remove_unreachable_blocks fn) qb.bb_label` by
     metis_tac[scfg_restriction_blocks_reachable] >>

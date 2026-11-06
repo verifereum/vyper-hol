@@ -1053,24 +1053,6 @@ Proof
   rpt strip_tac >>
   gvs[sue_alloc_assign_supply_def, sue_operand_label_def]
 QED
-Theorem sue_get_invoke_targets_cons:
-  MAP FST (get_invoke_targets (inst::insts)) =
-  MAP FST (get_invoke_targets [inst]) ++
-  MAP FST (get_invoke_targets insts)
-Proof
-  Cases_on `inst.inst_opcode = INVOKE` >> simp[get_invoke_targets_def] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  rename1 `inst.inst_operands = op::ops` >> Cases_on `op` >> simp[]
-QED
-
-Theorem sue_get_invoke_targets_append:
-  MAP FST (get_invoke_targets (xs ++ ys)) =
-  MAP FST (get_invoke_targets xs) ++ MAP FST (get_invoke_targets ys)
-Proof
-  Induct_on `xs` >- simp[get_invoke_targets_def] >>
-  rpt gen_tac >> pure_once_rewrite_tac[listTheory.APPEND] >>
-  once_rewrite_tac[sue_get_invoke_targets_cons] >> simp[]
-QED
 
 Theorem sue_expand_ops_supply_operand_labels:
   !dfg inst s ops k assigns new_ops s'.
@@ -1148,7 +1130,7 @@ Proof
   `MAP sue_operand_label new_ops =
    MAP sue_operand_label inst.inst_operands` by
     metis_tac[sue_expand_ops_supply_operand_labels] >>
-  rewrite_tac[sue_get_invoke_targets_append] >> simp[] >>
+  rewrite_tac[cfg_invoke_labels_append] >> simp[] >>
   (* Only the label map matters here: do not case-split supply equations. *)
   qpat_x_assum `MAP sue_operand_label new_ops = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> strip_tac >>
@@ -1180,8 +1162,8 @@ Proof
     metis_tac[sue_expand_inst_supply_invoke_labels] >>
   `MAP FST (get_invoke_targets tail_out) =
    MAP FST (get_invoke_targets insts)` by metis_tac[] >>
-  once_rewrite_tac[sue_get_invoke_targets_append] >>
-  once_rewrite_tac[sue_get_invoke_targets_cons] >> simp[]
+  once_rewrite_tac[cfg_invoke_labels_append] >>
+  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
 QED
 
 Theorem sue_expand_block_supply_invoke_labels:

@@ -912,7 +912,7 @@ Proof
   rw[cfgTransformTheory.subst_label_terminator_def, listTheory.MAP_MAP_o,
      combinTheory.o_DEF] >>
   irule listTheory.MAP_CONG >> rw[] >>
-  rw[cfgTransformProofsTheory.subst_label_inst_fields]
+  rw[cfgTransformPropsTheory.subst_label_inst_fields]
 QED
 
 Theorem inst_ids_update_phis[local]:
@@ -2522,7 +2522,7 @@ Proof
        metis_tac[inst_output_in_fn_all_vars,
                  cfgNormBaseTheory.inst_operand_var_in_fn_all_vars] >> NO_TAC) >>
   (* Terminator outputs: use subst_label_inst_fields *)
-  TRY (gvs[cfgTransformProofsTheory.subst_label_inst_fields] >>
+  TRY (gvs[cfgTransformPropsTheory.subst_label_inst_fields] >>
        metis_tac[inst_output_in_fn_all_vars] >> NO_TAC) >>
   (* Terminator operands: trace through subst_label_op *)
   gvs[cfgTransformTheory.subst_label_inst_def, listTheory.MEM_MAP] >>
