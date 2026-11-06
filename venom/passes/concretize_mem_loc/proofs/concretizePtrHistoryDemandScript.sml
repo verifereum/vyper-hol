@@ -3,7 +3,7 @@ Ancestors
   frameExecutionHistory ptrDiscipline venomExecSemantics venomInst list rich_list
   pred_set
 
-Theorem ptr_step_writes_subset[local]:
+Theorem ptr_step_writes_subset:
   range_bytes (step_writes inst s s') SUBSET
   range_bytes (source_memory_write_ranges inst s)
 Proof
