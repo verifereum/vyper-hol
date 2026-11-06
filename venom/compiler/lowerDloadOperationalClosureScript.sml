@@ -161,7 +161,7 @@ QED
    At root, the base origin fixes ctx_entry, lookup_function, fn_entry_label
    and the initial control update of vs0; it is not arbitrary setup_callee.
 
-   Smallest proposed bridge for review (not implemented here):
+   Origin/setup bridge implemented below as ld_stack_origin_setup_eq:
      ld_stack_origin vs0 CS (f::stk) callee s0 /\
      decode_invoke f.cf_inst = SOME (nm,ops) /\
      lookup_function nm CS.ctx_functions = SOME callee /\
@@ -186,7 +186,12 @@ QED
      resumed caller reachability only from a reachable terminal instruction,
      its actual step equation, binding and next active_inst. Thus the
      provenance conjunct above is essential, not replaceable by run existence.
-   Coverage table (local certificates are NOT temporal successor proofs):
+   Historical coverage inventory (superseded for ordinary data closure by
+   ld_normal_ordinary_backward in lowerDloadNormalDispatchTheory). Missing
+   producer entries below describe the earlier audit, not current source.
+   Temporal, call, allocation, external and terminal gaps remain separate;
+   local certificates are NOT temporal successor proofs:
+   Coverage table:
    family                          existing local producer / remaining interface
    PARAM, RETPC_PARAM              ParamProducer, RetpcProducer / entry alignment
    ASSIGN, PHI                     AssignProducer, PhiProducer / active_inst, PCs
@@ -301,4 +306,27 @@ Proof
   rpt strip_tac >> irule ld_annotated_reachable_ret >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[ld_annotated_active_inst]
+QED
+
+(* Fixed-stack origin functionality aligns a prefix with a consumer's s0;
+   it does not assert uniqueness of execution histories. *)
+Theorem ld_stack_origin_unique:
+  ld_stack_origin vs0 C stk fn s0 /\
+  ld_stack_origin vs0 C stk fn s1 ==> s0 = s1
+Proof
+  Cases_on `stk`
+  >- (simp[Once ld_stack_origin_cases] >> rpt strip_tac >>
+      gvs[Once ld_stack_origin_cases]) >>
+  simp[ld_stack_origin_cons] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_annotated_prefix_at_origin:
+  o1_ctx_shape C /\
+  ld_annotated_reachable vs0 C astk k L AP AG tn fn i s /\
+  ld_stack_origin vs0 C (MAP ld_erase_frame astk) fn s0 ==>
+  frame_reach C fn s0 i s
+Proof
+  strip_tac >> drule ld_annotated_erasure >> strip_tac >>
+  drule_all ld_frame_reachable_prefix >> strip_tac >>
+  metis_tac[ld_stack_origin_unique]
 QED
