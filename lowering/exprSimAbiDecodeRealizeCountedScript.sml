@@ -1,7 +1,7 @@
 Theory exprSimAbiDecodeRealizeCounted
 Ancestors
   exprSimAbiDecodeRealizeEntry exprSimAbiDecodeRealizeTarget
-  gasExemptCert gasOutcome gasSummary vyperState
+  gasExemptCert gasOutcome gasSummary vyperState builtinAbi vyperCompiler emitHelper compileEnv
 
 Theorem abi_decode_realize_no_exempt:
   ~gas_exempt_cert memory tops (ctx,func)
@@ -31,4 +31,46 @@ Proof
   gvs[exprSimDefsTheory.expr_exit_INL] >>
   drule fragGasModeTheory.gas_marked_path_exec >>
   metis_tac[]
+QED
+
+(* Keep the recursive decoder opaque: only these eight instructions precede
+   output allocation and recursive decoding in the non-exact interval arm. *)
+Definition abi_decode_realize_guard_prefix_def:
+  abi_decode_realize_guard_prefix data lo hi =
+    do len <- emit_op MLOAD [data];
+       ptr <- emit_op ADD [data; Lit 32w];
+       lt <- emit_op LT [len; Lit (n2w lo)];
+       ge <- emit_op ISZERO [lt];
+       gt <- emit_op GT [len; Lit (n2w hi)];
+       le <- emit_op ISZERO [gt];
+       valid <- emit_op AND [ge; le];
+       emit_void ASSERT [valid];
+       comp_return (ptr,len)
+    od
+End
+
+Theorem abi_decode_realize_lower_prefix:
+  lo <> hi ==>
+  lower_abi_decode data info lo hi sz =
+    do p <- abi_decode_realize_guard_prefix data lo hi;
+       buf <- compile_alloc_buffer sz;
+       compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD
+         (FST p) (SND p) info;
+       comp_return buf.buf_operand
+    od
+Proof
+  strip_tac >>
+  simp[lower_abi_decode_def, abi_decode_realize_guard_prefix_def,
+    comp_ignore_bind_def, comp_bind_assoc] >>
+  simp[FUN_EQ_THM, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[]
+QED
+
+Theorem abi_decode_realize_guard_opcodes:
+  MAP (\i. i.inst_opcode)
+    (SND (abi_decode_realize_guard_prefix data lo hi
+      (initial_compile_state entry))).cs_current_insts =
+  [MLOAD; ADD; LT; ISZERO; GT; ISZERO; AND; ASSERT]
+Proof
+  EVAL_TAC
 QED
