@@ -4,6 +4,9 @@ Ancestors
   storageNormalizationBranchPtr storageUnwrapSizingPtr storageLocatedResourcesPtr
   storageCopyContentsPtr storageCopyRepresentationPtr bodyPtrDefs exprSimProps
   exprSimStorageCopy venomState ptrDiscipline words arithmetic
+  reasonStoragePrefixPtr reasonPrefixPtr ghostPcTransportPtr allocationPtr
+  exprSimAlloc exprLoweringProps loweringHalt venomExecSemantics venomInstProofs
+  context emitHelper compileEnv venomInst loweringPosts
 
 Theorem storage_normalization_endpoint_resources:
   stmt_state_rel ctx func cenv cx es u /\
@@ -124,3 +127,103 @@ Proof
   CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV arithmeticTheory.ADD_COMM))) >>
   rewrite_tac[]
 QED
+
+(* ALLOCA resources at the counted-path cursor, ready for either copy branch. *)
+Theorem storage_normalization_alloc_path_ptr:
+  stmt_state_rel ctx func cenv cx es s /\
+  compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
+  local_ptrs_reserved cenv cc /\ fn_inst_ids_distinct func /\
+  n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = cc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at cc x) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  ptr_vv_ok cx ty tv (LocatedValue ann p) es G tn s ==>
+  ?u root b G1 tn1.
+    buf.buf_operand = Var root /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1 (OK u) /\
+    u.vs_current_bb = cd.cs_current_bb /\
+    u.vs_inst_idx = LENGTH cd.cs_current_insts /\ ~u.vs_halted /\
+    stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
+    FLOOKUP u.vs_allocas cc.cs_next_id = SOME (b,n) /\
+    b+n < dimword(:256) /\ lookup_var root u = SOME (n2w b) /\
+    ptr_covers G1 tn1 root u n /\
+    eval_operand p.ptr_operand u = eval_operand p.ptr_operand s /\
+    ptr_vv_ok cx ty tv (LocatedValue ann p) es G1 tn1 u /\
+    (!tr sty stv a. storage_holds cx tr sty stv a es s ==>
+      storage_holds cx tr sty stv a es u) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!name lb len. local_region cenv es.scopes u name lb len ==>
+      regions_disjoint b n lb len) /\
+    MEM (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [root]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes root /\
+    (!old. not_fresh_at cc old ==>
+      lookup_var old u = lookup_var old s /\ FLOOKUP G1 old = FLOOKUP G old /\
+      op_taint tn1 (Var old) = op_taint tn (Var old)) /\
+    (!old k. not_fresh_at cc old /\ ptr_covers G tn old s k ==>
+      ptr_covers G1 tn1 old u k)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all reason_storage_alloc_buffer_resources >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule_all reason_encoder_alloc_path_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
+  `cd.cs_current_bb = cc.cs_current_bb /\
+   LENGTH cd.cs_current_insts = SUC (LENGTH cc.cs_current_insts)` by
+    (qpat_x_assum `compile_alloc_buffer n cc = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_halted = s.vs_halted` by
+    suspend "control" >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1
+     (OK (s1 with vs_inst_idx := SUC (LENGTH cc.cs_current_insts)))` by metis_tac[] >>
+  qexistsl_tac [`s1 with vs_inst_idx := SUC s.vs_inst_idx`, `out`,
+    `w2n w`, `G1`, `tn1`] >>
+  simp[stmt_state_rel_inst_idx, lookup_var_def] >>
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- metis_tac[]
+  >- gvs[eval_operand_def, lookup_var_def]
+  >- suspend "source" >- suspend "holds" >- suspend "locals" >>
+  suspend "old"
+QED
+
+Resume storage_normalization_alloc_path_ptr[control]:
+  `step_inst 0 ctx (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK s1` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  conj_tac
+  >- (drule step_preserves_control_flow >> simp[mk_inst_def, is_terminator_def]) >>
+  drule step_preserves_halted >> simp[mk_inst_def, is_terminator_def]
+QED
+
+Resume storage_normalization_alloc_path_ptr[source]:
+  qpat_x_assum `ptr_vv_ok _ _ _ _ _ G1 tn1 s1` mp_tac >>
+  asm_rewrite_tac[] >> POP_ASSUM_LIST (K all_tac) >>
+  simp[ptr_vv_ok_def, ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def, lookup_var_def]
+QED
+
+Resume storage_normalization_alloc_path_ptr[holds]:
+  rpt strip_tac >>
+  `storage_holds cx tr sty stv a es s1` by metis_tac[] >>
+  pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+  simp[storage_holds_def, contract_storage_def, contract_transient_def]
+QED
+
+Resume storage_normalization_alloc_path_ptr[locals]:
+  qpat_x_assum `!name b len. local_region _ _ s1 _ _ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[local_region_def, lookup_var_def]
+QED
+
+Resume storage_normalization_alloc_path_ptr[old]:
+  rpt strip_tac >>
+  `old <> out` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]) >>
+  `eval_operand (Var old) s1 = eval_operand (Var old) s` by
+    (irule alloca_step_operand_preserved >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[eval_operand_def, lookup_var_def]
+QED
+
+Finalise storage_normalization_alloc_path_ptr
