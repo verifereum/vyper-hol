@@ -30,7 +30,8 @@ Theorem compile_tuple_member_typed_path_ptr:
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
     op_taint tn' (Var out) = {} /\
-    (if is_word_type ty then lookup_var out t = SOME (typed_val_to_w256 tv v)
+    (if is_word_type ty then lookup_var out t = SOME (typed_val_to_w256 tv v) /\
+       op_prov G' (Var out) = NONE
      else lookup_var out t = SOME (n2w a) /\ FLOOKUP G' out = SOME (b,sz))
 Proof
   strip_tac >> drule_all emit_add_member_path_ptr >>
@@ -119,7 +120,8 @@ Theorem compile_tuple_member_load_path_ptr:
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
     ptr_val_ok cx ty v op G' tn' t /\
     stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es G' tn' t /\
-    (if is_word_type ty then lookup_var out t = SOME (typed_val_to_w256 tv v)
+    (if is_word_type ty then lookup_var out t = SOME (typed_val_to_w256 tv v) /\
+       op_prov G' (Var out) = NONE
      else lookup_var out t = SOME (n2w a) /\ FLOOKUP G' out = SOME (b,sz))
 Proof
   strip_tac >>

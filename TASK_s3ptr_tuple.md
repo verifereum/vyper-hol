@@ -87,3 +87,7 @@ All paths are relative to this directory (the vyper-hol project root).
 - The tuple is staged in a memory buffer and its members are copied out one target at a time; each member's source range lies inside the staged value's site, and each target's store follows the single-target rules.
 - `typedCopyTuplePtrScript.sml` has the tuple copy's pointer facts.
 - The RESIDUAL lemmas of `lowering/bodyPtrAssignResidualScript.sml` are frozen and admitted: dispatch to them exactly where S1 dispatches to the S1 lemma of the same name (minus `_ptr`), and don't prove or restate them.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.

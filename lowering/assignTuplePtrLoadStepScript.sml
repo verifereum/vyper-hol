@@ -195,6 +195,7 @@ Theorem emit_mload_member_path_ptr:
   ?out t G' tn'. pv = Var out /\ not_fresh_at sm out /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
     lookup_var out t = SOME (mload (w2n w) s) /\ op_taint tn' (Var out) = {} /\
+    op_prov G' (Var out) = NONE /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
@@ -231,6 +232,11 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   gvs[] >>
   simp[mload_ghost_clean, eval_operand_def] >>
+  `!out. op_prov (step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+      (update_var out (mload (w2n w) s) s)) (Var out) = NONE` by
+    simp[op_prov_def, step_prov_def, set_prov_def, out_prov_def, mk_inst_def,
+         finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  asm_rewrite_tac[] >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, state_frame_def] >>
   conj_tac >- simp[step_taint_def, imm_taint_def, mk_inst_def] >>
   gen_tac >> strip_tac >>

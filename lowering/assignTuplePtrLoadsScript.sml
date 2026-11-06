@@ -162,7 +162,7 @@ Resume compile_tuple_load_all_offset_path_ptr[indexed]:
        op_taint tn'' (Var out) = op_taint tn' (Var out)` by metis_tac[] >>
       `ptr_val_ok cx h v (Var out) G'' tn'' t'` by
         (qpat_x_assum `ptr_val_ok cx h v hop G' tn' t` mp_tac >>
-         simp[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def]) >>
+         simp[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def, ptrDisciplineTheory.op_prov_def]) >>
       simp[] >> Cases_on `is_word_type h` >>
       gvs[eval_operand_def] >> simp[]) >>
   simp[] >> strip_tac >>
