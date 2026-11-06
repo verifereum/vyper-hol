@@ -2458,3 +2458,22 @@ Proof
   drule inventory_pop_singleton_physical_origin >> simp[] >>
   metis_tac[]
 QED
+
+(* Successful target layout separates the residual prefix from the suffix. *)
+Theorem inventory_join_marker_free_boundary:
+  stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack /\
+  ~MEM dead_stack_marker targets /\
+  ~MEM dead_stack_marker (stack_pop (LENGTH targets) qs.ps_stack) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  metis_tac[MEM_APPEND]
+QED
+
+Theorem inventory_restore_targets_not_spilled:
+  restore_spilled_plan targets ps = (ops,qs) ==>
+  !op. MEM op targets ==> FLOOKUP qs.ps_spilled op = NONE
+Proof
+  strip_tac >> drule inventory_restore_domain >>
+  simp[finite_mapTheory.FLOOKUP_DEF, EXTENSION] >> metis_tac[]
+QED
+
