@@ -542,51 +542,6 @@ Proof
   simp[dynarray_for_code_def, ALL_DISTINCT] >> rpt strip_tac >> gvs[]
 QED
 
-(* As stmtSimForArrayLoop's local array_body_continue_iteration_framed;
-   nothing in it depends on the condition block or the address prefix. *)
-Theorem dynarray_body_continue_iteration[local]:
-  !ctx func cenv cx P vs id idx saved_base arr_base p dst sz ainst st k es s
-   r sb sj exit_lbl incr_lbl cond_lbl nv i1 i2 i3.
-  stmt_lands (InLoop exit_lbl incr_lbl) sb r s /\
-  (r = INL () \/ r = INR ContinueException) /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-    ainst s.vs_current_bb st k es (s with vs_inst_idx := 0) /\
-  (!l. saved_base <> Label l) /\ k < LENGTH vs /\
-  (r = INL () ==>
-    sj.cs_blocks = sb.cs_blocks /\ sj.cs_current_bb = sb.cs_current_bb /\
-    sj.cs_current_insts = sb.cs_current_insts ++
-      [mk_inst sb.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb sj func) /\
-  lookup_block incr_lbl func.fn_blocks =
-    SOME <|bb_label := incr_lbl; bb_instructions :=
-      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
-       mk_inst i2 ASSIGN [Var nv] [idx];
-       mk_inst i3 JMP [Label cond_lbl] []]|> /\
-  not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
-  p <> idx /\ p <> nv /\
-  (!x. saved_base = Var x ==> x <> idx /\ x <> nv) ==>
-  ?next. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-    ainst cond_lbl st (k+1) es next /\
-    (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x s) /\
-    next.vs_allocas = s.vs_allocas /\
-    gas_marked_path F ctx func s 0 (OK next)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~s.vs_halted /\ stmt_state_rel ctx func cenv cx es s` by
-    fs[array_loop_inv_def, stmt_state_rel_inst_idx] >>
-  drule array_body_to_increment >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `sj`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-    ainst incr_lbl st k es dd` by
-    (gvs[array_loop_inv_def, stmt_state_rel_inst_idx, ret_pc_ok_def,
-         lookup_var_def] >>
-     Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def]) >>
-  drule_all array_increment_boundary >> strip_tac >>
-  `gas_marked_path F ctx func s 0 (OK next)` by
-    (drule_all gas_marked_path_then >> simp[]) >>
-  qexists_tac `next` >> simp[lookup_var_def] >> metis_tac[]
-QED
-
 Theorem dynarray_body_finish_counted:
   dynarray_for_code func cenv bc ty stmts id et tv stride saved_base
     p sz ainst idx dv ov tot ep nv lv cond_lbl exit_lbl stmts_lbl incr_lbl
@@ -643,7 +598,7 @@ Proof
      ainst cond_lbl st (k+1) (ee with <|scopes := rest; gas_obs := []|>) next /\
      (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x t) /\
      next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next)` by
-    (irule dynarray_body_continue_iteration >> simp[] >>
+    (irule array_body_continue_iteration_framed >> simp[] >>
      goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
      goal_assum (drule_at (Pat `stmt_lands _ _ _ _`)) >>
      qexists_tac `sj` >> simp[]) >>

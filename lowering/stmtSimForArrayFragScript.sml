@@ -8,7 +8,7 @@ Ancestors
   stmtSimForParts gasOutcome gasContext stmtSimForRounds vyperInterpreter
   fragGasPath fragGasMode gasSummaryCompose gasSummary gasExemptCert vyperState vyperValue stmtSimDeclGas
 
-Theorem array_declared_reserved[local]:
+Theorem array_declared_reserved:
   declare_local cenv id et st =
     (bc, st with cs_next_var := st.cs_next_var + 1) /\
   local_ptrs_reserved cenv st /\
@@ -73,7 +73,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem array_start_alloca_member[local]:
+Theorem array_start_alloca_member:
   lookup_block lbl func.fn_blocks =
     SOME <|bb_label := lbl; bb_instructions := pre ++ [a;j]|> ==>
   MEM a (fn_insts func)
@@ -146,7 +146,7 @@ Proof
   simp[exec_alloca_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem array_allocate_ready[local]:
+Theorem array_allocate_ready:
   stmt_state_rel ctx func cenv cx es s0 /\
   fn_inst_ids_distinct func /\ MEM ainst (fn_insts func) /\
   ainst.inst_opcode = ALLOCA /\
@@ -213,7 +213,7 @@ Proof
   simp[local_ptrs_reserved_def] >> rpt strip_tac >> metis_tac[]
 QED
 
-Theorem array_allocation_safe[local]:
+Theorem array_allocation_safe:
   local_ptrs_reserved bc sa /\
   bc.ce_imm_alloca = cenv.ce_imm_alloca /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -275,7 +275,7 @@ Proof
   simp[array_for_code_def, ALL_DISTINCT] >> metis_tac[]
 QED
 
-Theorem array_alloca_frame[local]:
+Theorem array_alloca_frame:
   exec_alloca ainst s0 (sz : bytes32) = OK s1 /\
   ainst.inst_outputs = [p] ==>
   (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
@@ -502,7 +502,7 @@ Proof
 QED
 
 (* A gas-free successful values prefix retains syntactic certificate binds. *)
-Theorem array_values_prefix_outcome[local]:
+Theorem array_values_prefix_outcome:
   (!gs. source (es with gas_obs := gs) = (INL (vs:value list), es with gas_obs := gs)) /\
   ~s.vs_halted /\
   gas_outcome F tops (ctx,func) (next vs) (es with gas_obs := [],s) Q R ==>
@@ -612,7 +612,7 @@ Proof
   drule_all fn_has_code_start >> simp[]
 QED
 
-Theorem array_unbound_body_ptr[local]:
+Theorem array_unbound_body_ptr:
   local_ptrs_reserved bc sa /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_scopes id scopes = NONE ==>
@@ -723,7 +723,7 @@ Resume array_code_loop_counted[callback]:
 QED
 Finalise array_code_loop_counted
 
-Theorem array_outcome_stmt_post[local]:
+Theorem array_outcome_stmt_post:
   st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
   gas_outcome F tops (ctx,func) source (es,s0)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
@@ -901,7 +901,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem stmt_frag_start_gas_obs[local]:
+Theorem stmt_frag_start_gas_obs:
   stmt_frag ctx func cx lctx RetQ cenv m source es ==>
   !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
 Proof

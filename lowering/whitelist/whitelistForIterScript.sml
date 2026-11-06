@@ -15,7 +15,7 @@
  *)
 Theory whitelistForIter
 Ancestors
-  bodySimDeclCases
+  bodySimDeclCases whitelistForIterDynLoop
 
 (* A local DynArray: the lowering loads the length word at the local's
    pointer, asserts it is at most the capacity c, and reads element k at
