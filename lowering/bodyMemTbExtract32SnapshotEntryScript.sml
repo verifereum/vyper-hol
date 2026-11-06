@@ -5,6 +5,7 @@ Ancestors
   exprLoweringProps exprOperandVar builtinBytes emitHelper emitHelperProps
   compileEnv venomInst rich_list loweringPosts fragExec
   bodyMemTbExtract32Source fragGasSeqMem list venomState venomExecSemantics
+  words arithmetic
 
 Theorem extract32_snapshot_code[local]:
   compile_bytestring_src src sa = ((len,data),sb) ==>
@@ -126,7 +127,10 @@ Theorem extract32_source_snapshot_entry:
     w2n (n2w (b + 32):bytes32) + w2n (n2w (LENGTH bs):bytes32) <= u.vs_alloca_next /\
     (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-    (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sb x)
+    (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sb x) /\
+    eval_operand src u = SOME (n2w b) /\
+    val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) b u.vs_memory /\
+    expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s0c sb es' (BytesV bs) src u
 Proof
   strip_tac >> drule_all extract32_source_post_view >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s` by fs[expr_post_def] >>
@@ -134,5 +138,31 @@ Proof
   `u.vs_memory = s.vs_memory` by
     (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
        (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
+  `b < dimword (:256)` by decide_tac >>
+  `u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
+       (mp_tac o Q.AP_TERM `\v. v.vs_labels`) >> simp[]) >>
+  `eval_operand src u = SOME (n2w b)` by
+    (Cases_on `src` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) b u.vs_memory` by
+    (gvs[expr_post_def, expr_val_rel_def, is_word_type_def, w2n_n2w] >>
+     metis_tac[]) >>
+  `u.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
+       (mp_tac o Q.AP_TERM `\v. v.vs_allocas`) >> simp[]) >>
+  `sa.cs_next_id <= sb.cs_next_id` by
+    metis_tac[ci_mono_compile_bytestring_src, ci_mono_def, pairTheory.SND] >>
+  `local_ptrs_rel func cenv es'.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
+  `!n b sz. local_region cenv es'.scopes u n b sz <=>
+            local_region cenv es'.scopes s n b sz` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule local_region_frame >>
+         conj_tac >- (qexists_tac `func` >> simp[]) >>
+         qexistsl_tac [`sa`,`es'.scopes`,`u`] >> simp[]) >>
+     strip_tac >> irule local_region_frame_fwd >>
+     qexistsl_tac [`s`,`sa`,`es'.scopes`] >> simp[]) >>
+  `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s0c sb es' (BytesV bs) src u` by
+    (gvs[expr_post_def, expr_val_at_def, is_word_type_def, w2n_n2w] >>
+     metis_tac[LESS_LESS_EQ_TRANS]) >>
   qexistsl_tac [`b`,`u`] >> simp[] >> metis_tac[]
 QED
