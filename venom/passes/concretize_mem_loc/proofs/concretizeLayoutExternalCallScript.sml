@@ -130,7 +130,7 @@ Theorem concretize_call_completion_supplement:
   rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
   rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
   rq with <| cr_accounts := rq'.cr_accounts; cr_tStorage := rq'.cr_tStorage |> = rq' /\
-  request_agree_except D rq rq' /\ s.vs_logs = t.vs_logs /\
+  (~computed_precompile rq ==> request_agree_except D rq rq') /\ s.vs_logs = t.vs_logs /\
   consume_call_outcome rq ro rs s = (w,post) /\
   consume_call_outcome rq' ro' rs t = (w',post') ==>
   w = w' /\ concretize_supplement D (step_taint inst s post tn) post post'
@@ -142,6 +142,9 @@ Proof
   `request_agree_except M rq rq'` by
     fs[request_agree_except_def, concretize_supplement_def, Abbr `M`,
        accounts_agree_except_def, transient_agree_except_def] >>
+  `computed_precompile rq = computed_precompile rq'` by
+    fs[request_agree_except_def, computed_precompile_def,
+       call_request_component_equality] >>
   `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
   Cases_on `take_outcome rq s.vs_outcomes` >>
   Cases_on `take_outcome rq' s.vs_outcomes` >>
@@ -169,7 +172,11 @@ Proof
   drule_all call_adoption_reset_agreement >> strip_tac >>
   `LIST_REL (request_agree_except D)
     (record_request rq s.vs_requests) (record_request rq' t.vs_requests)` by
-    (irule request_agree_record_request >> fs[concretize_supplement_def]) >>
+    (Cases_on `computed_precompile rq`
+     >- (`computed_precompile rq'` by
+           metis_tac[] >>
+         fs[record_request_def, concretize_supplement_def]) >>
+     irule request_agree_record_request >> fs[concretize_supplement_def]) >>
   qpat_x_assum `consume_call_outcome rq _ _ _ = _` kall_tac >>
   qpat_x_assum `consume_call_outcome rq' _ _ _ = _` kall_tac >>
   qpat_x_assum `MEM _ _` kall_tac >>
@@ -248,10 +255,11 @@ Theorem concretize_ext_call_observation:
   is_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
   concretize_local_obs s t /\ concretize_supplement D tn s t /\
   s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
-  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  (~computed_precompile (venom_call_request s addr value off sz is_static) ==>
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n (offT:bytes32)) (w2n sz) t /\
   exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
     (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
@@ -271,8 +279,13 @@ Proof
    rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
    rq with <|cr_accounts := rqT.cr_accounts; cr_tStorage := rqT.cr_tStorage|> = rqT` by
     (simp[Abbr `rq`, Abbr `rqT`, venom_call_request_def] >> metis_tac[]) >>
-  `request_agree_except D rq rqT` by
-    (drule_all concretize_request_observation >> simp[]) >>
+  `~computed_precompile rq ==> request_agree_except D rq rqT` by
+    (strip_tac >>
+     `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+       (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+      tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+       (s.vs_transient s.vs_call_ctx.cc_address)` by metis_tac[] >>
+     drule_all concretize_request_observation >> simp[]) >>
   drule ext_call_success_envelope >> strip_tac >>
   `consume_call_outcome rq (w2n ro) (w2n rs) s = (w,p)` by
     fs[Abbr `rq`, Excl "consume_call_outcome_eq"] >>
@@ -340,10 +353,11 @@ Theorem concretize_ext_call_local_execution:
     (guarded_bytes Opaque rv tn) R concretize_local_obs s t /\
   concretize_supplement D tn s t /\
   s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
-  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  (~computed_precompile (venom_call_request s addr value off sz is_static) ==>
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n (offT:bytes32)) (w2n sz) t /\
   exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
     (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post /\
@@ -526,5 +540,82 @@ Proof
        taint_component_equality]
 QED
 
+
+(* Observable requests grow exactly on noncomputed calls. *)
+Theorem ext_call_execution_request_growth:
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
+  (LENGTH s.vs_requests < LENGTH post.vs_requests <=>
+   ~computed_precompile (venom_call_request s addr value off sz is_static))
+Proof
+  strip_tac >> drule ext_call_success_envelope >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >> drule_all call_completion_fields >> strip_tac >>
+  simp[update_var_def, record_request_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem ext_call_execution_taint_masks:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  is_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
+  (step_taint inst s post tn).t_stor =
+    (if ~is_static /\
+        ~computed_precompile (venom_call_request s addr value off sz is_static) /\
+        s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success
+     then {} else tn.t_stor) /\
+  (step_taint inst s post tn).t_trans =
+    (if ~is_static /\
+        ~computed_precompile (venom_call_request s addr value off sz is_static) /\
+        s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success
+     then {} else tn.t_trans)
+Proof
+  strip_tac >> drule ext_call_success_envelope >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+  `rq.cr_kind = MessageCall /\
+   rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+   rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient` by
+    (simp[Abbr `rq`, venom_call_request_def] >> metis_tac[]) >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >> drule_all call_completion_taint_masks >>
+  disch_then (qspec_then `tn` strip_assume_tac) >>
+  gvs[step_taint_def, store_taint_def, adopt_reset_def, update_var_def,
+      Abbr `rq`, venom_call_request_def, Excl "consume_call_outcome_eq"]
+QED
+
+Theorem ext_call_execution_reset_agreement:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  is_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+  s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
+  s.vs_outcomes = t.vs_outcomes /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
+  exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
+    (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post /\
+  exec_ext_call inst t gas addr value (offT:bytes32) sz (roT:bytes32) rs is_static = OK post' ==>
+  ?reset.
+    (step_taint inst s post tn).t_stor = (if reset then {} else tn.t_stor) /\
+    (step_taint inst t post' un).t_stor = (if reset then {} else un.t_stor) /\
+    (step_taint inst s post tn).t_trans = (if reset then {} else tn.t_trans) /\
+    (step_taint inst t post' un).t_trans = (if reset then {} else un.t_trans)
+Proof
+  strip_tac >>
+  `computed_precompile (venom_call_request s addr value off sz is_static) =
+   computed_precompile (venom_call_request t addr value offT sz is_static)` by
+    simp[computed_precompile_def, venom_call_request_def] >>
+  `is_static = (inst.inst_opcode = STATICCALL \/ t.vs_call_ctx.cc_static)` by
+    metis_tac[] >>
+  drule_all ext_call_execution_taint_masks >>
+  disch_then (qspec_then `un` strip_assume_tac) >>
+  rev_drule_all ext_call_execution_taint_masks >>
+  disch_then (qspec_then `tn` strip_assume_tac) >>
+  qexists_tac `~is_static /\
+    ~computed_precompile (venom_call_request s addr value off sz is_static) /\
+    s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success` >> simp[]
+QED
 
 val _ = export_theory();
