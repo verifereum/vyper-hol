@@ -56,7 +56,7 @@ Theorem abi_decoder_recursive_loop_header:
     (if j < LENGTH vs then body_lbl else exit_lbl) j h /\ abi_decode_sim ctx fn s h
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qhdtm_assum `abi_decoder_recursive_loop_inv`
+  qhdtm_assum `abi_sites_decoder_recursive_loop_inv`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_inv_def]) >>
   `fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s`
     by fs[abi_decoder_effect_def, Excl "enc_def"] >>
