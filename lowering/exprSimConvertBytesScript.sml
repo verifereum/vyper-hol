@@ -1,7 +1,7 @@
 (* Shared conversion simulation for dynamic Bytes and String results. *)
 Theory exprSimConvertBytes
 Ancestors
-  exprBopSimProps
+  exprBopSimProps vyperEvalScopesProgress
   exprSimDefs exprSimProps exprSimStack loweringPosts
   exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv
   exprSimAlloc exprSimBuffer exprSimBufferStore exprSimLiteralBuffer exprSimHash
@@ -943,15 +943,17 @@ Proof
 QED
 
 Theorem convert_wb_frame_trans:
-  !ctx func cenv cx es es1 sa sm s0 s1 s2.
-    wb_frame cenv es sa s0 s1 /\ wb_frame cenv es1 sm s1 s2 /\
+  !ctx func cenv cx es es1 es2 sa sm s0 s1 s2.
+    wb_frame cenv es es1 sa s0 s1 /\ wb_frame cenv es1 es2 sm s1 s2 /\
+    scopes_progress es.scopes es1.scopes /\
+    scopes_progress es1.scopes es2.scopes /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
-    wb_frame cenv es sa s0 s2
+    wb_frame cenv es es2 sa s0 s2
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 s2` by
+  `locals_kept cenv es es2 s0 s2` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
      gvs[exprSimWordArgsTheory.wb_frame_def]) >>
@@ -985,7 +987,7 @@ Theorem convert_buffer_expr_post:
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tv v <= sz /\
     (!name lb lsz. local_region cenv es'.scopes tt name lb lsz ==>
        w2n p + sz <= lb \/ lb + lsz <= w2n p) /\
-    wb_frame cenv es sa s0 tt ==>
+    wb_frame cenv es es' sa s0 tt ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op tt
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1061,16 +1063,18 @@ Theorem convert_expr_post_compose:
     expr_post ctx func cenv cx e es1 sm sb s1 es1 v op tt /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    scopes_progress es.scopes es1.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
     expr_post ctx func cenv cx e es sa sb s0 es1 v op tt
 Proof
   rpt gen_tac >> strip_tac >>
-  `wb_frame cenv es sa s0 s1` by
+  `wb_frame cenv es es1 sa s0 s1` by
     (gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv es1 sm s1 tt` by
+  `wb_frame cenv es1 es1 sm s1 tt` by
     (gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `scopes_progress es1.scopes es1.scopes` by simp[] >>
   drule_all convert_wb_frame_trans >> strip_tac >>
   gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
   reverse conj_tac >- (first_assum ACCEPT_TAC) >>
@@ -1248,6 +1252,7 @@ Theorem convert_widen_cont:
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    scopes_progress es.scopes es1.scopes /\
     (!z. x = Var z ==> not_fresh_at sm z) ==>
     frag_exec ctx sm sb (\ss. ss = s)
       (\tt. ?v'. convert_result cx (expr_type e1) (expr_type e) v = INL v' /\
@@ -1339,6 +1344,7 @@ Theorem convert_bytestring_cont[local]:
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    scopes_progress es.scopes es1.scopes /\
     (!z. x = Var z ==> not_fresh_at sm z) ==>
     frag_exec ctx sm sb (\ss. ss = s)
       (\tt. ?v'. convert_result cx (expr_type e1) (expr_type e) v = INL v' /\
@@ -1427,6 +1433,7 @@ Proof
   simp[] >> rpt gen_tac >> strip_tac >>
   drule_all convert_operand_typed >> strip_tac >>
   drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >> strip_tac >>
+  drule forced_eval_expr_scopes_progress >> strip_tac >>
   Cases_on `type_memory_bytes cenv (lowered_value_type cenv e1) < type_memory_bytes cenv t`
   >- (gvs[] >>
       `val_footprint tv1 v1 <= type_memory_bytes cenv (lowered_value_type cenv e1)` by

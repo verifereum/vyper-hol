@@ -108,7 +108,7 @@ Proof
      rpt strip_tac >> irule local_region_frame >> conj_tac
      >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es' s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
   rpt strip_tac >> metis_tac[]

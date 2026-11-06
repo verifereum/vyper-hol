@@ -8,6 +8,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+  vyperEvalScopesProgress
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding venomExecSemantics venomInst venomState
@@ -109,17 +110,31 @@ Proof
 QED
 
 Theorem locals_kept_trans:
-  !cenv es es1 sa s0 t u.
+  !cenv es es1 es' sa s0 t u.
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
-    locals_kept cenv es s0 t /\ locals_kept cenv es1 t u ==>
-    locals_kept cenv es s0 u
+    scopes_progress es.scopes es1.scopes /\
+    scopes_progress es1.scopes es'.scopes /\
+    locals_kept cenv es es1 s0 t /\ locals_kept cenv es1 es' t u ==>
+    locals_kept cenv es es' s0 u
 Proof
-  rw[locals_kept_def] >>
+  rw[locals_kept_def]
+  >- (`local_region cenv es1.scopes t n b sz` by
+        metis_tac[local_region_frame_fwd] >> metis_tac[]) >>
   `local_region cenv es1.scopes t n b sz` by
     metis_tac[local_region_frame_fwd] >>
-  metis_tac[]
+  `?e e1. lookup_scopes n es.scopes = SOME e /\
+          lookup_scopes n es1.scopes = SOME e1` by gvs[local_region_def] >>
+  `e1 = e` by
+    (qpat_x_assum `scopes_progress es.scopes _`
+       (qspecl_then [`n`, `e`, `e1`] mp_tac o
+        SIMP_RULE std_ss [scopes_progress_def]) >>
+     qpat_x_assum `scopes_progress es1.scopes _`
+       (qspecl_then [`n`, `e1`, `e`] mp_tac o
+        SIMP_RULE std_ss [scopes_progress_def]) >>
+     gvs[] >> rw[] >> gvs[]) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem expr_post_bop:
@@ -136,6 +151,8 @@ Theorem expr_post_bop:
     is_word_type ann /\ local_ptrs_reserved cenv sa /\
     stmt_state_rel ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    scopes_progress es.scopes es1.scopes /\
+    scopes_progress es1.scopes es'.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id ==>
     expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
@@ -315,6 +332,25 @@ Proof
   metis_tac[eval_expr_preserves_scopes_dom]
 QED
 
+Theorem forced_eval_expr_scopes_progress:
+  !cx e es res es'.
+    (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==>
+    scopes_progress es.scopes es'.scopes
+Proof
+  rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[eval_scopes_progress, scopes_progress_refl]
+QED
+
+Theorem bop_value_scopes_progress:
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v, ee) ==>
+  scopes_progress es.scopes ee.scopes
+Proof
+  simp[bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[eval_scopes_progress]
+QED
+
 Theorem bop_first_exempt_cert:
   gas_exempt_cert memory tops (ctx, func)
     (ignore_bind (do r <- eval_expr cx e1; read_result cx r od) (return ()))
@@ -387,6 +423,17 @@ Proof
   disch_then (mp_tac o MATCH_MP bop_value_scopes_dom) >> simp[]
 QED
 
+Theorem bop_marked_scopes_progress:
+  gas_marked_exec memory (ctx, func)
+    (do r <- eval_expr cx e; read_result cx r od)
+    (es, s0) marks (INL v) mid (OK t) ==>
+  scopes_progress es.scopes (mid with gas_obs := []).scopes
+Proof
+  simp[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP bop_value_scopes_progress) >> simp[]
+QED
+
 Theorem bop_normal_prefix_summary:
   gas_value_prefix F (ctx, func, cenv, cx) (expr_type e1, e1)
     (sa, s1, x) (es, s0) left (v1, mid, t) /\
@@ -456,6 +503,11 @@ Proof
   >- (disj1_tac >> simp[] >>
       `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
         metis_tac[bop_marked_scopes_dom] >>
+      `scopes_progress es.scopes (mid with gas_obs := []).scopes` by
+        metis_tac[bop_marked_scopes_progress] >>
+      `scopes_progress (mid with gas_obs := []).scopes
+         (fin with gas_obs := []).scopes` by
+        metis_tac[bop_marked_scopes_progress] >>
       qexists_tac `v` >> gvs[] >>
       irule expr_post_bop >>
       qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>

@@ -165,21 +165,29 @@ End
 
 (* ===== The posts ===== *)
 
-(* Code run from s0 to s leaves the live locals' memory alone, but for the
-   length words of their dynamic arrays: the bytes of every live local's
-   region at es apart from each dynamic array length word inside it
-   (dynarray_len_at, the root's and the nested ones') are kept.  The only
-   memory of a local an expression writes is the length word of the array
-   a pop pops (exprSimPop for a local x.pop(); a pop on a nested place,
-   x.f.pop() or x[i].pop(), writes the length word at its offset in x's
-   declared type). *)
+(* Code run from s0 to s, taking the source from es to es', leaves the
+   live locals' memory alone, but for the length words of their dynamic
+   arrays: the bytes of every live local's region at es apart from each
+   dynamic array length word inside it (dynarray_len_at, the root's and the
+   nested ones') are kept.  The only memory of a local an expression writes
+   is the length word of the array a pop pops (exprSimPop for a local
+   x.pop(); a pop on a nested place, x.f.pop() or x[i].pop(), writes the
+   length word at its offset in x's declared type).  A local the code left
+   alone in the source (its scope entry the same at es and es') keeps its
+   whole region, length words included: a pop records the popped element
+   in the local's entry, so no pop leaves the entry unchanged
+   (scopes_progress). *)
 Definition locals_kept_def:
-  locals_kept cenv es s0 s <=>
-    !n b sz off len.
-      local_region cenv es.scopes s0 n b sz /\ b <= off /\
-      off + len <= b + sz /\
-      (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
-      mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
+  locals_kept cenv es es' s0 s <=>
+    (!n b sz off len.
+       local_region cenv es.scopes s0 n b sz /\ b <= off /\
+       off + len <= b + sz /\
+       (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
+    (!n b sz.
+       local_region cenv es.scopes s0 n b sz /\
+       lookup_scopes n es'.scopes = lookup_scopes n es.scopes ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory)
 End
 
 (* Where the value v of an expression of type t, lowered from compile state
@@ -203,7 +211,7 @@ End
    (locals_kept), which the path keeps apart from a value with no dynamic
    array in it. *)
 Definition wb_frame_def:
-  wb_frame cenv es sa s0 s <=>
+  wb_frame cenv es es' sa s0 s <=>
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -213,7 +221,7 @@ Definition wb_frame_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 Definition expr_val_at_def:
@@ -262,7 +270,7 @@ Definition expr_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* The slot w holds the value obtained by reading the captured source
@@ -388,7 +396,7 @@ Definition vv_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* The location of a storage or transient place. *)
@@ -454,7 +462,7 @@ Definition target_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* compile_stmts, returning the compile environment after the list's

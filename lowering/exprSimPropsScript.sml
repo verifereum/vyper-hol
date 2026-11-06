@@ -300,54 +300,55 @@ Proof
 QED
 
 Theorem locals_kept_mem_tail:
-  !cenv es s0 t u.
-    locals_kept cenv es s0 t /\ u.vs_memory = t.vs_memory ==>
-    locals_kept cenv es s0 u
+  !cenv es es' s0 t u.
+    locals_kept cenv es es' s0 t /\ u.vs_memory = t.vs_memory ==>
+    locals_kept cenv es es' s0 u
 Proof
-  rw[locals_kept_def]
+  rw[locals_kept_def] >> metis_tac[]
 QED
 
 Theorem locals_kept_refl[simp]:
-  !cenv es s. locals_kept cenv es s s
+  !cenv es es' s. locals_kept cenv es es' s s
 Proof
   simp[locals_kept_def]
 QED
 
 Theorem locals_kept_mem:
-  !cenv es s0 s. s.vs_memory = s0.vs_memory ==> locals_kept cenv es s0 s
+  !cenv es es' s0 s. s.vs_memory = s0.vs_memory ==> locals_kept cenv es es' s0 s
 Proof
   metis_tac[locals_kept_mem_tail, locals_kept_refl]
 QED
 
 Theorem locals_kept_inst_idx[simp]:
-  !cenv es s0 s k.
-    locals_kept cenv es s0 (s with vs_inst_idx := k) <=>
-    locals_kept cenv es s0 s
+  !cenv es es' s0 s k.
+    locals_kept cenv es es' s0 (s with vs_inst_idx := k) <=>
+    locals_kept cenv es es' s0 s
 Proof
   simp[locals_kept_def]
 QED
 
 Theorem locals_kept_regions_tail:
-  !cenv es s0 s t.
-    locals_kept cenv es s0 s /\
+  !cenv es es' s0 s t.
+    locals_kept cenv es es' s0 s /\
     (!n b sz. local_region cenv es.scopes s0 n b sz ==>
        mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) ==>
-    locals_kept cenv es s0 t
+    locals_kept cenv es es' s0 t
 Proof
-  rw[locals_kept_def] >>
-  qpat_x_assum `!n b sz. local_region _ _ _ n b sz ==> _` drule >>
-  strip_tac >>
-  drule (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
-  disch_then (qspecl_then [`off`, `len`] mp_tac) >>
-  impl_tac >- decide_tac >> strip_tac >>
-  first_x_assum drule_all >> simp[]
+  rw[locals_kept_def] >- (
+    qpat_x_assum `!n b sz. local_region _ _ _ n b sz ==> _` drule >>
+    strip_tac >>
+    drule (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
+    disch_then (qspecl_then [`off`, `len`] mp_tac) >>
+    impl_tac >- decide_tac >> strip_tac >>
+    first_x_assum drule_all >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem locals_kept_regions:
-  !cenv es s0 s.
+  !cenv es es' s0 s.
     (!n b sz. local_region cenv es.scopes s0 n b sz ==>
        mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) ==>
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 Proof
   metis_tac[locals_kept_regions_tail, locals_kept_refl]
 QED
