@@ -1,6 +1,6 @@
 Theory immutableCopyExecution
 Ancestors
-  bytestringCopyExecution fragExec
+  bytestringCopyExecution fragExec stmtSimStoreCopy
   fragGasPath fragGasMode fragGasSeq placeCopyControlPath slotCopyExecution immutableWordExecution immutableMemoryFrame emitHelperProps
   context compileEnv emitHelper exprLoweringProps venomState venomExecSemantics venomInst
   mmCopyEquiv venomMemProps mmInterval
@@ -1065,38 +1065,16 @@ Proof
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
-Definition immutable_loop_normalize_def:
-  immutable_loop_normalize s t =
-    t with <|vs_vars := s.vs_vars;
-             vs_current_bb := s.vs_current_bb;
-             vs_prev_bb := s.vs_prev_bb;
-             vs_inst_idx := s.vs_inst_idx|>
-End
-
-Theorem immutable_loop_normalize_refl[local]:
-  immutable_loop_normalize s s = s
-Proof
-  simp[immutable_loop_normalize_def]
-QED
-
-Theorem immutable_loop_normalize_update[local]:
-  immutable_loop_normalize s (update_var x v t) = immutable_loop_normalize s t /\
-  immutable_loop_normalize s (jump_to lbl t) = immutable_loop_normalize s t /\
-  immutable_loop_normalize s (t with vs_inst_idx := k) = immutable_loop_normalize s t
-Proof
-  simp[immutable_loop_normalize_def, update_var_def, jump_to_def]
-QED
-
 Theorem immutable_loop_normalize_store[local]:
-  immutable_loop_normalize s (istore at v t) =
-    istore at v (immutable_loop_normalize s t)
+  store_copy_normalize s (istore at v t) =
+    istore at v (store_copy_normalize s t)
 Proof
-  simp[immutable_loop_normalize_def, istore_def, mstore_def]
+  simp[store_copy_normalize_def, istore_def, mstore_def]
 QED
 
 Theorem immutable_loop_prefix_step[local]:
-  immutable_loop_normalize s t = immutable_transfers T T a b i 0 s ==>
-  immutable_loop_normalize s
+  store_copy_normalize s t = immutable_transfers T T a b i 0 s ==>
+  store_copy_normalize s
     (istore (w2n (b + n2w (32*i)))
        (mload (w2n (a + n2w (32*i))) t) t) =
     immutable_transfers T T a b (SUC i) 0 s
@@ -1105,7 +1083,7 @@ Proof
   simp[immutable_transfers_snoc, immutable_word_transfer_def,
        immutable_copy_read_def, immutable_loop_normalize_store] >>
   qpat_x_assum `_ = _` (SUBST1_TAC o SYM) >>
-  simp[immutable_loop_normalize_def, mload_def]
+  simp[store_copy_normalize_def, mload_def]
 QED
 
 Theorem immutable_loop_fresh_write[local]:
@@ -1140,7 +1118,7 @@ QED
 
 Definition immutable_loop_frame_def:
   immutable_loop_frame sa sb s a b i t <=>
-    immutable_loop_normalize s t = immutable_transfers T T a b i 0 s /\
+    store_copy_normalize s t = immutable_transfers T T a b i 0 s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t)
 End
@@ -1150,7 +1128,8 @@ Theorem immutable_loop_frame_write[local]:
   (!x. not_fresh_at sa x ==> x <> name) /\ not_fresh_at sb name ==>
   immutable_loop_frame sa sb s a b i (update_var name v t)
 Proof
-  simp[immutable_loop_frame_def, immutable_loop_normalize_update] >>
+  simp[immutable_loop_frame_def, store_copy_normalize_update,
+       store_copy_normalize_jump, store_copy_normalize_idx] >>
   rpt strip_tac
   >- (simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
       metis_tac[lookup_var_def]) >>
@@ -1163,7 +1142,8 @@ Theorem immutable_loop_frame_control[local]:
   (immutable_loop_frame sa sb s a b i (t with vs_inst_idx := k) <=>
    immutable_loop_frame sa sb s a b i t)
 Proof
-  simp[immutable_loop_frame_def, immutable_loop_normalize_update,
+  simp[immutable_loop_frame_def, store_copy_normalize_update,
+       store_copy_normalize_jump, store_copy_normalize_idx,
        lookup_var_def, fresh_vars_wrt_def, jump_to_def]
 QED
 
@@ -1180,9 +1160,9 @@ Theorem immutable_loop_frame_shared[local]:
   t.vs_labels = s.vs_labels /\ t.vs_halted = s.vs_halted
 Proof
   simp[immutable_loop_frame_def] >> strip_tac >>
-  qpat_x_assum `immutable_loop_normalize _ _ = _`
+  qpat_x_assum `store_copy_normalize _ _ = _`
     (mp_tac o Q.AP_TERM `\t. (t.vs_labels,t.vs_halted)`) >>
-  simp[immutable_loop_normalize_def, immutable_loop_prefix_shared]
+  simp[store_copy_normalize_def, immutable_loop_prefix_shared]
 QED
 
 Theorem immutable_loop_frame_operand[local]:
@@ -1659,15 +1639,14 @@ Proof
   qexists_tac `t` >>
   conj_tac >- (drule_all gas_marked_path_then >> simp[]) >>
   `t.vs_labels = s.vs_labels` by metis_tac[immutable_loop_frame_shared] >>
-  fs[immutable_loop_frame_def, immutable_loop_normalize_def] >>
+  fs[immutable_loop_frame_def, store_copy_normalize_def] >>
   metis_tac[immutable_loop_operand_frame]
 QED
 
 Resume compile_imm_store_loop_path[init]:
   `immutable_loop_frame sa sb s a b 0 s` by
-    (simp[immutable_loop_frame_def, immutable_loop_normalize_refl,
-          immutable_transfers_def, fresh_vars_wrt_def] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+    (simp[immutable_loop_frame_def, immutable_transfers_def, fresh_vars_wrt_def,
+          store_copy_normalize_def, venom_state_component_equality]) >>
   `!x. not_fresh_at sa x ==> x <> cv` by metis_tac[listTheory.MEM] >>
   `not_fresh_at sb cv` by metis_tac[listTheory.MEM] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb0` by simp[] >>
@@ -1710,12 +1689,12 @@ Finalise compile_imm_store_loop_path
 
 Theorem immutable_transfers_normalize[local]:
   !n off t.
-  immutable_loop_normalize s (immutable_transfers T T a b n off t) =
-    immutable_transfers T T a b n off (immutable_loop_normalize s t)
+  store_copy_normalize s (immutable_transfers T T a b n off t) =
+    immutable_transfers T T a b n off (store_copy_normalize s t)
 Proof
   Induct >> simp[immutable_transfers_def] >>
   simp[immutable_word_transfer_def, immutable_copy_read_def,
-       immutable_loop_normalize_store, immutable_loop_normalize_def,
+       immutable_loop_normalize_store, store_copy_normalize_def,
        mload_def, istore_def, mstore_def]
 QED
 
@@ -1769,8 +1748,8 @@ Proof
   drule_all bytestring_word_count_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `gas_marked_path F ctx func s 0 (OK r)` >>
-  `r.vs_labels = s.vs_labels /\ immutable_loop_normalize s r = s` by
-    (fs[venom_state_component_equality, immutable_loop_normalize_def]) >>
+  `r.vs_labels = s.vs_labels /\ store_copy_normalize s r = s` by
+    (fs[venom_state_component_equality, store_copy_normalize_def]) >>
   `!p. (!x. p = Var x ==> not_fresh_at sa x) ==>
        eval_operand p r = eval_operand p s` by
     (Cases >> simp[eval_operand_def]) >>
@@ -1786,6 +1765,6 @@ Proof
   simp[] >>
   qpat_x_assum `(t with <|vs_vars := r.vs_vars; vs_current_bb := r.vs_current_bb;
       vs_prev_bb := r.vs_prev_bb; vs_inst_idx := r.vs_inst_idx|>) = _`
-    (mp_tac o AP_TERM ``immutable_loop_normalize s``) >>
-  simp[immutable_transfers_normalize, immutable_loop_normalize_def]
+    (mp_tac o AP_TERM ``store_copy_normalize s``) >>
+  simp[immutable_transfers_normalize, store_copy_normalize_def]
 QED

@@ -316,20 +316,20 @@ Proof
   Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def]
 QED
 
-Theorem store_copy_normalize_jump[local,simp]:
+Theorem store_copy_normalize_jump[simp]:
   store_copy_normalize sbase (jump_to l s) = store_copy_normalize sbase s
 Proof
   simp[store_copy_normalize_def, jump_to_def]
 QED
 
-Theorem store_copy_normalize_idx[local,simp]:
+Theorem store_copy_normalize_idx[simp]:
   store_copy_normalize sbase (s with vs_inst_idx := idx) =
     store_copy_normalize sbase s
 Proof
   simp[store_copy_normalize_def]
 QED
 
-Theorem store_copy_normalize_update[local,simp]:
+Theorem store_copy_normalize_update[simp]:
   store_copy_normalize sbase (update_var v w s) = store_copy_normalize sbase s
 Proof
   simp[store_copy_normalize_def, update_var_def]
