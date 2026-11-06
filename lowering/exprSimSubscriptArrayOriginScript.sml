@@ -194,7 +194,8 @@ Proof
   namedCases_on `args` ["", "addr tail"] >> simp[vv_location_def] >>
   Cases_on `tail` >> simp[vv_location_def] >>
   gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >> simp[vv_location_def] >>
-  IF_CASES_TAC >> simp[vv_location_def]
+  IF_CASES_TAC >> simp[vv_location_def] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[vv_location_def]
 QED
 
 Theorem code_expr_not_memory:
