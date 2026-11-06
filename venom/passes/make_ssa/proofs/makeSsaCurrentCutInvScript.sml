@@ -25,6 +25,7 @@ Ancestors
   makeSsaCurrentEdgeTransport makeSsaCurrentPrefixEndpoints
   makeSsaCurrentHistoryOwner venomInst venomWf venomExecProps list rich_list
   makeSsaCurrentNonphiDemandEdge makeSsaCurrentSingletonDemandEdge
+  makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentExternalExclusion
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -1269,4 +1270,71 @@ Proof
         (simp[current_collapsed_carrier_def] >> metis_tac[]) >>
       irule current_cut_sg_exit_lookup >> metis_tac[]) >>
   irule current_cut_sg_exit_name_lookup >> metis_tac[]
+QED
+
+Theorem current_cut_actual_copy_source_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  A h = current_block_annotations old pre /\ bb = simplify_current_phi_block new /\
+  phi_prefix_length bb.bb_instructions <= k /\
+  k < LENGTH pre + LENGTH (collect_phis old.bb_instructions) /\
+  (EL k bb.bb_instructions).inst_opcode = ASSIGN /\
+  (EL k bb.bb_instructions).inst_outputs = [d] /\
+  (EL k bb.bb_instructions).inst_operands = [Var z] /\
+  current_prefix_back
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) - SUC k)
+      (DROP (SUC k) bb.bb_instructions))
+    (current_cut_sg fn A renamed H events h
+      (LENGTH (collect_phis old.bb_instructions))) d x ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >>
+  `phi_prefix_length new.bb_instructions =
+    LENGTH pre + LENGTH (collect_phis old.bb_instructions)` by
+    (irule current_prefix_actual_endpoint >> metis_tac[]) >>
+  `phi_prefix_length bb.bb_instructions <= SUC k` by decide_tac >>
+  `?t. MEM (t,x,d) H` by
+    (qpat_assum `phi_prefix_length new.bb_instructions = _`
+       (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+     irule (cj 1 current_cut_cleaned_suffix_owner) >>
+     goal_assum (drule_at (Pat `current_prefix_back _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  `k < phi_prefix_length new.bb_instructions` by simp[] >>
+  drule_all current_prefix_cleaned_copy_source_cases >> strip_tac >>
+  drule_all current_wf_inserted_phi_output >> strip_tac >>
+  `out = d` by fs[] >> gvs[] >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\ ir_supply_covers_fn s fn /\
+   ir_supply_inst_ok s` by fs[current_wf_phi_context_def] >>
+  `MEM (CurrentInserted v h,v,d) H` by
+    (irule current_history_owned_name_member >>
+     simp[current_wf_token_owner_def] >> metis_tac[]) >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  `v = x` by metis_tac[current_carrier_history_name_owner] >> gvs[]
+  >- (`!oi. MEM oi old.bb_instructions /\ oi.inst_opcode = PHI ==>
+         ~MEM v oi.inst_outputs` by
+        (metis_tac[current_wf_external_collapsed_phi_clear]) >>
+      `!ni. MEM ni new.bb_instructions ==> ~MEM z ni.inst_outputs` by
+        (metis_tac[current_wf_external_output_disjoint]) >>
+      `FLOOKUP (current_cut_sg fn A renamed H events p
+         (LENGTH pred.bb_instructions)) z = SOME v` by
+        (irule current_cut_collapsed_inserted_edge_lookup >> metis_tac[]) >>
+      `phi_eff (SOME p) v old.bb_instructions = SOME (Var v)` by
+        (irule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
+         simp[listTheory.EVERY_MEM] >>
+         metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+      simp[current_cut_semantic_endpoint_def] >> disj2_tac >> disj2_tac >>
+      simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+      `MEM z (FLAT (MAP (\i. i.inst_outputs)
+        (simplify_current_phi_block new).bb_instructions))` by
+        (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+         metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+      drule current_wf_cleanup_block_output_member >>
+      simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `?w td ts. MEM (td,w,d) H /\ MEM (ts,w,z) H` by
+    (irule current_prefix_cleaned_copy_owner >> simp[] >> metis_tac[]) >>
+  `w = v` by metis_tac[current_carrier_history_name_owner] >> gvs[] >>
+  irule current_cut_retained_original_endpoint >> metis_tac[]
 QED
