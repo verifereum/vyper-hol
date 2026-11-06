@@ -58,6 +58,39 @@ Proof
   first_x_assum drule >> simp[] >> metis_tac[LESS_EQ_TRANS]
 QED
 
+(* Compiler freshness is name separation, not absence from runtime maps. *)
+Theorem reason_tuple_copy_names:
+  emit_op MLOAD [Var src] sa = (Var v1,c1) /\
+  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
+  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
+  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_void MCOPY [Var dst;Var src;Var v4] c4 = ((),sb) ==>
+  (!p. not_fresh_at sa p ==> p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4) /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  (!p. MEM p [v1;v2;v3;v4] ==> not_fresh_at sb p) /\
+  (!p. MEM p [v1;v2;v3;v4] ==>
+    ?n. p = STRING #"%" (toString n) /\ sa.cs_next_var <= n)
+Proof
+  strip_tac >> imp_res_tac emitted_insts_emit_op >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  gvs[not_fresh_at_def, GREATER_EQ, ASCIInumbersTheory.toString_inj] >>
+  rpt conj_tac >> rpt strip_tac >> gvs[] >> metis_tac[LESS_EQ_REFL, LESS_EQ_ADD]
+QED
+
+Theorem reason_tuple_copy_nonlocal:
+  emit_op MLOAD [Var src] sa = (Var v1,c1) /\
+  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
+  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
+  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_void MCOPY [Var dst;Var src;Var v4] c4 = ((),sb) /\
+  local_ptrs_reserved cenv sa ==>
+  !p. MEM p [v1;v2;v3;v4] ==> not_local_ptr cenv scopes p
+Proof
+  strip_tac >> drule_all reason_tuple_copy_names >> strip_tac >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
+  irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]
+QED
+
 Theorem reason_tuple_copy_fresh_names:
   emit_op MLOAD [Var src] sa = (Var v1,c1) /\
   emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
@@ -70,9 +103,10 @@ Theorem reason_tuple_copy_fresh_names:
   sa.cs_next_var <= sb.cs_next_var /\
   (!p. MEM p [v1;v2;v3;v4] ==> not_fresh_at sb p)
 Proof
-  strip_tac >> imp_res_tac emitted_insts_emit_op >>
-  drule emitted_insts_emit_void >> strip_tac >>
-  gvs[not_fresh_at_def, fresh_vars_wrt_def, GREATER_EQ, lookup_var_def,
-      finite_mapTheory.FLOOKUP_DEF, ASCIInumbersTheory.toString_inj] >>
-  rpt conj_tac >> rpt strip_tac >> gvs[] >> metis_tac[LESS_EQ_REFL, LESS_EQ_ADD]
+  strip_tac >> drule_all reason_tuple_copy_names >> strip_tac >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      gvs[fresh_vars_wrt_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF]) >>
+  simp[]
 QED
