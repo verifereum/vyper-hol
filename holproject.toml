@@ -6,7 +6,8 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["venom/codegen/proofs/fnLineageInvSupportScript.sml",
+roots = ["venom/codegen/proofs/fnLineageInvSpliceProbeScript.sml",
+         "venom/codegen/proofs/fnLineageInvSupportScript.sml",
          "venom/codegen/proofs/fnLineageInvEdgeFactsScript.sml",
          "venom/codegen/proofs/fnLineageInvBoundaryScript.sml",
          "venom/codegen/proofs/fnLineageInvReadinessProbeScript.sml",
