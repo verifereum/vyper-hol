@@ -61,7 +61,7 @@ Theorem mload_counted_clean_ambient:
     ?G' tn' t.
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
       lookup_var out t = SOME (mload (w2n a) s) /\
-      op_taint tn' (Var out) = {} /\
+      op_taint tn' (Var out) = {} /\ op_prov G' (Var out) = NONE /\
       t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
       tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
       tn'.t_imm = tn.t_imm /\ t.vs_call_ctx = s.vs_call_ctx /\
@@ -84,6 +84,7 @@ Proof
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
   drule_all mload_ghost_clean >> strip_tac >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-       mload_ambient_frame] >>
+       mload_ambient_frame, op_prov_def, step_prov_def, out_prov_def,
+       set_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
   simp[step_taint_def, mk_inst_def, set_var_taint_def, imm_taint_def]
 QED
