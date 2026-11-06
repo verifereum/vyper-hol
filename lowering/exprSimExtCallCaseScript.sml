@@ -102,7 +102,7 @@ Definition extcall_default_ready_def:
                eval_operand default_op t = SOME w /\
                expr_val_rel cx default_ty d default_op t /\
                (~is_word_type default_ty ==>
-                w2n w + type_memory_size tv <= t.vs_alloca_next)
+                w2n w + val_footprint tv d <= t.vs_alloca_next)
 End
 
 (* At sp, just before the extcodesize check and the CALL: the source has
@@ -157,7 +157,7 @@ Definition extcall_request_ready_def:
              eval_operand default_op t = SOME w /\
              evaluate_type (get_tenv cx) default_ty = SOME tv ==>
              compileEnv$regions_disjoint (w2n ro) cap (w2n w)
-               (type_memory_size tv))) /\
+               (val_footprint tv d))) /\
     extcall_default_ready cx ret_type has_default default_op default_ty
       default_opt t
 End
