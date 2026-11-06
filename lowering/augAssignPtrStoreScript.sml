@@ -42,6 +42,8 @@ Theorem emit_mstore_path_ptr:
   ?tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf = (mstore (w2n a) w s) with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    tnf = step_taint (mk_inst sa.cs_next_id MSTORE [Var dst; value] []) s
+      (mstore (w2n a) w s) tn /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
     tnf.t_var = tn.t_var /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
