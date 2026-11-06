@@ -202,3 +202,89 @@ Proof
   irule abi_footprint_disjoint_subwindow >>
   qexistsl_tac [`b`,`sz`] >> simp[]
 QED
+
+Theorem log_output_protected_footprint:
+  compile_alloc_buffer cap st = (dst,prepared) /\ fn_has_code st prepared func /\
+  abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
+  FLOOKUP t.vs_allocas st.cs_next_id = SOME (db,cap) /\
+  stmt_state_rel ctx func ce cx es s /\ stmt_state_rel ctx func ce cx es t /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
+  local_ptrs_reserved ce prepared ==>
+  (!name b sz. local_region ce es.scopes t name b sz ==>
+    abi_footprint_disjoint b sz [(db,cap)]) /\
+  (!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+    aid < st.cs_next_id /\ off <= i /\ i < off+sz ==>
+    abi_footprint_disjoint i 1 [(db,cap)]) /\
+  (!name b sz i. local_region ce es.scopes s name b sz /\ b <= i /\ i < b+sz ==>
+    abi_footprint_disjoint i 1 [(db,cap)])
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!name b sz. local_region ce es.scopes t name b sz ==>
+    abi_footprint_disjoint b sz [(db,cap)]` by
+    (rpt gen_tac >> strip_tac >>
+     irule log_buffer_registered_local_region >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `!name b sz. local_region ce es.scopes s name b sz ==>
+    abi_footprint_disjoint b sz [(db,cap)]` by
+    (drule_all log_allocation_local_regions >> metis_tac[]) >>
+  `t.vs_allocas = (abi_builtin_allocate_state st.cs_next_id cap s).vs_allocas` by
+    fs[abi_builtin_allocation_frame_def] >>
+  drule_all log_builtin_allocation_candidate >> disch_tac >>
+  irule log_one_allocation_protected_bytes >>
+  goal_assum (drule_at Any) >>
+  conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+  qexists_tac `st.cs_next_id` >> asm_simp_tac bool_ss [LESS_EQ_REFL]
+QED
+
+Theorem log_tuple_protected_footprint:
+  compile_alloc_buffer cap st = (buf,prepared) /\ fn_has_code st prepared func /\
+  abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
+  FLOOKUP t.vs_allocas st.cs_next_id = SOME (db,cap) /\
+  stmt_state_rel ctx func ce cx es s /\ stmt_state_rel ctx func ce cx es t /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
+  local_ptrs_reserved ce prepared /\
+  compile_abi_encode_to_buf buf.buf_operand src (AbiComplex infos) prepared = (out,end_st) /\
+  fn_has_code prepared end_st func /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  EXISTS (\(_,_,_,dyn). dyn) infos /\
+  EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos /\
+  u.vs_allocas = (abi_builtin_allocate_state prepared.cs_next_id 32 t).vs_allocas /\
+  FLOOKUP u.vs_allocas prepared.cs_next_id = SOME (p,32) ==>
+  (!name b sz. local_region ce es.scopes t name b sz ==>
+    abi_footprint_disjoint b sz [(db,cap);(p,32)]) /\
+  (!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+    aid < st.cs_next_id /\ off <= i /\ i < off+sz ==>
+    abi_footprint_disjoint i 1 [(db,cap);(p,32)]) /\
+  (!name b sz i. local_region ce es.scopes s name b sz /\ b <= i /\ i < b+sz ==>
+    abi_footprint_disjoint i 1 [(db,cap);(p,32)])
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all log_output_protected_footprint >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac (Q.INST [`s` |-> `t`, `st` |-> `prepared`, `t` |-> `u`,
+    `dst` |-> `buf.buf_operand`]
+    (SPEC_ALL log_tuple_cursor_local_region)) >>
+  impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
+  `!name b sz. local_region ce es.scopes t name b sz ==>
+    abi_footprint_disjoint b sz [(db,cap);(p,32)]` by
+    (rpt gen_tac >> strip_tac >>
+     fs[abi_footprint_disjoint_def] >> metis_tac[ADD_COMM]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `!name b sz. local_region ce es.scopes s name b sz ==>
+    abi_footprint_disjoint b sz [(db,cap)] /\
+    abi_footprint_disjoint b sz [(p,32)]` by
+    (drule_all log_allocation_local_regions >> metis_tac[]) >>
+  `t.vs_allocas = (abi_builtin_allocate_state st.cs_next_id cap s).vs_allocas` by
+    fs[abi_builtin_allocation_frame_def] >>
+  drule_all log_builtin_allocation_candidate >> disch_tac >>
+  qpat_assum `u.vs_allocas = _`
+    (mp_then Any mp_tac log_builtin_allocation_candidate) >>
+  disch_then drule >> disch_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `alloca_inv s /\ alloca_inv t` by fs[stmt_state_rel_def, state_rel_def] >>
+  irule log_two_allocations_protected_bytes >>
+  goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`st.cs_next_var`,`st.cs_next_id`,`prepared.cs_next_id`,`t`] >>
+  asm_simp_tac bool_ss [] >> decide_tac
+QED
