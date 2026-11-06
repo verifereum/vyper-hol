@@ -12,7 +12,7 @@
 
 Theory bodyIntCallSeams
 Ancestors
-  bodyIntCallBufferOriginCheck bodyIntCallReturnLayout bodyIntCallRestoreResults bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallCountedPath bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
+  bodyIntCallSourceReturn bodyIntCallMetadata bodyIntCallReturnAdapters bodyIntCallCompilerBoundary bodyIntCallAssemblySource bodyIntCallAssemblyModes bodyIntCallAssembly bodyIntCallCompletedModes bodyIntCallCompletedFrame bodyIntCallCompletedFacts bodyIntCallCompletedSource bodyIntCallExemptReturn bodyIntCallStorePath bodyIntCallStoreRun bodyIntCallStorePost bodyIntCallEmitBoundary memoryLocalRhsProps supportedProgram supportedNames bodyIntCallBufferOriginCheck bodyIntCallReturnLayout bodyIntCallRestoreResults bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallCountedPath bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
   intCallCallee intCallFrame fragGasFocus gasOutcome gasContext
   compileVyper exprLowering exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperAST venomState venomExecSemantics
@@ -386,7 +386,82 @@ Theorem intcall_return_restore:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt strip_tac >>
+  `ann = ret` by (drule_all body_internal_decl_return_type >> simp[]) >>
+  `rc' = returns_stack_count
+    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ret` by
+    (drule_all body_internal_decl_return_count >> simp[]) >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_body_pre_def, expr_sim_inv_def] >>
+  `evaluate_type (get_tenv cx) ann = SOME rtv` by
+    fs[intcall_entry_def] >>
+  `wb_frame cenv es0 sa s0 t` by
+    (fs[intcall_entry_def, wb_frame_def] >> metis_tac[]) >>
+  `!n b sz. local_region cenv es0.scopes s0 n b sz ==>
+            local_region cenv prev t n b sz` by
+    (rpt strip_tac >>
+     irule (SRULE [] (Q.INST [`esB` |-> `es1 with scopes := prev`]
+       (SPEC_ALL expr_inv_local_regions_transport))) >>
+     qexistsl_tac [`cx`,`tenv`,`es1`,`es0`,`s0`,`sa`] >>
+     fs[intcall_entry_def, expr_body_pre_def]) >>
+  `immutable_alloca_sep func cenv cx (es1 with scopes := prev) t` by
+    fs[intcall_entry_def, stmt_state_rel_def] >>
+  qpat_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[intcall_entry_def] >> strip_tac >>
+  qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >>
+  strip_tac >>
+  rewrite_tac[intcall_rest_def] >>
+  pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
+  irule invoke_cleanup_outcome >>
+  conj_tac >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+    rewrite_tac[intcall_rest_def] >>
+    pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
+  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
+  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx rtv rc'
+    (if rc' = 0 /\ ann <> NoneT then SOME (HD argv) else NONE)
+    sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
+  reverse conj_tac >-
+    (simp[NoAsms, intcall_callee_exit_def] >>
+     qpat_assum `cenv.ce_func_return_type _ = ann` (fn th => rewrite_tac[th])) >>
+  rpt strip_tac >>
+  `immutable_alloca_sep func cenv cx (ee with scopes := prev) t` by
+    (irule marked_body_immutable_alloca_sep >>
+     goal_assum (drule_at Any) >>
+     qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[intcall_callee_src_def] >> strip_tac >>
+     goal_assum (drule_at Any)) >>
+  `gas_path ctx callee entered (LENGTH marks) (IntRet ir cs)` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gasSummaryTheory.gas_marked_exec_def,
+       fragGasModeTheory.gas_marked_path_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `(\v ee ir cs. _) _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [intcall_callee_exit_def, expr_exit_def]) >>
+  simp[NoAsms] >>
+  `0 < rc' ==> 0 < returns_stack_count
+    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ann` by
+    (qpat_assum `ann = ret` (fn th => rewrite_tac[th]) >>
+     qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th])) >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule source_return_dispatch >>
+  asm_rewrite_tac[] >>
+  reverse conj_tac >- (qexists_tac `es1` >> first_assum ACCEPT_TAC) >>
+  goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
+  qexistsl_tac [`arg_ops`,`cenv.ce_func_return_type (nsid_to_string (NONE,name))`,
+    `lbl`,`rc''`,`rc'`,`rbs'`,`rbs'`,`rtv`,`HD argv`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `cenv.ce_func_return_type _ = ann` (fn th => rewrite_tac[th]) >>
+  simp[NoAsms, expr_type_def] >>
+  qpat_assum `cenv.ce_func_info _ = (rc'',rbs',pvs')` mp_tac >>
+  qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
+  simp[NoAsms] >> strip_tac >>
+  qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `ann = ret` (fn th => rewrite_tac[GSYM th]) >>
+  asm_rewrite_tac[]
 QED
 
 (* Held for the posts-interface change (post_value_type in loweringPosts):
