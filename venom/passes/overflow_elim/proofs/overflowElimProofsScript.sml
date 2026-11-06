@@ -1,9 +1,9 @@
 (*
  * Overflow Check Elimination — Main Proofs
  *
- * Depends on overflowElimHelpers for all DFG soundness infrastructure.
- * This file contains: overflow_elim_block_sim_ind, overflow_elim_block_sim,
- * overflow_elim_inv_step and overflow_elim_function_sim, used by
+ * overflow_elim_function_sim lifts the per-instruction simulation
+ * overflow_elim_sim_pw through range_pass_correct, with the within-block
+ * invariant dfg_prefix_sound plus the chain closure.  Used by
  * overflowElimCorrectness.overflow_elim_function_correct.
  *)
 
@@ -12,7 +12,7 @@ Ancestors
   overflowElimHelpers2
   overflowElimHelpers
   overflowElimDefs
-  assertElimProofs
+  rangePassProofs
   analysisSimDefs
   analysisSimProps
   passSimulationDefs
@@ -46,7 +46,7 @@ Ancestors
 val _ = temp_delsimps ["dfg_block_local_def", "dfg_tracked_opcode_def"];
 
 (* ================================================================
-   Per-block simulation
+   Within-block invariant
    ================================================================ *)
 
 Triviality step_assign_output_in_fdom[local]:
@@ -143,30 +143,6 @@ Proof
         step_pure2_output_in_fdom) >> simp[])
 QED
 
-Triviality lift_result_OK_left[local]:
-  !R_ok R_term s1 r2.
-    lift_result R_ok R_term R_term (OK s1) r2 ==> ?s2. r2 = OK s2 /\ R_ok s1 s2
-Proof
-  rpt gen_tac >> Cases_on `r2` >> simp[lift_result_def]
-QED
-
-Triviality lift_result_nonOK[local]:
-  !R_ok R_term r1 r2.
-    lift_result R_ok R_term R_term r1 r2 /\ (!s. r1 <> OK s) ==> (!s. r2 <> OK s)
-Proof
-  rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def]
-QED
-
-Triviality oe_is_terminator_pres[local]:
-  !dfg v inst. is_terminator inst.inst_opcode ==>
-    is_terminator (overflow_elim_inst_v dfg v inst).inst_opcode
-Proof
-  rpt strip_tac >>
-  simp[overflow_elim_inst_v_def] >>
-  rpt IF_CASES_TAC >> simp[] >>
-  gvs[is_terminator_def]
-QED
-
 Triviality oe_nonterm_pres[local]:
   !dfg v inst. ~is_terminator inst.inst_opcode ==>
     ~is_terminator (overflow_elim_inst_v dfg v inst).inst_opcode
@@ -208,98 +184,22 @@ Proof
   simp[overflow_elim_inst_v_def]
 QED
 
-Triviality oe_phi_identity[local]:
-  !dfg v inst. inst.inst_opcode = PHI ==>
-    overflow_elim_inst_v dfg v inst = inst
+Triviality oe_outputs[local]:
+  !dfg v inst.
+    (overflow_elim_inst_v dfg v inst).inst_outputs = inst.inst_outputs \/
+    (overflow_elim_inst_v dfg v inst).inst_outputs = []
 Proof
-  simp[overflow_elim_inst_v_def]
-QED
-
-(* exec_block passes non-OK step results through directly *)
-Triviality exec_block_nonOK_passthrough[local]:
-  !fuel ctx bb st r.
-    st.vs_inst_idx < LENGTH bb.bb_instructions /\
-    step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = r /\
-    (!s. r <> OK s) ==>
-    exec_block fuel ctx bb st = r
-Proof
-  rpt strip_tac >>
-  simp[Once exec_block_def, get_instruction_def] >>
-  Cases_on `r` >> gvs[]
-QED
-
-(* exec_block on terminator OK = halted/continue result *)
-Triviality exec_block_terminator_OK[local]:
-  !fuel ctx bb st s1.
-    st.vs_inst_idx < LENGTH bb.bb_instructions /\
-    step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
-    is_terminator (EL st.vs_inst_idx bb.bb_instructions).inst_opcode ==>
-    exec_block fuel ctx bb st =
-      if s1.vs_halted then Halt s1 else OK s1
-Proof
-  rpt strip_tac >> simp[Once exec_block_def, get_instruction_def]
-QED
-
-(* exec_block on non-terminator OK = continuation *)
-Triviality exec_block_nonterm_OK[local]:
-  !fuel ctx bb st s1.
-    st.vs_inst_idx < LENGTH bb.bb_instructions /\
-    step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
-    ~is_terminator (EL st.vs_inst_idx bb.bb_instructions).inst_opcode ==>
-    exec_block fuel ctx bb st =
-      exec_block fuel ctx bb (s1 with vs_inst_idx := SUC st.vs_inst_idx)
-Proof
-  rpt strip_tac >> simp[Once exec_block_def, get_instruction_def]
-QED
-
-(* Helper: after one non-terminator step, dfg_prefix_sound, range_sound, and
-   chain closure all transfer from idx to SUC idx *)
-(* range_sound ignores vs_inst_idx *)
-Triviality range_sound_inst_idx[local]:
-  !X n s. range_sound X (s with vs_inst_idx := n) = range_sound X s
-Proof
-  rw[range_sound_def] >> Cases_on `X` >> simp[]
-QED
-
-(* range_sound transfers through one non-terminator step *)
-Triviality nonterm_range_transfer[local]:
-  !fn bb st s1 fuel ctx.
-    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label st.vs_inst_idx) st /\
-    step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
-    st.vs_inst_idx < LENGTH bb.bb_instructions /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    ALL_DISTINCT (fn_labels fn) /\
-    wf_function fn ==>
-    range_sound
-      (df_widen_at NONE (range_analyze fn) bb.bb_label (SUC st.vs_inst_idx))
-      (s1 with vs_inst_idx := SUC st.vs_inst_idx)
-Proof
-  rpt strip_tac >>
-  REWRITE_TAC [range_sound_inst_idx] >>
-  mp_tac (Q.SPECL [`fn`, `bb.bb_label`, `bb`, `st.vs_inst_idx`]
-            range_intra_transfer) >>
-  (impl_tac >- (
-    simp[] >> metis_tac[MEM_lookup_block, fn_labels_def])) >>
-  disch_then (fn th => REWRITE_TAC [th]) >>
-  mp_tac (ISPECL [``range_sound``,
-    ``range_transfer_opt``,
-    ``(dfg_build_function fn, fn.fn_blocks)``]
-    analysisSimProofsTheory.transfer_sound_step) >>
-  disch_then (qspecl_then [`EL st.vs_inst_idx bb.bb_instructions`,
-    `fuel`, `ctx`, `st`, `s1`,
-    `df_widen_at NONE (range_analyze fn) bb.bb_label st.vs_inst_idx`] mp_tac) >>
-  simp[range_transfer_sound]
+  rw[overflow_elim_inst_v_def, mk_nop_inst_def]
 QED
 
 (* chain closure extends by one step *)
 Triviality nonterm_chain_closure[local]:
   !fn bb st s1 fuel ctx.
-    (!chain_v k.
-       dfg_get_def (dfg_build_function fn) chain_v =
-         SOME (EL k bb.bb_instructions) /\
-       dfg_tracked_opcode (EL k bb.bb_instructions).inst_opcode /\
-       k < st.vs_inst_idx /\ k < LENGTH bb.bb_instructions ==>
+    (!chain_v chain_inst k.
+       dfg_get_def (dfg_build_function fn) chain_v = SOME chain_inst /\
+       dfg_tracked_opcode chain_inst.inst_opcode /\
+       k < st.vs_inst_idx /\ k < LENGTH bb.bb_instructions /\
+       EL k bb.bb_instructions = chain_inst ==>
        chain_v IN FDOM st.vs_vars) /\
     step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
     st.vs_inst_idx < LENGTH bb.bb_instructions /\
@@ -308,14 +208,14 @@ Triviality nonterm_chain_closure[local]:
     wf_function fn /\ fn_inst_wf fn /\
     (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
        MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) ==>
-    (!chain_v k.
-       dfg_get_def (dfg_build_function fn) chain_v =
-         SOME (EL k bb.bb_instructions) /\
-       dfg_tracked_opcode (EL k bb.bb_instructions).inst_opcode /\
-       k < SUC st.vs_inst_idx /\ k < LENGTH bb.bb_instructions ==>
+    (!chain_v chain_inst k.
+       dfg_get_def (dfg_build_function fn) chain_v = SOME chain_inst /\
+       dfg_tracked_opcode chain_inst.inst_opcode /\
+       k < SUC st.vs_inst_idx /\ k < LENGTH bb.bb_instructions /\
+       EL k bb.bb_instructions = chain_inst ==>
        chain_v IN FDOM s1.vs_vars)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> qpat_x_assum `EL _ _ = chain_inst` (SUBST_ALL_TAC o SYM) >>
   Cases_on `k < st.vs_inst_idx`
   >| [
     (* k < st.vs_inst_idx: variable preserved across step *)
@@ -340,368 +240,16 @@ Proof
   ]
 QED
 
-Triviality nonterm_ih_step[local]:
-  !fn bb st s1 fuel ctx.
-    dfg_prefix_sound (dfg_build_function fn) bb st.vs_vars st.vs_inst_idx /\
-    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label st.vs_inst_idx) st /\
-    (!chain_v k.
-       dfg_get_def (dfg_build_function fn) chain_v =
-         SOME (EL k bb.bb_instructions) /\
-       dfg_tracked_opcode (EL k bb.bb_instructions).inst_opcode /\
-       k < st.vs_inst_idx /\ k < LENGTH bb.bb_instructions ==>
-       chain_v IN FDOM st.vs_vars) /\
-    step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
-    st.vs_inst_idx < LENGTH bb.bb_instructions /\
-    ~is_terminator (EL st.vs_inst_idx bb.bb_instructions).inst_opcode /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    wf_function fn /\ fn_inst_wf fn /\
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    ALL_DISTINCT (fn_labels fn) /\
-    dfg_block_local fn /\
-    assert_local fn ==>
-    dfg_prefix_sound (dfg_build_function fn) bb s1.vs_vars
-      (SUC st.vs_inst_idx) /\
-    range_sound
-      (df_widen_at NONE (range_analyze fn) bb.bb_label (SUC st.vs_inst_idx))
-      (s1 with vs_inst_idx := SUC st.vs_inst_idx) /\
-    (!chain_v k.
-       dfg_get_def (dfg_build_function fn) chain_v =
-         SOME (EL k bb.bb_instructions) /\
-       dfg_tracked_opcode (EL k bb.bb_instructions).inst_opcode /\
-       k < SUC st.vs_inst_idx /\ k < LENGTH bb.bb_instructions ==>
-       chain_v IN FDOM s1.vs_vars)
-Proof
-  rpt gen_tac >> strip_tac >>
-  conj_tac >- (
-    mp_tac dfg_prefix_sound_step >>
-    disch_then (qspecl_then [`fn`, `bb`, `st.vs_inst_idx`,
-      `fuel`, `ctx`, `st`, `s1`] mp_tac) >>
-    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-    simp[]) >>
-  conj_tac >- (
-    mp_tac nonterm_range_transfer >>
-    disch_then (qspecl_then [`fn`, `bb`, `st`, `s1`,
-      `fuel`, `ctx`] mp_tac) >>
-    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-    simp[]) >>
-  rpt strip_tac >>
-  mp_tac nonterm_chain_closure >>
-  disch_then (qspecl_then [`fn`, `bb`, `st`, `s1`,
-    `fuel`, `ctx`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qspecl_then [`chain_v`, `k`] mp_tac) >>
-  simp[]
-QED
-
-(* Helper: if step results are non-OK and lift_result-related,
-   then exec_block results (which pass through) are also related *)
-Triviality nonOK_exec_block_lift[local]:
-  !fuel ctx bb1 bb2 inst1 inst2 st R_ok R_term.
-    st.vs_inst_idx < LENGTH bb1.bb_instructions /\
-    st.vs_inst_idx < LENGTH bb2.bb_instructions /\
-    EL st.vs_inst_idx bb1.bb_instructions = inst1 /\
-    EL st.vs_inst_idx bb2.bb_instructions = inst2 /\
-    (!s. step_inst fuel ctx inst1 st <> OK s) /\
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 st)
-      (step_inst fuel ctx inst2 st) ==>
-    (?e. exec_block fuel ctx bb1 st = Error e) \/
-    lift_result R_ok R_term R_term
-      (exec_block fuel ctx bb1 st)
-      (exec_block fuel ctx bb2 st)
-Proof
-  rpt strip_tac >>
-  `exec_block fuel ctx bb1 st = step_inst fuel ctx inst1 st` by
-    (irule exec_block_nonOK_passthrough >> simp[]) >>
-  `!s. step_inst fuel ctx inst2 st <> OK s` by
-    metis_tac[lift_result_nonOK] >>
-  `exec_block fuel ctx bb2 st = step_inst fuel ctx inst2 st` by
-    (irule exec_block_nonOK_passthrough >> simp[]) >>
-  Cases_on `step_inst fuel ctx inst1 st`
-  >- (DISJ1_TAC >> metis_tac[])
-  >> (DISJ2_TAC >> simp[])
-QED
-
-(* Core inductive lemma: works on exec_block (which preserves vs_inst_idx).
-   run_block resets vs_inst_idx to 0, so it can't be used inductively. *)
-Triviality overflow_elim_block_sim_ind:
-  !fn bb n fuel ctx st.
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    wf_function fn /\ fn_inst_wf fn /\
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    ALL_DISTINCT (fn_labels fn) /\
-    dfg_block_local fn /\
-    assert_local fn /\
-    (!i. i < LENGTH bb.bb_instructions - 1 ==>
-      ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
-    dfg_prefix_sound (dfg_build_function fn) bb st.vs_vars st.vs_inst_idx /\
-    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label st.vs_inst_idx) st /\
-    (!chain_v k.
-       dfg_get_def (dfg_build_function fn) chain_v =
-         SOME (EL k bb.bb_instructions) /\
-       dfg_tracked_opcode (EL k bb.bb_instructions).inst_opcode /\
-       k < st.vs_inst_idx /\ k < LENGTH bb.bb_instructions ==>
-       chain_v IN FDOM st.vs_vars) ==>
-    (?e. exec_block fuel ctx bb st = Error e) \/
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (exec_block fuel ctx bb st)
-      (exec_block fuel ctx
-        (analysis_block_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst]) bb) st)
-Proof
-  completeInduct_on `n` >> rpt strip_tac >>
-  qabbrev_tac `bt = analysis_block_transform_widen NONE (range_analyze fn)
-    (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                 (range_unwrap v) inst])` >>
-  Cases_on `st.vs_inst_idx < LENGTH bb.bb_instructions`
-  >- (
-    qabbrev_tac `dinst = EL st.vs_inst_idx bb.bb_instructions` >>
-    qabbrev_tac `idx = st.vs_inst_idx` >>
-    qabbrev_tac `v_opt = df_widen_at NONE (range_analyze fn) bb.bb_label idx` >>
-    (* Transformed block has same length and known instruction at idx *)
-    `idx < LENGTH (bt bb).bb_instructions` by
-      simp[Abbr`bt`, analysis_block_transform_widen_def, flat_mapi_singleton,
-           LENGTH_MAPi] >>
-    `EL idx (bt bb).bb_instructions =
-       overflow_elim_inst_v (dfg_build_function fn) (range_unwrap v_opt)
-         dinst` by
-      simp[Abbr`bt`, Abbr`dinst`, Abbr`v_opt`,
-           analysis_block_transform_widen_def, flat_mapi_singleton, EL_MAPi] >>
-    qabbrev_tac `tinst = overflow_elim_inst_v (dfg_build_function fn)
-                           (range_unwrap v_opt) dinst` >>
-    `inst_wf dinst` by
-      (fs[fn_inst_wf_def] >> first_x_assum irule >>
-       qexists_tac `bb` >> simp[Abbr`dinst`, MEM_EL] >> metis_tac[]) >>
-    (* Per-instruction simulation *)
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-              (Q.SPECL [`fn`, `bb`, `idx`, `v_opt`,
-                         `fuel`, `ctx`, `dinst`, `st`]
-                        overflow_elim_sim_pw))) >>
-    (impl_tac
-    >- (simp[Abbr`v_opt`, Abbr`dinst`] >>
-        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-        rpt strip_tac >> gvs[] >>
-        first_x_assum irule >> simp[])) >>
-    strip_tac >> pop_assum strip_assume_tac
-    >- ((* Error case: step_inst dinst st = Error e *)
-      DISJ1_TAC >>
-      `exec_block fuel ctx bb st = Error e` by
-        (irule exec_block_nonOK_passthrough >> simp[Abbr`dinst`, Abbr`idx`]) >>
-      simp[])
-    >> (* Lift_result case: we have lift_result on step results *)
-    Cases_on `step_inst fuel ctx dinst st`
-    >- ( (* OK case *)
-      rename1 `step_inst fuel ctx dinst st = OK s1` >>
-      qpat_x_assum `lift_result _ _ _ _ _`
-        (strip_assume_tac o MATCH_MP lift_result_OK_left) >>
-      imp_res_tac state_equiv_empty_eq >> gvs[] >>
-      (* OK case *)
-      Cases_on `is_terminator dinst.inst_opcode`
-      >- ( (* Terminator case *)
-        `exec_block fuel ctx bb st =
-           if s1.vs_halted then Halt s1 else OK s1` by
-          (irule exec_block_terminator_OK >> simp[Abbr`dinst`, Abbr`idx`]) >>
-        `exec_block fuel ctx (bt bb) st =
-           if s1.vs_halted then Halt s1 else OK s1` by
-          (irule exec_block_terminator_OK >> simp[Abbr`idx`] >>
-           metis_tac[oe_is_terminator_pres]) >>
-        simp[] >>
-        IF_CASES_TAC >>
-        simp[lift_result_def, state_equiv_refl, execution_equiv_refl]
-      )
-      >> ( (* Non-terminator case *)
-        `exec_block fuel ctx bb st =
-           exec_block fuel ctx bb (s1 with vs_inst_idx := SUC st.vs_inst_idx)` by
-          (irule exec_block_nonterm_OK >> simp[Abbr`dinst`, Abbr`idx`]) >>
-        `exec_block fuel ctx (bt bb) st =
-           exec_block fuel ctx (bt bb) (s1 with vs_inst_idx := SUC st.vs_inst_idx)` by
-          (irule exec_block_nonterm_OK >>
-           simp[Abbr`idx`] >>
-           metis_tac[oe_nonterm_pres]) >>
-        simp[] >>
-        last_x_assum (qspec_then
-          `LENGTH bb.bb_instructions - SUC st.vs_inst_idx` mp_tac) >>
-        (impl_tac >- simp[Abbr`idx`]) >>
-        disch_then (qspecl_then [`fn`, `bb`, `fuel`, `ctx`,
-          `s1 with vs_inst_idx := SUC st.vs_inst_idx`] mp_tac) >>
-        simp[Abbr`bt`] >>
-        (impl_tac >- suspend "ih_preconds") >>
-        simp[]
-      )
-    )
-    >> ( (* Non-OK cases: Halt, Abort, IntRet, Error —
-           both exec_blocks pass through the non-OK step result *)
-      qspecl_then [`fuel`, `ctx`, `bb`, `bt bb`,
-        `EL idx bb.bb_instructions`,
-        `EL idx (bt bb).bb_instructions`, `st`,
-        `state_equiv {}`, `execution_equiv {}`]
-        mp_tac nonOK_exec_block_lift >>
-      simp[Abbr`idx`] >>
-      disch_then match_mp_tac >>
-      qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
-      simp[Abbr`tinst`, Abbr`dinst`, Abbr`v_opt`]
-    )
-  )
-  >- (
-    (* Base case: st.vs_inst_idx >= LENGTH => get_instruction = NONE => Error *)
-    simp[Once exec_block_def, get_instruction_def] >>
-    simp[Abbr`bt`, analysis_block_transform_widen_def, flat_mapi_singleton,
-         LENGTH_MAPi] >>
-    simp[Once exec_block_def, get_instruction_def]
-  )
-QED
-
-Resume overflow_elim_block_sim_ind[ih_preconds]:
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qspecl_then [`fn`, `bb`, `st`, `s1`, `fuel`, `ctx`]
-    mp_tac nonterm_ih_step >>
-  simp[Abbr`idx`, Abbr`dinst`, Abbr`v_opt`] >>
-  disch_then match_mp_tac >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-QED
-
-Finalise overflow_elim_block_sim_ind
-
-Theorem overflow_elim_block_sim[local]:
-  !fn bb.
-    let dfg = dfg_build_function fn in
-    let ra = range_analyze fn in
-    let bt = analysis_block_transform_widen NONE ra
-               (\v inst. [overflow_elim_inst_v dfg (range_unwrap v) inst]) in
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    wf_function fn /\ fn_inst_wf fn /\
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    ALL_DISTINCT (fn_labels fn) /\
-    dfg_block_local fn /\
-    assert_local fn /\
-    (!i. i < LENGTH bb.bb_instructions - 1 ==>
-      ~is_terminator (EL i bb.bb_instructions).inst_opcode) ==>
-    !fuel ctx s.
-      s.vs_inst_idx = 0 /\
-      dfg_ext_sound dfg s.vs_vars /\
-      range_sound (df_widen_at NONE ra bb.bb_label 0) s ==>
-      (?e. run_block fuel ctx bb s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_block fuel ctx bb s)
-        (run_block fuel ctx (bt bb) s)
-Proof
-  simp_tac std_ss [LET_THM] >> rpt strip_tac >>
-  qmatch_goalsub_abbrev_tac `run_block fuel ctx (bt bb) s` >>
-  `bb_well_formed bb` by fs[wf_function_def] >>
-  `eval_phis s (bt bb).bb_instructions = eval_phis s bb.bb_instructions` by (
-    simp[Abbr`bt`, analysis_block_transform_widen_def] >>
-    irule analysisSimProofsBaseTheory.eval_phis_flat_mapi >>
-    simp[oe_phi_identity, oe_not_phi_pres] >>
-    fs[bb_well_formed_def]) >>
-  `phi_prefix_length (bt bb).bb_instructions =
-   phi_prefix_length bb.bb_instructions` by (
-    simp[Abbr`bt`, analysis_block_transform_widen_def] >>
-    irule analysisSimProofsBaseTheory.phi_prefix_length_flat_mapi >>
-    simp[oe_phi_identity, oe_not_phi_pres] >>
-    fs[bb_well_formed_def]) >>
-  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
-    eval_phis_ok_or_error_defs
-  >- (
-    rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
-    ONCE_REWRITE_TAC[run_block_def] >> gvs[] >>
-    mp_tac overflow_elim_block_sim_ind >>
-    disch_then (qspecl_then [`fn`, `bb`,
-      `LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
-      `fuel`, `ctx`,
-      `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] mp_tac) >>
-    impl_tac >- (
-      rpt conj_tac >| [
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        first_assum ACCEPT_TAC,
-        simp[],
-        mp_tac (Q.SPECL [`dfg_build_function fn`, `bb`,
-          `(s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_vars`,
-          `(s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_inst_idx`]
-          dfg_prefix_sound_phi_prefix) >> simp[],
-        simp[] >>
-        mp_tac (Q.SPECL [`fn`, `bb`, `s`, `s_phi`]
-          rangeAnalysisProofsTheory.eval_phis_range_sound) >>
-        impl_tac >- (
-          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-          irule venomExecPropsTheory.MEM_lookup_block >>
-          qpat_assum `ALL_DISTINCT _` mp_tac >>
-          simp_tac std_ss [fn_labels_def] >> metis_tac[]) >>
-        strip_tac >> gvs[range_sound_def, in_range_state_def],
-        rpt strip_tac >>
-        `k < phi_prefix_length bb.bb_instructions` by fs[] >>
-        `(EL k bb.bb_instructions).inst_opcode = PHI` by
-          metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
-        gvs[dfg_tracked_opcode_def]]) >>
-    simp[Abbr`bt`])
-  >- (
-    DISJ1_TAC >> qexists_tac `e` >> gvs[run_block_def])
-QED
-
 (* ================================================================
    Function-level correctness
    ================================================================ *)
 
-(* Invariant preservation across a single block execution *)
-Triviality overflow_elim_inv_step:
-  !fn bb fuel ctx s v.
-  wf_function fn /\ fn_inst_wf fn /\
-  (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-     MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-  ALL_DISTINCT (fn_labels fn) /\
-  dfg_block_local fn /\
-  (!bb. MEM bb fn.fn_blocks ==>
-    !i. i < LENGTH bb.bb_instructions - 1 ==>
-      ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-  (!bb cond false_lbl.
-    (LAST bb.bb_instructions).inst_opcode = JNZ ==>
-    (LAST bb.bb_instructions).inst_operands =
-      [cond; Label false_lbl; Label false_lbl] ==>
-    ~MEM bb fn.fn_blocks) /\
-  MEM bb fn.fn_blocks /\
-  dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
-  range_sound (df_widen_at NONE (range_analyze fn) s.vs_current_bb 0) s /\
-  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
-  s.vs_inst_idx = 0 /\
-  s.vs_current_bb = bb.bb_label /\
-  run_block fuel ctx bb s = OK v ==>
-  v.vs_inst_idx = 0 /\
-  dfg_ext_sound (dfg_build_function fn) v.vs_vars /\
-  range_sound (df_widen_at NONE (range_analyze fn) v.vs_current_bb 0) v /\
-  MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+Theorem overflow_elim_inst_structural[local]:
+  !dfg. inst_transform_structural_1
+          (\v inst. overflow_elim_inst_v dfg (range_unwrap v) inst)
 Proof
-  rpt gen_tac >> strip_tac >>
-  conj_tac >- metis_tac[run_block_OK_inst_idx_0] >>
-  conj_tac
-  >- (
-    irule dfg_ext_sound_run_block >>
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    TRY res_tac >>
-    qexistsl_tac [`bb`, `ctx`, `fuel`, `s`] >>
-    simp[])
-  >> (
-    mp_tac assertElimProofsTheory.range_successor_obligation >>
-    (impl_tac >- (
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> res_tac)) >>
-    disch_then (qspecl_then [`bb`, `fuel`, `ctx`, `s`, `v`] mp_tac) >>
-    (impl_tac >- (
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      fs[dfg_ext_sound_def])) >>
-    simp[])
+  rw[inst_transform_structural_1_def, overflow_elim_inst_v_def] >>
+  BasicProvers.every_case_tac >> gvs[mk_nop_inst_def, is_terminator_def]
 QED
 
 Theorem overflow_elim_function_sim:
@@ -721,82 +269,64 @@ Theorem overflow_elim_function_sim:
         [cond; Label true_lbl; Label false_lbl] ==>
       true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
-    MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+    fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
     range_sound (df_widen_at NONE (range_analyze fn) s.vs_current_bb 0) s ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx
-        (function_map_transform
-          (analysis_block_transform_widen NONE (range_analyze fn)
-            (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                         (range_unwrap v) inst])) fn) s)
+        (analysis_function_transform_widen NONE (range_analyze fn)
+          (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                       (range_unwrap v) inst]) fn) s)
 Proof
-  rpt strip_tac
-  \\ qabbrev_tac `bt = analysis_block_transform_widen NONE (range_analyze fn)
-       (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                    (range_unwrap v) inst])`
-  \\ qabbrev_tac `Inv = \s:venom_state.
-       s.vs_inst_idx = 0 /\
-       dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
-       range_sound (df_widen_at NONE
-         (range_analyze fn : (string |-> value_range) option df_widen_state)
-         s.vs_current_bb 0) s /\
-       MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre`
-  \\ mp_tac (BETA_RULE (ISPECL [
-    ``\(s1:venom_state) (s2:venom_state). (Inv : venom_state -> bool) s1``,
-    ``state_equiv {} : venom_state -> venom_state -> bool``,
-    ``execution_equiv {} : venom_state -> venom_state -> bool``,
-    ``bt : basic_block -> basic_block``,
-    ``fn : ir_function``]
-    block_sim_function_with_pred2_bb))
-  \\ impl_tac
-  >- (
-    rpt conj_tac
-    (* P s s ==> R_ok s s *)
-    >- metis_tac[state_equiv_refl]
-    (* R_ok ==> R_term *)
-    >- metis_tac[REWRITE_RULE [execEquivParamDefsTheory.valid_state_rel_def]
-          (SPEC ``{}:string set`` state_equiv_execution_equiv_valid_state_rel)]
-    (* R_ok ==> current_bb, inst_idx, halted agree *)
-    >- (rpt strip_tac >> fs[state_equiv_def, execution_equiv_def])
-    (* bt preserves bb_label *)
-    >- simp[analysis_block_transform_widen_def, Abbr `bt`]
-    (* P preservation after both exec_blocks *)
-    >- suspend "p_pres"
-    (* Block simulation *)
-    >- suspend "block_sim"
-  )
-  \\ disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac)
-  \\ simp[Abbr `Inv`, Abbr `bt`]
-QED
-
-Resume overflow_elim_function_sim[p_pres]:
-  rpt gen_tac >> strip_tac >>
-  imp_res_tac state_equiv_empty_eq >> gvs[] >>
-  simp[Abbr `Inv`] >>
-  match_mp_tac overflow_elim_inv_step >>
-  qexistsl_tac [`bb`, `fuel`, `ctx`, `s1`] >>
-  BETA_TAC >> gvs[] >> metis_tac[]
-QED
-
-Resume overflow_elim_function_sim[block_sim]:
   rpt strip_tac >>
-  imp_res_tac state_equiv_empty_eq >> gvs[] >>
-  (* Get run_block result from overflow_elim_block_sim *)
-  mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_block_sim)) >>
-  disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >>
-    TRY (first_assum ACCEPT_TAC) >>
-    gvs[Abbr `Inv`] >> res_tac)) >>
-  BETA_TAC >>
-  disch_then (qspecl_then [`fuel`, `ctx`, `s1`] mp_tac) >>
-  (impl_tac >- gvs[Abbr `Inv`]) >>
-  simp[Abbr `bt`]
+  mp_tac (BETA_RULE (ISPECL [``fn : ir_function``,
+    ``\bb idx (t:venom_state).
+        dfg_prefix_sound (dfg_build_function fn) bb t.vs_vars idx /\
+        !chain_v chain_inst k.
+          dfg_get_def (dfg_build_function fn) chain_v = SOME chain_inst /\
+          dfg_tracked_opcode chain_inst.inst_opcode /\
+          k < idx /\ k < LENGTH bb.bb_instructions /\
+          EL k bb.bb_instructions = chain_inst ==>
+          chain_v IN FDOM t.vs_vars``,
+    ``\v inst. overflow_elim_inst_v (dfg_build_function fn)
+                 (range_unwrap v) inst``] range_pass_correct)) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- ACCEPT_TAC (ISPEC ``dfg_build_function fn`` overflow_elim_inst_structural)
+      (* entry: nothing tracked lies in the PHI prefix *)
+      >- (rpt gen_tac >> strip_tac >> conj_tac
+          >- simp[dfg_prefix_sound_phi_prefix] >>
+          rpt strip_tac >>
+          `(EL k bb.bb_instructions).inst_opcode = PHI` by
+            metis_tac[phi_prefix_length_el_phi] >>
+          gvs[dfg_tracked_opcode_def])
+      (* step *)
+      >- (rpt gen_tac >> strip_tac >> conj_tac
+          >- (mp_tac (Q.SPECL [`fn`, `bb`, `idx`, `fuel`, `ctx`, `t`, `t'`]
+                dfg_prefix_sound_step) >>
+              impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+              simp[]) >>
+          qpat_x_assum `t.vs_inst_idx = idx` (SUBST_ALL_TAC o SYM) >>
+          mp_tac (Q.SPECL [`fn`, `bb`, `t`, `t'`, `fuel`, `ctx`]
+            nonterm_chain_closure) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          simp[])
+      (* per-instruction simulation *)
+      >> rpt gen_tac >> strip_tac >>
+      mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_sim_pw)) >>
+      disch_then (qspecl_then [`fn`, `bb`, `idx`,
+        `df_widen_at NONE (range_analyze fn) bb.bb_label idx`, `fuel`, `ctx`,
+        `EL idx bb.bb_instructions`, `t`] mp_tac) >>
+      impl_tac
+      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          fs[fn_inst_wf_def] >> first_x_assum irule >> metis_tac[MEM_EL]) >>
+      disch_then ACCEPT_TAC) >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  impl_tac >- (fs[dfg_ext_sound_def] >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
-
-Finalise overflow_elim_function_sim
 
 Theorem overflow_elim_analysis_transform_wf:
   !fn. wf_function fn ==>
@@ -819,3 +349,22 @@ Proof
        oe_phi_pres, oe_not_phi_pres]
 QED
 
+Theorem overflow_elim_analysis_transform_ssa:
+  !fn. wf_function fn /\ ssa_form fn ==>
+    ssa_form
+      (analysis_function_transform_widen NONE (range_analyze fn)
+        (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                     (range_unwrap v) inst]) fn)
+Proof
+  rpt strip_tac >>
+  qspecl_then
+    [`NONE : range_state option`, `range_analyze fn`,
+     `\v inst. overflow_elim_inst_v (dfg_build_function fn) (range_unwrap v) inst`,
+     `fn`]
+    (fn th => REWRITE_TAC[BETA_RULE th]) aftw_singleton_eq_fmt_mapi >>
+  mp_tac (Q.SPECL
+    [`\bb idx inst. overflow_elim_inst_v (dfg_build_function fn)
+        (range_unwrap (df_widen_at NONE (range_analyze fn) bb.bb_label idx)) inst`,
+     `fn`] mapi_transform_preserves_ssa_bb) >>
+  simp[oe_inst_id, oe_outputs]
+QED

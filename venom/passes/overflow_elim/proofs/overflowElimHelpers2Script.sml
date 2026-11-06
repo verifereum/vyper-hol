@@ -9,7 +9,6 @@ Theory overflowElimHelpers2
 Ancestors
   overflowElimHelpers
   overflowElimDefs
-  assertElimProofs
   analysisSimDefs
   analysisSimProps
   passSimulationDefs
@@ -359,9 +358,9 @@ Proof
         contradiction_gt) >> simp[])
 QED
 
-(* Like overflow_elim_sim but uses dfg_prefix_sound instead of dfg_ext_sound.
-   Uses weak chain closure (only for positions < idx) plus structural
-   preconditions to derive the full chain when needed. *)
+(* Per-instruction simulation: overflow_elim_inst_v drops an ASSERT only
+   when it cannot fail.  Needs dfg_prefix_sound and the chain closure for
+   positions < idx; the structural preconditions give the rest of the chain. *)
 Theorem overflow_elim_sim_pw:
   !fn bb idx v fuel ctx inst s.
     let dfg = dfg_build_function fn in

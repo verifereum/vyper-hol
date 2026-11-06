@@ -173,6 +173,29 @@ Proof
   simp[update_var_def, FLOOKUP_UPDATE]
 QED
 
+(* ASSERT with one operand: reverts if operand = 0w, continues unchanged otherwise *)
+Theorem step_inst_assert_1:
+  !fuel ctx inst s op.
+    inst.inst_opcode = ASSERT /\ inst.inst_operands = [op] ==>
+    step_inst fuel ctx inst s =
+      case eval_operand op s of
+        NONE => Error "undefined operand"
+      | SOME cond =>
+          if cond = 0w
+          then Abort Revert_abort (revert_state (set_returndata [] s))
+          else OK s
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[step_inst_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+  simp[is_terminator_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[]
+QED
+
 (* ==========================================================================
    block_step / exec_block Properties
    ========================================================================== *)

@@ -7,12 +7,7 @@
  *   assert_elim_preserves_ssa_form — assert elimination preserves SSA form
  *   assert_elim_preserves_wf_function — assert elimination preserves well-formedness
  *
- * Helper (local):
- *   assert_elim_inst_outputs — assert_elim_inst keeps the outputs or drops them all
- *
- * The other structural lemmas on assert_elim_inst (_cases, _id, _terminator,
- * _not_terminator, _phi, _not_phi) and aftw_singleton_eq_fmt_mapi are in
- * assertElimProofs.
+ * The proofs are in assertElimProofs.
  *)
 
 Theory assertElimCorrectness
@@ -81,46 +76,22 @@ Proof
   metis_tac[]
 QED
 
-(* ===== Derived structural properties ===== *)
-
-Theorem assert_elim_inst_outputs[local]:
-  !v inst. (assert_elim_inst v inst).inst_outputs = inst.inst_outputs \/
-           (assert_elim_inst v inst).inst_outputs = []
-Proof
-  rpt gen_tac >>
-  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
-                        assert_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
-QED
-
 (* ===== Obligations ===== *)
 
 (* A well-formed function in SSA form remains in SSA form after assert elimination. *)
 Theorem assert_elim_preserves_ssa_form:
   ∀fn. wf_function fn ∧ ssa_form fn ⇒ ssa_form (assert_elim_function fn)
 Proof
-  rpt strip_tac >>
-  simp[assert_elim_function_def] >>
+  rpt strip_tac >> simp[assert_elim_function_def] >>
   irule clear_nops_function_preserves_ssa >>
-  ONCE_REWRITE_TAC[aftw_singleton_eq_fmt_mapi] >>
-  mp_tac (Q.SPECL
-    [`\bb idx inst. assert_elim_inst (df_widen_at NONE (range_analyze fn) bb.bb_label idx) inst`,
-     `fn`] mapi_transform_preserves_ssa_bb) >>
-  simp[assert_elim_inst_id, assert_elim_inst_outputs]
+  irule assert_elim_analysis_transform_ssa >> fs[]
 QED
 
 (* A well-formed function remains well-formed after assert elimination. *)
 Theorem assert_elim_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (assert_elim_function fn)
 Proof
-  rpt strip_tac >>
-  simp[assert_elim_function_def] >>
+  rpt strip_tac >> simp[assert_elim_function_def] >>
   irule clear_nops_function_preserves_wf >>
-  ONCE_REWRITE_TAC[aftw_singleton_eq_fmt_mapi] >>
-  mp_tac (Q.SPECL
-    [`\bb idx inst. assert_elim_inst (df_widen_at NONE (range_analyze fn) bb.bb_label idx) inst`,
-     `fn`] mapi_transform_preserves_wf_bb) >>
-  simp[assert_elim_inst_id, assert_elim_inst_terminator,
-       assert_elim_inst_not_terminator, assert_elim_inst_phi,
-       assert_elim_inst_not_phi]
+  irule assert_elim_analysis_transform_wf >> fs[]
 QED

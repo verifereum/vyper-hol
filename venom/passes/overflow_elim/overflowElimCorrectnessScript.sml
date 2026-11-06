@@ -9,7 +9,7 @@ Ancestors
   passSharedDefs passSimulationProps passSharedProps
   passSimulationDefs venomInst dfgDefs
   rangeAnalysisDefs dfAnalyzeWidenDefs stateEquiv
-  assertElimProofs analysisSimDefs analysisSimProps stateEquivProps venomExecSemantics venomState venomInstProps venomExecProps execEquivParamProps rangeEvalDefs valueRangeDefs rangeAnalysisProofs dfgAnalysisProps dfgSoundDefs dfgSoundProofs worklistDefs list finite_map indexedLists
+  rangePassProofs analysisSimDefs analysisSimProps stateEquivProps venomExecSemantics venomState venomInstProps venomExecProps execEquivParamProps rangeEvalDefs valueRangeDefs rangeAnalysisProofs dfgAnalysisProps dfgSoundDefs dfgSoundProofs worklistDefs list finite_map indexedLists
 
 Libs
   BasicProvers
@@ -86,166 +86,32 @@ Theorem overflow_elim_function_correct:
 Proof
   rpt strip_tac
   \\ REWRITE_TAC[BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_function_eq)]
-  \\ qabbrev_tac `bt = analysis_block_transform_widen NONE (range_analyze fn)
-       (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                    (range_unwrap v) inst])`
-  (* Bridge: all run_function = run_blocks *)
-  \\ `!fn'. fn_entry_label fn' = fn_entry_label fn ==>
-       run_function fuel ctx fn' s = run_blocks fuel ctx fn' s` by
-    (rpt strip_tac >> irule run_function_is_run_blocks >> simp[])
-  \\ `(bt (HD fn.fn_blocks)).bb_label = (HD fn.fn_blocks).bb_label` by
-    simp[analysis_block_transform_widen_def, Abbr `bt`]
-  \\ `fn_entry_label (function_map_transform bt fn) = fn_entry_label fn` by
-    (irule fn_entry_label_function_map_transform >> simp[Abbr `bt`,
-       analysis_block_transform_widen_def])
-  \\ `fn_entry_label (clear_nops_function (function_map_transform bt fn)) =
-      fn_entry_label fn` by
-    simp[fn_entry_label_clear_nops]
-  (* Rewrite all run_function to run_blocks *)
-  \\ fs[]
-  (* Apply overflow_elim_function_sim for run_blocks *)
-  \\ mp_tac overflow_elim_function_sim
-  \\ disch_then (qspecl_then [`fn`, `fuel`, `ctx`, `s`] mp_tac)
-  \\ simp[Abbr `bt`]
-  \\ (impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    fs[fn_entry_label_def] >> Cases_on `entry_block fn` >> gvs[] >>
-    drule cfgAnalysisPropsTheory.cfg_analyze_preorder_entry_first >>
-    strip_tac >> metis_tac[rich_listTheory.HEAD_MEM]))
+  \\ mp_tac (Q.SPECL [`fn`, `fuel`, `ctx`, `s`] overflow_elim_function_sim)
+  \\ impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)
+  \\ qmatch_goalsub_abbrev_tac `clear_nops_function aft`
+  \\ `fn_entry_label aft = fn_entry_label fn` by
+       simp[Abbr `aft`, fn_entry_label_function_map_transform,
+            analysis_function_transform_widen_def,
+            analysis_block_transform_widen_def]
+  \\ `run_function fuel ctx fn s = run_blocks fuel ctx fn s` by
+       (irule run_function_is_run_blocks >> conj_tac >> first_assum ACCEPT_TAC)
+  \\ `run_function fuel ctx aft s = run_blocks fuel ctx aft s` by
+       (irule run_function_is_run_blocks >> metis_tac[])
   \\ strip_tac
   >- (DISJ1_TAC >> metis_tac[])
   \\ DISJ2_TAC
   \\ irule lift_result_trans
   \\ conj_tac >- metis_tac[state_equiv_trans]
   \\ conj_tac >- metis_tac[execution_equiv_trans]
-  \\ qexists_tac `run_blocks fuel ctx
-       (function_map_transform
-         (analysis_block_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst])) fn) s`
-  \\ conj_tac >- first_assum ACCEPT_TAC
-  \\ `run_function fuel ctx
-        (clear_nops_function (function_map_transform
-           (analysis_block_transform_widen NONE (range_analyze fn)
-             (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                          (range_unwrap v) inst])) fn)) s =
-      run_blocks fuel ctx
-        (clear_nops_function (function_map_transform
-           (analysis_block_transform_widen NONE (range_analyze fn)
-             (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                          (range_unwrap v) inst])) fn)) s` by
-    (first_x_assum irule >> simp[fn_entry_label_clear_nops])
-  \\ pop_assum (fn th => REWRITE_TAC [GSYM th])
-  \\ simp_tac std_ss [GSYM result_equiv_is_lift_result,
-       GSYM analysis_function_transform_widen_def]
-  (* run_blocks (aft fn) s = run_function (aft fn) s *)
-  \\ `run_blocks fuel ctx
-        (analysis_function_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst]) fn) s =
-      run_function fuel ctx
-        (analysis_function_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst]) fn) s` by
-    (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [GSYM run_function_is_run_blocks])) >>
-     simp[fn_entry_label_function_map_transform,
-          analysis_function_transform_widen_def,
-          analysis_block_transform_widen_def])
-  \\ pop_assum SUBST1_TAC
+  \\ qexists_tac `run_function fuel ctx aft s`
+  \\ conj_tac
+  >- (qpat_x_assum `run_function _ _ fn _ = _` SUBST1_TAC >>
+      qpat_x_assum `run_function _ _ aft _ = _` SUBST1_TAC >>
+      first_assum ACCEPT_TAC)
+  \\ simp_tac std_ss [GSYM result_equiv_is_lift_result]
   \\ irule clear_nops_function_correct_run_function
-  \\ simp[overflow_elim_analysis_transform_wf]
-QED
-
-(* ===== Core structural lemma: identity or mk_nop ===== *)
-
-Theorem overflow_elim_inst_cases[local]:
-  !dfg ra lbl idx inst.
-    overflow_elim_inst dfg ra lbl idx inst = inst \/
-    overflow_elim_inst dfg ra lbl idx inst = mk_nop_inst inst
-Proof
-  rpt gen_tac >> simp[overflow_elim_inst_def] >>
-  rpt (BasicProvers.PURE_CASE_TAC >> simp[])
-QED
-
-(* ===== Derived structural properties ===== *)
-
-Theorem overflow_elim_inst_id[local]:
-  !dfg ra lbl idx inst.
-    (overflow_elim_inst dfg ra lbl idx inst).inst_id = inst.inst_id
-Proof
-  rpt gen_tac >>
-  strip_assume_tac (Q.SPECL [`dfg`, `ra`, `lbl`, `idx`, `inst`]
-    overflow_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
-QED
-
-Theorem overflow_elim_inst_terminator[local]:
-  !dfg ra lbl idx inst.
-    is_terminator inst.inst_opcode ==>
-    overflow_elim_inst dfg ra lbl idx inst = inst
-Proof
-  rpt strip_tac >> simp[overflow_elim_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  fs[is_terminator_def]
-QED
-
-Theorem overflow_elim_inst_not_terminator[local]:
-  !dfg ra lbl idx inst.
-    ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (overflow_elim_inst dfg ra lbl idx inst).inst_opcode
-Proof
-  rpt gen_tac >> strip_tac >>
-  strip_assume_tac (Q.SPECL [`dfg`, `ra`, `lbl`, `idx`, `inst`]
-    overflow_elim_inst_cases) >>
-  simp[mk_nop_inst_def, is_terminator_def]
-QED
-
-Theorem overflow_elim_inst_phi[local]:
-  !dfg ra lbl idx inst.
-    inst.inst_opcode = PHI ==>
-    (overflow_elim_inst dfg ra lbl idx inst).inst_opcode = PHI
-Proof
-  rpt strip_tac >> simp[overflow_elim_inst_def]
-QED
-
-Theorem overflow_elim_inst_not_phi[local]:
-  !dfg ra lbl idx inst.
-    inst.inst_opcode <> PHI ==>
-    (overflow_elim_inst dfg ra lbl idx inst).inst_opcode <> PHI
-Proof
-  rpt gen_tac >> strip_tac >>
-  strip_assume_tac (Q.SPECL [`dfg`, `ra`, `lbl`, `idx`, `inst`]
-    overflow_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
-QED
-
-Theorem overflow_elim_inst_outputs[local]:
-  !dfg ra lbl idx inst.
-    (overflow_elim_inst dfg ra lbl idx inst).inst_outputs = inst.inst_outputs \/
-    (overflow_elim_inst dfg ra lbl idx inst).inst_outputs = []
-Proof
-  rpt gen_tac >>
-  strip_assume_tac (Q.SPECL [`dfg`, `ra`, `lbl`, `idx`, `inst`]
-    overflow_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
-QED
-
-(* ===== Rewrite to function_map_transform form ===== *)
-
-Theorem overflow_elim_function_eq_fmt[local]:
-  !fn. overflow_elim_function fn =
-    clear_nops_function
-      (function_map_transform
-        (\bb. bb with bb_instructions :=
-          MAPi (\idx inst.
-            overflow_elim_inst (dfg_build_function fn) (range_analyze fn)
-              bb.bb_label idx inst) bb.bb_instructions) fn)
-Proof
-  simp[overflow_elim_function_def, function_map_transform_def,
-       ir_function_component_equality, clear_nops_function_def] >>
-  gen_tac >> irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
-  simp[overflow_elim_block_def, basic_block_component_equality,
-       overflow_elim_block_insts_eq_mapi, clear_nops_block_def]
+  \\ conj_tac >- simp[Abbr `aft`, overflow_elim_analysis_transform_wf]
+  \\ first_assum ACCEPT_TAC
 QED
 
 (* ===== Obligations ===== *)
@@ -253,31 +119,17 @@ QED
 Theorem overflow_elim_preserves_ssa_form:
   ∀fn. wf_function fn ∧ ssa_form fn ⇒ ssa_form (overflow_elim_function fn)
 Proof
-  (* FIXME: Proof is non-trivial for a statement file — should be ACCEPT_TAC referencing
-     a proof theorem in overflowElimProofs. Requires adding the proof theorem there (cross-file). *)
   rpt strip_tac >>
-  ONCE_REWRITE_TAC[overflow_elim_function_eq_fmt] >>
+  REWRITE_TAC[BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_function_eq)] >>
   irule clear_nops_function_preserves_ssa >>
-  mp_tac (Q.SPECL
-    [`\bb idx inst. overflow_elim_inst (dfg_build_function fn)
-        (range_analyze fn) bb.bb_label idx inst`,
-     `fn`] mapi_transform_preserves_ssa_bb) >>
-  simp[overflow_elim_inst_id, overflow_elim_inst_outputs]
+  irule overflow_elim_analysis_transform_ssa >> fs[]
 QED
 
 Theorem overflow_elim_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (overflow_elim_function fn)
 Proof
-  (* FIXME: Proof is non-trivial for a statement file — should be ACCEPT_TAC referencing
-     a proof theorem in overflowElimProofs. Requires adding the proof theorem there (cross-file). *)
   rpt strip_tac >>
-  ONCE_REWRITE_TAC[overflow_elim_function_eq_fmt] >>
+  REWRITE_TAC[BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_function_eq)] >>
   irule clear_nops_function_preserves_wf >>
-  mp_tac (Q.SPECL
-    [`\bb idx inst. overflow_elim_inst (dfg_build_function fn)
-        (range_analyze fn) bb.bb_label idx inst`,
-     `fn`] mapi_transform_preserves_wf_bb) >>
-  simp[overflow_elim_inst_id, overflow_elim_inst_terminator,
-       overflow_elim_inst_not_terminator, overflow_elim_inst_phi,
-       overflow_elim_inst_not_phi]
+  irule overflow_elim_analysis_transform_wf >> fs[]
 QED
