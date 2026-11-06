@@ -228,3 +228,64 @@ Proof
   drule_all abi_decode_array_header_shape >> strip_tac >>
   metis_tac[run_inst_seq_abort_extends]
 QED
+
+(* The first guard rejects before any address computation or source read. *)
+Theorem abi_decode_dynarray_position_prefix_head_revert:
+  abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,st') /\
+  abi_decode_source_opcode opc /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand hi s = SOME(n2w h) /\
+  p < dimword(:256) /\ h < dimword(:256) /\ h < p+32 /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[abi_decode_dynarray_position_prefix_trace] >> strip_tac >>
+  `inst_extends head_st addr_st` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule abi_decode_dynarray_payload_guard_shape >> strip_tac >>
+  `inst_extends head_st st'` by metis_tac[inst_extends_trans] >>
+  drule_all abi_decode_bytes_head_revert >> strip_tac >>
+  drule abi_decode_bytes_head_shape >> strip_tac >>
+  metis_tac[run_inst_seq_abort_extends]
+QED
+
+Theorem abi_decode_dynarray_memory_prefix_source_outcome:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn
+    (abi_member_head_size at) st = (addr,st') /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w p) /\
+  eval_operand base_op s = SOME(n2w b) /\ eval_operand hi s = SOME(n2w h) /\
+  n = w2n (mem_word_at (b+p) s.vs_memory) /\
+  bs = mem_bytes_at (b+p) (h-p) s.vs_memory /\
+  p < dimword(:256) /\ h < dimword(:256) /\ b+h < dimword(:256) /\
+  maxn < dimword(:256) /\
+  (n <= maxn ==> n*abi_member_head_size at < dimword(:256)) /\
+  fresh_vars_wrt st s ==>
+  (n <= maxn /\ p+32+n*abi_member_head_size at <= h /\
+   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+       eval_operand addr t = SOME(n2w (b+p)) /\ fresh_vars_wrt st' t /\
+       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+       t.vs_data_section = s.vs_data_section /\ inst_extends st st') \/
+  (?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t /\
+       ~(vyper_decode_valid_enc (Array NONE at) bs /\
+         ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+               (dec (Array NONE at) bs) = SOME v))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  Cases_on `h < p+32`
+  >- (disj2_tac >> drule_all abi_decode_dynarray_position_prefix_head_revert >>
+      strip_tac >> goal_assum (drule_at Any) >>
+      irule abi_decode_dynarray_suffix_guard_reject >>
+      goal_assum (drule_at Any) >> qexists `n` >> asm_rewrite_tac[]) >>
+  `b+p < dimword(:256)` by decide_tac >>
+  `abi_decode_load MLOAD (n2w (b+p):bytes32) s = n2w n` by
+    simp[abi_decode_load_def, abi_decode_source_def, mload_def,
+         mem_word_at_def, mem_bytes_at_def] >>
+  drule_all abi_decode_dynarray_position_prefix_source_outcome >>
+  disch_then (qspecl_then [`ty`, `env`] mp_tac) >> simp[]
+QED
