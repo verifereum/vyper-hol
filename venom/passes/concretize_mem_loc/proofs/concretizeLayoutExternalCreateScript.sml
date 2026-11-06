@@ -172,7 +172,7 @@ Resume concretize_create_local_execution[values]:
 QED
 Finalise concretize_create_local_execution
 
-Theorem create_scalar_agreement[local]:
+Theorem create_scalar_agreement:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
   inst.inst_operands = opv::opd::opn::salts /\

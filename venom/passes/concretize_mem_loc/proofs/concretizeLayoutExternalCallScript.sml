@@ -457,7 +457,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ext_call_scalar_agreement[local]:
+Theorem ext_call_scalar_agreement:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
   inst.inst_operands = [opg;opa] ++ vals ++ [opd;opn;opr;opm] /\
