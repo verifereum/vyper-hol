@@ -4,7 +4,7 @@ Ancestors
   lowerDloadTargetValidity lowerDloadConfiguredScratch lowerDloadCoverageReserve
   lowerDloadCoverageLoad lowerDloadCallNormalSetup lowerDloadCallNormalEntry
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
-  lowerDloadSavedGeometry
+  lowerDloadSavedGeometry lowerDloadReturnRestore
   lowerDloadNormalJump lowerDloadNormalEntry lowerDloadReachableJump
   o1LowerDloadEntryFetch o1LowerDloadJointEntry lowerDloadNonhalted
   lowerDloadConfiguredSelection lowerDloadCoverageBytes lowerDloadResidualNonmemory
