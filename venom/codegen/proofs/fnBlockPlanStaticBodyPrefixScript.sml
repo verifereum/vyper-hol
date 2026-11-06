@@ -397,3 +397,170 @@ Proof
   gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
+
+Theorem regional_ready_use_compute:
+  codegen_ready_inst inst /\ MEM v (inst_uses inst) ==>
+  MEM (Var v) (compute_operands inst)
+Proof
+  strip_tac >>
+  `MEM (Var v) inst.inst_operands` by
+    gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  simp[compute_operands_def, LET_THM] >> rpt IF_CASES_TAC >>
+  gvs[get_non_label_operands_def, MEM_FILTER] >>
+  gvs[codegen_ready_inst_def] >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `case head of Lit _ => _ | _ => _` >>
+  Cases_on `head` >> gvs[]
+QED
+
+Theorem regional_body_upper_input_support:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  regional_body_lower_inv (liveness_analyze fn) dfg sb bb i ps /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)) ps.ps_stack ==>
+  EVERY (\op. ?v. op = Var v /\
+    (MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) \/
+     MEM op (compute_operands inst))) ps.ps_stack
+Proof
+  strip_tac >>
+  `wf_function fn /\ codegen_ready_inst inst` by
+    (gvs[codegen_ready_fn_def, EVERY_MEM] >> metis_tac[EL_MEM, lookup_block_mem]) >>
+  gvs[EVERY_MEM] >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  rename1 `MEM (Var v) ps.ps_stack` >>
+  `~MEM v (EL i bb.bb_instructions).inst_outputs` by
+    metis_tac[regional_body_lower_inv_output_roots] >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) \/
+   MEM v (inst_uses (EL i bb.bb_instructions))` by
+    (drule live_vars_at_forward_or_used >> simp[LET_THM] >>
+     disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`, `SUC i`, `v`] mp_tac) >>
+     `!k. i <= k /\ k < SUC i <=> k = i` by decide_tac >>
+     simp[inst_defs_def] >> metis_tac[]) >>
+  metis_tac[regional_ready_use_compute]
+QED
+
+Theorem regional_body_upper_resources:
+  regional_body_lower_inv lv dfg sb bb i ps /\
+  EVERY (\op. ?v. op = Var v /\ P v) ps.ps_stack ==>
+  ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)
+Proof
+  simp[regional_body_lower_inv_def, generated_plan_state_wf_marked_def] >>
+  strip_tac >>
+  `FILTER (\op. op <> dead_stack_marker) ps.ps_stack = ps.ps_stack` by
+    (simp[FILTER_EQ_ID, EVERY_MEM, dead_stack_marker_def] >>
+     strip_tac >> qpat_x_assum `EVERY _ _` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM] >>
+     disch_then (qspec_then `Label ""` mp_tac) >> simp[]) >>
+  gvs[]
+QED
+
+Theorem regional_body_upper_step:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+  ~is_param_opcode inst.inst_opcode /\ ~bb_is_halting bb /\
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb i ps /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)) ps.ps_stack /\
+  generate_inst_plan (liveness_analyze fn) (dfg_build_function fn) (cfg:cfg_analysis) fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) F next_term
+    bb.bb_label ps = SOME (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))) qs.ps_stack
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM]) >>
+  `wf_function fn /\ inst_wf inst /\ codegen_ready_inst inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  drule_all regional_body_upper_input_support >> strip_tac >>
+  `ALL_DISTINCT ps.ps_stack /\ DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)` by
+    metis_tac[regional_body_upper_resources] >>
+  Cases_on `inst.inst_opcode = NOP`
+  >- (gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+          codegen_ready_inst_def, compute_operands_def, python_stack_operands_def,
+          EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (drule_all inst_wf_offset_shape >> strip_tac >>
+      `!v. MEM v inst.inst_outputs ==>
+        MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
+        metis_tac[fnBlockPlanStaticOffsetLiveTheory.ready_offset_output_live, ADD1] >>
+      gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+          generate_offset_plan_def, stackModelTheory.stack_push_def, EVERY_APPEND, EVERY_MEM,
+          compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+      rpt strip_tac >> gvs[] >>
+      qpat_x_assum `!op. MEM op _ ==> ?v. _ /\ (_ \/ _)` drule >>
+      strip_tac >> gvs[]) >>
+  `generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn) cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) F next_term
+    bb.bb_label ps = (ops,qs)` by
+    (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_inst_plan_def, LET_THM] >> rpt IF_CASES_TAC >> gvs[]) >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    metis_tac[regional_body_lower_inv_operands] >>
+  `EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+     ~MEM (Var v) (compute_operands inst)) inst.inst_outputs` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[regional_body_lower_inv_output_roots, is_var_operand_def]) >>
+  irule (INST_TYPE [alpha |-> ``:cfg_analysis``]
+    fnBlockPlanStaticInventoryTheory.inventory_regular_live_support) >>
+  goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `sb` >> simp[] >>
+  metis_tac[regional_emit_input_capacity, codegen_ready_inst_outputs_distinct,
+    codegen_ready_inst_def, regional_body_lower_inv_wf, generated_plan_state_wf_marked_def]
+QED
+
+Theorem regional_body_upper_prefix:
+  !n a ps0 ops psn start fn bb sb cfg.
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ ~bb_is_halting bb /\
+  start <= a /\ a + n <= LENGTH bb.bb_instructions /\
+  (!i. a <= i /\ i < a + n ==>
+    (EL i bb.bb_instructions).inst_opcode <> PHI /\
+    (EL i bb.bb_instructions).inst_opcode <> JMP /\
+    ~is_param_opcode (EL i bb.bb_instructions).inst_opcode) /\
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb a ps0 /\
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label a)) ps0.ps_stack /\
+  generate_block_insts_prefix (liveness_analyze fn) (dfg_build_function fn)
+    (cfg:cfg_analysis) fn bb.bb_label (bb_is_halting bb) start
+    (LENGTH bb.bb_instructions) (a-start) n (DROP a bb.bb_instructions) ps0 =
+    SOME (ops,psn) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (a+n))) psn.ps_stack
+Proof
+  Induct_on `n` >- simp[generate_block_insts_prefix_def] >>
+  rpt gen_tac >> strip_tac >>
+  `a < LENGTH bb.bb_instructions` by simp[] >>
+  `DROP a bb.bb_instructions = EL a bb.bb_instructions :: DROP (SUC a) bb.bb_instructions` by
+    metis_tac[DROP_CONS_EL] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[generate_block_insts_prefix_def, LET_THM] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  ` (if LENGTH bb.bb_instructions <= SUC a then
+       live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
+     else live_vars_at (liveness_analyze fn) bb.bb_label (a+1)) =
+    live_vars_at (liveness_analyze fn) bb.bb_label (SUC a)` by
+    (IF_CASES_TAC
+     >- (`LENGTH bb.bb_instructions = SUC a` by decide_tac >> simp[]) >> simp[ADD1]) >>
+  gvs[] >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (_,mid)` >>
+  `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb (SUC a) mid` by
+    (irule regional_body_lower_inv_step >> simp[] >>
+     goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     simp[] >> metis_tac[LESS_EQ_REFL, LESS_EQ_LESS_TRANS]) >>
+  `EVERY (\op. ?v. op = Var v /\
+     MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC a))) mid.ps_stack` by
+    (irule regional_body_upper_step >> simp[] >>
+     goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     qexists_tac `sb` >> simp[] >> metis_tac[LESS_EQ_REFL, LESS_EQ_LESS_TRANS]) >>
+  `a + SUC n = SUC a + n` by simp[] >> pop_assum SUBST1_TAC >>
+  first_x_assum irule >> gvs[ADD1] >>
+  goal_assum (drule_at (Pat `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `sb` >> simp[] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_SUC_REFL]
+QED
