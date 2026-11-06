@@ -7,6 +7,7 @@ Ancestors
   ptrSafeRun memLocDefs codegenRel contextCodegenRel
   emitHelper emitHelperProps compileEnv freshWrites fragGasPathPtr fragExec
   exprSimPtrProps builtinBytes bodyPtrBytestringBuiltinsBuffer
+  bodyPtrBytestringBuiltinsBounds
 
 Theorem ptr_inst_ok_external_copy:
   (((opc = CALLDATACOPY \/ opc = CODECOPY) /\
@@ -171,10 +172,15 @@ Theorem emit_external_size_counted:
     eval_operand op t = SOME w /\ op_prov G' op = NONE /\ op_taint tn' op = {} /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-    (!p cap. p <> out /\ ptr_covers G tn p s cap ==> ptr_covers G' tn' p t cap)
+    (!p cap. p <> out /\ ptr_covers G tn p s cap ==> ptr_covers G' tn' p t cap) /\
+    (!x. x <> out ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t)
 Proof
   strip_tac >> rpt gen_tac >>
   `op = Var (STRING #"%" (toString sa.cs_next_var)) /\
+   sb.cs_next_var = SUC sa.cs_next_var /\
    sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++
      [mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]]` by
@@ -205,7 +211,9 @@ Proof
   simp[Abbr `u`, Abbr `out`, eval_operand_def, update_var_def, lookup_var_def,
     op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
   simp[ptr_covers_def, op_taint_def, update_var_def, lookup_var_def,
-    FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+    FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  simp[fresh_vars_wrt_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
 Theorem compile_slice_calldata_stages:
@@ -262,3 +270,95 @@ Proof
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
+
+(* These are the semantic query equations; they issue no requests. *)
+Theorem external_size_step:
+  ((opc = CALLDATASIZE /\ ops = [] /\ w = n2w (LENGTH s.vs_call_ctx.cc_calldata)) \/
+   (opc = CODESIZE /\ ops = [] /\ w = n2w (LENGTH s.vs_code)) \/
+   (opc = EXTCODESIZE /\ ops = [addr] /\ eval_operand addr s = SOME a /\
+    w = n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code))) ==>
+  step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s)
+Proof
+  strip_tac >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def, exec_read1_def]
+QED
+
+Theorem compile_slice_extcode_bounds_abort:
+  compile_slice_extcode addr start len root data sa = (out,sb) /\
+  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\
+  eval_operand addr s = SOME a /\ eval_operand start s = SOME wa /\
+  eval_operand len s = SOME wn /\
+  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  q = (update_var (STRING #"%" (toString sa.cs_next_var))
+    (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
+      vs_inst_idx := SUC s.vs_inst_idx /\
+  run_inst_seq (emitted_insts sc sd) q = Abort ab u ==>
+  ab = Revert_abort /\
+  ?G' tn' j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (Abort Revert_abort (u with vs_inst_idx := j)) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
+  `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >> gvs[] >>
+  `cs_extends s2 sb` by metis_tac[cs_extends_trans] >>
+  `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 fn /\ fn_has_code s1 s2 fn` by metis_tac[fn_has_code_split] >>
+  `step_inst_base
+    (mk_inst sa.cs_next_id EXTCODESIZE [addr] [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s)` by
+    (irule external_size_step >> simp[] >> metis_tac[]) >>
+  `MEM EXTCODESIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH [addr] <= 1 /\
+   (!arg. MEM arg [addr] ==> op_taint tn arg = {})` by simp[] >>
+  drule_all emit_external_size_counted >>
+  disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
+  suspend "bounds"
+QED
+
+Resume compile_slice_extcode_bounds_abort[bounds]:
+  `run_inst_seq (emitted_insts s1 s2) t = Abort ab u` by gvs[] >>
+  `fresh_vars_wrt s1 t` by simp[] >>
+  `!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w` by
+    (rpt strip_tac >>
+     `op <> Var out'` by
+       (strip_tac >> gvs[eval_operand_def, lookup_var_def, fresh_vars_wrt_def] >>
+        qpat_x_assum `!n. n >= sa.cs_next_var ==> _`
+          (qspec_then `sa.cs_next_var` mp_tac) >> fs[FLOOKUP_DEF]) >>
+     Cases_on `op` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `eval_operand start t = SOME wa /\ eval_operand len t = SOME wn` by metis_tac[] >>
+  `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
+    (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
+     `op_prov G op = NONE /\ op_taint tn op = {}` by
+       (qpat_x_assum `!op. op = addr \/ op = start \/ op = len ==> _`
+          (qspec_then `op` mp_tac) >> fs[]) >>
+     Cases_on `op` >>
+     gvs[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+     rw[]) >>
+  drule_all compile_assert_slice_bounds_counted_abort >>
+  strip_tac >> suspend "compose"
+QED
+Resume compile_slice_extcode_bounds_abort[compose]:
+  qpat_x_assum `!PG D. _` (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `s1.cs_next_var = SUC sa.cs_next_var` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s1 x /\ x <> out'` by
+    (gen_tac >> disch_tac >> conj_tac
+     >- (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     fs[not_fresh_at_def]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn''
+    (Abort Revert_abort (u with vs_inst_idx := j))` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  simp[] >> qexistsl_tac [`G''`,`tn''`,`j`] >> gvs[] >>
+  rpt strip_tac >> metis_tac[]
+QED
+Finalise compile_slice_extcode_bounds_abort
