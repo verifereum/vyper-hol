@@ -440,12 +440,3 @@ Proof
   Induct_on `ops` >> simp[eval_operands_def]
 QED
 
-Theorem init_venom_state_fmp_fields[local]:
-  ∀entry.
-    (init_venom_state entry).vs_fmp = 0w ∧
-    (init_venom_state entry).vs_call_entry_fmp = 0w ∧
-    (init_venom_state entry).vs_initial_fmp = 0w ∧
-    (init_venom_state entry).vs_return_pc_token = 0w
-Proof
-  simp[init_venom_state_def]
-QED
