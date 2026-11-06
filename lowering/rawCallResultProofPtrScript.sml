@@ -1822,3 +1822,150 @@ Resume raw_call_tuple_head_stage[compose]:
 QED
 
 Finalise raw_call_tuple_head_stage
+
+(* Actual tuple assembly.  The source tail belongs to an old allocation;
+   coverage alone would not justify preserving it across the fresh head. *)
+Theorem raw_call_tuple_construct_stage:
+  (do buf <- compile_alloc_buffer (32+ncopy);
+      emit_void MSTORE [buf.buf_operand;Var success];
+      dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+      emit_void MCOPY [dst;Var src;Lit (n2w ncopy)];
+      return buf.buf_operand od) sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  32+ncopy < dimword(:256) /\ not_fresh_at sa success /\ not_fresh_at sa src /\
+  eval_operand (Var success) s = SOME (val_to_w256 (BoolV flag)) /\
+  op_taint tn (Var success) = {} /\ lookup_var src s = SOME aw /\
+  ptr_covers G tn src s ncopy /\
+  aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) /\
+  off <= w2n aw /\ w2n aw+ncopy <= off+len /\
+  val_wf tt tv /\ val_footprint tt tv <= ncopy /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tt tv (w2n aw) m) /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME (TupleTV [BaseTV BoolT;tt]) /\
+  val_store_size (TupleTV [BaseTV BoolT;tt]) (ArrayV (TupleV [BoolV flag;tv])) <= 32+ncopy /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= 32+ncopy ==>
+  ?H un t x. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+    result = Var x /\
+    ptr_val_ok cx ty (ArrayV (TupleV [BoolV flag;tv])) result H un t /\
+    ptr_buf_ok cenv e result H t /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >>
+  `?buf sm sh dx sd.
+    compile_alloc_buffer (32+ncopy) sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand;Var success] sm = ((),sh) /\
+    emit_op ADD [buf.buf_operand;Lit 32w] sh = (Var dx,sd) /\
+    emit_void MCOPY [Var dx;Var src;Lit (n2w ncopy)] sd = ((),sb) /\
+    result = buf.buf_operand` by
+    (qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     `?dx. dst = Var dx` by
+       (qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+        simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+          fresh_id_def, emit_def, comp_return_def] >> metis_tac[]) >>
+     gvs[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `ci_mono sa sm /\ ci_mono sm sh /\ ci_mono sh sd /\ ci_mono sd sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+      exprLoweringPropsTheory.ci_mono_emit_void, exprLoweringPropsTheory.ci_mono_emit_op,
+      pairTheory.SND] >>
+  `ci_mono sa sh /\ ci_mono sh sb` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> conj_tac >>
+     irule compileEnvTheory.cs_extends_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  `fn_has_code sa sh func /\ fn_has_code sh sd func /\ fn_has_code sd sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split, exprLoweringPropsTheory.ci_mono_def] >>
+  `(do buf <- compile_alloc_buffer (32+ncopy);
+       emit_void MSTORE [buf.buf_operand;Var success]; return buf.buf_operand od) sa =
+    (result,sh)` by simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  `32 <= 32+ncopy` by simp[] >>
+  drule_all (raw_call_tuple_head_stage |> Q.INST [`ok` |-> `Var success`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`] strip_assume_tac) >> suspend "tail"
+QED
+
+Resume raw_call_tuple_construct_stage[tail]:
+  `regions_disjoint b (32+ncopy) off len` by metis_tac[] >>
+  `!m. mem_agree_outside un.t_mem t.vs_memory m ==> val_in_memory tt tv (w2n aw) m` by
+    (rpt strip_tac >> irule robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`s.vs_memory`, `t.vs_memory`, `tn.t_mem`, `un.t_mem`,
+       `{i | b <= i /\ i < b+(32+ncopy)}`] >> simp[] >>
+     conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     conj_tac
+     >- (rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+         decide_tac) >>
+     fs[compileEnvTheory.regions_disjoint_def] >> rpt strip_tac >> decide_tac) >>
+  suspend "add"
+QED
+
+Resume raw_call_tuple_construct_stage[add]:
+  `local_ptrs_reserved cenv sh` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sh z) /\
+   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sh z) /\
+   not_fresh_at sh src` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
+  `emit_op ADD [Var x;Lit 32w] sh = (Var dx,sd)` by metis_tac[] >>
+  `32+ncopy <= 32+ncopy` by simp[] >>
+  drule_all rawCallAllocationProofPtrTheory.raw_call_outbuf_add_stage >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  suspend "copy"
+QED
+
+Resume raw_call_tuple_construct_stage[copy]:
+  `lookup_var src t = SOME aw /\ lookup_var src u = SOME aw /\
+   lookup_var x u = SOME (n2w b)` by metis_tac[] >>
+  `ptr_covers H un src t ncopy` by
+    (irule (appendStorageGhostPtrTheory.ptr_covers_old_transport |> Q.INST [`sa` |-> `sa`]) >>
+     first_assum (irule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+     fs[bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
+  `ptr_covers H' un' src u ncopy` by
+    (irule (appendStorageGhostPtrTheory.ptr_covers_old_transport |> Q.INST [`sa` |-> `sh`]) >>
+     first_assum (irule_at (Pat `ptr_covers _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
+  `lookup_var dx u = SOME (n2w (b+32)) /\
+   eval_operand (Lit (n2w ncopy)) u = SOME (n2w ncopy) /\
+   op_taint un' (Lit (n2w ncopy)) = {} /\
+   w2n (n2w ncopy : bytes32) = ncopy /\
+   w2n (n2w (b+32) : bytes32) = w2n (n2w b : bytes32)+32` by
+    (fs[venomStateTheory.eval_operand_def] >>
+     simp[ptrDisciplineTheory.op_taint_def, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD] >> decide_tac) >>
+  `val_wf (BaseTV BoolT) (BoolV flag) /\
+   val_footprint (BaseTV BoolT) (BoolV flag) <= type_memory_size (BaseTV BoolT) /\
+   type_memory_size (BaseTV BoolT) = 32` by
+    simp[valueEncodingTheory.val_wf_def, loweringPostsTheory.val_footprint_def,
+      valueEncodingTheory.type_memory_size_def] >>
+  `(!m. mem_agree_outside un'.t_mem u.vs_memory m ==>
+      val_in_memory (BaseTV BoolT) (BoolV flag) (w2n (n2w b : bytes32)) m) /\
+   (!m. mem_agree_outside un'.t_mem u.vs_memory m ==> val_in_memory tt tv (w2n aw) m)` by
+    (simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac) >>
+  suspend "copy_apply"
+QED
+
+Resume raw_call_tuple_construct_stage[copy_apply]:
+  `ptr_covers H' un' dx u (w2n (n2w ncopy : bytes32)) /\
+   ptr_covers H' un' src u (w2n (n2w ncopy : bytes32)) /\
+   val_footprint tt tv <= w2n (n2w ncopy : bytes32) /\
+   w2n (n2w (b+32) : bytes32) =
+     w2n (n2w b : bytes32)+type_memory_size (BaseTV BoolT)` by
+    simp[valueEncodingTheory.type_memory_size_def] >>
+  drule_all (raw_call_pair_copy_stage |>
+    Q.INST [`ht` |-> `BaseTV BoolT`, `hv` |-> `BoolV flag`, `basevar` |-> `x`]) >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK u)` by
+    metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD] >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un'' (OK t')` by
+    metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD] >>
+  `b+32 < dimword(:256) /\ ncopy < dimword(:256)` by decide_tac >>
+  qexistsl_tac [`H'`, `un''`, `t'`, `x`] >>
+  fs[arithmeticTheory.LESS_MOD] >> metis_tac[]
+QED
+
+Finalise raw_call_tuple_construct_stage

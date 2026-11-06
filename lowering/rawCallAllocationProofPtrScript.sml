@@ -350,6 +350,7 @@ Theorem raw_call_outbuf_add_stage:
     ptr_covers H un x u n /\ ptr_covers H un dx u cap /\
     eval_operand (Var dx) u = SOME (n2w (b+32)) /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
+    u.vs_returndata = s.vs_returndata /\ u.vs_allocas = s.vs_allocas /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s /\
       FLOOKUP H z = FLOOKUP G z /\ op_taint un (Var z) = op_taint tn (Var z))
 Proof
