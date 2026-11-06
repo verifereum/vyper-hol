@@ -1,8 +1,8 @@
 Theory fnLineageInvTerminal
 Ancestors
   fnPlanLineageReorder fnPlanLineageInventory stackPlanOps stackModel
-  reorderSim planWf generatedPrefixSim planSpillBounds
-  list pred_set stackPlanGen venomInst finite_map rich_list indexedLists
+  reorderSim doSwapSim planWf generatedPrefixSim planSpillBounds
+  list sorting pred_set stackPlanGen venomInst finite_map rich_list indexedLists
 
 Theorem full_support_select_spill_candidate_none:
   !stk targets dist n.
@@ -271,4 +271,44 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[do_swap_def, top_n_def, TAKE_LENGTH_TOO_LONG] >>
   pairarg_tac >> gvs[] >> simp[]
+QED
+
+Theorem do_swap_deep_out_of_range_perm:
+  !d ps ops qs.
+    16 < d /\ LENGTH ps.ps_stack <= d /\ do_swap d ps = (ops,qs) ==>
+    PERM qs.ps_stack
+      (ps.ps_stack ++ GENLIST (\i. EL (LENGTH ps.ps_stack + i) ps.ps_stack)
+        (d + 1 - LENGTH ps.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all do_swap_deep_out_of_range >> strip_tac >>
+  `PERM qs.ps_stack
+     (MAP (\i. EL i ps.ps_stack) (GENLIST I (d + 1)))` by
+    (asm_rewrite_tac[] >> irule PERM_MAP >>
+     qspec_then `d + 1` mp_tac desired_perm_indices >> simp[]) >>
+  `d + 1 = LENGTH ps.ps_stack + (d + 1 - LENGTH ps.ps_stack)` by decide_tac >>
+  qpat_x_assum `PERM _ _` mp_tac >>
+  simp[MAP_GENLIST, combinTheory.o_DEF] >>
+  qpat_x_assum `d + 1 = _` (fn th => once_rewrite_tac[th]) >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  simp[GENLIST_APPEND, GENLIST_ID, combinTheory.I_THM,
+       arithmeticTheory.ADD_COMM]
+QED
+
+Theorem do_swap_deep_out_of_range_count:
+  !d ps ops qs x.
+    16 < d /\ LENGTH ps.ps_stack <= d /\ do_swap d ps = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack =
+      LIST_ELEM_COUNT x ps.ps_stack +
+      LIST_ELEM_COUNT x
+        (GENLIST (\i. EL (LENGTH ps.ps_stack + i) ps.ps_stack)
+          (d + 1 - LENGTH ps.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all do_swap_deep_out_of_range_perm >>
+  simp[PERM_DEF] >> disch_then (qspec_then `x` mp_tac) >>
+  `((\y. x = y) : operand -> bool) = ($= x)` by
+    simp[FUN_EQ_THM] >>
+  simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_EQ, EQ_SYM_EQ] >>
+  disch_then (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >> simp[]
 QED

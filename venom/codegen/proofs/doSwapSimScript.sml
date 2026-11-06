@@ -3304,7 +3304,7 @@ Proof
 QED
 
 (* The deep-swap index schedule is a rotation of every index exactly once. *)
-Theorem desired_perm_indices[local]:
+Theorem desired_perm_indices:
   !(n:num).
     n >= 2 ==>
     PERM ([n - 1] ++ GENLIST (\i. i + 1) (n - 2) ++ [0])
