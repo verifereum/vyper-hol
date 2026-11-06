@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsUintBlocks
 Ancestors
   bodyPtrBytestringBuiltinsUintGhost bodyPtrBytestringBuiltinsBounds
   fragGasSeqPtr fragGasPathPtr gasCount ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
-  venomExecProofs
+  venomExecProofs exprSimPtrProps bodyPtrDefs wordArgsPtr compileEnv
   venomExecSemantics venomInst venomState finite_map exprSimUint2Str fragExec exprLoweringProps words
 
 Theorem uint_scalar_inst_check:
@@ -198,4 +198,33 @@ Proof
   qexistsl_tac
     [`6`, `a.cs_next_id+7`] >>
   simp[get_instruction_def, u2s_cond_def, u2s_inst_def]
+QED
+
+Theorem u2s_scalar_ghost_inv:
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv a /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) ==>
+  ghost_inv d cenv cx es (DRESTRICT G (COMPL {u2s_var a k}))
+    (tn with t_var := tn.t_var |+ (u2s_var a k,{}))
+    (update_var (u2s_var a k) w s with vs_inst_idx := idx)
+Proof
+  strip_tac >> irule ghost_inv_fresh_frame >>
+  goal_assum (drule_at Any) >> simp[update_var_def] >>
+  qexistsl_tac [`G`, `es`, `s`, `tn`] >> simp[] >> rpt strip_tac >>
+  `x <> u2s_var a k` by metis_tac[u2s_var_fresh] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]
+QED
+
+Theorem u2s_scalar_ghost_kept:
+  ghost_kept cenv es a G0 tn0 s0 G tn ==>
+  ghost_kept cenv es a G0 tn0 s0 (DRESTRICT G (COMPL {u2s_var a k}))
+    (tn with t_var := tn.t_var |+ (u2s_var a k,{}))
+Proof
+  simp[ghost_kept_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `x <> u2s_var a k` by metis_tac[u2s_var_fresh] >>
+      simp[FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
+      qpat_x_assum `!x. not_fresh_at a x ==> _` drule >>
+      simp[op_taint_def]) >>
+  metis_tac[]
 QED
