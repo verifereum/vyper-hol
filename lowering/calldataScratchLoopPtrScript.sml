@@ -6,9 +6,10 @@ Ancestors
   abiScratchDecoderLoopInvariant abiScratchDecoderContract abiScratchEncoderContract
   abiDecoderContract abiDecoderAllocation abiDecoderReentry abiDecoderExecution
   abiDecoderLoop abiDecoderProtectedScratch abiDecoderValidArrayMemory
-  abiDecoderFrame compileEnv ptrDiscipline venomState words list arithmetic
+  abiDecoderFrame abiScratchEffect abiScratchFootprint
+  compileEnv ptrDiscipline venomState words list arithmetic
 
-Theorem calldata_scratch_loop_iteration_ptr:
+Theorem calldata_scratch_loop_iteration_prefix_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
     compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
@@ -56,7 +57,9 @@ Theorem calldata_scratch_loop_iteration_ptr:
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\
-  fn_inst_ids_distinct func /\ j < LENGTH vs /\
+  fn_inst_ids_distinct func /\ j < LENGTH vs /\ n <= j /\
+  (!k. k < n ==> !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem) /\
   ptr_covers G tn root s (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   ptr_covers G tn q s 32 /\ DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
@@ -76,6 +79,9 @@ Theorem calldata_scratch_loop_iteration_ptr:
     (!k a. k IN abi_decoder_ids first last /\ ~(k IN abi_decoder_ids lo hi) /\
       FLOOKUP s.vs_allocas k = SOME (a,32) ==>
       FLOOKUP t.vs_allocas k = SOME (a,32) /\ mload a t = mload a s) /\
+    (!k. k < n \/ k = j ==> !mem.
+      mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem) /\
     val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) t.vs_memory /\
     (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
       val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) mem) /\
@@ -169,6 +175,10 @@ Proof
      decide_tac) >>
   qpat_assum `type_memory_size tv = _` (fn th =>
     rule_assum_tac (PURE_REWRITE_RULE [GSYM th]) >> assume_tac th) >>
+  `!k. k < n ==> !mem.
+     mem_agree_outside u'.t_mem actual.vs_memory mem ==>
+     val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem` by
+    suspend "prefix_child" >>
   drule_at (Pat `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`)
     abi_scratch_decoder_child_advance >>
   disch_then (drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -234,14 +244,14 @@ Proof
   suspend "element_memory"
 QED
 
-Resume calldata_scratch_loop_iteration_ptr[taint_subset]:
+Resume calldata_scratch_loop_iteration_prefix_ptr[taint_subset]:
   qpat_assum `u''.t_mem SUBSET u'.t_mem` mp_tac >>
   qpat_assum `u'.t_mem SUBSET u.t_mem` mp_tac >>
   qpat_assum `u.t_mem = tn.t_mem` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> metis_tac[pred_setTheory.SUBSET_TRANS]
 QED
 
-Resume calldata_scratch_loop_iteration_ptr[old_vars]:
+Resume calldata_scratch_loop_iteration_prefix_ptr[old_vars]:
   qpat_assum `!x. ~MEM x _ ==> lookup_var x h = _ /\ _` mp_tac >>
   qpat_assum `!x. not_fresh_at st x ==> _` mp_tac >>
   qpat_assum `!x. x <> _ ==> lookup_var x h' = _ /\ _` mp_tac >>
@@ -270,7 +280,7 @@ Resume calldata_scratch_loop_iteration_ptr[old_vars]:
   fs[MEM]
 QED
 
-Resume calldata_scratch_loop_iteration_ptr[protected_scratch]:
+Resume calldata_scratch_loop_iteration_prefix_ptr[protected_scratch]:
   qpat_assum `!site slot. site IN _ /\ _ /\ FLOOKUP h.vs_allocas _ = _ ==> _` mp_tac >>
   qpat_assum `abi_decoder_budget first last b cap actual` mp_tac >>
   qpat_assum `FLOOKUP actual.vs_allocas site = SOME (slot,32)` mp_tac >>
@@ -303,20 +313,36 @@ Resume calldata_scratch_loop_iteration_ptr[protected_scratch]:
   qpat_x_assum `h' = _` kall_tac >> metis_tac[]
 QED
 
-Resume calldata_scratch_loop_iteration_ptr[element_memory]:
-  qpat_assum `!mem. mem_agree_outside u'.t_mem actual.vs_memory mem ==> _` mp_tac >>
+Resume calldata_scratch_loop_iteration_prefix_ptr[element_memory]:
+  `(!k. k < n \/ k = j ==> !mem.
+     mem_agree_outside u''.t_mem h'.vs_memory mem ==>
+     val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem)` suffices_by
+    (disch_tac >>
+     qpat_assum `!k. k < n \/ k = j ==> _` mp_tac >>
+     qpat_assum `h' = _` mp_tac >>
+     qpat_assum `type_memory_size tv = type_memory_bytes ce ty` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >> fs[] >>
+     metis_tac[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  gen_tac >> disch_tac >>
+  `k < LENGTH vs /\
+   (!mem. mem_agree_outside u'.t_mem actual.vs_memory mem ==>
+     val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem)` by
+    (Cases_on `k = j` >- metis_tac[] >>
+     `k < n /\ k < LENGTH vs` by decide_tac >> metis_tac[]) >>
+  qpat_assum `!mem. mem_agree_outside u'.t_mem actual.vs_memory mem ==>
+    val_in_memory tv (EL k vs) _ mem` mp_tac >>
   qpat_assum `u''.t_mem SUBSET u'.t_mem` mp_tac >>
   qpat_assum `all_have_type tv vs` mp_tac >>
-  qpat_assum `j < LENGTH vs` mp_tac >>
+  qpat_assum `k < LENGTH vs` mp_tac >>
   qpat_assum `h' = _` mp_tac >>
   qpat_assum `slot + 32 <= d \/ d + 32 + LENGTH vs * type_memory_size tv <= slot` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-  `val_wf tv (EL j vs)` by
+  `val_wf tv (EL k vs)` by
     (irule (cj 1 value_has_type_val_wf) >>
      fs[vyperTypingTheory.all_have_type_EVERY, EVERY_EL]) >>
-  `val_footprint tv (EL j vs) <= type_memory_size tv` by
+  `val_footprint tv (EL k vs) <= type_memory_size tv` by
     metis_tac[exprSimTheory.val_footprint_le] >>
-  `(j+1) * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
+  `(k+1) * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
     (irule LESS_MONO_MULT2 >> decide_tac) >>
   `abi_decode_footprint_frame [(slot,32)] actual h'` by
     (qpat_assum `h' = _` SUBST1_TAC >>
@@ -326,12 +352,12 @@ Resume calldata_scratch_loop_iteration_ptr[element_memory]:
      simp[update_var_def] >> fs[abi_footprint_disjoint_def]) >>
   qpat_x_assum `h' = _` kall_tac >>
   `!mem. mem_agree_outside u'.t_mem h'.vs_memory mem ==>
-     val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) mem` by
+     val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem` by
     (rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
      conj_tac >- asm_simp_tac bool_ss [] >>
      qexistsl_tac [`actual.vs_memory`,`h'.vs_memory`,`u'.t_mem`,`u'.t_mem`,
        `{a | slot <= a /\ a < slot+32}`] >>
-     asm_simp_tac bool_ss [IgnAsm `h' = _`] >>
+     asm_simp_tac bool_ss [] >>
      conj_tac
      >- (qpat_x_assum `abi_decode_footprint_frame _ _ _` mp_tac >>
          simp_tac bool_ss [abi_decode_footprint_frame_def, abi_footprint_disjoint_def,
@@ -340,11 +366,139 @@ Resume calldata_scratch_loop_iteration_ptr[element_memory]:
          fs[pred_setTheory.IN_GSPEC_IFF] >> decide_tac) >>
      simp[pred_setTheory.IN_GSPEC_IFF] >> rpt strip_tac >>
      fs[LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
-  conj_tac
-  >- (first_x_assum irule >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
   rpt strip_tac >> first_x_assum irule >>
   fs[bodyPtrDefsTheory.mem_agree_outside_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
-Finalise calldata_scratch_loop_iteration_ptr
+Resume calldata_scratch_loop_iteration_prefix_ptr[prefix_child]:
+  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ h actual`
+    (mp_then Any mp_tac abi_scratch_effect_frame) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> disch_tac >>
+  qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
+  qpat_assum `!k. k < n ==> _` mp_tac >>
+  qpat_assum `h.vs_memory = s.vs_memory` mp_tac >>
+  qpat_assum `u.t_mem = tn.t_mem` mp_tac >>
+  qpat_assum `u'.t_mem SUBSET u.t_mem` mp_tac >>
+  qpat_assum `all_have_type tv vs` mp_tac >>
+  qpat_assum `j < LENGTH vs` mp_tac >>
+  qpat_assum `n <= j` mp_tac >>
+  qpat_assum `LENGTH vs <= maxn` mp_tac >>
+  qpat_assum `type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = _` mp_tac >>
+  qpat_assum `abi_decode_footprint_frame _ h actual` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  gen_tac >> disch_tac >>
+  `val_wf tv (EL k vs)` by
+    (irule (cj 1 value_has_type_val_wf) >>
+     fs[vyperTypingTheory.all_have_type_EVERY, EVERY_EL] >>
+     `k < LENGTH vs` by decide_tac >> metis_tac[]) >>
+  `val_footprint tv (EL k vs) <= type_memory_size tv` by
+    metis_tac[exprSimTheory.val_footprint_le] >>
+  `(k+1)*type_memory_size tv <= j*type_memory_size tv /\
+   j*type_memory_size tv <= maxn*type_memory_size tv` by
+    (conj_tac >> irule LESS_MONO_MULT2 >> decide_tac) >>
+  `mem_bytes_at (d+32+k*type_memory_size tv) (val_footprint tv (EL k vs))
+     actual.vs_memory =
+   mem_bytes_at (d+32+k*type_memory_size tv) (val_footprint tv (EL k vs))
+     h.vs_memory` by
+    (irule abi_decode_footprint_frame_slice >> goal_assum (drule_at Any) >>
+     simp_tac bool_ss [abi_scratch_disjoint_cons] >>
+     conj_tac >- (disj1_tac >>
+       qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
+       pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+     qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, abi_footprint_disjoint_def] >>
+     rpt strip_tac >> first_x_assum drule >>
+     qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
+     qpat_assum `j*type_memory_size tv <= maxn*type_memory_size tv` mp_tac >>
+     qpat_assum `type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = _`
+       (fn th => pure_rewrite_tac [th]) >>
+     pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  match_mp_tac (Q.INST [`oldmem` |-> `h.vs_memory`,
+    `oldtaint` |-> `u.t_mem`] calldata_member_robust_window_frame) >>
+  asm_simp_tac bool_ss [] >> metis_tac[]
+QED
 
+Finalise calldata_scratch_loop_iteration_prefix_ptr
+
+
+Theorem calldata_scratch_loop_iteration_ptr:
+  (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
+      G tn lower P D PG.
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+    fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
+    (start.cs_blocks = end_st.cs_blocks \/
+      !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
+      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
+    end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+    fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+    initial.vs_current_bb = start.cs_current_bb /\
+    initial.vs_inst_idx = LENGTH start.cs_current_insts /\
+    ptr_covers G tn root initial (type_memory_bytes ce ty) /\
+    op_taint tn src = {} /\ op_prov G src = NONE /\
+    allocas_from lower initial /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+    ?actual H u.
+      val_in_memory tv v d actual.vs_memory /\
+      (!mem. mem_agree_outside u.t_mem actual.vs_memory mem ==>
+        val_in_memory tv v d mem) /\
+      abi_scratch_effect first last start.cs_next_id end_st.cs_next_id
+        start.cs_next_var limit_st d (type_memory_bytes ce ty) b cap initial actual /\
+      actual.vs_current_bb = end_st.cs_current_bb /\
+      actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+      abi_decode_sim ctx func initial actual /\
+      ptr_covers H u root actual (type_memory_bytes ce ty) /\
+      u.t_mem SUBSET tn.t_mem /\ DISJOINT P u.t_mem /\
+      u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+      (!x. not_fresh_at start x ==> lookup_var x actual = lookup_var x initial /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      allocas_from lower actual /\
+      (!site slot. site IN abi_decoder_ids first last /\
+        ~(site IN abi_decoder_ids start.cs_next_id end_st.cs_next_id) /\
+        FLOOKUP initial.vs_allocas site = SOME (slot,32) ==>
+        FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+        mload slot actual = mload slot initial) /\
+      ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+        !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
+    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
+    (Var q) src (Var root) sb d slot first last b cap next initial /\
+  abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+    first last lo hi next limit_st b cap initial hdr j s /\
+  fn_inst_ids_distinct func /\ j < LENGTH vs /\
+  ptr_covers G tn root s (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+  ptr_covers G tn q s 32 /\ DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  allocas_from lower s /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+  ?t H u.
+    abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+      first last lo hi next limit_st b cap initial hdr (SUC j) t /\
+    abi_decode_sim ctx func s t /\
+    ptr_covers H u root t (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+    ptr_covers H u q t 32 /\ mload slot t = n2w (SUC j) /\
+    DISJOINT {a | slot <= a /\ a < slot+32} u.t_mem /\ DISJOINT P u.t_mem /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\ allocas_from lower t /\
+    (!x. abi_decoder_older_vars next x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!k a. k IN abi_decoder_ids first last /\ ~(k IN abi_decoder_ids lo hi) /\
+      FLOOKUP s.vs_allocas k = SOME (a,32) ==>
+      FLOOKUP t.vs_allocas k = SOME (a,32) /\ mload a t = mload a s) /\
+    val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) t.vs_memory /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) mem) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u t) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`n` |-> `0`] calldata_scratch_loop_iteration_prefix_ptr) >>
+  (impl_tac >- (conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+    asm_simp_tac bool_ss [DECIDE ``0 <= (j:num) /\ ~(k < 0)``])) >>
+  strip_tac >> qexistsl_tac [`t`,`H`,`u`] >> asm_simp_tac bool_ss [] >>
+  qpat_assum `!k a. _` mp_tac >> POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
