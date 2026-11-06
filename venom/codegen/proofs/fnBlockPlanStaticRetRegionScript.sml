@@ -227,3 +227,18 @@ Proof
        live_vars_at_def, liveness_analyze_def] >>
   metis_tac[]
 QED
+
+Theorem ready_ret_index_no_jmp:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM ret_inst bb.bb_instructions /\ ret_inst.inst_opcode = RET ==>
+  !i. i < LENGTH bb.bb_instructions ==> (EL i bb.bb_instructions).inst_opcode <> JMP
+Proof
+  strip_tac >> drule_all ready_block_ret_last >> strip_tac >>
+  drule lookup_block_MEM >> strip_tac >>
+  `bb_well_formed bb` by
+    (fs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `EL i bb.bb_instructions = LAST bb.bb_instructions` by
+    (irule bb_well_formed_terminator_last >> simp[is_terminator_def, EL_MEM]) >>
+  gvs[]
+QED
