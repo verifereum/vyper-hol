@@ -894,7 +894,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `t = expr_type e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' s /\
        stmt_state_rel ctx func cenv cx es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
@@ -997,7 +997,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `t = expr_type e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (expr_type e) (Value v) w es' s /\
        stmt_state_rel ctx func cenv cx es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
@@ -1594,12 +1594,14 @@ Proof
   `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))]
        [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
     metis_tac[buffer_alloc_code] >>
+  `immutable_holds cenv cx t (Value v) a es' u` by
+    metis_tac[immutable_holds_memory_cong] >>
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
      qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
-     qexistsl_tac [`t`, `u`, `v`] >> simp[]) >>
+     qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >> gvs[mk_inst_def]) >>
   `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
   drule_all copy_ctor_contents >> strip_tac >>
   `eval_operand buf.buf_operand z = SOME w` by
@@ -1643,7 +1645,7 @@ Proof
   gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
