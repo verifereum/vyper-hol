@@ -31,7 +31,7 @@ Ancestors
   makeSsaCurrentForwardBlock makeSsaCurrentEdgePrefix
   makeSsaCurrentSuccessorRelation makeSsaCurrentPrefixTransport
   venomExecSemantics passSimulationDefs simplifyCfgBypassRootedEntry
-  makeSsaCurrentCopyPrefixRuntime list rich_list
+  makeSsaCurrentCopyPrefixRuntime makeSsaCurrentEntryPrefix list rich_list
 
 (* Terminating runs of the input and the output correspond. *)
 Theorem make_ssa_current_fn_fn_bisim:
@@ -334,3 +334,37 @@ Resume current_prepared_run_forward[plain]:
     phi_prefix_length bb''.bb_instructions` by metis_tac[] >> decide_tac
 QED
 Finalise current_prepared_run_forward
+
+Theorem current_entry_run_forward[local]:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') /\ fn_entry_state fn st /\
+  terminates (run_blocks fuel C fn st) ==>
+  frame_result_rel (run_blocks fuel C fn st) (run_blocks fuel C fn' st)
+Proof
+  strip_tac >>
+  `?eb. entry_block fn = SOME eb` by
+    (Cases_on `fn.fn_blocks` >> fs[fn_entry_state_def, fn_entry_label_def, entry_block_def]) >>
+  `ctx_bisim C C` by metis_tac[simplifyCfgSimToolsTheory.ctx_bisim_refl] >>
+  drule_all make_ssa_lockstep_phi_context >> strip_tac >>
+  drule_all current_target_entry_prefix_initial >> strip_tac >>
+  drule_all make_ssa_lockstep_entry_states >> strip_tac >>
+  drule_all current_phi_context_entry_cut >> strip_tac >>
+  `wf_function fn'` by metis_tac[o1MakeSsaStructuralShapeTheory.make_ssa_current_fn_wf_function] >>
+  `fn_inst_wf fn'` by metis_tac[o1MakeSsaFormatsTheory.make_ssa_current_fn_inst_wf] >>
+  `wf_ssa fn'` by
+    (irule makeSsaCurrentWfSsaTheory.make_ssa_current_fn_wf_ssa >>
+     qexistsl_tac [`fn`, `s`, `s'`] >>
+     fs[make_ssa_input_ok_def, IgnAsm `fn' = _`] >>
+     conj_tac >- first_assum ACCEPT_TAC >> metis_tac[]) >>
+  `st.vs_current_bb = eb.bb_label /\ st.vs_inst_idx = 0` by
+    (Cases_on `fn.fn_blocks` >> fs[fn_entry_state_def, fn_entry_label_def, entry_block_def]) >>
+  irule current_prepared_run_forward >>
+  rpt conj_tac >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >- metis_tac[] >>
+  qexistsl_tac [`A`, `H`, `bb'`, `[]`, `st`, `events`, `eb.bb_label`, `eb`, `st`, `st`, `[]`, `renamed`, `s`, `s'`] >>
+  simp[IgnAsm `fn' = _`, current_prefix_steps_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >> metis_tac[]
+QED
