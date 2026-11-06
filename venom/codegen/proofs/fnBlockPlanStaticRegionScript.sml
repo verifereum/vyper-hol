@@ -1582,3 +1582,67 @@ Proof
     `phi` |-> `EL i bb.bb_instructions`] (SPEC_ALL regional_indexed_phi_freshness)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
+
+Theorem regional_selected_phi_inv_prefix:
+  !fn bb dfg cfg sb i j ps ops qs.
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfg = dfg_build_function fn /\
+  i + j <= LENGTH (collect_phis bb.bb_instructions) /\
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb i ps /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    F 0 (LENGTH bb.bb_instructions) i j (DROP i bb.bb_instructions) ps =
+      SOME (ops, qs) ==>
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb (i+j) qs
+Proof
+  Induct_on `j`
+  >- simp[generate_block_insts_prefix_def] >>
+  rpt gen_tac >> strip_tac >>
+  `i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `i < LENGTH bb.bb_instructions` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+  `DROP i bb.bb_instructions = EL i bb.bb_instructions :: DROP (i+1) bb.bb_instructions` by
+    metis_tac[DROP_CONS_EL, arithmeticTheory.ADD1] >>
+  `(EL i bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[collect_phis_index, collect_phis_mem, EL_MEM] >>
+  `DROP (i+1) bb.bb_instructions = [] ==> i+1 = LENGTH bb.bb_instructions` by
+    (simp[DROP_EQ_NIL] >> decide_tac) >>
+  `i+1 <= LENGTH bb.bb_instructions` by decide_tac >>
+  `live_vars_at (liveness_analyze fn) bb.bb_label
+    (if DROP (i+1) bb.bb_instructions = [] then LENGTH bb.bb_instructions else i+1) =
+    live_vars_at (liveness_analyze fn) bb.bb_label (i+1)` by metis_tac[] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_block_insts_prefix_def, generate_inst_plan_def,
+    is_pre_codegen_opcode_def, LET_THM] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  `i+1 = LENGTH bb.bb_instructions \/ ~(LENGTH bb.bb_instructions <= i+1)` by decide_tac >>
+  gvs[] >>
+  rename1 `generate_phi_plan _ _ _ ps = (step_ops, mid)` >>
+  `regional_selected_phi_inv (liveness_analyze fn) (dfg_build_function fn) sb bb (i+1) mid` by
+    (irule regional_selected_phi_inv_step >> simp[] >>
+     qexistsl [`step_ops`, `ps`] >> gvs[]) >>
+  `i + SUC j = (i+1)+j` by decide_tac >>
+  pop_assum SUBST1_TAC >> first_x_assum irule >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD1]
+QED
+
+Theorem regional_selected_phi_inv_block_prefix:
+  !fn bb dfg cfg sb j ps0 ops qs.
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfg = dfg_build_function fn /\
+  LENGTH (get_params bb.bb_instructions) = 0 /\
+  non_param_insts bb = bb.bb_instructions /\ bb_is_halting bb = F /\
+  j <= LENGTH (collect_phis bb.bb_instructions) /\
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb 0 ps0 /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) 0 j (non_param_insts bb) ps0 =
+      SOME (ops, qs) ==>
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb j qs
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.INST [`i` |-> `0`, `ps` |-> `ps0`]
+    (SPEC_ALL regional_selected_phi_inv_prefix)) >>
+  gvs[]
+QED
