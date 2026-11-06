@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticInventory
 Ancestors
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
-  fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst
+  fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst venomWf
   fnBlockPlanStaticRetRegion genericInputReady
   fnBlockPlanStaticBalance fnFrameBoundaryGenRet generatedPrefixSim
 
@@ -2886,4 +2886,36 @@ Proof
   qpat_x_assum `_ = (join_ops,ps2)` mp_tac >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[join_reached_def] >>
   metis_tac[inventory_restore_reorder_marker_free]
+QED
+
+Theorem inventory_inst_marker_free:
+  codegen_ready_inst inst /\ inst_wf inst /\
+  ~MEM dead_stack_marker ps.ps_stack /\
+  generate_inst_plan lv dfg cfg fn inst nl F next_term lbl ps = SOME (ops,qs) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >>
+  `~is_pre_codegen_opcode inst.inst_opcode /\
+   (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst)` by
+    gvs[codegen_ready_inst_def] >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, LET_THM] >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (simp[] >> metis_tac[inventory_phi_marker_free]) >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (simp[generate_offset_plan_def, LET_THM] >>
+      Cases_on `EL 1 inst.inst_operands` >>
+      strip_tac >> gvs[stack_push_def, dead_stack_marker_def]) >>
+  Cases_on `is_param_opcode inst.inst_opcode` >- (simp[] >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = NOP` >- (simp[] >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  Cases_on `inst.inst_opcode = JMP`
+  >- (gvs[inst_wf_def] >> metis_tac[inventory_regular_jmp_marker_free]) >>
+  `~MEM dead_stack_marker (compute_operands inst)` by
+    (gvs[codegen_ready_inst_def] >>
+     simp[compute_operands_def, LET_THM] >> rpt IF_CASES_TAC >>
+     gvs[asmIRTheory.get_non_label_operands_def, MEM_FILTER] >>
+     Cases_on `inst.inst_operands` >> gvs[]) >>
+  `LENGTH (compute_operands inst) <= 16` by gvs[codegen_ready_inst_def] >>
+  metis_tac[inventory_regular_nonjmp_marker_free]
 QED
