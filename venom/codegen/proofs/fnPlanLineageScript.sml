@@ -28,7 +28,7 @@
 Theory fnPlanLineage
 Ancestors
   stackPlanGen stackPlanTypes fnPlanLineageJoinEntry fnPlanLineageLiveness
-  fnPlanLineagePhiSchedule codegenReadyCompute
+  fnPlanLineagePhiSchedule fnPlanLineagePhiTemporal codegenReadyCompute
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -334,6 +334,78 @@ Proof
     successful_join_edge_native_phi_coverage >>
   disch_then (qspecl_then [`succ`, `sb`, `pred`, `entry`] mp_tac) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem lineage_dfs_join_phi_schedule_ready:
+  !fn entry succ sb dfg ps0 psL psD halting.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ psD ==>
+  ?pred cells prefixL prefixD cells_end.
+    MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+    phi_origin_classes (native_phi_class pred (collect_phis sb.bb_instructions)) cells /\
+    psL.ps_stack = prefixL ++ MAP (phi_cell_value T) cells /\
+    psD.ps_stack = prefixD ++ MAP (phi_cell_value F) cells /\
+    phi_origin_schedule_ready
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) prefixL prefixD cells cells_end /\
+    phi_origin_classes (native_phi_class pred (collect_phis sb.bb_instructions)) cells_end
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  `fn_reachable fn succ` by
+    metis_tac[fn_reachable_cfg_analyze, lineage_state_reachable] >>
+  drule_all lineage_state_reachable_predecessor_origin >> strip_tac >>
+  drule_all dfs_block_state_reachable_predecessor_origin >> strip_tac >>
+  `?cells prefixP prefixQ cells_end.
+    phi_origin_classes (native_phi_class pred (collect_phis sb.bb_instructions)) cells /\
+    psAfter.ps_stack = prefixP ++ MAP (phi_cell_value T) cells /\
+    psAfter'.ps_stack = prefixQ ++ MAP (phi_cell_value F) cells /\
+    MAP (phi_cell_value T) cells = MAP Var
+      (input_vars_from pred sb.bb_instructions (live_vars_at (liveness_analyze fn) succ 0)) /\
+    phi_origin_schedule_ready
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) prefixP prefixQ cells cells_end /\
+    phi_origin_classes (native_phi_class pred (collect_phis sb.bb_instructions)) cells_end` by
+    (irule successful_join_edges_phi_schedule_ready >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`dfg`, `ops`, `ops'`, `psBefore`, `psBefore'`, `pred'`, `pb'`] >> simp[]) >>
+  qexistsl_tac [`pred`, `cells`, `prefixP`, `prefixQ`, `cells_end`] >> simp[]
+QED
+
+Theorem lineage_dfs_join_phi_state_replay:
+  !fn entry succ sb dfg ps0 psL psD halting rsL rsD.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ psD /\
+  rsL.ps_stack = psL.ps_stack /\ rsD.ps_stack = psD.ps_stack /\
+  rsL.ps_alloc = rsD.ps_alloc ==>
+  ?cells_end prefixL prefixD ops al.
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) rsL =
+      (ops, rsL with <|ps_stack := prefixL ++ MAP (phi_cell_value T) cells_end; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) rsD =
+      (ops, rsD with <|ps_stack := prefixD ++ MAP (phi_cell_value F) cells_end; ps_alloc := al|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_dfs_join_phi_schedule_ready >>
+  disch_then (qspec_then `halting` strip_assume_tac) >>
+  `rsL.ps_stack = prefixL ++ MAP (phi_cell_value T) cells /\
+   rsD.ps_stack = prefixD ++ MAP (phi_cell_value F) cells` by simp[] >>
+  drule_all phi_origin_schedule_state_replay >> strip_tac >>
+  qexistsl_tac [`cells_end`, `prefixL`, `prefixD`, `ops`, `al`] >> simp[]
 QED
 
 Theorem lineage_dfs_join_common_cells:
