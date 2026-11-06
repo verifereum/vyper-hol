@@ -1091,3 +1091,163 @@ Proof
   EVAL_TAC
 QED
 
+
+Definition deep_origin_entry_live_def:
+  deep_origin_entry_live = FEMPTY |++
+    MAP (\i. (("entry",i), REVERSE (TAKE i deep_origin_names))) (REVERSE (COUNT_LIST 19))
+End
+
+Definition deep_origin_branch_live_def:
+  deep_origin_branch_live (lbl:string) = (FEMPTY : (string # num) |-> string list) |++
+    MAP (\i. ((lbl,i),REVERSE deep_origin_names)) [2;1;0]
+End
+
+Definition deep_origin_join_live_def:
+  deep_origin_join_live = FEMPTY |++
+    MAP (\i. (("J",i), REVERSE (DROP i deep_origin_names))) (REVERSE (COUNT_LIST 19))
+End
+
+Theorem deep_origin_liveness:
+  liveness_analyze deep_origin_fn =
+  <| ds_inst := FUNION deep_origin_entry_live
+      (FUNION deep_origin_entry_live
+      (FUNION (deep_origin_branch_live "R")
+      (FUNION (deep_origin_branch_live "L")
+      (FUNION deep_origin_entry_live
+      (FUNION (deep_origin_branch_live "L")
+      (FUNION (deep_origin_branch_live "R")
+      (FUNION deep_origin_join_live
+      (FUNION (FEMPTY |+ (("exit",1),[]) |+ (("exit",0),[])) FEMPTY))))))));
+     ds_boundary := FEMPTY |++ REVERSE
+       (MAP (\lbl. (lbl, if MEM lbl ["L";"R";"J"] then REVERSE deep_origin_names else []))
+         ["entry";"entry";"R";"L";"entry";"L";"R";"J";"exit"] ++
+       MAP (\lbl. (lbl,[])) ["exit";"J";"R";"L";"entry"]) |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem deep_origin_dfg:
+  dfg_build_function deep_origin_fn =
+  <| dfg_uses := FEMPTY |++ REVERSE
+       ([("t0", [mk_inst 1 ASSIGN [Var "t0"] ["unusedL"];
+                       mk_inst 200 ASSIGN [Var "t0"] ["ut0"]]);
+         ("t16", [mk_inst 3 ASSIGN [Var "t16"] ["unusedR"];
+                        mk_inst 216 ASSIGN [Var "t16"] ["ut16"]])] ++
+        MAPi (\i v. (v,[mk_inst (200+i) ASSIGN [Var v] [STRCAT "u" v]])) deep_origin_names);
+     dfg_defs := FEMPTY |++ REVERSE
+       (MAPi (\i v. (v,mk_inst (100+i) ASSIGN [Lit 1w] [v])) deep_origin_names ++
+        [("unusedL",mk_inst 1 ASSIGN [Var "t0"] ["unusedL"]);
+         ("unusedR",mk_inst 3 ASSIGN [Var "t16"] ["unusedR"])] ++
+        MAPi (\i v. (STRCAT "u" v,mk_inst (200+i) ASSIGN [Var v] [STRCAT "u" v])) deep_origin_names);
+     dfg_ids := FEMPTY |++ REVERSE
+       (MAP (\inst. (inst.inst_id,inst))
+         (FLAT (MAP (\bb. bb.bb_instructions) deep_origin_fn.fn_blocks))) |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem deep_origin_cfg:
+  cfg_analyze deep_origin_fn =
+  <| cfg_succs := FEMPTY |++ REVERSE
+       [("exit",[]);("J",["exit"]);("R",["J"]);("L",["J"]);("entry",["R";"L"]);
+        ("exit",[]);("J",[]);("R",[]);("L",[]);("entry",[])];
+     cfg_preds := FEMPTY |++ REVERSE
+       [("exit",["J"]);("J",["L";"R"]);("J",["L"]);("R",["entry"]);("L",["entry"]);
+        ("exit",[]);("J",[]);("R",[]);("L",[]);("entry",[])];
+     cfg_reachable := FEMPTY |++ MAP (\lbl. (lbl,T)) ["entry";"L";"R";"J";"exit"];
+     cfg_dfs_post := ["exit";"J";"R";"L";"entry"];
+     cfg_dfs_pre := ["entry";"R";"J";"exit";"L"] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem deep_origin_pre_jump_left:
+  deep_origin_pre_jump deep_origin_fn 1 =
+    (entry_probe_start with <| ps_stack := MAP Var deep_origin_names;
+       ps_alloc := <| sa_free_slots := [0]; sa_next_offset := 32; sa_spill_base := 0 |> |>)
+Proof
+  rewrite_tac[deep_origin_pre_jump_def,deep_origin_entry_state,
+    deep_origin_liveness,deep_origin_dfg,deep_origin_cfg] >>
+  EVAL_TAC
+QED
+
+Theorem deep_origin_pre_jump_right:
+  deep_origin_pre_jump deep_origin_fn 2 =
+    entry_probe_start with ps_stack := MAP Var deep_origin_names
+Proof
+  rewrite_tac[deep_origin_pre_jump_def,deep_origin_entry_state,
+    deep_origin_liveness,deep_origin_dfg,deep_origin_cfg] >>
+  EVAL_TAC
+QED
+
+Theorem deep_origin_incoming_left:
+  residual_incoming deep_origin_fn 1 =
+    (entry_probe_start with <| ps_stack := MAP Var (REVERSE deep_origin_names);
+       ps_alloc := <| sa_free_slots := [0]; sa_next_offset := 32; sa_spill_base := 0 |> |>)
+Proof
+  rewrite_tac[residual_incoming_def,deep_origin_entry_state,residual_step_def,
+    deep_origin_liveness,deep_origin_dfg,deep_origin_cfg] >>
+  EVAL_TAC
+QED
+
+Theorem deep_origin_incoming_right:
+  residual_incoming deep_origin_fn 2 =
+    entry_probe_start with ps_stack := MAP Var (REVERSE deep_origin_names)
+Proof
+  rewrite_tac[residual_incoming_def,deep_origin_entry_state,residual_step_def,
+    deep_origin_liveness,deep_origin_dfg,deep_origin_cfg] >> EVAL_TAC
+QED
+
+Theorem deep_origin_targets:
+  deep_origin_target deep_origin_fn "L" = REVERSE deep_origin_names /\
+  deep_origin_target deep_origin_fn "R" = REVERSE deep_origin_names
+Proof
+  rewrite_tac[deep_origin_target_def,deep_origin_liveness] >> EVAL_TAC
+QED
+
+(* Candidate 2 tests repetition of one selected PHI source. *)
+Definition deep_origin_phi_fn_def:
+  deep_origin_phi_fn = deep_origin_fn with fn_blocks :=
+    MAP (\bb. if bb.bb_label = "J" then bb with bb_instructions :=
+      [mk_inst 300 PHI [Label "L";Var "t0";Label "R";Var "t0"] ["p"];
+       mk_inst 301 PHI [Label "L";Var "t0";Label "R";Var "t0"] ["q"];
+       mk_inst 302 ASSIGN [Var "p"] ["up"];
+       mk_inst 303 ASSIGN [Var "q"] ["uq"]] ++
+      TL bb.bb_instructions else bb) deep_origin_fn.fn_blocks
+End
+
+Theorem deep_origin_phi_rejected:
+  ~codegen_ready_fn deep_origin_phi_fn /\
+  ~phi_operands_ready deep_origin_phi_fn /\
+  ~phi_uses_disjoint (collect_phis (EL 3 deep_origin_phi_fn.fn_blocks).bb_instructions)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem deep_origin_branch_live_vars:
+  live_vars_at (liveness_analyze deep_origin_fn) "L" 1 = REVERSE deep_origin_names /\
+  live_vars_at (liveness_analyze deep_origin_fn) "R" 1 = REVERSE deep_origin_names
+Proof
+  rewrite_tac[deep_origin_liveness] >> EVAL_TAC
+QED
+
+Theorem deep_origin_count_ledger:
+  EVERY (\v.
+    (LIST_ELEM_COUNT (Var v) (deep_origin_pre_jump deep_origin_fn 1).ps_stack,
+     FLOOKUP (deep_origin_pre_jump deep_origin_fn 1).ps_spilled (Var v),
+     LIST_ELEM_COUNT v (deep_origin_target deep_origin_fn "L"),
+     MEM v (live_vars_at (liveness_analyze deep_origin_fn) "L" 1)) = (1,NONE,1,T) /\
+    (LIST_ELEM_COUNT (Var v) (deep_origin_pre_jump deep_origin_fn 2).ps_stack,
+     FLOOKUP (deep_origin_pre_jump deep_origin_fn 2).ps_spilled (Var v),
+     LIST_ELEM_COUNT v (deep_origin_target deep_origin_fn "R"),
+     MEM v (live_vars_at (liveness_analyze deep_origin_fn) "R" 1)) = (1,NONE,1,T) /\
+    (LIST_ELEM_COUNT (Var v) (residual_incoming deep_origin_fn 1).ps_stack,
+     FLOOKUP (residual_incoming deep_origin_fn 1).ps_spilled (Var v),
+     LIST_ELEM_COUNT (Var v) (residual_incoming deep_origin_fn 2).ps_stack,
+     FLOOKUP (residual_incoming deep_origin_fn 2).ps_spilled (Var v)) = (1,NONE,1,NONE))
+    deep_origin_names
+Proof
+  rewrite_tac[deep_origin_pre_jump_left,deep_origin_pre_jump_right,
+    deep_origin_incoming_left,deep_origin_incoming_right,deep_origin_targets,
+    deep_origin_branch_live_vars] >> EVAL_TAC
+QED
