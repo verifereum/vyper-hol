@@ -265,11 +265,7 @@ Resume evaluate_read_only[expr_if]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> BETA_TAC >> match_mp_tac machine_frame_bind >> conj_tac
       >- (irule machine_frame_switch_BoolV >> metis_tac[]) >>
-      qx_gen_tac `res` >> simp[] >> Cases_on `res` >>
-      simp[conditional_result_def, machine_frame_primitives] >>
-      match_mp_tac machine_frame_bind >> simp[machine_frame_place_type_value] >>
-      gen_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
-      match_mp_tac machine_frame_bind >> simp[machine_frame_read_place]) >>
+      simp[machine_frame_unchanged_reads]) >>
   metis_tac[]
 QED
 

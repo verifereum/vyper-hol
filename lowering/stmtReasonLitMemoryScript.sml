@@ -355,7 +355,10 @@ Proof
       irule room_by_fields >> qexists `update_var x0 (n2w B) sa0` >>
       simp[Abbr `s2`])
   >- (fs[alloca_next_valid_def] >> metis_tac[])
-  >- (strip_tac >> fs[allocas_non_overlapping_def] >> metis_tac[])
+  >- (strip_tac >> fs[allocas_non_overlapping_def] >>
+      qpat_x_assum `_ ==> !a1 a2 b1 sz1 b2 sz2. _` mp_tac >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `sa0.vs_allocas = A` (fn th => simp[th]))
   >- simp[Abbr `s2`, Abbr `sa0`]
   >- simp[Abbr `s2`, Abbr `sa0`]
   >- simp[Abbr `s2`, Abbr `sa0`]
