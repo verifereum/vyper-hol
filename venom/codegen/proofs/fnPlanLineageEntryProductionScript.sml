@@ -401,3 +401,90 @@ Proof
   simp[Q.SPEC `0` stackPlanOpsTheory.do_swap_def] >>
   rpt gen_tac >> pairarg_tac >> simp[]
 QED
+
+(* Out-of-range reads are deliberately left as the unspecified operand HD []. *)
+Theorem short_bulk_swap_stack_probe:
+  !ps. (SND (do_swap 17 (ps with ps_stack := [Var "x"]))).ps_stack =
+    [EL 16 ([] : operand list); HD []; EL 1 []; EL 2 []; EL 3 [];
+     EL 4 []; EL 5 []; EL 6 []; EL 7 []; EL 8 []; EL 9 []; EL 10 [];
+     EL 11 []; EL 12 []; EL 13 []; EL 14 []; EL 15 []; Var "x"]
+Proof
+  gen_tac >> simp[stackPlanOpsTheory.do_swap_def] >>
+  pairarg_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem repeated18_reorder_one_probe[local]:
+  !dfg ps i.
+    ps.ps_stack = REPLICATE 18 (Var "x") /\
+    MEM i [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17] ==>
+    reorder_one dfg (REPLICATE 18 (Var "x")) i (Var "x") ps = ([], ps)
+Proof
+  rpt gen_tac >> Cases_on `ps` >> simp_tac pure_ss [MEM] >> strip_tac >> gvs[] >>
+  simp[stackPlanOpsTheory.reorder_one_def,
+       stackModelTheory.stack_get_unfixed_depth_def,
+       stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def,
+       stackModelTheory.stack_peek_def, dfgDefsTheory.operand_equiv_def,
+       stackModelTheory.stack_poke_def] >> EVAL_TAC >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem repeated18_reorder_plan_probe:
+  !dfg ps.
+    reorder_plan dfg (REPLICATE 18 (Var "x"))
+      (ps with ps_stack := REPLICATE 18 (Var "x")) =
+    ([], ps with ps_stack := REPLICATE 18 (Var "x"))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[stackPlanOpsTheory.reorder_plan_def] >>
+  CONV_TAC (LAND_CONV (RAND_CONV EVAL)) >>
+  simp[repeated18_reorder_one_probe]
+QED
+
+Theorem short_bulk_swap_homogeneous_probe[local]:
+  !ps.
+    HD ([] : operand list) = Var "x" /\
+    (!i. 0 < i /\ i < 17 ==> EL i ([] : operand list) = Var "x") ==>
+    (SND (do_swap 17 (ps with ps_stack := [Var "x"]))).ps_stack =
+      REPLICATE 18 (Var "x")
+Proof
+  rpt strip_tac >> simp[short_bulk_swap_stack_probe] >> EVAL_TAC
+QED
+
+(* Conditional reduced-state diagnostic only: no claim that these unspecified
+   reads equal x, nor that this state occurs in a ready function. *)
+Theorem short_full_reorder_homogeneous_probe:
+  !dfg ps.
+    HD ([] : operand list) = Var "x" /\
+    (!i. 0 < i /\ i < 17 ==> EL i ([] : operand list) = Var "x") ==>
+    (SND (reorder_plan dfg (REPLICATE 18 (Var "x"))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>))).ps_stack =
+      REPLICATE 18 (Var "x")
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[stackPlanOpsTheory.reorder_plan_def] >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV EVAL)))) >>
+  pure_once_rewrite_tac[FOLDL] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp_tac (srw_ss()) [] >>
+  `ps'.ps_stack = REPLICATE 18 (Var "x")` by
+    (qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+     disch_then (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >>
+     simp[short_reorder_capacity_probe] >> strip_tac >> gvs[] >>
+     qspec_then `ps with ps_spilled := FEMPTY` mp_tac
+       short_bulk_swap_homogeneous_probe >> simp[]) >>
+  simp[repeated18_reorder_one_probe]
+QED
+
+Theorem short_full_reorder_conditional_guard_probe:
+  !dfg ps qs.
+    HD ([] : operand list) = Var "x" /\
+    (!i. 0 < i /\ i < 17 ==> EL i ([] : operand list) = Var "x") /\
+    qs = SND (reorder_plan dfg (REPLICATE 18 (Var "x"))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)) ==>
+    stack_pop 18 qs.ps_stack ++ REPLICATE 18 (Var "x") = qs.ps_stack /\
+    LIST_ELEM_COUNT (Var "x") qs.ps_stack = 18
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all short_full_reorder_homogeneous_probe >> strip_tac >>
+  simp[] >> EVAL_TAC
+QED
