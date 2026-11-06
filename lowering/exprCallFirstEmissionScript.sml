@@ -808,3 +808,26 @@ Resume first_emission_create_call[blueprint]:
   metis_tac[first_emission_create_blueprint_append]
 QED
 Finalise first_emission_create_call
+
+Theorem first_emission_create_target:
+  (!ce ty e. cs_appends (cfn ce ty e)) /\
+  (!e ty a x b. MEM e args /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rty ty (CreateTarget ck has_salt rof dummy) args defret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> rewrite_tac[compile_call_def] >>
+  Cases_on `compile_create_call cfn ce ck has_salt rof args a` >>
+  simp_tac bool_ss [as_stack_val_def] >> strip_tac >>
+  gvs[] >> drule_all first_emission_create_call >> simp[]
+QED
