@@ -919,3 +919,41 @@ Proof
 QED
 
 
+
+Theorem jmp_join_signed_balance[local]:
+  (case join_target_ops lv fn lbl inst of
+     NONE => ([],ps)
+   | SOME target =>
+       let (restore_ops,rs) = restore_spilled_plan target ps;
+           (swap_ops,ss) = reorder_plan dfg target rs
+       in (restore_ops ++ swap_ops,ss)) = (ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Cases_on `join_target_ops lv fn lbl inst` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule restore_spilled_plan_signed_balance >> strip_tac >>
+  drule reorder_plan_signed_balance >> strip_tac >>
+  simp[trace_weight_append] >> intLib.ARITH_TAC
+QED
+
+Theorem generate_regular_jmp_plan_signed_balance:
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\
+  inst.inst_outputs = [] /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps =
+    (ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops +
+    regular_correction inst (source_topics inst)
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM, compute_operands_def,
+       get_non_label_operands_def, emit_input_plan_def, reorder_plan_def,
+       generate_emit_ops_def, venom_to_evm_name_def, stack_pop_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[release_dead_spills_stack] >>
+  drule (SRULE [LET_THM, reorder_plan_def] jmp_join_signed_balance) >>
+  simp[regular_correction_def, source_topics_def, trace_weight_append,
+       trace_weight_def, stack_op_weight_def, compute_operands_def,
+       get_non_label_operands_def, generate_emit_ops_def, venom_to_evm_name_def] >>
+  intLib.ARITH_TAC
+QED

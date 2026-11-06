@@ -146,3 +146,22 @@ Proof
        fs[Once generate_block_insts_prefix_def, arithmeticTheory.ADD1]) >> simp[]) >>
   simp[trace_weight_append] >> intLib.ARITH_TAC
 QED
+
+Theorem generate_inst_plan_jmp_signed_balance:
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\
+  inst.inst_outputs = [] /\
+  generate_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps = SOME (ops,qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops +
+    instruction_correction inst
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       is_raw_fmp_opcode_def, is_param_opcode_def] >>
+  Cases_on `generate_regular_inst_plan lv dfg cfg fn inst nl halting next_term lbl ps` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    generate_regular_jmp_plan_signed_balance >>
+  simp[instruction_correction_def, is_param_opcode_def]
+QED
