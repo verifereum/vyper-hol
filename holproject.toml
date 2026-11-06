@@ -7,6 +7,7 @@ version = "0.2.3"
 
 [build]
 roots = ["lowering/whitelist/whitelistDeployScript.sml",
+         "lowering/whitelist/whitelistVisibilityScript.sml",
          "lowering/whitelist/whitelistExprOpenScript.sml",
          "lowering/whitelist/whitelistS2ExtrasScript.sml",
          "lowering/whitelist/whitelistCheckerTypesScript.sml",
