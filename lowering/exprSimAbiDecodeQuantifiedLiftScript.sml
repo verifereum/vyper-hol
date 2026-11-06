@@ -2,7 +2,8 @@ Theory exprSimAbiDecodeQuantifiedLift
 Ancestors
   exprSimAbiDecodeFreshProbe exprSimAbiDecodeBuiltin abiDecoderReentry
   exprSimAbiDecodeStepLift abiDecoderSiteEffect actualDecoderSites
-  exprSimAbiDecodeOutcomeAllocation exprSimAbiDecodeObserverReject
+  exprSimAbiDecodeOutcomeAllocation exprSimAbiDecodeEndpointFrame
+  exprSimAbiDecodeObserverReject
   exprSimAbiDecodePathReconstruct exprSimAbiDecodePathLift
   abiEncoderVarTransport exprSimAbiGasBridge abiEncoderObserver
   abiDecoderVarExtend abiDecoderLoop fragExec venomExecSemantics venomState
@@ -290,6 +291,10 @@ QED
 
 Definition abi_decode_success_closed_def:
   abi_decode_success_closed ce env ty tv bs out d start final ctx func s t <=>
+    abi_decode_allocation_floor s.vs_alloca_next s.vs_allocas t /\
+    FLOOKUP t.vs_allocas (abi_builtin_decode_output_site start
+      (abi_static_size ce.ce_struct_fields ty) (abi_size_bound ce.ce_struct_fields ty)) =
+      SOME (d,type_memory_bytes ce ty) /\
     ?u rd prev. abi_decode_success_post ce env ty tv bs out d start final ctx func s u /\
       t = u with <|vs_returndata := rd; vs_prev_bb := prev|>
 End
@@ -298,6 +303,10 @@ Theorem abi_decode_success_closed_transport:
   abi_decode_success_post ce env ty tv bs out d start final ctx func
     (abi_decoder_prune_vars start.cs_next_var s) t /\
   stop_view u = stop_view t /\ abi_decoder_vars_extend s.vs_vars u u' /\
+  abi_decode_allocation_floor s.vs_alloca_next s.vs_allocas t /\
+  FLOOKUP t.vs_allocas (abi_builtin_decode_output_site start
+    (abi_static_size ce.ce_struct_fields ty) (abi_size_bound ce.ce_struct_fields ty)) =
+    SOME (d,type_memory_bytes ce ty) /\
   local_prefix ctx fn (frag_observer_cut final) s u' ==>
   abi_decode_success_closed ce env ty tv bs out d start final ctx func s u' /\
   ~u'.vs_halted /\ u'.vs_current_bb = final.cs_current_bb /\
@@ -305,6 +314,7 @@ Theorem abi_decode_success_closed_transport:
 Proof
   strip_tac >> drule local_prefix_endpoint >>
   simp[frag_observer_cut_def] >> strip_tac >> simp[] >>
+  drule_all abi_decode_endpoint_allocation_transport >> strip_tac >>
   drule_all abi_decode_success_post_extend >> strip_tac >>
   simp[abi_decode_success_closed_def] >>
   qexistsl_tac [`u' with vs_returndata := t.vs_returndata`,
@@ -356,6 +366,24 @@ Proof
         (irule abi_decode_observer_continuation_extend >> simp[] >>
          qexistsl_tac [`id`, `abi_decoder_prune_vars start.cs_next_var s`, `start`] >>
          gvs[abi_decoder_prune_vars_def] >> metis_tac[]) >>
+      `abi_decode_allocation_floor
+         (abi_decoder_prune_vars start.cs_next_var s).vs_alloca_next
+         (abi_decoder_prune_vars start.cs_next_var s).vs_allocas t` by
+        (irule abi_decode_observer_continuation_floor >>
+         simp[abi_decoder_prune_vars_def] >>
+         goal_assum (drule_at (Pat `fn_has_code _ _ _`)) >> simp[] >>
+         qexistsl_tac [`ctx`, `id`] >> fs[abi_decoder_prune_vars_def]) >>
+      `abi_decode_allocation_floor s.vs_alloca_next s.vs_allocas t` by
+        fs[abi_decoder_prune_vars_def] >>
+      `FLOOKUP t.vs_allocas (abi_builtin_decode_output_site start
+         (abi_static_size ce.ce_struct_fields ty) (abi_size_bound ce.ce_struct_fields ty)) =
+         SOME (d,type_memory_bytes ce ty)` by
+        (irule (cj 2 abi_decode_outcome_allocation) >>
+         conj_tac >- (fs[abi_builtin_decode_site_resources_def] >> decide_tac) >>
+         goal_assum (drule_at (Pat `lower_abi_decode _ _ _ _ _ _ = _`)) >>
+         simp[] >> qexistsl_tac [`ctx`, `fn`, `id`,
+           `abi_decoder_prune_vars start.cs_next_var s`] >>
+         fs[abi_builtin_decode_site_resources_def, abi_decoder_prune_vars_def]) >>
       drule_all abi_decode_success_closed_transport >> strip_tac >>
       disj1_tac >> qexists_tac `u'` >> simp[]) >>
   `abi_decoder_vars_extend s.vs_vars
@@ -376,6 +404,7 @@ Theorem abi_decode_success_closed_updates:
     (t with <|vs_returndata := rd; vs_prev_bb := prev|>)
 Proof
   simp_tac bool_ss [abi_decode_success_closed_def] >> strip_tac >>
+  gvs[abi_decode_allocation_floor_def] >>
   qexistsl_tac [`u`, `rd`, `prev`] >> gvs[]
 QED
 
@@ -385,6 +414,7 @@ Theorem abi_decode_success_closed_returndata:
     (t with vs_returndata := rd)
 Proof
   simp_tac bool_ss [abi_decode_success_closed_def] >> strip_tac >>
+  gvs[abi_decode_allocation_floor_def] >>
   qexistsl_tac [`u`, `rd`, `prev`] >> gvs[]
 QED
 
@@ -394,5 +424,6 @@ Theorem abi_decode_success_closed_prev_bb:
     (t with vs_prev_bb := prev)
 Proof
   simp_tac bool_ss [abi_decode_success_closed_def] >> strip_tac >>
+  gvs[abi_decode_allocation_floor_def] >>
   qexistsl_tac [`u`, `rd`, `prev`] >> gvs[]
 QED
