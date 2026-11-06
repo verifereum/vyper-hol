@@ -566,7 +566,7 @@ Theorem word_copy_loop_exit_empty[local]:
   compile_word_copy_loop src dst n l1 l2 c sa = (u,sb) ==>
   sb.cs_current_insts = []
 Proof
-  simp[compile_word_copy_loop_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[new_block_def]
 QED
 

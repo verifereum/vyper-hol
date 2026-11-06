@@ -180,9 +180,9 @@ Resume gas_shadow_compiles_assign_value[code]:
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
            gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_store_memory_typed]) >>
   gen_tac >> Cases_on `prim` >>
-  Cases_on `(if is_bytestring_type ty then type_memory_bytes cenv sty else n) <= 32` >>
+  Cases_on `is_bytestring_type ty` >> Cases_on `n <= 32` >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_imm_store_word,
-       gas_shadow_compiles_imm_store_words]
+       gas_shadow_compiles_imm_store_words, gas_shadow_compiles_store_immutable_bytestring]
 QED
 
 Finalise gas_shadow_compiles_assign_value

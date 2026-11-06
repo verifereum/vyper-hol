@@ -68,7 +68,7 @@ Theorem compile_storage_copy_layout[local]:
       new_block exit
     od
 Proof
-  rpt strip_tac >> gvs[compile_word_copy_loop_def, word_scale_def,
+  rpt strip_tac >> gvs[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, word_scale_def,
                         compile_ptr_store_def]
 QED
 

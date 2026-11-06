@@ -171,7 +171,7 @@ Proof
      contextTheory.compile_storage_to_memory_def,
      contextTheory.compile_transient_to_memory_def,
      compile_imm_copy_to_memory_appends,
-     contextTheory.compile_word_copy_loop_def,
+     compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def,
      contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
      word_scale_def] >>
   Cases_on `loc` >> rw[] >>
