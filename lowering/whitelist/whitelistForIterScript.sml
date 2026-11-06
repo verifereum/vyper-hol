@@ -55,7 +55,7 @@
  *)
 Theory whitelistForIter
 Ancestors
-  bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem
+  bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImm
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
   bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
