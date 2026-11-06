@@ -12,8 +12,11 @@
  *)
 Theory bodyPtrAssignCases
 Ancestors
-  annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts supportedStmts compileEnv
+  annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts
+  assignTuplePtrBodyLocals assignTuplePtrBodyTargets
   bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
+  supportedStmts exprLoweringProps compileEnv vyperTypeEnv
+  stmtSimDefs
   vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
@@ -66,7 +69,35 @@ Theorem body_assign_tuple_case_ptr:
        body_tuple_target_ptr_ok cx (TupleTarget gs) v) /\ body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (Assign (TupleTarget gs) e)
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
+  reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
+  >- (irule body_assign_tuple_widened_call_ptr >> metis_tac[]) >>
+  Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+                  EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids`
+  >- (gvs[] >> drule_all tuple_locals_bytes_pos_ptr >> strip_tac >>
+      `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) ids` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      irule body_assign_tuple_locals_ptr >> metis_tac[]) >>
+  Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                                FLOOKUP env.var_types id = SOME ty /\
+                                0 < type_memory_bytes cenv ty) \/
+                       (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                               supported_scalar_target tops nsid) \/
+                       (?nsid fld fty.
+                          g = BaseTarget
+                                (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                          supported_storage_field_write tops nsid fld /\
+                          type_place_target env
+                            (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                            SOME (Type fty) /\ is_word_type fty)) gs`
+  >- (simp[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+      `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+        fs[stmt_state_rel_def, state_rel_def] >>
+      drule_all body_assign_tuple_targets_ptr >>
+      simp[stmt_frag_ptr_def] >> disch_then drule_all >> simp[]) >>
+  irule body_assign_tuple_other_ptr >> metis_tac[]
 QED
 
 (* ADMITTED: a piece of the body induction. *)
