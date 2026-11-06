@@ -1,6 +1,6 @@
 Theory lowerDloadProvenanceSupport
 Ancestors
-  lowerDloadOwnership pointerConfinedProps ptrDiscipline o1PassContract
+  lowerDloadOwnership irSupply fmpStepSupply pointerConfinedProps ptrDiscipline o1PassContract
   finite_map pred_set list option pointerConfinedDefs venomInst
   execEquivParamBase venomExecProps contextCodegenRel ctxLookupAgreeHelpers
 
@@ -225,4 +225,27 @@ Theorem ld_annotated_active_inst:
   active_inst fn inst s
 Proof
   ho_match_mp_tac ld_annotated_reachable_ind >> rpt strip_tac
+QED
+
+Theorem ld_fn_pv_ir_vars:
+  !P fn. fn_pv P fn SUBSET set (fn_ir_vars fn)
+Proof
+  rpt gen_tac >> simp[fn_pv_def, pointer_derived_vars_def, SUBSET_DEF] >>
+  ho_match_mp_tac pointerConfinedPropsTheory.pointer_use_vars_least >>
+  conj_tac
+  >- (simp[MEM_SET_TO_LIST, ld_ptr_roots_finite, ptr_roots_def,
+           alloca_roots_def] >> rpt strip_tac >>
+      gvs[inst_output_def, AllCaseEqs()] >>
+      gvs[fn_insts_def, fn_insts_blocks_MEM] >>
+      simp[fn_ir_vars_member] >> metis_tac[MEM]) >>
+  rpt strip_tac >> simp[fn_ir_vars_member] >> metis_tac[]
+QED
+
+Theorem ld_annotated_prov_ir_vars:
+  (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  FDOM AG SUBSET set (fn_ir_vars fn)
+Proof
+  strip_tac >> drule_all ld_annotated_prov_support >>
+  metis_tac[ld_fn_pv_ir_vars, SUBSET_TRANS]
 QED

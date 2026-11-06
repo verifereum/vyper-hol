@@ -56,6 +56,7 @@ Proof
   qpat_x_assum `step_inst fuelT CT i t = _` mp_tac >>
   simp[step_inst_non_invoke] >>
   pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
   simp[] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   rename1 `eval_operands i.inst_operands t = SOME (y::ys)` >>
@@ -63,7 +64,8 @@ Proof
   `LENGTH xs = LENGTH (y::ys)` by metis_tac[ld_eval_operands_length] >>
   `xs <> []` by (strip_tac >> gvs[]) >>
   simp[step_inst_non_invoke] >>
-  pure_once_rewrite_tac[step_inst_base_def] >> simp[] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >> simp[] >>
   qexists `<| iret_values := FRONT xs;
               iret_adopt_fmp := if i.inst_opcode = RET then NONE else SOME s.vs_fmp |>` >>
   Cases_on `xs` >> gvs[bind_outputs_def, LENGTH_FRONT, adopt_return_fmp_def]
