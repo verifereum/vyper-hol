@@ -1510,6 +1510,8 @@ QED
 Theorem remap_step_pending_deletions[local]:
   alloca_remap_rel fn roots remap s1 s2 /\
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> DELEGATECALL /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
   v1.vs_pending_deletions = v2.vs_pending_deletions
 Proof
@@ -3165,7 +3167,7 @@ QED
 
 (* LOG dispatch is reduced separately from the simulation context. *)
 Theorem step_inst_base_log[local]:
-  inst.inst_opcode = LOG ==>
+  inst.inst_opcode = LOG /\ ~s.vs_call_ctx.cc_static ==>
   step_inst_base inst s =
     (case inst.inst_operands of
        Lit tc :: rest =>
@@ -3189,6 +3191,7 @@ QED
 (* --- LOG: read from memory, append to logs, no memory write --- *)
 Resume remap_preserved_mem_ops[log]:
   `~s1.vs_call_ctx.cc_static` by metis_tac[log_ok_not_static] >>
+  `~s2.vs_call_ctx.cc_static` by gvs[alloca_remap_rel_def, LET_DEF] >>
   fs[step_inst_base_log, AllCaseEqs()] >>
   Cases_on `REVERSE rest` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
@@ -4457,6 +4460,12 @@ Resume step_inst_base_error_transfer[ISTORE]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[LOG]:
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s1))`
+    by (strip_tac >> gvs[]) >>
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s2))`
+    by (rpt strip_tac >> fs[] >> res_tac >> fs[]) >>
+  qpat_x_assum `_ = Error err` mp_tac >> ASM_REWRITE_TAC[] >> strip_tac >>
+  rpt (qpat_x_assum `~(_ /\ _)` kall_tac) >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `h` >> gvs[] >>
   Cases_on `LENGTH t <> w2n c + 2` >- gvs[] >>
