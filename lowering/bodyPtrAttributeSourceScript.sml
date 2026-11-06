@@ -35,6 +35,8 @@ Theorem attribute_typed_selection:
     eval_operand (vv_operand bvv) t = SOME w
 Proof
   strip_tac >> drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
   `expr_sim_inv cenv cx env es0` by fs[expr_body_pre_def] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
@@ -76,7 +78,7 @@ QED
 
 Theorem attribute_memory_field_address:
   vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv t /\
-  expr_type obj = StructT sid /\ vv_loc bvv = LocMemory /\
+  post_value_type cenv obj = StructT sid /\ vv_loc bvv = LocMemory /\
   read_result cx btv ee = (INL (StructV vals),ee) /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   eval_operand (vv_operand bvv) t = SOME w /\
