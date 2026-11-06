@@ -82,20 +82,20 @@ Theorem annassign_rhs_stage_input_ptr:
  expr_post ctx func cenv cx e es ea eb s0 es1 v op s /\
  lower_value compile_expr cenv (expr_type e) e ea = (op,eb) /\
  local_ptrs_reserved cenv ea /\ ~not_fresh_at eb dst /\
- evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
- ~is_word_type (expr_type e) /\
- ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
+ evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
+ ~is_word_type (post_value_type cenv e) /\
+ ptr_val_ok cx (post_value_type cenv e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
  k = type_memory_bytes cenv (lowered_value_type cenv e) /\ 0 < k /\
  k < dimword (:256) ==>
  ?src a. op = Var src /\ src <> dst /\ lookup_var src s = SOME a /\
  ptr_covers G tn src s k /\ val_wf tv v /\
- expr_val_at cenv cx (expr_type e) ea eb es1 v (Var src) s /\
+ expr_val_at cenv cx (post_value_type cenv e) ea eb es1 v (Var src) s /\
  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n a) m)
 Proof
  rpt gen_tac >> strip_tac >>
  drule compile_lower_value_var >> disch_then drule >> disch_tac >>
- `expr_val_at cenv cx (expr_type e) ea eb es1 v op s` by
+ `expr_val_at cenv cx (post_value_type cenv e) ea eb es1 v op s` by
    fs[expr_post_def] >>
  `val_wf tv v /\ ?w. eval_operand op s = SOME w` by
    (fs[expr_val_at_def] >> metis_tac[]) >>
