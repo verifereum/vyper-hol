@@ -3,6 +3,7 @@ Theory extRetSourceAllocationPtr
 Ancestors
   allocationPtr allocaFootprint abiEncoder valueEncoding venomState
   loweringPosts finite_map arithmetic
+  representationCleanPtr bodyPtrDefs exprSimProps ptrCoverage vyperValue words
 
 Theorem prospective_alloca_expr_interval_disjoint:
   stmt_state_rel ctx func cenv cx es s /\
@@ -66,4 +67,27 @@ Proof
     simp[val_footprint_def] >>
   drule_all prospective_alloca_expr_interval_disjoint >>
   simp[val_footprint_def]
+QED
+
+(* Aggregate footprints retain their declared capacity, even when children
+   include dynamic values. Zero capacity intentionally yields no provenance. *)
+Theorem non_bytes_source_sizes:
+  (!bs. v <> BytesV bs) /\ (!str. v <> StringV str) ==>
+  val_footprint tv v = type_memory_size tv /\
+  val_store_size tv v = type_memory_size tv
+Proof
+  Cases_on `v` >> simp[val_footprint_def, val_store_size_def]
+QED
+
+Theorem ptr_val_ok_aggregate_capacity_covers:
+  ptr_val_ok cx ty v op G tn s /\ ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand op s = SOME w /\
+  (!bs. v <> BytesV bs) /\ (!str. v <> StringV str) /\
+  0 < type_memory_size tv ==>
+  ?p. op = Var p /\ ptr_covers G tn p s (type_memory_size tv)
+Proof
+  strip_tac >> drule_all non_bytes_source_sizes >> strip_tac >>
+  irule ptr_val_ok_read_covers >> conj_tac >- metis_tac[] >>
+  qexistsl_tac [`cx`, `tv`, `ty`, `v`] >> simp[]
 QED
