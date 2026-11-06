@@ -2,12 +2,15 @@
 Theory exprSimAbiDecodeArrayRuntimeSetup
 Ancestors
   exprSimAbiDecodeArrayInvariant abiDecoderDynamicLoopSetup
+  exprSimAbiDecodeAbortReentry abiDecoderVarExtend abiDecoderContract
+  exprSimAbiDecodeArrayMembers exprSimAbiDecodeMemberExecute
+  abiValidAggregateHeads abiValidMembers
   abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentry abiDecoderSequenceReach
   abiDecoderFiniteControl abiDecoderBytestringOutcome abiDecoderRange
   abiDecoderArrayPtr abiDecoderArrayBound abiDecoderGuard abiDecoderGuards abiDecoderComplexGuard
   abiDecoderComplexHead exprSimAbiDecodeCompositePrefix
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
-  venomState venomInst words list arithmetic
+  venomState venomInst words list rich_list arithmetic
 
 Theorem abi_array_static_element_setup_phases:
   ~dec_info_needs_offset di ==>
@@ -192,4 +195,259 @@ Proof
   drule_all abi_array_pointer_guard_extends >> strip_tac >>
   drule_all run_inst_seq_emit_extend >> strip_tac >>
   metis_tac[inst_extends_trans]
+QED
+
+Theorem abi_array_pointer_reentry_opcodes:
+  compile_abi_decode_dyn_elem_ptr MLOAD base_op elem_src src_data hi abi_sz st = (child,last) ==>
+  EVERY (\i. MEM i.inst_opcode [ADD; LT; GT; AND; ISZERO; MLOAD; ASSERT])
+    (emitted_insts st last)
+Proof
+  Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+    emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
+Theorem abi_array_bounded_pointer_revert_reentry:
+  compile_abi_decode_dyn_elem_ptr MLOAD base_op elem_src src_data hi abi_sz st = (child_op,last) /\
+  hi <> Lit 0w /\
+  eval_operand elem_src s = SOME(n2w pos) /\
+  eval_operand base_op s = SOME(n2w B) /\
+  eval_operand src_data s = SOME(n2w data_base) /\
+  abi_decode_load MLOAD (n2w(B+pos):bytes32) s = n2w child_off /\
+  eval_operand hi s = SOME(n2w H) /\
+  data_base < dimword(:256) /\ abi_sz < dimword(:256) /\ H < dimword(:256) /\
+  (w2n(n2w(data_base+child_off):bytes32) < data_base \/
+   H < w2n(n2w(data_base+child_off):bytes32)+abi_sz) /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [elem_src;base_op;src_data;hi] /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
+    inst_extends st last
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var s)` by
+    irule abi_decoder_prune_fresh >>
+  `eval_operand elem_src (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w pos) /\
+   eval_operand base_op (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w B) /\
+   eval_operand src_data (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w data_base) /\
+   eval_operand hi (abi_decoder_prune_vars st.cs_next_var s) = SOME(n2w H)` by
+    (fs[] >> asm_simp_tac bool_ss [abi_decoder_prune_eval]) >>
+  `abi_decode_load MLOAD (n2w(B+pos):bytes32)
+    (abi_decoder_prune_vars st.cs_next_var s) = n2w child_off` by
+    fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def] >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_array_bounded_pointer_revert >> strip_tac >>
+  `abi_decoder_vars_extend s.vs_vars (abi_decoder_prune_vars st.cs_next_var s) s` by
+    irule abi_decoder_prune_extension >>
+  drule abi_array_pointer_reentry_opcodes >> strip_tac >>
+  drule_all abi_decode_guard_sequence_vars_extend_abort >> simp[]
+QED
+
+Theorem abi_array_source_setup_revert_reentry:
+  abi_decode_array_source_setup ip src MLOAD base_op hi abi_sz st = (ops,last) /\
+  hi <> Lit 0w /\ eval_operand ip s = SOME slotword /\ mload (w2n slotword) s = n2w j /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand base_op s = SOME(n2w B) /\
+  eval_operand hi s = SOME(n2w H) /\
+  abi_decode_load MLOAD (n2w(B+(p+32+j*abi_sz)):bytes32) s = n2w child_off /\
+  p+32 < dimword(:256) /\ abi_sz < dimword(:256) /\ H < dimword(:256) /\
+  (w2n(n2w(p+32+child_off):bytes32) < p+32 \/
+   H < w2n(n2w(p+32+child_off):bytes32)+abi_sz) /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;base_op;hi] /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
+    inst_extends st last
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decode_array_source_setup_split >> strip_tac >>
+  drule abi_decode_array_head_setup_counters >> strip_tac >>
+  drule abi_decoder_array_pointer_counters >> strip_tac >>
+  `c1.cs_next_var <= limit_st.cs_next_var` by
+    (Cases_on `base_op = Lit 0w` >> gvs[] >> decide_tac) >>
+  `abi_decoder_operand_live c1.cs_next_var base_op /\
+   abi_decoder_operand_live c1.cs_next_var hi` by
+    (fs[] >> conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[]) >>
+  `abi_decoder_operand_live st.cs_next_var src` by fs[] >>
+  drule_all abi_decode_array_head_setup_reentry >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  `eval_operand base_op s1 = SOME(n2w B) /\ eval_operand hi s1 = SOME(n2w H)` by
+    (fs[abi_decoder_address_frame_def] >> metis_tac[]) >>
+  `abi_decode_load MLOAD (n2w(B+(p+32+j*abi_sz)):bytes32) s1 = n2w child_off` by
+    (drule abi_decoder_address_frame_load >> strip_tac >> gvs[]) >>
+  `EVERY (abi_decoder_operand_live c1.cs_next_var)
+    [SND (SND head_ops);base_op;FST (SND head_ops);hi]` by simp[] >>
+  drule_all abi_array_bounded_pointer_revert_reentry >> strip_tac >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >>
+  metis_tac[inst_extends_trans]
+QED
+
+Theorem abi_array_dynamic_element_setup_revert_reentry:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di abi_sz mem_sz st = (ops,last) /\
+  dec_info_needs_offset di /\ hi <> Lit 0w /\
+  eval_operand ip s = SOME slotword /\ mload (w2n slotword) s = n2w j /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand base_op s = SOME(n2w B) /\
+  eval_operand hi s = SOME(n2w H) /\
+  abi_decode_load MLOAD (n2w(B+(p+32+j*abi_sz)):bytes32) s = n2w child_off /\
+  p+32 < dimword(:256) /\ abi_sz < dimword(:256) /\ H < dimword(:256) /\
+  (w2n(n2w(p+32+child_off):bytes32) < p+32 \/
+   H < w2n(n2w(p+32+child_off):bytes32)+abi_sz) /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;base_op;hi] /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
+    inst_extends st last
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decode_dynamic_element_setup_split >> strip_tac >>
+  drule abi_decode_indexed_address_counters >> strip_tac >>
+  `c1.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all abi_array_source_setup_revert_reentry >> strip_tac >>
+  `inst_extends c1 last` by
+    (qhdtm_x_assum `abi_decode_indexed_address` mp_tac >>
+     simp[abi_decode_indexed_address_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[] >>
+     simp[inst_extends_def, same_blocks_def, emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND]) >>
+  `!u. run_inst_seq (emitted_insts st c1) s <> OK u` by simp[] >>
+  drule_all run_inst_seq_emit_extend_err >> strip_tac >>
+  metis_tac[inst_extends_trans]
+QED
+
+Theorem abi_array_dynamic_pointer_source_reject:
+  is_dynamic at /\ (!elem. at <> Array (SOME 0) elem) /\
+  delta = abi_head_word (DROP (j * abi_member_head_size at) (DROP (p+32) bs)) /\
+  LENGTH bs <= H /\ H < dimword(:256) /\
+  (w2n(n2w(p+32+delta):bytes32) < p+32 \/
+   H < w2n(n2w(p+32+delta):bytes32)+32) ==>
+  ~vyper_decode_valid_enc at (abi_array_member_view at bs p j)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> strip_tac >>
+  `32 <= LENGTH (abi_array_member_view at bs p j)` by
+    metis_tac[abi_valid_dynamic_head_min] >>
+  `abi_array_member_view at bs p j = DROP delta (DROP (p+32) bs)` by
+    simp[abi_array_member_view_def, abi_decode_member_bytes_def] >>
+  `p+32+delta+32 <= LENGTH bs` by
+    (fs[LENGTH_DROP] >> decide_tac) >>
+  `p+32+delta < dimword(:256)` by decide_tac >>
+  fs[w2n_n2w] >> decide_tac
+QED
+
+Theorem abi_array_element_setup_straight:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di abi_sz mem_sz st = (ops,last) ==>
+  last.cs_blocks = st.cs_blocks /\ last.cs_current_bb = st.cs_current_bb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st last)
+Proof
+  Cases_on `dec_info_needs_offset di` >> Cases_on `hi = Lit 0w` >>
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_array_element_setup_def, abi_decode_indexed_coordinates_def,
+    abi_decode_indexed_address_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+    emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem abi_array_dynamic_element_setup_reject:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di 32 mem_sz st = (ops,last) /\
+  dec_info_needs_offset di /\ hi <> Lit 0w /\
+  eval_operand ip s = SOME slotword /\ mload (w2n slotword) s = n2w j /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand base_op s = SOME(n2w B) /\
+  eval_operand hi s = SOME(n2w H) /\
+  abi_decode_load MLOAD (n2w(B+(p+32+j*32)):bytes32) s = n2w delta /\
+  p+32 < dimword(:256) /\ H < dimword(:256) /\ LENGTH bs <= H /\
+  is_dynamic (vyper_to_abi_type env ty) /\
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  delta = abi_head_word (DROP (j * abi_member_head_size (vyper_to_abi_type env ty))
+    (DROP (p+32) bs)) /\
+  (w2n(n2w(p+32+delta):bytes32) < p+32 \/
+   H < w2n(n2w(p+32+delta):bytes32)+32) /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;base_op;hi] /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st last fn /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  (?u. Dabort ctx fn s Revert_abort u) /\
+  ~(?v. abi_decode_source_accepts env ty
+    (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse conj_tac
+  >- (drule_all abi_array_dynamic_pointer_source_reject >>
+      simp[abi_decode_source_accepts_def]) >>
+  `32 < dimword(:256)` by simp[] >>
+  drule_all abi_array_dynamic_element_setup_revert_reentry >> strip_tac >>
+  drule abi_array_element_setup_straight >> strip_tac >>
+  drule_all abi_decoder_run_sequence_abort >> strip_tac >>
+  qpat_x_assum `!ctx. _` (qspec_then `ctx` strip_assume_tac) >>
+  simp[Dabort_def] >> qexistsl_tac [`t with vs_inst_idx := n`, `0`] >> simp[]
+QED
+
+Theorem abi_array_pointer_check_bounds:
+  data_base < dimword(:256) /\ delta < dimword(:256) /\
+  H < dimword(:256) /\
+  ~(w2n(n2w(data_base+delta):bytes32) < data_base \/
+    H < w2n(n2w(data_base+delta):bytes32)+sz) ==>
+  data_base+delta+sz <= H
+Proof
+  strip_tac >>
+  Cases_on `data_base+delta < dimword(:256)`
+  >- (fs[w2n_n2w] >> decide_tac) >>
+  `data_base+delta-dimword(:256) < dimword(:256) /\
+   data_base+delta-dimword(:256) < data_base` by decide_tac >>
+  `data_base+delta = dimword(:256)+(data_base+delta-dimword(:256))` by decide_tac >>
+  `w2n(n2w(data_base+delta):bytes32) = data_base+delta-dimword(:256)` by
+    (pure_rewrite_tac[w2n_n2w] >>
+     qpat_x_assum `data_base+delta = _`
+       (fn th => CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     asm_simp_tac bool_ss [ADD_MODULUS_RIGHT, LESS_MOD]) >>
+  decide_tac
+QED
+
+Theorem abi_array_dynamic_element_setup_sequence_outcome:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di abi_sz mem_sz st = (ops,last) /\
+  dec_info_needs_offset di /\ hi <> Lit 0w /\
+  eval_operand ip s = SOME slotword /\ mload (w2n slotword) s = n2w j /\
+  eval_operand src s = SOME(n2w p) /\ eval_operand dst s = SOME(n2w d) /\
+  eval_operand base_op s = SOME(n2w B) /\ eval_operand hi s = SOME(n2w H) /\
+  abi_decode_load MLOAD (n2w(B+(p+32+j*abi_sz)):bytes32) s = n2w delta /\
+  p+32 < dimword(:256) /\ delta < dimword(:256) /\
+  abi_sz < dimword(:256) /\ H < dimword(:256) /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  (?t. run_inst_seq (emitted_insts st last) s = OK t /\
+    p+32+delta+abi_sz <= H /\
+    eval_operand (FST ops) t = SOME(n2w j) /\
+    eval_operand (FST (SND ops)) t = SOME(n2w(p+32+delta)) /\
+    eval_operand (SND (SND ops)) t = SOME(n2w(d+32+j*mem_sz)) /\
+    EVERY (abi_decoder_operand_live last.cs_next_var)
+      [FST ops; FST (SND ops); SND (SND ops)] /\
+    fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
+    inst_extends st last) \/
+  (?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
+    (w2n(n2w(p+32+delta):bytes32) < p+32 \/
+     H < w2n(n2w(p+32+delta):bytes32)+abi_sz) /\ inst_extends st last)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `w2n(n2w(p+32+delta):bytes32) < p+32 \/
+    H < w2n(n2w(p+32+delta):bytes32)+abi_sz`
+  >- (disj2_tac >>
+      `EVERY (abi_decoder_operand_live st.cs_next_var) [src;base_op;hi]` by fs[] >>
+      drule_all abi_array_dynamic_element_setup_revert_reentry >> metis_tac[]) >>
+  disj1_tac >>
+  `p+32+delta+abi_sz <= H` by
+    (drule_all abi_array_pointer_check_bounds >> simp[]) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  SUBGOAL_THEN ``hi = Lit 0w \/ ?hb. eval_operand hi s = SOME(n2w hb) /\
+    p+32+delta+abi_sz <= hb /\ hb < dimword(:256)`` assume_tac
+  >- metis_tac[] >>
+  qpat_x_assum `EVERY _ _` (strip_assume_tac o REWRITE_RULE [EVERY_DEF]) >>
+  drule_all abi_decode_dynamic_element_setup_reentry >> strip_tac >>
+  qexists_tac `t` >> simp[]
 QED
