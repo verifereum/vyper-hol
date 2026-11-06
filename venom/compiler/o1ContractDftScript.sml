@@ -10,7 +10,7 @@
 Theory o1ContractDft
 Ancestors
   o1DftStepAt o1DftStageSim o1DftStageSsa
-  o1PassContract venomPassSchedule venomCompilerTypes
+  dftContractGas o1PassContract venomPassSchedule venomCompilerTypes
 
 Theorem dft_stage_walk_gas:
   o1_run_contract_gas rpolicy D 7
@@ -20,7 +20,8 @@ Proof
   rpt strip_tac >>
   Cases_on `EVERY wf_ssa C.ctx_functions`
   >- (drule_all dft_stage_sim_gas >> strip_tac >>
-      qexists_tac `vs` >> rw[] >> irule dft_stage_wf_ssa >> metis_tac[]) >>
+      qexists_tac `vs` >>
+      `gas_variant vs vs'` by metis_tac[dft_gas_replay_variant] >> rw[] >> irule dft_stage_wf_ssa >> metis_tac[]) >>
   qexists_tac `vs'` >> simp[gas_variant_refl]
 QED
 

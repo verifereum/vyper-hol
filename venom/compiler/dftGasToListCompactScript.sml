@@ -15,7 +15,7 @@ Proof
                `f n <> SUC N` by metis_tac[] >> decide_tac) >> simp[]
 QED
 
-Theorem bounded_nonzero_chain_prefix:
+Theorem bounded_nonzero_chain:
   (!m n:num. m <= n ==> ?tail. (L:num->bytes32 list) n = L m ++ tail) /\
   (?N. !n. LENGTH (FILTER (\w:bytes32. w <> 0w) (L n)) <= N) ==>
   ?j. !n i. i < LENGTH (L n) ==> padded_reading (L j) i = EL i (L n)
@@ -45,15 +45,7 @@ Proof
   metis_tac[MEM_EL]
 QED
 
-Theorem bounded_nonzero_chain:
-  (!m n:num. m <= n ==> ?tail. (L:num->bytes32 list) n = L m ++ tail) /\
-  (?N. !n. LENGTH (FILTER (\w:bytes32. w <> 0w) (L n)) <= N) ==>
-  ?ws. !n i. i < LENGTH (L n) ==> padded_reading ws i = EL i (L n)
-Proof
-  metis_tac[bounded_nonzero_chain_prefix]
-QED
-
-Theorem context_agreement_prefix_exists:
+Theorem context_agreement_exists:
   FINITE {e | orc e <> 0w} ==>
   ?j. !fuel. agrees orc
     (MAP orc (trace_events (trace_context orc j ctx s)))
@@ -62,7 +54,7 @@ Proof
   strip_tac >> drule context_nonzero_count_bounded >>
   disch_then (qspecl_then [`s`, `ctx`] strip_assume_tac) >>
   qspec_then `\fuel. MAP orc (trace_events (trace_context orc fuel ctx s))`
-    mp_tac (GEN_ALL bounded_nonzero_chain_prefix) >>
+    mp_tac (GEN_ALL bounded_nonzero_chain) >>
   simp[] >> impl_tac
   >- (conj_tac
       >- (rpt strip_tac >> drule context_events_fuel_prefix >>
@@ -72,11 +64,4 @@ Proof
   strip_tac >> qexists_tac `j` >> simp[agrees_def] >>
   rpt strip_tac >> first_x_assum (qspecl_then [`fuel`, `i`] mp_tac) >>
   simp[EL_MAP]
-QED
-
-Theorem context_agreement_exists:
-  FINITE {e | orc e <> 0w} ==>
-  ?ws. !fuel. agrees orc ws (trace_events (trace_context orc fuel ctx s))
-Proof
-  metis_tac[context_agreement_prefix_exists]
 QED

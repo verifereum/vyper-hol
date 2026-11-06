@@ -120,12 +120,3 @@ Proof
   rpt strip_tac >> rename1 `MEM ew (trace_gas _)` >> Cases_on `ew` >> simp[] >>
   irule list_oracle_recorded >> simp[recorded_def] >> metis_tac[]
 QED
-
-Theorem finite_trace_oracle:
-  EVERY (\fn. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
-    fn.fn_blocks) ctx.ctx_functions ==>
-  ?orc. FINITE {e | orc e <> 0w} /\ !n. trace_agrees orc (trace_context n ctx s)
-Proof
-  strip_tac >> qexists_tac `list_oracle ctx s` >>
-  simp[list_oracle_finite, list_oracle_trace_agrees]
-QED

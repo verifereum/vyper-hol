@@ -245,7 +245,7 @@ Proof
   simp[dft_gas_replay_def]
 QED
 
-Theorem dft_ctx_sim_gas_replay:
+Theorem dft_ctx_sim_gas:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
@@ -261,10 +261,10 @@ Proof
   drule_all o1_ctx_shape_wf_functions >> strip_tac >>
   drule_all dft_ctx_wf_functions >> strip_tac >>
   mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
-            gas_oracle_from_list_traced) >>
+            gas_oracle_from_list) >>
   impl_tac >- simp[] >> strip_tac >>
   mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
-            gas_oracle_to_list_traced) >>
+            gas_oracle_to_list) >>
   impl_tac >- simp[] >> strip_tac >>
   qabbrev_tac `gas_orc = list_oracle C' vs'` >>
   qpat_x_assum `orc = _` SUBST_ALL_TAC >>
@@ -299,17 +299,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem dft_ctx_sim_gas:
-  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
-  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
-  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
-  o1_ctx_shape C /\
-  ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
-       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
-Proof
-  metis_tac[dft_ctx_sim_gas_replay, dft_gas_replay_variant]
-QED
 
 Theorem dft_out_wf_ssa:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
