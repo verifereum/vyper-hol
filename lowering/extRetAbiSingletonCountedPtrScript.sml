@@ -98,7 +98,7 @@ Proof
 QED
 
 (* The head address and the clean cursor read preceding the child call. *)
-Theorem abi_singleton_head_cursor_counted_ptr:
+Theorem abi_singleton_head_cursor_ambient_counted_ptr:
   emit_op ADD [Var dst; Lit 0w] sa = (Var head,sb) /\
   emit_op MLOAD [Var ip] sb = (Var off,sc) /\
   fn_has_code sa sc fn /\
@@ -118,6 +118,8 @@ Theorem abi_singleton_head_cursor_counted_ptr:
     lookup_var off sf = SOME (mload cursor s) /\
     op_taint tnf (Var off) = {} /\ op_prov Gf (Var off) = NONE /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
@@ -134,7 +136,7 @@ Proof
         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
   `0 + cap <= cap /\ w2n (n2w b : bytes32) + 0 < dimword(:256)` by
     simp[w2n_n2w, LESS_MOD] >>
-  drule_all (emit_bulk_offset_counted_ptr |> SPEC_ALL |>
+  drule_all (emit_bulk_offset_ambient_counted_ptr |> SPEC_ALL |>
     Q.INST [`off` |-> `0`, `n` |-> `cap`, `extent` |-> `cap`]) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `lookup_var ip sf = SOME (n2w cursor) /\ ptr_covers Gf tnf ip sf 32` by
@@ -142,7 +144,7 @@ Proof
   `!i. w2n (n2w cursor : bytes32) <= i /\
        i < w2n (n2w cursor : bytes32)+32 ==> i NOTIN tnf.t_mem` by
     simp[w2n_n2w, LESS_MOD] >>
-  drule_all emit_mload_clean_counted_ptr >>
+  drule_all emit_mload_clean_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf'`, `tnf'`, `sf'`] >>
   conj_tac >-
@@ -152,7 +154,7 @@ Proof
   gvs[ptr_covers_def] >> metis_tac[]
 QED
 
-Theorem abi_singleton_child_prefix_counted_ptr:
+Theorem abi_singleton_child_prefix_ambient_counted_ptr:
   abi_encode_child_prefix (Var dst) 0 (Var ip) sa =
     ((Var head,Var off,Var child),sb) /\ fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -171,6 +173,8 @@ Theorem abi_singleton_child_prefix_counted_ptr:
     lookup_var off sf = SOME 32w /\ op_taint tnf (Var off) = {} /\
     lookup_var child sf = SOME (n2w (b+32)) /\ ptr_covers Gf tnf child sf cap /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
@@ -195,13 +199,13 @@ Proof
        fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >>
      gvs[not_fresh_at_def] >> decide_tac) >>
   `b < dimword(:256)` by decide_tac >>
-  drule_all abi_singleton_head_cursor_counted_ptr >>
+  drule_all abi_singleton_head_cursor_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `lookup_var dst sf = SOME (n2w b) /\ ptr_covers Gf tnf dst sf (32+cap) /\
    lookup_var off sf = SOME (n2w 32) /\
    w2n (n2w b : bytes32)+32 < dimword(:256) /\ 32+cap <= 32+cap` by
     (gvs[ptr_covers_def, w2n_n2w, LESS_MOD] >> metis_tac[]) >>
-  drule_all (abi_bytes_lastptr_counted_ptr |> SPEC_ALL |>
+  drule_all (abi_bytes_lastptr_ambient_counted_ptr |> SPEC_ALL |>
     Q.INST [`off` |-> `32`, `n` |-> `cap`, `extent` |-> `32+cap`]) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf'`, `tnf'`, `sf'`] >>
@@ -211,7 +215,7 @@ Proof
   simp[w2n_n2w, LESS_MOD] >> gvs[ptr_covers_def] >> metis_tac[]
 QED
 
-Theorem abi_singleton_child_suffix_counted_ptr:
+Theorem abi_singleton_child_suffix_ambient_counted_ptr:
   abi_encode_child_suffix (Var head) (Var ip) (Var off) (Var len) sa =
     (Var len,sb) /\ fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -230,6 +234,8 @@ Theorem abi_singleton_child_suffix_counted_ptr:
     sf.vs_memory = (mstore cursor (n2w (32+n)) (mstore b 32w s)).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | b <= i /\ i < b+32}) DIFF
       {i | cursor <= i /\ i < cursor+32} /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sa v ==>
       lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
@@ -260,7 +266,7 @@ Proof
    eval_operand (Var len) sf = SOME (n2w n) /\
    op_taint tnf (Var off) = {} /\ op_taint tnf (Var len) = {}` by
     simp[eval_operand_def] >>
-  drule_all (emit_copy_len_binop_counted_ptr |>
+  drule_all (emit_copy_len_binop_ambient_counted_ptr |>
     Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `lookup_var ip sf' = SOME (n2w cursor) /\ ptr_covers Gf tnf' ip sf' 32 /\
@@ -281,14 +287,14 @@ Proof
   qpat_x_assum `sf'.vs_memory = _` (fn th => pure_rewrite_tac[th]) >> REFL_TAC
 QED
 
-Resume abi_singleton_child_suffix_counted_ptr[path]:
+Resume abi_singleton_child_suffix_ambient_counted_ptr[path]:
   irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
   qexistsl_tac [`G`, `sf`, `tnf`] >> simp[] >>
   irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
   qexistsl_tac [`Gf`, `sf'`, `tnf'`] >> simp[]
 QED
 
-Finalise abi_singleton_child_suffix_counted_ptr
+Finalise abi_singleton_child_suffix_ambient_counted_ptr
 
 Theorem abi_singleton_bytes_child_context[local]:
   compile_abi_encode_child dst src (AbiBytestring maxlen) T 0 ip sa = (out,sb) /\
@@ -349,6 +355,8 @@ Theorem abi_bytes_nat_counted_ptr[local]:
       sf.vs_memory s.vs_memory /\
     (!i. ~(b <= i /\ i < b+32+ceil32 (LENGTH bs)) ==>
       (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -361,9 +369,191 @@ Proof
   `a < dimword(:256) /\ b < dimword(:256)` by decide_tac >>
   rename1 `lookup_var src s = SOME (n2w addr1)` >>
   rename1 `lookup_var dst s = SOME (n2w addr2)` >>
-  mp_tac (compile_abi_encode_bytes_counted_ptr |> SPEC_ALL |> Q.INST
+  mp_tac (compile_abi_encode_bytes_ambient_counted_ptr |> SPEC_ALL |> Q.INST
     [`a` |-> `n2w addr1`, `b` |-> `n2w addr2`]) >>
   simp[w2n_n2w, LESS_MOD]
+QED
+
+Theorem abi_singleton_bytes_child_ambient_counted_ptr:
+  compile_abi_encode_child (Var dst) (Var src) (AbiBytestring maxlen) T 0
+    (Var ip) sa = (out,sb) /\ fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
+  not_fresh_at sa dst /\ not_fresh_at sa ip /\
+  lookup_var src s = SOME (n2w a) /\ lookup_var dst s = SOME (n2w b) /\
+  ptr_covers G tn src s cap /\ ptr_covers G tn dst s (64+ceil32 (LENGTH bs)) /\
+  lookup_var ip s = SOME (n2w cursor) /\ ptr_covers G tn ip s 32 /\
+  mload cursor s = 32w /\ cursor+32 < dimword(:256) /\
+  (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tn.t_mem) /\
+  32+LENGTH bs <= cap /\ LENGTH bs <= dimword(:256)-32 /\
+  32+ceil32 (LENGTH bs) < dimword(:256) /\
+  a+cap < dimword(:256) /\ b+64+ceil32 (LENGTH bs) < dimword(:256) /\
+  (a+cap <= b+32 \/ b+64+ceil32 (LENGTH bs) <= a) /\
+  (!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
+    abi_encoder_input (AbiBytestring maxlen) at (BytesV bs) a cap mem') ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    eval_operand out sf = SOME (n2w (32+ceil32 (LENGTH bs))) /\ op_taint tnf out = {} /\
+    mload cursor sf = n2w (64+ceil32 (LENGTH bs)) /\
+    (!i. b <= i /\ i < b+64+ceil32 (LENGTH bs) ==> i NOTIN tnf.t_mem) /\
+    (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tnf.t_mem) /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_singleton_bytes_child_context >> strip_tac >>
+  `b+32 < dimword(:256) /\ cursor < dimword(:256) /\ a < dimword(:256)` by decide_tac >>
+  `ptr_covers G tn dst s (32+(32+ceil32 (LENGTH bs)))` by fs[ADD_COMM] >>
+  drule_all abi_singleton_child_prefix_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `lookup_var src sf = SOME (n2w a) /\ ptr_covers Gf tnf src sf cap /\
+   not_fresh_at sc src` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `b+32+32+ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
+  Q.SUBGOAL_THEN
+    `(a+cap <= b+32 \/ b+32+32+ceil32 (LENGTH bs) <= a)` assume_tac
+    >- decide_tac >>
+  `!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
+     abi_encoder_input (AbiBytestring maxlen) at (BytesV bs) a cap mem'` by simp[] >>
+  drule_all abi_bytes_nat_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `lookup_var head sf' = SOME (n2w b) /\ ptr_covers Gf' tnf' head sf' 32 /\
+   lookup_var ip sf' = SOME (n2w cursor) /\ ptr_covers Gf' tnf' ip sf' 32 /\
+   lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {} /\
+   not_fresh_at sd head /\ not_fresh_at sd ip /\
+   lookup_var len sf' = SOME (n2w (32+ceil32 (LENGTH bs)))` by
+    suspend "suffix_resources" >>
+  `b < dimword(:256)` by decide_tac >>
+  drule (cj 1 abi_encode_child_suffix_shape) >> disch_then SUBST_ALL_TAC >>
+  drule_all abi_singleton_child_suffix_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
+  conj_tac >- suspend "path" >>
+  suspend "endpoint"
+QED
+
+Resume abi_singleton_bytes_child_ambient_counted_ptr[suffix_resources]:
+  fs[eval_operand_def] >>
+  `not_fresh_at sc ip` by metis_tac[] >>
+  `lookup_var head sf' = SOME (n2w b) /\
+   lookup_var ip sf' = SOME (n2w cursor) /\
+   lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {}` by
+    metis_tac[] >>
+  simp[] >>
+  gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]
+QED
+Resume abi_singleton_bytes_child_ambient_counted_ptr[path]:
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
+QED
+Resume abi_singleton_bytes_child_ambient_counted_ptr[endpoint]:
+  `eval_operand (Var len) sf'' = SOME (n2w (32+ceil32 (LENGTH bs))) /\
+   op_taint tnf'' (Var len) = {}` by
+    (fs[eval_operand_def] >> metis_tac[]) >>
+  `mload cursor sf'' = n2w (64+ceil32 (LENGTH bs))` by
+    (qmatch_asmsub_abbrev_tac `sf''.vs_memory = ss.vs_memory` >>
+     `mload cursor sf'' = mload cursor ss` by simp[mload_def] >>
+     simp[Abbr `ss`, mload_mstore_same, ADD_ASSOC]) >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+Finalise abi_singleton_bytes_child_ambient_counted_ptr
+
+(* Compatibility boundaries: ambient execution is proved only once above. *)
+Theorem abi_singleton_head_cursor_counted_ptr:
+  emit_op ADD [Var dst; Lit 0w] sa = (Var head,sb) /\
+  emit_op MLOAD [Var ip] sb = (Var off,sc) /\
+  fn_has_code sa sc fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa ip /\
+  lookup_var dst s = SOME (n2w b) /\ b < dimword(:256) /\
+  ptr_covers G tn dst s cap /\
+  lookup_var ip s = SOME (n2w cursor) /\ cursor < dimword(:256) /\
+  ptr_covers G tn ip s 32 /\
+  (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tn.t_mem) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sc.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var head sf = SOME (n2w b) /\ ptr_covers Gf tnf head sf cap /\
+    lookup_var off sf = SOME (mload cursor s) /\
+    op_taint tnf (Var off) = {} /\ op_prov Gf (Var off) = NONE /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >> drule_all abi_singleton_head_cursor_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
+QED
+
+Theorem abi_singleton_child_prefix_counted_ptr:
+  abi_encode_child_prefix (Var dst) 0 (Var ip) sa =
+    ((Var head,Var off,Var child),sb) /\ fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa ip /\ not_fresh_at sa dst /\
+  lookup_var dst s = SOME (n2w b) /\ b+32 < dimword(:256) /\
+  ptr_covers G tn dst s (32+cap) /\
+  lookup_var ip s = SOME (n2w cursor) /\ cursor < dimword(:256) /\
+  ptr_covers G tn ip s 32 /\ mload cursor s = 32w /\
+  (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tn.t_mem) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var head sf = SOME (n2w b) /\ ptr_covers Gf tnf head sf (32+cap) /\
+    lookup_var off sf = SOME 32w /\ op_taint tnf (Var off) = {} /\
+    lookup_var child sf = SOME (n2w (b+32)) /\ ptr_covers Gf tnf child sf cap /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >> drule_all abi_singleton_child_prefix_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
+QED
+
+Theorem abi_singleton_child_suffix_counted_ptr:
+  abi_encode_child_suffix (Var head) (Var ip) (Var off) (Var len) sa =
+    (Var len,sb) /\ fn_has_code sa sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa head /\ not_fresh_at sa ip /\
+  lookup_var head s = SOME (n2w b) /\ b < dimword(:256) /\
+  ptr_covers G tn head s 32 /\
+  lookup_var ip s = SOME (n2w cursor) /\ cursor < dimword(:256) /\
+  ptr_covers G tn ip s 32 /\
+  lookup_var off s = SOME 32w /\ op_taint tn (Var off) = {} /\
+  lookup_var len s = SOME (n2w n) /\ op_taint tn (Var len) = {} ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_memory = (mstore cursor (n2w (32+n)) (mstore b 32w s)).vs_memory /\
+    tnf.t_mem = (tn.t_mem DIFF {i | b <= i /\ i < b+32}) DIFF
+      {i | cursor <= i /\ i < cursor+32} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >> drule_all abi_singleton_child_suffix_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
 
 Theorem abi_singleton_bytes_child_counted_ptr:
@@ -398,61 +588,7 @@ Theorem abi_singleton_bytes_child_counted_ptr:
       op_taint tnf (Var v) = op_taint tn (Var v))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_singleton_bytes_child_context >> strip_tac >>
-  `b+32 < dimword(:256) /\ cursor < dimword(:256) /\ a < dimword(:256)` by decide_tac >>
-  `ptr_covers G tn dst s (32+(32+ceil32 (LENGTH bs)))` by fs[ADD_COMM] >>
-  drule_all abi_singleton_child_prefix_counted_ptr >>
+  drule_all abi_singleton_bytes_child_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `lookup_var src sf = SOME (n2w a) /\ ptr_covers Gf tnf src sf cap /\
-   not_fresh_at sc src` by
-    (gvs[ptr_covers_def] >> metis_tac[]) >>
-  `b+32+32+ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
-  Q.SUBGOAL_THEN
-    `(a+cap <= b+32 \/ b+32+32+ceil32 (LENGTH bs) <= a)` assume_tac
-    >- decide_tac >>
-  `!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
-     abi_encoder_input (AbiBytestring maxlen) at (BytesV bs) a cap mem'` by simp[] >>
-  drule_all abi_bytes_nat_counted_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `lookup_var head sf' = SOME (n2w b) /\ ptr_covers Gf' tnf' head sf' 32 /\
-   lookup_var ip sf' = SOME (n2w cursor) /\ ptr_covers Gf' tnf' ip sf' 32 /\
-   lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {} /\
-   not_fresh_at sd head /\ not_fresh_at sd ip /\
-   lookup_var len sf' = SOME (n2w (32+ceil32 (LENGTH bs)))` by
-    suspend "suffix_resources" >>
-  `b < dimword(:256)` by decide_tac >>
-  drule (cj 1 abi_encode_child_suffix_shape) >> disch_then SUBST_ALL_TAC >>
-  drule_all abi_singleton_child_suffix_counted_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
-  suspend "endpoint"
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
-
-Resume abi_singleton_bytes_child_counted_ptr[suffix_resources]:
-  fs[eval_operand_def] >>
-  `not_fresh_at sc ip` by metis_tac[] >>
-  `lookup_var head sf' = SOME (n2w b) /\
-   lookup_var ip sf' = SOME (n2w cursor) /\
-   lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {}` by
-    metis_tac[] >>
-  simp[] >>
-  gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]
-QED
-Resume abi_singleton_bytes_child_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
-Resume abi_singleton_bytes_child_counted_ptr[endpoint]:
-  `eval_operand (Var len) sf'' = SOME (n2w (32+ceil32 (LENGTH bs))) /\
-   op_taint tnf'' (Var len) = {}` by
-    (fs[eval_operand_def] >> metis_tac[]) >>
-  `mload cursor sf'' = n2w (64+ceil32 (LENGTH bs))` by
-    (qmatch_asmsub_abbrev_tac `sf''.vs_memory = ss.vs_memory` >>
-     `mload cursor sf'' = mload cursor ss` by simp[mload_def] >>
-     simp[Abbr `ss`, mload_mstore_same, ADD_ASSOC]) >>
-  simp[] >> rpt strip_tac >> decide_tac
-QED
-Finalise abi_singleton_bytes_child_counted_ptr
