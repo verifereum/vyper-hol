@@ -16,6 +16,7 @@ Theory makeSsaCurrentCutInv
 Ancestors
   makeSsaCurrentCleanupTransparent makeSsaCurrentSourceEntryRuntime
   makeSsaCurrentPhiBatchRuntime venomState
+  makeSsaCurrentExecRuntime makeSsaCurrentReturnRuntime
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
@@ -30,6 +31,7 @@ Ancestors
   makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentExternalExclusion
   makeSsaCurrentScanOrigin makeSsaCurrentEntryProvenance
   makeSsaCurrentCarrierExternal makeSsaCurrentLastOutput makeSsaCurrentRuntime
+  makeSsaCurrentDemandRuntime
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -930,7 +932,50 @@ Resume current_cut_inv_ordinary_step[ordinary_final_lookup]:
 QED
 
 Resume current_cut_inv_ordinary_step[ordinary_runtime]:
-  cheat
+  `fn_inst_wf fn` by fs[current_wf_phi_context_def] >>
+  `inst_wf (EL i old.bb_instructions)` by
+    metis_tac[venomWfTheory.fn_inst_wf_def, lookup_block_MEM, EL_MEM] >>
+  `current_last_output_slots (current_cut_sg fn A renamed H events l i)
+    (EL i old.bb_instructions).inst_outputs
+    (EL (LENGTH pre + i) new.bb_instructions).inst_outputs
+    (current_cut_sg fn A renamed H events l (SUC i))` by
+    (irule current_cut_last_output_slots >> metis_tac[]) >>
+  `current_last_output_slots (current_cut_sg fn A renamed H events l i)
+    (EL i old.bb_instructions).inst_outputs
+    (EL (LENGTH pre + i) bb'.bb_instructions).inst_outputs
+    (current_cut_sg fn A renamed H events l (SUC i))` by
+    (gvs[makeSsaCurrentCleanupShapeTheory.current_inst_no_id_def,
+      venomInstTheory.instruction_component_equality]) >>
+  drule current_last_output_slots_out_rename >> strip_tac >>
+  gvs[current_cut_inv_def, arithmeticTheory.ADD_COMM] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `(EL i old.bb_instructions).inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+      drule_all current_exec_step_noninvoke_ok_pair >>
+      disch_then (qspec_then `C` strip_assume_tac) >>
+      qexists_tac `t` >> simp[] >>
+      metis_tac[current_demand_step_defined]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `(EL i old.bb_instructions).inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+      drule_all current_exec_step_noninvoke_intret_pair >>
+      disch_then (qspec_then `C` strip_assume_tac) >>
+      qexists_tac `t` >> fs[stateFrameTheory.execution_frame_def,
+        venomStateTheory.venom_state_component_equality]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `(EL i old.bb_instructions).inst_opcode <> INVOKE` by fs[inst_pair_def] >>
+      drule_all current_exec_step_noninvoke_halt_pair >>
+      disch_then (qspec_then `C` strip_assume_tac) >>
+      qexists_tac `t` >> fs[stateFrameTheory.execution_frame_def,
+        venomStateTheory.venom_state_component_equality]) >>
+  rpt strip_tac >>
+  `execution_frame e' = execution_frame e` by
+    fs[stateFrameTheory.execution_frame_def,
+      venomStateTheory.venom_state_component_equality] >>
+  drule_all current_return_bind_last_slots >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  metis_tac[current_demand_return_defined]
 QED
 
 Finalise current_cut_inv_ordinary_step
