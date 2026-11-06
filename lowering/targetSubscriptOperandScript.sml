@@ -1,7 +1,7 @@
 Theory targetSubscriptOperand
 Ancestors
   exprSafeOperand exprSafeOperandBuiltins exprWordOperand exprOperandVar
-  exprLowering compileEnv context vyperTypeSystem vyperAST
+  exprLowering exprCallBounds compileEnv context vyperTypeSystem vyperAST
 
 (* Callback projection: unwrap_value preserves exclusion of labels. *)
 Theorem target_subscript_lower_callback_not_label:
@@ -587,4 +587,115 @@ Proof
     (rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def, mk_ptr_def] >>
      metis_tac[cj 3 subscript_pop_not_label]) >>
   simp[vv_operand_def] >> metis_tac[]
+QED
+
+Theorem target_subscript_compile_not_label[local]:
+  (!cenv ty e (sa:compile_state) env.
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    well_typed_expr env e ==>
+    !s vv s'. compile_expr cenv ty e s = (vv,s') ==>
+      !l. vv_operand vv <> Label l) /\
+  (!cenv ann ty bi args (sa:compile_state) env.
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    well_typed_expr env (Builtin ann bi args) ==>
+    !s vv s'. compile_builtin_dispatch cenv ann ty bi args s = (vv,s') ==>
+      !l. vv_operand vv <> Label l) /\
+  (!cenv ann ty tb rt args (sa:compile_state) env.
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    well_typed_expr env (TypeBuiltin ann tb rt args) ==>
+    !s vv s'. compile_type_builtin_dispatch cenv ann ty tb rt args s = (vv,s') ==>
+      !l. vv_operand vv <> Label l)
+Proof
+  ho_match_mp_tac compile_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "expr"
+  >- suspend "builtin"
+  >> suspend "type_builtin"
+QED
+
+Resume target_subscript_compile_not_label[expr]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule target_subscript_expr_body_not_label >>
+  goal_assum (drule_at (Pat `compile_expr_body`)) >>
+  qexists_tac `env` >> simp[] >>
+  conj_tac >-
+    (rpt gen_tac >> simp[builtin_child_callback_def] >>
+     Cases_on `list_size expr_size args < expr_size e` >> simp[]
+     >- metis_tac[] >>
+     simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[vv_operand_def])) >>
+  rpt gen_tac >> simp[type_child_callback_def] >>
+  Cases_on `list_size expr_size args < expr_size e` >> simp[]
+  >- metis_tac[] >>
+  simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[vv_operand_def])
+QED
+
+Resume target_subscript_compile_not_label[builtin]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule target_subscript_builtin_body_not_label >>
+  goal_assum (drule_at (Pat `compile_builtin_dispatch_body`)) >>
+  qexists_tac `env` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `lower_value`) target_subscript_lower_callback_not_label >>
+  disch_then irule >>
+  Cases_on `expr_size e < list_size expr_size args` >>
+  simp[expr_child_callback_def]
+  >- suspend "builtin_valid" >>
+  simp[invalid_expr_call_def, LET_THM] >> rpt gen_tac >> strip_tac >>
+  rpt (pairarg_tac >> gvs[vv_operand_def])
+QED
+Resume target_subscript_compile_not_label[type_builtin]:
+  gvs[] >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule target_subscript_type_builtin_body_not_label >>
+  goal_assum (drule_at (Pat `compile_type_builtin_dispatch_body`)) >>
+  qexists_tac `env` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `lower_value`) target_subscript_lower_callback_not_label >>
+  disch_then irule >>
+  Cases_on `expr_size e < list_size expr_size args` >>
+  simp[expr_child_callback_def]
+  >- suspend "type_valid" >>
+  simp[invalid_expr_call_def, LET_THM] >> rpt gen_tac >> strip_tac >>
+  rpt (pairarg_tac >> gvs[vv_operand_def])
+QED
+Resume target_subscript_compile_not_label[builtin_valid]:
+  `well_typed_expr env e` by
+    (qpat_x_assum `well_typed_expr env _` mp_tac >>
+     simp[well_typed_expr_def] >> strip_tac >>
+     irule exprSimSourceTheory.well_typed_exprs_member >> metis_tac[]) >>
+  metis_tac[]
+QED
+Resume target_subscript_compile_not_label[type_valid]:
+  `well_typed_expr env e` by
+    (qpat_x_assum `well_typed_expr env _` mp_tac >>
+     simp[well_typed_expr_def] >> strip_tac >>
+     irule exprSimSourceTheory.well_typed_exprs_member >> metis_tac[]) >>
+  metis_tac[]
+QED
+Finalise target_subscript_compile_not_label
+
+Theorem target_subscript_lower_value_not_label:
+  lower_value compile_expr cenv ty e sa = (op,sb) /\
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+    ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
+  !l. op <> Label l
+Proof
+  strip_tac >>
+  drule_at (Pat `lower_value`) target_subscript_lower_callback_not_label >>
+  disch_then irule >> rpt gen_tac >> disch_tac >>
+  irule (cj 1 target_subscript_compile_not_label) >>
+  goal_assum (drule_at (Pat `compile_expr`)) >>
+  qexists_tac `env` >> simp[]
 QED
