@@ -5,7 +5,7 @@
  *   eval_builtin_head_success, eval_type_builtin_head_success — the
  *     first argument's evaluation succeeds
  *   expr_body_pre_builtin_head, expr_body_pre_type_builtin_head —
- *     expr_body_pre holds of it
+ *     expr_body_pre holds of it (but of a slice's .code source)
  *)
 
 Theory exprOpenFirstOperand
@@ -14,15 +14,23 @@ Ancestors
    allocLimits vyperTypeSystem vyperTypeCallStackSoundness vyperInterpreter
   vyperAST vyperState vyperTypeCallGraph list
 
+(* But a slice's .code source, which alloc_limits_expr skips for its
+   address. *)
 Theorem expr_body_pre_builtin_head:
   !cenv cx env ann bi arg args es.
-    expr_body_pre cenv cx env (Builtin ann bi (arg::args)) es ==>
+    expr_body_pre cenv cx env (Builtin ann bi (arg::args)) es /\
+    ((!n. bi <> Slice n) \/ ~is_extcode arg) ==>
     expr_body_pre cenv cx env arg es
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm,
        supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+       supportedExprTraverseTheory.call_operands_effect_root_def] >>
+  rpt strip_tac >>
+  `alloc_limits_expr cenv arg` by
+    (qpat_x_assum `alloc_limits_exprs _ _` mp_tac >> IF_CASES_TAC >>
+     gvs[alloc_limits_expr_def]) >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
@@ -33,8 +41,9 @@ Theorem expr_body_pre_type_builtin_head:
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm,
        supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+       supportedExprTraverseTheory.call_operands_effect_root_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
