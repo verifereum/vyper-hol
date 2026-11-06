@@ -2,6 +2,7 @@
    independent of taint cleanliness and must be transported explicitly. *)
 Theory forPtrEndpointFrame
 Ancestors wordArgsPtr exprSimWordArgs stmtFragPtr stmtSimProps
+  gasOutcomeInitialObsPtr gasContext
   bodyPtrDefs ptrDiscipline compileEnv loweringPosts venomState
   exprLoweringProps finite_map list vyperInterpreter vyperState
 Libs monadsyntax
@@ -77,4 +78,12 @@ Proof
   rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[Once evaluate_def] >>
   simp[LET_THM, lift_option_type_def, for_endpoint_iterator_source,
        bind_assoc, bind_return, LENGTH_GENLIST]
+QED
+
+Theorem stmt_frag_ptr_initial_obs:
+  stmt_frag_ptr d ctx PG func cx lctx RetQ cenv m source (es with gas_obs := gs) <=>
+  stmt_frag_ptr d ctx PG func cx lctx RetQ cenv m source es
+Proof
+  simp[stmt_frag_ptr_def, gas_outcome_ptr_initial_obs,
+       gas_admissible_gas_obs, stmt_state_rel_gas_obs, ghost_inv_gas_obs]
 QED
