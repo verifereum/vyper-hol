@@ -6978,6 +6978,34 @@ Proof
   strip_tac >> irule asm_message_prepared_enter_view >> simp[] >> metis_tac[]
 QED
 
+Theorem asm_message_prepared_run_adoption:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\ next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) /\
+  wf_state v /\ (?dv. v.msdomain = Collect dv) /\
+  run_call v = SOME (INL (),t) /\ t.contexts = (ct,rb)::rest ==>
+  let out = outcome_of (request_of s).cr_kind t (LENGTH c.logs) (LENGTH s.rollback.toDelete) in
+  adopt_outcome (request_of s) out (s.rollback.accounts,s.rollback.tStorage,c.logs) =
+    (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
+  adopt_outcome_deletions (request_of s) out s.rollback.toDelete = t.rollback.toDelete
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  `(request_of s).cr_static = (op = StaticCall) /\
+   ((request_of s).cr_kind = MessageCall \/
+    (request_of s).cr_kind = DelegateMessageCall)` by
+    (qpat_assum `op = Call \/ op = StaticCall \/ op = DelegateCall` strip_assume_tac >>
+     gvs[request_of_def]) >>
+  drule_all asm_message_prepared_enter_view >> strip_tac >>
+  `LENGTH t.contexts = SUC (LENGTH rest)` by simp[] >>
+  drule_at (Pat `run_call _ = _`) asm_call_run_message_adoption >>
+  simp[]
+QED
+
 Theorem asm_call_prepared_run_adoption:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
   ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\ next_opcode c = SOME op /\
@@ -6994,12 +7022,48 @@ Theorem asm_call_prepared_run_adoption:
   adopt_outcome_deletions (request_of s) out s.rollback.toDelete = t.rollback.toDelete
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  simp_tac (srw_ss()) [LET_THM] >>
-  drule_all asm_call_prepared_request >> strip_tac >>
-  drule_all asm_call_prepared_enter_view >> strip_tac >>
-  `LENGTH t.contexts = SUC (LENGTH rest)` by simp[] >>
-  drule_at (Pat `run_call _ = _`) asm_call_run_memory_adoption >>
-  simp[]
+  `(request_of s).cr_kind = MessageCall` by
+    (qpat_assum `op = Call \/ op = StaticCall` strip_assume_tac >> gvs[request_of_def]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall \/ op = DelegateCall`
+    assume_tac >- metis_tac[]) >>
+  drule_all asm_message_prepared_run_adoption >> simp[]
+QED
+
+Theorem asm_message_prepared_run_selectors:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) /\ wf_state v /\ (?dv. v.msdomain = Collect dv) /\
+  run_call v = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?ct. t.contexts = (ct,rb)::rest /\ ct.msgParams = c.msgParams /\
+    ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
+    ct.stack = (if (outcome_of MessageCall t n m).co_success then 1w else 0w)::
+      DROP (6 + (if call_has_value op then 1 else 0)) c.stack /\
+    ct.returnData = (outcome_of MessageCall t n m).co_returnData /\
+    buffer_to_list ct.memory =
+      TAKE ro (asm_call_memory ao az ro rs (buffer_to_list c.memory)) ++
+      TAKE rs ct.returnData ++ DROP (ro + LENGTH (TAKE rs ct.returnData))
+        (asm_call_memory ao az ro rs (buffer_to_list c.memory))
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_message_prepared_enter_view >> strip_tac >>
+  drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
+  simp[] >> strip_tac >>
+  rename1 `t.contexts = (ct,rb)::rest` >>
+  `ct.jumpDest = parent.jumpDest` by
+    (drule_at (Pat `run_call _ = _`) asm_call_run_memory_jumpDest >> simp[]) >>
+  qexists_tac `ct` >> simp[outcome_of_def] >> conj_tac
+  >- (Cases_on `ex` >> simp[]) >>
+  qpat_x_assum `ct.memory = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `parent.memory = _` (fn th => rewrite_tac[th]) >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+  simp_tac (srw_ss()) [] >>
+  irule asm_call_memory_buffer_write >>
+  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
 QED
 
 Theorem asm_call_prepared_run_selectors:
@@ -7021,22 +7085,7 @@ Theorem asm_call_prepared_run_selectors:
       TAKE rs ct.returnData ++ DROP (ro + LENGTH (TAKE rs ct.returnData))
         (asm_call_memory ao az ro rs (buffer_to_list c.memory))
 Proof
-  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_all asm_call_prepared_enter_view >> strip_tac >>
-  drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
-  simp[] >> strip_tac >>
-  rename1 `t.contexts = (ct,rb)::rest` >>
-  `ct.jumpDest = parent.jumpDest` by
-    (drule_at (Pat `run_call _ = _`) asm_call_run_memory_jumpDest >> simp[]) >>
-  qexists_tac `ct` >> simp[outcome_of_def] >> conj_tac
-  >- (Cases_on `ex` >> simp[]) >>
-  qpat_x_assum `ct.memory = _` (fn th => rewrite_tac[th]) >>
-  qpat_x_assum `parent.memory = _` (fn th => rewrite_tac[th]) >>
-  POP_ASSUM_LIST (K ALL_TAC) >>
-  Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
-  simp_tac (srw_ss()) [] >>
-  irule asm_call_memory_buffer_write >>
-  goal_assum (drule_at Any) >> simp_tac std_ss [arithmeticTheory.MULT_COMM]
+  strip_tac >> irule asm_message_prepared_run_selectors >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_call_finite_txParams:
