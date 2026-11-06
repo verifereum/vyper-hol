@@ -1,7 +1,9 @@
 Theory fnPlanLineageStageAudit
 Ancestors
   fnPlanLineageInventory fnPlanLineageReplay fnPlanLineageSuffix planWf
+  fnPlanLineageEntryProbe
   stackPlanGen stackPlanOps stackModel venomInst
+Libs wordsLib
 
 (* These are local stage-interface tests, not reachable-ready-program claims. *)
 Theorem offset_retains_output:
@@ -723,3 +725,107 @@ QED
        windows preserving the boundary. Native live availability (Setup) is
        budget-free now, but supplies neither exclusion nor suffix-locality.
    No reachability, long-JMP coverage, or frozen-task falsehood is asserted. *)
+
+(* Reachable join-origin diagnostics reuse EntryProbe's ready diamond and
+   exact block-step observers. Two fixtures, with and without a PHI. *)
+Definition prefix_audit_phi_fn_def:
+  prefix_audit_phi_fn = residual_diamond_fn with fn_blocks :=
+    LUPDATE ((EL 1 residual_diamond_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 10 ADD [Var "t"; Var "t"] ["unused"];
+       mk_inst 1 ADD [Lit 10w; Lit 1w] ["a"];
+       mk_inst 2 JMP [Label "J"] []]) 1 residual_diamond_fn.fn_blocks
+End
+
+Definition prefix_audit_plain_fn_def:
+  prefix_audit_plain_fn = prefix_audit_phi_fn with fn_blocks :=
+    LUPDATE ((EL 3 prefix_audit_phi_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 6 ADD [Var "t"; Lit 1w] ["y"];
+       mk_inst 7 JMP [Label "exit"] []]) 3 prefix_audit_phi_fn.fn_blocks
+End
+
+Theorem prefix_audit_repeated_use_rejected:
+  EVERY (\fn. ~codegen_ready_fn fn) [prefix_audit_phi_fn; prefix_audit_plain_fn]
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.EVERY_DEF] >> conj_tac >> EVAL_TAC >> simp[]
+QED
+
+Theorem prefix_audit_success:
+  EVERY (\fn. IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn)
+    NONE [] fn 0 0)) [prefix_audit_phi_fn; prefix_audit_plain_fn]
+Proof
+  simpLib.SIMP_TAC bool_ss [listTheory.EVERY_DEF] >> conj_tac >>
+  (computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY]; EVAL_TAC)
+QED
+
+Theorem prefix_audit_incoming_stacks:
+  (residual_incoming prefix_audit_plain_fn 1).ps_stack = [Var "t"] /\
+  (residual_incoming prefix_audit_plain_fn 2).ps_stack = [Var "t"] /\
+  (residual_incoming prefix_audit_phi_fn 1).ps_stack = [Var "t"; Var "a"] /\
+  (residual_incoming prefix_audit_phi_fn 2).ps_stack = [Var "t"; Var "b"]
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Definition prefix_audit_exempt_fn_def:
+  prefix_audit_exempt_fn = prefix_audit_phi_fn with fn_blocks :=
+    LUPDATE ((EL 1 prefix_audit_phi_fn.fn_blocks) with bb_instructions :=
+      [mk_inst 10 ASSIGN [Var "t"] ["unused"];
+       mk_inst 1 ADD [Lit 10w; Lit 1w] ["a"];
+       mk_inst 2 JMP [Label "J"] []]) 1 prefix_audit_phi_fn.fn_blocks
+End
+
+Theorem prefix_audit_exempt_ready_success:
+  codegen_ready_fn prefix_audit_exempt_fn /\
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze prefix_audit_exempt_fn) (dfg_build_function prefix_audit_exempt_fn)
+    (cfg_analyze prefix_audit_exempt_fn) NONE [] prefix_audit_exempt_fn 0 0)
+Proof
+  conj_tac >> EVAL_TAC >> simp[]
+QED
+
+Theorem prefix_audit_exempt_target_and_phi:
+  input_vars_from "L" (EL 3 prefix_audit_exempt_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze prefix_audit_exempt_fn) "J" 0) = ["t"; "a"] /\
+  input_vars_from "R" (EL 3 prefix_audit_exempt_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze prefix_audit_exempt_fn) "J" 0) = ["t"; "b"] /\
+  (residual_incoming prefix_audit_exempt_fn 1).ps_stack = [Var "t"; Var "a"] /\
+  (residual_incoming prefix_audit_exempt_fn 2).ps_stack = [Var "t"; Var "b"] /\
+  (residual_phi prefix_audit_exempt_fn 3
+    (residual_incoming prefix_audit_exempt_fn 1)).ps_stack = [Var "t"; Var "x"] /\
+  (residual_phi prefix_audit_exempt_fn 3
+    (residual_incoming prefix_audit_exempt_fn 2)).ps_stack = [Var "t"; Var "x"] /\
+  MEM "t" (live_vars_at (liveness_analyze prefix_audit_exempt_fn) "J" 1)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem prefix_audit_rejection_cause:
+  ~single_use_form prefix_audit_phi_fn /\ ~single_use_form prefix_audit_plain_fn
+Proof
+  conj_tac >> EVAL_TAC >> simp[]
+QED
+
+(* Reachable prefix-origin ledger: three small diamonds were tested.
+   The two repeated-ADD variants (plain and independent PHI) successfully
+   plan but fail readiness: t is used by a predecessor ADD and the join ADD,
+   violating single_use_form. Their computed entry stacks have no residual
+   prefix either, so they do not even supply an arbitrary-plan collision.
+   The third variant uses exempt ASSIGN in the predecessor. It is ready and
+   its analyzed cleanup function plan succeeds. Both predecessor block plans
+   start at the actual entry-block result (residual_incoming), not fabricated
+   states. Their entire stacks equal the exact input_vars_from join targets:
+   [t;a] and [t;b]. Thus the residual prefix is EMPTY, not a smaller chosen
+   common suffix. The native PHI endpoints are both [t;x]; t is live after
+   PHI, while a/b are incoming-only names and x is the fresh PHI output.
+
+   Outcome is INCONCLUSIVE for universal live-prefix exclusion: no collision
+   in this bounded search. The observed exclusion is not proved for all
+   joins. Remaining origin obligations separate (i) incoming names, whose
+   post-PHI death is given by phi readiness, (ii) fresh PHI outputs, needing
+   provenance/freshness relative to the physical residual prefix, and
+   (iii) live-through names, whose target coverage does not exclude additional
+   lower occurrences. Global single-use and the actual duplication/consumption
+   decisions are a potential source for (iii), not an already established
+   physical multiplicity theorem. No selective-spill replay invariant or
+   frozen-theorem counterexample follows from these fixtures. *)
