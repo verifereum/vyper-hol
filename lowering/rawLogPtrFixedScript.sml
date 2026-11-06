@@ -1,7 +1,7 @@
 (* Fixed RawLog buffer retention and the checked store/log suffix. *)
 Theory rawLogPtrFixed
 Ancestors
-  rawLogPtrInst rawLogPtrTopics bodyPtrHashBuiltinsAllocFrame
+  rawLogPtrInst rawLogPtrTopics bodyPtrHashBuiltinsAllocFrame wordArgsPtr
   bodyPtrHashBuiltinsKeccakFixed assignTuplePtrCopyLen exprSimRawLog
   instSeqComposePtr ghostPcTransportPtr instIdxIndep fragExecPtr bodyPtrDefs loweringPosts
   fragGasSeqPtr exprLoweringProps emitHelper context compileEnv rich_list typedCopyPtr ptrDiscipline venomState venomInst
@@ -35,9 +35,13 @@ Theorem raw_log_fixed_inst_seq_ptr:
       [mk_inst sid MSTORE [Var p;value] [];
        mk_inst lid LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;Var p]) []]
       s = OK t /\
+    tn' = step_taint (mk_inst sid MSTORE [Var p;value] []) s (mstore (w2n a) w s) tn /\
     tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
+    t = (mstore (w2n a) w s) with vs_logs := s.vs_logs ++
+      [<|logger := w2w s.vs_call_ctx.cc_address; topics := vals;
+         data := TAKE 32 (DROP (w2n a) (mstore (w2n a) w s).vs_memory ++ REPLICATE 32 0w)|>] /\
     t.vs_memory = (mstore (w2n a) w s).vs_memory /\
     t.vs_logs = s.vs_logs ++
       [<|logger := w2w s.vs_call_ctx.cc_address; topics := vals;
@@ -129,9 +133,13 @@ Theorem raw_log_fixed_emitted_ptr:
   ?tn' t.
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tn' /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
+    tn' = step_taint (mk_inst sa.cs_next_id MSTORE [Var p;value] []) s (mstore (w2n a) w s) tn /\
     tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
+    t = (mstore (w2n a) w s) with vs_logs := s.vs_logs ++
+      [<|logger := w2w s.vs_call_ctx.cc_address; topics := vals;
+         data := TAKE 32 (DROP (w2n a) (mstore (w2n a) w s).vs_memory ++ REPLICATE 32 0w)|>] /\
     t.vs_memory = (mstore (w2n a) w s).vs_memory /\
     t.vs_logs = s.vs_logs ++
       [<|logger := w2w s.vs_call_ctx.cc_address; topics := vals;
@@ -152,3 +160,111 @@ Proof
   drule_all raw_log_fixed_inst_seq_ptr >>
   simp[] >> metis_tac[]
 QED
+
+(* The source log emission and target LOG preserve the clean-store ghost. *)
+Theorem raw_log_fixed_ghost_frame:
+  !PG G tn s id p value a w d cenv cx es ctx fn sa logs vlogs k.
+    lookup_var p s = SOME a /\ eval_operand value s = SOME w /\
+    op_taint tn value = {} /\ ghost_inv d cenv cx es G tn s /\
+    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+    (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+    (!n b z i. local_region cenv es.scopes s n b z /\ b <= i /\ i < b+z ==>
+      ~(w2n a <= i /\ i < w2n a+32)) ==>
+    ghost_inv d cenv cx (es with logs := logs) G
+      (step_taint (mk_inst id MSTORE [Var p;value] []) s (mstore (w2n a) w s) tn)
+      (((mstore (w2n a) w s) with vs_logs := vlogs) with vs_inst_idx := k) /\
+    ghost_kept cenv es sa G tn s G
+      (step_taint (mk_inst id MSTORE [Var p;value] []) s (mstore (w2n a) w s) tn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all hash_clean_mstore_frame >>
+  drule_all mstore_ghost_frame >> strip_tac >>
+  simp[log_ghost_frame]
+QED
+
+(* The buffer is allocated before the data expression, not after it.
+   Allocation supplies the initial coverage and exterior placement; the data
+   expression's ordinary and ghost frames retain precisely those facts. *)
+Theorem raw_log_fixed_data_frame:
+  !ctx fn cenv cx es es' sa s t G tn G' tn' p a d id value w logs vlogs k.
+    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    wb_frame cenv es sa s t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\ not_fresh_at sa p /\
+    (!n b z. local_region cenv es.scopes s n b z ==>
+      regions_disjoint (w2n a) 32 b z) /\
+    stmt_state_rel ctx fn cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    eval_operand value t = SOME w /\ op_taint tn' value = {} /\
+    (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+    (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) ==>
+    ptr_covers G' tn' p t 32 /\ lookup_var p t = SOME a /\
+    ghost_inv d cenv cx (es' with logs := logs) G'
+      (step_taint (mk_inst id MSTORE [Var p;value] []) t (mstore (w2n a) w t) tn')
+      (((mstore (w2n a) w t) with vs_logs := vlogs) with vs_inst_idx := k) /\
+    ghost_kept cenv es' sa G' tn' t G'
+      (step_taint (mk_inst id MSTORE [Var p;value] []) t (mstore (w2n a) w t) tn')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ptr_covers G' tn' p t 32` by
+    (irule ptr_covers_evaluation_frame >> metis_tac[]) >>
+  `lookup_var p t = SOME a` by metis_tac[wb_frame_def] >>
+  drule_all wb_frame_local_regions >> strip_tac >>
+  `!n b z i. local_region cenv es'.scopes t n b z /\ b <= i /\ i < b+z ==>
+      ~(w2n a <= i /\ i < w2n a+32)` by
+    (rpt gen_tac >> strip_tac >>
+     `local_region cenv es.scopes s n b z` by metis_tac[] >>
+     `regions_disjoint (w2n a) 32 b z` by metis_tac[] >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  simp[] >> irule raw_log_fixed_ghost_frame >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`ctx`, `fn`] >> simp[]
+QED
+
+(* Counted suffix and ghost endpoint, after the allocated-buffer/data boundary. *)
+Theorem raw_log_fixed_tail:
+  !D ctx fn PG G tn s p value a w sid lid ops vals bb d cenv cx es sa logs.
+    ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\
+    eval_operand value s = SOME w /\ op_taint tn value = {} /\
+    eval_operands ops s = SOME vals /\ EVERY (\op. op_taint tn op = {}) ops /\
+    LENGTH ops < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX
+      [mk_inst sid MSTORE [Var p;value] [];
+       mk_inst lid LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;Var p]) []]
+      (DROP s.vs_inst_idx bb.bb_instructions) /\
+    ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+    local_ptrs_reserved cenv sa /\
+    (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+    (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+    (!n b z i. local_region cenv es.scopes s n b z /\ b <= i /\ i < b+z ==>
+      ~(w2n a <= i /\ i < w2n a+32)) ==>
+    ?tn' t.
+      run_inst_seq
+        [mk_inst sid MSTORE [Var p;value] [];
+         mk_inst lid LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;Var p]) []]
+        s = OK t /\
+      gas_path_ptr D 0 ctx fn PG G tn s 0 G tn'
+        (OK (t with vs_inst_idx := s.vs_inst_idx+2)) /\
+      ghost_inv d cenv cx (es with logs := logs) G tn'
+        (t with vs_inst_idx := s.vs_inst_idx+2) /\
+      ghost_kept cenv es sa G tn s G tn'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all raw_log_fixed_inst_seq_ptr >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`, `sid`, `lid`] strip_assume_tac) >>
+  qexistsl_tac [`tn'`, `t`] >> simp[] >>
+  conj_tac >- suspend "path" >>
+  drule_all raw_log_fixed_ghost_frame >> simp[]
+QED
+
+Resume raw_log_fixed_tail[path]:
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    [mk_inst sid MSTORE [Var p;value] [];
+     mk_inst lid LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;Var p]) []]` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[mk_inst_def, is_terminator_def]
+QED
+
+Finalise raw_log_fixed_tail
