@@ -663,22 +663,6 @@ Proof
   simp[]
 QED
 
-(* Helper: derive fwd var freshness from edge freshness + restricted C11 *)
-Theorem fwd_var_fresh_from_edge_fresh[local]:
-  !func func0 p t.
-    MEM p (fn_labels func0) /\ MEM t (fn_labels func0) /\
-    ~MEM (split_block_name p t) (fn_labels func) /\
-    (!pred_lbl tgt_lbl var.
-       MEM pred_lbl (fn_labels func0) /\ MEM tgt_lbl (fn_labels func0) /\
-       MEM (STRCAT (STRCAT (split_block_name pred_lbl tgt_lbl) "_fwd_") var)
-                   (fn_all_vars func) ==>
-       MEM (split_block_name pred_lbl tgt_lbl) (fn_labels func)) ==>
-    !var. ~MEM (STRCAT (STRCAT (split_block_name p t) "_fwd_") var)
-              (fn_all_vars func)
-Proof
-  rpt strip_tac >> CCONTR_TAC >> fs[] >> res_tac
-QED
-
 (* Helper: cfg_norm_inv discharges insert_split_correct preconditions *)
 Theorem insert_split_correct_from_inv[local]:
   !func0 func pred_bb target_bb id_base.

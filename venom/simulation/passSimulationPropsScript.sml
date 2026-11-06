@@ -730,12 +730,6 @@ Proof
 QED
 
 (* Helpers for mapi_transform_bb_well_formed - standalone to avoid dispatch issues *)
-Triviality mapi_bb_nonempty[local]:
-  !(f:num -> instruction -> instruction) l.
-    l <> [] ==> MAPi f l <> []
-Proof
-  Cases_on `l` >> fs[MAPi_def]
-QED
 
 Triviality mapi_bb_last_term[local]:
   !(f:num -> instruction -> instruction) l.

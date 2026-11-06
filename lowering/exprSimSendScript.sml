@@ -403,21 +403,6 @@ Proof
         [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out];
       mk_inst (sm.cs_next_id + 1) ASSERT [Var out] []]` by
     fs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
-  (* Replaced failed specialization (raw evaluation was first obtained by
-     qpat_x_assum `bind _ _ _ = _`
-       (strip_assume_tac o MATCH_MP eval_send_read)):
-  `state_rel func cenv cx es1 t` by fs[stmt_state_rel_def] >>
-  qspecl_then [`func`, `cenv`, `cx`, `es1`, `t`,
-               `mk_inst sm.cs_next_id CALL
-                  [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out]`,
-               `gas_op`, `addr_op`, `val_op`, `out`, `has_gas`, `to_v`,
-               `amount_v`, `gas_vs`, `aw`, `vw`, `r`, `es'`]
-    mp_tac send_call_oracle_step >>
-  impl_tac >- simp[mk_inst_def] >>
-  `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
-  `r <> INR (Error (RuntimeError "call outcome accounts"))` by
-    (drule_all eval_send_outcome_typed >> simp[]) >>
-  simp[] >> strip_tac >> *)
   drule_all send_call_read_step >>
   disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac) >>
   rename1 `s' = t with <| vs_outcomes := _; vs_requests := _;
@@ -426,12 +411,6 @@ Proof
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
    s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars` by
     (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-  (* Replaced branch search:
-  irule frag_exec_run_inst_seq >> rpt conj_tac >>
-  TRY (fs[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
-       NO_TAC) >> rpt strip_tac >>
-  TRY (gvs[run_inst_seq_def, send_assert_fail, expr_exit_def] >> NO_TAC) >>
-  gvs[run_inst_seq_def, send_assert_ok] >> *)
   irule frag_exec_run_inst_seq >>
   simp[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
   rpt strip_tac >>
@@ -527,18 +506,12 @@ Proof
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
   qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
-  (* Replaced undirected dispatch:
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule address_typed_dest >> first_assum ACCEPT_TAC,
          irule uint256_typed_dest >> first_assum ACCEPT_TAC,
          Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
-         fs[] >> NO_TAC] *)
-  simp[] >> conj_tac
-  >- (Cases_on `has_gas` >> gvs[eval_operand_def]) >>
-  conj_tac
-  >- (irule address_typed_dest >> simp[]) >>
-  irule uint256_typed_dest >> simp[]
+         fs[] >> NO_TAC]
 QED
 
 (* TOP-LEVEL *)

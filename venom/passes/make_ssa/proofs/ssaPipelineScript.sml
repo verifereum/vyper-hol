@@ -921,12 +921,6 @@ Proof
   simp[bb_succs_def]
 QED
 
-Triviality bb_succs_empty:
-  !lbl. bb_succs <|bb_label := lbl; bb_instructions := []|> = []
-Proof
-  simp[bb_succs_def]
-QED
-
 (* Prepending PHIs preserves bb_succs. Works with any two blocks —
    just needs the instruction relationship. bb_succs only depends on
    LAST of instructions; PHIs are not terminators so don't affect it. *)

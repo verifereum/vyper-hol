@@ -255,21 +255,6 @@ Proof
   metis_tac[]
 QED
 
-(* offset_by preserves the allocation component *)
-Theorem offset_by_alloc[local]:
-  ∀p delta. ∃alloc off'. offset_by p delta = Ptr alloc off'
-Proof
-  Cases_on `p` >> Cases_on `o'` >> Cases_on `delta` >>
-  rw[offset_by_def]
-QED
-
-Theorem sub_offset_by_alloc[local]:
-  ∀p delta. ∃alloc off'. sub_offset_by p delta = Ptr alloc off'
-Proof
-  Cases_on `p` >> Cases_on `o'` >> Cases_on `delta` >>
-  rw[sub_offset_by_def] >> BasicProvers.EVERY_CASE_TAC >> rw[]
-QED
-
 (* offset_by preserves the allocation ID *)
 Theorem offset_by_same_alloc[local]:
   ∀alloc off delta. ∃off'. offset_by (Ptr alloc off) delta = Ptr alloc off'
@@ -587,40 +572,6 @@ QED
 Finalise bp_handle_inst_sound_proof
 
 (* DOMSUB helpers for fixpoint proof *)
-Theorem bp_ptr_sound_domsub[local]:
-  !bp v s. bp_ptr_sound bp s ==> bp_ptr_sound (bp \\ v) s
-Proof
-  rw[bp_ptr_sound_def] >>
-  rename1 `bp_get_ptrs (bp \\ v) w` >>
-  `w <> v` by (CCONTR_TAC >> gvs[bp_get_ptrs_def, FLOOKUP_DEF, fmap_domsub]) >>
-  `bp_get_ptrs (bp \\ v) w = bp_get_ptrs bp w` by
-    simp[bp_get_ptrs_def, DOMSUB_FLOOKUP_NEQ] >>
-  gvs[]
-QED
-
-Theorem bp_get_ptrs_domsub_self[local]:
-  !bp v. bp_get_ptrs (bp \\ v) v = []
-Proof
-  rw[bp_get_ptrs_def, FLOOKUP_DEF, DOMSUB_FAPPLY_NEQ, fmap_domsub]
-QED
-
-Theorem bp_get_ptrs_domsub_neq[local]:
-  !bp v w. v <> w ==> bp_get_ptrs (bp \\ v) w = bp_get_ptrs bp w
-Proof
-  rw[bp_get_ptrs_def, DOMSUB_FLOOKUP_NEQ]
-QED
-
-(* phi_pairs vars are a subset of operand_vars *)
-Theorem phi_pairs_subset_operand_vars[local]:
-  !ops x. MEM x (MAP SND (phi_pairs ops)) ==> MEM x (operand_vars ops)
-Proof
-  Induct_on `ops` using venomInstTheory.phi_pairs_ind >>
-  rpt strip_tac >>
-  gvs[venomInstTheory.phi_pairs_def,
-      venomInstTheory.operand_vars_def,
-      venomInstTheory.operand_var_def] >>
-  Cases_on `operand_var v1` >> gvs[]
-QED
 
 (* General frame lemma: bp_ptr_sound preserved by step_inst.
    For the output variable, caller provides either:
@@ -889,28 +840,6 @@ Proof
   gvs[foldl_update_var_allocas,
       venomExecSemanticsTheory.adopt_return_fmp_def,
       venomExecSemanticsTheory.merge_callee_state_def]
-QED
-
-(* Helper: derive per-instruction alloca FLOOKUP preservation.
-   INVOKE: full vs_allocas preserved (merge_callee_state keeps caller's).
-   ALLOCA: only inst_id entry changes.
-   Other: full vs_allocas preserved. *)
-Theorem step_alloca_from_block[local]:
-  ∀fuel ctx inst s0 s1 bp insts.
-    step_inst fuel ctx inst s0 = OK s1 ∧
-    MEM inst insts ∧
-    (∀i v aid off. MEM i insts ∧ i.inst_opcode = ALLOCA ∧
-       MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
-       aid ≠ i.inst_id) ⇒
-    ∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
-       FLOOKUP s1.vs_allocas aid = FLOOKUP s0.vs_allocas aid
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- (drule_all step_inst_invoke_preserves_allocas >> simp[])
-  >- (
-    `inst.inst_opcode = ALLOCA ⇒ aid ≠ inst.inst_id` by metis_tac[] >>
-    metis_tac[step_inst_alloca_flookup])
 QED
 
 Theorem is_terminator_not_alloca_invoke[local]:

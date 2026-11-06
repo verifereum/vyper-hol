@@ -19,37 +19,6 @@ Proof
   metis_tac[ALL_DISTINCT_EL_IMP]
 QED
 
-Triviality orig_data_dep_contra[local]:
-  !fn bi fl bb i j i' j' v.
-    wf_ssa fn /\ MEM bb fn.fn_blocks /\ bi = bb.bb_instructions /\
-    fl = FILTER (\q. ~is_pseudo q.inst_opcode) bi /\
-    i < j /\ j < LENGTH fl /\
-    i' < j' /\ j' < LENGTH bi /\ EL i' bi = EL i fl /\ EL j' bi = EL j fl /\
-    defs_before_uses bi /\
-    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi)) /\
-    MEM (Var v) (EL i fl).inst_operands /\ MEM v (EL j fl).inst_outputs ==>
-    F
-Proof
-  rpt strip_tac >>
-  `MEM (EL j' bi) bi` by simp[EL_MEM] >>
-  `MEM v (EL j' bi).inst_outputs` by metis_tac[] >>
-  `producing_inst bi v = SOME (EL j' bi)` by (
-    irule producing_inst_unique_definer >> simp[] >>
-    rpt strip_tac >>
-    metis_tac[all_distinct_flat_map_unique]) >>
-  `?m. m < i' /\ EL m bi = EL j' bi` by (
-    `MEM (Var v) (EL i' bi).inst_operands` by metis_tac[] >>
-    `i' < LENGTH bi` by decide_tac >>
-    fs[defs_before_uses_def] >>
-    metis_tac[]) >>
-  `m = j'` by (
-    `m < LENGTH bi` by decide_tac >>
-    `EL m (MAP (\i. i.inst_id) bi) = EL j' (MAP (\i. i.inst_id) bi)` by simp[EL_MAP] >>
-    metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP]) >>
-  decide_tac
-QED
-
 (* If MAP f l = pfx ++ [f (EL i l)] ++ sfx and ALL_DISTINCT, then i = LENGTH pfx *)
 Triviality all_distinct_map_el_append[local]:
   !l (f: 'a -> 'b) pfx sfx i.

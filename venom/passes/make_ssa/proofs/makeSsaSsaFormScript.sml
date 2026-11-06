@@ -648,26 +648,6 @@ Proof
   rw[collect_outputs_def]
 QED
 
-(* When outputs at a label are preserved between bbs and bbs',
-   collect_outputs at that label agrees *)
-Triviality collect_outputs_preserved:
-  !bbs bbs' lbl rest.
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs') /\
-    MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs /\
-    ~MEM lbl (FLAT (MAP dom_tree_labels rest)) /\
-    (!l bb bb'. ~MEM l (FLAT (MAP dom_tree_labels rest)) /\
-       lookup_block l bbs = SOME bb /\ lookup_block l bbs' = SOME bb' ==>
-       MAP (\i. i.inst_outputs) bb'.bb_instructions =
-       MAP (\i. i.inst_outputs) bb.bb_instructions) ==>
-    !bb bb'. lookup_block lbl bbs = SOME bb /\
-             lookup_block lbl bbs' = SOME bb' ==>
-    all_output_vars bb'.bb_instructions = all_output_vars bb.bb_instructions
-Proof
-  rpt strip_tac >> gvs[all_output_vars_def] >>
-  first_x_assum drule_all >> simp[]
-QED
-
 (* Output MAP equality preserves colon_free EVERY *)
 Triviality output_map_eq_colon_free:
   !insts1 insts2.
@@ -1338,14 +1318,6 @@ Proof
      simp[lookup_block_def, FIND_thm]) >>
   ASM_REWRITE_TAC[] >>
   first_x_assum irule >> gvs[]
-QED
-
-(* build_phi_inst outputs are colon_free if var is colon_free *)
-Triviality build_phi_inst_colon_free:
-  !var preds. colon_free var ==>
-    EVERY colon_free (build_phi_inst var preds).inst_outputs
-Proof
-  simp[build_phi_inst_def]
 QED
 
 (* block_assignments extracts from inst_outputs, so colon_free transfers *)

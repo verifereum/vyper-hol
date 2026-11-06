@@ -131,7 +131,12 @@ QED
 
 Theorem outcome_guard_success_only:
   call_outcomes_ok tops am tx [] /\
-  call_outcomes_ok tops am tx [co with co_success := F] /\
+  (call_outcomes_ok tops am tx [co with co_success := F] <=>
+    accounts_runtime_well_typed co.co_accounts /\
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state (am with <|accounts := co.co_accounts;
+                               tStorage := co.co_tStorage|>) [])) /\
   (call_outcomes_ok tops am tx [co with co_success := T] <=>
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed

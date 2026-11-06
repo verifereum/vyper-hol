@@ -91,7 +91,7 @@ val () = cv_auto_trans blueprint_test_address_def;
 
 Definition blueprint_test_expr_def:
   blueprint_test_expr target raw salted rof offset ctor =
-    Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint raw) salted rof)
+    Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint raw) salted rof [])
       ([target; Literal (BaseT (UintT 256)) (IntL 0)] ++
        (if salted then
          [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 0w))]
@@ -231,11 +231,71 @@ QED
 
 Definition blueprint_test_nested_create_def:
   blueprint_test_nested_create =
-    Call (BaseT AddressT) (CreateTarget RawCreate F T)
+    Call (BaseT AddressT) (CreateTarget RawCreate F T [])
       [blueprint_test_raw_arg [0w];
        Literal (BaseT (UintT 256)) (IntL 0)] NONE
 End
 val () = cv_auto_trans blueprint_test_nested_create_def;
+
+Definition blueprint_test_nested_post_def:
+  blueprint_test_nested_post = blueprint_test_state [] with accounts :=
+    create_prelude_accounts 41w (vfmContext$address_for_create 41w 2) 0
+      (blueprint_test_state []).accounts
+End
+val () = cv_auto_trans blueprint_test_nested_post_def;
+
+Theorem blueprint_test_nested_run:
+  blueprint_test_run blueprint_test_nested_create (blueprint_test_state []) =
+    (INL (Value (AddressV (vfmContext$address_for_create 41w 2))),
+     blueprint_test_nested_post)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_test_nested_eval:
+  eval_expr blueprint_test_context blueprint_test_nested_create
+    (blueprint_test_state []) =
+    (INL (Value (AddressV (vfmContext$address_for_create 41w 2))),
+     blueprint_test_nested_post)
+Proof
+  simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
+       GSYM blueprint_test_run_def, blueprint_test_nested_run]
+QED
+
+Theorem blueprint_test_nested_source_check:
+  check_create_blueprint T
+    [AddressV (vfmContext$address_for_create 41w 2); IntV 0;
+     BytesV (REPLICATE 32 0w); IntV 0] blueprint_test_nested_post =
+    (INR (Error (RuntimeError "create source has no deployable code")),
+     blueprint_test_nested_post) /\
+  check_create_blueprint F
+    [AddressV (vfmContext$address_for_create 41w 2); IntV 0; IntV 0]
+    blueprint_test_nested_post =
+    (INR (Error (RuntimeError "create source has no deployable code")),
+     blueprint_test_nested_post)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_test_outer_failure:
+  blueprint_test_run
+    (blueprint_test_expr blueprint_test_nested_create F salted rof 0
+      [blueprint_test_nested_create]) (blueprint_test_state []) =
+  (INR (Error (RuntimeError "create source has no deployable code")),
+   blueprint_test_nested_post)
+Proof
+  rewrite_tac[blueprint_test_run_def,
+    GSYM vyperSmallStepTheory.eval_expr_eq_cont_cps] >>
+  Cases_on `salted` >>
+  simp[blueprint_test_expr_def, Once evaluate_def] >>
+  simp[Once evaluate_def, vyperStateTheory.bind_def,
+       blueprint_test_nested_eval] >>
+  simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  ntac 8 (simp[Once evaluate_def, vyperStateTheory.bind_def,
+    vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+    vyperValueOperationTheory.evaluate_literal_def]) >>
+  simp[blueprint_test_nested_source_check]
+QED
 
 (* The prefix deploys an empty-runtime target, then fails its source check.
    The identical nested deployment in the constructor suffix must not run.
@@ -319,9 +379,9 @@ Theorem blueprint_invalid_source_precedes_constructor_effects:
     [F;T])
   [F;T]
 Proof
-  rewrite_tac[blueprint_test_run_def,
-              GSYM vyperSmallStepTheory.eval_expr_eq_cont_cps] >>
-  simp[listTheory.EVERY_DEF, blueprint_invalid_source_result] >>
+  simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
+       GSYM blueprint_test_run_def, listTheory.EVERY_DEF,
+       blueprint_test_outer_failure] >>
   CONV_TAC cv_eval
 QED
 
@@ -331,7 +391,7 @@ QED
    one-byte size from an incorrect recomputation producing two zero bytes. *)
 Definition blueprint_test_populate_source_def:
   blueprint_test_populate_source =
-    Call (BaseT AddressT) (CreateTarget RawCreate F T)
+    Call (BaseT AddressT) (CreateTarget RawCreate F T [])
       [blueprint_test_raw_arg [0x60w;1w;0x60w;0w;0xf3w];
        Literal (BaseT (UintT 256)) (IntL 0)] NONE
 End
@@ -364,6 +424,29 @@ Definition blueprint_test_captured_address_def:
 End
 val () = cv_auto_trans blueprint_test_captured_address_def;
 
+Definition blueprint_test_captured_post_def:
+  blueprint_test_captured_post =
+    let populated = update_account (vfmContext$address_for_create 41w 2)
+      (empty_account_state with <|nonce := 1; code := [0w]|>)
+      blueprint_test_nested_post.accounts in
+    blueprint_test_nested_post with accounts :=
+      create_prelude_accounts 41w blueprint_test_captured_address 0 populated
+End
+val () = cv_auto_trans blueprint_test_captured_post_def;
+
+Theorem blueprint_test_captured_run:
+  blueprint_test_run
+    (blueprint_test_expr
+      (Literal (BaseT AddressT)
+        (BytesL (word_to_bytes (vfmContext$address_for_create 41w 2) T)))
+      F T T (2 ** 256 - 1) [blueprint_test_populate_source])
+    (blueprint_test_state []) =
+  (INL (Value (AddressV blueprint_test_captured_address)),
+   blueprint_test_captured_post)
+Proof
+  CONV_TAC cv_eval
+QED
+
 Theorem blueprint_size_is_captured_before_constructor_changes_source:
   blueprint_copy_size (2 ** 256 - 1) [] = 1 /\
   let e = blueprint_test_expr
@@ -383,11 +466,9 @@ Theorem blueprint_size_is_captured_before_constructor_changes_source:
     final.logs = [<|logger := 43w; topics := []; data := [99w]|>] /\
     final.requests = [] /\ IS_NONE final.outcomes
 Proof
-  simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
-       GSYM blueprint_test_run_def] >>
-  conj_tac >- CONV_TAC cv_eval >>
-  conj_tac >- CONV_TAC cv_eval >>
-  conj_tac >- CONV_TAC cv_eval >>
+  rewrite_tac[vyperSmallStepTheory.eval_expr_eq_cont_cps,
+       GSYM blueprint_test_run_def, LET_THM] >>
+  BETA_TAC >> rewrite_tac[blueprint_test_captured_run] >>
   conj_tac >- CONV_TAC cv_eval >>
   conj_tac >- CONV_TAC cv_eval >>
   conj_tac >- CONV_TAC cv_eval >>
@@ -397,6 +478,22 @@ Proof
   conj_tac >- CONV_TAC cv_eval >>
   CONV_TAC cv_eval
 QED
+
+(* These execution regressions must remain kernel-closed. *)
+val () = List.app (fn th =>
+  if List.all (fn tag => tag = "DISK_THM")
+       (fst (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "create regression has oracle dependencies")
+  [blueprint_test_nested_run, blueprint_test_nested_source_check,
+   blueprint_test_outer_failure, blueprint_test_captured_run,
+   blueprint_invalid_source_precedes_constructor_effects,
+   blueprint_size_is_captured_before_constructor_changes_source,
+   blueprint_constructor_cannot_make_invalid_source_valid,
+   blueprint_wrapped_offset_pads_small_positive_size,
+   blueprint_oversized_copy_rejected_before_padding,
+   blueprint_encoded_constructor_counts_toward_size_limit,
+   blueprint_zero_and_signed_negative_source_sizes,
+   vyperSmallStepTheory.eval_expr_eq_cont_cps];
 
 (* The constructor tuple is (DynArray[uint256,3],uint256), whose array-length
    word is 64 bytes into its ABI encoding. This loader returns that word from
@@ -426,11 +523,11 @@ Definition create_argument_expr_def:
         ctor = [Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d";
                 Pop (BaseT (UintT 256)) (NameTarget "d")]
     in if raw then
-      Call (BaseT AddressT) (CreateTarget RawCreate T T)
+      Call (BaseT AddressT) (CreateTarget RawCreate T T [])
         ([blueprint_test_raw_arg create_argument_loader;
           Literal (BaseT (UintT 256)) (IntL 0)] ++ ctor ++ [salt]) NONE
     else
-      Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint F) T T)
+      Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint F) T T [])
         ([blueprint_test_address;
           Literal (BaseT (UintT 256)) (IntL 0); salt;
           Literal (BaseT (UintT 256)) (IntL 3)] ++ ctor) NONE

@@ -1,12 +1,14 @@
 (*
  * Properties of accounts_rel (#665): the state_rel component that relates
  * every address's accounts and transient storage. The running contract's
- * storage and transient storage agree on their live bytes; both sides may
- * accumulate pending deletions before outer finalization.
+ * storage and transient storage agree
+ * only on their live bytes (#637); everything else is equal.
  *
  * TOP-LEVEL:
- *   state_rel_accounts      — state_rel gives agreement of raw accounts and
- *                             transient storage before outer finalization
+ *   state_rel_accounts      — state_rel gives the agreement of the
+ *                             accounts and transient storage that the
+ *                             success case of the external result relation
+ *                             asks for
  *   accounts_rel_set_storage, accounts_rel_set_transient — a write of the
  *                             running contract's storage or transient
  *                             storage on both sides keeps accounts_rel
@@ -65,6 +67,20 @@ Proof
   simp[accounts_agree_def]
 QED
 
+Theorem accounts_agree_process_deletions:
+  !cx ds a1 a2.
+    accounts_agree cx a1 a2 ==>
+    accounts_agree cx (process_deletions ds a1) (process_deletions ds a2)
+Proof
+  gen_tac >> Induct_on `ds` >>
+  simp[process_deletions_def] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  Cases_on `h = cx.txn.target` >>
+  gvs[accounts_agree_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM, storage_agree_def]
+QED
+
 Theorem transient_agree_refl[simp]:
   !cx t. transient_agree cx t t
 Proof
@@ -83,7 +99,8 @@ Theorem state_rel_accounts:
   !func cenv cx es s.
     state_rel func cenv cx es s ==>
     accounts_agree cx es.accounts s.vs_accounts /\
-    transient_agree cx es.tStorage s.vs_transient
+    transient_agree cx es.tStorage s.vs_transient /\
+    es.pending_deletions = s.vs_pending_deletions
 Proof
   rw[state_rel_def, accounts_rel_def]
 QED
@@ -271,7 +288,8 @@ Theorem take_outcome_agree:
     transient_agree cx o1.co_tStorage o2.co_tStorage
 Proof
   rw[request_agree_def] >>
-  `rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
+  `rq1.cr_kind = rq2.cr_kind /\
+   rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
    rq1.cr_value = rq2.cr_value` by
     (qpat_x_assum `_ = rq2` (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[take_outcome_def, computed_precompile_def, failed_outcome_def,
@@ -279,19 +297,20 @@ Proof
   simp[call_outcome_component_equality]
 QED
 
-(* Both sides adopt the agreed outcome. Pending lists may grow before
-   outer finalization. *)
+(* Venom adopts an outcome with adopt_outcome on its accounts, transient
+   storage and logs (consume_call_outcome), as the source does; the two
+   outcomes and requests agree as take_outcome_agree gives. *)
 Theorem accounts_rel_adopt_call_outcome:
   !cx rq rq' outcome outcome' es es' s s' logs.
     accounts_rel cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
     rq'.cr_static = rq.cr_static /\
+    rq'.cr_kind = rq.cr_kind /\
     outcome with <| co_accounts := outcome'.co_accounts;
                     co_tStorage := outcome'.co_tStorage |> = outcome' /\
     accounts_agree cx outcome.co_accounts outcome'.co_accounts /\
     transient_agree cx outcome.co_tStorage outcome'.co_tStorage /\
     s'.vs_accounts =
-      FST (adopt_outcome rq' outcome'
-             (s.vs_accounts, s.vs_transient, logs)) /\
+      FST (adopt_outcome rq' outcome' (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq' outcome'
                   (s.vs_accounts, s.vs_transient, logs))) ==>
@@ -787,30 +806,4 @@ Proof
   disch_then (qspecl_then [`st`, `w2n w`, `j`, `b`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >>
   simp[arithmeticTheory.ADD_COMM]
-QED
-
-(* Matching deletion queues preserve agreement at the success boundary. *)
-Theorem process_deletions_apply[local]:
-  !ds accounts addr.
-    process_deletions ds accounts addr =
-      if MEM addr ds then empty_account_state else accounts addr
-Proof
-  Induct >> simp[process_deletions_def] >>
-  rpt gen_tac >> simp[update_account_def, combinTheory.APPLY_UPDATE_THM] >>
-  rpt IF_CASES_TAC >> gvs[]
-QED
-
-Theorem accounts_agree_process_deletions:
-  !cx ds accounts1 accounts2.
-    accounts_agree cx accounts1 accounts2 ==>
-    accounts_agree cx
-      (process_deletions ds accounts1) (process_deletions ds accounts2)
-Proof
-  rpt gen_tac >> strip_tac >> rw[accounts_agree_def]
-  >- (simp[process_deletions_apply] >>
-      Cases_on `MEM addr ds` >> simp[] >> fs[accounts_agree_def])
-  >- (Cases_on `MEM cx.txn.target ds` >>
-      fs[process_deletions_apply, accounts_agree_def]) >>
-  Cases_on `MEM cx.txn.target ds` >>
-  fs[process_deletions_apply, accounts_agree_def, storage_agree_def]
 QED

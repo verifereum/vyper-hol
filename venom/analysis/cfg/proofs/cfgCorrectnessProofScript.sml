@@ -479,16 +479,6 @@ QED
    Unconditional edge symmetry
    ========================================================================== *)
 
-(* Helper: cfg_succs = build_succs *)
-Theorem cfg_succs_build[local]:
-  !fn. (cfg_analyze fn).cfg_succs = build_succs fn.fn_blocks
-Proof
-  rw[cfgDefsTheory.cfg_analyze_def] >> simp_tac std_ss [LET_THM] >>
-  Cases_on `entry_block fn` >> simp[] >>
-  Cases_on `dfs_post_walk (build_succs fn.fn_blocks) [] x.bb_label` >> simp[] >>
-  Cases_on `dfs_pre_walk (build_succs fn.fn_blocks) [] x.bb_label` >> simp[]
-QED
-
 (* Unconditional edge symmetry: removes MEM-in-fn_labels precondition.
    If label is NOT in fn_labels, succs is [] and preds side is vacuously false. *)
 Theorem cfg_edge_symmetry_uncond_proof:

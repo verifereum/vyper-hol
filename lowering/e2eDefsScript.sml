@@ -85,11 +85,11 @@ End
 Definition call_outcomes_ok_def:
   call_outcomes_ok (tops : toplevel list) am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      EVERY (\outcome. outcome.co_success ==>
-                 accounts_runtime_well_typed outcome.co_accounts /\
-                 contract_storage_well_formed cx
-                   (initial_state (am with <| accounts := outcome.co_accounts;
-                                              tStorage := outcome.co_tStorage |>) []))
+      EVERY (\outcome.
+               accounts_runtime_well_typed outcome.co_accounts /\
+               contract_storage_well_formed cx
+                 (initial_state (am with <| accounts := outcome.co_accounts;
+                                            tStorage := outcome.co_tStorage |>) []))
             os
 End
 

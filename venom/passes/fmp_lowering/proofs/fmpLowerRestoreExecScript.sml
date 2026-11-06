@@ -62,7 +62,7 @@ Theorem dalloca_after_restore_exec:
   ALL_DISTINCT [plus31;mask;aligned;runner;out] ==>
   run_insts fuel ctx
     [mk_inst ri ASSIGN [Var target] [runner];
-     mk_inst ai ADD [size_op;Lit 31w] [plus31];
+     mk_inst ai ADD [Lit 31w;size_op] [plus31];
      mk_inst ni NOT [Lit 31w] [mask];
      mk_inst mi AND [Var plus31;Var mask] [aligned];
      mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s =
@@ -86,7 +86,7 @@ Theorem dalloca_expansion_runner_frame:
   eval_operand size_op s = SOME sz /\ lookup_var runner s = SOME frontier /\
   ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
   run_insts fuel ctx
-    [mk_inst ai ADD [size_op;Lit 31w] [plus31];
+    [mk_inst ai ADD [Lit 31w;size_op] [plus31];
      mk_inst ni NOT [Lit 31w] [mask];
      mk_inst mi AND [Var plus31;Var mask] [aligned];
      mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s = OK low ==>
@@ -113,7 +113,7 @@ Theorem dalloca_expansion_ledger:
   fmp_dalloca_query insts env out = SOME site /\
   hi = lo + ceil32 (w2n sz) /\ hi < dimword (:256) /\
   run_insts fuel ctx
-    [mk_inst ai ADD [size_op;Lit 31w] [plus31];
+    [mk_inst ai ADD [Lit 31w;size_op] [plus31];
      mk_inst ni NOT [Lit 31w] [mask];
      mk_inst mi AND [Var plus31;Var mask] [aligned];
      mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s = OK low ==>

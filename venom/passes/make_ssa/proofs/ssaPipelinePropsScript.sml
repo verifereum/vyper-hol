@@ -308,163 +308,6 @@ Proof
   metis_tac[]
 QED
 
-(* If process_frontiers modifies block j, then j's label is in output has_phi *)
-Triviality process_frontiers_modified_in_hp:
-  !fs var pm li bbs rest hp bbs' rest' hp'.
-    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ==>
-    !j. j < LENGTH bbs ==>
-      !inst. MEM inst (EL j bbs').bb_instructions /\
-             ~MEM inst (EL j bbs).bb_instructions ==>
-             MEM (EL j bbs).bb_label hp'
-Proof
-  Induct >> rw[process_frontiers_def]
-  >- metis_tac[] >- metis_tac[]
-  >> (
-    qmatch_asmsub_abbrev_tac `process_frontiers _ _ _ bbs_map _ _ _` >>
-    `j < LENGTH bbs_map` by simp[Abbr `bbs_map`] >>
-    Cases_on `MEM inst (EL j bbs_map).bb_instructions`
-    >- ( (* inst in bbs_map but not bbs: modified at this step *)
-      `(EL j bbs).bb_label = h` by (
-        spose_not_then ASSUME_TAC >>
-        `EL j bbs_map = EL j bbs` by simp[Abbr `bbs_map`, EL_MAP] >>
-        gvs[]) >>
-      drule process_frontiers_hp_mono >>
-      disch_then (qspec_then `h` mp_tac) >> simp[])
-    >- ( (* inst not in bbs_map: modified in recursion, use IH *)
-      first_x_assum drule >> disch_then (qspec_then `j` mp_tac) >>
-      simp[] >> disch_then drule >> strip_tac >>
-      `(EL j bbs_map).bb_label = (EL j bbs).bb_label` by (
-        simp[Abbr `bbs_map`, EL_MAP] >>
-        rw[insert_phi_at_block_def]) >>
-      gvs[]))
-QED
-
-(* process_frontiers adds at most one new instruction per block *)
-Triviality process_frontiers_new_unique:
-  !fs var pm li bbs rest hp bbs' rest' hp'.
-    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ==>
-    !j. j < LENGTH bbs ==>
-      !(inst1 : instruction) inst2.
-        MEM inst1 (EL j bbs').bb_instructions /\
-        ~MEM inst1 (EL j bbs).bb_instructions /\
-        MEM inst2 (EL j bbs').bb_instructions /\
-        ~MEM inst2 (EL j bbs).bb_instructions ==>
-        inst1 = inst2
-Proof
-  Induct >> rw[process_frontiers_def]
-  >- metis_tac[] >- metis_tac[]
-  >> (
-    qmatch_asmsub_abbrev_tac `process_frontiers _ _ _ bbs_map _ _ _` >>
-    `j < LENGTH bbs_map` by simp[Abbr `bbs_map`] >>
-    Cases_on `MEM inst1 (EL j bbs_map).bb_instructions` >>
-    Cases_on `MEM inst2 (EL j bbs_map).bb_instructions`
-    >- ( (* both in bbs_map but not bbs: both from MAP, must be same *)
-      qsuff_tac `!inst. MEM inst (EL j bbs_map).bb_instructions /\
-                        ~MEM inst (EL j bbs).bb_instructions ==>
-                        inst = build_phi_inst var
-                          (case ALOOKUP pm h of SOME ps => ps | NONE => [])`
-      >- metis_tac[] >>
-      rpt strip_tac >>
-      `EL j bbs_map = (if (EL j bbs).bb_label = h
-         then insert_phi_at_block
-           (build_phi_inst var
-             (case ALOOKUP pm h of SOME ps => ps | NONE => []))
-           (EL j bbs) else EL j bbs)` by
-        simp[Abbr `bbs_map`, EL_MAP] >>
-      Cases_on `(EL j bbs).bb_label = h` >>
-      gvs[insert_phi_at_block_def])
-    >- ( (* inst1 in bbs_map, inst2 not: impossible *)
-      (* inst1 new vs bbs => (EL j bbs).bb_label = h *)
-      `(EL j bbs).bb_label = h` by (
-        spose_not_then ASSUME_TAC >>
-        `EL j bbs_map = EL j bbs` by simp[Abbr `bbs_map`, EL_MAP] >>
-        gvs[]) >>
-      (* After MAP, label preserved, so (EL j bbs_map).bb_label = h *)
-      `(EL j bbs_map).bb_label = h` by
-        simp[Abbr `bbs_map`, EL_MAP, insert_phi_at_block_def] >>
-      (* h is in h::hp, so has_phi_preserves says no changes at block j *)
-      `(EL j bbs').bb_instructions = (EL j bbs_map).bb_instructions` by (
-        drule process_frontiers_has_phi_preserves >>
-        disch_then (qspec_then `j` mp_tac) >> simp[]) >>
-      (* inst2 is in bbs' but not bbs_map: contradiction *)
-      metis_tac[])
-    >- ( (* symmetric: inst2 in bbs_map, inst1 not *)
-      `(EL j bbs).bb_label = h` by (
-        spose_not_then ASSUME_TAC >>
-        `EL j bbs_map = EL j bbs` by simp[Abbr `bbs_map`, EL_MAP] >>
-        gvs[]) >>
-      `(EL j bbs_map).bb_label = h` by
-        simp[Abbr `bbs_map`, EL_MAP, insert_phi_at_block_def] >>
-      `(EL j bbs').bb_instructions = (EL j bbs_map).bb_instructions` by (
-        drule process_frontiers_has_phi_preserves >>
-        disch_then (qspec_then `j` mp_tac) >> simp[]) >>
-      metis_tac[])
-    >- (* neither in bbs_map: both from recursive call, IH *)
-       metis_tac[])
-QED
-
-(* insert_phis_for_var adds at most one new instruction per block *)
-Triviality insert_phis_for_var_new_unique:
-  !var dom_frontiers pred_map live_in bbs wl hp.
-    !j. j < LENGTH bbs ==>
-      !(inst1 : instruction) inst2.
-        MEM inst1 (EL j (insert_phis_for_var var dom_frontiers
-          pred_map live_in bbs wl hp)).bb_instructions /\
-        ~MEM inst1 (EL j bbs).bb_instructions /\
-        MEM inst2 (EL j (insert_phis_for_var var dom_frontiers
-          pred_map live_in bbs wl hp)).bb_instructions /\
-        ~MEM inst2 (EL j bbs).bb_instructions ==>
-        inst1 = inst2
-Proof
-  ho_match_mp_tac insert_phis_for_var_ind >>
-  rw[insert_phis_for_var_def] >>
-  pairarg_tac >> gvs[] >>
-  (* bbs' is from process_frontiers, result is insert_phis_for_var on bbs' *)
-  `phi_extends bbs bbs'` by
-    metis_tac[process_frontiers_phi_extends, phi_extends_refl] >>
-  `j < LENGTH bbs'` by gvs[phi_extends_def] >>
-  Cases_on `MEM inst1 (EL j bbs').bb_instructions` >>
-  Cases_on `MEM inst2 (EL j bbs').bb_instructions`
-  >- ( (* both in bbs' but not bbs: from process_frontiers *)
-    drule process_frontiers_new_unique >>
-    disch_then (qspec_then `j` mp_tac) >> simp[] >>
-    metis_tac[])
-  >- ( (* inst1 in bbs', inst2 not: contradiction via has_phi *)
-    (* process_frontiers modified block j, so label is in has_phi' *)
-    drule process_frontiers_modified_in_hp >>
-    disch_then (qspec_then `j` mp_tac) >> simp[] >>
-    disch_then (qspec_then `inst1` mp_tac) >> simp[] >> strip_tac >>
-    (* labels preserved by process_frontiers *)
-    imp_res_tac process_frontiers_labels >>
-    `(EL j bbs').bb_label = (EL j bbs).bb_label` by (
-      `EL j (MAP (\bb. bb.bb_label) bbs') =
-       EL j (MAP (\bb. bb.bb_label) bbs)` by simp[] >>
-      gvs[EL_MAP]) >>
-    (* insert_phis_for_var doesn't modify block j since label in has_phi' *)
-    `(EL j (insert_phis_for_var var dom_frontiers pred_map live_in
-        bbs' rest' has_phi')).bb_instructions =
-     (EL j bbs').bb_instructions` by (
-      irule insert_phis_for_var_has_phi_preserves >> gvs[]) >>
-    (* inst2 in result means inst2 in bbs': contradiction *)
-    metis_tac[])
-  >- ( (* symmetric: inst2 in bbs', inst1 not *)
-    drule process_frontiers_modified_in_hp >>
-    disch_then (qspec_then `j` mp_tac) >> simp[] >>
-    disch_then (qspec_then `inst2` mp_tac) >> simp[] >> strip_tac >>
-    imp_res_tac process_frontiers_labels >>
-    `(EL j bbs').bb_label = (EL j bbs).bb_label` by (
-      `EL j (MAP (\bb. bb.bb_label) bbs') =
-       EL j (MAP (\bb. bb.bb_label) bbs)` by simp[] >>
-      gvs[EL_MAP]) >>
-    `(EL j (insert_phis_for_var var dom_frontiers pred_map live_in
-        bbs' rest' has_phi')).bb_instructions =
-     (EL j bbs').bb_instructions` by (
-      irule insert_phis_for_var_has_phi_preserves >> gvs[]) >>
-    metis_tac[])
-  >- ( (* neither in bbs': both from later recursion, IH *)
-    metis_tac[])
-QED
-
 (* Step lemma: insert_phis_for_var preserves PHI injectivity *)
 Triviality insert_phis_inv1_step:
   !h0 dom_frontiers pred_map live_in bbs h1.
@@ -489,117 +332,6 @@ Proof
       (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,
         `bbs`,`h1`,`[]`] insert_phis_for_var_phi_live_in) >>
     gvs[])
-QED
-
-Triviality insert_phis_inv2_step:
-  !h0 dom_frontiers pred_map live_in bbs h1.
-    phi_extends bbs
-      (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 []) /\
-    (!j inst. j < LENGTH bbs /\
-      MEM inst (EL j bbs).bb_instructions /\ inst.inst_opcode = PHI ==>
-      !v. MEM v inst.inst_outputs ==> v <> h0 /\ ~MEM v (MAP FST defs)) /\
-    (!j inst1 inst2. j < LENGTH bbs /\
-      MEM inst1 (EL j bbs).bb_instructions /\
-      MEM inst2 (EL j bbs).bb_instructions /\
-      inst1.inst_opcode = PHI /\ inst2.inst_opcode = PHI /\
-      inst1.inst_outputs = inst2.inst_outputs ==> inst1 = inst2) ==>
-    let acc = insert_phis_for_var h0 dom_frontiers pred_map live_in
-               bbs h1 [] in
-    !j inst1 inst2. j < LENGTH bbs /\
-      MEM inst1 (EL j acc).bb_instructions /\
-      MEM inst2 (EL j acc).bb_instructions /\
-      inst1.inst_opcode = PHI /\ inst2.inst_opcode = PHI /\
-      inst1.inst_outputs = inst2.inst_outputs ==> inst1 = inst2
-Proof
-  simp_tac std_ss [LET_THM] >> rpt strip_tac >>
-  Cases_on `MEM inst1 (EL j bbs).bb_instructions` >>
-  Cases_on `MEM inst2 (EL j bbs).bb_instructions`
-  >- metis_tac[]
-  >- ( (* inst1 old, inst2 new *)
-    mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,
-      `bbs`,`h1`,`[]`] insert_phis_for_var_phi_live_in) >>
-    disch_then (qspec_then `j` mp_tac) >> simp[] >>
-    disch_then (qspec_then `inst2` mp_tac) >> simp[] >>
-    strip_tac >> (* inst2.inst_outputs = [h0] *)
-    `MEM h0 inst1.inst_outputs` by gvs[] >>
-    metis_tac[])
-  >- ( (* inst1 new, inst2 old *)
-    mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,
-      `bbs`,`h1`,`[]`] insert_phis_for_var_phi_live_in) >>
-    disch_then (qspec_then `j` mp_tac) >> simp[] >>
-    disch_then (qspec_then `inst1` mp_tac) >> simp[] >>
-    strip_tac >> (* inst1.inst_outputs = [h0] *)
-    `MEM h0 inst2.inst_outputs` by gvs[] >>
-    metis_tac[])
-  >- ( (* both new *)
-    mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,
-      `bbs`,`h1`,`[]`] insert_phis_for_var_new_unique) >>
-    disch_then (qspec_then `j` mp_tac) >> simp[])
-QED
-
-(* FOLDL induction: PHIs with same output at same block are equal *)
-Triviality add_phi_nodes_phi_inj_aux:
-  !defs dom_frontiers pred_map live_in bbs.
-    ALL_DISTINCT (MAP FST defs) /\
-    (* Inv1: existing PHI outputs disjoint from MAP FST defs *)
-    (!j inst. j < LENGTH bbs /\
-      MEM inst (EL j bbs).bb_instructions /\
-      inst.inst_opcode = PHI ==>
-      !v. MEM v inst.inst_outputs ==> ~MEM v (MAP FST defs)) /\
-    (* Inv2: PHIs at same block with same output are equal *)
-    (!j inst1 inst2. j < LENGTH bbs /\
-      MEM inst1 (EL j bbs).bb_instructions /\
-      MEM inst2 (EL j bbs).bb_instructions /\
-      inst1.inst_opcode = PHI /\ inst2.inst_opcode = PHI /\
-      inst1.inst_outputs = inst2.inst_outputs ==>
-      inst1 = inst2) ==>
-    let bbs1 = FOLDL (\acc (var,wl).
-      insert_phis_for_var var dom_frontiers pred_map live_in acc wl [])
-      bbs defs in
-    !j inst1 inst2. j < LENGTH bbs /\
-      MEM inst1 (EL j bbs1).bb_instructions /\
-      MEM inst2 (EL j bbs1).bb_instructions /\
-      inst1.inst_opcode = PHI /\ inst2.inst_opcode = PHI /\
-      inst1.inst_outputs = inst2.inst_outputs ==>
-      inst1 = inst2
-Proof
-  simp_tac std_ss [LET_THM] >>
-  Induct >- simp[FOLDL] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  (* Unfold only the goal's outer fold, leaving the guarded IH untouched. *)
-  PURE_ONCE_REWRITE_TAC [FOLDL] >>
-  PURE_REWRITE_TAC [MAP, pairTheory.FST, ALL_DISTINCT, MEM, DE_MORGAN_THM] >>
-  BETA_TAC >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> rpt strip_tac >>
-  `phi_extends bbs
-    (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 [])` by
-    (irule insert_phis_for_var_phi_extends >> MATCH_ACCEPT_TAC phi_extends_refl) >>
-  `LENGTH (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1
-     []) = LENGTH bbs` by
-    (qpat_x_assum `phi_extends _ _`
-      (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [phi_extends_def])) >>
-  (* Inv1 + Inv2 via step lemmas *)
-  mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,`bbs`,`h1`]
-    (INST_TYPE [``:'a`` |-> ``:string list``]
-      (SIMP_RULE std_ss [LET_THM] insert_phis_inv1_step))) >>
-  impl_tac
-  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >>
-  mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,`bbs`,`h1`]
-    (INST_TYPE [``:'a`` |-> ``:string list``]
-      (SIMP_RULE std_ss [LET_THM] insert_phis_inv2_step))) >>
-  impl_tac
-  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >>
-  (* Specialize the IH, normalizing only the accumulator's length. *)
-  qpat_x_assum `!df pm li acc. _` (qspecl_then
-    [`dom_frontiers`,`pred_map`,`live_in`,
-     `insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 []`]
-    mp_tac) >>
-  qpat_x_assum `LENGTH _ = LENGTH bbs`
-    (fn len => PURE_REWRITE_TAC [len]) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qspecl_then [`j`,`inst1`,`inst2`] MATCH_MP_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* process_frontiers: at each block, either unchanged or one PHI prepended *)
@@ -935,23 +667,6 @@ Proof
   gvs[valid_dom_tree_def, EXTENSION]
 QED
 
-(* Helper: any PHI in bbs1 was added by add_phi_nodes (not original) *)
-Triviality bbs1_phi_not_original:
-  !func defs dom_frontiers pred_map live_in.
-    (!bb inst. MEM bb func.fn_blocks /\
-              MEM inst bb.bb_instructions ==>
-              inst.inst_opcode <> PHI) ==>
-    let bbs1 = add_phi_nodes dom_frontiers pred_map live_in
-                 func.fn_blocks defs in
-    !j inst. j < LENGTH func.fn_blocks /\
-      MEM inst (EL j bbs1).bb_instructions /\
-      inst.inst_opcode = PHI ==>
-      ~MEM inst (EL j func.fn_blocks).bb_instructions
-Proof
-  simp_tac std_ss [LET_THM] >> rpt strip_tac >>
-  imp_res_tac EL_MEM >> res_tac
-QED
-
 Triviality ordered_bbs_colon_free:
   (!bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
     EVERY colon_free inst.inst_outputs) ==>
@@ -1109,16 +824,6 @@ Proof
   rw[venomExecSemanticsTheory.resolve_phi_def, renamed_operand_def]
 QED
 
-(* Specialized: when resolve_phi gives Var v, update gives Var (latest_version rs v) *)
-Triviality resolve_phi_update_same:
-  !rs lbl ops v.
-    resolve_phi lbl ops = SOME (Var v) ==>
-    resolve_phi lbl (update_phi_for_pred rs lbl ops) =
-      SOME (Var (latest_version rs v))
-Proof
-  rpt strip_tac >> simp[resolve_phi_update_same_gen, renamed_operand_def]
-QED
-
 (* resolve_phi after update_phi_for_pred for a DIFFERENT label *)
 Triviality resolve_phi_update_other:
   !rs lbl ops lbl'.
@@ -1255,51 +960,6 @@ Triviality bb_succs_all_distinct:
   !bb. ALL_DISTINCT (bb_succs bb)
 Proof
   rw[bb_succs_def] >> CASE_TAC >> simp[all_distinct_nub]
-QED
-
-(* OPTION_MAP with idempotent function is idempotent *)
-Triviality option_map_idempotent:
-  !f (x : operand option).
-    (!y. f (f y) = f y) ==>
-    OPTION_MAP f (OPTION_MAP f x) = OPTION_MAP f x
-Proof
-  rpt strip_tac >> Cases_on `x` >> simp[]
-QED
-
-(* One-step: update at h for resolve_phi lbl (same label) *)
-Triviality update_succ_phis_one_step_resolve_same:
-  !rs lbl bbs h bb.
-    lookup_block h bbs = SOME bb ==>
-    ?bb1. lookup_block h
-            (case lookup_block h bbs of
-               NONE => bbs
-             | SOME sbb => replace_block h
-                 (sbb with bb_instructions :=
-                   MAP (\inst. if inst.inst_opcode <> PHI then inst
-                               else inst with inst_operands :=
-                                 update_phi_for_pred rs lbl inst.inst_operands)
-                   sbb.bb_instructions) bbs) = SOME bb1 /\
-          LENGTH bb1.bb_instructions = LENGTH bb.bb_instructions /\
-          (!j. j < LENGTH bb.bb_instructions ==>
-               (EL j bb1.bb_instructions).inst_opcode =
-               (EL j bb.bb_instructions).inst_opcode) /\
-          (!j. j < LENGTH bb.bb_instructions /\
-               (EL j bb.bb_instructions).inst_opcode = PHI ==>
-               resolve_phi lbl (EL j bb1.bb_instructions).inst_operands =
-                 OPTION_MAP (renamed_operand (latest_version rs))
-                   (resolve_phi lbl (EL j bb.bb_instructions).inst_operands))
-Proof
-  rpt gen_tac >> strip_tac >> simp[] >>
-  qexists_tac `bb with bb_instructions :=
-    MAP (\inst. if inst.inst_opcode <> PHI then inst
-                else inst with inst_operands :=
-                  update_phi_for_pred rs lbl inst.inst_operands)
-    bb.bb_instructions` >>
-  imp_res_tac lookup_block_label >>
-  simp[lookup_block_replace_eq, EL_MAP] >>
-  rpt strip_tac
-  >- (COND_CASES_TAC >> simp[])
-  >- simp[resolve_phi_update_same_gen]
 QED
 
 (* Helper: FOLDL cons step for update_succ_phis *)
@@ -1452,29 +1112,6 @@ Proof
   irule labels_eq_lookup_exists >>
   qexists_tac `b` >> qexists_tac `bbs` >>
   simp[rename_blocks_preserves_labels]
-QED
-
-Triviality rename_blocks_lookup_exists_pair:
-  !rs bbs succ_map dtree l b ctrs' bbs'.
-    lookup_block l bbs = SOME b /\
-    rename_blocks rs bbs succ_map dtree = (ctrs', bbs') ==>
-    ?b'. lookup_block l bbs' = SOME b'
-Proof
-  rpt strip_tac >>
-  drule rename_blocks_lookup_exists >>
-  disch_then (qspecl_then [`rs`, `succ_map`, `dtree`] mp_tac) >>
-  simp[]
-QED
-
-Triviality rename_blocks_all_lookup_exists:
-  !rs bbs succ_map dtree labels ctrs' bbs'.
-    (!l. MEM l labels ==> ?b. lookup_block l bbs = SOME b) /\
-    rename_blocks rs bbs succ_map dtree = (ctrs', bbs') ==>
-    (!l. MEM l labels ==> ?b. lookup_block l bbs' = SOME b)
-Proof
-  rpt strip_tac >>
-  `?b. lookup_block l bbs = SOME b` by metis_tac[] >>
-  metis_tac[rename_blocks_lookup_exists_pair]
 QED
 
 Triviality rename_blocks_preserves_resolve_phi:
@@ -2399,18 +2036,6 @@ Proof
       metis_tac[])
 QED
 
-(* dtree_parent: result is in the children labels (not the root) *)
-Triviality dtree_parent_in_children:
-  !root children x p.
-    dtree_parent (DNode root children) x = SOME p /\ x <> root ==>
-    MEM x (FLAT (MAP dom_tree_labels children))
-Proof
-  rpt strip_tac >>
-  `MEM x (dom_tree_labels (DNode root children))` by
-    metis_tac[dtree_parent_in_tree] >>
-  gvs[dom_tree_labels_def, ETA_THM]
-QED
-
 (* dtree_parent fails for labels not in the tree *)
 Triviality dtree_parent_not_in_tree:
   !t x. ~MEM x (dom_tree_labels t) ==> dtree_parent t x = NONE
@@ -2542,29 +2167,6 @@ Proof
       gvs[ALL_DISTINCT, ALL_DISTINCT_APPEND,
           dom_tree_labels_def, MEM_FLAT, MEM_MAP] >>
       metis_tac[])
-QED
-
-(* Helper: ALL_DISTINCT of subtree from ALL_DISTINCT of full tree *)
-Triviality subtree_all_distinct:
-  ALL_DISTINCT (dom_tree_labels (DNode root (d :: rest))) ==>
-  ALL_DISTINCT (dom_tree_labels d)
-Proof
-  simp[dom_tree_labels_def, ETA_THM, ALL_DISTINCT_APPEND]
-QED
-
-(* Helper: dtree_parent dominance in subtree from dominance in full tree *)
-Triviality subtree_dtree_parent_dominates:
-  !root children d bbs entry child parent.
-    ALL_DISTINCT (dom_tree_labels (DNode root children)) /\
-    MEM d children /\
-    (!child parent. dtree_parent (DNode root children) child = SOME parent ==>
-       cfg_dominates bbs entry parent child) /\
-    dtree_parent d child = SOME parent ==>
-    cfg_dominates bbs entry parent child
-Proof
-  rpt strip_tac >> first_x_assum match_mp_tac >>
-  irule dtree_parent_child_subtree >>
-  simp[] >> qexists_tac `d` >> simp[]
 QED
 
 (* Helper: IH1 application — subtree root dominates node in subtree *)
@@ -3163,12 +2765,6 @@ Proof
   rpt strip_tac >> Cases_on `j < LENGTH pfx` >> gvs[] >> metis_tac[MEM_EL]
 QED
 
-Triviality ALL_DISTINCT_FLAT_MEM:
-  !ls x. ALL_DISTINCT (FLAT ls) /\ MEM x ls ==> ALL_DISTINCT x
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 (* Parent has smaller INDEX_OF than child in dom_tree_labels (preorder) *)
 Triviality parent_index_lt:
   !dtree lbl q i_lbl i_q.
@@ -3456,186 +3052,6 @@ Proof
     fs[ALOOKUP_NONE] >>
     metis_tac[dtree_parent_in_tree]) >>
   last_x_assum $ qspecl_then [`(ctrs,stacks)`,`bbs`,`sm`,`x`,`rs_x`,`p`] mp_tac >> simp[] >> (impl_tac >- (gvs[ALL_DISTINCT_APPEND] >> metis_tac[])) >> strip_tac >> qexistsl [`rs_p`,`bb_p`] >> simp[] >> simp[Once block_rename_states_def, ALOOKUP_APPEND]]
-QED
-
-(* version_diff_finds_def: If the entry rename state of some node lbl
-   has a different latest_version for v than the subtree root's entry,
-   then some block in the subtree has v as an instruction output and
-   dominates lbl. Mutual induction on dom_tree. *)
-Triviality version_diff_finds_def:
-  (!dt rs bbs sm lbl rs_lbl v entry.
-    ALOOKUP (block_rename_states rs bbs sm dt) lbl = SOME rs_lbl /\
-    latest_version rs_lbl v <> latest_version rs v /\
-    ALL_DISTINCT (dom_tree_labels dt) /\
-    (!c p. dtree_parent dt c = SOME p ==>
-       cfg_dominates bbs entry p c) /\
-    (!l. MEM l (dom_tree_labels dt) ==>
-       ?b. lookup_block l bbs = SOME b) ==>
-    ?D bb_D. lookup_block D bbs = SOME bb_D /\
-             MEM D (dom_tree_labels dt) /\
-             (?inst. MEM inst bb_D.bb_instructions /\
-                     MEM v inst.inst_outputs) /\
-             cfg_dominates bbs entry D lbl) /\
-  (!children ctrs stacks bbs sm lbl rs_lbl v entry.
-    ALOOKUP (children_rename_states ctrs stacks bbs sm children) lbl =
-      SOME rs_lbl /\
-    latest_version rs_lbl v <> latest_version (ctrs, stacks) v /\
-    ALL_DISTINCT (FLAT (MAP dom_tree_labels children)) /\
-    (!c p dt. MEM dt children /\ dtree_parent dt c = SOME p ==>
-       cfg_dominates bbs entry p c) /\
-    (!l. MEM l (FLAT (MAP dom_tree_labels children)) ==>
-       ?b. lookup_block l bbs = SOME b) ==>
-    ?D bb_D. lookup_block D bbs = SOME bb_D /\
-             MEM D (FLAT (MAP dom_tree_labels children)) /\
-             (?inst. MEM inst bb_D.bb_instructions /\
-                     MEM v inst.inst_outputs) /\
-             cfg_dominates bbs entry D lbl)
-Proof
-  ho_match_mp_tac dom_tree_list_induction >>
-  rpt conj_tac
-  >- ((* P0: DNode s l *)
-    rpt strip_tac >>
-    qpat_x_assum `ALOOKUP _ _ = SOME _` mp_tac >>
-    simp[Once block_rename_states_def] >>
-    Cases_on `lookup_block s bbs` >> simp[pairTheory.UNCURRY]
-    >- ((* NONE: alist is [(s,rs)], lbl=s, contradiction *)
-      strip_tac >> gvs[])
-    >> ((* SOME x *)
-      Cases_on `s = lbl`
-      >- (simp[] >> strip_tac >> gvs[])
-      >> (simp[] >> strip_tac >>
-        Cases_on `latest_version
-          (FST (rename_block_insts rs x.bb_instructions)) v =
-          latest_version rs v`
-        >- ((* version unchanged: use children IH *)
-          first_x_assum (qspecl_then [
-            `FST (FST (rename_block_insts rs x.bb_instructions))`,
-            `SND (FST (rename_block_insts rs x.bb_instructions))`,
-            `bbs`, `sm`, `lbl`, `rs_lbl`, `v`, `entry`] mp_tac) >>
-          impl_tac
-          >- (rpt conj_tac
-            >- gvs[]
-            >- gvs[]
-            >- gvs[dom_tree_labels_def, ETA_THM, ALL_DISTINCT_APPEND]
-            >- (rpt strip_tac >>
-                first_x_assum match_mp_tac >>
-                irule dtree_parent_child_subtree >>
-                simp[] >> qexists_tac `dt` >> simp[])
-            >> (rpt strip_tac >> first_x_assum match_mp_tac >>
-                simp[dom_tree_labels_def, ETA_THM]))
-          >> (strip_tac >>
-            qexists_tac `D` >> qexists_tac `bb_D` >> gvs[] >>
-            simp[dom_tree_labels_def, ETA_THM] >>
-            qexists_tac `inst` >> gvs[]))
-        >> ((* version changed: D = s *)
-          `?i. MEM i x.bb_instructions /\ MEM v i.inst_outputs` by
-            (CCONTR_TAC >>
-             `!i. MEM i x.bb_instructions ==> ~MEM v i.inst_outputs` by
-               metis_tac[] >>
-             `latest_version
-                (FST (rename_block_insts rs x.bb_instructions)) v =
-              latest_version rs v` by
-               (match_mp_tac rename_block_insts_non_output_stable_any >>
-                rpt strip_tac >> res_tac) >>
-             fs[]) >>
-          qexists_tac `s` >> qexists_tac `x` >>
-          simp[dom_tree_labels_def, ETA_THM] >>
-          conj_tac >- metis_tac[] >>
-          `MEM lbl (FLAT (MAP dom_tree_labels children))` by
-            (imp_res_tac alistTheory.ALOOKUP_MEM >>
-             `MAP FST (children_rename_states
-               (FST (FST (rename_block_insts rs x.bb_instructions)))
-               (SND (FST (rename_block_insts rs x.bb_instructions)))
-               bbs sm children) =
-              FLAT (MAP dom_tree_labels children)` by
-               (irule (CONJUNCT2 block_rename_states_keys) >>
-                rpt strip_tac >> first_x_assum match_mp_tac >>
-                simp[dom_tree_labels_def, ETA_THM]) >>
-             metis_tac[MEM_MAP, pairTheory.FST]) >>
-          irule dom_tree_root_dominates >>
-          qexists_tac `children` >>
-          qexists_tac `DNode s children` >>
-          simp[dom_tree_labels_def, ETA_THM] >> gvs[]))))
-  >- ((* P1 base: children = [] *)
-    simp[block_rename_states_def])
-  >> ((* P1 step: d::l *)
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    qpat_x_assum `ALOOKUP (children_rename_states _ _ _ _ (_::_)) _ = _`
-      mp_tac >>
-    simp[block_rename_states_def, LET_THM, alistTheory.ALOOKUP_APPEND] >>
-    Cases_on `ALOOKUP (block_rename_states (ctrs,stacks) bbs sm dt) lbl`
-    >- ( (* NONE: lbl in rest children *)
-      simp[] >> strip_tac >>
-      first_x_assum (qspecl_then [
-        `FST (rename_blocks (ctrs,stacks) bbs sm dt)`,
-        `stacks`, `bbs`, `sm`, `lbl`, `rs_lbl`, `v`, `entry`] mp_tac) >>
-      impl_tac
-      >- (rpt conj_tac
-        >- (Cases_on `rename_blocks (ctrs,stacks) bbs sm dt` >> gvs[])
-        >- gvs[latest_version_def]
-        >- gvs[ALL_DISTINCT_APPEND]
-        >- metis_tac[MEM]
-        >> (rpt strip_tac >> first_x_assum match_mp_tac >>
-            simp[dom_tree_labels_def, ETA_THM]))
-      >> (strip_tac >>
-          qexists_tac `D` >> qexists_tac `bb_D` >> gvs[] >>
-          qexists_tac `inst` >> gvs[]))
-    >> ( (* SOME x: lbl in child dt *)
-      strip_tac >>
-      first_x_assum (qspecl_then [`(ctrs,stacks)`, `bbs`, `sm`,
-        `lbl`, `x`, `v`, `entry`] mp_tac) >>
-      impl_tac
-      >- (rpt conj_tac
-        >- gvs[]
-        >- gvs[]
-        >- (gvs[ALL_DISTINCT_APPEND, dom_tree_labels_def, ETA_THM])
-        >- metis_tac[MEM]
-        >> (rpt strip_tac >> first_x_assum match_mp_tac >>
-            simp[dom_tree_labels_def, ETA_THM]))
-      >> (strip_tac >>
-          qexists_tac `D` >> qexists_tac `bb_D` >> gvs[] >>
-          simp[MEM_FLAT, MEM_MAP] >> metis_tac[])))
-QED
-
-Triviality version_diff_below_root:
-  !s children rs bbs sm lbl rs_lbl v entry bb_s.
-    ALOOKUP (block_rename_states rs bbs sm (DNode s children)) lbl = SOME rs_lbl /\
-    lookup_block s bbs = SOME bb_s /\
-    latest_version rs_lbl v <>
-      latest_version (FST (rename_block_insts rs bb_s.bb_instructions)) v /\
-    lbl <> s /\
-    ALL_DISTINCT (dom_tree_labels (DNode s children)) /\
-    (!c p. dtree_parent (DNode s children) c = SOME p ==>
-       cfg_dominates bbs entry p c) /\
-    (!l. MEM l (dom_tree_labels (DNode s children)) ==>
-       ?b. lookup_block l bbs = SOME b) ==>
-    ?D bb_D. lookup_block D bbs = SOME bb_D /\
-             MEM D (dom_tree_labels (DNode s children)) /\
-             D <> s /\
-             (?inst. MEM inst bb_D.bb_instructions /\
-                     MEM v inst.inst_outputs) /\
-             cfg_dominates bbs entry D lbl
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[Once block_rename_states_def] >>
-  pairarg_tac >> gvs[] >>
-  Cases_on `rs1` >> gvs[] >>
-  `?D bb_D.
-     lookup_block D bbs = SOME bb_D /\
-     MEM D (FLAT (MAP dom_tree_labels children)) /\
-     (?inst. MEM inst bb_D.bb_instructions /\ MEM v inst.inst_outputs) /\
-     cfg_dominates bbs entry D lbl` by (
-    match_mp_tac (Q.SPECL [`children`, `q`, `r`, `bbs`, `sm`,
-        `lbl`, `rs_lbl`, `v`, `entry`] (CONJUNCT2 version_diff_finds_def)) >>
-    gvs[dom_tree_labels_def, ETA_THM, ALL_DISTINCT_APPEND] >>
-    rpt strip_tac >>
-    first_x_assum (qspecl_then [`c`, `p`] mp_tac) >>
-    (impl_tac >- (irule dtree_parent_child_subtree >>
-                   gvs[dom_tree_labels_def, ETA_THM] >> metis_tac[])) >>
-    simp[]) >>
-  qexistsl_tac [`D`, `bb_D`] >>
-  gvs[dom_tree_labels_def, ETA_THM, ALL_DISTINCT_APPEND] >>
-  metis_tac[]
 QED
 
 Triviality version_propagation_finds_def:

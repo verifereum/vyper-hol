@@ -71,31 +71,6 @@ Proof
   CCONTR_TAC >> fs[]
 QED
 
-Triviality wf_unique_block:
-  !bbs bb bb'.
-    ALL_DISTINCT (MAP (\b. b.bb_label) bbs) /\
-    MEM bb bbs /\ MEM bb' bbs /\ (bb.bb_label = bb'.bb_label) ==> (bb = bb')
-Proof
-  Induct >> rw[] >> fs[listTheory.MEM_MAP] >> metis_tac[]
-QED
-
-Triviality valid_key_in_fold:
-  !fn lbl i bb.
-    wf_function fn /\ MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\
-    (lbl, i) IN df_valid_inst_keys fn.fn_blocks ==>
-    i < LENGTH bb.bb_instructions + 1
-Proof
-  rw[dfAnalyzeProofsTheory.df_valid_inst_keys_def,
-     pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP,
-     pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
-  `bb'.bb_label = bb.bb_label` by fs[] >>
-  sg `bb' = bb`
-  >- (irule wf_unique_block >> rw[] >>
-      qexists_tac `fn.fn_blocks` >>
-      fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
-  fs[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]
-QED
-
 (* ========================================================================
    Category A: FOLDL/domain properties
    ======================================================================== *)
@@ -341,73 +316,6 @@ Proof
        simp[dfHelperDefsTheory.list_intersect_def,
             LIST_TO_SET_FILTER, INTER_SUBSET]
      ]
-QED
-
-(* Joined value is a FILTER of fn_labels *)
-Theorem dom_joined_is_filter[local]:
-  !fn st lbl.
-    wf_function fn ==>
-    ?P. dom_joined fn st lbl = FILTER P (fn_labels fn)
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (fn_labels fn)` by fs[venomWfTheory.wf_function_def] >>
-  (* Expand to base + entry_val structure *)
-  PURE_REWRITE_TAC [dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def,
-                    LET_THM] >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  Cases_on `fn_entry_label fn` >> simp[]
-  >- ((* NONE: no entry join *)
-      Cases_on `MAP (\nbr. dom_edge_transfer () nbr lbl
-                  (df_boundary (fn_labels fn) st nbr))
-                  (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[]
-      >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
-      >> simp[dfHelperDefsTheory.list_intersect_def] >>
-         qspecl_then [`t`, `FILTER (\x. MEM x h) (fn_labels fn)`]
-           strip_assume_tac dfHelperPropsTheory.foldl_intersect_is_filter >>
-         qexists_tac `\x. P x /\ MEM x h` >>
-         simp[rich_listTheory.FILTER_FILTER])
-  >> (* SOME x: have entry join when lbl = x *)
-     Cases_on `lbl = x` >> simp[]
-     >- ((* lbl = entry *)
-         simp[dfHelperDefsTheory.list_intersect_def] >>
-         Cases_on `MAP (\nbr. dom_edge_transfer () nbr x
-                     (df_boundary (fn_labels fn) st nbr))
-                     (cfg_preds_of (cfg_analyze fn) x)` >> simp[]
-         >- ((* edge_vals = []: FILTER (\y. MEM y fn_labels) [x] *)
-             Cases_on `MEM x (fn_labels fn)` >> simp[]
-             >- (qexists_tac `$= x` >> metis_tac[ALL_DISTINCT_FILTER])
-             >> qexists_tac `\y. F` >> simp[])
-         >> (* edge_vals = h::t: FILTER (\y. MEM y (FOLDL ...)) [x] *)
-            simp[dfHelperDefsTheory.list_intersect_def] >>
-            Cases_on `MEM x (FOLDL list_intersect
-                       (FILTER (\x. MEM x h) (fn_labels fn)) t)` >> simp[]
-            >- (`MEM x (fn_labels fn)` by (
-                  `set (FOLDL list_intersect
-                     (FILTER (\x. MEM x h) (fn_labels fn)) t)
-                   SUBSET set (FILTER (\x. MEM x h) (fn_labels fn))` by
-                    simp[dfHelperPropsTheory.foldl_list_intersect_subset] >>
-                  fs[pred_setTheory.SUBSET_DEF, listTheory.MEM_FILTER]) >>
-                qexists_tac `$= x` >> metis_tac[ALL_DISTINCT_FILTER])
-            >> qexists_tac `\y. F` >> simp[])
-     >> (* lbl ≠ entry: same as NONE *)
-        Cases_on `MAP (\nbr. dom_edge_transfer () nbr lbl
-                    (df_boundary (fn_labels fn) st nbr))
-                    (cfg_preds_of (cfg_analyze fn) lbl)` >> simp[]
-        >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
-        >> simp[dfHelperDefsTheory.list_intersect_def] >>
-           qspecl_then [`t`, `FILTER (\x. MEM x h) (fn_labels fn)`]
-             strip_assume_tac dfHelperPropsTheory.foldl_intersect_is_filter >>
-           qexists_tac `\x. P x /\ MEM x h` >>
-           simp[rich_listTheory.FILTER_FILTER]
-QED
-
-(* dom_joined only depends on ds_boundary *)
-Theorem dom_joined_boundary_only[local]:
-  !fn st1 st2 lbl.
-    st1.ds_boundary = st2.ds_boundary ==>
-    dom_joined fn st1 lbl = dom_joined fn st2 lbl
-Proof
-  rw[dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM, dfAnalyzeDefsTheory.df_boundary_def]
 QED
 
 Triviality edge_transfer_mono:
@@ -813,413 +721,6 @@ Proof
      DECIDE_TAC
 QED
 
-Triviality dom_inst_complement_mono_base[local]:
-  !fn st inst_map.
-    (!k v_old v_new. FLOOKUP st.ds_inst k = SOME v_old /\
-       FLOOKUP inst_map k = SOME v_new ==>
-       ALL_DISTINCT v_new /\ ALL_DISTINCT v_old /\
-       set v_new SUBSET set v_old) ==>
-    dom_inst_complement fn st <=
-    dom_inst_complement fn (st with ds_inst := FUNION inst_map st.ds_inst)
-Proof
-  rw[dom_inst_complement_def, finite_mapTheory.FDOM_FUNION] >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  qexists_tac `SIGMA (\k. LENGTH (fn_labels fn) -
-    LENGTH (THE (FLOOKUP (FUNION inst_map st.ds_inst) k)))
-    (FDOM st.ds_inst)` >>
-  conj_tac
-  >- (irule pred_setTheory.SUM_IMAGE_MONO_LESS_EQ >> rw[] >>
-      simp[finite_mapTheory.FLOOKUP_FUNION] >>
-      Cases_on `FLOOKUP inst_map x` >> simp[] >>
-      `?v_old. FLOOKUP st.ds_inst x = SOME v_old` by
-        metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
-      simp[] >> res_tac >>
-      `LENGTH x' <= LENGTH v_old` by
-        metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET, pred_setTheory.CARD_SUBSET,
-                  listTheory.FINITE_LIST_TO_SET, arithmeticTheory.LESS_EQ_TRANS] >>
-      DECIDE_TAC)
-  >- (irule pred_setTheory.SUM_IMAGE_SUBSET_LE >>
-      simp[pred_setTheory.SUBSET_UNION])
-QED
-
-(* Generalized: works with any st' that has st'.ds_inst = FUNION inst_map st.ds_inst *)
-Triviality dom_inst_complement_mono[local]:
-  !fn st st' inst_map.
-    st'.ds_inst = FUNION inst_map st.ds_inst /\
-    (!k v_old v_new. FLOOKUP st.ds_inst k = SOME v_old /\
-       FLOOKUP inst_map k = SOME v_new ==>
-       ALL_DISTINCT v_new /\ ALL_DISTINCT v_old /\
-       set v_new SUBSET set v_old) ==>
-    dom_inst_complement fn st <= dom_inst_complement fn st'
-Proof
-  rpt strip_tac >>
-  `dom_inst_complement fn st' =
-   dom_inst_complement fn (st with ds_inst := FUNION inst_map st.ds_inst)` by
-    simp[dom_inst_complement_def] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
-  irule dom_inst_complement_mono_base >> metis_tac[]
-QED
-
-Triviality dom_inst_complement_strict_base[local]:
-  !fn st inst_map k0 v0 v_new.
-    FLOOKUP st.ds_inst k0 = SOME v0 /\
-    FLOOKUP inst_map k0 = SOME v_new /\
-    LENGTH v_new < LENGTH v0 /\
-    LENGTH v0 <= LENGTH (fn_labels fn) /\
-    (!k v_old v_new'. FLOOKUP st.ds_inst k = SOME v_old /\
-       FLOOKUP inst_map k = SOME v_new' ==>
-       LENGTH v_new' <= LENGTH v_old) ==>
-    dom_inst_complement fn st <
-    dom_inst_complement fn (st with ds_inst := FUNION inst_map st.ds_inst)
-Proof
-  rpt strip_tac >>
-  simp[dom_inst_complement_def, finite_mapTheory.FDOM_FUNION] >>
-  irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-  qexists_tac `SIGMA (\k. LENGTH (fn_labels fn) -
-    LENGTH (THE (FLOOKUP (FUNION inst_map st.ds_inst) k)))
-    (FDOM st.ds_inst)` >>
-  conj_tac
-  >- (irule pred_setTheory.SUM_IMAGE_MONO_LESS >>
-      rpt conj_tac
-      >- (rw[] >>
-          simp[finite_mapTheory.FLOOKUP_FUNION] >>
-          Cases_on `FLOOKUP inst_map x` >> simp[] >>
-          `?vx. FLOOKUP st.ds_inst x = SOME vx` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
-          simp[] >> res_tac >> DECIDE_TAC)
-      >- (qexists_tac `k0` >> simp[] >>
-          `k0 IN FDOM st.ds_inst` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-          simp[finite_mapTheory.FLOOKUP_FUNION] >> DECIDE_TAC)
-      >- simp[])
-  >- (irule pred_setTheory.SUM_IMAGE_SUBSET_LE >>
-      simp[pred_setTheory.SUBSET_UNION])
-QED
-
-(* Generalized: works with any st' that has st'.ds_inst = FUNION inst_map st.ds_inst *)
-Triviality dom_inst_complement_strict[local]:
-  !fn st st' inst_map k0 v0 v_new.
-    st'.ds_inst = FUNION inst_map st.ds_inst /\
-    FLOOKUP st.ds_inst k0 = SOME v0 /\
-    FLOOKUP inst_map k0 = SOME v_new /\
-    LENGTH v_new < LENGTH v0 /\
-    LENGTH v0 <= LENGTH (fn_labels fn) /\
-    (!k v_old v_new'. FLOOKUP st.ds_inst k = SOME v_old /\
-       FLOOKUP inst_map k = SOME v_new' ==>
-       LENGTH v_new' <= LENGTH v_old) ==>
-    dom_inst_complement fn st < dom_inst_complement fn st'
-Proof
-  rpt strip_tac >>
-  `dom_inst_complement fn st' =
-   dom_inst_complement fn (st with ds_inst := FUNION inst_map st.ds_inst)` by
-    simp[dom_inst_complement_def] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
-  irule dom_inst_complement_strict_base >> metis_tac[]
-QED
-
-Triviality dom_boundary_len_mono[local]:
-  !fn st lbl new_bv inst_map fv x.
-    Abbrev (new_bv = list_intersect
-              (df_boundary (fn_labels fn) st lbl) fv) ==>
-    LENGTH (df_boundary (fn_labels fn)
-              <|ds_inst := FUNION inst_map st.ds_inst;
-                ds_boundary := st.ds_boundary |+ (lbl, new_bv)|> x) <=
-    LENGTH (df_boundary (fn_labels fn) st x)
-Proof
-  rpt strip_tac >>
-  simp[dfAnalyzeDefsTheory.df_boundary_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `x = lbl` >> simp[] >>
-  fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_boundary_def] >>
-  metis_tac[dfHelperPropsTheory.list_intersect_length_le]
-QED
-
-(* When all inst_map values equal joined, and all overlapping st keys
-   also have value joined, and FDOM inst_map ⊆ FDOM st.ds_inst,
-   then FUNION inst_map st.ds_inst = st.ds_inst *)
-Triviality dom_funion_id[local]:
-  !(inst_map:(string # num) |-> 'b) (st:'b df_state).
-    FDOM inst_map SUBSET FDOM st.ds_inst /\
-    (!k. k IN FDOM inst_map ==>
-       FLOOKUP inst_map k = FLOOKUP st.ds_inst k) ==>
-    FUNION inst_map st.ds_inst = st.ds_inst
-Proof
-  rw[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
-     finite_mapTheory.FLOOKUP_FUNION] >>
-  Cases_on `FLOOKUP inst_map x` >> simp[] >>
-  `x IN FDOM inst_map` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-  res_tac >> fs[]
-QED
-
-(* When the fold produces values all equal to v0, and dom_state_inv holds,
-   then FUNION inst_map st.ds_inst = st.ds_inst.
-   Takes dom_state_inv directly to avoid fs[] corruption of v0. *)
-Triviality dom_identity_funion[local]:
-  !fn st inst_map lbl v0.
-    dom_state_inv fn st /\
-    FDOM inst_map SUBSET FDOM st.ds_inst /\
-    FLOOKUP st.ds_inst (lbl, 0n) = SOME v0 /\
-    (!k v. FLOOKUP inst_map k = SOME v ==> v = v0) /\
-    (!k. k IN FDOM inst_map ==> FST k = lbl) ==>
-    FUNION inst_map st.ds_inst = st.ds_inst
-Proof
-  rpt strip_tac >>
-  irule dom_funion_id >> reverse conj_tac >- fs[] >>
-  rpt strip_tac >>
-  `?w. FLOOKUP inst_map k = SOME w` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  `w = v0` by res_tac >>
-  `k IN FDOM st.ds_inst` by metis_tac[pred_setTheory.SUBSET_DEF] >>
-  `?sv. FLOOKUP st.ds_inst k = SOME sv` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  `FST k = lbl` by res_tac >>
-  Cases_on `k` >> fs[] >>
-  qpat_x_assum `dom_state_inv fn st` mp_tac >>
-  simp[dom_state_inv_def] >> rpt strip_tac >>
-  res_tac >> fs[]
-QED
-
-(* Helper: when inst and boundary updates are identity, process = st.
-   Takes the fold equation with the raw case expression as input,
-   matching what pairarg_tac produces in dom_measure_increases. *)
-Triviality dom_process_identity[local]:
-  !fn lbl st bb inst_map final_val.
-    MEM lbl (fn_labels fn) /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    bb.bb_label = lbl /\
-    df_fold_block Forward (dom_transfer_inst ()) lbl bb.bb_instructions
-      (dom_joined fn st lbl) = (final_val, inst_map) /\
-    FUNION inst_map st.ds_inst = st.ds_inst /\
-    list_intersect (df_boundary (fn_labels fn) st lbl) final_val =
-      df_boundary (fn_labels fn) st lbl /\
-    lbl IN FDOM st.ds_boundary /\
-    st.ds_boundary |+ (lbl, df_boundary (fn_labels fn) st lbl) =
-      st.ds_boundary ==>
-    df_process_block Forward (fn_labels fn) list_intersect
-      dom_transfer_inst dom_edge_transfer ()
-      (OPTION_MAP (\l. (l,[l])) (fn_entry_label fn))
-      (cfg_analyze fn) fn.fn_blocks lbl st = st
-Proof
-  rpt strip_tac >>
-  simp_tac std_ss [dfAnalyzeDefsTheory.df_process_block_def,
-                   LET_THM, dfAnalyzeDefsTheory.direction_case_def] >>
-  `(case lookup_block lbl fn.fn_blocks of
-      NONE => [] | SOME bb => bb.bb_instructions) =
-   bb.bb_instructions` by (ASM_REWRITE_TAC [] >> simp[]) >>
-  pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
-  fs[GSYM dom_joined_def] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  simp[dfAnalyzeDefsTheory.df_state_component_equality]
-QED
-
-(* B2 contradiction: if joined=v0 (old value at slot 0), boundary unchanged,
-   FDOM unchanged, then process = st. Used in measure_increases to rule out
-   the "all unchanged" case. *)
-Triviality dom_b2_process_eq_st:
-  !fn lbl st bb inst_map joined v0.
-    wf_function fn /\
-    MEM lbl (fn_labels fn) /\
-    dom_state_inv fn st /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    bb.bb_label = lbl /\
-    df_fold_block Forward (dom_transfer_inst ()) lbl bb.bb_instructions
-      (dom_joined fn st lbl) = (joined, inst_map) /\
-    (!k v. FLOOKUP inst_map k = SOME v ==> v = joined) /\
-    (!k. k IN FDOM inst_map ==> FST k = lbl) /\
-    FDOM inst_map SUBSET FDOM st.ds_inst /\
-    (lbl, 0n) IN FDOM inst_map /\
-    FLOOKUP st.ds_inst (lbl, 0n) = SOME v0 /\
-    joined = v0 /\
-    list_intersect (df_boundary (fn_labels fn) st lbl) joined =
-      df_boundary (fn_labels fn) st lbl ==>
-    df_process_block Forward (fn_labels fn) list_intersect
-      dom_transfer_inst dom_edge_transfer ()
-      (OPTION_MAP (\l. (l,[l])) (fn_entry_label fn))
-      (cfg_analyze fn) fn.fn_blocks lbl st = st
-Proof
-  rpt strip_tac >>
-  `(lbl,0n) IN FDOM st.ds_inst` by fs[pred_setTheory.SUBSET_DEF] >>
-  `!k v'. FLOOKUP inst_map k = SOME v' ==> v' = v0` by metis_tac[] >>
-  `FUNION inst_map st.ds_inst = st.ds_inst` by
-    (match_mp_tac dom_identity_funion >> metis_tac[]) >>
-  `lbl IN FDOM st.ds_boundary` by
-    (fs[dom_state_inv_def] >> metis_tac[]) >>
-  `st.ds_boundary |+ (lbl, df_boundary (fn_labels fn) st lbl) =
-     st.ds_boundary` by
-    (irule finite_mapTheory.FUPDATE_ELIM >>
-     simp[dfAnalyzeDefsTheory.df_boundary_def,
-          finite_mapTheory.FLOOKUP_DEF,
-          finite_mapTheory.FAPPLY_FUPDATE_THM]) >>
-  match_mp_tac dom_process_identity >>
-  qexistsl_tac [`bb`, `inst_map`, `joined`] >>
-  simp[]
-QED
-
-(* Case A helper: boundary changed → boundary sum strictly increases *)
-Triviality dom_measure_case_a[local]:
-  !fn lbl st new_bv inst_map joined.
-    wf_function fn /\
-    MEM lbl (fn_labels fn) /\
-    dom_state_inv fn st /\
-    new_bv = list_intersect (df_boundary (fn_labels fn) st lbl) joined /\
-    new_bv <> df_boundary (fn_labels fn) st lbl ==>
-    SUM (MAP (\l. LENGTH (fn_labels fn) -
-                  LENGTH (df_boundary (fn_labels fn) st l)) (fn_labels fn)) <
-    SUM (MAP (\l. LENGTH (fn_labels fn) -
-                  LENGTH (df_boundary (fn_labels fn)
-                    <|ds_inst := inst_map ⊌ st.ds_inst;
-                      ds_boundary := st.ds_boundary |+ (lbl,new_bv)|> l))
-             (fn_labels fn))
-Proof
-  rpt strip_tac >>
-  `Abbrev (new_bv = list_intersect (df_boundary (fn_labels fn) st lbl) joined)` by
-    fs[markerTheory.Abbrev_def] >>
-  `ALL_DISTINCT (fn_labels fn)` by fs[venomWfTheory.wf_function_def] >>
-  `!l v. FLOOKUP st.ds_boundary l = SOME v ==>
-     ALL_DISTINCT v /\ set v SUBSET set (fn_labels fn)` by
-    fs[dom_state_inv_def] >>
-  `ALL_DISTINCT (df_boundary (fn_labels fn) st lbl)` by
-    metis_tac[dfAnalyzeProofsTheory.df_boundary_all_distinct] >>
-  `LENGTH new_bv < LENGTH (df_boundary (fn_labels fn) st lbl)` by
-    metis_tac[dfHelperPropsTheory.list_intersect_strict_length] >>
-  qspecl_then [
-    `\x. LENGTH (df_boundary (fn_labels fn) st x)`,
-    `\x. LENGTH (df_boundary (fn_labels fn)
-       <|ds_inst := inst_map ⊌ st.ds_inst;
-         ds_boundary := st.ds_boundary |+ (lbl,new_bv)|> x)`,
-    `LENGTH (fn_labels fn)`, `fn_labels fn`, `lbl`
-  ] mp_tac sum_complement_strict >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  impl_tac >| [
-    rpt conj_tac >| [
-      first_assum ACCEPT_TAC,
-      srw_tac [][dfAnalyzeDefsTheory.df_boundary_def,
-                 finite_mapTheory.FLOOKUP_UPDATE] >>
-      fs[dfAnalyzeDefsTheory.df_boundary_def],
-      metis_tac[dfAnalyzeProofsTheory.df_boundary_length_le],
-      rpt strip_tac >| [
-        irule dom_boundary_len_mono >>
-        qexists_tac `joined` >> first_assum ACCEPT_TAC,
-        metis_tac[dfAnalyzeProofsTheory.df_boundary_length_le]
-      ]
-    ],
-    simp[]
-  ]
-QED
-
-(* Case B helper: boundary unchanged → inst complement strict or CARD strict *)
-Triviality dom_measure_case_b[local]:
-  !fn lbl st bb inst_map joined.
-    wf_function fn /\
-    MEM lbl (fn_labels fn) /\
-    dom_state_inv fn st /\
-    joined = dom_joined fn st lbl /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    bb.bb_label = lbl /\
-    MEM bb fn.fn_blocks /\
-    df_fold_block Forward (dom_transfer_inst ()) lbl bb.bb_instructions
-      (dom_joined fn st lbl) = (joined, inst_map) /\
-    (!k v. FLOOKUP inst_map k = SOME v ==> v = joined) /\
-    (!k. k IN FDOM inst_map ==> FST k = lbl) /\
-    (lbl, 0n) IN FDOM inst_map /\
-    FDOM inst_map SUBSET df_valid_inst_keys fn.fn_blocks /\
-    (!k v_old. FLOOKUP st.ds_inst k = SOME v_old /\ k IN FDOM inst_map ==>
-       set joined SUBSET set v_old) /\
-    list_intersect (df_boundary (fn_labels fn) st lbl) joined =
-      df_boundary (fn_labels fn) st lbl /\
-    df_process_block Forward (fn_labels fn) list_intersect
-      dom_transfer_inst dom_edge_transfer ()
-      (OPTION_MAP (\l. (l,[l])) (fn_entry_label fn))
-      (cfg_analyze fn) fn.fn_blocks lbl st <> st ==>
-    dom_inst_complement fn st <
-    dom_inst_complement fn
-      <|ds_inst := inst_map ⊌ st.ds_inst;
-        ds_boundary := st.ds_boundary |+
-          (lbl, df_boundary (fn_labels fn) st lbl)|> \/
-    CARD (FDOM st.ds_inst) <
-    CARD (FDOM <|ds_inst := inst_map ⊌ st.ds_inst;
-                 ds_boundary := st.ds_boundary |+
-                   (lbl, df_boundary (fn_labels fn) st lbl)|>.ds_inst)
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (fn_labels fn)` by fs[venomWfTheory.wf_function_def] >>
-  `ALL_DISTINCT joined /\ set joined SUBSET set (fn_labels fn)` by
-    metis_tac[dom_joined_invariant] >>
-  qpat_assum `dom_state_inv fn st`
-    (fn th => assume_tac th >>
-     strip_assume_tac (SIMP_RULE std_ss [dom_state_inv_def] th)) >>
-  Cases_on `FDOM inst_map SUBSET FDOM st.ds_inst`
-  >- ((* B2: all inst keys exist *)
-      `(lbl, 0n) IN FDOM st.ds_inst` by
-        fs[pred_setTheory.SUBSET_DEF] >>
-      `?v0. FLOOKUP st.ds_inst (lbl, 0n) = SOME v0` by
-        fs[finite_mapTheory.FLOOKUP_DEF] >>
-      `set joined SUBSET set v0` by
-        (qpat_assum `!k v_old. FLOOKUP st.ds_inst k = SOME v_old /\
-           k IN FDOM inst_map ==> _`
-          (qspecl_then [`(lbl,0n)`, `v0`] mp_tac) >>
-         simp[]) >>
-      `ALL_DISTINCT v0 /\ set v0 SUBSET set (fn_labels fn)` by
-        (qpat_assum `!k v. FLOOKUP st.ds_inst k = SOME v ==>
-           ALL_DISTINCT v /\ _`
-          (drule_then assume_tac) >> fs[]) >>
-      `?P. v0 = FILTER P (fn_labels fn)` by
-        (qpat_assum `!lbl' v0'. FLOOKUP st.ds_inst (lbl',0) = SOME v0' ==>
-           ?P. _`
-          (drule_then assume_tac) >> metis_tac[]) >>
-      `?Q. joined = FILTER Q (fn_labels fn)` by
-        metis_tac[dom_joined_is_filter] >>
-      Cases_on `set (joined:string list) = set v0`
-      >- ((* set equal: derive joined = v0, then process = st — contradiction *)
-          `FILTER Q (fn_labels fn) = FILTER P (fn_labels fn)` by
-            (irule dfHelperPropsTheory.filter_set_eq_filter_eq >> rfs[]) >>
-          `joined = v0` by metis_tac[] >>
-          `df_process_block Forward (fn_labels fn) list_intersect
-             dom_transfer_inst dom_edge_transfer ()
-             (OPTION_MAP (\l. (l,[l])) (fn_entry_label fn))
-             (cfg_analyze fn) fn.fn_blocks lbl st = st` by
-            (match_mp_tac dom_b2_process_eq_st >>
-             qexistsl_tac [`bb`, `inst_map`, `joined`, `v0`] >>
-             rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          metis_tac[])
-      >- ((* set not equal: proper subset, derive strict inst complement *)
-          DISJ1_TAC >>
-          `LENGTH joined < LENGTH v0` by
-            metis_tac[all_distinct_psubset_length] >>
-          irule dom_inst_complement_strict >>
-          simp[dfAnalyzeDefsTheory.df_state_accessors] >>
-          qexistsl_tac [`inst_map`, `(lbl, 0n)`, `v0`, `joined`] >> simp[] >>
-          rpt conj_tac
-          >- (`CARD (set v0) <= CARD (set (fn_labels fn))` by
-                (irule pred_setTheory.CARD_SUBSET >> fs[]) >>
-              metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET])
-          >- (rpt strip_tac >>
-              `v_new' = joined` by res_tac >>
-              `k IN FDOM inst_map` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-              `set joined SUBSET set v_old` by
-                (qpat_assum `!k v_old. FLOOKUP st.ds_inst k = SOME v_old /\
-                   k IN FDOM inst_map ==> _`
-                  (qspecl_then [`k`, `v_old`] mp_tac) >> simp[]) >>
-              `ALL_DISTINCT v_old` by
-                (qpat_assum `!k v. FLOOKUP st.ds_inst k = SOME v ==>
-                   ALL_DISTINCT v /\ _`
-                  (drule_then assume_tac) >> fs[]) >>
-              `CARD (set joined) <= CARD (set v_old)` by
-                (irule pred_setTheory.CARD_SUBSET >> fs[]) >>
-              metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET])
-          >- (`(lbl,0n) IN FDOM inst_map` by fs[] >>
-              `?w. FLOOKUP inst_map (lbl, 0n) = SOME w` by
-                fs[finite_mapTheory.FLOOKUP_DEF] >>
-              `w = joined` by res_tac >> fs[])))
-  >- ((* B1: some inst key is new — CARD strict *)
-      DISJ2_TAC >>
-      simp[dfAnalyzeDefsTheory.df_state_accessors,
-           finite_mapTheory.FDOM_FUNION] >>
-      irule pred_setTheory.CARD_PSUBSET >>
-      simp[pred_setTheory.PSUBSET_DEF, pred_setTheory.SUBSET_UNION] >>
-      fs[pred_setTheory.SUBSET_DEF] >>
-      metis_tac[pred_setTheory.IN_UNION])
-QED
-
 (* --- Measure strictly increases when state changes --- *)
 Theorem dom_measure_increases[local]:
   !fn lbl st.
@@ -1370,49 +871,6 @@ Proof
   metis_tac[dom_joined_subset_fn_labels]
 QED
 
-(* dom_joined only depends on ds_boundary, not ds_inst *)
-Triviality dom_joined_inst_irrelevant:
-  !fn st inst lbl.
-    dom_joined fn (st with ds_inst := inst) lbl = dom_joined fn st lbl
-Proof
-  rw[dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM, dfAnalyzeDefsTheory.df_boundary_def]
-QED
-
-(* dom_extra_inv only depends on ds_boundary, not ds_inst *)
-Triviality dom_extra_inv_inst_irrelevant:
-  !fn st inst.
-    dom_extra_inv fn (st with ds_inst := inst) = dom_extra_inv fn st
-Proof
-  rw[dom_extra_inv_def, dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM,
-     dfAnalyzeDefsTheory.df_boundary_def]
-QED
-
-(* dom_joined monotonicity for bare record form (no st with) *)
-Triviality dom_joined_boundary_mono_bare:
-  !fn st lbl new_bnd l.
-    set new_bnd SUBSET set (df_boundary (fn_labels fn) st lbl) ==>
-    set (dom_joined fn
-      <|ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> l) SUBSET
-    set (dom_joined fn st l)
-Proof
-  rpt strip_tac >>
-  `dom_joined fn <|ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> l =
-   dom_joined fn (st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd)) l`
-    by (irule dom_joined_boundary_only >> simp[]) >>
-  rw[] >> irule dom_joined_boundary_mono >> simp[]
-QED
-
-(* Same ds_boundary implies same dom_extra_inv *)
-Triviality dom_extra_inv_boundary_eq:
-  !fn st1 st2. st1.ds_boundary = st2.ds_boundary ==>
-    (dom_extra_inv fn st1 <=> dom_extra_inv fn st2)
-Proof
-  rw[dom_extra_inv_def] >>
-  `dom_joined fn st1 = dom_joined fn st2` by
-    (rw[FUN_EQ_THM] >> irule dom_joined_boundary_only >> simp[]) >>
-  fs[]
-QED
-
 (* KEY HELPER: updating one boundary entry preserves dom_extra_inv *)
 Triviality dom_extra_inv_boundary_update:
   !fn st lbl new_bdy.
@@ -1535,22 +993,6 @@ Proof
   irule foldl_inst_only_boundary >>
   simp[LET_THM] >>
   rpt gen_tac >> pairarg_tac >> simp[]
-QED
-
-(* If Q only depends on ds_boundary and Q holds before populate_inst,
-   then Q holds after. *)
-Triviality populate_inst_boundary_inv[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st Q.
-    (!s1 s2. s1.ds_boundary = s2.ds_boundary ==> (Q s1 <=> Q s2)) ==>
-    Q st ==>
-    Q (df_populate_inst dir bottom join transfer edge_transfer ctx
-         entry_val cfg bbs lbls st)
-Proof
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`st`,
-    `df_populate_inst dir bottom join transfer edge_transfer ctx
-       entry_val cfg bbs lbls st`] mp_tac) >>
-  simp[populate_inst_ds_boundary]
 QED
 
 (* dom_extra_inv only depends on ds_boundary *)
@@ -1709,19 +1151,6 @@ Proof
    {lbl | cfg_reachable_of (cfg_analyze fn) lbl}` by
     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_sets] >>
   fs[pred_setTheory.EXTENSION, pred_setTheory.GSPECIFICATION]
-QED
-
-(* dom_sets_of extracts boundary values for each label *)
-Theorem dom_sets_lookup[local]:
-  !fn lbl.
-    wf_function fn /\ MEM lbl (fn_labels fn) ==>
-    FLOOKUP (dom_sets_of fn (dom_fixpoint fn)) lbl =
-    SOME (df_boundary (fn_labels fn) (dom_fixpoint fn) lbl)
-Proof
-  rpt strip_tac >>
-  simp[dominatorDefsTheory.dom_sets_of_def, LET_THM] >>
-  irule foldl_fupdate_flookup >>
-  fs[venomWfTheory.wf_function_def]
 QED
 
 (* Bridge: fmap_lookup_list on da_dominators = df_boundary at fixpoint *)
@@ -1950,16 +1379,6 @@ Proof
   metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_sets_proof,
             pred_setTheory.EXTENSION, pred_setTheory.IN_GSPEC_IFF,
             listTheory.MEM, pred_setTheory.SPECIFICATION]
-QED
-
-(* For reachable labels: boundary ⊆ joined at fixpoint *)
-Triviality dom_boundary_sub_joined:
-  !fn lbl.
-    wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
-    set (df_boundary (fn_labels fn) (dom_fixpoint fn) lbl) SUBSET
-    set (dom_joined fn (dom_fixpoint fn) lbl)
-Proof
-  metis_tac[dom_fixpoint_boundary_subset]
 QED
 
 (* df_boundary at fixpoint is always a subset of fn_labels *)
@@ -2582,15 +2001,6 @@ Proof
 QED
 
 (* FEMPTY corollaries — clean rewrites for FOLDL-built maps *)
-Triviality foldl_fupdate_fempty[local]:
-  !labels (f:'a -> 'b) k.
-    ALL_DISTINCT labels /\ MEM k labels ==>
-    FLOOKUP (FOLDL (\m lbl. m |+ (lbl, f lbl)) FEMPTY labels) k =
-    SOME (f k)
-Proof
-  rpt strip_tac >> drule foldl_fupdate_lookup >>
-  disch_then (qspecl_then [`f`, `FEMPTY`, `k`] mp_tac) >> simp[]
-QED
 
 Triviality foldl_fupdate_opt_fempty[local]:
   !labels (f:'a -> 'b option) k.
@@ -2638,12 +2048,6 @@ Triviality qsort_length[local]:
   !R (xs:'a list). LENGTH (QSORT R xs) = LENGTH xs
 Proof
   metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_LENGTH]
-QED
-
-Triviality qsort_mem[local]:
-  !R (xs:'a list) x. MEM x (QSORT R xs) <=> MEM x xs
-Proof
-  metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]
 QED
 
 (* Bridge: idom_of connects to compute_idom_for *)
@@ -3007,14 +2411,6 @@ Proof
   gvs[]
 QED
 
-(* f h ≠ f x when h::t has ALL_DISTINCT (MAP f) and x ∈ t *)
-Triviality ad_map_head_neq[local]:
-  !f h t x. ALL_DISTINCT (MAP f (h::t)) /\ MEM x t ==> f h <> f x
-Proof
-  simp[listTheory.MAP, listTheory.ALL_DISTINCT] >>
-  rpt strip_tac >> gvs[] >> metis_tac[listTheory.MEM_MAP_f]
-QED
-
 (* QSORT with strict < on distinct-image elements produces a SORTED list.
    Key: on distinct elements, ¬(y < h) ∧ y ≠ h ⟹ h < y (trichotomy). *)
 Triviality qsort_strict_sorted[local]:
@@ -3086,25 +2482,6 @@ Proof
   metis_tac[]
 QED
 
-(* SORTED R (QSORT R doms) /\ transitive R /\ MEM lbl doms /\
-   (!x. MEM x doms /\ x <> lbl ==> R lbl x) ==>
-   HD (QSORT R doms) = lbl, given LENGTH >= 1 *)
-Triviality sorted_hd_is_min[local]:
-  !R (l:'a list) m.
-    transitive R /\ SORTED R l /\ MEM m l /\
-    (!x. MEM x l /\ x <> m ==> R m x) /\
-    irreflexive R ==>
-    HD l = m
-Proof
-  rpt strip_tac >>
-  Cases_on `l` >> fs[] >>
-  Cases_on `h = m` >> simp[] >>
-  `R m h` by metis_tac[] >>
-  `R h m` by metis_tac[sortingTheory.SORTED_EQ, listTheory.MEM] >>
-  fs[relationTheory.irreflexive_def, relationTheory.transitive_def] >>
-  metis_tac[]
-QED
-
 (* dom_post_order gives INDEX_OF; this corollary gives post_order_index directly *)
 Triviality dom_post_order_poi[local]:
   !fn bb d lbl.
@@ -3120,17 +2497,6 @@ Proof
   drule_all (strip_let dom_post_order) >>
   strip_tac >>
   simp[dominatorDefsTheory.post_order_index_def]
-QED
-
-(* transitive R /\ SORTED R (a::b::rest) /\ MEM x rest ==> R b x *)
-Triviality sorted_second_rest[local]:
-  !R (a:'a) b rest x.
-    transitive R /\ SORTED R (a :: b :: rest) /\ MEM x rest ==>
-    R b x
-Proof
-  rpt strip_tac >>
-  `SORTED R (b :: rest)` by fs[sortingTheory.SORTED_DEF] >>
-  metis_tac[sortingTheory.SORTED_EQ, listTheory.MEM]
 QED
 
 Theorem idom_is_immediate_proof:
@@ -3333,24 +2699,6 @@ Proof
   Cases_on `n = k` >> simp[cfgDefsTheory.set_insert_def] >>
   Cases_on `FLOOKUP df k` >> simp[MEM] >>
   Cases_on `MEM v x'` >> simp[MEM] >> metis_tac[]
-QED
-
-(* walk_to_idom monotonicity: walk only adds entries *)
-Triviality walk_to_idom_mono[local]:
-  !fuel idom target runner df n x.
-    MEM x (fmap_lookup_list df n) ==>
-    MEM x (fmap_lookup_list (walk_to_idom idom target runner df fuel) n)
-Proof
-  Induct_on `fuel` >>
-  simp[dominatorDefsTheory.walk_to_idom_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `FLOOKUP idom target` >> simp[] >>
-  Cases_on `runner = x'` >> simp[] >>
-  simp[LET_THM] >>
-  Cases_on `FLOOKUP idom runner` >> simp[] >-
-    simp[fmap_update_set_insert_iff] >>
-  first_x_assum irule >>
-  simp[fmap_update_set_insert_iff]
 QED
 
 (* idom_step: the relation followed by walk_to_idom *)
@@ -3923,204 +3271,6 @@ Triviality idom_step_deterministic[local]:
   !idom a b c. idom_step idom a b /\ idom_step idom a c ==> b = c
 Proof
   simp[idom_step_def] >> metis_tac[optionTheory.SOME_11]
-QED
-
-(* df_fold_forward with identity transfer is identity on acc *)
-Triviality df_fold_forward_id[local]:
-  !lbl' instrs idx acc im.
-    FST (df_fold_forward (dom_transfer_inst ()) lbl' instrs idx acc im) = acc
-Proof
-  Induct_on `instrs` >>
-  simp[dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM,
-       dominatorDefsTheory.dom_transfer_inst_def]
-QED
-
-(* FOLDL list_intersect xs over copies of xs is identity *)
-Triviality foldl_list_intersect_self[local]:
-  !ls xs. FOLDL list_intersect xs (MAP (\v. xs) ls) = xs
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  `list_intersect xs xs = xs` by
-    simp[dfHelperDefsTheory.list_intersect_def,
-         listTheory.FILTER_EQ_ID, listTheory.EVERY_MEM] >>
-  simp[]
-QED
-
-(* Entry label is always reachable *)
-Triviality entry_is_reachable[local]:
-  !fn elbl. wf_function fn /\ fn_entry_label fn = SOME elbl ==>
-            cfg_reachable_of (cfg_analyze fn) elbl
-Proof
-  rpt strip_tac >>
-  `?bb. entry_block fn = SOME bb` by metis_tac[wf_entry_block_exists] >>
-  `bb.bb_label = elbl` by fs[venomInstTheory.fn_entry_label_def] >>
-  mp_tac (INST_TYPE [alpha |-> ``:string``]
-            cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability
-          |> Q.SPECL [`fn`, `bb`, `elbl`]) >> simp[] >>
-  simp[cfgDefsTheory.cfg_path_def]
-QED
-
-(* Predecessors of unreachable nodes are unreachable *)
-Triviality preds_of_unreachable[local]:
-  !fn q nbr. wf_function fn /\
-             ~cfg_reachable_of (cfg_analyze fn) q /\
-             MEM nbr (cfg_preds_of (cfg_analyze fn) q) ==>
-             ~cfg_reachable_of (cfg_analyze fn) nbr
-Proof
-  rpt strip_tac >> CCONTR_TAC >> fs[] >>
-  `?bb. entry_block fn = SOME bb` by metis_tac[wf_entry_block_exists] >>
-  `cfg_reachable_of (cfg_analyze fn) q` suffices_by metis_tac[] >>
-  `MEM q (cfg_succs_of (cfg_analyze fn) nbr)` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
-  `cfg_path (cfg_analyze fn) bb.bb_label nbr` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability] >>
-  mp_tac (INST_TYPE [alpha |-> ``:string``]
-            cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability
-          |> Q.SPECL [`fn`, `bb`, `q`]) >> simp[] >>
-  fs[cfgDefsTheory.cfg_path_def] >>
-  simp[Once relationTheory.RTC_CASES2] >>
-  disj2_tac >> qexists_tac `nbr` >> simp[]
-QED
-
-(* Unreachable boundary preservation through df_process_block *)
-Triviality unreachable_bdy_preserved[local]:
-  !fn lbl st q.
-    wf_function fn /\ MEM lbl (fn_labels fn) /\ dom_full_inv fn st /\
-    (!q. ~cfg_reachable_of (cfg_analyze fn) q /\ MEM q (fn_labels fn) ==>
-         FLOOKUP st.ds_boundary q = SOME (fn_labels fn)) /\
-    ~cfg_reachable_of (cfg_analyze fn) q /\ MEM q (fn_labels fn) ==>
-    FLOOKUP (df_process_block Forward (fn_labels fn) list_intersect
-       dom_transfer_inst dom_edge_transfer ()
-       (OPTION_MAP (\lbl. (lbl,[lbl])) (fn_entry_label fn))
-       (cfg_analyze fn) fn.fn_blocks lbl st).ds_boundary q =
-    SOME (fn_labels fn)
-Proof
-  rpt strip_tac >>
-  `FLOOKUP st.ds_boundary q = SOME (fn_labels fn)` by metis_tac[] >>
-  rewrite_tac[dom_process_eq] >> simp_tac std_ss [LET_THM] >>
-  pairarg_tac >> simp[] >>
-  drule identity_fold_block_values >> strip_tac >> gvs[] >>
-  (* Goal: FLOOKUP (if ... then st else st |+ (lbl,...)).ds_boundary q = ... *)
-  Cases_on `lbl = q` >> gvs[]
-  >- ((* lbl = q: show boundary unchanged (IF true) by proving joined = fn_labels *)
-      `FLOOKUP st.ds_boundary lbl = SOME (fn_labels fn)` by metis_tac[] >>
-      `df_boundary (fn_labels fn) st lbl = fn_labels fn` by
-        simp[dfAnalyzeDefsTheory.df_boundary_def] >>
-      (* Show all predecessor boundaries = fn_labels *)
-      `!nbr. MEM nbr (cfg_preds_of (cfg_analyze fn) lbl) ==>
-             FLOOKUP st.ds_boundary nbr = SOME (fn_labels fn)` by (
-        rpt strip_tac >>
-        `MEM nbr (fn_labels fn)` by
-          metis_tac[INST_TYPE [alpha |-> ``:string``]
-                      cfgAnalysisPropsTheory.cfg_analyze_pred_labels] >>
-        first_x_assum irule >> simp[] >>
-        metis_tac[preds_of_unreachable]) >>
-      (* Show dom_joined fn st lbl = fn_labels fn *)
-      `dom_joined fn st lbl = fn_labels fn` by (
-        simp_tac std_ss
-          [dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM] >>
-        `MAP (\nbr. dom_edge_transfer () nbr lbl
-                      (df_boundary (fn_labels fn) st nbr))
-             (cfg_preds_of (cfg_analyze fn) lbl) =
-         MAP (\nbr. fn_labels fn) (cfg_preds_of (cfg_analyze fn) lbl)` by (
-          irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
-          `FLOOKUP st.ds_boundary x = SOME (fn_labels fn)` by metis_tac[] >>
-          simp[dominatorDefsTheory.dom_edge_transfer_def,
-               dfAnalyzeDefsTheory.df_boundary_def,
-               cfgDefsTheory.set_insert_def]) >>
-        simp[foldl_list_intersect_self] >>
-        Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> simp[] >>
-        Cases_on `fn_entry_label fn` >> simp[] >>
-        rename1 `fn_entry_label fn = SOME elbl` >>
-        `lbl <> elbl` by metis_tac[entry_is_reachable] >>
-        simp[]) >>
-      (* Now IF condition is true: list_intersect (fn_labels fn) (fn_labels fn) = fn_labels fn *)
-      `list_intersect (fn_labels fn) (fn_labels fn) = fn_labels fn` by
-        simp[dfHelperDefsTheory.list_intersect_def,
-             listTheory.FILTER_EQ_ID, listTheory.EVERY_MEM] >>
-      simp[])
-  >- ((* lbl <> q: boundary for q unchanged in both IF branches *)
-      IF_CASES_TAC >> simp[finite_mapTheory.FLOOKUP_UPDATE])
-QED
-
-(* Unreachable nodes are dominated by all labels *)
-Triviality unreachable_doms_all[local]:
-  !fn p n.
-    wf_function fn /\ MEM p (fn_labels fn) /\ MEM n (fn_labels fn) /\
-    ~cfg_reachable_of (cfg_analyze fn) p ==>
-    dominates (dom_analyze (cfg_analyze fn) fn) n p
-Proof
-  rpt strip_tac >>
-  simp[dominatorDefsTheory.dominates_def, dominatorDefsTheory.dom_analyze_def,
-       LET_THM, dominatorDefsTheory.dom_sets_of_def] >>
-  `ALL_DISTINCT (fn_labels fn)` by fs[venomWfTheory.wf_function_def] >>
-  simp[cfgDefsTheory.fmap_lookup_list_def, foldl_fupdate_lookup] >>
-  `FLOOKUP (dom_fixpoint fn).ds_boundary p = SOME (fn_labels fn)` suffices_by
-    simp[dfAnalyzeDefsTheory.df_boundary_def] >>
-  simp_tac std_ss [dominatorDefsTheory.dom_fixpoint_def] >>
-  mp_tac (INST_TYPE [alpha |-> ``:string list``, beta |-> ``:unit``]
-    df_analyze_invariant_forward'
-    |> Q.SPECL [`fn_labels fn`, `list_intersect`, `dom_transfer_inst`,
-                `dom_edge_transfer`, `()`,
-                `OPTION_MAP (\lbl. (lbl, [lbl])) (fn_entry_label fn)`,
-                `fn`, `dom_measure fn`, `dom_measure_bound fn`,
-                `\st. dom_full_inv fn st /\
-                      !q. ~cfg_reachable_of (cfg_analyze fn) q /\
-                          MEM q (fn_labels fn) ==>
-                          FLOOKUP st.ds_boundary q = SOME (fn_labels fn)`]) >>
-  simp_tac std_ss [LET_THM] >>
-  impl_tac >- (
-    conj_tac >- simp[] >>
-    conj_tac >- (
-      rpt strip_tac >>
-      `dom_state_inv fn st` by (fs[dom_full_inv_def] >> metis_tac[]) >>
-      metis_tac[dom_measure_increases']) >>
-    conj_tac >- (
-      rpt gen_tac >> strip_tac >> conj_tac
-      >- (fs[dom_full_inv_def] >>
-          metis_tac[dom_inv_preserved', dom_extra_preserved'])
-      >> metis_tac[unreachable_bdy_preserved]) >>
-    conj_tac >- (
-      Cases_on `fn_entry_label fn` >> simp[]
-      >- ((* NONE *)
-          conj_tac
-          >- (mp_tac (Q.SPEC `fn` dom_init_state_inv') >>
-              mp_tac (Q.SPEC `fn` dom_extra_init') >>
-              simp[dom_full_inv_def])
-          >> rpt strip_tac >>
-          simp[dfAnalyzeDefsTheory.init_df_state_def,
-               finite_mapTheory.FLOOKUP_UPDATE] >>
-          irule foldl_fupdate_const >> fs[venomInstTheory.fn_labels_def])
-      >> (* SOME *)
-      rename1 `fn_entry_label fn = SOME elbl` >>
-      conj_tac
-      >- (mp_tac (Q.SPEC `fn` dom_init_state_inv') >>
-          mp_tac (Q.SPEC `fn` dom_extra_init') >>
-          simp[dom_full_inv_def])
-      >> rpt strip_tac >>
-      `q <> elbl` by metis_tac[entry_is_reachable] >>
-      simp[dfAnalyzeDefsTheory.init_df_state_def,
-           finite_mapTheory.FLOOKUP_UPDATE] >>
-      irule foldl_fupdate_const >> fs[venomInstTheory.fn_labels_def]) >>
-    rpt strip_tac >>
-    `dom_state_inv fn x` by fs[dom_full_inv_def] >>
-    metis_tac[dom_measure_bounded']) >>
-  (* Bridge: df_analyze_invariant_forward' concludes about SND(wl_iterate ...),
-     but goal is about df_analyze (= df_populate_inst ... (SND(wl_iterate ...))).
-     df_populate_inst preserves ds_boundary. *)
-  disch_then (strip_assume_tac o SIMP_RULE std_ss []) >>
-  simp_tac std_ss [LET_THM, dominatorDefsTheory.dom_fixpoint_def,
-                   dfAnalyzeDefsTheory.df_analyze_def,
-                   dfAnalyzeDefsTheory.direction_case_def] >>
-  qmatch_goalsub_abbrev_tac `df_populate_inst _ _ _ _ _ _ _ _ _ _ wl_res` >>
-  `(df_populate_inst Forward (fn_labels fn) list_intersect dom_transfer_inst
-       dom_edge_transfer ()
-       (OPTION_MAP (\lbl. (lbl,[lbl])) (fn_entry_label fn))
-       (cfg_analyze fn) fn.fn_blocks
-       (MAP (\bb. bb.bb_label) fn.fn_blocks)
-       wl_res).ds_boundary = wl_res.ds_boundary`
-    by simp[populate_inst_ds_boundary] >>
-  metis_tac[]
 QED
 
 (* dom_frontier_correct_proof — design note:

@@ -194,8 +194,8 @@ val exec_delegatecall_update_var = prove(
      extract_venom_result_def, write_memory_with_expansion_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
 
-val exec_create_update_var = prove(
-  ``!inst x w s v off sz salt.
+Theorem exec_create_update_var[local]:
+  !inst x w s v off sz salt.
     ~MEM x inst.inst_outputs ==>
     exec_create inst (update_var x w s) v off sz salt =
     case exec_create inst s v off sz salt of
@@ -203,12 +203,12 @@ val exec_create_update_var = prove(
     | Error e => Error e
     | Abort ab s' => Abort ab (update_var x w s')
     | Halt s' => Halt (update_var x w s')
-    | IntRet vs s' => IntRet vs (update_var x w s')``,
-  rw[exec_create_def, update_var_def,
-     make_venom_create_state_def, venom_to_tx_params_def,
-     extract_venom_result_def, write_memory_with_expansion_def,
+    | IntRet vs s' => IntRet vs (update_var x w s')
+Proof
+  rw[exec_create_def, update_var_def, venom_create_request_def,
      read_memory_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
+  BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]
+QED
 
 val wmwe_update_var = prove(
   ``!x w off dat s.
