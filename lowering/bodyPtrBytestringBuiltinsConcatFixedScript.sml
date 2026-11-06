@@ -5,6 +5,8 @@ Ancestors
   typedCopyPtr fragGasSeqPtr fragGasPathPtr
   concatMemory fragExecPtr bodyPtrDefs ptrDiscipline ptrSafeRun
   venomInst venomState venomExecSemantics finite_map words
+  emitHelper compileEnv exprLoweringProps
+Libs monadsyntax
 
 Theorem concat_offset_load_ghost:
   !PG G tn s id src tmp a.
@@ -252,3 +254,179 @@ Resume concat_fixed_address_counted[endpoint]:
 QED
 
 Finalise concat_fixed_address_counted
+
+(* The remaining three edges. The offset is a scalar even though the data
+   destination is a pointer; the full store width is always 32 bytes. *)
+Theorem concat_fixed_store_counted:
+  !D ctx fn PG G tn s bb id dst off offset next value a b w k m.
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MSTORE [Var dst; value] []) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst (id+1) ADD [Var offset; Lit (n2w m)] [next]) /\
+    get_instruction bb (s.vs_inst_idx+2) =
+      SOME (mk_inst (id+2) MSTORE [Var off; Var next] []) /\
+    lookup_var dst s = SOME a /\ lookup_var off s = SOME b /\
+    lookup_var offset s = SOME (n2w k) /\ eval_operand value s = SOME w /\
+    ptr_covers G tn dst s 32 /\ ptr_covers G tn off s 32 /\
+    op_taint tn value = {} /\ op_taint tn (Var offset) = {} /\
+    op_prov G (Var offset) = NONE /\ off <> next /\ dst <> next ==>
+    ?Gf tnf t.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+      t.vs_memory =
+        (mstore (w2n b) (n2w k + n2w m) (mstore (w2n a) w s)).vs_memory /\
+      lookup_var next t = SOME (n2w k + n2w m) /\
+      op_prov Gf (Var next) = NONE /\ op_taint tnf (Var next) = {} /\
+      ptr_covers Gf tnf dst t 32 /\ ptr_covers Gf tnf off t 32 /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_inst_idx = s.vs_inst_idx+3 /\
+      t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
+      tnf.t_mem = tn.t_mem DIFF
+        ({i | w2n a <= i /\ i < w2n a + 32} UNION
+         {i | w2n b <= i /\ i < w2n b + 32}) /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      (!q. q <> next ==>
+        lookup_var q t = lookup_var q s /\
+        FLOOKUP Gf q = FLOOKUP G q /\
+        op_taint tnf (Var q) = op_taint tn (Var q))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `u = mstore (w2n a) w s` >>
+  qabbrev_tac `g1 = step_prov PG G (mk_inst id MSTORE [Var dst; value] []) u` >>
+  qabbrev_tac `tn1 = step_taint (mk_inst id MSTORE [Var dst; value] []) s u tn` >>
+  qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `v = update_var next (n2w k + n2w m) s1` >>
+  qabbrev_tac `g2 = step_prov PG g1
+    (mk_inst (id+1) ADD [Var offset; Lit (n2w m)] [next]) v` >>
+  qabbrev_tac `tn2 = step_taint
+    (mk_inst (id+1) ADD [Var offset; Lit (n2w m)] [next]) s1 v tn1` >>
+  qabbrev_tac `s2 = v with vs_inst_idx := SUC s1.vs_inst_idx` >>
+  qabbrev_tac `z = mstore (w2n b) (n2w k + n2w m) s2` >>
+  qabbrev_tac `g3 = step_prov PG g2 (mk_inst (id+2) MSTORE [Var off; Var next] []) z` >>
+  qabbrev_tac `tn3 = step_taint (mk_inst (id+2) MSTORE [Var off; Var next] []) s2 z tn2` >>
+  qabbrev_tac `s3 = z with vs_inst_idx := SUC s2.vs_inst_idx` >>
+  `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 g1 tn1 (OK s1)` by
+    (unabbrev_all_tac >> irule concat_word_store_counted_edge >> simp[]) >>
+  `g1 = G /\ tn1.t_var = tn.t_var /\ tn1.t_stor = tn.t_stor /\
+   tn1.t_trans = tn.t_trans /\
+   tn1.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}`
+    by suspend "first_frame" >>
+  `gas_path_ptr_edge D 0 ctx fn PG g1 tn1 s1 0 g2 tn2 (OK s2)`
+    by suspend "increment" >>
+  `ptr_covers g2 tn2 off s2 32 /\ ptr_covers g2 tn2 dst s2 32`
+    by suspend "covers" >>
+  `gas_path_ptr_edge D 0 ctx fn PG g2 tn2 s2 0 g3 tn3 (OK s3)`
+    by suspend "last_store" >>
+  qexistsl_tac [`g3`, `tn3`, `s3`] >>
+  conj_tac >- suspend "path" >> suspend "endpoint"
+QED
+
+Resume concat_fixed_store_counted[first_frame]:
+  simp[Abbr `g1`, Abbr `tn1`, Abbr `u`, mstore_ghost_frame,
+       step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV]
+QED
+
+Resume concat_fixed_store_counted[increment]:
+  simp[Abbr `g2`, Abbr `tn2`, Abbr `s2`, Abbr `v`] >>
+  irule pointer_offset_counted_edge >>
+  gvs[Abbr `s1`, Abbr `u`, mstore_def, op_taint_def,
+      lookup_var_def, eval_operand_def] >>
+  qexists_tac `bb` >> simp[]
+QED
+
+Resume concat_fixed_store_counted[covers]:
+  `ptr_covers g1 tn1 off s1 32 /\ ptr_covers g1 tn1 dst s1 32` by
+    (conj_tac >>
+     qunabbrev_tac `g1` >> qunabbrev_tac `tn1` >>
+     qunabbrev_tac `s1` >> qunabbrev_tac `u` >>
+     irule concat_word_store_preserves_covers >> simp[]) >>
+  conj_tac >>
+  qunabbrev_tac `g2` >> qunabbrev_tac `tn2` >>
+  qunabbrev_tac `s2` >> qunabbrev_tac `v` >>
+  irule concat_add_preserves_covers >> simp[]
+QED
+
+Resume concat_fixed_store_counted[last_store]:
+  simp[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `z`] >>
+  irule concat_word_store_counted_edge >>
+  gvs[Abbr `tn2`, Abbr `v`, copy_len_binop_ghost_frame,
+      Abbr `s2`, Abbr `s1`, Abbr `u`, mstore_def,
+      update_var_def, lookup_var_def, eval_operand_def, FLOOKUP_UPDATE,
+      arithmeticTheory.ADD1]
+QED
+
+Resume concat_fixed_store_counted[path]:
+  `~s3.vs_halted` by
+    simp[Abbr `s3`, Abbr `z`, Abbr `s2`, Abbr `v`,
+         Abbr `s1`, Abbr `u`, mstore_def, update_var_def] >>
+  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD]
+QED
+
+Resume concat_fixed_store_counted[endpoint]:
+  `lookup_var off s2 = SOME b /\
+   eval_operand (Var next) s2 = SOME (n2w k + n2w m)` by
+    (simp[Abbr `s2`, Abbr `v`, Abbr `s1`, Abbr `u`, mstore_def,
+          lookup_var_def, update_var_def, FLOOKUP_UPDATE, eval_operand_def] >>
+     qpat_x_assum `lookup_var off s = _` mp_tac >> simp[lookup_var_def]) >>
+  `op_prov g2 (Var next) = NONE /\ op_taint tn2 (Var next) = {} /\
+   tn2.t_mem = tn1.t_mem /\ tn2.t_stor = tn1.t_stor /\
+   tn2.t_trans = tn1.t_trans` by
+    (simp[Abbr `g2`, Abbr `tn2`, Abbr `v`, copy_len_binop_ghost_frame] >>
+     irule step_prov_out_none >> simp[mk_inst_def] >>
+     irule out_prov_arith_none >> simp[mk_inst_def, op_prov_def] >>
+     qpat_x_assum `op_prov G (Var offset) = _` mp_tac >> simp[op_prov_def]) >>
+  `g3 = g2 /\ tn3.t_var = tn2.t_var /\ tn3.t_stor = tn2.t_stor /\
+   tn3.t_trans = tn2.t_trans /\
+   tn3.t_mem = tn2.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 32}` by
+    simp[Abbr `g3`, Abbr `tn3`, Abbr `z`, mstore_ghost_frame,
+         step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV] >>
+  `ptr_covers g3 tn3 dst s3 32 /\ ptr_covers g3 tn3 off s3 32` by
+    (gvs[ptr_covers_def, op_taint_def, Abbr `s3`, Abbr `z`,
+         mstore_def, lookup_var_def]) >>
+  conj_tac >-
+    simp[NoAsms, Abbr `s3`, Abbr `z`, Abbr `s2`, Abbr `v`, Abbr `s1`,
+         mstore_def, update_var_def] >>
+  `op_taint tn3 (Var next) = {}` by
+    (simp[op_taint_def] >>
+     qpat_x_assum `op_taint tn2 (Var next) = _` mp_tac >> simp[op_taint_def]) >>
+  simp[Abbr `s3`, Abbr `z`, mstore_def, lookup_var_def,
+       pred_setTheory.DIFF_UNION] >>
+  simp[Abbr `s2`, Abbr `v`, update_var_def, FLOOKUP_UPDATE] >>
+  simp[Abbr `s1`, Abbr `u`, mstore_def] >>
+  rpt strip_tac >>
+  simp[Abbr `g2`, Abbr `tn2`, copy_len_binop_ghost_frame,
+       op_taint_def, lookup_var_def, update_var_def] >>
+  simp[step_taint_def, set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE]
+QED
+
+Finalise concat_fixed_store_counted
+
+Theorem compile_concat_fixed_layout:
+  !data_ptr off_ptr value m sa sb.
+    (do offset_op <- emit_op MLOAD [off_ptr];
+        dst <- emit_op ADD [data_ptr; offset_op];
+        emit_void MSTORE [dst; value];
+        new_offset <- emit_op ADD [offset_op; Lit (n2w m)];
+        emit_void MSTORE [off_ptr; new_offset]
+     od) sa = ((), sb) ==>
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_next_var = sa.cs_next_var + 3 /\
+    sb.cs_next_id = sa.cs_next_id + 5 /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id MLOAD [off_ptr]
+         [STRING #"%" (toString sa.cs_next_var)];
+       mk_inst (sa.cs_next_id+1) ADD
+         [data_ptr; Var (STRING #"%" (toString sa.cs_next_var))]
+         [STRING #"%" (toString (sa.cs_next_var+1))];
+       mk_inst (sa.cs_next_id+2) MSTORE
+         [Var (STRING #"%" (toString (sa.cs_next_var+1))); value] [];
+       mk_inst (sa.cs_next_id+3) ADD
+         [Var (STRING #"%" (toString sa.cs_next_var)); Lit (n2w m)]
+         [STRING #"%" (toString (sa.cs_next_var+2))];
+       mk_inst (sa.cs_next_id+4) MSTORE
+         [off_ptr; Var (STRING #"%" (toString (sa.cs_next_var+2)))] []]
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  rpt strip_tac >> gvs[]
+QED
