@@ -6,6 +6,7 @@ Ancestors
   bodyIntCallResourceAllocation
   vyperInterpreter vyperContext vyperState list finite_map
   vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants
+  vyperTypeContract exprLoweringProps
 
 Theorem body_inv_push_stack:
   body_inv tops ctx cenv cx ==>
@@ -124,4 +125,59 @@ Proof
      qexists_tac `env` >> simp[]) >>
   qexistsl_tac [`env_body`, `ret_tv`, `env_after`] >> simp[] >>
   metis_tac[]
+QED
+
+(* Allocation makes all declarations of a loaded module live, independently
+   of the syntactic call-closure roots. *)
+Theorem allocated_module_context_function_live:
+  get_module_code cx src = SOME tops /\
+  module_allocated cx.layouts cx.txn.target src tops ==>
+  context_function_live cx (src,name)
+Proof
+  simp[get_module_code_def, context_function_live_def] >>
+  Cases_on `ALOOKUP cx.sources cx.txn.target` >> simp[] >>
+  strip_tac >> simp[function_live_def]
+QED
+
+Theorem allocated_module_declared_signature:
+  env_context_consistent env cx /\
+  get_module_code cx src = SOME tops /\
+  module_allocated cx.layouts cx.txn.target src tops /\
+  MEM (FunctionDecl vis fm nr raw name args dflts ret ss) tops /\
+  (vis = Internal \/ (cx.in_deploy /\ vis = Deploy)) /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (fm,nr,args,dflts,ret,ss) ==>
+  FLOOKUP env.fn_sigs (src,name) =
+    SOME <| param_types := MAP SND args; num_defaults := LENGTH dflts;
+            ret_ty := ret |>
+Proof
+  strip_tac >>
+  `context_function_live cx (src,name)` by
+    (drule_all allocated_module_context_function_live >> simp[]) >>
+  gvs[] >> fs[env_context_consistent_def, fn_sigs_declared_complete_def] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+(* The two module pins are explicit: no held module-pins admission is used. *)
+Theorem body_inv_pinned_internal_signature:
+  body_inv tops ctx ce cx /\
+  ce.ce_module = NONE /\
+  ce.ce_module_vars = add_immutable_locations sft tops 0
+    (add_module_var_locations tops FEMPTY) /\
+  stmt_state_rel ctx func ce cx es s /\ env_consistent env cx es /\
+  MEM (FunctionDecl Internal fm nr raw name args dflts ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (fm,nr,args,dflts,ret,ss) ==>
+  IS_SOME (FLOOKUP env.fn_sigs (NONE,name))
+Proof
+  strip_tac >>
+  `module_allocated cx.layouts cx.txn.target NONE tops` by
+    (irule pinned_module_allocated >>
+     fs[body_inv_def, stmt_state_rel_def, state_rel_def] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `sft` >> simp[]) >>
+  drule_at (Pat `MEM _ _`) allocated_module_declared_signature >>
+  fs[body_inv_def, env_consistent_def] >>
+  disch_then (qspecl_then [`NONE`, `env`, `cx`] mp_tac) >> simp[]
 QED
