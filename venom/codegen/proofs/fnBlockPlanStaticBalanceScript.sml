@@ -1,6 +1,7 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
   stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec planWf
+  cleanOpsSim
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -464,4 +465,68 @@ Proof
   simp[] >> rpt strip_tac >> gvs[trace_weight_def] >>
   irule do_swap_signed_balance >>
   metis_tac[stack_get_depth_bound]
+QED
+
+Theorem popmany_fold_signed_balance[local]:
+  !items acc_ops ps ops qs.
+  FOLDL (\(ops, ps) v.
+    case stack_get_depth v ps.ps_stack of
+      NONE => (ops, ps)
+    | SOME dist =>
+      let (swap_ops, ps') = if dist = 0 then ([], ps) else do_swap dist ps in
+      (ops ++ swap_ops ++ [SOPop 1],
+       ps' with ps_stack := stack_pop 1 ps'.ps_stack))
+    (acc_ops, ps) items = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) +
+    trace_weight ops - trace_weight acc_ops
+Proof
+  Induct >> rpt gen_tac >- (simp[] >> rpt strip_tac >> gvs[] >> intLib.ARITH_TAC) >>
+  gvs[LET_THM] >> Cases_on `stack_get_depth h ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth h ps.ps_stack = SOME dist` >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  Cases_on `dist = 0` >> simp[]
+  >- (strip_tac >> first_x_assum drule >>
+      simp[trace_weight_append, trace_weight_def, stack_op_weight_def,
+           stack_pop_def, listTheory.LENGTH_TAKE_EQ] >> intLib.ARITH_TAC) >>
+  Cases_on `do_swap dist ps` >> simp[] >>
+  rename1 `do_swap dist ps = (swap_ops, next_ps)` >>
+  `LENGTH next_ps.ps_stack = LENGTH ps.ps_stack` by
+    (drule do_swap_length >> simp[]) >>
+  drule_all do_swap_signed_balance >> strip_tac >> strip_tac >>
+  first_x_assum drule >>
+  simp[trace_weight_append, trace_weight_def, stack_op_weight_def,
+       stack_pop_def, listTheory.LENGTH_TAKE_EQ] >> intLib.ARITH_TAC
+QED
+
+Theorem popmany_individual_signed_balance:
+  popmany_individual items ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[popmany_individual_def, LET_THM] >> strip_tac >>
+  drule (SRULE [LET_THM] popmany_fold_signed_balance) >> simp[trace_weight_def]
+QED
+
+Theorem popmany_plan_signed_balance:
+  popmany_plan items ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Cases_on `items` >- (simp[popmany_plan_def, trace_weight_def] >> rw[]) >>
+  rename1 `popmany_plan (item::rest) ps` >>
+  pure_rewrite_tac[popmany_plan_def, LET_THM] >> BETA_TAC >>
+  reverse (Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) (item::rest))`)
+  >- (asm_rewrite_tac[] >> strip_tac >> drule popmany_individual_signed_balance >> simp[]) >>
+  asm_rewrite_tac[] >>
+  reverse (Cases_on `is_contiguous_top
+    (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) (item::rest)))`)
+  >- (asm_rewrite_tac[] >> strip_tac >> drule popmany_individual_signed_balance >> simp[]) >>
+  asm_rewrite_tac[] >>
+  `LENGTH (item::rest) < LENGTH ps.ps_stack` by
+    (irule contiguous_top_stack_bound >> simp[]) >>
+  Cases_on `do_swap (LENGTH (item::rest)) ps` >> simp[] >>
+  rename1 `do_swap (LENGTH (item::rest)) ps = (swap_ops, next_ps)` >>
+  `LENGTH next_ps.ps_stack = LENGTH ps.ps_stack` by
+    (drule do_swap_length >> simp[]) >>
+  drule_all do_swap_signed_balance >> strip_tac >> strip_tac >>
+  gvs[trace_weight_append, trace_weight_def, stack_op_weight_def,
+      stack_pop_def, listTheory.LENGTH_TAKE_EQ] >> intLib.ARITH_TAC
 QED
