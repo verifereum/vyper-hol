@@ -40,3 +40,15 @@ Proof
   simp[] >> drule ld_normal_data_geometry >> strip_tac >>
   metis_tac[]
 QED
+
+Theorem ld_normal_data_serial_support:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  ld_annotated_reachable vs0 C astk k L AP AG tn fn i s /\
+  ld_live astk L AP AG (owner,(bs,sz)) ==>
+  owner IN live DELETE (0,k)
+Proof
+  strip_tac >> drule_all ld_normal_data_serial_delete >>
+  disch_then (mp_then Any strip_assume_tac ld_normal_data_geometry) >>
+  metis_tac[]
+QED
