@@ -66,7 +66,8 @@ Ancestors
   compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
-  vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
+  vyperValueOperation valueEncoding memoryValueEncoding
+  fragExec venomState exprSimLiteralBuffer
   vyperStorageLayoutSafety vyperLookupStorage vyperTypeValues
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
@@ -170,9 +171,11 @@ Proof
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
   `?w. lookup_var p s = SOME w /\ type_memory_size entry.type <= sz /\
        val_wf entry.type entry.value /\
-       val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+       memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> metis_tac[]) >>
+  `val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+    (irule memory_value_rel_val_in_memory >> simp[]) >>
   simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def,
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac

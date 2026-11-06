@@ -954,22 +954,6 @@ Proof
   strip_tac >> drule concrete_send_step_locals >> simp[]
 QED
 
-Theorem log_extends_outcome_rules[local]:
-  (!s. log_extends s s) /\
-  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
-  (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs deletions. log_extends s
-     (s with <|accounts := accounts; tStorage := transient;
-               logs := s.logs ++ logs;
-               pending_deletions := deletions ++ s.pending_deletions|>))
-Proof
-  rpt conj_tac
-  >- simp[log_extends_refl]
-  >- (rpt strip_tac >> drule_all log_extends_trans >> simp[])
-  >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
-  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
-QED
-
 Theorem eval_send_log_extends:
   eval_send cx has_gas vs st = (res,st') ==> log_extends st st'
 Proof

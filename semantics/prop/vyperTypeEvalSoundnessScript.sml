@@ -54,13 +54,6 @@ Proof
   simp[finally_unless_halt_def, finally_def, bind_def]
 QED
 
-Theorem finally_unless_halt_success[local]:
-  finally_unless_halt f g s = (INL v,t) ==>
-  finally f g s = (INL v,t)
-Proof
-  strip_tac >> drule finally_unless_halt_nonhalt >> simp[]
-QED
-
 Theorem finally_pop_function_compose[local]:
   finally (finally f (pop_function prev)) g s =
   finally f (do pop_function prev; g od) s

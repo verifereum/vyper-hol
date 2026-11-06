@@ -1239,6 +1239,9 @@ Resume compile_for_range_checked_frag[state]:
 QED
 
 Resume compile_for_range_checked_frag[run_loop]:
+  `word_memory_type tyv` by
+    (qspecl_then [`get_tenv cx`, `fty`, `tyv`] mp_tac
+       evaluate_word_memory_type >> simp[]) >>
   `type_memory_size tyv = 32` by
     (qspecl_then [`get_tenv cx`, `fty`, `tyv`] mp_tac
        is_int_type_memory_size >> simp[]) >>

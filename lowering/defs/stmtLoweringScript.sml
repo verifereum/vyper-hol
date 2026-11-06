@@ -17,7 +17,7 @@
 
 Theory stmtLowering
 Ancestors
-  exprLowering context compileEnv venomInst abiEncoder dretShapeDefs
+  exprLowering context compileEnv venomInst abiEncoder dretShapeDefs vyperExprEffects
 Libs
   monadsyntax
 
@@ -38,14 +38,23 @@ End
    evaluates all args before splitting. *)
 
 (* Evaluate all log arg expressions in AST order.
-   Returns list of (operand, type) pairs preserving AST order. *)
+   Returns (operand, source-layout type) pairs preserving AST order.
+   An aggregate operand points into memory: save its value before a later
+   argument can modify that memory, as eval_exprs materialises each value. *)
+Definition compile_log_save_arg_def:
+  compile_log_save_arg cenv src_ty op es =
+    if is_word_type src_ty \/ EVERY pure_expr es then return op
+    else compile_materialize_vv cenv src_ty (StackValue src_ty op)
+End
+
 Definition compile_log_eval_all_def:
   compile_log_eval_all cenv [] = return ([] : (operand # type) list) ∧
   compile_log_eval_all cenv (e::es) =
     (let arg_ty = expr_type e in
      do v <- lower_value compile_expr cenv arg_ty e;
+        saved <- compile_log_save_arg cenv (lowered_value_type cenv e) v es;
         rest <- compile_log_eval_all cenv es;
-        return ((v, arg_ty) :: rest)
+        return ((saved, lowered_value_type cenv e) :: rest)
      od)
 Termination
   WF_REL_TAC `measure (λ(cenv,es). LENGTH es)`
@@ -79,25 +88,23 @@ Termination
   WF_REL_TAC `measure (λops. LENGTH ops)`
 End
 
-(* Store already-evaluated data operands to buffer.
-   Input: list of (operand, type) *)
+(* Store already-evaluated data operands into the declared field layouts.
+   Python retains both the expected event-field type and arg_vv.typ. Checked
+   widening can change memory strides/capacity even when ABI types agree. *)
 Definition compile_log_store_data_def:
-  compile_log_store_data cenv [] buf_op offset = return () ∧
-  compile_log_store_data cenv (x :: rest) buf_op offset =
-    (let v = FST x in let arg_ty = SND x in
+  compile_log_store_data cenv [] [] buf_op offset = return () ∧
+  compile_log_store_data cenv (x :: rest) (arg_ty :: arg_types) buf_op offset =
+    (let v = FST x in let src_ty = SND x in
      let mem_size = type_memory_bytes cenv arg_ty in
-     let is_prim = is_word_type arg_ty in
      do (* Python's tuple-data lowering keeps the explicit base-plus-offset
            operation even for offset zero; retain it for identical IR shape. *)
         dst <- emit_op ADD [buf_op; Lit (n2w offset)];
-        (if is_prim then emit_void MSTORE [dst; v]
-         else if is_bytestring_type arg_ty then
-           compile_store_bytestring v dst
-         else emit_void MCOPY [dst; v; Lit (n2w mem_size)]);
-        compile_log_store_data cenv rest buf_op (offset + mem_size)
-     od)
+        compile_store_memory cenv v dst arg_ty src_ty;
+        compile_log_store_data cenv rest arg_types buf_op (offset + mem_size)
+     od) ∧
+  compile_log_store_data cenv _ _ buf_op offset = emit_void INVALID []
 Termination
-  WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
+  WF_REL_TAC `measure (λ(cenv,ops,tys,buf,off). LENGTH ops)` >> simp[]
 End
 
 (* Declared type and DynArray capacity of the target's root variable: a
@@ -971,13 +978,13 @@ Definition compile_stmt_def:
     (let event_name = nsid_to_string event_id in
      case cenv.ce_event_info event_name of
        NONE => emit_inst INVALID [] []
-     | SOME (ev_hash, arg_types, indexed_flags) =>
+     | SOME (event_hash_value, arg_types, indexed_flags) =>
          do eval_ops <- compile_log_eval_all cenv args;
             log_split <- return (split_log_ops eval_ops indexed_flags);
             raw_topics <- return (FST log_split);
             data_ops <- return (SND log_split);
             topic_ops <- compile_log_topic_ops raw_topics;
-            all_topics <- return (Lit (n2w ev_hash) :: topic_ops);
+            all_topics <- return (Lit (n2w event_hash_value) :: topic_ops);
             n_topics <- return (LENGTH all_topics);
             if NULL data_ops then
               (* Python builder.log stores LOG operands in physical stack
@@ -985,12 +992,12 @@ Definition compile_stmt_def:
               emit_inst (LOG : opcode)
                 (Lit (n2w n_topics) :: REVERSE all_topics ++ [Lit 0w; Lit 0w]) []
             else
-              let data_types = MAP SND data_ops in
+              let data_types = log_non_indexed_types indexed_flags arg_types in
               let data_tuple_t = TupleT data_types in
               let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
               do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
                  data_buf <- return data_buf_alloc.buf_operand;
-                 compile_log_store_data cenv data_ops data_buf 0;
+                 compile_log_store_data cenv data_ops data_types data_buf 0;
                  abi_size <- return (abi_size_bound cenv.ce_struct_fields data_tuple_t);
                  data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
                  abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);

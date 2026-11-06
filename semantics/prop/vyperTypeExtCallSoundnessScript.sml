@@ -1553,19 +1553,3 @@ Proof
     SRULE [bind_def, ignore_bind_def, return_def]) >> simp[]
 QED
 
-(* Retain the issue-567 public helper name with the evaluated-operands API. *)
-Theorem eval_send_type_sound:
-  runtime_consistent env cx st /\
-  exprs_runtime_typed env es vs /\
-  MAP expr_type es =
-    [BaseT AddressT; BaseT (UintT 256)] ++
-    (if has_gas then [BaseT (UintT 256)] else []) /\
-  eval_send cx has_gas vs st = (res,st') ==>
-  state_well_typed st' /\ env_consistent env cx st' /\
-  accounts_well_typed st'.accounts /\ no_type_error_result res /\
-  case res of
-  | INL tv => expr_result_typed env (Call NoneT (Send has_gas) es drv) tv
-  | INR _ => T
-Proof
-  ACCEPT_TAC eval_send_result_sound
-QED
