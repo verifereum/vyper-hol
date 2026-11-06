@@ -1,11 +1,11 @@
 (* Whole bytestring encoder assembled from certified pointer sequences. *)
 Theory logAbiEncodePtr
 Ancestors
-  logAbiBytesPtr logAbiPrefixPtr logAbiCopyPtr abiEncoderBytesPrefix
+  logAbiBytesPtr logAbiPrefixPtr logAbiCopyPtr logTopicScalarPtr abiEncoderBytesPrefix
   abiEncoderBytesCode abiEncoderRounding bodyPtrDefs logInstSeqPtr
   abiEncoderMemory abiDecoderContract fragGasSeqPtr valueEncodingProps
   emitHelper emitHelperProps exprLoweringProps compileEnv venomExecSemantics
-  venomState ptrDiscipline words arithmetic list pred_set
+  venomState venomInst abiEncoder ptrDiscipline words arithmetic list pred_set
 
 Theorem abi_bytes_prefix_live:
   abi_encode_bytes_prefix dst src sa = (ops,sb) ==>
@@ -18,6 +18,23 @@ Proof
     fresh_var_def, fresh_id_def, emit_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem compile_abi_bytes_immutable_taint_frame:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) sa = (out,sb) /\
+  inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H tm ==>
+  tm.t_imm = tn.t_imm
+Proof
+  strip_tac >> irule inst_seq_ptr_immutable_taint_frame >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
+    fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
 Theorem compile_abi_bytes_seq_ptr:
@@ -36,11 +53,11 @@ Theorem compile_abi_bytes_seq_ptr:
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
     eval_operand out sf = SOME (n2w (32+contractABI$ceil32 cnt)) /\
-    op_taint tnf out = {} /\
+    op_taint tnf out = {} /\ op_prov Gf out = NONE /\
     (!i. dest <= i /\ i < dest+32+contractABI$ceil32 cnt ==> i NOTIN tnf.t_mem) /\
     (!i. ~(dest <= i /\ i < dest+32+contractABI$ceil32 cnt) ==>
       (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     mem_agree_outside {i | dest <= i /\ i < dest+32+contractABI$ceil32 cnt}
       sf.vs_memory s.vs_memory /\
     (!p. not_fresh_at sa p ==>
@@ -158,6 +175,11 @@ Resume compile_abi_bytes_seq_ptr[compose_last]:
   qpat_x_assum `Abbrev (w = _)` kall_tac >>
   qpat_x_assum `w = _` SUBST_ALL_TAC >> qunabbrev_tac `r` >>
   drule_all successful_seq_ptr_append >> strip_tac >>
+  `tf.t_imm = tn.t_imm` by
+    (irule compile_abi_bytes_immutable_taint_frame >>
+     goal_assum (drule_at Any) >>
+     qpat_assum `emitted_insts sa sb = _` (fn th => rewrite_tac[th]) >>
+     goal_assum (drule_at Any)) >>
   qexistsl_tac [`Gf`,`tf`,`z with vs_inst_idx := t.vs_inst_idx`] >>
   conj_tac >-
     (qpat_x_assum `run_inst_seq (_ ++ _) s = OK (z with vs_inst_idx := _)` mp_tac >>
@@ -178,8 +200,10 @@ Resume compile_abi_bytes_seq_ptr[post]:
      pure_asm_rewrite_tac[] >>
      simp[eval_operand_def, lookup_var_def, word_add_n2w]) >>
   conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >- simp[] >>
   conj_tac >- suspend "memory" >> suspend "vars")
 QED
 Resume compile_abi_bytes_seq_ptr[memory]:
@@ -229,11 +253,11 @@ Theorem compile_abi_bytes_gas_path_ptr:
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) Gf tnf
       (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     eval_operand out sf = SOME (n2w (32+contractABI$ceil32 cnt)) /\
-    op_taint tnf out = {} /\
+    op_taint tnf out = {} /\ op_prov Gf out = NONE /\
     (!i. dest <= i /\ i < dest+32+contractABI$ceil32 cnt ==> i NOTIN tnf.t_mem) /\
     (!i. ~(dest <= i /\ i < dest+32+contractABI$ceil32 cnt) ==>
       (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     mem_agree_outside {i | dest <= i /\ i < dest+32+contractABI$ceil32 cnt}
       sf.vs_memory s.vs_memory /\
     (!p. not_fresh_at sa p ==>

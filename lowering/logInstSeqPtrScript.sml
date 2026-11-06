@@ -58,6 +58,8 @@ Theorem emit_copy_len_binop_seq_ptr:
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
     lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+    op_prov Gf (Var out) =
+      (if opc = ADD then first_prov G [left;right] else NONE) /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -83,6 +85,11 @@ Proof
     (simp[] >> irule inst_seq_ptr_singleton >> simp[] >>
      simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[] >> metis_tac[]) >>
   `opc = ADD \/ opc = AND` by metis_tac[] >>
+  `op_prov (step_prov PG G i t) (Var out) =
+    (if opc = ADD then first_prov G [left;right] else NONE)` by
+    (Cases_on `first_prov G [left;right]` >>
+     gvs[Abbr `i`, step_prov_def, set_prov_def, out_prov_def,
+         op_prov_def, mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
   simp[Abbr `i`, Abbr `t`, copy_len_binop_ghost_frame,
        lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> `p <> out` by metis_tac[] >>

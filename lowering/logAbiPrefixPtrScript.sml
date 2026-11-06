@@ -15,7 +15,8 @@ Theorem abi_encode_round_seq_ptr:
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
     eval_operand out sf = SOME
       (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w && (31w+w)) /\
-    op_taint tnf out = {} /\ sf.vs_memory = s.vs_memory /\
+    op_taint tnf out = {} /\ op_prov Gf out = NONE /\
+    sf.vs_memory = s.vs_memory /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -154,7 +155,8 @@ Theorem abi_encode_bytes_suffix_seq_ptr:
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
     eval_operand out sf = SOME
       (32w + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w && (31w+w))) /\
-    op_taint tnf out = {} /\ sf.vs_memory = s.vs_memory /\
+    op_taint tnf out = {} /\ op_prov Gf out = NONE /\
+    sf.vs_memory = s.vs_memory /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
@@ -191,7 +193,7 @@ Proof
      strip_tac >> asm_rewrite_tac[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
   qunabbrev_tac `u` >> drule_all successful_seq_ptr_append >> strip_tac >>
   qexistsl_tac [`Gf`, `tnf`, `v with vs_inst_idx := t.vs_inst_idx`] >>
-  simp[eval_operand_def, lookup_var_def] >>
+  simp[eval_operand_def, lookup_var_def, first_prov_def, op_prov_def] >>
   `!p. not_fresh_at sa p ==> not_fresh_at sm p` by
     (drule abi_encode_round_shape >> simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
   gvs[lookup_var_def] >> metis_tac[]
