@@ -16,14 +16,14 @@ Ancestors
   vfmOperation alist asmEncodeParse vfmState vfmSameFrame vfmRunWithinFrame
   vfmRunCall vfmContext vfmContextLength evmCreationGuard
 
-Theorem frame_rel_singleton[local]:
+Theorem frame_rel_singleton:
   asm_evm_rel p a es /\ es.contexts = (c,rb)::rest ==>
   asm_evm_rel p a (es with contexts := [(c,rb)])
 Proof
   strip_tac >> gvs[asm_evm_rel_def]
 QED
 
-Theorem frame_rel_output_to[local]:
+Theorem frame_rel_output_to:
   asm_evm_rel p a es /\ es.contexts = (c,rb)::rest ==>
   !addr. c.msgParams.outputTo <> Code addr
 Proof
@@ -43,7 +43,7 @@ Proof
   simp[asm_frame_prog_ok_def, is_evm_call_name_def] >> metis_tac[]
 QED
 
-Theorem frame_next_opcode[local]:
+Theorem frame_next_opcode:
   asm_frame_prog_ok prog /\
   asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   es.contexts = (c,rb)::rest /\ a.as_pc < LENGTH prog /\
@@ -236,7 +236,7 @@ Proof
   simp[call_requests_def]
 QED
 
-Theorem frame_terminal_singleton_length[local]:
+Theorem frame_terminal_singleton_length:
   wf_state es /\ es.contexts = (c,rb)::rest /\
   (!addr. c.msgParams.outputTo <> Code addr) /\
   step (es with contexts := [(c,rb)]) = (INR e,t) /\ ~vfm_abort e ==>
@@ -253,7 +253,7 @@ Proof
   Cases_on `t.contexts` >> gvs[]
 QED
 
-Theorem frame_starved_lift[local]:
+Theorem frame_starved_lift:
   asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
   (!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
@@ -276,7 +276,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem frame_terminal_lift[local]:
+Theorem frame_terminal_lift:
   asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
   (!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
