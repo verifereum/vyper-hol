@@ -236,3 +236,57 @@ Proof
        rpt gen_tac >> BETA_TAC >> simp[cs_appends_emit_helpers, cs_appends_return])
 QED
 
+Theorem first_emission_get_target_ptr:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce tgt a x b. compile_get_target_ptr cfn ce tgt a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> gen_tac >> gen_tac >>
+  measureInduct_on `base_assignment_target_size tgt` >>
+  Cases_on `tgt` >> simp_tac (srw_ss()) [compile_get_target_ptr_def]
+  >- (rpt CASE_TAC >> metis_tac[first_emission_return])
+  >- (rpt CASE_TAC >> metis_tac[first_emission_return])
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (first_x_assum (qspec_then `b` mp_tac) >> simp[]) >>
+      gen_tac >> rename1 `FST result` >> PairCases_on `result` >>
+      Cases_on `result2` >>
+      FIRST [rename1 `SOME desc` >> Cases_on `desc`, all_tac] >>
+      simp_tac (srw_ss()) [LET_THM] >>
+      ho_match_mp_tac first_emission_bind >>
+      (conj_tac
+       >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+       gen_tac)
+      >~ [`compile_keccak256_key`]
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac
+          >- (IF_CASES_TAC >> simp[] >> rpt strip_tac >>
+              metis_tac[first_emission_return, first_emission_keccak256_key]) >>
+          gen_tac >> ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_strong_bind >> conj_tac
+          >- metis_tac[first_emission_mapping_subscript] >>
+          simp[comp_return_def, cs_extends_refl]) >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >>
+      (conj_tac
+       >- (ho_match_mp_tac first_emission_array_subscript >>
+           metis_tac[first_emission_ptr_load]) >>
+       simp[comp_return_def, cs_extends_refl])) >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (first_x_assum (qspec_then `b` mp_tac) >> simp[]) >>
+  gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  simp[comp_return_def, cs_extends_refl]
+QED
