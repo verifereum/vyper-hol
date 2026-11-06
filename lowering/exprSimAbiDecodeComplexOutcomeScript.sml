@@ -12,6 +12,7 @@ Ancestors
   venomState venomInst words list rich_list arithmetic
   abiDecoderCoherence abiDecodeRanges valueEncodingProps vyperTypeSystem vyperValue
   vyperABI vyperTypeABI abiDecoderMembers contractABI
+  abiDecoderMemberInfos abiDecoderHeadAdequacy valueEncoding
 
 Theorem abi_decode_complex_guard_abort_opcodes[local]:
   abi_decode_complex_head_guard src hi k st = ((),st') ==>
@@ -482,4 +483,85 @@ Proof
   strip_tac >> drule abi_decode_struct_source_view_accept >>
   disch_then (qspecl_then [`v`, `p`, `bs`] assume_tac) >>
   metis_tac[abi_decode_struct_rows_raw_accept]
+QED
+
+Theorem abi_decode_coherent_no_zero_array:
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty ==>
+  !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem
+Proof
+  strip_tac >> drule abi_decoder_coherent_header >>
+  simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+  drule_all assignable_type_slot_size_pos >> strip_tac >>
+  metis_tac[evaluated_positive_type_excludes_empty_abi_array]
+QED
+
+Theorem abi_decode_constructor_rows_exist:
+  !tys tvs.
+  LIST_REL (abi_decoder_coherent ce env ce.ce_struct_fields) tys tvs /\
+  EVERY (assignable_type env) tys /\ EVERY (abi_decode_bytes_widths env) tys ==>
+  ?rows. abi_tuple_rows_schema ce env rows /\
+    MAP (\(ei,ty,tv,asz,msz). ty) rows = tys /\
+    MAP (\(ei,ty,tv,asz,msz). tv) rows = tvs /\
+    MAP (\(ei,ty,tv,asz,msz). (ei,asz,msz)) rows =
+      abi_decoder_member_infos ce.ce_struct_fields ce tys
+Proof
+  Induct >- (rpt gen_tac >> simp[] >> strip_tac >>
+    simp[abi_tuple_rows_schema_def, abi_decoder_member_infos_def]) >>
+  gen_tac >> Cases_on `tvs` >> simp[] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule abi_decoder_coherent_header >> simp_tac bool_ss [abi_decoder_header_def] >>
+  strip_tac >>
+  qexists_tac `(type_to_abi_dec_info ce.ce_struct_fields ce h,h,h',
+    abi_member_head_size (vyper_to_abi_type env h),type_memory_bytes ce h)::rows` >>
+  asm_simp_tac (srw_ss()) [abi_tuple_rows_schema_def, abi_decoder_member_infos_def] >>
+  conj_tac >- metis_tac[abi_decode_coherent_no_zero_array] >>
+  fs[abi_tuple_rows_schema_def]
+QED
+
+Theorem abi_decode_schema_rows_layout:
+  !rows. abi_tuple_rows_schema ce env rows ==>
+  SUM (MAP abi_tuple_row_abi_width rows) =
+    SUM (MAP abi_member_head_size
+      (MAP (vyper_to_abi_type env) (MAP (\(ei,ty,tv,asz,msz). ty) rows))) /\
+  SUM (MAP abi_tuple_row_mem_width rows) =
+    type_memory_size_list (MAP (\(ei,ty,tv,asz,msz). tv) rows)
+Proof
+  Induct >- simp[abi_tuple_row_abi_width_def, type_memory_size_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp_tac (srw_ss()) [abi_tuple_rows_schema_def] >> strip_tac >>
+  qpat_x_assum `abi_tuple_rows_schema ce env rows ==> _` mp_tac >>
+  asm_simp_tac (srw_ss()) [abi_tuple_rows_schema_def,
+    abi_tuple_row_abi_width_def, abi_tuple_row_mem_width_def, type_memory_size_def] >>
+  metis_tac[]
+QED
+
+Theorem abi_decode_tuple_constructor_rows:
+  abi_decoder_coherent ce env ce.ce_struct_fields (TupleT tys) atv /\
+  assignable_type env (TupleT tys) /\ abi_decode_bytes_widths env (TupleT tys) ==>
+  ?rows. abi_tuple_rows_schema ce env rows /\
+    MAP (\(ei,ty,tv,asz,msz). ty) rows = tys /\
+    atv = TupleTV (MAP (\(ei,ty,tv,asz,msz). tv) rows) /\
+    type_to_abi_dec_info ce.ce_struct_fields ce (TupleT tys) =
+      DecComplex (EXISTS (is_abi_dynamic ce.ce_struct_fields) tys)
+        (MAP (\(ei,ty,tv,asz,msz). (ei,asz,msz)) rows)
+Proof
+  simp_tac (srw_ss()) [abi_decoder_coherent_tuple_iff, assignable_type_def,
+    abi_decode_bytes_widths_def] >> strip_tac >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  drule_all abi_decode_constructor_rows_exist >> strip_tac >>
+  qexists_tac `rows` >> simp[abi_decoder_tuple_infos] >> metis_tac[]
+QED
+
+Theorem abi_decode_schema_row_count_bound:
+  !rows. abi_tuple_rows_schema ce env rows ==>
+  LENGTH rows <= SUM (MAP abi_tuple_row_abi_width rows)
+Proof
+  Induct >- simp[] >> gen_tac >> PairCases_on `h` >>
+  simp_tac (srw_ss()) [abi_tuple_rows_schema_def] >> strip_tac >>
+  `LENGTH rows <= SUM (MAP abi_tuple_row_abi_width rows)` by
+    (first_x_assum irule >> simp[abi_tuple_rows_schema_def]) >>
+  drule_all abi_decode_assignable_embedded_head_positive >>
+  drule abi_decoder_coherent_header >>
+  simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+  simp[abi_tuple_row_abi_width_def] >> decide_tac
 QED
