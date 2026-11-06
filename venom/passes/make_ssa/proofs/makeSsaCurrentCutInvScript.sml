@@ -20,6 +20,7 @@ Ancestors
   makeSsaCurrentCutTransport makeSsaCurrentPrefixSuffixOwner
   makeSsaCurrentPrefixMaps makeSsaCurrentPrefixOwner makeSsaCurrentCleanupShape
   makeSsaCurrentLockstepShape makeSsaCurrentPrefixRuntime
+  makeSsaCurrentRetainedContext
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -586,4 +587,114 @@ Proof
   conj_tac >- metis_tac[current_cut_sg_owned_name] >>
   simp[current_prefix_functional_def, current_prefix_back_def] >>
   metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem current_cut_original_phi_cleanup_effect:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_original_phi_at fn A renamed h k q slots /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  ALL_DISTINCT (MAP FST slots) /\ MEM (p,v) slots /\
+  (EL k old.bb_instructions).inst_outputs = [x] /\
+  (EL q new.bb_instructions).inst_outputs = [y] /\
+  simplify_current_phi (EL q new.bb_instructions) = EL q new.bb_instructions ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (phi_eff (SOME p) x old.bb_instructions)
+    (phi_eff (SOME p) y (simplify_current_phi_block new).bb_instructions)
+Proof
+  strip_tac >>
+  `q < LENGTH new.bb_instructions /\ (EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_original_phi_at_def] >> metis_tac[]) >>
+  `phi_eff (SOME p) x old.bb_instructions =
+    resolve_phi p (EL k old.bb_instructions).inst_operands` by
+    metis_tac[current_retained_original_at_effect] >>
+  `phi_eff (SOME p) y (simplify_current_phi_block new).bb_instructions =
+    resolve_phi p (EL q new.bb_instructions).inst_operands` by
+    metis_tac[current_retained_context_effect] >>
+  simp[] >> irule current_cut_original_phi_edge_resolution >> metis_tac[]
+QED
+
+Theorem current_cut_original_phi_effect:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_original_phi_at fn A renamed h k q slots /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  ALL_DISTINCT (MAP FST slots) /\ MEM (p,v) slots /\
+  (EL k old.bb_instructions).inst_outputs = [x] /\
+  (EL q new.bb_instructions).inst_outputs = [y] ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (phi_eff (SOME p) x old.bb_instructions)
+    (phi_eff (SOME p) y new.bb_instructions)
+Proof
+  strip_tac >>
+  `q < LENGTH new.bb_instructions /\ (EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_original_phi_at_def] >> metis_tac[]) >>
+  `phi_eff (SOME p) x old.bb_instructions =
+    resolve_phi p (EL k old.bb_instructions).inst_operands` by
+    metis_tac[current_retained_original_at_effect] >>
+  `phi_eff (SOME p) y new.bb_instructions =
+    resolve_phi p (EL q new.bb_instructions).inst_operands` by
+    metis_tac[current_retained_context_effect] >>
+  simp[] >> irule current_cut_original_phi_edge_resolution >> metis_tac[]
+QED
+
+Theorem current_cut_inserted_phi_cleanup_effect:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\ fn_cfg_edge fn p h /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) /\
+  (EL q new.bb_instructions).inst_outputs = [y] /\
+  simplify_current_phi (EL q new.bb_instructions) = EL q new.bb_instructions ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (phi_eff (SOME p) v old.bb_instructions)
+    (phi_eff (SOME p) y (simplify_current_phi_block new).bb_instructions)
+Proof
+  strip_tac >>
+  `q < LENGTH new.bb_instructions /\ (EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_inserted_phi_at_def] >> metis_tac[]) >>
+  `phi_eff (SOME p) v old.bb_instructions = SOME (Var v)` by
+    (irule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
+     fs[listTheory.EVERY_MEM] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `phi_eff (SOME p) y (simplify_current_phi_block new).bb_instructions =
+    resolve_phi p (EL q new.bb_instructions).inst_operands` by
+    metis_tac[current_retained_context_effect] >>
+  simp[] >> irule current_cut_inserted_phi_edge_resolution >> metis_tac[]
+QED
+
+Theorem current_cut_inserted_phi_effect:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\ fn_cfg_edge fn p h /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) /\
+  (EL q new.bb_instructions).inst_outputs = [y] ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (phi_eff (SOME p) v old.bb_instructions)
+    (phi_eff (SOME p) y new.bb_instructions)
+Proof
+  strip_tac >>
+  `q < LENGTH new.bb_instructions /\ (EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_inserted_phi_at_def] >> metis_tac[]) >>
+  `phi_eff (SOME p) v old.bb_instructions = SOME (Var v)` by
+    (irule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
+     fs[listTheory.EVERY_MEM] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `phi_eff (SOME p) y new.bb_instructions =
+    resolve_phi p (EL q new.bb_instructions).inst_operands` by
+    metis_tac[current_retained_context_effect] >>
+  simp[] >> irule current_cut_inserted_phi_edge_resolution >> metis_tac[]
 QED
