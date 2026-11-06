@@ -299,3 +299,101 @@ Proof
     ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.op_prov_def,
     venomInstTheory.mk_inst_def, finite_mapTheory.FLOOKUP_DRESTRICT]
 QED
+
+(* The capped-length prefix uses only integer operands.  In particular LT
+   must not be treated as a same-site pointer comparison. *)
+Theorem ptr_inst_ok_raw_call_length_binop:
+  (opc = LT \/ opc = XOR \/ opc = MUL) /\
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx func G tn
+    (mk_inst iid opc [left;right] [out]) s
+Proof
+  strip_tac >> gvs[] >>
+  simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+    ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
+    venomInstTheory.mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[ptrDisciplineTheory.op_prov_def, finite_mapTheory.FLOOKUP_DEF]) >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  pure_rewrite_tac[venomInstTheory.instruction_accessors,
+    venomInstTheory.instruction_accfupds, combinTheory.K_THM,
+    venomInstTheory.opcode_case_def] >>
+  simp[venomExecSemanticsTheory.exec_pure2_def, AllCaseEqs(),
+    venomStateTheory.update_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem raw_call_length_binop_step_base:
+  (opc = LT /\ f = (\x y. bool_to_word (w2n x < w2n y)) \/
+   opc = XOR /\ f = word_xor \/ opc = MUL /\ f = word_mul) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b ==>
+  step_inst_base (mk_inst iid opc [left;right] [out]) s =
+    OK (update_var out (f a b) s)
+Proof
+  strip_tac >> gvs[] >>
+  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  pure_rewrite_tac[venomInstTheory.mk_inst_def,
+    venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds,
+    combinTheory.K_THM, venomInstTheory.opcode_case_def] >>
+  simp[venomExecSemanticsTheory.exec_pure2_def]
+QED
+
+Theorem raw_call_length_binop_path_ptr:
+  (opc = LT /\ f = (\x y. bool_to_word (w2n x < w2n y)) \/
+   opc = XOR /\ f = word_xor \/ opc = MUL /\ f = word_mul) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst iid opc [left;right] [out]) /\
+  u = update_var out (f a b) s ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst iid opc [left;right] [out]) u)
+    (step_taint (mk_inst iid opc [left;right] [out]) s u tn)
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  rpt gen_tac >> disch_tac >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  `step_inst_base (mk_inst iid opc [left;right] [out]) s = OK u` by
+    (simp[] >> irule raw_call_length_binop_step_base >> metis_tac[]) >>
+  `ptr_inst_ok D 0 0 ctx func G tn (mk_inst iid opc [left;right] [out]) s` by
+    (irule ptr_inst_ok_raw_call_length_binop >> simp[] >> metis_tac[]) >>
+  `(mk_inst iid opc [left;right] [out]).inst_opcode <> INVOKE /\
+    ~is_terminator (mk_inst iid opc [left;right] [out]).inst_opcode /\
+    opc <> GAS` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >>
+     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  drule_all fragGasSeqPtrTheory.straight_line_ptr_edge >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  simp[venomInstTheory.mk_inst_def] >> strip_tac >>
+  drule (cj 2 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  simp[venomStateTheory.update_var_def]
+QED
+
+Theorem raw_call_length_binop_step_ghost:
+  (opc = LT \/ opc = XOR \/ opc = MUL) ==>
+  step_taint (mk_inst iid opc [left;right] [out]) s (update_var out w s) tn =
+    tn with t_var := tn.t_var |+ (out,{}) /\
+  step_prov PG G (mk_inst iid opc [left;right] [out]) (update_var out w s) =
+    DRESTRICT G (COMPL {out})
+Proof
+  strip_tac >> gvs[] >>
+  simp[ptrDisciplineTheory.step_taint_def, venomInstTheory.mk_inst_def,
+    ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.set_var_taint_def,
+    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+    ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.mem_taint_def,
+    ptrDisciplineTheory.new_site_bytes_def, ptrDisciplineTheory.step_writes_def,
+    ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_DEF,
+    ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+    ptrDisciplineTheory.out_prov_def] >>
+  Cases_on `eval_operand left s` >>
+  simp[SF CONJ_ss, ptrDisciplineTheory.taint_component_equality]
+QED
