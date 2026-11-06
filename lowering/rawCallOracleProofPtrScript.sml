@@ -132,7 +132,9 @@ Theorem oracle_call_checked_full:
     ghost_kept cenv es sa G tn s H un /\
     wb_frame cenv es sa s (t with vs_inst_idx := SUC s.vs_inst_idx) /\
     op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
-    t.vs_allocas = s.vs_allocas
+    t.vs_allocas = s.vs_allocas /\
+    t.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
+    t.vs_fmp = s.vs_fmp
 Proof
   rpt gen_tac >> disch_tac >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
@@ -171,6 +173,10 @@ Proof
     (qpat_x_assum `_ \/ _` strip_assume_tac >>
      simp[codegenRelTheory.source_memory_write_ranges_def,
        contextCodegenRelTheory.memory_range_of_operands_def]) >>
+  `(update_var out (if outcome.co_success then 1w else 0w) s').vs_vars =
+     s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
+   (update_var out (if outcome.co_success then 1w else 0w) s').vs_fmp = s.vs_fmp` by
+    simp[update_var_def] >>
   qexistsl_tac [`s'`, `update_var out (if outcome.co_success then 1w else 0w) s'`,
     `step_prov PG G inst (update_var out (if outcome.co_success then 1w else 0w) s')`,
     `step_taint inst s (update_var out (if outcome.co_success then 1w else 0w) s') tn`] >>
