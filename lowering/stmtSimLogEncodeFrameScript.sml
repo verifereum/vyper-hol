@@ -137,16 +137,11 @@ Theorem log_encode_immutable_sep_frame[local]:
   s.vs_alloca_next <= t.vs_alloca_next ==>
   immutable_alloca_sep func ce cx es t
 Proof
-  rewrite_tac[immutable_alloca_sep_def] >> strip_tac >> strip_tac >>
-  qpat_x_assum `_.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
-  strip_tac >> conj_tac >> (
-  rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >> rpt conj_tac
-  >- decide_tac
-  >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas aid`
-      >- (res_tac >> gvs[compileEnvTheory.regions_disjoint_def]) >>
-      metis_tac[optionTheory.SOME_11]) >>
-  metis_tac[])
+  strip_tac >> drule immutable_alloca_sep_frame >> disch_then irule >>
+  rpt conj_tac >- fs[] >- fs[]
+  >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas aid` >> res_tac >>
+      gvs[]) >>
+  rpt strip_tac >> res_tac >> metis_tac[]
 QED
 
 Theorem log_encode_allocate_metadata[local]:

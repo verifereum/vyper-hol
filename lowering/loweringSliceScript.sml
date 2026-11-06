@@ -565,24 +565,19 @@ Theorem immutable_alloca_sep_declare_local[local]:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) ==>
     immutable_alloca_sep func cenv cx es' t
 Proof
-  rpt gen_tac >> rewrite_tac[immutable_alloca_sep_def] >> strip_tac >>
-  asm_rewrite_tac[] >> strip_tac >>
-  qpat_x_assum `_.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
-  strip_tac >> conj_tac >> (
   rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  rpt (conj_tac >- (FIRST [first_assum ACCEPT_TAC, metis_tac[]] >> NO_TAC)) >>
+  drule immutable_alloca_sep_frame >> disch_then irule >>
+  rpt conj_tac >- fs[] >- fs[] >- fs[] >>
   rpt strip_tac >>
   rename1 `local_region cenv es'.scopes t n b z` >>
   Cases_on `n = id`
   >- (gvs[local_region_def] >> metis_tac[]) >>
-  `local_region cenv es.scopes s n b z` by
-    (fs[local_region_def] >>
-     rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
-     `~not_local_ptr cenv es.scopes q` by
-       (simp[not_local_ptr_def] >> metis_tac[]) >>
-     metis_tac[]) >>
-  metis_tac[])
+  disj1_tac >> qexists_tac `n` >>
+  fs[local_region_def] >>
+  rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
+  `~not_local_ptr cenv es.scopes q` by
+    (simp[not_local_ptr_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 (* Storing a word into a new local's region, whose ALLOCA ran, binds the
