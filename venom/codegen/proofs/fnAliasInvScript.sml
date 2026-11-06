@@ -4784,6 +4784,56 @@ Proof
   metis_tac[alias_popmany_plan_deletes]
 QED
 
+Theorem alias_clean_stack_stack_support:
+  MEM (Var x) (SND (clean_stack_plan live cfg fn bb ps)).ps_stack ==>
+  MEM (Var x) ps.ps_stack
+Proof
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- simp[clean_stack_plan_def] >>
+  rename1 `cfg_preds_of cfg bb.bb_label = pred::rest` >>
+  Cases_on `rest`
+  >- (simp[clean_stack_plan_def] >> IF_CASES_TAC
+      >- simp[] >>
+      Cases_on `lookup_block pred fn.fn_blocks`
+      >- simp[] >> simp[] >>
+      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+      qmatch_goalsub_abbrev_tac `if ok then _ else _` >>
+      qmatch_goalsub_abbrev_tac `mark_dead_stack retained` >>
+      qmatch_goalsub_abbrev_tac `popmany_plan cleanup ps` >>
+      qmatch_goalsub_abbrev_tac `popmany_plan other ps` >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      IF_CASES_TAC
+      >- (simp[MEM_MAP, dead_stack_marker_def] >> metis_tac[]) >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> simp[alias_mark_dead_stack_upper_support] >>
+          mp_tac (Q.INST [`at` |-> `Var x`, `to_pop` |-> `other`]
+            alias_popmany_stack_count) >>
+          gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+      qmatch_goalsub_abbrev_tac `popmany_plan removed ps` >>
+      mp_tac (Q.INST [`at` |-> `Var x`, `to_pop` |-> `removed`]
+        alias_popmany_stack_count) >>
+      simp[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  simp[clean_stack_plan_def]
+QED
+
+Theorem alias_clean_stack_edge_support:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  1 < LENGTH (cfg_succs_of cfg pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  (!x. MEM (Var x) ps.ps_stack ==>
+    MEM x (live_vars_at live pred (LENGTH pb.bb_instructions))) /\
+  (!x. LIST_ELEM_COUNT (Var x) ps.ps_stack <= 1) ==>
+  !x. MEM (Var x) (SND (clean_stack_plan live cfg fn bb ps)).ps_stack ==>
+  MEM x (input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0))
+Proof
+  rpt strip_tac >>
+  `MEM (Var x) ps.ps_stack` by metis_tac[alias_clean_stack_stack_support] >>
+  spose_not_then assume_tac >>
+  `MEM x (live_vars_at live pred (LENGTH pb.bb_instructions))` by metis_tac[] >>
+  `LIST_ELEM_COUNT (Var x) ps.ps_stack <= 1` by simp[] >>
+  drule_all alias_clean_stack_edge_deletes >> simp[]
+QED
+
 Theorem alias_clean_stack_edge_inventory:
   cfg_preds_of cfg bb.bb_label = [pred] /\
   1 < LENGTH (cfg_succs_of cfg pred) /\
