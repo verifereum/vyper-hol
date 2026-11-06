@@ -407,3 +407,159 @@ Proof
     `loaded` |-> `op_taint tn value`]
     (INST_TYPE [alpha |-> ``:256``] copied_prefix_taint_extend)) >> simp[]
 QED
+
+Theorem storage_body_destination_frame:
+  s1 = ((update_var ov (n2w (k*32)) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  G1 = DRESTRICT G (COMPL {ov}) /\
+  tn1 = (tn with t_var := tn.t_var |+ (ov,{})) /\
+  sf = ((update_var dv (a+n2w (k*32)) s1) with
+    vs_inst_idx := SUC s1.vs_inst_idx) /\
+  Gf = step_prov PG G1 (mk_inst aid ADD [Var dst;Var ov] [dv])
+    (update_var dv (a+n2w (k*32)) s1) /\
+  tnf = step_taint (mk_inst aid ADD [Var dst;Var ov] [dv]) s1
+    (update_var dv (a+n2w (k*32)) s1) tn1 ==>
+  copy_static sf = copy_static s /\ sf.vs_memory = s.vs_memory /\
+  tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+  (!x. x <> ov /\ x <> dv ==>
+    lookup_var x sf = lookup_var x s /\
+    op_prov Gf (Var x) = op_prov G (Var x) /\
+    op_taint tnf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `!x. x <> dv ==>
+    lookup_var x sf = lookup_var x s1 /\
+    op_prov Gf (Var x) = op_prov G1 (Var x) /\
+    op_taint tnf (Var x) = op_taint tn1 (Var x) /\
+    tnf.t_mem = tn1.t_mem /\ tnf.t_stor = tn1.t_stor /\
+    tnf.t_trans = tn1.t_trans /\ tnf.t_imm = tn1.t_imm /\
+    copy_static sf = copy_static s1 /\ sf.vs_memory = s1.vs_memory` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `sf = _` (fn th => pure_rewrite_tac [th]) >>
+     qpat_x_assum `Gf = _` (fn th => pure_rewrite_tac [th]) >>
+     qpat_x_assum `tnf = _` (fn th => pure_rewrite_tac [th]) >>
+     irule storage_body_arith_loaded_frame >> simp[]) >>
+  `tnf.t_mem = tn1.t_mem /\ tnf.t_stor = tn1.t_stor /\
+   tnf.t_trans = tn1.t_trans /\ tnf.t_imm = tn1.t_imm /\
+   copy_static sf = copy_static s1 /\ sf.vs_memory = s1.vs_memory` by
+    (first_x_assum (qspec_then `dv ++ "x"` mp_tac) >> simp[]) >>
+  gvs[copy_static_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+      FLOOKUP_DRESTRICT, op_prov_def, op_taint_def]
+QED
+
+Theorem storage_body_destination_endpoint:
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst mid MUL [Var cv; Lit 32w] [ov]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ADD [Var dst; Var ov] [dv]) /\
+  lookup_var cv s = SOME (n2w k) /\ lookup_var dst s = SOME a /\
+  op_taint tn (Var cv) = {} /\ ptr_covers G tn dst s (32*n) /\
+  k < n /\ w2n a + 32*n < dimword(:256) /\ ov <> dst /\ dv <> dst /\
+  s1 = ((update_var ov (n2w (k*32)) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  G1 = DRESTRICT G (COMPL {ov}) /\
+  tn1 = (tn with t_var := tn.t_var |+ (ov,{})) ==>
+  ?sf Gf tnf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    ptr_covers Gf tnf dv sf 32 /\
+    lookup_var dv sf = SOME (a+n2w (k*32)) /\
+    sf.vs_current_bb = s.vs_current_bb /\
+    sf.vs_inst_idx = s.vs_inst_idx+2 /\ ~sf.vs_halted /\
+    copy_static sf = copy_static s /\ sf.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!x. x <> ov /\ x <> dv ==>
+      lookup_var x sf = lookup_var x s /\
+      op_prov Gf (Var x) = op_prov G (Var x) /\
+      op_taint tnf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  qexistsl_tac [
+    `(update_var dv (a+n2w (k*32)) s1) with vs_inst_idx := SUC s1.vs_inst_idx`,
+    `step_prov PG G1 (mk_inst aid ADD [Var dst;Var ov] [dv])
+      (update_var dv (a+n2w (k*32)) s1)`,
+    `step_taint (mk_inst aid ADD [Var dst;Var ov] [dv]) s1
+      (update_var dv (a+n2w (k*32)) s1) tn1`] >>
+  conj_tac >- (irule storage_body_destination_path >> simp[] >>
+    gvs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
+  conj_tac >- (irule storage_body_destination_coverage >> simp[] >>
+    qexistsl_tac [`G`, `n`, `s`, `tn`] >> simp[]) >>
+  `!sf Gf tnf.
+    sf = ((update_var dv (a+n2w (k*32)) s1) with
+      vs_inst_idx := SUC s1.vs_inst_idx) /\
+    Gf = step_prov PG G1 (mk_inst aid ADD [Var dst;Var ov] [dv])
+      (update_var dv (a+n2w (k*32)) s1) /\
+    tnf = step_taint (mk_inst aid ADD [Var dst;Var ov] [dv]) s1
+      (update_var dv (a+n2w (k*32)) s1) tn1 ==>
+    copy_static sf = copy_static s /\ sf.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!x. x <> ov /\ x <> dv ==>
+      lookup_var x sf = lookup_var x s /\
+      op_prov Gf (Var x) = op_prov G (Var x) /\
+      op_taint tnf (Var x) = op_taint tn (Var x))` by
+    (rpt gen_tac >> strip_tac >> drule_all storage_body_destination_frame >> simp[]) >>
+  first_x_assum (qspecl_then [
+    `(update_var dv (a+n2w (k*32)) s1) with vs_inst_idx := SUC s1.vs_inst_idx`,
+    `step_prov PG G1 (mk_inst aid ADD [Var dst;Var ov] [dv])
+      (update_var dv (a+n2w (k*32)) s1)`,
+    `step_taint (mk_inst aid ADD [Var dst;Var ov] [dv]) s1
+      (update_var dv (a+n2w (k*32)) s1) tn1`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> gvs[update_var_def]
+QED
+
+Theorem storage_body_counter_frame:
+  s1 = ((update_var nv (n2w (k+1)) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  sf = ((update_var cv (n2w (k+1)) s1) with vs_inst_idx := SUC s1.vs_inst_idx) /\
+  Gf = DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv}) /\
+  tnf = (tn with t_var := (tn.t_var |+ (nv,{})) |+ (cv,{})) ==>
+  lookup_var cv sf = SOME (n2w (k+1)) /\
+  op_prov Gf (Var cv) = NONE /\ op_taint tnf (Var cv) = {} /\
+  sf.vs_current_bb = s.vs_current_bb /\ sf.vs_inst_idx = s.vs_inst_idx+2 /\
+  copy_static sf = copy_static s /\ sf.vs_memory = s.vs_memory /\
+  tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+  (!x. x <> nv /\ x <> cv ==>
+    lookup_var x sf = lookup_var x s /\
+    op_prov Gf (Var x) = op_prov G (Var x) /\
+    op_taint tnf (Var x) = op_taint tn (Var x)) /\
+  (!p n. p <> nv /\ p <> cv /\ ptr_covers G tn p s n ==>
+    ptr_covers Gf tnf p sf n)
+Proof
+  strip_tac >>
+  gvs[copy_static_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+      FLOOKUP_DRESTRICT, op_prov_def, op_taint_def,
+      bodyPtrDefsTheory.ptr_covers_def]
+QED
+
+Theorem storage_body_store_frame:
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
+  sf = ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  Gf = step_prov PG G (mk_inst id MSTORE [Var dst;value] []) (mstore (w2n a) w s) /\
+  tnf = step_taint (mk_inst id MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn ==>
+  Gf = G /\ tnf.t_var = tn.t_var /\
+  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+  sf.vs_current_bb = s.vs_current_bb /\ sf.vs_inst_idx = SUC s.vs_inst_idx /\
+  copy_static sf = copy_static s /\
+  (!x. lookup_var x sf = lookup_var x s) /\
+  (!p n. ptr_covers G tn p s n ==> ptr_covers Gf tnf p sf n) /\
+  mem_agree_outside {i | w2n a <= i /\ i < w2n a + 32}
+    sf.vs_memory s.vs_memory /\
+  (!i. (!j. j IN op_taint tn value ==> j < 32) /\
+    (i < w2n a \/ w2n a+32 <= i) ==>
+    (i IN tnf.t_mem <=> i IN tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all mstore_raw_ghost_frame >>
+  disch_then (qspecl_then [`tn`, `id`, `PG`, `G`] strip_assume_tac) >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- simp[mstore_def] >> conj_tac >- simp[mstore_def] >>
+  conj_tac >- simp[copy_static_def, mstore_def] >>
+  conj_tac >- simp[lookup_var_def, mstore_def] >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def, mstore_def]) >>
+  conj_tac >- (simp[] >> irule typedCopyPtrTheory.mstore_memory_frame) >>
+  rpt strip_tac >> qpat_assum `tnf = _` SUBST1_TAC >>
+  irule mstore_raw_outside_taint >> simp[]
+QED
