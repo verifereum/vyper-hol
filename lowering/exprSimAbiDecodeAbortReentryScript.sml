@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem abi_decode_guard_abort_opcode[local]:
-  MEM inst.inst_opcode [ADD; LT; GT; AND; ISZERO; MLOAD; ASSERT] /\
+  MEM inst.inst_opcode [ADD; MUL; LT; GT; AND; ISZERO; MLOAD; ASSERT] /\
   step_inst_base inst s = Abort a u ==> inst.inst_opcode = ASSERT /\ a = Revert_abort
 Proof
   strip_tac >> fs[] >>
@@ -35,7 +35,7 @@ QED
 
 Theorem abi_decode_guard_sequence_vars_extend_abort:
   !insts extras s t u.
-  EVERY (\i. MEM i.inst_opcode [ADD; LT; GT; AND; ISZERO; MLOAD; ASSERT]) insts /\
+  EVERY (\i. MEM i.inst_opcode [ADD; MUL; LT; GT; AND; ISZERO; MLOAD; ASSERT]) insts /\
   abi_decoder_vars_extend extras s t /\
   run_inst_seq insts s = Abort Revert_abort u ==>
   ?v. run_inst_seq insts t = Abort Revert_abort v
@@ -50,7 +50,7 @@ Proof
       drule_all abi_decoder_step_vars_extend >> strip_tac >>
       first_x_assum drule_all >> strip_tac >>
       qexists_tac `v''` >> simp[run_inst_seq_def]) >>
-  `MEM inst.inst_opcode [ADD; LT; GT; AND; ISZERO; MLOAD; ASSERT]` by simp[] >>
+  `MEM inst.inst_opcode [ADD; MUL; LT; GT; AND; ISZERO; MLOAD; ASSERT]` by simp[] >>
   drule_all abi_decode_guard_abort_opcode >> strip_tac >>
   drule_all abi_decode_assert_vars_extend_abort >> strip_tac >>
   qexists_tac `v` >> simp[run_inst_seq_def]
