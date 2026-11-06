@@ -83,6 +83,7 @@ Theorem mload_clean_seq_ptr:
     ?Gf tnf.
       inst_seq_ptr D 0 ctx fn PG G tn
         [mk_inst id MLOAD [Var src] [tmp]] s Gf tnf /\
+      op_prov Gf (Var tmp) = NONE /\
       op_taint tnf (Var tmp) = {} /\
       tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
       tnf.t_trans = tn.t_trans /\
@@ -101,7 +102,7 @@ Proof
   simp[mload_ghost_clean] >>
   rpt strip_tac >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
-       set_var_taint_def, mk_inst_def, op_taint_def,
+       set_var_taint_def, mk_inst_def, op_taint_def, op_prov_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
 
@@ -180,6 +181,7 @@ Theorem emit_mload_clean_seq_ptr:
       lookup_var out sf = SOME (mload (w2n a) s) /\
       (sf with vs_vars := s.vs_vars) = s /\
       (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s) /\
+      op_prov Gf (Var out) = NONE /\
       op_taint tnf (Var out) = {} /\
       tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
       tnf.t_trans = tn.t_trans /\
@@ -196,6 +198,7 @@ Proof
   `?Gf tnf.
      inst_seq_ptr D 0 ctx fn PG G tn
        [mk_inst sa.cs_next_id MLOAD [Var src] [out]] s Gf tnf /\
+     op_prov Gf (Var out) = NONE /\
      op_taint tnf (Var out) = {} /\
      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
      tnf.t_trans = tn.t_trans /\
