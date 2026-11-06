@@ -6420,7 +6420,7 @@ QED
    is defined at entry and read in the loop header; the body copy is demanded
    only by the exit edge. The path is planned one actual block at a time. *)
 Definition alias_buried_fn_def:
-  alias_buried_fn n flip = alias_diamond_fn with fn_blocks :=
+  alias_buried_fn phi n flip = alias_diamond_fn with fn_blocks :=
     MAP (\bb.
       if bb.bb_label = "entry" then
         bb with bb_instructions :=
@@ -6429,16 +6429,20 @@ Definition alias_buried_fn_def:
             [EL k ["d0"; "d1"; "d2"; "d3"]]) n ++ DROP 1 bb.bb_instructions
       else if bb.bb_label = "header" then
         bb with bb_instructions :=
-          TAKE 2 bb.bb_instructions ++
-          GENLIST (\k. mk_inst (40 + k) ADD
-            [Var (EL k ["d0"; "d1"; "d2"; "d3"]); Lit 1w]
+          TAKE 1 bb.bb_instructions ++
+          GENLIST (\k. mk_inst (40 + k) PHI
+            [Label "entry"; Var (EL k ["d0"; "d1"; "d2"; "d3"]);
+             Label "backedge"; Var (EL k ["f0"; "f1"; "f2"; "f3"])]
             [EL k ["s0"; "s1"; "s2"; "s3"]]) n ++
-          [EL 2 bb.bb_instructions;
+          [EL 1 bb.bb_instructions; EL 2 bb.bb_instructions;
            mk_inst 5 JNZ [Var "c"; Label (if flip then "right" else "left");
              Label (if flip then "left" else "right")] []]
       else if bb.bb_label = "join" then
         bb with bb_instructions := TAKE 2 bb.bb_instructions ++
-          [mk_inst 50 ASSIGN [Var "r"] ["buried"]] ++ DROP 2 bb.bb_instructions
+          [mk_inst 50 ASSIGN [Var (if phi then "t" else "r")] ["buried"]] ++
+          GENLIST (\k. mk_inst (60 + k) ADD
+            [Var (EL k ["s0"; "s1"; "s2"; "s3"]); Lit 1w]
+            [EL k ["f0"; "f1"; "f2"; "f3"]]) n ++ DROP 2 bb.bb_instructions
       else if bb.bb_label = "exit" then
         bb with bb_instructions :=
           mk_inst 51 ISZERO [Var "buried"] ["sink"] :: bb.bb_instructions
@@ -6446,27 +6450,159 @@ Definition alias_buried_fn_def:
 End
 
 Definition alias_buried_plan_def:
-  alias_buried_plan n flip idx ps =
-    generate_block_plan (liveness_analyze (alias_buried_fn n flip))
-      (dfg_build_function (alias_buried_fn n flip))
-      (cfg_analyze (alias_buried_fn n flip)) (alias_buried_fn n flip)
-      (EL idx (alias_buried_fn n flip).fn_blocks) ps
+  alias_buried_plan phi n flip idx ps =
+    generate_block_plan (liveness_analyze (alias_buried_fn phi n flip))
+      (dfg_build_function (alias_buried_fn phi n flip))
+      (cfg_analyze (alias_buried_fn phi n flip)) (alias_buried_fn phi n flip)
+      (EL idx (alias_buried_fn phi n flip).fn_blocks) ps
 End
 
 Definition alias_buried_path_def:
-  (alias_buried_path n flip [] = init_cleanup_plan_state NONE [] 0 0) /\
-  (alias_buried_path n flip (idx::rest) =
-    SND (THE (alias_buried_plan n flip idx (alias_buried_path n flip rest))))
+  (alias_buried_path phi n flip [] = init_cleanup_plan_state NONE [] 0 0) /\
+  (alias_buried_path phi n flip (idx::rest) =
+    SND (THE (alias_buried_plan phi n flip idx (alias_buried_path phi n flip rest))))
 End
 
 Theorem alias_buried_zero_probe:
-  normalize_operand (dfg_build_function (alias_buried_fn 0 F)) []
+  normalize_operand (dfg_build_function (alias_buried_fn F 0 F)) []
     (Var "buried") = Var "r" /\
-  (alias_buried_path 0 F [4; 3; 1; 0]).ps_stack =
+  (alias_buried_path F 0 F [4; 3; 1; 0]).ps_stack =
     [Var "buried"; Var "z"] /\
-  ~plan_holds (alias_buried_path 0 F [6; 4; 3; 1; 0]) (Var "buried")
+  ~plan_holds (alias_buried_path F 0 F [6; 4; 3; 1; 0]) (Var "buried")
 Proof
   rpt conj_tac >> EVAL_TAC
+QED
+
+Definition alias_buried_path_ok_def:
+  (alias_buried_path_ok phi n b [] <=> T) /\
+  (alias_buried_path_ok phi n b (idx::rest) <=>
+    alias_buried_path_ok phi n b rest /\
+    IS_SOME (alias_buried_plan phi n b idx (alias_buried_path phi n b rest)))
+End
+
+Theorem alias_buried_padding_plans_succeed:
+  !n b phi. n <= 4 ==>
+    alias_buried_path_ok phi n b [6; 4; (if b then 2 else 3); 1; 0]
+Proof
+  map_every qx_gen_tac [`n`, `b`, `phi`] >> strip_tac >>
+  rewrite_tac[alias_buried_path_ok_def] >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[]
+  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC) >>
+  Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- (CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- (CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- (rewrite_tac[Once alias_buried_path_def] >>
+      CONV_TAC (RAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+        (RAND_CONV computeLib.EVAL_CONV))))) >> EVAL_TAC)
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >>
+  CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC
+QED
+
+Theorem alias_buried_four_inventory:
+  (alias_buried_path F 4 F [4;3;1;0]).ps_stack =
+    [Var "f2"; Var "f1"; Var "f0"; Var "buried"; Var "f3"; Var "z"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_buried_backedge_state:
+  !n b phi. n <= 4 ==>
+    alias_buried_path phi n b [6;4;(if b then 2 else 3);1;0] =
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack :=
+        REVERSE (TAKE n (MAP Var ["f0";"f1";"f2";"f3"])) ++ [Var "z"])
+Proof
+  map_every qx_gen_tac [`n`, `b`, `phi`] >> strip_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[]
+  >- (Cases_on `b` >> Cases_on `phi`
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi`
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi`
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi`
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC) >>
+  Cases_on `b` >> Cases_on `phi` >>
+  rewrite_tac[Ntimes alias_buried_path_def 2]
+  >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+        (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC)
+  >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+        (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC)
+  >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+        (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC) >>
+  CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+    (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC
+QED
+
+(* The buried name is dead on the backedge, but is not below every live
+   slot: z is still below it. Thus clean_stack_plan includes it in physical
+   and to_cleanup, not retained. popmany_plan removes it even when cleanup
+   is promised; promises do not retain the identity of a dead slot. *)
+Theorem alias_buried_cleanup_diagnostic:
+  MEM "buried" (live_vars_at (liveness_analyze (alias_buried_fn F 4 F))
+    "join" (LENGTH (EL 4 (alias_buried_fn F 4 F).fn_blocks).bb_instructions)) /\
+  ~MEM "buried" (input_vars_from "join"
+    (EL 6 (alias_buried_fn F 4 F).fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze (alias_buried_fn F 4 F)) "backedge" 0)) /\
+  ~below_all_live (Var "buried")
+    (input_vars_from "join" (EL 6 (alias_buried_fn F 4 F).fn_blocks).bb_instructions
+      (live_vars_at (liveness_analyze (alias_buried_fn F 4 F)) "backedge" 0))
+    (alias_buried_path F 4 F [4;3;1;0]).ps_stack
+Proof
+  rewrite_tac[alias_buried_four_inventory] >> rpt conj_tac
+  >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_buried_replay_def:
+  alias_buried_replay phi n b h promised = alias_buried_plan phi n b 1
+    (alias_buried_path phi n b [6;4;(if b then 2 else 3);1;0] with
+      <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+End
+
+Theorem alias_buried_replay_filter:
+  !n b phi h promised. n <= 4 ==>
+    IS_SOME (alias_buried_replay phi n b h promised) /\
+    ~plan_holds (SND (THE (alias_buried_replay phi n b h promised))) (Var "buried")
+Proof
+  map_every qx_gen_tac [`n`, `b`, `phi`, `h`, `promised`] >> strip_tac >>
+  simp[alias_buried_replay_def, alias_buried_backedge_state] >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[]
+  >- (Cases_on `b` >> Cases_on `phi` >> conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi` >> conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi` >> conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
+  >- (Cases_on `b` >> Cases_on `phi` >> conj_tac
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC) >>
+  Cases_on `b` >> Cases_on `phi` >> conj_tac
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC
 QED
 
 Theorem eval_one_phi_without_predecessor:
