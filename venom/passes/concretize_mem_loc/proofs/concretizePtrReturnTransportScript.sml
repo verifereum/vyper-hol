@@ -1,6 +1,6 @@
 Theory concretizePtrReturnTransport
 Ancestors
-  concretizePtrOpaqueRetpc concretizePtrValueTransport
+  concretizePtrOpaqueRetpc concretizePtrValueTransport concretizePtrMixedAllocationTransport
   ptrDiscipline venomExecSemantics venomState list rich_list option
 
 Theorem ptr_mixed_scalar_operands_equal:
@@ -39,4 +39,14 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   qexists_tac `v::xs` >> gvs[] >>
   Cases_on `xs` >> Cases_on `vs` >> gvs[]
+QED
+
+Theorem ptr_mixed_vars_retained_births_tvar:
+  (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP B owner = SOME site) /\
+  tn'.t_var = tn.t_var /\
+  ptr_mixed_vars births positions TG tn f g s t ==>
+  ptr_mixed_vars B positions TG tn' f g s t
+Proof
+  strip_tac >> drule_all ptr_mixed_vars_birth_extension >> strip_tac >>
+  irule ptr_mixed_vars_fields >> goal_assum (drule_at Any) >> simp[]
 QED
