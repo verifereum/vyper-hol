@@ -682,6 +682,69 @@ Proof
   simp[venomStateTheory.lookup_var_def]
 QED
 
+Theorem raw_call_select_run:
+  eval_operand condop s = SOME (bool_to_word b) /\
+  eval_operand tp s = SOME tv /\ eval_operand ep s = SOME ev /\
+  condop <> Var d /\ ep <> Var d /\ ep <> Var m /\ d <> m ==>
+  ?t. run_inst_seq
+    [mk_inst i XOR [tp;ep] [d]; mk_inst j MUL [condop;Var d] [m];
+     mk_inst k XOR [ep;Var m] [out]] s = OK t /\
+    eval_operand (Var out) t = SOME (if b then tv else ev)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst i XOR [tp;ep] [d]) s =
+    OK (update_var d (word_xor tv ev) s)` by
+    (irule raw_call_length_binop_step_base >> simp[]) >>
+  `eval_operand condop (update_var d (word_xor tv ev) s) =
+     SOME (bool_to_word b)` by
+    (Cases_on `condop` >> gvs[venomStateTheory.eval_operand_def,
+      venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst j MUL [condop;Var d] [m])
+    (update_var d (word_xor tv ev) s) =
+    OK (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+      (update_var d (word_xor tv ev) s))` by
+    (irule raw_call_length_binop_step_base >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `eval_operand ep (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+      (update_var d (word_xor tv ev) s)) = SOME ev` by
+    (Cases_on `ep` >> gvs[venomStateTheory.eval_operand_def,
+      venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst k XOR [ep;Var m] [out])
+    (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+      (update_var d (word_xor tv ev) s)) =
+    OK (update_var out (word_xor ev (word_mul (bool_to_word b) (word_xor tv ev)))
+      (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+        (update_var d (word_xor tv ev) s)))` by
+    (irule raw_call_length_binop_step_base >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[run_inst_seq_def] >>
+  Cases_on `b` >> simp[venomExecSemanticsTheory.bool_to_word_def,
+    venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+    wordsTheory.WORD_MULT_CLAUSES, wordsTheory.WORD_XOR_CLAUSES] >>
+  metis_tac[wordsTheory.WORD_XOR_ASSOC, wordsTheory.WORD_XOR_COMM,
+    wordsTheory.WORD_XOR_CLAUSES]
+QED
+
+Theorem raw_call_select_run_code:
+  compile_select condop tp ep sa = (op,sb) /\
+  eval_operand condop s = SOME (bool_to_word b) /\
+  eval_operand tp s = SOME tv /\ eval_operand ep s = SOME ev /\
+  (!x. condop = Var x ==> not_fresh_at sa x) /\
+  (!x. ep = Var x ==> not_fresh_at sa x) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (if b then tv else ev)
+Proof
+  strip_tac >> drule raw_call_select_code >> strip_tac >> simp[] >>
+  irule raw_call_select_run >> simp[] >> rpt conj_tac >> strip_tac >>
+  fs[not_fresh_at_def] >>
+  first_x_assum (qspec_then `sa.cs_next_var` mp_tac) >> simp[]
+QED
+
 Theorem raw_call_select_path_ptr:
   compile_select condop tp ep sa = (op,sb) /\ fn_has_code sa sb func /\
   eval_operand condop s = SOME (bool_to_word b) /\
@@ -689,7 +752,7 @@ Theorem raw_call_select_path_ptr:
   op_prov G condop = NONE /\ op_prov G tp = NONE /\ op_prov G ep = NONE /\
   op_taint tn condop = {} /\ op_taint tn tp = {} /\ op_taint tn ep = {} /\
   (!x. condop = Var x ==> not_fresh_at sa x) /\
-  (!x. ep = Var x ==> not_fresh_at sa x) /\ fresh_vars_wrt sa s /\
+  (!x. ep = Var x ==> not_fresh_at sa x) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
@@ -704,9 +767,8 @@ Theorem raw_call_select_path_ptr:
     (!x. not_fresh_at sa x ==>
       FLOOKUP H x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule builtinPropsTheory.compile_select_correct >>
-  simp[] >> disch_then (qspecl_then [`tv`, `ev`, `b`, `s`] mp_tac) >> simp[] >>
-  strip_tac >> drule_all raw_call_select_state_frame >> strip_tac >>
+  strip_tac >> drule_all raw_call_select_run_code >> strip_tac >>
+  drule_all raw_call_select_state_frame >> strip_tac >>
   drule_all raw_call_select_checked_code >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   drule raw_call_select_code >> strip_tac >>
@@ -756,7 +818,7 @@ Theorem raw_call_select_stage:
   op_prov G condop = NONE /\ op_prov G tp = NONE /\ op_prov G ep = NONE /\
   op_taint tn condop = {} /\ op_taint tn tp = {} /\ op_taint tn ep = {} /\
   (!x. condop = Var x ==> not_fresh_at sa x) /\
-  (!x. ep = Var x ==> not_fresh_at sa x) /\ fresh_vars_wrt sa s /\
+  (!x. ep = Var x ==> not_fresh_at sa x) /\
   stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -791,3 +853,158 @@ Proof
   qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
   fs[same_blocks_def]
 QED
+
+Theorem raw_call_length_compare_stage:
+  emit_op RETURNDATASIZE [] sa = (Var rz,s1) /\
+  emit_op LT [Var rz;Lit (n2w n)] s1 = (Var cmpx,s2) /\ fn_has_code sa s2 func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  LENGTH s.vs_returndata < dimword(:256) /\ n < dimword(:256) ==>
+  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    t.vs_current_bb = s2.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s2.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand (Var rz) t = SOME (n2w (LENGTH s.vs_returndata)) /\
+    eval_operand (Var cmpx) t = SOME (bool_to_word (LENGTH s.vs_returndata < n)) /\
+    op_prov H (Var rz) = NONE /\ op_taint un (Var rz) = {} /\
+    op_prov H (Var cmpx) = NONE /\ op_taint un (Var cmpx) = {} /\
+    not_fresh_at s2 rz /\ not_fresh_at s2 cmpx /\
+    t.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
+    t.vs_returndata = s.vs_returndata /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint un (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND] >>
+  `cs_extends sa s1 /\ cs_extends s1 s2` by
+    fs[exprLoweringPropsTheory.ci_mono_def] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `local_ptrs_reserved cenv s1 /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x)` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+       stmtFragPtrTheory.not_fresh_at_mono]) >>
+  drule_all raw_call_emit_returndatasize_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `eval_operand (Lit (n2w n)) t = SOME (n2w n) /\
+   op_prov H (Lit (n2w n)) = NONE /\ op_taint un (Lit (n2w n)) = {}` by
+    simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+      ptrDisciplineTheory.op_taint_def] >>
+  drule_all (SRULE [] (Q.INST
+    [`opc` |-> `LT`, `f` |-> `(\x y. bool_to_word (w2n x < w2n y))`]
+    raw_call_emit_length_binop_stage)) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  suspend "compose"
+QED
+
+Resume raw_call_length_compare_stage[compose]:
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK t')` by
+    (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
+  `wb_frame cenv es sa s t'` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     goal_assum (drule_at Any) >> simp[] >> conj_tac
+     >- (qexistsl_tac [`es`, `s1`, `t`] >>
+         fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     goal_assum (drule_at Any)) >>
+  `ghost_kept cenv es sa G tn s H' un'` by
+    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+     >- (qexists_tac `func` >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+     qexistsl_tac [`H`, `es`, `t`, `s1`, `un`] >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s1 x` by
+    metis_tac[stmtFragPtrTheory.not_fresh_at_mono, exprLoweringPropsTheory.ci_mono_def] >>
+  `not_fresh_at s2 rz` by
+    metis_tac[stmtFragPtrTheory.not_fresh_at_mono, exprLoweringPropsTheory.ci_mono_def] >>
+  qexistsl_tac [`H'`, `un'`, `t'`] >>
+  fs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+    venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
+  metis_tac[]
+QED
+
+Finalise raw_call_length_compare_stage
+
+Theorem raw_call_capped_length_stage:
+  emit_op RETURNDATASIZE [] sa = (Var rz,s1) /\
+  emit_op LT [Var rz;Lit (n2w n)] s1 = (Var cmpx,s2) /\
+  compile_select (Var cmpx) (Var rz) (Lit (n2w n)) s2 = (cap,sb) /\
+  fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  LENGTH s.vs_returndata < dimword(:256) /\ n < dimword(:256) ==>
+  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand cap t = SOME (n2w (MIN (LENGTH s.vs_returndata) n)) /\
+    op_prov H cap = NONE /\ op_taint un cap = {} /\
+    t.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
+    t.vs_returndata = s.vs_returndata /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint un (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND] >>
+  `cs_extends sa s2` by
+    metis_tac[compileEnvTheory.cs_extends_trans, exprLoweringPropsTheory.ci_mono_def] >>
+  `cs_extends s2 sb` by
+    (drule raw_call_select_code >> strip_tac >>
+     simp[cs_extends_def] >> qexists_tac `[]` >>
+     fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `fn_has_code sa s2 func /\ fn_has_code s2 sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `local_ptrs_reserved cenv s2 /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s2 x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s2 x) /\
+   (!x. not_fresh_at sa x ==> not_fresh_at s2 x)` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+       stmtFragPtrTheory.not_fresh_at_mono]) >>
+  drule_all raw_call_length_compare_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `(!x. Lit (n2w n) = Var x ==> not_fresh_at s2 x) /\
+   (!x. Var cmpx = Var x ==> not_fresh_at s2 x) /\
+   eval_operand (Lit (n2w n)) t = SOME (n2w n) /\
+   op_prov H (Lit (n2w n)) = NONE /\ op_taint un (Lit (n2w n)) = {}` by
+    simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+      ptrDisciplineTheory.op_taint_def] >>
+  drule_all raw_call_select_stage >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> suspend "compose"
+QED
+
+Resume raw_call_capped_length_stage[compose]:
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK t')` by
+    (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
+  `wb_frame cenv es sa s t'` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     goal_assum (drule_at Any) >> simp[] >> conj_tac
+     >- (qexistsl_tac [`es`, `s2`, `t`] >>
+         fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     goal_assum (drule_at Any)) >>
+  `ghost_kept cenv es sa G tn s H' un'` by
+    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+     >- (qexists_tac `func` >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+     qexistsl_tac [`H`, `es`, `t`, `s2`, `un`] >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  qexistsl_tac [`H'`, `un'`, `t'`] >> simp[arithmeticTheory.MIN_DEF] >>
+  Cases_on `LENGTH s.vs_returndata < n` >> fs[] >> metis_tac[]
+QED
+
+Finalise raw_call_capped_length_stage
