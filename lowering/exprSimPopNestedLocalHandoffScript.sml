@@ -88,8 +88,6 @@ Proof
   qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
   drule pop_target_live_array >>
   disch_then (drule_at Any) >> simp[] >>
-  impl_tac
-  >- (rpt strip_tac >> fs[] >> metis_tac[]) >>
   strip_tac >>
   `?root_ty. cenv.ce_var_type id = SOME root_ty /\
      evaluate_type (get_tenv cx) root_ty = SOME entry.type` by
