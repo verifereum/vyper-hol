@@ -586,3 +586,63 @@ Proof
   simp[Once generate_fn_plan_aux_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem splice_two_dfs_b:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  dfs_aux_call (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    ["B"] ["Y";"H";"E"] q
+Proof
+  gen_tac >> strip_tac >> drule splice_two_block_result >> strip_tac >>
+  drule splice_two_y_return >> strip_tac >>
+  `q.ps_alloc.sa_next_offset = 608 /\ q.ps_alloc.sa_spill_base = 0 /\
+   q.ps_label_counter = 0` by (gvs[] >> EVAL_TAC) >>
+  qpat_x_assum `q = _` kall_tac >>
+  mp_tac splice_two_dfs_h >> strip_tac >>
+  mp_tac splice_two_schedule >> strip_tac >>
+  drule dfs_aux_call_succs >>
+  disch_then (qspec_then `THE (lookup_block "H" splice_two_fn.fn_blocks)` mp_tac) >>
+  simp[] >> strip_tac >>
+  `q with <|ps_alloc := r.ps_alloc with sa_free_slots := q.ps_alloc.sa_free_slots;
+            ps_label_counter := 0|> = q` by
+    (simp[stackPlanTypesTheory.plan_state_component_equality,
+          stackPlanTypesTheory.spill_alloc_component_equality]) >>
+  drule dfs_aux_call_sibling >> simp[] >> strip_tac >>
+  drule dfs_aux_call_branch >> simp[]
+QED
+
+Theorem splice_two_lineage_b:
+  !q. q = splice_loop_e with <|
+      ps_stack := splice_loop_e.ps_stack ++ MAP Var
+        ["r";"a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n"];
+      ps_spilled := FEMPTY |+ (Var "q",32) |+ (Var "p",64) |+ (Var "o",96);
+      ps_alloc := splice_loop_e.ps_alloc with sa_free_slots :=
+        TAKE 16 splice_loop_e.ps_alloc.sa_free_slots |> ==>
+  lineage_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0) "B" q
+Proof
+  gen_tac >> strip_tac >> drule splice_two_dfs_b >> strip_tac >>
+  drule splice_two_block_result >> strip_tac >>
+  qpat_x_assum `q = _` kall_tac >>
+  mp_tac splice_two_lineage_h >> strip_tac >>
+  mp_tac splice_two_schedule >> strip_tac >>
+  `dfs_block_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0) "B" q` by
+    (simp[dfs_block_state_def] >> qexistsl_tac [`[]`,`["Y";"H";"E"]`] >> simp[]) >>
+  `dfs_block_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0) "H" splice_loop_e` by
+    (simp[dfs_block_state_def] >> qexistsl_tac [`[]`,`["E"]`] >> simp[splice_two_dfs_h]) >>
+  `lineage_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0) "B"
+    (q with <|ps_stack := q.ps_stack; ps_spilled := q.ps_spilled|>)` suffices_by simp[] >>
+  irule lineage_state_step >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`NONE`,`F`] >>
+  gvs[splice_loop_e_exact]
+QED
