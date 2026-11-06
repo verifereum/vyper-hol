@@ -1259,3 +1259,32 @@ Historical write classification for remaining ordinary families, source-success
 supply for the MCOPY read consumer, fixed-byte exclusion, and universal target
 prefix coverage remain unresolved. No CALL/RET simulation or global write
 exclusion follows from these field equations alone.
+
+### C1.5.90.67.27 requested-write classification generalization
+
+HistoricalWriteClassification now exports `ptr_historical_write_classification`
+in place of the MCOPY-only theorem (the old theorem is removed). It retains
+stage, placement, transcript, historical index/snapshot, access_ok, taint_ok,
+and non-forwarding premises. Its instruction-specific inputs are exactly
+`mem_write_ops (EL j h).po_inst = SOME ops`, successful evaluation of
+`ops.iao_ofst` to d, membership of `(w2n d,len)` in the source requested write
+ranges, and len<>0. Its fixed/owned conclusion retains destination taint
+purity in the fixed branch and exact provenance, historical destination tag,
+production position, and strict word bound in the owned branch. A local
+destination-purity fact uses taint_ok and mem_write_ops opcode cases; no new
+purity premise was added.
+
+HistoricalMcopyExclusion's existing `ptr_demand_mcopy_write_exclusion` keeps
+its statement and now supplies the actual requested range and write-operand
+record to this generic classifier. Both directly affected theories build.
+There are no other SML imports/callers of these two theories in the current
+source search. Earlier MCOPY-specific classification references in this
+inventory describe the old interface and are superseded by this paragraph.
+
+The generic requested-range boundary does not classify a clipped CALL actual
+footprint as its requested length, nor classify zero-length ranges as bounded.
+It does not construct source execution. Historical ordinary-event assembly
+still needs exact event operands and footprints, immediate poststate fields
+(where applicable), and the actual same-history access/taint suppliers.
+MCOPY source-success for the read consumer, fixed-byte suffix exclusion,
+and universal target-prefix coverage remain unresolved.

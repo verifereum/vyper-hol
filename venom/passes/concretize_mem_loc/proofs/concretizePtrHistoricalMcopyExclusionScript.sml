@@ -63,13 +63,17 @@ Proof
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
    o1_run_state_ok vs /\ ~ctx_has_dalloca C` by
     fs[ptr_demand_interval_def] >>
+  `MEM (w2n ds,w2n n_target)
+    (source_memory_write_ranges (EL j h).po_inst (EL j h).po_state)` by
+    (simp[ptr_source_write_classification, ptr_classified_write_range_def] >> metis_tac[]) >>
   `((op_prov TGj dop = NONE /\ op_taint (EL j h).po_taint dop = {} /\
       w2n ds + w2n n_target <= lo) \/
     (?dv tokB bid db sb pb. dop = Var dv /\ FLOOKUP TGj dv = SOME (tokB,bid) /\
      FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
      FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
      db <= w2n ds /\ w2n ds + w2n n_target <= db+sb /\ pb+sb < dimword(:256)))` by
-    (drule_all ptr_historical_mcopy_write_classification >> simp[]) >>
+    (drule_at (Pat `mem_write_ops _ = SOME _`) ptr_historical_write_classification >>
+     simp[] >> disch_then drule_all >> simp[]) >>
   `(b+k IN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
       (mcopy (w2n ds) (w2n rs) (w2n n_target) (EL j h).po_state)) <=>
      ptr_chrono_write C (b+k) (EL j h))` by

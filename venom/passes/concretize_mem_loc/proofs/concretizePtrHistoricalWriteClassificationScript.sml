@@ -4,7 +4,16 @@ Ancestors concretizePtrHistoricalPlacement concretizePtrPlacementBounds
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrPrefixLedger ptrDiscipline venomInst memLocDefs finite_map words list
 
-Theorem ptr_historical_mcopy_write_classification:
+Theorem ptr_write_offset_untainted[local]:
+  taint_ok fn tn inst s /\ mem_write_ops inst = SOME ops ==>
+  op_taint tn ops.iao_ofst = {}
+Proof
+  Cases_on `inst.inst_opcode` >> simp[mem_write_ops_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[taint_ok_def] >> metis_tac[]
+QED
+
+Theorem ptr_historical_write_classification:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
@@ -13,34 +22,30 @@ Theorem ptr_historical_mcopy_write_classification:
   ptr_stage_placements C' positions /\
   ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
   j < LENGTH h /\ EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
-  (EL j h).po_inst.inst_opcode = MCOPY /\
-  (EL j h).po_inst.inst_operands = [dop;sop;nop] /\
-  eval_operand dop (EL j h).po_state = SOME d /\
-  eval_operand sop (EL j h).po_state = SOME r /\
-  eval_operand nop (EL j h).po_state = SOME n /\
+  mem_write_ops (EL j h).po_inst = SOME ops /\
+  eval_operand ops.iao_ofst (EL j h).po_state = SOME d /\
+  MEM (w2n d,len) (source_memory_write_ranges (EL j h).po_inst (EL j h).po_state) /\
   access_ok lo (EL j h).po_prov fn (EL j h).po_inst (EL j h).po_state /\
   taint_ok fn (EL j h).po_taint (EL j h).po_inst (EL j h).po_state /\
-  ~in_revert_forward fn (EL j h).po_state /\ w2n n <> 0 ==>
-  (op_prov TGj dop = NONE /\ op_taint (EL j h).po_taint dop = {} /\
-    w2n d + w2n n <= lo) \/
-  (?dv token bid db sb pb. dop = Var dv /\ FLOOKUP TGj dv = SOME (token,bid) /\
+  ~in_revert_forward fn (EL j h).po_state /\ len <> 0 ==>
+  (op_prov TGj ops.iao_ofst = NONE /\ op_taint (EL j h).po_taint ops.iao_ofst = {} /\
+    w2n d + len <= lo) \/
+  (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (token,bid) /\
     FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
-    db <= w2n d /\ w2n d + w2n n <= db+sb /\ pb+sb < dimword(:256))
+    db <= w2n d /\ w2n d + len <= db+sb /\ pb+sb < dimword(:256))
 Proof
   strip_tac >>
-  `MEM (w2n d,w2n n) (source_memory_write_ranges (EL j h).po_inst (EL j h).po_state)` by
-    (simp[ptr_source_write_classification, ptr_classified_write_range_def] >> metis_tac[]) >>
-  `op_taint (EL j h).po_taint dop = {}` by
-    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >> metis_tac[]) >>
+  `op_taint (EL j h).po_taint ops.iao_ofst = {}` by
+    (drule_all ptr_write_offset_untainted >> simp[]) >>
   `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
     (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   drule ptr_structural_transcript_ownership >> disch_then (qspec_then `j` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
   drule_all ptr_source_ownership_prov_erases >> strip_tac >>
-  Cases_on `op_prov (EL j h).po_prov dop = NONE /\ w2n d + w2n n <= lo`
+  Cases_on `op_prov (EL j h).po_prov ops.iao_ofst = NONE /\ w2n d + len <= lo`
   >- (disj1_tac >> simp[] >>
-      Cases_on `dop` >> gvs[op_prov_def] >>
+      Cases_on `ops.iao_ofst` >> gvs[op_prov_def] >>
       fs[ptr_ledger_erases_def] >>
       Cases_on `FLOOKUP TGj s` >> gvs[] >>
       metis_tac[flookup_thm]) >>
@@ -48,7 +53,7 @@ Proof
   qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
   simp[access_ok_def] >> strip_tac >>
   qpat_x_assum `!off len. MEM _ (source_memory_write_ranges _ _) /\ _ ==> _`
-    (qspecl_then [`w2n d`,`w2n n`] mp_tac) >>
+    (qspecl_then [`w2n d`,`len`] mp_tac) >>
   simp[mem_write_ops_def] >>
   (impl_tac >- (strip_tac >> gvs[] >> decide_tac)) >> strip_tac >>
   rename1 `FLOOKUP (EL j h).po_prov dv = SOME (db,sb)` >>
