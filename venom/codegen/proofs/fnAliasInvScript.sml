@@ -24,6 +24,191 @@ Ancestors
   livenessConvergenceProofs livenessBlockProofs codegenReadyCompute fnPlanPrefix
   simplifyCfgFixupStatic
 
+(* Actual planner cuts.  The historical label is deliberately independent of
+   any semantic predecessor.  Instruction indices count non-PARAM instructions,
+   exactly as generate_block_insts_plan does. *)
+Datatype:
+  alias_plan_cut =
+    AliasPlanEntry string plan_state
+  | AliasPlanPrepared string basic_block plan_state
+  | AliasPlanInst string basic_block num plan_state
+End
+
+Inductive alias_plan_event:
+[~override:]
+  alias_plan_event lv dfg cfg fn ps0
+    (AliasPlanEntry lbl ps)
+    (AliasPlanEntry lbl
+      (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>))
+[~prepare:]
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+   else ([], ps)) = (ops, ps1) ==>
+  alias_plan_event lv dfg cfg fn ps0
+    (AliasPlanEntry lbl ps) (AliasPlanPrepared lbl bb ps1)
+[~clean:]
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+   then clean_stack_plan lv cfg fn bb ps else ([], ps)) = (ops, ps1) ==>
+  alias_plan_event lv dfg cfg fn ps0
+    (AliasPlanPrepared lbl bb ps) (AliasPlanInst lbl bb 0 ps1)
+[~instruction:]
+  DROP i (non_param_insts bb) = inst::rest /\
+  generate_inst_plan lv dfg cfg fn inst
+    (if rest = [] then live_vars_at lv bb.bb_label (LENGTH bb.bb_instructions)
+     else live_vars_at lv bb.bb_label
+       (i + LENGTH (get_params bb.bb_instructions) + 1))
+    (bb_is_halting bb)
+    (case rest of [] => F | next::_ => is_terminator next.inst_opcode)
+    bb.bb_label ps = SOME (ops, ps1) ==>
+  alias_plan_event lv dfg cfg fn ps0
+    (AliasPlanInst lbl bb i ps) (AliasPlanInst lbl bb (i+1) ps1)
+[~edge:]
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn ps0 lbl ps_dfs /\
+  generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (ops, ps_dfs_after) /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) =
+      SOME (ops, ps_after) /\
+  MEM succ (cfg_succs_of cfg lbl) /\
+  dfs_block_state lv dfg cfg fn ps0 succ ps_succ ==>
+  alias_plan_event lv dfg cfg fn ps0
+    (AliasPlanInst lbl bb (LENGTH (non_param_insts bb)) ps_after)
+    (AliasPlanEntry succ
+      (ps_succ with <| ps_stack := ps_after.ps_stack;
+                      ps_spilled := ps_after.ps_spilled |>))
+End
+
+(* The list contains destination cuts, not the starting cut. *)
+Definition alias_cut_history_def:
+  (alias_cut_history R start [] finish <=> finish = start) /\
+  (alias_cut_history R start (cut::cuts) finish <=>
+     R start cut /\ alias_cut_history R cut cuts finish)
+End
+
+Theorem alias_cut_history_append:
+  !xs start mid ys finish.
+    alias_cut_history R start xs mid /\
+    alias_cut_history R mid ys finish ==>
+    alias_cut_history R start (xs ++ ys) finish
+Proof
+  Induct_on `xs` >> simp[alias_cut_history_def] >> metis_tac[]
+QED
+
+Theorem alias_cut_history_first_failure:
+  !cuts start finish.
+    alias_cut_history R start cuts finish /\ Good start /\ ~Good finish ==>
+    ?before input bad after.
+      cuts = before ++ bad::after /\
+      alias_cut_history R start before input /\
+      EVERY Good before /\ Good input /\ R input bad /\ ~Good bad /\
+      alias_cut_history R bad after finish
+Proof
+  Induct_on `cuts` >> simp[alias_cut_history_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `Good h`
+  >- (first_x_assum drule_all >> strip_tac >>
+      qexistsl_tac [`h::before`, `input`, `bad`, `after`] >>
+      simp[alias_cut_history_def]) >>
+  qexistsl_tac [`[]`, `start`, `h`, `cuts`] >>
+  simp[alias_cut_history_def]
+QED
+
+Theorem alias_plan_instruction_history:
+  !insts i ps ops ps_end.
+    generate_block_insts_plan lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+      i insts ps = SOME (ops, ps_end) /\
+    DROP i (non_param_insts bb) = insts ==>
+    ?cuts. alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+      (AliasPlanInst lbl bb i ps) cuts
+      (AliasPlanInst lbl bb (i + LENGTH insts) ps_end)
+Proof
+  Induct_on `insts`
+  >- (simp[generate_block_insts_plan_def] >> rpt strip_tac >>
+      qexists_tac `[]` >> simp[alias_cut_history_def]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once generate_block_insts_plan_def, LET_THM, AllCaseEqs()] >>
+  `DROP (i+1) (non_param_insts bb) = insts` by
+    (`DROP 1 (DROP i (non_param_insts bb)) = insts` by simp[] >>
+     qpat_x_assum `DROP 1 (DROP i _) = _` mp_tac >>
+     pure_rewrite_tac[DROP_DROP_T] >> simp[Once arithmeticTheory.ADD_COMM]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `AliasPlanInst lbl bb (i+1) ps' :: cuts` >>
+  simp[alias_cut_history_def, arithmeticTheory.ADD_CLAUSES] >>
+  reverse conj_tac >-
+    (`SUC (i + LENGTH insts) = i + 1 + LENGTH insts` by simp[] >>
+     pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  irule alias_plan_event_instruction >>
+  qexistsl_tac [`h`, `step_ops`, `insts`] >>
+  pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem alias_plan_block_history:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (ops, ps_after) ==>
+  ?cuts. alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+    (AliasPlanEntry lbl ps) cuts
+    (AliasPlanInst lbl bb (LENGTH (non_param_insts bb)) ps_after)
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule alias_plan_instruction_history >> simp[] >>
+  disch_then (qspecl_then [`ps0`, `lbl`] strip_assume_tac) >>
+  qexists_tac `AliasPlanPrepared lbl bb ps1 :: AliasPlanInst lbl bb 0 ps2 :: cuts` >>
+  simp[alias_cut_history_def] >> conj_tac
+  >- (irule alias_plan_event_prepare >> metis_tac[]) >>
+  irule alias_plan_event_clean >> metis_tac[]
+QED
+
+Theorem alias_plan_history_extend_block:
+  alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+    start prefix (AliasPlanEntry lbl ps) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) =
+      SOME (ops, ps_after) ==>
+  ?block_cuts. alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+    start (prefix ++ block_cuts)
+    (AliasPlanInst lbl bb (LENGTH (non_param_insts bb)) ps_after)
+Proof
+  strip_tac >> drule_all alias_plan_block_history >>
+  disch_then (qspec_then `ps0` strip_assume_tac) >>
+  qexists_tac `AliasPlanEntry lbl
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) :: cuts` >>
+  irule alias_cut_history_append >> first_assum (irule_at Any) >>
+  simp[alias_cut_history_def, alias_plan_event_override]
+QED
+
+Theorem alias_lineage_history:
+  !lbl ps. lineage_state lv dfg cfg fn ps0 lbl ps ==>
+  ?entry cuts. fn_entry_label fn = SOME entry /\
+    alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+      (AliasPlanEntry entry ps0) cuts (AliasPlanEntry lbl ps)
+Proof
+  ho_match_mp_tac lineage_state_ind >> conj_tac
+  >- (rpt strip_tac >> qexistsl_tac [`lbl`, `[]`] >>
+      simp[alias_cut_history_def]) >>
+  rpt strip_tac >> rename1 `MEM succ (cfg_succs_of cfg lbl)` >>
+  drule_all alias_plan_block_history >>
+  disch_then (qspec_then `ps0` strip_assume_tac) >>
+  qexists_tac `entry` >> simp[] >>
+  irule_at Any alias_cut_history_append >>
+  first_assum (irule_at Any) >>
+  qexists_tac `AliasPlanEntry lbl
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) ::
+    cuts' ++ [AliasPlanEntry succ
+      (ps_succ with <| ps_stack := ps_after.ps_stack;
+                      ps_spilled := ps_after.ps_spilled |>)]` >>
+  simp[alias_cut_history_def, alias_plan_event_override] >>
+  irule alias_cut_history_append >>
+  first_assum (irule_at Any) >>
+  simp[alias_cut_history_def] >>
+  irule alias_plan_event_edge >> metis_tac[]
+QED
+
 Theorem alias_single_successor_liveout:
   wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
   lookup_block pred fn.fn_blocks = SOME pb /\
