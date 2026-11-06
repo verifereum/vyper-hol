@@ -596,7 +596,7 @@ Finalise abi_encoder_shared_array_dynamic_body
 Theorem abi_encoder_shared_array_static_body:
   abi_sites_encoder_shared sites ei /\ abi_encoder_static_leaf ei /\
   abi_encode_array_static_body ip src dst ei asz msz st = (out,en) /\
-  fn_has_code st en func /\
+  fn_has_code st en func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
