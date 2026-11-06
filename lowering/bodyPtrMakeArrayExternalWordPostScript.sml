@@ -15,7 +15,8 @@ Theorem external_word_load_ptr_val_ok:
     ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all external_load_output_ghost >> simp[ptr_val_ok_def] >> gvs[]
+  drule_all external_load_output_ghost >> strip_tac >>
+  simp[ptr_val_ok_def, op_prov_def] >> metis_tac[]
 QED
 
 Theorem storage_word_load_ptr_val_ok:
