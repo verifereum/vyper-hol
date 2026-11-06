@@ -4,7 +4,7 @@ Ancestors
   bodyPtrMakeArrayStorageControl bodyPtrMakeArrayAdd bodyPtrMakeArrayCopyStep
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   finite_map words codegenRel fragGasPathPtr typedCopyLoopHeaderPtr
-  bodyPtrMakeArrayExternalLoop exprSimStorageCopy
+  bodyPtrMakeArrayExternalLoop exprSimStorageCopy bodyPtrMakeArrayPrefix
 
 Theorem storage_body_scalar_add_ghost:
   op_prov G left = NONE /\ op_prov G right = NONE ==>
@@ -330,4 +330,80 @@ Proof
      gvs[update_var_def, lookup_var_def, eval_operand_def, op_prov_def,
          op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]) >>
   drule_all gas_path_ptr_then >> simp[]
+QED
+
+Theorem storage_body_mul_old_coverage:
+  ptr_covers G tn root s n /\ root <> out ==>
+  ptr_covers (DRESTRICT G (COMPL {out}))
+    (tn with t_var := tn.t_var |+ (out,{})) root
+    ((update_var out w s) with vs_inst_idx := idx) n
+Proof
+  strip_tac >>
+  gvs[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, allocas_from_def]
+QED
+
+Theorem storage_body_destination_coverage:
+  ptr_covers G tn dst s (32*n) /\ lookup_var dst s = SOME a /\
+  k < n /\ w2n a + 32*n < dimword(:256) /\
+  ov <> dst /\ dv <> dst /\
+  s1 = ((update_var ov (n2w (k*32)) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  G1 = DRESTRICT G (COMPL {ov}) /\
+  tn1 = (tn with t_var := tn.t_var |+ (ov,{})) ==>
+  ptr_covers
+    (step_prov PG G1 (mk_inst aid ADD [Var dst;Var ov] [dv])
+      (update_var dv (a+n2w (k*32)) s1))
+    (step_taint (mk_inst aid ADD [Var dst;Var ov] [dv]) s1
+      (update_var dv (a+n2w (k*32)) s1) tn1)
+    dv ((update_var dv (a+n2w (k*32)) s1) with
+      vs_inst_idx := SUC s1.vs_inst_idx) 32
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ptr_covers G1 tn1 dst s1 (32*n)` by
+    (gvs[] >> irule storage_body_mul_old_coverage >> simp[]) >>
+  `lookup_var dst s1 = SOME a /\
+   eval_operand (Var ov) s1 = SOME (n2w (k*32))` by
+    gvs[update_var_def, lookup_var_def, eval_operand_def, FLOOKUP_UPDATE] >>
+  `k*32 < 32*n /\ k*32+32 <= 32*n /\ w2n a+k*32 < dimword(:256)` by
+    decide_tac >>
+  `ptr_covers
+    (step_prov PG G1 (mk_inst aid ADD [Var dst;Var ov] [dv])
+      (update_var dv (a+n2w (k*32)) s1))
+    (step_taint (mk_inst aid ADD [Var dst;Var ov] [dv]) s1
+      (update_var dv (a+n2w (k*32)) s1) tn1)
+    dv (update_var dv (a+n2w (k*32)) s1) 32` by
+    (irule typed_copy_loop_dynamic_offset_covers >> simp[] >>
+     qexists_tac `32*n` >> gvs[]) >>
+  gvs[bodyPtrDefsTheory.ptr_covers_def, lookup_var_def, eval_operand_def,
+      allocas_from_def]
+QED
+
+Theorem storage_body_store_prefix:
+  copy_prefix loc a b n sbase k s /\ k < n /\
+  w = copy_runtime_word loc sbase (a+n2w k) /\
+  lookup_var dv s = SOME (n2w (b+32*k)) /\ eval_operand value s = SOME w /\
+  b+32*k < dimword(:256) /\
+  (!i j. i < k /\ j < 32 /\ b+32*i+j IN tn.t_mem ==>
+     j IN key_taint keys (a+n2w i)) /\
+  op_taint tn value SUBSET key_taint keys (a+n2w k) /\
+  sm = mstore (b+32*k) w s /\
+  tnm = step_taint (mk_inst id MSTORE [Var dv;value] []) s sm tn ==>
+  copy_prefix loc a b n sbase (k+1)
+    (sm with vs_inst_idx := SUC s.vs_inst_idx) /\
+  (!i j. i < k+1 /\ j < 32 /\ b+32*i+j IN tnm.t_mem ==>
+     j IN key_taint keys (a+n2w i))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_tac >- (gvs[copy_prefix_idx] >> irule copy_prefix_extend >> simp[]) >>
+  `tnm.t_mem =
+    (tn.t_mem DIFF {x | b+32*k <= x /\ x < b+32*k+32}) UNION
+    {b+32*k+j | j IN op_taint tn value}` by
+    (mp_tac (Q.INST [`dst` |-> `dv`, `a` |-> `n2w (b+32*k)`,
+      `value` |-> `value`, `w` |-> `w`] mstore_raw_ghost_frame) >>
+     simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
+     strip_tac >> AP_TERM_TAC >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  ho_match_mp_tac (Q.INST [`tainted` |-> `tn.t_mem`,
+    `loaded` |-> `op_taint tn value`]
+    (INST_TYPE [alpha |-> ``:256``] copied_prefix_taint_extend)) >> simp[]
 QED
