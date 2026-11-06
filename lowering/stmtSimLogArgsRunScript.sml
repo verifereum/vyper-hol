@@ -14,6 +14,11 @@ Libs
 
 Theorem log_scalar_base[local]:
   supported_scalar_type ty ==> ?bt. ty = BaseT bt
+Proof
+  Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
+    supported_string_type_def]
+QED
+
 Theorem log_scalar_word_or_bytestring[local]:
   !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
 Proof
@@ -31,11 +36,6 @@ Theorem log_scalar_post_value_type[local]:
   supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
 Proof
   strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]
-QED
-
-Proof
-  Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def]
 QED
 
 (* ===== Source sequencing ===== *)
@@ -122,8 +122,6 @@ Theorem compile_log_eval_all_gas:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
-  `post_value_type cenv e = expr_type e` by
-    (drule_all log_scalar_post_value_type >> simp[]) >>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
@@ -172,6 +170,8 @@ Proof
     (drule_all lower_compile_expr_not_label >> simp[]) >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
+  `post_value_type cenv e = expr_type e` by
+    (drule_all log_scalar_post_value_type >> simp[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `x`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>

@@ -5,7 +5,7 @@ Ancestors
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
-  bodyMemoryDefs exprSimDefs vyperAST vyperInterpreter memSafeRun allocaHistory
+  bodyMemoryDefs exprSimMemDefs exprSimDefs vyperAST vyperInterpreter memSafeRun allocaHistory
 
 Theorem frag_exec_assign_mem:
   !ctx st st' src out P Q R.

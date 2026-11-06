@@ -765,6 +765,7 @@ Proof
      qexistsl_tac [`s`, `sa`] >> fs[vv_post_def] >> decide_tac) >>
   qexistsl_tac [`t`, `w`] >> simp[vv_post_def] >>
   fs[vv_post_def] >> rpt conj_tac
+  >- (strip_tac >> fs[] >> Cases_on `vv` >> gvs[vv_operand_def])
   >- (rpt strip_tac >>
       `not_fresh_at sa x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
   >- metis_tac[] >>
@@ -1051,6 +1052,7 @@ Proof
            Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
            compile_literal_vv_def] >> metis_tac[])
   >- suspend "bytes"
+  >- suspend "concat"
   >- suspend "abi"
   >> suspend "call"
 QED
@@ -1064,6 +1066,19 @@ Resume ifexp_different_type_unwrap_pure[bytes]:
        comp_return_def, lower_value_def, comp_bind_def,
        Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
        compile_literal_vv_def] >> metis_tac[]
+QED
+Resume ifexp_different_type_unwrap_pure[concat]:
+  rename1 `Builtin _ (Concat cn) cargs` >>
+  `~names_builtin (Concat cn) cargs` by
+    (`!bt args. names_builtin bt args ==> !n. bt <> Concat n` suffices_by
+       metis_tac[] >>
+     ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_builtin_dispatch] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  simp[unwrap_value_def, base_ptr_def] >> metis_tac[]
 QED
 Resume ifexp_different_type_unwrap_pure[abi]:
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
@@ -2257,6 +2272,7 @@ QED
 Resume ifexp_arm_outcome[success]:
   drule (SRULE [] ifexp_arm_marked_suffix) >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qexistsl_tac [`INL tv'`, `es_end with gas_obs := []`, `OK q`] >> simp[] >>
@@ -2580,6 +2596,7 @@ Resume compile_ifexp_vv_sim[routed]:
   simp[] >> conj_tac >- (Cases_on `sel` >> simp[]) >>
   `stmt_state_rel ctx func cenv cx mid (jump_to (if sel then tl else el) t')` by
     (simp[stmt_state_rel_jump_to] >> fs[expr_post_def]) >>
+  conj_tac >- (Cases_on `sel` >> simp[]) >>
   irule ifexp_arm_outcome >>
   simp[] >>
   conj_tac

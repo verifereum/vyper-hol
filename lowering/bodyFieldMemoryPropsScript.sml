@@ -282,7 +282,7 @@ Theorem body_attr_memory_vv_post:
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
-    expr_type obj = StructT sid /\
+    expr_type obj = StructT sid /\ post_value_type cenv obj = expr_type obj /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
     fields_layout
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
@@ -336,7 +336,9 @@ Proof
   >- (simp[expr_type_def] >>
       qpat_assum `vv_loc bvv = LocMemory`
         (fn th => pure_once_rewrite_tac[GSYM th]) >>
-      irule body_attr_memory_at_field >> simp[] >> metis_tac[]) >>
+      irule body_attr_memory_at_field >> simp[] >> metis_tac[])
+  >~ [`vv_own _ _ _ _ _ _ _ _ _`] >- simp[]
+  >~ [`vv_storage_live _ (LocatedValue _ _) _ _`] >- simp[mk_ptr_def] >>
   first_assum ACCEPT_TAC
 QED
 
@@ -406,7 +408,7 @@ Theorem body_base_memory_post_read_struct:
     ?v. read_result cx tv es1 = (INL v, es1)
 Proof
   rpt strip_tac >> fs[vv_post_def] >>
-  drule_all body_base_memory_holds_struct >> metis_tac[]
+  Cases_on `bvv` >> gvs[vv_holds_def, vv_loc_def, vv_location_def]
 QED
 
 Theorem body_word_load_prefix_mem_ok:
@@ -545,8 +547,10 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = OK q` mp_tac >>
   qpat_x_assum `alloca_history func (q with vs_inst_idx := _)` mp_tac >>
   simp[mk_inst_def] >> rpt strip_tac >>
-  `is_word_type (expr_type e)` by gvs[vv_post_def, vv_holds_def] >>
-  fs[expr_post_def, expr_val_rel_def, expr_val_at_def,
+  `is_word_type (post_value_type cenv e)` by
+    (gvs[vv_post_def, vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  fs[expr_post_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
      stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
      local_region_def, locals_kept_def] >>
   conj_tac >> first_x_assum MATCH_ACCEPT_TAC
@@ -763,8 +767,8 @@ Theorem body_field_expr_post_inst_idx[simp]:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, eval_operand_def,
-       lookup_var_def, expr_val_rel_def, expr_val_at_def, local_region_def,
-       locals_kept_def]
+       lookup_var_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
+       local_region_def, locals_kept_def]
 QED
 
 Theorem body_unwrap_memory_counted_read:
