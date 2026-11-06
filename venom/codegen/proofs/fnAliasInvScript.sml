@@ -10170,6 +10170,129 @@ Proof
   EVAL_TAC
 QED
 
+(* Ghost cut histories: demands are parameters only for this interface audit.
+   A lineage lift must instantiate them with actual pre-PHI edge inputs or
+   ordinary live_vars_at sets, and must prove the planner-step projection. *)
+Definition alias_retirement_witness_def:
+  alias_retirement_witness dfg cuts demand writes (n:num) x <=>
+    ?j. j <= n /\ plan_holds (cuts j) (Var x) /\ x IN demand j /\
+      !k. j <= k /\ k < n ==>
+        x NOTIN writes k /\
+        !r. normalize_operand dfg [] (Var x) = Var r ==> r NOTIN writes k
+End
+
+Definition alias_live_or_retired_def:
+  alias_live_or_retired dfg cuts demand writes n <=>
+    !x. plan_holds (cuts n) (Var x) /\
+        normalize_operand dfg [] (Var x) <> Var x ==>
+      alias_var_mass x (cuts n) <= 1 /\
+      (x IN demand n \/ alias_retirement_witness dfg cuts demand writes n x)
+End
+
+(* Exact write obligations, NOT assertions that lineage produces them.
+   The regular obligation permits an executed ASSIGN repair separately. *)
+Definition alias_regular_tracked_fresh_def:
+  alias_regular_tracked_fresh dfg inst x <=>
+    ~MEM x inst.inst_outputs /\
+    !r. normalize_operand dfg [] (Var x) = Var r ==> ~MEM r inst.inst_outputs
+End
+
+Definition alias_phi_root_exclusion_def:
+  alias_phi_root_exclusion dfg inst after <=>
+    !x r. normalize_operand dfg [] (Var x) <> Var x /\
+      normalize_operand dfg [] (Var x) = Var r /\ MEM r inst.inst_outputs ==>
+      ~plan_holds after (Var x)
+End
+
+Theorem alias_retirement_last_write_barrier:
+  normalize_operand dfg [] (Var x) = Var r /\ r IN writes n /\
+  x NOTIN demand (SUC n) ==>
+  ~alias_retirement_witness dfg cuts demand writes (SUC n) x
+Proof
+  strip_tac >> pure_rewrite_tac [alias_retirement_witness_def] >>
+  strip_tac >>
+  Cases_on `j = SUC n` >- gvs[] >>
+  `j <= n` by decide_tac >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[]
+QED
+
+Theorem alias_live_or_retired_root_write_obligation:
+  alias_live_or_retired dfg cuts demand writes (SUC n) /\
+  normalize_operand dfg [] (Var x) <> Var x /\
+  normalize_operand dfg [] (Var x) = Var r /\ r IN writes n /\
+  x NOTIN demand (SUC n) ==>
+  ~plan_holds (cuts (SUC n)) (Var x)
+Proof
+  strip_tac >> drule_all alias_retirement_last_write_barrier >>
+  disch_then (qspec_then `cuts` assume_tac) >>
+  fs[alias_live_or_retired_def] >> strip_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
+(* A prior live PHI keeps a, and a different selected alias b is then
+   consumed by a root-writing PHI. This is a symbolic planner cut, NOT a
+   reachable function/lineage counterexample. In particular the demands
+   and PHI placement here have not been justified by analyzed liveness. *)
+Theorem alias_history_unselected_phi_cut:
+  (SND (generate_phi_plan
+    (mk_inst 0 PHI [Label "left"; Var "a"] ["p"])
+    ["a"; "b"; "p"] F
+    ((init_plan_state 0) with ps_stack := [Var "a"; Var "b"]))).ps_stack =
+      [Var "a"; Var "b"; Var "p"] /\
+  (SND (generate_phi_plan
+    (mk_inst 1 PHI [Label "left"; Var "b"] ["r"])
+    ["r"] F
+    ((init_plan_state 0) with ps_stack := [Var "a"; Var "b"; Var "p"]))).ps_stack =
+      [Var "a"; Var "r"; Var "p"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_history_shared_root_exclusion_fails:
+  normalize_operand dfg [] (Var "a") = Var "r" /\
+  normalize_operand dfg [] (Var "b") = Var "r" ==>
+  ~alias_phi_root_exclusion dfg
+    (mk_inst 1 PHI [Label "left"; Var "b"] ["r"])
+    (SND (generate_phi_plan
+      (mk_inst 1 PHI [Label "left"; Var "b"] ["r"])
+      ["r"] F
+      ((init_plan_state 0) with ps_stack := [Var "a"; Var "b"; Var "p"])))
+Proof
+  strip_tac >>
+  simp[alias_phi_root_exclusion_def] >>
+  qexistsl_tac [`"a"`, `"r"`] >>
+  simp[mk_inst_def, plan_holds_def, alias_history_unselected_phi_cut]
+QED
+
+(* C1.93.3.4.1 write-interface audit:
+   - Demanded nonreflexive x at an ordinary cut: alias_live_available_after_phis
+     supplies availability; alias_available_suffix_not_output excludes writes
+     to x; alias_live_root_not_defined excludes writes to its variable root.
+     Thus alias_regular_tracked_fresh follows at that cut. An output x itself
+     instead requires the executed ASSIGN repair, not this freshness claim.
+   - Retired nonreflexive x: the witness excludes earlier writes only. It says
+     NOTHING about writes n. alias_retirement_last_write_barrier proves that
+     a root write at n destroys every old witness if x is not newly demanded.
+     Exclusion of the retained x (or a reformulated repair-aware invariant)
+     is therefore a producer obligation, not a consequence of retirement.
+   - Reflexive residue: alias_live_or_retired deliberately imposes no budget
+     or history requirement. Its alias equality is reflexive even at a write.
+   - PHI selected source: alias_phi_dead_selected_consumed requires SOME d,
+     peek d = Var x, deadness, x <> output, and mass x <= 1. Slot existence
+     comes from alias_lineage_join_phi_prefix_total_slots; identifying x with
+     the selected slot and establishing the budget remain separate obligations.
+     Nonreflexivity supplies output difference when the output is its root.
+     A live PHI retains its source, as alias_history_unselected_phi_cut checks.
+   - Unselected sharing-root source: even a per-name budget of one does not
+     delete a when the selected b is poked to r. The checked cut above keeps
+     a, consumes b and leaves the unrelated p untouched. Its arbitrary dfg
+     premises express the sharing-root case; they do not establish a reachable
+     SSA function, genuine analyzed demand, or lineage-step projection.
+     alias_history_shared_root_exclusion_fails refutes blanket PHI exclusion
+     on arbitrary cuts, NOT lineage_alias_successor. The history candidate
+     is not yet an inductive lineage invariant. Its genuine write-step
+     preservation and initial-state projection remain unproved. *)
+
 Theorem lineage_alias_successor:
   !fuel ctx lo liveness dfg cfg ch growth spill_base lbl_ctr fn lbl bb ps h
    promised block_ops ps_after ra vs vs'.
