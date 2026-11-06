@@ -72,7 +72,10 @@ fun from_term_option ty NONE = mk_none ty
    skip_to_matching_paren through parse_abi_type. Term construction is adapted
    to B and numeric values use IntInf to avoid host-dependent overflow. Keep
    syntax and inherited rejection/leniency behavior in sync when updating that
-   pin; vyperTestLibTestScript.sml checks parity and arbitrary-precision bounds. *)
+   pin; vyperTestLibTestScript.sml checks parity and arbitrary-precision bounds.
+   The copy exists because Verifereum's parser builds HOL terms directly; it could
+   be consolidated by moving that parser into a HOL-free function that takes the
+   constructors as an argument, which both Verifereum and this functor would call. *)
   fun skip_to_matching_paren ss = let
     fun skip_to_close i = let
       val c = Substring.sub(ss, i)
