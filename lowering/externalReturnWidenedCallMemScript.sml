@@ -1,12 +1,9 @@
-(* HELD: a valued return of the external frame whose value is an
-   internal call's result widened to the call's type other than as a
-   bytestring (lowered_value_type, the callee's declared return type,
-   differs from expr_type).  expr_post describes the value's memory at
-   expr_type, while the return's normalization copies it at the callee's
-   type, so the counted expression contract alone doesn't bound the
-   copy.  Admitted until s1-ops-widened-expr's post_value_type interface
-   lands, as bodyMemIfExpWidened's and bodyMemAnnAssignWidened's
-   widened-call cases are. *)
+(* A valued return of the external frame whose value is an internal
+   call's result laid out at the callee's declared return type
+   (lowered_value_type differs from expr_type, other than as a bytestring).
+   Besides expr_post, it takes the return expression's memory simulations
+   expr_sim_mem and expr_vv_sim_mem at every type, which frame_ret_ok_mem
+   provides. *)
 Theory externalReturnWidenedCallMem
 Ancestors
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
@@ -77,6 +74,12 @@ Theorem external_frame_ret_widened_call_mem:
             (read_result
                (initial_evaluation_context am.sources am.layouts tx NONE))
             (es with gas_obs := gs) = (INL v, ee')) /\
+       (!ty. expr_sim_mem unit.cu_context func cenv'
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               ty e es /\
+             expr_vv_sim_mem unit.cu_context func cenv'
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               ty e es) /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\

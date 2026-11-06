@@ -118,7 +118,8 @@ Proof
 QED
 
 Theorem return_value_counted_mem[local]:
-  expr_sim_mem ctx func cenv cx ty e es /\
+  (!ty'. expr_sim_mem ctx func cenv cx ty' e es /\
+         expr_vv_sim_mem ctx func cenv cx ty' e es) /\
   (!sa sb cenv'' op s1.
      stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv'', sb) /\
      lower_value compile_expr cenv ty e sa = (op, s1) ==> cs_extends s1 sb) /\
@@ -133,6 +134,8 @@ Theorem return_value_counted_mem[local]:
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
      (?gs ee'. bind (eval_expr cx e) (read_result cx)
                  (es with gas_obs := gs) = (INL v, ee')) /\
+     (!ty'. expr_sim_mem ctx func cenv cx ty' e es /\
+            expr_vv_sim_mem ctx func cenv cx ty' e es) /\
      t.vs_current_bb = s1.cs_current_bb /\
      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
@@ -148,6 +151,7 @@ Proof
   `cs_extends sa s1` by
     metis_tac[ci_mono_compile_expr_sa, ci_mono_def, pairTheory.SND] >>
   `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
+  `expr_sim_mem ctx func cenv cx ty e es` by fs[] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[return_forced_admissible] >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`

@@ -97,6 +97,12 @@ Theorem external_frame_ret_run_mem:
             (read_result
                (initial_evaluation_context am.sources am.layouts tx NONE))
             (es with gas_obs := gs) = (INL v, ee')) /\
+       (!ty. expr_sim_mem unit.cu_context func cenv'
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               ty e es /\
+             expr_vv_sim_mem unit.cu_context func cenv'
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               ty e es) /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
