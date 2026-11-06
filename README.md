@@ -133,6 +133,16 @@ holbuild -j"$(nproc)" build
 
 Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).
 
+### Frontend CV translation and benchmark
+
+`jsonToVyperCVLib.eval` returns an unconditional translation equality or fails.
+The test importer keeps `EVAL`, which was faster on all measured fixtures.
+The opt-in benchmark checks exact RHS parity and defined-input conditions:
+
+```bash
+holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBenchmarkTheory
+```
+
 ### Running the Vyper test suite
 
 The test runner expects exported JSON fixtures at `tests/vyper-test-exports`.
