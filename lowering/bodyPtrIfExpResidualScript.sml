@@ -38,7 +38,7 @@ Theorem ifexp_allocating_arm_exceptions:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es sa sb s0 ee tv vv t /\
+  vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty ==>
   (?n s. arm = Literal (BaseT (StringT n)) (StringL s)) \/
   (?n bs. arm = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
@@ -105,7 +105,7 @@ Theorem ifexp_allocating_noop_representation:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es sa sb s0 ee tv vv t /\
+  vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~is_word_type ty /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty ==>
   (?tag op. vv = StackValue tag op) \/
@@ -127,7 +127,7 @@ Theorem ifexp_allocating_unwrap_noop:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es sa sb s0 ee tv vv t /\
+  vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~is_word_type ty /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   unwrap_value ce vv sc = (op,sn) ==>
