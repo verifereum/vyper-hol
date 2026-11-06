@@ -9,6 +9,7 @@ Ancestors
   abiDecoderBytesBound abiDecoderCopy abiDecoderWordOutcome fragExec
   abiDecoderGuards abiDecoderComposition exprLoweringProps arithmetic pred_set
   abiCanonicalHeadSize exprSimAbiDecodeArrayPrefix emitHelperProps
+  abiDecoderLayout abiStaticLayoutProps abiDecodeRanges
   abiDecoderIndexInit abiEncoder compileEnv emitHelper
   venomExecSemantics venomState venomInst valueEncoding
   vyperABI vyperValue contractABI words list rich_list
@@ -213,3 +214,92 @@ Proof
   qexistsl [`ce`, `n`, `sf`] >> gvs[]
 QED
 
+
+Theorem abi_decode_array_bulk_source_outcome:
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
+    (DecDynArray (type_to_abi_dec_info sf ce ty)
+      (abi_member_head_size (vyper_to_abi_type env ty))
+      (type_memory_bytes ce ty) F maxn) st = ((),st') /\
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty /\
+  abi_decode_bytes_widths env ty /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
+  ~is_abi_dynamic ce.ce_struct_fields ty /\ hi <> Lit 0w /\
+  eval_operand src s = SOME(n2w pos) /\ eval_operand dst s = SOME(n2w d) /\
+  eval_operand base_op s = SOME(n2w b) /\ eval_operand hi s = SOME(n2w h) /\
+  n = w2n (mem_word_at (b+pos) s.vs_memory) /\
+  bs = mem_bytes_at (b+pos) (h-pos) s.vs_memory /\
+  pos < dimword(:256) /\ h < dimword(:256) /\ b+h < dimword(:256) /\
+  maxn < dimword(:256) /\ type_memory_bytes ce ty < dimword(:256) /\
+  (n <= maxn ==> n*abi_member_head_size (vyper_to_abi_type env ty) < dimword(:256)) /\
+  d+32 < dimword(:256) /\
+  (b+h <= d \/ d+32 <= b+pos+32) /\
+  fresh_vars_wrt st s /\ decode_site_resources ctx func s /\
+  {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes ==>
+  (?t v. run_inst_seq (emitted_insts st st') s = OK t /\
+    vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+    abi_to_vyper env (ArrayT ty (Dynamic maxn))
+      (dec (Array NONE (vyper_to_abi_type env ty)) bs) = SOME v /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) v d t.vs_memory /\
+    fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    decode_site_effect ctx func next writes s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next) \/
+  (?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t /\
+    ~(vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+      ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+        (dec (Array NONE (vyper_to_abi_type env ty)) bs) = SOME v))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_member_head_size (vyper_to_abi_type env ty) = type_memory_bytes ce ty` by
+    (`static_layout_compatible ce env ty tv` by
+       metis_tac[abi_decoder_unclamped_static_layout] >>
+     drule static_layout_compatible_properties >>
+     simp[abi_member_head_size_def]) >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >>
+  qpat_x_assum `abi_member_head_size _ = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th]) >> assume_tac th) >>
+  `compile_abi_decode_to_buf dst src MLOAD base_op hi
+    (DecDynArray (type_to_abi_dec_info sf ce ty)
+      (abi_member_head_size (vyper_to_abi_type env ty))
+      (type_memory_bytes ce ty) F maxn) st = ((),st')` by
+    (asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_bind_def, LET_THM] >> gvs[]) >>
+  drule_all abi_decode_dynarray_memory_prefix_source_outcome >>
+  disch_then (qspecl_then [`ty`, `env`] strip_assume_tac)
+  >- (disj1_tac >>
+      `b+pos+32 < dimword(:256)` by decide_tac >>
+      `abi_decode_load MLOAD (n2w (b+pos):bytes32) s = n2w n` by
+        simp[abi_decode_load_def, abi_decode_source_def, mload_def,
+             mem_word_at_def, mem_bytes_at_def] >>
+      `n*type_memory_bytes ce ty < dimword(:256) /\
+       (b+pos+32+n*type_memory_bytes ce ty <= d \/ d+32 <= b+pos+32)` by
+        (gvs[] >> decide_tac) >>
+      `hi = Lit 0w \/ ?h. eval_operand hi s = SOME(n2w h) /\
+        pos+32+n*abi_member_head_size (vyper_to_abi_type env ty) <= h /\
+        h < dimword(:256)` by metis_tac[] >>
+      drule abi_decode_array_bulk_success_effect >>
+      disch_then drule >>
+      disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
+      disch_then (drule_at (Pat `decode_site_resources _ _ _`)) >>
+      disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
+      disch_then (drule_at (Pat `eval_operand base_op _ = _`)) >>
+      disch_then (drule_at (Pat `abi_decode_load _ _ _ = _`)) >>
+      disch_then (qspecl_then [`writes`, `next`] mp_tac) >>
+      (impl_tac >-
+        (asm_simp_tac bool_ss [] >>
+         conj_tac >- (qexists `h` >> gvs[]) >> gvs[])) >>
+      strip_tac >>
+      qpat_x_assum `abi_member_head_size _ = _` (fn th =>
+        RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> assume_tac th) >>
+      drule_all abi_decode_array_bulk_suffix_memory >>
+      strip_tac >> qexistsl [`t'`, `v`] >> gvs[]) >>
+  disj2_tac >>
+  `abi_decode_bulk_body dst src addr MLOAD base_op
+    (abi_member_head_size (vyper_to_abi_type env ty)) cs' = ((),st')` by
+    (qpat_x_assum `(\(addr,cs'). _) _ = _` mp_tac >> simp[]) >>
+  drule_all abi_decode_bulk_body_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all run_inst_seq_abort_extends >> strip_tac >> qexists `t` >> gvs[]
+QED
