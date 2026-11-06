@@ -2049,7 +2049,7 @@ Proof
 QED
 
 (* Exchanging two in-range stack depths preserves the structural list facts. *)
-Theorem stack_poke_exchange_structural_wf[local]:
+Theorem stack_poke_exchange_structural_wf:
   !stk d1 d2.
     ALL_DISTINCT stk /\ d1 < LENGTH stk /\ d2 < LENGTH stk ==>
     ALL_DISTINCT
