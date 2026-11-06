@@ -36,8 +36,13 @@ Proof
   qabbrev_tac `out = "%" ++ toString sa.cs_next_var` >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id GT [src; Lit bound] [out]` >>
   `t = update_var out (bool_to_word (w2n a > w2n bound)) s` by
-    (gvs[run_inst_seq_def, Abbr `inst`, Abbr `out`, step_inst_base_def,
-      mk_inst_def, exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
+    (qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+     qpat_x_assum `eval_operand src s = SOME a` mp_tac >>
+     simp[Abbr `out`] >> POP_ASSUM_LIST (K all_tac) >>
+     strip_tac >>
+     simp[run_inst_seq_def] >>
+     simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+          eval_operand_def] >> rpt strip_tac >> gvs[]) >>
   `step_inst_base inst s = OK t` by
     (simp[Abbr `inst`, step_inst_base_def, mk_inst_def,
       exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
