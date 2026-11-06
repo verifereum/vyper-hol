@@ -7874,6 +7874,63 @@ Proof
   strip_tac >> simp[] >> metis_tac[alias_execution_prefix_rules]
 QED
 
+Theorem alias_exec_block_indexed_cut:
+  alias_execution_prefix states writes /\ LAST states = s /\
+  exec_block fuel ctx bb s = OK t /\
+  s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+  (!j. s.vs_inst_idx <= j /\ j < i ==>
+    ~is_terminator (EL j bb.bb_instructions).inst_opcode) ==>
+  ?suffix u writes'.
+    alias_execution_prefix (states ++ suffix) writes' /\
+    LAST (states ++ suffix) = u /\ u.vs_inst_idx = i /\
+    exec_block fuel ctx bb u = OK t /\
+    writes' SUBSET (writes UNION
+      {x | ?j. s.vs_inst_idx <= j /\ j < i /\
+        MEM x (EL j bb.bb_instructions).inst_outputs})
+Proof
+  qid_spec_tac `writes` >> qid_spec_tac `states` >> qid_spec_tac `s` >>
+  measureInduct_on `i - s.vs_inst_idx` >> rpt strip_tac >>
+  Cases_on `s.vs_inst_idx = i`
+  >- (qexistsl_tac [`[]`, `s`, `writes`] >> simp[]) >>
+  `s.vs_inst_idx < i` by decide_tac >>
+  `~is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode` by simp[] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def, Excl "exec_block_def"] >>
+  Cases_on `step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions) s` >> simp[] >>
+  rename1 `step_inst _ _ _ _ = OK u` >> strip_tac >>
+  qabbrev_tac `ew = set (EL s.vs_inst_idx bb.bb_instructions).inst_outputs` >>
+  qabbrev_tac `r = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `alias_prefix_edge s u ew` by
+    (simp[alias_prefix_edge_def, Abbr `ew`] >> metis_tac[]) >>
+  `alias_execution_prefix (states ++ [u]) (writes UNION ew)` by
+    metis_tac[alias_execution_prefix_extend_edge] >>
+  `alias_prefix_edge u r {}` by
+    (simp[alias_prefix_edge_def, Abbr `r`] >> disj2_tac >> disj2_tac >>
+     qexists_tac `SUC s.vs_inst_idx` >> simp[]) >>
+  `alias_execution_prefix ((states ++ [u]) ++ [r]) (writes UNION ew)` by
+    (drule alias_execution_prefix_extend_edge >> simp[] >>
+     disch_then drule >> simp[]) >>
+  qpat_x_assum `!y. i - y < _ ==> _` (qspec_then `SUC s.vs_inst_idx` mp_tac) >> simp[] >>
+  disch_then (qspec_then `r` mp_tac) >> simp[Abbr `r`] >>
+  disch_then (qspecl_then [`states ++ [u] ++ [u with vs_inst_idx := SUC s.vs_inst_idx]`,
+    `writes UNION ew`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  strip_tac >> rename1 `result_writes SUBSET _` >>
+  qexistsl_tac [`[u; u with vs_inst_idx := SUC s.vs_inst_idx] ++ suffix`, `result_writes`] >>
+  conj_tac >- (qpat_x_assum `alias_execution_prefix (_ ++ _ ++ _ ++ _) _` mp_tac >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  conj_tac >- (qpat_x_assum `(LAST _).vs_inst_idx = i` mp_tac >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  conj_tac >- (qpat_x_assum `exec_block _ _ _ _ = OK t` mp_tac >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  qpat_x_assum `result_writes SUBSET _` mp_tac >>
+  simp[pred_setTheory.SUBSET_DEF, Abbr `ew`] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >- simp[]
+  >- (disj2_tac >> qexists_tac `s.vs_inst_idx` >> simp[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >> decide_tac
+QED
+
 Theorem alias_exec_block_suffix_prefix:
   alias_execution_prefix states writes /\ LAST states = s /\
   exec_block fuel ctx bb s = OK t ==>
