@@ -8,7 +8,8 @@ Ancestors
   extRetAbiBytesLivePtr abiEncoderInput robustCopyTransportPtr valueEncodingProofs
   words finite_map arithmetic pred_set abiEncoderInputFrame
   extRetBufferStatePtr exprSimOperands venomState venomInst bodyPtrDefs exprLowering emitHelper context
-  abiBuiltinAllocation
+  abiBuiltinAllocation extRetAbiSingletonWrapperPtr abiEncoderComplexPrefix
+  abiEncoder fragGasPathPtr abiEncoderComplexCode
 
 Theorem external_return_singleton_stmt_parts[local]:
   stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv',sb) /\
@@ -90,8 +91,16 @@ QED
 
 (* Source provenance and the robust live input survive the destination ALLOCA.
    The source's capacity need not be the declared ABI capacity. *)
-Theorem singleton_buffer_source_resources[local]:
+Theorem singleton_buffer_return_suffix[local]:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb fn /\
+  compile_abi_encode_to_buf buf.buf_operand (Var src)
+    (AbiComplex [(AbiBytestring maxlen,32,cap,T)]) sb = (out,sc) /\
+  emit_inst RETURN [buf.buf_operand;out] [] sc = (u,sd) /\
+  fn_has_code sb sc fn /\ fn_has_code sc sd fn /\
+  64+ceil32 (LENGTH bs) <= n /\ 32+LENGTH bs <= cap /\
+  LENGTH bs <= dimword(:256)-32 /\
+  32+ceil32 (LENGTH bs) < dimword(:256) /\
+  a+(32+LENGTH bs) < dimword(:256) /\ stor_taint_ok cx tn s /\
   stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ not_fresh_at sa src /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -105,27 +114,37 @@ Theorem singleton_buffer_source_resources[local]:
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     abi_encoder_input (AbiBytestring maxlen) at (contractABI$BytesV bs)
       a (32+LENGTH bs) mem) ==>
-  ?dst b Gf tnf sf.
-    buf.buf_operand = Var dst /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    sf.vs_current_bb = sb.cs_current_bb /\
-    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    stmt_state_rel ctx fn cenv cx es sf /\
-    lookup_var dst sf = SOME (n2w b) /\ ptr_covers Gf tnf dst sf n /\
-    lookup_var src sf = SOME (n2w a) /\
-    ptr_covers Gf tnf src sf (32+LENGTH bs) /\
-    b+n < dimword(:256) /\
-    (b+n <= a \/ a+(32+LENGTH bs) <= b) /\
-    (!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==>
-      abi_encoder_input (AbiBytestring maxlen) at (contractABI$BytesV bs)
-        a (32+LENGTH bs) mem)
+  ?Gf tnf t.
+    gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 Gf tnf (Halt t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
     (irule fresh_not_local_ptr >> qexists_tac `sa` >>
      simp[not_fresh_at_def]) >>
-  drule_all compile_alloc_buffer_state_counted_ptr >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  qpat_assum `buf.buf_operand = _` (fn th =>
+    RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  drule_all abi_singleton_wrapper_context >> strip_tac >>
+  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sb.cs_next_var)]) (fn_insts fn)` by
+    (qpat_x_assum `abi_encode_complex_prefix _ _ = _` mp_tac >>
+     simp[abi_encode_complex_prefix_def, compile_alloc_buffer_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+       emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >>
+     qpat_x_assum `fn_has_code sb _ fn` mp_tac >>
+     simp[fn_has_code_def] >> strip_tac >>
+     `MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
+       [STRING #"%" (toString sb.cs_next_var)]) bb.bb_instructions` by
+       gvs[IS_PREFIX_APPEND] >>
+     metis_tac[lookup_block_fn_insts]) >>
+  drule_all (Q.INST [`used` |-> `64+ceil32 (LENGTH bs)`]
+    compile_alloc_buffer_cursor_state_counted_ptr) >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `cx_dead cx`]
+    (qx_choose_then `ip'` (qx_choose_then `addr` (qx_choose_then `Gf`
+      (qx_choose_then `tnf` (qx_choose_then `sf`
+        (map_every assume_tac o CONJUNCTS))))))) >>
+  qpat_x_assum `?cursor. _` (qx_choose_then `cursor` (map_every assume_tac o CONJUNCTS)) >>
   `lookup_var src sf = SOME (n2w a) /\
    FLOOKUP Gf src = FLOOKUP G src /\
    op_taint tnf (Var src) = op_taint tn (Var src)` by metis_tac[] >>
@@ -146,8 +165,8 @@ Proof
      `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
        [STRING #"%" (toString sa.cs_next_var)]) bb.bb_instructions` by
        gvs[IS_PREFIX_APPEND] >> metis_tac[lookup_block_fn_insts]) >>
-  `addr+n <= a \/ a+(32+LENGTH bs) <= addr` by
-    (drule_at (Pat `MEM _ _`)
+  Q.SUBGOAL_THEN `addr+n <= a \/ a+(32+LENGTH bs) <= addr` assume_tac
+  >- (drule_at (Pat `MEM _ _`)
        (SRULE [mk_inst_def] singleton_source_allocated_interval) >>
      disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ sf`)) >>
      simp[eval_operand_def, LESS_MOD, mk_inst_def] >>
@@ -167,7 +186,40 @@ Proof
      `abi_encoder_input (AbiBytestring maxlen) at (contractABI$BytesV bs)
         a (32+LENGTH bs) mix` by metis_tac[] >>
      drule_all abi_encoder_input_mem_agree >> simp[]) >>
-  qexistsl_tac [`ip`, `addr`, `Gf`, `tnf`, `sf`] >>
-  simp[] >> gvs[ptr_covers_def, LESS_MOD] >>
-  qexistsl_tac [`b`, `sz'`] >> simp[]
+  `ip' = STRING #"%" (toString sa.cs_next_var)` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
+  `not_fresh_at sb src /\ not_fresh_at sb ip'` by metis_tac[] >>
+  `ptr_covers Gf tnf src sf (32+LENGTH bs)` by
+    (qpat_x_assum `ptr_covers G tn src s _` mp_tac >>
+     gvs[ptr_covers_def, LESS_MOD] >> rpt strip_tac >>
+     qexistsl_tac [`b`, `sz'`] >> simp[]) >>
+  `ptr_covers Gf tnf ip' sf (64+ceil32 (LENGTH bs))` by
+    (qpat_assum `ptr_covers Gf tnf ip' sf n` mp_tac >>
+     rewrite_tac[ptr_covers_def] >> strip_tac >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`w`, `b`, `sz'`] >> simp[] >> decide_tac) >>
+  Q.SUBGOAL_THEN
+    `cursor+32 <= a \/ a+(32+LENGTH bs) <= cursor` assume_tac
+  >- (qpat_x_assum `!ty ea eb v op tv w. _` mp_tac >>
+      disch_then (qspecl_then [`ty`, `ea`, `sa`, `v`, `Var src`, `tv`, `n2w a`] mp_tac) >>
+      simp[eval_operand_def, LESS_MOD]) >>
+  `stor_taint_ok cx tnf sf` by
+    fs[stor_taint_ok_def] >>
+  `!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==>
+    abi_encoder_input (AbiBytestring maxlen) at (BytesV bs) a cap mem` by
+    (rpt strip_tac >> irule abi_encoder_input_capacity >>
+     qexists_tac `32+LENGTH bs` >> simp[]) >>
+  `addr+64+ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
+  Q.SUBGOAL_THEN
+    `cursor+32 <= addr \/ addr+64+ceil32 (LENGTH bs) <= cursor` assume_tac
+  >- decide_tac >>
+  Q.SUBGOAL_THEN
+    `a+(32+LENGTH bs) <= addr \/ addr+64+ceil32 (LENGTH bs) <= a` assume_tac
+  >- decide_tac >>
+  qpat_x_assum `ip' = _` SUBST_ALL_TAC >>
+  drule_all compile_abi_encode_singleton_bytes_live_return_counted_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`Gf'`, `tnf'`, `t`] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]
 QED
