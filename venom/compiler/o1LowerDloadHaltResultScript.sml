@@ -200,11 +200,14 @@ Proof
   gvs[eval_operands_def, AllCaseEqs()] >> simp[step_inst_non_invoke] >>
   asm_simp_tac (srw_ss()) [step_inst_base_def] >> simp[] >>
   gvs[halt_state_def, set_returndata_def, step_taint_def, store_taint_def,
-      adopt_reset_def, imm_taint_def, lookup_account_def] >>
+      adopt_reset_def, imm_taint_def, lookup_account_def,
+      vfmExecutionTheory.transfer_value_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
   qpat_x_assum `SOME _ = eval_operand _ _`
     (fn th => rewrite_tac[GSYM th]) >> simp[] >>
-  gvs[ld_shared_agree_def] >> rpt strip_tac >>
+  gvs[ld_shared_agree_def, combinTheory.APPLY_UPDATE_THM] >> rpt strip_tac >>
   rpt IF_CASES_TAC >> gvs[] >>
+  simp[combinTheory.APPLY_UPDATE_THM] >> rpt IF_CASES_TAC >> gvs[] >>
   qpat_x_assum `!a. _ with storage := _ = _`
     (qspec_then `a` (SUBST1_TAC o SYM)) >> simp[] >>
   gvs[word_agree_except_def] >> metis_tac[]
