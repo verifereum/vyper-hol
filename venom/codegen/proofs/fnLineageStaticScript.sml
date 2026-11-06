@@ -665,15 +665,6 @@ Proof
   simp[MEM_FLAT, MEM_MAP] >> metis_tac[inst_defs_def]
 QED
 
-Theorem phi_disjoint_use_indices[local]:
-  !phis i j v.
-    phi_uses_disjoint phis /\ i < LENGTH phis /\ j < LENGTH phis /\
-    MEM v (inst_uses (EL i phis)) /\ MEM v (inst_uses (EL j phis)) ==> i = j
-Proof
-  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
-  Cases_on `i` >> Cases_on `j` >>
-  gvs[phi_uses_disjoint_def, EVERY_MEM] >> metis_tac[EL_MEM]
-QED
 
 Theorem ready_phi_disjoint[local]:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>

@@ -798,8 +798,8 @@ Proof
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   drule_all (SRULE [] fnLineageInvTheory.lineage_entry_inventory) >>
   strip_tac >>
-  drule_all fnPlanLineageJoinTheory.join_predecessor_jmp_shape >> strip_tac >>
-  drule_all fnPlanLineageJoinTheory.join_predecessor_single_successor >>
+  drule_all fnPlanPrefixTheory.join_predecessor_jmp_shape >> strip_tac >>
+  drule_all fnPlanPrefixTheory.join_predecessor_single_successor >>
   strip_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   drule_all fnPlanLineageJoinTheory.lineage_state_reachable >> strip_tac >>
@@ -978,15 +978,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem phi_codegen_edge_wf[local]:
-  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
-  MEM inst (collect_phis bb.bb_instructions) ==>
-  phi_edge_uses_wf fn bb inst
-Proof
-  strip_tac >> drule livenessProofsTheory.collect_phis_mem >> strip_tac >>
-  gvs[codegen_ready_fn_def, venomWfTheory.def_dominates_uses_def] >>
-  metis_tac[]
-QED
 
 Theorem phi_codegen_has_incoming[local]:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
@@ -2091,33 +2082,6 @@ Proof
   metis_tac[phi_processed_output_excluded]
 QED
 
-Theorem phi_collect_outputs_distinct:
-  !insts.
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (collect_phis insts)))
-Proof
-  Induct >> simp[collect_phis_def] >>
-  Cases_on `h.inst_opcode = PHI` >>
-  simp[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[livenessProofsTheory.collect_phis_mem]
-QED
-
-Theorem phi_codegen_inst_shape:
-  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
-  MEM inst (collect_phis bb.bb_instructions) ==>
-  inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
-  phi_well_formed inst.inst_operands
-Proof
-  strip_tac >>
-  `inst.inst_opcode = PHI /\ MEM inst bb.bb_instructions` by
-    (qpat_x_assum `MEM inst (collect_phis _)` mp_tac >>
-     Q.SPEC_TAC (`bb.bb_instructions`, `insts`) >>
-     Induct >> rw[collect_phis_def] >> gvs[]) >>
-  `inst_wf inst` by
-    metis_tac[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
-  gvs[venomWfTheory.inst_wf_def]
-QED
 
 Theorem phi_codegen_pending_excluded:
   codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\

@@ -25,7 +25,7 @@
 Theory fnPlanPrefix
 Ancestors
   fnLiveDefDom removeUnusedSsaProofs dominatorProofs dominatorAnalysisProps
-  codegenReadyCompute venomExecProofs
+  livenessDefs livenessProofs codegenReadyCompute venomExecProofs
   stackPlanOps alist fnPlanLineageReorder genBlockSim stackPlanGen stackPlanTypes venomInst rich_list list arithmetic cfgAnalysisProps venomWf simplifyCfgDefs
 
 Definition generate_block_insts_prefix_def:
@@ -404,5 +404,53 @@ Proof
   mp_tac (live_def_dominates |> Q.SPEC `fn` |> Q.SPEC `lbl` |>
     Q.SPEC `bb` |> Q.SPEC `LENGTH bb.bb_instructions` |> Q.SPEC `v`) >>
   (impl_tac >- (simp[] >> rpt strip_tac >> decide_tac)) >>
+  metis_tac[]
+QED
+
+Theorem phi_collect_outputs_distinct:
+  !insts.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (collect_phis insts)))
+Proof
+  Induct >> simp[collect_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[livenessProofsTheory.collect_phis_mem]
+QED
+
+Theorem phi_codegen_inst_shape:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst (collect_phis bb.bb_instructions) ==>
+  inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
+  phi_well_formed inst.inst_operands
+Proof
+  strip_tac >>
+  `inst.inst_opcode = PHI /\ MEM inst bb.bb_instructions` by
+    (qpat_x_assum `MEM inst (collect_phis _)` mp_tac >>
+     Q.SPEC_TAC (`bb.bb_instructions`, `insts`) >>
+     Induct >> rw[collect_phis_def] >> gvs[]) >>
+  `inst_wf inst` by
+    metis_tac[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+  gvs[venomWfTheory.inst_wf_def]
+QED
+
+Theorem phi_disjoint_use_indices:
+  !phis i j v.
+    phi_uses_disjoint phis /\ i < LENGTH phis /\ j < LENGTH phis /\
+    MEM v (inst_uses (EL i phis)) /\ MEM v (inst_uses (EL j phis)) ==> i = j
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> Cases_on `j` >>
+  gvs[phi_uses_disjoint_def, EVERY_MEM] >> metis_tac[EL_MEM]
+QED
+
+Theorem phi_codegen_edge_wf:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst (collect_phis bb.bb_instructions) ==>
+  phi_edge_uses_wf fn bb inst
+Proof
+  strip_tac >> drule livenessProofsTheory.collect_phis_mem >> strip_tac >>
+  gvs[codegen_ready_fn_def, venomWfTheory.def_dominates_uses_def] >>
   metis_tac[]
 QED
