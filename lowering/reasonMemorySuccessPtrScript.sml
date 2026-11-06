@@ -143,3 +143,21 @@ Proof
   rpt (disch_then drule) >>
   simp[is_word_type_def]
 QED
+
+Theorem compile_raise_reason_frag_ptr:
+  (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
+  expr_body_pre cenv cx env r es /\
+  supported_string_reason tops r /\ supported_expr tops r /\
+  ~supported_expr_exists expr_internal_call_root r /\
+  expr_vv_sim_ptr d ctx PG func cenv cx (expr_type r) r es /\
+  (!sa vv sm. compile_expr cenv (expr_type r) r sa = (vv,sm) ==>
+    reason_vv_ok vv) ==>
+  stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Raise (RaiseReason r)))
+    (eval_stmt cx (Raise (RaiseReason r))) es
+Proof
+  strip_tac >> irule compile_raise_reason_path_frag_ptr >>
+  asm_rewrite_tac[] >> rpt strip_tac >>
+  `reason_vv_ok vv` by metis_tac[] >>
+  irule reason_memory_success_path_ptr >> metis_tac[]
+QED
