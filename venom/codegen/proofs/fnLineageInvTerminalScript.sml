@@ -516,3 +516,171 @@ Proof
   irule full_inventory_restore_reorder_preservation >>
   metis_tac[]
 QED
+
+Theorem target_window_select_spill_candidate_none:
+  !stk forbidden dist n.
+    1 <= LENGTH stk /\ LENGTH stk <= n ==>
+    select_spill_candidate stk forbidden dist n = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `select_spill_candidate stk forbidden dist n` >> simp[] >>
+  drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
+  drule planWfTheory.select_spill_candidate_below_target >> decide_tac
+QED
+
+Theorem target_window_reduce_depth_plan_identity:
+  !fuel targets target f n ps.
+    LENGTH ps.ps_stack <= n ==>
+    reduce_depth_plan fuel targets target f n ps = ([],ps)
+Proof
+  Cases >> rpt gen_tac >> strip_tac >> simp[Once reduce_depth_plan_def] >>
+  Cases_on `ps.ps_stack = []`
+  >- simp[stack_get_unfixed_depth_def, stack_get_depth_def, stack_find_def] >>
+  `1 <= LENGTH ps.ps_stack` by (Cases_on `ps.ps_stack` >> gvs[]) >>
+  drule_all target_window_select_spill_candidate_none >> strip_tac >>
+  Cases_on `stack_get_unfixed_depth target f n' ps.ps_stack` >> simp[]
+QED
+
+Theorem target_window_reorder_one_perm:
+  !targets dfg ps idx op ops qs.
+    ps.ps_spilled = FEMPTY /\ LENGTH ps.ps_stack = LENGTH targets /\
+    idx < LENGTH targets /\ reorder_one dfg targets idx op ps = (ops,qs) ==>
+    PERM qs.ps_stack ps.ps_stack /\ qs.ps_spilled = FEMPTY
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!fuel f. reduce_depth_plan fuel targets op f (LENGTH targets) ps = ([],ps)` by
+    (rpt gen_tac >> irule target_window_reduce_depth_plan_identity >> simp[]) >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - 1 - idx)
+    (LENGTH targets) ps.ps_stack` >> simp[] >> strip_tac >> gvs[] >>
+  `x < LENGTH ps.ps_stack /\ stack_peek x ps.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_bound, stack_get_unfixed_depth_peek] >>
+  Cases_on `x = LENGTH targets - (idx + 1)` >> gvs[] >>
+  `LENGTH targets - (idx + 1) < LENGTH ps.ps_stack` by decide_tac >>
+  simp[] >>
+  Cases_on `operand_equiv dfg (stack_peek x ps.ps_stack)
+    (stack_peek (LENGTH targets - (idx + 1)) ps.ps_stack)` >> gvs[]
+  >- (simp[stack_poke_def, stack_peek_def] >>
+      irule lupdate_exchange_perm >> simp[]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `PERM ps3.ps_stack ps.ps_stack` by
+    (qspec_then `x` (qspec_then `ps` mp_tac) do_swap_stack_perm >> gvs[]) >>
+  `LENGTH ps3.ps_stack = LENGTH ps.ps_stack` by metis_tac[PERM_LENGTH] >>
+  `PERM ps4.ps_stack ps3.ps_stack` by
+    (qspec_then `LENGTH (targets:operand list) - (idx + 1)`
+       (qspec_then `ps3` mp_tac) do_swap_stack_perm >> simp[]) >>
+  metis_tac[PERM_TRANS, do_swap_spilled_unchanged, pairTheory.SND]
+QED
+
+Theorem target_window_reorder_fold_perm:
+  !pairs targets dfg acc ps.
+    ps.ps_spilled = FEMPTY /\ LENGTH ps.ps_stack = LENGTH targets /\
+    EVERY (\(idx,op). idx < LENGTH targets) pairs ==>
+    PERM (SND (FOLDL (\(ops,st) (idx,op).
+      (\(step_ops,st'). (ops ++ step_ops,st'))
+        (reorder_one dfg targets idx op st)) (acc,ps) pairs)).ps_stack ps.ps_stack /\
+    (SND (FOLDL (\(ops,st) (idx,op).
+      (\(step_ops,st'). (ops ++ step_ops,st'))
+        (reorder_one dfg targets idx op st)) (acc,ps) pairs)).ps_spilled = FEMPTY
+Proof
+  Induct >- simp[] >>
+  gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `reorder_one dfg targets h0 h1 ps` >>
+  drule_all target_window_reorder_one_perm >> strip_tac >>
+  qpat_assum `reorder_one _ _ _ _ _ = _`
+    (fn th => pure_rewrite_tac[th, pairTheory.pair_case_thm]) >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  rule_assum_tac (CONV_RULE (DEPTH_CONV PairRules.PBETA_CONV)) >>
+  `LENGTH r.ps_stack = LENGTH targets` by metis_tac[PERM_LENGTH] >>
+  first_x_assum (qspecl_then [`targets`, `dfg`, `acc ++ q`, `r`] mp_tac) >>
+  simp[] >> metis_tac[PERM_TRANS]
+QED
+
+Theorem full_support_first_reorder_overflow:
+  !targets dfg ps d ops qs.
+    ps.ps_spilled = FEMPTY /\
+    (!x. MEM x ps.ps_stack /\ is_var_operand x ==> MEM x targets) /\
+    LENGTH ps.ps_stack < LENGTH targets /\ 17 < LENGTH targets /\
+    stack_get_depth (HD targets) ps.ps_stack = SOME d /\
+    reorder_one dfg targets 0 (HD targets) ps = (ops,qs) ==>
+    ?swap_ops mid.
+      do_swap d ps = (swap_ops,mid) /\
+      PERM mid.ps_stack ps.ps_stack /\
+      LENGTH qs.ps_stack = LENGTH targets /\ qs.ps_spilled = FEMPTY /\
+      PERM qs.ps_stack
+        (mid.ps_stack ++ GENLIST (\i. EL (LENGTH mid.ps_stack + i) mid.ps_stack)
+          (LENGTH targets - LENGTH mid.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  `!fuel f n. reduce_depth_plan fuel targets (HD targets) f n ps = ([],ps)` by
+    metis_tac[full_support_reduce_depth_plan_identity] >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, stack_get_unfixed_depth_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `do_swap (LENGTH targets - 1) ps3 = (swap2_ops,qs)` >>
+  `PERM ps3.ps_stack ps.ps_stack` by
+    (qspec_then `d` (qspec_then `ps` mp_tac) do_swap_stack_perm >> gvs[]) >>
+  `LENGTH ps3.ps_stack = LENGTH ps.ps_stack` by metis_tac[PERM_LENGTH] >>
+  `16 < LENGTH targets - 1 /\ LENGTH ps3.ps_stack <= LENGTH targets - 1` by
+    decide_tac >>
+  drule_all do_swap_deep_out_of_range_perm >> strip_tac >>
+  `LENGTH qs.ps_stack = LENGTH targets` by
+    (drule PERM_LENGTH >> simp[] >> decide_tac) >>
+  `qs.ps_spilled = FEMPTY` by
+    metis_tac[do_swap_spilled_unchanged, pairTheory.SND] >>
+  gvs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem full_support_successful_reorder_overflow:
+  !targets dfg rs ops qs.
+    lineage_inventory (set targets) rs /\ rs.ps_spilled = FEMPTY /\
+    LENGTH rs.ps_stack < LENGTH targets /\ 17 < LENGTH targets /\
+    reorder_plan dfg targets rs = (ops,qs) /\
+    stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+    ?first_ops first_state d swap_ops mid.
+      reorder_one dfg targets 0 (HD targets) rs = (first_ops,first_state) /\
+      stack_get_depth (HD targets) rs.ps_stack = SOME d /\
+      do_swap d rs = (swap_ops,mid) /\ PERM mid.ps_stack rs.ps_stack /\
+      LENGTH first_state.ps_stack = LENGTH targets /\
+      PERM targets first_state.ps_stack /\
+      PERM first_state.ps_stack
+        (mid.ps_stack ++ GENLIST (\i. EL (LENGTH mid.ps_stack + i) mid.ps_stack)
+          (LENGTH targets - LENGTH mid.ps_stack))
+Proof
+  Cases >- simp[] >> rpt gen_tac >> strip_tac >>
+  `MEM h rs.ps_stack` by
+    (gvs[lineage_inventory_def, lineage_core_def, EXTENSION] >>
+     metis_tac[MEM_APPEND, MEM]) >>
+  `?d. stack_get_depth h rs.ps_stack = SOME d` by
+    (Cases_on `stack_get_depth h rs.ps_stack`
+     >- (gvs[stack_get_depth_NONE, stack_peek_def] >>
+         qpat_x_assum `MEM h rs.ps_stack`
+           (strip_assume_tac o REWRITE_RULE[MEM_EL]) >>
+         qpat_x_assum `!d. d < _ ==> _`
+           (qspec_then `LENGTH rs.ps_stack - (n + 1)` mp_tac) >>
+         simp[]) >> metis_tac[]) >>
+  `!x. MEM x rs.ps_stack /\ is_var_operand x ==> MEM x (h::t)` by
+    (drule lineage_inventory_stack_subset >>
+     simp[pred_setTheory.SUBSET_DEF] >>
+     metis_tac[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def]) >>
+  Cases_on `reorder_one dfg (h::t) 0 h rs` >>
+  fs[] >>
+  drule_all (Q.SPEC `h::t` full_support_first_reorder_overflow |> SRULE[HD]) >>
+  strip_tac >>
+  qexistsl_tac [`swap_ops`, `mid`] >> simp[arithmeticTheory.ADD_COMM] >>
+  `EVERY (\(idx,op). idx < LENGTH (h::t))
+    (MAPi (\i op. (SUC i,op)) t)` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
+     rpt strip_tac >> gvs[]) >>
+  qpat_assum `r.ps_spilled = FEMPTY`
+    (mp_then Any mp_tac target_window_reorder_fold_perm) >>
+  disch_then (qspecl_then [`MAPi (\i op. (SUC i,op)) t`, `h::t`, `dfg`, `q`] mp_tac) >>
+  simp[] >>
+  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
+  simp[reorder_plan_def, indexedListsTheory.MAPi_def] >>
+  simp[combinTheory.o_DEF] >> strip_tac >> gvs[] >> strip_tac >>
+  `LENGTH qs.ps_stack = SUC (LENGTH t)` by metis_tac[PERM_LENGTH] >>
+  gvs[stack_pop_def, arithmeticTheory.ADD_COMM]
+QED
