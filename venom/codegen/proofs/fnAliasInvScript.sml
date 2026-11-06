@@ -7506,6 +7506,31 @@ Proof
   qexistsl_tac [`bb`, `i`] >> simp[] >> metis_tac[]
 QED
 
+Theorem alias_lineage_ordinary_entry_held:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ fn_entry_label fn <> SOME lbl /\
+  run_block fuel ctx bb s = OK s' /\
+  (!pred y. s.vs_prev_bb = SOME pred /\
+    MEM y (input_vars_from pred bb.bb_instructions (live_vars_at liveness lbl 0)) ==>
+      plan_holds ps (Var y)) /\
+  MEM x (live_vars_at liveness lbl 0) /\
+  MEM x (live_vars_at liveness lbl (LENGTH (collect_phis bb.bb_instructions))) ==>
+  plan_holds ps (Var x)
+Proof
+  strip_tac >> gvs[Excl "run_block_def"] >> Cases_on `s.vs_prev_bb`
+  >- (Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1`
+      >- (drule_at (Pat `lineage_state _ _ _ _ _ _ _`) alias_lineage_nonjoin_livein >>
+          simp[] >> disch_then drule >> simp[]) >>
+      `1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl)` by decide_tac >>
+      drule_at (Pat `lineage_state _ _ _ _ _ _ _`) alias_lineage_join_without_predecessor_coverage >>
+      simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `s.vs_prev_bb = SOME _`) alias_entry_ordinary_ownership >>
+  simp[] >> disch_then drule >> simp[] >> metis_tac[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
