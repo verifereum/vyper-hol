@@ -11,7 +11,7 @@ Theorem live_update_mem:
   MEM v (live_update defs uses live) <=>
   (MEM v live /\ ~MEM v defs) \/ MEM v uses
 Proof
-  rw[live_update_def, MEM_APPEND, MEM_FILTER] >> metis_tac[]
+  rw[live_update_def, MEM_FOLDL_append_unseen, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem phi_pairs_subset_uses[local]:
@@ -208,8 +208,7 @@ Theorem liveness_transfer_mono:
     set a SUBSET set b ==>
     set (liveness_transfer bbs inst a) SUBSET set (liveness_transfer bbs inst b)
 Proof
-  rw[liveness_transfer_def, live_update_def,
-     LIST_TO_SET_APPEND, LIST_TO_SET_FILTER, SUBSET_DEF] >>
+  rw[liveness_transfer_def, live_update_mem, SUBSET_DEF] >>
   metis_tac[]
 QED
 
