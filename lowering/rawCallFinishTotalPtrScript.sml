@@ -387,3 +387,271 @@ Proof
     Q.INST [`sa` |-> `protected`] |>
     SIMP_RULE (srw_ss()) [exprLoweringPropsTheory.ci_mono_refl]) >> gvs[]
 QED
+
+(* Source normalization is supplied by raw_call_prepared_source_total before
+   choosing one of the four finish branches.  Source gas is option-valued;
+   the checked CALL gas operand is a word and is kept separate. *)
+Theorem raw_call_scalar_finish_outcome:
+  compile_raw_call_finish addr dp dl gas_op value_op
+    (if stat then StaticCall else RegularCall) 0 F ov op sa = (result,sb) /\
+  fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
+  (~stat ==> eval_operand value_op s = SOME vw) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand op s = SOME ro /\
+  w2w aw = target /\ w2n (if stat then 0w else vw) =
+    (case value_opt of NONE => 0 | SOME k => k) /\ stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!out. ~not_fresh_at sa out ==>
+    access_ok 0 G func (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit 0w]
+       else [gas_op;addr;value_op;dp;dl;op;Lit 0w]) [out]) s /\
+    taint_ok func tn (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit 0w]
+       else [gas_op;addr;value_op;dp;dl;op;Lit 0w]) [out]) s) /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  ~s.vs_halted /\ ~cenv.ce_is_ctor /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!name a len. local_region cenv es.scopes s name a len ==> regions_disjoint (w2n ro) 0 a len) /\
+  (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint (w2n ro) 0 a len) /\
+  is_word_type ty /\ type_memory_bytes cenv (lowered_value_type cenv e) = 0 /\
+  stat = flags.rcf_is_static /\ value_opt = (if flags.rcf_is_static then NONE else SOME amount) /\
+  data = read_memory (w2n ao) (w2n az) s /\ flags.rcf_max_outsize = 0 /\ ~flags.rcf_revert_on_failure /\
+  (!tail. eval_raw_call cx flags target data amount source_gas (es with gas_obs := tail) =
+    (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+       INR (Error (RevertData outcome.co_returnData))
+     else INL (Value (if flags.rcf_revert_on_failure then
+       if flags.rcf_max_outsize = 0 then NoneV
+       else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+     else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+     else ArrayV (TupleV [BoolV outcome.co_success;
+       BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),
+     SND (adopt_call_outcome rq outcome es1) with gas_obs := tail)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
+    (\res ee H un t. ?v. res = INL (Value v) /\
+      ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule_all raw_call_scalar_finish >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (Value (BoolV outcome.co_success))`,
+    `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`, `OK t`] >>
+  simp[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
+  metis_tac[]
+QED
+
+Theorem raw_call_zero_reverting_finish_outcome:
+  compile_raw_call_finish addr dp dl gas_op value_op
+    (if stat then StaticCall else RegularCall) 0 T ov op sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
+  (~stat ==> eval_operand value_op s = SOME vw) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand op s = SOME ro /\
+  w2w aw = target /\ w2n (if stat then 0w else vw) =
+    (case value_opt of NONE => 0 | SOME k => k) /\ stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!out. ~not_fresh_at sa out ==>
+    access_ok 0 G func (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit 0w]
+       else [gas_op;addr;value_op;dp;dl;op;Lit 0w]) [out]) s /\
+    taint_ok func tn (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit 0w]
+       else [gas_op;addr;value_op;dp;dl;op;Lit 0w]) [out]) s) /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  ~s.vs_halted /\ ~cenv.ce_is_ctor /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!name a len. local_region cenv es.scopes s name a len ==> regions_disjoint (w2n ro) 0 a len) /\
+  (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint (w2n ro) 0 a len) /\
+  LENGTH outcome.co_returnData < dimword(:256) /\
+  type_memory_bytes cenv (lowered_value_type cenv e) = 0 /\
+  stat = flags.rcf_is_static /\ value_opt = (if flags.rcf_is_static then NONE else SOME amount) /\
+  data = read_memory (w2n ao) (w2n az) s /\ flags.rcf_max_outsize = 0 /\ flags.rcf_revert_on_failure /\
+  (!tail. eval_raw_call cx flags target data amount source_gas (es with gas_obs := tail) =
+    (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+       INR (Error (RevertData outcome.co_returnData))
+     else INL (Value (if flags.rcf_revert_on_failure then
+       if flags.rcf_max_outsize = 0 then NoneV
+       else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+     else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+     else ArrayV (TupleV [BoolV outcome.co_success;
+       BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),
+     SND (adopt_call_outcome rq outcome es1) with gas_obs := tail)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
+    (\res ee H un t. ?v. res = INL (Value v) /\
+      ptr_val_ok cx NoneT v result H un t /\ ptr_buf_ok cenv e result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule_all raw_call_zero_reverting_finish >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`if outcome.co_success then INL (Value NoneV)
+    else INR (Error (RevertData outcome.co_returnData))`,
+    `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`,
+    `if outcome.co_success then OK t else Abort Revert_abort t`] >>
+  Cases_on `outcome.co_success` >>
+  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
+    fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
+QED
+
+Theorem raw_call_positive_reverting_finish_outcome:
+  compile_raw_call_finish addr dp dl gas_op value_op
+    (if stat then StaticCall else RegularCall) n T (Var src) op sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
+  (~stat ==> eval_operand value_op s = SOME vw) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME (n2w (ob+32)) /\
+  w2w aw = target /\ w2n (if stat then 0w else vw) =
+    (case value_opt of NONE => 0 | SOME k => k) /\ stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!out. ~not_fresh_at sa out ==>
+    access_ok 0 G func (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit (n2w n)]
+       else [gas_op;addr;value_op;dp;dl;op;Lit (n2w n)]) [out]) s /\
+    taint_ok func tn (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit (n2w n)]
+       else [gas_op;addr;value_op;dp;dl;op;Lit (n2w n)]) [out]) s) /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  ~s.vs_halted /\ ~cenv.ce_is_ctor /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!name a len. local_region cenv es.scopes s name a len ==> regions_disjoint ob capacity a len) /\
+  (!id a len. id < protected.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (a,len) ==>
+    regions_disjoint ob capacity a len) /\
+  0 < n /\ n+32 <= capacity /\ ob+capacity < dimword(:256) /\
+  lookup_var src s = SOME (n2w ob) /\ ptr_covers G tn src s capacity /\
+  not_fresh_at sa src /\ FLOOKUP s.vs_allocas aid = SOME (ob,capacity) /\ aid < sa.cs_next_id /\
+  LENGTH outcome.co_returnData < dimword(:256) /\ ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic n))) /\
+  val_store_size (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n outcome.co_returnData)) <= capacity /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= capacity /\
+  stat = flags.rcf_is_static /\ value_opt = (if flags.rcf_is_static then NONE else SOME amount) /\
+  data = read_memory (w2n ao) (w2n az) s /\ n = flags.rcf_max_outsize /\ flags.rcf_revert_on_failure /\
+  (!tail. eval_raw_call cx flags target data amount source_gas (es with gas_obs := tail) =
+    (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+       INR (Error (RevertData outcome.co_returnData))
+     else INL (Value (if flags.rcf_revert_on_failure then
+       if flags.rcf_max_outsize = 0 then NoneV
+       else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+     else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+     else ArrayV (TupleV [BoolV outcome.co_success;
+       BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),
+     SND (adopt_call_outcome rq outcome es1) with gas_obs := tail)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
+    (\res ee H un t. ?v. res = INL (Value v) /\
+      ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule_all raw_call_positive_reverting_finish >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`if outcome.co_success then INL (Value (BytesV (TAKE n outcome.co_returnData)))
+    else INR (Error (RevertData outcome.co_returnData))`,
+    `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`,
+    `if outcome.co_success then OK t else Abort Revert_abort t`] >>
+  Cases_on `outcome.co_success` >>
+  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
+    fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
+QED
+
+Theorem raw_call_positive_nonreverting_finish_outcome:
+  compile_raw_call_finish addr dp dl gas_op value_op
+    (if stat then StaticCall else RegularCall) n F (Var src) op sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s /\
+  eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
+  (~stat ==> eval_operand value_op s = SOME vw) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME (n2w (ob+32)) /\
+  w2w aw = target /\ w2n (if stat then 0w else vw) =
+    (case value_opt of NONE => 0 | SOME k => k) /\ stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!out. ~not_fresh_at sa out ==>
+    access_ok 0 G func (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit (n2w n)]
+       else [gas_op;addr;value_op;dp;dl;op;Lit (n2w n)]) [out]) s /\
+    taint_ok func tn (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr;dp;dl;op;Lit (n2w n)]
+       else [gas_op;addr;value_op;dp;dl;op;Lit (n2w n)]) [out]) s) /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  ~s.vs_halted /\ ~cenv.ce_is_ctor /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
+  (!name a len. local_region cenv es.scopes s name a len ==> regions_disjoint ob capacity a len) /\
+  (!id a len. id < protected.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (a,len) ==>
+    regions_disjoint ob capacity a len) /\
+  0 < n /\ n+32 <= capacity /\ ob+capacity < dimword(:256) /\
+  capacity = 32+((n+31) DIV 32)*32 /\ 32+capacity < dimword(:256) /\
+  lookup_var src s = SOME (n2w ob) /\ ptr_covers G tn src s capacity /\
+  not_fresh_at sa src /\ FLOOKUP s.vs_allocas aid = SOME (ob,capacity) /\ aid < sa.cs_next_id /\
+  LENGTH outcome.co_returnData < dimword(:256) /\ ~is_word_type bty /\
+  evaluate_type (get_tenv cx) bty = SOME (BaseTV (BytesT (Dynamic n))) /\
+  val_store_size (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n outcome.co_returnData)) <= capacity /\
+  type_memory_bytes cenv (lowered_value_type cenv be) <= capacity /\
+  ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
+  val_store_size (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
+    (ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE n outcome.co_returnData)])) <= 32+capacity /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= 32+capacity /\
+  stat = flags.rcf_is_static /\ value_opt = (if flags.rcf_is_static then NONE else SOME amount) /\
+  data = read_memory (w2n ao) (w2n az) s /\ n = flags.rcf_max_outsize /\ ~flags.rcf_revert_on_failure /\
+  (!tail. eval_raw_call cx flags target data amount source_gas (es with gas_obs := tail) =
+    (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+       INR (Error (RevertData outcome.co_returnData))
+     else INL (Value (if flags.rcf_revert_on_failure then
+       if flags.rcf_max_outsize = 0 then NoneV
+       else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+     else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+     else ArrayV (TupleV [BoolV outcome.co_success;
+       BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),
+     SND (adopt_call_outcome rq outcome es1) with gas_obs := tail)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
+    (\res ee H un t. ?v. res = INL (Value v) /\
+      ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule_all raw_call_positive_nonreverting_finish >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (Value (ArrayV (TupleV [BoolV outcome.co_success;
+    BytesV (TAKE n outcome.co_returnData)])))`,
+    `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`, `OK t`] >>
+  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs]
+QED
