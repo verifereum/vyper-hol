@@ -3895,19 +3895,18 @@ Proof
 QED
 
 Theorem emit_one_input_live_upper_acc[local]:
-  !done rest opc nl h ps.
-    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+  !done rest opc nl h ps x.
+    (LIST_ELEM_COUNT x ps.ps_stack +
       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
       LIST_ELEM_COUNT x done +
       (if MEM x (MAP Var (operand_vars (h::rest) ++ nl)) then 1 else 0)) ==>
-    !x. LIST_ELEM_COUNT x (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_stack +
+    LIST_ELEM_COUNT x (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_stack +
       (if x IN FDOM (SND (emit_one_input opc (operand_vars rest ++ nl) h ps)).ps_spilled
        then 1 else 0) <=
       LIST_ELEM_COUNT x (done ++ [h]) +
       (if MEM x (MAP Var (operand_vars rest ++ nl)) then 1 else 0)
 Proof
-  rpt gen_tac >> strip_tac >> gen_tac >>
-  first_x_assum (qspec_then `x` assume_tac) >>
+  rpt gen_tac >> strip_tac >>
   qspecl_then [`opc`, `operand_vars rest ++ nl`, `h`, `ps`, `x`]
     assume_tac emit_one_input_inventory_upper >>
   Cases_on `x IN FDOM ps.ps_spilled` >>
@@ -3920,13 +3919,13 @@ Proof
 QED
 
 Theorem emit_input_plan_live_upper_acc[local]:
-  !rest done opc nl ps iops qs.
-    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+  !rest done opc nl ps iops qs x.
+    (LIST_ELEM_COUNT x ps.ps_stack +
       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
       LIST_ELEM_COUNT x done +
       (if MEM x (MAP Var (operand_vars rest ++ nl)) then 1 else 0)) /\
     emit_input_plan opc rest nl ps = (iops,qs) ==>
-    !x. LIST_ELEM_COUNT x qs.ps_stack +
+    LIST_ELEM_COUNT x qs.ps_stack +
       (if x IN FDOM qs.ps_spilled then 1 else 0) <=
       LIST_ELEM_COUNT x (done ++ rest) +
       (if MEM x (MAP Var nl) then 1 else 0)
@@ -3942,6 +3941,25 @@ Proof
   gvs[emit_input_plan_cons] >>
   first_x_assum drule >> disch_then drule >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem emit_input_plan_relevant_variable_upper:
+  !opc operands nl ps iops qs v.
+    MEM v (operand_vars operands ++ nl) /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    emit_input_plan opc operands nl ps = (iops,qs) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) operands + (if MEM v nl then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack +
+     (if Var v IN FDOM ps.ps_spilled then 1 else 0) <=
+   LIST_ELEM_COUNT (Var v) [] +
+     (if MEM (Var v) (MAP Var (operand_vars operands ++ nl)) then 1 else 0)` by
+    gvs[MEM_MAP, LIST_ELEM_COUNT_THM] >>
+  drule_all emit_input_plan_live_upper_acc >> simp[MEM_MAP]
 QED
 
 Theorem emit_input_plan_live_upper:
@@ -3979,6 +3997,8 @@ Proof
      `~MEM x ps.ps_stack /\ x NOTIN FDOM ps.ps_spilled` by
        (gvs[SUBSET_DEF] >> metis_tac[]) >>
      gvs[GSYM LIST_ELEM_COUNT_MEM, LIST_ELEM_COUNT_THM]) >>
+  gen_tac >>
+  qpat_x_assum `!x. _` (qspec_then `x` assume_tac) >>
   drule_all emit_input_plan_live_upper_acc >> simp[]
 QED
 
