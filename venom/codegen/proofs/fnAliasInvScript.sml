@@ -6012,6 +6012,300 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+(* Initialized loop probe with the root written by a header PHI. *)
+Definition alias_phi_loop_fn_def:
+  alias_phi_loop_fn = mk_raw_function "phi_loop_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["e"];
+          mk_inst 1 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 2 PHI [Label "entry"; Var "e"; Label "backedge"; Var "q"] ["r"];
+          mk_inst 3 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+         [mk_inst 4 ASSIGN [Var "r"] ["a"];
+          mk_inst 5 ISZERO [Var "a"] ["z"];
+          mk_inst 6 CALLDATASIZE [] ["q"];
+          mk_inst 7 JNZ [Var "z"; Label "backedge"; Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 8 STOP [] []] |>;
+     <| bb_label := "backedge"; bb_instructions := [mk_inst 9 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_phi_loop_ready:
+  codegen_ready_fn alias_phi_loop_fn /\
+  normalize_operand (dfg_build_function alias_phi_loop_fn) [] (Var "a") = Var "r"
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_phi_loop_plan_def:
+  alias_phi_loop_plan n ps = generate_block_plan
+    (liveness_analyze alias_phi_loop_fn) (dfg_build_function alias_phi_loop_fn)
+    (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn (EL n alias_phi_loop_fn.fn_blocks) ps
+End
+
+Definition alias_phi_loop_entry_def:
+  alias_phi_loop_entry = THE (alias_phi_loop_plan 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Definition alias_phi_loop_header_def:
+  alias_phi_loop_header = THE (alias_phi_loop_plan 1 (SND alias_phi_loop_entry))
+End
+
+Definition alias_phi_loop_body_def:
+  alias_phi_loop_body = THE (alias_phi_loop_plan 2 (SND alias_phi_loop_header))
+End
+
+Theorem alias_phi_loop_plans_success:
+  IS_SOME (alias_phi_loop_plan 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+  IS_SOME (alias_phi_loop_plan 1 (SND alias_phi_loop_entry)) /\
+  IS_SOME (alias_phi_loop_plan 2 (SND alias_phi_loop_header)) /\
+  IS_SOME (alias_phi_loop_plan 1 ((SND alias_phi_loop_entry) with
+    <|ps_stack := (SND alias_phi_loop_body).ps_stack;
+      ps_spilled := (SND alias_phi_loop_body).ps_spilled|>))
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_endpoint_stacks:
+  (SND alias_phi_loop_entry).ps_stack = [Var "e"] /\
+  (SND alias_phi_loop_header).ps_stack = [Var "r"] /\
+  (SND alias_phi_loop_body).ps_stack = [Var "q"]
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_phi_loop_backedge_def:
+  alias_phi_loop_backedge = THE (alias_phi_loop_plan 4 (SND alias_phi_loop_body))
+End
+
+Definition alias_phi_loop_reentry_def:
+  alias_phi_loop_reentry = (SND alias_phi_loop_entry) with
+    <|ps_stack := (SND alias_phi_loop_backedge).ps_stack;
+      ps_spilled := (SND alias_phi_loop_backedge).ps_spilled|>
+End
+
+Definition alias_phi_loop_phi_cut_def:
+  alias_phi_loop_phi_cut = SND (generate_phi_plan
+    (HD (EL 1 alias_phi_loop_fn.fn_blocks).bb_instructions)
+    (live_vars_at (liveness_analyze alias_phi_loop_fn) "header" 1) F
+    alias_phi_loop_reentry)
+End
+
+Theorem alias_phi_loop_plans:
+  alias_phi_loop_plan 0 (init_cleanup_plan_state NONE [] 0 0) = SOME alias_phi_loop_entry /\
+  alias_phi_loop_plan 1 (SND alias_phi_loop_entry) = SOME alias_phi_loop_header /\
+  alias_phi_loop_plan 2 (SND alias_phi_loop_header) = SOME alias_phi_loop_body
+Proof
+  mp_tac alias_phi_loop_plans_success >>
+  Cases_on `alias_phi_loop_plan 0 (init_cleanup_plan_state NONE [] 0 0)` >>
+  Cases_on `alias_phi_loop_plan 1 (SND alias_phi_loop_entry)` >>
+  Cases_on `alias_phi_loop_plan 2 (SND alias_phi_loop_header)` >>
+  simp[alias_phi_loop_entry_def, alias_phi_loop_header_def, alias_phi_loop_body_def]
+QED
+
+Theorem alias_phi_loop_backedge_success:
+  IS_SOME (alias_phi_loop_plan 4 (SND alias_phi_loop_body))
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_phi_loop_backedge_plan:
+  alias_phi_loop_plan 4 (SND alias_phi_loop_body) = SOME alias_phi_loop_backedge
+Proof
+  mp_tac alias_phi_loop_backedge_success >>
+  Cases_on `alias_phi_loop_plan 4 (SND alias_phi_loop_body)` >>
+  simp[alias_phi_loop_backedge_def]
+QED
+
+Theorem alias_phi_loop_reentry_fields:
+  (SND alias_phi_loop_backedge).ps_stack = [Var "q"] /\
+  alias_phi_loop_reentry.ps_stack = [Var "q"] /\
+  alias_phi_loop_reentry.ps_spilled = FEMPTY /\
+  alias_phi_loop_phi_cut.ps_stack = [Var "r"] /\
+  alias_phi_loop_phi_cut.ps_spilled = FEMPTY /\
+  IS_SOME (alias_phi_loop_plan 1 alias_phi_loop_reentry) /\
+  FST (THE (alias_phi_loop_plan 1 alias_phi_loop_reentry)) = FST alias_phi_loop_header /\
+  (SND (THE (alias_phi_loop_plan 1 alias_phi_loop_reentry))).ps_stack = [Var "r"]
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_alias_deleted:
+  ~plan_holds (SND alias_phi_loop_body) (Var "a") /\
+  ~plan_holds (SND alias_phi_loop_backedge) (Var "a") /\
+  ~plan_holds alias_phi_loop_reentry (Var "a") /\
+  ~plan_holds alias_phi_loop_phi_cut (Var "a")
+Proof
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+Theorem alias_phi_loop_dfs_header:
+  dfs_aux_call (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["header"] ["entry"] (SND alias_phi_loop_entry)
+Proof
+  `SND alias_phi_loop_entry = (SND alias_phi_loop_entry) with
+    <|ps_stack := (SND alias_phi_loop_entry).ps_stack;
+      ps_spilled := (SND alias_phi_loop_entry).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `cfg_succs_of (cfg_analyze alias_phi_loop_fn) "entry" = ["header"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 0 alias_phi_loop_fn.fn_blocks`, `FST alias_phi_loop_entry`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_plans] >>
+  conj_tac >- EVAL_TAC >> irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_dfs_body:
+  dfs_aux_call (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["body"] ["header"; "entry"] (SND alias_phi_loop_header)
+Proof
+  `SND alias_phi_loop_header = (SND alias_phi_loop_header) with
+    <|ps_stack := (SND alias_phi_loop_header).ps_stack;
+      ps_spilled := (SND alias_phi_loop_header).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `cfg_succs_of (cfg_analyze alias_phi_loop_fn) "header" = ["body"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 1 alias_phi_loop_fn.fn_blocks`, `FST alias_phi_loop_header`,
+    `SND alias_phi_loop_entry`, `[]`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_plans, alias_phi_loop_dfs_header] >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_exit_dfs_result:
+  generate_fn_plan_aux (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    ["exit"] ["body"; "header"; "entry"] (SND alias_phi_loop_body) =
+    SOME ([SOLabel "exit"; SOPop 1; SOEmit "STOP"],
+      ["exit"; "body"; "header"; "entry"], init_cleanup_plan_state NONE [] 0 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_phi_loop_dfs_backedge:
+  dfs_aux_call (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["backedge"]
+    ["exit"; "body"; "header"; "entry"] (SND alias_phi_loop_body)
+Proof
+  `SND alias_phi_loop_body = (SND alias_phi_loop_body) with
+    <|ps_stack := (SND alias_phi_loop_body).ps_stack;
+      ps_spilled := (SND alias_phi_loop_body).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >> qexists_tac `[]` >>
+  `SND alias_phi_loop_body = (SND alias_phi_loop_body) with
+    <|ps_alloc := (init_cleanup_plan_state NONE [] 0 0).ps_alloc with
+        sa_free_slots := (SND alias_phi_loop_body).ps_alloc.sa_free_slots;
+      ps_label_counter := (init_cleanup_plan_state NONE [] 0 0).ps_label_counter|>` by EVAL_TAC >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_sibling >>
+  qexistsl_tac [`[SOLabel "exit"; SOPop 1; SOEmit "STOP"]`,
+    `"exit"`, `["body"; "header"; "entry"]`] >>
+  simp[alias_phi_loop_exit_dfs_result] >>
+  `cfg_succs_of (cfg_analyze alias_phi_loop_fn) "body" = ["exit"; "backedge"]` by EVAL_TAC >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 2 alias_phi_loop_fn.fn_blocks`, `FST alias_phi_loop_body`,
+    `SND alias_phi_loop_header`, `[]`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_plans, alias_phi_loop_dfs_body] >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_dfs_states:
+  dfs_block_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "entry" (init_cleanup_plan_state NONE [] 0 0) /\
+  dfs_block_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" (SND alias_phi_loop_entry) /\
+  dfs_block_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "body" (SND alias_phi_loop_header) /\
+  dfs_block_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" (SND alias_phi_loop_body)
+Proof
+  rewrite_tac[dfs_block_state_def] >> conj_tac
+  >- (qexistsl_tac [`[]`, `[]`] >> simp[] >> irule dfs_aux_call_entry >> EVAL_TAC) >>
+  conj_tac >- (qexistsl_tac [`[]`, `["entry"]`] >> simp[alias_phi_loop_dfs_header]) >>
+  conj_tac >- (qexistsl_tac [`[]`, `["header"; "entry"]`] >> simp[alias_phi_loop_dfs_body]) >>
+  qexistsl_tac [`[]`, `["exit"; "body"; "header"; "entry"]`] >> simp[alias_phi_loop_dfs_backedge]
+QED
+
+Theorem alias_phi_loop_lineage_header:
+  lineage_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "header" (SND alias_phi_loop_entry)
+Proof
+  `SND alias_phi_loop_entry = (SND alias_phi_loop_entry) with
+    <|ps_stack := (SND alias_phi_loop_entry).ps_stack;
+      ps_spilled := (SND alias_phi_loop_entry).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_phi_loop_dfs_states] >>
+  qexistsl_tac [`EL 0 alias_phi_loop_fn.fn_blocks`, `FST alias_phi_loop_entry`, `NONE`,
+    `"entry"`, `F`, `init_cleanup_plan_state NONE [] 0 0`,
+    `init_cleanup_plan_state NONE [] 0 0`, `SND alias_phi_loop_entry`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_plans, alias_phi_loop_dfs_states] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> irule lineage_state_entry >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_lineage_body:
+  lineage_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "body" (SND alias_phi_loop_header)
+Proof
+  `SND alias_phi_loop_header = (SND alias_phi_loop_header) with
+    <|ps_stack := (SND alias_phi_loop_header).ps_stack;
+      ps_spilled := (SND alias_phi_loop_header).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_phi_loop_dfs_states] >>
+  qexistsl_tac [`EL 1 alias_phi_loop_fn.fn_blocks`, `FST alias_phi_loop_header`, `NONE`,
+    `"header"`, `F`, `SND alias_phi_loop_entry`, `SND alias_phi_loop_entry`,
+    `SND alias_phi_loop_header`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_plans, alias_phi_loop_dfs_states,
+       alias_phi_loop_lineage_header] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_lineage_backedge:
+  lineage_state (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" (SND alias_phi_loop_body)
+Proof
+  `SND alias_phi_loop_body = (SND alias_phi_loop_body) with
+    <|ps_stack := (SND alias_phi_loop_body).ps_stack;
+      ps_spilled := (SND alias_phi_loop_body).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[alias_phi_loop_dfs_states] >>
+  qexistsl_tac [`EL 2 alias_phi_loop_fn.fn_blocks`, `FST alias_phi_loop_body`, `NONE`,
+    `"body"`, `F`, `SND alias_phi_loop_header`, `SND alias_phi_loop_header`,
+    `SND alias_phi_loop_body`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_plans, alias_phi_loop_dfs_states,
+       alias_phi_loop_lineage_body] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_phi_loop_lineage_reentry:
+  lineage_entry (liveness_analyze alias_phi_loop_fn)
+    (dfg_build_function alias_phi_loop_fn) (cfg_analyze alias_phi_loop_fn) alias_phi_loop_fn
+    (init_cleanup_plan_state NONE [] 0 0) "backedge" "header" alias_phi_loop_reentry
+Proof
+  simp[lineage_entry_def] >>
+  qexistsl_tac [`SND alias_phi_loop_body`, `EL 4 alias_phi_loop_fn.fn_blocks`,
+    `SND alias_phi_loop_body`, `FST alias_phi_loop_backedge`, `SND alias_phi_loop_backedge`,
+    `NONE`, `F`, `SND alias_phi_loop_backedge`, `SND alias_phi_loop_entry`] >>
+  simp[GSYM alias_phi_loop_plan_def, alias_phi_loop_backedge_plan, alias_phi_loop_dfs_states,
+       alias_phi_loop_lineage_backedge, alias_phi_loop_reentry_def] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
 (* Without dominance, liveness alone admits a stale alias at a root write. *)
 Definition alias_probe_bad_loop_fn_def:
   alias_probe_bad_loop_fn = mk_raw_function "bad_loop_probe"
