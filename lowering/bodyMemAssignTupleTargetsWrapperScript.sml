@@ -21,16 +21,6 @@ Proof
   Cases_on `eval_expr cx e x` >> Cases_on `q` >> simp[bind_def]
 QED
 
-(* S1 original: stmtSimForced.ignore_bind_bind_value (local). *)
-Theorem tuple_targets_ignore_bind[local]:
-  !(a : evaluation_state -> value evaluation_result) k.
-    ignore_bind (bind a k) (return ()) =
-    bind a (\v. ignore_bind (k v) (return ()))
-Proof
-  simp[ignore_bind_def, FUN_EQ_THM, bind_def] >> rpt gen_tac >>
-  Cases_on `a x` >> Cases_on `q` >> simp[]
-QED
-
 Theorem compile_assign_tuple_targets_stmt_frag_mem:
   !d ctx func cx lctx RetQ cenv ty gs e es tys tvs.
     expr_type e = TupleT tys /\ LENGTH gs = LENGTH tys /\
@@ -147,7 +137,7 @@ Resume compile_assign_tuple_targets_stmt_frag_mem[exempt]:
   pop_assum strip_assume_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   pure_rewrite_tac [tuple_targets_source_action] >>
-  ONCE_REWRITE_TAC [tuple_targets_ignore_bind] >>
+  ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
 Finalise compile_assign_tuple_targets_stmt_frag_mem
