@@ -308,6 +308,19 @@ Proof
        ptr_value_transport_refl]
 QED
 
+Theorem ptr_mixed_vars_eval_presence:
+  ptr_mixed_vars births positions TG tn f g s t /\ s.vs_labels = t.vs_labels ==>
+  !op. IS_SOME (eval_operand op s) = IS_SOME (eval_operand op t)
+Proof
+  strip_tac >> Cases >> simp[eval_operand_def] >>
+  rename1 `IS_SOME (lookup_var x s) = IS_SOME (lookup_var x t)` >>
+  Cases_on `retpc_var f x`
+  >- (drule_all ptr_mixed_vars_opaque_lookup >> strip_tac >> simp[]) >>
+  drule_all ptr_mixed_vars_lookup >>
+  Cases_on `lookup_var x s` >> Cases_on `lookup_var x t` >>
+  simp[ptr_lookup_transport_def]
+QED
+
 Theorem ptr_mixed_vars_eval_operands:
   !ops. ptr_mixed_vars births positions TG tn f g s t /\
     EVERY (ptr_nonopaque_operand f) ops /\ s.vs_labels = t.vs_labels ==>
