@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeProducerExecution
 Ancestors
   exprSimAbiEncodePrefixWindow exprSimAbiEncodeExecution
+  exprSimAbiEncodeEmptySource
   abiBuiltinEncodeContext abiBuiltinEncodeCode abiDecoderContract abiDecoderReentry
   abiBuiltinAllocation abiEncodeWindowBuiltin abiEncoderCounters
   abiTupleValueEncoding abiEncoderAdmissible exprSimAlloc loweringPosts
@@ -233,4 +234,29 @@ Proof
     qpat_assum `LENGTH (enc ct rv) = 32` (fn length_eq =>
       qpat_assum `enc ct rv = _` (fn enc_eq =>
         first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [length_eq, enc_eq])))]
+QED
+
+(* The counted unwrap ends in expr_post at sa, retaining origin.  In the
+   empty case its actual pointer remains unconstrained by the frontier. *)
+Theorem abi_encode_nonword_producer_source_split:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  ~is_word_type (expr_type e) /\
+  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
+  ?w ct rv. eval_operand op s = SOME w /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory /\
+    ((val_footprint tv v = 0 /\ ei = AbiCopy 0) \/
+     (0 < val_footprint tv v /\
+      w2n w + val_footprint tv v <= s.vs_alloca_next))
+Proof
+  strip_tac >> drule_all abi_encode_nonword_expr_window >> strip_tac >>
+  drule_all abi_encode_nonword_expr_bound >> strip_tac
+  >- (drule_all abi_encode_nonword_zero_plan >> strip_tac >>
+      qexistsl [`w`, `ct`, `rv`] >> simp[]) >>
+  qexistsl [`w`, `ct`, `rv`] >> simp[] >>
+  Cases_on `val_footprint tv v = 0`
+  >- metis_tac[abi_encode_nonword_zero_plan] >> simp[]
 QED
