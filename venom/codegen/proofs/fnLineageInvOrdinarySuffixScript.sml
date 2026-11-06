@@ -65,3 +65,49 @@ Proof
   irule reorderSimTheory.residual_budget_wf_canonical >>
   gvs[reorderSimTheory.residual_budget_wf_def]
 QED
+
+Theorem analyzed_ordinary_inst_inventory:
+ !fn bb k dfg cfg term base ps ops qs.
+ codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+ k < LENGTH bb.bb_instructions /\
+ EVERY (\inst. inst.inst_opcode <> PHI) (DROP k bb.bb_instructions) /\
+ (EL k bb.bb_instructions).inst_opcode <> JMP /\
+ (EL k bb.bb_instructions).inst_opcode <> OFFSET /\
+ ~is_param_opcode (EL k bb.bb_instructions).inst_opcode /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label k))) ps /\
+ (?m core. lineage_core m core ps /\ residual_budget_wf base [] (ps with ps_stack := core)) /\
+ generate_inst_plan (liveness_analyze fn) dfg cfg fn (EL k bb.bb_instructions)
+   (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k)) F term bb.bb_label ps = SOME (ops,qs)
+ ==>
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k)))) qs /\
+ (?n tail. lineage_core n tail qs /\ residual_budget_wf base [] (qs with ps_stack := tail))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `(EL k bb.bb_instructions).inst_opcode <> PHI` by
+   (gvs[EVERY_MEM] >> first_x_assum irule >> simp[MEM_DROP, MEM_EL] >> qexists_tac `0` >> simp[]) >>
+ Cases_on `(EL k bb.bb_instructions).inst_opcode = NOP`
+ >- (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def] >> strip_tac >> gvs[] >>
+     drule_all analyzed_nop_live_identity >> strip_tac >> gvs[] >> metis_tac[]) >>
+ drule_all lineage_inventory_canonical_budget >> strip_tac >>
+ `ps.ps_stack = REPLICATE n dead_stack_marker ++ tail` by
+   gvs[lineage_core_def] >>
+ `set tail UNION FDOM ps.ps_spilled SUBSET
+    set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label k))` by (qpat_x_assum `set tail UNION _ = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+ `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+   (gvs[pred_setTheory.EXTENSION, MEM_MAP, MEM_APPEND] >> metis_tac[]) >>
+ `k <= LENGTH bb.bb_instructions` by simp[] >>
+ `!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+    demand_available fn bb k v` by
+   (rpt strip_tac >> irule analyzed_suffix_inventory_demand >>
+    simp[] >> qexistsl_tac [`tail`, `n`, `ps`] >>
+    asm_rewrite_tac[] >>
+    qpat_x_assum `set tail UNION _ = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+ qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+ simp[generate_inst_plan_def, AllCaseEqs()] >> strip_tac >>
+ drule_all analyzed_ordinary_live_inventory >> strip_tac >>
+ simp[] >> metis_tac[]
+QED
