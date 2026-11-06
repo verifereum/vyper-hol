@@ -57,13 +57,16 @@ Theorem cast_check_success_certificate:
     (!p. p <> a /\ p <> b ==> lookup_var p t = lookup_var p s /\
        FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory
 Proof
   strip_tac >> gen_tac >>
   `MEM GT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
    op_prov G (Lit (n2w n)) = NONE /\ op_taint tn (Lit (n2w n)) = {}` by
     simp[op_prov_def, op_taint_def] >>
   drule_all scalar_checked_pair_runtime_frame >> strip_tac >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_assum `t with vs_vars := _ = s`
+       (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
   drule_all (cj 1 (PURE_REWRITE_RULE
     [LEFT_AND_OVER_OR, DISJ_IMP_THM] scalar_checked_pair_uniform_certificate)) >>
   disch_then (qspecl_then [`fn`,`PG`,`D`,`k`] strip_assume_tac) >>
@@ -108,7 +111,8 @@ Theorem cast_narrow_success_path:
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx+4)) /\
     ghost_inv d cenv cx es H th t /\
-    ghost_kept cenv es sa G tn s H th /\ ptr_covers H th src t sz
+    ghost_kept cenv es sa G tn s H th /\ ptr_covers H th src t sz /\
+    t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem
 Proof
   strip_tac >> qpat_x_assum `code = _` SUBST_ALL_TAC >>
   `ptr_covers G tn src s 32` by
@@ -137,6 +141,9 @@ Proof
   `isPREFIX [mk_inst (id+1) GT [Var len;Lit (n2w n)] [a];
      mk_inst (id+2) ISZERO [Var a] [b]; mk_inst (id+3) ASSERT [Var b] []]
      (DROP u.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  `u.vs_memory = s.vs_memory` by
+    (qpat_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
   qpat_x_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>` kall_tac >>
   qpat_x_assum `id+2 = _` kall_tac >> qpat_x_assum `id+3 = _` kall_tac >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >> disch_tac >>
@@ -234,7 +241,8 @@ Theorem convert_cast_success_path:
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     ghost_inv d cenv cx es H th t /\
-    ghost_kept cenv es sa G tn s H th /\ ptr_covers H th src t sz
+    ghost_kept cenv es sa G tn s H th /\ ptr_covers H th src t sz /\
+    t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem
 Proof
   strip_tac >> drule convert_cast_emitted_shape >> strip_tac >> simp[] >>
   Cases_on `n < i` >> fs[]
