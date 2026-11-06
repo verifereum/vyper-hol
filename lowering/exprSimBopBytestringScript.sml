@@ -114,6 +114,53 @@ Proof
     (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]
 QED
 
+Theorem comparison_hash_dynamic[local]:
+  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) ptr_op s /\
+  expr_type e = BaseT (BytesT (Dynamic cap)) /\
+  evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (BaseTV (BytesT (Dynamic cap))) /\
+  compile_bytestring_hash ptr_op sm = (op, sb) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sm x) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    stmt_state_rel ctx func cenv cx es' t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >> drule_all hash_dynamic_post_view >> strip_tac >>
+  irule comparison_hash_counted >> goal_assum drule >>
+  gvs[loweringPostsTheory.expr_post_def] >> metis_tac[]
+QED
+
+Theorem comparison_hash_string[local]:
+  expr_post ctx func cenv cx e es sa sm s0 es' (StringV str) ptr_op s /\
+  expr_type e = BaseT (StringT cap) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) /\
+  compile_bytestring_hash ptr_op sm = (op, sb) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sm x) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    eval_operand op t = SOME
+      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 (MAP (n2w o ORD) str))) /\
+    stmt_state_rel ctx func cenv cx es' t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >> drule_all hash_string_post_view >> strip_tac >>
+  irule comparison_hash_counted >> goal_assum drule >>
+  gvs[loweringPostsTheory.expr_post_def] >> metis_tac[]
+QED
+
 Theorem compile_bop_bytestring_eqne_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) ==>
