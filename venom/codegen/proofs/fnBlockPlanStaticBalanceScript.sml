@@ -421,17 +421,6 @@ Proof
   drule reorder_fold_no_push_var >> simp[]
 QED
 
-Theorem reorder_plan_signed_balance:
-  LENGTH target_ops <= LENGTH ps.ps_stack /\ LENGTH target_ops <= 16 /\
-  reorder_plan dfg target_ops ps = (ops, qs) ==>
-  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
-Proof
-  strip_tac >> drule_all reorder_plan_wf_len >>
-  disch_then (qspecl_then [`dfg`, `FEMPTY`] mp_tac) >> simp[] >> strip_tac >>
-  drule prefix_wf_signed_balance >>
-  impl_tac >- metis_tac[reorder_plan_no_push_var] >> simp[]
-QED
-
 Theorem spill_fold_trace_weight[local]:
   !items acc offs al.
     trace_weight (FST (FOLDL (\(ops, offsets, alloc) item.
@@ -472,6 +461,113 @@ Proof
   gvs[top_n_def, listTheory.LENGTH_TAKE_EQ] >>
   qpat_x_assum `FOLDL _ _ _ = _` kall_tac >>
   Cases_on `dist + 1 <= LENGTH ps.ps_stack` >> gvs[] >> intLib.ARITH_TAC
+QED
+
+Theorem do_spill_tos_signed_balance[local]:
+  ps.ps_stack <> [] /\ do_spill_tos ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  strip_tac >>
+  `0 < LENGTH ps.ps_stack` by (Cases_on `ps.ps_stack` >> gvs[]) >>
+  qpat_x_assum `do_spill_tos _ = _` mp_tac >>
+  simp[do_spill_tos_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  gvs[trace_weight_def, stack_op_weight_def, stack_pop_def,
+      listTheory.LENGTH_TAKE_EQ] >> intLib.ARITH_TAC
+QED
+
+Theorem do_spill_at_signed_balance:
+  ps.ps_stack <> [] /\ do_spill_at dist ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  strip_tac >> Cases_on `dist = 0`
+  >- (gvs[do_spill_at_def] >> metis_tac[do_spill_tos_signed_balance]) >>
+  qpat_x_assum `do_spill_at _ _ = _` mp_tac >> simp[do_spill_at_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule_at (Pat `do_spill_tos _ = _`) do_spill_tos_signed_balance >>
+  (impl_tac >- (simp[] >> metis_tac[stack_swap_length, listTheory.LENGTH_NIL])) >>
+  simp[trace_weight_def, stack_op_weight_def]
+QED
+
+Theorem reduce_depth_plan_signed_balance:
+  !fuel targets op f n ps ops qs.
+    reduce_depth_plan fuel targets op f n ps = (ops, qs) ==>
+    &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Induct >> rpt gen_tac >> simp[Once reduce_depth_plan_def]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  Cases_on `f + 1 < n` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
+  Cases_on `dist <= 16` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  `ps.ps_stack <> []` by
+    (drule stack_get_unfixed_depth_bound >> Cases_on `ps.ps_stack` >> simp[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  drule_all do_spill_at_signed_balance >> strip_tac >>
+  simp[trace_weight_append] >> intLib.ARITH_TAC
+QED
+
+Theorem reorder_one_signed_balance[local]:
+  reorder_one dfg target_ops idx op ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[reorder_one_def, LET_THM] >> pairarg_tac >> simp[] >>
+  `&(LENGTH ps1.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight restore_ops` by
+    (qpat_x_assum `_ = (restore_ops, ps1)` mp_tac >>
+     Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
+       (LENGTH target_ops) ps.ps_stack` >> simp[]
+     >- (Cases_on `FLOOKUP ps.ps_spilled op` >> simp[]
+         >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+         metis_tac[do_restore_signed_balance]) >>
+     rpt strip_tac >> gvs[trace_weight_def]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
+    (LENGTH target_ops) ps1.ps_stack` >> simp[]
+  >- (rpt strip_tac >> gvs[]) >>
+  pairarg_tac >> simp[] >>
+  `&(LENGTH ps2.ps_stack) = (&(LENGTH ps1.ps_stack):int) + trace_weight reduce_ops` by
+    (qpat_x_assum `_ = (reduce_ops, ps2)` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- metis_tac[reduce_depth_plan_signed_balance] >>
+     rpt strip_tac >> gvs[trace_weight_def]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
+    (LENGTH target_ops) ps2.ps_stack` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_append] >> intLib.ARITH_TAC) >>
+  rpt IF_CASES_TAC >> simp[] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  imp_res_tac do_swap_signed_balance >>
+  gvs[stack_poke_def, listTheory.LENGTH_LUPDATE, trace_weight_append] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem reorder_fold_signed_balance[local]:
+  !items acc_ops ps ops qs.
+    FOLDL (\(ops, ps) (idx, op).
+      let (step_ops, next_ps) = reorder_one dfg target_ops idx op ps in
+      (ops ++ step_ops, next_ps)) (acc_ops, ps) items = (ops, qs) ==>
+    &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) +
+      trace_weight ops - trace_weight acc_ops
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[] >> rpt strip_tac >> gvs[] >> intLib.ARITH_TAC) >>
+  rename1 `FOLDL _ _ (item::items)` >> PairCases_on `item` >>
+  simp[LET_THM] >> pairarg_tac >> simp[] >> strip_tac >>
+  RULE_ASSUM_TAC (REWRITE_RULE [LET_THM]) >>
+  first_x_assum drule >> strip_tac >>
+  drule reorder_one_signed_balance >> strip_tac >>
+  gvs[trace_weight_append] >> intLib.ARITH_TAC
+QED
+
+Theorem reorder_plan_signed_balance:
+  reorder_plan dfg target_ops ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[reorder_plan_def] >> strip_tac >>
+  drule (SRULE [LET_THM] reorder_fold_signed_balance) >> simp[trace_weight_def]
 QED
 
 Theorem optimistic_swap_plan_signed_balance:
@@ -751,8 +847,8 @@ Proof
         (simp[listTheory.LENGTH_TAKE] >> decide_tac) >>
       rpt (pairarg_tac >> gvs[]) >>
       Cases_on `reorder_cost oa < reorder_cost ob` >> gvs[]
-      >- (drule_all reorder_plan_signed_balance >> strip_tac >>
-          conj_tac >- simp[] >> irule reorder_plan_length_floor >>
+      >- (conj_tac >- metis_tac[reorder_plan_signed_balance] >>
+          irule reorder_plan_length_floor >>
           goal_assum (drule_at Any) >> simp[]) >>
       qpat_x_assum `reorder_plan dfg operands ps = _` kall_tac >>
       `LENGTH (TAKE (LENGTH operands - 2) operands ++
@@ -822,51 +918,4 @@ Proof
   gvs[release_dead_spills_stack, trace_weight_append] >> intLib.ARITH_TAC
 QED
 
-Theorem do_spill_tos_signed_balance[local]:
-  ps.ps_stack <> [] /\ do_spill_tos ps = (ops, qs) ==>
-  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
-Proof
-  strip_tac >>
-  `0 < LENGTH ps.ps_stack` by (Cases_on `ps.ps_stack` >> gvs[]) >>
-  qpat_x_assum `do_spill_tos _ = _` mp_tac >>
-  simp[do_spill_tos_def] >> pairarg_tac >> simp[] >> strip_tac >>
-  gvs[trace_weight_def, stack_op_weight_def, stack_pop_def,
-      listTheory.LENGTH_TAKE_EQ] >> intLib.ARITH_TAC
-QED
 
-Theorem do_spill_at_signed_balance:
-  ps.ps_stack <> [] /\ do_spill_at dist ps = (ops, qs) ==>
-  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
-Proof
-  strip_tac >> Cases_on `dist = 0`
-  >- (gvs[do_spill_at_def] >> metis_tac[do_spill_tos_signed_balance]) >>
-  qpat_x_assum `do_spill_at _ _ = _` mp_tac >> simp[do_spill_at_def] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule_at (Pat `do_spill_tos _ = _`) do_spill_tos_signed_balance >>
-  (impl_tac >- (simp[] >> metis_tac[stack_swap_length, listTheory.LENGTH_NIL])) >>
-  simp[trace_weight_def, stack_op_weight_def]
-QED
-
-Theorem reduce_depth_plan_signed_balance:
-  !fuel targets op f n ps ops qs.
-    reduce_depth_plan fuel targets op f n ps = (ops, qs) ==>
-    &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
-Proof
-  Induct >> rpt gen_tac >> simp[Once reduce_depth_plan_def]
-  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
-  Cases_on `f + 1 < n` >> simp[]
-  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[]
-  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
-  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
-  Cases_on `dist <= 16` >> simp[]
-  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
-  Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> simp[]
-  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
-  `ps.ps_stack <> []` by
-    (drule stack_get_unfixed_depth_bound >> Cases_on `ps.ps_stack` >> simp[]) >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  first_x_assum drule >> strip_tac >>
-  drule_all do_spill_at_signed_balance >> strip_tac >>
-  simp[trace_weight_append] >> intLib.ARITH_TAC
-QED
