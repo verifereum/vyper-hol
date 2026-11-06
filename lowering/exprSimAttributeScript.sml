@@ -452,6 +452,25 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
+      metis_tac[])
+  >~ [`storage_read_live`]
+  >- (strip_tac >>
+      qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+      asm_rewrite_tac[] >> strip_tac >>
+      drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
+      drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
+      strip_tac >>
+      Cases_on `bvv` >>
+      simp[mk_ptr_def, vv_loc_def, contextTheory.vv_location_def] >>
+      rename1 `LocatedValue t p` >>
+      `t = StructT sid` by
+        (qpat_x_assum `vv_holds _ _ _ _ (LocatedValue _ _) _ _` mp_tac >>
+         simp[vv_holds_def, is_bytestring_type_def] >> rpt strip_tac >>
+         simp[]) >>
+      gvs[vv_loc_def, contextTheory.vv_location_def,
+          contextTheory.vv_operand_def, attr_offset_def] >>
+      rpt strip_tac >> gvs[] >>
+      irule accountsRelPropsTheory.storage_read_live_field >>
       metis_tac[]) >>
   first_assum ACCEPT_TAC
 QED
@@ -633,6 +652,8 @@ Theorem attr_summary_ok[local]:
          t.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
   rpt strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    metis_tac[attr_post_value_type] >>
   `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL btv, fe with gas_obs := [])` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`

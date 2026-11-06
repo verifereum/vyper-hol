@@ -56,8 +56,9 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   `post_value_type cenv obj = expr_type obj` by
-    (Cases_on `nocalls` >> fs[] >> irule post_value_type_no_calls >>
-     fs[int_calls_expr_def]) >>
+    (Cases_on `nocalls` >> fs[] >>
+     `int_calls_expr obj = []` by fs[int_calls_expr_def] >>
+     drule post_value_type_no_calls >> simp[]) >>
   drule_all_then assume_tac
     exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
@@ -209,7 +210,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
       qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o CONJUNCT2 o
          REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
-      simp[loweringPostsTheory.vv_holds_def] >> rpt strip_tac >>
+      simp[loweringPostsTheory.vv_holds_def, compileEnvTheory.is_bytestring_type_def] >> rpt strip_tac >>
       gvs[Abbr `loc`, contextTheory.vv_location_def]) >>
   qpat_x_assum `bvv = _` SUBST_ALL_TAC >>
   qpat_x_assum `loc = _` SUBST_ALL_TAC >>

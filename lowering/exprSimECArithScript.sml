@@ -2253,6 +2253,9 @@ Proof
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
   `nocalls ==> int_calls_expr b = []` by
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
+  `post_value_type cenv a = expr_type a` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >> fs[expr_body_pre_def]) >>
   `expr_sim ctx func cenv cx (expr_type a) a es` by
     (gvs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
   qpat_assum `lower_value _ _ _ a _ = _`
@@ -2395,14 +2398,6 @@ Proof
     (imp_res_tac ec_points_code_shape >>
      simp[cs_extends_def] >> qexists_tac `[]` >>
      gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
-  `post_value_type cenv a = expr_type a` by
-    (irule post_value_type_ec_point >> simp[] >>
-     qexistsl_tac [`cx`,`env`,`es`] >>
-     gvs[expr_body_pre_def, well_typed_expr_def]) >>
-  `expr_sim_inv cenv cx env es /\ well_typed_expr env b` by
-    gvs[expr_body_pre_def, well_typed_expr_def] >>
-  `post_value_type cenv b = expr_type b` by
-    metis_tac[post_value_type_ec_point, post_value_type_word, is_word_type_def] >>
   gvs[] >> irule ec_binary_call_gas >> simp[] >>
   (reverse conj_tac
   >- (qexists_tac `nocalls` >> simp[]) >>
@@ -2421,7 +2416,9 @@ QED
 
 Resume compile_ec_call_case[point_payload]:
   markerLib.RESUME_TAC >~ [`compile_ecmul_point _ _ _ = _`]
-  >- (`expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
+  >- (`post_value_type cenv b = expr_type b` by
+        simp[post_value_type_word, is_word_type_def] >>
+      `expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
       irule (SRULE []
         (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`]
           (SPEC_ALL (CONJUNCT1 ec_points_path)))) >>
@@ -2429,6 +2426,11 @@ Resume compile_ec_call_case[point_payload]:
       conj_tac >- metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
       goal_assum (drule_at (Pat `ec_source_tail _ _ _ _ _ _ = _`)) >>
       qexistsl_tac [`sa`, `p`, `scalar`] >> simp[] >> metis_tac[]) >>
+  `post_value_type cenv b = expr_type b` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def]) >>
   `expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 q u /\
    expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) s1 sm es2 v2 q u` by
     gvs[expr_post_def] >>

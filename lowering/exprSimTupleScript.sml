@@ -797,6 +797,36 @@ Proof
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
+(* A tuple element of a value read live is read live. *)
+Theorem storage_read_live_tuple_elem[local]:
+  !cx tr st w tvs i.
+    storage_read_live cx tr st w (TupleTV tvs) /\ i < LENGTH tvs ==>
+    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size i tvs))
+      (EL i tvs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule tuple_prefix_el_bound >> strip_tac >>
+  Cases_on `type_slot_size (EL i tvs) = 0`
+  >- (simp[storage_read_live_def] >>
+      rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size i tvs)` mp_tac
+        wordsTheory.w2n_lt >>
+      decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size i tvs < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size i tvs)) =
+   w2n w + tuple_prefix_slot_size i tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `dead_bytes_list st (w2n w) tvs j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  drule dead_bytes_list_el >>
+  disch_then (qspec_then `i` mp_tac) >> simp[]
+QED
+
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
@@ -900,10 +930,31 @@ Proof
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
-  qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
-               `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
-               `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
-  imp_res_tac values_have_types_length >> simp[]
+  `vv_at cenv cx (EL k tys) sa sn es1 tv'
+     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
+    (qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
+                  `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
+                  `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
+     imp_res_tac values_have_types_length >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
+    (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+     impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+     simp[]) >>
+  Cases_on `bvv` >>
+  gvs[mk_ptr_def, vv_loc_def, contextTheory.vv_location_def,
+      contextTheory.vv_operand_def] >>
+  rename1 `LocatedValue t p` >>
+  `t = TupleT tys` by
+    (qpat_x_assum `vv_holds _ _ _ _ (LocatedValue _ _) _ _` mp_tac >>
+     simp[vv_holds_def, is_bytestring_type_def] >> rpt strip_tac >>
+     simp[]) >>
+  `tuple_offset cenv tys p.ptr_location k = tuple_prefix_slot_size k tvs` by
+    (irule tuple_offset_slots >> simp[] >> metis_tac[]) >>
+  gvs[] >> irule storage_read_live_tuple_elem >> simp[] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* ===== The simulation ===== *)
@@ -1085,6 +1136,7 @@ Theorem tuple_summary_ok[local]:
     expr_body_pre cenv cx env
       (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
     expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
+    post_value_type cenv obj = TupleT tys /\
     k < LENGTH tys /\
     compile_expr cenv ty obj sa = (bvv, sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -1152,6 +1204,7 @@ Theorem tuple_vv_sim[local]:
     expr_body_pre cenv cx env
       (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
     expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
+    post_value_type cenv obj = expr_type obj /\
     place_type cenv obj = ValPT (TupleT tys) /\ k < LENGTH tys /\
     expr_vv_sim ctx func cenv cx ty obj es ==>
     expr_vv_sim ctx func cenv cx ty
