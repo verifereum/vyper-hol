@@ -1465,3 +1465,74 @@ Proof
  mp_tac (SPEC_ALL analyzed_join_initial_spills_live) >>
  (impl_tac >- simp[]) >> simp[]
 QED
+
+Theorem actual_phi_prefix_trace:
+ !k insts lv dfg cfg fn lbl halt np bl i ps ops qs.
+ k <= LENGTH insts /\ EVERY (\inst. inst.inst_opcode = PHI) (TAKE k insts) /\
+ generate_block_insts_prefix lv dfg cfg fn lbl halt np bl i k insts ps = SOME (ops,qs) ==>
+ ?s. s 0 = ps /\ s k = qs /\
+   (!j. j < k ==> s (SUC j) = SND (generate_phi_plan (EL j insts)
+     (if DROP (SUC j) insts = [] then live_vars_at lv lbl bl
+      else live_vars_at lv lbl (i+j+np+1)) halt (s j))) /\
+   (!j. j <= k ==> (s j).ps_spilled = ps.ps_spilled)
+Proof
+ Induct_on `k`
+ >- (simp[generate_block_insts_prefix_def] >> rpt gen_tac >>
+     qexists_tac `\j. ps` >> simp[]) >>
+ Cases_on `insts` >- simp[] >> rpt gen_tac >> strip_tac >>
+ gvs[generate_block_insts_prefix_def, generate_inst_plan_def,
+     is_pre_codegen_opcode_def, is_unlowered_fmp_opcode_def,
+     is_unlowered_internal_call_opcode_def, is_raw_fmp_opcode_def,
+     AllCaseEqs()] >>
+ first_x_assum drule_all >> strip_tac >>
+ drule phi_plan_spilled_unchanged >> disch_tac >>
+ qexists_tac `\j. if j = 0 then ps else s (PRE j)` >> simp[] >>
+ conj_tac
+ >- (gen_tac >> Cases_on `j`
+     >- (gvs[] >> Cases_on `t` >> gvs[]) >>
+     simp[EL, arithmeticTheory.ADD_CLAUSES, GSYM arithmeticTheory.ADD1] >>
+     rpt strip_tac >> qpat_x_assum `!j. j < k ==> _` drule >>
+     simp[arithmeticTheory.ADD_CLAUSES, GSYM arithmeticTheory.ADD1]) >>
+ gen_tac >> Cases_on `j` >> simp[]
+QED
+
+Theorem analyzed_join_raw_phi_trace_release:
+ !fn entry pred pb succ sb dfg ps0 ops ps m core spillbase s k halt.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions)))) ps /\
+ lineage_core m core ps /\ EVERY is_var_operand core /\
+ residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+ k <= LENGTH (collect_phis sb.bb_instructions) /\ s 0 = ps /\
+ (!j. j < k ==> s (SUC j) = SND (generate_phi_plan
+   (EL j (collect_phis sb.bb_instructions))
+   (live_vars_at (liveness_analyze fn) succ (SUC j)) halt (s j))) ==>
+ !j. j < k ==> s (SUC j) = release_dead_spills
+   (live_vars_at (liveness_analyze fn) succ (SUC j))
+   (SND (generate_phi_plan (EL j (collect_phis sb.bb_instructions))
+     (live_vars_at (liveness_analyze fn) succ (SUC j)) halt (s j)))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `!j. j <= k ==> (s j).ps_spilled = ps.ps_spilled` by
+   (Induct >- simp[] >> strip_tac >>
+    `s (SUC j) = SND (generate_phi_plan
+      (EL j (collect_phis sb.bb_instructions))
+      (live_vars_at (liveness_analyze fn) succ (SUC j)) halt (s j))` by simp[] >>
+    Cases_on `generate_phi_plan (EL j (collect_phis sb.bb_instructions))
+      (live_vars_at (liveness_analyze fn) succ (SUC j)) halt (s j)` >>
+    drule phi_plan_spilled_unchanged >> gvs[]) >>
+ gen_tac >> disch_tac >>
+ `SUC j <= LENGTH (collect_phis sb.bb_instructions)` by decide_tac >>
+ `release_dead_spills (live_vars_at (liveness_analyze fn) succ (SUC j))
+   (s (SUC j)) = s (SUC j)` by
+   (irule analyzed_join_phi_release_identity >> goal_assum drule >> simp[] >>
+    metis_tac[]) >>
+ metis_tac[]
+QED
