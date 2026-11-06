@@ -3,8 +3,10 @@ Ancestors
   loweringHalt stmtLowering compileEnv emitHelper venomInst
   compileVyper entryStateRel bodySim bodyPtrDefs fragExecPtr fragExec stmtSim
   ptrSafeRun ptrDiscipline venomState venomExecSemantics contextCodegenRelProps
+  abiBuiltinAllocation finite_map words arithmetic list
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "base";
 
 Theorem compile_return_none_external_code:
   compile_stmt cenv lctx ty (Return NONE) st = (x,st') /\
@@ -67,4 +69,39 @@ Proof
   irule ptr_safe_run_stop >> simp[] >>
   conj_tac >- (qexists `sa.cs_next_id` >> gvs[]) >>
   gvs[ghost_inv_def]
+QED
+
+Theorem compile_external_return_word_run_ptr:
+  compile_external_return (SOME op) T F ei msz nr nkey ut iv sa = (x,sb) /\
+  (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at sa y) /\
+  fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand op s = SOME w /\ op_taint tn op = {} /\
+  stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas
+    sa.cs_next_id = SOME (base,32) /\ base < dimword (:256) ==>
+  !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s /\
+    ?ss. run_from fuel ctx func s = Halt ss /\
+      ss.vs_returndata = word_to_bytes w T /\
+      ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
+      ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+      ss.vs_pending_deletions = s.vs_pending_deletions
+Proof
+  strip_tac >>
+  drule_all compile_external_return_word_parts >> strip_tac >>
+  `op <> Var buf` by metis_tac[] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [buf]) /\
+   get_instruction bb (s.vs_inst_idx+1) =
+     SOME (mk_inst (sa.cs_next_id+1) MSTORE [Var buf;op] []) /\
+   get_instruction bb (s.vs_inst_idx+2) =
+     SOME (mk_inst (sa.cs_next_id+2) RETURN [Var buf;Lit 32w] [])` by
+    (qpat_x_assum `!i. _` (fn th =>
+       map_every (fn j => mp_tac (Q.SPEC j th)) [`0`,`1`,`2`]) >> simp[]) >>
+  gen_tac >> conj_tac
+  >- (irule ptr_safe_run_return_word >> simp[] >>
+      qexistsl [`base`,`buf`,`sa.cs_next_id`,`op`,`w`] >> gvs[]) >>
+  irule return_word_run >> simp[] >>
+  qexistsl [`buf`,`sa.cs_next_id`,`op`] >> gvs[]
 QED
