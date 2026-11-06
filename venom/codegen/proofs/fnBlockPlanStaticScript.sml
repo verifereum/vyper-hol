@@ -9,7 +9,7 @@
  *
  * TOP-LEVEL:
  *   block_plan_state         - the planner state at an instruction index
- *   block_plan_state_static  - CHEATED: at an instruction past the PHI
+ *   block_plan_state_static  - at an instruction past the PHI
  *                              prefix, the state is well formed, holds the
  *                              instruction's variable operands, and nothing
  *                              on its stack or in its spill map stands for
@@ -522,110 +522,6 @@ QED
    a slot at RET; offset_outputs_used (codegen_ready_fn) excludes it.  The
    marker clauses hold since no instruction has the marker as an operand,
    and normalize_operand only follows ASSIGNs of operands. *)
-Theorem block_plan_state_static:
-  !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
-   ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
-   next_is_term.
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
-    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
-      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    lineage_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_l /\
-    dfs_block_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
-    generate_block_plan liveness dfg cfg fn bb ps_dfs =
-      SOME (block_ops, ps_dfs_after) /\
-    generate_block_plan liveness dfg cfg fn bb
-      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
-      SOME (block_ops, ps_after) /\
-    block_plan_state liveness dfg cfg fn bb
-      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
-      k ps /\
-    phi_prefix_length bb.bb_instructions <= k /\
-    k < LENGTH bb.bb_instructions /\
-    EL k bb.bb_instructions = inst /\
-    next_live = live_vars_at liveness bb.bb_label (k + 1) /\
-    next_is_term =
-      (k + 1 < LENGTH bb.bb_instructions /\
-       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
-    ==>
-    generated_plan_state_wf_marked spill_base ps /\
-    MEM inst (fn_insts fn) /\ inst_wf inst /\
-    ~is_param_opcode inst.inst_opcode /\
-    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-      IS_SOME (stack_get_depth op ps.ps_stack) \/
-      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    LENGTH (compute_operands inst) <=
-      LENGTH (SND (emit_input_plan inst.inst_opcode
-        (compute_operands inst) next_live ps)).ps_stack /\
-    EVERY (\op. op <> dead_stack_marker /\
-      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
-      (compute_operands inst) /\
-    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
-                      inst.inst_outputs) ps.ps_stack /\
-    (!op. op IN FDOM ps.ps_spilled ==>
-          EVERY (\out. case op of Var x => x <> out | _ => T)
-                inst.inst_outputs) /\
-    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
-            ~MEM v inst.inst_outputs) /\
-    (inst.inst_opcode = JNZ ==>
-     !cond_op if_nz if_z.
-       inst.inst_operands = [cond_op; Label if_nz; Label if_z] ==>
-       1 <= LENGTH (SND (emit_input_plan JNZ [cond_op] next_live ps)).ps_stack /\
-       (is_var_operand cond_op ==>
-         IS_SOME (stack_get_depth cond_op ps.ps_stack) \/
-         IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
-       cond_op <> dead_stack_marker /\
-       (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker)) /\
-    (inst.inst_opcode = JMP ==>
-     !target target_bb target_stack.
-       inst.inst_operands = [Label target] /\
-       lookup_block target fn.fn_blocks = SOME target_bb /\
-       target_stack =
-         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
-                    (live_vars_at liveness target 0)) ==>
-       pending_inventory_wf target_stack ps) /\
-    (inst.inst_opcode = JMP ==>
-     !target target_bb target_stack.
-       inst.inst_operands = [Label target] /\
-       lookup_block target fn.fn_blocks = SOME target_bb /\
-       target_stack =
-         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
-                    (live_vars_at liveness target 0)) ==>
-       LENGTH target_stack <=
-         LENGTH (SND (restore_spilled_plan target_stack ps)).ps_stack /\
-       EVERY (\op. op <> dead_stack_marker /\
-         !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
-         target_stack) /\
-    (inst.inst_opcode = RET ==>
-     !ops ps'.
-       generate_inst_plan liveness dfg cfg fn inst next_live (bb_is_halting bb)
-         next_is_term bb.bb_label ps = SOME (ops, ps') ==>
-       ps'.ps_stack = []) /\
-    (!j. revert_forward_pair bb k j ==>
-     !k' inst' op.
-       k <= k' /\ get_instruction bb k' = SOME inst' /\
-       MEM op (compute_operands inst') /\ is_var_operand op /\
-       (!k'' inst'' x. k <= k'' /\ k'' < k' /\
-                       get_instruction bb k'' = SOME inst'' /\
-                       op = Var x ==> ~MEM x inst''.inst_outputs) ==>
-       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-    (!j. revert_forward_pair bb k j ==>
-     !ops ps_end.
-       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-         (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
-         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
-       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
-Proof
-  cheat
-QED
-
 Theorem regional_actual_dfs_phi_upper_cut:
   lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
   codegen_ready_fn fn /\
@@ -1675,3 +1571,264 @@ Proof
   disch_then (qspec_then `[]` mp_tac) >>
   simp[dead_stack_marker_def]
 QED
+
+Theorem regional_replay_suffix_ops:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  generate_block_plan lv dfg cfg fn bb ps_in = SOME (block_ops, ps_after) /\
+  block_plan_state lv dfg cfg fn bb ps_in k ps /\
+  k <= LENGTH bb.bb_instructions /\
+  generate_block_insts_plan lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+    (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+    (k - LENGTH (get_params bb.bb_instructions)) (DROP k bb.bb_instructions)
+    ps = SOME (ops, ps_end) ==>
+  ?pre. ~revert_block_spills bb (pre ++ ops)
+Proof
+  strip_tac >> drule_all regional_canonical_body_layout >> strip_tac >>
+  gvs[block_plan_state_def] >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  `generate_block_insts_plan lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+    (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions) 0
+    (DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions) ps2 =
+    SOME (pre_ops ++ ops, ps_end)` by
+    (qspecl_then [`k - LENGTH (get_params bb.bb_instructions)`,
+       `DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions`]
+       mp_tac (INST_TYPE [alpha |-> ``:cfg_analysis``] generate_block_insts_plan_split) >>
+     (impl_tac >- simp[]) >>
+     disch_then (fn th => once_rewrite_tac[th]) >>
+     qexistsl_tac [`pre_ops`, `ps`, `ops`] >>
+     simp[rich_listTheory.DROP_DROP_T]) >>
+  gvs[] >> qexists_tac `pre_ops` >> simp[]
+QED
+
+Theorem regional_replay_revert_no_spill:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  generate_block_plan lv dfg cfg fn bb ps_in = SOME (block_ops, ps_after) /\
+  block_plan_state lv dfg cfg fn bb ps_in k ps /\
+  k <= LENGTH bb.bb_instructions /\ revert_forward_pair bb k j /\
+  generate_block_insts_plan lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+    (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+    (k - LENGTH (get_params bb.bb_instructions)) (DROP k bb.bb_instructions)
+    ps = SOME (ops, ps_end) ==>
+  !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops
+Proof
+  strip_tac >> drule_all regional_replay_suffix_ops >> strip_tac >>
+  `bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  qpat_x_assum `revert_forward_pair _ _ _` mp_tac >>
+  simp[revert_forward_pair_def] >> strip_tac >>
+  `MEM inst1 bb.bb_instructions /\ MEM inst2 bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs(), listTheory.EL_MEM] >>
+  `LAST bb.bb_instructions = inst2` by
+    (irule EQ_SYM >> irule bb_well_formed_terminator_last >>
+     simp[is_terminator_def] >> metis_tac[]) >>
+  `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  qpat_x_assum `~revert_block_spills _ _` mp_tac >>
+  simp[revert_block_spills_def, listTheory.EXISTS_MEM, listTheory.MEM_APPEND] >>
+  strip_tac >- metis_tac[] >>
+  gen_tac >> conj_tac
+  >- (strip_tac >> first_x_assum (qspec_then `SORestore off` mp_tac) >> gvs[]) >>
+  strip_tac >> first_x_assum (qspec_then `SOSpill off` mp_tac) >> gvs[]
+QED
+
+Theorem block_plan_state_static:
+  !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
+   ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
+   next_is_term.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lineage_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    generate_block_plan liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (block_ops, ps_after) /\
+    block_plan_state liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+      k ps /\
+    phi_prefix_length bb.bb_instructions <= k /\
+    k < LENGTH bb.bb_instructions /\
+    EL k bb.bb_instructions = inst /\
+    next_live = live_vars_at liveness bb.bb_label (k + 1) /\
+    next_is_term =
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+    ==>
+    generated_plan_state_wf_marked spill_base ps /\
+    MEM inst (fn_insts fn) /\ inst_wf inst /\
+    ~is_param_opcode inst.inst_opcode /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_live ps)).ps_stack /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+            ~MEM v inst.inst_outputs) /\
+    (inst.inst_opcode = JNZ ==>
+     !cond_op if_nz if_z.
+       inst.inst_operands = [cond_op; Label if_nz; Label if_z] ==>
+       1 <= LENGTH (SND (emit_input_plan JNZ [cond_op] next_live ps)).ps_stack /\
+       (is_var_operand cond_op ==>
+         IS_SOME (stack_get_depth cond_op ps.ps_stack) \/
+         IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
+       cond_op <> dead_stack_marker /\
+       (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker)) /\
+    (inst.inst_opcode = JMP ==>
+     !target target_bb target_stack.
+       inst.inst_operands = [Label target] /\
+       lookup_block target fn.fn_blocks = SOME target_bb /\
+       target_stack =
+         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+                    (live_vars_at liveness target 0)) ==>
+       pending_inventory_wf target_stack ps) /\
+    (inst.inst_opcode = JMP ==>
+     !target target_bb target_stack.
+       inst.inst_operands = [Label target] /\
+       lookup_block target fn.fn_blocks = SOME target_bb /\
+       target_stack =
+         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+                    (live_vars_at liveness target 0)) ==>
+       LENGTH target_stack <=
+         LENGTH (SND (restore_spilled_plan target_stack ps)).ps_stack /\
+       EVERY (\op. op <> dead_stack_marker /\
+         !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+         target_stack) /\
+    (inst.inst_opcode = RET ==>
+     !ops ps'.
+       generate_inst_plan liveness dfg cfg fn inst next_live (bb_is_halting bb)
+         next_is_term bb.bb_label ps = SOME (ops, ps') ==>
+       ps'.ps_stack = []) /\
+    (!j. revert_forward_pair bb k j ==>
+     !k' inst' op.
+       k <= k' /\ get_instruction bb k' = SOME inst' /\
+       MEM op (compute_operands inst') /\ is_var_operand op /\
+       (!k'' inst'' x. k <= k'' /\ k'' < k' /\
+                       get_instruction bb k'' = SOME inst'' /\
+                       op = Var x ==> ~MEM x inst''.inst_outputs) ==>
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!j. revert_forward_pair bb k j ==>
+     !ops ps_end.
+       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+         (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
+         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
+       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(inst.inst_opcode = RET ==> !ops qs.
+     generate_inst_plan liveness dfg cfg fn inst next_live (bb_is_halting bb)
+       next_is_term bb.bb_label ps = SOME (ops,qs) ==> qs.ps_stack = [])` by
+    (rpt strip_tac >> drule_all regional_replay_ret_step_empty >> simp[]) >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  qpat_x_assum `bb.bb_label = lbl` (SUBST_ALL_TAC o SYM) >>
+  drule_all regional_actual_lower_inv_at_phi_index >> strip_tac >>
+  `LENGTH (get_params bb.bb_instructions) <= k` by
+    gvs[block_plan_state_def] >>
+  `inst = EL k bb.bb_instructions` by simp[] >>
+  drule_all regional_body_instruction_structure >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+    metis_tac[dfs_block_state_cfg_reachable] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule_all cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  drule_all regional_body_lower_inv_wf >> disch_tac >>
+  drule_all regional_body_lower_inv_stack_fresh >> disch_tac >>
+  imp_res_tac regional_body_lower_inv_spills_fresh >>
+  imp_res_tac regional_body_lower_inv_output_roots >>
+  `regional_body_lower_inv (liveness_analyze fn) dfg spill_base bb k ps` by metis_tac[] >>
+  imp_res_tac regional_body_lower_inv_operand_lookup >>
+  drule_all regional_body_lower_inv_input_capacity >>
+  disch_then (qspec_then `next_live` assume_tac) >>
+  drule_all regional_computed_operands_marker_safe >> disch_tac >>
+  qpat_x_assum `inst = EL k bb.bb_instructions` kall_tac >>
+  simp[] >>
+  conj_tac >- (qpat_x_assum `EVERY _ (compute_operands inst)` mp_tac >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (disch_tac >> rpt gen_tac >> disch_tac >>
+      `inst = EL k bb.bb_instructions` by simp[] >>
+      `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+         spill_base bb k ps` by metis_tac[] >>
+      drule_all regional_body_lower_inv_jnz >>
+      disch_then (qspec_then `next_live` mp_tac) >>
+      qpat_x_assum `inst = EL k bb.bb_instructions` kall_tac >> simp[]) >>
+  conj_tac >- suspend "jmp_inventory" >>
+  conj_tac >- suspend "jmp_capacity" >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all regional_body_forward_operand_owned >> simp[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  rpt strip_tac >> gvs[] >>
+  `k <= LENGTH bb.bb_instructions` by decide_tac >>
+  drule_all regional_replay_revert_no_spill >> simp[] >> metis_tac[]
+QED
+
+Resume block_plan_state_static[jmp_inventory]:
+  rpt strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `fn_reachable fn bb.bb_label` by
+    metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze] >>
+  `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
+  `LAST bb.bb_instructions = inst` by
+    (irule EQ_SYM >> irule bb_well_formed_terminator_last >>
+     simp[is_terminator_def] >>
+     `bb_well_formed bb` by
+       (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >> metis_tac[]) >>
+  `fn_cfg_edge fn bb.bb_label target` by
+    (simp[fn_cfg_edge_def] >> qexists_tac `bb` >>
+     Cases_on `bb.bb_instructions` >>
+     gvs[bb_succs_def, get_successors_def, venomStateTheory.get_label_def,
+         is_terminator_def]) >>
+  `inst = EL k bb.bb_instructions` by simp[] >>
+  `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+    spill_base bb k ps` by metis_tac[] >>
+  drule_all (SRULE[] (Q.INST [`targets` |->
+    `MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) target 0))`] regional_jmp_target_static)) >>
+  qpat_x_assum `inst = EL k bb.bb_instructions` kall_tac >> simp[]
+QED
+Resume block_plan_state_static[jmp_capacity]:
+  rpt strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `fn_reachable fn bb.bb_label` by
+    metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze] >>
+  `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
+  `LAST bb.bb_instructions = inst` by
+    (irule EQ_SYM >> irule bb_well_formed_terminator_last >>
+     simp[is_terminator_def] >>
+     `bb_well_formed bb` by
+       (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >> metis_tac[]) >>
+  `fn_cfg_edge fn bb.bb_label target` by
+    (simp[fn_cfg_edge_def] >> qexists_tac `bb` >>
+     Cases_on `bb.bb_instructions` >>
+     gvs[bb_succs_def, get_successors_def, venomStateTheory.get_label_def,
+         is_terminator_def]) >>
+  `inst = EL k bb.bb_instructions` by simp[] >>
+  `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+    spill_base bb k ps` by metis_tac[] >>
+  drule_all (SRULE[] (Q.INST [`targets` |->
+    `MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) target 0))`] regional_jmp_target_static)) >>
+  qpat_x_assum `inst = EL k bb.bb_instructions` kall_tac >> simp[]
+QED
+Finalise block_plan_state_static
