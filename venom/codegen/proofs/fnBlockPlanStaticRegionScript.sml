@@ -4010,3 +4010,30 @@ Proof
   simp[Once lineage_state_cases] >> strip_tac >>
   gvs[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
 QED
+
+Theorem regional_insts_marker_free:
+  !insts i ps ops qs.
+    EVERY codegen_ready_inst insts /\ EVERY inst_wf insts /\
+    ~MEM dead_stack_marker ps.ps_stack /\
+    generate_block_insts_plan lv dfg cfg fn lbl F np bl i insts ps =
+      SOME (ops,qs) ==>
+    ~MEM dead_stack_marker qs.ps_stack
+Proof
+  Induct >> simp[generate_block_insts_plan_def] >> rpt strip_tac >>
+  gvs[generate_block_insts_plan_def, LET_THM, AllCaseEqs()] >>
+  metis_tac[inventory_inst_marker_free]
+QED
+
+Theorem regional_prefix_marker_free:
+  !j insts i ps ops qs.
+    EVERY codegen_ready_inst insts /\ EVERY inst_wf insts /\
+    ~MEM dead_stack_marker ps.ps_stack /\
+    generate_block_insts_prefix lv dfg cfg fn lbl F np bl i j insts ps =
+      SOME (ops,qs) ==>
+    ~MEM dead_stack_marker qs.ps_stack
+Proof
+  Induct >- (simp[generate_block_insts_prefix_def] >> metis_tac[]) >>
+  Cases_on `insts` >> simp[generate_block_insts_prefix_def] >> rpt strip_tac >>
+  gvs[generate_block_insts_prefix_def, LET_THM, AllCaseEqs()] >>
+  metis_tac[inventory_inst_marker_free]
+QED
