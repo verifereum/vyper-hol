@@ -548,7 +548,8 @@ QED
    bounds existing sites, not a future allocation of w2n n.
 
    For a FRESH source site, the legitimate route is to construct the source
-   exec_alloca success separately (one clean/equal scalar operand suffices),
+   exec_alloca success separately (singleton literal syntax is required;
+   a clean/equal evaluated scalar operand alone does not suffice),
    establish the next source active instruction from block shape, obtain
    source raw_reachable there, and use mem_inv headroom at that successor.
    Since the new source frontier is old+w2n n, and ld_alloc_account plus
