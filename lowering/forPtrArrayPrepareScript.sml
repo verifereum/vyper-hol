@@ -6,7 +6,7 @@ Ancestors forPtrRangePrepare forPtrAddress forPtrWriteScope forPtrArraySnapshot
   fragExec emitHelperProps finite_map list forPtrControl venomState ptrDiscipline
   exprSimProps typedCopyAgreement context compileEnv valueEncoding stmtLowering
   exprLoweringProps rich_list forPtrElementFrame bodyPtrDefs forPtrScope
-  exprSimPtrLiteralBuffer venomInst venomExecSemantics vyperState loweringPosts
+  exprSimPtrLiteralBuffer venomInst venomExecSemantics vyperState loweringPosts emitHelper fragGasSeqPtr fragGasPathPtr
 
 Theorem for_array_header_test_path_ptr:
   lookup_block cond_lbl func.fn_blocks =
@@ -424,4 +424,115 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`GA`, `tA`, `gf`, `tf`, `sf`] >>
   gvs[Abbr `sA`] >> metis_tac[]
+QED
+
+Theorem for_array_element_copy_straight:
+  compile_iter_elem_copy cenv src dst stride LocMemory F ty ty sa = ((),sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  rewrite_tac[for_memory_element_copy_dispatch] >>
+  Cases_on `is_word_type ty`
+  >- (simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >> strip_tac >>
+      gvs[emitted_insts_def] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  Cases_on `is_bytestring_type ty` >> simp[] >> strip_tac
+  >- (drule for_bytes_copy_code >> strip_tac >>
+      simp[mk_inst_def, is_terminator_def]) >>
+  drule for_compile_bulk_copy_code >> simp[] >>
+  Cases_on `type_memory_bytes cenv ty = 0` >> simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem for_array_entry_copy_ready:
+  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+    idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
+  sA = ((update_var ep (arr_base + n2w k * n2w stride)
+    (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2) /\
+  run_inst_seq (emitted_insts sa sb0) sA = OK sf ==>
+  array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s
+    (sf with vs_inst_idx := LENGTH sb0.cs_current_insts)
+Proof
+  strip_tac >>
+  `?t. run_inst_seq sb0.cs_current_insts s = OK t /\
+    sf = t with vs_inst_idx := 2` suffices_by
+    (strip_tac >> drule_all for_array_entry_raw_ready >>
+     gvs[]) >>
+  qhdtm_x_assum `array_entry_inputs` mp_tac >> pure_rewrite_tac[array_entry_inputs_def] >> strip_tac >>
+  drule_all array_for_body_entry_run >>
+  disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >>
+  drule_all array_address_prefix_run >>
+  disch_then (qspecl_then [`stride`, `ep`, `j3`, `j4`] mp_tac) >>
+  rewrite_tac[GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w,
+    wordsTheory.n2w_w2n] >>
+  disch_then (mp_tac o MATCH_MP run_inst_seq_append) >>
+  disch_then (qspec_then `emitted_insts sa sb0` assume_tac) >>
+  qexists_tac `t` >> conj_tac >- metis_tac[] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb0)` by
+    fs[EVERY_MEM] >>
+  drule run_inst_seq_inst_idx >>
+  disch_then (qspecl_then
+    [`update_var ep (arr_base + n2w k * n2w stride)
+      (update_var ov (n2w k * n2w stride) s)`, `2`] mp_tac) >>
+  gvs[instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem for_array_entry_copy_path_ptr:
+  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+    idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
+  sA = ((update_var ep (arr_base + n2w k * n2w stride)
+    (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2) /\
+  inst_seq_ptr D 0 ctx func PG GA tA (emitted_insts sa sb0) sA gf tf /\
+  run_inst_seq (emitted_insts sa sb0) sA = OK sf ==>
+  gas_path_ptr D 0 ctx func PG GA tA sA 0 gf tf
+    (OK (sf with vs_inst_idx := LENGTH sb0.cs_current_insts))
+Proof
+  strip_tac >> qhdtm_x_assum `array_entry_inputs` mp_tac >>
+  pure_rewrite_tac[array_entry_inputs_def] >> strip_tac >>
+  drule for_array_element_copy_straight >> strip_tac >>
+  `~sA.vs_halted /\ lookup_block sA.vs_current_bb func.fn_blocks = SOME bb /\
+   sA.vs_inst_idx = 2` by simp[update_var_def] >>
+  `isPREFIX (emitted_insts sa sb0) (DROP sA.vs_inst_idx bb.bb_instructions)` by
+    (`?tail. bb.bb_instructions = sb0.cs_current_insts ++ tail` by
+       metis_tac[IS_PREFIX_APPEND] >> simp[] >>
+     metis_tac[IS_PREFIX_APPEND]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb0) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb0) = []` by
+    (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+  `sA.vs_inst_idx + LENGTH (emitted_insts sa sb0) =
+    LENGTH sb0.cs_current_insts` by (simp[] >> decide_tac) >>
+  drule_all run_inst_seq_gas_path_ptr >>
+  pure_asm_rewrite_tac[listTheory.LENGTH, arithmeticTheory.ADD_CLAUSES] >>
+  rewrite_tac[]
+QED
+
+Theorem for_array_round_prepare_ptr:
+  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+    idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
+  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn bp s ((k+1)*stride) /\ ptr_covers G tn p s sz /\
+  op_taint tn (Var idx) = {} /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n arr_base + k*stride) m) /\
+  (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+         cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
+  ?gf tf s2.
+    gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK s2) /\
+    array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2 /\
+    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
+      gf tf s2 /\
+    (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
+      FLOOKUP gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all for_array_entry_copy_checked >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  drule_all for_array_entry_copy_ready >> strip_tac >>
+  drule_all for_array_entry_copy_path_ptr >> strip_tac >>
+  qexistsl_tac [`gf`, `tf`, `sf with vs_inst_idx := LENGTH sb0.cs_current_insts`] >>
+  simp[SRULE [] (Q.INST [`gs` |-> `es.gas_obs`] literal_ptr_ghost_inv_normalize)] >>
+  drule_all gas_path_ptr_then >> simp[]
 QED
