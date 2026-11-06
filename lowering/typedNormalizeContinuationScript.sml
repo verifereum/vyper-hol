@@ -310,7 +310,7 @@ QED
 (* A real terminal certificate transports backwards across a PHI-safe suffix,
    including the zero-code case.  Finalized entry blocks are covered by the
    compiler's PHI invariant, not by code containment alone. *)
-Theorem normalize_phi_suffix_entry[local]:
+Theorem normalize_phi_suffix_entry:
   cs_extends sa sb /\ abi_decoder_phi sa sb /\
   phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn /\
   (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
