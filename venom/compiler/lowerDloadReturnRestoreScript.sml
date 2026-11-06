@@ -5,6 +5,8 @@ Ancestors
   o1LowerDloadRunnerBoundary lowerDloadOperationalClosure o1PassLift
   lowerDloadReachability lowerDloadOwnership lowerDloadOwnerTransport
   lowerDloadTableSupport lowerDloadFrameRepresentation
+  lowerDloadFrameCertificate lowerDloadCoverageInvariant lowerDloadPairedBoundary
+  lowerDloadOpaqueExecution
 
 (* Retained environment comes from the caller; global observations and masks
    come from the current callee, never from the saved memory snapshot. *)
@@ -220,4 +222,130 @@ Proof
     (gvs[] >> simp[] >> qexistsl [`bs`, `sz`] >>
      simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
   gvs[] >> simp[FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+Theorem ld_return_mask_bounds:
+  (!v. (case FLOOKUP ms v of NONE => {} | SOME m => m) SUBSET count 32) /\
+  (!v. (case FLOOKUP mt v of NONE => {} | SOME m => m) SUBSET count 32) /\
+  un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\
+  un.t_imm SUBSET tn.t_imm ==>
+  (!v. op_taint (tn with t_var := DRESTRICT ms keepS) (Var v) SUBSET count 32) /\
+  (!v. op_taint (un with t_var := DRESTRICT mt keepT) (Var v) SUBSET count 32) /\
+  (un with t_var := DRESTRICT mt keepT).t_stor SUBSET
+    (tn with t_var := DRESTRICT ms keepS).t_stor /\
+  (un with t_var := DRESTRICT mt keepT).t_trans SUBSET
+    (tn with t_var := DRESTRICT ms keepS).t_trans /\
+  (un with t_var := DRESTRICT mt keepT).t_imm SUBSET
+    (tn with t_var := DRESTRICT ms keepS).t_imm
+Proof
+  simp[op_taint_def, FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+  Cases_on `v IN keepS` >> Cases_on `v IN keepT` >> simp[]
+QED
+
+Theorem ld_return_global_companions:
+  callerS.vs_call_ctx = endS.vs_call_ctx /\
+  endS.vs_gas_readings = endT.vs_gas_readings /\
+  (!a. a <> endS.vs_call_ctx.cc_address ==>
+    (endS.vs_accounts a).storage = (endT.vs_accounts a).storage) /\
+  (!a. a <> endS.vs_call_ctx.cc_address ==>
+    endS.vs_transient a = endT.vs_transient a) /\
+  bind_outputs os xs (merge_callee_state callerS endS) = SOME s' /\
+  bind_outputs ot xt (merge_callee_state callerT endT) = SOME t' ==>
+  s'.vs_gas_readings = t'.vs_gas_readings /\
+  (!a. a <> s'.vs_call_ctx.cc_address ==>
+    (s'.vs_accounts a).storage = (t'.vs_accounts a).storage) /\
+  (!a. a <> s'.vs_call_ctx.cc_address ==>
+    s'.vs_transient a = t'.vs_transient a)
+Proof
+  strip_tac >>
+  dxrule ld_bind_outputs_vars_only >> disch_then SUBST1_TAC >>
+  dxrule ld_bind_outputs_vars_only >> disch_then SUBST1_TAC >>
+  fs[merge_callee_state_def]
+QED
+
+Theorem ld_return_frame_data:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  ld_saved_embedded U E keys d A sf tf /\
+  (!v. v IN V ==> (lookup_var v sf.lf_state = NONE <=>
+                    lookup_var v tf.lf_state = NONE)) /\
+  bind_outputs sf.lf_inst.inst_outputs vals
+    (merge_callee_state sf.lf_state endS) = SOME s' /\
+  bind_outputs sf.lf_inst.inst_outputs vals
+    (merge_callee_state tf.lf_state endT) = SOME t' /\
+  ld_owned_vars U E (DRESTRICT sf.lf_prov keep) (DRESTRICT tf.lf_prov keep)
+    (entry_taint with t_var := DRESTRICT sf.lf_tvar keep)
+    (entry_taint with t_var := DRESTRICT tf.lf_tvar keep) s' t' /\
+  sf.lf_state.vs_call_ctx = tf.lf_state.vs_call_ctx /\
+  sf.lf_state.vs_tx_ctx = tf.lf_state.vs_tx_ctx /\
+  sf.lf_state.vs_block_ctx = tf.lf_state.vs_block_ctx /\
+  sf.lf_state.vs_prev_hashes = tf.lf_state.vs_prev_hashes /\
+  sf.lf_state.vs_code = tf.lf_state.vs_code /\
+  sf.lf_state.vs_data_section = tf.lf_state.vs_data_section /\
+  sf.lf_state.vs_fmp = tf.lf_state.vs_fmp /\
+  sf.lf_state.vs_call_entry_fmp = tf.lf_state.vs_call_entry_fmp /\
+  sf.lf_state.vs_initial_fmp = tf.lf_state.vs_initial_fmp /\
+  ld_shared_state tn un endS endT ==>
+  ld_frame_data V U (DRESTRICT E owners) sf.lf_local tf.lf_local
+    sf.lf_params tf.lf_params (DRESTRICT sf.lf_prov keep)
+    (DRESTRICT tf.lf_prov keep)
+    (tn with t_var := DRESTRICT sf.lf_tvar keep)
+    (un with t_var := DRESTRICT tf.lf_tvar keep) s' t'
+Proof
+  strip_tac >>
+  `ld_frame_embedding E sf.lf_local tf.lf_local s' t'` by
+    (drule ld_saved_embedded_layout >>
+     dxrule ld_bind_outputs_allocas >>
+     dxrule ld_bind_outputs_allocas >>
+     simp[ld_frame_embedding_def, merge_callee_state_def]) >>
+  `!v. ld_owned_selection E (FLOOKUP (DRESTRICT sf.lf_prov keep) v)
+    (FLOOKUP (DRESTRICT tf.lf_prov keep) v)` by
+    (gen_tac >> Cases_on `v IN keep` >>
+     simp[FLOOKUP_DRESTRICT, ld_owned_selection_def] >>
+     metis_tac[ld_saved_embedded_prov, ld_owned_selection_def]) >>
+  drule ld_saved_embedded_params >> strip_tac >>
+  drule_all ld_return_head_table >> strip_tac >>
+  simp[ld_frame_data_def] >> conj_tac
+  >- (irule ld_return_owned_vars_table >>
+      conj_tac >- (qexists_tac `astail` >> simp[]) >>
+      fs[ld_owned_vars_def, op_taint_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all ld_return_definedness >> simp[]) >>
+  irule ld_shared_state_return_slice >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_return_parameter_envelope:
+  owners = {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+    (DRESTRICT sf.lf_prov keep) (owner,(bs,sz))} /\
+  bind_outputs os xs (merge_callee_state sf.lf_state endS) = SOME s' /\
+  bind_outputs ot xt (merge_callee_state tf.lf_state endT) = SOME t' /\
+  ((CS.ctx_entry = SOME sf.lf_fn.fn_name /\ sf.lf_params = [] /\
+      tf.lf_params = [] /\ entry_fn_no_params sf.lf_fn) \/
+   (LENGTH sf.lf_params = LENGTH sf.lf_state.vs_params /\
+    LENGTH tf.lf_params = LENGTH tf.lf_state.vs_params /\
+    LENGTH sf.lf_state.vs_params = LENGTH tf.lf_state.vs_params /\
+    (!q. q < LENGTH sf.lf_state.vs_params ==>
+      ld_owned_value E (EL q sf.lf_params) (EL q tf.lf_params) {} {}
+        (EL q sf.lf_state.vs_params) (EL q tf.lf_state.vs_params)))) ==>
+  ((CS.ctx_entry = SOME sf.lf_fn.fn_name /\ sf.lf_params = [] /\
+      tf.lf_params = [] /\ entry_fn_no_params sf.lf_fn) \/
+   (LENGTH sf.lf_params = LENGTH s'.vs_params /\
+    LENGTH tf.lf_params = LENGTH t'.vs_params /\
+    LENGTH s'.vs_params = LENGTH t'.vs_params /\
+    (!q. q < LENGTH s'.vs_params ==>
+      ld_owned_value (DRESTRICT E owners)
+        (EL q sf.lf_params) (EL q tf.lf_params) {} {}
+        (EL q s'.vs_params) (EL q t'.vs_params))))
+Proof
+  strip_tac >>
+  `s'.vs_params = sf.lf_state.vs_params /\
+   t'.vs_params = tf.lf_state.vs_params` by
+    (dxrule ld_bind_outputs_vars_only >> disch_then SUBST1_TAC >>
+     dxrule ld_bind_outputs_vars_only >> disch_then SUBST1_TAC >>
+     simp[merge_callee_state_def]) >>
+  simp[] >> disj2_tac >> rpt strip_tac >>
+  irule ld_return_parameter_values >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`astail`, `keep`, `sf`] >> simp[]
 QED
