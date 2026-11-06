@@ -164,3 +164,52 @@ remain unvalidated design gates. This diagnostic establishes coverage and
 missing interfaces, not impossibility of the generic driver or the TASK.
 
 No frozen source modified, no new proof axioms/cheats, no final assembly attempted.
+
+## Executed scope probe (bounded failed candidates)
+
+Temporary concretizeLayoutPhaseScopeProbeTheory was built clean in
+TO_concretize_sim-20261105T171004Z_m14168_t001. This is checked failure of
+candidate bookkeeping, **not** a counterexample to concretize_stage_sim.
+
+- `equal_scope_prefix_obstruction`: for `Qeq g h s t =
+  (origin g = origin h /\ Entry h s t)`, unequal g/h origins and an
+  inhabited h entry give `Qeq h h s t /\ ~Qeq g h s t`. Thus a PHI origin
+  reset cannot support the required *universal* transport for this formula.
+- Tested repair `scope_independent Entry Ret D g h r r'` ignores g. It has
+  an actual Entry h for paired OK, task observations for paired Halt/Abort,
+  and explicit parametric `Ret h ir jr s t` for paired IntRet. Remaining
+  constructors are false. `independent_scope_prefix` proves universal
+  prefix transport for all constructors and `independent_scope_splice`
+  proves indexed_splice for **any** Admin, including identity and corridor
+  pending-to-ready administration. Neither lemma claims that an arbitrary
+  Ret parameter is a proved return producer.
+- `independent_scope_phi` proves the actual phase_phi_prefix predicate for
+  a source-only reflexive Run (`g = ScopeRun`, equal functions and states),
+  reflexive BlockPair and Entry with distinct ScopeBlock/ScopeExceptional
+  constructors. It uses actual lookup/eval_phis, choosing ScopeBlock 0.
+  Therefore repeated PHI transport itself is not the failed law.
+- `independent_scope_block_return_failure` proves the negation of the
+  **exact** phase_block_return predicate for that Run/BlockPair/Q. Source
+  state is init_venom_state "entry"; its singleton JMP-to-"next" block has
+  a checked finite_block OK result `scope_post`, with halted false.
+  Both executions and PHI evaluations are reflexive. Yet Q allows endpoint
+  `ScopeExceptional scope_bad_endpoint`, whose origin is a *different*
+  singleton REVERT block at index 0 with entry scope_post. That endpoint
+  satisfies layout_corridor_entry, including the checked no-finite-OK
+  certificate for its own unrelated origin. Taking the independently
+  quantified h = ScopeBlock 37 satisfies the contract antecedent but its
+  conclusion demands Run at an exceptional k, which is false by definition.
+  The normal block and exceptional endpoint facts use concrete evaluation;
+  context C, Ret and D are immaterial to this OK witness.
+
+Consequently a second PHI boundary after the first normal block cannot be
+justified through phase_block_return for this candidate, even though the
+universal PHI law holds at every reflexive Run. It is unsound to add an
+implicit premise identifying h with the PHI witness: the predicate's
+quantifiers do not provide one. The missing interface is a checked scope
+link between the actual completed block/PHI entry and the exceptional
+endpoint's fixed no-normal origin. Neither equality-only Q nor simply
+erasing Q's first index provides both required laws. No third candidate or
+replacement driver has been implemented; this is the bounded stopping
+point requested by C0.exception.scopeinterface. Probe sources are local
+validation artifacts and must not ship.
