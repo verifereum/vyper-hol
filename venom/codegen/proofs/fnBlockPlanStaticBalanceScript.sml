@@ -335,3 +335,111 @@ Proof
   drule do_restore_signed_balance >> strip_tac >>
   first_x_assum drule >> simp[trace_weight_append] >> intLib.ARITH_TAC
 QED
+
+Theorem do_swap_no_push_var[local]:
+  do_swap dist ps = (ops, qs) ==> !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[do_swap_def] >>
+  Cases_on `dist = 0` >- simp[] >>
+  Cases_on `dist <= 16` >- (rw[] >> simp[]) >>
+  simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  simp[listTheory.MEM_MAP, PULL_EXISTS] >>
+  rpt gen_tac >> drule spill_fold_no_push_var >> simp[]
+QED
+
+Theorem do_spill_tos_no_push_var[local]:
+  do_spill_tos ps = (ops, qs) ==> !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[do_spill_tos_def] >> pairarg_tac >> simp[] >> rw[] >> simp[]
+QED
+
+Theorem do_spill_at_no_push_var[local]:
+  do_spill_at dist ps = (ops, qs) ==> !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[do_spill_at_def] >> IF_CASES_TAC >> simp[]
+  >- metis_tac[do_spill_tos_no_push_var] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule do_spill_tos_no_push_var >> simp[]
+QED
+
+Theorem do_restore_no_push_var[local]:
+  do_restore op ps = (ops, qs) ==> !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >> rw[] >> simp[]
+QED
+
+Theorem reduce_depth_plan_no_push_var[local]:
+  !fuel target_ops target_op f n ps ops qs.
+  reduce_depth_plan fuel target_ops target_op f n ps = (ops, qs) ==>
+  !v. ~MEM (SOPush (Var v)) ops
+Proof
+  Induct >> simp[reduce_depth_plan_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_unfixed_depth target_op f n ps.ps_stack` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  qmatch_goalsub_rename_tac `select_spill_candidate _ _ dist _` >>
+  Cases_on `select_spill_candidate ps.ps_stack target_ops dist n` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[do_spill_at_no_push_var]
+QED
+
+Theorem reorder_one_no_push_var[local]:
+  reorder_one dfg target_ops idx op ps = (ops, qs) ==>
+  !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[reorder_one_def] >> pairarg_tac >>
+  `!v. ~MEM (SOPush (Var v)) restore_ops` by
+    (gvs[AllCaseEqs()] >> metis_tac[do_restore_no_push_var]) >>
+  gvs[] >> qpat_x_assum `_ = (restore_ops, ps1)` kall_tac >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
+              (LENGTH target_ops) ps1.ps_stack` >> simp[]
+  >- (rw[] >> gvs[]) >>
+  pairarg_tac >>
+  `!v. ~MEM (SOPush (Var v)) reduce_ops` by
+    (gvs[AllCaseEqs()] >> metis_tac[reduce_depth_plan_no_push_var]) >>
+  gvs[] >> qpat_x_assum `_ = (reduce_ops, ps2)` kall_tac >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
+              (LENGTH target_ops) ps2.ps_stack` >> simp[]
+  >- (rw[] >> gvs[]) >>
+  rpt IF_CASES_TAC >> simp[] >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[do_swap_no_push_var, listTheory.MEM_APPEND]
+QED
+
+Theorem reorder_fold_no_push_var[local]:
+  !xs acc_ops ps ops qs.
+  FOLDL (\(ops, ps) (idx, op).
+    (\(step_ops, ps'). (ops ++ step_ops, ps'))
+      (reorder_one dfg target_ops idx op ps)) (acc_ops, ps) xs =
+    (ops, qs) /\ ~MEM (SOPush (Var v)) acc_ops ==>
+  ~MEM (SOPush (Var v)) ops
+Proof
+  Induct >> rpt gen_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rename1 `FOLDL _ _ (item::xs)` >>
+  PairCases_on `item` >> simp[] >>
+  rename1 `reorder_one dfg target_ops idx op ps` >>
+  Cases_on `reorder_one dfg target_ops idx op ps` >> simp[] >> strip_tac >>
+  qmatch_asmsub_rename_tac `reorder_one _ _ _ _ _ = (step_ops, next_ps)` >>
+  first_x_assum (qspec_then `acc_ops ++ step_ops` mp_tac) >> simp[] >>
+  disch_then drule >> drule reorder_one_no_push_var >> simp[]
+QED
+
+Theorem reorder_plan_no_push_var:
+  reorder_plan dfg target_ops ps = (ops, qs) ==>
+  !v. ~MEM (SOPush (Var v)) ops
+Proof
+  simp[reorder_plan_def] >> strip_tac >> rpt gen_tac >>
+  drule reorder_fold_no_push_var >> simp[]
+QED
+
+Theorem reorder_plan_signed_balance:
+  LENGTH target_ops <= LENGTH ps.ps_stack /\ LENGTH target_ops <= 16 /\
+  reorder_plan dfg target_ops ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  strip_tac >> drule_all reorder_plan_wf_len >>
+  disch_then (qspecl_then [`dfg`, `FEMPTY`] mp_tac) >> simp[] >> strip_tac >>
+  drule prefix_wf_signed_balance >>
+  impl_tac >- metis_tac[reorder_plan_no_push_var] >> simp[]
+QED
