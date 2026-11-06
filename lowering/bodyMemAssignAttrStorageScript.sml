@@ -112,7 +112,7 @@ Proof
   irule expr_post_rebased_operand_mem_src >> goal_assum (drule_at Any) >> gvs[]
 QED
 
-Theorem expr_post_rebased_compose_mem_src[local]:
+Theorem expr_post_rebased_compose_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   local_ptrs_reserved ce sa /\ local_ptrs_rel func ce es.scopes s0 /\
   sa.cs_next_var <= sm.cs_next_var /\
