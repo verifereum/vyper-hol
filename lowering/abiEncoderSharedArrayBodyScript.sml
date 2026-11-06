@@ -420,7 +420,7 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
     (LENGTH avs*abi_member_head_size ty+SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) /\
    cursor_site < addressed.cs_next_id /\
    FLOOKUP address_ready.vs_allocas cursor_site = SOME (cursor_slot,32)` by
-    (fs[abi_encoder_cursor_def] >> gvs[] >> decide_tac) >>
+    (fs[abi_sites_encoder_cursor_def] >> gvs[] >> decide_tac) >>
   `prepared.cs_next_var <= limit_st.cs_next_var /\
    abi_decoder_operand_live addressed.cs_next_var (FST (SND coords))` by
     (asm_simp_tac bool_ss [] >> decide_tac) >>
@@ -428,7 +428,7 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
     (drule_all abi_encoder_member_tail_transport >> simp[]) >>
   `abi_decoder_operand_live ce.cs_next_var dp` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >>
-     fs[abi_encoder_cursor_def]) >>
+     fs[abi_sites_encoder_cursor_def]) >>
   `abi_sites_scratch_effect sites first last cursor_site en.cs_next_id addressed.cs_next_var limit_st
      d sz b cap address_ready actual /\
    abi_encoder_registered_effect (abi_sites_decoder_ids sites cursor_site en.cs_next_id) [(d,sz)] address_ready actual /\
@@ -681,7 +681,7 @@ QED
 Resume abi_encoder_shared_array_static_body[static_finish]:
   qpat_assum `abi_sites_encoder_shared_endpoint sites _ _ _ _ address_ready actual`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_endpoint_def]) >>
-  `site <= st.cs_next_id /\ first <= site` by fs[abi_encoder_cursor_def] >>
+  `site <= st.cs_next_id /\ first <= site` by fs[abi_sites_encoder_cursor_def] >>
   `d+32+j*asz+LENGTH (enc ty (EL j avs)) <= d+sz` by
     (qpat_x_assum `asz = _` SUBST_ALL_TAC >> full_simp_tac bool_ss [] >> decide_tac) >>
   `abi_encoder_extend_sim ctx func initial actual` by
@@ -719,7 +719,7 @@ Resume abi_encoder_shared_array_static_body[static_finish]:
      asm_simp_tac bool_ss [] >>
      fs[abi_sites_encoder_shared_input_def] >>
      qpat_x_assum `asz = _` SUBST_ALL_TAC >>
-     fs[MULT_COMM,abi_encoder_cursor_def] >>
+     fs[MULT_COMM,abi_sites_encoder_cursor_def] >>
      qpat_assum `abi_footprint_disjoint (d + _) (LENGTH (enc ty (EL j avs))) _` mp_tac >>
      qpat_assum `LENGTH (enc ty (EL j avs)) = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[AC ADD_ASSOC ADD_COMM]) >>
@@ -767,7 +767,7 @@ Resume abi_encoder_shared_array_static_body[static_prefix]:
      qpat_x_assum `SUC j * abi_member_head_size ty <= _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp_tac bool_ss [MULT_CLAUSES] >> decide_tac) >>
-  qexists_tac `actual` >> simp[abi_encoder_cursor_def]
+  qexists_tac `actual` >> simp[abi_sites_encoder_cursor_def]
 QED
 
 Finalise abi_encoder_shared_array_static_body
