@@ -13,7 +13,8 @@ Theorem augassign_local_load_clean_ptr:
   word_value entry.value /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
   local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
-  ret_pc_ok cenv sa s /\ return_buf_frame d cenv sa s /\
+  ret_pc_ok cenv sa s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -50,8 +51,7 @@ Proof
   conj_tac >- (simp[ghost_inv_gas_obs] >> irule ghost_inv_load_frame >>
     qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
     simp[Abbr `H`, Abbr `tm`, Abbr `t`, update_var_def, load_ambient_frame] >>
-    Cases_on `d` >> gvs[return_buf_frame_def, ret_pc_ok_def] >>
-    PairCases_on `x` >> gvs[return_buf_frame_def]) >>
+    gvs[ret_pc_ok_def]) >>
   conj_tac >- (simp[ghost_kept_def, Abbr `tm`, load_ambient_frame] >> metis_tac[]) >>
   conj_tac >- (qpat_x_assum `mload _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
     simp[Abbr `tm`, NoAsms] >>
