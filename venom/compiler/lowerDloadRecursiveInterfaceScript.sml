@@ -1403,18 +1403,34 @@ val ld_recursive_alloca_zero =
   in list_mk_abs(args,list_mk_exists(ws,
        list_mk_conj [b, ``^n = 0``, ``^i.inst_opcode = ALLOCA``])) end;
 
-Theorem ld_recursive_alloca_next_anchor[local]:
-  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+val ld_recursive_alloca_witness_zero =
+  let
+    val (args,b) = strip_abs ld_recursive_alloca_zero
+    val (ws,nb) = strip_exists (ld_retain_saved_normal b)
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val E = named "E" and astk = named "astk" and L = named "L"
+    val AP = named "AP" and AG = named "AG"
+    val gstk = named "gstk" and savedkeys = named "savedkeys"
+    val EN = mk_var("EN",type_of E)
+    val R = mk_var("R",type_of (list_mk_abs([E,astk,gstk,savedkeys],``T``)))
+    val transfer = ``!^EN.
+      (!owner bs sz. ld_live ^astk ^L ^AP ^AG (owner,(bs,sz)) ==>
+        FLOOKUP ^EN owner = FLOOKUP ^E owner) ==>
+      ^R ^EN ^astk ^gstk ^savedkeys``
+  in list_mk_abs(args,list_mk_exists(ws,mk_conj(nb,transfer))) end;
+
+Theorem ld_recursive_alloca_next_witness[local]:
+  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
-  (^ld_recursive_alloca_zero) vs0 CT stk un gn j t /\
+  (^ld_recursive_alloca_witness_zero) vs0 CT stk un gn j t /\
   step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) /\
   Q (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  (^ld_recursive_post_anchor) vs0 CT stk (step_taint j t z un) gn j'
+  (^ld_recursive_ordinary_witness_post) vs0 CT stk (step_taint j t z un) gn j'
     (z with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  gen_tac >> BETA_TAC >> strip_tac >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >>
        qpat_x_assum `n = 0` SUBST1_TAC >> simp[] >> NO_TAC) >>
   qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved") >>
@@ -1525,6 +1541,19 @@ Proof
      (impl_tac >- asm_rewrite_tac []) >>
      simp[EL_APPEND2] >> Cases_on `nextcode`
      >- metis_tac[] >> simp[]) >>
+  `!owner bs sz. ld_live astk L AP AG (owner,(bs,sz)) ==>
+      FLOOKUP E' owner = FLOOKUP E owner` by
+    (rpt strip_tac >>
+     `SND owner < k` by
+       (qpat_assum `ld_annotated_reachable _ _ _ k _ _ _ _ _ _ _`
+          (mp_then Any mp_tac ld_annotated_serial) >>
+        disch_then drule >> simp[]) >>
+     `owner <> (0,k)` by (strip_tac >> gvs[]) >>
+     Cases_on `FLOOKUP L i.inst_id = NONE` >>
+     simp[FLOOKUP_UPDATE]) >>
+  `R E' astk gstk savedkeys` by
+    (qpat_x_assum `!EN. _ ==> R EN astk gstk savedkeys` irule >>
+     first_assum ACCEPT_TAC) >>
   Cases_on `in_revert_forward fn (s' with vs_inst_idx := SUC s.vs_inst_idx)`
   >- suspend "revert_successor" >>
   disj1_tac >>
@@ -1540,6 +1569,7 @@ Proof
     `nexttail`, `bpre`, `bpost`, `qpre`, `qpost`, `supports`, `savedkeys`,
     `s0`, `0`] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   asm_rewrite_tac [] >>
   conj_tac
   >- (qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
@@ -1548,7 +1578,7 @@ Proof
   suspend "saved_successor"
 QED
 
-Resume ld_recursive_alloca_next_anchor[revert_successor]:
+Resume ld_recursive_alloca_next_witness[revert_successor]:
   `lookup_block (s' with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
      fn.fn_blocks = SOME bb /\
    lookup_block (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb
@@ -1566,7 +1596,8 @@ Resume ld_recursive_alloca_next_anchor[revert_successor]:
   `get_instruction gb (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j'` by
     (simp[get_instruction_def, EL_APPEND2] >>
      Cases_on `nextcode` >- metis_tac[] >> simp[]) >>
-  irule (BETA_RULE (Q.SPEC `Q` ld_recursive_configured_revert_anchor)) >>
+  BETA_TAC >> disj2_tac >>
+  irule (BETA_RULE ld_recursive_configured_revert_exceptional) >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at (Pat `lower_dload_insts_supply _ (TAKE _ _) = _`)) >>
   goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
@@ -1575,7 +1606,7 @@ Resume ld_recursive_alloca_next_anchor[revert_successor]:
   asm_rewrite_tac [] >> metis_tac[]
 QED
 
-Resume ld_recursive_alloca_next_anchor[saved_successor]:
+Resume ld_recursive_alloca_next_witness[saved_successor]:
   all_tac >>
   drule lowerDloadProvenanceSupportTheory.ld_annotated_active_inst >> strip_tac >>
   conj_tac >- simp[] >>
@@ -1588,14 +1619,9 @@ Resume ld_recursive_alloca_next_anchor[saved_successor]:
   qmatch_goalsub_abbrev_tac `ld_saved_embedded _ EN _ _ _ _ _` >>
   `!owner bs sz. ld_live astk L AP AG (owner,(bs,sz)) ==>
       FLOOKUP EN owner = FLOOKUP E owner` by
-    (rpt strip_tac >>
-     `SND owner < k` by
-       (qpat_assum `ld_annotated_reachable _ _ _ k _ _ _ _ _ _ _`
-          (mp_then Any mp_tac ld_annotated_serial) >>
-        disch_then drule >> simp[]) >>
-     `owner <> (0,k)` by (strip_tac >> gvs[]) >>
-     Cases_on `FLOOKUP L i.inst_id = NONE` >>
-     simp[Abbr `EN`, FLOOKUP_UPDATE]) >>
+    (qpat_x_assum `!owner bs sz. ld_live astk L AP AG (owner,(bs,sz)) ==>
+       FLOOKUP E' owner = FLOOKUP E owner` mp_tac >>
+     simp[Abbr `EN`]) >>
   qx_gen_tac `q` >> strip_tac >>
   `(^ld_recursive_saved) EN q` by
     (irule ld_recursive_saved_support >>
@@ -1607,7 +1633,23 @@ Resume ld_recursive_alloca_next_anchor[saved_successor]:
   pop_assum mp_tac >> BETA_TAC >> asm_rewrite_tac []
 QED
 
-Finalise ld_recursive_alloca_next_anchor
+Finalise ld_recursive_alloca_next_witness
+
+Theorem ld_recursive_alloca_next_anchor[local]:
+  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (^ld_recursive_alloca_zero) vs0 CT stk un gn j t /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) /\
+  Q (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_post_anchor) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  gen_tac >> qspecl_then [`\E astk gstk savedkeys. T`, `Q`]
+    mp_tac ld_recursive_alloca_next_witness >>
+  BETA_TAC >> simp[]
+QED
 
 Theorem ld_recursive_alloca_next:
   ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
@@ -4035,6 +4077,47 @@ Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   RULE_ASSUM_TAC BETA_RULE >>
   disch_then drule_all >>
+  disch_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC
+QED
+
+val ld_recursive_combined_alloca_zero =
+  ld_combined_restriction ld_recursive_alloca_zero;
+
+Theorem ld_recursive_combined_alloca_next:
+  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (^ld_recursive_combined_alloca_zero) vs0 CT stk un gn j t /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_combined_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  `alloca_inv (z with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule ld_step_next_alloca_inv >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any)) >>
+  qspecl_then [`\E astk gstk savedkeys.
+    (^ld_indexed_saved_geometry) lo E astk gstk savedkeys`, `alloca_inv`]
+    mp_tac ld_recursive_alloca_next_witness >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  (impl_tac >-
+    (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `?astk gstk. _` mp_tac >>
+      rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+      disch_then (assume_tac o CONJUNCT1) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      gen_tac >> disch_tac >>
+      ho_match_mp_tac lowerDloadReturnSnapshotTheory.ld_indexed_saved_geometry_transport >>
+      conj_tac >- first_assum (ACCEPT_TAC o CONJUNCT2) >>
+      rpt strip_tac >> first_x_assum irule >>
+      qexistsl [`bs`, `sz`] >>
+      irule lowerDloadSavedGeometryTheory.ld_saved_geometry_root_inclusion >>
+      goal_assum (drule_at Any) >> first_assum ACCEPT_TAC])) >>
   disch_tac >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
