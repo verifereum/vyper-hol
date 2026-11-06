@@ -1693,6 +1693,9 @@ Theorem raw_call_tuple_head_stage:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
     t.vs_returndata = s.vs_returndata /\
+    t.vs_memory = (mstore b (val_to_w256 (BoolV flag)) s).vs_memory /\
+    (!i. ~(b <= i /\ i < b+capacity) ==> (i IN un.t_mem <=> i IN tn.t_mem)) /\
+    (!aid. aid < sa.cs_next_id ==> FLOOKUP t.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
     (!m. mem_agree_outside un.t_mem t.vs_memory m ==>
       val_in_memory (BaseTV BoolT) (BoolV flag) b m) /\
@@ -1804,10 +1807,16 @@ Resume raw_call_tuple_head_stage[compose]:
    op_taint vn (Var x) = op_taint un (Var x) /\
    v.vs_current_bb = u.vs_current_bb /\
    v.vs_inst_idx = LENGTH sb.cs_current_insts /\ v.vs_halted = u.vs_halted /\
-   v.vs_returndata = u.vs_returndata` by
+   v.vs_returndata = u.vs_returndata /\ v.vs_allocas = u.vs_allocas` by
     simp[NoAsms, Abbr `v`, Abbr `vn`, venomStateTheory.mstore_def,
       venomStateTheory.lookup_var_def, venomStateTheory.write_memory_with_expansion_def,
       venomStateTheory.write_memory_def, ptrDisciplineTheory.op_taint_def] >>
+  `v.vs_memory = (mstore b (val_to_w256 (BoolV flag)) s).vs_memory` by
+    simp[Abbr `v`, venomStateTheory.mstore_def,
+      venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def] >>
+  `!i. ~(b <= i /\ i < b+capacity) ==> (i IN vn.t_mem <=> i IN tn.t_mem)` by
+    (fs[Abbr `vn`, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+     `i NOTIN dirty` by metis_tac[] >> simp[] >> decide_tac) >>
   qexistsl_tac [`H`, `vn`, `v`, `x`, `b`] >>
   simp[] >> metis_tac[]
 QED
