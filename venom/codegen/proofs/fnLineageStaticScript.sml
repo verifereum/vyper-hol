@@ -914,17 +914,6 @@ Proof
   metis_tac[dominates_entry_label]
 QED
 
-Theorem initial_cleanup_wf_marked[local]:
-  generated_plan_state_wf_marked spill_base
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr)
-Proof
-  simp[generated_plan_state_wf_marked_def,
-       planSpillBoundsTheory.plan_slots_bounded_def,
-       planSpillBoundsTheory.alloc_slots_bounded_def,
-       doSwapSimTheory.spill_alloc_layout_wf_def,
-       init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
-QED
-
 Theorem ready_join_pred_jmp[local]:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\

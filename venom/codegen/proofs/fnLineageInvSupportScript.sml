@@ -1,7 +1,7 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
-  stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
+  planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  stackPlanTypes stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
   !inst v. inst.inst_opcode <> LOG /\ MEM v (inst_uses inst) ==>
@@ -253,4 +253,55 @@ Proof
       gvs[EXTENSION] >> metis_tac[]) >>
   drule_all generate_inst_plan_jmp_suffix >> strip_tac >>
   gvs[EXTENSION, MEM_MAP, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem native_parameter_wf_marked:
+  !fn ch growth spill_base lbl_ctr.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+    generated_plan_state_wf_marked spill_base
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_parameter_names_distinct >> strip_tac >>
+  simp[prepare_params_plan_def] >> IF_CASES_TAC
+  >- simp[initial_cleanup_wf_marked] >>
+  simp[parameter_push_fold] >>
+  qmatch_goalsub_abbrev_tac `popmany_plan dead pushed` >>
+  `generated_plan_state_wf_marked spill_base pushed` by
+    (simp[Abbr `pushed`, init_cleanup_plan_state_def, init_plan_state_def,
+       generated_plan_state_wf_marked_def,
+       planSpillBoundsTheory.plan_slots_bounded_def,
+       planSpillBoundsTheory.alloc_slots_bounded_def,
+       doSwapSimTheory.spill_alloc_layout_wf_def, init_spill_alloc_def] >>
+     irule FILTER_ALL_DISTINCT >>
+     `MAP (\inst. Var (HD inst.inst_outputs))
+       (get_params (HD fn.fn_blocks).bb_instructions) =
+       MAP Var (MAP (\inst. HD inst.inst_outputs)
+         (get_params (HD fn.fn_blocks).bb_instructions))` by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+     simp[ALL_DISTINCT_MAP_INJ]) >>
+  pairarg_tac >> simp[] >>
+  `generated_plan_state_wf_marked spill_base ps''` by
+    metis_tac[popmany_plan_wf_marked] >>
+  simp[optimistic_swap_plan_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST
+    (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))))) ps''.ps_stack` >>
+  simp[] >> pairarg_tac >> simp[] >>
+  metis_tac[do_swap_wf_marked, stack_get_depth_props]
+QED
+
+Theorem native_parameter_residual_budget:
+  !fn ch growth spill_base lbl_ctr pending.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+    residual_budget_wf spill_base pending
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_parameter_inventory >> strip_tac >>
+  drule_all native_parameter_wf_marked >>
+  simp[generated_plan_state_wf_marked_def] >> strip_tac >>
+  irule reorderSimTheory.residual_budget_wf_canonical >> simp[]
 QED

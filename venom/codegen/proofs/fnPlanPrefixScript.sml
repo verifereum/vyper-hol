@@ -116,3 +116,14 @@ Proof
   rw[generated_plan_state_wf_def, generated_plan_state_wf_marked_def] >>
   irule FILTER_ALL_DISTINCT >> simp[]
 QED
+
+Theorem initial_cleanup_wf_marked:
+  generated_plan_state_wf_marked spill_base
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+Proof
+  simp[generated_plan_state_wf_marked_def,
+       planSpillBoundsTheory.plan_slots_bounded_def,
+       planSpillBoundsTheory.alloc_slots_bounded_def,
+       doSwapSimTheory.spill_alloc_layout_wf_def,
+       init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
+QED
