@@ -136,6 +136,19 @@ Theorem immutable_allocated_buffer_ptr_path:
     w2n w + type_memory_size tv < dimword (:256) /\
     z.vs_data_section = s.vs_data_section /\ z.vs_immutables = s.vs_immutables /\
     tnf.t_mem SUBSET tn1.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\
+    (!i. i < w2n w \/ w2n w+type_memory_size tv <= i ==>
+      mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    z.vs_call_ctx = s.vs_call_ctx /\ z.vs_accounts = s.vs_accounts /\
+    z.vs_transient = s.vs_transient /\ z.vs_fmp = s.vs_fmp /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP z.vs_allocas aid = SOME entry) /\
+    (!aid a len. FLOOKUP s.vs_allocas aid = SOME (a,len) /\
+      aid < sa.cs_next_id ==>
+      regions_disjoint (w2n w) (type_memory_size tv) a len) /\
+    (!name a len. local_region cenv es.scopes u name a len ==>
+      regions_disjoint (w2n w) (type_memory_size tv) a len) /\
     (!p. not_fresh_at sa p ==>
       lookup_var p z = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
@@ -167,7 +180,15 @@ Proof
   `lookup_var root z = SOME w /\
    FLOOKUP Gf root = SOME (w2n w,type_memory_size tv)` by simp[] >>
   qexistsl_tac [`u`, `root`, `w`, `G1`, `tn1`, `z`, `Gf`, `tnf`] >>
-  simp[] >> rpt strip_tac >>
-  `not_fresh_at sm p` by (irule not_fresh_at_mono >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. _ \/ _ ==> _ /\ _` (qspec_then `i` mp_tac) >>
+      (impl_tac >- decide_tac) >> strip_tac >>
+      qpat_x_assum `!i. _ ==> (i IN _ <=> _)` (qspec_then `i` mp_tac) >>
+      (impl_tac >- decide_tac) >> gvs[]) >>
+  conj_tac >- (qpat_x_assum `!aid a len. _ /\ _ ==> _` mp_tac >> simp[]) >>
+  conj_tac >- (qpat_x_assum `!name a len. _` mp_tac >> simp[]) >>
+  rpt strip_tac >>
+  `not_fresh_at sm p` by (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   metis_tac[]
 QED
