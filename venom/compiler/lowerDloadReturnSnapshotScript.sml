@@ -59,3 +59,93 @@ Proof
   drule ld_bind_outputs_allocas >> strip_tac >>
   gvs[adopt_return_fmp_allocas, merge_callee_state_def] >> metis_tac[]
 QED
+
+(* Pointwise transport includes every suspended tail root, not just the
+   selected frame's own roots. No equality of whole relocation maps is used. *)
+Theorem ld_indexed_saved_geometry_transport:
+  (!q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry E owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))) /\
+  (!q owner bs sz. q < LENGTH astk /\
+    ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+      (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) ==>
+    FLOOKUP E' owner = FLOOKUP E owner) ==>
+  !q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry E' owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))
+Proof
+  rpt strip_tac >> irule ld_return_snapshot_transport >>
+  qexists_tac `E` >> conj_tac >- metis_tac[] >> metis_tac[]
+QED
+
+Theorem ld_indexed_saved_geometry_update:
+  (!q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry E owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))) /\
+  (!q owner bs sz. q < LENGTH astk /\
+    ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+      (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) ==>
+    owner <> fresh) ==>
+  !q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry (E |+ (fresh,value)) owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))
+Proof
+  rpt strip_tac >> irule ld_indexed_saved_geometry_transport >>
+  reverse conj_tac >- simp[] >> qexists_tac `E` >> reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `owner <> fresh` by metis_tac[] >> simp[FLOOKUP_UPDATE]
+QED
+
+Theorem ld_indexed_saved_geometry_restrict:
+  (!q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry E owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))) /\
+  (!q owner bs sz. q < LENGTH astk /\
+    ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+      (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) ==>
+    owner IN keep) ==>
+  !q. q < LENGTH astk ==>
+    ?f. lo <= f /\ allocas_from f (EL q gstk).lf_state /\
+      f <= (EL q gstk).lf_state.vs_alloca_next /\
+      (!owner bs bt sz.
+        ld_live (DROP (SUC q) astk) (EL q astk).lf_local
+          (EL q astk).lf_params (EL q astk).lf_prov (owner,(bs,sz)) /\
+        ld_site_entry (DRESTRICT E keep) owner bs bt sz ==>
+        bt+sz <= f \/ ?j. j NOTIN EL q savedkeys /\
+          FLOOKUP (EL q gstk).lf_state.vs_allocas j = SOME(bt,sz))
+Proof
+  rpt strip_tac >> irule ld_indexed_saved_geometry_transport >>
+  reverse conj_tac >- simp[] >> qexists_tac `E` >> reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `owner IN keep` by metis_tac[] >> simp[FLOOKUP_DRESTRICT]
+QED
