@@ -41,7 +41,7 @@ Theorem append_storage_word_code_parts:
     lower_value compile_expr cenv elem e sa = (op,sb) /\
     compile_dynarray_append cenv (Lit slot) op 1 1 elem
       (lowered_value_type cenv e) cap T
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf)
+      (if tr then LocTransient else LocStorage) sb = ((),sf)
 Proof
   strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
@@ -50,24 +50,24 @@ Proof
        target_root_type_def, target_root_capacity_def, target_to_expr_def,
        compile_target_base_def, infer_array_location_def] >>
   Cases_on `tr` >>
-  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def,
-       load_opc_for_def, store_opc_for_def] >>
+  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def] >>
   Cases_on `lower_value compile_expr cenv elem e sa` >>
   rename1 `lower_value _ _ _ _ _ = (op,sb)` >> simp[] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = (u,_)` >>
+  rename1 `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = (u,_)` >>
   Cases_on `u` >> simp[]
 QED
 
 Theorem append_storage_word_suffix_structure:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   same_blocks sa sf /\ inst_extends sa sf /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               ~is_ext_call_op i.inst_opcode) (emitted_insts sa sf)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   simp[same_blocks_def, inst_extends_def, emitted_insts_def] >>
@@ -80,7 +80,7 @@ Theorem append_storage_word_code_frame:
   lower_value compile_expr cenv elem e sa = (op,sb) /\
   compile_dynarray_append cenv (Lit slot) op 1 1 elem
     (lowered_value_type cenv e) cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sa sf func ==>
   cs_extends sa sb /\ cs_extends sb sf /\
   fn_has_code sa sb func /\ fn_has_code sb sf func
@@ -97,7 +97,7 @@ QED
 
 Theorem append_storage_word_run_frag:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
@@ -148,7 +148,7 @@ QED
 
 Theorem append_storage_word_abort_frag:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot sbase else sload slot sbase) ==>
@@ -201,7 +201,7 @@ QED
 
 Theorem append_storage_word_success_frag:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
@@ -276,7 +276,7 @@ QED
 
 Theorem append_storage_word_value_frag[local]:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
@@ -308,7 +308,7 @@ Proof
   `cap <= w2n (lookup_storage slot (get_storage cx es tr))` by decide_tac >>
   drule append_storage_full >> strip_tac >> gvs[] >>
   irule append_storage_word_abort_frag >>
-  goal_assum $ drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`) >>
+  goal_assum $ drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`) >>
   simp[eval_operand_def]
 QED
 
@@ -318,7 +318,7 @@ Theorem append_storage_value_run[local]:
   (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es1) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\ is_word_type (expr_type e) /\
   compile_dynarray_append cenv (Lit slot) op 1 1 elem vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   cap < dimword (:256) /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\ encode_value tv v = SOME [(0,typed_val_to_w256 etv v)] /\
@@ -364,11 +364,12 @@ QED
 
 Theorem append_storage_word_suffix_open[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sb = ((),sf) ==>
   ~block_is_terminated sf
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>

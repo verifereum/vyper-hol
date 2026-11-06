@@ -1092,8 +1092,6 @@ Definition compile_stmt_def:
      let loc = infer_array_location cenv (target_to_expr target) in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc elem_ty in
-     let load_opc = load_opc_for loc in
-     let store_opc = store_opc_for loc in
      do val_op_raw <- lower_value compile_expr cenv elem_ty val_e;
         (* Stage complex elements through temp buffer to guard against aliasing
            (e.g., arr.append(arr[0])). MemoryCopyElisionPass elides when safe.
@@ -1111,8 +1109,7 @@ Definition compile_stmt_def:
                                else elem_ty);
         compile_dynarray_append cenv target_op staged_val ws elem_size
                                      elem_ty src_elem_ty
-                                     capacity is_prim
-                                     load_opc store_opc
+                                     capacity is_prim loc
      od) ∧
 
   (* Assign with TupleTarget: tuple unpacking.

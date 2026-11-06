@@ -1485,6 +1485,26 @@ Proof
   simp[] >> stmt_plain_void
 QED
 
+Theorem compile_ptr_store_cenv_shape:
+  !cenv loc dst v internal.
+    shape_step internal compiler_label
+      (\st. cenv_shape_ok st cenv /\ plain_operand st dst /\ plain_operand st v)
+      (compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst v)
+      (\x st. cenv_shape_ok st cenv)
+Proof
+  rpt gen_tac >> Cases_on `loc = LocCode /\ cenv.ce_is_ctor`
+  >- (gvs[compile_ptr_store_def] >> irule compile_imm_store_word_shape) >>
+  `compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst v =
+   compile_ptr_store cenv.ce_is_ctor NONE loc dst v`
+    by (Cases_on `loc` >> gvs[compile_ptr_store_def]) >>
+  pop_assum SUBST1_TAC >>
+  qspecl_then [`internal`, `compiler_label`,
+    `\st. plain_operand st dst /\ plain_operand st v`,
+    `compile_ptr_store cenv.ce_is_ctor NONE loc dst v`, `\x st. T`,
+    `\st. cenv_shape_ok st cenv`] mp_tac shape_step_frame >>
+  simp[compile_ptr_store_shape, cenv_shape_ok_stable]
+QED
+
 Theorem stmt_shape_stable_const[local]:
   !b. shape_stable (\st. b)
 Proof
@@ -3154,82 +3174,6 @@ Proof
   qexists_tac `\st. T` >> simp[shape_stable_def]
 QED
 
-Theorem compile_dynarray_append_shape:
-  !cenv base_op val_op ws elem_size dst_ty src_ty capacity is_prim loc internal.
-    shape_step internal compiler_label
-      (\st. plain_operand st base_op /\ plain_operand st val_op)
-      (compile_dynarray_append cenv base_op val_op ws elem_size dst_ty src_ty
-         capacity is_prim (load_opc_for loc) (store_opc_for loc)) (\u st. T)
-Proof
-  rpt strip_tac >> simp[compile_dynarray_append_def] >>
-  irule shape_step_bind >>
-  qexists_tac `\n st. plain_operand st n /\
-                     (plain_operand st base_op /\ plain_operand st val_op)` >>
-  conj_tac
-  >- (qx_gen_tac `len` >> BETA_TAC >> irule shape_step_bind >>
-      qexists_tac `\valid st. plain_operand st valid /\
-        (plain_operand st len /\ plain_operand st base_op /\ plain_operand st val_op)` >>
-      conj_tac
-      >- (qx_gen_tac `valid` >> BETA_TAC >>
-          stmt_sequence `\u st. plain_operand st valid /\ plain_operand st len /\
-            plain_operand st base_op /\ plain_operand st val_op` stmt_plain_void >>
-          irule shape_step_bind >>
-          qexists_tac `\p st. plain_operand st p /\
-            (plain_operand st len /\ plain_operand st base_op /\ plain_operand st val_op)` >>
-          conj_tac
-          >- (qx_gen_tac `data_ptr` >> BETA_TAC >> irule shape_step_bind >>
-              qexists_tac `\off st. plain_operand st off /\
-                (plain_operand st data_ptr /\ plain_operand st len /\
-                 plain_operand st base_op /\ plain_operand st val_op)` >>
-              conj_tac
-              >- (qx_gen_tac `offset` >> BETA_TAC >> irule shape_step_bind >>
-                  qexists_tac `\p st. plain_operand st p /\
-                    (plain_operand st len /\ plain_operand st base_op /\ plain_operand st val_op)` >>
-                  conj_tac
-                  >- suspend "store_and_length" >>
-                  stmt_frame_emit `\st. plain_operand st data_ptr /\ plain_operand st offset`) >>
-              stmt_frame_emit `\st. plain_operand st len`) >>
-          stmt_frame_emit `\st. plain_operand st base_op`) >>
-      stmt_frame_emit `\st. plain_operand st len`) >>
-  Cases_on `loc` >> gvs[load_opc_for_def] >>
-  stmt_frame_emit `\st. plain_operand st base_op`
-QED
-
-Resume compile_dynarray_append_shape[store_and_length]:
-  qx_gen_tac `elem_ptr` >> BETA_TAC >>
-  stmt_sequence `\u st. plain_operand st len /\ plain_operand st base_op`
-    (suspend "store_element") >>
-  irule shape_step_bind >>
-  qexists_tac `\n st. plain_operand st n /\ plain_operand st base_op` >>
-  conj_tac
-  >- (gen_tac >> BETA_TAC >> Cases_on `loc` >> gvs[store_opc_for_def] >>
-      stmt_plain_void_drop) >>
-  stmt_frame_emit `\st. plain_operand st len`
-QED
-
-Resume compile_dynarray_append_shape[store_element]:
-  irule shape_step_conseq >>
-  qexistsl_tac [`compiler_label`,
-    `\st. plain_operand st elem_ptr /\ plain_operand st len /\
-          plain_operand st base_op /\ plain_operand st val_op`,
-    `\u st. T /\ (plain_operand st len /\ plain_operand st base_op)`] >>
-  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
-  ho_match_mp_tac stmt_shape_frame >>
-  qexists_tac `\st. plain_operand st elem_ptr /\ plain_operand st val_op` >>
-  simp[stmt_shape_stable_plain, shape_stable_conj] >>
-  IF_CASES_TAC
-  >- (Cases_on `loc` >> gvs[store_opc_for_def] >> stmt_plain_void_drop) >>
-  Cases_on `loc` >> gvs[store_opc_for_def] >>
-  (stmt_sequence `\u st. T`
-    (FIRST [irule compile_store_memory_shape,
-      irule shape_step_conseq >>
-      qexistsl_tac [`compiler_label`,
-        `\st. plain_operand st val_op /\ plain_operand st elem_ptr`, `\u st. T`] >>
-      simp[] >> irule compile_word_copy_loop_any_loc_shape >> simp[]]) >>
-   irule shape_step_return >> simp[])
-QED
-Finalise compile_dynarray_append_shape[local]
-
 (* Workaround for HOL-Theorem-Prover/HOL#2115.  `Induct` reads the datatype
    package's mutual principle for the AST, whose hypothesis for a constructor
    argument that reaches the type under a container is one folded disjunction,
@@ -3606,6 +3550,107 @@ Theorem compile_store_memory_shape_framed[local]:
 Proof
   shape_framed_tac compile_store_memory_shape
 QED
+
+(* Frame the first step of a bind on a generator lemma: R carries the live
+   values (and cenv_shape_ok) that the lemma's own contract doesn't. *)
+fun append_framed R th =
+  irule shape_step_frame_from >> irule_at Any th >> qexists_tac R >>
+  rpt conj_tac >> rpt (ho_match_mp_tac shape_stable_conj >> conj_tac) >>
+  simp[cenv_shape_ok_stable, stmt_shape_stable_plain];
+
+fun append_bind post name first_step =
+  irule shape_step_bind >> qexists_tac post >>
+  reverse conj_tac >- first_step >> qx_gen_tac name >> BETA_TAC;
+
+fun append_seq post first_step =
+  irule shape_step_ignore_bind >> qexists_tac post >>
+  reverse conj_tac >- first_step >> gen_tac >> BETA_TAC;
+
+val append_void =
+  qmatch_goalsub_abbrev_tac `shape_step _ _ pre _ _` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `pre`, `\x st. pre st`] >>
+  simp[Abbr `pre`] >> ho_match_mp_tac stmt_shape_emit_void >>
+  conj_tac >- (rpt (ho_match_mp_tac shape_stable_conj >> conj_tac) >>
+    simp[cenv_shape_ok_stable, stmt_shape_stable_plain]) >>
+  simp[label_or_plain_def] >> stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label];
+
+val append_emit =
+  qmatch_goalsub_abbrev_tac `shape_step _ _ pre _ _` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `pre`,
+                `\x st. pre st /\ plain_operand st x`] >>
+  simp[Abbr `pre`] >> ho_match_mp_tac stmt_shape_emit_op >>
+  conj_tac
+  >- (rpt (ho_match_mp_tac shape_stable_conj >> conj_tac) >>
+      simp[cenv_shape_ok_stable, stmt_shape_stable_plain]) >>
+  conj_tac
+  >- simp[label_or_plain_def, plain_operand_def,
+          stackPlanTypesTheory.is_label_operand_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       operand_case_not_label];
+
+Theorem compile_dynarray_append_shape:
+  !cenv base_op val_op ws elem_size dst_ty src_ty capacity is_prim loc internal.
+    shape_step internal compiler_label
+      (\st. cenv_shape_ok st cenv /\ plain_operand st base_op /\
+            plain_operand st val_op)
+      (compile_dynarray_append cenv base_op val_op ws elem_size dst_ty src_ty
+         capacity is_prim loc) (\u st. T)
+Proof
+  rpt gen_tac >> simp[compile_dynarray_append_def] >>
+  append_bind `\len st. (cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                         plain_operand st val_op) /\ plain_operand st len` `len`
+    (append_framed `\st. plain_operand st base_op /\ plain_operand st val_op`
+       compile_ptr_load_cenv_shape) >>
+  append_bind `\valid st. ((cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                         plain_operand st val_op) /\ plain_operand st len) /\
+                         plain_operand st valid` `valid` append_emit >>
+  append_seq `\u st. (cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                      plain_operand st val_op) /\ plain_operand st len`
+    append_void >>
+  append_bind `\d st. ((cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                        plain_operand st val_op) /\ plain_operand st len) /\
+                        plain_operand st d` `data_ptr` append_emit >>
+  append_bind `\off st. (((cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                        plain_operand st val_op) /\ plain_operand st len) /\
+                        plain_operand st data_ptr) /\ plain_operand st off`
+    `offset` append_emit >>
+  append_bind `\p st. ((cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                        plain_operand st val_op) /\ plain_operand st len) /\
+                        plain_operand st p` `elem_ptr` append_emit >>
+  append_seq `\u st. cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                     plain_operand st len` (suspend "store_element") >>
+  append_bind `\n st. (cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                       plain_operand st len) /\ plain_operand st n` `new_len`
+    append_emit >>
+  irule shape_step_conseq >> irule_at Any compile_ptr_store_cenv_shape >>
+  simp[]
+QED
+
+Resume compile_dynarray_append_shape[store_element]:
+  IF_CASES_TAC
+  >- append_framed `\st. plain_operand st base_op /\ plain_operand st len`
+       compile_ptr_store_cenv_shape >>
+  IF_CASES_TAC
+  >- (append_seq `\u st. cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                         plain_operand st len`
+        (append_framed `\st. cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                             plain_operand st len` compile_store_memory_shape) >>
+      irule shape_step_return >> simp[]) >>
+  IF_CASES_TAC
+  >- append_framed `\st. plain_operand st base_op /\ plain_operand st len`
+       compile_imm_store_words_shape >>
+  append_seq `\u st. cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                     plain_operand st len`
+    (append_framed `\st. cenv_shape_ok st cenv /\ plain_operand st base_op /\
+                         plain_operand st len` compile_word_copy_loop_any_loc_shape) >>
+  irule shape_step_return >> simp[]
+QED
+Finalise compile_dynarray_append_shape[local]
 
 Theorem compile_bytelike_literal_shape_framed[local]:
   shape_stable R ==>
@@ -9727,10 +9772,11 @@ Proof
   stmt_bind `\staged st. plain_operand st staged /\ cenv_shape_ok st cenv` `staged`
     (suspend "stage") >>
   simp[stmt_return_bind] >>
-  qmatch_goalsub_abbrev_tac `load_opc_for loc` >>
+  qmatch_goalsub_abbrev_tac `compile_dynarray_append _ _ _ _ _ _ _ _ _ loc` >>
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. plain_operand st (compile_target_base cenv bt) /\ plain_operand st staged`,
+    `\st. cenv_shape_ok st cenv /\
+          plain_operand st (compile_target_base cenv bt) /\ plain_operand st staged`,
     `\u st. T`] >>
   simp[compile_dynarray_append_shape] >> metis_tac[compile_target_base_shape]
 QED

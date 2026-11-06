@@ -158,25 +158,27 @@ QED
 (* No allocation or copy-loop code is emitted in the primitive branch. *)
 Theorem compile_dynarray_append_word_parts:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    load_opc store_opc s0 = ((),s9) <=>
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) <=>
   ?lop valid dop off pop nop s1 s2 s3 s4 s5 s6 s7 s8.
-    emit_op load_opc [bop] s0 = (lop,s1) /\
+    emit_op (if tr then TLOAD else SLOAD) [bop] s0 = (lop,s1) /\
     emit_op LT [lop; Lit (n2w cap)] s1 = (valid,s2) /\
     emit_void ASSERT [valid] s2 = ((),s3) /\
     emit_op ADD [bop; Lit 1w] s3 = (dop,s4) /\
     emit_op MUL [lop; Lit 1w] s4 = (off,s5) /\
     emit_op ADD [dop; off] s5 = (pop,s6) /\
-    emit_void store_opc [pop; vop] s6 = ((),s7) /\
+    emit_void (if tr then TSTORE else SSTORE) [pop; vop] s6 = ((),s7) /\
     emit_op ADD [lop; Lit 1w] s7 = (nop,s8) /\
-    emit_void store_opc [bop; nop] s8 = ((),s9)
+    emit_void (if tr then TSTORE else SSTORE) [bop; nop] s8 = ((),s9)
 Proof
-  eq_tac
-  >- (simp[compile_dynarray_append_def, comp_ignore_bind_def, comp_bind_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-      metis_tac[pairTheory.PAIR, pairTheory.pair_CASES, oneTheory.one]) >>
-  strip_tac >>
-  simp[compile_dynarray_append_def, comp_ignore_bind_def,
-       comp_bind_def, comp_return_def]
+  Cases_on `tr` >>
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def] >>
+  (eq_tac
+   >- (simp[comp_ignore_bind_def, comp_bind_def] >>
+       rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+       metis_tac[pairTheory.PAIR, pairTheory.pair_CASES, oneTheory.one]) >>
+   strip_tac >>
+   simp[comp_ignore_bind_def, comp_bind_def, comp_return_def])
 QED
 
 Theorem append_storage_store_run:
@@ -310,7 +312,7 @@ QED
 
 Theorem compile_dynarray_append_word_run:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
   eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
   fresh_vars_wrt s0 ss /\ cap < dimword (:256) /\
   len = w2n (if tr then tload slot ss else sload slot ss) /\ len < cap ==>
@@ -347,7 +349,7 @@ QED
 
 Theorem compile_dynarray_append_word_abort:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
   eval_operand bop ss = SOME slot /\ fresh_vars_wrt s0 ss /\
   cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot ss else sload slot ss) ==>
