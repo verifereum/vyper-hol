@@ -68,6 +68,20 @@ Proof
   disj2_tac >> metis_tac[]
 QED
 
+(* Source-only facts enrich normal posts without inspecting execution. *)
+Theorem for_outcome_semantic_post_ptr:
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0) Q R /\
+  (!obs res ee G tn t.
+    source (es with gas_obs := obs) = (res,ee) /\ Q res ee G tn t ==>
+    Sem res ee) ==>
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0)
+    (\res ee G tn t. Q res ee G tn t /\ Sem res ee) R
+Proof
+  strip_tac >> dxrule for_outcome_source_evidence_ptr >> strip_tac >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
 (* A checked administrative suffix may change the target and its ghost,
    but performs no source read and leaves source exceptions untouched. *)
 Theorem for_outcome_zero_suffix_ptr:
