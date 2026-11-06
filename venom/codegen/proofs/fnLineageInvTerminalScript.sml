@@ -260,3 +260,15 @@ Proof
   irule residual_budget_wf_canonical >>
   gvs[lineage_core_def]
 QED
+
+Theorem do_swap_deep_out_of_range:
+  !d ps ops qs.
+    16 < d /\ LENGTH ps.ps_stack <= d /\ do_swap d ps = (ops,qs) ==>
+    qs.ps_stack = MAP (\i. EL i ps.ps_stack)
+      ([d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0]) /\
+    qs.ps_spilled = ps.ps_spilled /\ LENGTH qs.ps_stack = d + 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[do_swap_def, top_n_def, TAKE_LENGTH_TOO_LONG] >>
+  pairarg_tac >> gvs[] >> simp[]
+QED
