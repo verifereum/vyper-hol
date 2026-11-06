@@ -2,7 +2,8 @@
 Theory logAbiChildPtr
 Ancestors
   logAbiEncodePtr logAbiPrefixPtr logInstSeqPtr logTopicScalarPtr
-  abiEncoderChildCode abiEncoderBytesCode bodyPtrDefs fragGasSeqPtr
+  abiEncoder abiEncoderChildCode abiEncoderChildPrefix abiDecoderReentry
+  abiEncoderBytesCode bodyPtrDefs fragGasSeqPtr
   emitHelperProps emitHelper exprLoweringProps compileEnv
   venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
   finite_map words arithmetic list rich_list
@@ -285,3 +286,139 @@ Resume abi_encode_child_suffix_seq_ptr[memory]:
     [mstore_def, venom_state_accfupds, combinTheory.K_THM, LET_THM]
 QED
 Finalise abi_encode_child_suffix_seq_ptr
+
+
+Theorem abi_encode_bytes_result_var_live:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) sa = (out,sb) ==>
+  ?v. out = Var v /\ not_fresh_at sb v
+Proof
+  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[not_fresh_at_def]
+QED
+
+(* The bytes phase retains precisely the live bookkeeping registers needed by
+   the suffix.  Padding in the input is deliberately not required clean. *)
+Theorem abi_bytes_child_suffix_ready_ptr:
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiBytestring maxlen) sa = (out,sb) /\
+  not_fresh_at sa dst /\ not_fresh_at sa src /\
+  lookup_var dst s = SOME (n2w dest) /\ lookup_var src s = SOME (n2w a) /\
+  mload a s = n2w cnt /\ cnt <= maxlen /\
+  ptr_covers G tn dst s (32+contractABI$ceil32 cnt) /\
+  ptr_covers G tn src s (32+cnt) /\
+  (!i. a <= i /\ i < a+32+cnt ==> i NOTIN tn.t_mem) /\
+  dest+32+contractABI$ceil32 cnt < dimword(:256) /\
+  a+32+cnt < dimword(:256) /\ 32+cnt < dimword(:256) /\
+  (dest+32+contractABI$ceil32 cnt <= a \/ a+32+cnt <= dest) /\
+  not_fresh_at sa hd /\ not_fresh_at sa dp /\ not_fresh_at sa off /\
+  lookup_var hd s = SOME h /\ lookup_var dp s = SOME p /\
+  lookup_var off s = SOME r /\ ptr_covers G tn hd s 32 /\
+  ptr_covers G tn dp s 32 /\ op_taint tn (Var off) = {} /\
+  op_prov G (Var off) = NONE /\ ~ctx_has_dalloca ctx ==>
+  ?H tm t lv.
+    out = Var lv /\ not_fresh_at sb lv /\
+    not_fresh_at sb hd /\ not_fresh_at sb dp /\ not_fresh_at sb off /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
+    lookup_var lv t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
+    op_taint tm (Var lv) = {} /\ op_prov H (Var lv) = NONE /\
+    lookup_var hd t = SOME h /\ lookup_var dp t = SOME p /\
+    lookup_var off t = SOME r /\ ptr_covers H tm hd t 32 /\
+    ptr_covers H tm dp t 32 /\ op_taint tm (Var off) = {} /\
+    op_prov H (Var off) = NONE /\
+    (!i. dest <= i /\ i < dest+32+contractABI$ceil32 cnt ==> i NOTIN tm.t_mem) /\
+    (!i. ~(dest <= i /\ i < dest+32+contractABI$ceil32 cnt) ==>
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    mem_agree_outside {i | dest <= i /\ i < dest+32+contractABI$ceil32 cnt}
+      t.vs_memory s.vs_memory /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `?H tm t.
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
+    eval_operand out t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
+    op_taint tm out = {} /\ op_prov H out = NONE /\
+    (!i. dest <= i /\ i < dest+32+contractABI$ceil32 cnt ==> i NOTIN tm.t_mem) /\
+    (!i. ~(dest <= i /\ i < dest+32+contractABI$ceil32 cnt) ==>
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    mem_agree_outside {i | dest <= i /\ i < dest+32+contractABI$ceil32 cnt}
+      t.vs_memory s.vs_memory /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x))` by
+    (irule compile_abi_bytes_seq_ptr >> asm_simp_tac bool_ss [] >>
+     qexistsl_tac [`dst`,`maxlen`,`src`,`a`] >> asm_simp_tac bool_ss []) >>
+  drule abi_encode_bytes_result_var_live >> strip_tac >> gvs[] >>
+  drule abi_encode_bytes_shape >> strip_tac >>
+  `not_fresh_at sb hd /\ not_fresh_at sb dp /\ not_fresh_at sb off` by
+    (gvs[not_fresh_at_def] >> decide_tac) >>
+  qexistsl_tac [`H`,`tm`] >>
+  gvs[eval_operand_def, ptr_covers_def, op_prov_def] >> metis_tac[]
+QED
+
+(* Compose the already certified bytes phase with the finite bookkeeping
+   suffix.  The exact two-store endpoint is retained for functional framing. *)
+Theorem abi_bytes_child_finish_seq_ptr:
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiBytestring maxlen) sa = (Var lv,sc) /\
+  abi_encode_child_suffix (Var hd) (Var dp) (Var off) (Var lv) sc = (out,sb) /\
+  run_inst_seq (emitted_insts sa sc) s = OK v /\
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc) s J tk /\
+  not_fresh_at sc hd /\ not_fresh_at sc dp /\ not_fresh_at sc off /\
+  lookup_var hd v = SOME h /\ lookup_var dp v = SOME p /\
+  lookup_var off v = SOME r /\ lookup_var lv v = SOME n /\
+  ptr_covers J tk hd v 32 /\ ptr_covers J tk dp v 32 /\
+  op_taint tk (Var off) = {} /\ op_prov J (Var off) = NONE /\
+  op_taint tk (Var lv) = {} /\ op_prov J (Var lv) = NONE /\
+  ~ctx_has_dalloca ctx ==>
+  ?H tm t.
+    out = Var lv /\
+    run_inst_seq (emitted_insts sa sc ++ emitted_insts sc sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn
+      (emitted_insts sa sc ++ emitted_insts sc sb) s H tm /\
+    lookup_var lv t = SOME n /\ op_taint tm (Var lv) = {} /\
+    op_prov H (Var lv) = NONE /\
+    t.vs_memory = (mstore (w2n p) (r+n) (mstore (w2n h) r v)).vs_memory /\
+    tm.t_mem = tk.t_mem DIFF
+      ({i | w2n h <= i /\ i < w2n h+32} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) /\
+    tm.t_stor = tk.t_stor /\ tm.t_trans = tk.t_trans /\ tm.t_imm = tk.t_imm /\
+    (!x. not_fresh_at sc x ==>
+      lookup_var x t = lookup_var x v /\ FLOOKUP H x = FLOOKUP J x /\
+      op_taint tm (Var x) = op_taint tk (Var x))
+Proof
+  strip_tac >> drule abi_encode_bytes_result_var_live >> strip_tac >> gvs[] >>
+  drule abi_encode_bytes_shape >> strip_tac >>
+  qabbrev_tac `v1 = v with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sc)` >>
+  `ptr_covers J tk hd v1 32 /\ ptr_covers J tk dp v1 32 /\
+   lookup_var hd v1 = SOME h /\ lookup_var dp v1 = SOME p /\
+   lookup_var off v1 = SOME r /\ lookup_var lv v1 = SOME n` by
+    gvs[Abbr `v1`, ptr_covers_def, lookup_var_def] >>
+  drule_all abi_encode_child_suffix_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `w` strip_assume_tac)))) >>
+  drule abi_encode_child_suffix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sc) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sc sb)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `run_inst_seq (emitted_insts sa sc ++ emitted_insts sc sb) s =
+      OK (w with vs_inst_idx := v.vs_inst_idx) /\
+   inst_seq_ptr D 0 ctx fn PG G tn
+     (emitted_insts sa sc ++ emitted_insts sc sb) s H tm` by
+    (irule successful_seq_ptr_append >> qunabbrev_tac `v1` >>
+     asm_simp_tac bool_ss [] >> qexistsl_tac [`J`,`tk`] >>
+     asm_simp_tac bool_ss [] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  `w.vs_memory = (mstore (w2n p) (r+n) (mstore (w2n h) r v)).vs_memory` by
+    (qpat_x_assum `w.vs_memory = _` mp_tac >>
+     simp_tac (pure_ss ++ boolSimps.BOOL_ss)
+       [Abbr `v1`, mstore_def, venom_state_accfupds, combinTheory.K_THM, LET_THM]) >>
+  qexistsl_tac [`H`,`tm`,`w with vs_inst_idx := v.vs_inst_idx`] >>
+  simp[lookup_var_def] >>
+  qpat_x_assum `!x. not_fresh_at sc x ==> _` mp_tac >>
+  gvs[Abbr `v1`, lookup_var_def, op_prov_def] >> metis_tac[]
+QED
