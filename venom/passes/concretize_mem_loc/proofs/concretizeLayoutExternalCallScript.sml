@@ -32,6 +32,7 @@ Theorem call_completion_fields:
   post.vs_fmp = s.vs_fmp /\ post.vs_labels = s.vs_labels /\
   post.vs_gas_readings = s.vs_gas_readings /\
   post.vs_tx_ctx = s.vs_tx_ctx /\ post.vs_block_ctx = s.vs_block_ctx /\
+    post.vs_prev_hashes = s.vs_prev_hashes /\
   post.vs_code = s.vs_code /\ post.vs_data_section = s.vs_data_section
 Proof
   strip_tac >>
@@ -326,6 +327,7 @@ Theorem ext_call_execution_fields:
     post.vs_labels = s.vs_labels /\ post.vs_call_ctx = s.vs_call_ctx /\
     post.vs_gas_readings = s.vs_gas_readings /\
     post.vs_tx_ctx = s.vs_tx_ctx /\ post.vs_block_ctx = s.vs_block_ctx /\
+    post.vs_prev_hashes = s.vs_prev_hashes /\
     post.vs_code = s.vs_code /\ post.vs_data_section = s.vs_data_section
 Proof
   strip_tac >> drule ext_call_success_envelope >> strip_tac >>

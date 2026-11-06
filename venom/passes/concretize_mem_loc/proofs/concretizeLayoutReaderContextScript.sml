@@ -5,7 +5,8 @@ Ancestors venomExecSemantics venomState
    call-local environment, opaque tokens and allocation metadata. *)
 Definition relocation_reader_context_def:
   relocation_reader_context s t <=>
-    s.vs_tx_ctx = t.vs_tx_ctx /\ s.vs_block_ctx = t.vs_block_ctx
+    s.vs_tx_ctx = t.vs_tx_ctx /\ s.vs_block_ctx = t.vs_block_ctx /\
+    s.vs_prev_hashes = t.vs_prev_hashes
 End
 
 Theorem relocation_reader_context_refl[simp]:
@@ -52,4 +53,11 @@ Proof
   gvs[exec_read0_def, relocation_reader_context_def, update_var_def,
       venom_state_component_equality] >>
   metis_tac[]
+QED
+
+(* All immutable inputs observed by concrete EVM sub-execution. *)
+Theorem relocation_reader_context_tx_params:
+  relocation_reader_context s t ==> venom_to_tx_params s = venom_to_tx_params t
+Proof
+  simp[relocation_reader_context_def, venom_to_tx_params_def]
 QED
