@@ -4,7 +4,8 @@ Ancestors bodyPtrTypeBuiltinsSourceTyping bodyPtrTypeBuiltinsFrameProbe
   bodyPtrTypeBuiltinsUnsignedValue bodyPtrTypeBuiltinsLiteralPost
   exprSimConvert fragGasPathPtr gasSummaryComposePtr
   loweringPosts exprLoweringProps compileEnv vyperAST venomState bodyPtrDefs
-  exprSimProps loweringShapeDefs
+  exprSimProps loweringShapeDefs bodyPtrTypeBuiltinsUintActual
+  bodyPtrTypeBuiltinsScalarCompose opcodeClass bodyPtrTypeBuiltinsUnsignedLoad venomInst exprLowering ptrDiscipline builtinConvertPrefix emitHelperProps fragExec bodyPtrTypeBuiltinsClamp
 Libs monadsyntax
 
 Theorem zero_convert_child_post:
@@ -100,3 +101,49 @@ Proof
   gvs[is_bytestring_type_def, vyperTypeSystemTheory.valid_conversion_def] >>
   strip_tac >> gvs[] >> decide_tac
 QED
+
+(* Placement yields the actual memory view and excludes the wrapping ADD. *)
+Theorem bytes_uint_source_packet:
+  expr_post ctx func cenv cx e es sa s1 s0 ee (BytesV bs) x t0 /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME stv ==>
+  ?a. eval_operand x t0 = SOME a /\
+      val_in_memory stv (BytesV bs) (w2n a) t0.vs_memory /\
+      w2n a + 32 < dimword(:256)
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx ee t0 /\
+   expr_val_rel cx (expr_type e) (BytesV bs) x t0 /\
+   expr_val_at cenv cx (expr_type e) sa s1 ee (BytesV bs) x t0` by
+    fs[expr_post_def] >>
+  `?a. eval_operand x t0 = SOME a /\
+       val_in_memory stv (BytesV bs) (w2n a) t0.vs_memory` by
+    gvs[expr_val_rel_def, is_word_type_def] >>
+  `~is_word_type (expr_type e) /\
+   32 <= val_footprint stv (BytesV bs)` by
+    gvs[is_word_type_def, val_footprint_def,
+        vyperValueTheory.evaluate_type_def] >>
+  drule_all expr_val_at_payload_nonwrap >> strip_tac >>
+  qexists_tac `a` >> simp[]
+QED
+
+Theorem inst_seq_no_abort[local]:
+  !code s err t.
+    EVERY (\i. !ss a tt. step_inst_base i ss <> Abort a tt) code ==>
+    run_inst_seq code s <> Abort err t
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >> metis_tac[]
+QED
+
+Theorem unsigned_loader_no_abort:
+  load_bytestring_as_word (Var src) SHR sa = ((out,bits),sb) /\
+  not_fresh_at sa src ==>
+  run_inst_seq (emitted_insts sa sb) s <> Abort err t
+Proof
+  strip_tac >> drule_all unsigned_loader_shape_fresh >> strip_tac >>
+  irule inst_seq_no_abort >> simp[] >> rpt conj_tac >>
+  rpt strip_tac >> drule step_inst_base_abort_opcodes >>
+  simp[mk_inst_def]
+QED
+
