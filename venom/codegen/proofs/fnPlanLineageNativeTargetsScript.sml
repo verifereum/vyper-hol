@@ -2,6 +2,7 @@ Theory fnPlanLineageNativeTargets
 Ancestors
   fnPlanLineagePhiClasses fnPlanLineageCallers fnPlanLineageLiveness
   fnPlanLineagePhiMaps livenessAnalysisProps
+  fnPlanLineageDistinct fnPlanLineageInventory
 
 (* For a use-free prefix, entry membership is suffix membership minus all
    definitions in the prefix.  This deliberately states no list-count fact. *)
@@ -98,15 +99,27 @@ Proof
   metis_tac[]
 QED
 
-(* Multiplicity checkpoint: ready_join_target_counts leaves the NONE-map
-   analyzed live-list counts to bound.  The merged live_update deduplication
-   removes the former repeated-operand obstruction.  Its local preservation
-   theorem still requires a distinct incoming accumulator: a global analysis
-   invariant must cover initialization, successor gathering and iteration
-   before this consumer can conclude a unit count.  Membership partition and
-   convergence alone do not supply that invariant.  Analyzed-list distinctness
-   also does not imply physical stack uniqueness or establish frozen replay.
-*)
+Theorem ready_join_target_count_le_one:
+  codegen_ready_fn fn /\ lookup_block succ fn.fn_blocks = SOME sb /\
+  inst.inst_operands = [Label succ] /\
+  join_target_ops (liveness_analyze fn) fn pred inst = SOME targets ==>
+  LIST_ELEM_COUNT (Var v) targets <= 1
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (live_vars_at (liveness_analyze fn) succ 0)` by
+    simp[ready_live_vars_at_distinct] >>
+  drule_at (Pat `join_target_ops _ _ _ _ = _`) ready_join_target_counts >>
+  simp[] >> disch_then (qspec_then `v` mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `FLOOKUP (FST (build_phi_maps pred
+    (collect_phis sb.bb_instructions))) v` >>
+  metis_tac[all_distinct_elem_count_le_one]
+QED
+
+(* Logical join targets now have unit variable multiplicity, including the
+   NONE-map residual case, by the global analyzed-list invariant.  This does
+   not imply uniqueness of the incoming physical stack or stack-plus-spill
+   resources, nor does it establish temporal reset or frozen replay. *)
 
 Theorem ready_unrenamed_phi_partition:
   codegen_ready_fn fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
