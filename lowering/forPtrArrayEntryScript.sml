@@ -1,6 +1,7 @@
 (* Checked finite entry paths, before the array rounds induction. *)
 Theory forPtrArrayEntry
 Ancestors forPtrRangeEntry forPtrAdmin forPtrAllocationGhost forPtrArrayInvariant
+  allocationPtr forPtrAllocation
   fragGasPathPtr venomState venomInst ptrDiscipline finite_map
   stmtSimForArrayFrag stmtSimForArrayLoop stmtSimProps bodyPtrDefs
   exprLoweringProps forPtrRangePrepare loweringPosts compileEnv stmtFragPtr
@@ -127,4 +128,53 @@ Proof
       gvs[FLOOKUP_UPDATE] >> metis_tac[]) >>
   conj_tac >> rpt strip_tac >> `x <> idx` by metis_tac[] >>
   fs[lookup_var_def, op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+(* Actual allocation resources, including the reused-allocation-site case. *)
+Theorem for_array_alloca_resources_ptr:
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  fn_inst_ids_distinct func /\
+  MEM (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\ ~s.vs_halted /\
+  (!q. cenv.ce_return_buf <> SOME (PtrVar (Var p) q)) /\
+  bp <> p /\ ptr_covers G tn bp s arr_sz /\ lookup_var bp s = SOME arr_base /\
+  ret_pc_ok cenv st s /\ (!x. not_fresh_at st x ==> x <> p) ==>
+  ?u dst.
+    step_inst_base (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s = OK u /\
+    stmt_state_rel ctx func cenv cx es u /\
+    ghost_inv d cenv cx es
+      (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+      (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) u /\
+    lookup_var p u = SOME dst /\
+    FLOOKUP u.vs_allocas aid = SOME (w2n dst,sz) /\
+    u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx /\
+    ~u.vs_halted /\ lookup_var bp u = SOME arr_base /\ ret_pc_ok cenv st u /\
+    ptr_covers (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+      (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) p u sz /\
+    ptr_covers (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
+      (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) bp u arr_sz /\
+    (!nm lo z. local_region cenv es.scopes u nm lo z ==>
+      regions_disjoint (w2n dst) sz lo z) /\
+    (!x. not_fresh_at st x ==>
+      lookup_var x u = lookup_var x s /\
+      FLOOKUP (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u) x =
+        FLOOKUP G x /\
+      op_taint (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn)
+        (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all for_range_alloca_state >> strip_tac >>
+  qexistsl_tac [`u`, `a`] >> simp[] >> conj_tac
+  >- (drule_all for_alloca_ghost_inv >> simp[]) >> conj_tac
+  >- (fs[ret_pc_ok_def] >> rpt strip_tac >>
+      qpat_x_assum `!x z. cenv.ce_return_pc = _ ==> _` drule >>
+      strip_tac >> `x <> p` by metis_tac[] >> simp[]) >> conj_tac
+  >- (irule alloca_step_ptr_covers >> simp[] >> metis_tac[]) >> conj_tac
+  >- (irule alloca_step_old_ptr_covers >> simp[] >> metis_tac[]) >> conj_tac
+  >- (rpt strip_tac >>
+      `local_region cenv es.scopes s nm lo z` by
+        (fs[local_region_def, not_local_ptr_def] >>
+         `p' <> p` by metis_tac[] >> metis_tac[]) >>
+      irule for_alloca_outer_local_disjoint >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> `x <> p` by metis_tac[] >>
+  drule_all alloca_old_variable_ghost_frame >> simp[]
 QED
