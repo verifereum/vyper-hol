@@ -287,8 +287,8 @@ Definition expr_sim_ptr_def:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           ghost_inv d cenv cx ee G tn t /\
-          ptr_val_ok cx (expr_type e) v op G tn t /\
-          (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+          ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+          (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
         (\res ee gt r. expr_exit res r)
 End
@@ -316,8 +316,8 @@ Definition expr_vv_sim_ptr_def:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           ghost_inv d cenv cx ee G tn t /\
-          ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
-          (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
+          ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn t /\
+          (!t' op. vv = StackValue t' op /\ ~is_word_type (post_value_type cenv e) ==>
                    ptr_buf_ok cenv e op G t) /\
           (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
                   ptr_buf_ok cenv e p.ptr_operand G t) /\
