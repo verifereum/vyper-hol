@@ -1171,3 +1171,56 @@ Checked targets: `lowerDloadReturnInterfaceProbeTheory` and
 null-kernel-hypothesis assertions check the new supply and production
 specialization theorems. Concrete alignment, PHI and opcode producers remain
 unproved and are not included in this refactor's claim.
+
+## Terminal packaging checkpoint (C1.3.2.6.2.3)
+
+`lowerDloadReturnTerminalTheory.ld_return_terminal_package` packages the exact
+shared Terminal quotation, with no post-return activity requirement. Its original
+sync/Stable witnesses are retained. `ld_return_suffix_terminal` and
+`ld_return_cont_def` supply the actual source `run_blocks` witness; restriction
+lookup follows from `FLOOKUP_DRESTRICT`. The theorem deliberately *assumes* the
+source/target RET effects and their value/memory agreement.
+
+### Opcode audit
+
+- `opcodeClassTheory.step_inst_base_intret_opcodes` exhaustively gives RET,
+  RETFMP, DRET for IntRet (opcodeClassScript.sml:678).
+- `fmp_free_ctx_def` requires `no_raw_fmp_ops` for every source function;
+  `no_raw_fmp_ops_def` excludes `is_raw_fmp_opcode` at every member instruction.
+  Both RETFMP and DRET are raw FMP opcodes (venomInstScript.sml:631-641).
+  Thus exclusion must be obtained at the *aligned original instruction* using
+  source membership, not from the broadened `retpc_use_ok` (which permits all
+  three return opcodes). The ordinary singleton-envelope origin is needed to
+  identify that original with the target return instruction.
+- `is_terminator_def` lists JMP/JNZ/DJMP, RET/RETFMP/DRET,
+  RETURN/REVERT/STOP/SINK/SELFDESTRUCT/INVALID. Branches are covered by the
+  correlated branch theorem. RET family returns IntRet or Error; STOP, RETURN,
+  SINK, SELFDESTRUCT return Halt or Error; REVERT returns Abort or Error;
+  INVALID returns Error. None of the non-branch terminators produces OK in the
+  current `step_inst_base_def`. Halt/Abort/Error S branches are vacuous.
+
+### Exact remaining return-effect interface
+
+Given the aligned singleton RET point with `ld_sync ... fn inst s t A (f::fs) N`
+and `step_inst_base inst t = IntRet rt u`, prove existence of `rs,e` with
+`step_inst 0 C inst s = IntRet rs e`,
+`step_inst 0 C' inst t = IntRet rt u`,
+`rs.iret_values = rt.iret_values`, both adoption fields NONE, and
+`ld_memory lo A tn e u /\ ld_nonghost tn e u`.
+The semantics leaves states unchanged for RET: `e=s`, `u=t`; incoming sync's
+memory/nonghost boundaries therefore discharge the last pair.
+
+Do not compare the opaque final token's numeric value. Reuse
+`o1LowerDloadOpaqueTheory.ret_front_transfer` in the target-to-source direction:
+its premises are operand definedness equivalence for all operands and operand
+value equality only on `FRONT inst.inst_operands`. It exports matching returned
+values, adoption NONE, and unchanged states. Existing
+`eval_operands_defined_iff`, `eval_operands_front_agree`, `ret_front_non_retpc`
+are the underlying interfaces; do not duplicate them.
+`lowerDloadSafetyValuesTheory.ld_vars_operand_defined` supplies individual
+operand definedness; `ld_vars_operand_scalar` supplies scalar agreement.
+`o1LowerDloadGhostTheory.ret_operand_not_pointer`, `ret_operand_untainted`,
+`ret_operand_no_provenance` capture the RET-specific pointer/taint exclusions.
+The unproved consumer must connect these to the synchronized head and shape
+membership, including retpc exclusion only on FRONT. No unconditional return
+producer or exhaustive terminating S theorem is certified by this checkpoint.
