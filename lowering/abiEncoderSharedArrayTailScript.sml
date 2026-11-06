@@ -73,6 +73,7 @@ QED
    cursor is retained in the callback post, never reconstructed from a weak run. *)
 Theorem abi_encoder_array_spine_shared_run:
   abi_encode_array_tail data_op dp st = (ops,p) /\
+  abi_sites_cover func sites /\
   abi_encoder_spine_core_code func (ei,SND ops,src,p,ce,len) /\
   abi_encode_child_suffix head dp (FST ops) len ce = (out,en) /\
   eval_operand data_op initial = SOME (n2w d) /\
@@ -233,6 +234,7 @@ QED
 Theorem abi_encoder_shared_array_tail_reach:
   abi_sites_encoder_shared sites ei /\
   abi_encode_array_tail data_op dp st = (ops,p) /\
+  abi_sites_cover func sites /\
   abi_encoder_spine_core_code func (ei,SND ops,src,p,ce,len) /\
   abi_encode_child_suffix head dp (FST ops) len ce = (out,en) /\
   abi_sites_encoder_shared_input sites (ei,at,av) (st,src,data_op) (sb,source_cap)

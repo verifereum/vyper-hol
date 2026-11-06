@@ -122,7 +122,7 @@ QED
 Theorem abi_encoder_shared_array_dynamic_body_run_retained[local]:
   abi_sites_encoder_shared sites ei /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz st = (out,en) /\
-  fn_has_code st en func /\
+  fn_has_code st en func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\
@@ -339,7 +339,8 @@ Theorem abi_encoder_shared_array_dynamic_body_run[local]:
         SUM (MAP (abi_member_tail_size ty) (TAKE j avs))+
         LENGTH (enc ty (EL j avs)))
 Proof
-  strip_tac >> drule_all abi_encoder_shared_array_dynamic_body_run_retained >>
+  strip_tac >> drule_all (SIMP_RULE bool_ss [abiDecoderAllocationTheory.abi_sites_cover_univ]
+    (Q.INST [`sites` |-> `UNIV:num set`] abi_encoder_shared_array_dynamic_body_run_retained)) >>
   disch_then (qspec_then `ctx` (qx_choose_then `coords` (qx_choose_then `addressed`
     (qx_choose_then `ops` (qx_choose_then `prepared` (qx_choose_then `len`
       (qx_choose_then `ce` (qx_choose_then `address_ready` (qx_choose_then `ready`
@@ -351,7 +352,7 @@ QED
 Theorem abi_encoder_shared_array_dynamic_body:
   abi_sites_encoder_shared sites ei /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz st = (out,en) /\
-  fn_has_code st en func /\
+  fn_has_code st en func /\ abi_sites_cover func sites /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
   abi_encoder_array_prefix ty avs j d initial.vs_memory /\

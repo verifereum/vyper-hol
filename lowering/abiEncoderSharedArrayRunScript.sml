@@ -13,6 +13,7 @@ Theorem abi_encoder_shared_array_prepared_run:
     abi_encode_array_static_body ip src dst ei asz msz body_st = (out,body_end)) \/
    (active = T /\
     abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (out,body_end))) /\
+  abi_sites_cover func sites /\
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\
   body_end.cs_next_var+1 <= limit_st.cs_next_var /\
@@ -56,7 +57,7 @@ Theorem abi_encoder_shared_array_prepared_complete:
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   (if active then abi_encode_array_dynamic_exit src dp exit_st = (out,final)
    else abi_encode_array_static_exit src asz exit_st = (out,final)) /\
-  fn_has_code exit_st final func /\
+  fn_has_code exit_st final func /\ abi_sites_cover func sites /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\
   body_end.cs_next_var+1 <= limit_st.cs_next_var /\ final.cs_next_var <= limit_st.cs_next_var /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)

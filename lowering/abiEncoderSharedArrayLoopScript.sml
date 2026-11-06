@@ -71,7 +71,7 @@ QED
 Theorem abi_encoder_shared_array_dynamic_body_owner:
   abi_sites_encoder_shared sites ei /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (out,en) /\
-  fn_has_code body_st en func /\
+  fn_has_code body_st en func /\ abi_sites_cover func sites /\
   owner_st.cs_next_var <= body_st.cs_next_var /\ owner_st.cs_next_id <= body_st.cs_next_id /\
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz T,Array NONE ty,ListV avs)
     (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
@@ -281,6 +281,7 @@ QED
 Theorem abi_encoder_shared_array_loop_dynamic_step:
   abi_sites_encoder_shared sites ei /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (out,body_end) /\
+  abi_sites_cover func sites /\
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\
   body_end.cs_next_var+1 <= limit_st.cs_next_var /\
@@ -378,6 +379,7 @@ Theorem abi_encoder_shared_array_loop_run:
     abi_encode_array_static_body ip src dst ei asz msz body_st = (out,body_end)) \/
    (active = T /\
     abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (out,body_end))) /\
+  abi_sites_cover func sites /\
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
   body_end.cs_next_id+3 <= hi /\ hi <= last /\
   body_end.cs_next_var+1 <= limit_st.cs_next_var /\
