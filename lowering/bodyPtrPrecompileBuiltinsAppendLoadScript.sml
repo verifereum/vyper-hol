@@ -19,7 +19,13 @@ Theorem appended_clean_mload_path:
     gas_path_ptr D lo ctx fn PG G tn s n G2 tn2
       (OK (t with vs_inst_idx := s.vs_inst_idx + k + 1)) /\
     op_prov G2 (Var y) = NONE /\ op_taint tn2 (Var y) = {} /\
-    eval_operand (Var y) t = SOME (mem_word_at (w2n wo) q.vs_memory)
+    eval_operand (Var y) t = SOME (mem_word_at (w2n wo) q.vs_memory) /\
+    t = update_var y (mload (w2n wo) q) q /\
+    G2 = step_prov PG G1 (mk_inst id MLOAD [Var dst] [y])
+      (t with vs_inst_idx := s.vs_inst_idx + k) /\
+    tn2 = step_taint (mk_inst id MLOAD [Var dst] [y])
+      (q with vs_inst_idx := s.vs_inst_idx + k)
+      (t with vs_inst_idx := s.vs_inst_idx + k) tn1
 Proof
   strip_tac >>
   qabbrev_tac `i = mk_inst id MLOAD [Var dst] [y]` >>

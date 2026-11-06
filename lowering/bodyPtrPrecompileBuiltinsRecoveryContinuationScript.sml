@@ -100,7 +100,26 @@ Theorem computed_load_suffix_clean_path:
       (OK (t with vs_inst_idx := s.vs_inst_idx + 4)) /\
     op_prov G' res = NONE /\ op_taint tn' res = {} /\
     eval_operand res t = SOME (mem_word_at (w2n wo)
-      (write_memory_with_expansion (w2n wo) (TAKE 32 data) s).vs_memory)
+      (write_memory_with_expansion (w2n wo) (TAKE 32 data) s).vs_memory) /\
+    ?sl q u v G1 tn1 y.
+      (do gas <- emit_op GAS [];
+          success <- emit_op STATICCALL
+            [gas; Lit target; Var src; Lit insz; Var dst; Lit 32w];
+          emit_void ASSERT [success]; return (Var dst) od) sm = (Var dst,sl) /\
+      emit_op MLOAD [Var dst] sl = (res,sb) /\ res = Var y /\
+      run_inst_seq (emitted_insts sm sl) s = OK q /\
+      step_inst_base (EL 0 (emitted_insts sm sl)) s = OK u /\
+      step_inst_base (EL 1 (emitted_insts sm sl)) u = OK v /\
+      G1 = step_prov PG (step_prov PG G (EL 0 (emitted_insts sm sl)) u)
+        (EL 1 (emitted_insts sm sl)) v /\
+      tn1 = step_taint (EL 1 (emitted_insts sm sl)) u v
+        (step_taint (EL 0 (emitted_insts sm sl)) s u tn) /\
+      t = update_var y (mload (w2n wo) q) q /\
+      G' = step_prov PG G1 (mk_inst sl.cs_next_id MLOAD [Var dst] [y])
+        (t with vs_inst_idx := s.vs_inst_idx + 3) /\
+      tn' = step_taint (mk_inst sl.cs_next_id MLOAD [Var dst] [y])
+        (q with vs_inst_idx := s.vs_inst_idx + 3)
+        (t with vs_inst_idx := s.vs_inst_idx + 3) tn1
 Proof
   strip_tac >> drule computed_load_suffix_parts >> strip_tac >>
   `isPREFIX (emitted_insts sm sl) (DROP s.vs_inst_idx bb.bb_instructions)` by
@@ -134,10 +153,23 @@ Proof
      [mk_inst sl.cs_next_id MLOAD [Var dst] [STRING #"%" (toString sl.cs_next_var)]])
      (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
   drule_all appended_clean_mload_path >> strip_tac >>
-  qexistsl [`t`,`G2`,`tn2`] >>
-  map_every (fn pat => qpat_x_assum pat mp_tac)
-    [`run_inst_seq (_ ++ _) s = OK t`, `gas_path_ptr _ _ _ _ _ _ _ _ _ G2 tn2 _`,
-     `op_prov G2 _ = NONE`, `op_taint tn2 _ = {}`, `eval_operand _ t = _`] >>
-  simp[]
+  suspend "endpoints"
 QED
+
+Resume computed_load_suffix_clean_path[endpoints]:
+  qexistsl [`t`,`G2`,`tn2`] >> conj_tac
+  >- (qpat_x_assum `run_inst_seq (_ ++ _) s = OK t` mp_tac >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ G2 tn2 _` mp_tac >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `op_prov G2 _ = NONE` mp_tac >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `op_taint tn2 _ = {}` mp_tac >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `eval_operand _ t = _` mp_tac >> simp[]) >>
+  qexists `sl` >> qexistsl [`q`,`u`,`v`] >>
+  qexistsl [`G'`,`tn'`,`STRING #"%" (toString sl.cs_next_var)`] >> simp[]
+QED
+
+Finalise computed_load_suffix_clean_path
 
