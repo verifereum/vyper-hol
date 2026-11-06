@@ -6,9 +6,9 @@ Ancestors
   exprSimAbiDecodeArrayFetched abiDecoderWordOutcome instIdxIndep
   abiDecoderSiteEffect exprSimAbiDecodeSiteProvenance
   exprSimAbiDecodeOwnedContext exprSimAbiDecodeOwnedMember
-  abiDecoderFrame finite_map pred_set
+  abiDecoderFrame abiDecoderLoopData venomMemDefs vyperABI vyperValue contractABI finite_map pred_set
   exprSimAbiDecodeArrayMembers exprSimAbiDecodeMemberExecute
-  abiValidAggregateHeads abiValidMembers
+  abiValidAggregateHeads abiValidMembers abiDecodeRanges
   abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentry abiDecoderSequenceReach
   abiDecoderFiniteControl abiDecoderBytestringOutcome abiDecoderRange
   abiDecoderArrayPtr abiDecoderArrayBound abiDecoderGuard abiDecoderGuards abiDecoderComplexGuard
@@ -484,7 +484,7 @@ Theorem abi_array_element_setup_success_reach:
   fn_has_code st last fn /\ abi_decode_entry st s ==>
   ?t. Dreach ctx fn s t /\ abi_decode_entry last t /\
     t.vs_vars = u.vs_vars /\ t.vs_memory = u.vs_memory /\
-    fresh_vars_wrt limit_st t /\
+    t.vs_labels = u.vs_labels /\ fresh_vars_wrt limit_st t /\
     abi_decoder_address_frame st.cs_next_var s t /\
     abi_decode_alloc_progress sites s t /\
     decode_site_effect ctx func st.cs_next_var writes s t
@@ -580,4 +580,105 @@ Proof
   fs[SUBSET_DEF] >> rpt strip_tac >>
   qpat_x_assum `!a. _ ==> _ /\ _` (qspec_then `a` mp_tac) >>
   simp[] >> decide_tac
+QED
+
+Theorem abi_array_current_head_span:
+  p+32+n*h <= LENGTH bs /\ j < n ==>
+  p+32+j*h+h <= LENGTH bs
+Proof
+  strip_tac >>
+  `j*h+h <= n*h` by
+    (`j*h+h = SUC j*h` by (pure_rewrite_tac[MULT_CLAUSES] >> REFL_TAC) >>
+     once_asm_rewrite_tac [] >> simp_tac bool_ss [LE_MULT_RCANCEL] >> decide_tac) >>
+  decide_tac
+QED
+
+Theorem abi_array_ready_dynamic_offset_load:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  is_dynamic (vyper_to_abi_type env ty) /\ j < n /\
+  p+32+n*abi_member_head_size (vyper_to_abi_type env ty) <= LENGTH bs ==>
+  abi_decode_load MLOAD (n2w(B+(p+32+j*32)):bytes32) s =
+    n2w(abi_head_word (DROP (j*32) (DROP (p+32) bs)))
+Proof
+  strip_tac >>
+  `abi_member_head_size (vyper_to_abi_type env ty) = 32` by
+    simp[abi_member_head_size_def] >>
+  `p+32+j*32+32 <= LENGTH bs` by metis_tac[abi_array_current_head_span] >>
+  simp_tac bool_ss [GSYM ADD_ASSOC] >>
+  irule (REWRITE_RULE [GSYM ADD_ASSOC]
+    (Q.INST [`p` |-> `p+32`, `ao` |-> `j*32`] abi_decode_member_offset_load)) >>
+  fs[abi_array_ready_def, abi_array_runtime_context_def]
+QED
+
+Theorem abi_array_ready_dynamic_setup_outcome:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di 32
+    (type_memory_bytes ce ty) st = (ops,middle) /\
+  dec_info_needs_offset di /\ is_dynamic (vyper_to_abi_type env ty) /\
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  j < n /\ p+32+n*abi_member_head_size (vyper_to_abi_type env ty) <= LENGTH bs /\
+  middle.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st middle fn ==>
+  (?t pos. Dreach ctx fn s t /\ abi_decode_entry middle t /\
+    eval_operand (FST ops) t = SOME(n2w j) /\
+    eval_operand (FST (SND ops)) t = SOME(n2w pos) /\
+    eval_operand (SND (SND ops)) t = SOME(n2w(d+32+j*type_memory_bytes ce ty)) /\
+    EVERY (abi_decoder_operand_live middle.cs_next_var)
+      [FST ops; FST (SND ops); SND (SND ops)] /\
+    pos+32 <= LENGTH bs /\ fresh_vars_wrt limit_st t /\
+    abi_decoder_address_frame st.cs_next_var s t /\
+    decode_site_effect ctx func st.cs_next_var
+      (abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j) s t /\
+    abi_decode_alloc_progress sites s t /\
+    abi_array_member_view (vyper_to_abi_type env ty) bs p j =
+      abi_decode_source_view (vyper_to_abi_type env ty) bs pos) \/
+  (?u. Dabort ctx fn s Revert_abort u /\
+    ~(?v. abi_decode_source_accepts env ty
+      (abi_array_member_view (vyper_to_abi_type env ty) bs p j) v))
+Proof
+  strip_tac >>
+  drule_all abi_array_ready_dynamic_offset_load >> strip_tac >>
+  drule abi_array_ready_loop_data >> strip_tac >>
+  drule abi_array_loop_data_slot >> strip_tac >>
+  drule abi_array_ready_runtime_context >> strip_tac >>
+  `abi_member_head_size (vyper_to_abi_type env ty) = 32` by
+    simp[abi_member_head_size_def] >>
+  qabbrev_tac `delta = abi_head_word (DROP (j*32) (DROP (p+32) bs))` >>
+  `delta < dimword(:256)` by
+    simp[Abbr `delta`, abi_head_word_def, dec_number_def, dest_NumV_def, w2n_lt] >>
+  `p+32 < dimword(:256) /\ LENGTH bs < dimword(:256)` by
+    (fs[abi_array_runtime_context_def] >> decide_tac) >>
+  `w2n(n2w slot:bytes32) = slot` by
+    fs[abi_array_loop_data_def, Ldata_def, alloca_inv_def] >>
+  qhdtm_assum `abi_array_runtime_context`
+    (strip_assume_tac o REWRITE_RULE [abi_array_runtime_context_def]) >>
+  `EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
+   EVERY (abi_decoder_operand_live st.cs_next_var) [src;base_op;hi]` by fs[] >>
+  `mload (w2n(n2w slot:bytes32)) s = n2w j /\ LENGTH bs <= LENGTH bs /\
+   32 < dimword(:256)` by simp[] >>
+  Cases_on `w2n(n2w(p+32+delta):bytes32) < p+32 \/
+    LENGTH bs < w2n(n2w(p+32+delta):bytes32)+32`
+  >- (disj2_tac >>
+      `delta = abi_head_word (DROP (j*abi_member_head_size (vyper_to_abi_type env ty))
+        (DROP (p+32) bs))` by simp[Abbr `delta`] >>
+      `~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+       s.vs_inst_idx = LENGTH st.cs_current_insts` by
+        (drule abi_array_ready_entry >> simp_tac bool_ss [abi_decode_entry_def]) >>
+      drule_all abi_array_dynamic_element_setup_reject >> metis_tac[]) >>
+  drule_all abi_array_dynamic_element_setup_sequence_outcome >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (disj1_tac >>
+      `abi_decode_entry st s` by metis_tac[abi_array_ready_entry] >>
+      drule_all abi_array_element_setup_success_reach >>
+      disch_then (qspecl_then
+        [`abi_array_child_scratch sites origin UNION abi_array_cell d (type_memory_bytes ce ty) j`,
+         `sites`] strip_assume_tac) >>
+      rename1 `Dreach ctx fn s actual` >>
+      `!op. eval_operand op actual = eval_operand op t` by
+        (Cases >> simp_tac bool_ss [eval_operand_def, lookup_var_def] >> asm_rewrite_tac []) >>
+      qexistsl_tac [`actual`, `p+32+delta`] >> asm_simp_tac bool_ss [] >>
+      mp_tac (Q.INST [`at` |-> `vyper_to_abi_type env ty`] abi_array_member_setup_view) >>
+      asm_simp_tac bool_ss [] >> disch_then irule >> simp[Abbr `delta`]) >>
+  fs[]
 QED
