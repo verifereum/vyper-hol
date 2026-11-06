@@ -2056,7 +2056,10 @@ Proof
   `vv_post ctx func cenv cx
      (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
    vv_post ctx func cenv cx lit` by
-    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def] >>
+    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def,
+         supportedExprTraverseTheory.expr_has_effect_def,
+         supportedExprTraverseTheory.supported_expr_exists_def,
+         supportedExprTraverseTheory.expr_effect_root_def] >>
   simp[expr_vv_sim_def]
 QED
 
@@ -3805,7 +3808,8 @@ Theorem vv_post_pointer_cong:
 Proof
   strip_tac >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]
+  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+                  vv_storage_live_def]
 QED
 
 Theorem compile_method_id_runtime_typed_vv_sim:

@@ -851,7 +851,6 @@ QED
 Theorem emit_void_nonterminator_open:
   !opc args sa sb.
     emit_void opc args sa = ((),sb) /\ ~is_terminator opc ==>
-    post_value_type cenv e = expr_type e /\
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
@@ -977,6 +976,10 @@ Proof
    0 < type_memory_bytes c (lowered_value_type c e) /\
    type_memory_bytes c (lowered_value_type c e) < dimword (:256)` by
     (simp[] >> metis_tac[]) >>
+  `post_value_type c e = expr_type e` by
+    (qpat_x_assum `lowered_value_type c e = expr_type e \/ _` strip_assume_tac
+     >- (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+     irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   drule_all annassign_memory_store_post_path >>
   disch_then (qspec_then `T` strip_assume_tac) >>
   qexistsl_tac [`ee with <|gas_obs := []; scopes :=
@@ -1078,12 +1081,6 @@ Proof
     (\res ee t. ?v. res = INL v /\
       expr_post ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
-  `post_value_type c e = expr_type e` by
-    (qpat_x_assum `lowered_value_type cenv e = expr_type e \/ _`
-       strip_assume_tac
-     >- (irule post_value_type_lowered >>
-         metis_tac[declare_local_memory_types]) >>
-     simp[post_value_type_bytestring]) >>
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
     (\res ee r. expr_exit res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>

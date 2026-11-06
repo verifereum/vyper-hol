@@ -329,7 +329,6 @@ Theorem local_memory_assign_path:
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    post_value_type cenv e = expr_type e /\
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
@@ -392,7 +391,7 @@ Theorem assign_local_memory_normal_continuation:
   !ctx func cenv cx lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc info bytes.
     gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
       (stmt_res_ok lctx) es /\
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
     type_memory_bytes cenv (expr_type e) = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
@@ -430,8 +429,6 @@ Proof
      qpat_x_assum `!gs v es1 entry. _` drule >>
      disch_then (qspec_then `entry` mp_tac) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      `post_value_type cenv e = expr_type e` by
-        (irule post_value_type_lowered >> simp[]) >>
   simp[expr_post_def] >> strip_tac >>
   `?sw. eval_operand op s = SOME sw /\ val_in_memory tyv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -454,7 +451,7 @@ QED
 Theorem assign_local_memory_rhs_outcome:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   type_memory_bytes cenv (expr_type e) = type_memory_size tyv /\
   0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
@@ -548,7 +545,10 @@ Proof
     metis_tac[cj 2 compile_expr_grows] >>
   `local_ptrs_reserved cenv sB` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  irule assign_local_memory_rhs_outcome >> simp[] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  irule assign_local_memory_rhs_outcome >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   (conj_tac >- gvs[SF ETA_ss]) >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
     (irule_at Any) >> simp[] >>
@@ -573,7 +573,6 @@ Theorem assign_local_memory_widen_code_parts:
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
         (case vtyp of ArrayT elem_ty (Dynamic _) =>
-    post_value_type cenv e = expr_type e /\
            SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
                  type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf) /\
@@ -675,8 +674,6 @@ Resume local_memory_assign_widen_run[staged]:
       `not_fresh_at sn x` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
       `x <> tmp` by metis_tac[] >> simp[]) >>
-      `post_value_type cenv e = expr_type e` by
-        metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
   metis_tac[]
 QED
 
@@ -769,7 +766,7 @@ Finalise local_memory_assign_widen_path
 Theorem assign_local_memory_widen_normal_continuation:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
-  ~is_word_type vtyp /\
+  ~is_word_type vtyp /\ post_value_type cenv e = expr_type e /\
   (expr_type e = vtyp \/ is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
   (sty = vtyp \/ is_bytestring_type vtyp) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -840,7 +837,7 @@ QED
 Theorem assign_local_memory_widen_rhs_outcome:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
-  ~is_word_type vtyp /\
+  ~is_word_type vtyp /\ post_value_type cenv e = expr_type e /\
   (expr_type e = vtyp \/ is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
   (sty = vtyp \/ is_bytestring_type vtyp) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -938,7 +935,10 @@ Proof
     metis_tac[cj 2 compile_expr_grows] >>
   `!x. op = Var x ==> not_fresh_at sB x` by
     (drule_then (drule_then assume_tac) compile_lower_value_var >> simp[]) >>
-  irule assign_local_memory_widen_rhs_outcome >> simp[] >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
+  irule assign_local_memory_widen_rhs_outcome >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `tyv` >> simp[] >>
   (conj_tac >- (gvs[SF ETA_ss] >> first_assum ACCEPT_TAC)) >>

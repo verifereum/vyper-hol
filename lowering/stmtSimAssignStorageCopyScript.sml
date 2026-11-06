@@ -1524,8 +1524,6 @@ Proof
       qexistsl_tac [`INL ()`,
         `set_storage cx es tr (update_storage (n2w slot) 0w (get_storage cx es tr))`,
         `OK ((if tr then tstore (n2w slot) 0w s0 else sstore (n2w slot) 0w s0)
-  `post_value_type cenv e = expr_type e` by
-    simp[post_value_type_lowered] >>
               with vs_inst_idx := SUC s0.vs_inst_idx)`] >>
       conj_tac >- (conj_tac >-
         (gen_tac >>
@@ -1604,6 +1602,8 @@ Proof
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all storage_copy_post_region >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
