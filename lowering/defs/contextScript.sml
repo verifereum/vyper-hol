@@ -158,13 +158,12 @@ Definition compile_copy_memory_def:
     emit_void MCOPY [dst; src; Lit (n2w (SUC size))]
 End
 
-(* Parameterized word-copy loop between two address spaces.  The word
-   count is an operand: a literal for a fixed-size copy, a computed value for
-   a bytestring's live words.
+(* Parameterized word-copy loop between two address spaces, copying as many
+   words as count_op holds at run time (a bytestring's live words).
    Mirrors Python: context.py _word_copy_loop
    Used for storage↔memory and transient↔memory bulk copies. *)
-Definition compile_word_copy_loop_def:
-  compile_word_copy_loop src_op dst_op count_op load_loc store_loc is_ctor =
+Definition compile_word_copy_loop_op_def:
+  compile_word_copy_loop_op src_op dst_op count_op load_loc store_loc is_ctor =
     let src_scale = word_scale load_loc in
     let dst_scale = word_scale store_loc in
     do
@@ -209,17 +208,39 @@ Definition compile_word_copy_loop_def:
     od
 End
 
+(* The word-copy loop for a fixed word count: Python's _word_copy_loop with
+   an int count, which it emits as a literal. *)
+Definition compile_word_copy_loop_def:
+  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
+    compile_word_copy_loop_op src_op dst_op (Lit (n2w word_count))
+      load_loc store_loc is_ctor
+End
+
 (* ===== Load from Storage/Transient to Memory ===== *)
 (* Mirrors Python: context.py _load_storage_to_memory *)
 Definition compile_storage_to_memory_def:
   compile_storage_to_memory slot buf word_count =
-    compile_word_copy_loop slot buf (Lit (n2w word_count)) LocStorage LocMemory F
+    compile_word_copy_loop slot buf word_count LocStorage LocMemory F
+End
+
+(* Copy word_count words from memory to storage.  Python inlines this
+   _word_copy_loop call in _store_memory_to_slots. *)
+Definition compile_memory_to_storage_def:
+  compile_memory_to_storage buf slot word_count =
+    compile_word_copy_loop buf slot word_count LocMemory LocStorage F
 End
 
 (* Mirrors Python: context.py _load_transient_to_memory *)
 Definition compile_transient_to_memory_def:
   compile_transient_to_memory slot buf word_count =
-    compile_word_copy_loop slot buf (Lit (n2w word_count)) LocTransient LocMemory F
+    compile_word_copy_loop slot buf word_count LocTransient LocMemory F
+End
+
+(* Copy word_count words from memory to transient storage, as
+   compile_memory_to_storage. *)
+Definition compile_memory_to_transient_def:
+  compile_memory_to_transient buf slot word_count =
+    compile_word_copy_loop buf slot word_count LocMemory LocTransient F
 End
 
 (* ===== Allocate Buffer ===== *)
@@ -338,7 +359,7 @@ Definition compile_code_to_memory_def:
   compile_code_to_memory (offset:operand) (dst:operand) (word_count:num) =
     if word_count = 0 then (return () : unit compiler)
     else
-      do compile_word_copy_loop offset dst (Lit (n2w word_count)) LocCode LocMemory F;
+      do compile_word_copy_loop offset dst word_count LocCode LocMemory F;
          return ()
       od
 End
@@ -537,7 +558,7 @@ End
    Mirrors Python: context.py slot_to_memory *)
 Definition compile_slot_to_memory_def:
   compile_slot_to_memory src_slot dst_ptr num_slots loc =
-    compile_word_copy_loop src_slot dst_ptr (Lit (n2w num_slots)) loc LocMemory F
+    compile_word_copy_loop src_slot dst_ptr num_slots loc LocMemory F
 End
 
 (* ===== Store Immutable ===== *)
@@ -583,24 +604,19 @@ End
 (* NOTE: compile_load_by_loc deleted — duplicate of compile_ptr_load *)
 
 (* ===== With Byte Offset ===== *)
-(* Add byte offset to base pointer, folding it into a literal base.
-   Mirrors Python: context.py _with_byte_offset
+(* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset
    (one equation, not clauses on 0 and SUC, so EVAL reduces it on a numeral). *)
 Definition compile_with_byte_offset_def:
   compile_with_byte_offset base offset =
     if offset = 0 then return base
-    else case base of
-           Lit w => return (Lit (w + n2w offset))
-         | _ => emit_op ADD [base; Lit (n2w offset)]
+    else emit_op ADD [base; Lit (n2w offset)]
 End
 
 Theorem compile_with_byte_offset_clauses:
   compile_with_byte_offset op 0 = return op /\
-  compile_with_byte_offset (Lit w) (SUC n) = return (Lit (w + n2w (SUC n))) /\
-  ((!w. op <> Lit w) ==>
-   compile_with_byte_offset op (SUC n) = emit_op ADD [op; Lit (n2w (SUC n))])
+  compile_with_byte_offset op (SUC n) = emit_op ADD [op; Lit (n2w (SUC n))]
 Proof
-  rw[compile_with_byte_offset_def] >> Cases_on `op` >> gvs[]
+  rw[compile_with_byte_offset_def]
 QED
 
 (* ===== Store Memory for Bytestrings ===== *)
@@ -914,13 +930,13 @@ Definition compile_store_slots_def:
             emit_void store_opc [slot; loaded]
          od
        else
-         do compile_word_copy_loop src slot (Lit (n2w words)) LocMemory
-              store_loc F;
+         do (if transient then compile_memory_to_transient
+             else compile_memory_to_storage) src slot words;
             return ()
          od
      else if is_bytestring_type ty then
        do count_op <- compile_bytestring_word_count src;
-          compile_word_copy_loop src slot count_op LocMemory store_loc F;
+          compile_word_copy_loop_op src slot count_op LocMemory store_loc F;
           return ()
        od
      else if ¬acyclic_struct_metadata cenv.ce_struct_fields then
@@ -953,8 +969,8 @@ Definition compile_store_slots_def:
     return () ∧
   compile_store_slots_members cenv src slot ((ty, sz)::rest) mem_off slot_off
                               transient =
-    (do member_src <- compile_with_byte_offset src mem_off;
-        member_slot <- compile_with_byte_offset slot slot_off;
+    (do member_src <- compile_lit_byte_offset src mem_off;
+        member_slot <- compile_lit_byte_offset slot slot_off;
         compile_store_slots cenv member_src member_slot ty transient;
         compile_store_slots_members cenv src slot rest (mem_off + sz)
           (slot_off + sz DIV 32) transient
