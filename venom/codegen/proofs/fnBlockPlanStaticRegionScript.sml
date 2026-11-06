@@ -4166,3 +4166,69 @@ Proof
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   metis_tac[regional_insts_marker_free]
 QED
+
+Theorem regional_dfs_marker_mutual[local]:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET ==>
+  (!wl visited ps.
+    dfs_aux_call (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth sb ctr) wl visited ps ==>
+    dfs_aux_call (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth sb ctr) wl visited ps /\
+    LENGTH wl <= 1 /\
+    ((!l. MEM l wl ==> ~cfg_path (cfg_analyze fn) l target) \/
+      ~MEM dead_stack_marker ps.ps_stack)) /\
+  (!ss sp succs visited ps.
+    dfs_succs_call (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth sb ctr) ss sp succs visited ps ==>
+    dfs_succs_call (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth sb ctr) ss sp succs visited ps /\
+    ((!l. MEM l succs ==> ~cfg_path (cfg_analyze fn) l target) \/
+      ~MEM dead_stack_marker ss))
+Proof
+  strip_tac >> ho_match_mp_tac dfs_aux_call_ind >> rpt conj_tac
+  >- (rpt strip_tac >> simp[dfs_aux_call_entry, init_cleanup_plan_state_def,
+        stackPlanTypesTheory.init_plan_state_def])
+  >- (rpt gen_tac >> strip_tac >>
+      (conj_tac >- metis_tac[dfs_aux_call_visited] >>
+       rename1 `LENGTH (lbl::tail) <= 1` >>
+       Cases_on `tail` >> gvs[]))
+  >- (rpt gen_tac >> strip_tac >>
+      (conj_tac >- metis_tac[dfs_aux_call_missing] >>
+       rename1 `LENGTH (lbl::tail) <= 1` >>
+       Cases_on `tail` >> gvs[]))
+  >- (rpt gen_tac >> strip_tac >>
+      (conj_tac >- metis_tac[dfs_aux_call_succs] >>
+       Cases_on `cfg_path (cfg_analyze fn) lbl target`
+       >- (disj2_tac >>
+           `~MEM dead_stack_marker ps.ps_stack` by metis_tac[MEM] >>
+           `dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+             (init_cleanup_plan_state ch growth sb ctr) lbl ps` by
+             (simp[dfs_block_state_def] >> metis_tac[]) >>
+           metis_tac[regional_dfs_block_marker_free]) >>
+       disj1_tac >> metis_tac[cfg_path_predecessor_closed]))
+  >- (rpt gen_tac >> strip_tac >>
+      (conj_tac >- metis_tac[dfs_aux_call_rest] >>
+       rename1 `LENGTH (lbl::tail) <= 1` >>
+       Cases_on `tail` >> gvs[]))
+  >- (rpt gen_tac >> strip_tac >>
+      (conj_tac >- metis_tac[dfs_aux_call_branch] >>
+       simp[] >> metis_tac[MEM]))
+  >> rpt gen_tac >> strip_tac >>
+  (conj_tac >- metis_tac[dfs_aux_call_sibling] >>
+   metis_tac[MEM])
+QED
+
+Theorem regional_ret_reaching_dfs_marker_free:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  dfs_block_state (liveness_analyze fn) dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps /\
+  cfg_path cfg lbl target ==>
+  ~MEM dead_stack_marker ps.ps_stack
+Proof
+  simp[dfs_block_state_def] >> rpt strip_tac >> gvs[] >>
+  drule_all (cj 1 regional_dfs_marker_mutual) >>
+  simp[] >> metis_tac[]
+QED
