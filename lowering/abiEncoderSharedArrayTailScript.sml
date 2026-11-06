@@ -52,7 +52,7 @@ Theorem abi_encoder_array_spine_cursor_saved:
   abi_decoder_operand_live st.cs_next_var dp /\
   abi_decoder_operand_live st.cs_next_var head /\
   p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  first <= site /\ site < last /\ site < st.cs_next_id /\
+  site IN sites /\ first <= site /\ site < last /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   abi_encoder_member_phase_raw st p initial ready ==>
   abi_sites_scratch_member_cursor_saved sites (head,FST ops,dp,h,off,slot,site)
@@ -244,7 +244,7 @@ Theorem abi_encoder_shared_array_tail_reach:
   mload slot initial = n2w off /\ slot < dimword (:256) /\ h < dimword (:256) /\
   off+LENGTH (enc at av) <= output_size /\
   abi_sites_decoder_budget sites first last b cap initial /\
-  first <= site /\ site < last /\ site < st.cs_next_id /\
+  site IN sites /\ first <= site /\ site < last /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   ce.cs_next_id <= last /\ en.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
