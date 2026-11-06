@@ -2965,7 +2965,7 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_snapshot_vv[local]:
+Theorem ci_mono_compile_snapshot_vv:
   ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
 Proof
   rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
