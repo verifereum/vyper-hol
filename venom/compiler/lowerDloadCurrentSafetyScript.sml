@@ -8,6 +8,7 @@ Ancestors lowerDloadDescriptorObservation lowerDloadRangeFrontier
   venomInst venomState finite_map pred_set list words arithmetic venomWf pair
   lowerDloadPublicTrace lowerDloadSafetyLocations lowerDloadSafetyKernel
   lowerDloadExpansionExit irSupply venomExecSemantics
+  lowerDloadScratchTransport lowerDloadLiveAllocation
 
 Theorem ld_sync_ordinary_raw:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -135,3 +136,40 @@ Resume ld_sync_dloadbytes_prefix_raw[copy]:
   strip_tac >> disj2_tac >> decide_tac
 QED
 Finalise ld_sync_dloadbytes_prefix_raw
+
+Theorem ld_sync_scratch_fresh_headroom:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
+  ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
+  ld_private f d ai /\ FLOOKUP t.vs_allocas ai = NONE ==>
+  t.vs_alloca_next + 32 < dimword(:256)
+Proof
+  strip_tac >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  `EVERY (ld_maps A) (f::fs)` by metis_tac[ld_sync_maps] >>
+  `d NOTIN f.lf_E` by
+    (spose_not_then assume_tac >>
+     `ld_maps A f` by gvs[] >>
+     drule_all ld_maps_private >> simp[]) >>
+  `set (MAP (\g. g.lf_fn) (f::fs)) SUBSET set C.ctx_functions` by
+    (qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ld_sync_def, SUBSET_DEF, MEM_MAP, EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[]) >>
+  `ld_charge (f::fs) + 1 <= ctx_dload_count C` by
+    (irule ld_configured_charge_fresh_bound >> metis_tac[]) >>
+  `dload_headroom_ok C fn inst s` by
+    (irule ld_sync_source_mem_inv >> metis_tac[]) >>
+  drule ld_sync_frontier >> strip_tac >>
+  gvs[lowerDloadDefsTheory.dload_headroom_ok_def] >> decide_tac
+QED
+
+Theorem ld_sync_scratch_cached_bound:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  FLOOKUP s.vs_allocas ai = NONE /\ FLOOKUP t.vs_allocas ai = SOME (b,n) ==>
+  n = 32 /\ b+32 <= t.vs_alloca_next
+Proof
+  strip_tac >> drule ld_sync_active >> simp[] >> strip_tac >>
+  `n = 32` by metis_tac[ld_maps_target, optionTheory.NOT_SOME_NONE] >>
+  gvs[ld_intervals_def] >> metis_tac[]
+QED
