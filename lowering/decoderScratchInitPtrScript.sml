@@ -87,7 +87,7 @@ Proof
 QED
 
 (* Source-valid caller of the joint physical/ghost initializer. *)
-Theorem calldata_scratch_array_initialize_ptr:
+Theorem calldata_scratch_array_initialize_clean_ptr:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) st = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -118,6 +118,8 @@ Theorem calldata_scratch_array_initialize_ptr:
     ptr_covers H u root actual (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
     op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
     b <= slot /\ slot + 32 <= b + cap /\ slot + 32 < dimword (:256) /\
+    DISJOINT {a | d <= a /\ a < d + 32} u.t_mem /\
+    DISJOINT {a | slot <= a /\ a < slot + 32} u.t_mem /\
     u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial /\
@@ -162,6 +164,51 @@ Proof
   gvs[abi_decoder_array_init_post_def, abi_scratch_decoder_input_def,
     abi_scratch_decoder_ranges_def, abi_decoder_valid_array_memory_def,
     abi_decoder_child_scratch_def, abi_decode_source_def, mload_def,
-    lookup_var_def, ptr_covers_def, SUBSET_DEF] >>
+    lookup_var_def, ptr_covers_def, SUBSET_DEF, DISJOINT_DEF, EXTENSION] >>
   drule abi_decoder_budget_word_bound >> decide_tac
+QED
+
+(* Compatibility projection: initialization has one operational proof. *)
+Theorem calldata_scratch_array_initialize_ptr:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+    (abi_embedded_static_size ce.ce_struct_fields ty) st = (setup,loop_st) /\
+  abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w)
+    source_base d first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  fn_has_code st loop_st func /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+  op_taint tn src = {} /\ allocas_from lower initial /\ lower <= initial.vs_alloca_next /\
+  ~ctx_has_dalloca ctx ==>
+  ?actual slot H u q.
+    abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w)
+      source_base d first last b cap actual /\
+    abi_decoder_valid_array_memory CALLDATALOAD bs tv vs source_base d 0 actual /\
+    abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
+      limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
+    FLOOKUP actual.vs_allocas (loop_st.cs_next_id-2) = SOME (slot,32) /\
+    eval_operand (FST setup) actual = SOME (n2w slot) /\ mload slot actual = 0w /\
+    eval_operand (SND setup) actual = SOME (n2w (LENGTH vs)) /\
+    abi_decoder_operand_live loop_st.cs_next_var (FST setup) /\
+    actual.vs_current_bb = loop_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\ ~actual.vs_halted /\
+    abi_decode_sim ctx func initial actual /\
+    FST setup = Var q /\ ptr_covers H u q actual 32 /\
+    ptr_covers H u root actual (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
+    b <= slot /\ slot + 32 <= b + cap /\ slot + 32 < dimword (:256) /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all calldata_scratch_array_initialize_clean_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`actual`, `slot`, `H`, `u`, `q`] >> asm_rewrite_tac[]
 QED
