@@ -1351,7 +1351,7 @@ Proof
 QED
 
 
-Theorem compile_copy_memory_dynamic_shape[local]:
+Theorem compile_copy_memory_dynamic_shape:
   !internal dst src len.
     shape_step internal compiler_label
       (\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st len)
@@ -1582,7 +1582,7 @@ Proof
      stmt_shape_emit_simp)]
 QED
 
-Theorem compile_select_shape[local]:
+Theorem compile_select_shape:
   !internal cond_op then_op else_op.
     shape_step internal compiler_label
       (\st. plain_operand st cond_op /\ plain_operand st then_op /\
@@ -2198,7 +2198,7 @@ Proof
   simp[compile_memory_to_transient_def, compile_word_copy_loop_any_loc_shape]
 QED
 
-Theorem compile_slot_to_memory_shape[local]:
+Theorem compile_slot_to_memory_shape:
   !internal src dst n loc.
     shape_step internal compiler_label
       (\st. plain_operand st src /\ plain_operand st dst)
@@ -3030,7 +3030,7 @@ Resume compile_abi_encode_shape[dyn_exit]:
   irule shape_step_bind >> qexists_tac `\v st. plain_operand st v` >> conj_tac
   >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit
 QED
-Finalise compile_abi_encode_shape[local]
+Finalise compile_abi_encode_shape
 
 
 Theorem compile_encode_log_topic_shape[local]:
@@ -3288,7 +3288,7 @@ Proof
   simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
 QED
 
-Theorem shape_step_frame_from[local]:
+Theorem shape_step_frame_from:
   !R internal P m Q PP QQ.
     shape_stable R /\ shape_step internal compiler_label P m Q /\
     (!st. PP st ==> R st /\ P st) /\ (!x st. R st /\ Q x st ==> QQ x st) ==>
@@ -3350,7 +3350,7 @@ Proof
   simp[is_extcode_def, extcode_addr_expr_def, supported_expr_exists_def]
 QED
 
-Theorem shape_step_uncurry[local]:
+Theorem shape_step_uncurry:
   shape_step internal LP P m Q /\
   (!x. shape_step internal LP (Q x) (k x) R) ==>
   shape_step internal LP P (\st. UNCURRY k (m st)) R
@@ -3363,7 +3363,7 @@ Proof
   qexists_tac `Q` >> simp[]
 QED
 
-Theorem invalid_expr_call_shape[local]:
+Theorem invalid_expr_call_shape:
   shape_step internal compiler_label (\st. T) (invalid_expr_call ty)
     (\v st. value_shape_ok st v)
 Proof
@@ -3461,7 +3461,7 @@ Proof
   simp[invalid_expr_call_shape]
 QED
 
-Theorem shape_step_emit_op_plain[local]:
+Theorem shape_step_emit_op_plain:
   !internal R opc ops.
   shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
   (!st id outs. R st /\ EVERY (plain_operand st) ops ==>
@@ -3478,7 +3478,7 @@ Proof
   simp[] >> gvs[EVERY_MEM, label_or_plain_def]
 QED
 
-Theorem shape_step_emit_inst_guarded_framed[local]:
+Theorem shape_step_emit_inst_guarded_framed:
   shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
   (!st. R st ==> EVERY (plain_operand st) (MAP Var outs)) /\
   (!st id. R st /\ EVERY (label_or_plain st) ops ==>
@@ -3495,7 +3495,7 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
-Theorem shape_step_emit_void_plain[local]:
+Theorem shape_step_emit_void_plain:
   shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
   (!st id. R st /\ EVERY (plain_operand st) ops ==>
      lowered_inst_ok internal (mk_inst id opc ops [])) ==>
@@ -3517,7 +3517,7 @@ Proof
   simp[EVERY_MEM, label_or_plain_def]
 QED
 
-Theorem compile_alloc_buffer_shape_framed[local]:
+Theorem compile_alloc_buffer_shape_framed:
   shape_stable R ==>
   shape_step internal compiler_label R (compile_alloc_buffer nbytes)
     (\buf st. R st /\ plain_operand st buf.buf_operand)
@@ -4836,7 +4836,7 @@ fun shape_unwrap_value_tac frame =
   irule_at Any shape_step_frame >> irule_at Any unwrap_value_shape >>
   qexists_tac frame >> simp[];
 
-Theorem lower_value_callback_shape[local]:
+Theorem lower_value_callback_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
@@ -5012,7 +5012,7 @@ Resume compile_concat_shape[fixed]:
 QED
 Finalise compile_concat_shape[local]
 
-Theorem compile_multi_vvs_shape[local]:
+Theorem compile_multi_vvs_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) ==>
@@ -6342,7 +6342,7 @@ Resume compile_stage_intcall_args_shape_under[buffer]:
 QED
 Finalise compile_stage_intcall_args_shape_under[local]
 
-Theorem compile_materialize_vv_shape_under[local]:
+Theorem compile_materialize_vv_shape_under:
   shape_stable R ==>
   shape_step internal compiler_label
     (\st. R st /\ cenv_shape_ok st cenv /\ value_shape_ok st vv)
@@ -6480,7 +6480,7 @@ Proof
   qx_gen_tac `result_op` >> simp[shape_step_def, comp_return_def, shape_extends_refl]
 QED
 
-Theorem compile_ext_call_kwargs_shape[local]:
+Theorem compile_ext_call_kwargs_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) ==>
@@ -6522,7 +6522,7 @@ Proof
   rpt strip_tac >> rpt (IF_CASES_TAC >> simp[])
 QED
 
-Theorem compile_extcall_store_values_shape_under[local]:
+Theorem compile_extcall_store_values_shape_under:
   !vs offset R. shape_stable R ==>
   shape_step internal compiler_label
     (\st. R st /\ cenv_shape_ok st cenv /\ plain_operand st buf_op /\ EVERY (value_shape_ok st o FST) vs)
@@ -7525,7 +7525,7 @@ fun shape_raw_name_tac frame tidy vvname opname =
   qx_gen_tac opname >> simp[];
 
 
-Theorem shape_step_as_stack_val[local]:
+Theorem shape_step_as_stack_val:
   shape_step internal compiler_label P m (\op st. plain_operand st op) ==>
   shape_step internal compiler_label P (\st. as_stack_val ty (m st))
     (\v st. value_shape_ok st v)

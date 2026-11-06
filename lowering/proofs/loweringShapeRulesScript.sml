@@ -1163,7 +1163,7 @@ Proof
        stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Theorem shape_base_step_emit_op_guarded[local]:
+Theorem shape_base_step_emit_op_guarded:
   !internal LP P opc ops.
     shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
@@ -1178,7 +1178,7 @@ Proof
   metis_tac[shape_stable_def]
 QED
 
-Theorem shape_base_step_emit_inst_guarded[local]:
+Theorem shape_base_step_emit_inst_guarded:
   !internal LP P opc ops outs.
     shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
@@ -1193,7 +1193,7 @@ Proof
   metis_tac[shape_stable_def]
 QED
 
-Theorem shape_base_step_extcall_revert[local]:
+Theorem shape_base_step_extcall_revert:
   !internal LP R.
     shape_stable R ==>
     shape_base_step internal LP R
