@@ -15,10 +15,6 @@
  *     its operands' judgments
  *
  * ADMITTED:
- *   expr_sim_inv_func_return_type — cenv.ce_func_return_type is
- *     build_func_return_type of the program.  Held for the
- *     shared-interface wave that adds it to expr_sim_inv_def; only
- *     extcall_request_setup uses it.
  *   vv_post_storage_live — what the conjunct
  *     (~expr_has_effect e ==> vv_storage_live cx vv es' s) that vv_post_def
  *     is to gain gives, written out: an effect-free operand's storage or
@@ -46,7 +42,7 @@
 Theory exprSimExtCallCase
 Ancestors
   list rich_list loweringPosts supportedExprTraverse exprSimHypsDefs exprSimHyps vyperAST
-  vyperInterpreter vyperState exprSimDefs compileVyper
+  vyperInterpreter vyperState exprSimDefs
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -68,22 +64,6 @@ Proof
   cheat
 QED
 
-(* The compile environment's return types are the program's: an internal
-   call's lowered value type (lowered_value_type) is its declared return
-   type.  Only extcall_request_setup may use it, for an internal-call
-   default. *)
-Theorem expr_sim_inv_func_return_type:
-  !cenv cx env es.
-    expr_sim_inv cenv cx env es ==>
-    ?tops. get_module_code cx NONE = SOME tops /\
-           cenv.ce_func_return_type = build_func_return_type tops
-Proof
-  (* Held for the shared-interface wave that adds this conjunct to
-     expr_sim_inv_def; bodySim and bodySimStmtCases already carry it as a
-     hypothesis. *)
-  cheat
-QED
-
 (* Source boundary: positional locations are read only after kwargs. *)
 Theorem eval_extcall_stages:
   eval_expr cx (Call ann (ExtCall static skip sig opts) args dflt) =
@@ -101,10 +81,10 @@ QED
 (* ===== The split: request, call step, return ===== *)
 
 (* The default operand of a call that has default_return_value: none on a
-   void call; its value, typed both at default_ty (the lowered type it is
-   stored from) and at the call's return type (the default expression's
-   type), with default_ty widening to the return type; and, for a memory
-   default, a region below the next alloca, so no later alloca overlaps it.
+   void call; its type default_ty (the lowered type it is stored from) is
+   the return type or, for bytestrings, another bytestring type; its value
+   is typed at both; and, for a memory default, a region below the next
+   alloca, so no later alloca overlaps it.
    has_default is the lowering's flag, default_opt the source's keyword
    value. *)
 Definition extcall_default_ready_def:
@@ -113,9 +93,10 @@ Definition extcall_default_ready_def:
     (has_default <=> IS_SOME default_opt) /\
     (ret_type = NoneT ==> ~has_default) /\
     !d. default_opt = SOME d ==>
+        (default_ty = ret_type \/
+         is_bytestring_type default_ty /\ is_bytestring_type ret_type) /\
         ?tv rtv w. evaluate_type (get_tenv cx) default_ty = SOME tv /\
                evaluate_type (get_tenv cx) ret_type = SOME rtv /\
-               type_widens_to (get_tenv cx) default_ty ret_type /\
                value_has_type tv d /\ val_wf tv d /\
                value_has_type rtv d /\ val_wf rtv d /\
                eval_operand default_op t = SOME w /\
