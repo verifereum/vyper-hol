@@ -1068,8 +1068,8 @@ Definition step_inst_base_def:
               | _ => Error "log: undefined operand")
         | _ => Error "log requires Lit topic_count as first operand")
 
-    (* Selfdestruct: transfer balance to beneficiary, then halt.
-       Deprecated post-Cancun but still defined in Venom IR. *)
+    (* EIP-6780: transfer balance; only transaction-created accounts are
+       zeroed and scheduled for deletion, including a self-beneficiary. *)
     | SELFDESTRUCT =>
         if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
           Abort ExHalt_abort (halt_state (set_returndata [] s)) else
@@ -1082,13 +1082,15 @@ Definition step_inst_base_def:
                 let beneficiary = w2w addr in
                 let accts = s.vs_accounts in
                 let self_acct = lookup_account self accts in
-                let ben_acct = lookup_account beneficiary accts in
-                let accts' = (\a. if a = self then
-                                    self_acct with balance := 0
-                                  else if a = beneficiary then
-                                    ben_acct with balance := ben_acct.balance + bal
-                                  else accts a) in
-                Halt (halt_state (set_returndata [] (s with vs_accounts := accts')))
+                let transferred = transfer_value self beneficiary bal accts in
+                let created = s.vs_call_ctx.cc_created_in_tx in
+                let accts' = if created then
+                    update_account self (self_acct with balance := 0) transferred
+                  else transferred in
+                Halt (halt_state (set_returndata [] (s with <|
+                  vs_accounts := accts';
+                  vs_pending_deletions := if created then
+                    self :: s.vs_pending_deletions else s.vs_pending_deletions |>)))
             | NONE => Error "selfdestruct: undefined operand")
         | _ => Error "selfdestruct requires 1 operand")
 
