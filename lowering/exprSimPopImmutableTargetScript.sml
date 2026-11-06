@@ -8,8 +8,6 @@
  *   body_imm_var_type     — in a body whose compile env is the main
  *                           module's, an assignable immutable has its
  *                           declared type in ce_module_var_type.
- *   body_pop_nested_immutable_module_case — RESIDUAL (may be false): the
- *                           same for another module.
  *   imm_place_at,
  *   imm_target_post       — where a target rooted at an initialized
  *                           immutable points: k bytes into the
@@ -109,22 +107,6 @@ Proof
   `FLOOKUP env.bare_global_assignable (NONE,id) = SOME ty` by
     (gvs[bare_global_assignable_complete_def] >> res_tac >> gvs[]) >>
   gvs[body_inv_def] >> drule_all build_var_type_map_mem >> simp[]
-QED
-
-(* RESIDUAL (may be false as stated until body_inv records
-   cenv.ce_module = NONE, which build_compile_env sets): a nested pop on
-   an immutable in the constructor, in a body whose compile env names
-   another module.  body_inv gives ce_module_var_type only at
-   (NONE,id), and expr_sim_inv puts the immutable at ce_module, so
-   pop_nested_sim's root-type premise does not follow. *)
-Theorem body_pop_nested_immutable_module_case:
-  !cx bt tops ctx func cenv env ann ty es.
-    body_inv tops ctx cenv cx /\ body_base_target_ok cx bt /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    immutable_root cx bt /\ cx.in_deploy /\ cenv.ce_module <> NONE ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
-Proof
-  cheat
 QED
 
 (* The place pv is at w, of type ty: an immutable of the module being

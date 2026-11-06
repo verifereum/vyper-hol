@@ -43,11 +43,15 @@ Ancestors
        ALLOCAs, and the store changes mem_bytes_at 0 64, so vv_post's
        alloca frame fails.  (Execution records no such entry: the
        immutable base comes from compile_fixed_region_with_id's ASSIGN.)
-   The fix: pairwise disjointness of the initialized immutables' regions
-   (as immutable_section_layout gives) in expr_sim_inv or stmt_state_rel,
-   and immutable_alloca_sep's clause 2 widened to every vs_allocas entry.
-   The target walk, imm_target_walk in exprSimPopImmutableTarget, does
-   not need either. *)
+   (b) is fixed: immutable_decl_sep's clause 2 covers every vs_allocas
+   entry.  (a) is not yet: bare_globals_layout's disjointness clause is
+   keyed on env.bare_globals, while immutables_rel ranges over every
+   ImmutableLoc entry of ce_module_vars, and expr_sim_inv does not say
+   those entries are in bare_globals (at entry they are: ce_module_vars
+   comes from add_immutable_locations over the declarations, and
+   bare_globals_complete lists every declared immutable).  The fix is
+   that clause in bare_globals_layout.  The target walk, imm_target_walk
+   in exprSimPopImmutableTarget, does not need it. *)
 Theorem pop_nested_immutable_deploy_pure_sim:
   !ctx func cenv cx env ann bt ty es src id nocalls.
     cx.in_deploy /\ cenv.ce_is_ctor /\
@@ -84,30 +88,4 @@ Proof
   rpt strip_tac >> Cases_on `EVERY pure_expr (target_indices bt)`
   >- (irule pop_nested_immutable_deploy_pure_sim >> metis_tac[]) >>
   irule pop_nested_immutable_deploy_impure_index_case >> metis_tac[]
-QED
-
-(* RESIDUAL, FALSE as stated: the expression-level case, with expr_body_pre
-   alone, as the cut stated pop_nested_immutable_deploy_sim.  Admitted until
-   expr_sim_inv carries cenv.ce_is_ctor <=> cx.in_deploy and the
-   assignable immutables' declared types in ce_module_var_type, when it
-   follows from pop_nested_immutable_deploy_sim (the indices' judgments
-   from expr_sim_below, as compile_pop_nested_sim has them).
-   Counterexample without the first: cx.in_deploy with
-   cenv.ce_is_ctor = F, target self.s.a for an initialized immutable
-   struct s whose DynArray field a is nonempty.  stmt_state_rel's
-   immutables_rel then relates the data section, the length loads by
-   DLOAD, and compile_ptr_store F emits INVALID for the length store, so
-   the fragment aborts while the source pop returns its element.  Without
-   the second, ce_module_var_type (src,id) = NONE leaves the target's place
-   type NONE, and the lowering takes a uint256 element. *)
-Theorem pop_nested_immutable_deploy_expr_case:
-  !ctx func cenv cx env ann bt ty es src id.
-    cx.in_deploy /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = TopLevelNameTarget (src,id) /\
-    (!ts. get_module_code cx src = SOME ts ==>
-          find_var_decl_by_name id ts = NONE) ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
-Proof
-  cheat
 QED

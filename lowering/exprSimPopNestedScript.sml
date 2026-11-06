@@ -146,6 +146,41 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
+(* In the constructor, a nested pop's immutable root is assignable (its
+   target types, and a bare global that is not assignable has a storage
+   declaration), so expr_sim_inv's bare_globals_layout gives
+   pop_nested_sim's constructor premises: the compile env is the
+   constructor's exactly when the context is in deploy, and the root's
+   declared type is in ce_module_var_type. *)
+Theorem pop_nested_immutable_root_ctor:
+  !cenv cx env es ann bt src id.
+    expr_sim_inv cenv cx env es /\ well_typed_expr env (Pop ann bt) /\
+    target_root bt = TopLevelNameTarget (src,id) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) ==>
+    (cenv.ce_is_ctor <=> cx.in_deploy) /\
+    !ty0. FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
+          cenv.ce_module_var_type (src,id) = SOME ty0
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env_context_consistent env cx` by
+    fs[expr_sim_inv_def, env_consistent_def] >>
+  `bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
+     cenv.ce_module_vars cx env.bare_globals env.bare_global_assignable` by
+    fs[expr_sim_inv_def] >>
+  `!ty0. FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
+         FLOOKUP env.bare_globals (src,id) = SOME ty0` by
+    (fs[env_context_consistent_def] >> metis_tac[]) >>
+  `?ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty` by
+    (drule well_typed_expr_Pop_dynamic_target >> strip_tac >>
+     Cases_on `type_place_target env (TopLevelNameTarget (src,id))`
+     >- (qspecl_then [`env`, `bt`] mp_tac target_root_untyped >> simp[]) >>
+     gvs[type_place_target_TopLevelNameTarget] >>
+     rename1 `FLOOKUP env.toplevel_vtypes _ = SOME vt` >> Cases_on `vt` >>
+     fs[env_context_consistent_def] >> res_tac >> gvs[]) >>
+  fs[bare_globals_layout_def] >> metis_tac[]
+QED
+
 Theorem target_root_cases[local]:
   !bt. (?id. target_root bt = NameTarget id) \/
        (?src id. target_root bt = TopLevelNameTarget (src,id))
