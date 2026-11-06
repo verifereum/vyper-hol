@@ -4,7 +4,7 @@
 Theory bodyMemTbExtract32
 Ancestors
   bodyMemoryPreds bodyMemTbExtract32Held bodyMemTbExtract32Load
-  bodyMemTbExtract32Action bodyMemTbExtract32Cuts
+  bodyMemTbExtract32Action bodyMemTbExtract32TypedSuffix
 
 Theorem body_type_builtin_extract32_ready_mem_case:
   !cx v11 typ src off m k.
