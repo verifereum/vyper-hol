@@ -1,6 +1,6 @@
 Theory makeSsaCurrentRuntime
 Ancestors
-  o1FrameLockstep venomExecSemantics venomState
+  o1FrameLockstep venomExecSemantics venomState venomWf
 
 Definition current_output_slots_def:
   current_output_slots sg outs outs' sg1 <=>
@@ -108,4 +108,13 @@ Proof
   `lookup_var (EL k outs) t = SOME (EL k vals)` by
     (irule current_runtime_bind_lookup_slot >> simp[] >> metis_tac[]) >>
   gvs[]
+QED
+
+(* The source IR contract allows repeated INVOKE destinations. *)
+Theorem current_runtime_invoke_duplicate_outputs_probe:
+  inst_wf (inst with <| inst_opcode := INVOKE;
+    inst_operands := [Label "callee"]; inst_outputs := ["x"; "x"] |>) /\
+  ~current_output_slots sg ["x"; "x"] outs' sg1
+Proof
+  simp[venomWfTheory.inst_wf_def, current_output_slots_def]
 QED

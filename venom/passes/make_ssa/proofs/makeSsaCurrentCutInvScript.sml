@@ -204,7 +204,16 @@ Theorem current_cut_inv_block_entry_prefix:
               (LENGTH (collect_phis old_h.bb_instructions)) ==>
             IS_SOME (lookup_var v post)
 Proof
-  cheat
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by fs[current_wf_phi_context_def] >>
+  `?old_h. lookup_block h fn.fn_blocks = SOME old_h` by
+    (fs[venomWfTheory.fn_cfg_edge_def, venomWfTheory.wf_function_def] >>
+     `MEM h (venomInst$fn_labels fn)` by
+       metis_tac[venomWfTheory.fn_succs_closed_def] >>
+     gvs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
+  suspend "prefix_structure"
 QED
 
 Theorem current_collapsed_carrier_owned_name:
@@ -820,3 +829,77 @@ Resume current_cut_inv_ordinary_step[ordinary_runtime]:
 QED
 
 Finalise current_cut_inv_ordinary_step
+
+Resume current_cut_inv_block_entry_prefix[prefix_structure]:
+  `?eb. entry_block fn = SOME eb` by
+    (drule venomExecPropsTheory.lookup_block_MEM >>
+     Cases_on `fn.fn_blocks` >> simp[venomInstTheory.entry_block_def]) >>
+  `?new. lookup_block h renamed = SOME new` by
+    (drule current_wf_precleanup_labels >> strip_tac >>
+     `ALL_DISTINCT (MAP (\bb. bb.bb_label) renamed)` by
+       fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def] >>
+     `MEM h (MAP (\bb. bb.bb_label) renamed)` by
+       metis_tac[venomExecPropsTheory.lookup_block_MEM,
+         makeSsaHelperTheory.lookup_block_label, listTheory.MEM_MAP] >>
+     fs[listTheory.MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
+  `MEM new renamed /\ new.bb_label = h` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      makeSsaHelperTheory.lookup_block_label] >>
+  drule_all current_wf_precleanup_block_shape >> strip_tac >>
+  drule current_wf_precleanup_structural >> strip_tac >>
+  `lookup_block (current_event_label ev) fn.fn_blocks = SOME old_h` by simp[] >>
+  drule_all current_wf_certificate_actual_prefix >> strip_tac >>
+  `A h = current_block_annotations old_h pre` by metis_tac[] >>
+  `phi_prefix_length new.bb_instructions =
+    LENGTH pre + LENGTH (collect_phis old_h.bb_instructions)` by
+    (irule current_prefix_actual_endpoint >> metis_tac[]) >>
+  `LENGTH new.bb_instructions = LENGTH pre + LENGTH old_h.bb_instructions` by
+    (drule_all current_wf_phi_context_block_opcodes >> strip_tac >>
+     `LENGTH pre = LENGTH pre'` by
+       (qpat_x_assum `A h = current_block_annotations old_h pre` mp_tac >>
+        simp[current_block_annotations_def, current_inserted_annotations_def] >>
+        disch_then (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+     metis_tac[listTheory.LENGTH_MAP, listTheory.LENGTH_APPEND]) >>
+  qpat_assum `lookup_block h renamed = SOME new`
+    (mp_then Any mp_tac simplify_current_phis_if_lookup_shape) >>
+  disch_then (qspec_then `blocks_have_leading_phi fn.fn_blocks` mp_tac) >>
+  strip_tac >>
+  qexistsl_tac [`old_h`, `b'`, `pre`] >>
+  simp[] >>
+  suspend "prefix_maps"
+QED
+
+Resume current_cut_inv_block_entry_prefix[prefix_maps]:
+  qexists_tac `\k. current_prefix_map
+    (TAKE (LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) - k)
+      (DROP k b'.bb_instructions))
+    (current_cut_sg fn A renamed H events h
+      (LENGTH (collect_phis old_h.bb_instructions)))` >>
+  simp[current_prefix_map_nil] >>
+  `!k. phi_prefix_length b'.bb_instructions <= k /\
+       k <= LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) ==>
+       current_prefix_functional (current_prefix_back
+         (TAKE (LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) - k)
+           (DROP k b'.bb_instructions))
+         (current_cut_sg fn A renamed H events h
+           (LENGTH (collect_phis old_h.bb_instructions))))` by
+    (rpt strip_tac >> irule (cj 2 current_cut_actual_suffix_owner) >> metis_tac[]) >>
+  conj_tac >- suspend "prefix_phi_relation" >>
+  conj_tac >- suspend "prefix_copy_chain" >>
+  suspend "prefix_enter_runtime"
+QED
+
+Resume current_cut_inv_block_entry_prefix[prefix_phi_relation]:
+  cheat
+QED
+
+Resume current_cut_inv_block_entry_prefix[prefix_copy_chain]:
+  cheat
+QED
+
+Resume current_cut_inv_block_entry_prefix[prefix_enter_runtime]:
+  cheat
+QED
+
+Finalise current_cut_inv_block_entry_prefix
