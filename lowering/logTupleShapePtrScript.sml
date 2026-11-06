@@ -85,3 +85,37 @@ Proof
   qpat_x_assum `!i. MEM i _ ==> log_encode_safe_opcode _` drule >>
   simp_tac bool_ss [log_encode_safe_opcode_def] >> strip_tac >> gvs[is_terminator_def]
 QED
+
+(* Prefix code containment follows from actual phase equations, not merely the
+   instruction-list extension (which alone says nothing about blocks). *)
+Theorem log_tuple_dynamic_prefix_code:
+  compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,end_st) /\
+  EXISTS (\(_,_,_,dyn). dyn) infos /\
+  EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei) infos /\
+  abi_encode_complex_prefix infos st = (cb.buf_operand,b) /\
+  compile_alloc_buffer 32 st = (cb,a) /\
+  emit_void MSTORE [cb.buf_operand;
+    Lit (n2w (SUM (MAP (\(_,asz,_,_). asz) infos)))] a = ((),b) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 cb.buf_operand b = (ignored,c) /\
+  emit_op MLOAD [cb.buf_operand] c = (out,end_st) /\
+  fn_has_code st end_st func /\ end_st.cs_next_var <= limit_st.cs_next_var ==>
+  fn_has_code st a func /\ a.cs_next_var <= limit_st.cs_next_var
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all log_tuple_dynamic_code >> strip_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  drule abi_encoder_members_bounds >> strip_tac >>
+  `a.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  `cs_extends st a /\ cs_extends a b /\ cs_extends c end_st` by
+    (drule emit_op_same_blocks >> strip_tac >>
+     drule emit_void_same_blocks >> strip_tac >>
+     qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any assume_tac emit_op_same_blocks) >>
+     rpt conj_tac >> irule cs_extends_same_block >>
+     full_simp_tac bool_ss [same_blocks_def, inst_extends_def,
+       rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  `cs_extends a end_st` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_split]
+QED
