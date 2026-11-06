@@ -17,7 +17,7 @@ Theorem bulk_canonical_values[local]:
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) = DecDynArray ei abi_sz mem_sz F maxn /\
   ~dec_info_needs_clamp ei /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV xs)) ==>
+    root_di (ListV avs) (ArrayV (DynArrayV xs)) ==>
   static_layout_compatible ce env ty tv /\ all_have_type tv xs /\
   vyper_to_abi_same env ty xs = SOME avs /\ LENGTH xs <= maxn /\
   abi_sz = type_memory_size tv /\ mem_sz = type_memory_size tv /\
@@ -73,7 +73,7 @@ Theorem bulk_canonical_typed_sequence[local]:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) = DecDynArray ei abi_sz mem_sz F maxn /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV xs)) /\
+    root_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   sb + LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) (ListV avs)) < dimword (:256) /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
@@ -183,7 +183,7 @@ Theorem entry_canonical_bulk_owned_endpoint:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) = DecDynArray ei abi_sz mem_sz F maxn /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV xs)) /\
+    root_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   sb + LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) (ListV avs)) < dimword (:256) /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
