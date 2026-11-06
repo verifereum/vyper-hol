@@ -2,6 +2,7 @@
    at one operational endpoint. *)
 Theory entryReachBodyCanonicalLocalMembers
 Ancestors
+  entryReachBodyCertifiedProducer
   entryReachBodyCanonicalProducerBridge entryReachBodyCanonicalMemberEntry
   entryReachBodyCanonicalMembers entryReachBodyCanonicalArrayChild
   entryReachBodyEmptyMember entryReachBodyMemberPrefix entryReachBodyMemberSetup
@@ -24,7 +25,8 @@ Theorem entry_local_member_nonempty[local]:
   canonical_members_semantics ce env fulltys fulltvs fullavs fullvs sb d
     pretys pretvs preavs prevs (ty::tys) (tv::tvs) (av::avs) (v::vs) s /\
   type_to_abi_dec_info ce.ce_struct_fields ce ty <> DecComplex T [] /\
-  array_child_producer ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
+  entry_certified_child_producer cert ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
+  cert last /\
   ao = SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)) /\
   vo = SUM (MAP (type_memory_bytes ce) pretys) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) fulltys)) (ListV fullavs)) < dimword (:256) /\
@@ -65,13 +67,10 @@ Proof
   qpat_assum `fulltys = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `fullavs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   disch_then drule_all >> strip_tac >>
-  qpat_x_assum `array_child_producer _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o PURE_REWRITE_RULE [array_child_producer_def]) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
-  simp[] >>
-  disch_then (qspecl_then [`sb + abi_tuple_child_offset
-    (MAP (vyper_to_abi_type env) fulltys) fullavs (LENGTH pretys)`, `d+vo`, `u`] mp_tac) >>
-  simp[] >> strip_tac >>
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+    entry_certified_child_apply >>
+  disch_then (drule_at (Pat `entry_certified_child_producer _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
   `st.cs_next_var <= mid.cs_next_var` by
     (drule abi_decode_member_setup_counters >> simp[]) >>
   qpat_x_assum `array_child_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -152,7 +151,8 @@ QED
 Theorem entry_local_member_decode[local]:
   canonical_members_semantics ce env fulltys fulltvs fullavs fullvs sb d
     pretys pretvs preavs prevs (ty::tys) (tv::tvs) (av::avs) (v::vs) s /\
-  array_child_producer ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
+  entry_certified_child_producer cert ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
+  cert last /\
   ao = SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)) /\
   vo = SUM (MAP (type_memory_bytes ce) pretys) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) fulltys)) (ListV fullavs)) < dimword (:256) /\
@@ -268,9 +268,13 @@ Proof
 QED
 
 Theorem local_members_cons_step[local]:
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\
   canonical_members_semantics ce env fulltys fulltvs fullavs fullvs sb d
     pretys pretvs preavs prevs (ty::tys) (tv::tvs) (av::avs) (v::vs) s /\
-  array_child_producer ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
+  entry_certified_child_producer cert ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
+  cert last /\
   compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
     (abi_decoder_member_infos ce.ce_struct_fields ce (ty::tys))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
@@ -302,6 +306,10 @@ Proof
   strip_tac >> drule abi_decoder_member_cons_trace >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_member_cons_code >> strip_tac >>
+  `cert end_st` by
+    (qpat_x_assum `!a z elems ao vo. _`
+       (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _`)) >>
+     disch_then drule_all >> simp[]) >>
   drule_all abi_decoder_member_body_code >> strip_tac >>
   `oid NOTIN abi_decoder_ids middle.cs_next_id end_st.cs_next_id /\
    window_alloca_sites fn (abi_decoder_ids middle.cs_next_id end_st.cs_next_id) SUBSET sites` by
@@ -359,9 +367,12 @@ QED
 
 Theorem local_members_suffix[local]:
   !tys tvs avs vs pretys pretvs preavs prevs st last s.
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   canonical_members_semantics ce env fulltys fulltvs fullavs fullvs sb d
     pretys pretvs preavs prevs tys tvs avs vs s /\
-  (!i. i < LENGTH tys ==> array_child_producer ce env
+  (!i. i < LENGTH tys ==> entry_certified_child_producer cert ce env
     (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
     ctx fn oid root extent sites b cap site limit_st) /\
   compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
@@ -392,10 +403,10 @@ Proof
           abi_encoder_registered_effect_refl, canonical_members_semantics_def, Excl "enc_def"]) >>
   drule local_members_suffix_lengths >> strip_tac >>
   Cases_on `tvs` >- gvs[] >> Cases_on `avs` >- gvs[] >> Cases_on `vs` >- gvs[] >>
-  `array_child_producer ce env h h' h'' h''' ctx fn oid root extent sites b cap site limit_st` by
+  `entry_certified_child_producer cert ce env h h' h'' h''' ctx fn oid root extent sites b cap site limit_st` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   drule_all local_members_cons_step >> strip_tac >>
-  `!i. i < LENGTH tys ==> array_child_producer ce env
+  `!i. i < LENGTH tys ==> entry_certified_child_producer cert ce env
     (EL i tys) (EL i t) (EL i t') (EL i t'')
     ctx fn oid root extent sites b cap site limit_st` by
     (gen_tac >> strip_tac >>
@@ -418,6 +429,45 @@ Proof
   qexists_tac `t''''` >> asm_rewrite_tac[] >> conj_tac
   >- (irule local_members_effect_trans >> goal_assum (drule_at Any) >> simp[]) >>
   irule abi_encoder_registered_effect_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem entry_certified_local_members_endpoint:
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
+  abi_decoder_members ce env ce.ce_struct_fields tys tvs avs vs /\
+  mem_bytes_at sb
+    (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) =
+    enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
+  (!i. i < LENGTH tys ==> entry_certified_child_producer cert ce env
+    (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
+    ctx fn oid root extent sites b cap site limit_st) /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    (abi_decoder_member_infos ce.ce_struct_fields ce tys) 0 0 st = ((),last) /\
+  canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+    dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) st s /\
+  sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)) < dimword (:256) /\
+  d + SUM (MAP (type_memory_bytes ce) tys) < dimword (:256) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\ oid NOTIN sites /\
+  oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+  ?t. canonical_members_effect ctx fn sites d (SUM (MAP (type_memory_bytes ce) tys)) st s t /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) last t /\
+    tuple_in_memory vs tvs d t.vs_memory /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,SUM (MAP (type_memory_bytes ce) tys))] s t
+Proof
+  strip_tac >>
+  `canonical_members_semantics ce env tys tvs avs vs sb d
+     [] [] [] [] tys tvs avs vs s` by
+    simp[canonical_members_semantics_def, abi_decoder_members_def, val_in_memory_def] >>
+  drule_at (Pat `canonical_members_semantics _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    local_members_suffix >>
+  simp_tac bool_ss [MAP, SUM] >> disch_then drule_all >> simp[]
 QED
 
 Theorem entry_canonical_local_members_endpoint:
@@ -448,14 +498,98 @@ Theorem entry_canonical_local_members_endpoint:
       [(d,SUM (MAP (type_memory_bytes ce) tys))] s t
 Proof
   strip_tac >>
-  `canonical_members_semantics ce env tys tvs avs vs sb d
-     [] [] [] [] tys tvs avs vs s` by
-    simp[canonical_members_semantics_def, abi_decoder_members_def, val_in_memory_def] >>
-  drule_at (Pat `canonical_members_semantics _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    local_members_suffix >>
-  simp_tac bool_ss [MAP, SUM] >> disch_then drule_all >> simp[]
+  mp_tac (Q.INST [`cert` |-> `\z. T`] entry_certified_local_members_endpoint) >>
+  simp_tac bool_ss [entry_certified_child_unconditional] >>
+  disch_then drule_all >> simp[]
 QED
 
+Theorem entry_certified_local_complex_endpoint:
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
+  abi_decoder_members ce env ce.ce_struct_fields tys tvs avs vs /\
+  mem_bytes_at sb
+    (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) =
+    enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
+  (!i. i < LENGTH tys ==> entry_certified_child_producer cert ce env
+    (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
+    ctx fn oid root extent sites b cap site limit_st) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) st = ((),last) /\
+  canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+    dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) st s /\
+  sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)) < dimword (:256) /\
+  d + SUM (MAP (type_memory_bytes ce) tys) < dimword (:256) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\ oid NOTIN sites /\
+  oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+  ?t. canonical_members_effect ctx fn sites d (SUM (MAP (type_memory_bytes ce) tys)) st s t /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) last t /\
+    tuple_in_memory vs tvs d t.vs_memory /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,SUM (MAP (type_memory_bytes ce) tys))] s t
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, LET_THM]) >>
+  drule_all entry_certified_local_members_endpoint >> simp[]
+QED
+
+Theorem entry_certified_local_fixed_array_endpoint:
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
+  abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) di av v /\
+  mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Fixed n))) av))
+    (abi_decode_source CALLDATALOAD s) = enc (vyper_to_abi_type env (ArrayT ty (Fixed n))) av /\
+  (!avs vs. av = ListV avs /\
+    v = ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs)) /\
+    LENGTH vs = n /\ abi_decoder_members ce env ce.ce_struct_fields
+      (REPLICATE n ty) (REPLICATE n tv) avs vs ==>
+    !i. i < n ==> entry_certified_child_producer cert ce env ty tv (EL i avs) (EL i vs)
+      ctx fn oid root extent sites b cap site limit_st) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Fixed n))) st = ((),last) /\
+  canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+    dst src sb d (type_memory_bytes ce (ArrayT ty (Fixed n))) st s /\
+  sb + LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Fixed n))) av) < dimword (:256) /\
+  d + type_memory_bytes ce (ArrayT ty (Fixed n)) < dimword (:256) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\ oid NOTIN sites /\
+  oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+  ?t. canonical_members_effect ctx fn sites d (type_memory_bytes ce (ArrayT ty (Fixed n))) st s t /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d (type_memory_bytes ce (ArrayT ty (Fixed n))) last t /\
+    val_in_memory (ArrayTV tv (Fixed n)) v d t.vs_memory /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,type_memory_bytes ce (ArrayT ty (Fixed n)))] s t
+Proof
+  strip_tac >> drule_all abi_decoder_fixed_array_values >> strip_tac >>
+  `type_memory_bytes ce (ArrayT ty (Fixed n)) =
+    SUM (MAP (type_memory_bytes ce) (REPLICATE n ty))` by
+    simp[Once type_memory_bytes_def, map_replicate, SUM_REPLICATE] >>
+  `!i. i < LENGTH (REPLICATE n ty) ==> entry_certified_child_producer cert ce env
+    (EL i (REPLICATE n ty)) (EL i (REPLICATE n tv)) (EL i avs) (EL i vs)
+    ctx fn oid root extent sites b cap site limit_st` by
+    (simp[] >> rpt strip_tac >> simp[EL_REPLICATE] >>
+     qpat_x_assum `!avs vs. _` drule_all >> simp[]) >>
+  gvs[abi_decoder_fixed_array_infos, Once vyper_to_abi_type_def,
+      canonical_array_tuple, map_replicate, Excl "enc_def"] >>
+  drule_at (Pat `abi_decoder_members _ _ _ _ _ _ _`) entry_certified_local_complex_endpoint >>
+  simp[map_replicate, SUM_REPLICATE, Excl "enc_def"] >>
+  disch_then drule_all >> strip_tac >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule abi_decoder_fixed_array_memory >> simp[]
+QED
+
+(* The established unconditional interfaces are the trivial-certificate cases. *)
 Theorem entry_canonical_local_complex_endpoint:
   abi_decoder_members ce env ce.ce_struct_fields tys tvs avs vs /\
   mem_bytes_at sb
@@ -484,9 +618,9 @@ Theorem entry_canonical_local_complex_endpoint:
       [(d,SUM (MAP (type_memory_bytes ce) tys))] s t
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
-    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, LET_THM]) >>
-  drule_all entry_canonical_local_members_endpoint >> simp[]
+  mp_tac (Q.INST [`cert` |-> `\z. T`] entry_certified_local_complex_endpoint) >>
+  simp_tac bool_ss [entry_certified_child_unconditional] >>
+  disch_then drule_all >> simp[]
 QED
 
 Theorem entry_canonical_local_fixed_array_endpoint:
@@ -518,20 +652,8 @@ Theorem entry_canonical_local_fixed_array_endpoint:
       (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
       [(d,type_memory_bytes ce (ArrayT ty (Fixed n)))] s t
 Proof
-  strip_tac >> drule_all abi_decoder_fixed_array_values >> strip_tac >>
-  `type_memory_bytes ce (ArrayT ty (Fixed n)) =
-    SUM (MAP (type_memory_bytes ce) (REPLICATE n ty))` by
-    simp[Once type_memory_bytes_def, map_replicate, SUM_REPLICATE] >>
-  `!i. i < LENGTH (REPLICATE n ty) ==> array_child_producer ce env
-    (EL i (REPLICATE n ty)) (EL i (REPLICATE n tv)) (EL i avs) (EL i vs)
-    ctx fn oid root extent sites b cap site limit_st` by
-    (simp[] >> rpt strip_tac >> simp[EL_REPLICATE] >>
-     qpat_x_assum `!avs vs. _` drule_all >> simp[]) >>
-  gvs[abi_decoder_fixed_array_infos, Once vyper_to_abi_type_def,
-      canonical_array_tuple, map_replicate, Excl "enc_def"] >>
-  drule_at (Pat `abi_decoder_members _ _ _ _ _ _ _`) entry_canonical_local_complex_endpoint >>
-  simp[map_replicate, SUM_REPLICATE, Excl "enc_def"] >>
-  disch_then drule_all >> strip_tac >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  irule abi_decoder_fixed_array_memory >> simp[]
+  strip_tac >>
+  mp_tac (Q.INST [`cert` |-> `\z. T`] entry_certified_local_fixed_array_endpoint) >>
+  simp_tac bool_ss [entry_certified_child_unconditional] >>
+  disch_then drule_all >> simp[]
 QED
