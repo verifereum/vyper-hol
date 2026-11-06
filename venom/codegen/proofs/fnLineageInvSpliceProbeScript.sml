@@ -2,9 +2,9 @@ Theory fnLineageInvSpliceProbe
 Ancestors fnPlanLineage fnLineageInvBoundary codegenReadyCompute cfgTransform
   stackPlanGen stackPlanOps stackPlanTypes venomInst
 
-(* Local H outputs are killed before the backedge, unlike the dominating
-   parameters. Consuming the deep dead output t forces persistent spilling
-   of other, still-live H outputs before the nonjoin H -> B edge. *)
+(* Single-demand diagnostic candidate. Its intended burial mechanism is
+   contradicted by splice_loop_h_second_optimistic_swap below: the planner
+   promotes t back to the top after producing a. No retained spill is claimed. *)
 Definition splice_loop_fn_def:
   splice_loop_fn =
     let vs = ["a";"b";"c";"d";"e";"f";"g";"h";"i";
@@ -130,4 +130,33 @@ Proof
   CONV_TAC (computeLib.RESTR_EVAL_CONV
     [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``, ``splice_loop_fn``]) >>
   simp[]
+QED
+
+Theorem splice_loop_h_live_two:
+  live_vars_at (liveness_analyze splice_loop_fn) "H" 2 =
+    ["p_r";"p_q";"p_p";"p_o";"p_n";"p_m";"p_l";"p_k";
+     "p_j";"p_i";"p_h";"p_g";"p_f";"p_e";"p_d";"p_c";"p_b";"p_a";"cond";"a";"t"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem splice_loop_h_a_t_inequivalent:
+  ~operand_equiv (dfg_build_function splice_loop_fn) (Var "a") (Var "t")
+Proof
+  rewrite_tac[dfgDefsTheory.operand_equiv_def] >>
+  simp[Once dfgDefsTheory.normalize_operand_def] >>
+  EVAL_TAC
+QED
+
+Theorem splice_loop_h_second_optimistic_swap:
+  optimistic_swap_plan (dfg_build_function splice_loop_fn)
+    (mk_inst 22 ADD [Lit 0w; Lit 1w] ["a"])
+    (live_vars_at (liveness_analyze splice_loop_fn) "H" 2) F
+    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"; Var "a"]) =
+  ([SOSwap 1],
+    splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "a"; Var "t"])
+Proof
+  simp[splice_loop_h_live_two, optimistic_swap_plan_def, venomInstTheory.mk_inst_def,
+    splice_loop_h_a_t_inequivalent] >>
+  rewrite_tac[splice_loop_e_exact] >> EVAL_TAC
 QED
