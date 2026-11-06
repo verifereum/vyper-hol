@@ -20,7 +20,7 @@ Theorem compile_storage_copy_ptr_path:
   compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   copy_old_operand sa src /\ not_fresh_at sa dst /\
-  eval_operand src s = SOME a /\ op_prov G src = NONE /\ op_taint tn src = {} /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
   lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
   allocas_from 0 s /\ ~s.vs_halted /\ b+32*n < dimword(:256) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

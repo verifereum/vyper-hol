@@ -38,7 +38,7 @@ Theorem storage_copy_body_ptr_step:
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   dst NOTIN {cv;sv;vv;mv;dv;nv} /\
   (!x. src = Var x ==> x NOTIN {cv;sv;vv;mv;dv;nv}) /\
-  eval_operand src s = SOME a /\ op_prov G src = NONE /\ op_taint tn src = {} /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
   lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
   lookup_var cv s = SOME (n2w k) /\ op_prov G (Var cv) = NONE /\ op_taint tn (Var cv) = {} /\
   k < n /\ b+32*n < dimword(:256) ==>
@@ -63,7 +63,7 @@ Theorem storage_copy_body_ptr_step:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_body_source_endpoint >>
-  disch_then (qspecl_then [`PG`, `D`]
+  disch_then (qspecl_then [`PG`, `G`, `D`]
     (qx_choose_then `sl` (qx_choose_then `Gl` (qx_choose_then `tl` strip_assume_tac)))) >>
   `lookup_var cv sl = SOME (n2w k) /\ op_prov Gl (Var cv) = NONE /\
    op_taint tl (Var cv) = {}` by
@@ -173,7 +173,7 @@ Finalise storage_copy_body_ptr_step
 Definition storage_body_inv_def:
   storage_body_inv src dst cv writes loc a b n Gbase tnbase sbase k G tn s <=>
     storage_body_frame writes Gbase tnbase sbase G tn s /\
-    eval_operand src s = SOME a /\ op_prov G src = NONE /\ op_taint tn src = {} /\
+    eval_operand src s = SOME a /\ op_taint tn src = {} /\
     lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
     lookup_var cv s = SOME (n2w k) /\ op_prov G (Var cv) = NONE /\
     op_taint tn (Var cv) = {} /\ allocas_from 0 s /\ ~s.vs_halted /\
@@ -242,7 +242,7 @@ Proof
   qexistsl_tac [`t`, `H`, `tm`] >> simp[] >>
   `storage_body_frame writes G tn s H tm t` by
     (drule_all storage_body_frame_mono >> simp[]) >>
-  `eval_operand src t = SOME a /\ op_prov H src = NONE /\ op_taint tm src = {}` by
+  `eval_operand src t = SOME a /\ op_taint tm src = {}` by
     (drule storage_body_frame_operand >> disch_then (qspec_then `src` mp_tac) >> simp[]) >>
   `lookup_var dst t = SOME (n2w b)` by
     (drule storage_body_frame_register >> disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
