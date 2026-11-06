@@ -3,6 +3,7 @@ Ancestors
   lowerDloadProjectedReachability lowerDloadNormalData lowerDloadReachability
   lowerDloadRevertSuffix lowerDloadSavedExtension lowerDloadPhaseBoundary
   lowerDloadControlPosition lowerDloadOwnership lowerDloadDefs
+  lowerDloadConfiguredSuccessor
   lowerDloadIndexedStageEntry lowerDloadTopEntryControl ctxLookupAgreeHelpers
   contextCodegenRel venomExecSemantics venomInst venomExecProofs venomWf
   ptrDiscipline list finite_map pred_set words
@@ -489,3 +490,131 @@ Resume ld_recursive_entry_clause[data]:
 QED
 
 Finalise ld_recursive_entry_clause
+
+(* Entry history only: the checked theorem above keeps its expanded statement.
+   All subsequent operational clauses use the corrected single binding below.
+   The saved raw endpoint is independent of dispatcher postprocessing. *)
+val ld_entry_history_candidate = ld_recursive_candidate;
+val ld_entry_history_conclusion = concl ld_recursive_entry_clause;
+val ld_recursive_candidate =
+  let
+    val count = ref 0
+    fun saved_supply_eq tm =
+      is_eq tm andalso
+      (let val (l,r) = dest_eq tm in
+         is_var r andalso fst(dest_var r) = "sb" andalso
+         is_comb l andalso is_const (rator l) andalso
+         same_const (rator l) (rator ``out.fpo_supply``)
+       end handle HOL_ERR _ => false)
+    fun repair tm =
+      if is_conj tm andalso saved_supply_eq (rand(rator tm)) then
+        (count := !count + 1; repair (rand tm))
+      else if is_abs tm then
+        let val (v,b) = dest_abs tm in mk_abs(v,repair b) end
+      else if is_comb tm then mk_comb(repair(rator tm),repair(rand tm))
+      else tm
+    val corrected = repair ld_entry_history_candidate
+  in if !count = 1 then corrected
+     else raise Fail "expected exactly one saved raw/configured equality"
+  end;
+val _ = if aconv ld_entry_history_conclusion (concl ld_recursive_entry_clause)
+        then () else raise Fail "historical entry statement changed";
+val ld_recursive_clause_goals =
+  let
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses, _) = dest_imp body
+  in map (subst [p |-> ld_recursive_candidate]) (strip_conj clauses) end;
+
+Theorem ld_recursive_candidate_weaken[local]:
+  (^ld_entry_history_candidate) vs0 CT stk un gn j t ==>
+  (^ld_recursive_candidate) vs0 CT stk un gn j t
+Proof
+  BETA_TAC >>
+  rpt (FIRST [disch_then ACCEPT_TAC,
+              disch_then (ACCEPT_TAC o CONJUNCT2),
+              ho_match_mp_tac MONO_OR, ho_match_mp_tac MONO_AND,
+              ho_match_mp_tac MONO_EXISTS, ho_match_mp_tac MONO_ALL,
+              ho_match_mp_tac MONO_IMP, conj_tac, gen_tac]) >>
+  simp[]
+QED
+
+(* Only the operational binding is used below.  The historical entry clause
+   is consumed through ld_recursive_candidate_weaken, never rebound. *)
+val ld_recursive_inside =
+  let
+    val (args,body) = strip_abs ld_recursive_candidate
+    val (normal,_) = dest_disj body
+    val (ws,b) = strip_exists normal
+    val n = List.last ws
+    val code = hd (filter (fn v => fst(dest_var v) = "code") ws)
+    val bounded = list_mk_exists(ws,mk_conj(b,``SUC ^n < LENGTH ^code``))
+  in list_mk_abs(args,bounded) end;
+
+Theorem ld_active_lookup_el[local]:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) gn.fn_blocks) /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+  active_inst gn j t ==>
+  j = EL t.vs_inst_idx gb.bb_instructions
+Proof
+  rw[active_inst_def] >>
+  `lookup_block t.vs_current_bb gn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> simp[]) >> gvs[]
+QED
+
+Theorem ld_recursive_prefix_next:
+  o1_ctx_shape CS /\
+  (^ld_recursive_inside) vs0 CT stk un gn j t /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> strip_tac >>
+  `ld_target_prefix CT code ta ua n t un` by
+    asm_simp_tac (srw_ss()) [ld_target_prefix_empty] >>
+  `j = EL n code` by (asm_simp_tac (srw_ss()) [EL]) >>
+  `ld_target_prefix CT code ta ua (SUC n)
+     (z with vs_inst_idx := SUC t.vs_inst_idx)
+     (step_taint j t z un)` by
+    (rewrite_tac [ld_target_prefix_step_iff] >>
+     qexistsl_tac [`t`,`un`,`z`,`fuel`] >>
+     qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     qpat_x_assum `ld_target_prefix _ _ _ _ n _ _` mp_tac >>
+     simp[EL,ld_target_prefix_empty]) >>
+  `i.inst_opcode IN {DLOAD;DLOADBYTES}` by
+    (spose_not_then assume_tac >>
+     `i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES` by
+       fs[IN_INSERT,IN_SING] >>
+     qpat_x_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     qpat_x_assum `SUC n < LENGTH code` mp_tac >>
+     simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) gn.fn_blocks)` by
+    (drule o1_ctx_shape_distinct_block_labels >>
+     disch_then (mp_tac o SRULE [EVERY_MEM]) >>
+     disch_then (qspec_then `fn` mp_tac) >>
+     impl_tac >- simp[] >>
+     drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     pure_rewrite_tac [fn_labels_def] >>
+     disch_then SUBST1_TAC >> simp[]) >>
+  drule_all lower_dload_configured_prefix_labels >> strip_tac >>
+  qpat_x_assum `(z with vs_inst_idx := _).vs_current_bb = _` (assume_tac o SRULE []) >>
+  `lookup_block (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb
+     gn.fn_blocks = SOME gb` by
+    (qpat_x_assum `lookup_block ta.vs_current_bb _ = SOME gb` mp_tac >> simp[]) >>
+  drule_all ld_active_lookup_el >> strip_tac >>
+  drule_all lowerDloadPositionBoundaryTheory.ld_target_prefix_position >>
+  strip_tac >>
+  `j' = EL (SUC n) code` by
+    (qpat_x_assum `j' = EL _ _` mp_tac >> asm_rewrite_tac []) >>
+  disj1_tac >>
+  qexistsl_tac [`astk`,`gstk`,`k`,`L`,`AP`,`AG`,`tn`,`fn`,`i`,`s`,
+    `ta`,`ua`,`V`,`U`,`E`,`H`,`BP`,`BH`,`live`,`keys`,`A`,`suspended`,
+    `f`,`fa`,`fb`,`bb`,`gb`,`a0`,`a1`,`a2`,`a3`,`pre`,`post`,`p`,
+    `code`,`tail`,`bpre`,`bpost`,`qpre`,`qpost`,`supports`,`savedkeys`,
+    `s0`,`SUC n`] >>
+  asm_rewrite_tac [] >> simp[] >>
+  qexistsl_tac [`cpre`,`cpost`,`gpre`,`gpost`,`observed`,`out`] >>
+  asm_rewrite_tac []
+QED
