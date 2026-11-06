@@ -483,3 +483,41 @@ Proof
    simp[cs_extends_refl] >> pairarg_tac >>
    gvs[] >> metis_tac[cs_appends_store_multi_results, cs_appends_def])
 QED
+
+Theorem first_emission_extcall:
+  (!e ty a x b. MEM e args /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rty ty (ExtCall static skip (nm,tys,rt) opts) args defret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Cases_on `args` >> simp_tac (srw_ss()) [compile_call_def, LET_THM]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+      gen_tac >> simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (match_mp_tac first_emission_multi_vvs >> metis_tac[listTheory.MEM, rich_listTheory.MEM_TAKE]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (match_mp_tac first_emission_ext_call_kwargs >> metis_tac[listTheory.MEM, rich_listTheory.MEM_DROP_IMP]) >>
+  qx_gen_tac `kw` >> PairCases_on `kw` >>
+  simp_tac bool_ss [pairTheory.UNCURRY_DEF, pairTheory.FST, pairTheory.SND] >>
+  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF, pairTheory.FST, pairTheory.SND] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (Cases_on `kw1` >> simp_tac (srw_ss()) []
+      >- (ho_match_mp_tac first_emission_strong >> call_emit_tac) >>
+      simp[cs_extends_refl]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> MATCH_ACCEPT_TAC first_emission_external_call_kwargs) >>
+  gen_tac >> rpt gen_tac >> IF_CASES_TAC >> simp[cs_extends_refl]
+QED
