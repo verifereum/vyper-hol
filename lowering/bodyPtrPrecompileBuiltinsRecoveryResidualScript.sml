@@ -311,6 +311,8 @@ Theorem recovery_residual_success:
   (?co rest. s.vs_outcomes = co::rest /\ co.co_success) ==>
   ?t G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sf sb) /\
     eval_operand res t = SOME (typed_val_to_w256 (BaseTV AddressT)
       (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
         NONE => 0w | SOME addr => addr))) /\
@@ -411,6 +413,10 @@ Resume recovery_residual_success[finish]:
 QED
 
 Resume recovery_residual_success[pack_success]:
+  `LENGTH (emitted_insts sz sb) = 4` by
+    (drule computed_load_suffix_parts >> strip_tac >>
+     drule exprSimPrecompilesTheory.computed_suffix_shape >> strip_tac >> simp[]) >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   qpat_x_assum `G' = _` kall_tac >>
   qpat_x_assum `tn' = _` kall_tac >>
   qpat_x_assum `t' = _` kall_tac >>

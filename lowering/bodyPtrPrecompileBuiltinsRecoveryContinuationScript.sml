@@ -98,6 +98,7 @@ Theorem computed_load_suffix_clean_path:
     run_inst_seq (emitted_insts sm sb) s = OK t /\
     gas_path_ptr D lo ctx fn PG G tn s 1 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 4)) /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx /\
     op_prov G' res = NONE /\ op_taint tn' res = {} /\
     eval_operand res t = SOME (mem_word_at (w2n wo)
       (write_memory_with_expansion (w2n wo) (TAKE 32 data) s).vs_memory) /\
@@ -161,6 +162,8 @@ Resume computed_load_suffix_clean_path[endpoints]:
   >- (qpat_x_assum `run_inst_seq (_ ++ _) s = OK t` mp_tac >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ G2 tn2 _` mp_tac >> simp[]) >>
+  conj_tac >- gvs[venomStateTheory.update_var_def] >>
+  conj_tac >- gvs[venomStateTheory.update_var_def] >>
   conj_tac
   >- (qpat_x_assum `op_prov G2 _ = NONE` mp_tac >> simp[]) >>
   conj_tac
