@@ -31,20 +31,6 @@ Proof
   >> simp[read_result_def, raise_def]
 QED
 
-(* A stale child snapshot refutes an unrestricted read/selection equation.
-   This history is typed, but its child key is not indexed through a dynamic
-   array, as expr_sim_inv requires. *)
-Theorem fixed_array_snapshot_probe[local]:
-  let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) (Dynamic 2);
-      p = [ValueSubscript (IntV 0)];
-      hist = [(p ++ [ValueSubscript (IntV 0)], IntV 9);
-              (p, ArrayV (StaticArrayV [IntV 5; IntV 1]))]
-  in read_popped tv p hist = SOME (ArrayV (StaticArrayV [IntV 5; IntV 1])) /\
-     read_popped tv (p ++ [ValueSubscript (IntV 0)]) hist = SOME (IntV 9)
-Proof
-  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
-QED
-
 Theorem eval_expr_subscript_bind:
   eval_expr cx (Subscript ann obj idx) =
   bind (eval_expr cx obj) (\r.
