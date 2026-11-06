@@ -428,7 +428,7 @@ Proof
   Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
 QED
 
-Theorem DROP_EQ_CONS[local]:
+Theorem DROP_EQ_CONS:
   !l n h rest.
     DROP n l = h :: rest ==>
     n < LENGTH l /\ EL n l = h /\ DROP (SUC n) l = rest

@@ -123,7 +123,12 @@ Resume compile_expr_open_general[builtin]:
      simp[] >> disch_then irule >>
      rpt gen_tac >> strip_tac >>
      drule eval_builtin_head_success >> strip_tac >>
-     drule expr_body_pre_builtin_head >> disch_tac >>
+     drule expr_body_pre_builtin_head >>
+     impl_tac
+     >- (disj1_tac >> rpt strip_tac >>
+         gvs[supported_expr_def, supported_pure_expr_def,
+             supported_effect_expr_def, supported_builtin_form_def]) >>
+     disch_tac >>
      `supported_expr tops arg` by
        gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
            supported_pure_exprs_every] >>

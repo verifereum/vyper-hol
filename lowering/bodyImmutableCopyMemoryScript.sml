@@ -1,7 +1,7 @@
 (* Runtime immutable copying: actual DLOAD/MSTORE memory footprints. *)
 Theory bodyImmutableCopyMemory
 Ancestors
-  valueEncodingProps
+  valueEncodingProps memSafeRun
   exprSimCopy exprSimStorageCopy immutableCopyExecution bodyCopyMemory storageDecodeMemory fragExecMem instMemFrontier
   context compileEnv exprLoweringProps emitHelper emitHelperProps venomExecSemantics
   venomState venomInst words arithmetic list rich_list
@@ -24,7 +24,8 @@ Theorem body_immutable_copy_one_mem_ok:
   compile_imm_copy_to_memory F imm src dst (SUC 0) 0 sa = ((),sb) /\
   eval_operand dst s = SOME b /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
-  w2n b + 32 <= s.vs_alloca_next ==>
+  w2n b + 32 <= s.vs_alloca_next /\
+  (!a. eval_operand src s = SOME a ==> w2n a <= LENGTH s.vs_data_section) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   simp[compile_imm_copy_to_memory_def, compile_lit_byte_offset_def,
@@ -35,6 +36,8 @@ Proof
   simp[emitted_insts_def, DROP_APPEND] >>
   rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  conj_tac
+  >- (rw[inst_dload_in_section_def, mk_inst_def] >> metis_tac[]) >>
   simp[step_inst_base_def, exec_read1_def] >>
   Cases_on `eval_operand src s` >> simp[] >>
   rewrite_tac[run_inst_seq_mem_ok_last] >>
@@ -74,13 +77,15 @@ Proof
 QED
 
 Theorem body_immutable_load_mem_ok:
-  compile_imm_load_word F imm op sa = (r,sb) ==>
+  compile_imm_load_word F imm op sa = (r,sb) /\
+  (!a. eval_operand op s = SOME a ==> w2n a <= LENGTH s.vs_data_section) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   simp[compile_imm_load_word_def] >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
-  simp[run_inst_seq_mem_ok_last] >>
-  irule below_frontier_no_ranges >> simp[mk_inst_def]
+  simp[run_inst_seq_mem_ok_last] >> conj_tac
+  >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  rw[inst_dload_in_section_def, mk_inst_def] >> metis_tac[]
 QED
 
 Theorem body_immutable_store_mem_ok:
@@ -92,14 +97,21 @@ Proof
   simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE]
 QED
 
-Theorem body_copy_frame_frontier[local]:
+Theorem body_copy_frame_frontier:
   copy_runtime_frame sa s sb t ==> t.vs_alloca_next = s.vs_alloca_next
 Proof
   simp[copy_runtime_frame_def] >> strip_tac >>
   drule copy_static_fields >> simp[]
 QED
 
-Theorem body_copy_frame_mem_append[local]:
+Theorem body_copy_frame_data_section:
+  copy_runtime_frame sa s sb t ==> t.vs_data_section = s.vs_data_section
+Proof
+  simp[copy_runtime_frame_def] >> strip_tac >>
+  drule copy_static_fields >> simp[]
+QED
+
+Theorem body_copy_frame_mem_append:
   copy_runtime_frame sa s sm t /\ copy_runtime_frame sm t sb u /\
   run_inst_seq_mem_ok (emitted_insts sa sm) s /\
   run_inst_seq_mem_ok (emitted_insts sm sb) t ==>
@@ -117,7 +129,9 @@ Theorem body_immutable_one_mem_ok:
   copy_old_operand sa src /\ copy_old_operand sa dst /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
   w2n b + off + 32 <= s.vs_alloca_next /\
-  w2n b + off + 32 < dimword (:256) ==>
+  w2n b + off + 32 < dimword (:256) /\
+  w2n a + off + 32 <= LENGTH s.vs_data_section /\
+  w2n a + off + 32 < dimword (:256) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   simp[immutable_copy_one_def, immutable_comp_bind_cases] >> strip_tac >>
@@ -152,6 +166,13 @@ Proof
     (irule body_copy_frame_mem_append >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
      metis_tac[body_immutable_byte_offset_mem_ok]) >>
+  `t1.vs_data_section = s.vs_data_section` by
+    metis_tac[body_copy_frame_data_section] >>
+  `w2n (a + n2w off) <= LENGTH t1.vs_data_section` by
+    (`off < dimword (:256) /\ w2n a + off < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w]) >>
+  `run_inst_seq_mem_ok (emitted_insts s1 s2) t1` by
+    (drule_then irule body_immutable_load_mem_ok >> rw[] >> gvs[]) >>
   `run_inst_seq_mem_ok (emitted_insts s1 sb) t1` by
     (irule body_copy_frame_mem_append >>
      qexistsl [`s2`,`t2`] >> simp[] >>
@@ -166,7 +187,9 @@ Theorem body_immutable_copy_mem_ok:
     copy_old_operand sa src /\ copy_old_operand sa dst /\
     eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
     w2n b + off + 32 * n <= s.vs_alloca_next /\
-    w2n b + off + 32 * n < dimword (:256) ==>
+    w2n b + off + 32 * n < dimword (:256) /\
+    w2n a + off + 32 * n <= LENGTH s.vs_data_section /\
+    w2n a + off + 32 * n < dimword (:256) ==>
     run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   Induct
@@ -181,12 +204,14 @@ Proof
   `eval_operand src t = SOME a /\ eval_operand dst t = SOME b` by
     metis_tac[copy_runtime_frame_operand] >>
   `t.vs_alloca_next = s.vs_alloca_next` by metis_tac[body_copy_frame_frontier] >>
+  `t.vs_data_section = s.vs_data_section` by
+    metis_tac[body_copy_frame_data_section] >>
   `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
     (drule body_immutable_one_mem_ok >> disch_then irule >>
      goal_assum (drule_at Any) >> simp[MULT_SUC] >> decide_tac) >>
   `run_inst_seq_mem_ok (emitted_insts sm sb) t` by
     (first_x_assum drule >> disch_then irule >>
-     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+     goal_assum (drule_at Any) >> simp[] >> gvs[MULT_SUC]) >>
   drule_all copy_runtime_run >> strip_tac >>
   irule body_copy_frame_mem_append >> metis_tac[]
 QED

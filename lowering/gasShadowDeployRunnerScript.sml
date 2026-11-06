@@ -40,6 +40,14 @@ Proof
   drule gas_shadow_install_immutable_reservation >>
   disch_then (qspec_then `imm` assume_tac) >>
   drule gas_shadow_lowering_context_ok >> strip_tac >>
+  drule gasShadowUnitObservationsTheory.gas_shadow_unit_alloca_budget >>
+  strip_tac >>
+  `!c d. gas_shadow_context c d ==>
+         FILTER (\i. i.inst_opcode = DLOAD) (FLAT (MAP fn_insts c.ctx_functions)) =
+         FILTER (\i. i.inst_opcode = DLOAD) (FLAT (MAP fn_insts d.ctx_functions))`
+    by (rpt strip_tac >> irule gas_shadow_functions_filter_opc >> simp[] >>
+        fs[gas_shadow_context_def]) >>
+  pop_assum (fn th => drule th) >> strip_tac >>
   gvs[] >> Cases_on `lowering_context_ok (install_immutable_reservation imm x'0)` >>
-  simp[gas_shadow_unit_def]
+  simp[gas_shadow_unit_def] >> IF_CASES_TAC >> simp[gas_shadow_unit_def]
 QED

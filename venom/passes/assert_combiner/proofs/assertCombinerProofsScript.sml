@@ -1479,7 +1479,7 @@ Proof
   drule lift_result_weaken_UNIV >> strip_tac >>
   Cases_on `exec_block fuel ctx bb s1` >> gvs[lift_result_def] >>
   Cases_on `exec_block fuel ctx bb s2` >> gvs[lift_result_def] >>
-  Cases_on `exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s2` >>
+  Cases_on `exec_block fuel ctx (ac_transform_block (dfg_build_function fn) (ac_id_base fn) bb) s2` >>
   gvs[lift_result_def] >>
   metis_tac[state_equiv_trans, execution_equiv_trans,
             execution_equiv_ac_abort_equiv, ac_abort_equiv_trans]

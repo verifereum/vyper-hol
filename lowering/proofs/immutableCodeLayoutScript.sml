@@ -17,14 +17,6 @@ Proof
   pairarg_tac >> simp[]
 QED
 
-Theorem immutable_compiled_runtime_nonempty:
-  compile_vyper (K SOME) policy tops = SOME (deploy_bc,runtime_bc) ==>
-  runtime_bc <> []
-Proof
-  strip_tac >> drule compile_vyper_runtime_phases >> strip_tac >>
-  gvs[] >> drule immutable_runtime_codegen_nonempty >> simp[]
-QED
-
 Theorem immutable_installed_prefix_guard:
   codegen_assembly policy unit = SOME prog ==>
   ((~?tail. assemble prog ++ section = 0xEFw::tail) <=>
@@ -105,7 +97,7 @@ Proof
 QED
 
 (* unit_shape_ok rules out OFFSET, the only source of unbounded push
-   offsets, and call_state_rel bounds the code size, so codegen's output
+   offsets, and codegen_assembly bounds the code size, so codegen's output
    meets asm_encoding_wf. *)
 Theorem generated_entry_code_layout_shape:
   !tops prog am tx es cp policy unit.
@@ -114,8 +106,6 @@ Theorem generated_entry_code_layout_shape:
   code_layout_valid (entry_venom_state prog cp es)
 Proof
   rpt strip_tac >>
-  `LENGTH (assemble prog) < 65536` by
-    gvs[call_state_rel_def, immutableSectionRelTheory.installed_code_rel_def] >>
   drule_all codegen_assembly_asm_encoding_wf >> strip_tac >>
   metis_tac[generated_entry_immutable_code_layout]
 QED

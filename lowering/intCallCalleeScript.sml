@@ -1790,7 +1790,7 @@ Proof
   simp[internal_immutable_regions_def, immutables_rel_def] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   rename1 `FLOOKUP cenv.ce_module_vars _ = SOME (ImmutableLoc off)` >>
-  qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _ /\ _`
+  qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _`
     drule_all >> strip_tac >>
   qpat_x_assum `!name tv v off. _ /\ _ ==> val_wf _ _ /\ _`
     drule_all >> strip_tac >>
