@@ -104,9 +104,10 @@ Theorem raw_call_scalar_finish:
     regions_disjoint (w2n ro) 0 a len) /\
   (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint (w2n ro) 0 a len) /\
-  is_word_type ty /\ type_memory_bytes cenv (lowered_value_type cenv e) = 0 ==>
+  is_word_type ty ==>
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
-    ptr_val_ok cx ty (BoolV outcome.co_success) result H un t /\ ptr_buf_ok cenv e result H t /\
+    ptr_val_ok cx ty (BoolV outcome.co_success) result H un t /\
+    (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
     ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
     ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
@@ -125,8 +126,8 @@ Proof
       valueEncodingTheory.val_to_w256_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   `return (Var out) sb = (Var out,sb)` by simp[compileEnvTheory.comp_return_def] >>
   drule_all (raw_call_scalar_suffix |> Q.INST [`protected` |-> `protected`]) >> strip_tac >>
-  qpat_x_assum `!protected PG. _`
-    (qspecl_then [`protected`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `!protected e PG. _`
+    (qspecl_then [`protected`, `e`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`H`, `un`, `u`] >> simp[] >>
   drule_all (cj 2 gas_path_ptr_rules) >> simp[]
 QED
@@ -379,7 +380,8 @@ Proof
      `aw` |-> `n2w ob`, `off` |-> `ob`, `len` |-> `capacity`,
      `G` |-> `H`, `tn` |-> `un`, `flag` |-> `outcome.co_success`,
      `es` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
-  impl_tac >- (gvs[wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
+  impl_tac >- (gvs[wordsTheory.w2n_n2w] >>
+    conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK t')` by
     (drule_all (cj 2 gas_path_ptr_rules) >> simp[]) >>
   qexistsl_tac [`H'`, `un'`, `t'`] >> simp[] >>
@@ -419,7 +421,7 @@ Theorem raw_call_scalar_finish_outcome:
   (!name a len. local_region cenv es.scopes s name a len ==> regions_disjoint (w2n ro) 0 a len) /\
   (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint (w2n ro) 0 a len) /\
-  is_word_type ty /\ type_memory_bytes cenv (lowered_value_type cenv e) = 0 /\
+  is_word_type ty /\
   stat = flags.rcf_is_static /\ value_opt = (if flags.rcf_is_static then NONE else SOME amount) /\
   data = read_memory (w2n ao) (w2n az) s /\ flags.rcf_max_outsize = 0 /\ ~flags.rcf_revert_on_failure /\
   (!tail. eval_raw_call cx flags target data amount source_gas (es with gas_obs := tail) =
@@ -435,14 +437,15 @@ Theorem raw_call_scalar_finish_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v. res = INL (Value v) /\
-      ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
+      ptr_val_ok cx ty v result H un t /\
+      (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all raw_call_scalar_finish >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  disch_then (qspecl_then [`e`, `PG`] strip_assume_tac) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value (BoolV outcome.co_success))`,

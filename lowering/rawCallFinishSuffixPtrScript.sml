@@ -11,11 +11,11 @@ Theorem raw_call_scalar_suffix:
   stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ is_word_type ty /\
-  type_memory_bytes cenv (lowered_value_type cenv e) = 0 /\
   eval_operand op s = SOME (val_to_w256 v) /\
   op_taint tn op = {} /\ op_prov G op = NONE ==>
   gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn (OK s) /\
-  ptr_val_ok cx ty v result G tn s /\ ptr_buf_ok cenv e result G s /\
+  ptr_val_ok cx ty v result G tn s /\
+  (~is_word_type ty ==> ptr_buf_ok cenv e result G s) /\
   stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
   ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es protected s s /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -25,6 +25,30 @@ Proof
   simp[bodyPtrDefsTheory.ptr_val_ok_word, bodyPtrDefsTheory.ptr_buf_ok_def,
     wordArgsPtrTheory.ghost_kept_refl, exprSimWordArgsTheory.wb_frame_refl] >>
   irule (cj 1 gas_path_ptr_rules) >> simp[]
+QED
+
+(* Regression check: the actual scalar Call has a 32-byte type layout,
+   but its runtime result is a word, not a located memory buffer. *)
+Theorem raw_call_scalar_bool_layout[local]:
+  return op sa = (result,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ eval_operand op s = SOME (val_to_w256 (BoolV flag)) /\
+  op_taint tn op = {} /\ op_prov G op = NONE ==>
+  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn (OK s) /\
+  ptr_val_ok cx (BaseT BoolT) (BoolV flag) result G tn s /\
+  (~is_word_type (expr_type (Call (BaseT BoolT) (RawCallTarget flags) args ann)) ==>
+    ptr_buf_ok cenv (Call (BaseT BoolT) (RawCallTarget flags) args ann) result G s) /\
+  type_memory_bytes cenv (lowered_value_type cenv
+    (Call (BaseT BoolT) (RawCallTarget flags) args ann)) = 32
+Proof
+  strip_tac >>
+  `is_word_type (BaseT BoolT)` by simp[compileEnvTheory.is_word_type_def] >>
+  drule_all raw_call_scalar_suffix >>
+  disch_then (qspecl_then [`sa`,
+    `Call (BaseT BoolT) (RawCallTarget flags) args ann`, `PG`] strip_assume_tac) >>
+  simp[vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def,
+    exprLoweringTheory.lowered_value_type_def, compileEnvTheory.type_memory_bytes_def]
 QED
 
 Theorem raw_call_success_bytes_suffix:
@@ -131,7 +155,7 @@ Theorem raw_call_nonrevert_suffix:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ eval_operand (Var success) s = SOME (val_to_w256 (BoolV flag)) /\
   op_taint tn (Var success) = {} /\ op_prov G (Var success) = NONE /\
-  (n = 0 ==> is_word_type ty /\ type_memory_bytes cenv (lowered_value_type cenv e) = 0) /\
+  (n = 0 ==> is_word_type ty) /\
   (0 < n ==>
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv protected /\ ci_mono protected sa /\
@@ -161,7 +185,7 @@ Theorem raw_call_nonrevert_suffix:
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
     ptr_val_ok cx ty (if n = 0 then BoolV flag else
       ArrayV (TupleV [BoolV flag;BytesV (TAKE n s.vs_returndata)])) result H un t /\
-    ptr_buf_ok cenv e result H t /\
+    (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
     stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -169,7 +193,7 @@ Theorem raw_call_nonrevert_suffix:
 Proof
   strip_tac >> Cases_on `n = 0` >> gvs[]
   >- (drule_all raw_call_scalar_suffix >>
-      disch_then (qspecl_then [`protected`, `PG`] strip_assume_tac) >>
+      disch_then (qspecl_then [`protected`, `e`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`G`, `tn`, `s`] >> simp[]) >>
   mp_tac (raw_call_tuple_suffix_stage |> Q.INST [`bs` |-> `TAKE n s.vs_returndata`]) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
