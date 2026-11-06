@@ -897,6 +897,51 @@ Proof
   metis_tac[]
 QED
 
+Theorem alias_offset_reachable_use_witness:
+  codegen_ready_fn fn /\ MEM oi (fn_insts fn) /\
+  oi.inst_opcode = OFFSET /\ MEM v oi.inst_outputs ==>
+  ?ub ui endpoint use_opt path.
+    MEM ub fn.fn_blocks /\ MEM ui ub.bb_instructions /\
+    MEM (Var v) ui.inst_operands /\
+    lookup_block endpoint.bb_label fn.fn_blocks = SOME endpoint /\
+    def_available_at fn endpoint use_opt v /\
+    is_fn_path fn path /\ path <> [] /\
+    (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+    LAST path = endpoint.bb_label /\
+    ((ui.inst_opcode <> PHI /\ endpoint = ub /\ use_opt = SOME ui) \/
+     (ui.inst_opcode = PHI /\ use_opt = NONE /\
+      MEM (endpoint.bb_label,v) (phi_pairs ui.inst_operands) /\
+      fn_cfg_edge fn endpoint.bb_label ub.bb_label))
+Proof
+  strip_tac >>
+  `wf_function fn /\ def_dominates_uses fn /\ offset_outputs_used fn` by
+    gvs[codegen_ready_fn_def] >>
+  `?ui. MEM ui (fn_insts fn) /\ MEM (Var v) ui.inst_operands` by
+    (gvs[offset_outputs_used_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `?ub. MEM ub fn.fn_blocks /\ MEM ui ub.bb_instructions` by
+    (gvs[fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+         MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `?endpoint use_opt.
+    MEM endpoint fn.fn_blocks /\ def_available_at fn endpoint use_opt v /\
+    ((ui.inst_opcode <> PHI /\ endpoint = ub /\ use_opt = SOME ui) \/
+     (ui.inst_opcode = PHI /\ use_opt = NONE /\
+      MEM (endpoint.bb_label,v) (phi_pairs ui.inst_operands) /\
+      fn_cfg_edge fn endpoint.bb_label ub.bb_label))` by
+    (Cases_on `ui.inst_opcode = PHI`
+     >- (`phi_edge_uses_wf fn ub ui` by metis_tac[def_dominates_uses_def] >>
+         `?pred. MEM (pred,v) (phi_pairs ui.inst_operands)` by
+           metis_tac[phi_well_formed_var_pair, phi_edge_uses_wf_def] >>
+         gvs[phi_edge_uses_wf_def] >> metis_tac[]) >>
+     qexistsl_tac [`ub`, `SOME ui`] >> simp[] >>
+     metis_tac[def_dominates_uses_def]) >>
+  `lookup_block endpoint.bb_label fn.fn_blocks = SOME endpoint` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  `fn_reachable fn endpoint.bb_label` by
+    gvs[def_available_at_def, fn_dominates_def] >>
+  drule alias_reachable_first_visit >> strip_tac >>
+  qexistsl_tac [`ub`, `ui`, `endpoint`, `use_opt`, `path`] >> simp[]
+QED
+
 Theorem alias_phi_ready_postprefix_input:
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -8550,7 +8595,6 @@ Proof
   simp[] >> rewrite_tac[alias_buried_path_def] >>
   rpt (CONV_TAC buried_plan_stage) >> EVAL_TAC
 QED
-end
 
 Theorem alias_buried_four_inventory:
   (alias_buried_path F 4 F [4;3;1;0]).ps_stack =
@@ -8568,39 +8612,12 @@ Theorem alias_buried_backedge_state:
         REVERSE (TAKE n (MAP Var ["f0";"f1";"f2";"f3"])) ++ [Var "z"])
 Proof
   map_every qx_gen_tac [`n`, `b`, `phi`] >> strip_tac >>
-  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[]
-  >- (Cases_on `b` >> Cases_on `phi`
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi`
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi`
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi` >>
-      rewrite_tac[Ntimes alias_buried_path_def 4] >>
-      CONV_TAC (LHS_CONV (funpow 12 RAND_CONV computeLib.EVAL_CONV)) >>
-      CONV_TAC (LHS_CONV (funpow 11 RAND_CONV
-        (REWR_CONV alias_buried_plan_def))) >>
-      CONV_TAC (LHS_CONV (funpow 11 RAND_CONV
-        (computeLib.RESTR_EVAL_CONV [``generate_block_plan``]))) >>
-      CONV_TAC (LHS_CONV (funpow 9 RAND_CONV computeLib.EVAL_CONV)) >>
-      CONV_TAC (LHS_CONV (funpow 6 RAND_CONV computeLib.EVAL_CONV)) >>
-      CONV_TAC (LHS_CONV (funpow 5 RAND_CONV
-        (REWR_CONV alias_buried_plan_def))) >>
-      CONV_TAC (LHS_CONV (funpow 5 RAND_CONV
-        (computeLib.RESTR_EVAL_CONV [``generate_block_plan``]))) >>
-      CONV_TAC (LHS_CONV (funpow 5 RAND_CONV computeLib.EVAL_CONV)) >>
-      EVAL_TAC) >>
-  Cases_on `b` >> Cases_on `phi` >>
-  rewrite_tac[Ntimes alias_buried_path_def 2]
-  >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
-        (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC)
-  >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
-        (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC)
-  >- (CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
-        (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC) >>
-  CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV computeLib.EVAL_CONV))))))) >> EVAL_TAC
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[] >>
+  Cases_on `b` >> Cases_on `phi` >> simp[] >>
+  rewrite_tac[alias_buried_path_def] >>
+  rpt (CONV_TAC buried_plan_stage) >> EVAL_TAC
 QED
+end
 
 (* The buried name is dead on the backedge, but is not below every live
    slot: z is still below it. Thus clean_stack_plan includes it in physical
