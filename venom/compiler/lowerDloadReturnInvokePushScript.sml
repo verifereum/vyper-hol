@@ -156,4 +156,60 @@ QED
 val _ = List.app (fn th => if null (hyp th) then ()
         else raise Fail "paired setup effect has kernel hypotheses")
   [ld_setup_pair_effect, ld_setup_pair_vars, ld_setup_source_exists,
-   ld_invoke_callee_ambient];
+   ld_invoke_callee_ambient, ld_invoke_correlated_setup];
+
+(* Structural constructor: semantic entry/reachability is supplied separately. *)
+Theorem ld_sync_call_push:
+  ld_sync lo P C vs0 stk PG G tn fn calli s t A (f::fs) N /\
+  saved = <|cf_fn := fn; cf_inst := calli; cf_state := s;
+    cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> /\
+  g.lf_serial = N /\ g.lf_tv = tn1.t_var /\
+  g.lf_src.vs_allocas = FEMPTY /\ g.lf_tgt.vs_allocas = FEMPTY /\
+  g.lf_E = {} /\ ld_maps A g /\ ld_vars P A g /\
+  ld_intervals lo g.lf_src /\ ld_intervals lo g.lf_tgt /\
+  g.lf_src.vs_prev_bb = g.lf_tgt.vs_prev_bb /\
+  g.lf_src.vs_current_bb = g.lf_tgt.vs_current_bb /\
+  MEM g.lf_fn C.ctx_functions /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+  frame_reachable vs0 C (saved::stk)
+    (MAP (OPTION_MAP (ld_erase A)) g.lf_Q) (ld_erase A o_f g.lf_H)
+    tn1 g.lf_fn i g.lf_src /\
+  active_inst g.lf_fn i g.lf_src /\
+  ld_envelope g.lf_supply g.lf_fn g.lf_src g.lf_src.vs_inst_idx X p /\
+  g.lf_tgt.vs_inst_idx = p /\
+  ld_memory lo A tn1 g.lf_src g.lf_tgt /\
+  ld_nonghost tn1 g.lf_src g.lf_tgt ==>
+  ld_sync lo P C vs0 (saved::stk)
+    (MAP (OPTION_MAP (ld_erase A)) g.lf_Q) (ld_erase A o_f g.lf_H)
+    tn1 g.lf_fn i g.lf_src g.lf_tgt A (g::f::fs) (SUC N)
+Proof
+  strip_tac >>
+  `ld_charge (g::f::fs) = ld_charge (f::fs)` by
+    metis_tac[ld_charge_empty_push] >>
+  `ld_slots A (g::f::fs) = ld_slots A (f::fs)` by
+    metis_tac[ld_slots_empty_push] >>
+  `f.lf_tgt.vs_alloca_next =
+     f.lf_src.vs_alloca_next + 32 * ld_charge (f::fs)` by
+    (drule ld_sync_active >> simp[] >> strip_tac >>
+     drule ld_sync_frontier >> simp[]) >>
+  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_sync_def] >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `EVERY _ fs` mp_tac >> rpt (pop_assum kall_tac) >>
+      simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >>
+      first_x_assum drule >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `EVERY _ fs` mp_tac >> rpt (pop_assum kall_tac) >>
+      simp[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> Cases_on `j` >> simp[ld_charge_empty_push] >>
+      first_x_assum (irule o SPEC_ALL) >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> Cases_on `j` >> simp[] >- metis_tac[] >>
+      first_x_assum (irule o SPEC_ALL) >> simp[]) >>
+  gen_tac >> Cases_on `j` >> simp[]
+QED
+
+val _ = if null (hyp ld_sync_call_push) then ()
+        else raise Fail "structural call push has kernel hypotheses";
