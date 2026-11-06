@@ -4132,3 +4132,37 @@ Proof
      gvs[EVERY_MEM]) >>
   strip_tac >> gvs[]
 QED
+
+Theorem regional_dfs_block_marker_free:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  dfs_block_state (liveness_analyze fn) dfg cfg fn
+    (init_cleanup_plan_state ch growth sb ctr) lbl ps /\
+  ~MEM dead_stack_marker ps.ps_stack /\
+  generate_block_plan (liveness_analyze fn) dfg cfg fn bb ps = SOME (ops,qs) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >> gvs[] >>
+  `lbl = bb.bb_label` by metis_tac[lookup_block_label] >>
+  `~ps.ps_cleanup_promised` by metis_tac[ret_region_dfs_block_unpromised] >>
+  `~bb_is_halting bb` by metis_tac[regional_ret_reaching_nonhalting] >>
+  `EVERY codegen_ready_inst (non_param_insts bb)` by
+    metis_tac[regional_non_param_insts_ready] >>
+  `EVERY inst_wf (non_param_insts bb)` by
+    metis_tac[regional_non_param_insts_wf] >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, LET_THM] >> pairarg_tac >>
+  `~MEM dead_stack_marker ps1.ps_stack` by
+    metis_tac[regional_dfs_params_marker_free] >>
+  `~ps1.ps_cleanup_promised` by
+    (Cases_on `bb = HD fn.fn_blocks` >> gvs[] >>
+     metis_tac[prepare_params_plan_promised, SND]) >>
+  gvs[] >> pairarg_tac >>
+  `~MEM dead_stack_marker ps2.ps_stack` by
+    (Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1` >>
+     gvs[] >> metis_tac[regional_ret_cleanup_marker_free]) >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  metis_tac[regional_insts_marker_free]
+QED
