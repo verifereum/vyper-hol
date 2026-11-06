@@ -18,6 +18,7 @@ Ancestors
   extRetOperandBoundaryPtr extRetDispatchProtectionPtr extRetDispatchResultPtr
   extRetStaticStmtPtr extRetStaticReservedPtr extRetStaticFrameMetadataPtr
   extRetStaticFrameConsumerPtr extRetStaticCapacityPtr extRetStaticBoundedConsumerPtr
+  extRetTypedStaticConsumerPtr
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
   extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr extRetAbiArrayBackedgePtr
@@ -139,6 +140,23 @@ Proof
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `assignable_type (type_env tops) ret /\
+            (?m. cenv'.ce_ret_enc_info = AbiCopy m) /\
+            lowered_value_type cenv' x = ret /\
+            ~is_abi_dynamic cenv'.ce_struct_fields ret`
+  >- (pop_assum strip_assume_tac >>
+      drule source_deployment_context >> strip_tac >>
+      `expr_type x = ret` by
+        (drule_all typed_abi_static_return_annotation >> simp[]) >>
+      `well_typed_expr env' x /\ expr_type x <> NoneT` by
+        fs[typedCopyPtrTheory.type_stmt_return_some_iff] >>
+      `ret <> NoneT` by metis_tac[] >>
+      irule external_frame_typed_static_copy_stmt_frag_ptr_bounded >> simp[] >>
+      conj_tac >- fs[int_calls_stmt_def, int_calls_expr_def] >>
+      reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   Cases_on `assignable_type (type_env tops) ret /\
             (?m. cenv'.ce_ret_enc_info = AbiCopy m) /\
             expr_type x = ret /\ lowered_value_type cenv' x = ret`
