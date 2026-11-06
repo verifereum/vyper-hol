@@ -1168,3 +1168,37 @@ Proof
   drule_all regular_post_emit_tail_resource_nonincrease >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
+
+Theorem native_regular_last_use_extinction:
+  !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    MEM (Var v) (compute_operands inst) /\ ~MEM v nl /\
+    ~MEM v inst.inst_outputs /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs)
+    ==> ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_regular_stages >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) = 0 /\
+    Var v NOTIN FDOM ps4.ps_spilled` by
+    (irule emit_reorder_pop_last_use_extinction >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >> simp[]) >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
+  disch_then (strip_assume_tac o SRULE [parameter_push_fold]) >>
+  `~MEM (Var v) (MAP Var inst.inst_outputs)` by simp[MEM_MAP] >>
+  `LIST_ELEM_COUNT (Var v) (MAP Var inst.inst_outputs) = 0` by
+    gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  `LIST_ELEM_COUNT (Var v) ps7.ps_stack +
+    (if Var v IN FDOM ps7.ps_spilled then 1 else 0) = 0` by
+    gvs[elem_count_append] >>
+  drule_all regular_post_emit_tail_resource_nonincrease >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  Cases_on `Var v IN FDOM qs.ps_spilled` >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM]
+QED

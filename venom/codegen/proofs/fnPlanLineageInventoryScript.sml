@@ -5534,3 +5534,47 @@ Proof
   gvs[elem_count_append, stack_pop_def, TAKE_APPEND, TAKE_TAKE] >>
   Cases_on `x IN FDOM ps.ps_spilled` >> gvs[]
 QED
+
+Theorem emit_reorder_pop_last_use_extinction:
+  !ps operands selected opc nl dfg iops ps1 rops ps2 v.
+    LENGTH operands <= 16 /\ PERM operands selected /\
+    (!w. MEM (Var w) operands ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    MEM (Var v) operands /\ ~MEM v nl /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) = 0 /\
+    Var v NOTIN FDOM ps2.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `MEM (Var v) selected` by metis_tac[sortingTheory.PERM_MEM_EQ] >>
+  `MEM v (operand_vars operands ++ nl)` by
+    simp[input_mem_operand_vars] >>
+  drule_all emit_input_plan_relevant_variable_upper >> simp[] >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) ps1.ps_stack = LIST_ELEM_COUNT (Var v) selected /\
+    Var v NOTIN FDOM ps1.ps_spilled` by
+    (qpat_x_assum `!x. LIST_ELEM_COUNT x operands <= _`
+       (qspec_then `Var v` assume_tac) >>
+     Cases_on `Var v IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac) >>
+  `LIST_ELEM_COUNT (Var v) ps2.ps_stack = LIST_ELEM_COUNT (Var v) selected` by
+    (`LENGTH selected <= 16 /\ LENGTH selected <= LENGTH ps1.ps_stack /\
+      (!x. MEM x selected ==>
+        LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x ps1.ps_stack)` by
+       (gvs[] >> metis_tac[]) >>
+     drule_all reorder_plan_materialised_counts >> simp[]) >>
+  `Var v NOTIN FDOM ps2.ps_spilled` by
+    (drule_all reorder_plan_pending_not_spilled >>
+     disch_then (qspec_then `dfg` mp_tac) >> simp[]) >>
+  irule selected_suffix_resource_extinction >> simp[] >>
+  qexists_tac `stack_pop (LENGTH selected) ps2.ps_stack` >>
+  metis_tac[emit_reorder_plan_bounded_core_suffix]
+QED
