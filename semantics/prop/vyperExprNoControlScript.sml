@@ -927,12 +927,14 @@ QED
 Resume canonical_eval_no_control_with_results[Builtin]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     get_accounts_def, type_check_def, assert_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac result_array_length_no_control >>
   imp_res_tac next_gas_reading_no_control >>
   imp_res_tac precompile_call_success_no_control >>
+  imp_res_tac lift_option_type_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[type_check_def, assert_def, return_def] >>
   imp_res_tac lift_sum_no_control >>

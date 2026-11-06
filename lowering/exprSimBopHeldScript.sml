@@ -82,7 +82,14 @@ Theorem compile_bop_nonword_membership_case:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  simp[expr_sim_case_def, expr_body_pre_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ (Builtin _ _ _)` mp_tac >>
+  simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
+  strip_tac >>
+  gvs[well_typed_binop_def, GSYM membership_element_word_boundary,
+      is_prim_word_type_def]
 QED
 
 Theorem compile_bop_in_literal_nonword_sim:
@@ -93,5 +100,12 @@ Theorem compile_bop_in_literal_nonword_sim:
     (bop = In \/ bop = NotIn) ==>
     expr_ok cenv (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  simp[expr_ok_def, expr_sim_ok_def, expr_vv_ok_def, expr_sim_pre_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ (Builtin _ _ _)` mp_tac >>
+  simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
+  strip_tac >>
+  gvs[well_typed_binop_def, GSYM membership_element_word_boundary,
+      is_prim_word_type_def]
 QED

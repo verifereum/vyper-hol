@@ -97,11 +97,10 @@ Proof
   simp[lift_sum_def, return_def, raise_def]
 QED
 
-(* The operator's type argument matters only for in and not in on an
-   array. *)
+(* Membership and bytes equality inspect the type argument. *)
 Theorem evaluate_binop_tv:
   !u tv tv' bop v1 v2.
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\ bop <> Eq /\ bop <> NotEq ==>
     evaluate_binop u tv bop v1 v2 = evaluate_binop u tv' bop v1 v2
 Proof
   rpt strip_tac >> Cases_on `bop` >> gvs[] >>
@@ -298,13 +297,20 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
+Theorem word_value_not_bytes:
+  !v. word_value v ==> !bs. v <> BytesV bs
+Proof
+  simp[word_value_def] >> rpt strip_tac >> gvs[]
+QED
+
 (* The source's operator on x's value and e's is the operator of the
    expression x op e annotated with x's type: the builtin reads its type
    argument from e's type, x op= e from x's place, and neither matters
-   but for in and not in. *)
+   for non-membership operators on word values. *)
 Theorem bop_result_augassign:
   !cx ty bop t2 v1 v2 es tv.
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. v1 <> BytesV bs) ==>
     bop_result cx ty bop [ty; t2] v1 v2 es =
     case evaluate_binop
            (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -313,6 +319,9 @@ Theorem bop_result_augassign:
     | INR err => INR (Error err)
 Proof
   rpt strip_tac >> simp[bop_result_def, evaluate_builtin_def] >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[] >> Cases_on `v1` >> gvs[] >>
+      simp[evaluate_binop_def]) >>
   metis_tac[evaluate_binop_tv]
 QED
 
@@ -323,7 +332,8 @@ QED
 Theorem eval_augassign_local_bop:
   !cx ty id bop e es res es' entry.
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
-    lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn ==>
+    lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. entry.value <> BytesV bs) ==>
     ?r es1.
       (do tv <- eval_expr cx (Builtin ty (Bop bop) [Name ty id; e]);
           read_result cx tv od) es = (r, es1) /\
@@ -345,7 +355,7 @@ Proof
                  entry.type bop entry.value w of
             INL v => INL v
           | INR err => INR (Error err)` by
-    (rpt gen_tac >> irule bop_result_augassign >> simp[]) >>
+    (rpt gen_tac >> irule bop_result_augassign >> metis_tac[]) >>
   gvs[vyperASTTheory.expr_type_def] >>
   Cases_on `evaluate_binop
               (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
