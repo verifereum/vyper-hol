@@ -271,3 +271,83 @@ Resume compile_log_store_data_seq_ptr[exterior]:
   simp[Abbr `u`] >> metis_tac[]
 QED
 Finalise compile_log_store_data_seq_ptr
+
+Theorem compile_log_store_data_path_ptr:
+  compile_log_store_data ce xs (Var buf) off sa = ((),sb) /\
+  LIST_REL (log_data_source cx b cap s) xs vs /\
+  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
+  EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
+  not_fresh_at sa buf /\ lookup_var buf s = SOME (n2w b) /\
+  ptr_covers G tn buf s cap /\
+  off + SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
+  b+cap < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tm
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      log_data_layout cx (MAP SND xs) vs (b+off) m) /\
+    log_write_frame sa (b+off)
+      (SUM (MAP (type_memory_bytes ce) (MAP SND xs))) s t /\
+    (!i. ~(b+off <= i /\ i < b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs))) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all compile_log_store_data_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  `EVERY (supported_scalar_type o SND) xs` by metis_tac[log_data_sources_types] >>
+  drule_all log_data_store_opcode_shape >> strip_tac >>
+  drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> strip_tac >>
+  qexistsl_tac [`H`,`tm`,`t`] >> simp[]
+QED
+
+Theorem log_data_write_ghost_inv:
+  ghost_inv d ce cx es G tn s /\ local_ptrs_rel fn ce es.scopes s /\
+  local_ptrs_reserved ce sa /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!name p sz. local_region ce es.scopes s name p sz ==> p+sz <= b \/ b+n <= p) /\
+  log_write_frame sa b n s t /\
+  (!i. ~(b <= i /\ i < b+n) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+  tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+  (!p. not_fresh_at sa p ==>
+    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    op_taint tm (Var p) = op_taint tn (Var p)) ==>
+  ghost_inv d ce cx es H tm t
+Proof
+  strip_tac >> irule ghost_inv_exterior_transport >>
+  qexistsl_tac [`G`,`fn`,`s`,`sa`,`tn`,`{i | b <= i /\ i < b+n}`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> res_tac >> decide_tac) >>
+  qpat_x_assum `log_write_frame _ _ _ _ _` mp_tac >>
+  simp[log_write_frame_def] >> strip_tac >>
+  qpat_x_assum `t with <|vs_memory := _; vs_vars := _|> = s`
+    (fn th => map_every (mp_tac o C AP_TERM th)
+      [``\z. z.vs_accounts``,``\z. z.vs_transient``,``\z. z.vs_call_ctx``]) >>
+  simp[]
+QED
+
+Theorem log_data_write_ghost_kept:
+  ghost_kept ce es se G0 tn0 s0 G tn /\ se.cs_next_var <= sa.cs_next_var /\
+  (!aid p sz. FLOOKUP s0.vs_allocas aid = SOME (p,sz) /\ aid < se.cs_next_id /\
+    (!name a k. local_region ce es.scopes s0 name a k ==> p+sz <= a \/ a+k <= p) ==>
+    p+sz <= b \/ b+n <= p) /\
+  (!name p sz. local_region ce es.scopes s0 name p sz ==> p+sz <= b \/ b+n <= p) /\
+  (!i. ~(b <= i /\ i < b+n) ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+  (!p. not_fresh_at sa p ==>
+    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) ==>
+  ghost_kept ce es se G0 tn0 s0 H tm
+Proof
+  strip_tac >> irule ghost_kept_exterior_transport >>
+  qexistsl_tac [`G`,`sa`,`tn`,`{i | b <= i /\ i < b+n}`] >> simp[] >>
+  conj_tac >> rpt strip_tac >> res_tac >> decide_tac
+QED
