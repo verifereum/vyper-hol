@@ -48,6 +48,9 @@ Theory exprSimExtCallCase
 Ancestors
   list rich_list loweringPosts supportedExprTraverse exprSimHypsDefs exprSimHyps vyperAST
   vyperInterpreter vyperState exprSimDefs
+  extCallSeamPrecheck extCallSeamOracle extCallSeamFrame extCallSeamFinish
+  extCallSeamSummary exprLowering emitHelper rawCallFragPath compileEnv
+  exprLoweringProps exprSafeOperand fragGasPath gasSummary gasSummaryCompose
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -377,8 +380,208 @@ Theorem extcall_call_step:
           k returnData
        od) (ee,t) Q (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `comp_ignore_bind _ _ sp = _` mp_tac >>
+  pure_once_rewrite_tac[comp_ignore_bind_def] >>
+  pure_once_rewrite_tac[comp_bind_def] >> pure_rewrite_tac[LET_THM] >>
+  pairarg_tac >> simp[] >>
+  pure_once_rewrite_tac[comp_bind_def] >> pure_rewrite_tac[LET_THM] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  fs[extcall_request_ready_def] >>
+  drule_all extcall_source_prefix_obs >>
+  disch_then (qspecl_then
+    [`target`,`skip`,`ret_type`,`gas`,`calldata`,`value_opt`] strip_assume_tac) >>
+  drule_all extcall_optional_precheck_path >>
+  disch_then assume_tac >>
+  drule extcall_optional_precheck_shape >> strip_tac >>
+  drule extcall_finish_shape >> strip_tac >>
+  rename1 `(if stat then emit_op STATICCALL _ else emit_op CALL _) cs' = (ok,cs'')` >>
+  `emit_op (if stat then STATICCALL else CALL)
+      (if stat then [gas_op;addr_op;call_offset;call_len;buf_op;Lit (n2w cap)]
+       else [gas_op;addr_op;value_op;call_offset;call_len;buf_op;Lit (n2w cap)])
+      cs' = (ok,cs'')` by (Cases_on `stat` >> gvs[]) >>
+  `ci_mono cs' cs''` by
+    (qmatch_asmsub_abbrev_tac `emit_op opc ops cs' = (ok,cs'')` >>
+     qspecl_then [`opc`,`ops`,`cs'`] mp_tac ci_mono_emit_op >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `frag_path ctx sp cs' _ (\t'. _ /\ t' = pre) _` >>
+  `stmt_state_rel ctx func cenv cx ee pre` by
+    (simp[Abbr `pre`] >> irule (SRULE [] extcall_optional_precheck_stmt) >> simp[]) >>
+  `wb_frame cenv es sa s0 pre` by
+    (simp[Abbr `pre`] >> irule (SRULE [] extcall_optional_precheck_wb) >>
+     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >> simp[]) >>
+  `!p. safe_operand sp p ==> eval_operand p pre = eval_operand p t` by
+    (rpt strip_tac >> simp[Abbr `pre`] >>
+     irule (SRULE [] extcall_optional_precheck_operands) >> simp[]) >>
+  `pre.vs_memory = t.vs_memory /\ pre.vs_allocas = t.vs_allocas /\
+   pre.vs_alloca_next = t.vs_alloca_next /\ pre.vs_fmp = t.vs_fmp /\
+   pre.vs_halted = t.vs_halted /\ pre.vs_returndata = t.vs_returndata /\
+   pre.vs_current_bb = t.vs_current_bb` by
+    (simp[NoAsms, Abbr `pre`] >> irule (SRULE [] extcall_optional_precheck_fields) >> simp[]) >>
+  `!scopes name b sz. local_region cenv scopes pre name b sz <=>
+                     local_region cenv scopes t name b sz` by
+    (rpt gen_tac >> simp[Abbr `pre`] >>
+     irule (SRULE [] extcall_optional_precheck_regions) >> simp[]) >>
+  `stat = IS_NONE value_opt` by (Cases_on `value_opt` >> gvs[]) >>
+  `w2n (if stat then 0w else vw) =
+     (case value_opt of NONE => 0 | SOME n => n)` by
+    (Cases_on `value_opt` >> gvs[]) >>
+  `cap < dimword (:256)` by decide_tac >>
+  `?gw. eval_operand gas_op pre = SOME gw` by (Cases_on `eval_operand gas_op t` >> gvs[]) >>
+  drule_at (Pat `emit_op _ _ _ = _`) oracle_call_path >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ pre`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ pre`)) >>
+  disch_then (qspec_then `value_opt` mp_tac) >>
+  `eval_operand addr_op pre = SOME aw /\
+   eval_operand call_offset pre = SOME ao /\ eval_operand call_len pre = SOME az /\
+   eval_operand buf_op pre = SOME ro /\ eval_operand value_op pre = SOME vw` by simp[] >>
+  `read_memory (w2n ao) (w2n az) pre = calldata` by
+    (gvs[venomStateTheory.read_memory_def]) >>
+  disch_then (drule_at (Pat `eval_operand value_op pre = SOME _`)) >>
+  disch_then (drule_at (Pat `eval_operand buf_op pre = SOME _`)) >>
+  disch_then (drule_at (Pat `eval_operand call_offset pre = SOME _`)) >>
+  disch_then (drule_at (Pat `eval_operand call_len pre = SOME _`)) >>
+  disch_then (drule_at (Pat `eval_operand addr_op pre = SOME _`)) >>
+  disch_then (drule_at (Pat `eval_operand gas_op pre = SOME _`)) >>
+  simp[] >>
+  (impl_tac >- (fs[compileEnvTheory.regions_disjoint_def, DISJ_COMM] >>
+                 rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  `cs_extends cs' cs'' /\ cs_extends cs'' sr` by fs[ci_mono_def] >>
+  `cs_extends cs' sr` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sp cs' func /\ fn_has_code cs' sr func` by
+    (irule fragExecTheory.fn_has_code_split >> goal_assum (drule_at Any) >> simp[]) >>
+  `fn_has_code cs' cs'' func /\ fn_has_code cs'' sr func` by
+    (irule fragExecTheory.fn_has_code_split >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `frag_path ctx sp cs' _ _ _` mp_tac >>
+  simp[frag_path_def] >>
+  disch_then (qspec_then `func` mp_tac) >> simp[] >>
+  strip_tac
+  >- suspend "precheck_pass"
+  >> suspend "precheck_fail"
 QED
+
+Resume extcall_call_step[precheck_pass]:
+  qpat_x_assum `frag_path ctx cs' cs'' _ _ _` mp_tac >>
+  simp[frag_path_def] >> disch_then (qspec_then `func` mp_tac) >> simp[] >>
+  strip_tac >>
+  `eval_operand ok u' = SOME (if oc.co_success then 1w else 0w)` by
+    (Cases_on `oc.co_success` >> gvs[venomExecSemanticsTheory.bool_to_word_def]) >>
+  drule extcall_finish_path >>
+  disch_then (qspec_then `oc.co_success` mp_tac) >>
+  disch_then (drule_at (Pat `eval_operand ok _ = _`)) >>
+  simp[] >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp[frag_path_def] >> disch_then (qspec_then `func` mp_tac) >> simp[] >>
+  qpat_x_assum `_ = OK u'` SUBST_ALL_TAC >>
+  drule gas_path_normal >> strip_tac >> simp[] >>
+  strip_tac
+  >- suspend "call_success"
+  >> suspend "call_failure"
+QED
+
+Resume extcall_call_step[call_success]:
+  `!p. safe_operand sp p ==> eval_operand p u' = eval_operand p t` by simp[] >>
+  `u'.vs_memory = (write_memory_with_expansion (w2n ro)
+     (TAKE cap oc.co_returnData) t).vs_memory` by
+    simp[venomStateTheory.write_memory_with_expansion_def] >>
+  `extcall_default_ready cx ret_type has_default default_op default_ty default_opt u'` by
+    (Cases_on `default_opt`
+     >- fs[extcall_default_ready_def] >>
+     fs[extcall_default_ready_def] >>
+     gvs[] >>
+     irule extcall_default_write_frame >>
+     goal_assum (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >>
+     simp[] >> qexistsl [`w2n ro`, `TAKE cap oc.co_returnData`] >>
+     simp[venomStateTheory.write_memory_with_expansion_def] >>
+     fs[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >>
+     strip_tac >> fs[] >>
+     Cases_on `cap <= LENGTH oc.co_returnData` >> gvs[] >> decide_tac) >>
+  `extcall_default_ready cx ret_type has_default default_op default_ty default_opt
+      (jump_to sr.cs_current_bb u')` by
+    (fs[extcall_default_ready_def] >> rpt strip_tac >>
+     gvs[extcall_jump_fields] >>
+     irule extcall_default_operand_frame >>
+     goal_assum (drule_at Any) >> simp[extcall_jump_fields]) >>
+  `consumed.gas_obs = ee.gas_obs` by
+    (drule vyperCallOutcomeTheory.take_call_outcome_frame >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `(SND (adopt_call_outcome rq oc consumed)).gas_obs = []` by
+    (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
+  `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
+      has_default default_op default_ty default_opt oc.co_returnData
+      (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by
+    (simp[extcall_returned_def, stmt_state_rel_jump_to, extcall_jump_wb_frame,
+          extcall_jump_fields] >>
+     fs[ci_mono_def] >>
+     `sp.cs_next_id <= sr.cs_next_id /\ sp.cs_next_var <= sr.cs_next_var` by
+       (fs[cs_extends_def] >> decide_tac) >>
+     rpt conj_tac
+     >- (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) 
+     >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
+     >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
+     >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
+     >- (qexistsl [`live`, `buf_size`] >> simp[] >> decide_tac) >>
+     metis_tac[]) >>
+  `gas_path ctx func t (n + (n' + n'')) (OK (jump_to sr.cs_current_bb u'))` by
+    (irule gas_path_then >> qexists `pre` >> conj_tac >- metis_tac[] >>
+     irule gas_path_then >> qexists `u'` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!tail. _ = _` mp_tac >> simp[] >> strip_tac >>
+  drule_all extcall_marked_prefix >> strip_tac >>
+  `?marks. gas_summary_at F (ctx,func) marks
+    (vyperState$bind
+      (do accounts <- get_accounts;
+          check (ext_call_precheck_ok skip ret_type target accounts)
+                "ExtCall target has no code";
+          amount' <- frame_call_value cx value_opt;
+          eval_ext_call_effects cx target calldata amount' gas accounts od) k)
+    (ee,t) Q (\res ee r. expr_exit res r)` suffices_by
+      simp[vyperStateTheory.bind_assoc, vyperStateTheory.ignore_bind_def, SF ETA_ss] >>
+  irule extcall_summary_bind_normal >>
+  goal_assum (drule_at Any) >> simp[] >>
+  first_x_assum irule >>
+  `SND (adopt_call_outcome rq oc consumed) with gas_obs := [] =
+     SND (adopt_call_outcome rq oc consumed)` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  asm_rewrite_tac[]
+QED
+
+Resume extcall_call_step[call_failure]:
+  `gas_path ctx func t (n + (n' + n'')) (Abort Revert_abort t')` by
+    (irule gas_path_then >> qexists `pre` >> conj_tac >- metis_tac[] >>
+     irule gas_path_then >> qexists `u'` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!tail. _ = _` mp_tac >> simp[] >> strip_tac >>
+  drule_all extcall_marked_prefix >> strip_tac >>
+  `?marks. gas_summary_at F (ctx,func) marks
+    (vyperState$bind
+      (do accounts <- get_accounts;
+          check (ext_call_precheck_ok skip ret_type target accounts)
+                "ExtCall target has no code";
+          amount' <- frame_call_value cx value_opt;
+          eval_ext_call_effects cx target calldata amount' gas accounts od) k)
+    (ee,t) Q (\res ee r. expr_exit res r)` suffices_by
+      simp[vyperStateTheory.bind_assoc, vyperStateTheory.ignore_bind_def, SF ETA_ss] >>
+  qexists `REPLICATE (n + (n' + n'')) F` >>
+  irule extcall_summary_bind_exception >>
+  goal_assum (drule_at Any) >> simp[expr_exit_def, fragExecTheory.exit_result_def]
+QED
+
+Resume extcall_call_step[precheck_fail]:
+  qpat_x_assum `!tail. _ = _` mp_tac >> simp[] >> strip_tac >>
+  drule_all extcall_marked_prefix >> strip_tac >>
+  `?marks. gas_summary_at F (ctx,func) marks
+    (vyperState$bind
+      (do accounts <- get_accounts;
+          check (ext_call_precheck_ok skip ret_type target accounts)
+                "ExtCall target has no code";
+          amount' <- frame_call_value cx value_opt;
+          eval_ext_call_effects cx target calldata amount' gas accounts od) k)
+    (ee,t) Q (\res ee r. expr_exit res r)` suffices_by
+      simp[vyperStateTheory.bind_assoc, vyperStateTheory.ignore_bind_def, SF ETA_ss] >>
+  qexists `REPLICATE n F` >> irule extcall_summary_bind_exception >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise extcall_call_step
+
 
 (* (3) Return handling.  From sr after a successful call: void, the
    default on empty returndata (with the code recheck) and the bounded
