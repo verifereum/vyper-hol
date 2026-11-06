@@ -204,7 +204,7 @@ QED
 Theorem abi_encoder_shared_run:
   abi_sites_encoder_shared sites ei /\
   compile_abi_encode_to_buf dst src ei start = (out,end_st) /\ fn_has_code start end_st func /\
-  (start.cs_blocks = end_st.cs_blocks \/
+  abi_sites_cover func sites /\\n  (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_sites_encoder_shared_input sites (ei,at,av) (start,src,dst) (sb,source_cap) (d,LENGTH (enc at av))
@@ -227,7 +227,7 @@ Proof
   drule abi_scratch_input_shared >> strip_tac >>
   `?actual. abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st)
     (first,last,b,cap) (at,av,d) initial actual` by
-    (irule abi_encoder_shared_run >> asm_simp_tac bool_ss [] >>
+    (irule abi_encoder_shared_run >> asm_simp_tac bool_ss [abi_sites_cover_univ] >>
      metis_tac[]) >>
   qexists_tac `actual` >>
   fs[abi_encoder_shared_endpoint_def, abi_encoder_extend_sim_sim]

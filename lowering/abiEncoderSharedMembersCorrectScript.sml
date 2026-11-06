@@ -106,7 +106,7 @@ Theorem abi_encoder_shared_members_correct:
   EVERY (\(ei,_,_,_). abi_sites_encoder_shared sites ei) infos /\
   compile_abi_encode_complex_elems dst src infos so ho dyn_ptr st = (out,end_st) /\
   fn_has_code st end_st func /\
-  (st.cs_blocks = end_st.cs_blocks \/
+  abi_sites_cover func sites /\\n  (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_sites_encoder_shared_members_inv sites infos tys avs pre pvs active dyn_ptr site slot first last lo st limit_st

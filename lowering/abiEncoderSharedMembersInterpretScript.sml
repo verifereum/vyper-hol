@@ -205,7 +205,7 @@ QED
 
 Theorem abi_encoder_shared_members_generate:
   hi <= last /\
-  abi_encoder_spine_code func limit_st hi (dst,src,dp) infos (st,so,ho) (out,en) /\
+  abi_sites_cover func sites /\\n  abi_encoder_spine_code func limit_st hi (dst,src,dp) infos (st,so,ho) (out,en) /\
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     (all_tys,all_avs,end_so,end_ho) infos (st,so,ho) x s ==>
@@ -239,7 +239,7 @@ Proof
     (Q.GENL [`Inv`,`Entry`,`child_pre`,`child_post`,`core_run`,`Post`,`last`]
       abi_encoder_member_spine_generate)))) >>
   simp_tac bool_ss [] >> impl_tac
-  >- (conj_tac >- MATCH_ACCEPT_TAC abi_encoder_shared_members_child_run >>
+  >- (conj_tac >- (rpt strip_tac >> irule abi_encoder_shared_members_child_run >> asm_rewrite_tac []) >>
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_encoder_shared_members_index_source) >>
       conj_tac
       >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>

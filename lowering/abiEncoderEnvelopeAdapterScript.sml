@@ -82,7 +82,7 @@ Proof
   drule_all abi_encoder_pre_shared >> strip_tac >>
   `?actual. abi_encoder_shared_endpoint (ctx,func) (start,end_st,out,limit_st)
     (first,last,b,cap) (at,av,d) initial actual` by
-    (irule abi_encoder_shared_run >> asm_simp_tac bool_ss [] >> metis_tac[]) >>
+    (irule abi_encoder_shared_run >> asm_simp_tac bool_ss [abi_sites_cover_univ] >> metis_tac[]) >>
   drule abi_encoder_shared_endpoint_sim >> strip_tac >>
   qpat_x_assum `abi_encoder_shared_endpoint _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_endpoint_def]) >>

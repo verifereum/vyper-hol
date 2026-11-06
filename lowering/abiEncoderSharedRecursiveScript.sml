@@ -123,7 +123,7 @@ Theorem abi_encoder_shared_complex_static_run:
   EVERY (\(ei,_,_,_). abi_sites_encoder_shared sites ei) infos /\
   compile_abi_encode_complex_elems dst src infos 0 0 (Lit 0w) st = (ignored,final) /\
   fn_has_code st final func /\
-  (st.cs_blocks = final.cs_blocks \/
+  abi_sites_cover func sites /\\n  (st.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_sites_encoder_shared_members_inv sites infos tys avs [] [] F (Lit 0w) 0 0 first last st.cs_next_id
@@ -227,7 +227,7 @@ Theorem abi_encoder_shared_complex_members_finish:
   compile_abi_encode_complex_elems dst src infos 0 0 dp st = (ignored,middle) /\
   emit_op MLOAD [dp] middle = (out,final) /\
   fn_has_code st middle func /\ fn_has_code middle final func /\
-  (st.cs_blocks = middle.cs_blocks \/
+  abi_sites_cover func sites /\\n  (st.cs_blocks = middle.cs_blocks \/
     !bb. lookup_block middle.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_sites_encoder_shared_members_inv sites infos tys avs [] [] T dp site slot first last lo st limit_st
