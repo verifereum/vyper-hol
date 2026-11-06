@@ -1627,6 +1627,44 @@ Proof
   metis_tac[alias_available_suffix_not_output]
 QED
 
+Theorem alias_ordinary_use_root_suffix_not_output:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn lbl /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode <> PHI /\
+  (!v. at = Var v ==> MEM v (inst_uses (EL i bb.bb_instructions))) /\
+  normalize_operand (dfg_build_function fn) [] at = Var r /\
+  i <= j /\ j < LENGTH bb.bb_instructions ==>
+  ~MEM r (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `!v. at = Var v ==> alias_path_available fn lbl i v` by
+    (rpt strip_tac >>
+     `MEM v (inst_uses (EL i bb.bb_instructions))` by metis_tac[] >>
+     drule_all alias_ordinary_use_available >> simp[]) >>
+  irule alias_available_root_suffix_not_output >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_assign_source_root_suffix_not_output:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  fn_reachable fn lbl /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = ASSIGN /\
+  (EL i bb.bb_instructions).inst_operands = [at] /\
+  normalize_operand (dfg_build_function fn) [] at = Var r /\
+  i <= j /\ j < LENGTH bb.bb_instructions ==>
+  ~MEM r (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >> irule alias_ordinary_use_root_suffix_not_output >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`at`, `fn`, `i`, `lbl`] >>
+  simp[inst_uses_def, operand_vars_def] >>
+  rpt strip_tac >> gvs[operand_vars_def, operand_var_def]
+QED
+
 Theorem alias_available_entry_not_output:
   wf_function fn /\ ssa_form fn /\ fn_reachable fn l /\
   lookup_block l fn.fn_blocks = SOME bb /\
