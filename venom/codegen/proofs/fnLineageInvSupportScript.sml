@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
   stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -89,13 +89,32 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
+Theorem analyzed_compute_operands_no_marker:
+  !fn bb i. codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    i < LENGTH bb.bb_instructions ==>
+    EVERY (\op. op <> dead_stack_marker)
+      (compute_operands (EL i bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule codegen_ready_fn_no_marker >>
+  simp[EVERY_MEM] >> strip_tac >>
+  `EVERY (\op. op <> dead_stack_marker)
+     (EL i bb.bb_instructions).inst_operands` by
+    (simp[EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  simp[compute_operands_def] >> IF_CASES_TAC
+  >- (gvs[asmIRTheory.get_non_label_operands_def, EVERY_MEM, MEM_FILTER] >>
+      metis_tac[]) >>
+  IF_CASES_TAC
+  >- (Cases_on `(EL i bb.bb_instructions).inst_operands` >> gvs[EVERY_MEM]) >>
+  gvs[EVERY_MEM]
+QED
+
 Theorem analyzed_ordinary_live_inventory:
   !fn bb i dfg cfg term lbl ps m core base ops qs.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
     i < LENGTH bb.bb_instructions /\
     (EL i bb.bb_instructions).inst_opcode <> PHI /\
     (EL i bb.bb_instructions).inst_opcode <> JMP /\
-    EVERY (\x. x <> dead_stack_marker) (compute_operands (EL i bb.bb_instructions)) /\
     ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
     residual_budget_wf base [] (ps with ps_stack := core) /\
     set core UNION FDOM ps.ps_spilled SUBSET
@@ -114,6 +133,9 @@ Theorem analyzed_ordinary_live_inventory:
       residual_budget_wf base [] (qs with ps_stack := rest)
 Proof
   rpt gen_tac >> strip_tac >>
+  `EVERY (\op. op <> dead_stack_marker)
+     (compute_operands (EL i bb.bb_instructions))` by
+    metis_tac[analyzed_compute_operands_no_marker] >>
   `ssa_form fn /\ wf_function fn` by gvs[codegen_ready_fn_def] >>
   `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
     (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
