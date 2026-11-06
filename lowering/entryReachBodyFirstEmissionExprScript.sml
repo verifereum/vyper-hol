@@ -1,7 +1,7 @@
 Theory entryReachBodyFirstEmissionExpr
 Ancestors
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionSupport
-  compilerFirstEmission externalEntryShape
+  compilerFirstEmission externalEntryShape exprOperandVar
   exprLowering exprCallBounds compileEnv fragExec emitHelper venomInst finite_map list
 
 Theorem first_emission_expr_toplevelname[local]:
@@ -201,3 +201,32 @@ Proof
   simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
 QED
 
+
+Theorem first_emission_expr_builtin[local]:
+  (!ce rt ty bi es a x b. g ce rt ty bi es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !f h ce ty t bi es a x b.
+  compile_expr_body f g h ce ty (Builtin t bi es) a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> ntac 8 gen_tac >>
+  qspec_then `\r. !x b. r = (x,b) ==> cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))`
+    (ho_match_mp_tac o BETA_RULE) compiler_expr_builtin_pred >>
+  BETA_TAC >> rpt conj_tac >>
+  metis_tac[first_emission_mod_names, first_emission_powmod256_names]
+QED
