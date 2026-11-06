@@ -7,7 +7,7 @@ Ancestors
   lowerDloadDefs venomInst venomState ptrDiscipline finite_map list
   contextCodegenRel o1ContractLowerDload
 
-Theorem ld_active_zero_origin[local]:
+Theorem ld_active_zero_origin:
   lower_dload_function_supply u fn = (fn',v) /\
   s.vs_inst_idx = 0 /\ active_inst fn' ti s ==>
   ?inst. active_inst fn inst s
