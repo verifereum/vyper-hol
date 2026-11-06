@@ -113,6 +113,10 @@ Theorem abi_decode_loop_suffix_source_prefix_counted_ptr:
     lookup_var dst sf = SOME b /\ ptr_covers Gf tnf dst sf dcap /\
     mem_bytes_at (w2n b) k sf.vs_memory = prefix /\
     (!i. w2n b <= i /\ i < w2n b+k ==> i NOTIN tnf.t_mem) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v)) /\
     (!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
       abi_encoder_input info ty v (w2n a) cap mem')
 Proof

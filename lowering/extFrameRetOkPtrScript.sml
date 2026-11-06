@@ -21,6 +21,7 @@ Ancestors
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
   extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr extRetAbiArrayBackedgePtr
+  extRetAbiArrayStaticLoopPtr
 
 val _ = Parse.hide "body";
 
