@@ -3,8 +3,7 @@ Ancestors
   makeSsaCurrentHistoryOwner makeSsaCurrentCleanupBoundary makeSsaCurrentDefs
   makeSsaCurrentWfSsa makeSsaCurrentCertificate makeSsaCurrentTreeTrace
   makeSsaCurrentAllocation
-  makeSsaHelper venomInst list rich_list
-
+  makeSsaHelper venomInst list rich_list makeSsaRfAllocation
 Theorem current_carrier_copy_source_slot:
   inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
   inst.inst_operands = current_phi_slots slots /\
@@ -113,14 +112,3 @@ Proof
   irule current_history_owned_name_member >> metis_tac[]
 QED
 
-Theorem current_carrier_history_name_owner:
-  current_history_valid V H /\ MEM (t,v,n) H /\ MEM (u,w,n) H ==>
-  v = w
-Proof
-  simp[current_history_valid_def, MEM_EL] >> rpt strip_tac >>
-  `EL n' H = EL n'' H` suffices_by metis_tac[pairTheory.PAIR_EQ] >>
-  `n' = n''` suffices_by simp[] >>
-  `EL n' (MAP (SND o SND) H) = EL n'' (MAP (SND o SND) H)` by
-    (simp[EL_MAP] >> metis_tac[pairTheory.SND]) >>
-  metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP]
-QED

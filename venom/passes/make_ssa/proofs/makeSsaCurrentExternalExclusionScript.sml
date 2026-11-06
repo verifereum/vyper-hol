@@ -1,16 +1,6 @@
 Theory makeSsaCurrentExternalExclusion
 Ancestors
-  makeSsaCurrentWfSsa venomExecProps list rich_list removeUnusedSsaProofs
-
-Theorem current_external_output_blocks[local]:
-  !bbs (f:basic_block -> string list) a b z.
-    ALL_DISTINCT (FLAT (MAP f bbs)) /\ MEM a bbs /\ MEM b bbs /\
-    MEM z (f a) /\ MEM z (f b) ==> a = b
-Proof
-  Induct >> rw[listTheory.MEM_FLAT, listTheory.MEM_MAP,
-    listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]
-QED
-
+  makeSsaCurrentWfSsa venomExecProps list rich_list removeUnusedSsaProofs makeSsaSsaForm
 Theorem current_wf_external_output_disjoint:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\ lookup_block h renamed = SOME new /\
@@ -27,8 +17,10 @@ Proof
       fn_insts_blocks_flat, listTheory.MAP_FLAT,
       FLAT_FLAT, listTheory.MAP_MAP_o, combinTheory.o_DEF]) >>
   `new = db` suffices_by metis_tac[] >>
-  irule current_external_output_blocks >>
-  qexistsl_tac [`renamed`, `\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)`, `z`] >>
+  irule (Q.ISPEC `\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)`
+           all_distinct_flat_map_unique) >>
+  conj_tac >- (qexists_tac `renamed` >> simp[]) >>
+  qexists_tac `z` >>
   simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]
 QED
 

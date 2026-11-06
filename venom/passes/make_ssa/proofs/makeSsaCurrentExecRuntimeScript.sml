@@ -752,7 +752,7 @@ Proof
 QED
 
 (* Existing no-Abort facts in passSharedFrame and ssaRenamedSim are local. *)
-Theorem current_exec_ext_call_not_abort[local]:
+Theorem current_exec_ext_call_not_abort:
   exec_ext_call inst st gas addr value ao as_ ro rs is_static <> Abort reason t
 Proof
   rw[exec_ext_call_def] >> gvs[AllCaseEqs()]

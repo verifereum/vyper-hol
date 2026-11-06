@@ -4,8 +4,7 @@ Ancestors
   makeSsaCurrentCertificate makeSsaCurrentFinalBlock makeSsaCurrentTreeTrace
   makeSsaCurrentDemand makeSsaHelper makeSsaCurrentHistoryOwner
   makeSsaCurrentRenameTrace makeSsaCurrentTreePaths makeSsaCurrentTokens
-  makeSsaCurrentSourceCuts list rich_list venomInst
-
+  makeSsaCurrentSourceCuts list rich_list venomInst makeSsaRfAllocation
 Theorem current_transport_precleanup_output_names:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\
@@ -90,7 +89,7 @@ Proof
     fs[current_wf_phi_context_def] >>
   drule_all current_wf_precleanup_names >> strip_tac >>
   `EL j (EL i old.bb_instructions).inst_outputs = v` by
-    metis_tac[current_carrier_history_name_owner] >>
+    metis_tac[current_history_name_unique] >>
   metis_tac[EL_MEM]
 QED
 

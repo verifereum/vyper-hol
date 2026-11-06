@@ -4,8 +4,7 @@ Ancestors
   makeSsaCurrentPrefixMaps makeSsaCurrentCarrierOwner
   makeSsaCurrentWfSsa makeSsaCurrentLockstepShape
   makeSsaCurrentCleanupBoundary makeSsaCurrentDefs makeSsaCurrentCertificate
-  venomInst venomExecSemantics list rich_list
-
+  venomInst venomExecSemantics list rich_list makeSsaRfAllocation
 Theorem current_prefix_phi_copy_owner:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
@@ -114,7 +113,7 @@ Proof
   strip_tac >>
   `current_prefix_functional (\z x. ?t. MEM (t,x,z) H)` by
     (simp[current_prefix_functional_def] >>
-     metis_tac[current_carrier_history_name_owner]) >>
+     metis_tac[current_history_name_unique]) >>
   `!inst d src. MEM inst
       (TAKE (phi_prefix_length new.bb_instructions - k) (DROP k bb.bb_instructions)) /\
     inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [d] /\

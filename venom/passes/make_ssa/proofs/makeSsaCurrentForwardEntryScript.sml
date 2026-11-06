@@ -1,7 +1,6 @@
 Theory makeSsaCurrentForwardEntry
 Ancestors
-  makeSsaCurrentPrefixRuntime o1FrameLockstep venomExecSemantics venomState
-
+  makeSsaCurrentPrefixRuntime o1FrameLockstep venomExecSemantics venomState simplifyCfgRetpc
 (* All PHI reads are from the pre-PHI state, including dead outputs. *)
 Theorem current_forward_selected_phi_evaluable:
   phi_well_formed inst.inst_operands /\
@@ -14,7 +13,7 @@ Theorem current_forward_selected_phi_evaluable:
 Proof
   strip_tac >>
   `resolve_phi p inst.inst_operands = SOME (Var src)` by
-    metis_tac[current_prefix_resolve_phi_selected] >>
+    metis_tac[retpc_phi_pair_selected] >>
   `lookup_var src st' = lookup_var v st` by
     (fs[state_rel_def, vars_rel_def] >> metis_tac[]) >>
   Cases_on `lookup_var v st` >>

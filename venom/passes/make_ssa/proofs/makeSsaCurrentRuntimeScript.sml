@@ -1,7 +1,6 @@
 Theory makeSsaCurrentRuntime
 Ancestors
-  o1FrameLockstep venomExecSemantics venomState venomWf
-
+  o1FrameLockstep venomExecSemantics venomState venomWf simplifyCfgPhiSemantics tailMergeStep
 Definition current_output_slots_def:
   current_output_slots sg outs outs' sg1 <=>
     LENGTH outs = LENGTH outs' /\ ALL_DISTINCT outs /\ ALL_DISTINCT outs' /\
@@ -17,16 +16,6 @@ Proof
   metis_tac[listTheory.EL_MEM]
 QED
 
-Theorem current_runtime_fold_lookup_unwritten:
-  !pairs st x. ~MEM x (MAP FST pairs) ==>
-    lookup_var x (FOLDL (\s (k,v). update_var k v s) st pairs) = lookup_var x st
-Proof
-  Induct >> simp[] >> Cases_on `h` >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >>
-  simp[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
 Theorem current_runtime_fold_lookup_slot:
   !outs vals st k. ALL_DISTINCT outs /\ LENGTH outs = LENGTH vals /\ k < LENGTH outs ==>
     lookup_var (EL k outs)
@@ -38,7 +27,7 @@ Proof
     `lookup_var key (FOLDL (\s (n,v). update_var n v s)
        (update_var key value st) (ZIP (outs,t))) =
        lookup_var key (update_var key value st)` by
-      (irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]) >>
+      (irule scfg_snapshot_lookup >> simp[listTheory.MAP_ZIP]) >>
     fs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]) >>
   first_x_assum irule >> simp[]
@@ -53,22 +42,6 @@ Proof
   Induct >> simp[] >> Cases_on `h` >> rpt gen_tac >>
   first_x_assum (qspec_then `update_var q r st` mp_tac) >>
   simp[venomStateTheory.update_var_def, stateFrameTheory.execution_frame_def]
-QED
-
-Theorem current_runtime_bind_lookup_slot:
-  ALL_DISTINCT outs /\ bind_outputs outs vals st = SOME t /\ k < LENGTH outs ==>
-  lookup_var (EL k outs) t = SOME (EL k vals)
-Proof
-  simp[bind_outputs_def] >> rpt strip_tac >> gvs[] >>
-  irule current_runtime_fold_lookup_slot >> simp[]
-QED
-
-Theorem current_runtime_bind_lookup_unwritten:
-  bind_outputs outs vals st = SOME t /\ ~MEM x outs ==>
-  lookup_var x t = lookup_var x st
-Proof
-  simp[bind_outputs_def] >> rpt strip_tac >> gvs[] >>
-  irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]
 QED
 
 Theorem current_runtime_bind_slots:
@@ -92,10 +65,10 @@ Proof
         (irule current_runtime_fold_lookup_slot >> simp[]) >> metis_tac[]) >>
   `lookup_var x' (FOLDL (\s (n,v). update_var n v s) st' (ZIP (outs',vals))) =
      lookup_var x' st'` by
-    (irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]) >>
+    (irule scfg_snapshot_lookup >> simp[listTheory.MAP_ZIP]) >>
   `lookup_var x (FOLDL (\s (n,v). update_var n v s) st (ZIP (outs,vals))) =
      lookup_var x st` by
-    (irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]) >>
+    (irule scfg_snapshot_lookup >> simp[listTheory.MAP_ZIP]) >>
   fs[vars_rel_def]
 QED
 
@@ -106,7 +79,7 @@ Proof
   rpt strip_tac >>
   `?k. k < LENGTH outs /\ EL k outs = x` by metis_tac[listTheory.MEM_EL] >>
   `lookup_var (EL k outs) t = SOME (EL k vals)` by
-    (irule current_runtime_bind_lookup_slot >> simp[] >> metis_tac[]) >>
+    (irule bind_outputs_lookup_position >> simp[] >> metis_tac[]) >>
   gvs[]
 QED
 
@@ -147,7 +120,7 @@ Proof
       `lookup_var key (FOLDL (\s (n,v). update_var n v s)
          (update_var key value st) (ZIP (outs,t))) =
        lookup_var key (update_var key value st)` by
-        (irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]) >>
+        (irule scfg_snapshot_lookup >> simp[listTheory.MAP_ZIP]) >>
       fs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE]) >>
   first_x_assum irule >> simp[]
@@ -174,10 +147,10 @@ Proof
         (irule current_runtime_fold_lookup_slot >> simp[]) >> metis_tac[]) >>
   `lookup_var x' (FOLDL (\s (n,v). update_var n v s) st' (ZIP (outs',vals))) =
      lookup_var x' st'` by
-    (irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]) >>
+    (irule scfg_snapshot_lookup >> simp[listTheory.MAP_ZIP]) >>
   `lookup_var x (FOLDL (\s (n,v). update_var n v s) st (ZIP (outs,vals))) =
      lookup_var x st` by
-    (irule current_runtime_fold_lookup_unwritten >> simp[listTheory.MAP_ZIP]) >>
+    (irule scfg_snapshot_lookup >> simp[listTheory.MAP_ZIP]) >>
   fs[vars_rel_def]
 QED
 

@@ -1,8 +1,7 @@
 Theory makeSsaCurrentPrefixEffect
 Ancestors
   makeSsaCurrentPrefixRuntime o1FrameLockstep livenessDefs
-  venomExecSemantics venomWf venomInst list
-
+  venomExecSemantics venomWf venomInst list simplifyCfgRetpc
 Theorem current_prefix_phi_eff_selected:
   !pre inst rest x p v.
   EVERY (\j. j.inst_opcode = PHI /\ ~MEM x j.inst_outputs) pre /\
@@ -14,7 +13,7 @@ Theorem current_prefix_phi_eff_selected:
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (simp[phi_eff_def, phi_read_def] >>
-      metis_tac[current_prefix_resolve_phi_selected]) >>
+      metis_tac[retpc_phi_pair_selected]) >>
   gvs[] >>
   simp[phi_eff_def, phi_read_def] >>
   first_x_assum drule >> simp[phi_eff_def]

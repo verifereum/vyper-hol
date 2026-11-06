@@ -5,8 +5,7 @@ Ancestors
   makeSsaCurrentEdgeTransport makeSsaCurrentPrefixEffect
   makeSsaCurrentPrefixSuffixOwner
   venomExecSemantics venomExecProps venomExecProofs venomState venomWf venomInst
-  list alist finite_map
-
+  list alist finite_map simplifyCfgRetpc
 Theorem current_source_phi_entry_success:
   current_wf_phi_context s fn renamed s' A H events /\
   fn_cfg_edge fn p h /\ lookup_block h fn.fn_blocks = SOME old /\
@@ -28,7 +27,7 @@ Proof
   `ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))` by
     (fs[current_wf_phi_context_def] >> metis_tac[]) >>
   `resolve_phi p inst.inst_operands = SOME (Var v)` by
-    (irule current_prefix_resolve_phi_selected >> simp[]) >>
+    (irule retpc_phi_pair_selected >> simp[]) >>
   `?k. k < LENGTH old.bb_instructions /\ inst = EL k old.bb_instructions` by
     metis_tac[MEM_EL] >>
   `current_demand fn v p (LENGTH pred.bb_instructions)` by

@@ -1,8 +1,7 @@
 Theory makeSsaCurrentReturnRuntime
 Ancestors
   makeSsaCurrentRuntime o1FrameLockstep venomExecSemantics stateFrame
-  venomState finite_map list
-
+  venomState finite_map list tailMergeStep
 Theorem current_return_merge_state_rel:
   state_rel sg st st' /\ execution_frame e' = execution_frame e ==>
   state_rel sg (adopt_return_fmp ret (merge_callee_state st e))
@@ -42,7 +41,7 @@ Theorem current_return_bind_unwritten:
     (adopt_return_fmp ret (merge_callee_state st e)) = SOME t /\
   ~MEM v outs ==> lookup_var v t = lookup_var v st
 Proof
-  strip_tac >> drule current_runtime_bind_lookup_unwritten >>
+  strip_tac >> drule bind_outputs_lookup_outside >>
   simp[current_return_merge_lookup]
 QED
 

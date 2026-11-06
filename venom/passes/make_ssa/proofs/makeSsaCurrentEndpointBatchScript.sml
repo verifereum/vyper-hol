@@ -2,8 +2,7 @@ Theory makeSsaCurrentEndpointBatch
 Ancestors
   makeSsaCurrentDominanceAvailability makeSsaCurrentPhiBatchRuntime
   makeSsaCurrentPrefixRuntime venomExecProofs venomWf venomExecSemantics
-  venomState list option cfgNormSupplySim finite_map sccpCorrectnessProofs
-
+  venomState list option cfgNormSupplySim finite_map sccpCorrectnessProofs simplifyCfgRetpc
 Theorem current_endpoint_available_lookup[local]:
   wf_function f /\ MEM pred f.fn_blocks /\
   def_available_at f pred NONE x /\
@@ -41,7 +40,7 @@ Proof
   `IS_SOME (lookup_var v st)` by
     (drule_all current_endpoint_available_lookup >> simp[]) >>
   `resolve_phi pb.bb_label inst.inst_operands = SOME (Var v)` by
-    (irule current_prefix_resolve_phi_selected >> simp[]) >>
+    (irule retpc_phi_pair_selected >> simp[]) >>
   fs[inst_wf_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   simp[eval_one_phi_def, eval_operand_def] >>

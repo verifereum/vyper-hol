@@ -605,12 +605,6 @@ Proof
   fs[state_rel_def, execution_frame_def, halt_state_def, set_returndata_def]
 QED
 
-Theorem current_exec_ext_call_not_abort_forward[local]:
-  exec_ext_call inst st gas addr value ao as_ ro rs is_static <> Abort reason t
-Proof
-  rw[exec_ext_call_def] >> gvs[AllCaseEqs()]
-QED
-
 Theorem current_exec_simple_abort_pair_forward:
   MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE;
                        SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; CREATE; CREATE2;
@@ -628,7 +622,7 @@ Proof
   fs[MEM] >>
   qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
   strip_tac >> stepInstBaseLib.with_opcode_clause gvs >>
-  gvs[current_exec_ext_call_not_abort_forward, exec_write2_def, exec_create_abort_iff,
+  gvs[current_exec_ext_call_not_abort, exec_write2_def, exec_create_abort_iff,
       AllCaseEqs()] >>
   rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >> simp[] >>
   fs[state_rel_def, execution_frame_def, halt_state_def, revert_state_def,

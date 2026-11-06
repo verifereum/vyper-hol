@@ -31,7 +31,7 @@ Ancestors
   makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentExternalExclusion
   makeSsaCurrentScanOrigin makeSsaCurrentEntryProvenance
   makeSsaCurrentCarrierExternal makeSsaCurrentLastOutput makeSsaCurrentRuntime
-  makeSsaCurrentDemandRuntime
+  makeSsaCurrentDemandRuntime makeSsaRfAllocation simplifyCfgRetpc
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -257,7 +257,7 @@ Resume current_cut_pair_unique_owner[owned_history]:
    ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
     fs[current_wf_phi_context_def] >>
   drule_all current_wf_precleanup_names >> strip_tac >>
-  `v1 = v2` by metis_tac[current_carrier_history_name_owner] >>
+  `v1 = v2` by metis_tac[current_history_name_unique] >>
   simp[listTheory.MEM_MAP] >> qexists `(t,v1,x')` >> simp[]
 QED
 
@@ -386,10 +386,10 @@ Proof
   `MEM (p,n) pairs` by metis_tac[listTheory.MEM_EL, listTheory.LENGTH_MAP] >>
   qpat_x_assum `slots = phi_pairs _` kall_tac >>
   `resolve_phi p (EL k old.bb_instructions).inst_operands = SOME (Var v)` by
-    (irule current_prefix_resolve_phi_selected >>
+    (irule retpc_phi_pair_selected >>
      simp[current_cut_phi_slots_shape]) >>
   `resolve_phi p (EL q new.bb_instructions).inst_operands = SOME (Var n)` by
-    (irule current_prefix_resolve_phi_selected >>
+    (irule retpc_phi_pair_selected >>
      simp[current_cut_phi_slots_shape]) >>
   simp[op_rename_def]
 QED
@@ -431,7 +431,7 @@ Proof
      (LENGTH pred.bb_instructions)) n = SOME v` by
     (irule current_cut_sg_exit_name_lookup >> metis_tac[]) >>
   `resolve_phi p (EL q new.bb_instructions).inst_operands = SOME (Var n)` by
-    (irule current_prefix_resolve_phi_selected >>
+    (irule retpc_phi_pair_selected >>
      simp[current_cut_phi_slots_shape, cfg_analyze_preds_distinct] >>
      metis_tac[]) >>
   simp[op_rename_def]
@@ -1242,7 +1242,7 @@ Proof
   `MEM (CurrentOriginal h j 0,v,z) H` by
     (irule current_history_owned_name_member >> simp[] >> metis_tac[]) >>
   drule_all current_wf_precleanup_names >> strip_tac >>
-  `v = x` by metis_tac[current_carrier_history_name_owner] >> gvs[] >>
+  `v = x` by metis_tac[current_history_name_unique] >> gvs[] >>
   drule_all current_cut_original_slots_cover >> strip_tac >>
   `simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions` by
     metis_tac[current_wf_original_phi_retained] >>
@@ -1458,7 +1458,7 @@ Proof
     (irule current_history_owned_name_member >>
      simp[current_wf_token_owner_def] >> metis_tac[]) >>
   drule_all current_wf_precleanup_names >> strip_tac >>
-  `v = x` by metis_tac[current_carrier_history_name_owner] >> gvs[]
+  `v = x` by metis_tac[current_history_name_unique] >> gvs[]
   >- (`!oi. MEM oi old.bb_instructions /\ oi.inst_opcode = PHI ==>
          ~MEM v oi.inst_outputs` by
         (metis_tac[current_wf_external_collapsed_phi_clear]) >>
@@ -1481,7 +1481,7 @@ Proof
       simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
   `?w td ts. MEM (td,w,d) H /\ MEM (ts,w,z) H` by
     (irule current_prefix_cleaned_copy_owner >> simp[] >> metis_tac[]) >>
-  `w = v` by metis_tac[current_carrier_history_name_owner] >> gvs[] >>
+  `w = v` by metis_tac[current_history_name_unique] >> gvs[] >>
   irule current_cut_retained_original_endpoint >> metis_tac[]
 QED
 

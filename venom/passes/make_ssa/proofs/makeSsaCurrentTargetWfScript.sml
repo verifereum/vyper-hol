@@ -19,13 +19,6 @@ Proof
   simp[EVERY_MEM] >> strip_tac >> metis_tac[]
 QED
 
-Theorem current_final_wf_function:
-  make_ssa_current_fn s fn = (fn',s') /\ wf_function fn /\
-  ir_supply_inst_ok s /\ ir_supply_covers_fn s fn ==> wf_function fn'
-Proof
-  metis_tac[make_ssa_current_fn_wf_function]
-QED
-
 Theorem current_final_block_inst_wf:
   make_ssa_current_fn s fn = (fn',s') /\ fn_inst_wf fn /\
   MEM bb' fn'.fn_blocks ==> EVERY inst_wf bb'.bb_instructions
