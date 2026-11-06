@@ -201,7 +201,7 @@ Theorem body_builtin_residual_case:
 Proof
   rpt strip_tac >> (irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Builtin ty bt es)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by (strip_tac >> conj_tac >- (irule expr_sim_case_of_vv >> simp[]) >> simp[]) >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>

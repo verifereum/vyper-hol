@@ -41,6 +41,7 @@ QED
 
 Theorem assign_tuple_targets_suffix[local]:
   !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
+    lowered_value_type cenv e = TupleT tys /\
     expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
@@ -148,8 +149,8 @@ Resume assign_tuple_targets_suffix[stores]:
   qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `(if flag then _ else _) su = _` kall_tac >>
   qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `expr_val_rel _ (expr_type e) _ _ _` kall_tac >>
-  qpat_x_assum `expr_val_at _ _ (expr_type e) _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_val_rel _ (post_value_type cenv e) _ _ _` kall_tac >>
+  qpat_x_assum `expr_val_at _ _ (post_value_type cenv e) _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_val_rel _ (TupleT tys) _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
   drule_all (SIMP_RULE (srw_ss()) []

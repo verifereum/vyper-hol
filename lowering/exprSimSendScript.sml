@@ -592,7 +592,7 @@ Theorem send_tail_path[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?n r. gas_marked_path F ctx func t n r /\
     ((?w. r = OK w /\
           (?v. res = INL v /\
@@ -670,7 +670,7 @@ Theorem send_tail_summary[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx)
     es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?marks. gas_summary_at F (ctx,func) marks
     (bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx))
     (es1, t)
