@@ -31,9 +31,10 @@
  *   ec_scratch_stores_memory, ec_scratch_stores_capacity and
  *   ec_scratch_stores_frame preserve disjoint regions and immutable bytes;
  *   ec_points_run,
- *   ec_binary_call_then composes exprs_case operands under expr_body_pre,
- *   taking an immediate exit when the first operand fails;
- *   ec_points_frag and compile_ec_call_case share the EC pipeline atop
+ *   ec_outcome_then composes a value step with a counted continuation;
+ *   ec_binary_call_gas composes exprs_case operands under expr_body_pre as
+ *   counted gas outcomes;
+ *   ec_points_path and compile_ec_call_case share the EC pipeline atop
  *   exprSimPrecompiles' allocated_payload_run and computed-call suffix.
  *)
 Theory exprSimECArith
@@ -54,7 +55,8 @@ Ancestors
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
   vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list
-  numposrep cv_std[ignore_grammar]
+  numposrep gasOutcome gasSummary gasSummaryCompose gasExemptCert
+  fragGasPath fragGasMode cv_std[ignore_grammar]
 
 Theorem lower_value_name_safe_operand[local]:
   expr_body_pre cenv cx env (Name ann id) es /\
@@ -480,7 +482,7 @@ QED
 
 (* These bounds adapters use distinct affine results: addAffine_bounded
    directly, versus mulAffine_bounded with the valid input point unpacked. *)
-Theorem ecadd_success_bounds[local]:
+Theorem ecadd_success_bounds:
   vfmExecution$ecadd a b = SOME (x,y) ==>
   x < 2 ** 256 /\ y < 2 ** 256
 Proof
@@ -488,7 +490,7 @@ Proof
   mp_tac (Q.SPECL [`a`, `b`] addAffine_bounded) >> gvs[]
 QED
 
-Theorem ecmul_success_bounds[local]:
+Theorem ecmul_success_bounds:
   vfmExecution$ecmul a n = SOME (x,y) ==>
   x < 2 ** 256 /\ y < 2 ** 256
 Proof
@@ -1969,7 +1971,7 @@ Proof
   gvs[evaluate_ecadd_def, wordsTheory.w2n_n2w, wordsTheory.dimword_def]
 QED
 
-Theorem ec_points_frag[local]:
+Theorem ec_points_path[local]:
   (!p scalar sf res sb func cenv cx es s lo v k e ctx ann tys r es'.
   compile_ecmul_point p scalar sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -1982,12 +1984,18 @@ Theorem ec_points_frag[local]:
   expr_val_rel cx (BaseT (UintT 256)) k scalar s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  ec_source_tail cx ann ECMul tys [v;k] es = (r,es') ==>
-  frag_exec ctx sf sb (\t. t = s)
-    (\t. ?a. r = INL a /\
-      vv_post ctx func cenv cx e es sf sb s es' a
-        (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t)
-    (expr_exit r)) /\
+  ec_source_tail cx ann ECMul tys [v;k] es = (r,es') /\
+  fn_has_code sf sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sf.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sf.cs_current_insts ==>
+  ?n r'. gas_marked_path F ctx func s n r' /\
+    ((?w. r' = OK w /\
+        (?a. r = INL a /\
+           vv_post ctx func cenv cx e es sf sb s es' a
+             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w) /\
+        w.vs_current_bb = sb.cs_current_bb /\
+        w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r' /\ expr_exit r r'))) /\
   (!p1 p2 sf res sb func cenv cx es s lo v1 v2 e ctx ann tys r es'.
   compile_ecadd_points p1 p2 sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -2001,22 +2009,47 @@ Theorem ec_points_frag[local]:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  ec_source_tail cx ann ECAdd tys [v1;v2] es = (r,es') ==>
-  frag_exec ctx sf sb (\t. t = s)
-    (\t. ?a. r = INL a /\
-      vv_post ctx func cenv cx e es sf sb s es' a
-        (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t)
-    (expr_exit r))
+  ec_source_tail cx ann ECAdd tys [v1;v2] es = (r,es') /\
+  fn_has_code sf sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sf.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sf.cs_current_insts ==>
+  ?n r'. gas_marked_path F ctx func s n r' /\
+    ((?w. r' = OK w /\
+        (?a. r = INL a /\
+           vv_post ctx func cenv cx e es sf sb s es' a
+             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w) /\
+        w.vs_current_bb = sb.cs_current_bb /\
+        w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r' /\ expr_exit r r')))
 Proof
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
+      drule (CONJUNCT2 ec_points_code_shape) >> strip_tac >>
+      qspecl_then [`ctx`, `func`, `sf`, `sb`, `s`,
+        `\w. ?a. r = INL a /\
+           vv_post ctx func cenv cx e es sf sb s es' a
+             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w`,
+        `expr_exit r`] mp_tac run_inst_seq_gas_path >>
+      BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (fs[same_blocks_def] >> NO_TAC) >>
+      TRY (simp[rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
       drule_all (CONJUNCT1 ec_memory_semantics) >> strip_tac >>
       `w2n point + 64 < dimword (:256)` by
         (irule ec_point_pointer_bound >> goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >> qexistsl_tac [`ctx`,`func`] >> simp[]) >>
-      drule_all (CONJUNCT1 ec_points_run) >>
-      drule (CONJUNCT2 ec_points_code_shape) >> strip_tac >> suspend "result") >>
+      drule_all (CONJUNCT1 ec_points_run) >> suspend "result") >>
   rpt gen_tac >> strip_tac >>
+  drule (CONJUNCT1 ec_points_code_shape) >> strip_tac >>
+  qspecl_then [`ctx`, `func`, `sf`, `sb`, `s`,
+    `\w. ?a. r = INL a /\
+       vv_post ctx func cenv cx e es sf sb s es' a
+         (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w`,
+    `expr_exit r`] mp_tac run_inst_seq_gas_path >>
+  BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (fs[same_blocks_def] >> NO_TAC) >>
+  TRY (simp[rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
   qpat_assum `value_has_type _ v1`
     (mp_then Any mp_tac (CONJUNCT2 ec_memory_semantics)) >>
   disch_then (qspecl_then [`v2`, `cx`, `p1`, `p2`, `s`] mp_tac) >>
@@ -2027,92 +2060,129 @@ Proof
   `w2n point2 + 64 < dimword (:256)` by
     (irule ec_point_pointer_bound >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> qexistsl_tac [`ctx`,`func`] >> simp[]) >>
-  drule_all (CONJUNCT2 ec_points_run) >>
-  drule (CONJUNCT1 ec_points_code_shape) >> strip_tac >> suspend "result"
+  drule_all (CONJUNCT2 ec_points_run) >> suspend "result"
 QED
 
-Resume ec_points_frag[result]:
+Resume ec_points_path[result]:
   markerLib.RESUME_TAC >> (
   qmatch_goalsub_abbrev_tac `option_CASE result` >> Cases_on `result`
   >- (gvs[markerTheory.Abbrev_def] >> strip_tac >>
       gvs[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
-          evaluate_builtin_def] >>
-      irule frag_exec_run_inst_seq >>
-      gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-      rpt strip_tac >> gvs[expr_exit_def]) >>
+          evaluate_builtin_def, expr_exit_def] >>
+      TRY (goal_assum (drule_at Any) >> simp[])) >>
   qmatch_goalsub_rename_tac `option_CASE (SOME pair)` >>
   PairCases_on `pair` >> gvs[markerTheory.Abbrev_def] >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes` by gvs[stmt_state_rel_def, state_rel_def] >>
   Cases_on `s.vs_outcomes`
   >- (gvs[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
-          evaluate_builtin_def] >>
-      irule frag_exec_run_inst_seq >>
-      gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-      rpt strip_tac >> gvs[expr_exit_def]) >>
+          evaluate_builtin_def, expr_exit_def] >>
+      TRY (goal_assum (drule_at Any) >> simp[])) >>
   rename1 `s.vs_outcomes = co::rest` >>
   Cases_on `co.co_success` >>
   gvs[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
-      evaluate_builtin_def] >>
-  irule frag_exec_run_inst_seq >>
-  gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  rpt strip_tac >> gvs[expr_exit_def] >>
-  goal_assum (drule_at Any) >> simp[])
+      evaluate_builtin_def, expr_exit_def] >>
+  TRY (goal_assum (drule_at Any) >> simp[]))
 QED
 
-Finalise ec_points_frag
+Finalise ec_points_path
 
-Theorem ec_point_operands_then[local]:
-  expr_sim ctx func cenv cx ty1 a es /\
-  expr_sim ctx func cenv cx ty2 b es1 /\
-  lower_value compile_expr cenv ty1 a sa = (p,s1) /\
-  lower_value compile_expr cenv ty2 b s1 = (q,sm) /\
-  (do r <- eval_expr cx a; read_result cx r od) es = (r1,es1) /\
-  (do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2) /\
-  expr_res_ok r1 /\ expr_res_ok r2 /\
-  fn_has_code sa s1 func /\ fn_has_code s1 sm func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  local_ptrs_reserved cenv s1 /\
-  cs_extends sa s1 /\ cs_extends s1 sm /\ cs_extends sm sb /\
-  expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  expr_sim_inv cenv cx env es /\
-  (!z. p = Var z ==> not_fresh_at s1 z) /\ (!l. p <> Label l) /\
-  MAP FDOM es1.scopes = MAP FDOM es2.scopes /\ s1.cs_next_id <= sm.cs_next_id /\
-  (!r. expr_exit r1 r ==> R r) /\
-  (!v r. r1 = INL v /\ expr_exit r2 r ==> R r) /\
-  (!v1 v2 t u. r1 = INL v1 /\ r2 = INL v2 /\
-    expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
-    expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
-    expr_val_rel cx (expr_type a) v1 p u /\
-    expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u ==>
-    frag_exec ctx sm sb (\s. s = u) Q R) ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) Q R
+Theorem ec_expr_exit_INR_cast[local]:
+  expr_exit (INR exc : value + exception) r ==>
+  expr_exit (INR exc : eval_result + exception) r
 Proof
-  strip_tac >>
-  `frag_exec ctx sa s1 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-     (\t. ?v1. r1 = INL v1 /\ expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t) R` by
-    (irule frag_exec_pre_exit >>
-     qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`, `expr_exit r1`] >>
-     simp[] >> irule exprSimWordArgsTheory.expr_sim_apply >> simp[] >> metis_tac[]) >>
-  dxrule frag_exec_then >> disch_then irule >>
-  conj_tac >-
-   (gen_tac >> simp[] >> strip_tac >>
-    `stmt_state_rel ctx func cenv cx es1 t` by gvs[expr_post_def] >>
-    `frag_exec ctx s1 sm (\s. s = t)
-       (\u. ?v2. r2 = INL v2 /\ expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u) R` by
-      (irule frag_exec_pre_exit >>
-       qexistsl_tac [`\s. s = t /\ stmt_state_rel ctx func cenv cx es1 s`, `expr_exit r2`] >>
-       simp[] >> irule exprSimWordArgsTheory.expr_sim_apply >> simp[] >> metis_tac[]) >>
-    dxrule frag_exec_then >> disch_then irule >> simp[] >>
-    gen_tac >> simp[] >> strip_tac >>
-    `?w. eval_operand p t = SOME w /\ eval_operand p t' = SOME w` by
-      (metis_tac[expr_post_operand_word]) >>
-    `!w. eval_operand p t = SOME w ==> eval_operand p t' = SOME w` by
-      metis_tac[optionTheory.SOME_11] >>
-    `expr_val_rel cx (expr_type a) v1 p t' /\
-     expr_val_at cenv cx (expr_type a) sa sm es2 v1 p t'` by
-      (metis_tac[ec_point_operand_kept]) >>
-    first_x_assum irule >> qexists_tac `t` >> gvs[]) >>
-  metis_tac[cs_extends_trans]
+  Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+QED
+
+(* A value step followed by a continuation whose outcome is counted from
+   every normal endpoint of the step. *)
+Theorem ec_outcome_then[local]:
+  gas_outcome F tops (ctx,func)
+    (m : evaluation_state -> value evaluation_result) (es,s0)
+    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
+     R (INR exc) ee r) /\
+  (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
+     P v ee t /\ ~t.vs_halted ==>
+     gas_outcome F tops (ctx,func) (k v) (ee,t) Q R) ==>
+  gas_outcome F tops (ctx,func) (bind m k) (es,s0) Q R
+Proof
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      gvs[]
+      >- (`m (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+             (INL v, es_end with gas_obs := [])` by
+            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+               (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+             strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+          `~t.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          qpat_x_assum `!gs v ee t. _`
+            (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `v`,
+                          `es_end with gas_obs := []`, `t`] mp_tac) >>
+          (impl_tac >- simp[]) >>
+          disch_then (qx_choose_then `right` strip_assume_tac)
+          >- (qexists_tac `marks ++ right` >> disj1_tac >>
+              qpat_x_assum `gas_summary_at F _ right _ _ _ _`
+                (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+              disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
+                (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+              drule_all gas_marked_exec_bind_normal >> strip_tac >>
+              rewrite_tac[gas_summary_at_def] >>
+              qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[]) >>
+          qexists_tac `marks ++ right` >> disj2_tac >>
+          `ignore_bind (bind m k) (return ()) =
+           bind m (\v. ignore_bind (k v) (return ()))` by
+            simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
+          pop_assum SUBST1_TAC >>
+          irule_at Any gas_exempt_cert_bind_value >>
+          first_assum (irule_at Any) >> BETA_TAC >>
+          first_assum (irule_at Any)) >>
+      Cases_on `res` >> gvs[] >>
+      rename1 `expr_exit (INR exc) r` >>
+      qexists_tac `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+      irule gas_marked_exec_bind_exception >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  `ignore_bind (bind m k) (return ()) =
+   bind m (\v. ignore_bind (k v) (return ()))` by
+    simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  pop_assum SUBST1_TAC >>
+  metis_tac[gas_exempt_cert_error_value]
+QED
+
+Theorem ec_eval_bind[local]:
+  (bt = ECAdd \/ bt = ECMul) ==>
+  eval_expr cx (Builtin ann bt [a;b]) =
+  bind (bind (eval_expr cx a) (read_result cx))
+    (\v1. bind (bind (eval_expr cx b) (read_result cx))
+      (\v2. ec_source_tail cx ann bt [expr_type a; expr_type b] [v1;v2]))
+Proof
+  disch_tac >>
+  `eval_expr cx (Builtin ann bt [a;b]) =
+   bind (eval_exprs cx [a;b])
+     (\vs. ec_source_tail cx ann bt (MAP expr_type [a;b]) vs)` by
+    (qpat_x_assum `_ \/ _` mp_tac >> simp[FUN_EQ_THM] >> rpt strip_tac >>
+     Cases_on `eval_expr cx (Builtin ann bt [a;b]) x` >>
+     drule_at (Pat `eval_expr _ _ _ = _`) eval_expr_ec_cases >>
+     impl_tac >- simp[] >> strip_tac >>
+     gvs[vyperStateTheory.bind_def]) >>
+  `eval_exprs cx [] = return []` by
+    simp[FUN_EQ_THM, exprSimWordArgsTheory.eval_exprs_nil,
+         vyperStateTheory.return_def] >>
+  asm_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+  simp[vyperStateTheory.bind_assoc, vyperStateTheory.bind_return]
+QED
+
+Theorem ec_source_tail_gas_obs[local]:
+  (bt = ECAdd \/ bt = ECMul) /\
+  ec_source_tail cx ann bt tys vs es = (r,es') ==>
+  ec_source_tail cx ann bt tys vs (es with gas_obs := g) =
+    (r, es' with gas_obs := g)
+Proof
+  rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()] >>
+  simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
 Theorem ec_source_tail_scopes[local]:
@@ -2123,75 +2193,61 @@ Proof
   rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()]
 QED
 
-Theorem ec_binary_call_then[local]:
+(* Both operands as counted outcomes, then the point suffix as an actual
+   counted target path from every pair of operand endpoints. *)
+Theorem ec_binary_call_gas[local]:
   exprs_case nocalls ctx func cenv cx [a;b] /\
   expr_body_pre cenv cx env (Builtin ann bt [a;b]) es /\
   (nocalls ==> int_calls_expr (Builtin ann bt [a;b]) = []) /\
-  (bt = ECAdd \/ bt = ECMul) /\ builtin_args_length_ok bt 2 /\
+  (bt = ECAdd \/ bt = ECMul) /\
   expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   lower_value compile_expr cenv (expr_type a) a sa = (p,s1) /\
   lower_value compile_expr cenv (expr_type b) b s1 = (q,sm) /\
   cs_extends sm sb /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  eval_expr cx (Builtin ann bt [a;b]) es = (res,es') /\
-  (!es1 es2 v1 v2 t u.
-    (do r <- eval_expr cx a; read_result cx r od) es = (INL v1,es1) /\
-    (do r <- eval_expr cx b; read_result cx r od) es1 = (INL v2,es2) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!es1 es2 v1 v2 t u res es'.
     expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
     expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
     expr_val_rel cx (expr_type a) v1 p u /\
     expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u /\
     expr_result_typed env a (Value v1) /\ expr_result_typed env b (Value v2) /\
     stmt_state_rel ctx func cenv cx es2 u /\ local_ptrs_reserved cenv sm /\
-    fn_has_code sm sb func /\
+    fn_has_code sm sb func /\ ~u.vs_halted /\
+    u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
     (!z. MEM (Var z) [p;q] ==> not_fresh_at sm z) /\
     ec_source_tail cx ann bt [expr_type a;expr_type b] [v1;v2] es2 = (res,es') ==>
-    frag_exec ctx sm sb (\s. s = u)
-      (\s. ?v. res = INL v /\
-        vv_post ctx func cenv cx (Builtin ann bt [a;b]) es2 sm sb u es' v vv s)
-      (expr_exit res)) ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?v. res = INL v /\
-      vv_post ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 es' v vv s)
-    (expr_exit res)
+    ?n r. gas_marked_path F ctx func u n r /\
+      ((?w. r = OK w /\
+          (?tv. res = INL tv /\
+             vv_post ctx func cenv cx (Builtin ann bt [a;b]) es2 sm sb u es'
+               tv vv w) /\
+          w.vs_current_bb = sb.cs_current_bb /\
+          w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\ expr_exit res r))) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (Builtin ann bt [a;b]))
+    (es,s0)
+    (\res ee t. ?tv. res = INL tv /\
+       vv_post ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
-        (simp[FUN_EQ_THM] >> metis_tac[]) >>
-      simp[] >> irule frag_exec_false_pre) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!n. bt <> Slice n` by (rpt strip_tac >> gvs[]) >>
   `expr_body_pre cenv cx env a es` by
-    (`expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-     drule expr_body_pre_builtin_arg >>
+    (drule expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`a`, `es`] mp_tac) >> simp[]) >>
   `nocalls ==> int_calls_expr a = []` by
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
-  `expr_sim ctx func cenv cx (expr_type a) a es` by
-    (gvs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
-  Cases_on `(do r <- eval_expr cx a; read_result cx r od) es` >>
-  rename1 `(do r <- eval_expr cx a; read_result cx r od) es = (r1,es1)` >>
-  `expr_sim_inv cenv cx env es1 /\ expr_res_ok r1` by
-    metis_tac[expr_body_pre_eval, expr_body_pre_res_ok] >>
-  reverse (Cases_on `r1`)
-  >- suspend "first_exit" >>
-  rename1 `expr_res_ok (INL point_value)` >>
-  `expr_body_pre cenv cx env b es1` by
-    (qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
-       (mp_then Any mp_tac expr_body_pre_builtin_arg) >>
-     disch_then (qspecl_then [`b`, `es1`] mp_tac) >> simp[]) >>
   `nocalls ==> int_calls_expr b = []` by
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
-  `expr_sim ctx func cenv cx (expr_type b) b es1` by
-    (qpat_x_assum `exprs_case _ _ _ _ _ _` mp_tac >>
-     simp[exprs_case_def] >> strip_tac >>
-     `?s tv t s1 v t1. eval_expr cx a s = (INL tv,t) /\
-                       read_result cx tv s1 = (INL v,t1)` by
-       (qpat_x_assum `bind _ _ es = _` mp_tac >>
-        simp[vyperStateTheory.bind_def, AllCaseEqs()] >> metis_tac[]) >>
-     gvs[expr_sim_case_def] >> metis_tac[]) >>
-  Cases_on `(do r <- eval_expr cx b; read_result cx r od) es1` >>
-  rename1 `(do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2)` >>
-  `expr_res_ok r2` by metis_tac[expr_body_pre_res_ok] >>
+  `expr_sim ctx func cenv cx (expr_type a) a es` by
+    (gvs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
   qpat_assum `lower_value _ _ _ a _ = _`
     (mp_then Any mp_tac (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >> strip_tac >>
   qpat_assum `lower_value _ _ _ b _ = _`
@@ -2205,70 +2261,114 @@ Proof
     metis_tac[fn_has_code_split] >>
   `fn_has_code s1 sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split] >>
-  drule_at (Pat `eval_expr _ (Builtin _ _ _) _ = _`) ec_two_args_source >>
-  disch_then drule_all >> strip_tac >>
   `safe_operand s1 p` by
     metis_tac[ec_point_lower_value_safe_operand] >>
   `!l. p <> Label l` by gvs[safe_operand_def] >>
+  qpat_assum `bt = ECAdd \/ bt = ECMul`
+    (fn th => rewrite_tac[MATCH_MP ec_eval_bind th]) >>
+  irule ec_outcome_then >>
+  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
+  qexists_tac `\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
+     t.vs_current_bb = s1.cs_current_bb /\
+     t.vs_inst_idx = LENGTH s1.cs_current_insts` >>
+  BETA_TAC >> reverse conj_tac
+  >- (irule exprSimWordArgsTheory.expr_sim_apply >>
+      simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
+      qexists_tac `expr_type a` >> simp[]) >>
+  qx_genl_tac [`gs1`, `v1`, `es1`, `t`] >> strip_tac >>
+  qspecl_then [`cenv`, `cx`, `env`, `a`, `es with gas_obs := gs1`, `INL v1`, `es1`]
+    mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `expr_result_typed env a (Value v1)` by simp[] >>
+  `expr_body_pre cenv cx env b es1` by
+    (qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+       (mp_then Any mp_tac expr_body_pre_builtin_arg) >>
+     disch_then (qspecl_then [`b`, `es1`] mp_tac) >> simp[]) >>
+  `expr_sim ctx func cenv cx (expr_type b) b es1` by
+    (qpat_x_assum `exprs_case _ _ _ _ _ _` mp_tac >>
+     simp[exprs_case_def] >> strip_tac >>
+     `?s tv t s1 v t1. eval_expr cx a s = (INL tv,t) /\
+                       read_result cx tv s1 = (INL v,t1)` by
+       (qpat_x_assum `bind (eval_expr cx a) _ _ = _` mp_tac >>
+        simp[vyperStateTheory.bind_def, AllCaseEqs()] >> metis_tac[]) >>
+     gvs[expr_sim_case_def] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx es1 t` by
+    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
+    (qpat_assum `bind (eval_expr cx a) _ _ = _`
+       (mp_then Any mp_tac
+         (CONV_RULE (DEPTH_CONV ETA_CONV)
+            exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >>
+     simp[]) >>
+  irule ec_outcome_then >>
+  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
+  qexists_tac `\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
+     u.vs_current_bb = sm.cs_current_bb /\
+     u.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+  BETA_TAC >> reverse conj_tac
+  >- (irule exprSimWordArgsTheory.expr_sim_apply >>
+      simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
+      qexists_tac `expr_type b` >> simp[]) >>
+  qx_genl_tac [`gs2`, `v2`, `es2`, `u`] >> strip_tac >>
+  qspecl_then [`cenv`, `cx`, `env`, `b`, `es1 with gas_obs := gs2`, `INL v2`, `es2`]
+    mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `expr_result_typed env b (Value v2)` by simp[] >>
+  `stmt_state_rel ctx func cenv cx es2 u` by
+    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `MAP FDOM es1.scopes = MAP FDOM es2.scopes` by
-    metis_tac[exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom] >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  irule ec_point_operands_then >> simp[] >>
-  conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`a`, `b`, `es1`, `es2`, `p`, `q`, `INL point_value`, `r2`,
-                `s1`, `sm`, `expr_type a`, `expr_type b`] >> simp[] >>
-  rpt conj_tac
-  >- (once_rewrite_tac[GSYM (Q.ISPEC `Value` expr_exit_success_map)] >>
-      Cases_on `r2` >> gvs[expr_exit_def] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >>
-  `expr_result_typed env a (Value point_value) /\ expr_result_typed env b (Value v2)` by
-    metis_tac[expr_body_pre_eval] >>
-  `stmt_state_rel ctx func cenv cx es2 u` by gvs[expr_post_def] >>
+    (qpat_assum `bind (eval_expr cx b) _ _ = _`
+       (mp_then Any mp_tac
+         (CONV_RULE (DEPTH_CONV ETA_CONV)
+            exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >>
+     simp[]) >>
+  `?w. eval_operand p t = SOME w /\ eval_operand p u = SOME w` by
+    metis_tac[expr_post_operand_word] >>
+  `!w. eval_operand p t = SOME w ==> eval_operand p u = SOME w` by
+    metis_tac[optionTheory.SOME_11] >>
+  `expr_val_rel cx (expr_type a) v1 p u /\
+   expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u` by
+    metis_tac[ec_point_operand_kept] >>
   `!z. MEM (Var z) [p;q] ==> not_fresh_at sm z` by
     (simp[] >> metis_tac[exprOperandVarTheory.compile_lower_value_var,
                          freshWritesTheory.not_fresh_at_mono]) >>
-  gvs[] >>
-  qpat_x_assum `!t u. _ ==> frag_exec _ _ _ _ _ _` drule_all >> strip_tac >>
-  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    metis_tac[exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom] >>
-  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
-    metis_tac[ec_source_tail_scopes] >>
+  Cases_on `ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2] es2` >>
+  rename1 `_ = (res, es')` >>
+  qpat_x_assum `!es1 es2 v1 v2 t u res es'. _`
+    (qspecl_then [`es1`, `es2`, `v1`, `v2`, `t`, `u`, `res`, `es'`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `es2 with gas_obs := [] = es2` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `!g. ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2]
+         (es2 with gas_obs := g) = (res, es' with gas_obs := g)` by
+    metis_tac[ec_source_tail_gas_obs] >>
+  `es' with gas_obs := [] = es'` by
+    (qpat_x_assum `!g. _` (qspec_then `[]` mp_tac) >>
+     qpat_x_assum `es2 with gas_obs := [] = es2` (fn th => rewrite_tac[th]) >>
+     qpat_assum `ec_source_tail _ _ _ _ _ es2 = _` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[pairTheory.PAIR_EQ] >> metis_tac[]) >>
   `wb_frame cenv es sa s0 u` by
-    (drule_all exprSimWordArgsTheory.expr_post_frame >> strip_tac >>
-     qpat_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _`
-       (mp_then Any strip_assume_tac exprSimWordArgsTheory.expr_post_frame) >>
-     irule exprSimWordArgsTheory.wb_frame_trans >>
-     simp[] >> conj_tac >- metis_tac[] >>
-     qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
-  gvs[] >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` (mp_then Any mp_tac frag_exec_conseq) >>
-  disch_then irule >> simp[] >> rpt strip_tac >> gvs[] >>
-  irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+    (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `s1`,
+                            `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     metis_tac[exprSimWordArgsTheory.expr_post_frame]) >>
+  `gas_marked_exec F (ctx,func)
+     (ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2])
+     (es2,u) (REPLICATE n F) res es' r` by
+    (irule gas_marked_exec_no_source_read >> conj_tac >>
+     first_assum ACCEPT_TAC) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE n F` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es'`, `r`] >>
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+  BETA_TAC >>
+  qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
+  FIRST [disj2_tac >> simp[] >> NO_TAC,
+         disj1_tac >> simp[] >>
+         irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
+         first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+         simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]]
 QED
-
-Resume ec_binary_call_then[first_exit]:
-  rename1 `(do r <- eval_expr cx a; read_result cx r od) es = (INR ex,es1)` >>
-  qpat_x_assum `!es1 es2 v1 v2 t u. _` kall_tac >>
-  `res = INR ex` by
-    (Cases_on `(do r <- eval_expr cx b; read_result cx r od) es1` >>
-     drule_all ec_two_args_source >> simp[]) >>
-  gvs[] >>
-  qpat_assum `lower_value _ _ _ a _ = _`
-    (mp_then Any mp_tac (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >> strip_tac >>
-  qpat_assum `lower_value _ _ _ b _ = _`
-    (mp_then Any mp_tac (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >> strip_tac >>
-  `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
-  drule_all exprSimWordArgsTheory.expr_sim_apply >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _`
-    (mp_tac o PURE_ONCE_REWRITE_RULE
-      [GSYM (Q.ISPEC `Value` expr_exit_success_map)]) >>
-  simp[] >> strip_tac >>
-  irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
-QED
-Finalise ec_binary_call_then
 
 Theorem compile_ec_call_case[local]:
   (!nocalls ctx func cenv cx ann args.
@@ -2288,7 +2388,7 @@ Proof
     (imp_res_tac ec_points_code_shape >>
      simp[cs_extends_def] >> qexists_tac `[]` >>
      gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
-  gvs[] >> irule ec_binary_call_then >> simp[builtin_args_length_ok_def] >>
+  gvs[] >> irule ec_binary_call_gas >> simp[] >>
   (reverse conj_tac
   >- (qexists_tac `nocalls` >> simp[]) >>
   qexists_tac `env` >> simp[] >>
@@ -2309,7 +2409,7 @@ Resume compile_ec_call_case[point_payload]:
   >- (`expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
       irule (SRULE []
         (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`]
-          (SPEC_ALL (CONJUNCT1 ec_points_frag)))) >>
+          (SPEC_ALL (CONJUNCT1 ec_points_path)))) >>
       simp[vyperASTTheory.expr_type_def] >>
       conj_tac >- metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
       goal_assum (drule_at (Pat `ec_source_tail _ _ _ _ _ _ = _`)) >>
@@ -2323,7 +2423,7 @@ Resume compile_ec_call_case[point_payload]:
     (irule expr_val_at_start_mono >> goal_assum (drule_at Any) >> simp[]) >>
   irule (SRULE []
     (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd [a;b]`]
-      (SPEC_ALL (CONJUNCT2 ec_points_frag)))) >>
+      (SPEC_ALL (CONJUNCT2 ec_points_path)))) >>
   simp[vyperASTTheory.expr_type_def] >>
   conj_tac >- metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
   goal_assum (drule_at (Pat `ec_source_tail _ _ _ _ _ _ = _`)) >>

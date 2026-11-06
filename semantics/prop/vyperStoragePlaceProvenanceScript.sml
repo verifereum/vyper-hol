@@ -112,7 +112,7 @@ Proof
   strip_tac >> drule lookup_global_mapping_region >> simp[]
 QED
 
-Theorem resolve_array_element_empty[local]:
+Theorem resolve_array_element_empty:
   resolve_array_element cx tr slot tv [] st = (INL (slot,tv,[]),st)
 Proof
   Cases_on `tv` >> simp[resolve_array_element_def, return_def]

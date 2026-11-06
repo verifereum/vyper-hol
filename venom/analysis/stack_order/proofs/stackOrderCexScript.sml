@@ -97,7 +97,8 @@ QED
 Theorem liveness_transfer_kills_x:
   ∀bbs live. ¬MEM "x" (liveness_transfer bbs cex_inst0 live)
 Proof
-  rw[liveness_transfer_def, live_update_def, MEM_APPEND, MEM_FILTER] >>
+  rw[liveness_transfer_def, live_update_def, MEM_FOLDL_append_unseen,
+     MEM_FILTER] >>
   simp[inst0_defs_x, inst0_uses_empty]
 QED
 
@@ -190,8 +191,8 @@ Theorem liveness_transfer_kills_v:
       <| inst_id := 0; inst_opcode := MEMTOP;
          inst_operands := []; inst_outputs := ["v"] |> live)
 Proof
-  rw[liveness_transfer_def, live_update_def, MEM_APPEND, MEM_FILTER,
-     inst_defs_def, inst_uses_def, operand_vars_def]
+  rw[liveness_transfer_def, live_update_def, MEM_FOLDL_append_unseen,
+     MEM_FILTER, inst_defs_def, inst_uses_def, operand_vars_def]
 QED
 
 (* KEY LEMMA 2c: var_use_count_block for "v" is exactly 1 *)

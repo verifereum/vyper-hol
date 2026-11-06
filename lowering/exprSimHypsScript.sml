@@ -243,6 +243,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
+  exprSimConcatSource vyperContext
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
   vyperEvalOutcomeSuffix vyperRuntimeAccounts
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -410,15 +411,35 @@ QED
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    ((!n. bi <> Slice n) \/ ~is_extcode e) /\
     expr_sim_inv cenv cx env es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm,
-     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+  rpt gen_tac >> strip_tac >>
+  `alloc_limits_expr cenv e` by
+    (irule alloc_limits_builtin_arg >> gvs[expr_sim_pre_def] >> metis_tac[]) >>
+  gvs[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+      byte_widths_expr_def, expr_has_evm_run_thm,
+      supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
-  drule_all alloc_limits_exprs_mem >>
   gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+QED
+
+(* An operand that isn't of the account-code type is never a slice's
+   .code source. *)
+Theorem expr_sim_pre_builtin_typed_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_type e <> BaseT (BytesT (Dynamic 24576)) /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_sim_pre cenv cx env e es'
+Proof
+  rpt strip_tac >> irule expr_sim_pre_builtin_arg >> simp[] >>
+  qexistsl_tac [`ann`, `args`, `bi`, `es`] >> simp[] >> disj2_tac >>
+  strip_tac >> qpat_x_assum `expr_type e <> _` mp_tac >> simp[] >>
+  irule well_typed_extcode_type >> simp[] >> qexists_tac `env` >>
+  irule well_typed_exprs_member >> qexists_tac `args` >>
+  gvs[expr_sim_pre_def, well_typed_expr_def]
 QED
 
 Theorem int_calls_exprs_mem:
@@ -659,6 +680,22 @@ Proof
   metis_tac[expr_sim_below_mem]
 QED
 
+Theorem results_case_every_ok:
+  !ctx func cenv cx es.
+    EVERY (expr_ok cenv) es ==> results_case T ctx func cenv cx es
+Proof
+  ntac 4 gen_tac >> Induct >> rw[results_case_def] >> gvs[expr_ok_case]
+QED
+
+Theorem results_case_below:
+  !cenv args ctx func cx.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    results_case T ctx func cenv cx args
+Proof
+  rpt strip_tac >> irule results_case_every_ok >> simp[EVERY_MEM] >>
+  metis_tac[expr_sim_below_mem]
+QED
+
 (* An operand of a builtin: its judgments at a state where the operands
    before it evaluated. *)
 Theorem int_calls_builtin_arg:
@@ -793,6 +830,137 @@ Proof
   gvs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
+(* concat(...) evaluation and buffer sizing, shared with exprSimConcatResult. *)
+Theorem eval_expr_concat_bind:
+  !cx ann n args.
+    2 <= LENGTH args ==>
+    eval_expr cx (Builtin ann (Concat n) args) =
+    bind (eval_exprs cx args)
+      (\vs st. ((case evaluate_concat n vs of
+                   INL v => INL (Value v)
+                 | INR err => INR (Error err)), st))
+Proof
+  rw[FUN_EQ_THM] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
+  Cases_on `eval_exprs cx args x` >>
+  rename1 `eval_exprs cx args x = (rr, st)` >>
+  Cases_on `rr` >>
+  simp[get_accounts_def, lift_sum_def, evaluate_builtin_def, return_def,
+       raise_def, bind_def, ignore_bind_def] >>
+  rename1 `evaluate_concat n vs` >>
+  Cases_on `evaluate_concat n vs` >>
+  simp[return_def, raise_def, bind_def, ignore_bind_def]
+QED
+
+Theorem concat_payload_capacity_bound:
+  !ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
+       MAP bytelike_type_bound ts = MAP concat_payload_capacity ts
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[bytelike_type_bound_def, concat_payload_capacity_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[bound_length_def, concat_payload_capacity_def]
+QED
+
+Theorem concat_map_ctor_11:
+  (!l1 l2. MAP BytesV l1 = MAP BytesV l2 <=> l1 = l2) /\
+  (!l1 l2. MAP StringV l1 = MAP StringV l2 <=> l1 = l2)
+Proof
+  conj_tac >> Induct >> gen_tac >> Cases_on `l2` >> simp[]
+QED
+
+Theorem concat_alloc_size_bounds:
+  !tys. 32 + SUM (MAP concat_payload_capacity tys) <= concat_alloc_size tys /\
+        32 + concat_data_bound 0 tys <= concat_alloc_size tys
+Proof
+  gen_tac >> simp[concat_alloc_size_def, LET_THM] >>
+  qabbrev_tac `c = SUM (MAP concat_payload_capacity tys)` >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `c + 31` strip_assume_tac) >>
+  `(c + 31) MOD 32 < 32` by simp[] >>
+  decide_tac
+QED
+
+Theorem concat_buffer_type_bytestring[local]:
+  !ty n. is_bytestring_type (concat_buffer_type ty n)
+Proof
+  rw[concat_buffer_type_def] >> CASE_TAC >> simp[is_bytestring_type_def] >>
+  CASE_TAC >> simp[is_bytestring_type_def]
+QED
+
+(* A concat result fits the buffer the lowering allocates for it. *)
+Theorem concat_read_buffer_typed[local]:
+  !cenv cx env ty n args es v es'.
+    expr_body_pre cenv cx env (Builtin ty (Concat n) args) es /\
+    (do r <- eval_expr cx (Builtin ty (Concat n) args); read_result cx r od) es =
+      (INL v, es') ==>
+    value_runtime_typed env
+      (concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))) v
+Proof
+  rpt strip_tac >>
+  `expr_sim_inv cenv cx env es /\
+   well_typed_expr env (Builtin ty (Concat n) args) /\
+   alloc_limits_expr cenv (Builtin ty (Concat n) args) /\
+   call_evaluation_safe cx (int_calls_expr (Builtin ty (Concat n) args))` by
+    fs[expr_body_pre_def] >>
+  `well_typed_exprs env args /\ 2 <= LENGTH args /\
+   SUM (MAP bytelike_type_bound (MAP expr_type args)) <= n /\
+   ((ty = BaseT (BytesT (Dynamic n)) /\
+     EVERY (\t. ?bd. t = BaseT (BytesT bd)) (MAP expr_type args)) \/
+    (ty = BaseT (StringT n) /\
+     EVERY (\t. ?m. t = BaseT (StringT m)) (MAP expr_type args)))` by
+    (qpat_x_assum `well_typed_expr _ _` mp_tac >>
+     simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
+     rpt strip_tac >> fs[]) >>
+  `call_evaluation_safe cx (int_calls_exprs args)` by
+    (qpat_x_assum `call_evaluation_safe _ (int_calls_expr _)` mp_tac >>
+     pure_rewrite_tac[int_calls_expr_def] >> simp[]) >>
+  `concat_alloc_size (MAP expr_type args) < 2 ** 64` by
+    (qpat_x_assum `alloc_limits_expr _ _` mp_tac >> simp[alloc_limits_expr_def]) >>
+  `SUM (MAP (concat_payload_capacity o expr_type) args) < 2 ** 64` by
+    (qspec_then `MAP expr_type args` strip_assume_tac concat_alloc_size_bounds >>
+     fs[MAP_MAP_o]) >>
+  `(SUM (MAP (concat_payload_capacity o expr_type) args) + 31) DIV 32 <=
+   SUM (MAP (concat_payload_capacity o expr_type) args) + 31` by
+    simp[arithmeticTheory.DIV_LESS_EQ] >>
+  `MAP bytelike_type_bound (MAP expr_type args) =
+   MAP concat_payload_capacity (MAP expr_type args)` by
+    (irule concat_payload_capacity_bound >> fs[EVERY_MEM]) >>
+  drule eval_expr_concat_bind >>
+  disch_then (qspecl_then [`cx`, `ty`, `n`] SUBST_ALL_TAC) >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[bind_def] >>
+  Cases_on `eval_exprs cx args es` >> rename1 `eval_exprs cx args es = (rr, st)` >>
+  Cases_on `rr` >> simp[] >>
+  rename1 `eval_exprs cx args es = (INL vs, st)` >>
+  `exprs_runtime_typed env args vs` by
+    (qspecl_then [`cx`, `args`] (assume_tac o cj 1) (cj 6 eval_scc_type_sound_mutual) >>
+     first_x_assum (qspecl_then [`env`, `es`, `INL vs`, `st`] mp_tac) >>
+     fs[expr_sim_inv_def]) >>
+  `LIST_REL (\t v. ?tv. evaluate_type env.type_defs t = SOME tv /\ value_has_type tv v)
+     (MAP expr_type args) vs` by
+    (fs[exprs_runtime_typed_def, LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
+  gvs[]
+  >~ [`concat_buffer_type (BaseT (BytesT _)) _`]
+  >- (drule_all typed_bytes_operands >> strip_tac >>
+      mp_tac (Q.INST [`ts` |-> `MAP expr_type args`, `tenv` |-> `env.type_defs`]
+                evaluate_concat_typed_bytes) >>
+      impl_tac >- fs[] >> strip_tac >>
+      gvs[concat_map_ctor_11, read_result_def, return_def] >> strip_tac >>
+      gvs[concat_buffer_type_def, value_runtime_typed_def, evaluate_type_def,
+          type_slot_size_def, vyperTypingTheory.value_has_type_def,
+          MAP_MAP_o, vfmConstantsTheory.word_size_def, wordsTheory.dimword_def])
+  >> drule_all typed_string_operands >> strip_tac >>
+  mp_tac (Q.INST [`ts` |-> `MAP expr_type args`, `tenv` |-> `env.type_defs`]
+            evaluate_concat_typed_string) >>
+  impl_tac >- fs[] >> strip_tac >>
+  gvs[concat_map_ctor_11, read_result_def, return_def] >> strip_tac >>
+  gvs[concat_buffer_type_def, value_runtime_typed_def, evaluate_type_def,
+      type_slot_size_def, vyperTypingTheory.value_has_type_def,
+      MAP_MAP_o, vfmConstantsTheory.word_size_def, wordsTheory.dimword_def]
+QED
+
 Theorem lowered_zero_bytestring_read_empty:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
@@ -829,6 +997,10 @@ Proof
       irule type_builtin_read_annotation_typed >>
       gvs[expr_body_pre_def] >> goal_assum drule >> simp[] >>
       metis_tac[])
+  >~ [`Builtin _ (Concat _) _`]
+  >- (rpt strip_tac >> drule_all concat_read_buffer_typed >> strip_tac >>
+      irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
+      gvs[lowered_value_type_def])
   >~ [`Call _ (IntCall _) _ _`]
   >- (strip_tac >> drule_all expr_body_pre_read_value_typed >> strip_tac >>
       irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
@@ -991,6 +1163,9 @@ Proof
            vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
       gvs[type_slot_size_def, compatible_bound_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ (Concat _) _`]
+  >- (rpt strip_tac >> simp[lowered_value_type_def] >>
+      drule_all concat_read_buffer_typed >> simp[])
   >- (rpt gen_tac >> strip_tac >>
       drule abi_encode_lowered_well_typed_coherent >> strip_tac >>
       irule type_builtin_read_annotation_typed >>
@@ -1009,5 +1184,6 @@ Theorem lowered_value_type_bytestring:
     is_bytestring_type (lowered_value_type cenv e)
 Proof
   ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, is_bytestring_type_def]
+  simp[lowered_value_type_def, is_bytestring_type_def,
+       concat_buffer_type_bytestring]
 QED

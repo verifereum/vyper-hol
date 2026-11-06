@@ -9,7 +9,10 @@ Theorem gas_shadow_compiles_load_bytestring_as_word:
 Proof
   Cases_on `opc = SAR` >> simp[load_bytestring_as_word_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[] >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
+       >- (rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+                >- simp[] >> gen_tac >> BETA_TAC) >>
+           simp[gas_shadow_compiles_return]) >>
+       gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_compiles_int_clamp:

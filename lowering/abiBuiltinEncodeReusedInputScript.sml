@@ -215,7 +215,7 @@ Theorem compile_abi_encode_tuple_source:
   let source_size = type_memory_bytes ce (TupleT tys) in
   let maxlen = abi_size_bound ce.ce_struct_fields (TupleT tys) in
   let bytes = abi_encode_method_id_bytes method_id ++ enc (Tuple ats) (ListV avs) in
-  ~(LENGTH args = 1 /\ ~ensure) /\ compile_multi_exprs cfn ce args origin = (ops,arg_st) /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ compile_abi_encode_args cfn ce args origin = (ops,arg_st) /\
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
     (vv,final) /\ fn_has_code arg_st final func /\
   (arg_st.cs_blocks = final.cs_blocks \/
@@ -254,7 +254,7 @@ Proof
   rename1 `compile_store_abi_tuple _ _ _ _ allocated = ((),staged)` >>
   rename1 `lower_abi_encode _ _ _ _ _ staged = (out,final)` >>
   `LENGTH ops = LENGTH args` by
-    (mp_tac (Q.SPECL [`args`, `cfn`, `ce`, `origin`] compile_multi_exprs_length) >> asm_simp_tac (srw_ss()) []) >>
+    (mp_tac (Q.SPECL [`args`, `cfn`, `ce`, `origin`] compile_abi_encode_args_length) >> asm_simp_tac (srw_ss()) []) >>
   `MAP SND (ZIP (ops,MAP expr_type args)) = MAP expr_type args` by asm_simp_tac (srw_ss()) [MAP_ZIP] >>
   `abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)) = type_memory_bytes ce (TupleT (MAP expr_type args))` by
     (mp_tac (Q.ISPECL [`ops:operand list`, `MAP expr_type args`] abi_tuple_encode_bytes_zip) >>
@@ -286,7 +286,7 @@ QED
    Separation follows from allocation credit, without a final-layout premise. *)
 
 Theorem compile_abi_encode_tuple_output_live:
-  ~(LENGTH args = 1 /\ ~ensure) /\ compile_multi_exprs cfn ce args origin = (ops,arg_st) /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ compile_abi_encode_args cfn ce args origin = (ops,arg_st) /\
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
     (vv,final) ==>
   abi_decoder_operand_live final.cs_next_var (vv_operand vv)
@@ -304,7 +304,7 @@ Theorem compile_abi_encode_tuple_producer:
   let maxlen = abi_size_bound ce.ce_struct_fields (TupleT tys) in
   let n = maxlen+LENGTH (abi_encode_method_id_bytes method_id) in
   let bytes = abi_encode_method_id_bytes method_id ++ enc (Tuple ats) (ListV avs) in
-  ~(LENGTH args = 1 /\ ~ensure) /\ compile_multi_exprs cfn ce args origin = (ops,arg_st) /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ compile_abi_encode_args cfn ce args origin = (ops,arg_st) /\
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
     (vv,final) /\ fn_has_code arg_st final func /\
   (arg_st.cs_blocks = final.cs_blocks \/
