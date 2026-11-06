@@ -2,10 +2,11 @@
 Theory bodyPtrBytestringBuiltinsConcatBytes
 Ancestors
   bodyPtrBytestringBuiltinsConcatFixed bodyPtrBytestringBuiltinsAllocation
-  typedCopyPtr fragExecPtr abiEncoderReentryLeaves
+  typedCopyPtr fragExecPtr abiEncoderReentryLeaves emitHelper compileEnv exprLoweringProps
   fragGasSeqPtr fragGasPathPtr bodyPtrDefs ptrDiscipline ptrSafeRun
   venomInst venomState venomExecSemantics words finite_map
-  valueEncodingProps valueEncodingProofs list rich_list byte
+  valueEncodingProps valueEncodingProofs venomMemProps list rich_list byte
+Libs monadsyntax
 
 Theorem concat_payload_copy_counted_edge:
   !D ctx fn PG G tn s bb id dst src count_op a b n.
@@ -578,3 +579,169 @@ Resume concat_bytes_arm_counted[endpoint]:
 QED
 
 Finalise concat_bytes_arm_counted
+
+Theorem concat_bytes_store_memory_frame:
+  !s t d src n ob x.
+    t.vs_memory = (mstore ob x (mcopy d src n s)).vs_memory ==>
+    mem_agree_outside
+      ({i | d <= i /\ i < d+n} UNION {i | ob <= i /\ i < ob+32})
+      t.vs_memory s.vs_memory
+Proof
+  rpt strip_tac >> simp[mem_agree_outside_def] >> rpt strip_tac >>
+  `mem_agree_outside {i | ob <= i /\ i < ob+32}
+    (mstore ob x (mcopy d src n s)).vs_memory (mcopy d src n s).vs_memory` by
+    simp[mstore_memory_frame] >>
+  `mem_bytes_at i 1 (mcopy d src n s).vs_memory =
+   mem_bytes_at i 1 s.vs_memory` by
+    (irule mcopy_mem_bytes_at_disjoint >> gvs[] >> decide_tac) >>
+  gvs[mem_agree_outside_def] >> metis_tac[]
+QED
+
+Theorem concat_bytes_arm_ptr:
+  !D ctx fn PG G tn s bb id root off input len src offset dst next
+    a b c k bs source_cap cap.
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MLOAD [Var input] [len]) /\
+    get_instruction bb (s.vs_inst_idx+1) =
+      SOME (mk_inst (id+1) ADD [Var input; Lit 32w] [src]) /\
+    get_instruction bb (s.vs_inst_idx+2) =
+      SOME (mk_inst (id+2) MLOAD [Var off] [offset]) /\
+    get_instruction bb (s.vs_inst_idx+3) =
+      SOME (mk_inst (id+3) ADD [Var root; Var offset] [dst]) /\
+    get_instruction bb (s.vs_inst_idx+4) =
+      SOME (mk_inst (id+4) MCOPY [Var dst;Var src;Var len] []) /\
+    get_instruction bb (s.vs_inst_idx+5) =
+      SOME (mk_inst (id+5) ADD [Var offset;Var len] [next]) /\
+    get_instruction bb (s.vs_inst_idx+6) =
+      SOME (mk_inst (id+6) MSTORE [Var off;Var next] []) /\
+    lookup_var input s = SOME b /\ lookup_var root s = SOME a /\
+    lookup_var off s = SOME c /\
+    ptr_covers G tn input s source_cap /\ ptr_covers G tn input s 32 /\
+    ptr_covers G tn root s cap /\ ptr_covers G tn off s 32 /\
+    mload (w2n b) s = n2w (LENGTH bs) /\ mload (w2n c) s = n2w k /\
+    mem_bytes_at (w2n b+32) (LENGTH bs) s.vs_memory = bs /\
+    (!i. (w2n b <= i /\ i < w2n b+32+LENGTH bs) \/
+         (w2n c <= i /\ i < w2n c+32) \/
+         (w2n a <= i /\ i < w2n a+k) ==> i NOTIN tn.t_mem) /\
+    32+LENGTH bs <= source_cap /\ w2n b+32 < dimword(:256) /\
+    k+LENGTH bs <= cap /\ w2n a+k < dimword(:256) /\
+    LENGTH bs < dimword(:256) /\
+    (w2n a+(k+LENGTH bs) <= w2n c \/ w2n c+32 <= w2n a) /\
+    ALL_DISTINCT [len;src;offset;dst;next] /\
+    (~MEM root [len;src;offset;dst;next]) /\
+    (~MEM off [len;src;offset;dst;next]) /\ input <> len ==>
+    ?Gf tnf t.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+      mem_bytes_at (w2n a) (k+LENGTH bs) t.vs_memory =
+        mem_bytes_at (w2n a) k s.vs_memory ++ bs /\
+      mload (w2n c) t = n2w (k+LENGTH bs) /\
+      ptr_covers Gf tnf root t cap /\ ptr_covers Gf tnf off t 32 /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_inst_idx = s.vs_inst_idx+7 /\
+      t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
+      (!i. w2n a <= i /\ i < w2n a+k+LENGTH bs ==> i NOTIN tnf.t_mem) /\
+      (!i. w2n c <= i /\ i < w2n c+32 ==> i NOTIN tnf.t_mem) /\
+      tnf.t_mem = tn.t_mem DIFF
+        ({i | w2n a+k <= i /\ i < w2n a+k+LENGTH bs} UNION
+         {i | w2n c <= i /\ i < w2n c+32}) /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      mem_agree_outside
+        ({i | w2n a+k <= i /\ i < w2n a+k+LENGTH bs} UNION
+         {i | w2n c <= i /\ i < w2n c+32}) t.vs_memory s.vs_memory /\
+      (!q. ~MEM q [len;src;offset;dst;next] ==>
+        lookup_var q t = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+        op_taint tnf (Var q) = op_taint tn (Var q))
+Proof
+  rpt gen_tac >> strip_tac >> (
+  `!i. (w2n b <= i /\ i < w2n b+32+LENGTH bs) \/
+       (w2n c <= i /\ i < w2n c+32) ==> i NOTIN tn.t_mem` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> simp[]) >>
+  drule_all concat_bytes_arm_counted >>
+  disch_then (qspecl_then [`D`, `PG`]
+    (qx_choose_then `Gf` (qx_choose_then `tnf`
+      (qx_choose_then `t` strip_assume_tac)))) >>
+  `w2n (a+n2w k) = w2n a+k` by
+    (`k < dimword(:256)` by decide_tac >>
+     simp[w2n_add_2, w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+  `w2n (b+32w) = w2n b+32` by simp[w2n_add_2] >>
+  qexistsl_tac [`Gf`, `tnf`, `t`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- suspend "prefix" >>
+  conj_tac >- suspend "offset" >>
+  conj_tac >- suspend "root" >>
+  simp[] >> suspend "frames")
+QED
+
+Resume concat_bytes_arm_ptr[prefix]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  (asm_rewrite_tac[] >> irule concat_bytes_store_prefix >> simp[])
+QED
+
+Resume concat_bytes_arm_ptr[offset]:
+  markerLib.RESUME_TAC >> rpt strip_tac >> (
+  `mload (w2n c) t =
+   mload (w2n c) (mstore (w2n c) (n2w k+n2w (LENGTH bs))
+     (mcopy (w2n (a+n2w k)) (w2n (b+32w)) (LENGTH bs) s))` by
+    simp[mload_def] >>
+  gvs[mload_mstore_same, word_add_n2w])
+QED
+
+Resume concat_bytes_arm_ptr[root]:
+  markerLib.RESUME_TAC >> rpt strip_tac >> (
+  `lookup_var root t = lookup_var root s /\
+   FLOOKUP Gf root = FLOOKUP G root /\
+   op_taint tnf (Var root) = op_taint tn (Var root)` by
+    (first_x_assum (qspec_then `root` mp_tac) >> simp[]) >>
+  gvs[ptr_covers_def, eval_operand_def, op_prov_def])
+QED
+
+Resume concat_bytes_arm_ptr[frames]:
+  markerLib.RESUME_TAC >> (
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> Cases_on `i < w2n a+k` >> simp[] >>
+      qpat_x_assum `!i. _ \/ _ \/ _ ==> i NOTIN tn.t_mem` irule >> simp[]) >>
+  drule concat_bytes_store_memory_frame >> simp[])
+QED
+
+Finalise concat_bytes_arm_ptr
+
+Theorem compile_concat_bytes_layout:
+  !data_ptr off_ptr value sa sb.
+    (do arg_len <- emit_op MLOAD [value];
+        arg_data <- emit_op ADD [value; Lit 32w];
+        offset_op <- emit_op MLOAD [off_ptr];
+        dst <- emit_op ADD [data_ptr; offset_op];
+        emit_void MCOPY [dst;arg_data;arg_len];
+        new_offset <- emit_op ADD [offset_op;arg_len];
+        emit_void MSTORE [off_ptr;new_offset]
+     od) sa = ((),sb) ==>
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_next_var = sa.cs_next_var+5 /\
+    sb.cs_next_id = sa.cs_next_id+7 /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id MLOAD [value]
+         [STRING #"%" (toString sa.cs_next_var)];
+       mk_inst (sa.cs_next_id+1) ADD [value;Lit 32w]
+         [STRING #"%" (toString (sa.cs_next_var+1))];
+       mk_inst (sa.cs_next_id+2) MLOAD [off_ptr]
+         [STRING #"%" (toString (sa.cs_next_var+2))];
+       mk_inst (sa.cs_next_id+3) ADD
+         [data_ptr;Var (STRING #"%" (toString (sa.cs_next_var+2)))]
+         [STRING #"%" (toString (sa.cs_next_var+3))];
+       mk_inst (sa.cs_next_id+4) MCOPY
+         [Var (STRING #"%" (toString (sa.cs_next_var+3)));
+          Var (STRING #"%" (toString (sa.cs_next_var+1)));
+          Var (STRING #"%" (toString sa.cs_next_var))] [];
+       mk_inst (sa.cs_next_id+5) ADD
+         [Var (STRING #"%" (toString (sa.cs_next_var+2)));
+          Var (STRING #"%" (toString sa.cs_next_var))]
+         [STRING #"%" (toString (sa.cs_next_var+4))];
+       mk_inst (sa.cs_next_id+6) MSTORE
+         [off_ptr;Var (STRING #"%" (toString (sa.cs_next_var+4)))] []]
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  rpt strip_tac >> gvs[]
+QED
