@@ -2,7 +2,7 @@
 Theory logTupleCallerPtr
 Ancestors
   logTupleDispatchPtr logTupleGhostPtr logAllocFramePtr stmtSimLogStoreEncode
-  stmtSimLogEncodeFields stmtSimLogExecFields
+  stmtSimLogEncodeFields stmtSimLogExecFields exprSimPtrLiteralBuffer
   localPtrsProps abiBuiltinAllocation abiDecoderFrame bodyPtrDefs compileEnv
   allocationPtr emitHelperProps fragGasSeqPtr context ASCIInumbers string
   logDataAllocPtr abiEncoderCounters stmtFragPtr abiDecoderReentry
@@ -190,7 +190,9 @@ Theorem log_allocated_tuple_sequence_ptr:
   ?actual db H tm.
     run_inst_seq (emitted_insts st end_st) s = OK actual /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s H tm /\
-    inst_extends st end_st /\ fresh_vars_wrt limit_st actual /\
+    inst_extends st end_st /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st end_st) /\ fresh_vars_wrt limit_st actual /\
     stmt_state_rel ctx func ce cx es actual /\
     eval_operand dst.buf_operand actual = SOME (n2w db) /\ db < dimword (:256) /\
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
@@ -314,6 +316,9 @@ Resume log_allocated_tuple_sequence_ptr[compose]:
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `emitted_insts st end_st = emitted_insts st prepared ++ emitted_insts prepared end_st` by
     (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st end_st)` by
+    (asm_simp_tac bool_ss [EVERY_APPEND]) >>
   `run_inst_seq (emitted_insts st end_st) s = OK (u with vs_inst_idx := t.vs_inst_idx)` by
     metis_tac[] >>
   `abi_encoder_input ei (Tuple ats) (ListV avs) sb inputCap s.vs_memory` by
@@ -334,15 +339,7 @@ Resume log_allocated_tuple_sequence_ptr[result]:
   `db < dimword (:256)` by decide_tac >>
   `inst_extends st end_st` by metis_tac[inst_extends_trans] >>
   qexistsl_tac [`u with vs_inst_idx := t.vs_inst_idx`,`db`,`Gf`,`tk`] >>
-  asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx, eval_operand_def] >>
-  qpat_x_assum `ghost_inv d ce cx es Gf tk u` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> Cases_on `d`
-  >- (simp_tac bool_ss [ghost_inv_def, ptr_covers_def, stor_taint_ok_def,
-       lookup_var_def, return_buf_ptr_def, venom_state_accfupds, optionTheory.option_CLAUSES] >>
-       metis_tac[]) >>
-  PairCases_on `x` >>
-  simp_tac bool_ss [ghost_inv_def, ptr_covers_def, stor_taint_ok_def,
-    lookup_var_def, return_buf_ptr_def, venom_state_accfupds, optionTheory.option_CLAUSES] >>
-  metis_tac[]
+  asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx, eval_operand_def,
+    PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize]
 QED
 Finalise log_allocated_tuple_sequence_ptr
