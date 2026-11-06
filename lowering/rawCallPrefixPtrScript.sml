@@ -339,6 +339,7 @@ Theorem raw_call_operands_sim_ptr:
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
+      EVERY (\op. !l. op <> Label l) xs /\
       EVERY (\op. !v. op = Var v ==> not_fresh_at s5 v) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
@@ -543,6 +544,7 @@ Theorem raw_call_prefix_sim_ptr:
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
+      EVERY (\op. !l. op <> Label l) xs /\
       EVERY (\op. !v. op = Var v ==> not_fresh_at s6 v) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
