@@ -141,3 +141,88 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[pred_setTheory.SUBSET_DEF]
 QED
+
+Theorem plan_trace_key_invariant[local]:
+  (!lv dfg cfg fn labels visited ps result events.
+    plan_aux_trace lv dfg cfg fn labels visited ps result events ==>
+    set visited SUBSET set (FST (SND result)) /\
+    DISJOINT (set (MAP FST events)) (set visited) /\
+    set (MAP FST events) SUBSET set (FST (SND result)) /\
+    ALL_DISTINCT (MAP FST events)) /\
+  (!lv dfg cfg fn stack spilled labels visited ps result events.
+    plan_succs_trace lv dfg cfg fn stack spilled labels visited ps result events ==>
+    set visited SUBSET set (FST (SND result)) /\
+    DISJOINT (set (MAP FST events)) (set visited) /\
+    set (MAP FST events) SUBSET set (FST (SND result)) /\
+    ALL_DISTINCT (MAP FST events))
+Proof
+  ho_match_mp_tac plan_aux_trace_ind >> rpt strip_tac >>
+  gvs[MAP_APPEND, ALL_DISTINCT_APPEND, pred_setTheory.DISJOINT_DEF,
+      pred_setTheory.SUBSET_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[]
+QED
+
+Theorem plan_aux_trace_initial_exclusion:
+  plan_aux_trace lv dfg cfg fn labels visited ps result events ==>
+  DISJOINT (set (MAP FST events)) (set visited)
+Proof
+  metis_tac[cj 1 plan_trace_key_invariant]
+QED
+
+Theorem plan_succs_trace_initial_exclusion:
+  plan_succs_trace lv dfg cfg fn stack spilled labels visited ps result events ==>
+  DISJOINT (set (MAP FST events)) (set visited)
+Proof
+  metis_tac[cj 2 plan_trace_key_invariant]
+QED
+
+Theorem plan_aux_trace_final_inclusion:
+  plan_aux_trace lv dfg cfg fn labels visited ps (ops,visited',out) events ==>
+  set (MAP FST events) SUBSET set visited'
+Proof
+  metis_tac[cj 1 plan_trace_key_invariant, pairTheory.FST, pairTheory.SND]
+QED
+
+Theorem plan_succs_trace_final_inclusion:
+  plan_succs_trace lv dfg cfg fn stack spilled labels visited ps (ops,visited',out) events ==>
+  set (MAP FST events) SUBSET set visited'
+Proof
+  metis_tac[cj 2 plan_trace_key_invariant, pairTheory.FST, pairTheory.SND]
+QED
+
+Theorem plan_aux_trace_distinct_keys:
+  plan_aux_trace lv dfg cfg fn labels visited ps result events ==>
+  ALL_DISTINCT (MAP FST events)
+Proof
+  metis_tac[cj 1 plan_trace_key_invariant]
+QED
+
+Theorem plan_succs_trace_distinct_keys:
+  plan_succs_trace lv dfg cfg fn stack spilled labels visited ps result events ==>
+  ALL_DISTINCT (MAP FST events)
+Proof
+  metis_tac[cj 2 plan_trace_key_invariant]
+QED
+
+Theorem distinct_event_keys_unique[local]:
+  !events lbl ps qs.
+  ALL_DISTINCT (MAP FST events) /\ MEM (lbl,ps) events /\ MEM (lbl,qs) events ==>
+  ps = qs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[MEM_MAP] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem plan_aux_trace_event_unique:
+  plan_aux_trace lv dfg cfg fn labels visited ps0 result events /\
+  MEM (lbl,ps) events /\ MEM (lbl,qs) events ==> ps = qs
+Proof
+  metis_tac[plan_aux_trace_distinct_keys, distinct_event_keys_unique]
+QED
+
+Theorem plan_succs_trace_event_unique:
+  plan_succs_trace lv dfg cfg fn stack spilled labels visited ps0 result events /\
+  MEM (lbl,ps) events /\ MEM (lbl,qs) events ==> ps = qs
+Proof
+  metis_tac[plan_succs_trace_distinct_keys, distinct_event_keys_unique]
+QED
