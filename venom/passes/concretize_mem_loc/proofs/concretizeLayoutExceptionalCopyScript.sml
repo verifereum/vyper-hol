@@ -1,5 +1,5 @@
 Theory concretizeLayoutExceptionalCopy
-Ancestors concretizeLayoutLocalReturnCopy concretizeLayoutExceptionalEntry
+Ancestors concretizeLayoutLocalReturnCopy concretizeLayoutRankedCorridor
   concretizeLayoutLocalCalldataCopy frameResolvedTrace concretizePtrParamSupport
   frameRelocationReachableSupport frameRelocationLocal frameRelocationValues
   frameRelocationGuardedValues frameRelocationEnvironment
@@ -54,8 +54,7 @@ Theorem concretize_returncopy_atomic_abort:
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
     (guarded_bytes (retpc_var fn) rv tn) R concretize_local_obs s t /\
   step_inst_base inst s = OK post /\
-  terminal_corridor bb bb' (SUC s.vs_inst_idx) j /\
-  s.vs_inst_idx = t.vs_inst_idx /\
+  ranked_terminal_corridor bb bb' (SUC s.vs_inst_idx) (SUC t.vs_inst_idx) n /\
   exec_block fuel C bb (post with vs_inst_idx := SUC post.vs_inst_idx) = Abort a final ==>
   ?tpost final'. step_inst_base inst t = OK tpost /\
     exec_block fuel C' bb' (tpost with vs_inst_idx := SUC tpost.vs_inst_idx) =
@@ -65,7 +64,7 @@ Proof
   drule_all concretize_returncopy_success_complete >> strip_tac >>
   `variable_domains s t` by metis_tac[local_rel_domains] >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
-  drule_all layout_returncopy_terminal_abort >> strip_tac >>
+  drule_all layout_returncopy_ranked_abort >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
 

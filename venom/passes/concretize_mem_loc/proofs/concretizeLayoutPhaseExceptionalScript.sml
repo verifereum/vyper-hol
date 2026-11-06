@@ -1,8 +1,9 @@
 Theory concretizeLayoutPhaseExceptional
 Ancestors concretizeLayoutPhaseOrigin concretizeLayoutExceptionalCopy
-  concretizeLayoutExceptionalEntry frameJointTrace frameJointTransition
+  concretizeLayoutExceptionalEntry concretizeLayoutBlockPairing concretizeStepStructure
+  frameJointTrace frameJointTransition
   frameOriginHistory frameOriginReachable frameResolvedTrace
-  venomExecSemantics venomInst list
+  venomExecSemantics venomInst list arithmetic concretizeLayoutRankedCorridor
 
 Theorem layout_returncopy_phase_block_abort:
   ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -14,12 +15,9 @@ Theorem layout_returncopy_phase_block_abort:
   eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
   eval_operand opn s = SOME sz /\
   get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
-  get_instruction g.lop_origin.lbo_target t.vs_inst_idx = SOME inst /\
-  s.vs_inst_idx = t.vs_inst_idx /\
+  layout_block_pair positions g.lop_origin.lbo_source g.lop_origin.lbo_target
+    s.vs_inst_idx t.vs_inst_idx /\
   revert_forward_pair g.lop_origin.lbo_source s.vs_inst_idx j /\
-  (!n i. get_instruction g.lop_origin.lbo_source n = SOME i /\
-    (i.inst_opcode = ASSIGN \/ i.inst_opcode = REVERT) ==>
-    get_instruction g.lop_origin.lbo_target n = SOME i) /\
   step_inst_base inst s = OK post /\
   exec_block (SUC fuel) C g.lop_origin.lbo_source s = Abort a final ==>
   ?final'. exec_block (SUC fuel) C' g.lop_origin.lbo_target t = Abort a final' /\
@@ -40,9 +38,19 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `terminal_corridor g.lop_origin.lbo_source g.lop_origin.lbo_target
+  `get_instruction g.lop_origin.lbo_target t.vs_inst_idx = SOME inst` by
+    (drule layout_block_pair_lookup >> disch_then drule >>
+     simp[concretize_positions_unchanged]) >>
+  `layout_block_pair positions g.lop_origin.lbo_source g.lop_origin.lbo_target
+    (SUC s.vs_inst_idx) (SUC t.vs_inst_idx)` by
+    (drule_all layout_block_pair_advance >>
+     simp[concretize_positions_unchanged, ADD1]) >>
+  `terminal_corridor g.lop_origin.lbo_source g.lop_origin.lbo_source
     (SUC s.vs_inst_idx) j` by
     (irule layout_revert_forward_corridor >> goal_assum (drule_at Any) >> simp[]) >>
+  `ranked_terminal_corridor g.lop_origin.lbo_source g.lop_origin.lbo_target
+    (SUC s.vs_inst_idx) (SUC t.vs_inst_idx) (j - SUC s.vs_inst_idx)` by
+    (drule_all layout_terminal_corridor_ranked >> simp[]) >>
   `post.vs_inst_idx = s.vs_inst_idx` by
     (irule step_inst_base_preserves_inst_idx >> goal_assum (drule_at Any) >>
      simp[is_terminator_def]) >>

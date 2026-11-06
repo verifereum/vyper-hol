@@ -85,12 +85,9 @@ Theorem layout_pending_returncopy_block_abort:
   eval_operand opd sn = SOME dst /\ eval_operand ops sn = SOME src /\
   eval_operand opn sn = SOME sz /\
   get_instruction g.lop_origin.lbo_source sn.vs_inst_idx = SOME inst /\
-  get_instruction g.lop_origin.lbo_target tnxt.vs_inst_idx = SOME inst /\
-  sn.vs_inst_idx = tnxt.vs_inst_idx /\
+  layout_block_pair positions g.lop_origin.lbo_source g.lop_origin.lbo_target
+    sn.vs_inst_idx tnxt.vs_inst_idx /\
   revert_forward_pair g.lop_origin.lbo_source sn.vs_inst_idx j /\
-  (!n i. get_instruction g.lop_origin.lbo_source n = SOME i /\
-    (i.inst_opcode = ASSIGN \/ i.inst_opcode = REVERT) ==>
-    get_instruction g.lop_origin.lbo_target n = SOME i) /\
   step_inst_base inst sn = OK post /\
   exec_block (SUC fuel) C g.lop_origin.lbo_source sn = Abort a final ==>
   ?final'. exec_block (SUC fuel) C' g.lop_origin.lbo_target tnxt = Abort a final' /\
@@ -104,8 +101,7 @@ Proof
   drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
     layout_returncopy_phase_block_abort >>
   simp[layout_phase_ok_abort_def] >>
-  disch_then irule >> goal_assum (drule_at Any) >>
-  gvs[] >> metis_tac[]
+  disch_then irule >> gvs[] >> metis_tac[]
 QED
 
 val _ = export_theory();
