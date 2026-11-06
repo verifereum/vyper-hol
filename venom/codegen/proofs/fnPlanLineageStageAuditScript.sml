@@ -1481,3 +1481,112 @@ QED
    certified universal invariant nor a frozen-theorem counterexample. No new
    fixture enumeration or global invariant definition was used for this audit.
 *)
+
+(* First-reactivation / demand-loss causal audit (C3.gate.reset_cut).
+
+   Scope and logical boundary:
+   E0341's self-carried PHI candidate is NOT ready. E0342's
+   analyzed_phi_incoming_first_reactivation is a universal logical boundary:
+   for incoming v used by PHI i and live at j, it provides i<k<j defining v,
+   and deadness at every boundary i<r<=k. It does not provide a resource
+   premise at any of those boundaries. Its premises alone do NOT include
+   SSA, canonical parameters or instruction well-formedness. The following
+   classification additionally uses the frozen theorem's codegen_ready_fn.
+
+   First defining instruction k (classification argument, not new theorem):
+   * inst_defs is inst_outputs (venomInst). NOP and output-free terminators
+     cannot be k under inst_wf. Parameter definitions are confined to the
+     entry prefix by canonical_param_prefix; a block containing PHIs cannot
+     be entry by block_entries_ready. They cannot be k in this situation.
+   * PHIs form a prefix by bb_well_formed. A later PHI defining v cannot
+     explain live v at j: if j is in the prefix, incoming-dead-after already
+     forbids it; otherwise propagate back to the prefix end. SSA gives no
+     further definition of v after k, and phi_block_ready forbids v live at
+     that end. This is a logical exclusion argument still requiring formal
+     packaging if used by a consumer. It is not a physical erasure argument.
+   * Remaining k is OFFSET or an output-producing regular instruction,
+     INCLUDING ASSIGN. generate_inst_plan dispatches ASSIGN to the regular
+     pipeline. Unlowered opcodes are rejected by readiness. The single-use
+     property does not exclude these routes: ASSIGN, PHI, OFFSET and params
+     are exempt in sue_count_exempt; a counted use can be skipped by a path.
+
+   Old incoming occurrence at the earlier PHI entry: two different routes.
+   Route                    Last demand / actual potential deletion event
+   ----------------------------------------------------------------------
+   Selected on this edge    input_vars_from selects this PHI source. At PHI
+                            execution the source ceases to be live after its
+                            use (E0342's i+1 fact); generate_phi_plan's keep=F
+                            branch overwrites ONE selected depth. Existing
+                            phi_origin_stage_selected_extinction removes a
+                            UNIQUE selected tag, not every cell named v. A
+                            spill must also be absent/restored consistently.
+                            Needed entry bound is total R(v)<=1 plus actual
+                            source availability, not one tagged origin alone.
+   Only another edge        input_vars_from replaces this input by this
+                            edge's selected source; no PHI step selects v.
+                            Follow the finite path backwards to the first
+                            loss of edge demand since v's previous dynamic
+                            definition. If an ordinary last use intervenes,
+                            the existing suffix resource cancellation applies
+                            with its entry bound. If every use was skipped,
+                            the cut must be a divergent successor choice with
+                            v in predecessor live-out but not chosen inputs.
+                            clean_stack_plan acts at a single-predecessor
+                            branch successor. With several predecessors its
+                            identity branch deletes nothing; ready join
+                            predecessors must end in JMP, so a proof must
+                            locate an EARLIER divergent edge, not claim the
+                            final JMP reorder removes non-target names.
+
+   Exact outstanding physical implication (NOT asserted here):
+   For a genuine native path segment between consecutive dynamic definitions
+   of v, entered with zero old resources before the first definition, produce
+   stable pointwise U for relevant operands and live names. At its first
+   demand-loss cut prove R(v,q)=0 from the actual native result p -> q:
+     - selected PHI: availability + U at p, dead selected source and valid
+       selected depth must imply no Var v in q.ps_stack or q.ps_spilled;
+     - ordinary last use: U, materialisation, bounded exact operand suffix,
+       not-next-live, and no v output permit selected_suffix_resource_extinction;
+     - skipped-use branch: v in layout but not inputs, U at p, and actual
+       clean_stack_plan result must remove/mark its unique physical cell;
+       any map occurrence needs its OWN release argument. Cleanup does not
+       release spills, and OFFSET/PHI may not do so either. If no stack cell
+       exists, a surviving spill cannot be treated as zero automatically.
+   Then transport zero through the remaining dead interval to k, proving no
+   other step recreates v (SSA and exact stage behavior). The regular U
+   interface requires output absence, so assuming U at every reachable point
+   to obtain this reset would be circular unless a joint path invariant and
+   the demand-loss cut are independently proved. E0342 supplies neither the
+   preceding dynamic definition nor the cut across CFG edges.
+
+   At k / first subsequent observable query:
+   Regular (ASSIGN too) pops the operand window, pushes output v, and may
+   query LAST next_liveness in optimistic_swap immediately. It never sweeps
+   old v cells. A later emit_one_input exact depth lookup or optimistic query
+   can expose an old v when the new copy spills (the checked selective-spill
+   obstruction above). OFFSET pushes without input consumption, dead-output
+   removal or spill release; its first later depth query has the same gap.
+   No surviving PHI-k case is justified by the logical classification above;
+   for general cross-block redefinitions PHI's selected-origin accounting
+   still needs its entry uniqueness premise.
+
+   Alias check: the analyzed DFG records the unique static ASSIGN definition;
+   normalize_operand follows its singleton input recursively, with a visited
+   guard, and operand_equiv compares the resulting roots (dfgDefs). Thus
+   ASSIGN v:=Var w may make v and w equivalent for reorder/optimistic elision;
+   v:=Lit c may normalize v to that literal. This is not name erasure:
+   emit_one_input and optimistic_swap's selected depth query use exact operand
+   equality. No assumption that dfg_empty models this route is justified.
+   Static dominance ensures the definition of an incoming v is available at
+   its NAMED predecessor endpoint, not that all dynamic paths execute its
+   use before revisiting the defining block. A same-block later regular or
+   OFFSET definition can supply a backedge operand; E0341 rules out only
+   the direct PHI-output self-input live-after-prefix construction.
+
+   Strategy decision: unresolved. The feasible remaining route requires a
+   previous dynamic ordinary/ASSIGN/OFFSET definition, a selected-source or
+   skipped-use demand-loss cut, a surviving residual resource at that cut,
+   and a later exact query exposed after selective spill. No ready native
+   witness or universal exclusion has been established. Do not launch more
+   fixtures or export a conditional consumer on this audit's authority.
+*)
