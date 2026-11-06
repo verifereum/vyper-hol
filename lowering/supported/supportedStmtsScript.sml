@@ -103,7 +103,10 @@ End
 
 Definition supported_log_def:
   supported_log tops id es <=>
-    supported_pure_exprs tops es
+    supported_pure_exprs tops es /\
+    case supported_event_fields tops id of
+      SOME fields => MAP expr_type es = MAP (SND o FST) fields
+    | NONE => F
 End
 
 (* Literal ranges have exactly Num(b-a), including zero. The other range

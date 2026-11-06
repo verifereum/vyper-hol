@@ -8,6 +8,7 @@
  *)
 Theory tupleAssignMemory
 Ancestors
+  tupleAssignParts tupleAssignPrefix
   tupleTypedLoad tupleStageProps stmtSimAssignTuple tupleLocalStoreProps
   tupleLocalStoreRun stmtSimReturn stmtSimDeclMem valueCopyBytes
   stmtSim exprSim exprOperandVar exprLoweringProps stmtLowering compileEnv
@@ -57,27 +58,7 @@ Theorem assign_tuple_locals_memory_code_parts:
       sl.cs_next_var <= ss.cs_next_var /\ ss.cs_next_var <= sf.cs_next_var
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all assign_tuple_locals_code_decompose >> strip_tac >>
-  drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
-  drule exprSimUnwrapTheory.unwrap_value_extends >> strip_tac >>
-  drule tuple_stage_grows >> strip_tac >>
-  drule compile_tuple_load_all_grows >> strip_tac >>
-  drule_all tupleLocalStorePropsTheory.tuple_store_locals_grows >> strip_tac >>
-  `lower_value compile_expr cenv (TupleT tys) e sa = (op, su)` by
-    simp[lower_value_def, comp_bind_def] >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends sl sf` by metis_tac[cs_extends_trans] >>
-  `cs_extends su sf` by metis_tac[cs_extends_trans] >>
-  `cs_extends sc sf` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa sc func /\ fn_has_code sc sf func` by
-    metis_tac[fn_has_code_split] >>
-  `fn_has_code sc su func /\ fn_has_code su sf func` by
-    metis_tac[fn_has_code_split] >>
-  `fn_has_code su sl func /\ fn_has_code sl sf func` by
-    metis_tac[fn_has_code_split] >>
-  `fn_has_code sl ss func /\ fn_has_code ss sf func` by
-    metis_tac[fn_has_code_split] >>
-  simp[]
+  drule_all assign_tuple_targets_code_parts >> simp[]
 QED
 
 Theorem assign_tuple_locals_memory_success_run:
@@ -170,32 +151,6 @@ Resume assign_tuple_locals_memory_success_run[code]:
   `cs_extends sa su` by metis_tac[cs_extends_trans] >>
   `fn_has_code sa su func` by
     (qspecl_then [`sa`, `su`, `sf`, `func`] mp_tac fn_has_code_split >> simp[]) >>
-  `expr_res_ok (INL (ArrayV (TupleV vs)))` by simp[expr_res_ok_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then drule_all >> disch_then (qspec_then `s0` mp_tac) >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  simp[] >> strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  qpat_x_assum `expr_type e = TupleT tys`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
-  suspend "value"
-QED
-
-Resume assign_tuple_locals_memory_success_run[value]:
-  `!x. op = Var x ==> not_fresh_at su x` by
-    metis_tac[compile_lower_value_var] >>
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`fn_has_code sa sf func`, `fn_has_code sa sc func`,
-     `fn_has_code sc su func`, `fn_has_code sa su func`,
-     `compile_expr _ _ _ _ = _`, `unwrap_value _ _ _ = _`,
-     `lower_value _ _ _ _ _ = _`, `expr_res_ok _`,
-     `!aid off sz. _`,
-     `stmt_state_rel ctx func cenv cx es s0`, `~s0.vs_halted`,
-     `s0.vs_current_bb = _`, `s0.vs_inst_idx = _`,
-     `cs_extends sa sc`, `cs_extends sc su`, `cs_extends sa su`,
-     `cs_extends su sf`] >>
   `LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) tys tvs` by
     (irule tuple_element_sizes >> reverse conj_tac
      >- (qexists `get_tenv cx` >> first_assum ACCEPT_TAC) >>
@@ -210,43 +165,15 @@ Resume assign_tuple_locals_memory_success_run[value]:
      Cases_on `is_word_type (EL i tys)` >- simp[] >>
      qpat_x_assum `!i. i < LENGTH ids ==> _` (qspec_then `i` mp_tac) >>
      simp[] >> strip_tac >> metis_tac[]) >>
-  suspend "stage"
-QED
-
-Resume assign_tuple_locals_memory_success_run[stage]:
-  `type_memory_bytes cenv (TupleT tys) = type_memory_size_list tvs` by
-    (irule type_memory_bytes_tuple_list >> first_assum ACCEPT_TAC) >>
-  `local_ptrs_reserved cenv su` by
-    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
-  `?sw. eval_operand op sv = SOME sw` by metis_tac[expr_val_rel_def] >>
   qmatch_asmsub_abbrev_tac `if flag then _ else comp_return op` >>
   `flag ==> type_memory_size_list tvs < dimword (:256)` by
     (simp[Abbr `flag`] >> metis_tac[type_memory_size_def]) >>
   qpat_x_assum `(if flag then _ else _) su = _`
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
-  drule_all optional_tuple_stage_run >>
-  disch_then ((MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `?t w. _`
-    (qx_choosel_then [`st`, `w`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `?b sz. _`
-    (qx_choosel_then [`b`, `sz`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  suspend "load"
-QED
-
-Resume assign_tuple_locals_memory_success_run[load]:
-  map_every (fn q => qpat_x_assum q kall_tac)
-    [`(if flag then _ else _) su = _`, `Abbrev (flag = _)`,
-     `flag ==> _`, `expr_val_rel _ _ _ _ _`, `expr_val_at _ _ _ _ _ _ _ _ _`,
-     `expr_type e = _`, `eval_operand op sv = _`,
-     `!x. op = Var x ==> _`, `fn_has_code su sl func`,
-     `~sv.vs_halted`, `sv.vs_current_bb = _`, `sv.vs_inst_idx = _`,
-     `stmt_state_rel ctx func cenv cx es1 sv`] >>
-  `local_ptrs_reserved cenv sl` by
-    (irule local_ptrs_reserved_next_var >> qexists `su` >> simp[]) >>
-  `w2n w + type_memory_size_list tvs < dimword (:256)` by
-    (drule_all tuple_container_bound >> decide_tac) >>
-  drule_all compile_tuple_load_all_typed_frag >>
-  strip_tac >>
+  drule_all tuple_assignment_prefix_run >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?t w b sz. _`
+    (qx_choosel_then [`t`, `w`, `b`, `sz`] (map_every assume_tac o CONJUNCTS)) >>
   suspend "store"
 QED
 
@@ -283,13 +210,8 @@ Resume assign_tuple_locals_memory_success_run[store_ready]:
      `value_has_type _ _`, `evaluate_type _ (TupleT tys) = _`,
      `(is_memory_view _ /\ EXISTS _ tys ==> _)`, `(EXISTS _ tys ==> _)`,
      `bind (eval_expr _ _) _ _ = _`, `compile_tuple_load_all _ _ _ _ _ = _`,
-     `local_ptrs_reserved cenv sa`, `local_ptrs_reserved cenv su`,
-     `eval_operand staged st = _`,
-     `tuple_in_memory vs tvs (w2n w) st.vs_memory`,
-     `0 < type_memory_size_list tvs`, `tys <> []`,
-     `type_memory_bytes cenv (TupleT tys) = _`] >>
-  `EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems` by
-    (simp[EVERY_MEM] >> metis_tac[]) >>
+     `local_ptrs_reserved cenv sa`,
+     `0 < type_memory_size_list tvs`, `tys <> []`] >>
   `!i. i < LENGTH tys ==>
      evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
      (is_word_type (EL i tys) ==> type_memory_size (EL i tvs) = 32)` by
@@ -301,14 +223,6 @@ Resume assign_tuple_locals_memory_success_run[store_ready]:
      simp[] >> strip_tac >>
      drule_all word_type_sizes >>
      disch_then (qspec_then `cenv` strip_assume_tac) >> simp[]) >>
-  Q.SUBGOAL_THEN
-    `((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
-      (?name. local_region cenv es1.scopes t name b sz))` assume_tac
-  >- metis_tac[] >>
-  `~t.vs_halted` by metis_tac[] >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [frag_exec_def]) >>
-  disch_then (qspec_then `func` mp_tac) >> simp[] >> strip_tac >>
   drule_all (SIMP_RULE (srw_ss()) []
     (Q.SPECL [`ids`, `T`] tupleLocalStoreRunTheory.tuple_store_mixed_locals_run)) >>
   disch_then ((MAP_EVERY assume_tac o CONJUNCTS)) >>
@@ -320,12 +234,7 @@ QED
 Resume assign_tuple_locals_memory_success_run[compose]:
   conj_tac >- simp[] >>
   qexists `sfv` >> simp[] >>
-  conj_tac >- suspend "vars" >>
-  ntac 3 (qpat_x_assum
-    `!fuel. _ ==> ?fuel'. run_from fuel' ctx func _ = _` mp_tac) >>
-  qpat_x_assum `!fuel r. _ ==> ?fuel'. run_from fuel' ctx func _ = r` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-  metis_tac[]
+  suspend "vars"
 QED
 Resume assign_tuple_locals_memory_success_run[vars]:
   rpt strip_tac >>

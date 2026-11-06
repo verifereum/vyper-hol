@@ -22,6 +22,32 @@ Ancestors
   exprLoweringProps emitHelperProps exprLowering valueEncoding intCallCallee
   venomExecSemantics venomInst words entrySinkExtraction
 
+(* Memory-only entry boundary: the decoder supplies the physical allocation
+   facts separately from the contents of each decoded local. *)
+Theorem decoded_memory_local_ptrs:
+  !func cenv scopes ss.
+    (!name entry p sz.
+       lookup_scopes name scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       ?w. lookup_var p ss = SOME w /\
+           local_backed func p ss (w2n w) sz /\
+           w2n w + sz <= ss.vs_alloca_next /\
+           type_memory_size entry.type <= sz /\
+           val_wf entry.type entry.value) /\
+    (!name entry p sz w.
+       lookup_scopes name scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+       lookup_var p ss = SOME w ==>
+       memory_value_rel entry.type entry.value (w2n w) ss.vs_memory) /\
+    (!n1 n2 b1 sz1 b2 sz2.
+       n1 <> n2 /\ local_region cenv scopes ss n1 b1 sz1 /\
+       local_region cenv scopes ss n2 b2 sz2 ==>
+       regions_disjoint b1 sz1 b2 sz2) ==>
+    local_ptrs_rel func cenv scopes ss
+Proof
+  rw[local_ptrs_rel_def] >> metis_tac[]
+QED
+
 Theorem dec_frame_mstore:
   !st q w s t.
     vars_pc_only (mstore q w s) t /\

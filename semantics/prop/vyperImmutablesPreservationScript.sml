@@ -35,12 +35,33 @@ Theorem lookup_global_immutables:
     lookup_global cx src n st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rpt strip_tac >> gvs[lookup_global_def, bind_def, return_def, raise_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, get_immutables_def, get_address_immutables_def,
-           lift_option_type_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >>
+  Cases_on `get_module_code cx src`
+  >- gvs[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  rename1 `SOME ts` >>
+  Cases_on `find_var_decl_by_name n ts`
+  >- (Cases_on `ALOOKUP st.immutables cx.txn.target`
+      >- gvs[lookup_global_def, bind_def, lift_option_type_def,
+             get_immutables_def, get_address_immutables_def,
+             return_def, raise_def] >>
+      rename1 `SOME imms` >>
+      Cases_on `FLOOKUP (get_source_immutables src imms) n` >>
+      gvs[lookup_global_def, bind_def, lift_option_type_def,
+          get_immutables_def, get_address_immutables_def,
+          return_def, raise_def]) >>
+  rename1 `SOME decl_id` >> PairCases_on `decl_id` >>
+  Cases_on `decl_id0`
+  >- (rename1 `StorageVarDecl tr typ` >>
+      Cases_on `lookup_var_slot_from_layout cx tr src decl_id1`
+      >- gvs[lookup_global_def, bind_def, lift_option_type_def,
+             return_def, raise_def] >>
+      Cases_on `evaluate_type (get_tenv cx) typ` >>
+      gvs[lookup_global_def, bind_def, lift_option_type_def,
+          return_def, raise_def]) >>
+  rename1 `HashMapVarDecl tr kt vt` >>
+  Cases_on `lookup_var_slot_from_layout cx tr src decl_id1` >>
+  gvs[lookup_global_def, bind_def, lift_option_type_def,
+      return_def, raise_def]
 QED
 
 Theorem set_global_immutables:

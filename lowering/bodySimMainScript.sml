@@ -4,9 +4,9 @@
  * body_sim_mutual: by evaluate_ind, every statement, statement list and
  * expression of a frame of the lowered program simulates (bodySim's
  * predicates), internal calls included.  Each case of the induction is a
- * case lemma of bodySimStmtCases, bodySimDeclCases or bodySimExprCases, or
- * a short tactic below.  bodySimEntry gives ce_locals_declared at a body's
- * entry.
+ * case lemma of bodySimStmtCases, bodySimLog, bodySimDeclCases or
+ * bodySimExprCases, or a short tactic below.  bodySimEntry gives
+ * ce_locals_declared at a body's entry.
  *
  * TOP-LEVEL:
  *   body_sim_mutual  — the eleven predicates, by evaluate_ind
@@ -16,7 +16,7 @@
 Theory bodySimMain
 Ancestors
   list bodySim bodySimStmtCases bodySimDeclCases bodySimExprCases
-  bodySimEntry stmtSimIf
+  bodySimEntry bodySimLog stmtSimIf
   supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph
 

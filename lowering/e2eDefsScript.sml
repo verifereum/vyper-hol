@@ -3,7 +3,8 @@
  * source_storage_ok, call_outcomes_ok, tx_env_ok, tx_block_fields_rel,
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
- * load_contract_pending_deletions, valid_vyper_call, compiled_event_info, return_bytes,
+ * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
+ * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -86,6 +87,7 @@ Definition call_outcomes_ok_def:
   call_outcomes_ok (tops : toplevel list) am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome.
+               LENGTH outcome.co_returnData < dimword(:256) /\
                accounts_runtime_well_typed outcome.co_accounts /\
                contract_storage_well_formed cx
                  (initial_state (am with <| accounts := outcome.co_accounts;
@@ -222,6 +224,14 @@ Definition return_bytes_def:
                  then enc (Tuple [vyper_to_abi_type (type_env tops) ret])
                           (ListV [abi_v])
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
+End
+
+(* Observe the selected function's decorator at the transaction boundary. *)
+Definition tx_return_bytes_def:
+  tx_return_bytes tops ret tx v out <=>
+    if lookup_raw_return_or_F (NONE : num option) tx.function_name External tops
+    then raw_return_bytes v = SOME out
+    else return_bytes tops ret v out
 End
 
 Definition unspecified_behaviour_exempt_def:
@@ -412,7 +422,7 @@ Definition call_result_rel_def:
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
-          return_bytes tops ret v out /\
+          tx_return_bytes tops ret tx v out /\
           accounts_agree cx am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
           transient_agree cx am'.tStorage es'.rollback.tStorage /\

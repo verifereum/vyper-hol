@@ -4,7 +4,7 @@
 
 Theory passSharedField
 Ancestors
-  passSharedDefs venomExecSemantics venomEffects venomInstProps
+  passSharedDefs venomExecSemantics venomEffects venomInstProps venomMemProps
   venomState venomInst
 
 (* Cache the guarded equations; only rewrite the already-known opcode. *)
@@ -255,11 +255,7 @@ QED
    ---------------------------------------------------------------- *)
 
 (* Building blocks *)
-Theorem eval_operand_mem[local,simp]:
-  !op s m. eval_operand op (s with vs_memory := m) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def]
-QED
+Theorem eval_operand_mem[local,simp] = venomMemPropsTheory.eval_operand_with_memory
 
 Theorem eval_operands_mem[local,simp]:
   !ops s m. eval_operands ops (s with vs_memory := m) = eval_operands ops s

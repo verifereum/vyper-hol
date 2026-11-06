@@ -2,6 +2,8 @@
    constructor body: each gets its own ALLOCA, as in Python Vyper, rather
    than a fixed MemLoc address.
    TOP-LEVEL: ctor_local_word_matches_python_oracle,
+              ctor_bare_return_matches_python_oracle,
+              ctor_immutable_early_return_matches_python_oracle,
               ctor_arg_local_array_matches_python_oracle,
               ctor_local_across_call_matches_python_oracle,
               ctor_for_range_matches_python_oracle,
@@ -25,6 +27,26 @@ Theorem ctor_local_word_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "ctor_local_word")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation ctor_local_word))) >> EVAL_TAC
+QED
+
+(* A constructor return must install the getter, rather than RET to an
+   uninitialized internal return PC. *)
+val ctor_bare_return = memoryStoreWitnessLib.evaluate fixture_root "ctor_bare_return"
+Theorem ctor_bare_return_matches_python_oracle:
+  ^(#term ctor_bare_return) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "ctor_bare_return")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation ctor_bare_return))) >> EVAL_TAC
+QED
+
+(* Both the early-return and fallthrough paths copy the immutable suffix. *)
+val ctor_immutable_early_return =
+  memoryStoreWitnessLib.evaluate fixture_root "ctor_immutable_early_return"
+Theorem ctor_immutable_early_return_matches_python_oracle:
+  ^(#term ctor_immutable_early_return) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "ctor_immutable_early_return")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation ctor_immutable_early_return))) >> EVAL_TAC
 QED
 
 (* A local array next to a constructor argument. *)

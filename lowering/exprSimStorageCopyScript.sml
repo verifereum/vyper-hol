@@ -9,9 +9,14 @@
  * the loop's counter runs from 0 until it equals n2w word_count, so the
  * copy ends at the start of its exit block with the buffer's operand
  * defined and the variables handed out before it unchanged, whatever
- * storage holds.  Nothing is said about the bytes copied.
+ * storage holds.  The content boundary additionally records the exact
+ * copied words, a frozen non-memory state projection, and preservation
+ * of bytes outside the destination buffer, under no-wrap bounds.
  *
  * TOP-LEVEL:
+ *   compile_storage_copy_content_capacity_frag — loop contents and full frame
+ *   storage_copy_suffix_content_frag  — uniform zero/one/many-word copy
+ *   storage_copy_operand_preserved    — recover framed operand values
  *   compile_storage_copy_defined_frag  — the copy loop runs to its exit
  *   ensure_storage_memory_layout       — compile_ensure_in_memory's code
  *                                        for storage and transient storage
@@ -25,8 +30,8 @@
 
 Theory exprSimStorageCopy
 Ancestors
-  list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimUnwrap exprSimHyps exprSimWordBuiltins loweringSlice
+  list rich_list finite_map pred_set valueEncodingProps
+  fragExec localPtrsProps exprSim loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps
   venomExecSemantics venomInst venomState
@@ -304,6 +309,168 @@ Proof
   simp[ALL_DISTINCT] >> metis_tac[]
 QED
 
+(* Freeze every field except registers, memory and execution position. *)
+Definition copy_static_def:
+  copy_static s = s with <| vs_memory := []; vs_vars := FEMPTY;
+    vs_prev_bb := NONE; vs_current_bb := ""; vs_inst_idx := 0 |>
+End
+
+Definition copy_runtime_word_def:
+  copy_runtime_word loc s a =
+    if loc = LocStorage then sload a s else tload a s
+End
+
+Theorem copy_static_update_var[local,simp]:
+  copy_static (update_var x w s) = copy_static s
+Proof
+  simp[copy_static_def, update_var_def]
+QED
+
+Theorem copy_static_jump[local,simp]:
+  copy_static (jump_to l s) = copy_static s
+Proof
+  simp[copy_static_def, jump_to_def]
+QED
+
+Theorem copy_static_idx[local,simp]:
+  copy_static (s with vs_inst_idx := i) = copy_static s
+Proof
+  simp[copy_static_def]
+QED
+
+Theorem copy_static_mstore[local,simp]:
+  copy_static (mstore b w s) = copy_static s
+Proof
+  simp[copy_static_def, mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem copy_static_fields:
+  copy_static s = copy_static t ==>
+  s.vs_accounts = t.vs_accounts /\
+  s.vs_transient = t.vs_transient /\
+  s.vs_call_ctx = t.vs_call_ctx /\
+  s.vs_allocas = t.vs_allocas /\
+  s.vs_alloca_next = t.vs_alloca_next /\
+  s.vs_labels = t.vs_labels /\
+  s.vs_halted = t.vs_halted /\
+  s.vs_data_section = t.vs_data_section
+Proof
+  simp[copy_static_def, venom_state_component_equality]
+QED
+
+Theorem copy_runtime_word_static[local]:
+  copy_static s = copy_static t ==>
+  copy_runtime_word loc s a = copy_runtime_word loc t a
+Proof
+  strip_tac >> drule copy_static_fields >>
+  simp[copy_runtime_word_def, sload_def, tload_def,
+       contract_storage_def, contract_transient_def]
+QED
+
+(* Memory observations include zero-extended bytes outside the buffer. *)
+Definition copy_prefix_def:
+  copy_prefix loc a b n sbase k s <=>
+    k <= n /\ copy_static s = copy_static sbase /\
+    (!i. i < k ==> mem_word_at (b+32*i) s.vs_memory =
+       copy_runtime_word loc sbase (a+n2w i)) /\
+    (!off len. off+len <= b \/ b+32*n <= off ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory)
+End
+
+Theorem copy_prefix_zero[local]:
+  copy_prefix loc a b n s 0 s
+Proof
+  simp[copy_prefix_def]
+QED
+
+Theorem copy_prefix_transfer[local]:
+  copy_prefix loc a b n sbase k s /\
+  copy_static t = copy_static s /\ t.vs_memory = s.vs_memory ==>
+  copy_prefix loc a b n sbase k t
+Proof
+  rw[copy_prefix_def] >> metis_tac[]
+QED
+
+Theorem copy_prefix_update_var[local,simp]:
+  copy_prefix loc a b n sbase k (update_var x w s) =
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[copy_prefix_def, update_var_def]
+QED
+
+Theorem copy_prefix_jump[local,simp]:
+  copy_prefix loc a b n sbase k (jump_to l s) =
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[copy_prefix_def, jump_to_def]
+QED
+
+Theorem copy_prefix_idx[local,simp]:
+  copy_prefix loc a b n sbase k (s with vs_inst_idx := i) =
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[copy_prefix_def]
+QED
+
+Theorem copy_prefix_word:
+  copy_prefix loc a b n sbase n s /\ i < n ==>
+  mem_word_at (b+32*i) s.vs_memory = copy_runtime_word loc sbase (a+n2w i)
+Proof
+  simp[copy_prefix_def]
+QED
+
+Theorem copy_prefix_bytes:
+  copy_prefix loc a b n sbase k s /\
+  (off+len <= b \/ b+32*n <= off) ==>
+  mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory
+Proof
+  rw[copy_prefix_def] >> metis_tac[]
+QED
+
+Theorem copy_prefix_extend[local]:
+  copy_prefix loc a b n sbase k s /\ k < n ==>
+  copy_prefix loc a b n sbase (k+1)
+    (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s)
+Proof
+  rw[copy_prefix_def]
+  >- (Cases_on `i = k` >- simp[mstore_mem_word_at_same] >>
+      `i < k` by decide_tac >>
+      `b+32*i+32 <= b+32*k` by decide_tac >>
+      simp[mstore_mem_word_at_disjoint]) >>
+  `off+len <= b+32*k \/ b+32*k+32 <= off` by decide_tac >>
+  simp[mstore_mem_bytes_at_disjoint]
+QED
+
+Theorem copy_destination_no_wrap[local]:
+  k < n /\ b+32*n < 2**256 ==>
+  w2n (n2w b + n2w k * 32w : bytes32) = b+32*k
+Proof
+  strip_tac >>
+  `b+32*k < 2**256` by decide_tac >>
+  simp[wordsTheory.word_mul_n2w, wordsTheory.word_add_n2w,
+       wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  gvs[]
+QED
+
+Theorem storage_copy_load_exact[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand op s = SOME a ==>
+  step_inst_base
+    (mk_inst id (if loc = LocStorage then SLOAD else TLOAD) [op] [out]) s =
+  OK (update_var out (copy_runtime_word loc s a) s)
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def,
+                          copy_runtime_word_def]
+QED
+
+Theorem storage_copy_store_exact[local]:
+  eval_operand op1 s = SOME a /\ eval_operand op2 s = SOME w ==>
+  step_inst_base (mk_inst id MSTORE [op1; op2] []) s =
+  OK (mstore (w2n a) w s)
+Proof
+  strip_tac >> irule step_MSTORE >> simp[]
+QED
+
 (* Both slot spaces are total reads, independent of the stored contents. *)
 Theorem storage_copy_load_step[local]:
   !opc op v id out s.
@@ -475,6 +642,32 @@ Proof
   simp[mstore_def, write_memory_with_expansion_def]
 QED
 
+(* Exact sequence equations complement the register-frame run boundaries. *)
+Theorem storage_copy_source_run_effect[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand src s = SOME a /\ eval_operand (Var cv) s = SOME k /\
+  (!x. src = Var x ==> x <> sv) ==>
+  run_inst_seq
+    [mk_inst id ADD [src; Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]] s =
+  OK (update_var vv (copy_runtime_word loc s (a+k))
+        (update_var sv (a+k) s))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ADD [src; Var cv] [sv]) s =
+     OK (update_var sv (a+k) s)` by (irule step_ADD >> simp[]) >>
+  `copy_runtime_word loc (update_var sv (a+k) s) (a+k) =
+     copy_runtime_word loc s (a+k)` by
+    (irule copy_runtime_word_static >> simp[]) >>
+  `step_inst_base
+     (mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv])
+     (update_var sv (a+k) s) =
+     OK (update_var vv (copy_runtime_word loc (update_var sv (a+k) s) (a+k))
+           (update_var sv (a+k) s))` by
+    (irule storage_copy_load_exact >> simp[eval_operand_update_var]) >>
+  gvs[] >> simp[run_inst_seq_def]
+QED
+
 Theorem storage_copy_source_run[local]:
   !opc src a cv sv vv id s k.
     (opc = SLOAD \/ opc = TLOAD) /\
@@ -507,6 +700,37 @@ Proof
   gvs[ALL_DISTINCT, eval_operand_def, lookup_var_update_var] >>
   irule storage_copy_operand_frame >>
   qexistsl [`[sv; vv]`, `s`] >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_copy_destination_run_effect[local]:
+  eval_operand dst s = SOME b /\ eval_operand (Var cv) s = SOME k /\
+  eval_operand (Var vv) s = SOME v /\
+  vv <> mv /\ vv <> dv /\
+  (!x. dst = Var x ==> x <> mv) ==>
+  run_inst_seq
+    [mk_inst id MUL [Var cv; Lit 32w] [mv];
+     mk_inst (id+1) ADD [dst; Var mv] [dv];
+     mk_inst (id+2) MSTORE [Var dv; Var vv] []] s =
+  OK (mstore (w2n (b+k*32w)) v
+        (update_var dv (b+k*32w) (update_var mv (k*32w) s)))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MUL [Var cv; Lit 32w] [mv]) s =
+     OK (update_var mv (k*32w) s)` by
+    (irule step_MUL >> simp[eval_operand_lit]) >>
+  `eval_operand dst (update_var mv (k*32w) s) = SOME b` by
+    (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_update_var]) >>
+  `step_inst_base (mk_inst (id+1) ADD [dst; Var mv] [dv])
+     (update_var mv (k*32w) s) =
+     OK (update_var dv (b+k*32w) (update_var mv (k*32w) s))` by
+    (irule step_ADD >> simp[eval_operand_update_var]) >>
+  `step_inst_base (mk_inst (id+2) MSTORE [Var dv; Var vv] [])
+     (update_var dv (b+k*32w) (update_var mv (k*32w) s)) =
+     OK (mstore (w2n (b+k*32w)) v
+           (update_var dv (b+k*32w) (update_var mv (k*32w) s)))` by
+    (irule storage_copy_store_exact >>
+     simp[eval_operand_update_var, eval_operand_update_other]) >>
+  simp[run_inst_seq_def]
 QED
 
 Theorem storage_copy_destination_run[local]:
@@ -552,6 +776,21 @@ Proof
        t.vs_halted = s2.vs_halted /\ t.vs_labels = s2.vs_labels` by
     (irule storage_copy_store_step >> simp[]) >>
   qexists_tac `t` >> simp[run_inst_seq_def] >> metis_tac[]
+QED
+
+Theorem storage_copy_increment_run_effect[local]:
+  eval_operand (Var cv) s = SOME k ==>
+  run_inst_seq
+    [mk_inst id ADD [Var cv; Lit 1w] [nv];
+     mk_inst (id+1) ASSIGN [Var nv] [cv]] s =
+  OK (update_var cv (k+1w) (update_var nv (k+1w) s))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ADD [Var cv; Lit 1w] [nv]) s =
+     OK (update_var nv (k+1w) s)` by
+    (irule step_ADD >> simp[eval_operand_lit]) >>
+  simp[run_inst_seq_def] >>
+  simp[step_inst_base_def, mk_inst_def, eval_operand_update_var]
 QED
 
 Theorem storage_copy_increment_run[local]:
@@ -642,6 +881,91 @@ Proof
   qexistsl [`[cv; sv; vv; mv; dv; nv]`, `s`] >> gvs[] >> metis_tac[])
 QED
 
+(* Exact observations complement the register-frame existence theorem. *)
+Theorem storage_copy_body_run_effect[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  eval_operand (Var cv) s = SOME k /\
+  ALL_DISTINCT [cv; sv; vv; mv; dv; nv] /\
+  (!x. src = Var x \/ dst = Var x ==>
+       ~MEM x [cv; sv; vv; mv; dv; nv]) /\
+  run_inst_seq
+    [mk_inst id ADD [src; Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv; Lit 32w] [mv];
+     mk_inst (id+3) ADD [dst; Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv; Var vv] [];
+     mk_inst (id+5) ADD [Var cv; Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK t ==>
+  copy_static t = copy_static s /\
+  t.vs_memory =
+    (mstore (w2n (b+k*32w)) (copy_runtime_word loc s (a+k)) s).vs_memory
+Proof
+  strip_tac >>
+  qabbrev_tac `w = copy_runtime_word loc s (a+k)` >>
+  qabbrev_tac `s1 = update_var vv w (update_var sv (a+k) s)` >>
+  `run_inst_seq
+     [mk_inst id ADD [src; Var cv] [sv];
+      mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]] s = OK s1` by
+    (simp[NoAsms, Abbr `s1`, Abbr `w`] >> irule storage_copy_source_run_effect >>
+     gvs[] >> metis_tac[]) >>
+  `eval_operand dst s1 = SOME b /\ eval_operand (Var cv) s1 = SOME k /\
+   eval_operand (Var vv) s1 = SOME w` by
+    (simp[Abbr `s1`, eval_operand_update_var] >>
+     Cases_on `dst` >> gvs[ALL_DISTINCT, eval_operand_def, lookup_var_update_var] >>
+     metis_tac[]) >>
+  qabbrev_tac `s2 = mstore (w2n (b+k*32w)) w
+    (update_var dv (b+k*32w) (update_var mv (k*32w) s1))` >>
+  `run_inst_seq
+     [mk_inst (id+2) MUL [Var cv; Lit 32w] [mv];
+      mk_inst ((id+2)+1) ADD [dst; Var mv] [dv];
+      mk_inst ((id+2)+2) MSTORE [Var dv; Var vv] []] s1 = OK s2` by
+    (qunabbrev_tac `s2` >> irule storage_copy_destination_run_effect >>
+     gvs[ALL_DISTINCT] >> metis_tac[]) >>
+  `eval_operand (Var cv) s2 = SOME k` by
+    (gvs[Abbr `s2`, ALL_DISTINCT, mstore_def, write_memory_with_expansion_def,
+         eval_operand_def, lookup_var_update_var]) >>
+  drule storage_copy_increment_run_effect >>
+  disch_then (qspecl_then [`nv`, `id+5`] assume_tac) >>
+  qpat_x_assum `run_inst_seq [_;_;_] _ = OK _`
+    (assume_tac o SRULE [GSYM arithmeticTheory.ADD_ASSOC] o MATCH_MP run_inst_seq_append) >>
+  rpt (qpat_x_assum `run_inst_seq [_;_] _ = OK _`
+    (assume_tac o SRULE [GSYM arithmeticTheory.ADD_ASSOC] o MATCH_MP run_inst_seq_append)) >>
+  qpat_x_assum `run_inst_seq [_;_;_;_;_;_;_] _ = OK _` mp_tac >>
+  asm_rewrite_tac[] >> simp[run_inst_seq_def] >> strip_tac >>
+  gvs[Abbr `s2`, Abbr `s1`, Abbr `w`, copy_static_def,
+      mstore_def, write_memory_with_expansion_def, update_var_def]
+QED
+
+Theorem storage_copy_body_prefix[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b) /\
+  eval_operand (Var cv) s = SOME (n2w k) /\
+  ALL_DISTINCT [cv; sv; vv; mv; dv; nv] /\
+  (!x. src = Var x \/ dst = Var x ==>
+       ~MEM x [cv; sv; vv; mv; dv; nv]) /\
+  run_inst_seq
+    [mk_inst id ADD [src; Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv; Lit 32w] [mv];
+     mk_inst (id+3) ADD [dst; Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv; Var vv] [];
+     mk_inst (id+5) ADD [Var cv; Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK t /\
+  copy_prefix loc a b n sbase k s /\ k < n /\ b+32*n < 2**256 ==>
+  copy_prefix loc a b n sbase (k+1) t
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all storage_copy_body_run_effect >> strip_tac >>
+  `copy_runtime_word loc s (a+n2w k) =
+   copy_runtime_word loc sbase (a+n2w k)` by
+    (irule copy_runtime_word_static >> gvs[copy_prefix_def]) >>
+  drule_all copy_destination_no_wrap >> strip_tac >>
+  irule copy_prefix_transfer >>
+  qexists_tac `mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s` >>
+  simp[] >> irule copy_prefix_extend >> simp[]
+QED
+
 Theorem storage_copy_body_frag[local]:
   !ctx loc src dst cv sv vv mv dv nv stb ste ds sbase a b k R.
     (loc = LocStorage \/ loc = LocTransient) /\
@@ -686,6 +1010,66 @@ Proof
   rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED
 
+Theorem storage_copy_body_content_frag[local]:
+  !ctx loc src dst cv sv vv mv dv nv stb ste ds sbase a b n k R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    same_blocks stb ste /\ isPREFIX stb.cs_current_insts ste.cs_current_insts /\
+    emitted_insts stb ste =
+      [mk_inst stb.cs_next_id ADD [src; Var cv] [sv];
+       mk_inst (stb.cs_next_id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+       mk_inst (stb.cs_next_id+2) MUL [Var cv; Lit 32w] [mv];
+       mk_inst (stb.cs_next_id+3) ADD [dst; Var mv] [dv];
+       mk_inst (stb.cs_next_id+4) MSTORE [Var dv; Var vv] [];
+       mk_inst (stb.cs_next_id+5) ADD [Var cv; Lit 1w] [nv];
+       mk_inst (stb.cs_next_id+6) ASSIGN [Var nv] [cv]] /\
+    ALL_DISTINCT [cv; sv; vv; mv; dv; nv] /\
+    (!x. src = Var x \/ dst = Var x ==> ~MEM x ds) /\
+    (!x. MEM x [cv; sv; vv; mv; dv; nv] ==> MEM x ds) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    k < n /\ b+32*n < 2**256 ==>
+    frag_exec ctx stb ste
+      (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
+           copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory)
+      (\s. eval_operand (Var cv) s = SOME (n2w (k+1)) /\ storage_copy_frame ds sbase s /\
+           copy_prefix loc a b n sbase (k+1) s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  `eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b)` by
+    (conj_tac >> irule storage_copy_operand_frame >> qexistsl_tac [`ds`, `sbase`] >>
+     gvs[storage_copy_frame_def] >> metis_tac[]) >>
+  `?t. run_inst_seq
+      [mk_inst stb.cs_next_id ADD [src; Var cv] [sv];
+       mk_inst (stb.cs_next_id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+       mk_inst (stb.cs_next_id+2) MUL [Var cv; Lit 32w] [mv];
+       mk_inst (stb.cs_next_id+3) ADD [dst; Var mv] [dv];
+       mk_inst (stb.cs_next_id+4) MSTORE [Var dv; Var vv] [];
+       mk_inst (stb.cs_next_id+5) ADD [Var cv; Lit 1w] [nv];
+       mk_inst (stb.cs_next_id+6) ASSIGN [Var nv] [cv]] s = OK t /\
+      eval_operand (Var cv) t = SOME (n2w k+1w) /\
+      eval_operand src t = SOME a /\ eval_operand dst t = SOME (n2w b) /\
+      (!x. ~MEM x [cv; sv; vv; mv; dv; nv] ==> lookup_var x t = lookup_var x s) /\
+      t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx /\
+      t.vs_halted = s.vs_halted /\ t.vs_labels = s.vs_labels` by
+    (irule storage_copy_body_run >> simp[] >> metis_tac[]) >>
+  `copy_prefix loc a b n sbase (k+1) t` by
+    (gvs[] >> irule storage_copy_body_prefix >> simp[] >>
+     goal_assum (drule_at (Pat `run_inst_seq _ _ = OK _`)) >> simp[] >> metis_tac[]) >>
+  `LENGTH sbase.vs_memory <= LENGTH t.vs_memory` by
+    (drule_at (Pat `run_inst_seq _ _ = OK _`) storage_copy_body_run_effect >>
+     disch_then (qspecl_then [`n2w k`, `n2w b`, `a`] mp_tac) >>
+     (impl_tac >- (simp[ALL_DISTINCT] >> metis_tac[])) >> strip_tac >>
+     gvs[immutableMemoryFrameTheory.immutable_mstore_capacity] >> decide_tac) >>
+  disj1_tac >> qexists_tac `t` >>
+  gvs[GSYM mk_inst_def, control_moves_keep_vars, wordsTheory.word_add_n2w] >>
+  irule storage_copy_frame_step >> qexists_tac `s` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
 Theorem storage_copy_body_frame_frag[local]:
   !ctx stb ste src dst a b cv ds sbase k R.
     eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME b /\
@@ -703,6 +1087,54 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   irule storage_copy_operand_frame >> qexistsl [`ds`, `sbase`] >>
   gvs[storage_copy_frame_def] >> metis_tac[]
+QED
+
+Theorem storage_copy_init_content_frag[local]:
+  !ctx sa s0 cv ds sbase loc a b n R.
+    same_blocks sa s0 /\ isPREFIX sa.cs_current_insts s0.cs_current_insts /\
+    emitted_insts sa s0 = [mk_inst sa.cs_next_id ASSIGN [Lit 0w] [cv]] /\
+    MEM cv ds ==>
+    frag_exec ctx sa s0 (\s. s = sbase)
+      (\s. eval_operand (Var cv) s = SOME 0w /\ storage_copy_frame ds sbase s /\
+           copy_prefix loc a b n sbase 0 s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory) R
+Proof
+  rpt gen_tac >> strip_tac >> irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >> gvs[] >> disj1_tac >>
+  qexists_tac `update_var cv 0w sbase` >>
+  simp[run_inst_seq_def, step_inst_base_def, eval_operand_def,
+       eval_operand_update_var, copy_prefix_zero, storage_copy_frame_def,
+       lookup_var_update_var, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem storage_copy_header_content_frag[local]:
+  !ctx cv tv n sth stj ds sbase loc a b k R.
+    emit_op EQ [Var cv; Lit (n2w n)] sth = (Var tv,stj) /\
+    cv <> tv /\ MEM tv ds ==>
+    frag_exec ctx sth stj
+      (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
+           copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory)
+      (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
+           copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
+           eval_operand (Var tv) s = SOME (bool_to_word (n2w k = n2w n : bytes32))) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule storage_copy_header_layout >> strip_tac >> gvs[] >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >> disj1_tac >>
+  qexists_tac `update_var tv (bool_to_word (n2w k = n2w n : bytes32)) s` >>
+  `step_inst_base (mk_inst sth.cs_next_id EQ [Var cv; Lit (n2w n)] [tv]) s =
+   OK (update_var tv (bool_to_word (n2w k = n2w n : bytes32)) s)` by
+    (irule step_EQ >> simp[eval_operand_def]) >>
+  gvs[run_inst_seq_def, GSYM mk_inst_def, eval_operand_update_var,
+      lookup_var_update_var, storage_copy_frame_def, update_var_def,
+      eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
 
 Theorem storage_copy_loop[local]:
@@ -765,6 +1197,141 @@ Proof
       simp[arithmeticTheory.LESS_MOD]) >>
   irule cs_extends_same_block >>
   drule storage_copy_header_layout >> simp[same_blocks_def]
+QED
+
+Definition storage_copy_inv_def:
+  storage_copy_inv cv ds loc a b n sbase k s <=>
+    eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
+    copy_prefix loc a b n sbase k s /\
+    LENGTH sbase.vs_memory <= LENGTH s.vs_memory
+End
+
+Theorem storage_copy_inv_eta[local]:
+  storage_copy_inv cv ds loc a b n sbase k =
+    (\s. eval_operand (Var cv) s = SOME (n2w k) /\ storage_copy_frame ds sbase s /\
+         copy_prefix loc a b n sbase k s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory)
+Proof
+  simp[FUN_EQ_THM, storage_copy_inv_def]
+QED
+
+Definition storage_copy_test_def:
+  storage_copy_test cv tv ds loc a b n sbase k s <=>
+    storage_copy_inv cv ds loc a b n sbase k s /\
+    eval_operand (Var tv) s = SOME (bool_to_word (k = n))
+End
+
+Theorem storage_copy_content_loop[local]:
+  !ctx st0 st1 sth stj st2 stb ste st3 stx hdr loop_body exit cv tv n
+   x0 x1 x2 x3 x4 x5 ds loc a b sbase R.
+    emit_inst JMP [Label hdr] [] st0 = (x0,st1) /\
+    new_block hdr st1 = (x1,sth) /\
+    emit_op EQ [Var cv; Lit (n2w n)] sth = (Var tv,stj) /\
+    emit_inst JNZ [Var tv; Label exit; Label loop_body] [] stj = (x2,st2) /\
+    new_block loop_body st2 = (x3,stb) /\
+    emit_inst JMP [Label hdr] [] ste = (x4,st3) /\
+    new_block exit st3 = (x5,stx) /\
+    cs_extends stb ste /\ cv <> tv /\ MEM tv ds /\ n < 2**256 /\
+    (!k. k < n ==> frag_exec ctx stb ste
+      (storage_copy_inv cv ds loc a b n sbase k)
+      (storage_copy_inv cv ds loc a b n sbase (k+1)) R) ==>
+    frag_exec ctx st0 stx
+      (storage_copy_inv cv ds loc a b n sbase 0)
+      (storage_copy_test cv tv ds loc a b n sbase n) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule (Q.INST
+    [`I` |-> `storage_copy_inv cv ds loc a b n sbase`,
+     `J` |-> `storage_copy_test cv tv ds loc a b n sbase`, `N` |-> `n`]
+    (SPEC_ALL frag_exec_loop)) >>
+  conj_tac >- simp[storage_copy_inv_def, control_moves_keep_vars, jump_to_def] >>
+  conj_tac >- simp[storage_copy_test_def, storage_copy_inv_def, control_moves_keep_vars, jump_to_def] >>
+  Cases_on `x0` >> Cases_on `x2` >> Cases_on `x4` >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  rpt (goal_assum (drule_at (Pat `new_block _ _ = _`))) >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[storage_copy_inv_def, storage_copy_test_def] >>
+  conj_tac
+  >- (rpt strip_tac >> irule frag_exec_conseq >>
+      first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
+      disch_then (irule_at Any) >>
+      simp[storage_copy_test_def, arithmeticTheory.ADD1]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      irule frag_exec_conseq >> irule_at Any storage_copy_header_content_frag >>
+      goal_assum (drule_at (Pat `emit_op EQ _ _ = _`)) >>
+      qexistsl_tac [`sbase`, `loc`, `k`, `ds`, `b`, `a`, `R`] >>
+      simp[storage_copy_inv_def, storage_copy_test_def] >>
+      rpt strip_tac >>
+      `k < 2**256` by decide_tac >>
+      gvs[wordsTheory.n2w_11, wordsTheory.dimword_def]) >>
+  irule cs_extends_same_block >>
+  drule storage_copy_header_layout >> simp[same_blocks_def]
+QED
+
+Theorem compile_storage_copy_content_capacity_frag:
+  !ctx loc src dst n sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    n < 2**256 /\ b+32*n < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b n sbase n s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all compile_storage_copy_certificate >> strip_tac >>
+  rename1 `emit_op EQ [Var cv; Lit (n2w n)] sth = (Var tv,stj)` >>
+  rename1 `emitted_insts sa s0 = [mk_inst _ ASSIGN _ _]` >>
+  rename1 `emitted_insts stb ste = [mk_inst _ ADD _ [sv]; _; _; _; _; _; _]` >>
+  qmatch_asmsub_abbrev_tac `ALL_DISTINCT ds` >>
+  `MEM cv ds /\ MEM tv ds /\ cv <> tv /\
+   (!x. src = Var x \/ dst = Var x ==> ~MEM x ds)` by
+    (gvs[Abbr `ds`, ALL_DISTINCT] >> metis_tac[]) >>
+  irule frag_exec_seq >>
+  qexistsl_tac [`storage_copy_inv cv ds loc a b n sbase 0`, `s0`] >> simp[] >>
+  conj_tac
+  >- (irule frag_exec_conseq >> irule_at Any storage_copy_init_content_frag >>
+      goal_assum (drule_at (Pat `emitted_insts _ _ = _`)) >>
+      qexistsl_tac [`sbase`, `n`, `loc`, `ds`, `b`, `a`, `R`] >>
+      simp[storage_copy_inv_def]) >>
+  irule frag_exec_conseq >>
+  qexistsl_tac [`storage_copy_inv cv ds loc a b n sbase 0`,
+               `storage_copy_test cv tv ds loc a b n sbase n`, `R`] >> simp[] >>
+  conj_tac
+  >- (rw[storage_copy_test_def, storage_copy_inv_def, storage_copy_frame_def] >>
+      metis_tac[]) >>
+  irule storage_copy_content_loop >> simp[] >>
+  goal_assum (drule_at (Pat `emit_op EQ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  rpt (goal_assum (drule_at (Pat `new_block _ _ = _`))) >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >> qx_gen_tac `i` >> strip_tac >>
+  simp[storage_copy_inv_eta] >> irule storage_copy_body_content_frag >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  reverse conj_tac >- simp[] >>
+  goal_assum (drule_at (Pat `emitted_insts _ _ = _`)) >>
+  gvs[Abbr `ds`, ALL_DISTINCT] >> metis_tac[]
+QED
+
+Theorem compile_storage_copy_content_frag:
+  !ctx loc src dst n sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    n < 2**256 /\ b+32*n < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b n sbase n s /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> strip_tac >> irule frag_exec_conseq >>
+  irule_at Any compile_storage_copy_content_capacity_frag >>
+  goal_assum (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`sbase`, `b`, `a`, `R`] >> simp[] >> metis_tac[]
 QED
 
 Theorem compile_storage_copy_defined_frag:
@@ -901,6 +1468,139 @@ Proof
   rename1 `step_inst_base _ t = OK t1` >>
   disj1_tac >> qexists_tac `t1` >>
   gvs[run_inst_seq_def, GSYM mk_inst_def, control_moves_keep_vars] >> metis_tac[]
+QED
+
+Theorem storage_copy_word_content_frag[local]:
+  !ctx loc src dst sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+       emit_void MSTORE [dst; v] od sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    b+32 < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b 1 sbase 1 s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule storage_copy_word_layout >> strip_tac >>
+  qabbrev_tac `v = STRING #"%" (toString sa.cs_next_var)` >>
+  `~is_terminator (if loc = LocStorage then SLOAD else TLOAD) /\
+   (if loc = LocStorage then SLOAD else TLOAD) <> INVOKE` by
+    (Cases_on `loc = LocStorage` >> simp[is_terminator_def]) >>
+  irule frag_exec_run_inst_seq >>
+  qpat_x_assum `same_blocks sa sb` mp_tac >>
+  simp[same_blocks_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  qabbrev_tac `w = copy_runtime_word loc sbase a` >>
+  `step_inst_base (mk_inst sa.cs_next_id
+    (if loc = LocStorage then SLOAD else TLOAD) [src] [v]) sbase =
+    OK (update_var v w sbase)` by
+    (qunabbrev_tac `w` >> irule storage_copy_load_exact >> simp[]) >>
+  `eval_operand dst (update_var v w sbase) = SOME (n2w b)` by
+    (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_update_var] >> metis_tac[]) >>
+  `w2n (n2w b : bytes32) = b` by
+    (gvs[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >> decide_tac) >>
+  `step_inst_base (mk_inst (sa.cs_next_id+1) MSTORE [dst; Var v] [])
+    (update_var v w sbase) = OK (mstore b w (update_var v w sbase))` by
+    (qpat_assum `w2n (n2w b : bytes32) = b` (fn th => once_rewrite_tac[GSYM th]) >>
+     irule step_MSTORE >> simp[eval_operand_update_var]) >>
+  disj1_tac >> qexists_tac `mstore b w (update_var v w sbase)` >>
+  simp[run_inst_seq_def, GSYM mk_inst_def, control_moves_keep_vars] >>
+  conj_tac
+  >- (`copy_prefix loc a b 1 sbase (0+1)
+        (mstore (b+32*0) (copy_runtime_word loc sbase (a+n2w 0))
+          (update_var v w sbase))` by
+        (irule copy_prefix_extend >> simp[copy_prefix_zero]) >>
+      gvs[Abbr `w`, wordsTheory.WORD_ADD_0]) >>
+  conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity, update_var_def] >>
+  simp[mstore_def, write_memory_with_expansion_def, lookup_var_update_var] >>
+  metis_tac[]
+QED
+
+(* After rewriting ensure_storage_memory_layout, compose the allocation
+   boundary and instantiate sbase with its resulting state.  This suffix
+   covers zero words too: no positivity hypothesis is used by the loop. *)
+Theorem storage_copy_suffix_extends:
+  !loc src dst n sa u sb.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    (if n = 1 then
+       do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+          emit_void MSTORE [dst; v] od
+     else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
+      sa = (u,sb) ==>
+    cs_extends sa sb
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `n = 1` >> gnvs[]
+  >- (drule_all storage_copy_word_layout >>
+      simp[cs_extends_def, same_blocks_def] >> strip_tac >>
+      qexists_tac `[]` >> simp[]) >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> irule compile_storage_copy_extends >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem storage_copy_suffix_content_capacity_frag:
+  !ctx loc src dst n sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    (if n = 1 then
+       do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+          emit_void MSTORE [dst; v] od
+     else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
+      sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    n < 2**256 /\ b+32*n < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b n sbase n s /\
+           LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `n = 1`
+  >- (gnvs[] >> irule storage_copy_word_content_frag >>
+      conj_tac >- gvs[] >> reverse conj_tac >- simp[] >>
+      goal_assum (drule_at (Pat `comp_bind _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
+  gnvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gnvs[] >> irule compile_storage_copy_content_capacity_frag >>
+  conj_tac >- (gvs[] >> decide_tac) >> conj_tac >- gvs[] >>
+  reverse conj_tac >- simp[] >>
+  goal_assum (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem storage_copy_suffix_content_frag:
+  !ctx loc src dst n sa u sb sbase a b R.
+    (loc = LocStorage \/ loc = LocTransient) /\
+    (if n = 1 then
+       do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+          emit_void MSTORE [dst; v] od
+     else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
+      sa = (u,sb) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME (n2w b) /\
+    n < 2**256 /\ b+32*n < 2**256 ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. copy_prefix loc a b n sbase n s /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase)) R
+Proof
+  rpt gen_tac >> strip_tac >> irule frag_exec_conseq >>
+  irule_at Any storage_copy_suffix_content_capacity_frag >>
+  goal_assum (drule_at (Pat `(if _ then _ else _) _ = _`)) >>
+  qexistsl_tac [`sbase`, `b`, `a`, `R`] >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_copy_operand_preserved:
+  copy_static s = copy_static sbase /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) ==>
+  eval_operand op s = eval_operand op sbase
+Proof
+  strip_tac >> drule copy_static_fields >> strip_tac >>
+  Cases_on `op` >> simp[eval_operand_def]
 QED
 
 Theorem ensure_storage_memory_layout:

@@ -18,7 +18,7 @@
  *                                  expr_sim_inv does
  *   slot_count_of_memory_size    — a type's slots are its memory size
  *                                  rounded up to words
- *   type_memory_size_slots, decode_value_n2w, decode_struct_field,
+ *   decode_value_n2w, decode_struct_field,
  *   evaluate_subscripts_snoc_attr, evaluate_subscripts_append_err,
  *   read_popped_snoc_attr, read_memory_path_snoc_attr — steps of the
  *                                  field reads, exported for reuse
@@ -33,6 +33,7 @@
 
 Theory exprSimAttributeFields
 Ancestors
+  storageDecodeMemory
   list rich_list finite_map pair
   exprSimHyps compileEnv valueEncoding
   vyperAST vyperInterpreter vyperState vyperStorage vyperValue
@@ -42,15 +43,6 @@ Libs
 
 (* ===== Struct layout ===== *)
 
-Theorem type_memory_size_slots:
-  (!tv. type_memory_size tv = 32 * type_slot_size tv) /\
-  (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs) /\
-  (!fields. type_memory_size_fields fields = 32 * type_slot_size_fields fields)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  simp[type_memory_size_def, type_slot_size_def,
-       arithmeticTheory.LEFT_ADD_DISTRIB]
-QED
 
 Theorem slot_count_of_memory_size:
   !tv. (type_memory_size tv + 31) DIV 32 = type_slot_size tv
@@ -286,7 +278,7 @@ Proof
   Induct >- simp[evaluate_subscripts_def] >>
   Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
   rpt gen_tac >>
-  TRY (rename1 `AttrSubscript fname :: _` >> Cases_on `a`) >>
+  Cases_on `a` >>
   simp[evaluate_subscripts_def] >> strip_tac >>
   gvs[AllCaseEqs()] >> res_tac >> simp[]
 QED

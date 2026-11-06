@@ -13,6 +13,7 @@ Ancestors
   vyperCalldataSliceTest
   vyperCheckContractFrontendLibTest
   vyperCheckContractLibTest
+  rawReturnDeclarationTest
   vyperCheckContractTraceLibTest
   vyperCreateSelfdestruct
   vyperCreateStorageTest

@@ -4401,6 +4401,15 @@ Proof
   simp[ci_mono_as_ptr_val, ci_mono_compile_slice_extcode, ci_mono_compile_slice_data]
 QED
 
+Theorem ci_mono_compile_bytestring_widen_copy[local]:
+  ∀ d v sz sa. ci_mono sa (SND (compile_bytestring_widen_copy d v sz sa))
+Proof
+  rw[compile_bytestring_widen_copy_def] >>
+  irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >> rpt gen_tac >>
+  irule ci_mono_ignore_bind >>
+  simp[ci_mono_compile_copy_memory, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_type_builtin_convert[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty Convert ret_ty args st))
@@ -4408,7 +4417,10 @@ Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   irule ci_mono_uncurry >> reverse conj_tac
   >- simp[ci_mono_lower_value_cfn] >>
-  rpt gen_tac >> BETA_TAC >> Cases_on `ret_ty` >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >- simp[ci_mono_refl] >>
+  IF_CASES_TAC
+  >- simp[ci_mono_as_stack_val, ci_mono_compile_bytestring_widen_copy] >>
+  Cases_on `ret_ty` >>
   simp[ci_mono_as_stack_val, ci_mono_compile_type_convert]
 QED
 

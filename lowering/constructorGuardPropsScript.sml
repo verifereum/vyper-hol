@@ -10,14 +10,24 @@ Definition constructor_guard_env_def:
     ce_nonreentrant := (T,global_nonreentrant_slot,T,is_view)
 End
 
+(* The constructor body ends in a jump to its shared exit block, which holds
+   the unlock and the epilogue, so the opcodes are read across both blocks. *)
+Definition deploy_opcodes_def:
+  deploy_opcodes (st : compile_state) =
+    MAP (\i. i.inst_opcode)
+      (FLAT (MAP (\bb. bb.bb_instructions) (REVERSE st.cs_blocks)) ++
+       st.cs_current_insts)
+End
+
 Theorem constructor_guard_view_opcodes:
-  MAP (\i. i.inst_opcode)
+  deploy_opcodes
     (SND (compile_generate_deploy T 1 0 [] 0 []
       (constructor_guard_env T) [] T T global_nonreentrant_slot T
-      (initial_compile_state "entry"))).cs_current_insts =
-    [TLOAD; EQ; ISZERO; ASSERT; ALLOCA; CODECOPY; RETURN]
+      (initial_compile_state "entry"))) =
+    [TLOAD; EQ; ISZERO; ASSERT; JMP; ALLOCA; CODECOPY; RETURN]
 Proof
-  simp[compile_generate_deploy_def, constructor_guard_env_def,
+  simp[deploy_opcodes_def, compile_generate_deploy_def, constructor_guard_env_def,
+       fresh_label_def, new_block_def,
        compile_register_constructor_args_def,
        stmtLoweringTheory.compile_stmt_def, compile_internal_fn_bodies_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, comp_get_def,
@@ -30,13 +40,14 @@ Proof
 QED
 
 Theorem constructor_guard_mutable_opcodes:
-  MAP (\i. i.inst_opcode)
+  deploy_opcodes
     (SND (compile_generate_deploy T 1 0 [] 0 []
       (constructor_guard_env F) [] T T global_nonreentrant_slot T
-      (initial_compile_state "entry"))).cs_current_insts =
-    [TLOAD; EQ; ISZERO; ASSERT; TSTORE; TSTORE; ALLOCA; CODECOPY; RETURN]
+      (initial_compile_state "entry"))) =
+    [TLOAD; EQ; ISZERO; ASSERT; TSTORE; JMP; TSTORE; ALLOCA; CODECOPY; RETURN]
 Proof
-  simp[compile_generate_deploy_def, constructor_guard_env_def,
+  simp[deploy_opcodes_def, compile_generate_deploy_def, constructor_guard_env_def,
+       fresh_label_def, new_block_def,
        compile_register_constructor_args_def,
        stmtLoweringTheory.compile_stmt_def, compile_internal_fn_bodies_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, comp_get_def,

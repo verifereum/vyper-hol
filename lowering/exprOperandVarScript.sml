@@ -284,6 +284,20 @@ Proof
   simp[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
+Theorem compiler_bytestring_widen_copy_var[local]:
+  compile_bytestring_widen_copy d v sz sa = (op,sb) ==>
+  !x. op = Var x ==> not_fresh_at sb x
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  drule_all compiler_alloc_buffer_var >> strip_tac >>
+  rename1 `compile_copy_memory _ _ _ s1 = (_, s2)` >>
+  `ci_mono s1 s2` by
+    metis_tac[ci_mono_compile_copy_memory, pairTheory.SND] >>
+  metis_tac[compiler_ci_mono_not_fresh]
+QED
+
 Theorem compiler_lower_abi_encode_var:
   lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
@@ -517,7 +531,20 @@ Proof
      gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
      metis_tac[compiler_empty_complex_var])
   >~ [`compile_type_convert _ _ _`] >-
-    (Cases_on `rt` >> simp[] >>
+    (Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_word_type rt /\
+               (lowered_value_type cenv (HD args) = BaseT (BytesT (Dynamic 0)) \/
+                lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
+     pop_assum (fn th => REWRITE_TAC [th])
+     >- (rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
+     Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type rt /\
+               type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
+               type_memory_bytes cenv rt` >>
+     pop_assum (fn th => REWRITE_TAC [th])
+     >- (qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
+         Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+         rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+         metis_tac[compiler_bytestring_widen_copy_var]) >>
+     Cases_on `rt` >> simp[] >>
      qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
      Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >>
@@ -856,9 +883,19 @@ Proof
   Cases_on `lit`
   >~ [`compile_literal_vv ty (BoolL b)`] >-
     (Cases_on `b` >> simp[compile_literal_vv_def, comp_return_def] >>
-     rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
-  simp[compile_literal_vv_def, comp_return_def] >>
-  rpt CASE_TAC >>
+     rpt strip_tac >> gvs[contextTheory.vv_operand_def])
+  >~ [`compile_literal_vv ty (BytesL bs)`] >-
+    (Cases_on `ty` >>
+     gvs[compile_literal_vv_def, comp_return_def, contextTheory.vv_operand_def] >>
+     rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[comp_return_def, contextTheory.vv_operand_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >>
+     gvs[comp_bind_def, comp_return_def, contextTheory.vv_operand_def] >>
+     rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+     gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
+     metis_tac[compiler_bytelike_literal_var]) >>
+  simp[compile_literal_vv_def, comp_return_def, contextTheory.vv_operand_def] >>
   simp[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
@@ -927,17 +964,42 @@ Proof
   gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
+Theorem compiler_var_keep_bind[local]:
+  (!s. s.cs_next_var <= (SND (m s)).cs_next_var) /\
+  (!a s op t. not_fresh_at s x /\ f a s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y) ==>
+  !s op t. not_fresh_at s x /\ comp_bind m f s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `m s` >>
+  simp[comp_bind_def] >>
+  metis_tac[not_fresh_at_mono, pairTheory.SND]
+QED
+
+Theorem compiler_var_fresh_bind[local]:
+  (!x s op t. not_fresh_at s x /\ f x s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y) ==>
+  !s op t. comp_bind fresh_var f s = (op,t) ==>
+     !y. op = Var y ==> not_fresh_at t y
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `fresh_var s` >>
+  simp[comp_bind_def] >> strip_tac >>
+  drule fresh_var_safe_operand >> simp[safe_operand_def] >>
+  metis_tac[]
+QED
+
 Theorem compiler_uint2str_var:
   compile_uint2str v nd n sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
 Proof
-  simp[builtinStringsTheory.compile_uint2str_def,
-       contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
-       emit_inst_def, new_block_def, fresh_label_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  simp[builtinStringsTheory.compile_uint2str_def, comp_ignore_bind_def] >>
+  map_every qid_spec_tac [`sb`, `op`, `sa`] >>
+  ntac 6 (ho_match_mp_tac compiler_var_prefix >> gen_tac) >>
+  ho_match_mp_tac compiler_var_fresh_bind >> gen_tac >>
+  rpt (ho_match_mp_tac compiler_var_keep_bind >> conj_tac
+       >- simp[compiler_counter_primitives, compiler_counter_emit] >>
+       gen_tac >> BETA_TAC) >>
+  simp[comp_return_def]
 QED
 
 Theorem compiler_as_wei_value_var:
@@ -992,6 +1054,25 @@ Proof
     metis_tac[compiler_counter_emit, pairTheory.SND] >>
   simp[]
 QED
+
+Theorem builtin_stack_safe_var[local]:
+  exprSafeOperand$safe_operand (SND result) (FST result) ==>
+  as_stack_val ty result = (vv,sb) ==>
+  !x. vv_operand vv = Var x ==> not_fresh_at sb x
+Proof
+  Cases_on `result` >>
+  simp[as_stack_val_def, contextTheory.vv_operand_def,
+       exprSafeOperandTheory.safe_operand_def] >>
+  rpt strip_tac >> gvs[contextTheory.vv_operand_def]
+QED
+
+fun builtin_safe_stack_tac safety =
+  rpt (pairarg_tac >> gvs[]) >>
+  match_mp_tac builtin_stack_safe_var >>
+  qmatch_goalsub_abbrev_tac `SND result` >>
+  Cases_on `result` >>
+  gvs[markerTheory.Abbrev_def] >>
+  irule safety >> simp[] >> irule_at Any EQ_REFL;
 
 (* Both value wrappers expose the same Var-only result obligation. *)
 fun builtin_result_var_tac pat =
@@ -1092,21 +1173,22 @@ QED
 Resume compiler_builtin_var[bop]:
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
   IF_CASES_TAC
-  >- (Cases_on `HD (TL args)` >> simp[]
-      >~ [`HD (TL args) = Builtin ann bi es`] >-
-        (Cases_on `bi` >> simp[] >>
-         rpt (pairarg_tac >> gvs[]) >>
-         rpt (IF_CASES_TAC >> simp[]) >> builtin_stack_var_tac >>
-         metis_tac[exprSafeOperandBuiltinsTheory.compile_list_membership_in_safe_operand,
-                   exprSafeOperandBuiltinsTheory.compile_list_membership_notin_safe_operand,
-                   exprSafeOperandBuiltinsTheory.compile_var_array_membership_safe_operand,
-                   exprSafeOperandTheory.safe_operand_def]) >>
-      builtin_stack_var_tac >>
-      metis_tac[exprSafeOperandBuiltinsTheory.compile_var_array_membership_safe_operand,
-                exprSafeOperandTheory.safe_operand_def]) >>
+  >- (rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `HD (TL args)` >> simp[]
+      >>~- ([`Builtin ann bi es`],
+        Cases_on `bi` >> simp[]
+        >>~- ([`MakeArray _ _`],
+          rpt (pairarg_tac >> gvs[]) >> builtin_stack_var_tac >>
+          metis_tac[exprSafeOperandBuiltinsTheory.compile_list_membership_in_safe_operand,
+                    exprSafeOperandBuiltinsTheory.compile_list_membership_notin_safe_operand,
+                    exprSafeOperandTheory.safe_operand_def]) >>
+        builtin_safe_stack_tac
+          exprSafeOperandBuiltinsTheory.compile_var_array_membership_safe_operand) >>
+      builtin_safe_stack_tac
+        exprSafeOperandBuiltinsTheory.compile_var_array_membership_safe_operand) >>
   IF_CASES_TAC
   >- (rpt (pairarg_tac >> gvs[]) >>
-      rpt (IF_CASES_TAC >> simp[]) >> builtin_stack_var_tac >>
+      builtin_stack_var_tac >>
       metis_tac[exprSafeOperandTheory.emit_op_safe_operand,
                 exprSafeOperandTheory.safe_operand_def]) >>
   builtin_stack_var_tac >>
@@ -1160,9 +1242,19 @@ Resume compiler_builtin_var[keccak]:
   >- (builtin_stack_var_tac >>
       metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_bytes_safe_operand,
                 exprSafeOperandTheory.safe_operand_def]) >>
-  rpt CASE_TAC >> simp[] >> builtin_stack_var_tac >>
-  metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_bytesm_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
+  Cases_on `expr_type (HD args)` >> simp[]
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> simp[]
+      >~ [`BytesT bd`]
+      >- (Cases_on `bd` >> simp[] >> builtin_stack_var_tac >>
+          metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_bytesm_safe_operand,
+                    exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
+                    exprSafeOperandTheory.safe_operand_def]) >>
+      builtin_stack_var_tac >>
+      metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
+                exprSafeOperandTheory.safe_operand_def]) >>
+  builtin_stack_var_tac >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_keccak256_word_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[sha]:
@@ -1958,16 +2050,22 @@ Proof
   >~ [`Concat _`] >- suspend "concat" >>
   simp[compile_builtin_dispatch_body_def, LET_THM]
   >~ [`compile_acc _ _ _ _ _`] >-
-    (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[]) >>
+    (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[])
+  >~ [`compile_addmod`] >- rpt compiler_reserved_pair_tac
+  >~ [`compile_mulmod`] >- rpt compiler_reserved_pair_tac
+  >~ [`compile_ecrecover`] >- rpt compiler_reserved_pair_tac >>
   rpt compiler_reserved_pair_tac
 QED
 
 Resume compiler_builtin_reserved_cong[bop]:
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
   IF_CASES_TAC >> simp[]
-  >- (compiler_reserved_pair_tac >>
+  >- (pairarg_tac >>
+      qpat_assum `!ty e s v sb. _ /\ lower_value _ _ _ _ _ = _ ==> _`
+        drule_all >>
+      strip_tac >> simp[] >>
       Cases_on `HD (TL args)` >> simp[] >>
-      rename1 `Builtin _ b _` >> Cases_on `b` >> simp[] >>
+      rename1 `Builtin _ rhs_b _` >> Cases_on `rhs_b` >> simp[] >>
       AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
   IF_CASES_TAC >> simp[]
   >- (Cases_on `bytestring_literal_hash (HD args)` >> simp[]
@@ -2123,7 +2221,117 @@ QED
 Resume compiler_expr_body_reserved_cong[builtin]:
   rename1 `Builtin ann bi args` >>
   `!rt ty. bf ce rt ty bi args sa = bg ce rt ty bi args sa` by simp[] >>
-  Cases_on `bi` >> simp[compile_expr_body_def, LET_THM]
+  (* Keep constructor simplification in separate budgeted proof steps. *)
+  Cases_on `bi`
+  >~ [`Len`] >- suspend "builtin_len"
+  >~ [`CalldataLen`] >- suspend "builtin_calldatalen"
+  >~ [`CalldataSlice _`] >- suspend "builtin_calldataslice"
+  >~ [`Not`] >- suspend "builtin_not"
+  >~ [`Neg`] >- suspend "builtin_neg"
+  >~ [`Abs`] >- suspend "builtin_abs"
+  >~ [`Keccak256`] >- suspend "builtin_keccak"
+  >~ [`Sha256`] >- suspend "builtin_sha"
+  >~ [`AsWeiValue _`] >- suspend "builtin_wei"
+  >~ [`Concat _`] >- suspend "builtin_concat"
+  >~ [`Slice _`] >- suspend "builtin_slice"
+  >~ [`Uint2Str _`] >- suspend "builtin_uint2str"
+  >~ [`MakeArray _ _`] >- suspend "builtin_array"
+  >~ [`Ceil`] >- suspend "builtin_ceil"
+  >~ [`Floor`] >- suspend "builtin_floor"
+  >~ [`AddMod`] >- suspend "builtin_addmod"
+  >~ [`MulMod`] >- suspend "builtin_mulmod"
+  >~ [`Bop _`] >- suspend "builtin_bop"
+  >~ [`BlockHash`] >- suspend "builtin_blockhash"
+  >~ [`BlobHash`] >- suspend "builtin_blobhash"
+  >~ [`Env _`] >- suspend "builtin_env"
+  >~ [`Acc _`] >- suspend "builtin_acc"
+  >~ [`MethodId`] >- suspend "builtin_methodid"
+  >~ [`ECRecover`] >- suspend "builtin_ecrecover"
+  >~ [`ECAdd`] >- suspend "builtin_ecadd"
+  >~ [`ECMul`] >- suspend "builtin_ecmul"
+  >~ [`PowMod256`] >- suspend "builtin_powmod"
+QED
+
+Resume compiler_expr_body_reserved_cong[builtin_len]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_calldatalen]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_calldataslice]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_not]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_neg]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_abs]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_keccak]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_sha]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_wei]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_concat]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_slice]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_uint2str]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_array]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_ceil]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_floor]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_addmod]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_mulmod]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_bop]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_blockhash]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_blobhash]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_env]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_acc]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_methodid]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_ecrecover]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_ecadd]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_ecmul]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_powmod]:
+  simp[compile_expr_body_def, LET_THM]
 QED
 
 Resume compiler_expr_body_reserved_cong[struct]:

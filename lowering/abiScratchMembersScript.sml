@@ -271,7 +271,8 @@ Theorem abi_scratch_members_initial_inv:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `hl = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  asm_simp_tac (srw_ss()) [abi_scratch_members_inv_def, has_type_def, abi_tuple_tails_def,
+  PURE_REWRITE_TAC [abi_scratch_members_inv_def] >>
+  asm_simp_tac (srw_ss()) [has_type_def, abi_tuple_tails_def,
     Excl "enc_def"]
 QED
 

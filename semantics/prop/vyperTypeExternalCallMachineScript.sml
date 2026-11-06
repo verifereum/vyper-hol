@@ -109,10 +109,10 @@ Proof
     (irule call_lock_send_success_components >> simp[] >>
      qexistsl [`cx`, `gobs`, `lock_st`, `mut`, `nr`, `orc`, `rqs`] >> simp[]) >>
   `ALL_DISTINCT (MAP FST args)` by
-    (`check_function_body am.layouts tx.target mods art src mut nr
+    (`check_function_body am.layouts tx.target mods art src External mut nr
        args dflts ret body` by
        (irule check_contract_runtime_function_body_MEM >> simp[] >>
-        qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
+        qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
      gvs[check_function_body_def, params_ok_def]) >>
   irule checked_explicit_external_body_preserves_machine_components >>
   qexistsl [`am`, `args`, `art`, `body`, `cx`, `dflts`, `mods`, `mut`, `nr`,

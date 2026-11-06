@@ -26,6 +26,9 @@
  *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
  *   expr_val_rel_footprint_agree — the bytes a memory value occupies, which
  *                            expr_val_at bounds, and the same at them
+ *   val_store_size, val_store_size_le, val_footprint_le_store_size — the
+ *                            bytes storing a value writes: a bytestring's
+ *                            data rounded up to whole words
  *   val_in_memory_word_type — a word type's value in memory: its word is
  *                            the typed encoding
  *   dynarray_type, dynarray_local, locals_kept — the frame on the live
@@ -149,7 +152,7 @@ End
 
 (* The bytes from its address that the value v of type tv occupies in
    memory: for a dynamic bytes or string value, its length word and its data
-   rounded up to whole words; for any other value, type_memory_size tv.  A
+   bytes; for any other value, type_memory_size tv.  A
    bytes or string literal's annotation is the type it is used at (Bytes[100]
    for a literal of 3 bytes assigned to a Bytes[100] local), while the
    lowering, like Python's _lower_bytelike, allocates a buffer the size of
@@ -158,6 +161,24 @@ End
    (val_in_memory_footprint_agree). *)
 Definition val_footprint_def:
   val_footprint tv v =
+    case v of
+      BytesV bs =>
+        (case tv of
+           BaseTV (BytesT (Dynamic _)) => 32 + LENGTH bs
+         | _ => type_memory_size tv)
+    | StringV str =>
+        (case tv of
+           BaseTV (StringT _) => 32 + LENGTH str
+         | _ => type_memory_size tv)
+    | _ => type_memory_size tv
+End
+
+(* The bytes from its address that storing the value v of type tv writes
+   (compile_store_memory): for a dynamic bytes or string value, its length
+   word and its data rounded up to whole words, as compile_store_bytestring
+   copies them; for any other value, type_memory_size tv. *)
+Definition val_store_size_def:
+  val_store_size tv v =
     case v of
       BytesV bs =>
         (case tv of
@@ -328,6 +349,20 @@ Proof
   disch_then (qspec_then `n + 31` strip_assume_tac) >> decide_tac
 QED
 
+(* Rounding down to whole words: clearing the low five bits. *)
+Theorem buffer_round_mask:
+  !w:bytes32. w && i2w (- &32) = (w >>> 5) << 5
+Proof
+  `i2w (- &32):bytes32 = (-1w:bytes32) << 5` by
+    (simp[integer_wordTheory.i2w_def] >> CONV_TAC wordsLib.WORD_EVAL_CONV) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (bool_ss ++ fcpLib.FCP_ss)
+    [wordsTheory.word_and_def, wordsTheory.word_lsl_def,
+     wordsTheory.word_lsr_def, wordsTheory.WORD_NEG_1, wordsTheory.word_T] >>
+  rpt strip_tac >> Cases_on `5 <= i` >>
+  asm_simp_tac (arith_ss ++ fcpLib.FCP_ss) [wordsTheory.WORD_NEG_1, wordsTheory.word_T]
+QED
+
 Theorem word_size_le_of_le_mul[local]:
   !len k. len <= 32 * k ==> word_size len <= k
 Proof
@@ -340,13 +375,16 @@ Proof
   gvs[]
 QED
 
-Theorem val_footprint_cases[local]:
+(* The dynamic bytestrings, where footprint and store size are their own;
+   every other value takes its type's size. *)
+Theorem val_size_cases[local]:
   !tv v.
     (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
     (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
-    val_footprint tv v = type_memory_size tv
+    (val_footprint tv v = type_memory_size tv /\
+     val_store_size tv v = type_memory_size tv)
 Proof
-  rpt gen_tac >> Cases_on `v` >> simp[val_footprint_def] >>
+  rpt gen_tac >> Cases_on `v` >> simp[val_footprint_def, val_store_size_def] >>
   Cases_on `tv` >> simp[] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> simp[] >>
   rename1 `BytesT sz` >> Cases_on `sz` >> simp[]
@@ -360,11 +398,38 @@ Proof
   `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_footprint tv v = type_memory_size tv` by
-    metis_tac[val_footprint_cases]
+    metis_tac[val_size_cases]
   >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
-      irule word_size_le_of_le_mul >> simp[])
+      qspec_then `n` mp_tac le_word_size_mul >> decide_tac)
   >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+          valueEncodingTheory.type_memory_size_def] >>
+      qspec_then `n` mp_tac le_word_size_mul >> decide_tac) >>
+  simp[]
+QED
+
+(* A value's footprint is within the bytes storing it writes. *)
+Theorem val_footprint_le_store_size:
+  !tv v. val_footprint tv v <= val_store_size tv v
+Proof
+  rpt gen_tac >>
+  qspecl_then [`tv`, `v`] strip_assume_tac val_size_cases >>
+  gvs[val_footprint_def, val_store_size_def, le_word_size_mul]
+QED
+
+(* A well-formed value's store size fits its type's size. *)
+Theorem val_store_size_le:
+  !tv v. val_wf tv v ==> val_store_size tv v <= type_memory_size tv
+Proof
+  rpt strip_tac >>
+  `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
+   (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
+   val_store_size tv v = type_memory_size tv` by
+    metis_tac[val_size_cases]
+  >- (gvs[val_store_size_def, valueEncodingTheory.val_wf_def,
+          valueEncodingTheory.type_memory_size_def] >>
+      irule word_size_le_of_le_mul >> simp[])
+  >- (gvs[val_store_size_def, valueEncodingTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       irule word_size_le_of_le_mul >> simp[]) >>
   simp[]
@@ -382,11 +447,10 @@ Proof
   `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_footprint tv v = type_memory_size tv` by
-    metis_tac[val_footprint_cases]
+    metis_tac[val_size_cases]
   >- (gvs[val_footprint_def, val_in_memory_def] >>
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       strip_tac >>
-      `LENGTH bs <= 32 * word_size (LENGTH bs)` by simp[le_word_size_mul] >>
       `mem_word_at off mem' = mem_word_at off mem` by
         (qpat_x_assum `!off2. _ ==> mem_word_at _ _ = _` irule >> simp[]) >>
       `mem_bytes_at (off + 32) (LENGTH bs) mem' =
@@ -397,7 +461,6 @@ Proof
   >- (gvs[val_footprint_def, val_in_memory_def] >>
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       strip_tac >>
-      `LENGTH str <= 32 * word_size (LENGTH str)` by simp[le_word_size_mul] >>
       `mem_word_at off mem' = mem_word_at off mem` by
         (qpat_x_assum `!off2. _ ==> mem_word_at _ _ = _` irule >> simp[]) >>
       `mem_bytes_at (off + 32) (LENGTH str) mem' =

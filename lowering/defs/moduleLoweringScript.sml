@@ -842,18 +842,19 @@ Definition compile_generate_deploy_def:
              let (_,_,_,is_view) = cenv.ce_nonreentrant in
              compile_nonreentrant_lock nkey use_transient is_view
           else return ());
-         (* Constructor body *)
-         compile_stmts cenv' NoLoop (BaseT BoolT) body;
+         exit_lbl <- fresh_label "ctor_exit";
+         (* Early returns and fallthrough share the unlock and epilogue. *)
+         compile_stmts (cenv' with ce_ctor_exit_label := SOME exit_lbl)
+           NoLoop NoneT body;
          cs <- comp_get;
          (if block_is_terminated cs then return ()
-          else
-            do (if is_nonreentrant then
-                   let (_,_,_,is_view) = cenv.ce_nonreentrant in
-                   compile_nonreentrant_unlock nkey use_transient is_view
-                else return ());
-               compile_constructor_epilogue runtime_size immutables_len
-                 imm_alloca
-            od);
+          else emit_inst JMP [Label exit_lbl] []);
+         new_block exit_lbl;
+         (if is_nonreentrant then
+            let (_,_,_,is_view) = cenv.ce_nonreentrant in
+            compile_nonreentrant_unlock nkey use_transient is_view
+          else return ());
+         compile_constructor_epilogue runtime_size immutables_len imm_alloca;
          (* Internal functions: generated regardless of constructor termination *)
          compile_internal_fn_bodies ctor_internal_fns
       od

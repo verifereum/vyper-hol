@@ -205,10 +205,16 @@ Definition source_memory_read_byte_def:
             byte_in_memory_range range i
 End
 
+(* Every source read range avoids every context-owned spill region, in the
+   same endpoint form as the writes below: a range may not straddle even an
+   empty region, which the planner's spill interval can sit on. *)
 Definition source_memory_reads_disjoint_def:
   source_memory_reads_disjoint cp inst vs <=>
-    !i. source_memory_read_byte inst vs i ==>
-        ~context_spill_byte cp i
+    EVERY (\(off,len).
+      len = 0 \/
+      !r. MEM r cp.cp_regions ==>
+          off + len <= r.sr_spill_base \/ r.sr_spill_end <= off)
+      (source_memory_read_ranges inst vs)
 End
 
 (* Every source write range avoids every context-owned spill region.  Keeping
@@ -274,12 +280,77 @@ Definition reachability_closed_def:
        fn_entry_inv Inv ctx callee cs)
 End
 
+(* An operand resolved backwards through a block's ASSIGN copies: the
+   instructions are given latest first (REVERSE (TAKE k bb.bb_instructions)
+   for the operand of the instruction at index k).  A variable defined by
+   anything but a one-operand ASSIGN resolves to itself. *)
+Definition resolve_block_assigns_def:
+  resolve_block_assigns [] op = op /\
+  resolve_block_assigns (inst :: rest) op =
+    case op of
+      Var v =>
+        if MEM v inst.inst_outputs then
+          if inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [v] /\
+             LENGTH inst.inst_operands = 1
+          then resolve_block_assigns rest (HD inst.inst_operands)
+          else op
+        else resolve_block_assigns rest op
+    | _ => op
+End
+
+(* Revert forwarding: RETURNDATACOPY [p; 0; rds] at i, later followed by
+   REVERT [p; rds] at j, with only ASSIGNs in between and the operands
+   equal up to the block's ASSIGN copies (SingleUseExpansion wraps them in
+   fresh ASSIGNs).  After a failed call, the lowering copies the callee's
+   revert data to p (a zero-size ALLOCA or address 0) and reverts with it
+   (extcall_fail, raw_call's call_failed, create_fail), as Python does.
+   Both instructions touch [p, p + rds), past the frontier when rds > 0;
+   the REVERT discards memory, so that write is never read by anything
+   but the REVERT itself. *)
+Definition revert_forward_pair_def:
+  revert_forward_pair bb i j <=>
+    i < j /\
+    (!k inst. i < k /\ k < j /\ get_instruction bb k = SOME inst ==>
+              inst.inst_opcode = ASSIGN) /\
+    ?inst1 inst2 p src rds p' rds'.
+      get_instruction bb i = SOME inst1 /\
+      get_instruction bb j = SOME inst2 /\
+      inst1.inst_opcode = RETURNDATACOPY /\
+      inst1.inst_operands = [p; src; rds] /\
+      inst2.inst_opcode = REVERT /\
+      inst2.inst_operands = [p'; rds'] /\
+      resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) src =
+        Lit 0w /\
+      resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) p =
+        resolve_block_assigns (REVERSE (TAKE j bb.bb_instructions)) p' /\
+      resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) rds =
+        resolve_block_assigns (REVERSE (TAKE j bb.bb_instructions)) rds'
+End
+
+(* Index k is one of the two instructions of a revert forwarding. *)
+Definition revert_forward_at_def:
+  revert_forward_at bb k <=>
+    ?j. revert_forward_pair bb k j \/ revert_forward_pair bb j k
+End
+
+(* The instruction state s of fn is one of a revert forwarding's two
+   instructions. *)
+Definition in_revert_forward_def:
+  in_revert_forward fn s <=>
+    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+         revert_forward_at bb s.vs_inst_idx
+End
+
+(* A revert forwarding is exempt: it copies the callee's revert data to
+   its pointer and reverts with it, reading nothing else (the REVERT's
+   operands are loaded onto the stack before the copy writes), and the
+   revert discards memory. *)
 Definition codegen_memory_obligations_def:
   codegen_memory_obligations Inv ctx cp <=>
     !fn inst vs1 vs2 fuel.
       Inv ctx fn inst vs1 /\
       MEM fn ctx.ctx_functions /\
-      MEM inst (fn_insts fn) ==>
+      MEM inst (fn_insts fn) /\ ~in_revert_forward fn vs1 ==>
       source_memory_reads_disjoint cp inst vs1 /\
       context_source_memory_writes_disjoint cp inst vs1 /\
       (step_inst fuel ctx inst vs1 = OK vs2 ==>

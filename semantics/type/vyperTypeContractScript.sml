@@ -55,9 +55,13 @@ Definition artifact_env_def:
        event_fields := art.cta_event_fields |>
 End
 
+(* Vyper rejects writes to the arguments of external and deploy functions
+   ("Cannot write to calldata", _handle_modification in
+   vyper/semantics/analysis/local.py); internal-function arguments are
+   writable. *)
 Definition function_entry_env_def:
-  function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env id ty T)
+  function_entry_env art mods src vis args =
+    FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
       (artifact_env art mods src) args
 End
 
@@ -88,7 +92,7 @@ Definition add_toplevel_static_maps_def:
         art with <| cta_bare_globals updated_by
                     (flip FUPDATE ((src,id), typ));
                     cta_bare_global_assignable updated_by
-                    (flip FUPDATE ((src,id), typ));
+                    (if in_deploy then flip FUPDATE ((src,id), typ) else I);
                     cta_toplevel_vtypes updated_by
                     (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>
@@ -897,19 +901,13 @@ Termination
   simp[value_type_size_def]
 End
 
-Definition event_indexable_type_def:
-  event_indexable_type (BaseT _) = T /\
-  event_indexable_type (FlagT _) = T /\
-  event_indexable_type _ = F
-End
-
 (* Header checks apply in both checking modes, including constructors whose
    bodies are checked only in deployment mode. *)
 Definition function_header_ok_def:
   function_header_ok vis (mut : function_mutability) (nr : bool) rr
       (name : identifier) (args : argument list)
       (dflts : expr list) ret <=>
-    (rr ==> ?n. ret = BaseT (BytesT (Dynamic n))) /\
+    (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
     (* Constructor code returns the deployed runtime, not an ABI value. *)
     (vis = Deploy ==> NULL dflts /\ ret = NoneT) /\
     (* The source treats Pure as a read-only guard, while the compiler's
@@ -918,6 +916,12 @@ Definition function_header_ok_def:
     (mut = Pure ==> ~nr) /\
     (* The fallback has no ABI argument-decoding entry block. *)
     (vis = External /\ name = "__default__" ==> NULL args)
+End
+
+Definition event_indexable_type_def:
+  event_indexable_type (BaseT _) = T /\
+  event_indexable_type (FlagT _) = T /\
+  event_indexable_type _ = F
 End
 
 Definition check_toplevel_decl_def:
@@ -956,11 +960,11 @@ End
 (* ===== Callable-body checks ===== *)
 
 Definition check_function_body_def:
-  check_function_body layouts addr mods art src mut nr args dflts ret body =
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body =
     let tenv = type_env_all_modules mods in
-    let env = function_entry_env art mods src args in
+    let env = function_entry_env art mods src vis args in
       params_ok tenv args /\
-      (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
+      (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
       custom_errors_stmts_ok mods body /\
@@ -981,7 +985,7 @@ Definition check_toplevel_body_def:
     | FunctionDecl vis mut nr _ fn args dflts ret body =>
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
-        check_function_body layouts addr mods art src mut nr args dflts ret body
+        check_function_body layouts addr mods art src vis mut nr args dflts ret body
     | _ => T
 End
 

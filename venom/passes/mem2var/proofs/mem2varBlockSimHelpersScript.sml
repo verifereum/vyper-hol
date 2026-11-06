@@ -3543,14 +3543,6 @@ Resume m2v_nonterminal_step_dispatch[alloca_none_sync]:
   gvs[]
 QED
 
-(* mstore8 is equivalent to wmwe with a single byte *)
-Triviality mstore8_eq_wmwe:
-  !off (val_w:bytes32) s. mstore8 off val_w s =
-    write_memory_with_expansion off [w2w val_w] s
-Proof
-  simp[mstore8_def, write_memory_with_expansion_def, LET_THM]
-QED
-
 (* Enumerate the ~14 opcodes with memory effects that are
    not alloca, not ext_call, not terminator, not INVOKE, not MEMTOP.
    Proved by Cases_on once; avoids repeating 70-way split inline. *)
@@ -3943,7 +3935,7 @@ QED
 Resume m2v_nonpromoted_mem_dispatch[mstore8]:
   gvs[step_inst_non_invoke] >>
   with_step_inst_base_opcode (fn eqs =>
-    gvs (AllCaseEqs() :: mstore8_eq_wmwe :: exec_write2_def :: eqs)) >>
+    gvs (AllCaseEqs() :: mstore8_eq_write_mem :: exec_write2_def :: eqs)) >>
   `eval_operand op1 s1 = SOME addr` by gvs[] >>
   irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
   rpt strip_tac >> `addr' = w2n addr` by simp[] >> gvs[] >>
@@ -4308,8 +4300,11 @@ Proof
       with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
       metis_tac[m2v_inv_noix_update_accounts, m2v_inv_noix_halt_state,
+                m2v_inv_noix_set_returndata,
                 m2v_non32_ok_update_accounts, m2v_non32_ok_halt_state,
+                m2v_non32_ok_set_returndata,
                 m2v_ao_undef_sync_update_accounts,
+                m2v_ao_undef_sync_set_returndata,
                 m2v_ao_undef_sync_halt_state]) >>
   with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[lift_result_def] >>
   metis_tac[m2v_inv_noix_set_returndata, m2v_inv_noix_halt_state,

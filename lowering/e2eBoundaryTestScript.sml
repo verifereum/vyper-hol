@@ -125,12 +125,14 @@ QED
 Theorem outcome_guard_success_only:
   call_outcomes_ok tops am tx [] /\
   (call_outcomes_ok tops am tx [co with co_success := F] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
                                tStorage := co.co_tStorage|>) [])) /\
   (call_outcomes_ok tops am tx [co with co_success := T] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -199,6 +201,19 @@ Proof
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
+Theorem raw_return_is_unwrapped:
+  tx_return_bytes
+    [FunctionDecl External Pure F T "raw" [] []
+       (BaseT (BytesT (Dynamic 8))) []]
+    (BaseT (BytesT (Dynamic 8))) (tx with function_name := "raw")
+    (vyperValue$BytesV [1w; 2w]) out <=>
+  out = [1w; 2w]
+Proof
+  simp[tx_return_bytes_def, lookup_raw_return_or_F_def,
+       lookup_raw_return_def, vyperValueTheory.raw_return_bytes_def] >>
+  metis_tac[]
+QED
+
 Theorem no_return_is_empty:
   return_bytes tops NoneT v out <=> out = []
 Proof
@@ -298,7 +313,7 @@ Theorem success_requires_requests_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
-      return_bytes tops ret v out /\
+      tx_return_bytes tops ret tx v out /\
       accounts_agree cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\

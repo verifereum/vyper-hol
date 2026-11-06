@@ -85,6 +85,7 @@ val () = List.app (check_conversion_in "checker-oracle" true)
    last pin that accepted them (see ../conversions/README.md). *)
 val () = List.app (check_conversion_in "typecheck-rejected" false)
   ["u256_to_b4", "bys33_to_bool", "bys64_to_u256", "bys8_to_b4",
-   "str8_to_b4", "u256_to_bys16", "b4_to_bys2"]
+   "str8_to_b4", "u256_to_bys16", "b4_to_bys2",
+   "b4_to_bys", "b4_to_str", "u256_to_bys"]
 val () = List.app (check_conversion_in "typecheck-rejected" true)
-  ["i8_to_addr", "i256_to_addr", "b4_to_bys", "b4_to_str", "u256_to_bys"]
+  ["i8_to_addr", "i256_to_addr"]

@@ -1,6 +1,7 @@
 Theory vyperEvalPreservesScopes
 Ancestors
   pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
+  vyperImmutableMetadataFrame
   vyperTypeInvariants
   vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
@@ -1468,15 +1469,27 @@ Proof
           arithmeticTheory.PRE_SUB1] >>
       `i = LENGTH x0` by decide_tac >>
       gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[] >>
-  gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
-      get_source_immutables_def, set_source_immutables_def] >>
-  rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]
+  strip_tac >>
+  drule pop_place_metadata_frame >> strip_tac >>
+  `st'.scopes = st.scopes` by
+    (qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+     simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def,
+          lift_sum_def, vyperMiscTheory.option_CASE_rator,
+          vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+     rpt strip_tac >> imp_res_tac get_immutables_state >> gvs[] >>
+     metis_tac[set_immutable_scopes]) >>
+  gvs[preserves_tv_def] >> rpt strip_tac >>
+  qpat_x_assum `immutable_metadata_frame _ _` mp_tac >>
+  simp[immutable_metadata_frame_def] >> strip_tac >>
+  qpat_x_assum `!addr. IS_SOME _ <=> _`
+    (qspec_then `cx.txn.target` assume_tac) >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+  first_x_assum drule >> disch_then drule >>
+  disch_then (qspecl_then [`src`,`id`] mp_tac) >>
+  simp[] >>
+  Cases_on `FLOOKUP (get_source_immutables src x') id` >> simp[] >>
+  PairCases_on `x''` >> simp[]
 QED
 (* TODO(cleanup): this generic handle_function state-frame fact belongs with
    the interpreter/function-call support lemmas once those are split out. *)
@@ -2020,7 +2033,7 @@ Proof
     gvs[get_scopes_def, return_def, bind_apply, ignore_bind_apply,
         finally_def, set_scopes_def, return_def] >>
     Cases_on `eval_exprs cxd needed_dflts (r' with scopes := [FEMPTY])` >>
-    Cases_on `q` >> gvs[return_def, raise_def] >>
+    Cases_on `q` >> full_simp_tac std_ss [return_def, raise_def] >>
     first_x_assum drule_all >> strip_tac >>
     (* Derive preserves_tv cx from preserves_tv cxd via txn_eq *)
     drule preserves_tv_restore_scopes >>

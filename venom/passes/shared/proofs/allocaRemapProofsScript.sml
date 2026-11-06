@@ -679,13 +679,6 @@ Proof
   simp[mstore_def, write_memory_with_expansion_def, length_w2b_256]
 QED
 
-Theorem mstore8_eq_wmwe[local]:
-  mstore8 offset value s =
-  write_memory_with_expansion offset [w2w value] s
-Proof
-  simp[mstore8_def, write_memory_with_expansion_def]
-QED
-
 (* Generic: writing same bytes at corresponding alloca offsets via
    write_memory_with_expansion preserves alloca_remap_rel.
    Combines splice_preserves_remap_mem + alloca_remap_rel_mem_update. *)
@@ -2605,8 +2598,9 @@ Theorem mem_ops_opcode_support[local]:
        CODECOPY; RETURNDATACOPY; EXTCODECOPY; CALL; DELEGATECALL;
        STATICCALL; MLOAD; ILOAD; RETURN; CREATE; CREATE2; SHA3; LOG; REVERT]
 Proof
-  gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[mem_write_ops_def, mem_read_ops_def]
+  gen_tac >> Cases_on `inst.inst_opcode` >> simp[] >>
+  asm_rewrite_tac[mem_write_ops_def, mem_read_ops_def, opcode_case_def] >>
+  simp[]
 QED
 
 Theorem remap_preserved_mem_ops[local]:
@@ -2644,8 +2638,13 @@ Proof
   qpat_x_assum `MEM inst.inst_opcode _`
     (strip_assume_tac o REWRITE_RULE[MEM]) >>
   fs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def,
-     is_immutable_op_def, mem_write_ops_def, mem_read_ops_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
+     is_immutable_op_def] >>
+  first_x_assum
+    (fn th => if can (match_term ``mem_write_ops inst = SOME ops``) (concl th)
+              orelse can (match_term ``mem_read_ops inst = SOME ops``) (concl th)
+              then mp_tac th else NO_TAC) >>
+  simp[mem_write_ops_def, mem_read_ops_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
   (* Use >~ pattern matching to bind labels to correct opcodes *)
   >~ [`MLOAD`] >- suspend "mload"
   >~ [`ILOAD`] >- suspend "mload"
@@ -2703,7 +2702,7 @@ Resume remap_preserved_mem_ops[mstore8]:
   qpat_x_assum `w1 = addr` (SUBST_ALL_TAC o SYM) >>
   fs[] >>
   (* Rewrite to wmwe and apply write_at_pv_preserves_remap *)
-  simp[mstore8_eq_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   (* Safe access bound: w2n w1 + 1 <= orig_off + asz *)
   safe_access_bound_tac
     `<| iao_ofst := Var v; iao_size := SOME (Lit 1w);
@@ -4582,7 +4581,8 @@ Proof
   >- (term_op_agree >>
       BasicProvers.every_case_tac >>
       gvs[lift_result_def] >>
-      irule alloca_remap_rel_halt_accounts >> simp[])
+      irule alloca_remap_rel_halt_returndata >>
+      irule alloca_remap_rel_accounts_update >> simp[])
   (* INVALID *)
   >> (irule alloca_remap_rel_halt_returndata >> simp[])
 QED
@@ -5087,7 +5087,7 @@ Proof
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
     gvs[update_var_def] >>
     (* All results use mstore/mstore8/mcopy → wmwe → monotone *)
-    simp[mstore_eq_wmwe, mstore8_eq_wmwe, mcopy_def] >>
+    simp[mstore_eq_wmwe, venomMemPropsTheory.mstore8_eq_write_mem, mcopy_def] >>
     irule wmwe_mem_length_mono)
 QED
 

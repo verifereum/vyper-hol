@@ -7,7 +7,7 @@
  * literals, empty(T), max_value, min_value, epsilon, and the conversions
  * exprSimConvert proves (which rest on the cheated lower_value_word_shape).
  * Struct and array literals store each child with unwrap_value_sim, so
- * they carry exprSimUnwrap's cheated storage, immutable and copy cases.
+ * they carry exprSimUnwrap's cheated constructor immutable cases.
  * Cheated, for the later #636 PRs: the other conversions, abi_encode and
  * abi_decode.
  *
@@ -63,6 +63,7 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprSimAlloc
   allocLimits
   list exprSim exprSimHyps exprSimConvert exprLowering compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperContext
@@ -344,7 +345,16 @@ Resume compile_make_array_vv_case[array]:
   simp[wordsTheory.dimword_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
-  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  conj_tac
+  >- (map_every qx_gen_tac [`aid`,`a`,`n`] >> strip_tac >>
+      qpat_x_assum `!aid p n. FLOOKUP _ aid = SOME (p,n) /\ _ ==> _`
+        (qspecl_then [`aid`,`a`,`n`] irule) >>
+      simp[arithmeticTheory.ADD_COMM] >>
+      (reverse conj_tac >- (qexists `aid` >> simp[]) >>
+       map_every qx_gen_tac [`name`,`lo`,`sz`] >> strip_tac >>
+       qpat_x_assum `!name lo k. local_region _ _ _ name lo k ==> _`
+         (qspecl_then [`name`,`lo`,`sz`] mp_tac) >>
+       simp[arithmeticTheory.ADD_COMM])) >>
   `LENGTH vs = LENGTH args` by (drule eval_exprs_length >> simp[]) >>
   Cases_on `bnd`
   >- (gvs[vyperValueTheory.compatible_bound_def] >>

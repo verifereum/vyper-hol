@@ -183,7 +183,15 @@ Proof
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `rt` >> gvs[is_word_type_def]
+  qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[word_result_ok_def]) >>
+  pop_assum kall_tac >> IF_CASES_TAC
+  >- (Cases_on `rt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_bytestring_type_def, is_word_type_def] >>
+      rename1 `BytesT bl` >> Cases_on `bl` >>
+      gvs[is_bytestring_type_def, is_word_type_def]) >>
+  pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[is_word_type_def]
   >~ [`FlagT flag_nsid`] >-
     (`is_word_type (expr_type arg)` by
        (Cases_on `expr_type arg` >> gvs[valid_conversion_def, is_word_type_def] >>
@@ -418,15 +426,94 @@ Proof
   Cases_on `e` >> simp[]
 QED
 
+Theorem word_compile_expr_addmod_classify:
+  compile_expr_body f g h cenv ty (Builtin ann AddMod args) sa = (vv,sb) ==>
+  g cenv ann ty AddMod args sa = (vv,sb) \/ word_result_ok sb vv
+Proof
+  namedCases_on `args` ["", "a rest"]
+  >- simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  namedCases_on `rest2` ["", "m rest3"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  reverse (Cases_on `rest3`)
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[word_compile_named_modular]
+QED
+
+Theorem word_compile_expr_mulmod_classify:
+  compile_expr_body f g h cenv ty (Builtin ann MulMod args) sa = (vv,sb) ==>
+  g cenv ann ty MulMod args sa = (vv,sb) \/ word_result_ok sb vv
+Proof
+  namedCases_on `args` ["", "a rest"]
+  >- simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  namedCases_on `rest2` ["", "m rest3"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  reverse (Cases_on `rest3`)
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[word_compile_named_modular]
+QED
+
+Theorem word_compile_expr_powmod256_classify:
+  compile_expr_body f g h cenv ty (Builtin ann PowMod256 args) sa = (vv,sb) ==>
+  g cenv ann ty PowMod256 args sa = (vv,sb) \/ word_result_ok sb vv
+Proof
+  namedCases_on `args` ["", "a rest"]
+  >- simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"]
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  reverse (namedCases_on `rest2` ["", "m rest3"])
+  >- (Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+      Cases_on `rest3` >> simp[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[word_compile_named_modular]
+QED
+
+Theorem word_compile_expr_builtin_ordinary_eq:
+  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
+  compile_expr_body f g h cenv ty (Builtin ann bi args) sa =
+  g cenv ann ty bi args sa
+Proof
+  strip_tac >>
+  namedCases_on `args` ["", "a rest"] >>
+  simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `a` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest` ["", "b rest2"] >>
+  simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `b` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  namedCases_on `rest2` ["", "m rest3"]
+  >- (Cases_on `bi` >> gvs[compile_expr_body_def, expr_type_def, LET_THM]) >>
+  Cases_on `m` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `rest3` >> simp[compile_expr_body_def, expr_type_def, LET_THM] >>
+  Cases_on `bi` >> gvs[compile_expr_body_def, expr_type_def, LET_THM]
+QED
+
 Theorem word_compile_expr_builtin_classify:
   compile_expr_body f g h cenv ty (Builtin ann bi args) sa = (vv,sb) ==>
   g cenv ann ty bi args sa = (vv,sb) \/ word_result_ok sb vv
 Proof
-  Cases_on `bi` >>
-  simp[compile_expr_body_def, expr_type_def, LET_THM,
-       word_list_result_elim, word_expr_result_elim] >>
-  rpt strip_tac >>
-  metis_tac[word_compile_named_modular]
+  Cases_on `bi`
+  >~ [`Builtin ann AddMod args`] >- MATCH_ACCEPT_TAC word_compile_expr_addmod_classify
+  >~ [`Builtin ann MulMod args`] >- MATCH_ACCEPT_TAC word_compile_expr_mulmod_classify
+  >~ [`Builtin ann PowMod256 args`] >- MATCH_ACCEPT_TAC word_compile_expr_powmod256_classify >>
+  simp[word_compile_expr_builtin_ordinary_eq]
 QED
 
 Theorem word_compile_expr_builtin:

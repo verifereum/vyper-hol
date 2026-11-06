@@ -2563,7 +2563,7 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_internal_prologue ce params` >>
   `MAP FST params = MAP FST fargs` by
     simp[Abbr `params`, MAP_ZIP, LENGTH_compute_pass_via_stack] >>
-  qspecl_then [`tops`, `if is_ctor then Deploy else Internal`, `mut`, `fname`,
+  qspecl_then [`tops`, `Internal`, `mut`, `fname`,
                `fargs`, `ret`, `body'`, `use_tr`]
     strip_assume_tac compileVyperTheory.build_compile_env_vars >>
   qpat_x_assum `compile_internal_prologue _ _ _ _ _ = _` mp_tac >>
