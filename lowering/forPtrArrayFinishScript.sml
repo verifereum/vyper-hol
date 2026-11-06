@@ -3,7 +3,8 @@
 Theory forPtrArrayFinish
 Ancestors forPtrArrayInvariant forPtrRangeCallback stmtSimForArrayLoop
   stmtFragPtr compileEnv bodyPtrDefs loweringPosts finite_map
-  forPtrAllocationFrame gasSummaryComposePtr stmtSimProps stmtLowering
+  forPtrAllocationFrame gasSummaryComposePtr stmtSimProps stmtLowering vyperState forPtrScope forPtrSourceScopes
+  exprLoweringProps localPtrsProps vyperEvalPreservesScopes
 
 Theorem for_array_callback_control_ptr:
   array_for_code func cenv bc ty stmts id et tv n stride (Var bp)
@@ -91,4 +92,66 @@ Theorem for_array_code_top_ext_ptr:
 Proof
   strip_tac >> fs[array_for_code_def, cenv_top_ext_def] >>
   rpt strip_tac >> `n' = id` by metis_tac[] >> gvs[] >> metis_tac[]
+QED
+
+Theorem for_array_code_outer_not_local_ptr:
+  array_for_code func cenv bc ty stmts id et tv n stride saved_base
+    p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  not_local_ptr bc (FEMPTY :: rest) p /\ lookup_scopes id rest = NONE ==>
+  not_local_ptr cenv rest p
+Proof
+  simp[array_for_code_def, not_local_ptr_def, lookup_scopes_def] >>
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> `name <> id` by metis_tac[] >> metis_tac[]) >>
+  qpat_x_assum `bc with <| ce_vars := _; ce_dynarray_capacity := _;
+    ce_var_type := _ |> = cenv`
+    (mp_tac o Q.AP_TERM `\ce:compile_env. ce.ce_imm_alloca`) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem for_array_callback_outer_state_ptr:
+  array_for_code func cenv bc ty stmts id et tv n stride saved_base
+    p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  lookup_scopes id esk.scopes = NONE /\
+  not_local_ptr bc (FEMPTY :: esk.scopes) p /\
+  eval_stmts cx stmts (esk with scopes :=
+    (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee t /\
+  ghost_inv d c3 cx ee G tn t /\
+  FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n w,sz) ==>
+  ?sc rest. ee.scopes = sc :: rest /\
+    lookup_scopes id rest = NONE /\
+    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv d cenv cx (ee with scopes := rest) G tn t /\
+    (!name lo z. local_region cenv rest t name lo z ==>
+      regions_disjoint (w2n w) sz lo z)
+Proof
+  strip_tac >> drule_all fresh_body_scope_shape >> strip_tac >>
+  qexistsl_tac [`sc`, `rest`] >> simp[] >>
+  `cenv_top_ext cenv bc ((FEMPTY |+ (id,entry)) :: esk.scopes)` by
+    (metis_tac[for_array_code_top_ext_ptr]) >>
+  `stmt_state_rel ctx func cenv cx (ee with scopes := rest) t` by
+    (irule array_body_scope_projection >> conj_tac
+     >- (qexists_tac `sc` >> simp[]) >>
+     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
+  `ghost_inv d cenv cx (ee with scopes := rest) G tn t` by
+    (irule ghost_inv_body_scope_projection >> conj_tac
+     >- (qexists_tac `sc` >> simp[]) >>
+     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
+  simp[] >>
+  `not_local_ptr cenv esk.scopes p` by
+    (drule_all for_array_code_outer_not_local_ptr >> simp[]) >>
+  `MAP FDOM rest = MAP FDOM esk.scopes` by
+    (drule eval_stmts_preserves_scopes_dom >> simp[preserves_scopes_dom_def]) >>
+  `not_local_ptr cenv rest p` by
+    (irule not_local_ptr_scope_domains >> metis_tac[]) >>
+  `alloca_inv t /\ local_ptrs_rel func cenv rest t` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `fn_inst_ids_distinct func /\ MEM ainst (fn_insts func) /\
+   ainst.inst_outputs = [p]` by fs[array_for_code_def] >>
+  rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  qexistsl_tac [`func`, `ainst`, `p`] >> simp[]
 QED
