@@ -1033,3 +1033,63 @@ Still outstanding: production observation shape and source/target leading-PHI
 correspondence, discharge of predecessor equality from paired cursor alignment,
 ordinary return equality, byte/read recovery and universal source-prefix
 construction. This local boundary is not a proof of the frozen static theorem.
+
+## C1.5.90.67.21 — full chronological INVOKE integration audit
+
+Artifact: `concretizePtrPairedCallSchemaScript.sml` contains a typechecked
+quotation, NOT a theorem. Both that theory and PairedCallEntryTheory build.
+The quotation states source call recovery, the immediate six-field certificate,
+and subsequent NOP normalization. It assumes the actual target call constructor
+and the static premises of `ptr_paired_invoke_entry`, not source success or a
+post-call certificate.
+
+### Computed witnesses (no independently chosen relocation)
+
+Let b/bt be the exact observations in the quotation, copied from
+ChronologicalHistory:48–59 and SourceOwnership:42–55. Source PG becomes
+`MAP (op_prov a.po_prov) ops`; tagged PT becomes `MAP (op_prov TG) ops`;
+both variable provenance maps become FEMPTY. Source taint becomes
+`a.po_taint with t_var := FEMPTY`, NOT entry_taint (memory taint persists).
+The saved tags are `(PT,TG)::saved`, not the callee parameter tags.
+The activation token is LENGTH h; tokens and registry become
+`LENGTH h::tokens` and `registry |+ (LENGTH h,f)` (ActivationChronology:5–16).
+Births B are explicitly `ptr_birth_overlay (LENGTH h) b.po_state.vs_allocas births`.
+setup_callee clears allocations; the accepted no-PHI entry identity gives
+b.po_state.vs_allocas = FEMPTY. Hence B = births by birth_lift/overlay definitions
+(ActivationBirths:8–15), not by a lifetime/freshness assumption.
+The entries map gains `(LENGTH h,LENGTH ht)`; H appends exactly the new tuple.
+done appends `LENGTH h - 1`.
+
+### Six certificate fields and supplier recipe
+
+| Field (`ptr_paired_prefix_def`:135–145) | Supplier / remaining assembly |
+| --- | --- |
+| transcript | `ptr_paired_invoke_entry` obtains f,args,cs,cs',i. Source active caller comes from ownership/history reachability, as in `ptr_owned_invoke_restrictions`. Expand observation projections to apply `ptr_tagged_chrono_step_call`; target step is given. `ptr_structural_transcript_pair` uses equal inst ids (positions id preservation), both pushed stacks, and R f g from paired code. Its computed tuple is exactly the schema tuple. |
+| stage placements | unchanged C t and positions: reuse projection, no extension needed. |
+| samples | `ptr_paired_samples_pair` freezes old endpoint and appends the new sample. Setup clears vars; `ptr_mixed_vars_setup` applies also with the actual caller taint with cleared t_var because mixed transport consults t_var only. `ptr_core_shared` comes from entry boundary. Overlay with empty allocation map changes no births. This is not equality of memories. |
+| alignment | old j < LENGTH ht retain their code/cursor/params via EL_APPEND_EQN and the frozen former endpoint index. At j=LENGTH ht use selected paired code, entry cursor, and transported args as callee params. `ptr_args_transport_lengths` and setup params reduce the mask length required by `ptr_paired_params_def`. No new alignment semantic premise is needed. There is no exported alignment-pair lemma; this is list bookkeeping to be assembled, not a supplied theorem. |
+| callers | push `(LENGTH h - 1,LENGTH ht - 1)::calls`. The new head frame is exactly the departing observation, on each side; LAST h=a, LAST ht=at and LAST H=old snapshot give ptr_paired_frame and saved tags. LENGTH ht=SUC(LENGTH done) makes new j=LENGTH ht-1 point to the newly appended done element. Old records use `ptr_paired_call_retained` and old callers at tail indices. `ptr_paired_callers_retained` alone is NOT applicable because stacks changed. No semantic caller transport assumption is needed; historical sample and alignment remain frozen. |
+| writes | `ptr_paired_writes_pair` with extra=[] reuses ws. Its new-event coverage antecedent explicitly excludes INVOKE (PairedFields:217–229), so it is vacuous. Old actual write records use `ptr_paired_writes_retained`, including old post-event H entries. Separately, step_writes inst s bstate=[] for INVOKE follows from ptrDiscipline:267–274 and source_memory_write_ranges (codegenRel:131 ff; default [] branch). This call ENTRY does not execute callee writes, and must not be confused with a big-step INVOKE footprint. |
+
+### Normalization and decision boundary
+
+Apply `ptr_paired_prefix_normalize` (PairedPrefixProbe:339–353) to the
+immediate certificate and fn_inst_wf f. It appends delta and snapshots,
+retaining the computed tokens, registry, births, PT, TG, saved and entries.
+It retains the PUSHED calls list and the SAME ws, not the original calls list.
+The quotation includes both immediate and normalized certificates so no
+assembly obligation can be hidden in normalization.
+
+No unsupported semantic implication was found in this bounded call-entry audit.
+The missing work is checked assembly: caller cons/list retention, the alignment
+new-index split, clearing taint-variable projections and empty-birth-overlay
+normalization. These are exact local consequences of definitions and accepted
+interfaces, but are not certified by this quotation. Authorize a complete
+INVOKE extension proof, not another conditional wrapper, before claiming them.
+This does not resolve return restoration, callee body execution, historical
+write exclusion, read recovery, or universal prefix coverage.
+
+Disprove-first inspection: persistent memory taint is the main potential mismatch
+with the entry boundary's entry_taint presentation. It is not silently reset here;
+empty variable transport depends only on t_var. Imported pointer parameter tags
+are preserved, and empty allocations do not erase retained ancestor births.
