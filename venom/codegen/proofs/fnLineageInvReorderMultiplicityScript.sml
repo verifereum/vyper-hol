@@ -57,25 +57,3 @@ Proof
   `LENGTH ps.ps_stack - (d + 1) = 0` by decide_tac >>
   simp[combinTheory.o_DEF]
 QED
-
-Theorem reorder_one_singleton_outside_placement:
-  !dfg pending op ps.
-    18 <= LENGTH pending /\ ps.ps_stack = [op] ==>
-    (SND (reorder_one dfg pending 0 op ps)).ps_stack =
-      EL (LENGTH pending - 1) [op] ::
-        (MAP (\i. EL (i + 1) [op])
-           (GENLIST I (LENGTH pending - 2)) ++ [op])
-Proof
-  rpt strip_tac >>
-  `stack_get_unfixed_depth op (LENGTH pending - 1) (LENGTH pending)
-    ps.ps_stack = SOME 0` by
-    simp[stack_get_unfixed_depth_def, stack_get_depth_def, stack_find_def] >>
-  `16 < LENGTH pending - 1 /\
-    LENGTH ps.ps_stack <= LENGTH pending - 1` by simp[] >>
-  simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_def,
-       stack_get_depth_def, stack_find_def] >>
-  CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
-  simp[stack_get_unfixed_depth_def, stack_get_depth_def, stack_find_def] >>
-  `do_swap 0 ps = ([],ps)` by simp[do_swap_def] >>
-  simp[do_swap_outside_stack_projection]
-QED
