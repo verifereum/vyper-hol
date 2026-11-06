@@ -1,7 +1,7 @@
 (* Typed source representation at the extract32 suffix entry. *)
 Theory bodyMemTbExtract32TypedSuffix
 Ancestors
-  bodyMemTbExtract32AddressClamp bodyMemTbExtract32FixedClamp bodyMemTbExtract32IntClamp bodyMemTbExtract32Readonly bodyMemTbExtract32Load bodyMemTbExtract32Cuts bodyMemTbExtract32Slice bodyMemTbExtract32Encoding stmtSimLogArgs
+  bodyMemTbExtract32Clamp bodyMemTbExtract32AddressClamp bodyMemTbExtract32FixedClamp bodyMemTbExtract32IntClamp bodyMemTbExtract32Readonly bodyMemTbExtract32Load bodyMemTbExtract32Cuts bodyMemTbExtract32Slice bodyMemTbExtract32Encoding stmtSimLogArgs
   exprSimHash exprSimProps exprSimWordArgs loweringPosts exprSimDefs
   valueEncoding vyperTypeSystem compileEnv
 
