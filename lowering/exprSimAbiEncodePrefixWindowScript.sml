@@ -1,9 +1,11 @@
 Theory exprSimAbiEncodePrefixWindow
 Ancestors
   exprSimHash exprSimAlloc exprSimLiteralBuffer loweringPosts
-  exprSimBufferStore abiValueEncoding
+  exprSimBufferStore abiValueEncoding abiBuiltinEncodeCode loweringHalt fragExec
+  abiTupleValueEncoding abiEncoderStaticRepresentative abiEncoderWindow abiEncoderLeaves
+  exprSimSource exprSimHypsDefs vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   abiBuiltinAllocation exprSimAbiEncodeConcreteResources
-  valueEncodingProps compileEnv exprLoweringProps emitHelperProps
+  valueEncodingProps compileEnv exprLoweringProps emitHelper emitHelperProps rich_list
   venomMemDefs venomInst venomState words finite_map list arithmetic
 
 (* The actual singleton word staging prefix keeps its allocation certificate.
@@ -150,4 +152,187 @@ Proof
     (simp[mstore_def, byteTheory.LENGTH_word_to_bytes, LENGTH_TAKE] >>
      rw[] >> simp[]) >>
   drule_all abi_word_memory >> strip_tac >> metis_tac[]
+QED
+
+(* The output resource site is the actual setup ALLOCA, also with a selector. *)
+Theorem abi_encode_setup_alloca_code:
+  abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
+  fn_has_code st ready func ==>
+  MEM (mk_inst st.cs_next_id ALLOCA
+    [Lit (n2w (32 + 32 * word_size
+      (maxlen + (case mid of NONE => 0 | SOME _ => 4))))]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)
+Proof
+  strip_tac >> drule abi_builtin_encode_setup_trace >> strip_tac >>
+  `cs_extends st allocated` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends allocated ready` by
+    (Cases_on `mid` >>
+     gvs[abi_builtin_encode_method_id_def, emit_op_def, emit_void_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def,
+         fresh_var_def, fresh_id_def, emit_def, cs_extends_def] >>
+     simp[IS_PREFIX_APPEND]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all buffer_alloc_code >> simp[]
+QED
+
+Theorem abi_encode_word_setup_resources:
+  abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
+  fn_has_code st ready func /\ stmt_state_rel ctx func cenv cx es s /\
+  FLOOKUP s.vs_allocas source_id = SOME (sb,32) /\
+  source_id <> st.cs_next_id /\
+  32 <= maxlen /\
+  32 + 32 * word_size (maxlen + (case mid of NONE => 0 | SOME _ => 4))
+    < dimword (:256) ==>
+  let k = case mid of NONE => 0 | SOME _ => 4 in
+  let outsz = 32 + 32 * word_size (maxlen+k) in
+  let a = abi_builtin_allocate_state st.cs_next_id outsz s in
+  alloca_inv a /\ alloca_room ctx func a /\
+  sb+32 <= a.vs_alloca_next /\
+  ?p. FLOOKUP a.vs_allocas st.cs_next_id = SOME (p,outsz) /\
+      p+(32+k)+32 <= a.vs_alloca_next /\
+      venomMemDefs$regions_disjoint (sb,32) (p+(32+k),32)
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_setup_alloca_code >> strip_tac >>
+  `32 + (case mid of NONE => 0 | SOME _ => 4) + 32 <=
+   32 + 32 * word_size (maxlen + (case mid of NONE => 0 | SOME _ => 4))` by
+    (mp_tac (Q.SPEC `maxlen + (case (mid:bytes32 option) of NONE => 0 | SOME _ => 4)`
+      abiBuiltinAllocationTheory.abi_builtin_word_size_capacity) >> decide_tac) >>
+  drule_at (Pat `MEM _ _`) abi_encode_word_output_resources >>
+  disch_then (irule o SRULE [LET_THM, mk_inst_def, ADD_ASSOC]) >>
+  simp[ADD_ASSOC] >> metis_tac[]
+QED
+
+(* The window uses a valid bytes32 representative, not the literal source ABI
+   type: Fixed 0, for example, is source-typed but not literally ABI-typed. *)
+Theorem abi_encode_word_source_window:
+  is_word_type ty /\ mem_bytes_at sb 32 mem = enc at av /\
+  LENGTH (enc at av) = 32 ==>
+  ?ct rv. enc ct rv = enc at av /\
+    abi_encoder_window_input (type_to_abi_enc_info sf ce ty) ct rv sb 32 mem
+Proof
+  strip_tac >> drule abi_word_metadata >> strip_tac >>
+  drule abi_encoder_bytes32_representative >> strip_tac >>
+  qexistsl_tac [`Bytes (SOME 32)`, `contractABI$BytesV (enc at av)`] >>
+  simp[abi_encoder_window_copy_iff]
+QED
+
+Theorem abi_encode_word_body_no_alloca:
+  is_word_type ty /\
+  compile_abi_encode_to_buf dst src (type_to_abi_enc_info sf ce ty) st = (out,en) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func ==>
+  !inst. MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids st en ==>
+    inst.inst_opcode <> ALLOCA
+Proof
+  strip_tac >> drule abi_word_metadata >> strip_tac >> gvs[] >>
+  drule abi_encode_copy_code >> strip_tac >>
+  `MEM (mk_inst st.cs_next_id MCOPY [dst;src;Lit 32w] []) (fn_insts func)` by
+    (gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, emit_def, fn_has_code_def,
+         IS_PREFIX_APPEND] >>
+     irule lookup_block_fn_insts >> goal_assum (drule_at Any) >> simp[]) >>
+  `en.cs_next_id = st.cs_next_id + 1` by
+    gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >>
+  `inst.inst_id = st.cs_next_id` by fs[abiEncoderPropsTheory.frag_ids_def] >>
+  `inst = mk_inst st.cs_next_id MCOPY [dst;src;Lit 32w] []` by
+    (irule localPtrsPropsTheory.fn_inst_ids_distinct_inj >>
+     simp[mk_inst_def] >> qexists_tac `func` >> fs[mk_inst_def]) >>
+  gvs[mk_inst_def]
+QED
+
+(* Source typing is a consequence of the real successful operand semantics,
+   not a readiness assumption on the frozen expression simulation. *)
+Theorem abi_encode_operand_success_type:
+  expr_body_pre ce cx env e es /\
+  (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es') ==>
+  ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v
+Proof
+  strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
+QED
+
+Theorem abi_encode_singleton_success_conversion:
+  evaluate_type_builtin cx (AbiEncode F mid) (TupleT [ty]) [ty] [v] = INL result ==>
+  ?av. vyper_to_abi (get_tenv cx) ty v = SOME av
+Proof
+  simp[vyperContextTheory.evaluate_type_builtin_def,
+       vyperABITheory.evaluate_abi_encode_bytes_def,
+       vyperABITheory.needs_external_call_wrap_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem abi_encode_word_size_bound:
+  is_word_type ty ==> abi_size_bound sf ty = 32
+Proof
+  Cases_on `ty` >> simp[is_word_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[is_word_type_def, abi_size_bound_def, abi_static_size_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[is_word_type_def, abi_size_bound_def, abi_static_size_def]) >>
+  simp[abi_size_bound_def, abi_static_size_def]
+QED
+
+(* Producer checkpoint for the actual word branch. All semantic typing and
+   conversion premises below are the successful operand and builtin results. *)
+Theorem abi_encode_word_prefix_resources:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_body_pre ce cx env e es /\
+  (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es') /\
+  evaluate_type_builtin cx (AbiEncode F mid0) (TupleT [expr_type e])
+    [expr_type e] [v] = INL result /\
+  is_word_type (expr_type e) /\
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand;op] sm = ((),sh) /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+    sh = (ops,ready) /\
+  fn_has_code sa sm func /\ fn_has_code sh ready func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  (!x. op = Var x ==> not_fresh_at sa x) ==>
+  ?allocated addr ct rv p.
+    let staged = mstore (w2n addr) (typed_val_to_w256
+      (THE (evaluate_type (get_tenv cx) (expr_type e))) v) allocated in
+    let k = case mid of NONE => 0 | SOME _ => 4 in
+    let outsz = 32 + 32 * word_size (32+k) in
+    let a = abi_builtin_allocate_state sh.cs_next_id outsz staged in
+    run_inst_seq (emitted_insts sa sm) s = OK allocated /\
+    run_inst_seq (emitted_insts sm sh) allocated = OK staged /\
+    stmt_state_rel ctx func ce cx es' staged /\
+    eval_operand buf.buf_operand allocated = SOME addr /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e))
+      (THE (vyper_to_abi (get_tenv cx) (expr_type e) v)) /\
+    LENGTH (enc ct rv) = 32 /\
+    abi_encoder_window_input (type_to_abi_enc_info sf ce (expr_type e))
+      ct rv (w2n addr) 32 staged.vs_memory /\
+    alloca_inv a /\ alloca_room ctx func a /\
+    w2n addr+32 <= a.vs_alloca_next /\
+    FLOOKUP a.vs_allocas sh.cs_next_id = SOME (p,outsz) /\
+    p+(32+k)+32 <= a.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (w2n addr,32) (p+(32+k),32)
+Proof
+  strip_tac >> drule_all abi_encode_operand_success_type >> strip_tac >>
+  drule abi_encode_singleton_success_conversion >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all abi_encode_word_expr_post >> strip_tac >>
+  `sh.cs_next_id = sa.cs_next_id + 2` by
+    gvs[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+        comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_var_def, fresh_id_def, emit_def] >>
+  `abi_size_bound ce.ce_struct_fields (expr_type e) = 32` by
+    metis_tac[abi_encode_word_size_bound] >> gvs[] >>
+  `FLOOKUP (mstore (w2n addr) (typed_val_to_w256 tv v) allocated).vs_allocas
+    sa.cs_next_id = SOME (w2n addr,32)` by simp[mstore_def] >>
+  `32 + 32 * word_size (32 + (case (mid:bytes32 option) of NONE => 0 | SOME _ => 4))
+    < dimword (:256)` by
+    (Cases_on `mid` >> simp[vfmConstantsTheory.word_size_def, dimword_def]) >>
+  `sa.cs_next_id <> sh.cs_next_id` by decide_tac >>
+  `abi_builtin_encode_setup mid 32 sh = (ops,ready)` by fs[] >>
+  drule_all (SRULE [] (Q.INST [`maxlen` |-> `32`] abi_encode_word_setup_resources)) >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_word_source_window >>
+  disch_then (qspecl_then [`sf`, `ce`] strip_assume_tac) >>
+  qexistsl_tac [`ct`, `rv`, `p`] >> gvs[]
 QED
