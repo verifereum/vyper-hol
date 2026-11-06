@@ -249,3 +249,65 @@ Proof
   drule abi_valid_members_view >>
   gvs[vyper_to_abi_types_MAP, MAP_MAP_o, combinTheory.o_DEF]
 QED
+
+Theorem abi_decode_source_view_length_le:
+  LENGTH (abi_decode_source_view at bs p) <= LENGTH (DROP p bs)
+Proof
+  Cases_on `is_dynamic at` >> simp[abi_decode_source_view_def, LENGTH_TAKE_EQ]
+QED
+
+Theorem abi_decode_tuple_short_head_reject:
+  abi_tuple_rows_schema ce env rows /\ rows <> [] /\
+  tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  LENGTH bs < p + SUM (MAP abi_tuple_row_abi_width rows) ==>
+  ~(?v. abi_decode_source_accepts env (TupleT tys)
+    (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs p) v)
+Proof
+  strip_tac >> drule_all abi_decode_schema_heads_positive >> strip_tac >>
+  drule_all abi_decode_positive_head_short_drop >> strip_tac >>
+  strip_tac >> drule_all abi_decode_tuple_source_head_bound >>
+  strip_tac >>
+  `LENGTH (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs p)
+    <= LENGTH (DROP p bs)` by irule abi_decode_source_view_length_le >> decide_tac
+QED
+
+Theorem abi_decode_struct_short_head_reject:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\ rows <> [] /\
+  MAP SND args = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  LENGTH bs < p + SUM (MAP abi_tuple_row_abi_width rows) ==>
+  ~(?v. abi_decode_source_accepts env (StructT nsid)
+    (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs p) v)
+Proof
+  strip_tac >> drule_all abi_decode_schema_heads_positive >> strip_tac >>
+  drule_all abi_decode_positive_head_short_drop >> strip_tac >>
+  strip_tac >> drule_all abi_decode_struct_source_head_bound >>
+  strip_tac >>
+  `LENGTH (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs p)
+    <= LENGTH (DROP p bs)` by irule abi_decode_source_view_length_le >> decide_tac
+QED
+
+Theorem abi_decode_assignable_tuple_short_head_reject:
+  abi_tuple_rows_schema ce env rows /\ assignable_type env (TupleT tys) /\
+  tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  LENGTH bs < p + SUM (MAP abi_tuple_row_abi_width rows) ==>
+  ~(?v. abi_decode_source_accepts env (TupleT tys)
+    (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs p) v)
+Proof
+  strip_tac >> irule abi_decode_tuple_short_head_reject >>
+  qexistsl_tac [`ce`, `rows`] >> simp[] >>
+  Cases_on `rows` >> gvs[assignable_type_def]
+QED
+
+Theorem abi_decode_assignable_struct_short_head_reject:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\ assignable_type env (StructT nsid) /\
+  MAP SND args = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  LENGTH bs < p + SUM (MAP abi_tuple_row_abi_width rows) ==>
+  ~(?v. abi_decode_source_accepts env (StructT nsid)
+    (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs p) v)
+Proof
+  strip_tac >> irule abi_decode_struct_short_head_reject >>
+  qexistsl_tac [`args`, `ce`, `rows`] >> simp[] >>
+  Cases_on `rows` >> gvs[assignable_type_def]
+QED
