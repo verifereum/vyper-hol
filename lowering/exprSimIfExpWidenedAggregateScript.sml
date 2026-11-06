@@ -4,7 +4,7 @@ Ancestors
   exprSimIfExpWidenedAdapter exprSimProps exprBopSimProps freshWrites
   exprSimHypsDefs exprLoweringProps compileEnv valueEncodingTyping
   valueEncodingProps fragExec context emitHelper emitHelperProps
-  loweringPosts exprSimDefs
+  loweringPosts exprSimDefs exprOperandVar exprSimHyps
 
 Theorem changed_aggregate_post_frag:
   expr_body_pre ce cx env e es /\
@@ -109,3 +109,50 @@ Resume changed_aggregate_post_frag[frames]:
 QED
 
 Finalise changed_aggregate_post_frag
+
+Theorem compile_changed_aggregate_post_frag:
+  expr_body_pre ce cx env e es /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
+  post_value_type ce e <> expr_type e /\
+  ~is_word_type (post_value_type ce e) /\
+  ~is_bytestring_type (post_value_type ce e) /\
+  ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
+  ~same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+  compile_expr ce ty e sc = (vv,sa) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sc /\
+  local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  acyclic_struct_metadata ce.ce_struct_fields ==>
+  ?src. unwrap_value ce vv sa = (src,sa) /\
+    frag_exec ctx sa sb
+      (\s. expr_post ctx func ce cx e es origin sa s0 ee v src s)
+      (\q. expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+        es origin sb s0 ee v op q) R
+Proof
+  strip_tac >>
+  `post_value_type ce e = lowered_value_type ce e` by
+    (Cases_on `e` >> gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     rpt IF_CASES_TAC >> gvs[]) >>
+  gvs[] >> drule_all compile_changed_ifexp_copy_endpoints >> strip_tac >> gvs[] >>
+
+  `!x. vv_operand vv = Var x ==> not_fresh_at sa x` by
+    metis_tac[cj 1 compiler_compile_var] >>
+  `!x. src = Var x ==> not_fresh_at sa x` by
+    (rpt strip_tac >> irule compiler_unwrap_value_var >>
+     qexistsl_tac [`ce`, `src`, `sa`, `vv`] >>
+     simp[] >> Cases_on `vv` >> gvs[vv_operand_def]) >>
+  irule changed_aggregate_post_frag >>
+  simp[] >> gvs[compile_store_memory_def] >>
+  conj_tac
+  >- fs[expr_body_pre_def, expr_sim_inv_def] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >>
+      simp[wordsTheory.dimword_def] >> decide_tac) >>
+  conj_tac >- fs[expr_body_pre_def, expr_sim_inv_def] >>
+  metis_tac[]
+QED

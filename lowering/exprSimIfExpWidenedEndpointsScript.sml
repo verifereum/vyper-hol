@@ -11,13 +11,13 @@ Theorem compile_changed_ifexp_copy_endpoints:
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sa = (op,sb) ==>
   ?buf sm src.
     compile_alloc_buffer (type_memory_bytes ce (expr_type e)) sa = (buf,sm) /\
-    unwrap_value ce vv sm = (src,sm) /\
+    (!st. unwrap_value ce vv st = (src,st)) /\
     compile_store_memory ce src buf.buf_operand (expr_type e)
       (lowered_value_type ce e) sm = ((),sb) /\
     op = buf.buf_operand
 Proof
   strip_tac >>
-  `!sm. ?src. unwrap_value ce vv sm = (src,sm)` by
+  `?src. !sm. unwrap_value ce vv sm = (src,sm)` by
     (Cases_on `e` >> gvs[lowered_value_type_def, expr_type_def]
      >- (Cases_on `t` >> gvs[oneline lowered_value_type_def, expr_type_def] >>
          rename1 `BaseT bt` >> Cases_on `bt` >> gvs[]
@@ -62,6 +62,7 @@ Proof
      simp[unwrap_value_def, contextTheory.base_ptr_def,
           compileEnvTheory.comp_return_def]) >>
   drule_all compile_ifexp_copy_parts >> strip_tac >>
-  first_x_assum (qspec_then `sm` strip_assume_tac) >>
+  qpat_assum `!sm. unwrap_value _ _ sm = _`
+    (qspec_then `sm` assume_tac) >>
   gvs[] >> metis_tac[]
 QED
