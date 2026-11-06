@@ -19,6 +19,7 @@ Theorem assert_reason_vv_sim_mem[local]:
     body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\ ~is_extcode se /\
+    ~supported_expr_exists call_operands_effect_root se /\
     ~supported_expr_exists
        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) se ==>
@@ -35,7 +36,8 @@ Proof
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
   `body_expr_mem_ok cx se` by metis_tac[] >>
   `byte_widths_expr se /\ alloc_limits_expr cenv se` by
-    (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
+    (CCONTR_TAC >>
+     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
      simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
   `expr_body_pre cenv cx env se es1` by
     gvs[expr_body_pre_def, expr_sim_pre_def] >>
@@ -59,7 +61,8 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
-  `~expr_has_evm_run se /\ ~is_extcode se` by
+  `~expr_has_evm_run se /\ ~is_extcode se /\
+   ~supported_expr_exists call_operands_effect_root se` by
     metis_tac[supported_string_reason_body_calls] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
