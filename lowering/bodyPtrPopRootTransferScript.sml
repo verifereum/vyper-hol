@@ -92,3 +92,51 @@ Proof
        scalar_assert_taint, Abbr `tn2`, Abbr `tn1`, Abbr `G2`, Abbr `G1`]
 QED
 
+
+(* Schematic final ghosts and instruction ids keep matching independent of
+   the simplifier's normal form for nested map deletions and updates. *)
+Theorem pop_root_guard_transfer_at:
+  ~ctx_has_dalloca ctx /\ op_taint tn (Var x0) = {} /\
+  lookup_var x0 s = SOME w /\ id1 = id+1 /\ id2 = id+2 /\
+  Gf = DRESTRICT (DRESTRICT G (COMPL {x1})) (COMPL {x2}) /\
+  tnf = (tn with t_var := tn.t_var |+ (x1,{}) |+ (x2,{})) ==>
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ISZERO [Var x0] [x1];
+     mk_inst id1 ISZERO [Var x1] [x2];
+     mk_inst id2 ASSERT [Var x2] []] s Gf tnf
+Proof
+  strip_tac >> gvs[] >> irule (SRULE [] pop_root_guard_transfer) >> metis_tac[]
+QED
+
+Theorem pop_root_prefix_transfer:
+  ~ctx_has_dalloca ctx /\
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+  Gf = DRESTRICT (DRESTRICT (DRESTRICT G (COMPL {x0})) (COMPL {x1})) (COMPL {x2}) /\
+  tnf = (tn with t_var := tn.t_var |+ (x0,{}) |+ (x1,{}) |+ (x2,{})) ==>
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [x0];
+     mk_inst (id+1) ISZERO [Var x0] [x1];
+     mk_inst (id+2) ISZERO [Var x1] [x2];
+     mk_inst (id+3) ASSERT [Var x2] []] s Gf tnf
+Proof
+  strip_tac >>
+  `inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [x0]] s
+    (DRESTRICT G (COMPL {x0})) (tn with t_var := tn.t_var |+ (x0,{}))` by
+    (irule pop_root_header_transfer >> simp[]) >>
+  pop_assum mp_tac >> simp[Once inst_seq_ptr_def] >>
+  Cases_on `tr` >>
+  simp[step_inst_base_def, exec_read1_def, mk_inst_def,
+       eval_operands_def, eval_operand_def] >> strip_tac >>
+  simp[Once inst_seq_ptr_def] >>
+  simp[step_inst_base_def, exec_read1_def, mk_inst_def,
+       eval_operands_def, eval_operand_def] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [] _ _ _`
+    (strip_assume_tac o SRULE [inst_seq_ptr_def]) >>
+  qpat_x_assum `DRESTRICT _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `(_ with t_var := _) = _` (fn th => rewrite_tac[GSYM th]) >>
+  rewrite_tac[GSYM mk_inst_def] >>
+  irule pop_root_guard_transfer_at >>
+  simp[lookup_var_def, update_var_def, op_taint_def, FLOOKUP_UPDATE] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
