@@ -1238,3 +1238,199 @@ Proof
   ho_match_mp_tac first_emission_as_stack_val >>
   drule first_emission_create_call >> disch_then MATCH_ACCEPT_TAC
 QED
+
+Theorem first_emission_env_var[local]:
+  !item a x b. compile_env_var item a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  gen_tac >> Cases_on `item`
+  >~ [`compile_env_var PrevHash`]
+  >- (rewrite_tac[compile_env_var_def] >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      gen_tac >> simp[GSYM cs_appends_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule cs_appends_bind >> simp[cs_appends_emit_helpers]) >>
+  rewrite_tac[compile_env_var_def] >>
+  rpt strip_tac >> drule_at Any
+    (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]
+QED
+
+Theorem first_emission_builtin_environment:
+  !cfn ce ret_ty ty bi args a x b.
+  ((?item. bi = Env item) \/ bi = CalldataLen) /\
+  compile_builtin_dispatch_body cfn ce ret_ty ty bi args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+  gvs[compile_builtin_dispatch_body_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_as_stack_val
+  >- metis_tac[first_emission_env_var] >>
+  rewrite_tac[builtinSimpleTheory.compile_builtin_calldatasize_def] >>
+  rpt strip_tac >> drule_at Any
+    (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]
+QED
+
+Theorem first_emission_invert[local]:
+  !v ty ce a x b. compile_invert v ty ce a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> Cases_on `ty` >> rewrite_tac[compile_invert_def, LET_THM] >>
+  metis_tac[
+    SRULE [] (Q.SPEC `NOT` (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers))),
+    SRULE [] (Q.SPEC `XOR` (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)))]
+QED
+
+Theorem first_emission_neg[local]:
+  !v ty a x b. compile_neg v ty a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> simp_tac (srw_ss()) [compile_neg_def, LET_THM, pairTheory.UNCURRY] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  gen_tac >> simp[GSYM cs_appends_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule cs_appends_ignore_bind >> simp[cs_appends_emit_helpers]
+QED
+
+Theorem first_emission_abs[local]:
+  !v a x b. compile_builtin_abs v a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  gen_tac >> rewrite_tac[builtinSimpleTheory.compile_builtin_abs_def] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  gen_tac >> simp[GSYM cs_appends_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  ntac 4 (irule cs_appends_bind >> simp[cs_appends_emit_helpers] >> gen_tac) >>
+  irule cs_appends_ignore_bind >> simp[cs_appends_emit_helpers] >>
+  simp[cs_appends_def] >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`a`, `neg_val`, `v`, `st`] (cj 1 compile_select_labels)) >>
+  simp[]
+QED
+
+Theorem first_emission_builtin_unary:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty bi args a x b.
+  (bi = Not \/ bi = Neg \/ bi = Abs) /\
+  compile_builtin_dispatch_body cfn ce ret_ty ty bi args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac
+   >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac)
+  >- (Cases_on `expr_type (HD args) = BaseT BoolT` >> simp[] >>
+      ho_match_mp_tac first_emission_as_stack_val
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      metis_tac[first_emission_invert])
+  >- (ho_match_mp_tac first_emission_as_stack_val >> metis_tac[first_emission_neg]) >>
+  ho_match_mp_tac first_emission_as_stack_val >> metis_tac[first_emission_abs]
+QED
+
+Theorem first_emission_acc[local]:
+  (!a x b. cfn ce (BaseT AddressT) e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !item a x b. compile_acc cfn ce e item a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> gen_tac >> Cases_on `item`
+  >~ [`compile_acc cfn ce e Address`]
+  >- (rewrite_tac[compile_acc_def] >> ho_match_mp_tac first_emission_lower_value >> simp[])
+  >~ [`compile_acc cfn ce e Code`]
+  >- (rewrite_tac[compile_acc_def, LET_THM] >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >>
+      simp[cs_extends_refl]) >>
+  rewrite_tac[compile_acc_def, LET_THM] >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> simp[]) >> gen_tac)
+  >~ [`(\(cs_op,st2). emit_op GT [cs_op; Lit 0w] st2) _`]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+      gen_tac >> rpt strip_tac >> drule_at Any
+        (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  rpt strip_tac >> drule_at Any
+    (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]
+QED
+
+Theorem first_emission_builtin_accessor:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty bi args a x b.
+  ((?item. bi = Acc item) \/ bi = Len) /\
+  compile_builtin_dispatch_body cfn ce ret_ty ty bi args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`]
+  >- (ho_match_mp_tac first_emission_as_stack_val >>
+      qid_spec_tac `item` >>
+      ho_match_mp_tac first_emission_acc >> metis_tac[]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- metis_tac[] >> gen_tac >>
+  ho_match_mp_tac first_emission_as_stack_val >>
+  rewrite_tac[builtinSimpleTheory.compile_builtin_len_def] >>
+  metis_tac[first_emission_ptr_load]
+QED
