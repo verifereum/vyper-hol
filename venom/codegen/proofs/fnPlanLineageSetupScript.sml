@@ -1274,16 +1274,55 @@ Proof
                 ps_alloc := free_spill_slot r ps'.ps_alloc|>` mp_tac) >> simp[]
 QED
 
-(* This is a code/metadata frame, not an inventory or future-demand theorem.
-   In particular, neither core distinctness nor output freshness is needed. *)
-Theorem native_regular_bottom_frame:
-  !liveness dfg cfg fn inst nl halting term lbl ps prefix ops qs.
-    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+(* Literal non-JMP preparation prefix; planner definitions stay unchanged. *)
+Definition lineage_regular_prepare_def:
+  lineage_regular_prepare dfg inst nl ps =
+    let operands = compute_operands inst in
+    let topic = case inst.inst_opcode of LOG =>
+      (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0 in
+    let (iops,ps1) = emit_input_plan inst.inst_opcode operands nl ps in
+    let (rops,ps4) =
+      if is_commutative inst.inst_opcode /\ LENGTH operands >= 2 then
+        let (oa,pa) = reorder_plan dfg operands ps1 in
+        let swapped = TAKE (LENGTH operands - 2) operands ++
+          [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands] in
+        let (ob,pb) = reorder_plan dfg swapped ps1 in
+        if reorder_cost oa < reorder_cost ob then (oa,pa) else (ob,pb)
+      else reorder_plan dfg operands ps1 in
+    let ps5 = ps4 with ps_stack := stack_pop (LENGTH operands) ps4.ps_stack in
+    let ps6 = FOLDL (\s out.
+      s with ps_stack := stack_push (Var out) s.ps_stack) ps5 inst.inst_outputs in
+    let (eops,ps7) = generate_emit_ops inst topic ps6 in
+    (iops ++ rops ++ eops,ps7)
+End
+
+Theorem lineage_regular_prepare_decompose:
+  !liveness dfg cfg fn inst nl halting term lbl ps.
+    inst.inst_opcode <> JMP ==>
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps =
+    case lineage_regular_prepare dfg inst nl ps of (ops,ps7) =>
+      if inst.inst_outputs = [] then (ops, release_dead_spills nl ps7)
+      else
+        case (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+            popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7
+          else ([],ps7)) of (pops,ps8) =>
+        case (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+          else optimistic_swap_plan dfg inst nl term ps8) of (opts,ps9) =>
+        (ops ++ pops ++ opts,release_dead_spills nl ps9)
+Proof
+  rpt strip_tac >>
+  simp[lineage_regular_prepare_def, generate_regular_inst_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (IF_CASES_TAC >> gvs[]) >> simp[APPEND_ASSOC]
+QED
+
+Theorem lineage_regular_prepare_bottom_frame:
+  !dfg inst nl ps prefix ops qs.
+    LENGTH (compute_operands inst) <= 16 /\
     (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
       MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
-    EVERY (\v. ~MEM (Var v) prefix) (nl ++ inst.inst_outputs) /\
-    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
-    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl
+    lineage_regular_prepare dfg inst nl ps = (ops,qs) ==>
+    lineage_regular_prepare dfg inst nl
       (ps with ps_stack := prefix ++ ps.ps_stack) =
       (ops,qs with ps_stack := prefix ++ qs.ps_stack)
 Proof
@@ -1314,25 +1353,56 @@ Proof
     (irule stack_pop_bottom_extension >> simp[]) >>
   rule_assum_tac (SIMP_RULE bool_ss [pairTheory.pair_CASE_def,
     pairTheory.UNCURRY, pairTheory.PAIR]) >>
-  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_regular_inst_plan_def, LET_THM, parameter_push_fold,
+  qpat_x_assum `lineage_regular_prepare _ _ _ _ = _` mp_tac >>
+  simp[lineage_regular_prepare_def, LET_THM, parameter_push_fold,
        arithmeticTheory.GREATER_EQ, APPEND_ASSOC, pairTheory.pair_CASE_def,
        pairTheory.UNCURRY, pairTheory.PAIR] >>
-  Cases_on `inst.inst_outputs = []` >> simp[] >>
   qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic (ps4 with ps_stack := core)` >>
   namedCases_on `generate_emit_ops inst topic (ps4 with ps_stack := core)` ["eops ps7"] >>
   drule generate_emit_ops_stack_update >>
   disch_then (qspec_then `prefix ++ core` assume_tac) >>
   qpat_assum `generate_emit_ops inst topic (ps4 with ps_stack := core) = _`
     (mp_then Any strip_assume_tac fnPlanLineageReorderTheory.generate_emit_ops_slots) >>
-  gvs[] >>
-  TRY (qpat_assum `inst.inst_outputs = []` kall_tac >>
-       strip_tac >> gvs[release_dead_spills_stack_update, release_dead_spills_stack] >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic framed` >>
-  `framed = ps4 with ps_stack := prefix ++ ps7.ps_stack` by
-    (simp[Abbr `framed`, stackPlanTypesTheory.plan_state_component_equality] >>
-     metis_tac[APPEND_ASSOC]) >>
-  gvs[] >>
+  simp[] >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem lineage_regular_prepare_output_suffix:
+  !dfg inst nl ps ops qs.
+    lineage_regular_prepare dfg inst nl ps = (ops,qs) ==>
+    ?core. qs.ps_stack = core ++ MAP Var inst.inst_outputs
+Proof
+  rpt gen_tac >>
+  simp[lineage_regular_prepare_def, LET_THM, parameter_push_fold] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> simp[] >>
+  strip_tac >> goal_assum (drule_at Any)
+QED
+
+(* This is a code/metadata frame, not an inventory or future-demand theorem.
+   In particular, neither core distinctness nor output freshness is needed. *)
+Theorem native_regular_bottom_frame:
+  !liveness dfg cfg fn inst nl halting term lbl ps prefix ops qs.
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    EVERY (\v. ~MEM (Var v) prefix) (nl ++ inst.inst_outputs) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[EVERY_APPEND] >>
+  namedCases_on `lineage_regular_prepare dfg inst nl ps` ["preops ps7"] >>
+  drule_all lineage_regular_prepare_bottom_frame >> strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[lineage_regular_prepare_decompose] >>
+  Cases_on `inst.inst_outputs = []`
+  >- (simp[] >> strip_tac >>
+      gvs[release_dead_spills_stack_update, release_dead_spills_stack]) >>
+  simp[] >>
   `DISJOINT (set prefix)
     (set (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)))` by
     (gvs[DISJOINT_ALT, EVERY_MEM, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
@@ -1404,45 +1474,11 @@ Proof
     (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
   Cases_on `MEM v nl`
   >- (irule native_regular_bottom_frame >> simp[] >> gvs[EVERY_MEM]) >>
-  namedCases_on `emit_input_plan inst.inst_opcode (compute_operands inst) nl ps`
-    ["iops ps1"] >>
-  `!w. MEM (Var w) (compute_operands inst) ==>
-    ~MEM (Var w) prefix \/ MEM (Var w) ps.ps_stack \/
-    Var w IN FDOM ps.ps_spilled` by
-    (gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]) >>
-  drule_all emit_input_plan_shielded_bottom_frame >> strip_tac >>
-  qabbrev_tac `choice =
-    if is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) then
-      case reorder_plan dfg (compute_operands inst) ps1 of (oa,pa) =>
-      case reorder_plan dfg
-        (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
-          [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
-           EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) ps1 of (ob,pb) =>
-      if reorder_cost oa < reorder_cost ob then (oa,pa) else (ob,pb)
-    else reorder_plan dfg (compute_operands inst) ps1` >>
-  namedCases_on `choice` ["rops ps4"] >>
-  qpat_x_assum `Abbrev ((rops,ps4) = _)`
-    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all emitted_commutative_preparation_bottom_frame >>
-  disch_then (qspec_then `prefix` strip_assume_tac) >>
-  `stack_pop (LENGTH (compute_operands inst)) (prefix ++ ps4.ps_stack) =
-    prefix ++ stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` by
-    (irule stack_pop_bottom_extension >> simp[]) >>
-  rule_assum_tac (SIMP_RULE bool_ss [pairTheory.pair_CASE_def,
-    pairTheory.UNCURRY, pairTheory.PAIR]) >>
+  namedCases_on `lineage_regular_prepare dfg inst nl ps` ["preops ps7"] >>
+  drule_all lineage_regular_prepare_bottom_frame >> strip_tac >>
+  drule lineage_regular_prepare_output_suffix >> strip_tac >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_regular_inst_plan_def, LET_THM, parameter_push_fold,
-       arithmeticTheory.GREATER_EQ, APPEND_ASSOC, pairTheory.pair_CASE_def,
-       pairTheory.UNCURRY, pairTheory.PAIR] >>
-  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic (ps4 with ps_stack := core ++ [Var v])` >>
-  namedCases_on `generate_emit_ops inst topic (ps4 with ps_stack := core ++ [Var v])`
-    ["eops ps7"] >>
-  qspecl_then [`inst`, `topic`, `ps4 with ps_stack := core ++ [Var v]`,
-    `prefix ++ (core ++ [Var v])`] mp_tac generate_emit_ops_stack_update >>
-  simp[] >> strip_tac >>
-  qpat_assum `generate_emit_ops inst topic (ps4 with ps_stack := core ++ [Var v]) = _`
-    (mp_then Any strip_assume_tac fnPlanLineageReorderTheory.generate_emit_ops_slots) >>
-  gvs[] >>
+  simp[lineage_regular_prepare_decompose] >>
   `popmany_plan [Var v] ps7 = ([SOPop 1], ps7 with ps_stack := core)` by
     (`stack_get_depth (Var v) ps7.ps_stack = SOME 0` by
        simp[stack_get_depth_def, REVERSE_APPEND, stack_find_def] >>
