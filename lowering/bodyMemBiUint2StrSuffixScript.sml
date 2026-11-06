@@ -19,6 +19,7 @@ Theorem u2s_alloc_mem_ready:
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
     u2s_safe ctx fn cenv cx es a ba.buf_operand b sz inst t t /\
     MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = sa.cs_next_id /\ inst.inst_id < a.cs_next_id /\
     eval_operand op t = SOME (n2w X) /\ local_ptrs_reserved cenv a /\
     (?p. ba.buf_operand = Var p /\ not_fresh_at a p) /\
     b+sz < dimword (:256) /\ t.vs_current_bb = a.cs_current_bb /\
@@ -79,7 +80,9 @@ Theorem u2s_allocated_mem_exit:
       (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
     b+n-LENGTH (num_to_dec_string X)+sz <= t.vs_alloca_next /\
     t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    wb_frame cenv es sp spre t
+    wb_frame cenv es sp spre t /\
+    inst.inst_id = sa.cs_next_id /\ inst.inst_id < a.cs_next_id /\
+    b+sz+n < dimword (:256)
 Proof
   strip_tac >>
   drule_all u2s_alloc_layout_code >> strip_tac >>
