@@ -825,7 +825,7 @@ val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
      E9: [back], spills empty. E11 finishes with [x], spills empty.
    Thus this bypass really skips every tracked use, but it does NOT retain
    a residual tracked resource: clean_stack_plan performs the reset at E6.
-   Width17 U additionally spills/restores carry; its allocator has free=[0],
+   Width17 U additionally spills/restores t16; its allocator has free=[0],
    next=32, unlike S's unchanged allocator. Reentry uses the actual E9 stack
    and spill projections with the destination's fields, not the source alloc.
    Whole stacks above give exact name counts (1 for listed names, 0 otherwise)
@@ -849,3 +849,38 @@ val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
    recursive-prefix evaluation exceeds 2.5s even with prefix4 and liveness
    query caches. This is an unfinished diagnostic, not NONE or falsehood.
 *)
+
+Theorem bypass_consume_five_wide:
+  EVERY (\n. bypass_prefix n 3 5 (bypass_defined n) =
+    SOME ([SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1] ++
+      (if n = 17 then [SOSwap 1; SOSpill 0] else []) ++ [SOPop 1],
+      entry_probe_start with <|
+        ps_stack := Var "carry" :: MAP Var (TAKE 15 (TL cycle_deep_names));
+        ps_spilled := if n = 17 then FEMPTY |+ (Var "t16",0) else FEMPTY;
+        ps_alloc := <| sa_free_slots := []; sa_next_offset := if n = 17 then 32 else 0;
+          sa_spill_base := 0 |> |>)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  simp[Once bypass_prefix_def,
+    bypass_consume_four_wide |> SRULE [listTheory.EVERY_DEF]] >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
+  (CONJUNCTS (SRULE [listTheory.EVERY_DEF] bypass_consume_five_wide)));
+
+Theorem bypass_consume_six_wide:
+  EVERY (\n. bypass_prefix n 3 6 (bypass_defined n) =
+    SOME ([SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1] ++
+      (if n = 17 then [SOSwap 1; SOSpill 0] else []) ++ REPLICATE 2 (SOPop 1),
+      entry_probe_start with <|
+        ps_stack := [Var "carry";Var "t15"] ++ MAP Var (TAKE 13 (DROP 2 cycle_deep_names));
+        ps_spilled := if n = 17 then FEMPTY |+ (Var "t16",0) else FEMPTY;
+        ps_alloc := <| sa_free_slots := []; sa_next_offset := if n = 17 then 32 else 0;
+          sa_spill_base := 0 |> |>)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  simp[Once bypass_prefix_def,
+    bypass_consume_five_wide |> SRULE [listTheory.EVERY_DEF]] >> EVAL_TAC
+QED
