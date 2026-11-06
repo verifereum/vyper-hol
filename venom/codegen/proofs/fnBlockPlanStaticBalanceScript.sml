@@ -299,19 +299,6 @@ Proof
   metis_tac[emit_one_input_no_push_var, pairTheory.FST]
 QED
 
-Theorem emit_input_plan_signed_balance:
-  !opc operands nl ps lo ops qs.
-    opc <> INVOKE /\
-    (!l. MEM (Label l) operands ==> IS_SOME (FLOOKUP lo l)) /\
-    emit_input_plan opc operands nl ps = (ops, qs) ==>
-    &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
-Proof
-  rpt strip_tac >> drule_all emit_input_plan_wf_len >>
-  disch_then (qspecl_then [`nl`, `ps`] mp_tac) >> strip_tac >>
-  gvs[] >> drule prefix_wf_signed_balance >>
-  impl_tac >- metis_tac[emit_input_plan_no_push_var, pairTheory.FST] >>
-  simp[]
-QED
 
 Theorem do_restore_signed_balance:
   do_restore op ps = (ops, qs) ==>
@@ -529,4 +516,57 @@ Proof
   drule_all do_swap_signed_balance >> strip_tac >> strip_tac >>
   gvs[trace_weight_append, trace_weight_def, stack_op_weight_def,
       stack_pop_def, listTheory.LENGTH_TAKE_EQ] >> intLib.ARITH_TAC
+QED
+
+Theorem do_dup_signed_balance:
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  strip_tac >> drule do_dup_wf_len >>
+  disch_then (qspec_then `FEMPTY` mp_tac) >> simp[] >> strip_tac >>
+  drule prefix_wf_signed_balance >>
+  impl_tac >- metis_tac[do_dup_no_push_var] >> simp[]
+QED
+
+Theorem emit_one_input_signed_balance:
+  (opc = INVOKE ==> !l. op <> Label l) /\
+  emit_one_input opc nl op ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Cases_on `op` >> simp[emit_one_input_def, is_var_operand_def, LET_THM]
+  >- (rpt strip_tac >> gvs[stack_push_def, trace_weight_def, stack_op_weight_def] >>
+      intLib.ARITH_TAC)
+  >- (pairarg_tac >> simp[] >>
+      `&(LENGTH ps1.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight restore_ops` by
+        (qpat_x_assum `_ = (restore_ops, ps1)` mp_tac >>
+         IF_CASES_TAC >> simp[]
+         >- (strip_tac >> drule do_restore_signed_balance >> simp[]) >>
+         rpt strip_tac >> gvs[trace_weight_def]) >>
+      Cases_on `MEM s nl` >> simp[]
+      >- (Cases_on `stack_get_depth (Var s) ps1.ps_stack` >> simp[]
+          >- (rpt strip_tac >> gvs[]) >>
+          rename1 `stack_get_depth (Var s) ps1.ps_stack = SOME dist` >>
+          Cases_on `do_dup dist ps1` >> simp[] >> rpt strip_tac >> gvs[] >>
+          `dist < LENGTH ps1.ps_stack` by metis_tac[stack_get_depth_bound] >>
+          drule_all do_dup_signed_balance >> simp[trace_weight_append] >> intLib.ARITH_TAC) >>
+      rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[stack_push_def, trace_weight_def, stack_op_weight_def] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem emit_input_plan_signed_balance:
+  !operands opc nl ps ops qs.
+  (!l. opc = INVOKE ==> ~MEM (Label l) operands) /\
+  emit_input_plan opc operands nl ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[emit_input_plan_def, trace_weight_def] >> rpt strip_tac >> gvs[]) >>
+  simp[emit_input_plan_def, LET_THM] >> pairarg_tac >>
+  Cases_on `emit_input_plan opc operands nl ps1` >> simp[] >> strip_tac >> gvs[] >>
+  `opc = INVOKE ==> !l. h <> Label l` by metis_tac[] >>
+  drule_all emit_one_input_signed_balance >> strip_tac >>
+  `!l. opc = INVOKE ==> ~MEM (Label l) operands` by metis_tac[] >>
+  first_x_assum (qspec_then `opc` mp_tac) >>
+  disch_then drule_all >> simp[trace_weight_append] >> intLib.ARITH_TAC
 QED
