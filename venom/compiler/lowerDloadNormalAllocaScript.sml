@@ -15,7 +15,7 @@ Proof
   strip_tac >> pop_assum (fn th => once_rewrite_tac[GSYM th]) >> simp[]
 QED
 
-Theorem ld_alloca_frontier_floor[local]:
+Theorem ld_alloca_frontier_floor:
   exec_alloca i s n = OK z /\ allocas_from f s /\ f <= s.vs_alloca_next ==>
   allocas_from f z /\ f <= z.vs_alloca_next /\
   z.vs_alloca_next <= s.vs_alloca_next + w2n n
