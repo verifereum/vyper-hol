@@ -6,7 +6,7 @@ Theory bodyIntCallJointAudit
 Ancestors
   bodyIntCallJointTuple bodyIntCallArgLifetime bodyIntCallGasPrefix
   bodyIntCallJointCounted bodyIntCallJointSingleton bodyIntCallJointInduction
-  bodyIntCallArgCounted
+  bodyIntCallArgCounted bodyIntCallJointWordForce
   bodyIntCallJointBind exprSimHypsDefs gasOutcome gasContext
 
 val joint_audit_contract = ``\tops e.
