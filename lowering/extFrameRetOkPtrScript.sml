@@ -29,6 +29,7 @@ Ancestors
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
   extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr extRetRawFramePtr
+  extRetSignatureFramePtr
 
 val _ = Parse.hide "body";
 
