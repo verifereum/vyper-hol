@@ -49,6 +49,8 @@ Theorem allocated_storage_copy_path_ptr:
     buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gm tm (OK sm) /\
+    sm.vs_accounts = s.vs_accounts /\ sm.vs_transient = s.vs_transient /\
+    sm.vs_data_section = s.vs_data_section /\ sm.vs_call_ctx = s.vs_call_ctx /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     eval_operand buf.buf_operand t = SOME (n2w b) /\
@@ -170,6 +172,8 @@ Theorem allocated_runtime_immutable_copy_path_ptr:
     buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gm tm (OK sm) /\
+    sm.vs_accounts = s.vs_accounts /\ sm.vs_transient = s.vs_transient /\
+    sm.vs_data_section = s.vs_data_section /\ sm.vs_call_ctx = s.vs_call_ctx /\
     copy_runtime_frame sc sm sb z /\
     t = z with vs_inst_idx := LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -268,6 +272,8 @@ Theorem allocated_storage_string_path_ptr:
     i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w) ==>
   ?root b sm t Gf tf.
+    sm.vs_accounts = s.vs_accounts /\ sm.vs_transient = s.vs_transient /\
+    sm.vs_data_section = s.vs_data_section /\ sm.vs_call_ctx = s.vs_call_ctx /\
     buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -315,6 +321,8 @@ Theorem allocated_runtime_immutable_string_path_ptr:
     i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w) ==>
   ?root b sm z t Gf tf.
+    sm.vs_accounts = s.vs_accounts /\ sm.vs_transient = s.vs_transient /\
+    sm.vs_data_section = s.vs_data_section /\ sm.vs_call_ctx = s.vs_call_ctx /\
     buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
     copy_runtime_frame sc sm sb z /\
