@@ -137,7 +137,7 @@ Theorem emit_account_gt_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\ eval_operand op t = SOME w /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\ eval_operand op t = SOME w /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -167,6 +167,9 @@ Proof
   >- (Cases_on `eval_operand arg s` >>
       simp[op_taint_def, step_taint_def, mk_inst_def, set_var_taint_def,
            out_taint_def, FLOOKUP_UPDATE]) >>
+  conj_tac
+  >- simp[op_prov_def, step_prov_def, set_prov_def, out_prov_def,
+          mk_inst_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[]
 QED
 
@@ -188,7 +191,7 @@ Theorem account_read_counted_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME (typed_val_to_w256 tv
       (evaluate_account_op item bs
         (lookup_account (word_of_bytes_be bs) es.accounts))) /\
@@ -207,7 +210,9 @@ Proof
   disch_then (qspecl_then [`STRING #"%" (toString sa.cs_next_var)`,
     `sa.cs_next_id`] assume_tac) >>
   `!a. MEM a [arg] ==> op_taint tn a = {}` by simp[] >>
-  drule_all emit_scalar_builtin_run >> simp[]
+  drule_all emit_scalar_builtin_run >> simp[] >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`G'`, `tn'`, `t`] >> gvs[]
 QED
 
 Theorem emit_account_gt_append:
@@ -234,7 +239,7 @@ Theorem emit_account_gt_append:
     gas_path_ptr D 0 ctx fn PG G0 tn0 s0 k G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
-    op_taint tn' op = {} /\ eval_operand op t = SOME w /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\ eval_operand op t = SOME w /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\

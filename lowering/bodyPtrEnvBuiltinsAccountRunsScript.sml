@@ -27,7 +27,7 @@ Theorem account_iscontract_counted_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
-    op_taint tn' op = {} /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME
       (bool_to_word ((lookup_account (word_of_bytes_be bs) es.accounts).code <> [])) /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
@@ -62,7 +62,7 @@ Proof
 QED
 
 Theorem account_suffix_counted_run:
-  item <> Code /\
+  item <> Code /\ (item = Address ==> op_prov G arg = NONE) /\
   (case item of
      Balance => emit_op BALANCE [arg]
    | Codesize => emit_op EXTCODESIZE [arg]
@@ -86,7 +86,7 @@ Theorem account_suffix_counted_run:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
-    op_taint tn' op = {} /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME (typed_val_to_w256 tv
       (evaluate_account_op item bs
         (lookup_account (word_of_bytes_be bs) es.accounts))) /\
