@@ -5,6 +5,7 @@ Ancestors
   logSourceEntryPtr logDataStorePtr emitHelper stmtFragPtr ghostPcTransportPtr exprSimPtrLiteralBuffer
   exprLoweringProps abiBuiltinAllocation emitHelperProps bodyPtrDefs
   compileEnv stmtSimLogDataFrame abiDecoderReentry abiDecoderFrame fragGasPathPtr
+  stmtSimLogSuffixFrame
   venomState venomInst finite_map words list arithmetic
 
 Theorem log_source_store_run_path_ptr:
@@ -47,7 +48,9 @@ Theorem log_source_store_run_path_ptr:
       local_region ce es.scopes s name p sz) /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
-    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
+    t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb
 Proof
   strip_tac >>
   `start.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
@@ -58,6 +61,9 @@ Proof
      (emitted_insts st start)` by
     (drule abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
+  `!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP u.vs_allocas aid = SOME a` by
+    (match_mp_tac log_run_old_allocas >>
+     qexists_tac `emitted_insts st start` >> simp[] >> fs[EVERY_MEM]) >>
   drule_all run_inst_seq_gas_path_ptr >> disch_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `st.cs_next_var <= start.cs_next_var` by
@@ -84,6 +90,8 @@ Proof
         rpt strip_tac >> gvs[abi_decoder_operand_live_def,
           abi_decoder_older_vars_def, not_fresh_at_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
+    fs[log_write_frame_def, venom_state_component_equality] >>
   qexistsl_tac [`H'`,`tm'`,`t`,`b`] >>
   conj_tac
   >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ H' tm' _` mp_tac >>
