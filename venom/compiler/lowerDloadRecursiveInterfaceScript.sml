@@ -4391,3 +4391,157 @@ Proof
   qpat_x_assum `HD supports = _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> simp[EL])
 QED
+
+(* Common-state RETURN interface audit. This is a TERM, not an asserted theorem.
+   The antecedent consumes exactly paired_pop's premises and its opened result:
+   sr/tr are not independently chosen again. The final combined-candidate output
+   includes configured successor, tail certificates, origin and validity; normal
+   data is also exposed explicitly to prevent a hidden unrelated witness. *)
+val ld_proposed_combined_return_restore =
+  let
+    val (pre,pop) = dest_imp (concl ld_recursive_paired_return_pop)
+    val (popvars,popbody) = strip_exists pop
+    val result = ``
+      let keepS = COMPL (set sf.lf_inst.inst_outputs);
+          keepT = COMPL (set tf.lf_inst.inst_outputs) in
+      let owners = {owner | ?bs sz.
+            ld_live astail sf.lf_local sf.lf_params
+              (DRESTRICT sf.lf_prov keepS) (owner,(bs,sz))} in
+      ?floor.
+        owners SUBSET live /\
+        ld_normal_data CS sf.lf_fn (HD supports)
+          {v | v IN HD supports /\ ~retpc_var sf.lf_fn v}
+          lo (DRESTRICT E owners) sf.lf_local tf.lf_local
+          sf.lf_params tf.lf_params
+          (DRESTRICT sf.lf_prov keepS) (DRESTRICT tf.lf_prov keepT)
+          (tn with t_var := DRESTRICT sf.lf_tvar keepS)
+          (un with t_var := DRESTRICT tf.lf_tvar keepT) s' t'
+          astail owners (HD savedkeys) (32 * SUM (MAP CARD (TL suspended)))
+          (HD suspended) (TL suspended) gtail floor /\
+        (^ld_indexed_saved_geometry) lo (DRESTRICT E owners)
+          astail gtail (TL savedkeys) /\ alloca_inv t' /\
+        (?j'. active_inst tf.lf_fn j'
+          (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx)) /\
+        (!j'. active_inst tf.lf_fn j'
+          (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx) ==>
+          (^ld_recursive_combined_candidate) vs0 CT
+            (MAP (\g. (g.lf_fn,g.lf_inst,g.lf_state,g.lf_tvar)) gtail)
+            (un with t_var := DRESTRICT tf.lf_tvar keepT)
+            tf.lf_fn j' (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx))``
+    val inputs = free_vars pre @ popvars
+    fun align tm = subst (List.mapPartial (fn v =>
+      case List.find (fn w => fst(dest_var w) = fst(dest_var v) andalso
+                             type_of w = type_of v) inputs of
+        NONE => NONE | SOME w => SOME (v |-> w)) (free_vars tm)) tm
+    val obligation = mk_imp(mk_conj(pre,popbody),align result)
+  in list_mk_forall(free_vars obligation,obligation) end;
+
+(* COMPLETE AUDIT for the term above (supersedes the old proposed geometry-only
+   restoration term, not any theorem). No new invariant or hypothesis is added.
+
+   Common results: s',t' and fuelS are paired_pop's opened witnesses. sf/tf are
+   saved heads; supports'=TL supports, savedkeys'=TL savedkeys, suspended'=
+   TL suspended, astk'=astail, gstk'=gtail. Caller fn=sf.lf_fn, target fn=tf.lf_fn,
+   V=HD supports, U=V minus retpc. L/H=sf/tf.lf_local; AP/BP=sf/tf.lf_params;
+   AG/BH are saved provenance restricted off their output lists. These lists
+   are equal, not merely same length. keys=HD savedkeys; A=HD suspended;
+   d=32*SUM(MAP CARD(TL suspended)). E'=DRESTRICT E owners. Both taints retain
+   CURRENT callee nonvariable fields and use restricted SAVED variable maps.
+   floor comes only from saved_geometry_head_consume, not the callee floor.
+
+   NormalData clauses (definition line references):
+   11 embedding/params/provenance: saved_embedded_return_layout, saved params/
+      prov, bind_outputs_vars_only; restrict support with frame_embedding_support,
+      owned_params_support and owned_selection_support. All selected head roots
+      survive by owners' definition. The paired_pop owned-vars result uses
+      entry_taint wrappers; owned_vars_tvar_cong converts to current-global masks,
+      and owned_vars_support restricts E. Full V definedness (including retpc)
+      is explicitly saved at candidate:79-81. Need a small successful-binding
+      definedness transport lemma: equal output lists and same values make output
+      lookups equal; outside outputs merge retains saved vars. Existing local
+      ld_fold_bind_lookup is not exported. tailMergeStepTheory already exports
+      bind_outputs_lookup_outside and bind_outputs_lookup_position (the latter
+      needs ALL_DISTINCT outs). Check the function shape's output distinctness
+      before reusing that pair; do not duplicate their lemmas. The whole-support
+      equivalence packaging is semantic glue, NOT missing saved evidence.
+   11 shared-state: CURRENT frame_data gives callee ld_shared_state. The candidate
+      at 123-131 saves precisely the nine retained environment equalities; it
+      does NOT save a full ld_shared_state of the caller. Thus the new
+      ld_shared_state_return_restore is too strong on its first premise to apply
+      directly! Its implementation needs only this slice. A slice-premise
+      boundary (or approved generalization; frozen task forbids changing existing
+      statements) is needed; do not invent saved global agreement. No invariant
+      refinement is necessary because merge takes global fields from callee.
+   12 owner inclusion: any restricted active provenance selection is an owners
+      root by definition. 13-18 lower/no-wrap/separation inherit current normal
+      data after proving owners SUBSET live and site_entry_restrict.
+   19-20 bytes: ld_call_return_memory at CURRENT tn.t_mem/un.t_mem and s/t,
+      with the common successful bindings and owners SUBSET live.
+   21 account and 23 target bounds: ld_return_geometry requires current stack
+      bound, saved head embedding/account, lo<=saved target frontier, and the
+      two common bindings. Saved geometry supplies the lower frontier premise.
+      Its d uses the OLDER suspended charge, not current callee A.
+   22 charge is definitional. 24 floor and 29-30 representation: saved_geometry_
+      head_consume on target binding; restrict E with site_entry_restrict and
+      owners. No old memory is restored.
+   25 live lower: resumed source annotation from paired_pop (at successor),
+      current lower facts on inherited roots. 27-28 endpoints: source via
+      ld_annotated_live_endpoint of that resumed annotation; target via
+      ld_paired_live_endpoints using saved head layout/params/prov and surviving
+      tail embeddings with ld_return_geometry bounds. Binding/successor only
+      updates vars/index, so frontiers are identical. Source bs must be aligned
+      with E by owned selections and uniqueness of FLOOKUP E; target bound alone
+      proves no source endpoint.
+   31-32 var masks: candidate:82-85 saves pointwise count-32 bounds. DRESTRICT
+      gives the old mask or {}; op_taint Var ignores all nonvariable fields.
+   33-34 global masks: current normal_data_masks, unchanged t_var updates.
+   35-41 envelope: candidate:135-143 saves the ACTUAL value envelope disjunction,
+      not merely LIST_REL selections. Merge/bind retain caller params.
+      ld_owned_value_support transports each parameter owner because parameters
+      remain roots of owners. Entry/no-params alternative is unchanged.
+   42 gas: current normal_data_companions and merge/bind field equations.
+   43-45 off-address: current companions are indexed at s.vs_call_ctx.cc_address;
+      restored caller address is sf.lf_state.vs_call_ctx.cc_address. Need explicit
+      equality along source saved setup/origin and frame_reach. OperationalClosure
+      ld_annotated_return_pop yields actual setup; ld_stack_origin_setup_eq
+      aligns s0; RunnerBoundary ld_setup_callee_call_ctx, ld_step_ok_call_ctx,
+      ld_enters_block_call_ctx give a small frame_reach context-preservation
+      induction. No such frame_reach theorem found. Without it direct reuse of
+      off-address companions has an unproved address-index premise.
+
+   Survivors SUBSET live: restricted head roots are old head roots by
+   ld_restrict_selected; deeper tail selections were already saved stack roots
+   of CURRENT callee. Current normal_data includes every such root. Must prove
+   this inclusion explicitly, not assume it from a relation over active locals.
+   Tail saved_embedded_restrict / saved_stack_restrict then use those selected
+   roots; indexed saved geometry uses saved_geometry_return_tail. Other tail
+   metadata is unchanged and index q becomes SUC q. Its parameter VALUE envelope
+   needs owned_value_support, not just saved_embedded_restrict. Retained supports,
+   original INVOKE certificates, origin and nine-field equalities do not change.
+
+   alloca_inv t' follows from saved target validity in the combined candidate,
+   ld_bind_outputs_allocas and retained allocation frontier. alloca_inv of each
+   older saved state is unchanged; alloca_inv at the new anchor is the same
+   restored t' up to index. There is no inference from callee validity at its
+   larger frontier.
+
+   Configured successor: saved INVOKE singleton certificate retains actual
+   pre/p/post/tail and supply boundaries. Source and target bindings retain
+   bb/prev/index (ld_invoke_bind_control); set each index to the respective SUC.
+   wf_function plus ld_invoke_bind_successor supplies an actual target j'.
+   Re-split post supply at the next source instruction using existing segment
+   lemmas; ordinary configured successor machinery or its proof prefix must be
+   reused, not an existential implication from an already packaged successor.
+   If source successor enters revert-forward, construct existing exceptional
+   alternative instead of claiming normal_data persists through its later copy.
+   Source annotation is paired_pop's universal successor result. Resumed origin
+   is the saved source origin. Normal phase zero sets ta=t' advanced, ua=resumed
+   un, n=0 and uses exactly the restored/restricted data above.
+
+   Minimum semantic gaps identified: (1) saved-nine-field/current-global shared
+   merge interface; (2) successful-bind full-support definedness; (3) source
+   frame_reach call-context/address preservation from saved setup. Remaining
+   root inclusion/restriction, restored endpoints, masks/envelope, validity and
+   configured successor are proof/packaging obligations, not missing invariant
+   conjuncts. None has been asserted here. In particular do not start an omnibus
+   restoration proof before review schedules these gaps. *)
