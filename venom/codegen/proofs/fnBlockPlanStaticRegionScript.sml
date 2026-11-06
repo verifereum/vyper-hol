@@ -3,7 +3,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs
-  fnFrameBoundaryEntryParams
+  fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -547,3 +547,34 @@ Theorem regional_prepare_params_spilled:
 Proof
   strip_tac >> drule_all regional_prepare_params_inventory >> simp[]
 QED
+
+Theorem regional_stack_find_exists[local]:
+  !stk P. (?op. MEM op stk /\ P op) ==> ?d. stack_find P stk = SOME d
+Proof
+  Induct >> simp[stack_find_def] >> rpt gen_tac >>
+  Cases_on `P h` >> simp[] >> strip_tac >>
+  `?d. stack_find P stk = SOME d` by metis_tac[] >> simp[]
+QED
+
+Theorem regional_phi_physical_depth:
+  MEM (Var src) phi.inst_operands /\ MEM (Var src) stk /\
+  (!v. MEM (Var v) phi.inst_operands /\ MEM (Var v) stk ==> v = src) ==>
+  ?d. stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) stk = SOME d /\
+      d < LENGTH stk /\ stack_peek d stk = Var src
+Proof
+  strip_tac >>
+  `?d. stack_find (\op. MEM op (FILTER is_var_operand phi.inst_operands))
+       (REVERSE stk) = SOME d` by
+    (irule regional_stack_find_exists >> qexists_tac `Var src` >>
+     simp[MEM_FILTER, stackPlanTypesTheory.is_var_operand_def]) >>
+  qexists_tac `d` >> simp[stack_get_phi_depth_def] >>
+  drule planWfTheory.stack_find_bound >> simp[] >> strip_tac >>
+  drule genBlockSimTheory.stack_find_el >> simp[MEM_FILTER] >> strip_tac >>
+  `stack_peek d stk = EL d (REVERSE stk)` by
+    (simp[stack_peek_def, EL_REVERSE] >>
+     `PRE (LENGTH stk - d) = LENGTH stk - 1 - d` by decide_tac >> simp[]) >>
+  `MEM (EL d (REVERSE stk)) stk` by
+    metis_tac[MEM_EL, MEM_REVERSE, LENGTH_REVERSE] >>
+  Cases_on `EL d (REVERSE stk)` >> gvs[stackPlanTypesTheory.is_var_operand_def]
+QED
+
