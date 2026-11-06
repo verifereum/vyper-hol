@@ -4,16 +4,16 @@ Ancestors
   exprPtrUnwrapFacts exprSimPtrProps exprSimUnwrapProps exprSimMemoryPath
   exprSimUnwrap exprLoweringProps gasSummaryComposePtr bodyPtrDefs
   exprLowering emitHelper compileEnv loweringPosts vyperState
-  venomState finite_map valueEncodingProps gasSummary exprSimMemorySource context
+  venomState finite_map valueEncodingProps gasSummary exprSimMemorySource context valueCopyBytes
 
 Theorem unwrap_memory_word_input:
   vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   p.ptr_location = LocMemory /\ is_word_type t /\
-  ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+  ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\
   (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type ty v) ==>
   ?v src w.
-    t = expr_type e /\ p.ptr_operand = Var src /\
+    t = post_value_type cenv e /\ p.ptr_operand = Var src /\
     read_result cx tv ee = (INL v,ee) /\
     eval_operand (Var src) s = SOME w /\ lookup_var src s = SOME w /\
     ptr_covers G tn src s 32 /\
@@ -21,10 +21,10 @@ Theorem unwrap_memory_word_input:
     mload (w2n w) s = typed_val_to_w256 ty v
 Proof
   strip_tac >>
-  `t = expr_type e /\ ?w v. eval_operand p.ptr_operand s = SOME w /\
+  `t = post_value_type cenv e /\ ?w v. eval_operand p.ptr_operand s = SOME w /\
      read_result cx tv ee = (INL v,ee) /\
      mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 ty v` by
-    (gvs[vv_post_def, vv_holds_def] >> metis_tac[]) >>
+    (gvs[vv_post_def, vv_holds_def, is_bytestring_word_type] >> metis_tac[]) >>
   gvs[ptr_vv_ok_def] >> drule_all ptr_mem_ok_word_input >> strip_tac >>
   gvs[eval_operand_def, mem_word_at_eq_mload]
 QED
@@ -42,7 +42,8 @@ Theorem unwrap_mload_post:
        with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >> drule_all emit_mload_endpoint >> strip_tac >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `t = post_value_type cenv e` by
+    gvs[vv_post_def, vv_holds_def, is_bytestring_word_type] >>
   `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
   `not_local_ptr cenv ee.scopes (STRING #"%" (toString sm.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
@@ -51,12 +52,12 @@ Proof
         with vs_inst_idx := SUC s.vs_inst_idx)` by
     (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[]) >>
   drule vv_post_read_result >> strip_tac >> gvs[] >>
-  irule expr_post_of_vv_post_load >>
+  irule expr_post_of_vv_post_load_physical >>
   simp[] >> conj_tac
   >- (rpt strip_tac >>
       gvs[vv_post_def, vv_holds_def, read_result_def, return_def,
           mem_word_at_eq_mload]) >>
-  qexistsl [`p`, `s`, `sm`, `expr_type e`] >> simp[]
+  qexistsl [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[]
 QED
 
 Theorem unwrap_memory_word_marked_read_ptr:
@@ -70,9 +71,9 @@ Theorem unwrap_memory_word_marked_read_ptr:
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ghost_inv d cenv cx ee G tn s /\
-  ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
+  ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\
   (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type ty v) ==>
   ?v Gf tnf u.
     gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx tv)
@@ -81,8 +82,8 @@ Theorem unwrap_memory_word_marked_read_ptr:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv d cenv cx ee Gf tnf u /\
-    ptr_val_ok cx (expr_type e) v op Gf tnf u /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op Gf u) /\
+    ptr_val_ok cx (post_value_type cenv e) v op Gf tnf u /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op Gf u) /\
     ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
   strip_tac >> drule_all unwrap_memory_word_input >> strip_tac >>
