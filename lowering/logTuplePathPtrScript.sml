@@ -128,3 +128,11 @@ Proof
     ghost_kept_def, local_region_def, lookup_var_def] >> fs[] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+val _ = List.app (fn (name,th) =>
+  if null (hyp th) then () else
+    (print (name ^ " has hypotheses:\n"); List.app print_term (hyp th);
+     raise Fail (name ^ " is not closed")))
+  [("log_allocated_tuple_sequence_ptr",log_allocated_tuple_sequence_ptr),
+   ("log_allocated_tuple_raw_path_ptr",log_allocated_tuple_raw_path_ptr),
+   ("log_allocated_tuple_path_ptr",log_allocated_tuple_path_ptr)];

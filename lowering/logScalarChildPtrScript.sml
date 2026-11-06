@@ -391,6 +391,7 @@ Resume log_scalar_member_child_seq_ptr[frame]:
   drule log_members_layout_bounds >> strip_tac >>
   gen_tac >> strip_tac >>
   qpat_x_assum `!i. _ ==> (i IN tm.t_mem <=> i IN tn.t_mem)` irule >>
-  Cases_on `dyn` >> fs[] >> decide_tac
+  Cases_on `dyn` >> RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >>
+  simp_tac bool_ss [] >> decide_tac
 QED
 Finalise log_scalar_member_child_seq_ptr

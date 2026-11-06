@@ -184,7 +184,8 @@ Resume log_scalar_members_finish_seq_ptr[post]:
   qexistsl_tac [`H`,`tm`,`v with vs_inst_idx := u.vs_inst_idx`] >>
   conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- gvs[fresh_vars_wrt_def] >>
+  conj_tac >- (qpat_assum `fresh_vars_wrt limit_st v` mp_tac >>
+    simp_tac (srw_ss()) [fresh_vars_wrt_def]) >>
   conj_tac >- (asm_rewrite_tac[] >> simp[EVERY_APPEND, mk_inst_def, is_terminator_def]) >>
   conj_tac >- simp[eval_op_inst_idx] >>
   asm_simp_tac bool_ss [] >>
@@ -193,7 +194,21 @@ Resume log_scalar_members_finish_seq_ptr[post]:
 QED
 Resume log_scalar_members_finish_seq_ptr[frames]:
   markerLib.RESUME_TAC >>
-  gvs[lookup_var_def, mload_def] >>
+  `mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) v.vs_memory =
+   mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) u.vs_memory` by
+    (qpat_assum `abi_decode_footprint_frame [] _ v` mp_tac >>
+     simp_tac (srw_ss()) [abi_decode_footprint_frame_def] >>
+     strip_tac >> first_x_assum irule >> simp[abi_footprint_disjoint_def]) >>
+  qpat_assum `mem_bytes_at _ _ v.vs_memory = enc _ _` mp_tac >>
+  qpat_assum `mem_bytes_at _ _ v.vs_memory = mem_bytes_at _ _ u.vs_memory`
+    (fn th => rewrite_tac[th]) >>
+  qpat_assum `mload p u = _` mp_tac >>
+  qpat_assum `!x. not_fresh_at st x ==> _ /\ _ /\ _` mp_tac >>
+  qpat_assum `lookup_var src v = _` mp_tac >>
+  qpat_assum `lookup_var dst v = _` mp_tac >>
+  qpat_assum `lookup_var dp v = _` mp_tac >>
+  simp_tac (srw_ss()) [lookup_var_def, mload_def, LET_THM] >>
+  rpt disch_tac >> asm_rewrite_tac[] >>
   qpat_x_assum `abi_decode_footprint_frame _ s u` mp_tac >>
   qpat_x_assum `abi_decode_footprint_frame [] _ v` mp_tac >>
   simp[abi_decode_footprint_frame_def]
