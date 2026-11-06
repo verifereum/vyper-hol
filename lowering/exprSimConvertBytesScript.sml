@@ -1,7 +1,7 @@
 (* Shared conversion simulation for dynamic Bytes and String results. *)
 Theory exprSimConvertBytes
 Ancestors
-  exprBopSimProps
+  exprBopSimProps exprSimHypsDefs
   exprSimDefs exprSimProps exprSimStack loweringPosts
   exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv
   exprSimAlloc exprSimBuffer exprSimBufferStore exprSimLiteralBuffer exprSimHash
@@ -954,8 +954,8 @@ Proof
   `locals_kept cenv es s0 s2` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
-     gvs[exprSimWordArgsTheory.wb_frame_def]) >>
-  gvs[exprSimWordArgsTheory.wb_frame_def] >> conj_tac
+     gvs[loweringPostsTheory.wb_frame_def]) >>
+  gvs[loweringPostsTheory.wb_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
@@ -990,7 +990,7 @@ Theorem convert_buffer_expr_post:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[expr_post_def, expr_val_rel_def, expr_val_at_def,
-      exprSimWordArgsTheory.wb_frame_def] >>
+      loweringPostsTheory.wb_frame_def] >>
   reverse conj_tac >- metis_tac[] >>
   disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `w2n p`, `sz`] >>
   simp[] >> metis_tac[]
@@ -1041,7 +1041,7 @@ Proof
     first_x_assum drule >> decide_tac) >>
   qpat_x_assum `frag_exec ctx mid sb _ _ _` kall_tac >>
   qpat_x_assum `frag_exec ctx sm mid _ _ _` kall_tac >>
-  simp[exprSimWordArgsTheory.wb_frame_def] >> conj_tac
+  simp[loweringPostsTheory.wb_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. _` drule_all >>
       simp[regions_disjoint_def] >> strip_tac >>
@@ -1066,13 +1066,13 @@ Theorem convert_expr_post_compose:
 Proof
   rpt gen_tac >> strip_tac >>
   `wb_frame cenv es sa s0 s1` by
-    (gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
+    (gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es1 sm s1 tt` by
-    (gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
+    (gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all convert_wb_frame_trans >> strip_tac >>
-  gvs[expr_post_def, exprSimWordArgsTheory.wb_frame_def] >>
+  gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
   reverse conj_tac >- (first_assum ACCEPT_TAC) >>
   irule expr_val_at_start_mono >> goal_assum (drule_at Any) >> simp[]
 QED
