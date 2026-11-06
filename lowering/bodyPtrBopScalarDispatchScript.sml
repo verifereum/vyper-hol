@@ -89,8 +89,9 @@ Proof
   `!op. op IN ({x; y} UNION IMAGE Lit UNIV) ==>
      op_prov G op = NONE /\ op_taint tn op = {}` by
     metis_tac[bop_scalar_binop_input_clean] >>
-  drule_all bop_scalar_certificate_result_path >>
-  disch_then (qspecl_then [`PG`, `D`] mp_tac) >> simp[]
+  irule bop_scalar_certificate_result_path >>
+  simp[] >> qexists_tac `{x; y} UNION IMAGE Lit UNIV` >>
+  simp[] >> qexists_tac `B` >> simp[]
 QED
 
 Theorem bop_scalar_binop_abort_path:
@@ -110,7 +111,9 @@ Theorem bop_scalar_binop_abort_path:
                       FLOOKUP tn'.t_var z = FLOOKUP tn.t_var z)
 Proof
   strip_tac >> drule_all bop_scalar_binop_certificate >> strip_tac >>
-  drule_all bop_scalar_binop_input_clean >> disch_then assume_tac >>
+  `!op. op IN ({x; y} UNION IMAGE Lit UNIV) ==>
+     op_prov G op = NONE /\ op_taint tn op = {}` by
+    metis_tac[bop_scalar_binop_input_clean] >>
   drule_all bop_scalar_seq_abort_path >>
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >> simp[]
 QED
