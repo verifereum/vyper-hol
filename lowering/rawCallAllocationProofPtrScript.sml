@@ -3,7 +3,7 @@ Theory rawCallAllocationProofPtr
 Ancestors
   rawCallPrefixPtr rawCallBufferPtr builtinSystem context emitHelper compileEnv
   fragGasSeqPtr fragExecPtr typedCopyPtr exprSimAlloc exprSimPtrLiteralBuffer
-  exprLoweringProps venomInst
+  exprLoweringProps venomInst bodyPtrDefs pred_set
 
 Theorem raw_call_outbuf_steps:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
@@ -156,4 +156,151 @@ Proof
   drule_all raw_call_emit_alloca_path_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >> simp[] >>
   strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* A fresh allocation may dirty padding, but never old allocations or locals. *)
+Theorem raw_call_alloc_dirty_kept:
+  (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+    op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  tn'.t_mem = tn.t_mem UNION dirty /\
+  dirty SUBSET {i | b <= i /\ i < b+n} /\
+  (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint b n a len) /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b n a len) ==>
+  ghost_kept cenv es sa G tn s G' tn'
+Proof
+  simp[ghost_kept_def, regions_disjoint_def, SUBSET_DEF] >>
+  rpt strip_tac >> gvs[] >>
+  `b <= i /\ i < b+n` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >> decide_tac
+QED
+
+Theorem raw_call_alloc_dirty_inv:
+  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+    FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b n a len) /\
+  u.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem UNION dirty /\
+  dirty SUBSET {i | b <= i /\ i < b+n} /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+  u.vs_transient = s.vs_transient ==>
+  ghost_inv d cenv cx es G' tn' u
+Proof
+  strip_tac >> irule literal_ghost_inv_frame >>
+  qexistsl_tac [`G`, `s`, `sa`, `tn`, `{i | b <= i /\ i < b+n}`] >>
+  simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all literal_ptr_local_footprint_exterior >> simp[]) >>
+  gvs[SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem raw_call_alloca_state_frame:
+  step_inst_base (mk_inst id ALLOCA [Lit nw] [out]) s = OK u ==>
+  u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient
+Proof
+  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
+  >- (strip_tac >> gvs[venomStateTheory.update_var_def]) >>
+  rename1 `SOME site` >> PairCases_on `site` >>
+  strip_tac >> gvs[venomStateTheory.update_var_def]
+QED
+
+Theorem raw_call_alloc_ghost_frame:
+  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> x <> out /\ lookup_var x u = lookup_var x s) /\
+  (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint b n a len) /\
+  (!name a len. local_region cenv es.scopes u name a len ==>
+    regions_disjoint b n a len) /\
+  step_inst_base (mk_inst id ALLOCA [Lit nw] [out]) s = OK u /\
+  dirty SUBSET {i | b <= i /\ i < b+n} ==>
+  ghost_inv d cenv cx es (G |+ (out,(b,n)))
+    (tn with <|t_var := tn.t_var |+ (out,{}); t_mem := tn.t_mem UNION dirty|>) u /\
+  ghost_kept cenv es sa G tn s (G |+ (out,(b,n)))
+    (tn with <|t_var := tn.t_var |+ (out,{}); t_mem := tn.t_mem UNION dirty|>)
+Proof
+  strip_tac >>
+  `!name a len. local_region cenv es.scopes u name a len <=>
+    local_region cenv es.scopes s name a len` by
+    (irule literal_ptr_local_region_frame >> simp[] >> metis_tac[]) >>
+  `!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b n a len` by metis_tac[] >>
+  `!x. not_fresh_at sa x ==>
+    FLOOKUP (G |+ (out,(b,n))) x = FLOOKUP G x /\
+    op_taint (tn with <|t_var := tn.t_var |+ (out,{});
+      t_mem := tn.t_mem UNION dirty|>) (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE,
+      ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  drule raw_call_alloca_state_frame >> strip_tac >> conj_tac
+  >- (irule raw_call_alloc_dirty_inv >>
+      qexistsl_tac [`G`, `b`, `ctx`, `dirty`, `func`, `n`, `s`, `sa`, `tn`] >>
+      simp[] >> metis_tac[]) >>
+  irule raw_call_alloc_dirty_kept >> simp[] >>
+  qexistsl_tac [`b`, `dirty`, `n`] >> simp[] >> metis_tac[]
+QED
+
+
+Theorem raw_call_alloc_buffer_ghost_stage:
+  compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  n < dimword(:256) /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
+  ?u b H un.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
+    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es u /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand buf.buf_operand u = SOME (n2w b) /\
+    op_prov H buf.buf_operand = SOME (b,n) /\
+    op_taint un buf.buf_operand = {} /\ b+n < dimword(:256) /\
+    u.vs_memory = s.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    H = G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)) /\
+    (?dirty. dirty SUBSET {i | b <= i /\ i < b+n} /\
+      un = tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
+        t_mem := tn.t_mem UNION dirty|>)
+Proof
+  strip_tac >> drule_all raw_call_alloc_buffer_stage >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  `ghost_inv dep cenv cx es
+    (G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)))
+    (tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
+      t_mem := tn.t_mem UNION dirty|>) u /\
+   ghost_kept cenv es sa G tn s
+    (G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)))
+    (tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
+      t_mem := tn.t_mem UNION dirty|>)` by
+    (irule raw_call_alloc_ghost_frame >> simp[] >>
+     `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+       (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+     metis_tac[]) >>
+  qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `b`,
+    `G |+ (STRING #"%" (toString sa.cs_next_var),(b,n))`,
+    `tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
+      t_mem := tn.t_mem UNION dirty|>`] >>
+  simp[rawCallHeaderFramePtrTheory.ghost_inv_inst_idx, stmt_state_rel_inst_idx] >>
+  `buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+    ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE,
+    venomStateTheory.lookup_var_def] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >>
+      simp[venomStateTheory.lookup_var_def]) >>
+  qexists_tac `dirty` >> simp[]
 QED
