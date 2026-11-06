@@ -229,6 +229,37 @@ Proof
   simp[dfs_block_state_def]
 QED
 
+Theorem regional_dfs_singleton_success:
+  ~MEM lbl visited /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_fn_plan_aux lv dfg cfg fn [lbl] visited ps =
+    SOME (ops, seen, pend) ==>
+  ?bops pout sops.
+    generate_block_plan lv dfg cfg fn bb ps = SOME (bops,pout) /\
+    generate_succs_plan lv dfg cfg fn pout.ps_stack pout.ps_spilled
+      (cfg_succs_of cfg lbl) (lbl::visited) pout = SOME (sops,seen,pend) /\
+    ops = bops ++ sops
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_fn_plan_aux _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_fn_plan_aux_def] >>
+  simp[AllCaseEqs(), cj 1 generate_fn_plan_aux_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem regional_dfs_singleton_seen:
+  generate_fn_plan_aux lv dfg cfg fn [lbl] visited ps =
+    SOME (ops, seen, pend) ==> MEM lbl seen
+Proof
+  Cases_on `MEM lbl visited`
+  >- (strip_tac >> drule generate_fn_plan_aux_visited_mono >>
+      simp[pred_setTheory.SUBSET_DEF]) >>
+  Cases_on `lookup_block lbl fn.fn_blocks`
+  >- (simp[Once generate_fn_plan_aux_def, cj 1 generate_fn_plan_aux_def] >>
+      rpt strip_tac >> gvs[]) >>
+  strip_tac >> drule_all regional_dfs_singleton_success >> strip_tac >>
+  drule generate_succs_plan_visited_mono >> simp[pred_setTheory.SUBSET_DEF]
+QED
+
 Theorem dfs_block_state_lineage_state:
   dfs_block_state lv dfg cfg fn ps0 lbl ps ==>
   lineage_state lv dfg cfg fn ps0 lbl ps
