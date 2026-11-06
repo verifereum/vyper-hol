@@ -79,7 +79,9 @@ Theorem compile_log_tuple_seq_ptr:
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_halted = s.vs_halted /\
       (!i. ~(d <= i /\ i < d+cap) ==> (i IN tm.t_mem <=> i IN tn.t_mem))) \/
-     (?p. abi_decode_footprint_frame [(d,cap);(p,32)] s t /\
+     (?p. (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
+        EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos) /\
+      abi_decode_footprint_frame [(d,cap);(p,32)] s t /\
       FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\ p+32 < dimword(:256) /\
       t.vs_allocas = (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas /\
       t.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id 32 s).vs_alloca_next /\
@@ -142,7 +144,8 @@ Resume compile_log_tuple_seq_ptr[dynamic]:
   disch_then (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t`
     (qx_choose_then `p` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
   qexistsl_tac [`H`,`tm`,`t`] >> asm_simp_tac bool_ss [] >>
-  disj2_tac >> qexists_tac `p` >> asm_simp_tac bool_ss []
+  disj2_tac >> qexists_tac `p` >> asm_simp_tac bool_ss [] >>
+  qexists_tac `infos` >> asm_simp_tac bool_ss []
 QED
 
 Resume compile_log_tuple_seq_ptr[static_post]:
