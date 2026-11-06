@@ -6655,6 +6655,70 @@ Proof
   simp[eval_one_phi_def] >> Cases_on `inst.inst_outputs` >> simp[]
 QED
 
+Theorem alias_clean_stack_holds_input:
+  cfg_preds_of cfg bb.bb_label = [pred] /\
+  MEM x (input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0)) /\
+  plan_holds ps (Var x) ==>
+  plan_holds (SND (clean_stack_plan live cfg fn bb ps)) (Var x)
+Proof
+  strip_tac >>
+  Cases_on `Var x IN FDOM ps.ps_spilled`
+  >- (Cases_on `clean_stack_plan live cfg fn bb ps` >>
+      drule alias_clean_stack_spilled >> gvs[plan_holds_def]) >>
+  `MEM (Var x) ps.ps_stack` by gvs[plan_holds_def] >>
+  simp[clean_stack_plan_def] >>
+  Cases_on `LENGTH (cfg_succs_of cfg pred) <= 1`
+  >- simp[plan_holds_def] >>
+  Cases_on `lookup_block pred fn.fn_blocks`
+  >- simp[plan_holds_def] >> simp[] >>
+  qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+  `~guard` by (simp[Abbr `guard`] >> disj1_tac >>
+    gvs[NULL_EQ] >> metis_tac[MEM]) >> simp[] >>
+  qmatch_goalsub_abbrev_tac `if enabled then _ else _` >>
+  qmatch_goalsub_abbrev_tac `popmany_plan cleanup ps` >>
+  qmatch_goalsub_abbrev_tac `mark_dead_stack retained` >>
+  qmatch_goalsub_abbrev_tac `popmany_plan (MAP Var dead_names) ps` >>
+  `~MEM (Var x) retained /\ ~MEM (Var x) cleanup /\ ~MEM x dead_names` by
+    (simp[Abbr `retained`, Abbr `cleanup`, Abbr `dead_names`,
+          MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+  simp[] >> Cases_on `enabled` >> simp[]
+  >- (pairarg_tac >> simp[plan_holds_def, alias_mark_dead_stack_upper_support] >>
+      drule popmany_plan_plan_holds >>
+      disch_then (qspec_then `ps` mp_tac) >> gvs[plan_holds_def]) >>
+  irule popmany_plan_plan_holds >> simp[MEM_MAP]
+QED
+
+Theorem alias_ready_nonjoin_no_phis:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 ==>
+  collect_phis bb.bb_instructions = []
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM, NULL_EQ] >>
+  metis_tac[]
+QED
+
+Theorem alias_ready_nonjoin_input_liveout:
+  codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 /\
+  MEM x (live_vars_at (liveness_analyze fn) lbl 0) ==>
+  MEM x (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))
+Proof
+  strip_tac >>
+  `collect_phis bb.bb_instructions = []` by
+    metis_tac[alias_ready_nonjoin_no_phis] >>
+  `MEM x (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))` by
+    simp[alias_input_vars_no_phis] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all alias_selected_input_liveout >> simp[]
+QED
+
 Theorem alias_run_without_predecessor_no_phis:
   s.vs_prev_bb = NONE /\ run_block fuel ctx bb s = OK s' ==>
   collect_phis bb.bb_instructions = []
