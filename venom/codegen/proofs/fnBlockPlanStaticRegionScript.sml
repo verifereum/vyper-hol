@@ -4616,3 +4616,44 @@ Proof
      drule_all regional_phi_output_not_phi_source >> simp[]) >>
   simp[regional_phi_upper_family_def]
 QED
+
+Theorem regional_selected_phi_initial_unique[local]:
+  regional_selected_phi_inv lv dfg sb bb 0 ps ==>
+  !phi x y. MEM phi (collect_phis bb.bb_instructions) /\
+    MEM (Var x) ps.ps_stack /\ MEM (Var y) ps.ps_stack /\
+    MEM (Var x) phi.inst_operands /\ MEM (Var y) phi.inst_operands ==> x=y
+Proof
+  simp[regional_selected_phi_inv_def] >> rpt strip_tac >>
+  qpat_x_assum `!phi. _` drule >> strip_tac >> metis_tac[]
+QED
+
+Theorem regional_selected_phi_upper_complete:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ dfg = dfg_build_function fn /\
+  regional_selected_phi_inv (liveness_analyze fn) dfg sb bb 0 ps0 /\
+  EVERY (\op. ?v. op = Var v /\
+    (regional_phi_remaining_source bb 0 v \/
+     MEM v (live_vars_at (liveness_analyze fn) bb.bb_label 0))) ps0.ps_stack /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label F 0
+    (LENGTH bb.bb_instructions) 0 (LENGTH (collect_phis bb.bb_instructions))
+    bb.bb_instructions ps0 = SOME (ops,qs) ==>
+  EVERY (\op. ?v. op = Var v /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (collect_phis bb.bb_instructions)))) qs.ps_stack
+Proof
+  strip_tac >>
+  `EVERY (\op. ?v. op = Var v /\
+     regional_phi_upper_family (liveness_analyze fn) bb
+       (\v. MEM (Var v) ps0.ps_stack) 0 v) ps0.ps_stack` by
+    (gvs[EVERY_MEM, regional_phi_upper_family_def] >> metis_tac[]) >>
+  `EVERY (\op. ?v. op = Var v /\
+     regional_phi_upper_family (liveness_analyze fn) bb
+       (\v. MEM (Var v) ps0.ps_stack)
+       (LENGTH (collect_phis bb.bb_instructions)) v) qs.ps_stack` suffices_by
+    simp[regional_phi_upper_family_endpoint] >>
+  irule (Q.SPECL [`LENGTH (collect_phis bb.bb_instructions)`, `0`]
+    regional_selected_phi_upper_prefix |> SIMP_RULE (srw_ss()) []) >> simp[] >>
+  qexistsl [`bb`, `cfg`, `fn`, `ops`, `ps0`, `sb`] >> gvs[] >>
+  rpt gen_tac >> strip_tac >> irule regional_phi_upper_family_transition >> simp[] >>
+  drule regional_selected_phi_initial_unique >> simp[]
+QED
