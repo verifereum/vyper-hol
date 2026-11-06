@@ -129,7 +129,7 @@ Proof
   strip_tac >> simp[expr_body_pre_def, padding_source_invariant_probe] >>
   EVAL_TAC >> simp[dimword_def] >> qexists_tac `[]` >>
   simp[vyperInterpreterTheory.lookup_function_def, call_edge_rel_def, irreflexive_def] >>
-  simp[Once TC_CASES1, call_edge_rel_def]
+  simp[Once TC_CASES1, call_edge_rel_def] >> EVAL_TAC
 QED
 
 Theorem padding_body_inv:
@@ -309,3 +309,120 @@ End
 (* padding_actual_start/cenv are candidates extracted from the checked runtime
    equation.  Their lower_value equation and the complete entry predicates
    remain to be checked; runtime membership alone is not a frame certificate. *)
+
+Theorem padding_actual_cenv_projections:
+  padding_actual_cenv.ce_vars = FEMPTY |+ ("x",PtrVar (Var "%5") 64) /\
+  padding_actual_cenv.ce_var_type "x" = SOME (BaseT (BytesT (Dynamic 1))) /\
+  padding_actual_cenv.ce_return_pc = SOME (PtrVar (Var "%6") 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem padding_actual_lower_value:
+  lower_value compile_expr padding_actual_cenv (BaseT (IntT 256))
+    padding_expr padding_actual_start =
+  (Var "%16", padding_actual_start with
+    <| cs_next_var := 17; cs_next_id := 20;
+       cs_current_insts := TAKE 12 (fn_insts padding_runtime_function) |>)
+Proof
+  simp[padding_expr_def, padding_actual_start_def,
+       padding_runtime_function_equation] >> EVAL_TAC
+QED
+
+Theorem padding_actual_fn_has_code:
+  fn_has_code padding_actual_start padding_actual_end padding_runtime_function
+Proof
+  simp[padding_actual_end_def, padding_actual_lower_value,
+       padding_actual_start_def, padding_runtime_function_equation,
+       fn_has_code_def, emitted_blocks_def, initial_compile_state_def,
+       mk_raw_function_def] >> EVAL_TAC >> simp[]
+QED
+
+(* The actual source context contains the singleton program, unlike the earlier
+   empty-program diagnostic. *)
+Definition padding_actual_context_def:
+  padding_actual_context = initial_evaluation_context
+    [(padding_tx.target,[(NONE,padding_program)])] [] padding_tx NONE
+End
+
+Definition padding_actual_env_def:
+  padding_actual_env = padding_env with fn_sigs :=
+    FEMPTY |+ ((NONE,"probe"),
+      <| param_types := [BaseT (BytesT (Dynamic 1))]; num_defaults := 0;
+         ret_ty := BaseT (IntT 256) |>)
+End
+
+Theorem padding_actual_source_invariant:
+  context_well_typed padding_actual_context /\
+  functions_well_typed padding_actual_context ==>
+  expr_sim_inv padding_actual_cenv padding_actual_context
+    padding_actual_env padding_source
+Proof
+  strip_tac >> simp[expr_sim_inv_def] >>
+  EVAL_TAC >> simp[] >>
+  simp[AllCaseEqs(), lookup_flag_def, vyperInterpreterTheory.lookup_function_def,
+       evaluate_type_def, value_has_type_def, well_formed_type_value_def] >>
+  simp[type_slot_size_def, find_var_decl_by_name_def] >> EVAL_TAC >> simp[dimword_def]
+QED
+
+Theorem padding_actual_body_inv:
+  body_inv padding_program padding_runtime.cu_context
+    padding_actual_cenv padding_actual_context
+Proof
+  simp[body_inv_def, padding_program_supported] >> conj_tac
+  >- (qexistsl_tac [`padding_policy`,`padding_runtime`] >>
+      EVAL_TAC >> simp[dimword_def]) >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem padding_actual_convert_body_pre:
+  context_well_typed padding_actual_context /\
+  functions_well_typed padding_actual_context ==>
+  expr_body_pre padding_actual_cenv padding_actual_context
+    padding_actual_env padding_expr padding_source
+Proof
+  strip_tac >> simp[expr_body_pre_def, padding_actual_source_invariant] >>
+  EVAL_TAC >> simp[dimword_def] >> qexists_tac `[]` >>
+  simp[vyperInterpreterTheory.lookup_function_def, call_edge_rel_def, irreflexive_def] >>
+  simp[Once TC_CASES1, call_edge_rel_def] >> EVAL_TAC
+QED
+
+Definition padding_actual_machine_def:
+  padding_actual_machine = padding_machine with
+    <| vs_vars := FEMPTY |+ ("%5",0w) |+ ("%6",0w) |+ ("%7",64w);
+       vs_current_bb := padding_runtime_label; vs_inst_idx := 3;
+       vs_alloca_next := 96; vs_allocas := FEMPTY |+ (10,(64,32)) |>
+End
+
+Theorem padding_actual_machine_state_rel:
+  state_rel padding_runtime_function padding_actual_cenv padding_actual_context
+    padding_source padding_actual_machine
+Proof
+  rewrite_tac[state_rel_def] >> conj_tac
+  >- (EVAL_TAC >> simp[AllCaseEqs(), type_memory_size_def, val_wf_def,
+                       val_in_memory_def] >> EVAL_TAC >> simp[w2n_n2w]) >>
+  EVAL_TAC >> simp[AllCaseEqs()]
+QED
+
+Theorem padding_actual_ghost_entry:
+  ghost_inv NONE padding_actual_cenv padding_actual_context padding_source
+    (FEMPTY |+ ("%5",(0,64))) (entry_taint with t_mem := {63})
+    padding_actual_machine
+Proof
+  irule padding_ghost_entry >> EVAL_TAC >>
+  qexistsl_tac [`<| assignable := F; type := BaseTV (BytesT (Dynamic 1));
+                    value := BytesV [0w:word8]; popped := [] |>`, `"x"`] >> simp[]
+QED
+
+(* Bounded entry diagnostic: state_rel and ghost_inv above are checked.
+   stmt_state_rel remains open specifically at alloca_room/fmp_room's finite
+   transitive call-reachability obligations. EVAL does not unfold TC.
+   context_well_typed and functions_well_typed also remain explicit premises. *)
+
+Theorem padding_actual_gas_admissible:
+  gas_admissible
+    (bind (eval_expr padding_actual_context padding_expr)
+          (read_result padding_actual_context)) expr_res_ok padding_source
+Proof
+  EVAL_TAC >> CONV_TAC (DEPTH_CONV wordsLib.WORD_CONV) >> simp[] >> EVAL_TAC >> simp[]
+QED
