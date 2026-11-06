@@ -2784,3 +2784,154 @@ Proof
   metis_tac[first_emission_safe_arithmetic, first_emission_safe_pow,
             first_emission_compare, first_emission_binop_aux]
 QED
+
+Theorem first_emission_builtin_bop:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty op args a x b.
+  compile_builtin_dispatch_body cfn ce ret_ty ty (Bop op) args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  pure_rewrite_tac [compile_builtin_dispatch_body_def, vyperASTTheory.builtin_case_def, LET_THM] >> BETA_TAC >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  Cases_on `(op = In \/ op = NotIn) /\ is_ArrayT (expr_type (HD (TL args)))` >>
+  asm_rewrite_tac []
+  >- suspend "membership" >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)` >>
+  asm_rewrite_tac []
+  >- suspend "bytes_compare" >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  ho_match_mp_tac first_emission_as_stack_val >> metis_tac[first_emission_binop]
+QED
+
+Resume first_emission_builtin_bop[bytes_compare]:
+  ntac 2
+    (ho_match_mp_tac first_emission_pair_let >>
+     (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac)) >>
+  ntac 2
+    (ho_match_mp_tac first_emission_pair_let >>
+     (conj_tac >- metis_tac[first_emission_bytestring_hash] >> gen_tac)) >>
+  Cases_on `op = Eq` >> asm_rewrite_tac []
+  >- (ho_match_mp_tac first_emission_as_stack_val >> rpt strip_tac >>
+      imp_res_tac first_emission_emit_helpers >> gvs[]) >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (rpt strip_tac >> imp_res_tac first_emission_emit_helpers >> gvs[]) >> gen_tac) >>
+  ho_match_mp_tac first_emission_as_stack_val >> rpt strip_tac >>
+  imp_res_tac first_emission_emit_helpers >> gvs[]
+QED
+
+Resume first_emission_builtin_bop[membership]:
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+  Cases_on `HD (TL args)` >> simp[]
+  >~ [`Builtin t bi elems`]
+  >- (Cases_on `bi` >> simp[]
+      >~ [`compile_multi_exprs`]
+      >- suspend "literal_member" >>
+      ho_match_mp_tac first_emission_pair_let >>
+      (conj_tac >- metis_tac[] >> gen_tac) >>
+      ho_match_mp_tac first_emission_as_stack_val >>
+      MATCH_ACCEPT_TAC first_emission_var_array_membership) >>
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- metis_tac[] >> gen_tac) >>
+  ho_match_mp_tac first_emission_as_stack_val >>
+  MATCH_ACCEPT_TAC first_emission_var_array_membership
+QED
+
+Resume first_emission_builtin_bop[literal_member]:
+  ho_match_mp_tac first_emission_pair_let >>
+  (conj_tac >- (ho_match_mp_tac first_emission_multi_exprs >> metis_tac[]) >> gen_tac) >>
+  Cases_on `op = In` >> asm_rewrite_tac [] >>
+  ho_match_mp_tac first_emission_as_stack_val >>
+  metis_tac[first_emission_list_membership]
+QED
+Finalise first_emission_builtin_bop
+
+Theorem first_emission_builtin_dispatch:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty bi args a x b.
+  compile_builtin_dispatch_body cfn ce ret_ty ty bi args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `bi` >> strip_tac
+  >~ [`Len`] >- (drule first_emission_builtin_accessor >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`CalldataLen`] >- (irule first_emission_builtin_environment >> goal_assum (drule_at Any) >> simp[])
+  >~ [`CalldataSlice n`] >- (drule first_emission_builtin_calldata_slice >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Not`] >- (drule first_emission_builtin_unary >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Neg`] >- (drule first_emission_builtin_unary >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Abs`] >- (drule first_emission_builtin_unary >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Keccak256`] >- (drule first_emission_builtin_hash >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Sha256`] >- (drule first_emission_builtin_hash >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`AsWeiValue d`] >- (drule first_emission_builtin_wei_value >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Concat n`] >- (drule first_emission_builtin_concat >> disch_then drule >> simp[])
+  >~ [`Slice n`] >- (drule first_emission_builtin_slice >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Uint2Str n`] >- (drule first_emission_builtin_uint2str >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`MakeArray t n`] >- (drule first_emission_builtin_make_array >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Ceil`] >- (drule first_emission_builtin_scalar >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Floor`] >- (drule first_emission_builtin_scalar >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`AddMod`] >- (drule first_emission_builtin_modular >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`MulMod`] >- (drule first_emission_builtin_modular >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Bop op`] >- (drule first_emission_builtin_bop >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`BlockHash`] >- (drule first_emission_builtin_scalar >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`BlobHash`] >- (drule first_emission_builtin_scalar >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Env item`] >- (irule first_emission_builtin_environment >> goal_assum (drule_at Any) >> simp[])
+  >~ [`Acc item`] >- (drule first_emission_builtin_accessor >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`MethodId`] >- (drule first_emission_builtin_method_id >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`ECRecover`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`ECAdd`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`ECMul`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[]) >>
+  drule first_emission_builtin_modular >> disch_then irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem first_emission_type_builtin_dispatch:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ret_ty ty bi t args a x b.
+  compile_type_builtin_dispatch_body cfn ce ret_ty ty bi t args a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `bi`
+  >~ [`Empty`] >- metis_tac[first_emission_type_builtin_constant]
+  >~ [`MaxValue`] >- metis_tac[first_emission_type_builtin_constant]
+  >~ [`MinValue`] >- metis_tac[first_emission_type_builtin_constant]
+  >~ [`Epsilon`] >- metis_tac[first_emission_type_builtin_constant]
+  >~ [`Convert`] >- (drule first_emission_type_builtin_convert >> disch_then MATCH_ACCEPT_TAC)
+  >~ [`Extract32`] >- (drule first_emission_type_builtin_extract32 >> disch_then MATCH_ACCEPT_TAC)
+  >~ [`AbiDecode u`] >- (drule first_emission_type_builtin_abi_decode >> disch_then MATCH_ACCEPT_TAC) >>
+  drule first_emission_type_builtin_abi_encode >> disch_then MATCH_ACCEPT_TAC
+QED
