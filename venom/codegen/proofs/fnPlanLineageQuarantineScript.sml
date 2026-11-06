@@ -277,3 +277,67 @@ Proof
      disch_then (qspec_then `Var v` mp_tac) >> simp[]) >>
   metis_tac[emit_input_plan_stack_support, sortingTheory.PERM_MEM_EQ]
 QED
+
+Theorem phi_declared_output_stack_support:
+  !inst nl halt ps ops qs v.
+    inst.inst_outputs <> [] /\
+    generate_phi_plan inst nl halt ps = (ops,qs) /\
+    MEM (Var v) qs.ps_stack ==>
+    MEM (Var v) ps.ps_stack \/ MEM v inst.inst_outputs
+Proof
+  rpt gen_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- (simp[generate_phi_plan_def] >> metis_tac[]) >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by
+    (fs[stackModelTheory.stack_get_phi_depth_def] >>
+     drule planWfTheory.stack_find_bound >> simp[]) >>
+  Cases_on `inst.inst_outputs` >- simp[] >>
+  Cases_on `do_dup d ps` >>
+  rename1 `do_dup d ps = (dops,ds)` >>
+  `ds.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
+    (drule doSwapSimTheory.do_dup_stack_exact >> simp[]) >>
+  `!x. MEM x ds.ps_stack ==> MEM x ps.ps_stack` by
+    (gvs[stackModelTheory.stack_peek_def] >>
+     `LENGTH ps.ps_stack - (d + 1) < LENGTH ps.ps_stack` by decide_tac >>
+     metis_tac[listTheory.EL_MEM]) >>
+  simp[generate_phi_plan_def] >>
+  IF_CASES_TAC >> simp[] >> IF_CASES_TAC >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      drule_all popmany_plan_stack_support >> simp[] >>
+      strip_tac >> drule stack_poke_mem_subset_nb >> simp[] >> metis_tac[])
+  >- (strip_tac >> gvs[] >>
+      drule stack_poke_mem_subset_nb >> simp[] >> metis_tac[])
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      drule_all popmany_plan_stack_support >> simp[] >>
+      strip_tac >> drule stack_poke_mem_subset_nb >> simp[] >> metis_tac[]) >>
+  strip_tac >> gvs[] >>
+  drule stack_poke_mem_subset_nb >> simp[] >> metis_tac[]
+QED
+
+Theorem wellformed_jmp_outputs_empty:
+  inst_wf inst /\ inst.inst_opcode = JMP ==> inst.inst_outputs = []
+Proof
+  strip_tac >> gvs[venomWfTheory.inst_wf_def]
+QED
+
+Theorem native_special_stack_support:
+  !lv dfg cfg fn inst nl halt term lbl ps ops qs v.
+    inst_wf inst /\
+    (inst.inst_opcode = PHI \/ inst.inst_opcode = OFFSET \/
+     is_param_opcode inst.inst_opcode \/ inst.inst_opcode = NOP) /\
+    generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,qs) /\
+    MEM (Var v) qs.ps_stack ==>
+    MEM (Var v) ps.ps_stack \/ MEM v inst.inst_outputs
+Proof
+  rpt gen_tac >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (strip_tac >> `inst.inst_outputs <> []` by
+        (gvs[venomWfTheory.inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[]) >>
+      gvs[generate_inst_plan_def, AllCaseEqs()] >>
+      metis_tac[phi_declared_output_stack_support]) >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (strip_tac >> gvs[generate_inst_plan_def, AllCaseEqs()] >>
+      metis_tac[offset_declared_output_stack_support]) >>
+  strip_tac >> gvs[generate_inst_plan_def, AllCaseEqs()]
+QED
