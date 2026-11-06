@@ -762,8 +762,15 @@ Proof
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
   >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
-    >- suspend "create"
-  >> suspend "send"
+    >- suspend "create" >>
+  (* send, raw_log and raw_revert: each returns the zero word on the stack. *)
+  Cases_on `args` >> gvs[reason_result_shape_def] >>
+  rpt (rename1 `list_CASE tail _ _` >> Cases_on `tail` >>
+       gvs[reason_result_shape_def]) >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[reason_result_shape_def]) >>
+  rpt (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> IF_CASES_TAC >>
+       strip_tac) >>
+  gvs[reason_result_shape_def]
 QED
 
 Resume reason_compile_call[internal]:
@@ -788,14 +795,6 @@ Resume reason_compile_call[create]:
   strip_tac >> gvs[reason_result_shape_def] >>
   metis_tac[exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand,
             safe_operand_def]
-QED
-
-Resume reason_compile_call[send]:
-  Cases_on `args` >> gvs[reason_result_shape_def] >>
-  rename1 `list_CASE tail _ _` >> Cases_on `tail` >>
-  gvs[reason_result_shape_def] >>
-  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[reason_result_shape_def]) >>
-  simp[reason_result_shape_def]
 QED
 
 Finalise reason_compile_call
