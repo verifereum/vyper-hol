@@ -307,3 +307,83 @@ Proof
   conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   fs[eval_operand_def]
 QED
+
+Theorem external_return_singleton_string_stmt_frag_ptr:
+  cenv.ce_return_pc = NONE /\ ~cenv.ce_raw_return /\
+  cenv.ce_nonreentrant = (F,nkey,ut,iv) /\
+  expr_type e = BaseT (StringT k) /\ k <= n /\
+  is_bytestring_type (lowered_value_type cenv e) /\
+  cenv.ce_ret_enc_info = AbiComplex [(AbiBytestring n,32,cap,T)] /\
+  32+n <= cap /\ 64+ceil32 n <= cenv.ce_max_return_size /\
+  cenv.ce_max_return_size < dimword(:256) /\
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  expr_sim_ptr d ctx PG func cenv cx (BaseT (StringT n)) e es ==>
+  stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
+    (stmt_env cenv lctx (BaseT (StringT n)) (Return (SOME e)))
+    (eval_stmt cx (Return (SOME e))) es
+Proof
+  strip_tac >> rw[stmt_frag_ptr_def] >>
+  drule external_return_singleton_stmt_parts >>
+  simp[is_word_type_def, is_bytestring_type_def] >>
+  disch_then drule_all >> strip_tac >>
+  drule_at (Pat `lower_value _ _ _ _ _ = _`) compile_lower_value_var >>
+  simp[] >> disch_then assume_tac >>
+  drule return_forced_admissible >> strip_tac >>
+  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_sim_ptr_def] >>
+  disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  dxrule gas_outcome_ptr_normal_evidence >> strip_tac >>
+  drule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)
+    external_return_some_outcome_ptr >>
+  disch_then irule >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule expr_post_ptr_return_inputs >> simp[] >> disch_then drule_all >> strip_tac >>
+  `n <= ceil32 n` by simp[ceil32_ge] >>
+  `k < dimword(:256)` by decide_tac >>
+  `type_slot_size (BaseTV (StringT k)) <= dimword(:256)` by
+    (Cases_on `k = 0` >- simp[type_slot_size_def, word_size_def, dimword_def] >>
+     `word_size k <= k` by (irule word_size_le >> decide_tac) >>
+     simp[type_slot_size_def] >> decide_tac) >>
+  `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT k))` by
+    simp[evaluate_type_def] >>
+  drule_all external_return_forced_value_typed >> strip_tac >>
+  `?text. v = StringV text` by
+    (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+  gvs[] >>
+  `LENGTH text <= k` by fs[vyperTypingTheory.value_has_type_def] >>
+  `ceil32 (LENGTH text) <= ceil32 n` by
+    (simp[abi_bytes_ceil32_eq] >> irule ceil32_mono >> decide_tac) >>
+  `val_footprint (BaseTV (StringT k)) (StringV text) = 32+LENGTH text` by
+    simp[val_footprint_def] >>
+  `expr_val_at cenv cx (BaseT (StringT k)) sa sm ee (StringV text) op t` by
+    gvs[expr_post_def] >>
+  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) expr_val_at_bound >>
+  simp[is_word_type_def] >> disch_then drule_all >> strip_tac >>
+  drule ptr_val_ok_read_covers >> simp[is_word_type_def] >>
+  disch_then (qspec_then `32+LENGTH text` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  `val_wf (BaseTV (StringT k)) (StringV text)` by
+    metis_tac[value_has_type_val_wf] >>
+  `k < dimword(:256)` by decide_tac >>
+  drule ptr_val_ok_string_abi_input >>
+  disch_then (qspec_then `w` mp_tac) >> simp[] >> disch_then assume_tac >>
+  `!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
+    abi_encoder_input (AbiBytestring n) String
+      (contractABI$BytesV (MAP (n2w o ORD) text))
+      (w2n w) (32+LENGTH text) mem` by
+    (rpt strip_tac >>
+     qpat_x_assum `!mem'. mem_agree_outside _ _ _ ==> _` drule >>
+     simp[abi_encoder_input_bytes_iff] >> decide_tac) >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[cs_extends_def]) >>
+  drule_at (Pat `compile_alloc_buffer _ _ = _`) singleton_buffer_return_suffix >>
+  disch_then irule >> simp[] >>
+  `0 < cenv.ce_max_return_size` by decide_tac >> simp[] >>
+  qexistsl_tac [`w2n w`, `String`, `MAP (n2w o ORD) text`, `cap`, `cenv`, `sa`, `ee`,
+    `n`, `len`, `so`, `sb`, `p`, `BaseTV (StringT k)`,
+    `BaseT (StringT k)`, `StringV text`] >>
+  simp[is_word_type_def, eval_operand_def] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  fs[eval_operand_def]
+QED
