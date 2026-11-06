@@ -1164,7 +1164,7 @@ Resume materialize_run_compact[stack]:
   simp[internal_stack_size_def] >> irule mat_frame_trans >>
   qexistsl_tac [`mid`, `t`] >> simp[not_fresh_at_def]
 QED
-Finalise materialize_run_compact[local]
+Finalise materialize_run_compact
 
 Theorem internal_args_local_memloc[local]:
   !cenv params env idx args frontier mem name entry.
@@ -1416,7 +1416,7 @@ Proof
 QED
 
 (* ===== The callee's entry ===== *)
-Theorem internal_capture_materialization_entry[local]:
+Theorem internal_capture_materialization_entry:
   !has_rb st0 rb stb params caps next stp rpc stc cenv cenv1
    env args caller func s0.
     (if has_rb then
