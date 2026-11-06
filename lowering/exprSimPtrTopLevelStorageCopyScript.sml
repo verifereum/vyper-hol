@@ -1190,18 +1190,18 @@ Theorem toplevel_copy_counter_suffix_ghost:
 Proof
   strip_tac >>
   Cases_on `lookup_var cv s`
-  >- gvs[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_def,
+  >- gvs[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_opcode_eqs,
          exec_pure2_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
   rename1 `lookup_var cv s = SOME w` >>
   qabbrev_tac `i = mk_inst id ADD [Var cv;Lit 1w] [nv]` >>
   qabbrev_tac `j = mk_inst (id+1) ASSIGN [Var nv] [cv]` >>
   qabbrev_tac `u = update_var nv (w+1w) s` >>
   `step_inst_base i s = OK u` by
-    simp[Abbr `i`, Abbr `u`, step_inst_base_def, exec_pure2_def,
+    simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, exec_pure2_def,
          mk_inst_def, eval_operands_def, eval_operand_def] >>
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   `step_inst_base j u1 = OK (update_var cv (w+1w) u1)` by
-    simp[Abbr `j`, Abbr `u1`, Abbr `u`, step_inst_base_def, exec_read1_def,
+    simp[Abbr `j`, Abbr `u1`, Abbr `u`, step_inst_base_opcode_eqs, exec_read1_def,
          mk_inst_def, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >>
