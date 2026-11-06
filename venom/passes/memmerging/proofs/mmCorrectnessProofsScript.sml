@@ -3,7 +3,6 @@
  *
  * Definitions (invariants, fresh sets, block wf predicates) and
  * proof infrastructure for the memmerging correctness argument.
- * Re-exported by mmCorrectnessScript.sml.
  *)
 
 Theory mmCorrectnessProofs
@@ -1352,11 +1351,9 @@ Proof
   (impl_tac >- fs[]) >> simp[]
 QED
 
-(* mode_run_insts_lift_result and mm_block_simulates_mode are after
-   flat_map_same_start_block_bridge and bb_wf_decompose below. *)
-
-(* mm_block_simulates_mode: proved in mmBlockSimScript as
-   mm_block_simulates_mode_proof. No forward declaration needed. *)
+(* mode_run_insts_lift_result is after flat_map_same_start_block_bridge
+   and bb_wf_decompose below; mm_block_simulates_mode_proof is in
+   mmBlockSimProofs. *)
 
 (* Generalized run_insts simulation for memzero transform.
    Starts from memzero_inv-related states (needed for within-group induction).

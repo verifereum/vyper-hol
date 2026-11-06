@@ -78,7 +78,7 @@ objects, forced cold replay or fixture/oracle change was needed.
 | Requirement | Verified evidence |
 |---|---|
 | DEAD/superseded FALSE admissions retired | Named site ledger and clean source/changed audits; original proof provenance retained. |
-| Frame-aware top, no old run-based compatibility boundary | Exact saved §2.1 schema in `e2eCallChecks`; `call_result_rel` uses `frame_outcome` and Verifereum `run_call`. |
+| Frame-aware top, no old run-based compatibility boundary | Exact saved §2.1 schema in `e2eCallChecks` (since removed as an audit outside the build); `call_result_rel` uses `frame_outcome` and Verifereum `run_call`. |
 | Non-vacuous gas clause | Actual frame OutOfGas/StackOverflow or valid computed-precompile failure, not an unconditional gas escape. |
 | D12–D14 corrections and proof preservation | Complete source/CPS/CV/small-step, Venom/assembly/pass/codegen closure and exact regressions; 15,767 same-owner proof comparisons found no formerly proved semantic claim newly cheated. |
 | 101 memberships and original plain-EVAL parities | Exact manifest bijections, saved hypotheses/tags and independent byte audit above. |
