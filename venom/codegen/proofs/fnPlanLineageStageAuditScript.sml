@@ -550,3 +550,94 @@ QED
    is suffix hit/selected-live preservation through the native schedule, with
    explicit bounded dead-output and deep-dup effects, NOT global exclusion.
    None of these local tests is a counterexample to lineage_state_block_plan. *)
+
+(* Lower-reserve probes deliberately allow repeats and stack/spill overlap.
+   These are local computations, not claims of reachable planner states. *)
+Theorem repeated_protected_consumption_probe:
+  MEM (Var "a")
+    (stack_pop 2
+      (SND (reorder_plan dfg_empty [Var "a"; Var "a"]
+        (SND (emit_input_plan ADD [Var "a"; Var "a"] ["a"]
+          ((init_plan_state 0) with ps_stack :=
+            [Var "a"; Var "a"; Var "a"])) ))).ps_stack)
+Proof
+  EVAL_TAC
+QED
+
+Theorem overlap_protected_consumption_probe:
+  MEM (Var "b")
+    (stack_pop 1
+      (SND (reorder_plan dfg_empty [Var "a"]
+        (SND (emit_input_plan ISZERO [Var "a"] ["b"]
+          ((init_plan_state 0) with <|
+            ps_stack := [Var "b"; Var "b"; Var "a"];
+            ps_spilled := FEMPTY |+ (Var "b", 0) |>)) ))).ps_stack)
+Proof
+  EVAL_TAC
+QED
+
+Definition lower_reserve_deep_state_def:
+  lower_reserve_deep_state = (init_plan_state 0) with <|
+    ps_stack := [Var "a"] ++ REPLICATE 17 (Var "b");
+    ps_spilled := FEMPTY |+ (Var "b", 0) |>
+End
+
+Theorem deep_overlap_protected_consumption_probe:
+  Var "b" IN FDOM
+    (SND (reorder_plan dfg_empty [Var "a"]
+      (SND (emit_input_plan ISZERO [Var "a"] ["b"]
+        lower_reserve_deep_state)))).ps_spilled /\
+  MEM (SOSpill 0)
+    (FST (reorder_plan dfg_empty [Var "a"]
+      (SND (emit_input_plan ISZERO [Var "a"] ["b"]
+        lower_reserve_deep_state))))
+Proof
+  EVAL_TAC
+QED
+
+Theorem deep_overlap_inventory_drop_probe:
+  LIST_ELEM_COUNT (Var "b") lower_reserve_deep_state.ps_stack +
+    (if Var "b" IN FDOM lower_reserve_deep_state.ps_spilled then 1 else 0) = 18 /\
+  LIST_ELEM_COUNT (Var "b")
+    (SND (reorder_plan dfg_empty [Var "a"]
+      lower_reserve_deep_state)).ps_stack = 16 /\
+  stack_peek 0 (SND (reorder_plan dfg_empty [Var "a"]
+    lower_reserve_deep_state)).ps_stack = Var "a"
+Proof
+  EVAL_TAC
+QED
+
+(* Lower-reserve audit, after the checked probes above:
+   emit_reorder_plan_core_protected_consumption currently calls
+   emit_reorder_plan_core_suffix (which uses residual_budget_wf both for
+   materialised_suffix and its propagated budget), then calls
+   reorder_plan_inventory_mono. Removing the budget premise from that
+   inventory theorem is invalid: deep_overlap_inventory_drop_probe loses
+   one unit of count-plus-domain inventory while keeping b available.
+
+   For bounded materialised inputs, reorder_one_materialised_counts_unconditional
+   already preserves ALL counts of target operands provided its unfixed hit
+   exists. The materialised_fold_bottom_frame proof obtains each next hit
+   using the fixed-window and target-count interfaces without a budget.
+   This suggests reusing that induction for a budget-free suffix theorem;
+   suffix correctness is still required, not supplied by these tests.
+
+   For a protected variable NOT in targets, reduction only spills variables
+   excluded from targets; do_spill_at removes one stack occurrence and adds
+   a spill binding (possibly overwriting one). Thus positive count-plus-spill
+   is preserved, though its full value is not. For a target variable,
+   materialised counts are preserved, but consumption needs its EXTRA live
+   reserve too. Exact target stack count preservation supplies this when
+   the reserve is a stack occurrence; a reserve in the spill domain needs
+   a separate preservation fact (restore cannot run when an unfixed stack
+   hit was obtained). Placement swaps or the operand_equiv two-poke branch
+   permute physical values and do not discard a protected non-target.
+
+   Smallest proposed universal boundary for review: under materialised
+   counts, length floor and fixed suffix at stage idx, one reorder_one step
+   preserves (a) fixed suffix extended by op, (b) target stack counts,
+   (c) each protected Var v's count-plus-spill lower bound capped at
+   count(targets,Var v)+1. Use separate non-target positive-availability
+   and target-spill-preservation lemmas instead of uncapped inventory mono.
+   No global reachability or suffix-local availability follows from these
+   local computations. Optimistic code shielding remains separate. *)
