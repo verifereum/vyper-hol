@@ -658,7 +658,7 @@ Proof
     mp_tac block_plan_state_static >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      metis_tac[body_ready_fn_no_marker]) >>
+      metis_tac[codegen_ready_fn_no_marker]) >>
   disch_then ACCEPT_TAC
 QED
 

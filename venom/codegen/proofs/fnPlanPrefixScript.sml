@@ -95,6 +95,16 @@ Proof
   simp[generated_plan_state_wf_marked_def, planSpillBoundsTheory.plan_slots_bounded_def]
 QED
 
+Theorem codegen_ready_fn_no_marker:
+  !fn. codegen_ready_fn fn ==>
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks
+Proof
+  simp[codegen_ready_fn_def, EVERY_MEM] >> rpt strip_tac >>
+  `codegen_ready_inst inst` by metis_tac[] >>
+  gvs[codegen_ready_inst_def]
+QED
+
 (* generated_plan_state_wf doesn't keep the marker out of the spill map,
    hence the second premise. *)
 Theorem generated_plan_state_wf_marked_wf:

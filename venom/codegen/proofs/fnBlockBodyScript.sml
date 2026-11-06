@@ -234,7 +234,7 @@ Proof
         mp_tac body_revert_no_spill >>
       impl_tac
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
-          metis_tac[body_ready_fn_no_marker]) >>
+          metis_tac[codegen_ready_fn_no_marker]) >>
       disch_then (qspec_then `j` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >>
       disch_then (qspecl_then [`rest_ops`, `ps_after`] mp_tac) >>
