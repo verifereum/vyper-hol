@@ -23,6 +23,11 @@
  *     still read live slots.  Held for the posts-interface round after the
  *     branch merge, which adds the conjunct to vv_post_def; then it
  *     follows from vv_post_def.
+ *   vv_post_locals_pure_kept — an effect-free operand's fragment keeps
+ *     the live locals whole, their dynamic arrays' length words included
+ *     (locals_kept exempts those).  It lets a positional memory operand
+ *     holding a dynamic array, read only after the later operands, keep
+ *     its value.  Held for the same posts-interface round.
  *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
@@ -61,6 +66,22 @@ Theorem vv_post_storage_live:
 Proof
   (* Held for the posts-interface round: follows from vv_post_def once it
      has the vv_storage_live conjunct. *)
+  cheat
+QED
+
+(* An effect-free operand's fragment keeps every live local's bytes, its
+   dynamic arrays' length words too: it pops nothing.  locals_kept exempts
+   those words since a pop writes them; a positional memory operand holding
+   a dynamic array, read only after the later operands, needs them kept. *)
+Theorem vv_post_locals_pure_kept:
+  !ctx func cenv cx e es sa sb s0 es' tv vv s n b sz.
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+    ~expr_has_effect e /\
+    local_region cenv es.scopes s0 n b sz ==>
+    mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
+Proof
+  (* Held for the posts-interface round: follows from vv_post_def once it
+     keeps an effect-free operand's locals whole. *)
   cheat
 QED
 
