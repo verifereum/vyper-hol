@@ -3,8 +3,15 @@ Ancestors
   concretizePtrHistoryCoverage concretizePtrStageBounds
   concretizePtrComparisonTransport ptrDiscipline unitMemInv
   concretizePtrPairedFields concretizePtrOwnershipErasure
-  concretizePtrOpaqueRetpc concretizePtrValueTransport
-  pointerConfinedDefs memLocDefs
+  concretizePtrOpaqueRetpc concretizePtrValueTransport concretizePtrMloadEndpoint
+  pointerConfinedDefs memLocDefs concretizeStepStructure
+  concretizePtrStructuralTranscript concretizePtrStructuralTrace
+  concretizePtrSourceOwnership concretizePtrDeletedGapHistory
+  concretizePtrChronologicalHistory concretizePtrAllocationSize
+  concretizePtrParamSupport concretizePtrPairedPrefix
+  concretizePtrSharedFields venomWf unitShapeDefs passSimulationDefs
+  concretizePtrPrefixLedger o1PassContract venomExecProofs
+  venomInst venomExecSemantics contextCodegenRel unitLabelMapIdentity
   list finite_map words arithmetic
 
 (* access_ok retains ownership even when a provenance-bearing range lies
@@ -162,3 +169,123 @@ Proof
   Cases_on `eval_operand addr s` >>
   gvs[ptr_lookup_transport_def]
 QED
+
+Theorem ptr_paired_read_range_static_bound:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  n = 0 \/ w2n y + n <= eom
+Proof
+  strip_tac >> Cases_on `n = 0` >- simp[] >>
+  drule_all ptr_paired_read_range_classification >> strip_tac
+  >- (drule_all ptr_stage_fixed_region_bound >> simp[]) >>
+  `ptr_stage_placements C' positions` by
+    fs[concretizePtrPairedPrefixTheory.ptr_paired_prefix_def] >>
+  drule_all ptr_stage_placements_endpoint_bound >> simp[] >> decide_tac
+QED
+
+Theorem ptr_paired_terminal_static_bound:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions Ct.ctx_functions /\
+  ptr_stage_placements Ct positions /\
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  (a.po_inst.inst_opcode = RETURN \/ a.po_inst.inst_opcode = REVERT) ==>
+  !off len. MEM (off,len)
+    (source_memory_read_ranges at.po_inst at.po_state ++
+     source_memory_write_ranges at.po_inst at.po_state) ==>
+    len = 0 \/ off + len <= eom
+Proof
+  strip_tac >>
+  `at.po_inst = a.po_inst` by gvs[concretize_positions_unchanged] >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+     a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (fs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
+  `inst_wf a.po_inst /\ fn_shape_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  `?addr lenop. a.po_inst.inst_operands = [addr;lenop]` by
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> fs[fn_shape_ok_def]) >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+     a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
+    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
+    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  suspend "terminal_operands"
+QED
+
+Resume ptr_paired_terminal_static_bound[terminal_operands]:
+  markerLib.RESUME_TAC >> rpt disch_tac >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
+  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  qpat_assum `ptr_discipline _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  drule_all ptr_frame_current_static >> strip_tac >>
+  `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
+    (fs[ptr_static_support_def, pred_setTheory.SUBSET_DEF, FLOOKUP_DEF] >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `ptr_use_ok P (fn_pv P a.po_fn) a.po_inst` by
+    (fs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+  `ptr_nonopaque_operand a.po_fn addr /\ ptr_nonopaque_operand a.po_fn lenop` by
+    (qpat_x_assum `EVERY (ptr_nonopaque_operand _) _` mp_tac >> simp[]) >>
+  rpt gen_tac >>
+  `source_memory_write_ranges at.po_inst at.po_state = []` by
+    gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  simp[] >> strip_tac >>
+  drule ptr_terminal_read_range_transport >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`off`, `lenop`, `len`, `addr`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `mem_read_ops a.po_inst = SOME
+    <|iao_ofst := addr; iao_size := SOME lenop; iao_max_size := SOME lenop|>` by
+    simp[mem_read_ops_def] >>
+  drule_at (Pat `mem_read_ops _ = _`) ptr_paired_read_range_static_bound >>
+  disch_then (drule_all o SRULE []) >> simp[]
+QED
+
+Finalise ptr_paired_terminal_static_bound

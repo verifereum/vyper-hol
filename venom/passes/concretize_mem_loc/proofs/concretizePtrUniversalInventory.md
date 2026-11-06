@@ -2125,3 +2125,25 @@ extractor, full forwarding index/slice lift, universal history extension and raw
 observation packaging remain unproved. Owned offsets additionally need the
 already checked birth/placement and nonwrapping arithmetic suppliers before any
 static bound follows from this range theorem.
+
+### Actual-prefix terminal static endpoint (2026-11-06)
+
+`concretizePtrObservationInterfaceTheory` now proves
+`ptr_paired_read_range_static_bound` (arbitrary evaluated read, including zero
+length) and `ptr_paired_terminal_static_bound` (RETURN/REVERT current read/write
+ranges). The latter uses the schema's stage/prefix/alignment premises plus
+explicit **source** non-forwarding; it adds no departure, scalar purity,
+evaluation, ledger-erasure or target-bound premise.
+
+Supplier chain: prefix -> transcript/structural trace -> source ownership and
+frame reachability; source shape -> instruction well-formedness and nonopaque
+operands; source discipline and current static support -> ptr_use_ok and
+provenance-domain inclusion; paired sample -> mixed variables and equal label
+maps. Terminal transport then supplies source evaluations and exact owned/scalar
+word transport. The shared bound consumes the existing read classifier and
+StageBounds fixed/placement endpoint bounds. Terminal writes are empty.
+
+This is conditional endpoint safety, not universal prefix coverage. All-opcode
+observation transport, source-to-target revert-forward slice/index transport,
+normalized history extension and raw-observation packaging remain unresolved.
+No successful terminal departure is needed or claimed.
