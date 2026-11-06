@@ -487,3 +487,32 @@ Proof
   gvs[ptr_covers_def, venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
   qexists_tac `n2w b` >> simp[wordsTheory.w2n_n2w] >> decide_tac
 QED
+
+Theorem raw_call_outbuf_stage:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword(:256) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
+  ?H un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
+    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+    ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s)
+Proof
+  strip_tac >> Cases_on `cap = 0`
+  >- (gvs[] >> drule_all raw_call_outbuf_zero_stage >>
+      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+      qexistsl_tac [`H`, `un`, `u`, `x`, `x`] >> simp[]) >>
+  `0 < cap` by decide_tac >> gvs[] >>
+  irule (SIMP_RULE (srw_ss()) [arithmeticTheory.MULT_COMM] raw_call_outbuf_positive_stage) >>
+  simp[] >> metis_tac[]
+QED
