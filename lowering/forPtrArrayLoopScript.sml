@@ -34,7 +34,8 @@ Theorem array_code_loop_counted_ptr:
   (!j. j < LENGTH vs ==> value_has_type tv (EL j vs) /\ val_wf tv (EL j vs) /\
     w2n arr_base + j * stride < dimword (:256)) /\
   st.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
-  (!ei. lookup_scopes name ei.scopes = SOME snapshot ==>
+  (!ei. lookup_scopes name ei.scopes = SOME snapshot /\
+    lookup_scopes id ei.scopes = NONE ==>
     not_local_ptr bc (FEMPTY :: ei.scopes) p) /\
   ~ctx_has_dalloca ctx /\ ~bc.ce_is_ctor /\
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
@@ -54,7 +55,8 @@ Theorem array_code_loop_counted_ptr:
 Proof
   strip_tac >> ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `lookup_scopes name es.scopes = SOME snapshot` by
+      `lookup_scopes name es.scopes = SOME snapshot /\
+       lookup_scopes id es.scopes = NONE` by
         (fs[for_array_inv_ptr_def, array_loop_inv_def, IgnAsm `vs = _`] >> metis_tac[]) >>
       `stmt_frag_ptr d ctx PG func cx (InLoop exit_lbl incr_lbl) RetQ bc
         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
