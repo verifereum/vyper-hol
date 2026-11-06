@@ -77,6 +77,147 @@ Proof
   simp[outcome_of_def]
 QED
 
+Theorem asm_frame_create_decode:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2") ==>
+  next_opcode (FST (HD es.contexts)) =
+    SOME (if EL a.as_pc prog = AsmOp "CREATE" then Create else Create2)
+Proof
+  strip_tac >> irule asm_frame_opcode_decode >>
+  simp[vfmOperationTheory.wf_opname_def] >>
+  qexistsl_tac [`a`, `data`, `prog`] >>
+  gvs[is_data_inst_def, encode_inst_def, evm_opcode_byte_def,
+      evm_opcode_table_def, vfmOperationTheory.wf_opname_def,
+      vfmOperationTheory.opcode_def]
+QED
+
+Theorem asm_frame_create_observable:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\
+  ((EL a.as_pc prog = AsmOp "CREATE" /\ 3 <= LENGTH a.as_stack) \/
+   (EL a.as_pc prog = AsmOp "CREATE2" /\ 4 <= LENGTH a.as_stack)) ==>
+  observable_call (FST (HD es.contexts))
+Proof
+  strip_tac >>
+  `next_opcode (FST (HD es.contexts)) =
+     SOME (if EL a.as_pc prog = AsmOp "CREATE" then Create else Create2)` by
+    (irule asm_frame_create_decode >> metis_tac[]) >>
+  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def, observable_call_def]
+QED
+
+Theorem asm_create_request_observed:
+  asm_evm_rel prog a es /\
+  next_opcode (FST (HD es.contexts)) =
+    SOME (case salt_opt of NONE => Create | SOME salt => Create2) /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
+  asm_create_request a value (w2n off) (w2n sz) salt_opt = request_of es
+Proof
+  strip_tac >> Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def] >>
+  Cases_on `salt_opt` >>
+  gvs[asm_create_request_def, request_of_def, GSYM asm_call_input_buffer,
+      regularMemorySimTheory.expanded_slice_padded_range]
+QED
+
+Theorem asm_create_observed_adoption:
+  rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall /\
+  ~rq.cr_static /\ t.contexts = (c,rb)::rest /\
+  c.logs = logs ++ added /\ t.rollback.toDelete = deleted ++ pending ==>
+  adopt_outcome rq
+    (outcome_of rq.cr_kind t (LENGTH logs) (LENGTH pending))
+    (accounts,ts,logs) =
+    (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+  adopt_outcome_deletions rq
+    (outcome_of rq.cr_kind t (LENGTH logs) (LENGTH pending)) pending =
+    t.rollback.toDelete
+Proof
+  simp[adopt_outcome_def, adopt_outcome_deletions_def, outcome_of_def,
+       rich_listTheory.DROP_APPEND, rich_listTheory.TAKE_LENGTH_APPEND]
+QED
+
+Theorem asm_create_observed_address:
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
+  HD (FST (HD t.contexts)).stack = result /\
+  (result = 0w \/ result = w2w (address:address)) ==>
+  (if (outcome_of kind t n m).co_success
+   then w2w (outcome_of kind t n m).co_created else 0w : bytes32) = result
+Proof
+  strip_tac >> gvs[outcome_of_def] >> wordsLib.WORD_DECIDE_TAC
+QED
+
+Theorem asm_consume_create_observed:
+  rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall /\
+  ~rq.cr_static /\ t.contexts = (c,rb)::rest /\
+  a.as_outcomes =
+    outcome_of rq.cr_kind t (LENGTH a.as_logs)
+      (LENGTH a.as_pending_deletions) :: outcomes /\
+  c.logs = a.as_logs ++ added /\
+  t.rollback.toDelete = deleted ++ a.as_pending_deletions /\
+  c.stack = result::stk /\
+  (result = 0w \/ result = w2w (address:address)) ==>
+  asm_consume_create_outcome rq stk a =
+    AsmOK (asm_next (a with <|
+      as_stack := result::stk; as_outcomes := outcomes;
+      as_requests := a.as_requests ++ [rq];
+      as_accounts := t.rollback.accounts; as_transient := t.rollback.tStorage;
+      as_logs := c.logs; as_pending_deletions := t.rollback.toDelete;
+      as_returndata := c.returnData |>))
+Proof
+  strip_tac >>
+  `adopt_outcome rq
+     (outcome_of rq.cr_kind t (LENGTH a.as_logs)
+       (LENGTH a.as_pending_deletions))
+     (a.as_accounts,a.as_transient,a.as_logs) =
+     (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+   adopt_outcome_deletions rq
+     (outcome_of rq.cr_kind t (LENGTH a.as_logs)
+       (LENGTH a.as_pending_deletions)) a.as_pending_deletions =
+     t.rollback.toDelete` by
+    (irule asm_create_observed_adoption >> metis_tac[]) >>
+  `((if (outcome_of rq.cr_kind t (LENGTH a.as_logs)
+      (LENGTH a.as_pending_deletions)).co_success then
+      w2w (outcome_of rq.cr_kind t (LENGTH a.as_logs)
+        (LENGTH a.as_pending_deletions)).co_created else 0w):bytes32) = result` by
+    (irule asm_create_observed_address >> simp[] >> metis_tac[]) >>
+  simp[asm_consume_create_outcome_def, take_outcome_create, outcome_of_fields]
+QED
+
+(* This view includes exceptions raised while depositing returned code. *)
+Theorem asm_create_run_final_view:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?ex u c. u.contexts = (c,crb)::(parent,prb)::rest /\
+    c.msgParams = child.msgParams /\
+    handle_exception ex u = (INL (),t)
+Proof
+  strip_tac >>
+  drule_at (Pat `run_call _ = _`) asm_call_run_last_snapshot >>
+  simp[] >> strip_tac >>
+  `mid.contexts <> [] /\ LENGTH t.contexts < LENGTH mid.contexts` by simp[] >>
+  drule_at (Pat `step _ = _`) asm_call_step_drop_raw_view >>
+  simp[] >> strip_tac >>
+  `~vfm_abort ex` by
+    (drule_at (Pat `step_inner _ = _`) asm_call_step_inner_noabort >> simp[]) >>
+  qpat_x_assum `same_frame_rel _ _` mp_tac >>
+  simp[vfmSameFrameTheory.same_frame_rel_def] >> strip_tac >>
+  `u.contexts <> []` by (Cases_on `u.contexts` >> gvs[]) >>
+  `?e' s'. handle_create ex u = ((INR e',s') : unit execution_result)` by metis_tac[handle_create_INR] >>
+  `handle_exception e' s' = (INL (),t)` by
+    (qpat_x_assum `handle_step ex u = _` mp_tac >>
+     asm_rewrite_tac[handle_step_def, handle_def] >>
+     simp[] >>
+     qpat_x_assum `handle_create ex u = _` (fn th => simp[th])) >>
+  drule vfmHandleStepTheory.handle_create_preserves_tl_and_snd_hd >>
+  simp[] >> strip_tac >>
+  Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  Cases_on `s'.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  metis_tac[]
+QED
+
 Theorem asm_frame_create_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\

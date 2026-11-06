@@ -194,12 +194,12 @@ Proof
   drule_all asm_handle_exception_nested_normal >> simp[]
 QED
 
-Theorem asm_frame_call_decode:
+Theorem asm_frame_opcode_decode:
   asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
-  a.as_pc < LENGTH prog /\
-  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") ==>
-  next_opcode (FST (HD es.contexts)) =
-    SOME (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall)
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  encode_inst (SND (compute_label_offsets (prog ++ [AsmDataItem data])))
+    (EL a.as_pc prog) = opcode expected /\ wf_opname expected ==>
+  next_opcode (FST (HD es.contexts)) = SOME expected
 Proof
   strip_tac >>
   `asm_encoding_wf (prog ++ [AsmDataItem data])` by
@@ -207,17 +207,27 @@ Proof
   `a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
   `!j. j <= a.as_pc ==> ~is_data_inst (EL j (prog ++ [AsmDataItem data]))` by
     (rpt strip_tac >> `j < LENGTH prog` by decide_tac >>
-     gvs[EL_APPEND1, asm_frame_prog_ok_def] >>
-     metis_tac[is_data_inst_def]) >>
+     gvs[EL_APPEND1, asm_frame_prog_ok_def] >> metis_tac[]) >>
   drule_all assemble_parse_exact >> strip_tac >>
   `asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc <
      LENGTH (assemble (prog ++ [AsmDataItem data]))` by
     (irule offset_in_bounds >> simp[]) >>
-  gvs[EL_APPEND1, encode_inst_def, evm_opcode_byte_def, evm_opcode_table_def] >>
-  `op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall)` by
-    (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def]) >>
+  `op = expected` by (irule opcode_wf_inj >> gvs[EL_APPEND1]) >>
   Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
   PairCases_on `h` >> gvs[asm_evm_rel_def, next_opcode_def]
+QED
+
+Theorem asm_frame_call_decode:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") ==>
+  next_opcode (FST (HD es.contexts)) =
+    SOME (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall)
+Proof
+  strip_tac >> irule asm_frame_opcode_decode >>
+  simp[wf_opname_def] >> qexistsl_tac [`a`, `data`, `prog`] >>
+  gvs[is_data_inst_def, encode_inst_def, evm_opcode_byte_def,
+      evm_opcode_table_def, wf_opname_def, opcode_def]
 QED
 
 Theorem asm_frame_call_observable:
