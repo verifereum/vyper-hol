@@ -2,7 +2,9 @@ Theory concretizePtrObservationInterface
 Ancestors
   concretizePtrHistoryCoverage concretizePtrStageBounds
   concretizePtrComparisonTransport ptrDiscipline unitMemInv
-  concretizePtrPairedFields pointerConfinedDefs memLocDefs
+  concretizePtrPairedFields concretizePtrOwnershipErasure
+  concretizePtrOpaqueRetpc concretizePtrValueTransport
+  pointerConfinedDefs memLocDefs
   list finite_map words arithmetic
 
 (* access_ok retains ownership even when a provenance-bearing range lies
@@ -103,4 +105,60 @@ Proof
   simp[ptr_use_ok_def, is_pointer_preserving_op_def,
        mem_read_ops_def, mem_write_ops_def] >>
   conj_tac >> qexists_tac `"p"` >> simp[]
+QED
+
+Theorem ptr_mixed_scalar_eval:
+  ptr_ledger_erases births TG G /\
+  ptr_mixed_vars births positions TG tn f g s t /\
+  ptr_nonopaque_operand f op /\ s.vs_labels = t.vs_labels /\
+  op_prov G op = NONE /\ op_taint tn op = {} ==>
+  eval_operand op s = eval_operand op t
+Proof
+  strip_tac >>
+  drule ptr_owner_op_projection >>
+  disch_then (qspec_then `op` strip_assume_tac) >>
+  `op_prov TG op = NONE` by
+    (Cases_on `op_prov TG op` >> gvs[ptr_owner_project_def, FLOOKUP_DEF]) >>
+  drule_all ptr_mixed_vars_eval >>
+  Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
+  simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
+QED
+
+Theorem ptr_terminal_read_range_transport:
+  ptr_ledger_erases births TG G /\
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\ ptr_use_ok P pv inst /\
+  FDOM G SUBSET pv /\ taint_ok f tn inst s /\
+  ptr_nonopaque_operand f addr /\ ptr_nonopaque_operand f lenop /\
+  inst.inst_operands = [addr;lenop] /\
+  (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
+  MEM (off,len) (source_memory_read_ranges inst t) ==>
+  ?x y n. eval_operand addr s = SOME x /\
+    eval_operand addr t = SOME y /\
+    eval_operand lenop s = SOME n /\ eval_operand lenop t = SOME n /\
+    off = w2n y /\ len = w2n n /\
+    MEM (w2n x,len) (source_memory_read_ranges inst s) /\
+    ptr_lookup_transport births positions (op_prov TG addr) {}
+      (SOME x) (SOME y)
+Proof
+  strip_tac >>
+  `op_prov G lenop = NONE` by metis_tac[ptr_terminal_length_prov] >>
+  `op_taint tn lenop = {}` by metis_tac[ptr_terminal_length_taint] >>
+  `eval_operand lenop s = eval_operand lenop t` by
+    (irule ptr_mixed_scalar_eval >> metis_tac[]) >>
+  `op_taint tn addr = {}` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     gvs[taint_ok_def] >> strip_tac >>
+     first_x_assum (qspec_then `addr` mp_tac) >> simp[]) >>
+  `ptr_lookup_transport births positions (op_prov TG addr) {}
+     (eval_operand addr s) (eval_operand addr t)` by
+    (qpat_x_assum `ptr_nonopaque_operand f lenop` kall_tac >>
+     drule_all ptr_mixed_vars_eval >> simp[]) >>
+  gvs[contextCodegenRelTheory.source_memory_read_ranges_def,
+      contextCodegenRelTheory.memory_range_of_operands_def,
+      AllCaseEqs()] >>
+  Cases_on `eval_operand addr t` >>
+  Cases_on `eval_operand lenop t` >>
+  Cases_on `eval_operand addr s` >>
+  gvs[ptr_lookup_transport_def]
 QED

@@ -13,7 +13,7 @@ Definition ptr_params_erases_def:
     EVERY (\p. case p of NONE => T | SOME owner => owner IN FDOM births) tagged
 End
 
-Theorem ptr_owner_op_projection[local]:
+Theorem ptr_owner_op_projection:
   ptr_ledger_erases births tagged numerical ==>
   op_prov numerical op = ptr_owner_project births (op_prov tagged op) /\
   (!owner. op_prov tagged op = SOME owner ==> owner IN FDOM births)

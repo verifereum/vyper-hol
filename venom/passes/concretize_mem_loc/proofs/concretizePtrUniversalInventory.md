@@ -2097,3 +2097,31 @@ induction. Neither this audit nor MCOPY coverage proves exhaustive normalized
 dispatch, arbitrary source prefix coverage, terminal static bounds, or the
 frozen theorem. No new HOL lemmas, axioms, or executable definitions were added
 in this audit; only a typed candidate and this bounded supplier ledger.
+
+### Scalar equality and terminal range consumer (2026-11-06)
+
+`ptr_owner_op_projection` is now exported from OwnershipErasure (the existing
+proof, not a duplicate). Its second conjunct rules out dangling tags when
+numerical provenance is NONE. ObservationInterface's `ptr_mixed_scalar_eval`
+uses it to derive equality of complete option evaluations for a nonopaque,
+untainted scalar, including absent evaluations and Label operands with equal
+label maps. This supersedes the missing exported bridge noted above.
+
+`ptr_terminal_read_range_transport` now recovers an actual source RETURN/REVERT
+read range from a target range. It exports the two evaluated addresses, a common
+length value, and their empty-taint lookup transport. It permits zero length,
+coincident address/length operands, and forwarding observations; it requires
+neither source departure nor source non-forwarding. The accepted terminal
+length lemmas discharge scalar purity; taint_ok supplies address purity.
+
+These are conditional operand/range boundaries, not prefix coverage. Their
+inputs must still be supplied by actual normalized endpoints: numerical support
+from ptr_frame_current_static/ptr_static_support, ptr_use_ok and taint_ok from
+source discipline, ledger erasure from ptr_source_ownership_prov_erases, mixed
+variables from normalized paired-prefix coverage, and nonopacity/equal label maps
+from the existing operand and paired-fields interfaces. No input was added to
+the frozen theorem or a prefix predicate. The generic all-opcode guard/slot
+extractor, full forwarding index/slice lift, universal history extension and raw
+observation packaging remain unproved. Owned offsets additionally need the
+already checked birth/placement and nonwrapping arithmetic suppliers before any
+static bound follows from this range theorem.
