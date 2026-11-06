@@ -14,16 +14,6 @@ Ancestors
    Layer 1: Generic FOLDL helpers
    =================================================================== *)
 
-(* FOLDL with a domain-monotone step preserves domain membership. *)
-Theorem foldl_fdom_mono[local]:
-  ∀ks f step.
-    (∀s k. FDOM s ⊆ FDOM (step s k)) ⇒
-    ∀k. k ∈ FDOM f ⇒ k ∈ FDOM (FOLDL step f ks)
-Proof
-  Induct >> rw[] >>
-  first_x_assum irule >> fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
-QED
-
 (* FOLDL with step that only modifies the key it's given *)
 Theorem foldl_flookup_other[local]:
   ∀ks (f : 'a |-> 'b) step.
@@ -122,16 +112,6 @@ Proof
       fs[pred_setTheory.SUBSET_DEF])
 QED
 
-(* After FOLDL, keys NOT in the fold list are unchanged *)
-Theorem ma_foldl_other[local]:
-  ∀ks s loc k.
-    ¬MEM k ks ⇒
-    FLOOKUP (FOLDL (ma_fold_step loc) s ks) k = FLOOKUP s k
-Proof
-  rw[] >> irule foldl_flookup_other >> rw[] >>
-  metis_tac[ma_fold_step_other]
-QED
-
 (* FOLDL preserves FDOM exactly when all keys are already in domain *)
 Theorem ma_foldl_fdom_exact[local]:
   ∀ks sets loc.
@@ -146,19 +126,6 @@ Proof
   `EVERY (λk. k ∈ FDOM (ma_fold_step loc sets h)) ks` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[]
-QED
-
-(* Key in FOLDL result ⇒ key in original domain (when all fold keys ∈ FDOM) *)
-Theorem ma_foldl_in_fdom[local]:
-  ∀ks sets loc k als.
-    EVERY (λk. k ∈ FDOM sets) ks ∧
-    FLOOKUP (FOLDL (ma_fold_step loc) sets ks) k = SOME als ⇒
-    k ∈ FDOM sets
-Proof
-  rw[] >>
-  `FDOM (FOLDL (ma_fold_step loc) sets ks) = FDOM sets` by
-    metis_tac[ma_foldl_fdom_exact] >>
-  fs[FLOOKUP_DEF]
 QED
 
 (* FOLDL correctness: listed aliases actually overlap their key *)
@@ -234,53 +201,6 @@ QED
 (* ===================================================================
    Layer 3: ma_add_location properties
    =================================================================== *)
-
-Theorem ma_add_location_loc_in_domain[local]:
-  ∀sets loc. loc ∈ FDOM (ma_add_location sets loc)
-Proof
-  rw[ma_add_location_def, LET_THM, FDOM_FUPDATE]
-QED
-
-Theorem ma_add_location_preserves_domain[local]:
-  ∀sets loc k. k ∈ FDOM sets ⇒ k ∈ FDOM (ma_add_location sets loc)
-Proof
-  rw[ma_add_location_alt, LET_THM, FDOM_FUPDATE] >>
-  DISJ2_TAC >>
-  irule foldl_fdom_mono >>
-  rw[ma_fold_step_fdom]
-QED
-
-Theorem ma_add_location_aliases_overlap[local]:
-  ∀sets loc aliases.
-    FLOOKUP (ma_add_location sets loc) loc = SOME aliases ⇒
-    ∀a. MEM a aliases ⇒
-      (a = loc ∧ may_overlap loc loc) ∨
-      a ∈ FDOM sets ∧ may_overlap loc a ∨
-      MEM a (case FLOOKUP sets loc of NONE => [] | SOME l => l)
-Proof
-  rw[ma_add_location_alt, LET_THM, FLOOKUP_UPDATE] >>
-  fs[MEM_APPEND, MEM_FILTER, MEM_MAP] >>
-  BasicProvers.EVERY_CASE_TAC >> fs[] >>
-  Cases_on `y` >> fs[MEM_fmap_to_alist] >> fs[FLOOKUP_DEF]
-QED
-
-Theorem ma_add_location_overlap_recorded[local]:
-  ∀sets loc k.
-    k ∈ FDOM sets ∧ may_overlap loc k ⇒
-    ∃aliases. FLOOKUP (ma_add_location sets loc) k = SOME aliases ∧
-              MEM loc aliases
-Proof
-  rw[ma_add_location_alt, LET_THM] >>
-  Cases_on `k = loc` >- (
-    (* k = loc: loc is in self since may_overlap loc loc (from hyp) *)
-    fs[FLOOKUP_UPDATE, MEM_APPEND]
-  ) >>
-  fs[FLOOKUP_UPDATE] >>
-  (* k ≠ loc, so FLOOKUP in FOLDL result *)
-  `MEM k (FILTER (λk. may_overlap loc k) (MAP FST (fmap_to_alist sets)))` by
-    fs[mem_overlapping] >>
-  drule_all ma_foldl_adds_loc >> rw[]
-QED
 
 (* ===== wf preservation — the key theorem ===== *)
 
@@ -443,24 +363,6 @@ Proof
   metis_tac[ma_add_location_preserves_wf]
 QED
 
-Theorem ma_analyze_inst_preserves_domain[local]:
-  ∀bp addr sets inst k.
-    k ∈ FDOM sets ⇒ k ∈ FDOM (ma_analyze_inst bp addr sets inst)
-Proof
-  rw[ma_analyze_inst_def, LET_THM] >>
-  metis_tac[ma_add_location_preserves_domain]
-QED
-
-Theorem ma_analyze_block_domain_mono[local]:
-  ∀bp addr sets insts k.
-    k ∈ FDOM sets ⇒
-    k ∈ FDOM (ma_analyze_block bp addr sets insts)
-Proof
-  Induct_on `insts` >> rw[ma_analyze_block_def] >>
-  first_x_assum irule >>
-  irule ma_analyze_inst_preserves_domain >> fs[]
-QED
-
 Theorem ma_analyze_block_preserves_wf[local]:
   ∀bp addr sets insts.
     wf_alias_sets sets ⇒ wf_alias_sets (ma_analyze_block bp addr sets insts)
@@ -468,16 +370,6 @@ Proof
   Induct_on `insts` >> rw[ma_analyze_block_def] >>
   first_x_assum irule >>
   irule ma_analyze_inst_preserves_wf >> fs[]
-QED
-
-Theorem ma_analyze_blocks_domain_mono[local]:
-  ∀bp addr sets bbs k.
-    k ∈ FDOM sets ⇒
-    k ∈ FDOM (ma_analyze_blocks bp addr sets bbs)
-Proof
-  Induct_on `bbs` >> rw[ma_analyze_blocks_def] >>
-  first_x_assum irule >>
-  irule ma_analyze_block_domain_mono >> fs[]
 QED
 
 Theorem ma_analyze_blocks_preserves_wf[local]:
@@ -534,13 +426,6 @@ Proof
   rw[] >> drule ma_may_alias_iff >>
   disch_then (qspecl_then [`ml_empty`, `loc`] mp_tac) >>
   rw[empty_no_overlap_l]
-QED
-
-(* mk_volatile doesn't change may_overlap *)
-Theorem mk_volatile_overlap[local]:
-  ∀loc x. may_overlap (mk_volatile loc) x ⇔ may_overlap loc x
-Proof
-  rw[mk_volatile_def, may_overlap_def]
 QED
 
 (* ===== Volatile FOLDL step and helpers ===== *)
@@ -610,14 +495,6 @@ Theorem mv_foldl_other[local]:
     FLOOKUP (FOLDL (mv_fold_step vloc) s ks) k = FLOOKUP s k
 Proof
   rw[] >> irule foldl_flookup_other >> rw[] >> metis_tac[mv_fold_step_other]
-QED
-
-(* FOLDL of mv_fold_step preserves FDOM *)
-Theorem mv_foldl_fdom[local]:
-  ∀ks s vloc k.
-    k ∈ FDOM s ⇒ k ∈ FDOM (FOLDL (mv_fold_step vloc) s ks)
-Proof
-  rw[] >> irule foldl_fdom_mono >> rw[mv_fold_step_fdom]
 QED
 
 (* FOLDL of mv_fold_step adds vloc to listed keys *)
@@ -701,18 +578,6 @@ Theorem flookup_in_fdom[local]:
   ∀(f:'a |-> 'b) k v. FLOOKUP f k = SOME v ⇒ k ∈ FDOM f
 Proof
   rw[flookup_thm]
-QED
-
-(*
- * ma_mark_volatile correctness helper:
- * Every entry in s3's alias lists actually overlaps its key.
- *)
-Theorem mk_volatile_overlap_all[local]:
-  ∀loc. may_overlap (mk_volatile loc) (mk_volatile loc) = may_overlap loc loc ∧
-        may_overlap (mk_volatile loc) loc = may_overlap loc loc ∧
-        may_overlap loc (mk_volatile loc) = may_overlap loc loc
-Proof
-  rw[may_overlap_def, mk_volatile_def]
 QED
 
 (* For any x, may_overlap x (mk_volatile loc) = may_overlap x loc *)
@@ -967,34 +832,7 @@ Proof
   ]
 QED
 
-(* Empty function produces empty alias sets *)
-Theorem ma_analyze_empty[local]:
-  ∀bp addr_sp fn.
-    fn.fn_blocks = [] ⇒
-    ma_analyze bp fn addr_sp = FEMPTY
-Proof
-  rw[ma_analyze_def, ma_analyze_blocks_def]
-QED
-
 (* ===== ma_may_alias characterization (local, subsumed by iff) ===== *)
-
-Theorem ma_may_alias_volatile[local]:
-  ∀sets loc1 loc2.
-    loc1.ml_volatile ∨ loc2.ml_volatile ⇒
-    (ma_may_alias sets loc1 loc2 ⇔ may_overlap loc1 loc2)
-Proof
-  rw[ma_may_alias_def]
-QED
-
-Theorem ma_may_alias_unknown[local]:
-  ∀sets loc1 loc2.
-    ¬loc1.ml_volatile ∧ ¬loc2.ml_volatile ∧
-    (FLOOKUP sets loc1 = NONE ∨ FLOOKUP sets loc2 = NONE) ⇒
-    (ma_may_alias sets loc1 loc2 ⇔ may_overlap loc1 loc2)
-Proof
-  rw[ma_may_alias_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[]
-QED
 
 (* ===== ma_mark_volatile helpers ===== *)
 

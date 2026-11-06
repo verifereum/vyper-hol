@@ -84,15 +84,6 @@ Proof
   >> Cases_on `ys` >> simp[] >> metis_tac[]
 QED
 
-Theorem LIST_REL_right_EVERY[local]:
-  LIST_REL r xs ys /\ (!x y. r x y ==> p y) ==>
-  EVERY p ys
-Proof
-  qid_spec_tac `ys` >> Induct_on `xs`
-  >- simp[]
-  >> Cases_on `ys` >> simp[] >> metis_tac[]
-QED
-
 Theorem LIST_REL_MEM_right[local]:
   LIST_REL r xs ys /\ MEM y ys ==>
   ?x. MEM x xs /\ r x y
@@ -631,32 +622,6 @@ Proof
       >- simp[get_invoke_targets_def]
       >> Cases_on `h'` >> simp[get_invoke_targets_def])
   >> simp[get_invoke_targets_def]
-QED
-
-Theorem concretize_get_invoke_targets_cons[local]:
-  get_invoke_targets (inst::insts) =
-  get_invoke_targets [inst] ++ get_invoke_targets insts
-Proof
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- (Cases_on `inst.inst_operands`
-      >- simp[get_invoke_targets_def]
-      >> Cases_on `h` >> simp[get_invoke_targets_def])
-  >> simp[get_invoke_targets_def]
-QED
-
-Theorem concretize_inst_with_positions_invoke_targets[local]:
-  get_invoke_targets [concretize_inst_with_positions positions inst] =
-  get_invoke_targets [inst]
-Proof
-  Cases_on `inst.inst_opcode = ALLOCA`
-  >- (Cases_on `inst.inst_outputs`
-      >- simp[concretize_inst_with_positions_def, get_invoke_targets_def]
-      >> Cases_on `t`
-      >- (Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
-          simp[concretize_inst_with_positions_def, get_invoke_targets_def,
-               mk_assign_inst_def, mk_nop_inst_def])
-      >> simp[concretize_inst_with_positions_def, get_invoke_targets_def])
-  >> simp[concretize_inst_with_positions_def]
 QED
 
 Theorem concretize_insts_with_positions_invoke_targets[local]:

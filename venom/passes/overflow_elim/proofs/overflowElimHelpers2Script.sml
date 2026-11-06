@@ -233,29 +233,6 @@ Proof
   REWRITE_TAC[dfg_tracked_opcode_def, dfg_block_local_def] >> metis_tac[]
 QED
 
-(* Helper: derive MEM + position ordering from dfg_block_local *)
-Triviality dfg_block_local_pos[local]:
-  !fn v inst u inst_u bb j.
-    dfg_block_local fn /\
-    dfg_get_def (dfg_build_function fn) v = SOME inst /\
-    MEM (Var u) inst.inst_operands /\
-    dfg_tracked_opcode inst.inst_opcode /\
-    dfg_get_def (dfg_build_function fn) u = SOME inst_u /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    j < LENGTH bb.bb_instructions /\
-    EL j bb.bb_instructions = inst ==>
-    MEM inst_u bb.bb_instructions /\
-    ?i. i < j /\ i < LENGTH bb.bb_instructions /\
-        EL i bb.bb_instructions = inst_u
-Proof
-  rpt strip_tac
-  >- (drule_all dfg_block_local_elim >> simp[])
-  >> (drule_all dfg_block_local_elim >> strip_tac) >>
-  `?nn. nn < LENGTH bb.bb_instructions /\ EL nn bb.bb_instructions = inst_u` by
-    metis_tac[MEM_EL] >>
-  qexists_tac `nn` >> simp[]
-QED
-
 (* Eliminator for try_elim_add_overflow_v: extracts operand structure *)
 Theorem try_elim_add_overflow_v_elim:
   !dfg rs lt_inst.
