@@ -121,7 +121,7 @@ Proof
          asm_rewrite_tac []) >>
       drule_all abi_encoder_member_prefix_transport >> strip_tac >>
       drule abi_encode_child_prefix_live >> strip_tac >>
-      fs[abi_sites_encoder_shared_member_dynamic_pre_def, abi_scratch_member_cursor_saved_def,
+      fs[abi_sites_encoder_shared_member_dynamic_pre_def, abi_sites_scratch_member_cursor_saved_def,
         abi_decoder_address_frame_def]) >>
   rpt strip_tac >> irule abi_encoder_shared_member_dynamic_cursor_input >>
   asm_rewrite_tac [] >> goal_assum (drule_at Any) >> asm_rewrite_tac [])

@@ -113,7 +113,21 @@ Proof
   asm_simp_tac bool_ss [] >> fs[abi_scratch_effect_def] >> metis_tac[]
 QED
 
-Definition abi_scratch_member_cursor_saved_def:
+Definition abi_sites_scratch_member_cursor_saved_def:
+  abi_sites_scratch_member_cursor_saved sites (head,offset,dp,h,off,slot,site)
+      (first,last,b,cap,limit_st) (ei,dst,src,st,en,out) s <=>
+    abi_decoder_operand_live st.cs_next_var head /\
+    abi_decoder_operand_live st.cs_next_var offset /\
+    abi_decoder_operand_live st.cs_next_var dp /\
+    eval_operand head s = SOME (n2w h) /\ eval_operand offset s = SOME (n2w off) /\
+    eval_operand dp s = SOME (n2w slot) /\
+    site IN sites /\ first <= site /\ site < last /\ site < st.cs_next_id /\
+    FLOOKUP s.vs_allocas site = SOME (slot,32)
+End
+
+Overload abi_scratch_member_cursor_saved = “abi_sites_scratch_member_cursor_saved UNIV”
+
+Theorem abi_scratch_member_cursor_saved_def:
   abi_scratch_member_cursor_saved (head,offset,dp,h,off,slot,site)
       (first,last,b,cap,limit_st) (ei,dst,src,st,en,out) s <=>
     abi_decoder_operand_live st.cs_next_var head /\
@@ -123,12 +137,14 @@ Definition abi_scratch_member_cursor_saved_def:
     eval_operand dp s = SOME (n2w slot) /\
     first <= site /\ site < last /\ site < st.cs_next_id /\
     FLOOKUP s.vs_allocas site = SOME (slot,32)
-End
+Proof
+  simp[abi_sites_scratch_member_cursor_saved_def]
+QED
 
 Definition abi_sites_scratch_member_dynamic_pre_def:
   abi_sites_scratch_member_dynamic_pre sites value resources cursor c s <=>
     abi_sites_scratch_member_core_pre sites value resources c s /\
-    abi_scratch_member_cursor_saved cursor resources c s
+    abi_sites_scratch_member_cursor_saved sites cursor resources c s
 End
 
 Overload abi_scratch_member_dynamic_pre = “abi_sites_scratch_member_dynamic_pre UNIV”

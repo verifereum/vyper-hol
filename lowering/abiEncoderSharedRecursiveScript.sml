@@ -173,7 +173,7 @@ Proof
     start limit_st src dst sb 0 0 d (head_lengths tys 0)
     (LENGTH (enc (Tuple tys) (ListV avs))) b cap initial` by
     (irule abi_encoder_shared_members_initial_inv >>
-     asm_simp_tac (srw_ss()) [abi_encoder_cursor_def, Excl "enc_def"] >> decide_tac) >>
+     asm_simp_tac (srw_ss()) [abi_sites_encoder_cursor_def, Excl "enc_def"] >> decide_tac) >>
   drule_all abi_encoder_shared_complex_static_run >>
   disch_then (qspec_then `ctx` (qx_choose_then `actual` assume_tac)) >>
   qexists_tac `actual` >> gvs[abi_sites_encoder_shared_endpoint_def, Excl "enc_def"]
@@ -184,7 +184,7 @@ Theorem abi_encoder_shared_complex_slot_bound[local]:
     src dst sb so ho d hl sz b cap s /\ st.cs_next_id <= last ==>
   slot < dimword (:256)
 Proof
-  simp_tac bool_ss [abi_sites_encoder_shared_members_inv_def, abi_encoder_cursor_def] >>
+  simp_tac bool_ss [abi_sites_encoder_shared_members_inv_def, abi_sites_encoder_cursor_def] >>
   strip_tac >>
   qpat_x_assum `abi_sites_decoder_budget sites _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_decoder_budget_def]) >>

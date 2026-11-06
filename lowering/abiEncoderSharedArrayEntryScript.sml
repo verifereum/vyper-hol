@@ -124,7 +124,7 @@ Proof
      qexistsl_tac [`count_op`,`id`,`ip`,`n2w slot`] >>
      asm_simp_tac bool_ss [] >>
      drule_all abi_encoder_cursor_bounds >> strip_tac >>
-     fs[abi_encoder_cursor_def, w2n_n2w]) >>
+     fs[abi_sites_encoder_cursor_def, w2n_n2w]) >>
   `t.vs_current_bb = (if j < LENGTH avs then body_lbl else exit_lbl) /\ t.vs_inst_idx = 0` by
     simp[Abbr `t`, jump_to_def] >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>

@@ -78,7 +78,7 @@ Theorem abi_encoder_shared_array_index_facts:
 Proof
   simp_tac bool_ss [abi_sites_encoder_shared_array_index_def] >> strip_tac >>
   drule abi_encoder_shared_array_input_facts >> strip_tac >>
-  fs[abi_encoder_array_prefix_def, abi_encoder_cursor_def, abi_sites_scratch_effect_def, Excl "enc_def"]
+  fs[abi_encoder_array_prefix_def, abi_sites_encoder_cursor_def, abi_sites_scratch_effect_def, Excl "enc_def"]
 QED
 
 Theorem abi_encoder_shared_array_index_advance:

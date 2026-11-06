@@ -55,13 +55,13 @@ Theorem abi_encoder_array_spine_cursor_saved:
   first <= site /\ site < last /\ site < st.cs_next_id /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   abi_encoder_member_phase_raw st p initial ready ==>
-  abi_scratch_member_cursor_saved (head,FST ops,dp,h,off,slot,site)
+  abi_sites_scratch_member_cursor_saved sites (head,FST ops,dp,h,off,slot,site)
     (first,last,b,cap,limit_st) (ei,SND ops,src,p,ce,len) ready
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encoder_member_tail_transport >> strip_tac >>
   drule abi_encode_array_tail_shape >> strip_tac >>
-  simp_tac bool_ss [abi_scratch_member_cursor_saved_def] >>
+  simp_tac bool_ss [abi_sites_scratch_member_cursor_saved_def] >>
   rpt conj_tac
   >- (irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[])
   >- asm_rewrite_tac []

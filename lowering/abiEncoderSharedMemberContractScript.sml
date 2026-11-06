@@ -23,7 +23,7 @@ QED
 Definition abi_sites_encoder_shared_member_dynamic_pre_def:
   abi_sites_encoder_shared_member_dynamic_pre sites value resources cursor c s <=>
     abi_sites_encoder_spine_shared_pre sites value resources c s /\
-    abi_scratch_member_cursor_saved cursor resources c s
+    abi_sites_scratch_member_cursor_saved sites cursor resources c s
 End
 
 Overload abi_encoder_shared_member_dynamic_pre = “abi_sites_encoder_shared_member_dynamic_pre UNIV”
@@ -78,13 +78,13 @@ Theorem abi_encoder_shared_member_dynamic_saved:
   abi_sites_decoder_budget sites first last b cap actual
 Proof
   simp_tac bool_ss [abi_sites_encoder_shared_member_dynamic_post_def,
-    abi_sites_encoder_shared_member_dynamic_pre_def, abi_scratch_member_cursor_saved_def,
+    abi_sites_encoder_shared_member_dynamic_pre_def, abi_sites_scratch_member_cursor_saved_def,
     abi_sites_encoder_spine_shared_pre_def, abi_sites_encoder_spine_shared_post_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_encoder_shared_endpoint_scratch >> disch_tac >>
   `site IN abi_sites_decoder_ids sites first last /\
     ~(site IN abi_sites_decoder_ids sites st.cs_next_id en.cs_next_id)` by
-    (simp[abi_sites_decoder_ids_def] >> decide_tac) >>
+    (fs[abi_sites_decoder_ids_def, abi_sites_scratch_member_cursor_saved_def] >> decide_tac) >>
   `abi_footprint_disjoint d (LENGTH (enc at av))
     (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial)` by
     fs[abi_sites_encoder_shared_input_def] >>
@@ -110,7 +110,7 @@ Proof
   drule abi_encode_result_live >> strip_tac >>
   `abi_decoder_operand_live en.cs_next_var dp` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >>
-     fs[abi_sites_encoder_shared_member_dynamic_pre_def, abi_scratch_member_cursor_saved_def]) >>
+     fs[abi_sites_encoder_shared_member_dynamic_pre_def, abi_sites_scratch_member_cursor_saved_def]) >>
   simp_tac bool_ss [abi_encoder_spine_cursor_input_def] >>
   qexistsl_tac [`h`,`slot`,`off`,`LENGTH (enc at av)`] >>
   fs[abi_sites_encoder_spine_shared_post_def, abi_sites_encoder_shared_endpoint_def]

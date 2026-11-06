@@ -185,7 +185,7 @@ Proof
     fs[abi_encoder_array_prefix_def, Excl "enc_def"] >>
   mp_tac (Q.INST [`active` |-> `F`, `initial` |-> `ready:venom_state`,
     `site` |-> `start.cs_next_id`] abi_encoder_shared_array_prepared_complete) >>
-  impl_tac >- asm_simp_tac bool_ss [abi_encoder_cursor_def] >>
+  impl_tac >- asm_simp_tac bool_ss [abi_sites_encoder_cursor_def] >>
   disch_then (qx_choose_then `actual` strip_assume_tac) >>
   `abi_sites_scratch_effect sites first last start.cs_next_id hi start.cs_next_var limit_st d sz b cap initial ready` by
     (irule abi_scratch_effect_widen >> goal_assum (drule_at Any) >> simp[]) >>
