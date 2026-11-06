@@ -19,7 +19,7 @@ Theorem storage_copy_load_pair_path_ptr:
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G' tn' t /\
-    lookup_var vv t = SOME (copy_runtime_word loc s (a+n2w k)) /\
+    lookup_var vv t = SOME (copy_runtime_word loc sbase (a+n2w k)) /\
     op_taint tn' (Var vv) = key_taint
       (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) (a+n2w k) /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+2 /\
@@ -75,6 +75,8 @@ Resume storage_copy_load_pair_path_ptr[finish]:
     (simp[Abbr `t`, Abbr `v`, Abbr `tn2`] >>
      irule storage_copy_inv_ptr_scratch >> simp[] >> qexists_tac `G1` >> simp[] >>
      simp[Abbr `G2`, FLOOKUP_DRESTRICT]) >>
+  `copy_runtime_word loc s (a+n2w k) = copy_runtime_word loc sbase (a+n2w k)` by
+    (irule copy_runtime_word_static >> gvs[copy_prefix_def]) >>
   qexistsl_tac [`G2`, `tn2`, `t`] >> conj_tac
   >- (drule_all gas_path_ptr_then >> simp[]) >>
   simp[Abbr `tn2`, Abbr `t`, Abbr `v`, Abbr `s1`, Abbr `u`,
@@ -276,3 +278,4 @@ Resume storage_copy_store_chunk_path_ptr[store]:
 QED
 
 Finalise storage_copy_store_chunk_path_ptr
+

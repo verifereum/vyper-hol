@@ -141,3 +141,32 @@ Proof
      pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> disch_then ACCEPT_TAC)) >>
   rpt strip_tac >> `x <> cv` by metis_tac[] >> simp[] >> metis_tac[]
 QED
+
+Theorem storage_copy_inv_ptr_store_increment:
+  storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G tn s /\
+  k < n /\ cv IN scratch /\ nv IN scratch /\
+  cv <> root /\ nv <> root /\ nv <> cv /\
+  src <> Var cv /\ src <> Var nv ==>
+  storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase (k+1)
+    (DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv}))
+    (tn with <| t_var := (tn.t_var |+ (nv,{})) |+ (cv,{});
+      t_mem := (tn.t_mem DIFF {x | b+32*k <= x /\ x < b+32*(k+1)}) UNION
+        {x | ?r. r < 32 /\
+          (a+n2w k,r) IN (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) /\
+          x = b+32*k+r} |> )
+    (update_var cv (n2w (k+1))
+      (update_var nv (n2w (k+1))
+        (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s)))
+Proof
+  strip_tac >>
+  `storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k
+    (DRESTRICT G (COMPL {nv})) (tn with t_var := tn.t_var |+ (nv,{}))
+    (update_var nv (n2w (k+1)) s)` by
+    (irule storage_copy_inv_ptr_scratch >> simp[] >>
+     qexists_tac `G` >> simp[FLOOKUP_DRESTRICT]) >>
+  drule_at (Pat `storage_copy_inv_ptr _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    storage_copy_inv_ptr_extend >>
+  disch_then (qspec_then `DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv})` mp_tac) >>
+  simp[FLOOKUP_DRESTRICT, op_prov_def] >>
+  simp[update_var_def, mstore_def, write_memory_with_expansion_def]
+QED
