@@ -341,7 +341,8 @@ QED
 (* Seam 3: return and revert handling.  The INVOKE with the callee's run
    as seam 2 gives it, then the copy of the returned value to the
    caller's buffer, the frame's cleanup and the cast: the call's
-   expr_vv_sim post, or an abort passed on. *)
+   expr_vv_sim post, or an abort passed on.  Only the case where the
+   callee's return type is the call's annotation. *)
 Theorem intcall_return_restore:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
@@ -357,6 +358,53 @@ Theorem intcall_return_restore:
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,args,ret,ss,rr) prev penv rtv es1 t /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ann /\
+    (!callee entered bb inst lbl arg_ops argv.
+       gas_invoke_entry (ctx,func) t callee entered /\
+       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+       get_instruction bb t.vs_inst_idx = SOME inst /\
+       decode_invoke inst = SOME (lbl,arg_ops) /\
+       eval_operands arg_ops t = SOME argv ==>
+       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+         (es1,entered) (\res ee r. F)
+         (intcall_callee_exit func cenv cx rtv rc
+            (if rc = 0 /\
+               cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
+            then SOME (HD argv) else NONE)
+            sa.cs_next_id sb.cs_next_id t)) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut ss prev rtv)
+      (es1,t)
+      (\res ee t'. ?tv. res = INL tv /\
+         vv_post ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
+           es0 sa sb s0 ee tv vv t' /\
+         t'.vs_current_bb = sb.cs_current_bb /\
+         t'.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
+Proof
+  cheat
+QED
+
+(* Held for the posts-interface change (post_value_type in loweringPosts):
+   when the call's annotation differs from the callee's return type,
+   compile_call's value has the return type, which vv_post can't describe
+   until the posts describe values at their lowered type.  Seam 3's
+   statement with the other side of the case split; not an alan seam. *)
+Theorem intcall_return_widened:
+  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
+   mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,F,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+    compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
+      (vv,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+      (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> ann /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
        lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\

@@ -215,15 +215,17 @@ Proof
   qexistsl_tac [`args`,`cenv`,`mut`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
                 `ty`,`vv`] >>
   simp[] >> rpt strip_tac >>
-  qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,`es`,
-               `v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`args`,`ret`,`ss`,`rr`,
-               `prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,`npvs`]
-    mp_tac intcall_return_restore >>
-  impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      drule intcall_entry_source >> strip_tac >>
-      `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
-        metis_tac[] >>
-      drule_all intcall_callee_body_sim >> simp[]) >>
-  simp[]
+  Cases_on `cenv.ce_func_return_type (nsid_to_string (NONE,fn)) = v16` >|
+  map (qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,
+                    `es`,`v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`args`,`ret`,
+                    `ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,
+                    `npvs`] mp_tac)
+    [intcall_return_restore, intcall_return_widened] >>
+  (impl_tac
+   >- (simp[] >> rpt strip_tac >>
+       drule intcall_entry_source >> strip_tac >>
+       `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
+         metis_tac[] >>
+       drule_all intcall_callee_body_sim >> simp[]) >>
+   simp[])
 QED
