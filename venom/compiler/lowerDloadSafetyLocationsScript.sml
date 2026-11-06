@@ -186,3 +186,26 @@ QED
 
 val _ = if null (hyp ld_envelope_successor_location) then ()
         else raise Fail "envelope successor location has hypotheses";
+
+Theorem ld_envelope_successor_head:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  ld_envelope supply fn s j X p /\
+  fn' = FST (lower_dload_function_supply supply fn) /\
+  q.vs_current_bb = s.vs_current_bb /\ q.vs_inst_idx = p + LENGTH X /\
+  ss.vs_current_bb = s.vs_current_bb /\ active_inst fn' ti q ==>
+  ?next Y. active_inst fn next (ss with vs_inst_idx := SUC j) /\
+    ld_envelope supply fn (ss with vs_inst_idx := SUC j) (SUC j) Y (p + LENGTH X) /\
+    0 < LENGTH Y /\ ti = EL 0 Y
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
+    (Cases_on `lower_dload_function_supply supply fn` >> gvs[] >>
+     drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
+  drule_all lowerDloadSafetyAmbientTheory.ld_active_lookup >> strip_tac >>
+  `get_instruction bb q.vs_inst_idx = SOME ti` by simp[get_instruction_def] >>
+  drule_all ld_envelope_successor_location >> strip_tac >>
+  `0 < LENGTH Y /\ ti = EL 0 Y` by
+    (irule ld_envelope_active_head >> goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `q` >> gvs[]) >>
+  qexistsl_tac [`next`,`Y`] >> simp[]
+QED

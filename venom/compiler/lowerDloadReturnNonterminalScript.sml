@@ -84,29 +84,22 @@ Proof
          `t` |-> `u with vs_inst_idx := SUC t.vs_inst_idx`]
        ld_successful_body_fetch) >> fs[Abbr `Guard1`, ADD1] >> metis_tac[]) >>
   `fn' = FST (lower_dload_function_supply f.lf_supply fn)` by metis_tac[pairTheory.FST] >>
+  `active_inst fn' ti (u with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (simp[NoAsms, active_inst_def] >> qexists_tac `bb` >>
+     fs[get_instruction_def, ADD1] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `u.vs_current_bb = s.vs_current_bb` by metis_tac[] >>
   `?next Y. active_inst fn next (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
      ld_envelope f.lf_supply fn (ss with vs_inst_idx := SUC s.vs_inst_idx)
-       (SUC s.vs_inst_idx) Y (p+LENGTH X)` by
-    (qmatch_goalsub_abbrev_tac `ld_envelope _ _ ns _ _ _` >>
-     `lookup_block (u with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb fn'.fn_blocks = SOME bb` by (simp[NoAsms] >> metis_tac[]) >>
-     `get_instruction bb (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME ti` by (simp[NoAsms] >> metis_tac[]) >>
-     ` (u with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb = s.vs_current_bb /\
-       (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = p + LENGTH X` by simp[] >>
-     simp[Abbr `ns`] >>
-     irule (Q.INST [`q` |-> `u with vs_inst_idx := SUC t.vs_inst_idx`]
-       lowerDloadSafetyLocationsTheory.ld_envelope_successor_location) >>
-     goal_assum (drule_at Any) >> simp[NoAsms] >> metis_tac[]) >>
+       (SUC s.vs_inst_idx) Y (p+LENGTH X) /\ 0 < LENGTH Y /\ ti = EL 0 Y` by
+    (irule (Q.INST [`q` |-> `u with vs_inst_idx := SUC t.vs_inst_idx`]
+       lowerDloadSafetyLocationsTheory.ld_envelope_successor_head) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`fn'`,`s`,`t`,`u`] >> simp[NoAsms] >> metis_tac[]) >>
   `active_inst fn next g.lf_src` by fs[] >>
   `ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
      (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N` by
     metis_tac[] >>
-  `active_inst fn' ti g.lf_tgt` by
-    (simp[NoAsms, active_inst_def] >> qexists_tac `bb` >> fs[get_instruction_def, ADD1] >>
-     metis_tac[lookup_block_MEM, lookup_block_label]) >>
-  `0 < LENGTH Y /\ ti = EL 0 Y` by
-    (irule lowerDloadSafetyLocationsTheory.ld_envelope_active_head >>
-     goal_assum (drule_at Any) >> simp[NoAsms] >>
-     qexists_tac `g.lf_tgt` >> fs[ADD1] >> metis_tac[pairTheory.FST]) >>
   simp[NoAsms, Abbr `Goal`] >>
   qexistsl_tac [`PG`,`step_prov PG G inst ss`,`step_taint inst s ss tn`,
     `next`,`g.lf_src`,`g.lf_tgt`,`Ar`,`g::fs`,`N`,`Y`,`p+LENGTH X`,`0`] >>
