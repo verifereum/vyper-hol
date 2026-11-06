@@ -5,6 +5,7 @@ Ancestors
   abiDecoderPrimitiveSource abiDecoderClamp exprLowering abiEncoder
   vyperABI contractABI valueEncoding valueEncodingProps vyperTypeSystem
   abiDecoderCoherence compileEnv vyperValue valueEncodingTyping
+  vyperABIValid vyperTypeABI abiCanonicalHeadSize
   finite_map arithmetic rich_list list vyperArith integer_word words exprSimConvert
 
 Theorem abi_decoder_unclamped_word_window:
@@ -385,4 +386,133 @@ Theorem abi_decoder_static_source_acceptance_take:
 Proof
   strip_tac >> drule abi_decoder_static_source_acceptance >>
   disch_then irule >> simp[LENGTH_TAKE_EQ]
+QED
+
+Theorem abi_decoder_static_memory_window:
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty /\
+  abi_decode_bytes_widths env ty /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
+  ~is_abi_dynamic ce.ce_struct_fields ty /\
+  type_memory_bytes ce ty < dimword (:256) /\
+  type_memory_bytes ce ty <= LENGTH (bs:byte list) /\
+  mem_bytes_at d (type_memory_bytes ce ty) mem = TAKE (type_memory_bytes ce ty) bs ==>
+  vyper_decode_valid_enc (vyper_to_abi_type env ty) bs /\
+  ?v. abi_to_vyper env ty (dec (vyper_to_abi_type env ty) bs) = SOME v /\
+      val_in_memory tv v d mem
+Proof
+  strip_tac >> drule_all abi_decoder_static_source_acceptance >> strip_tac >>
+  simp[] >>
+  `abi_decoder_header ce env ty tv` by metis_tac[abi_decoder_coherent_header] >>
+  `~is_dynamic (vyper_to_abi_type env ty)` by fs[abi_decoder_header_def] >>
+  `static_length (vyper_to_abi_type env ty) = type_memory_bytes ce ty` by
+    (irule abi_decode_static_window_width >> metis_tac[]) >>
+  `valid_enc (vyper_to_abi_type env ty) bs` by
+    metis_tac[vyper_decode_valid_enc_static] >>
+  `enc (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) bs) =
+    TAKE (type_memory_bytes ce ty) bs` by
+    (drule abi_static_prefix_static >> simp[abi_static_prefix_def]) >>
+  `value_has_type tv v` by
+    metis_tac[abi_to_vyper_well_typed, abi_decoder_header_def] >>
+  `has_type (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) bs)` by
+    metis_tac[vyper_decode_dec_has_type] >>
+  irule abi_decoder_descended_bulk_layout >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem abi_decoder_static_memory_body:
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty /\
+  abi_decode_bytes_widths env ty /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
+  ~is_abi_dynamic ce.ce_struct_fields ty /\
+  type_memory_bytes ce ty < dimword (:256) ==>
+  !n raw dst acc base. n * type_memory_bytes ce ty <= LENGTH (raw:byte list) /\
+    mem_bytes_at dst (n * type_memory_bytes ce ty) mem =
+      TAKE (n * type_memory_bytes ce ty) raw ==>
+    vyper_decode_valid_enc_array n (SOME (type_memory_bytes ce ty))
+      (vyper_to_abi_type env ty) base raw /\
+    ?avs vs. dec_tuple (REPLICATE n (vyper_to_abi_type env ty)) base raw acc =
+      ListV (REVERSE acc ++ avs) /\
+      LENGTH avs = n /\ LENGTH vs = n /\
+      abi_to_vyper_list env (REPLICATE n ty) avs = SOME vs /\
+      elems_in_memory vs dst tv mem
+Proof
+  strip_tac >>
+  `static_length (vyper_to_abi_type env ty) = type_memory_bytes ce ty` by
+    (irule abi_decode_static_window_width >> metis_tac[]) >>
+  `~is_dynamic (vyper_to_abi_type env ty)` by
+    metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
+  `type_memory_size tv = type_memory_bytes ce ty` by
+    metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
+  Induct >- simp[vyper_decode_valid_enc_def, dec_def, abi_to_vyper_def,
+    val_in_memory_def] >>
+  map_every qx_gen_tac [`raw`, `dst`, `acc`, `input`] >> strip_tac >>
+  `type_memory_bytes ce ty <= LENGTH raw` by
+    (fs[MULT_CLAUSES] >> decide_tac) >>
+  `mem_bytes_at dst (type_memory_bytes ce ty) mem = TAKE (type_memory_bytes ce ty) raw` by
+    (qspecl_then [`dst`, `0`, `type_memory_bytes ce ty`,
+      `SUC n * type_memory_bytes ce ty`, `mem`] mp_tac mem_bytes_at_window >>
+     simp[MULT_CLAUSES, TAKE_TAKE_MIN] >>
+     `MIN (type_memory_bytes ce ty) (n * type_memory_bytes ce ty + type_memory_bytes ce ty) =
+       type_memory_bytes ce ty` by
+       (Cases_on `n = 0` >> Cases_on `type_memory_bytes ce ty = 0` >>
+        simp[MIN_DEF]) >>
+     simp[]) >>
+  `vyper_decode_valid_enc (vyper_to_abi_type env ty) (TAKE (type_memory_bytes ce ty) raw) /\
+   ?v. abi_to_vyper env ty
+     (dec (vyper_to_abi_type env ty) (TAKE (type_memory_bytes ce ty) raw)) = SOME v /\
+     val_in_memory tv v dst mem` by
+    (irule abi_decoder_static_memory_window >> simp[LENGTH_TAKE_EQ, TAKE_TAKE_MIN] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `n * type_memory_bytes ce ty <= LENGTH (DROP (type_memory_bytes ce ty) raw)` by
+    (simp[LENGTH_DROP] >> fs[MULT_CLAUSES] >> decide_tac) >>
+  `mem_bytes_at (dst + type_memory_bytes ce ty) (n * type_memory_bytes ce ty) mem =
+    TAKE (n * type_memory_bytes ce ty) (DROP (type_memory_bytes ce ty) raw)` by
+    (qspecl_then [`dst`, `type_memory_bytes ce ty`, `n * type_memory_bytes ce ty`,
+      `SUC n * type_memory_bytes ce ty`, `mem`] mp_tac mem_bytes_at_window >>
+     simp[MULT_CLAUSES, DROP_TAKE, TAKE_TAKE_MIN]) >>
+  first_x_assum (qspecl_then [`DROP (type_memory_bytes ce ty) raw`,
+    `dst + type_memory_bytes ce ty`,
+    `dec (vyper_to_abi_type env ty) (TAKE (type_memory_bytes ce ty) raw)::acc`, `input`] mp_tac) >>
+  simp[] >> strip_tac >>
+  conj_tac >- simp[Once vyper_decode_valid_enc_def] >>
+  qexistsl [`dec (vyper_to_abi_type env ty) (TAKE (type_memory_bytes ce ty) raw)::avs`, `v::vs`] >>
+  simp[Once dec_def, abi_to_vyper_def, val_in_memory_def]
+QED
+
+Theorem abi_decoder_static_dynarray_memory:
+  abi_decoder_coherent ce env sf ty tv /\ assignable_type env ty /\
+  abi_decode_bytes_widths env ty /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
+  ~is_abi_dynamic ce.ce_struct_fields ty /\
+  type_memory_bytes ce ty < dimword (:256) /\
+  32 <= LENGTH (bs:byte list) /\ n = abi_head_word bs /\ n <= maxn /\
+  n * type_memory_bytes ce ty <= LENGTH (DROP 32 bs) /\
+  mem_bytes_at (dst + 32) (n * type_memory_bytes ce ty) mem =
+    TAKE (n * type_memory_bytes ce ty) (DROP 32 bs) /\
+  mem_word_at dst mem = n2w n ==>
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+  ?v. abi_to_vyper env (ArrayT ty (Dynamic maxn))
+        (dec (Array NONE (vyper_to_abi_type env ty)) bs) = SOME v /\
+      val_in_memory (ArrayTV tv (Dynamic maxn)) v dst mem
+Proof
+  strip_tac >> drule_all abi_decoder_static_memory_body >>
+  disch_then (qspecl_then [`[]`, `DROP 32 bs`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `static_length (vyper_to_abi_type env ty) = type_memory_bytes ce ty` by
+    (irule abi_decode_static_window_width >> metis_tac[]) >>
+  `~is_dynamic (vyper_to_abi_type env ty)` by
+    metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
+  conj_tac
+  >- (simp[Once vyper_decode_valid_enc_def] >>
+      fs[abi_head_word_def, dec_number_def, w2n_lt]) >>
+  `dec (Array NONE (vyper_to_abi_type env ty)) bs = ListV avs` by
+    (simp[Once dec_def, GSYM abi_head_word_def] >>
+     qpat_x_assum `static_length _ = _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[abi_static_array_decode_tuple]) >>
+  asm_rewrite_tac[] >>
+  simp[Once abi_to_vyper_def, compatible_bound_def, val_in_memory_def,
+    Excl "dec_def"] >>
+  `evaluate_type env ty = SOME tv` by
+    metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
+  gs[compatible_bound_def, make_array_value_def, val_in_memory_def]
 QED
