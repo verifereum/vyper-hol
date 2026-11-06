@@ -2,18 +2,18 @@ Theory bodyPtrBopCases
 Ancestors
   bodyPtrBopPairCompose bodyPtrBopOperandContract bodyPtrBopScalarOutcome bodyPtrBopClassification
   exprBopLowering exprSimOperators exprSimWordArgs exprBopSimProps exprSimSource
-  bodyPtrPreds bodyPtrDefs exprSimHypsDefs
+  bodyPtrPreds bodyPtrDefs exprSimHypsDefs bodyPtrBopTypedBytes
 
 Theorem bop_word_pair_sim_ptr:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   body_exprs_ptr_ok cx [e1;e2] /\ bop <> In /\ bop <> NotIn /\
-  word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) ==>
   expr_sim_ptr d ctx PG func cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
 Proof
   strip_tac >> simp[expr_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
   `~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq))` by
-    gvs[word_value_type_word] >>
+    metis_tac[bop_machine_word_not_bytestring] >>
   `~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2))` by simp[] >>
   drule_all lower_value_bop >> strip_tac >>
   drule expr_body_pre_bop >> strip_tac >>

@@ -1,7 +1,7 @@
 Theory bodyPtrBopPairCompose
 Ancestors
   bodyPtrBopPairCps bodyPtrBopContinuation bodyPtrBopEntry
-  exprSimOperators exprBopSimProps gasExemptCert bodyPtrBopSource emitHelperProps compileEnv
+  exprSimOperators exprBopSimProps gasExemptCert bodyPtrBopTypedSource emitHelperProps compileEnv
 
 Theorem bop_word_pair_outcome_ptr:
   lower_value compile_expr cenv ty1 e1 ca = (x,c1) /\
@@ -11,7 +11,7 @@ Theorem bop_word_pair_outcome_ptr:
     (if bop = Exp then expr_int_literal e2 else NONE) c2 = (op,cz) /\
   body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx [e1;e2] /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
-  word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   bop_operand_entry d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
     es ca cz op t0 G0 tn0 /\
   bop <> In /\ bop <> NotIn /\
@@ -52,11 +52,11 @@ Proof
     goal_assum (drule_at Any) >> simp[]) >>
   conj_tac >- (rpt gen_tac >> strip_tac >> conj_tac
     >- (irule (INST_TYPE [alpha |-> ``:operand``] bop_operand_entry_next) >> simp[] >>
-        conj_tac >- metis_tac[bop_word_source_witness] >>
+        conj_tac >- metis_tac[bop_typed_source_witness] >>
         goal_assum (drule_at (Pat `bop_operand_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
         qexistsl_tac [`cz`, `op`, `Builtin ann (Bop bop) [e1;e2]`] >> simp[]) >>
     metis_tac[]) >>
-  conj_tac >- metis_tac[bop_word_source_witness] >>
+  conj_tac >- metis_tac[bop_typed_source_witness] >>
   irule (INST_TYPE [alpha |-> ``:operand``] bop_operand_entry_prefix) >> simp[] >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`cz`, `op`, `Builtin ann (Bop bop) [e1;e2]`] >>

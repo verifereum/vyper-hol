@@ -5,11 +5,12 @@ Ancestors
   bodyPtrBopEntry bodyPtrBopOperandContract exprBopSimProps exprSimWordArgs
   bodyPtrDefs loweringPosts bodyPtrBopScalarOutcome bodyPtrBopScalarDispatch
   compileEnv exprLoweringProps localPtrsProps emitHelperProps freshWrites
-  list rich_list fragExec bodyPtrBopAnchored
+  list rich_list fragExec bodyPtrBopAnchored bodyPtrBopTypedSource
+  bodyPtrBopTypedBytes bodyPtrBopClassification valueEncoding
 
 Theorem bop_pair_source_facts:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
-  word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =
         (INL v1,es1)) /\
   (?gs. bind (eval_expr cx e2) (read_result cx) (es1 with gas_obs := gs) =
@@ -26,21 +27,20 @@ Theorem bop_pair_source_facts:
          value_has_type tv1 v1) /\
   (?tv2. evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
          value_has_type tv2 v2) /\
-  word_value v1 /\ word_value v2 /\
   expr_res_ok (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es2) /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es1.scopes = MAP FDOM es2.scopes
 Proof
   strip_tac >> drule expr_body_pre_bop >> strip_tac >>
-  drule bop_word_source_witness >>
+  drule bop_typed_source_witness >>
   disch_then (qspecl_then [`v1`, `es1`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `expr_body_pre cenv cx env e2 es1` by metis_tac[] >>
-  drule bop_word_source_witness >>
+  drule bop_typed_source_witness >>
   disch_then (qspecl_then [`v2`, `es2`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  `is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2)` by
-    metis_tac[word_value_type_word, well_typed_binop_word_result] >>
+  `is_word_type ann` by
+    (Cases_on `bop` >> gvs[well_typed_binop_def, is_word_type_def]) >>
   `type_bits (expr_type e1) MOD 8 = 0` by
     (irule byte_widths_expr_type >> gvs[expr_body_pre_def]) >>
   `IS_SOME (evaluate_type (get_tenv cx) ann)` by
@@ -57,7 +57,7 @@ QED
 
 Theorem bop_pair_scalar_run:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
-  word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =
         (INL v1,es1)) /\
   (?gs. bind (eval_expr cx e2) (read_result cx) (es1 with gas_obs := gs) =
@@ -83,20 +83,33 @@ Proof
   strip_tac >>
   drule bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `es2`, `es1`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (simp[] >> metis_tac[word_value_type_word])) >> strip_tac >>
   drule_all bop_pair_word_inputs >> strip_tac >>
-  `eval_operand x t1 = SOME (val_to_w256 v1) /\
-   eval_operand y t2 = SOME (val_to_w256 v2)` by
-    (gvs[bop_operand_post_def, expr_post_def] >>
-     metis_tac[expr_val_rel_word, optionTheory.IS_SOME_EXISTS]) >>
-  irule bop_scalar_typed_run >> simp[] >>
-  reverse conj_tac >- metis_tac[] >>
-  qexistsl_tac [`x`, `y`] >> simp[]
+  Cases_on `word_value_type (expr_type e1) /\ word_value_type (expr_type e2)`
+  >- (fs[] >> `word_value v1 /\ word_value v2` by metis_tac[word_value_type_typed] >>
+      `eval_operand x t1 = SOME (val_to_w256 v1) /\
+       eval_operand y t2 = SOME (val_to_w256 v2)` by
+        (gvs[bop_operand_post_def, expr_post_def] >>
+         metis_tac[expr_val_rel_word, optionTheory.IS_SOME_EXISTS]) >>
+      irule bop_scalar_typed_run >> simp[] >>
+      reverse conj_tac >- metis_tac[] >> qexistsl_tac [`x`, `y`] >> simp[]) >>
+  drule_all bop_byte_typed_values >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?b1 b2. _` strip_assume_tac >>
+  qpat_x_assum `v1 = BytesV _` SUBST_ALL_TAC >>
+  qpat_x_assum `v2 = BytesV _` SUBST_ALL_TAC >>
+  `eval_operand x t1 = SOME (typed_val_to_w256 tv1 (BytesV b1)) /\
+   eval_operand y t2 = SOME (typed_val_to_w256 tv1 (BytesV b2))` by
+    metis_tac[bop_operand_post_typed_word] >>
+  irule bop_compare_bytes_run >> simp[] >>
+  qexistsl_tac [`if bop = Exp then expr_int_literal e1 else NONE`,
+    `if bop = Exp then expr_int_literal e2 else NONE`, `tv1`, `expr_type e1`, `x`, `y`] >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem bop_scalar_parent_outcome:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
-  word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   bop_operand_entry d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
     es ca cz op t0 G0 tn0 /\
   bop_operand_post d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
@@ -128,7 +141,7 @@ Proof
   strip_tac >>
   drule bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `es2`, `es1`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (simp[] >> metis_tac[word_value_type_word])) >> strip_tac >>
   drule_all bop_pair_word_inputs >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at c2 z` by metis_tac[not_fresh_at_mono] >>
   `local_ptrs_reserved cenv ca /\ local_ptrs_reserved cenv c1 /\
