@@ -77,7 +77,7 @@ Proof
   rename1 `EL k indices = i` >>
   `k < j` by
     (Cases_on `j < k` >- metis_tac[ptr_ledger_alignment_order, LESS_ANTISYM] >>
-     Cases_on `k = j` >> gvs[] >> decide_tac) >>
+     Cases_on `k = j` >- metis_tac[prim_recTheory.LESS_REFL] >> decide_tac) >>
   `j <> 0` by decide_tac >>
   Cases_on `k = j-1` >- metis_tac[prim_recTheory.LESS_REFL] >>
   `k < j-1 /\ j-1 < LENGTH indices` by decide_tac >>
@@ -122,4 +122,45 @@ Proof
   qexists_tac `indices` >> simp[] >>
   qexists_tac `block_map_transform (concretize_inst_with_positions positions) bb` >>
   simp[block_map_transform_def] >> qexists_tac `bb` >> simp[]
+QED
+
+Theorem ptr_ledger_alignment_image:
+  ptr_ledger_block_alignment p src tgt indices ==>
+  tgt = FILTER (\i. i.inst_opcode <> NOP)
+    (MAP (concretize_inst_with_positions p) src)
+Proof
+  strip_tac >>
+  strip_assume_tac (Q.INST [`positions` |-> `p`] ptr_ledger_alignment_construct) >>
+  gvs[ptr_ledger_block_alignment_def]
+QED
+
+Theorem ptr_filter_rank[local]:
+  !xs j. j < LENGTH (FILTER P xs) ==>
+  ?i. i < LENGTH xs /\ EL j (FILTER P xs) = EL i xs /\
+    LENGTH (FILTER P (TAKE i xs)) = j
+Proof
+  Induct_on `xs` >- simp[] >>
+  gen_tac >> Cases_on `P h` >> simp[]
+  >- (Cases_on `j` >> simp[]
+      >- (qexists_tac `0` >> simp[]) >>
+      strip_tac >> first_x_assum drule >> strip_tac >>
+      qexists_tac `SUC i` >> simp[]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `SUC i` >> simp[]
+QED
+
+Theorem ptr_ledger_alignment_prefix_count:
+  ptr_ledger_block_alignment p src tgt indices /\ j < LENGTH indices ==>
+  LENGTH (FILTER (\i. i.inst_opcode <> NOP)
+    (MAP (concretize_inst_with_positions p) (TAKE (EL j indices) src))) = j
+Proof
+  rw[ptr_ledger_block_alignment_def] >>
+  drule ptr_filter_rank >> strip_tac >>
+  `i < LENGTH src` by fs[LENGTH_COUNT_LIST] >>
+  `EL i (COUNT_LIST (LENGTH src)) = i` by simp[EL_COUNT_LIST] >>
+  `TAKE i (COUNT_LIST (LENGTH src)) = COUNT_LIST i` by
+    (irule LIST_EQ >> simp[LENGTH_COUNT_LIST, LENGTH_TAKE, EL_TAKE, EL_COUNT_LIST]) >>
+  `TAKE i src = MAP (\k. EL k src) (COUNT_LIST i)` by
+    (irule LIST_EQ >> simp[LENGTH_COUNT_LIST, LENGTH_TAKE, EL_TAKE, EL_MAP, EL_COUNT_LIST]) >>
+  gvs[FILTER_MAP, MAP_MAP_o, combinTheory.o_DEF]
 QED
