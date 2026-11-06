@@ -1,6 +1,7 @@
 Theory fnPlanLineageReturnCut
 Ancestors
   fnPlanLineagePath fnPlanLineageCallers fnPlanLineageEdge venomWf
+  fnPlanLineageDemand
 
 (* Exact copy of the local rtc_to_fn_path in removeUnusedSsaProofs.
    Its local status prevents importing the fact through the existing ancestor. *)
@@ -167,5 +168,96 @@ Proof
   `MEM j (cfg_succs_of (cfg_analyze fn) a)` by
     metis_tac[codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze] >>
   drule_all ready_join_edge_terminator >> strip_tac >>
+  qexistsl_tac [`before`, `a`, `j`, `after`, `pa`, `jb`] >> simp[]
+QED
+
+(* The prefix-order condition is the PHI clause of bb_well_formed. *)
+Theorem ordered_phis_ordinary_suffix:
+  !insts.
+    (!i j. i < j /\ j < LENGTH insts /\
+      (EL j insts).inst_opcode = PHI ==> (EL i insts).inst_opcode = PHI) ==>
+    EVERY (\inst. inst.inst_opcode <> PHI)
+      (DROP (LENGTH (collect_phis insts)) insts)
+Proof
+  Induct >- simp[livenessDefsTheory.collect_phis_def] >>
+  rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[livenessDefsTheory.collect_phis_def] >> first_x_assum irule >>
+      rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+  simp[livenessDefsTheory.collect_phis_def, listTheory.EVERY_EL] >>
+  rpt strip_tac >> Cases_on `n` >> gvs[] >>
+  first_x_assum (qspecl_then [`0`, `SUC n'`] mp_tac) >> simp[]
+QED
+
+Theorem ordinary_output_post_phi_demand_exclusion:
+  !fn d db k v j jb.
+    codegen_ready_fn fn /\ lookup_block d fn.fn_blocks = SOME db /\
+    k < LENGTH db.bb_instructions /\
+    LENGTH (collect_phis db.bb_instructions) <= k /\
+    MEM v (EL k db.bb_instructions).inst_outputs /\
+    lookup_block j fn.fn_blocks = SOME jb /\ fn_reachable fn j /\
+    (j = d \/ ~fn_dominates fn d j) ==>
+    ~MEM v (live_vars_at (liveness_analyze fn) j
+      (LENGTH (collect_phis jb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn /\ ssa_form fn` by gvs[stackPlanGenTheory.codegen_ready_fn_def] >>
+  `MEM jb fn.fn_blocks /\ jb.bb_label = j` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  `EVERY (\inst. inst.inst_opcode <> PHI)
+      (DROP (LENGTH (collect_phis jb.bb_instructions)) jb.bb_instructions)` by
+    (irule ordered_phis_ordinary_suffix >>
+     fs[wf_function_def, bb_well_formed_def] >> metis_tac[]) >>
+  `LENGTH (collect_phis jb.bb_instructions) <= LENGTH jb.bb_instructions` by
+    (qspec_then `jb.bb_instructions` strip_assume_tac
+       fnPlanLineageLivenessTheory.collect_phis_prefix >>
+     qpat_x_assum `jb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `EVERY (demand_available fn jb (LENGTH (collect_phis jb.bb_instructions)))
+    (live_vars_at (liveness_analyze fn) j (LENGTH (collect_phis jb.bb_instructions)))` by
+    (qpat_assum `jb.bb_label = j` (fn th => rewrite_tac[GSYM th]) >>
+     irule analyzed_ordinary_suffix_demand >> fs[]) >>
+  strip_tac >>
+  `demand_available fn jb (LENGTH (collect_phis jb.bb_instructions)) v` by
+    metis_tac[listTheory.EVERY_MEM] >>
+  `MEM db fn.fn_blocks /\ db.bb_label = d` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  gvs[fnPlanLineageDemandSupportTheory.demand_available_def] >>
+  `?q. q < LENGTH db'.bb_instructions /\ EL q db'.bb_instructions = di` by
+    metis_tac[listTheory.MEM_EL] >>
+  `db' = db /\ q = k` by metis_tac[removeUnusedProofsTheory.ssa_form_position] >>
+  gvs[] >>
+  `k' < LENGTH db.bb_instructions` by decide_tac >>
+  `k' = k` by metis_tac[removeUnusedProofsTheory.ssa_form_position] >> decide_tac
+QED
+
+(* Static reset boundary only: incoming PHI demands and physical resources
+   are deliberately not asserted to vanish at this cut. *)
+Theorem first_return_jmp_join_demand_cut:
+  !fn d tail db k v.
+    codegen_ready_fn fn /\ fn_reachable fn d /\ tail <> [] /\
+    is_fn_path fn (d::tail) /\ LAST tail = d /\ ~MEM d (FRONT tail) /\
+    lookup_block d fn.fn_blocks = SOME db /\
+    k < LENGTH db.bb_instructions /\
+    LENGTH (collect_phis db.bb_instructions) <= k /\
+    MEM v (EL k db.bb_instructions).inst_outputs ==>
+    ?before a j after pa jb.
+      d::tail = before ++ a::j::after /\
+      1 < LENGTH (cfg_preds_of (cfg_analyze fn) j) /\
+      (j = d \/ ~fn_dominates fn d j) /\
+      fn_reachable fn a /\ fn_reachable fn j /\
+      lookup_block a fn.fn_blocks = SOME pa /\
+      lookup_block j fn.fn_blocks = SOME jb /\
+      MEM j (cfg_succs_of (cfg_analyze fn) a) /\
+      pa.bb_instructions <> [] /\
+      (LAST pa.bb_instructions).inst_opcode = JMP /\
+      ~MEM v (live_vars_at (liveness_analyze fn) j
+        (LENGTH (collect_phis jb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all first_return_jmp_join_cut >> strip_tac >>
+  `~MEM v (live_vars_at (liveness_analyze fn) j
+      (LENGTH (collect_phis jb.bb_instructions)))` by
+    metis_tac[ordinary_output_post_phi_demand_exclusion] >>
   qexistsl_tac [`before`, `a`, `j`, `after`, `pa`, `jb`] >> simp[]
 QED
