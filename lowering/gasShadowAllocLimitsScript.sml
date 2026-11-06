@@ -45,8 +45,14 @@ Proof
           rename1 `is_extcode h` >> Cases_on `is_extcode h` >>
           gvs[gas_shadow_extcode]) >>
       IF_CASES_TAC >> gvs[]) >>
-  rpt gen_tac >> strip_tac >> Cases_on `tb` >> simp[] >>
-  Cases_on `es` >> simp[]
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases_on `tb` >> simp[] >>
+      Cases_on `es` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> simp[] >> Cases_on `ct` >>
+  simp[ext_call_alloc_ok_def] >> rename1 `ExtCall _ _ sig _` >>
+  PairCases_on `sig` >>
+  simp[SF ETA_ss, ext_call_alloc_ok_def, GSYM MAP_DROP, GSYM MAP_TAKE, MAP_MAP_o,
+       combinTheory.o_DEF, gasShadowCompilePureTheory.gas_shadow_lowered_value_type]
 QED
 
 Theorem gas_shadow_alloc_limits_assignment:
