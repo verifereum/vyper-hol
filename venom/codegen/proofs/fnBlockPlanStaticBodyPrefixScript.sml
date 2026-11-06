@@ -182,3 +182,27 @@ Proof
   gvs[no_param_insts_def, EVERY_MEM] >>
   first_x_assum irule >> irule EL_MEM >> decide_tac
 QED
+
+Theorem regional_entry_lower_start:
+  codegen_ready_fn fn /\ bb = HD fn.fn_blocks /\
+  lineage_state (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) bb.bb_label ps_l /\
+  prepare_params_plan (liveness_analyze fn) fn
+    (ps_l with <|ps_cleanup_height := height; ps_cleanup_promised := promised|>) =
+    (param_ops,ps1) /\
+  (if LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1 then
+     clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb ps1
+   else ([],ps1)) = (clean_ops,ps2) ==>
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb
+    (LENGTH (get_params bb.bb_instructions)) ps2
+Proof
+  strip_tac >> gvs[] >>
+  `ps_l = init_cleanup_plan_state ch growth sb ctr` by
+    metis_tac[regional_entry_lineage_initial] >>
+  `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
+    metis_tac[regional_entry_no_preds] >>
+  gvs[] >> simp[regional_body_lower_inv_def] >>
+  conj_tac >- metis_tac[regional_prepare_params_initial_wf] >>
+  conj_tac >- metis_tac[regional_prepare_params_initial_live_coverage] >>
+  metis_tac[regional_prepare_params_initial_freshness]
+QED

@@ -2716,7 +2716,7 @@ Proof
   strip_tac >> drule_all regional_prepare_params_initial_exact >> simp[]
 QED
 
-Theorem regional_entry_structure[local]:
+Theorem regional_entry_structure:
   codegen_ready_fn fn ==>
   fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
   lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
@@ -3986,4 +3986,28 @@ Proof
   irule regional_regular_marked_live_coverage >>
   goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `sb` >> simp[] >> metis_tac[]
+QED
+
+Theorem regional_entry_no_preds:
+  codegen_ready_fn fn ==>
+  cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []
+Proof
+  strip_tac >>
+  `fn.fn_blocks <> [] /\ block_entries_ready (cfg_analyze fn) fn` by
+    gvs[codegen_ready_fn_def, wf_function_def, fn_has_entry_def] >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[block_entries_ready_def, entry_block_def, NULL_EQ]
+QED
+
+Theorem regional_entry_lineage_initial:
+  codegen_ready_fn fn /\
+  lineage_state lv dfg (cfg_analyze fn) fn ps0 (HD fn.fn_blocks).bb_label ps ==>
+  ps = ps0
+Proof
+  strip_tac >>
+  `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
+    metis_tac[regional_entry_no_preds] >>
+  qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+  simp[Once lineage_state_cases] >> strip_tac >>
+  gvs[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
 QED
