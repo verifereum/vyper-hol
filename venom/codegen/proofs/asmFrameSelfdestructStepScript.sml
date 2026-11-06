@@ -91,5 +91,40 @@ Theorem asm_frame_selfdestruct_step_created:
                   es.originalAccounts)) ==>
   asm_frame_step_ok prog data es0 as es
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `as.as_stack`
+  >- simp[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
+          asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+          asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+          asm_selfdestruct_def] >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) as es` by
+    gvs[asm_frame_rel_def] >>
+  `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
+  drule_all frame_next_opcode >> strip_tac >>
+  `op = SelfDestruct` by
+    (irule opcode_wf_inj >>
+     gvs[encode_inst_def, opcode_def, wf_opname_def,
+         evm_opcode_byte_def, evm_opcode_table_def]) >> gvs[] >>
+  `!op. next_opcode c = SOME op ==>
+    ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]` by
+    simp[] >>
+  `?a1. asm_selfdestruct as = AsmHalt a1` by simp[asm_selfdestruct_def] >>
+  drule frame_selfdestruct_singleton >>
+  disch_then drule >> simp[] >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choose_then `exc` (qx_choose_then `ts` assume_tac))
+    (qx_choose_then `ts` strip_assume_tac))
+  >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
+      simp[asm_frame_step_ok_def] >>
+      metis_tac[frame_starved_lift]) >>
+  drule frame_terminal_lift >> disch_then drule >>
+  simp[vfm_abort_def] >> strip_tac >>
+  `as.as_requests = call_requests es0` by gvs[asm_frame_rel_def] >>
+  simp[asm_frame_step_ok_def, asm_step_def, asm_step_op_def] >>
+  disj2_tac >>
+  `a1.as_requests = as.as_requests` by gvs[asm_selfdestruct_def] >>
+  simp[asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+       asm_step_memory_def, asm_step_control_def, asm_step_extcall_def] >>
+  gvs[]
 QED
