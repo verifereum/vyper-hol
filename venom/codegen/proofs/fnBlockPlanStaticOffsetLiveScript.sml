@@ -182,6 +182,33 @@ Proof
   irule ready_phi_block >> metis_tac[lookup_block_MEM]
 QED
 
+Theorem phi_input_fold_trigger[local]:
+  !op_map matching v idx src.
+    FLOOKUP op_map v = SOME idx /\ FLOOKUP matching idx = SOME src ==>
+    !live acc placed.
+    (MEM idx placed ==> MEM src acc) /\ (MEM v live \/ MEM src acc) ==>
+    MEM src (FST (FOLDL (\(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME i => if MEM i placed then (acc, placed)
+                  else case FLOOKUP matching i of
+                         NONE => (acc, placed)
+                       | SOME picked => (acc ++ [picked], i :: placed))
+      (acc, placed) live))
+Proof
+  rpt gen_tac >> strip_tac >> Induct >- simp[] >>
+  rpt gen_tac >> rename1 `FOLDL _ _ (head :: live)` >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `FLOOKUP op_map head` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  rename1 `FLOOKUP op_map head = SOME i` >>
+  Cases_on `MEM i placed` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  Cases_on `FLOOKUP matching i` >> simp[]
+  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  first_x_assum irule >> Cases_on `idx = i` >> gvs[] >> metis_tac[]
+QED
+
 Theorem phi_input_fold_selected:
   !live acc placed op_map matching v idx.
     FLOOKUP op_map v = SOME idx /\ FLOOKUP matching idx = SOME v /\
@@ -195,16 +222,22 @@ Theorem phi_input_fold_selected:
                        | SOME src => (acc ++ [src], i :: placed))
       (acc, placed) live))
 Proof
-  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
-  rename1 `FLOOKUP op_map v = SOME idx` >>
-  Cases_on `FLOOKUP op_map h` >> simp[]
-  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-  rename1 `FLOOKUP op_map h = SOME i` >>
-  Cases_on `MEM i placed` >> simp[]
-  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-  Cases_on `FLOOKUP matching i` >> simp[]
-  >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-  first_x_assum irule >> Cases_on `idx = i` >> gvs[] >> metis_tac[]
+  metis_tac[phi_input_fold_trigger]
+QED
+
+Theorem input_vars_from_trigger_maps:
+  !pred instrs live op_map matching w idx src.
+    build_phi_maps pred (collect_phis instrs) = (op_map, matching) /\
+    FLOOKUP op_map w = SOME idx /\ FLOOKUP matching idx = SOME src /\
+    MEM w live ==>
+    MEM src (input_vars_from pred instrs live)
+Proof
+  rpt strip_tac >> simp[input_vars_from_def] >>
+  Cases_on `NULL (collect_phis instrs)`
+  >- gvs[NULL_EQ, build_phi_maps_def] >> simp[] >>
+  qpat_x_assum `build_phi_maps _ _ = _` (fn th => rewrite_tac[th]) >>
+  simp[Once UNCURRY] >>
+  irule phi_input_fold_trigger >> simp[] >> metis_tac[]
 QED
 
 Theorem input_vars_from_selected_maps:
@@ -214,11 +247,7 @@ Theorem input_vars_from_selected_maps:
     MEM v live ==>
     MEM v (input_vars_from pred instrs live)
 Proof
-  rpt strip_tac >> simp[input_vars_from_def] >>
-  Cases_on `NULL (collect_phis instrs)` >> simp[] >>
-  qpat_x_assum `build_phi_maps _ _ = _` (fn th => rewrite_tac[th]) >>
-  simp[Once UNCURRY] >>
-  irule phi_input_fold_selected >> simp[] >> metis_tac[]
+  metis_tac[input_vars_from_trigger_maps]
 QED
 
 Theorem phi_pair_updates_lookup[local]:
@@ -233,14 +262,14 @@ Proof
 QED
 
 Theorem phi_maps_fold_selected[local]:
-  !items (om:string |-> num) (mm:num |-> string) pred v idx.
+  !items (om:string |-> num) (mm:num |-> string) pred v idx src.
     EVERY (\(i,phi).
       (MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> i = idx) /\
       (i = idx ==> MEM v (MAP SND (phi_pairs phi.inst_operands)) /\
         FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) =
-                    SOME (pred,v))) items /\
+                    SOME (pred,src))) items /\
     (MEM idx (MAP FST items) \/
-     (FLOOKUP om v = SOME idx /\ FLOOKUP mm idx = SOME v)) ==>
+     (FLOOKUP om v = SOME idx /\ FLOOKUP mm idx = SOME src)) ==>
     FLOOKUP (FST (FOLDL (\(op_map,matching) (i,phi).
       (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
        case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
@@ -250,7 +279,7 @@ Theorem phi_maps_fold_selected[local]:
       (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
        case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
          NONE => matching | SOME (_,w) => matching |+ (i,w)))
-      (om,mm) items)) idx = SOME v
+      (om,mm) items)) idx = SOME src
 Proof
   Induct >- simp[] >> rpt gen_tac >> Cases_on `h` >>
   rename1 `(i,phi) :: items` >> simp[NoAsms] >>
@@ -293,6 +322,28 @@ Proof
   metis_tac[phi_pairs_mem_operand_vars, EL_MEM]
 QED
 
+Theorem build_phi_maps_trigger:
+  !phis pred w j src.
+    phi_uses_disjoint phis /\ EVERY (\phi. phi.inst_opcode = PHI) phis /\
+    j < LENGTH phis /\
+    ALL_DISTINCT (MAP FST (phi_pairs (EL j phis).inst_operands)) /\
+    MEM (pred,src) (phi_pairs (EL j phis).inst_operands) /\
+    MEM w (MAP SND (phi_pairs (EL j phis).inst_operands)) ==>
+    FLOOKUP (FST (build_phi_maps pred phis)) w = SOME j /\
+    FLOOKUP (SND (build_phi_maps pred phis)) j = SOME src
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FIND (\(l,w). l = pred) (phi_pairs (EL j phis).inst_operands) =
+     SOME (pred,src)` by (irule phi_pairs_find_selected >> simp[]) >>
+  simp[NoAsms, build_phi_maps_def, LET_THM] >>
+  irule phi_maps_fold_selected >> conj_tac
+  >- (simp[EVERY_EL, indexedListsTheory.EL_MAPi,
+           indexedListsTheory.LENGTH_MAPi] >> rpt strip_tac >> gvs[] >>
+      metis_tac[phi_disjoint_source_index]) >>
+  disj1_tac >> simp[MEM_MAP, indexedListsTheory.MEM_MAPi] >>
+  qexists_tac `(j, EL j phis)` >> simp[] >> metis_tac[]
+QED
+
 Theorem build_phi_maps_selected:
   !phis pred v j.
     phi_uses_disjoint phis /\ EVERY (\phi. phi.inst_opcode = PHI) phis /\
@@ -302,18 +353,30 @@ Theorem build_phi_maps_selected:
     FLOOKUP (FST (build_phi_maps pred phis)) v = SOME j /\
     FLOOKUP (SND (build_phi_maps pred phis)) j = SOME v
 Proof
-  rpt gen_tac >> strip_tac >>
-  `MEM v (MAP SND (phi_pairs (EL j phis).inst_operands))` by
-    (simp[MEM_MAP] >> metis_tac[SND]) >>
-  `FIND (\(l,w). l = pred) (phi_pairs (EL j phis).inst_operands) =
-     SOME (pred,v)` by (irule phi_pairs_find_selected >> simp[]) >>
-  simp[NoAsms, build_phi_maps_def, LET_THM] >>
-  irule phi_maps_fold_selected >> conj_tac
-  >- (simp[EVERY_EL, indexedListsTheory.EL_MAPi,
-           indexedListsTheory.LENGTH_MAPi] >> rpt strip_tac >> gvs[] >>
-      metis_tac[phi_disjoint_source_index]) >>
-  disj1_tac >> simp[MEM_MAP, indexedListsTheory.MEM_MAPi] >>
-  qexists_tac `(j, EL j phis)` >> simp[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> irule build_phi_maps_trigger >> simp[] >>
+  simp[MEM_MAP] >> metis_tac[SND]
+QED
+
+Theorem input_vars_from_trigger_phi:
+  !instrs phi pred src w live.
+    phi_uses_disjoint (collect_phis instrs) /\
+    MEM phi (collect_phis instrs) /\
+    ALL_DISTINCT (MAP FST (phi_pairs phi.inst_operands)) /\
+    MEM (pred,src) (phi_pairs phi.inst_operands) /\
+    MEM w (MAP SND (phi_pairs phi.inst_operands)) /\ MEM w live ==>
+    MEM src (input_vars_from pred instrs live)
+Proof
+  rpt strip_tac >>
+  `?j. j < LENGTH (collect_phis instrs) /\
+       EL j (collect_phis instrs) = phi` by metis_tac[MEM_EL] >>
+  `EVERY (\phi. phi.inst_opcode = PHI) (collect_phis instrs)` by
+    (simp[EVERY_MEM] >> metis_tac[collect_phis_mem]) >>
+  `FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) w = SOME j /\
+   FLOOKUP (SND (build_phi_maps pred (collect_phis instrs))) j = SOME src` by
+    (irule build_phi_maps_trigger >> simp[]) >>
+  irule input_vars_from_trigger_maps >> simp[] >>
+  qexistsl_tac [`j`, `SND (build_phi_maps pred (collect_phis instrs))`,
+    `FST (build_phi_maps pred (collect_phis instrs))`, `w`] >> simp[]
 QED
 
 Theorem input_vars_from_selected_phi:
@@ -324,17 +387,8 @@ Theorem input_vars_from_selected_phi:
     MEM (pred,v) (phi_pairs phi.inst_operands) /\ MEM v live ==>
     MEM v (input_vars_from pred instrs live)
 Proof
-  rpt strip_tac >>
-  `?j. j < LENGTH (collect_phis instrs) /\
-       EL j (collect_phis instrs) = phi` by metis_tac[MEM_EL] >>
-  `EVERY (\phi. phi.inst_opcode = PHI) (collect_phis instrs)` by
-    (simp[EVERY_MEM] >> metis_tac[collect_phis_mem]) >>
-  `FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME j /\
-   FLOOKUP (SND (build_phi_maps pred (collect_phis instrs))) j = SOME v` by
-    (irule build_phi_maps_selected >> simp[]) >>
-  irule input_vars_from_selected_maps >> simp[] >>
-  qexistsl_tac [`j`, `SND (build_phi_maps pred (collect_phis instrs))`,
-    `FST (build_phi_maps pred (collect_phis instrs))`] >> simp[]
+  rpt strip_tac >> irule input_vars_from_trigger_phi >> simp[] >>
+  qexistsl_tac [`phi`, `v`] >> simp[MEM_MAP] >> metis_tac[SND]
 QED
 
 Theorem ready_reachable_preorder:
