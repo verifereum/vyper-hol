@@ -8568,6 +8568,41 @@ Proof
   EVAL_TAC
 QED
 
+(* C1.33: one bounded repeated-source candidate. *)
+Definition alias_repeat_phi_fn_def:
+  alias_repeat_phi_fn = mk_raw_function "repeat_phi"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 CALLDATASIZE [] ["seed"];
+        mk_inst 1 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+       [mk_inst 2 PHI [Label "entry"; Var "seed"; Label "body"; Var "b"] ["r"];
+        mk_inst 3 PHI [Label "entry"; Var "seed"; Label "body"; Var "a"] ["q"];
+        mk_inst 4 PHI [Label "entry"; Var "seed"; Label "body"; Var "a"] ["t"];
+        mk_inst 5 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+       [mk_inst 6 ADD [Var "q"; Var "t"] ["sink"];
+        mk_inst 7 ASSIGN [Var "r"] ["a"];
+        mk_inst 8 ADD [Var "r"; Lit 1w] ["b"];
+        mk_inst 9 JMP [Label "header"] []] |>]
+End
+
+(* Readiness rejects repeated PHI sources before plan/lineage testing.
+   In particular a is used by both PHI q and PHI t; seed is shared too. *)
+Theorem alias_repeat_phi_disjoint_obstruction:
+  MEM "a" (inst_uses (EL 1 (EL 1 alias_repeat_phi_fn.fn_blocks).bb_instructions)) /\
+  MEM "a" (inst_uses (EL 2 (EL 1 alias_repeat_phi_fn.fn_blocks).bb_instructions)) /\
+  ~phi_uses_disjoint (collect_phis (EL 1 alias_repeat_phi_fn.fn_blocks).bb_instructions) /\
+  ~phi_operands_ready alias_repeat_phi_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_repeat_phi_not_ready:
+  ~codegen_ready_fn alias_repeat_phi_fn
+Proof
+  EVAL_TAC
+QED
+
 Definition alias_root_phi_plan_def:
   alias_root_phi_plan i ps = generate_block_plan (liveness_analyze alias_root_phi_fn)
     (dfg_build_function alias_root_phi_fn) (cfg_analyze alias_root_phi_fn)
