@@ -6585,6 +6585,225 @@ Proof
   simp[LET_THM]
 QED
 
+Theorem place_store_update_projections[local]:
+  (update_var x w s).vs_memory = s.vs_memory /\
+  (update_var x w s).vs_call_ctx = s.vs_call_ctx /\
+  (update_var x w s).vs_halted = s.vs_halted /\
+  (update_var x w s).vs_current_bb = s.vs_current_bb /\
+  (update_var x w s).vs_inst_idx = s.vs_inst_idx
+Proof
+  simp[update_var_def]
+QED
+
+Theorem place_store_jump_projections[local]:
+  (jump_to l s).vs_memory = s.vs_memory /\
+  (jump_to l s).vs_allocas = s.vs_allocas /\
+  (jump_to l s).vs_call_ctx = s.vs_call_ctx /\
+  (jump_to l s).vs_halted = s.vs_halted /\
+  (jump_to l s).vs_current_bb = l /\
+  (jump_to l s).vs_inst_idx = 0 /\
+  lookup_var x (jump_to l s) = lookup_var x s
+Proof
+  simp[jump_to_def, lookup_var_def]
+QED
+
+Theorem place_store_slot_projections[local]:
+  ((if tr then tstore else sstore) k w s).vs_memory = s.vs_memory /\
+  ((if tr then tstore else sstore) k w s).vs_allocas = s.vs_allocas /\
+  ((if tr then tstore else sstore) k w s).vs_call_ctx = s.vs_call_ctx /\
+  ((if tr then tstore else sstore) k w s).vs_halted = s.vs_halted /\
+  ((if tr then tstore else sstore) k w s).vs_current_bb = s.vs_current_bb /\
+  ((if tr then tstore else sstore) k w s).vs_inst_idx = s.vs_inst_idx /\
+  lookup_var x ((if tr then tstore else sstore) k w s) = lookup_var x s
+Proof
+  Cases_on `tr` >> simp[sstore_def, tstore_def, lookup_var_def]
+QED
+
+Theorem place_store_copy_framed_step:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~q.vs_halted /\ q.vs_current_bb = slot_copy_cond cs /\ q.vs_inst_idx = 0 /\
+  lookup_var (slot_copy_var cs 0) q = SOME (n2w i) /\ i < n /\
+  n < dimword (:256) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at cs x) /\
+  eval_operand src q = SOME sw /\ eval_operand dst q = SOME dw /\
+  ~q.vs_call_ctx.cc_static /\ q.vs_memory = s.vs_memory /\
+  store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s i q ==>
+  ?t. gas_marked_path F ctx func q 0 (OK t) /\
+      store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s (SUC i) t /\
+      (!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x q) /\
+      t.vs_memory = q.vs_memory /\ t.vs_allocas = q.vs_allocas /\
+      t.vs_call_ctx = q.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = slot_copy_cond cs /\ t.vs_inst_idx = 0 /\
+      lookup_var (slot_copy_var cs 0) t = SOME (n2w (SUC i))
+Proof
+  strip_tac >>
+  qabbrev_tac `u = jump_to (slot_copy_body cs)
+    (update_var (slot_copy_var cs 1) 0w q)` >>
+  `i <= n /\ i <> n` by decide_tac >>
+  `gas_marked_path F ctx func q 0 (OK u)` by
+    (drule_all place_store_copy_test_path >>
+     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `u`, bool_to_word_def]) >>
+  `(!x. src = Var x \/ dst = Var x ==> x <> slot_copy_var cs 1)` by
+    metis_tac[place_store_copy_old_var] >>
+  `eval_operand src u = SOME sw /\ eval_operand dst u = SOME dw /\
+   lookup_var (slot_copy_var cs 0) u = SOME (n2w i) /\
+   ~u.vs_halted /\ u.vs_current_bb = slot_copy_body cs /\
+   u.vs_inst_idx = 0 /\ ~u.vs_call_ctx.cc_static` by
+    (Cases_on `src` >> Cases_on `dst` >>
+     gvs[Abbr `u`, jump_to_def, update_var_def, eval_operand_def,
+         lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+         slot_copy_var_def, ASCIInumbersTheory.toString_inj]) >>
+  drule_all place_store_copy_iteration_path >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp_tac pure_ss [LET_THM] >>
+  disch_tac >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func u 0 (OK t)` >>
+  qexists_tac `t` >>
+  (conj_tac >- (drule_all gas_marked_path_then >> simp[])) >>
+  `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x q` by
+    (rpt strip_tac >>
+     `!k. x <> slot_copy_var cs k` by metis_tac[place_store_copy_old_var] >>
+     Cases_on `tr` >>
+     simp[Abbr `t`, Abbr `u`, jump_to_def, update_var_def,
+          sstore_def, tstore_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  (conj_tac >-
+    (pure_rewrite_tac[arithmeticTheory.ADD1] >>
+     irule place_store_copy_frame_chunk >> qexists_tac `q` >>
+     simp[] >> Cases_on `tr` >>
+     simp[Abbr `t`, Abbr `u`, store_copy_normalize_def, jump_to_def,
+          update_var_def, sstore_def, tstore_def, mload_def])) >>
+  simp[Abbr `t`, Abbr `u`, place_store_jump_projections,
+       place_store_update_projections, place_store_slot_projections,
+       allocaFootprintTheory.update_var_fields,
+       emitHelperPropsTheory.lookup_var_update_var, wordsTheory.n2w_SUC]
+QED
+
+Theorem place_store_copy_frame_observations:
+  store_copy_frame cs loc sw dw s i q ==>
+  q.vs_memory = s.vs_memory /\ q.vs_allocas = s.vs_allocas /\
+  q.vs_labels = s.vs_labels /\ q.vs_call_ctx = s.vs_call_ctx /\
+  q.vs_halted = s.vs_halted
+Proof
+  `!i. (store_copy_prefix loc sw dw s i).vs_memory = s.vs_memory /\
+       (store_copy_prefix loc sw dw s i).vs_allocas = s.vs_allocas /\
+       (store_copy_prefix loc sw dw s i).vs_labels = s.vs_labels /\
+       (store_copy_prefix loc sw dw s i).vs_call_ctx = s.vs_call_ctx /\
+       (store_copy_prefix loc sw dw s i).vs_halted = s.vs_halted` by
+    (Induct >- simp[store_copy_prefix_def, rich_listTheory.COUNT_LIST_def] >>
+     pure_rewrite_tac[store_copy_prefix_def, rich_listTheory.COUNT_LIST_SNOC,
+                      listTheory.FOLDL_SNOC] >>
+     pure_rewrite_tac[GSYM store_copy_prefix_def] >>
+     Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def]) >>
+  strip_tac >> gvs[store_copy_frame_def] >>
+  first_x_assum (qspec_then `i` mp_tac) >>
+  qpat_x_assum `store_copy_normalize _ _ = _` (SUBST1_TAC o SYM) >>
+  simp[store_copy_normalize_def]
+QED
+
+Theorem place_store_copy_frame_operand[local]:
+  store_copy_frame cs loc sw dw s i q /\
+  (!x. op = Var x ==> not_fresh_at cs x) ==>
+  eval_operand op q = eval_operand op s
+Proof
+  strip_tac >> drule place_store_copy_frame_observations >> strip_tac >>
+  Cases_on `op` >> gvs[eval_operand_def, store_copy_frame_def]
+QED
+
+Theorem place_store_copy_condition_run:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at cs x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  n < dimword (:256) /\ i <= n /\
+  store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s i q /\
+  q.vs_current_bb = slot_copy_cond cs /\ q.vs_inst_idx = 0 /\
+  lookup_var (slot_copy_var cs 0) q = SOME (n2w i) ==>
+  ?t. gas_marked_path F ctx func q 0 (OK t) /\
+      store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s n t /\
+      ~t.vs_halted /\ t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  qabbrev_tac `copy_inv = \j u.
+    j <= n /\ store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s j u /\
+    u.vs_current_bb = slot_copy_cond cs /\ u.vs_inst_idx = 0 /\
+    lookup_var (slot_copy_var cs 0) u = SOME (n2w j)` >>
+  `!j u. copy_inv j u ==> ~u.vs_halted` by
+    (simp[Abbr `copy_inv`] >> metis_tac[place_store_copy_frame_observations]) >>
+  `!j u. j < n /\ copy_inv j u ==>
+    ?r. gas_marked_path F ctx func u 0 (OK r) /\ copy_inv (SUC j) r` by
+    (simp[Abbr `copy_inv`] >> rpt strip_tac >>
+     drule place_store_copy_frame_observations >> strip_tac >>
+     `eval_operand src u = SOME sw /\ eval_operand dst u = SOME dw` by
+       metis_tac[place_store_copy_frame_operand] >>
+     `~u.vs_halted /\ ~u.vs_call_ctx.cc_static` by simp[] >>
+     drule_all place_store_copy_framed_step >>
+     disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+     qexists_tac `t` >> simp[] >> decide_tac) >>
+  `copy_inv i q` by simp[Abbr `copy_inv`] >>
+  drule_all place_store_counted_iterate >> strip_tac >>
+  rename1 `copy_inv n r` >>
+  `~r.vs_halted` by metis_tac[] >>
+  fs[Abbr `copy_inv`] >>
+  qabbrev_tac `t = jump_to (slot_copy_exit cs)
+    (update_var (slot_copy_var cs 1) 1w r)` >>
+  `n <= n /\ n < dimword (:256)` by simp[] >>
+  `gas_marked_path F ctx func r 0 (OK t)` by
+    (drule_all place_store_copy_test_path >>
+     disch_then (qspec_then `ctx` mp_tac) >>
+     simp[Abbr `t`, bool_to_word_def]) >>
+  qexists_tac `t` >>
+  (conj_tac >- (drule_all gas_marked_path_then >> simp[])) >>
+  (conj_tac >-
+    (`n = n + 0` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     irule place_store_copy_frame_chunk >> qexists_tac `r` >>
+     simp[Abbr `t`, store_copy_normalize_def, update_var_def, jump_to_def] >>
+     rpt strip_tac >>
+     `x <> slot_copy_var cs 1` by metis_tac[place_store_copy_old_var] >>
+     simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE])) >>
+  simp[Abbr `t`, place_store_jump_projections, place_store_update_projections]
+QED
+
+Theorem place_store_copy_framed_run:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~s.vs_halted /\ s.vs_current_bb = cs.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at cs x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  n < dimword (:256) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s n t /\
+      (!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\
+      ~t.vs_halted /\
+      t.vs_current_bb = (place_store_copy_final cs src dst n tr).cs_current_bb /\
+      t.vs_inst_idx = LENGTH (place_store_copy_final cs src dst n tr).cs_current_insts
+Proof
+  strip_tac >>
+  qabbrev_tac `q = jump_to (slot_copy_cond cs)
+    (update_var (slot_copy_var cs 0) 0w s)` >>
+  `gas_marked_path F ctx func s 0 (OK q)` by
+    (simp[Abbr `q`] >> irule place_store_copy_entry_path >> simp[] >>
+     goal_assum (drule_at (Pat `fn_has_code _ _ _`))) >>
+  `store_copy_frame cs (if tr then LocTransient else LocStorage) sw dw s 0 q` by
+    (simp[store_copy_frame_def, store_copy_prefix_def, rich_listTheory.COUNT_LIST_def,
+          Abbr `q`, store_copy_normalize_def, jump_to_def, update_var_def] >>
+     (conj_tac >-
+       (rpt strip_tac >>
+        `x <> slot_copy_var cs 0` by metis_tac[place_store_copy_old_var] >>
+        simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE])) >>
+     simp[venom_state_component_equality]) >>
+  `q.vs_current_bb = slot_copy_cond cs /\ q.vs_inst_idx = 0 /\
+   lookup_var (slot_copy_var cs 0) q = SOME (n2w 0) /\ 0 <= n` by
+    simp[Abbr `q`, place_store_jump_projections, emitHelperPropsTheory.lookup_var_update_var] >>
+  drule_all place_store_copy_condition_run >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  qexists_tac `t` >>
+  (conj_tac >- (drule_all gas_marked_path_then >> simp[])) >>
+  drule place_store_copy_frame_observations >> strip_tac >>
+  gvs[place_store_copy_final_def, store_copy_frame_def]
+QED
+
 (* The allocation-limit check bounds the natural size, before n2w. *)
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
