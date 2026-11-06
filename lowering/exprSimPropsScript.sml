@@ -409,11 +409,10 @@ Proof
 QED
 
 Theorem locals_kept_regions:
-  !cenv es es' s0 s.
-    es'.scopes = es.scopes /\
+  !cenv es s0 s.
     (!n b sz. local_region cenv es.scopes s0 n b sz ==>
        mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) ==>
-    locals_kept cenv es es' s0 s
+    locals_kept cenv es es s0 s
 Proof
   metis_tac[locals_kept_regions_tail, locals_kept_refl]
 QED
