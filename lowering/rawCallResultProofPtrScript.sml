@@ -2,7 +2,7 @@
 Theory rawCallResultProofPtr
 Ancestors
   rawCallOracleProofPtr rawCallBufferPtr builtinSystem context emitHelper
-  compileEnv exprLoweringProps bodyPtrDefs builtinSimple builtinProps
+  compileEnv exprLoweringProps bodyPtrDefs builtinSimple builtinProps typedCopyPtr
 Libs
   monadsyntax
 
@@ -1008,3 +1008,121 @@ Resume raw_call_capped_length_stage[compose]:
 QED
 
 Finalise raw_call_capped_length_stage
+
+Theorem raw_call_mstore_path_ptr:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst iid MSTORE [Var dst;value] []) /\
+  ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst iid MSTORE [Var dst;value] []) (mstore (w2n a) w s))
+    (step_taint (mk_inst iid MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn)
+    (OK (mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst iid MSTORE [Var dst;value] []) s =
+    OK (mstore (w2n a) w s)` by
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_write2_def,
+       venomStateTheory.eval_operand_def]) >>
+  `ptr_inst_ok D 0 0 ctx func G tn (mk_inst iid MSTORE [Var dst;value] []) s` by
+    (irule fragExecPtrTheory.ptr_inst_ok_mstore >> simp[]) >>
+  `(mk_inst iid MSTORE [Var dst;value] []).inst_opcode <> INVOKE /\
+   ~is_terminator (mk_inst iid MSTORE [Var dst;value] []).inst_opcode` by
+    simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  drule_all fragGasSeqPtrTheory.straight_line_ptr_edge >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  simp[venomInstTheory.mk_inst_def] >> strip_tac >>
+  drule (cj 2 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  simp[venomStateTheory.mstore_def]
+QED
+
+Theorem raw_call_emit_mstore_path_ptr:
+  emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst sa.cs_next_id MSTORE [Var dst;value] []) (mstore (w2n a) w s))
+    (step_taint (mk_inst sa.cs_next_id MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn)
+    (OK (mstore (w2n a) w s with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MSTORE [Var dst;value] []]` by
+    gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      fresh_id_def, emit_def, comp_return_def] >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id MSTORE [Var dst;value] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  drule_all raw_call_mstore_path_ptr >> simp[]
+QED
+
+Theorem raw_call_bytes_length_write_stage:
+  emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn dst s capacity /\ 32 <= capacity /\ op_taint tn value = {} /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME (n2w (LENGTH bs)) /\
+  mem_bytes_at (w2n a+32) (LENGTH bs) s.vs_memory = bs /\ LENGTH bs <= n /\
+  (!i. w2n a+32 <= i /\ i < w2n a+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic n))) /\
+  val_store_size (BaseTV (BytesT (Dynamic n))) (BytesV bs) <= capacity /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= capacity ==>
+  ?un t. gas_path_ptr D 0 ctx func PG G tn s 0 G un (OK t) /\
+    ptr_val_ok cx ty (BytesV bs) (Var dst) G un t /\
+    ptr_buf_ok cenv e (Var dst) G t /\
+    t = mstore (w2n a) (n2w (LENGTH bs)) s with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
+    un.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
+    un.t_var = tn.t_var /\ un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\
+    (!x. lookup_var x t = lookup_var x s) /\
+    t.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >>
+  `ptr_covers G tn dst s 32` by
+    (gvs[bodyPtrDefsTheory.ptr_covers_def] >>
+     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+  drule_all raw_call_emit_mstore_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
+  drule_all typedCopyPtrTheory.mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`, `G`, `sa.cs_next_id`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ _ un (OK t)` >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      fresh_id_def, emit_def, comp_return_def] >>
+  `ptr_covers G un dst t capacity` by
+    (gvs[bodyPtrDefsTheory.ptr_covers_def, Abbr `t`,
+       venomStateTheory.lookup_var_def, venomStateTheory.mstore_def,
+       ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  qexistsl_tac [`un`, `t`] >> conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (irule rawCallBufferPtrTheory.ptr_val_ok_from_covers >>
+      goal_assum (drule_at Any) >> simp[] >>
+      suspend "robust") >>
+  conj_tac
+  >- (irule rawCallBufferPtrTheory.ptr_buf_ok_from_covers >>
+      goal_assum (drule_at Any) >> simp[] >> qexists_tac `capacity` >> simp[]) >>
+  simp[Abbr `t`, venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
+QED
+
+Resume raw_call_bytes_length_write_stage[robust]:
+  qexists_tac `capacity` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `w = a` by
+    (fs[Abbr `t`, venomStateTheory.lookup_var_def, venomStateTheory.mstore_def]) >>
+  gvs[] >> irule rawCallBufferPtrTheory.bytes_length_store_robust >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`tn.t_mem`, `s`] >> simp[] >>
+  fs[Abbr `t`]
+QED
+
+Finalise raw_call_bytes_length_write_stage
