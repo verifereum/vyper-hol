@@ -288,6 +288,7 @@ Theorem intcall_entry_prefix_code:
       (st.cs_next_var + (if has_rb then 1 else 0) + LENGTH params))) /\
     stm.cs_next_var = st.cs_next_var + (if has_rb then 1 else 0) + LENGTH params + 1 /\
     st.cs_next_id <= stm.cs_next_id /\
+    stm.cs_blocks = st.cs_blocks /\ stm.cs_current_bb = st.cs_current_bb /\
     stm.cs_current_insts = st.cs_current_insts ++
       GENLIST (\j. mk_inst (st.cs_next_id+j) PARAM [Lit (n2w j)]
         [STRING #"%" (toString (st.cs_next_var+j))])

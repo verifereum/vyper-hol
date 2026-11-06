@@ -307,7 +307,9 @@ QED
 Theorem intcall_materialize_append:
   !caps cenv st ce st'.
     materialize_internal_params cenv caps st = (ce,st') ==>
-    ?code. st'.cs_current_insts = st.cs_current_insts ++ code
+    ?code. st'.cs_current_insts = st.cs_current_insts ++ code /\
+      st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code
 Proof
   Induct
   >- simp[materialize_internal_params_def, comp_return_def] >>
@@ -321,7 +323,7 @@ Proof
       >- (simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
                comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
           strip_tac >> first_x_assum drule >> strip_tac >>
-          pop_assum mp_tac >> simp[] >> metis_tac[APPEND_ASSOC]) >>
+          pop_assum mp_tac >> simp[is_terminator_def]) >>
       strip_tac >> first_x_assum drule >> simp[]) >>
   strip_tac >> first_x_assum drule >> simp[]
 QED

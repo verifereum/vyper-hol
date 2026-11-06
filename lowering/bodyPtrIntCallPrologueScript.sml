@@ -4,7 +4,7 @@ Ancestors
   fragGasSeqPtr intCallCallee venomState venomExecSemantics ptrDiscipline
   finite_map words exprLoweringProps bodyPtrDefs pred_set loweringHalt
   fragExecPtr venomInst arithmetic emitHelper exprLowering compileEnv context rich_list list
-  bodyPtrIntCallRoom bodyPtrIntCallJoint fragGasPathPtr vyperState venomMemDefs
+  bodyPtrIntCallRoom bodyPtrIntCallJoint fragGasPathPtr vyperState venomMemDefs fragExec
 
 (* Scratch allocation taints only bytes above the completed locals. *)
 Theorem intcall_scratch_old_robust:
@@ -349,6 +349,8 @@ Theorem intcall_optional_scratch_append:
        else return ()
    | NONE => return ()) st = ((),st') ==>
   ?code. st'.cs_current_insts = st.cs_current_insts ++ code /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    EVERY (\i. i.inst_opcode <> INVOKE) code /\
     EVERY (\i. ~is_terminator i.inst_opcode) code
 Proof
   Cases_on `ret_type`
@@ -600,3 +602,50 @@ Resume intcall_runtime_prologue_entry_ptr[cursor]:
   fs[lookup_var_def]
 QED
 Finalise intcall_runtime_prologue_entry_ptr
+
+Theorem intcall_prologue_code_suppliers:
+  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),stm) /\
+  materialize_internal_params ce1 caps stm = (ce2,st2) /\
+  (case ret_type of
+     SOME ty => if ce.ce_returns_count > 0 then
+       do compile_alloc_buffer (type_memory_bytes ce ty); return () od
+       else return ()
+   | NONE => return ()) st2 = ((),st1) /\ fn_has_code st st1 fn ==>
+  fn_has_code st2 st1 fn /\
+  EVERY (\i. MEM i (fn_insts fn) /\ i.inst_opcode <> INVOKE)
+    (emitted_insts st st1) /\
+  EVERY (\i. MEM i (fn_insts fn) /\ i.inst_opcode <> INVOKE)
+    (emitted_insts st st2) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st st1)
+Proof
+  strip_tac >> drule intcall_entry_prefix_code >> strip_tac >>
+  drule intcall_materialize_append >> strip_tac >>
+  drule_all intcall_optional_scratch_append >> strip_tac >>
+  conj_tac >- (fs[fn_has_code_def, emitted_blocks_def]) >>
+  `EVERY (\i. MEM i (fn_insts fn)) (emitted_insts st st1)` by suspend "members" >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st1)` by suspend "opcodes" >>
+  `isPREFIX (emitted_insts st st2) (emitted_insts st st1)` by
+    (asm_rewrite_tac[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  fs[EVERY_MEM, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[MEM_APPEND]
+QED
+
+Resume intcall_prologue_code_suppliers[members]:
+  qpat_x_assum `fn_has_code st st1 fn` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  simp[EVERY_MEM, emitted_insts_def] >> rpt strip_tac >>
+  irule lookup_block_fn_insts >>
+  qexistsl_tac [`bb`,`st1.cs_current_bb`] >> simp[] >>
+  metis_tac[MEM_DROP_IMP, MEM_APPEND]
+QED
+
+Resume intcall_prologue_code_suppliers[opcodes]:
+  asm_rewrite_tac[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[EVERY_APPEND, EVERY_GENLIST, mk_inst_def, is_terminator_def] >>
+  fs[EVERY_MEM]
+QED
+Finalise intcall_prologue_code_suppliers
