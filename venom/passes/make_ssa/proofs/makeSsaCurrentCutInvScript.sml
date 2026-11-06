@@ -19,7 +19,7 @@ Ancestors
   makeSsaCurrentTreePaths makeSsaCurrentTokens makeSsaCurrentCarrierOwner
   makeSsaCurrentCutTransport makeSsaCurrentPrefixSuffixOwner
   makeSsaCurrentPrefixMaps makeSsaCurrentPrefixOwner makeSsaCurrentCleanupShape
-  makeSsaCurrentLockstepShape
+  makeSsaCurrentLockstepShape makeSsaCurrentPrefixRuntime
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -300,6 +300,62 @@ Proof
     `current_event_exit_env ev`] >>
   simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
   metis_tac[]
+QED
+
+Theorem current_cut_phi_slots_shape[local]:
+  !slots. phi_well_formed (current_phi_slots slots) /\
+    phi_pairs (current_phi_slots slots) = slots
+Proof
+  Induct >> simp[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
+    venomWfTheory.phi_well_formed_def, venomInstTheory.phi_pairs_def] >>
+  gen_tac >> PairCases_on `h` >>
+  fs[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
+    venomWfTheory.phi_well_formed_def, venomInstTheory.phi_pairs_def]
+QED
+
+Theorem current_cut_original_phi_edge_resolution:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_original_phi_at fn A renamed h k q slots /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  ALL_DISTINCT (MAP FST slots) /\ MEM (p,v) slots ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (resolve_phi p (EL k old.bb_instructions).inst_operands)
+    (resolve_phi p (EL q new.bb_instructions).inst_operands)
+Proof
+  strip_tac >>
+  drule_all current_wf_original_phi_shape >> strip_tac >>
+  `?i. i < LENGTH slots /\ EL i slots = (p,v)` by metis_tac[listTheory.MEM_EL] >>
+  drule_all current_wf_original_phi_pair >> strip_tac >>
+  `wf_function fn /\ fn_phis_cover_preds fn` by fs[current_wf_phi_context_def] >>
+  qpat_assum `current_wf_original_phi_at _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_original_phi_at_def] >> strip_tac >>
+  `old' = old` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `old' = old` SUBST_ALL_TAC >>
+  `MEM old fn.fn_blocks /\ MEM (EL k old.bb_instructions) old.bb_instructions /\
+   old.bb_label = h` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      makeSsaHelperTheory.lookup_block_label, listTheory.MEM_EL] >>
+  `fn_cfg_edge fn p h` by
+    (qpat_assum `current_wf_phi_context _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[current_wf_phi_context_def] >> strip_tac >> metis_tac[]) >>
+  `current_demand fn v p (LENGTH pred.bb_instructions)` by
+    (irule current_wf_original_phi_demand >> metis_tac[]) >>
+  `FLOOKUP (current_cut_sg fn A renamed H events p
+     (LENGTH pred.bb_instructions)) n = SOME v` by
+    (irule current_cut_sg_exit_name_lookup >> metis_tac[]) >>
+  `MEM (p,n) pairs` by metis_tac[listTheory.MEM_EL, listTheory.LENGTH_MAP] >>
+  qpat_x_assum `slots = phi_pairs _` kall_tac >>
+  `resolve_phi p (EL k old.bb_instructions).inst_operands = SOME (Var v)` by
+    (irule current_prefix_resolve_phi_selected >>
+     simp[current_cut_phi_slots_shape]) >>
+  `resolve_phi p (EL q new.bb_instructions).inst_operands = SOME (Var n)` by
+    (irule current_prefix_resolve_phi_selected >>
+     simp[current_cut_phi_slots_shape]) >>
+  simp[op_rename_def]
 QED
 
 Theorem current_cut_pair_precleanup_output_exclusion:
