@@ -904,3 +904,75 @@ Resume analyzed_join_released_phi_coverage[initial]:
 QED
 
 Finalise analyzed_join_released_phi_coverage
+
+Theorem analyzed_join_initial_phi_support:
+ !fn pred pb succ sb ps.
+ wf_function fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions)))) ps ==>
+ !op. (MEM op ps.ps_stack /\ op <> dead_stack_marker) \/
+   op IN FDOM ps.ps_spilled ==>
+ ?v. op = Var v /\
+   ((MEM v (live_vars_at (liveness_analyze fn) succ 0) /\
+     ~MEM v (raw_phi_inputs sb.bb_instructions)) \/
+    ?phi. MEM phi (collect_phis sb.bb_instructions) /\
+      MEM (pred,v) (phi_pairs phi.inst_operands))
+Proof
+ rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+ drule lineage_inventory_live_membership >> strip_tac >>
+ `?v. op = Var v /\ MEM v (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions))` by metis_tac[] >>
+ drule_all analyzed_live_out_singleton >>
+ simp[pred_setTheory.EXTENSION] >> strip_tac >>
+ `MEM v (input_vars_from pred sb.bb_instructions
+   (live_vars_at (liveness_analyze fn) succ 0))` by metis_tac[] >>
+ drule input_vars_from_projected_membership >> metis_tac[]
+QED
+
+Theorem analyzed_phi_origin_selected_input:
+ !fn entry pred succ sb k v.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ k < LENGTH (collect_phis sb.bb_instructions) /\
+ MEM (Var v) (FILTER is_var_operand
+   (EL k (collect_phis sb.bb_instructions)).inst_operands) /\
+ ((MEM v (live_vars_at (liveness_analyze fn) succ 0) /\
+    ~MEM v (raw_phi_inputs sb.bb_instructions)) \/
+  (?i. k <= i /\ i < LENGTH (collect_phis sb.bb_instructions) /\
+    MEM (pred,v) (phi_pairs (EL i (collect_phis sb.bb_instructions)).inst_operands)) \/
+  MEM v (FLAT (MAP (\phi. phi.inst_outputs)
+    (TAKE k (collect_phis sb.bb_instructions))))) ==>
+ MEM (pred,v) (phi_pairs (EL k (collect_phis sb.bb_instructions)).inst_operands)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `MEM sb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+ `MEM (EL k (collect_phis sb.bb_instructions))
+    (collect_phis sb.bb_instructions)` by simp[EL_MEM] >>
+ `phi_well_formed (EL k (collect_phis sb.bb_instructions)).inst_operands` by
+   metis_tac[phi_codegen_inst_shape] >>
+ `MEM v (inst_uses (EL k (collect_phis sb.bb_instructions)))` by
+   gvs[MEM_FILTER, inst_uses_def, MEM_operand_vars_eq_Var] >>
+ `phi_uses_disjoint (collect_phis sb.bb_instructions)` by
+   (metis_tac[ready_block_phi_uses_disjoint])
+ >~ [`~MEM v (raw_phi_inputs _)`]
+ >- (`?l. MEM (l,v) (phi_pairs
+         (EL k (collect_phis sb.bb_instructions)).inst_operands)` by
+       (gvs[MEM_FILTER] >> metis_tac[venomWfTheory.phi_well_formed_var_pair]) >>
+     `MEM v (raw_phi_inputs sb.bb_instructions)` by
+       (simp[NoAsms, raw_phi_inputs_def, MEM_FLAT, MEM_MAP] >>
+        qexists_tac `MAP SND (phi_pairs (EL k (collect_phis sb.bb_instructions)).inst_operands)` >>
+        conj_tac >- metis_tac[] >> simp[MEM_MAP] >>
+        qexists_tac `(l,v)` >> simp[]) >> metis_tac[])
+ >- (`MEM v (inst_uses (EL i (collect_phis sb.bb_instructions)))` by
+       (simp[inst_uses_def, MEM_operand_vars_eq_Var] >>
+        metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
+     `i = k` by (irule phi_disjoint_use_indices >> metis_tac[]) >> gvs[]) >>
+ gvs[MEM_FLAT, MEM_MAP] >>
+ `MEM phi (collect_phis sb.bb_instructions)` by metis_tac[MEM_TAKE] >>
+ `~MEM v (inst_uses (EL k (collect_phis sb.bb_instructions)))` by
+   (irule reachable_phi_prefix_no_output_use_alias >> metis_tac[]) >> metis_tac[]
+QED
