@@ -64,7 +64,10 @@ Proof
        vyperTypeSystemTheory.well_typed_expr_def,
        vyperTypeSystemTheory.type_builtin_result_ok_def,
        vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  rpt strip_tac >> gvs[is_bytestring_type_def]
+  rpt strip_tac >> gvs[is_bytestring_type_def] >>
+  (* concat: its typing makes the annotation a bytestring *)
+  gvs[vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+  rpt (pop_assum mp_tac) >> rw[] >> gvs[is_bytestring_type_def]
 QED
 
 Theorem aggregate_store_lowered_elem[local]:

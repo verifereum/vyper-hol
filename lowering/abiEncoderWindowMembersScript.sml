@@ -1121,7 +1121,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem window_member_envelope_frame[local]:
+Theorem window_member_envelope_frame:
   EVERY (\(b,n). d <= b /\ b+n <= d+len) outs ==>
   !a. EVERY (\(b,n). a < b \/ b+n <= a) [(d,len)] ==>
       EVERY (\(b,n). a < b \/ b+n <= a) outs
