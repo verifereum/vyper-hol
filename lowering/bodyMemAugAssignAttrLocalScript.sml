@@ -279,6 +279,9 @@ Proof
     transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def,
     immutable_alloca_sep_def, evaluation_state_accfupds]
 QED
+val _ = temp_delsimps ["stmt_state_rel_gas_obs"];
+val _ = augment_srw_ss [rewrites [stmt_state_rel_gas_obs_mem_src]];
+
 
 Theorem augassign_attr_binop_admissible_mem_src[local]:
   lookup_scopes id es.scopes = SOME entry /\
@@ -296,7 +299,7 @@ Proof
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign_mem_src >> simp[]) >>
   drule_all eval_augassign_attr_fields_obs_mem_src >>
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
   simp[GSYM bind_assoc, bind_def] >>
@@ -325,7 +328,7 @@ Proof
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign_mem_src >> simp[]) >>
   drule_all eval_augassign_attr_fields_obs_mem_src >>
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
   Cases_on `evaluate_binop
@@ -979,7 +982,7 @@ Proof
     (irule augassign_field_address_bound_mem >> metis_tac[]) >>
   `mload (w2n (w0 + n2w (struct_field_offset fields fld))) s0 =
     typed_val_to_w256 ftv fv` by
-    (irule stmt_state_rel_field_word >> metis_tac[word_value_type_word]) >>
+    (irule stmt_state_rel_field_word_mem_src >> metis_tac[word_value_type_word]) >>
   drule_all augassign_field_add_path_mem >> strip_tac >>
   rename1 `gas_marked_path T ctx func s0 0 (OK t1)` >>
   `w2n (w0 + n2w (struct_field_offset fields fld)) + 32 <= t1.vs_alloca_next` by
@@ -1033,7 +1036,7 @@ Proof
       `s.vs_alloca_next < dimword (:256)` by
         metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
       drule_all body_field_address_no_wrap >> simp[]) >>
-  drule_all stmt_state_rel_write_field >> strip_tac >>
+  drule_all stmt_state_rel_write_field_mem_src >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
   qabbrev_tac `u = mstore (w2n (wbase + n2w (struct_field_offset fields fld)))
@@ -1073,7 +1076,7 @@ Proof
   `es with <|scopes := sc; gas_obs := gs|> =
      ((es with scopes := sc) with gas_obs := gs)` by (Cases_on `es` >> simp[]) >>
   once_asm_rewrite_tac [] >>
-  pure_rewrite_tac [exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> REFL_TAC
+  pure_rewrite_tac [stmt_state_rel_gas_obs_mem_src] >> REFL_TAC
 QED
 
 Theorem augassign_attr_local_code_parts_mem_src[local]:
@@ -1125,7 +1128,7 @@ Proof
   metis_tac[is_bool_type_def]
 QED
 
-Theorem compile_augassign_attr_local_mem[local]:
+Theorem compile_augassign_attr_local_mem:
   (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
   expr_body_pre cenv cx env e es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -1223,11 +1226,11 @@ Resume compile_augassign_attr_local_mem[rhs_normal]:
   rename1 `value_has_type etv v` >>
   drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
   `!n. expr_int_literal e = SOME n ==> v = IntV n` by
-    metis_tac[eval_expr_int_literal_agrees] >>
+    metis_tac[eval_expr_int_literal_agrees_mem_src] >>
   `(bop = ShL \/ bop = ShR ==> ?i. v = IntV i /\ 0 <= i)` by
-    metis_tac[eval_expr_shift_amount] >>
+    metis_tac[eval_expr_shift_amount_mem_src] >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
-  `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
+  `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits_mem_src] >>
   `binop_frag_val_mem ctx func cenv cx bop ty ty NONE
      (if bop = Exp then expr_int_literal e else NONE)
      [ty; expr_type e] fv v (ee with gas_obs := [])` by
@@ -1264,7 +1267,7 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        ftv bop fv v of INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign_mem_src >> simp[]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ftv bop fv v = INL result` by gvs[AllCaseEqs()] >>
@@ -1275,7 +1278,7 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
   `!m. wr <> INR (Error (TypeError m))` by
     (drule_all augassign_attr_write_admissible_mem_src >> simp[]) >>
   `expr_sim_inv cenv cx env (ee with gas_obs := [])` by simp[] >>
-  drule_all write_attr_local_typed >> strip_tac >> gvs[] >>
+  drule_all write_attr_local_typed_mem_src >> strip_tac >> gvs[] >>
   rename1 `find_containing_scope id ee.scopes = SOME (pre, env1, cur, rest)` >>
   `value_has_type ftv result` by
     (mp_tac (Q.INST [`t1` |-> `ty`, `t2` |-> `expr_type e`,
@@ -1364,7 +1367,7 @@ Resume compile_augassign_attr_local_mem[operator_exit]:
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign_mem_src >> simp[]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
     ftv bop fv v`
@@ -2066,7 +2069,7 @@ Proof
   qexists_tac `sg` >> simp[]
 QED
 
-Theorem compile_safe_pow_exponent_run_mem_src[local]:
+Theorem compile_safe_pow_exponent_run_mem_src:
   !x y ty a b sa op sb ss.
     0 < type_bits ty /\ type_bits ty <= 256 /\ type_bits ty MOD 8 = 0 /\
     within_int_bound (if is_signed_type ty then Signed (type_bits ty)
@@ -2157,7 +2160,7 @@ Resume compile_safe_pow_exponent_run_mem_src[unsigned]:
   simp[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS] >>
   metis_tac[arithmeticTheory.NOT_LESS_EQUAL]
 QED
-Finalise compile_safe_pow_exponent_run_mem_src
+Finalise compile_safe_pow_exponent_run_mem_src[local]
 
 
 Theorem straight_fresh_pow_exponent_mem_src[local]:
@@ -2249,15 +2252,23 @@ Proof
     (Cases_on `bop` >> gvs[]) >> metis_tac[]
 QED
 
+Theorem expr_int_literal_value_mem_src[local]:
+  !e. expr_int_literal e = int_literal_value e
+Proof
+  Cases >> simp[expr_int_literal_def, int_literal_value_def] >>
+  rename1 `Literal ty lit` >> Cases_on `lit` >>
+  simp[expr_int_literal_def, int_literal_value_def]
+QED
+
 Resume compile_augassign_attr_local_mem[typed_dispatch]:
   irule binop_frag_augassign_typed_mem_src >> simp[] >> conj_tac
-  >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+  >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value_mem_src] >>
       Cases_on `expr_int_literal e` >> gvs[]) >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`expr_type e`, `get_tenv cx`, `ftv`, `etv`] >> simp[]
 QED
 
-Finalise compile_augassign_attr_local_mem
+Finalise compile_augassign_attr_local_mem[local]
 
 Theorem body_augassign_attr_local_mem:
   !cx ty id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -2302,7 +2313,7 @@ Proof
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
                    (nsid_to_string sid)) fld = SOME (ty,fsz)` by
-    metis_tac[attribute_type_struct_field, expr_sim_inv_def] >>
+    metis_tac[attribute_type_struct_field_mem_src, expr_sim_inv_def] >>
   drule_all augassign_attr_conditional_ih_mem_src >> strip_tac >>
   irule compile_augassign_attr_local_mem >> simp[] >>
   conj_tac
@@ -2314,4 +2325,3 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
-
