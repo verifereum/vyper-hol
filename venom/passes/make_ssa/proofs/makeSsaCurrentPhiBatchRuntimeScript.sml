@@ -89,3 +89,14 @@ Proof
   qpat_x_assum `post = _` SUBST_ALL_TAC >>
   qpat_x_assum `post' = _` SUBST_ALL_TAC >> fs[state_rel_def]
 QED
+
+Theorem current_phi_batch_success_all:
+  !insts. (!inst. MEM inst insts /\ inst.inst_opcode = PHI ==>
+    IS_SOME (eval_one_phi s inst)) ==>
+  ?post. eval_phis s insts = OK post
+Proof
+  Induct >> simp[eval_phis_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >> strip_tac >>
+  `IS_SOME (eval_one_phi s h)` by simp[] >>
+  Cases_on `eval_one_phi s h` >> gvs[] >> PairCases_on `x` >> simp[]
+QED
