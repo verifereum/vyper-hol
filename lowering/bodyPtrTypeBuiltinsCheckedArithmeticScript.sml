@@ -694,3 +694,275 @@ Proof
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ H' th' _ _ _ _` mp_tac >>
   simp_tac (pure_ss ++ boolSimps.BOOL_ss) [AC ADD_ASSOC ADD_COMM]
 QED
+
+Theorem scalar_two_checks_instruction_filter:
+  comp_ignore_bind
+    (if c1 then comp_bind (emit_op op1 [x;Lit w1]) (\a.
+       comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+     else comp_return ())
+    (comp_ignore_bind
+      (if c2 then comp_bind (emit_op op2 [x;Lit w2]) (\a.
+         comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+       else comp_return ())
+      (emit_op opc [x;Lit scale])) sa = (out,sb) /\
+  MEM op1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM op2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule scalar_two_checks_decompose >> strip_tac >>
+  drule_all scalar_optional_check_instruction_filter >> strip_tac >>
+  rev_drule_all scalar_optional_check_instruction_filter >> strip_tac >>
+  drule_all scalar_emit_instruction_filter >> strip_tac >>
+  qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
+  simp[EVERY_APPEND, FILTER_APPEND]
+QED
+
+Theorem scalar_two_checks_abort_fixed_certificate:
+  comp_ignore_bind
+    (if c1 then comp_bind (emit_op op1 [x;Lit w1]) (\a.
+       comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+     else comp_return ())
+    (comp_ignore_bind
+      (if c2 then comp_bind (emit_op op2 [x;Lit w2]) (\a.
+         comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+       else comp_return ())
+      (emit_op opc [x;Lit scale])) sa = (out,sb) /\
+  MEM op1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM op2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
+  ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all scalar_two_checks_instruction_filter >> strip_tac >>
+  drule scalar_two_checks_decompose >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa s1) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s1 s2)` by
+    (qpat_x_assum `EVERY _ (emitted_insts sa sb)` mp_tac >>
+     asm_rewrite_tac[EVERY_APPEND] >> simp_tac pure_ss [EVERY_MEM] >> metis_tac[]) >>
+  drule_all scalar_emit_no_abort >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ s = Abort err t` mp_tac >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  rewrite_tac[scalar_seq_append_abort_iff] >> strip_tac
+  >- (drule_all (cj 2 (PURE_REWRITE_RULE
+        [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+        scalar_optional_check_uniform_certificate)) >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+      disch_then (qspec_then `s.vs_inst_idx` strip_assume_tac) >>
+      qexistsl_tac [`H`,`th`] >> reverse conj_tac >- simp[] >>
+      qpat_x_assum `inst_seq_ptr _ _ _ _ _ G tn _ _ _ _` (assume_tac o SRULE []) >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      irule inst_seq_ptr_abort_append >> goal_assum (drule_at Any) >> simp[])
+  >- (drule_all (cj 1 (PURE_REWRITE_RULE
+        [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+        scalar_optional_check_uniform_certificate)) >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+      disch_then (qspec_then `s.vs_inst_idx` strip_assume_tac) >>
+      `op_prov H x = NONE /\ op_taint th x = {}` by metis_tac[] >>
+      drule_all (cj 2 (PURE_REWRITE_RULE
+        [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM]
+        scalar_optional_check_uniform_certificate)) >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+      disch_then (qspec_then `s.vs_inst_idx + LENGTH (emitted_insts sa s1)` strip_assume_tac) >>
+      qexistsl_tac [`H'`,`th'`] >> reverse conj_tac >- (simp[] >> metis_tac[]) >>
+      qpat_x_assum `inst_seq_ptr _ _ _ _ _ G tn _ _ _ _` (assume_tac o SRULE []) >>
+      irule scalar_seq_ptr_append_at >> simp[] >> qexistsl_tac [`H`,`th`] >> simp[] >>
+      irule inst_seq_ptr_abort_append >> reverse conj_tac
+      >- (simp[] >> once_rewrite_tac[ADD_COMM] >> first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`err`,`t with vs_inst_idx :=
+        s.vs_inst_idx + LENGTH (emitted_insts sa s1)`] >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
+  metis_tac[]
+QED
+
+Theorem scalar_two_checks_runtime_frame:
+  comp_ignore_bind
+    (if c1 then comp_bind (emit_op op1 [x;Lit w1]) (\a.
+       comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+     else comp_return ())
+    (comp_ignore_bind
+      (if c2 then comp_bind (emit_op op2 [x;Lit w2]) (\a.
+         comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+       else comp_return ())
+      (emit_op opc [x;Lit scale])) sa = (out,sb) /\
+  MEM op1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM op2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s /\
+  (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule scalar_two_checks_decompose >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  asm_rewrite_tac[] >> rewrite_tac[scalar_seq_append_ok_iff] >> strip_tac >>
+  drule_all scalar_optional_check_runtime_frame >> strip_tac >>
+  rev_drule_all scalar_optional_check_runtime_frame >> strip_tac >>
+  drule_all scalar_emit_runtime_frame >> strip_tac >>
+  `(u with vs_vars := s.vs_vars) = s /\
+   (!p. not_fresh_at sa p ==> lookup_var p u = lookup_var p s)` by
+    (irule scalar_seq_runtime_frame_trans >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  irule scalar_seq_runtime_frame_trans >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* Both decimal directions have the same pointer-relevant compiler shape.
+   Threshold arithmetic only decides whether the two checks are present. *)
+Theorem convert_decimal_pipeline:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) ==>
+  ?c1 c2 op2 w1 w2 opc scale.
+  compile_type_convert x tc =
+    comp_ignore_bind
+      (if c1 then comp_bind (emit_op SLT [x;Lit w1]) (\a.
+         comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+       else comp_return ())
+      (comp_ignore_bind
+        (if c2 then comp_bind (emit_op op2 [x;Lit w2]) (\a.
+           comp_bind (emit_op ISZERO [a]) (\b. emit_void ASSERT [b]))
+         else comp_return ())
+        (emit_op opc [x;Lit scale])) /\
+  MEM op2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]
+Proof
+  strip_tac >> gvs[]
+  >- (qexistsl_tac
+        [`(if signed then - &(2 ** (bits-1)) else 0) < lo quot &divisor`,
+         `(if signed then &(2 ** (bits-1)-1) else &(2 ** bits-1)) > hi quot &divisor`,
+         `if signed then SGT else GT`, `i2w (lo quot &divisor)`,
+         `i2w (hi quot &divisor)`, `MUL`, `n2w divisor`] >>
+      Cases_on `signed` >> simp[compile_type_convert_def]) >>
+  qexistsl_tac [`ilo < lo * &divisor`, `ihi > hi * &divisor`,
+    `if signed then SGT else GT`, `i2w (lo * &divisor)`,
+    `i2w (hi * &divisor)`, `SDIV`, `n2w divisor`] >>
+  Cases_on `signed` >> simp[compile_type_convert_def]
+QED
+
+Theorem convert_decimal_fixed_certificate:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) /\
+  compile_type_convert x tc sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule convert_decimal_pipeline >> disch_then (qspec_then `x` strip_assume_tac) >>
+  qpat_x_assum `compile_type_convert x tc = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `MEM SLT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_two_checks_fixed_certificate >> simp[]
+QED
+
+Theorem convert_decimal_abort_fixed_certificate:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) /\
+  compile_type_convert x tc sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
+  ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule convert_decimal_pipeline >> disch_then (qspec_then `x` strip_assume_tac) >>
+  qpat_x_assum `compile_type_convert x tc = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `MEM SLT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_two_checks_abort_fixed_certificate >> simp[]
+QED
+
+Theorem convert_decimal_instruction_filter:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) /\
+  compile_type_convert x tc sa = (out,sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule convert_decimal_pipeline >> disch_then (qspec_then `x` strip_assume_tac) >>
+  qpat_x_assum `compile_type_convert x tc = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `MEM SLT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_two_checks_instruction_filter >> simp[]
+QED
+
+Theorem convert_decimal_runtime_frame:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) /\
+  compile_type_convert x tc sa = (out,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s /\
+  (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule convert_decimal_pipeline >> disch_then (qspec_then `x` strip_assume_tac) >>
+  qpat_x_assum `compile_type_convert x tc = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `MEM SLT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_two_checks_runtime_frame >> simp[]
+QED
+
+Theorem convert_decimal_counted_certificate:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) /\
+  compile_type_convert x tc sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all convert_decimal_fixed_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`th`] >> simp[] >>
+  drule_all convert_decimal_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Theorem convert_decimal_abort_counted_certificate:
+  ((?signed bits divisor lo hi. tc = ConvIntToDecimal signed bits divisor lo hi) \/
+   (?divisor ilo ihi lo hi signed. tc = ConvDecimalToInt divisor ilo ihi lo hi signed)) /\
+  compile_type_convert x tc sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th n j.
+    gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all convert_decimal_abort_fixed_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  drule_all convert_decimal_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
+  qexistsl_tac [`H`,`th`,`n`,`j`] >> simp[]
+QED
