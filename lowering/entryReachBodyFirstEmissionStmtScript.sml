@@ -615,3 +615,89 @@ Proof
   PairCases_on `x` >> pure_rewrite_tac[pairTheory.pair_case_def] >> BETA_TAC >>
   metis_tac[first_emission_dynarray_to_storage]
 QED
+
+Theorem first_emission_tuple_load_all[local]:
+  !ce src tys off a x b. compile_tuple_load_all ce src tys off a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> Cases_on `tys` >>
+  pure_rewrite_tac[compile_tuple_load_all_def, LET_THM] >> BETA_TAC
+  >- metis_tac[first_emission_return] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  match_mp_tac cs_appends_bind >> conj_tac
+  >- (rewrite_tac[contextTheory.compile_load_memory_def] >>
+      IF_CASES_TAC >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
+  gen_tac >> BETA_TAC >> irule cs_appends_bind >> simp[cs_appends_return] >>
+  rw[cs_appends_def] >> metis_tac[stmt_list_helpers_labels, pairTheory.SND]
+QED
+
+Theorem first_emission_tuple_store_all[local]:
+  !ce tys tgts vals a x b. compile_tuple_store_all ce tys tgts vals a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ho_match_mp_tac compile_tuple_store_all_ind >> rpt conj_tac
+  >- (pure_rewrite_tac[compile_tuple_store_all_def] >> metis_tac[first_emission_return])
+  >- suspend "base_target"
+  >- (rpt gen_tac >> strip_tac >> pure_rewrite_tac[compile_tuple_store_all_def] >>
+      ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+      >- (rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
+      first_assum ACCEPT_TAC) >>
+  pure_rewrite_tac[compile_tuple_store_all_def] >> metis_tac[first_emission_return]
+QED
+
+Resume first_emission_tuple_store_all[base_target]:
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[compile_tuple_store_all_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_get_target_ptr >> metis_tac[first_emission_compile_expr]) >>
+  gen_tac >> BETA_TAC >>
+  ntac 10 (ho_match_mp_tac first_emission_bind >> conj_tac
+     >- metis_tac[first_emission_return] >> gen_tac >> BETA_TAC) >>
+  ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC
+      >- (IF_CASES_TAC >- metis_tac[first_emission_store_at_loc] >>
+          rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
+      metis_tac[first_emission_assign_value]) >>
+  first_assum ACCEPT_TAC
+QED
+Finalise first_emission_tuple_store_all
+
+Theorem first_emission_tuple_unpack[local]:
+  !ce ty stage tgts src a x b. compile_tuple_unpack ce ty stage tgts src a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_tuple_unpack_def, LET_THM] >> BETA_TAC >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >> IF_CASES_TAC
+  >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac
+          >- metis_tac[first_emission_alloc_buffer] >>
+          gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+          >- metis_tac[first_emission_return] >>
+          gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+          >- (rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
+          metis_tac[first_emission_return]) >>
+      metis_tac[first_emission_return]) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[first_emission_tuple_load_all] >>
+  metis_tac[first_emission_tuple_store_all]
+QED
