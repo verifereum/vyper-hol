@@ -163,6 +163,110 @@ Proof
   irule alias_plan_event_clean >> metis_tac[]
 QED
 
+(* Unlike the flat event projection, this certificate retains the operation
+   fragments and recursively correlates every cut with its block origin. *)
+Inductive alias_instruction_segment:
+[~nil:]
+  DROP i (non_param_insts bb) = [] ==>
+  alias_instruction_segment lv dfg cfg fn lbl bb i [] ps [] ps []
+[~cons:]
+  DROP i (non_param_insts bb) = inst::rest /\
+  generate_inst_plan lv dfg cfg fn inst
+    (if rest = [] then live_vars_at lv bb.bb_label (LENGTH bb.bb_instructions)
+     else live_vars_at lv bb.bb_label
+       (i + LENGTH (get_params bb.bb_instructions) + 1))
+    (bb_is_halting bb)
+    (case rest of [] => F | next::_ => is_terminator next.inst_opcode)
+    bb.bb_label ps = SOME (step_ops, ps1) /\
+  alias_instruction_segment lv dfg cfg fn lbl bb (i+1) rest
+    ps1 rest_ops ps_end cuts ==>
+  alias_instruction_segment lv dfg cfg fn lbl bb i (inst::rest)
+    ps (step_ops ++ rest_ops) ps_end (AliasPlanInst lbl bb (i+1) ps1 :: cuts)
+End
+
+Definition alias_block_segment_def:
+  alias_block_segment lv dfg cfg fn lbl bb ps ops ps_after cuts <=>
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    ?param_ops ps1 clean_ops ps2 inst_ops inst_cuts.
+      (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+       else ([], ps)) = (param_ops, ps1) /\
+      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+       then clean_stack_plan lv cfg fn bb ps1 else ([], ps1)) = (clean_ops, ps2) /\
+      alias_instruction_segment lv dfg cfg fn lbl bb 0 (non_param_insts bb)
+        ps2 inst_ops ps_after inst_cuts /\
+      ops = [SOLabel bb.bb_label] ++ param_ops ++ clean_ops ++ inst_ops /\
+      cuts = AliasPlanPrepared lbl bb ps1 :: AliasPlanInst lbl bb 0 ps2 :: inst_cuts
+End
+
+Theorem alias_instruction_segment_exists:
+  !insts i ps ops ps_end.
+    generate_block_insts_plan lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+      i insts ps = SOME (ops, ps_end) /\
+    DROP i (non_param_insts bb) = insts ==>
+    ?cuts. alias_instruction_segment lv dfg cfg fn lbl bb i insts ps ops ps_end cuts
+Proof
+  Induct_on `insts`
+  >- (simp[generate_block_insts_plan_def] >> rpt strip_tac >>
+      qexists_tac `[]` >> irule alias_instruction_segment_nil >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once generate_block_insts_plan_def, LET_THM, AllCaseEqs()] >>
+  `DROP (i+1) (non_param_insts bb) = insts` by
+    (`DROP 1 (DROP i (non_param_insts bb)) = insts` by simp[] >>
+     qpat_x_assum `DROP 1 (DROP i _) = _` mp_tac >>
+     pure_rewrite_tac[DROP_DROP_T] >> simp[Once arithmeticTheory.ADD_COMM]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `AliasPlanInst lbl bb (i+1) ps' :: cuts` >>
+  irule alias_instruction_segment_cons >>
+  pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+  rpt (first_assum (irule_at Any))
+QED
+
+Theorem alias_instruction_segment_history:
+  !i insts ps ops ps_end cuts.
+    alias_instruction_segment lv dfg cfg fn lbl bb i insts ps ops ps_end cuts ==>
+    !ps0. alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+      (AliasPlanInst lbl bb i ps) cuts
+      (AliasPlanInst lbl bb (i + LENGTH insts) ps_end)
+Proof
+  ho_match_mp_tac alias_instruction_segment_ind >> conj_tac
+  >- simp[alias_cut_history_def] >>
+  rpt strip_tac >> rename1 `DROP i _ = inst::rest` >>
+  simp[alias_cut_history_def] >> conj_tac
+  >- (irule alias_plan_event_instruction >> metis_tac[]) >>
+  `i + SUC (LENGTH rest) = i+1+LENGTH rest` by simp[] >>
+  pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem alias_block_segment_exists:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (ops, ps_after) ==>
+  ?cuts. alias_block_segment lv dfg cfg fn lbl bb ps ops ps_after cuts
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule alias_instruction_segment_exists >> simp[] >>
+  disch_then (qspec_then `lbl` strip_assume_tac) >>
+  qexists_tac `AliasPlanPrepared lbl bb ps1 :: AliasPlanInst lbl bb 0 ps2 :: cuts` >>
+  simp[alias_block_segment_def] >> rpt (first_assum (irule_at Any))
+QED
+
+Theorem alias_block_segment_history:
+  alias_block_segment lv dfg cfg fn lbl bb ps ops ps_after cuts ==>
+  !ps0. alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+    (AliasPlanEntry lbl ps) cuts
+    (AliasPlanInst lbl bb (LENGTH (non_param_insts bb)) ps_after)
+Proof
+  simp[alias_block_segment_def] >> rpt strip_tac >>
+  drule alias_instruction_segment_history >> simp[] >> strip_tac >>
+  simp[alias_cut_history_def] >> conj_tac
+  >- (irule alias_plan_event_prepare >> metis_tac[]) >>
+  irule alias_plan_event_clean >> metis_tac[]
+QED
+
 Theorem alias_plan_history_extend_block:
   alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
     start prefix (AliasPlanEntry lbl ps) /\
@@ -178,6 +282,97 @@ Proof
   disch_then (qspec_then `ps0` strip_assume_tac) >>
   qexists_tac `AliasPlanEntry lbl
     (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) :: cuts` >>
+  irule alias_cut_history_append >> first_assum (irule_at Any) >>
+  simp[alias_cut_history_def, alias_plan_event_override]
+QED
+
+Inductive alias_lineage_segments:
+[~entry:]
+  fn_entry_label fn = SOME lbl ==>
+  alias_lineage_segments lv dfg cfg fn ps0 lbl ps0 []
+[~step:]
+  alias_lineage_segments lv dfg cfg fn ps0 lbl ps cuts /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn ps0 lbl ps_dfs /\
+  generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (ops, ps_dfs_after) /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) =
+      SOME (ops, ps_after) /\
+  alias_block_segment lv dfg cfg fn lbl bb
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>)
+    ops ps_after block_cuts /\
+  MEM succ (cfg_succs_of cfg lbl) /\
+  dfs_block_state lv dfg cfg fn ps0 succ ps_succ ==>
+  alias_lineage_segments lv dfg cfg fn ps0 succ
+    (ps_succ with <| ps_stack := ps_after.ps_stack;
+                    ps_spilled := ps_after.ps_spilled |>)
+    (cuts ++ AliasPlanEntry lbl
+       (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) ::
+     block_cuts ++ [AliasPlanEntry succ
+       (ps_succ with <| ps_stack := ps_after.ps_stack;
+                       ps_spilled := ps_after.ps_spilled |>)])
+End
+
+Theorem alias_lineage_segments_exists:
+  !lbl ps. lineage_state lv dfg cfg fn ps0 lbl ps ==>
+    ?cuts. alias_lineage_segments lv dfg cfg fn ps0 lbl ps cuts
+Proof
+  ho_match_mp_tac lineage_state_ind >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `[]` >>
+      irule alias_lineage_segments_entry >> simp[]) >>
+  rpt strip_tac >> rename1 `MEM succ (cfg_succs_of cfg lbl)` >>
+  drule_all alias_block_segment_exists >> strip_tac >>
+  qexists_tac `cuts ++ AliasPlanEntry lbl
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) ::
+    cuts' ++ [AliasPlanEntry succ
+      (ps_succ with <| ps_stack := ps_after.ps_stack;
+                      ps_spilled := ps_after.ps_spilled |>)]` >>
+  irule alias_lineage_segments_step >> simp[] >>
+  qexistsl_tac [`ps_dfs`, `ps_dfs_after`] >> simp[]
+QED
+
+Theorem alias_lineage_segments_history:
+  !lbl ps cuts. alias_lineage_segments lv dfg cfg fn ps0 lbl ps cuts ==>
+  ?entry. fn_entry_label fn = SOME entry /\
+    alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+      (AliasPlanEntry entry ps0) cuts (AliasPlanEntry lbl ps)
+Proof
+  ho_match_mp_tac alias_lineage_segments_ind >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `lbl` >> simp[alias_cut_history_def]) >>
+  rpt strip_tac >> rename1 `MEM succ (cfg_succs_of cfg lbl)` >>
+  drule alias_block_segment_history >>
+  disch_then (qspec_then `ps0` assume_tac) >>
+  qexists_tac `entry` >> simp[] >>
+  irule alias_cut_history_append >>
+  qexists_tac `AliasPlanInst lbl bb (LENGTH (non_param_insts bb)) ps_after` >>
+  conj_tac
+  >- (simp[alias_cut_history_def] >> irule alias_plan_event_edge >> metis_tac[]) >>
+  irule alias_cut_history_append >> first_assum (irule_at Any) >>
+  simp[alias_cut_history_def, alias_plan_event_override]
+QED
+
+Theorem alias_lineage_segments_extend_block:
+  alias_lineage_segments lv dfg cfg fn ps0 lbl ps cuts /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb
+    (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) =
+      SOME (ops, ps_after) ==>
+  ?entry block_cuts.
+    fn_entry_label fn = SOME entry /\
+    alias_block_segment lv dfg cfg fn lbl bb
+      (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>)
+      ops ps_after block_cuts /\
+    alias_cut_history (alias_plan_event lv dfg cfg fn ps0)
+      (AliasPlanEntry entry ps0)
+      (cuts ++ AliasPlanEntry lbl
+        (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) :: block_cuts)
+      (AliasPlanInst lbl bb (LENGTH (non_param_insts bb)) ps_after)
+Proof
+  strip_tac >> drule alias_lineage_segments_history >> strip_tac >>
+  drule_all alias_block_segment_exists >> strip_tac >>
+  drule alias_block_segment_history >>
+  disch_then (qspec_then `ps0` assume_tac) >>
+  qexistsl_tac [`entry`, `cuts'`] >> simp[] >>
   irule alias_cut_history_append >> first_assum (irule_at Any) >>
   simp[alias_cut_history_def, alias_plan_event_override]
 QED
