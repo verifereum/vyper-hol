@@ -1430,3 +1430,71 @@ base without dropping lemmas. MloadProducer separately passed at session start.
 No semantic theorem was asserted here, and no frozen contract file was edited.
 No new positions-rewrite lemma was proposed: all such needs use existing
 concretizeStepStructure/StepShape/StepCallChecks/StepRetpc/StageShape imports.
+
+## ALLOCA immediate certificate audit (allocCertificateAudit)
+
+The earlier N17 success gap is now discharged by
+`concretizePtrMixedAllocationPrefix.ptr_paired_prefix_alloca_success`
+(lines 97–123): its antecedent and existential conclusion are exactly
+`mixed_allocation_success_schema`. This covers fresh AND cached execution,
+including zero size, without a zero allocator-frontier assumption.
+`mixed_allocation_immediate_prefix_schema` adds only the immediate six-field
+prefix conclusion under that SAME antecedent. It is a typechecked quotation,
+not a theorem. `holbuild(targets=["concretizePtrUniversalStepSchemaTheory"])`
+passed after its addition (TO_concretize_ptr-20261105T174221Z_m15721_t001).
+
+Write `S = (tokens,registry,B,PT,TG',saved,entries)`. The candidate appends
+`h++[b]`, `ht++[zt]`, `done++[LENGTH h-1]`, `H++[S]`, keeping calls and ws.
+The following ledger distinguishes installed suppliers from assembly still
+unproved. All field definitions are in PairedPrefix, lines 174–183.
+
+| Field | Exact supplier interface and allocation match |
+|---|---|
+| transcript | StructuralTranscript pair rule, lines 33–56, consumes old transcript, `ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT TG' saved`, target `ptr_chrono_step C' at zt`, equal departing inst ids and the equal-stack-length disjunct. The tagged step is an explicit success conclusion. Source stack is unchanged by success; target stack is unchanged by ordinary ASSIGN event inversion. Existing contract rewrite id preservation gives equal ids. ActivationChronology tokens/registry definitions therefore reduce to tokens/registry, the entry conditional selects entries, and its computed overlay is exactly B. The rule appends S, not an altered copy of H. |
+| placements | `ptr_stage_placements C' positions` is unchanged: C' and positions do not change. Project from old prefix. No new layout premise. |
+| samples | `ptr_paired_samples_pair`: old samples AND `ptr_paired_sample positions b zt S` imply samples on the four appended lists. The new sample definition is exactly the success conclusion's mixed variables and core sharing. It uses B and TG' only at the new endpoint. |
+| alignment | `ptr_paired_alignment_pair`: old samples, old alignment, `ptr_paired_code R lp positions b.po_fn zt.po_fn`, `ptr_paired_cursor lp b zt`, and `ptr_paired_params positions b zt S` imply appended alignment. Cursor is explicit in success. Code follows from endpoint code and b.po_fn=a.po_fn, with zt.po_fn=at.po_fn from ordinary target ASSIGN inversion. Params require the birth-extension implication specified below, plus unchanged source/target vs_params. The new TG' is irrelevant to ptr_paired_params. |
+| callers | `ptr_paired_callers_retained`: old callers, `EVERY (\\n. n<LENGTH h) done`, `LENGTH done<LENGTH ht`, `LENGTH H=LENGTH h`, b.po_stack=a.po_stack and zt.po_stack=at.po_stack imply callers on arbitrary appended hs,ts,ds,snapshots with the same saved/calls. Length premises follow from old samples. Source stack is a success conclusion; target stack is ASSIGN inversion. No caller birth-map substitution is performed. |
+| writes | `ptr_paired_writes_pair` (PairedFields lines 217–229) consumes old writes, `LENGTH H=LENGTH h`, positive source length, `LENGTH ht=SUC(LENGTH done)`, `EVERY (\\n. SUC n<LENGTH h) done`, the empty-or-singleton extra shape, EVERY new-write certificate on extra, and the departing nonempty-footprint implication. Choose extra=[]; EVERY and shape are trivial and ws++[]=ws. Structural trace embedding supplies the strict done bound. `LAST h=a` follows from source history. ALLOCA has `range_bytes(step_writes a.po_inst a.po_state b.po_state)={}`, so the implication is vacuous, regardless of fresh/cached allocation. No write equality or target exclusion premise is added. |
+
+### Exact small missing transport boundary
+
+No exported args birth-extension theorem was found in ValueTransport or
+AllocationTransport. The precise desired implication (not an additional schema
+premise, and not asserted here) is:
+
+```sml
+(!owner site. FLOOKUP births owner = SOME site ==>
+  FLOOKUP B owner = SOME site) /\
+ptr_args_transport births positions tags masks xs ys ==>
+ptr_args_transport B positions tags masks xs ys
+```
+
+Installed `ptr_value_transport_birth_extension` has exactly the same lookup
+retention antecedent plus `ptr_value_transport births positions tag mask x y`,
+and concludes that value relation with B. `ptr_args_transport_def` is two
+unchanged length equalities and
+`LIST_REL (\\(tag,mask,x) y. ptr_value_transport births positions tag mask x y)
+ (ZIP(tags,ZIP(masks,xs))) ys`. Thus LIST_REL monotonicity lifts the installed
+value theorem; no new semantic invariant is indicated. The accepted success
+supplier already concludes lookup retention for B. For paired params, the
+PT=[]/equal-vs_params alternative is preserved directly; otherwise apply this
+implication to unchanged PT, parameter lists and replicated empty masks.
+ALLOCA/ASSIGN preserve vs_params, independently of the observation po_params
+field (do not confuse these two). These operational projection facts remain
+assembly obligations, not consequences of mixed variables alone.
+
+### Audit verdict and scope
+
+Immediate ALLOCA integration now appears standard constructor/list assembly
+with one small reusable args-monotonicity boundary; no additional hypothesis
+or change to the paired-prefix definition was identified. This verdict is NOT
+a checked full-prefix theorem. In particular the quotation does not certify
+its own premises or conclusion. Source execution and birth retention must be
+obtained from the accepted success theorem, not assumed a second time.
+`ptr_structural_transcript_append_prefix` preserves TAKE/EL of old H exactly;
+all old samples, caller certificates and write certificates continue to use
+their original snapshots. Neither B nor TG' may replace historical witnesses.
+Normalization is a separate existing consumer. RET and other event families
+were not advanced in this diagnostic; universal coverage is still unproved.
+No positions-rewrite lemma or frozen contract file was added or edited.
