@@ -1,6 +1,6 @@
 Theory bodyIfExpMemory
 Ancestors
-  loweringPosts exprSimMemUnwrap
+  loweringPosts exprSimMemUnwrap bodyIfExpMemoryJoin bodyIfExpArmMemory
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
@@ -409,9 +409,9 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ifexp_word_arm_finish_mem[local]:
+Theorem ifexp_arm_finish_mem[local]:
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
-  is_word_type t /\ expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
+  expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
@@ -424,14 +424,18 @@ Theorem ifexp_word_arm_finish_mem[local]:
   gas_outcome T tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+      (~is_word_type t ==> vv_store_bound cx t (lowered_value_type cenv (IfExp t c a b))
+        ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
       u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
       alloca_history func u /\ tt.vs_alloca_next <= u.vs_alloca_next) R ==>
   gas_outcome T tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?tv. res = INL tv /\
       vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
-        (StackValue t (Var rv)) u /\
+        (if is_word_type t then StackValue t (Var rv)
+         else LocatedValue t (mk_ptr (Var rv) LocMemory)) u /\
       vv_store_bound cx t (lowered_value_type cenv (IfExp t c a b)) ee tv
-        (StackValue t (Var rv)) u /\
+        (if is_word_type t then StackValue t (Var rv)
+         else LocatedValue t (mk_ptr (Var rv) LocMemory)) u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
 Proof
@@ -440,9 +444,11 @@ Proof
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
-  qexists_tac `tv` >> simp[vv_store_bound_stack_word] >> conj_tac
-  >- (qpat_assum `is_word_type t` (fn th => irule (SRULE [th] ifexp_finish_post)) >>
-      simp[] >> metis_tac[]) >>
+  qexists_tac `tv` >> simp[] >> conj_tac
+  >- (irule ifexp_finish_post >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases_on `is_word_type t` >> simp[vv_store_bound_stack_word] >>
+      irule ifexp_pointer_bound_assign >> metis_tac[]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
