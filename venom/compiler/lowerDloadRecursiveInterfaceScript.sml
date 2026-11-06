@@ -2768,3 +2768,144 @@ Resume ld_recursive_geometry_load_next[revert_successor]:
 QED
 
 Finalise ld_recursive_geometry_load_next
+
+(* CALL/RETURN compatibility audit (geometry refinement, C2.calls_compatibility).
+   These are exact constructor TERMS, not closure theorems. They use the same
+   environment as ld_recursive_geometry_block_clause; there is no additional
+   completed-run premise, raw target provenance, or anchor reachability premise. *)
+val ld_recursive_geometry_call_return_goals =
+  let
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses,_) = dest_imp body
+    fun select idx =
+      let
+        val clause = subst [p |-> ld_recursive_geometry_candidate]
+          (List.nth(strip_conj clauses,idx))
+        val (v0::ct::rest,b) = strip_forall clause
+      in subst [v0 |-> mk_var("vs0",type_of v0),
+                ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end
+  in (select 3, select 4) end;
+val (ld_recursive_geometry_call_goal,ld_recursive_geometry_return_goal) =
+  ld_recursive_geometry_call_return_goals;
+
+(* Proposed NEXT SEMANTIC BOUNDARY: setup only, not constructor closure.
+   The record equations fix the SAME parent witnesses, not independent saved
+   displacements. Child entry/PHIs and configured child position follow later.
+   This quotation is typechecked; it is deliberately NOT asserted as a theorem.
+   No source-success, child-normal-data, or completed-run assumption is hidden. *)
+val ld_proposed_call_normal_setup = ``
+  lower_dload_function_supply a child = (callee,b) /\
+  opaque_use_ok caller /\ MEM ci (fn_insts caller) /\
+  ci.inst_opcode = INVOKE /\ decode_invoke ci = SOME (nm,ops) /\
+  taint_ok caller tn ci s /\
+  V = set (fn_ir_vars caller) /\ U = {v | v IN V /\ ~retpc_var caller v} /\
+  ld_normal_data CS caller V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  sf = <|lf_fn := caller; lf_inst := ci; lf_state := s;
+          lf_params := AP; lf_prov := AG; lf_tvar := tn.t_var; lf_local := L|> /\
+  tf = <|lf_fn := target_caller; lf_inst := ci; lf_state := t;
+          lf_params := BP; lf_prov := BH; lf_tvar := un.t_var; lf_local := H|> /\
+  FINITE child_keys /\
+  eval_operands ops t = SOME args /\ setup_callee callee args t = SOME cs ==>
+  ?sargs ss.
+    eval_operands ops s = SOME sargs /\ setup_callee child sargs s = SOME ss /\
+    ld_normal_data CS child childV {v | v IN childV /\ ~retpc_var child v}
+      lo E FEMPTY FEMPTY (MAP (ld_op_prov AG) ops) (MAP (ld_op_prov BH) ops)
+      FEMPTY FEMPTY (tn with t_var := FEMPTY) (un with t_var := FEMPTY)
+      ss cs (sf::astk) live child_keys (32 * SUM (MAP CARD (A::suspended)))
+      {} (A::suspended) (tf::gstk) t.vs_alloca_next``;
+
+(* PREMISE/CONCLUSION LEDGER (source locations are authoritative interfaces).
+
+   CALL inversion:
+   The fourth projected clause supplies INVOKE, decode, target lookup, operand
+   evaluation, setup, enters_block and child active_inst. There is no OK step
+   premise. ld_recursive_block_anchor therefore cannot be used: its successful
+   terminator hypothesis is wrong. Singleton INVOKE inversion is still needed:
+   lower_dload_inst_supply_control plus supply definition gives i=j, code=[i],
+   a2=a1, n=0, t=ta, un=ua. Strict prefixes cannot contain INVOKE. The exceptional
+   interval exclusion must use its copy/ASSIGN/REVERT opcode classification, not
+   assume that the existing BLOCK inversion covers CALL.
+
+   Callee lookup:
+   lowerDloadIndexedStageEntry:29 lower_dload_stage_lookup_indexed returns the
+   source lookup and indexed fn_pass_step/view witness at the actual supply.
+   fn_pass_step must still be inverted to the callee supply. No whole-context
+   lower_dload_functions_supply certificate can replace these fields.
+
+   Source setup/parameters/frame:
+   lowerDloadCallFrameSetup:21 ld_call_frame_setup_backward consumes exactly
+   opaque_use_ok, caller membership, INVOKE/decode, source taint_ok and owned
+   observable variables. Normal-data frame supplies owned variables/shared_state;
+   annotated source taint_ok and context shape supply the remaining facts.
+   It returns one sargs/ss, the full child frame_data with empty locals/provenance
+   and parameter tables MAP(ld_op_prov AG/BH) ops, and the clean parameter
+   envelope. lowerDloadCallParameters:37 additionally returns selection LIST_REL.
+   This is NOT yet ld_normal_data. The proposed setup quote above is the first
+   unmatched producer: no existing theorem returns that complete conjunction.
+
+   Geometry/memory are ingredients, not alternative independently chosen ss:
+   lowerDloadCallBoundaryTest:162 ld_call_entry_geometry_backward returns actual
+   source evaluation/setup/entry and child account/frame/stack/floor bounds,
+   but no child normal_data or saved certificates. Its outputs must be aligned
+   with frame_setup's ss by deterministic setup (and sargs by eval_operands).
+   lowerDloadTargetGeometry:66 ld_call_geometry is the geometry-only consumer
+   once both setups/entries are known. lowerDloadCallMemory:7 ld_call_entry_memory
+   transports bytes under the pushed source live shape, with the SAME E.
+   lowerDloadFrameFloor:35 ld_setup_callee_floor gives new floor=t.vs_alloca_next.
+   At setup the old target allocation representation becomes bt+sz<=new floor;
+   child allocas are empty. Normal strict caps/disjointness/live bounds remain
+   with the same live and E; child AG support is vacuous. Masks outside t_var
+   are unchanged. Companion gas/noncurrent storage fields require setup
+   footprints, not an assumption that frame_data implies them.
+   Once setup normal_data exists, lowerDloadNormalEntry:8 is the available PHI
+   boundary. It returns ld_entry_prov and entry_taint_vars updates. The CALL rule
+   instead keeps FEMPTY provenance/t_var: equality of those updates on setup's
+   empty variable store still needs checking. No closure is inferred here.
+
+   Push bookkeeping:
+   sf/tf are the fixed records in the proposed quote. New saved head is the
+   parent ld_saved_embedded at d,A; its parameter-envelope is the EXACT disjunction
+   in ld_normal_data_envelope, not the clean child envelope. The nine saved slice
+   equalities are call_ctx, tx_ctx, block_ctx, prev_hashes, code, data_section,
+   fmp, call_entry_fmp, initial_fmp (candidate lines 122-130). All come from
+   parent shared_state. Head annotation/origin/configured INVOKE is the phase-zero
+   parent witness; tail q becomes SUC q, DROP tail-charge arithmetic is unchanged.
+   Child A={}, suspended=A::suspended and supports/key lists push caller values.
+   Allocation validity is separate: save alloca_inv t from refined premise;
+   setup empties allocas, alloca_inv_empty plus enters_block allocation fields
+   gives valid actual child anchor. TargetValidity:9/37 independently checks
+   active/saved validity, but does not prove this simulation push.
+
+   RETURN:
+   Fifth projected clause has ONE IH at ((caller,inv,saved,T)::stk), an actual
+   target IntRet and bind, then caller active_inst. No source completed run.
+   First invert normal phase and exceptional interval; dispatch must exclude
+   RETFMP/DRET using source fmp_free/shape and supply control. The checked
+   ld_nonopaque_ret_backward returns the SAME ret record (not merely related
+   operand vectors); ordinary RET has ret.iret_adopt_fmp=NONE. These facts are
+   mandatory before using the saved nine-field slice.
+   lowerDloadOperationalClosure:270 ld_annotated_call_pop consumes source terminal
+   annotation/IntRet, the SAVED decode/lookup/eval/setup and a source bind; it
+   reconstructs run_blocks and resumed annotation. Thus the saved origin must
+   align with setup; it is not a second induction hypothesis or an added premise.
+   lowerDloadCallBoundaryTest:133 ld_return_pop_backward returns source IntRet and
+   bind plus resumed account/frame/stack/floor bounds, but neither same ret nor
+   complete resumed normal_data. It is not a RETURN constructor closure theorem.
+   lowerDloadCallMemory:28 ld_call_return_memory uses CURRENT callee bytes and
+   restricts E to surviving live owners; it does NOT restore saved caller memory.
+   Current shared_state supplies accounts/transient/immutables/outcomes/returndata;
+   saved nine-field slice supplies retained caller fields; saved envelope supplies
+   restored caller AP/BP and params; saved owned-vars supplies labels and masked
+   saved variable restoration after DRESTRICT output removal. Complete resumed
+   normal_data and configured resumed caller position remain unmatched.
+   Geometry: saved caller alloca_inv and bind_outputs/adopt_return_fmp allocation
+   fields restore current validity; remaining saved states simply drop the head.
+   See lowerDloadTargetValidity:31-34 for the actual allocation-field interfaces:
+   ld_bind_outputs_allocas, bind_outputs_shared_fields, adopt_return_fmp_allocas.
+
+   RESULT: CALL/RETURN are not proved. The exact setup normal-data quotation is
+   the proposed bounded next boundary; singleton INVOKE inversion, setup-entry
+   empty PHI update alignment, saved push packaging and RETURN normal restoration
+   remain distinct residuals. No historical ledger paragraph certifies them.
+*)
