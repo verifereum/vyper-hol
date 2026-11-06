@@ -338,8 +338,7 @@ Proof
      irule log_arg_clear_base >> metis_tac[]) >>
   `log_arg_rel cenv cx sa sb es' u (x,expr_type e) v` by
     (irule log_arg_rel_frame >> simp[] >>
-     qexistsl_tac [`ctx`, `es1`, `func`] >>
-     qexistsl_tac [`t`, `sm`] >> gvs[]) >>
+     qexistsl_tac [`ctx`, `es'`, `es1`, `func`, `t`, `sm`] >> gvs[]) >>
   simp[log_args_post_def] >> conj_tac
   >- (drule_all log_args_post_state >> simp[]) >>
   conj_tac
