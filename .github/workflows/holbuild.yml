@@ -206,7 +206,12 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
+          # Bound total HOL memory on the hosted runner, including fixture builds.
+          jobs=$(nproc)
+          if [ "$jobs" -gt 2 ]; then jobs=2; fi
+          memory_mib=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1024 / 1024 ))
+          if [ "$memory_mib" -lt 12288 ]; then jobs=1; fi
+          holbuild --max-heap 4096 --verbose -j"$jobs" build --skip-checkpoints --skip-proof-steps
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -363,15 +368,19 @@ jobs:
 
       - name: Generate test theories from pinned exports
         run: |
-          holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
+          holbuild --max-heap 4096 build --skip-checkpoints --skip-proof-steps vyperTestLibTestTheory
           generator=$(mktemp --suffix=.sml)
           trap 'rm -f "$generator"' EXIT
           printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
-          (cd tests && holbuild run --noconfig vyperTestLib "$generator")
+          (cd tests && holbuild --max-heap 4096 run --noconfig vyperTestLib "$generator")
+
+      - name: Check generated Vyper script inventory
+        run: |
+          holbuild --max-heap 4096 run --noconfig tests/checkGeneratedScripts.sml
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
-        run: holbuild build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
+        run: holbuild --max-heap 4096 build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
 
       - name: Report Vyper test coverage baseline
         if: matrix.group == 0
@@ -385,7 +394,12 @@ jobs:
           # build time; rerun `tools/vyper_test_groups.py plan` when tests change.
           targets=$(python3 tools/vyper_test_groups.py targets --group ${{ matrix.group }} --groups ${{ strategy.job-total }})
           echo "Building: $targets"
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+          # Leave RAM for the runner and dependency loading, not just ML heaps.
+          jobs=$(nproc)
+          if [ "$jobs" -gt 2 ]; then jobs=2; fi
+          memory_mib=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1024 / 1024 ))
+          if [ "$memory_mib" -lt 12288 ]; then jobs=1; fi
+          holbuild --max-heap 4096 --verbose -j"$jobs" build --skip-checkpoints --skip-proof-steps $targets
 
       - name: Verify no successful-build checkpoints remain
         run: |

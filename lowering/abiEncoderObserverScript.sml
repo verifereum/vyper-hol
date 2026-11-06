@@ -561,15 +561,6 @@ Proof
   rpt strip_tac >> gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
-Theorem observer_setfmp_step[local]:
-  !ctx s. step_inst 0 ctx (mk_inst 0 SETFMP [Lit 7w] []) s =
-    OK (s with vs_fmp := 7w)
-Proof
-  rpt gen_tac >>
-  simp[step_inst_non_invoke, mk_inst_def] >>
-  simp[Once step_inst_base_def, eval_operand_def]
-QED
-
 Theorem observer_old_prefix_region_closed:
   observer_region_closed ctx
     (fn with fn_blocks :=
@@ -579,8 +570,8 @@ Theorem observer_old_prefix_region_closed:
 Proof
   rw[observer_region_closed_def, abi_observer_step_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  gvs[observer_setfmp_step] >>
-  gvs[mk_inst_def, is_terminator_def]
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+      is_terminator_def, eval_operand_def]
 QED
 
 Theorem observer_old_stop_or_invoke_not_closed:

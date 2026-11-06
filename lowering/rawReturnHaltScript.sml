@@ -44,7 +44,8 @@ Theorem return_raw_run[local]:
     LENGTH bs < dimword (:256) ==>
     ?ss. run_from fuel ctx fn s = Halt ss /\ ss.vs_returndata = bs /\
          ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests
+         ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+         ss.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt strip_tac >>
   qabbrev_tac `s1 = update_var len (n2w (LENGTH bs)) s with
@@ -95,7 +96,8 @@ Theorem compile_external_return_raw_frag[local]:
     (!s ss. P s /\ ss.vs_returndata = bs /\
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient = s.vs_transient /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
@@ -135,7 +137,8 @@ Theorem compile_external_return_raw_unlock_frag:
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
               (if nr /\ ~iv then tstore (n2w nkey) 0w s else s).vs_transient /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof

@@ -765,7 +765,7 @@ Theorem regular_plan_selected_prefix:
     emitted = FOLDL (\st out. st with ps_stack := stack_push (Var out) st.ps_stack)
       (arranged with ps_stack := stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)
       inst.inst_outputs /\
-    (if inst.inst_outputs = [] \/ halting then (popops,popped) = ([],emitted)
+    (if inst.inst_outputs = [] \/ halting /\ LENGTH inst.inst_outputs <= 1 then (popops,popped) = ([],emitted)
      else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs))
        emitted = (popops,popped)) /\
     (if inst.inst_outputs = [] \/ FILTER (\out. MEM out nl) inst.inst_outputs = []
@@ -803,7 +803,7 @@ Proof
   strip_tac >>
   qexists `selected` >> qexists `reorder_ops` >> qexists `ps4` >> simp[] >>
   qexists `pop_ops` >> qexists `ps8` >> qexists `opt_ops` >> qexists `ps9` >>
-  Cases_on `halting` >> gvs[] >>
+  Cases_on `halting` >> Cases_on `LENGTH inst.inst_outputs <= 1` >> gvs[] >>
   Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> gvs[]
 QED
 

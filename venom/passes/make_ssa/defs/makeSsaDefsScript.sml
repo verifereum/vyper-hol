@@ -507,20 +507,6 @@ Proof
   irule MAP_CONG >> rw[]
 QED
 
-(* Frontier labels from ALOOKUP are in the nub universe *)
-Triviality alookup_mem_flat_nub:
-  ∀d df (prefix : 'a list) f x.
-    ALOOKUP df d = SOME x ∧ MEM f x ⇒
-    MEM f (nub (prefix ++ FLAT (MAP SND df)))
-Proof
-  rpt strip_tac >>
-  imp_res_tac ALOOKUP_MEM >>
-  simp[MEM_nub, MEM_APPEND] >>
-  disj2_tac >> simp[MEM_FLAT] >>
-  qexists_tac `x` >> simp[MEM_MAP] >>
-  qexists_tac `(d,x)` >> simp[]
-QED
-
 (* process_frontiers does not increase the worklist-universe measure.
    U is a fixed universe containing all frontier labels. *)
 Triviality process_frontiers_measure:

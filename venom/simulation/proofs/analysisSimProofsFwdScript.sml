@@ -35,18 +35,6 @@ Proof
   simp[analysis_function_transform_def, function_map_transform_def]
 QED
 
-(* Boundary lemma: abt bb is in aft fn whenever bb is in fn.fn_blocks *)
-Triviality abt_mem_aft_fn_blocks:
-  !bottom result f fn bb.
-    MEM bb fn.fn_blocks ==>
-    MEM (analysis_block_transform bottom result f bb)
-        (analysis_function_transform bottom result f fn).fn_blocks
-Proof
-  rpt strip_tac >>
-  simp[aft_fn_blocks, MEM_MAP] >>
-  qexists_tac `bb` >> simp[]
-QED
-
 (* Compare two analysis_function_transforms of the same function.
    Useful when a pass decomposes into substitution + elimination phases
    that use different transform functions on the same analysis result. *)

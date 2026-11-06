@@ -132,30 +132,6 @@ Proof
   simp[MEM_MAP] >> qexists_tac `x` >> simp[]
 QED
 
-(* The children + DfsEmit pushed by processing a non-pseudo instruction
-   don't contain tid *)
-Triviality pushed_no_tid:
-  !bi order eda offspring_map top tid.
-    MEM top bi ==> ~is_pseudo top.inst_opcode ==>
-    top.inst_id <> tid ==>
-    eda_wf eda bi ==>
-    (!i. MEM i bi /\ ~is_pseudo i.inst_opcode ==>
-         ~MEM tid (MAP (\d. d.inst_id) (inst_all_deps bi order eda i))) ==>
-    let sorted = sort_children bi order eda offspring_map top
-                   (inst_all_deps bi order eda top) in
-    let inst' = if is_flippable top.inst_opcode /\
-                   sorted <> inst_all_deps bi order eda top
-                then flip_operands top else top in
-    id_not_in_stack tid
-      (MAP DfsProcess sorted ++ [DfsEmit inst'])
-Proof
-  rpt strip_tac >> simp[LET_THM, id_not_in_stack_def] >>
-  conj_tac
-  >- (drule children_no_tid >> rpt (disch_then drule) >>
-      strip_tac >> gvs[id_not_in_map_process])
-  >> (rw[] >> simp[])
-QED
-
 (* Invariant for the DFS FUNPOW. tid = (LAST bi).inst_id.
    Either:
    (A) DfsProcess with inst_id = tid is at stack bottom, not visited,
@@ -183,30 +159,6 @@ End
 (* Helper: when the stack top is processed (not the bottom item),
    the bottom item is preserved and new items above don't contain tid.
    This factors the common case analysis for Phases A, B, and C. *)
-
-(* dfs_step preserves bottom_inv — helper for pushed items *)
-Triviality pushed_stack_no_tid:
-  !bi order eda offspring_map top tid rest.
-    MEM top bi /\ ~is_pseudo top.inst_opcode /\
-    top.inst_id <> tid /\ eda_wf eda bi /\
-    (!i. MEM i bi /\ ~is_pseudo i.inst_opcode ==>
-         ~MEM tid (MAP (\d. d.inst_id) (inst_all_deps bi order eda i))) /\
-    id_not_in_stack tid rest ==>
-    id_not_in_stack tid
-      (MAP DfsProcess
-         (sort_children bi order eda offspring_map top
-            (inst_all_deps bi order eda top)) ++
-       [DfsEmit (if is_flippable top.inst_opcode /\
-          sort_children bi order eda offspring_map top
-            (inst_all_deps bi order eda top) <>
-          inst_all_deps bi order eda top
-        then flip_operands top else top)] ++ rest)
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`bi`,`order`,`eda`,`offspring_map`,`top`,`tid`]
-            pushed_no_tid) >>
-  simp[LET_THM]
-QED
 
 (* dfs_step preserves bottom_inv when tid is not a dep target.
    Key: asm_rewrite_tac[dfs_step_def] resolves case on ds_stack
@@ -1450,13 +1402,6 @@ QED
 Definition non_pseudo_defs_before_uses_def:
   non_pseudo_defs_before_uses = np_defs_before_uses
 End
-
-Triviality defs_before_implies_non_pseudo:
-  !insts. defs_before_uses insts ==> non_pseudo_defs_before_uses insts
-Proof
-  rw[non_pseudo_defs_before_uses_def, defs_before_uses_def,
-     np_defs_before_uses_def] >> metis_tac[]
-QED
 
 Triviality operand_dep_backward_weak:
   !bi inst dep v.

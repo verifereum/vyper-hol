@@ -10,8 +10,8 @@
  *   - AsmPushLabel: push resolved byte offset onto stack
  *   - JUMP/JUMPI: pop byte offset, map back to asm index via offset_to_pc
  *
- * CALL/STATICCALL use the shared gas-free outcome oracle. Other external
- * operations retain their concrete Verifereum execution bridge.
+ * CALL/STATICCALL and CREATE/CREATE2 use the shared gas-free outcome oracle.
+ * DELEGATECALL retains its concrete Verifereum execution bridge.
  *
  * TOP-LEVEL:
  *   asm_state, asm_result    — execution state and result types
@@ -568,7 +568,10 @@ Definition extract_asm_result_def:
              as_accounts := accounts;
              as_logs := s.as_logs ++ new_logs;
              as_memory := new_memory;
-             as_transient := new_transient
+             as_transient := new_transient;
+             as_pending_deletions := if success
+               then final_state.rollback.toDelete ++ s.as_pending_deletions
+               else s.as_pending_deletions
            |> in
            SOME (output, s')
        | _ => NONE)
@@ -580,7 +583,9 @@ End
  * Forwarded gas is popped/evaluated by dispatch and deliberately ignored. *)
 Definition asm_call_request_def:
   asm_call_request s (addr:bytes32) (value:bytes32) ao asz is_static =
-    <| cr_target := w2w addr;
+    <| cr_kind := MessageCall; cr_gas := NONE;
+       cr_data_len := LENGTH (TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory)));
+       cr_target := w2w addr;
        cr_value := w2n value;
        cr_data := TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory));
        cr_static := (is_static \/ s.as_call_ctx.cc_static);
@@ -668,6 +673,34 @@ Definition asm_exec_delegatecall_def:
     | _ => AsmError "delegatecall: stack underflow"
 End
 
+(* Creation uses the same request/outcome stream as Venom. *)
+Definition asm_create_request_def:
+  asm_create_request s (value:bytes32) off size salt_opt =
+    let data = TAKE size (DROP off (asm_expand_memory (off + size) s.as_memory))
+    in <| cr_kind := (case salt_opt of NONE => CreateCall
+                       | SOME salt => Create2Call salt);
+          cr_gas := NONE; cr_data_len := LENGTH data;
+          cr_target := 0w; cr_value := w2n value; cr_data := data;
+          cr_static := F; cr_accounts := s.as_accounts;
+          cr_tStorage := s.as_transient |>
+End
+
+Definition asm_consume_create_outcome_def:
+  asm_consume_create_outcome rq stk s =
+    let (outcome, rest) = take_outcome rq s.as_outcomes;
+        (accounts, ts, logs) = adopt_outcome rq outcome
+          (s.as_accounts, s.as_transient, s.as_logs);
+        output : bytes32 = if outcome.co_success then w2w outcome.co_created else 0w
+    in AsmOK (asm_next (s with <|
+         as_stack := output :: stk;
+         as_outcomes := rest;
+         as_requests := record_request rq s.as_requests;
+         as_accounts := accounts; as_transient := ts; as_logs := logs;
+         as_pending_deletions :=
+           adopt_outcome_deletions rq outcome s.as_pending_deletions;
+         as_returndata := outcome.co_returnData |>))
+End
+
 (* CREATE: pop [value, offset, sz] *)
 Definition asm_exec_create_def:
   asm_exec_create s =
@@ -675,20 +708,9 @@ Definition asm_exec_create_def:
       value :: offset :: sz :: stk =>
         let off = w2n offset in
         let size = w2n sz in
-        let mem = asm_expand_memory (off + size) s.as_memory in
-        let init_code = TAKE size (DROP off mem) in
-        let sender = s.as_call_ctx.cc_address in
-        let nonce = (lookup_account sender s.as_accounts).nonce in
-        let new_addr = address_for_create sender nonce in
-        let gas = s.as_call_ctx.cc_gas -
-                  s.as_call_ctx.cc_gas DIV 64 in
-        let evm_s = make_asm_create_state s new_addr gas
-                      (w2n value) init_code in
-        (case extract_asm_result s (w2w new_addr) 0 0
-                (run evm_s) of
-           SOME (output, s') =>
-             AsmOK (asm_next (s' with as_stack := output :: stk))
-         | NONE => AsmError "create: non-terminating")
+        let rq = asm_create_request s value off size NONE in
+        asm_consume_create_outcome rq stk
+          (s with as_memory := asm_call_memory off size 0 0 s.as_memory)
     | _ => AsmError "create: stack underflow"
 End
 
@@ -699,19 +721,9 @@ Definition asm_exec_create2_def:
       value :: offset :: sz :: salt :: stk =>
         let off = w2n offset in
         let size = w2n sz in
-        let mem = asm_expand_memory (off + size) s.as_memory in
-        let init_code = TAKE size (DROP off mem) in
-        let sender = s.as_call_ctx.cc_address in
-        let new_addr = address_for_create2 sender salt init_code in
-        let gas = s.as_call_ctx.cc_gas -
-                  s.as_call_ctx.cc_gas DIV 64 in
-        let evm_s = make_asm_create_state s new_addr gas
-                      (w2n value) init_code in
-        (case extract_asm_result s (w2w new_addr) 0 0
-                (run evm_s) of
-           SOME (output, s') =>
-             AsmOK (asm_next (s' with as_stack := output :: stk))
-         | NONE => AsmError "create2: non-terminating")
+        let rq = asm_create_request s value off size (SOME salt) in
+        asm_consume_create_outcome rq stk
+          (s with as_memory := asm_call_memory off size 0 0 s.as_memory)
     | _ => AsmError "create2: stack underflow"
 End
 

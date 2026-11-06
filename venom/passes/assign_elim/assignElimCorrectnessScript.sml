@@ -65,29 +65,6 @@ Proof
   rw[assign_elim_inst_def, LET_THM, mk_nop_inst_def]
 QED
 
-Triviality aei_term_opcode[local]:
-  !pv v inst. is_terminator inst.inst_opcode ==>
-    (assign_elim_inst pv v inst).inst_opcode = inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> PHI` by
-    (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  `~is_forwardable_assign pv inst` by
-    (simp[is_forwardable_assign_def] >>
-     Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  simp[assign_elim_inst_def, LET_THM]
-QED
-
-Triviality aei_opcode[local]:
-  !pv v inst. (assign_elim_inst pv v inst).inst_opcode = inst.inst_opcode \/
-              (assign_elim_inst pv v inst).inst_opcode = NOP
-Proof
-  rpt strip_tac >>
-  simp[assign_elim_inst_def, LET_THM] >>
-  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
-  Cases_on `is_forwardable_assign pv inst` >> simp[mk_nop_inst_def]
-QED
-
 Triviality aei_outputs[local]:
   !pv v inst. (assign_elim_inst pv v inst).inst_outputs = inst.inst_outputs \/
               (assign_elim_inst pv v inst).inst_outputs = []
@@ -162,42 +139,6 @@ Triviality process_block_inst_unchanged[local]:
 Proof
   rpt gen_tac >> simp[dfAnalyzeDefsTheory.df_process_block_def, LET_THM] >>
   pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
-QED
-
-(* FOLDL of join on no-Label values preserves no-Label *)
-Triviality foldl_join_no_label[local]:
-  !preds g init.
-    (!k v. FLOOKUP (unwrap_copies init) k = SOME v ==> !l. v <> Label l) /\
-    (!pred. MEM pred preds ==>
-      !k v. FLOOKUP (unwrap_copies (g pred)) k = SOME v ==>
-            !l. v <> Label l) ==>
-    !k v. FLOOKUP (unwrap_copies
-      (FOLDL (\acc pred. copy_prop_join acc (g pred)) init preds)) k =
-      SOME v ==> !l. v <> Label l
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> strip_tac >> simp[] >>
-  first_x_assum (qspecl_then [`g`, `copy_prop_join init (g h)`] mp_tac) >>
-  impl_tac >- (fs[] >> metis_tac[copy_prop_join_no_label]) >>
-  simp[]
-QED
-
-(* FOLDL of copy_prop_join directly on a list of values *)
-Triviality foldl_join_vals_no_label[local]:
-  !vals init.
-    (!k v. FLOOKUP (unwrap_copies init) k = SOME v ==> !l. v <> Label l) /\
-    EVERY (\val. !k v. FLOOKUP (unwrap_copies val) k = SOME v ==>
-                       !l. v <> Label l) vals ==>
-    !k v. FLOOKUP (unwrap_copies (FOLDL copy_prop_join init vals)) k =
-      SOME v ==> !l. v <> Label l
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  PURE_ONCE_REWRITE_TAC[listTheory.FOLDL] >> BETA_TAC >>
-  first_x_assum match_mp_tac >>
-  conj_tac
-  >- (match_mp_tac copy_prop_join_no_label >>
-      conj_tac >> first_x_assum ACCEPT_TAC)
-  >> first_x_assum ACCEPT_TAC
 QED
 
 (* Process changed equivalence (replicated from dfAnalyzeProofs) *)

@@ -2028,6 +2028,36 @@ Proof
   >> asm_rewrite_tac[]
 QED
 
+(* ===== Create Builtins ===== *)
+
+(* Historical admitted contract, refuted by rawCreateContractProbeTheory.
+   Retained for review; production creation uses the callback-driven pipeline.
+   The replacement must use CFG execution and cover all live operands.
+
+(* NOTE: compile_raw_create_correct was ILL-TYPED as originally stated.
+   compile_raw_create takes 5 args (bytecode_op, value_op, salt_opt,
+   revert_on_failure, ctor_args_info) but the original had 6 positional args
+   (code_ptr, code_len, value_op, salt_opt, revert_on_failure), making
+   value_op (operand) land in the salt_opt (operand option) position.
+   Corrected statement below pending task owner review. *)
+Theorem compile_raw_create_correct:
+  ∀ bytecode_op value_op salt_opt revert_on_failure ctor_args_info
+    ss st op st' bv vv.
+    compile_raw_create bytecode_op value_op salt_opt
+      revert_on_failure ctor_args_info st = (op, st') ∧
+    eval_operand bytecode_op ss = SOME bv ∧
+    eval_operand value_op ss = SOME vv ∧
+    fresh_vars_wrt st ss ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
+      (* CREATE failure with revert_on_failure → revert *)
+      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  cheat
+QED
+
+*)
+
 (* ===== Bytes Builtins ===== *)
 
 (* extract32: bounds-checked 32-byte load from a bytestring's data.

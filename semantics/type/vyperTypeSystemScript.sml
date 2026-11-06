@@ -684,10 +684,11 @@ Definition create_arg_types_ok_def:
        tys = [BaseT AddressT; BaseT (UintT 256)] ++
          (if has_salt then [BaseT (BytesT (Fixed 32))] else []) ++
          [BaseT (UintT 256)] ++ ctor_tys /\
-       (raw_args ==> ?bd. ctor_tys = [BaseT (BytesT bd)])) /\
+       (raw_args ==> ?n. ctor_tys = [BaseT (BytesT (Dynamic n))])) /\
   create_arg_types_ok RawCreate has_salt tys =
-    (?bd ctor_tys.
-       tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys ++
+    (?n ctor_tys.
+       n <= 49152 /\
+       tys = [BaseT (BytesT (Dynamic n)); BaseT (UintT 256)] ++ ctor_tys ++
          if has_salt then [BaseT (BytesT (Fixed 32))] else [])
 End
 
@@ -697,13 +698,15 @@ Theorem create_arg_types_ok_raw_create:
   create_arg_types_ok RawCreate has_salt tys <=>
     if has_salt then
       tys <> [] /\ LAST tys = BaseT (BytesT (Fixed 32)) /\
-      ?bd ctor_tys. FRONT tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
-    else ?bd ctor_tys. tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
+      ?n ctor_tys. n <= 49152 /\
+        FRONT tys = [BaseT (BytesT (Dynamic n)); BaseT (UintT 256)] ++ ctor_tys
+    else ?n ctor_tys. n <= 49152 /\
+      tys = [BaseT (BytesT (Dynamic n)); BaseT (UintT 256)] ++ ctor_tys
 Proof
   Cases_on `has_salt` >> simp[create_arg_types_ok_def] >> eq_tac >> strip_tac
   >- simp[listTheory.LAST_CONS_cond, listTheory.FRONT_DEF,
           rich_listTheory.FRONT_APPEND]
-  >- (qexistsl [`bd`, `ctor_tys`] >>
+  >- (qexistsl [`n`, `ctor_tys`] >>
       qspec_then `tys` mp_tac listTheory.APPEND_FRONT_LAST >> simp[])
 QED
 
@@ -819,7 +822,7 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
-  well_typed_expr env (Call ty (CreateTarget kind has_salt rof) args drv) =
+  well_typed_expr env (Call ty (CreateTarget kind has_salt rof _) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = BaseT AddressT /\
      create_arg_types_ok kind has_salt (MAP expr_type args)) /\
 

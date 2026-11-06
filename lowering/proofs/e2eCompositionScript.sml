@@ -159,6 +159,20 @@ Proof
   qexists_tac `a1` >> gvs[]
 QED
 
+(* Deleting the same accounts on both sides keeps them equal up to dead
+   bytes: a deleted account is empty on both. *)
+Theorem accounts_agree_except_process_deletions[local]:
+  !ds a1 a2. accounts_agree_except D a1 a2 ==>
+    accounts_agree_except D (vfmExecution$process_deletions ds a1)
+      (vfmExecution$process_deletions ds a2)
+Proof
+  Induct >> simp[vfmExecutionTheory.process_deletions_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[accounts_agree_except_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rw[] >> simp[storage_agree_except_def, word_agree_except_def]
+QED
+
 Theorem transient_agree_dead_trans[local]:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   transient_agree cx t0 t1 /\
@@ -208,7 +222,8 @@ Proof
     (irule LIST_EQ >> gvs[external_call_dead_def]) >>
   rpt conj_tac
   >- gvs[]
-  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
+  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+      metis_tac[accounts_agree_except_process_deletions])
   >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
   gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
   irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]

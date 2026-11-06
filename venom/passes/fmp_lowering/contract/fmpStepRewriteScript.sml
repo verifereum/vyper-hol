@@ -33,7 +33,8 @@ Proof
       gvs[fmp_lower_inst_def, fmp_lower_inst_shape_def, AllCaseEqs(),
           venomInstTheory.mk_inst_def] >>
       gvs[inst_shape_ok_def, is_read0_opcode_def, label_positions_ok_def,
-          stackPlanTypesTheory.is_label_operand_def, AllCaseEqs()]) >>
+          stackPlanTypesTheory.is_label_operand_def, AllCaseEqs()] >>
+      rpt (CASE_TAC >> gvs[stackPlanTypesTheory.is_label_operand_def])) >>
   Cases_on `inst.inst_opcode = DRET`
   >- (rpt strip_tac >> gvs[fmp_lower_inst_def, fmp_lower_inst_shape_def]) >>
   Cases_on `inst.inst_opcode = GETFMP`

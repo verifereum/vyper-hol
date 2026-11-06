@@ -3947,8 +3947,11 @@ Resume regular_inst_ok_sim[emitted]:
   `(if inst.inst_outputs = [] \/ is_halting then ([],emitted)
     else popmany_plan (MAP Var (FILTER (\out. ~MEM out next_liveness)
       inst.inst_outputs)) emitted) = (popops,popped)` by
-    (qpat_x_assum `if inst.inst_outputs = [] \/ is_halting then _ else _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> IF_CASES_TAC >> simp[]) >>
+    (qpat_x_assum `if inst.inst_outputs = [] \/ is_halting /\ _ then _ else _`
+       mp_tac >>
+     qpat_x_assum `LENGTH inst.inst_outputs <= 1` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> asm_rewrite_tac[] >>
+     IF_CASES_TAC >> simp[]) >>
   `(if FILTER (\out. MEM out next_liveness) inst.inst_outputs = [] then ([],popped)
     else optimistic_swap_plan dfg inst next_liveness next_is_term popped) = (optops,tail)` by
     (qpat_x_assum `if inst.inst_outputs = [] \/ FILTER _ _ = [] then _ else _` mp_tac >>
@@ -7268,14 +7271,7 @@ Resume gen_inst_bump_ok_sim[bump]:
        (update_var h'³' (x + x')
          (update_var h'' x vs)) as8 /\
      as8.as_pc = as''.as_pc + LENGTH (execute_plan initial_fmp pop_ops)` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         qexistsl [`0`, `as''`] >>
-         conj_tac >- simp[asm_steps_def] >>
-         conj_tac >- first_assum ACCEPT_TAC >>
-         simp[execute_plan_def])
-     >> qspecl_then
+    (qspecl_then
           [`~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
            `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
            `ps4 with ps_stack :=
@@ -7289,18 +7285,14 @@ Resume gen_inst_bump_ok_sim[bump]:
           ((conj_tac >- simp[stack_push_def]) >>
            (conj_tac >- simp[]) >>
            (conj_tac >-
-             (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+             (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
               Cases_on `MEM h'' next_liveness` >>
               Cases_on `MEM h'³' next_liveness` >> simp[])) >>
            (conj_tac >- first_assum ACCEPT_TAC) >>
            first_assum ACCEPT_TAC)) >>
         simp[]) >>
   `generated_plan_state_wf base' ps8` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         first_assum ACCEPT_TAC)
-     >> qspecl_then
+    (qspecl_then
           [`base'`, `~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
            `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
            `ps4 with ps_stack :=
@@ -7311,7 +7303,7 @@ Resume gen_inst_bump_ok_sim[bump]:
           ((conj_tac >- first_assum ACCEPT_TAC) >>
            (conj_tac >- simp[stack_push_def]) >>
            (conj_tac >- simp[]) >>
-           (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+           (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
             Cases_on `MEM h'' next_liveness` >>
             Cases_on `MEM h'³' next_liveness` >> simp[]))) >>
         simp[]) >>

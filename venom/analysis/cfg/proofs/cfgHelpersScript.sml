@@ -322,33 +322,6 @@ Proof
   rpt strip_tac >> simp[build_preds_def, foldl_preds_mem, init_preds_nil]
 QED
 
-(* FOLDR only grows FDOM *)
-Theorem foldr_fdom_mono[local]:
-  !succs_list (lbl:string) (m:(string,string list) fmap).
-    FDOM m ⊆ FDOM (FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert lbl (fmap_lookup_list m2 succ))) m succs_list)
-Proof
-  Induct >> simp[SUBSET_DEF, FDOM_FUPDATE] >> rpt strip_tac >>
-  disj2_tac >> first_x_assum (qspecl_then [`lbl`, `m`] mp_tac) >>
-  simp[SUBSET_DEF]
-QED
-
-(* FOLDL for build_preds only grows FDOM *)
-Theorem foldl_preds_fdom_mono[local]:
-  !(bbs : basic_block list) (succs : (string, string list) fmap)
-   (acc : (string, string list) fmap).
-    FDOM acc ⊆ FDOM (FOLDL (λm bb. FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
-                                          m (fmap_lookup_list succs bb.bb_label))
-                            acc bbs)
-Proof
-  Induct >> simp[SUBSET_DEF] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`succs`,
-    `FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert h.bb_label (fmap_lookup_list m2 succ)))
-           acc (fmap_lookup_list succs h.bb_label)`] mp_tac) >>
-  simp[SUBSET_DEF] >> disch_then irule >>
-  mp_tac (Q.SPECL [`fmap_lookup_list succs h.bb_label`, `h.bb_label`, `acc`] foldr_fdom_mono) >>
-  simp[SUBSET_DEF]
-QED
-
 
 (* ==========================================================================
    DFS mutual induction combinator

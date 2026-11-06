@@ -91,8 +91,13 @@ Proof
   `eval_operand cond (s with vs_inst_idx := 0) = SOME w` by
     (Cases_on `cond` >> gvs[eval_operand_def, lookup_var_def]) >>
   simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
-  simp[Once exec_block_def, get_instruction_def, step_inst_def,
-       Once step_inst_base_def, is_terminator_def, jump_to_def] >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  simp[step_inst_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  pure_rewrite_tac[venomInstTheory.instruction_accfupds,
+    venomInstTheory.instruction_accessors, combinTheory.K_THM,
+    venomInstTheory.opcode_case_def] >>
+  simp[is_terminator_def, jump_to_def] >>
   Cases_on `w = 0w` >> simp[]
 QED
 

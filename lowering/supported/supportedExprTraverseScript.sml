@@ -102,7 +102,7 @@ Definition expr_evm_run_root_def:
     (flags.rcf_is_delegate \/ ~flags.rcf_revert_on_failure) /\
   expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
     (flags.rcf_is_delegate \/ ~flags.rcf_revert_on_failure) /\
-  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof) es default) = T /\
+  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
   expr_evm_run_root _ = F
 End
 

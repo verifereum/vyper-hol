@@ -211,17 +211,12 @@ Theorem exec_create_frame_view:
   t.vs_memory = s.vs_memory
 Proof
   strip_tac >>
+  `venom_create_request (frame_view fn ra s with vs_memory := m)
+     value off sz salt = venom_create_request s value off sz salt` by
+    fs[venom_create_request_def, read_memory_def, frame_view_def] >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = OK t` mp_tac >>
-  simp[exec_create_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  rename1 `extract_venom_result s _ 0 0 _ = SOME (w,u)` >>
-  drule extract_venom_result_memory >> strip_tac >>
-  drule extract_venom_result_frame_view >>
-  disch_then (qspecl_then [`ra`, `m`, `fn`] assume_tac) >>
-  fs[read_memory_def] >>
-  simp[exec_create_def, read_memory_def, make_venom_create_state_frame_view] >>
-  fs[frame_view_def] >>
-  simp[update_var_def, finite_mapTheory.FMAP_MAP2_FUPDATE,
-       write_memory_with_expansion_def]
+  simp[exec_create_def] >> strip_tac >> gvs[] >>
+  simp[frame_view_def, update_var_def, finite_mapTheory.FMAP_MAP2_FUPDATE]
 QED
 
 Theorem create_base_frame_view:

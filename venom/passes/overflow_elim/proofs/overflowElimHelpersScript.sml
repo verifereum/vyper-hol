@@ -822,29 +822,6 @@ Proof
   metis_tac[]
 QED
 
-(* Helper: dfg_arith_sound + concrete operands + range_nonneg ==>
-   eval_op_env values exist. Wraps dfg_arith_sound_def to hide no-Label guard. *)
-Triviality dfg_arith_sound_instantiate:
-  !dfg env v inst op1 op2 rs.
-    dfg_arith_sound dfg env /\
-    dfg_get_def dfg v = SOME inst /\
-    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
-    inst.inst_operands = [op1; op2] /\
-    v IN FDOM env /\
-    range_nonneg (range_get_range_v rs op1) /\
-    range_nonneg (range_get_range_v rs op2) ==>
-    ?w1 w2. eval_op_env op1 env = SOME w1 /\
-            eval_op_env op2 env = SOME w2 /\
-            FLOOKUP env v = SOME
-              (if inst.inst_opcode = ADD then w1 + w2 else w1 - w2)
-Proof
-  rpt strip_tac >>
-  imp_res_tac range_nonneg_not_label >>
-  fs[dfg_arith_sound_def] >>
-  first_x_assum (qspecl_then [`v`, `inst`, `op1`, `op2`] mp_tac) >>
-  simp[]
-QED
-
 (* ADD overflow contradiction:
    If the DFG chain for the ADD case is satisfied, dfg_ext_sound holds,
    in_range_state holds, and the ISZERO output is 0w, then False. *)

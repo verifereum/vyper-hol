@@ -154,25 +154,6 @@ QED
 
 (* ===== Transform Shape Preservation ===== *)
 
-Theorem af_rewrite_inst_preserves[local]:
-  !dfg vi inst result.
-    af_rewrite_inst dfg vi inst = SOME result ==>
-    result.inst_outputs = inst.inst_outputs /\
-    result.inst_id = inst.inst_id
-Proof
-  rw[af_rewrite_inst_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem af_rewrite_inst_opcode[local]:
-  !dfg vi inst result.
-    af_rewrite_inst dfg vi inst = SOME result ==>
-    (result.inst_opcode = ASSIGN \/ result.inst_opcode = ADD)
-Proof
-  rw[af_rewrite_inst_def] >>
-  gvs[AllCaseEqs()]
-QED
-
 Theorem af_transform_block_label[local]:
   !dfg vi bb. (af_transform_block dfg vi bb).bb_label = bb.bb_label
 Proof
@@ -255,78 +236,6 @@ Theorem vi_sound_identity[local]:
 Proof
   rw[vi_sound_def, eval_operand_def, lookup_var_def] >>
   Cases_on `FLOOKUP s.vs_vars v` >> simp[wordsTheory.WORD_ADD_0]
-QED
-
-(* transfer_add result satisfies transfer_result_vi_sound preconditions *)
-Theorem transfer_add_vi_sound[local]:
-  !vi op1 op2 out_var s v1 v2.
-    vi_alist_sound vi s /\
-    eval_operand op1 s = SOME v1 /\
-    eval_operand op2 s = SOME v2 /\
-    (case vi_base (transfer_add (vi_lookup vi op1) (vi_lookup vi op2)
-                     (Var out_var)) of
-       SOME (Var v) => v <> out_var | _ => T) ==>
-    vi_sound (transfer_add (vi_lookup vi op1) (vi_lookup vi op2) (Var out_var))
-      out_var (s with vs_vars := s.vs_vars |+ (out_var, v1 + v2))
-Proof
-  rpt strip_tac >>
-  Cases_on `vi_lookup vi op1` >> Cases_on `vi_lookup vi op2` >>
-  rename1 `transfer_add (VarInfo b1 o1) (VarInfo b2 o2) _` >>
-  Cases_on `b1` >> Cases_on `b2` >>
-  gvs[transfer_add_def, vi_base_def] >>
-  imp_res_tac vi_lookup_eval >> gvs[] >>
-  TRY (irule transfer_result_vi_sound >> simp[] >>
-       Cases_on `x` >> gvs[] >>
-       metis_tac[wordsTheory.WORD_ADD_ASSOC, wordsTheory.WORD_ADD_COMM] >>
-       NO_TAC) >>
-  simp[vi_sound_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  metis_tac[wordsTheory.WORD_ADD_COMM]
-QED
-
-(* transfer_sub result satisfies vi_sound *)
-Theorem transfer_sub_vi_sound[local]:
-  !vi op1 op2 out_var s v1 v2.
-    vi_alist_sound vi s /\
-    eval_operand op1 s = SOME v1 /\
-    eval_operand op2 s = SOME v2 /\
-    (case vi_base (transfer_sub (vi_lookup vi op1) (vi_lookup vi op2)
-                     (Var out_var)) of
-       SOME (Var v) => v <> out_var | _ => T) ==>
-    vi_sound (transfer_sub (vi_lookup vi op1) (vi_lookup vi op2) (Var out_var))
-      out_var (s with vs_vars := s.vs_vars |+ (out_var, v1 - v2))
-Proof
-  rpt strip_tac >>
-  Cases_on `vi_lookup vi op1` >> Cases_on `vi_lookup vi op2` >>
-  rename1 `transfer_sub (VarInfo b1 o1) (VarInfo b2 o2) _` >>
-  Cases_on `b2` >> gvs[transfer_sub_def, vi_base_def] >>
-  imp_res_tac vi_lookup_eval >> gvs[] >>
-  TRY (simp[vi_sound_identity] >> NO_TAC) >>
-  Cases_on `b1` >> gvs[] >>
-  TRY (irule transfer_result_vi_sound >> simp[] >>
-       Cases_on `x` >> gvs[] >>
-       metis_tac[wordsTheory.WORD_ADD_SUB_ASSOC, wordsTheory.WORD_ADD_COMM] >>
-       NO_TAC) >>
-  simp[vi_sound_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  metis_tac[wordsTheory.WORD_ADD_SUB_ASSOC, wordsTheory.WORD_ADD_COMM]
-QED
-
-(* transfer_assign result satisfies vi_sound *)
-Theorem transfer_assign_vi_sound[local]:
-  !vi op1 out_var s v1.
-    vi_alist_sound vi s /\
-    eval_operand op1 s = SOME v1 /\
-    (case vi_base (transfer_assign (vi_lookup vi op1)) of
-       SOME (Var v) => v <> out_var | _ => T) ==>
-    vi_sound (transfer_assign (vi_lookup vi op1))
-      out_var (s with vs_vars := s.vs_vars |+ (out_var, v1))
-Proof
-  rpt strip_tac >>
-  Cases_on `vi_lookup vi op1` >> gvs[transfer_assign_def, vi_base_def] >>
-  imp_res_tac vi_lookup_eval >> gvs[] >>
-  Cases_on `o'` >> gvs[] >>
-  TRY (irule transfer_result_vi_sound >> simp[] >>
-       Cases_on `x` >> gvs[] >> metis_tac[] >> NO_TAC) >>
-  simp[vi_sound_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* Value-level soundness for af_rewrite_inst_step_eq *)
@@ -687,12 +596,6 @@ QED
 
 (* ===== Lattice Soundness Maintenance ===== *)
 
-Theorem vi_alist_sound_nil[local]:
-  !s. vi_alist_sound [] s
-Proof
-  rw[vi_alist_sound_def]
-QED
-
 (* ===== Block-Level Equality ===== *)
 
 Theorem get_instruction_map[local]:
@@ -918,22 +821,6 @@ Proof
   rpt gen_tac >>
   Cases_on `h.inst_opcode = PHI` >>
   simp[af_transform_inst_phi_identity, af_transform_inst_not_phi]
-QED
-
-(* vi_sound is preserved when the variable's value and base operand
-   value are unchanged. *)
-Theorem vi_sound_preserved_by_eq[local]:
-  !entry v s s'.
-    vi_sound entry v s /\
-    FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v /\
-    (case vi_base entry of
-       NONE => T
-     | SOME bop => eval_operand bop s' = eval_operand bop s) ==>
-    vi_sound entry v s'
-Proof
-  Cases_on `entry` >> rw[vi_sound_def, vi_base_def] >>
-  Cases_on `FLOOKUP s.vs_vars v` >> gvs[] >>
-  Cases_on `o'` >> gvs[]
 QED
 
 

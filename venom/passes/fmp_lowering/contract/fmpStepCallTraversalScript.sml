@@ -30,7 +30,7 @@ Proof
           flag_step_def, write_effects_def, empty_effects_def] >>
       irule dftCallChecksTheory.flag_path_mono >> qexists_tac `[]` >> simp[] >>
       qsuff_tac `flag_path dst []
-        ([mk_inst add_id ADD [size_op; Lit 31w] [plus31];
+        ([mk_inst add_id ADD [Lit 31w; size_op] [plus31];
           mk_inst not_id NOT [Lit 31w] [mask];
           mk_inst and_id AND [Var plus31; Var mask] [aligned];
           mk_inst bump_id BUMP [Var runner; Var aligned] [old;runner]] ++ tail)`

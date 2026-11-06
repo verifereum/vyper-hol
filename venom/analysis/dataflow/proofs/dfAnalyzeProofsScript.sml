@@ -1609,81 +1609,8 @@ Proof
   gen_tac >> Induct >> rw[]
 QED
 
-(* P for case xs of [] => bottom | _::_ => FOLDL join bottom xs *)
-Theorem case_foldl_P[local]:
-  !xs. P bottom /\ (!a b. P a /\ P b ==> P (join a b)) /\ EVERY P xs ==>
-    P (case xs of [] => bottom | v2::v3 => FOLDL join bottom xs)
-Proof
-  Cases >> rw[] >> irule foldl_preserves_P >> fs[]
-QED
-
 (* df_process_block preserves element-level P for inst and boundary maps *)
 (* Helper: df_process_block doesn't change ds_inst *)
-
-(* Helper: df_process_block preserves P for boundary values. *)
-Theorem df_process_P[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
-    P bottom /\
-    (case entry_val of NONE => T | SOME (lbl, v) => P v) /\
-    (!a b. P a /\ P b ==> P (join a b)) /\
-    (!inst a. P a ==> P (transfer ctx inst a)) /\
-    (!src dst a. P a ==> P (edge_transfer ctx src dst a)) /\
-    (!k v. FLOOKUP st.ds_inst k = SOME v ==> P v) /\
-    (!k v. FLOOKUP st.ds_boundary k = SOME v ==> P v)
-    ==>
-    (!k v. FLOOKUP (df_process_block dir bottom join transfer edge_transfer
-                      ctx entry_val cfg bbs lbl st).ds_inst k = SOME v
-           ==> P v) /\
-    (!k v. FLOOKUP (df_process_block dir bottom join transfer edge_transfer
-                      ctx entry_val cfg bbs lbl st).ds_boundary k = SOME v
-           ==> P v)
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[df_process_block_def, df_joined_val_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  IF_CASES_TAC >> simp[]
-  (* THEN: unchanged, trivial *)
-  >- (rpt strip_tac >> res_tac)
-  (* ELSE: both boundary and inst updated — use old proof structure *)
-  \\ `!nbr. P (edge_transfer ctx nbr lbl (df_boundary bottom st nbr))` by
-    (rw[df_boundary_def] >>
-     Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[])
-  \\ `!nbrs. EVERY P (MAP (\nbr. edge_transfer ctx nbr lbl
-      (df_boundary bottom st nbr)) nbrs)` by
-    (Induct >> rw[])
-  \\ `!l nbr. P (edge_transfer ctx nbr l (df_boundary bottom st nbr))` by
-    (rpt gen_tac >>
-     qpat_x_assum `!src dst a. P a ==> P (edge_transfer _ _ _ _)` irule >>
-     rw[df_boundary_def] >>
-     Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[])
-  \\ `!l. EVERY P (MAP (\nbr. edge_transfer ctx nbr l
-       (df_boundary bottom st nbr))
-       (case dir of Forward => cfg_preds_of cfg l
-                   | Backward => cfg_succs_of cfg l))` by
-    (gen_tac >> simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
-  \\ qmatch_asmsub_abbrev_tac `df_fold_block _ _ _ _ joined_val`
-  \\ sg `P joined_val`
-  >- (qunabbrev_tac `joined_val` >>
-      Cases_on `entry_val` >> simp[]
-      >- (irule case_foldl_P >> fs[])
-      >> Cases_on `x` >> simp[] >>
-      IF_CASES_TAC >> simp[]
-      >- (qpat_x_assum `lbl = _` (SUBST_ALL_TAC o SYM) >>
-          qpat_x_assum `!a b. P a /\ P b ==> P (join a b)`
-            (fn th => irule th >> assume_tac th) >>
-          conj_tac
-          >- (qpat_x_assum `case _ of NONE => T | _ => _` mp_tac >> simp[])
-          >> irule case_foldl_P >> fs[] >>
-          simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
-      >> irule case_foldl_P >> fs[])
-  \\ drule_all df_fold_block_P >> strip_tac
-  \\ conj_tac
-  >- (rw[finite_mapTheory.FLOOKUP_FUNION] >>
-      Cases_on `FLOOKUP inst_map k` >> fs[] >> metis_tac[])
-  \\ rw[finite_mapTheory.FLOOKUP_UPDATE] >>
-     fs[df_boundary_def] >>
-     Cases_on `FLOOKUP st.ds_boundary k` >> fs[] >> metis_tac[]
-QED
 
 (* Helper: FOLDL join base ls preserves P *)
 Theorem foldl_join_P[local]:
@@ -2500,47 +2427,6 @@ QED
    successors of A (which read A's boundary) need reprocessing.
    For backward: deps = preds, symmetric argument.
    Requires CFG succs/preds are inverses. *)
-(* Core congruence: when two states agree on boundaries at all neighbors
-   of lbl, processing lbl produces the same fold output (final_val, inst_map).
-   This is the key reusable fact for stable_after, self_idempotent, etc. *)
-Theorem df_process_fold_cong[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st1 st2
-   final_val1 inst_map1 final_val2 inst_map2.
-    let neighbors = (case dir of Forward => cfg_preds_of cfg lbl
-                               | Backward => cfg_succs_of cfg lbl) in
-    let instrs = (case lookup_block lbl bbs of
-                    NONE => [] | SOME bb => bb.bb_instructions) in
-    let joined1 = (case MAP (λnbr. edge_transfer ctx nbr lbl
-                                     (df_boundary bottom st1 nbr)) neighbors of
-                     [] => (case entry_val of NONE => bottom
-                            | SOME (ev_lbl,v) => if lbl = ev_lbl then v else bottom)
-                   | v4::v5 => FOLDL join bottom
-                       (MAP (λnbr. edge_transfer ctx nbr lbl
-                               (df_boundary bottom st1 nbr)) neighbors)) in
-    let joined2 = (case MAP (λnbr. edge_transfer ctx nbr lbl
-                                     (df_boundary bottom st2 nbr)) neighbors of
-                     [] => (case entry_val of NONE => bottom
-                            | SOME (ev_lbl,v) => if lbl = ev_lbl then v else bottom)
-                   | v4::v5 => FOLDL join bottom
-                       (MAP (λnbr. edge_transfer ctx nbr lbl
-                               (df_boundary bottom st2 nbr)) neighbors)) in
-      (!nbr. MEM nbr neighbors ==>
-        df_boundary bottom st1 nbr = df_boundary bottom st2 nbr) /\
-      df_fold_block dir (transfer ctx) lbl instrs joined1 = (final_val1, inst_map1) /\
-      df_fold_block dir (transfer ctx) lbl instrs joined2 = (final_val2, inst_map2)
-    ==>
-      final_val1 = final_val2 /\ inst_map1 = inst_map2
-Proof
-  rw[] >>
-  `MAP (λnbr. edge_transfer ctx nbr lbl (df_boundary bottom st1 nbr))
-       (case dir of Forward => cfg_preds_of cfg lbl
-                   | Backward => cfg_succs_of cfg lbl) =
-   MAP (λnbr. edge_transfer ctx nbr lbl (df_boundary bottom st2 nbr))
-       (case dir of Forward => cfg_preds_of cfg lbl
-                   | Backward => cfg_succs_of cfg lbl)` by
-    (irule listTheory.MAP_CONG >> rw[] >> Cases_on `dir` >> fs[]) >>
-  fs[]
-QED
 
 (* Helper: when lbl ∉ neighbors(lbl), processing lbl is idempotent.
    Similar structure to stable_after but b = lbl. *)

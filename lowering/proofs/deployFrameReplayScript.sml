@@ -3092,7 +3092,7 @@ Proof
 QED
 
 Theorem shadow_root_outcome_of[local]:
-  outcome_of (shadow_root es) n m = outcome_of es n m
+  outcome_of kind (shadow_root es) n m = outcome_of kind es n m
 Proof
   Cases_on `es.contexts` >> simp[shadow_root_def, shadow_root_contexts_def, outcome_of_def] >>
   PairCases_on `h` >> Cases_on `t = []` >>

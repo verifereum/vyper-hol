@@ -261,8 +261,9 @@ Theorem step_DLOAD:
                (TAKE 32 (DROP (w2n v1) ss.vs_data_section ++
                          REPLICATE 32 0w))) ss)
 Proof
-  rw[venomExecSemanticsTheory.step_inst_base_def,
-     venomExecSemanticsTheory.exec_read1_def]
+  rpt strip_tac >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def, mk_inst_def] >>
+  simp[venomExecSemanticsTheory.exec_read1_def]
 QED
 
 (* Admissibility rules out type/value mismatches; a word type's memory

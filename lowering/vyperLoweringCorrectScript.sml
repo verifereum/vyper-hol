@@ -143,6 +143,7 @@ Definition initial_venom_state_rel_def:
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
     vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions /\
     immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
@@ -182,7 +183,8 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         tx_return_bytes tops ret tx v ss.vs_returndata /\
-        accounts_agree cx am'.accounts ss.vs_accounts /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
@@ -893,8 +895,9 @@ QED
 (* S2, Milestone 5: proved in loweringShapeSource as
    lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
    builtin arities and distinct internal names; raw_shape_free_program
-   excludes msg.gas values and raw_call (wider than the unit shape needs:
-   a plain raw_call passes it, but the body-shape proof lacks that case).
+   excludes msg.gas values, raw_call and create calls (wider than the unit
+   shape needs: a plain raw_call passes it, but the body-shape proof lacks
+   that case).
    Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
    theorem's source domain, not the runtime immutable compiler. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
