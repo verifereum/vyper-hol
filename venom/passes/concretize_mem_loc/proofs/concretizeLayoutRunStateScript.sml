@@ -6,6 +6,8 @@ Ancestors concretizeLayoutRunTrace concretizeLayoutBlockEntry frameResolvedTrace
   frameActivationLookup frameRelocationTaintOrder frameRelocationEnvironment
   concretizeLayoutReaderContext concretizeLayoutSupplement frameActivationLifetime
   frameJointTrace concretizeStepStructure finite_map contextCodegenRel
+  frameRelocationBinding frameRelocationGhostCopy frameRelocationCopyTaint
+  frameRelocationValues list
 
 (* Unlike the existential block boundary, this pins the transported head map. *)
 Theorem layout_run_block_annotations:
@@ -87,6 +89,45 @@ Proof
     lop_target_taint := entry_taint_vars fn tpost a.lop_target_taint|>`] >>
   simp[layout_ordinary_state_def, layout_phase_normalize_def] >>
   qexistsl [`birth`, `ids`, `rp`, `resolved_entry fn post rv`, `saved`] >> simp[]
+QED
+
+(* The initial sampled state is diagonal; no allocator-next premise is used. *)
+Theorem layout_run_initial_state:
+  joint_trace vs0 C q0 es qs q /\
+  q0 = JointConfig [] [] FEMPTY entry_taint fn inst s [] FEMPTY hs h /\
+  s.vs_allocas = FEMPTY ==>
+  ?b. b.lop_origin = origin /\ ~b.lop_pending /\
+    b.lop_cursor = 0 /\ b.lop_bound = 0 /\ b.lop_config = q0 /\
+    b.lop_ids = [0] /\ b.lop_anns = [([],FEMPTY)] /\
+    b.lop_target_taint = entry_taint /\
+    layout_ordinary_trace vs0 C q0 es qs q b s /\
+    layout_ordinary_state D lo C' q0 es qs b s s
+Proof
+  strip_tac >>
+  qexists `<|lop_origin := origin; lop_pending := F; lop_cursor := 0;
+    lop_bound := 0; lop_config := q0; lop_ids := [0];
+    lop_anns := [([],FEMPTY)]; lop_target_taint := entry_taint|>` >>
+  simp[] >> conj_tac
+  >- (qmatch_goalsub_abbrev_tac `layout_ordinary_trace _ _ _ _ _ _ b _` >>
+      drule layout_run_initial_trace >>
+      disch_then (qspecl_then [`s`, `b`] mp_tac) >> simp[Abbr `b`]) >>
+  simp[layout_ordinary_state_def, layout_phase_normalize_def] >>
+  conj_tac
+  >- (simp[local_rel_def, local_values_def, variable_domains_def,
+        variables_agree_on_def, guarded_ptr_def, guarded_bytes_def,
+        copy_ptr_def, copy_bytes_def, word_agree_except_def,
+        concretize_local_obs_def, dead_result_rel_def] >>
+      conj_tac >- (rpt strip_tac >> gvs[]) >>
+      conj_tac
+      >- (irule (SRULE[joint_memory_observation_def]
+            joint_relocation_demand_initial_agreement) >> simp[]) >>
+      simp[accounts_agree_except_def, transient_agree_except_def,
+        imms_agree_except_def, storage_agree_except_def, word_agree_except_def] >>
+      irule EVERY2_refl >> simp[request_agree_except_def,
+        accounts_agree_except_def, transient_agree_except_def,
+        storage_agree_except_def, word_agree_except_def]) >>
+  simp[relocation_taint_le_def, demand_taint_def] >> rpt strip_tac >>
+  drule joint_relocation_demand_empty_entry >> simp[] >> metis_tac[]
 QED
 
 val _ = export_theory();
