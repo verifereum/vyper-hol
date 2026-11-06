@@ -467,3 +467,69 @@ Proof
      rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   simp_tac bool_ss []
 QED
+
+(* Producer-facing view: resources remain explicit, while the encoded value
+   is named by the producer's byte equality. *)
+Theorem abi_encode_bridge_bytes_phases_open:
+  enc at av = bytes /\
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len m body_end = ((),final) /\
+  m = (case method_id of NONE => 0 | SOME mid => 4) /\
+  w = (case method_id of NONE => 0 | SOME mid => 32) /\
+  d = p+32+m /\ outsz = 32+32*word_size (maxlen+m) /\
+  fn_has_code st ready obs /\ fn_has_code ready body_end obs /\
+  fn_has_code body_end final obs /\ fn_inst_ids_distinct obs /\
+  obs.fn_name = func.fn_name /\
+  (!i. MEM i (fn_insts obs) /\ i.inst_opcode <> STOP /\
+       i.inst_opcode <> NOP ==> MEM i (fn_insts func)) /\
+  (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ p < dimword (:256) /\
+  (method_id <> NONE ==> p+32 < dimword (:256)) /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_admissible ei /\ abi_encoder_window_input ei at av sb cap initial.vs_memory /\
+  eval_operand src initial = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
+  (!x. src = Var x \/ SND ops = Var x ==> not_fresh_at ready x) /\
+  (!x. FST ops = Var x ==> not_fresh_at ready x) /\
+  abi_decoder_operand_live body_end.cs_next_var (FST ops) /\
+  alloca_inv (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  alloca_room ctx func (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  sb+cap <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  d+LENGTH bytes <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH bytes) /\
+  (sb+cap <= p+32 \/ p+32+w <= sb) /\
+  venomMemDefs$regions_disjoint (p+32,m) (d,LENGTH bytes) /\
+  (!inst b sz. MEM inst (fn_insts obs) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids ready body_end /\
+    FLOOKUP (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
+    venomMemDefs$regions_disjoint (d,LENGTH bytes) (b,sz) /\
+    venomMemDefs$regions_disjoint (p+32,m) (b,sz)) ==>
+  ?prepared body actual.
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    mload p actual = n2w (LENGTH bytes+m) /\
+    mem_bytes_at (p+32+m) (LENGTH bytes) actual.vs_memory = bytes /\
+    (case method_id of NONE => T | SOME mid =>
+      mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid) /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_decode_sim ctx obs initial actual /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p w initial prepared /\
+    window_strong_result (ctx with ctx_functions := [obs]) obs ready body_end len at av d prepared body /\
+    abi_decode_frame p 32 body actual /\
+    actual.vs_allocas = body.vs_allocas /\ actual.vs_alloca_next = body.vs_alloca_next /\
+    abi_encoder_registered_effect {} [(p,32)] body actual /\
+    (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
+      eval_operand op actual = SOME v)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `enc at av = bytes` (SUBST_ALL_TAC o SYM) >>
+  drule_all abi_encode_bridge_phases_open >>
+  qpat_x_assum `d = _` SUBST_ALL_TAC >>
+  simp_tac bool_ss []
+QED
