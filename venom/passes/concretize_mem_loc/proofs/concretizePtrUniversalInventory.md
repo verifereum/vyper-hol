@@ -7,7 +7,94 @@ Reuses concretizePtrInterfaceAudit.md (.18), concretizePtrReadBoundaryAudit.md
 references are historical. Only frozen StageStatic/max_live_eom is current.
 .50--.52 supply local write CONTENT, not source execution or writer exclusion.
 
-## Current status (stageBridgeAudit, 2026-11-06)
+## Current integration frontier (E0482, 2026-11-06)
+
+Checked integration boundaries: StagePairedBridge supplies ONE fixed R/lp/positions
+and all code/shape premises from the frozen antecedent. ContextRoot initializes
+the normalized certificate. HistoryCoverage proves full-history coverage ONLY
+CONDITIONALLY on the explicit universal normalized extension premise. No theorem
+below discharges that premise for all opcodes. These are not additional premises
+permitted on the frozen target.
+
+ContextRoot's remaining context premises have suppliers independent of choice:
+ctx_pass_stage_def gives C.ctx_entry = Ct.ctx_entry;
+o1_run_state_ok_def/o1_initial_state_ok_def give vs.vs_vars = FEMPTY.
+StagePairedBridge itself does not assert those two projections.
+
+### Current exhaustive supplier matrix
+
+The disjoint constructor sets N1--T in the historical dispatch partition below
+remain the exhaustive partition. This matrix supersedes their old progress notes.
+An immediate producer still requires deleted-NOP normalization and reassociation
+of h/H appends to match HistoryCoverage's extension conclusion.
+
+| Partition | Exact current supplier or missing implication |
+|---|---|
+| N1 ADD/SUB | OwnedAffinePrefix: ptr_affine_prefix_back_next, ptr_affine_owned_prefix are lower-level affine interfaces, NOT complete paired-prefix producers; general immediate family supplier missing |
+| N2 scalar arithmetic, bitwise, OFFSET | No complete paired-prefix family producer located; operand shape/eval, scalar masking and ledger/ghost attachment remain |
+| N3 EQ/LT/GT | Comparison transport is lower-level; no complete paired-prefix producer; common provenance/nonwrapping endpoints must be derived, not supplied |
+| N4 source ASSIGN | ptr_paired_prefix_assign (AssignProducer), complete immediate prefix; not the ALLOCA preimage of target ASSIGN |
+| N5 PARAM | ptr_paired_prefix_param (ParamProducer), complete immediate prefix |
+| N6 INITIAL_FMP/BUMP/RETPC_PARAM | Complete family supplier missing; not excluded by fn_ptr_ok |
+| N7 MLOAD/ILOAD | ptr_paired_prefix_mload (MloadProducer) covers MLOAD ONLY, from frozen premises + prefix + opcode + target step; ILOAD supplier missing |
+| N8 MSTORE/MSTORE8/ISTORE | ptr_paired_prefix_mstore (MstoreProducer) covers MSTORE ONLY; remaining two not implied by its name |
+| N9 MCOPY | ptr_paired_prefix_mcopy (McopyProducer), complete immediate prefix; historical read/range gaps are closed for this opcode |
+| N10 CALLDATACOPY/CODECOPY/DLOADBYTES/RETURNDATACOPY | Local content facts only; complete family prefix supplier missing, including returndata OOB success guard |
+| N11 EXTCODECOPY | Complete prefix supplier missing; account-code payload and shared fields needed |
+| N12 SLOAD/SSTORE/TLOAD/TSTORE | Complete prefix supplier missing; storage/transient observation, taint and static-frame guard needed |
+| N13 environment reads | ptr_paired_prefix_environment_read covers exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE. Remaining SELFBALANCE/BALANCE/BLOCKHASH/GAS/CODESIZE/EXTCODESIZE/EXTCODEHASH/BLOBHASH/BLOBBASEFEE/CALLDATALOAD/DLOAD lack a complete supplier |
+| N14 SHA3/LOG | Complete supplier missing; read payload/hash/topics/static guard required |
+| N15 CALL/STATICCALL | Content boundaries only; no complete prefix supplier; full request bytes and shared-state equality not free consequences of masked equality |
+| N16 DELEGATECALL/CREATE/CREATE2 | Complete prefix supplier missing; cannot rename CALL content facts |
+| N17 ALLOCA | ptr_paired_prefix_alloca_immediate plus ptr_paired_structural_prefix_normalize; explicit universal-schema code/shape premises; target ASSIGN handled separately from N4 |
+| N18 ASSERT/ASSERT_UNREACHABLE | Complete supplier missing; true-condition transition requires scalar untainted equality |
+| J JMP/JNZ/DJMP | ptr_paired_jump_prefix_normalize requires inverted target block step/entry and local shape; ptr_paired_jnz_prefix_normalize additionally requires [cond;Label yes;Label no], ptr_nonopaque_operand, op_prov TG cond=NONE and op_taint cond={}. These must be supplied from discipline. DJMP complete supplier missing |
+| C INVOKE | ptr_paired_invoke_prefix_normalize (PairedCallSchema) requires actual target decode/eval/lookup/setup/entry/active cursor and exact bt observation; derive by target call inversion, with opaque_use_ok and fixed code/shape environment |
+| R RET | ptr_paired_ret_prefix_immediate (ReturnPrefix) plus structural normalization; target ret inversion and successor_births antecedent still must match full dispatch |
+| X1 MEMTOP/GETFMP/SETFMP/FMP_PARAM | Exclude via source fn_ptr_ok plus existing D0004 preimage facts, not new simulation |
+| X2 DALLOCA | Exclude via frozen no-DALLOCA and existing preimage facts |
+| X3 DRET/RETFMP | Exclude via source fn_ptr_ok and preimage; raw ret alone does not exclude |
+| X4 PHI | No ordinary successful departure; entry PHIs handled atomically |
+| X5 NOP | No retained target NOP; source-only normalization already exists |
+| T RETURN/REVERT/STOP/SINK/SELFDESTRUCT/INVALID | No successful chrono departure, but active observations ARE included in memory invariant; cannot omit their memory ranges |
+
+### Endpoint consumer and first missing interface
+
+normalized_endpoint_static_schema in UniversalStepSchema is a typechecked
+QUOTATION, not a theorem. Its conclusion spells out static_mem_ok_def using
+read++write ranges: in_revert_forward target fn/state OR every range has len=0
+OR off+len<=eom. Zero-size ranges need no address bound. Revert forwarding is a
+syntactic/semantic exemption requiring its own transport; not every REVERT is
+forwarding. RETURN/REVERT ranges must be covered without assuming a departing
+chrono step. mem_inv_raw_reachable additionally needs target entry resolution
+and coverage of every raw observation (raw-to-frame/history projection), not
+merely a theorem about successful departures.
+
+Existing endpoint numerical suppliers must be REUSED: ptr_stage_fixed_region_bound,
+ptr_max_live_global_bound, ptr_max_live_function_bound (StageBounds), and
+ptr_stage_placements_endpoint_bound: stage + fresh fn_eom + shape + callee_first
++ max_live_eom + placements + FLOOKUP positions (Allocation aid)=SOME(p,sz)
+implies p+sz<=eom. PlacementBounds supplies strict/word endpoints separately.
+None of these theorems classifies an arbitrary evaluated target access.
+
+First missing semantic interface: a current-observation range transport boundary,
+valid also for terminal observations, deriving fixed/owned/zero/revert cases from
+source access_ok and the paired mixed operands, then applying existing numerical
+bounds. It must NOT assume target range boundedness, source success, or future
+writer exclusion. This is preferable to another isolated opcode extension: it
+serves the final consumer and all memory-reading/writing families. Proposed order:
+(1) validate that range classification interface against actual access_ok and
+source_memory_*_ranges, including imported owners and word wrap;
+(2) prove terminal-inclusive endpoint consumer using existing bounds;
+(3) de-risk residual semantic families in the matrix, retaining one universal
+normalized extension conclusion; (4) discharge HistoryCoverage premise and raw
+observation packaging. No further opcode queue is authorized by this audit.
+
+The older inventory below is retained as historical reasoning, not current proof
+status; in particular its claims that H/W types remain unresolved are superseded
+by the accepted concrete certificate and historical recovery libraries.
+
+## Historical status (stageBridgeAudit, 2026-11-06)
 
 MCOPY immediate extension is now checked by `ptr_paired_prefix_mcopy` in
 concretizePtrMcopyProducerScript.sml (E0475). The MCOPY audit at the end of the
