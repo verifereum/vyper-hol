@@ -1,5 +1,5 @@
 Theory fnLineageInvTwoDemandProbe
-Ancestors fnLineageInvSpliceProbe fnLineageInvLiteral fnPlanPrefix fnPlanLineageReplay stackPlanGen
+Ancestors fnLineageInvSpliceProbe fnLineageInvLiteral fnPlanPrefix fnPlanLineageReplay fnPlanLineage stackPlanGen
 
 (* The extra early output u uses the previously unused instruction ID 40.
    The two-demand store kills both early outputs; all other blocks and IDs
@@ -412,3 +412,63 @@ Proof
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``set``]) >>
   simp[pred_setTheory.EXTENSION] >> metis_tac[]
 QED
+
+Theorem splice_two_schedule:
+  fn_entry_label splice_two_fn = SOME "E" /\
+  cfg_succs_of (cfg_analyze splice_two_fn) "E" = ["H"] /\
+  cfg_succs_of (cfg_analyze splice_two_fn) "H" = ["Y";"B"] /\
+  lookup_block "E" splice_two_fn.fn_blocks =
+    SOME (THE (lookup_block "E" splice_two_fn.fn_blocks)) /\
+  lookup_block "H" splice_two_fn.fn_blocks =
+    SOME (THE (lookup_block "H" splice_two_fn.fn_blocks))
+Proof
+  EVAL_TAC
+QED
+
+Theorem splice_two_dfs_h:
+  dfs_aux_call (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    ["H"] ["E"] splice_loop_e
+Proof
+  mp_tac splice_two_entry_result >> strip_tac >>
+  `dfs_aux_call (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    ["E"] [] (init_cleanup_plan_state NONE [] 0 0)` by
+    (irule dfs_aux_call_entry >> simp[splice_two_schedule]) >>
+  mp_tac splice_two_schedule >> strip_tac >>
+  drule dfs_aux_call_succs >>
+  disch_then (qspec_then `THE (lookup_block "E" splice_two_fn.fn_blocks)` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule dfs_aux_call_branch >> simp[]
+QED
+
+Theorem splice_two_lineage_h:
+  lineage_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    "H" splice_loop_e
+Proof
+  mp_tac splice_two_entry_result >> strip_tac >>
+  mp_tac splice_two_schedule >> strip_tac >>
+  `dfs_block_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    "H" splice_loop_e` by
+    (simp[dfs_block_state_def] >> qexistsl_tac [`[]`,`["E"]`] >> simp[splice_two_dfs_h]) >>
+  `lineage_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    "E" (init_cleanup_plan_state NONE [] 0 0)` by
+    (irule lineage_state_entry >> simp[]) >>
+  `dfs_block_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    "E" (init_cleanup_plan_state NONE [] 0 0)` by
+    (simp[dfs_block_state_def] >> qexistsl_tac [`[]`,`[]`] >> simp[dfs_aux_call_entry]) >>
+  `lineage_state (liveness_analyze splice_two_fn) (dfg_build_function splice_two_fn)
+    (cfg_analyze splice_two_fn) splice_two_fn (init_cleanup_plan_state NONE [] 0 0)
+    "H" (splice_loop_e with <|ps_stack := splice_loop_e.ps_stack;
+                              ps_spilled := splice_loop_e.ps_spilled|>)` suffices_by simp[] >>
+  irule lineage_state_step >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`NONE`,`F`] >> gvs[init_cleanup_plan_state_def]
+QED
+
