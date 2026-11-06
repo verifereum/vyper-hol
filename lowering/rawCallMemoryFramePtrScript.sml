@@ -1,5 +1,7 @@
-(* Clean return-buffer writes may remove old taint.  Robust local values
-   survive because their occupied region, not all memory, is unchanged. *)
+(* Exterior-write frames allow arbitrary taint changes inside the written
+   window, including copied padding. Robust locals survive because their
+   occupied region, not all memory, is unchanged. Historical theorem names
+   retain 'clean' for compatibility with existing callers. *)
 Theory rawCallMemoryFramePtr
 Ancestors
   robustCopyTransportPtr valueEncodingProps bodyPtrDefs pred_set ptrDiscipline
@@ -9,16 +11,16 @@ Ancestors
 Theorem robust_val_clean_write_frame:
   val_wf tv v /\
   (p + val_footprint tv v <= dst \/ dst + LENGTH bytes <= p) /\
+  (!i. ~(dst <= i /\ i < dst + LENGTH bytes) ==> (i IN dirty' <=> i IN dirty)) /\
   (!mem. mem_agree_outside dirty s.vs_memory mem ==> val_in_memory tv v p mem) ==>
-  !mem. mem_agree_outside
-    (dirty DIFF {i | dst <= i /\ i < dst + LENGTH bytes})
+  !mem. mem_agree_outside dirty'
     (write_memory_with_expansion dst bytes s).vs_memory mem ==>
     val_in_memory tv v p mem
 Proof
   rpt strip_tac >> (
   irule robust_val_in_memory_exterior_frame >> simp[] >>
   qexistsl_tac [`s.vs_memory`, `(write_memory_with_expansion dst bytes s).vs_memory`,
-    `dirty`, `dirty DIFF {i | dst <= i /\ i < dst + LENGTH bytes}`,
+    `dirty`, `dirty'`,
     `{i | dst <= i /\ i < dst + LENGTH bytes}`] >>
   simp[] >> rpt strip_tac >>
   irule write_memory_mem_bytes_at_disjoint >> decide_tac)
@@ -135,9 +137,9 @@ Theorem local_robust_clean_write_frame:
   (!mem. mem_agree_outside dirty s.vs_memory mem ==>
     val_in_memory entry.type entry.value (w2n w) mem) /\
   (!name a len. local_region cenv scopes s name a len ==>
-    regions_disjoint dst (LENGTH bytes) a len) ==>
-  !mem. mem_agree_outside
-    (dirty DIFF {i | dst <= i /\ i < dst+LENGTH bytes})
+    regions_disjoint dst (LENGTH bytes) a len) /\
+  (!i. ~(dst <= i /\ i < dst + LENGTH bytes) ==> (i IN dirty' <=> i IN dirty)) ==>
+  !mem. mem_agree_outside dirty'
     (write_memory_with_expansion dst bytes s).vs_memory mem ==>
     val_in_memory entry.type entry.value (w2n w) mem
 Proof
@@ -146,7 +148,7 @@ Proof
     (fs[compileEnvTheory.local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> simp[]) >>
   irule robust_val_clean_write_frame >> simp[] >>
-  qexistsl_tac [`bytes`, `dirty`, `dst`, `s`] >> simp[] >>
+  qexistsl_tac [`bytes`, `dirty`, `dirty'`, `dst`, `s`] >> simp[] >>
   `val_footprint entry.type entry.value <= sz` by
     (drule exprSimPropsTheory.val_footprint_le >> decide_tac) >>
   `local_region cenv scopes s name (w2n w) sz` by
@@ -164,7 +166,7 @@ Theorem ghost_inv_clean_write_frame:
     op_taint un (Var x) = op_taint tn (Var x) /\ lookup_var x u = lookup_var x s) /\
   ee.scopes = es.scopes /\
   u.vs_memory = (write_memory_with_expansion dst bytes s).vs_memory /\
-  un.t_mem = tn.t_mem DIFF {i | dst <= i /\ i < dst+LENGTH bytes} /\
+  (!i. ~(dst <= i /\ i < dst+LENGTH bytes) ==> (i IN un.t_mem <=> i IN tn.t_mem)) /\
   (!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint dst (LENGTH bytes) a len) /\ stor_taint_ok cx un u ==>
   ghost_inv d cenv cx ee H un u
@@ -180,7 +182,7 @@ Proof
       irule local_robust_clean_write_frame >>
       first_assum (irule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
       first_assum (irule_at (Pat `FLOOKUP _ _ = SOME (PtrVar _ _)`)) >>
-      qexistsl_tac [`dst`, `tn.t_mem`, `bytes`] >> simp[] >> metis_tac[]) >>
+      qexistsl_tac [`dst`, `un.t_mem`, `tn.t_mem`, `bytes`] >> simp[] >> metis_tac[]) >>
   Cases_on `d` >> fs[bodyPtrDefsTheory.return_buf_ptr_def] >>
   PairCases_on `x` >> gvs[bodyPtrDefsTheory.return_buf_ptr_def] >>
   metis_tac[ptr_covers_old_transport]
