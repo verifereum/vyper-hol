@@ -93,3 +93,66 @@ Proof
   simp[current_prefix_functional_def, current_prefix_back_def,
     current_prefix_pull_def] >> metis_tac[]
 QED
+
+Theorem current_prefix_map_copy:
+  current_prefix_functional (current_prefix_back (inst::xs) M) /\
+  current_prefix_functional (current_prefix_back xs M) /\
+  ((?dst src. inst.inst_opcode = ASSIGN /\
+      inst.inst_outputs = [dst] /\ inst.inst_operands = [Var src]) \/
+   inst.inst_outputs = []) ==>
+  copy_rename_ok (current_prefix_map (inst::xs) M) inst
+    (current_prefix_map xs M)
+Proof
+  strip_tac >> simp[copy_rename_ok_def, current_prefix_map_lookup] >>
+  rpt strip_tac
+  >- (Cases_on `x' = dst` >> gvs[]
+      >- (simp[current_prefix_back_def, current_prefix_pull_def] >> metis_tac[]) >>
+      simp[current_prefix_back_def, current_prefix_pull_def]) >>
+  simp[current_prefix_back_def, current_prefix_pull_def]
+QED
+
+Theorem current_prefix_map_phis:
+  current_prefix_functional (current_prefix_back xs M) /\
+  (!z x. current_prefix_back xs M z x ==>
+    OPTREL (op_rename sg) (phi_eff prev x old) (phi_eff prev z new)) ==>
+  phis_rename_ok prev sg old new (current_prefix_map xs M)
+Proof
+  simp[phis_rename_ok_def, current_prefix_map_lookup]
+QED
+
+Theorem current_prefix_suffix_cons[local]:
+  !k insts b. k < b /\ b <= LENGTH insts ==>
+  TAKE (b-k) (DROP k insts) =
+    EL k insts :: TAKE (b-SUC k) (DROP (SUC k) insts)
+Proof
+  Induct >> Cases_on `insts` >> simp[] >> rpt strip_tac
+  >- (Cases_on `b` >> gvs[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem current_prefix_map_chain:
+  a <= b /\ b <= LENGTH insts /\
+  (!k. a <= k /\ k <= b ==>
+    current_prefix_functional
+      (current_prefix_back (TAKE (b-k) (DROP k insts)) M)) /\
+  (!k. a <= k /\ k < b ==>
+    ((?dst src. (EL k insts).inst_opcode = ASSIGN /\
+      (EL k insts).inst_outputs = [dst] /\
+      (EL k insts).inst_operands = [Var src]) \/
+      (EL k insts).inst_outputs = [])) ==>
+  current_prefix_map (TAKE (b-b) (DROP b insts)) M = M /\
+  (!k. a <= k /\ k < b ==>
+    copy_rename_ok
+      (current_prefix_map (TAKE (b-k) (DROP k insts)) M)
+      (EL k insts)
+      (current_prefix_map (TAKE (b-SUC k) (DROP (SUC k) insts)) M))
+Proof
+  strip_tac >> conj_tac >- simp[current_prefix_map_nil] >>
+  rpt strip_tac >>
+  `TAKE (b-k) (DROP k insts) =
+    EL k insts :: TAKE (b-SUC k) (DROP (SUC k) insts)` by
+    (irule current_prefix_suffix_cons >> simp[]) >>
+  simp[] >> irule current_prefix_map_copy >>
+  metis_tac[arithmeticTheory.LESS_EQ, arithmeticTheory.LESS_EQ_TRANS,
+    arithmeticTheory.LESS_OR_EQ]
+QED
