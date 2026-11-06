@@ -1141,6 +1141,13 @@ Definition resolve_module_chain_def:
            | NONE => []) rest
 End
 
+Theorem resolve_module_chain_nonempty:
+  resolve_module_chain all_import_maps import_map aliases = SOME nsid ==>
+  aliases <> []
+Proof
+  Cases_on `aliases` >> simp[resolve_module_chain_def]
+QED
+
 Definition initialized_module_paths_def:
   initialized_module_paths 0 all_import_maps imports import_map body prefix =
     [] ∧

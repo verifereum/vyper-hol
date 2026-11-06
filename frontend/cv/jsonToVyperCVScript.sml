@@ -5,54 +5,46 @@ Ancestors
 Libs
   cv_transLib jsonToVyperCVLib
 
-(* Preserve the source frontend's defined-input conditions, rather than
-   choosing a value for its undefined empty interface-constructor case. *)
-val translate_var_mutability_pre_def = cv_auto_trans_pre
-  "translate_var_mutability_pre" translate_var_mutability_def;
-
+val () = cv_auto_trans translate_var_mutability_def;
 
 val translate_toplevel_compute = save_thm ("translate_toplevel_compute",
   PURE_REWRITE_RULE [GSYM translate_expr_list_map] translate_toplevel_def);
-val translate_toplevel_pre_def = cv_auto_trans_pre
-  "translate_toplevel_pre" translate_toplevel_compute;
+val () = cv_auto_trans translate_toplevel_compute;
 
+(* The module traversals' MAP over toplevels, as first-order recursion. *)
 Definition translate_toplevels_def:
-  translate_toplevels ni im ec tc nr declaration_only tops =
-    MAP (λtop. if declaration_only ∧ is_function_toplevel top then NONE
-               else translate_toplevel ni im ec tc nr top) tops
-End
-
-Theorem translate_toplevels_compute:
   (translate_toplevels ni im ec tc nr declaration_only [] = []) /\
   (translate_toplevels ni im ec tc nr declaration_only (top::tops) =
     (if declaration_only ∧ is_function_toplevel top then NONE
      else translate_toplevel ni im ec tc nr top) ::
     translate_toplevels ni im ec tc nr declaration_only tops)
-Proof
-  simp[translate_toplevels_def]
-QED
+End
 
-val translate_toplevels_pre_def = cv_auto_trans_pre
-  "translate_toplevels_pre" translate_toplevels_compute;
+val () = cv_auto_trans translate_toplevels_def;
+
+Theorem translate_toplevels_map:
+  translate_toplevels ni im ec tc nr declaration_only tops =
+    MAP (λtop. if declaration_only ∧ is_function_toplevel top then NONE
+               else translate_toplevel ni im ec tc nr top) tops
+Proof
+  Induct_on `tops` >> simp[translate_toplevels_def]
+QED
 
 Theorem translate_toplevels_implementation:
   translate_toplevels ni im ec tc nr F tops =
     MAP (translate_toplevel ni im ec tc nr) tops
 Proof
-  simp[translate_toplevels_def] >>
+  simp[translate_toplevels_map] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
 QED
 
 val translate_module_compute = save_thm ("translate_module_compute",
   PURE_REWRITE_RULE [GSYM translate_toplevels_implementation] translate_module_def);
-val translate_module_pre_def = cv_auto_trans_pre
-  "translate_module_pre" translate_module_compute;
+val () = cv_auto_trans translate_module_compute;
 val translate_imported_module_compute = save_thm ("translate_imported_module_compute",
-  PURE_REWRITE_RULE [GSYM translate_toplevels_def] translate_imported_module_def);
-val translate_imported_module_pre_def = cv_auto_trans_pre
-  "translate_imported_module_pre" translate_imported_module_compute;
-val translate_imported_modules_pre_def = cv_auto_trans_pre
-  "translate_imported_modules_pre" translate_imported_modules_def;
+  PURE_REWRITE_RULE [GSYM translate_toplevels_map] translate_imported_module_def);
+val () = cv_auto_trans translate_imported_module_compute;
+val () = cv_auto_trans translate_imported_modules_def;
 
 (* Expose the override-default traversal's nested MAP calls as first-order
    recursion, retaining equations about the original canonicalizer. *)
@@ -263,11 +255,25 @@ val initialized_module_paths_pre_def = cv_auto_trans_pre_rec
      INL (fuel,_,_,_,_,_) => (cv$c2n fuel,0)
    | INR (fuel,_,_,_,_,chains) => (cv$c2n fuel,cv_size chains + 1))` >>
    cv_termination_tac);
-val layout_import_map_pre_def = cv_auto_trans_pre
-  "layout_import_map_pre" layout_import_map_def;
 
-val translate_annotated_ast_canonical_pre_def = cv_auto_trans_pre
-  "translate_annotated_ast_canonical_pre" translate_annotated_ast_canonical_def;
+(* LAST is applied only to chains that resolve, which are nonempty. *)
+Theorem initialized_module_paths_pre[cv_pre]:
+  (∀fuel all_import_maps imports import_map body prefix.
+    initialized_module_paths_pre fuel all_import_maps imports import_map body
+      prefix) ∧
+  (∀fuel all_import_maps imports import_map prefix chains.
+    initialized_chain_paths_pre fuel all_import_maps imports import_map prefix
+      chains)
+Proof
+  ho_match_mp_tac initialized_module_paths_compute_ind >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [initialized_module_paths_pre_def] >> rw[] >>
+  imp_res_tac resolve_module_chain_nonempty >> gvs[]
+QED
+
+val () = cv_auto_trans layout_import_map_def;
+
+val () = cv_auto_trans translate_annotated_ast_canonical_def;
 
 (* Register each mutually recursive nominal-resolution family together. *)
 val () = cv_auto_trans resolve_json_type_def;
@@ -298,5 +304,4 @@ Proof
   ONCE_REWRITE_TAC [resolve_json_stmt_pre_def] >> rw[] >> gvs[]
 QED
 
-val translate_annotated_ast_pre_def = cv_auto_trans_pre
-  "translate_annotated_ast_pre" translate_annotated_ast_def;
+val () = cv_auto_trans translate_annotated_ast_def;

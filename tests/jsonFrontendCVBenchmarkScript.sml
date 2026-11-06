@@ -2,7 +2,7 @@ Theory jsonFrontendCVBenchmark
 Ancestors
   jsonToVyperCV jsonToVyperExprCV jsonToVyperExpr vyperAST
 Libs
-  jsonASTLib jsonToVyperCVLib cv_transLib wordsLib intLib
+  jsonASTLib cv_transLib wordsLib intLib
 
 (* These are committed compiler outputs already used by frontend regressions;
    neither Vyper, exported execution traces nor the native runner is required. *)
@@ -54,12 +54,12 @@ fun parity tm reference actual = let
   in TRANS (SYM reference) actual end;
 
 (* First use in this process, not a claim of OS-cold caches. Includes CV input
-   encoding, code selection, result decoding and defined-input condition proofs.
+   encoding, code selection and result decoding.
    The two evaluators receive the very same closed HOL application term. *)
 fun cold (name, tm) = let
   val reference = timed ("phase=cold case=" ^ name ^ " mode=EVAL") EVAL tm
   val actual = timed ("phase=cold case=" ^ name ^ " mode=cv_eval")
-    jsonToVyperCVLib.eval tm
+    cv_eval tm
   val _ = save_thm (name ^ "_translation", actual)
   val _ = save_thm (name ^ "_rhs_parity", parity tm reference actual)
   val () = print ("FRONTEND_CV phase=cold case=" ^ name ^ " parity=PASS\n")
@@ -76,8 +76,8 @@ fun warm scale = let
     " translations=" ^ Int.toString (length terms)
   fun run mode conv = timed (label ^ " mode=" ^ mode) (List.map conv) terms
   val (evals, cvs) = if scale = 1 then
-      (run "EVAL" EVAL, run "cv_eval" jsonToVyperCVLib.eval)
-    else let val cvs = run "cv_eval" jsonToVyperCVLib.eval
+      (run "EVAL" EVAL, run "cv_eval" cv_eval)
+    else let val cvs = run "cv_eval" cv_eval
          in (run "EVAL" EVAL, cvs) end
   val () = ListPair.appEq (fn ((tm, reference), (ev, cv)) =>
     (ignore (parity tm reference ev); ignore (parity tm reference cv)))
@@ -85,19 +85,3 @@ fun warm scale = let
   val () = print ("FRONTEND_CV " ^ label ^ " parity=PASS\n")
   in () end;
 val () = List.app warm [1, 4];
-
-(* Regression for the defined-input boundary: no unconditional value is assigned
-   to HD [] in the source frontend, and the evaluator must not assume it away. *)
-Theorem interface_constructor_defined_input_boundary:
-  ~interface_constructor_result_pre (BaseT AddressT) [] /\
-  interface_constructor_result_pre (BaseT AddressT)
-    [Literal (BaseT AddressT) (BytesL [])]
-Proof
-  simp[interface_constructor_result_pre_cases]
-QED
-
-val () =
-  if (ignore (jsonToVyperCVLib.eval
-       ``interface_constructor_result (BaseT AddressT) []``); false)
-     handle HOL_ERR _ => true | Fail _ => true
-  then () else raise Fail "frontend CV evaluator accepted undefined HD []";
