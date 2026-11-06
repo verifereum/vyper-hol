@@ -358,6 +358,49 @@ Proof
   simp[op_rename_def]
 QED
 
+Theorem current_cut_inserted_phi_edge_resolution:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  fn_cfg_edge fn p h /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (SOME (Var v))
+    (resolve_phi p (EL q new.bb_instructions).inst_operands)
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_slots >> strip_tac >>
+  `wf_function fn` by fs[current_wf_phi_context_def] >>
+  `MEM h (fn_labels fn)` by
+    (simp[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       makeSsaHelperTheory.lookup_block_label]) >>
+  `MAP FST pairs = cfg_preds_of (cfg_analyze fn) h` by
+    (drule makeSsaCurrentDefsTheory.ALOOKUP_current_pred_map >> disch_tac >>
+     qpat_x_assum `MAP FST pairs = _` mp_tac >> simp[]) >>
+  `ALL_DISTINCT (MAP FST pairs)` by simp[cfg_analyze_preds_distinct] >>
+  `MEM p (MAP FST pairs)` by
+    metis_tac[makeSsaCurrentAnalysisTheory.current_cfg_edge_preds] >>
+  `?n. MEM (p,n) pairs` by
+    (fs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  `?i. i < LENGTH pairs /\ EL i pairs = (p,n)` by metis_tac[listTheory.MEM_EL] >>
+  drule_all current_wf_inserted_phi_pair >> strip_tac >>
+  drule_all current_wf_inserted_phi_prefix >> strip_tac >>
+  `current_demand fn v p (LENGTH pred.bb_instructions)` by
+    (irule current_wf_inserted_pred_demand >> metis_tac[]) >>
+  `FLOOKUP (current_cut_sg fn A renamed H events p
+     (LENGTH pred.bb_instructions)) n = SOME v` by
+    (irule current_cut_sg_exit_name_lookup >> metis_tac[]) >>
+  `resolve_phi p (EL q new.bb_instructions).inst_operands = SOME (Var n)` by
+    (irule current_prefix_resolve_phi_selected >>
+     simp[current_cut_phi_slots_shape, cfg_analyze_preds_distinct] >>
+     metis_tac[]) >>
+  simp[op_rename_def]
+QED
+
 Theorem current_cut_pair_precleanup_output_exclusion:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\
