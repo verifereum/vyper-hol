@@ -1595,15 +1595,13 @@ Proof
        [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
     metis_tac[buffer_alloc_code] >>
   `immutable_holds cenv cx t (Value v) a es' u` by
-    (qpat_x_assum `immutable_holds _ _ _ _ _ _ s` mp_tac >>
-     asm_simp_tac std_ss [immutable_holds_def]) >>
+    metis_tac[immutable_holds_memory_cong] >>
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
      qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qpat_assum `MEM _ (fn_insts func)` (irule_at Any) >>
-     fs[mk_inst_def]) >>
+     goal_assum (drule_at Any) >> simp[mk_inst_def] >>
+     qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >> gvs[mk_inst_def]) >>
   `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
   drule_all copy_ctor_contents >> strip_tac >>
   `eval_operand buf.buf_operand z = SOME w` by
