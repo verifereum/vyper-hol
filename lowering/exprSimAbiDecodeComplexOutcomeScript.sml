@@ -11,7 +11,7 @@ Ancestors
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   venomState venomInst words list rich_list arithmetic
   abiDecoderCoherence abiDecodeRanges valueEncodingProps vyperTypeSystem vyperValue
-  vyperABI vyperTypeABI abiDecoderMembers
+  vyperABI vyperTypeABI abiDecoderMembers contractABI
 
 Theorem abi_decode_complex_guard_abort_opcodes[local]:
   abi_decode_complex_head_guard src hi k st = ((),st') ==>
@@ -310,4 +310,176 @@ Proof
   strip_tac >> irule abi_decode_struct_short_head_reject >>
   qexistsl_tac [`args`, `ce`, `rows`] >> simp[] >>
   Cases_on `rows` >> gvs[assignable_type_def]
+QED
+
+Theorem abi_decode_tuple_source_value_shape:
+  abi_decode_source_accepts env (TupleT tys) view v ==>
+  ?vs. v = ArrayV (TupleV vs)
+Proof
+  simp_tac (srw_ss()) [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    Once dec_def, abi_decode_members_value, abi_to_vyper_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem abi_decode_struct_source_value_shape:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  abi_decode_source_accepts env (StructT nsid) view v ==>
+  ?vs. v = StructV (ZIP (MAP FST args,vs))
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_source_accepts _ _ _ _` mp_tac >>
+  asm_simp_tac (srw_ss()) [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    Once dec_def, abi_decode_members_value, abi_to_vyper_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem abi_decode_tuple_rows_raw_accept:
+  abi_tuple_rows_schema ce env rows /\
+  tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  SUM (MAP abi_tuple_row_abi_width rows) <= LENGTH view /\
+  LENGTH rows < dimword(:256) ==>
+  (abi_decode_source_accepts env (TupleT tys) view v <=>
+    ?vs. v = ArrayV (TupleV vs) /\ abi_tuple_rows_accept env view 0 rows vs)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> drule abi_decode_tuple_source_value_shape >> strip_tac >>
+      gvs[] >> metis_tac[abi_tuple_rows_tuple_source]) >>
+  strip_tac >> gvs[] >> metis_tac[abi_tuple_rows_tuple_source]
+QED
+
+Theorem abi_decode_struct_rows_raw_accept:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\
+  MAP SND args = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  SUM (MAP abi_tuple_row_abi_width rows) <= LENGTH view /\
+  LENGTH rows < dimword(:256) ==>
+  (abi_decode_source_accepts env (StructT nsid) view v <=>
+    ?vs. v = StructV (ZIP (MAP FST args,vs)) /\
+      abi_tuple_rows_accept (env \\ nsid) view 0 rows vs)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> drule_all abi_decode_struct_source_value_shape >> strip_tac >>
+      gvs[] >> metis_tac[abi_tuple_rows_struct_source]) >>
+  strip_tac >> gvs[] >> metis_tac[abi_tuple_rows_struct_source]
+QED
+
+
+Theorem abi_decode_static_members_valid_take:
+  !ts b1 b2 hds. EVERY (\at. ~is_dynamic at) ts ==>
+  (vyper_decode_valid_enc_tuple ts b1 (TAKE (SUM (MAP static_length ts)) hds) <=>
+   vyper_decode_valid_enc_tuple ts b2 hds)
+Proof
+  Induct >- simp[vyper_decode_valid_enc_def] >>
+  rpt gen_tac >> simp_tac bool_ss [EVERY_DEF] >> strip_tac >>
+  asm_simp_tac (srw_ss()) [vyper_decode_valid_enc_def, LET_THM,
+    TAKE_TAKE_MIN, DROP_TAKE, LENGTH_TAKE_EQ, MIN_DEF] >>
+  Cases_on `static_length h + SUM (MAP static_length ts) <= LENGTH hds` >> simp[] >>
+  first_x_assum (qspecl_then [`b1`, `b2`, `DROP (static_length h) hds`] mp_tac) >>
+  simp[]
+QED
+
+Theorem abi_decode_static_members_decode_take:
+  !ts b1 b2 hds. EVERY (\at. ~is_dynamic at) ts ==>
+  abi_decode_members ts b1 (TAKE (SUM (MAP static_length ts)) hds) =
+  abi_decode_members ts b2 hds
+Proof
+  Induct >- simp[abi_decode_members_def] >>
+  rpt gen_tac >> simp_tac bool_ss [EVERY_DEF] >> strip_tac >>
+  asm_simp_tac (srw_ss()) [abi_decode_members_def, abi_decode_member_bytes_def,
+    abi_member_head_size_def, TAKE_TAKE_MIN, DROP_TAKE, MIN_DEF] >>
+  first_x_assum (qspecl_then [`b1`, `b2`, `DROP (static_length h) hds`] mp_tac) >>
+  simp[]
+QED
+
+Theorem abi_decode_static_tuple_accept_take:
+  EVERY (\at. ~is_dynamic at) (MAP (vyper_to_abi_type env) tys) ==>
+  (abi_decode_source_accepts env (TupleT tys)
+    (TAKE (SUM (MAP static_length (MAP (vyper_to_abi_type env) tys))) view) v <=>
+   abi_decode_source_accepts env (TupleT tys) view v)
+Proof
+  strip_tac >>
+  simp_tac (srw_ss()) [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    vyper_to_abi_types_MAP, Once vyper_decode_valid_enc_def, Once dec_def,
+    abi_decode_members_value] >>
+  qmatch_asmsub_abbrev_tac `EVERY _ ats` >>
+  qmatch_goalsub_abbrev_tac `TAKE k view` >>
+  `vyper_decode_valid_enc_tuple ats (TAKE k view) (TAKE k view) =
+   vyper_decode_valid_enc_tuple ats view view` by
+    (simp[Abbr `k`] >> metis_tac[abi_decode_static_members_valid_take]) >>
+  `abi_decode_members ats (TAKE k view) (TAKE k view) =
+   abi_decode_members ats view view` by
+    (simp[Abbr `k`] >> metis_tac[abi_decode_static_members_decode_take]) >>
+  asm_simp_tac (srw_ss()) [vyper_decode_valid_enc_def, Abbr `ats`]
+QED
+
+Theorem abi_decode_tuple_source_view_accept:
+  abi_decode_source_accepts env (TupleT tys)
+    (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs p) v <=>
+  abi_decode_source_accepts env (TupleT tys) (DROP p bs) v
+Proof
+  simp_tac bool_ss [abi_decode_source_view_def] >>
+  Cases_on `is_dynamic (vyper_to_abi_type env (TupleT tys))` >- simp[] >>
+  `EVERY (\at. ~is_dynamic at) (MAP (vyper_to_abi_type env) tys)` by
+    (gvs[vyper_to_abi_type_def, vyper_to_abi_types_MAP, is_dynamic_def,
+      any_dynamic_EXISTS, EXISTS_MEM, EVERY_MEM] >> metis_tac[]) >>
+  asm_simp_tac (srw_ss()) [vyper_to_abi_type_def, vyper_to_abi_types_MAP,
+    static_length_Tuple_SUM, abi_decode_static_tuple_accept_take]
+QED
+
+Theorem abi_decode_struct_source_view_accept:
+  FLOOKUP env nsid = SOME (StructArgs args) ==>
+  (abi_decode_source_accepts env (StructT nsid)
+    (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs p) v <=>
+   abi_decode_source_accepts env (StructT nsid) (DROP p bs) v)
+Proof
+  strip_tac >>
+  simp_tac bool_ss [abi_decode_source_view_def] >>
+  Cases_on `is_dynamic (vyper_to_abi_type env (StructT nsid))` >- simp[] >>
+  `EVERY (\at. ~is_dynamic at)
+    (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))` by
+    (gvs[vyper_to_abi_type_def, vyper_to_abi_types_MAP, is_dynamic_def,
+      any_dynamic_EXISTS, EXISTS_MEM, EVERY_MEM] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `EVERY _ ats` >>
+  qmatch_goalsub_abbrev_tac `TAKE k (DROP p bs)` >>
+  `k = SUM (MAP static_length ats)` by
+    simp[Abbr `k`, Abbr `ats`, vyper_to_abi_type_def, vyper_to_abi_types_MAP,
+      static_length_Tuple_SUM] >>
+  `vyper_decode_valid_enc_tuple ats (TAKE k (DROP p bs)) (TAKE k (DROP p bs)) =
+   vyper_decode_valid_enc_tuple ats (DROP p bs) (DROP p bs)` by
+    metis_tac[abi_decode_static_members_valid_take] >>
+  `abi_decode_members ats (TAKE k (DROP p bs)) (TAKE k (DROP p bs)) =
+   abi_decode_members ats (DROP p bs) (DROP p bs)` by
+    metis_tac[abi_decode_static_members_decode_take] >>
+  asm_simp_tac (srw_ss()) [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    vyper_to_abi_types_MAP, vyper_decode_valid_enc_def, Once dec_def,
+    abi_decode_members_value, Abbr `ats`] >> gvs[]
+QED
+
+Theorem abi_decode_tuple_rows_view_accept:
+  abi_tuple_rows_schema ce env rows /\
+  tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  SUM (MAP abi_tuple_row_abi_width rows) <= LENGTH (DROP p bs) /\
+  LENGTH rows < dimword(:256) ==>
+  (abi_decode_source_accepts env (TupleT tys)
+    (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs p) v <=>
+    ?vs. v = ArrayV (TupleV vs) /\ abi_tuple_rows_accept env (DROP p bs) 0 rows vs)
+Proof
+  simp_tac bool_ss [abi_decode_tuple_source_view_accept] >>
+  metis_tac[abi_decode_tuple_rows_raw_accept]
+QED
+
+Theorem abi_decode_struct_rows_view_accept:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\
+  MAP SND args = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  SUM (MAP abi_tuple_row_abi_width rows) <= LENGTH (DROP p bs) /\
+  LENGTH rows < dimword(:256) ==>
+  (abi_decode_source_accepts env (StructT nsid)
+    (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs p) v <=>
+    ?vs. v = StructV (ZIP (MAP FST args,vs)) /\
+      abi_tuple_rows_accept (env \\ nsid) (DROP p bs) 0 rows vs)
+Proof
+  strip_tac >> drule abi_decode_struct_source_view_accept >>
+  disch_then (qspecl_then [`v`, `p`, `bs`] assume_tac) >>
+  metis_tac[abi_decode_struct_rows_raw_accept]
 QED
