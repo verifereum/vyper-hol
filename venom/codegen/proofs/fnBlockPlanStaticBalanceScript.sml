@@ -619,3 +619,48 @@ Proof
   simp[] >> rpt strip_tac >>
   gvs[stack_push_def, trace_weight_def, stack_op_weight_def] >> intLib.ARITH_TAC
 QED
+
+Theorem param_push_fold_length[local]:
+  !params ps.
+  LENGTH (FOLDL (\s inst. s with ps_stack :=
+    stack_push (Var (HD inst.inst_outputs)) s.ps_stack) ps params).ps_stack =
+  LENGTH ps.ps_stack + LENGTH params
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  first_x_assum (qspec_then `ps with ps_stack :=
+    stack_push (Var (HD h.inst_outputs)) ps.ps_stack` mp_tac) >>
+  simp[stack_push_def]
+QED
+
+Theorem prepare_params_plan_signed_balance:
+  prepare_params_plan lv fn ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops +
+    &(LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  simp[prepare_params_plan_def, LET_THM] >>
+  Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule popmany_plan_signed_balance >> strip_tac >>
+  drule optimistic_swap_plan_signed_balance >>
+  simp[param_push_fold_length, trace_weight_append] >> intLib.ARITH_TAC
+QED
+
+Theorem clean_stack_plan_signed_balance:
+  clean_stack_plan lv cfg fn bb ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  rename1 `cfg_preds_of cfg bb.bb_label = pred::rest` >>
+  reverse (Cases_on `rest`) >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  IF_CASES_TAC >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  Cases_on `lookup_block pred fn.fn_blocks` >> simp[]
+  >- (rpt strip_tac >> gvs[trace_weight_def]) >>
+  rpt IF_CASES_TAC >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[trace_weight_def] >>
+  drule popmany_plan_signed_balance >> simp[mark_dead_stack_def]
+QED
