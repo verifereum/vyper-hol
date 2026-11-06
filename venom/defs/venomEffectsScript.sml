@@ -114,8 +114,10 @@ Definition write_effects_def:
   write_effects CALL = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects DELEGATECALL = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects STATICCALL = {Eff_MEMORY; Eff_RETURNDATA} /\
-  write_effects CREATE = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
-  write_effects CREATE2 = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
+  (* CREATE/CREATE2: Eff_MEMORY is conservative (memory expansion), as for
+     CALL; not upstream, carried in lowering/defs/bytecode/vyper-pin.patch *)
+  write_effects CREATE = all_effects DIFF {Eff_IMMUTABLES} /\
+  write_effects CREATE2 = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects INVOKE = all_effects /\
   (* Logging *)
   write_effects LOG = {Eff_LOG} /\

@@ -59,3 +59,20 @@ index c834b2d0..e4690826 100644
  
          # === Contract Existence Check ===
          # If function returns nothing and skip_contract_check is False,
+diff --git a/vyper/venom/effects.py b/vyper/venom/effects.py
+index 539d2369..445b3d4d 100644
+--- a/vyper/venom/effects.py
++++ b/vyper/venom/effects.py
+@@ -53,8 +53,10 @@ _writes = {
+     "call": ALL ^ IMMUTABLES,
+     "delegatecall": ALL ^ IMMUTABLES,
+     "staticcall": MEMORY | RETURNDATA,
+-    "create": ALL ^ (MEMORY | IMMUTABLES),
+-    "create2": ALL ^ (MEMORY | IMMUTABLES),
++    # vyperlang/vyper#5345 (not merged yet): create/create2 write memory,
++    # so no memory read is scheduled above a creation
++    "create": ALL ^ IMMUTABLES,
++    "create2": ALL ^ IMMUTABLES,
+     "invoke": ALL,  # could be smarter, look up the effects of the invoked function
+     "log": LOG,
+     "dloadbytes": MEMORY,
