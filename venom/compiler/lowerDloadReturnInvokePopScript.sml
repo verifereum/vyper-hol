@@ -3,7 +3,7 @@ Theory lowerDloadReturnInvokePop
 Ancestors
   lowerDloadReturnInvokePush lowerDloadSafetyKernel venomExecSemantics
   finite_map pred_set list o1LowerDloadJointRestore venomState ptrDiscipline
-  lowerDloadSafetyUpdates
+  lowerDloadSafetyUpdates lowerDloadReturnCallContext lowerDloadOracleCallAssembly
 Libs
   lowerDloadReturnPackageLib
 
@@ -467,3 +467,339 @@ val _ = List.app (fn th => if null (hyp th) then ()
   [ld_return_frame_geometry, ld_global_return_restore, ld_return_stack_geometry,
    ld_call_global_return_restore, ld_saved_stack_alloc_agree,
    ld_call_saved_stack_return];
+
+(* The actual source return supplies reachability of the resumed caller;
+   the old caller continuation, not the callee entry, is retained. *)
+Theorem ld_return_caller_reachable:
+  o1_ctx_shape C /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_return_cont C fn caller_cs s /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  run_blocks sf C callee cs = IntRet rs sc /\
+  ld_sync lo P C vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    PGr Gr tnr callee rinst se te Ar fr Nr /\
+  step_inst 0 C rinst se = IntRet rs sc /\
+  bind_outputs inst.inst_outputs rs.iret_values
+    (adopt_return_fmp rs (merge_callee_state s sc)) = SOME sr /\
+  active_inst fn next (sr with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  frame_reachable vs0 C stk PG
+    (DRESTRICT G (COMPL (set inst.inst_outputs)))
+    (tnr with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs)))
+    fn next (sr with vs_inst_idx := SUC s.vs_inst_idx) /\
+  ld_return_cont C fn caller_cs (sr with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >> conj_tac
+  >- (qpat_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o MATCH_MP ld_sync_source) >>
+      drule frame_reachable_ret >> simp[] >>
+      metis_tac[]) >>
+  irule ld_return_cont_next >> goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (qpat_x_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _` kall_tac >>
+    drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  qexistsl_tac [`inst`, `sf`] >>
+  simp[venomInstTheory.is_terminator_def] >>
+  conj_tac >- simp[Once step_inst_def] >>
+  metis_tac[ld_sync_source]
+QED
+
+Theorem ld_invoke_guarded_pop:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn caller_cs s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  ^ld_probe_guard C' j bb (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Stable = ^ld_probe_stable` >>
+  qabbrev_tac `Terminal = ^ld_probe_terminal` >>
+  qabbrev_tac `Point = ^ld_probe_point` >>
+  qabbrev_tac `Guard = ^ld_probe_guard` >> fs[] >> strip_tac >>
+  `?sr. bind_outputs inst.inst_outputs rs.iret_values
+      (adopt_return_fmp rs (merge_callee_state s cs')) = SOME sr /\
+      step_inst sf C inst s = OK sr` by
+    (irule lowerDloadReturnInterfaceProbeTheory.ld_invoke_from_return >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `o1_ctx_shape C` by fs[Abbr `Ambient`] >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (qpat_x_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  `EVERY inst_wf (fn_insts fn)` by
+    (qpat_x_assum `ld_sync _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     drule_all ld_sync_fn_shape >> strip_tac >>
+     drule o1_fn_shape_components >>
+     simp[venomWfTheory.fn_inst_wf_def, EVERY_MEM, venomInstTheory.fn_insts_def,
+       venomInstTheory.fn_insts_blocks_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[o1PassContractTheory.fn_insts_blocks_MEM]) >>
+  `f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn` by
+    (qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
+       (strip_assume_tac o MATCH_MP ld_sync_active) >> fs[]) >>
+  `lower_dload_function_supply f.lf_supply fn =
+    (fn', SND (lower_dload_function_supply f.lf_supply fn))` by
+    fs[ld_image_def] >>
+  `sr.vs_current_bb = s.vs_current_bb /\ q.vs_current_bb = t.vs_current_bb` by
+    metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control] >>
+  `?ti. get_instruction bb (SUC t.vs_inst_idx) = SOME ti` by
+    (mp_tac (Q.INST [`C` |-> `C'`, `k` |-> `j`,
+      `t` |-> `q with vs_inst_idx := SUC t.vs_inst_idx`]
+      lowerDloadReturnAlignmentTheory.ld_successful_body_fetch) >>
+     fs[Abbr `Guard`] >> metis_tac[]) >>
+  `?next Y. active_inst fn next (sr with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ld_envelope f.lf_supply fn (sr with vs_inst_idx := SUC s.vs_inst_idx)
+      (SUC s.vs_inst_idx) Y (p+1)` by
+    (irule (SRULE [] (Q.INST [`X` |-> `[inst]`,
+       `q` |-> `q with vs_inst_idx := SUC t.vs_inst_idx`]
+       lowerDloadSafetyLocationsTheory.ld_envelope_successor_location)) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`bb`, `inst`, `q with vs_inst_idx := SUC t.vs_inst_idx`,
+       `s`, `t`, `ti`] >> simp[] >>
+     metis_tac[ld_sync_control, pairTheory.FST]) >>
+  drule_all ld_return_caller_reachable >> strip_tac >>
+  `cs'.vs_call_ctx = s.vs_call_ctx` by
+    (drule_all ld_setup_return_call_ctx >> simp[]) >>
+  `bind_outputs inst.inst_outputs rt.iret_values (merge_callee_state s cs') = SOME sr /\
+   bind_outputs inst.inst_outputs rt.iret_values (merge_callee_state t u) = SOME q` by
+    gvs[adopt_return_fmp_def] >>
+  qabbrev_tac `B = DRESTRICT Ar (ld_slots Ar (f::fs))` >>
+  qabbrev_tac `keep = COMPL (set inst.inst_outputs)` >>
+  qabbrev_tac `g = f with <|lf_src := sr with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := q with vs_inst_idx := SUC t.vs_inst_idx;
+    lf_H := DRESTRICT f.lf_H keep; lf_tv := DRESTRICT f.lf_tv keep|>` >>
+  qabbrev_tac `tn1 = tnr with t_var := DRESTRICT tn.t_var keep` >>
+  `ld_memory lo B tn1 (sr with vs_inst_idx := SUC s.vs_inst_idx)
+      (q with vs_inst_idx := SUC t.vs_inst_idx) /\
+   ld_nonghost tn1 (sr with vs_inst_idx := SUC s.vs_inst_idx)
+      (q with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (qunabbrev_tac `B` >> qunabbrev_tac `tn1` >>
+     irule ld_return_shared_restore >>
+     goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[ld_sync_memory]) >>
+  `EVERY (\h. ld_maps B h /\ ld_vars P B h) (f::fs) /\
+   FDOM B = ld_slots B (f::fs)` by
+    (qunabbrev_tac `B` >> qunabbrev_tac `Stable` >>
+     drule_all ld_call_saved_alloc_restore >> simp[]) >>
+  `bind_outputs inst.inst_outputs rt.iret_values (merge_callee_state f.lf_src cs') = SOME sr /\
+   bind_outputs inst.inst_outputs rt.iret_values (merge_callee_state f.lf_tgt u) = SOME q` by
+    simp[] >>
+  `g = (f with <|lf_src := sr with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := q with vs_inst_idx := SUC t.vs_inst_idx;
+    lf_H := DRESTRICT f.lf_H keep; lf_tv := DRESTRICT f.lf_tv keep|>)` by
+    simp[Abbr `g`] >>
+  `ld_global lo B (g::fs)` by
+    (qunabbrev_tac `B` >> qunabbrev_tac `Stable` >>
+     drule_all ld_call_global_return_restore >> simp[]) >>
+  `EVERY (\h. h.lf_supply = Sigma h.lf_fn.fn_name) (f::fs) /\
+   (!i k. i < k /\ k < LENGTH (f::fs) ==>
+      list_precedes (EL i (f::fs)).lf_fn.fn_name
+        (EL k (f::fs)).lf_fn.fn_name names)` by fs[Abbr `Stable`] >>
+  drule_all ld_return_stack_geometry >> strip_tac >>
+  `!i. i < LENGTH stk ==>
+    (EL i stk).cf_fn = (EL i fs).lf_fn /\
+    (EL i stk).cf_state = (EL i fs).lf_src /\
+    (EL i stk).cf_prov = ld_erase B o_f (EL i fs).lf_H /\
+    (EL i stk).cf_params = MAP (OPTION_MAP (ld_erase B)) (EL i fs).lf_Q /\
+    (EL i stk).cf_tvar = (EL i fs).lf_tv` by
+    (rpt strip_tac >> qunabbrev_tac `B` >> qunabbrev_tac `Stable` >>
+     drule_all ld_call_saved_stack_return >> simp[]) >>
+  `set inst.inst_outputs SUBSET set (fn_ir_vars f.lf_fn)` by
+    (simp[SUBSET_DEF] >> rpt strip_tac >> irule ld_inst_output_ir >>
+     qexists_tac `inst` >> simp[] >>
+     metis_tac[ld_sync_source, ld_active_inst_member]) >>
+  `ld_vars P B g` by
+    (qpat_assum `EVERY (\h. ld_maps B h /\ ld_vars P B h) (f::fs)`
+       (strip_assume_tac o SRULE []) >>
+     drule_all ld_vars_return_restore >> simp[Abbr `g`, Abbr `keep`]) >>
+  drule_all ld_return_frame_geometry >> strip_tac >>
+  `ld_maps B g` by
+    (qpat_assum `EVERY (\h. ld_maps B h /\ ld_vars P B h) (f::fs)`
+       (strip_assume_tac o SRULE []) >>
+     `!d ai. ld_private g d ai = ld_private f d ai` by
+       simp[ld_private_def] >>
+     qpat_x_assum `ld_maps B f` mp_tac >>
+     simp[ld_maps_def] >> strip_tac >> simp[]) >>
+  `FDOM B = ld_slots B (g::fs)` by
+    (qpat_x_assum `FDOM B = _` SUBST1_TAC >>
+     qpat_x_assum `g.lf_serial = _` mp_tac >>
+     qpat_x_assum `g.lf_src.vs_allocas = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rpt strip_tac >> simp[ld_slots_def, EXTENSION] >> metis_tac[]) >>
+  `!a. a IN ld_slots A (f::fs) ==> FLOOKUP Ar a = FLOOKUP A a` by
+    (fs[Abbr `Stable`] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     fs[ld_slots_def, FLOOKUP_DEF]) >>
+  `ld_slots A (f::fs) SUBSET ld_slots Ar (f::fs)` by
+    (irule lowerDloadReturnInvokeStackTheory.ld_slots_agree_subset >> simp[]) >>
+  `!a. a IN FRANGE f.lf_H \/ MEM (SOME a) f.lf_Q ==>
+    FLOOKUP B a = FLOOKUP A a` by
+    (rpt strip_tac >>
+     `a IN FDOM A` by
+       (`ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
+        irule ld_global_selected >> goal_assum (drule_at Any) >>
+        qexists_tac `f` >> simp[]) >>
+     `a IN ld_slots A (f::fs)` by metis_tac[ld_sync_def] >>
+     simp[Abbr `B`, FLOOKUP_DRESTRICT] >> fs[SUBSET_DEF]) >>
+  `ld_erase B o_f f.lf_H = ld_erase A o_f f.lf_H` by
+    (simp[fmap_eq_flookup, FLOOKUP_o_f] >> gen_tac >>
+     Cases_on `FLOOKUP f.lf_H x` >> simp[] >>
+     `FLOOKUP B x' = FLOOKUP A x'` by
+       (first_x_assum irule >> simp[FRANGE_FLOOKUP] >> metis_tac[]) >>
+     simp[ld_erase_def]) >>
+  `MAP (OPTION_MAP (ld_erase B)) f.lf_Q =
+    MAP (OPTION_MAP (ld_erase A)) f.lf_Q` by
+    (irule MAP_CONG >> simp[] >> rpt strip_tac >>
+     Cases_on `x` >> simp[ld_erase_def]) >>
+  `PG = MAP (OPTION_MAP (ld_erase B)) g.lf_Q /\
+   DRESTRICT G keep = ld_erase B o_f g.lf_H` by
+    (qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
+       (strip_assume_tac o SRULE [ld_sync_def]) >>
+     `G = ld_erase B o_f f.lf_H` by metis_tac[] >>
+     simp[Abbr `g`, Abbr `keep`, lowerDloadSafetyBoundaryTheory.provenance_return_erasure]) >>
+  `EVERY (\h. h.lf_serial < N /\ ld_maps B h /\ ld_vars P B h /\
+      ld_intervals lo h.lf_src /\ ld_intervals lo h.lf_tgt /\
+      h.lf_src.vs_prev_bb = h.lf_tgt.vs_prev_bb /\
+      h.lf_src.vs_current_bb = h.lf_tgt.vs_current_bb /\
+      MEM h.lf_fn C.ctx_functions) (g::fs)` by
+    (qpat_x_assum `EVERY (\h. h.lf_serial < N /\ _) (g::fs)` mp_tac >>
+     qpat_x_assum `EVERY (\h. ld_maps B h /\ ld_vars P B h) (f::fs)` mp_tac >>
+     qpat_x_assum `ld_maps B g` mp_tac >>
+     qpat_x_assum `ld_vars P B g` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
+  `!i. i < LENGTH (g::fs) ==>
+    ?X p. ld_envelope (EL i (g::fs)).lf_supply (EL i (g::fs)).lf_fn
+      (EL i (g::fs)).lf_src (EL i (g::fs)).lf_src.vs_inst_idx X p /\
+      (EL i (g::fs)).lf_tgt.vs_inst_idx = p` by
+    (qpat_x_assum `!j. j < LENGTH fs ==> ?X p. _` mp_tac >>
+     qpat_x_assum `ld_envelope _ _ (sr with vs_inst_idx := _) _ Y _` mp_tac >>
+     qpat_x_assum `t.vs_inst_idx = p` mp_tac >>
+     qpat_x_assum `f.lf_fn = fn` mp_tac >>
+     qunabbrev_tac `g` >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `i` >> gvs[arithmeticTheory.ADD1] >> metis_tac[]) >>
+  `ld_sync lo P C vs0 stk PG (DRESTRICT G keep) tn1 fn next
+    (sr with vs_inst_idx := SUC s.vs_inst_idx)
+    (q with vs_inst_idx := SUC t.vs_inst_idx) B (g::fs) N` by
+    (qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
+       (strip_assume_tac o SRULE [ld_sync_def]) >>
+     qpat_x_assum `!a. a IN FRANGE f.lf_H \/ _ ==> _` kall_tac >>
+     qpat_x_assum `!a. a IN ld_slots A (f::fs) ==> _` kall_tac >>
+     qpat_x_assum `Abbrev (Ambient = _)` kall_tac >>
+     qpat_x_assum `Abbrev (Terminal = _)` kall_tac >>
+     qpat_x_assum `Abbrev (Point = _)` kall_tac >>
+     qpat_x_assum `Abbrev (Stable = _)` kall_tac >>
+     qpat_x_assum `Abbrev (Guard = _)` kall_tac >>
+     pure_rewrite_tac[ld_sync_def, listTheory.HD] >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       (simp[NoAsms, Abbr `g`, Abbr `tn1`])] >>
+     FIRST [first_assum ACCEPT_TAC,
+       (qpat_x_assum `f.lf_tv = tn.t_var` (fn th => rewrite_tac[th]))]) >>
+  `fs0 = fs` by
+    (qpat_assum `Stable lo P Sigma names fs0 f0 A0 A (f::fs)` mp_tac >>
+     qunabbrev_tac `Stable` >> rpt (pop_assum kall_tac) >> simp[]) >>
+  `fr = HD fr::f::fs` by
+    (qpat_assum `Stable lo P Sigma names (f::fs) fc A Ar fr` mp_tac >>
+     qunabbrev_tac `Stable` >> rpt (pop_assum kall_tac) >>
+     Cases_on `fr` >> simp[] >> metis_tac[]) >>
+  `Stable lo P Sigma names (f::fs) fc A Ar (HD fr::f::fs)` by metis_tac[] >>
+  `(!a. a IN FDOM A0 INTER ld_slots A0 fs0 ==> FLOOKUP B a = FLOOKUP A0 a) /\
+   (!h. MEM h fs0 ==> FRANGE h.lf_H SUBSET ld_slots Ar (f::fs) /\
+      (!a. MEM (SOME a) h.lf_Q ==> a IN ld_slots Ar (f::fs)))` by
+    (qunabbrev_tac `Stable` >> drule_all lowerDloadReturnInvokeStackTheory.ld_saved_slots_restore >>
+     strip_tac >> qpat_x_assum `fs0 = fs` SUBST_ALL_TAC >>
+     simp[Abbr `B`] >> rpt strip_tac >>
+     qpat_assum `!h. MEM h fs ==> FRANGE h.lf_H SUBSET _ /\ _` drule >> simp[]) >>
+  `ld_slots A fs0 SUBSET ld_slots B fs0` by
+    (irule lowerDloadReturnInvokeStackTheory.ld_slots_agree_subset >>
+     rpt strip_tac >>
+     `a IN ld_slots A (f::fs)` by
+       (qpat_x_assum `fs0 = fs` SUBST_ALL_TAC >>
+        qpat_x_assum `a IN ld_slots A fs` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[Once ld_slots_cons]) >>
+     qunabbrev_tac `B` >>
+     qpat_assum `!a. a IN ld_slots A (f::fs) ==> FLOOKUP Ar a = FLOOKUP A a` mp_tac >>
+     qpat_assum `ld_slots A (f::fs) SUBSET ld_slots Ar (f::fs)` mp_tac >>
+     qpat_assum `a IN ld_slots A (f::fs)` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[SUBSET_DEF, FLOOKUP_DRESTRICT]) >>
+  `Stable lo P Sigma names fs0 f0 A0 B (g::fs)` by
+    (qpat_assum `Stable lo P Sigma names fs0 f0 A0 A (f::fs)` mp_tac >>
+     qunabbrev_tac `Stable` >> BETA_TAC >>
+     pure_rewrite_tac [listTheory.HD, listTheory.TL, listTheory.NOT_CONS_NIL] >>
+     strip_tac >>
+     conj_tac >- simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[Abbr `g`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (qpat_assum `EVERY (\h. h.lf_supply = _) (f::fs)` mp_tac >>
+         qunabbrev_tac `g` >> rpt (pop_assum kall_tac) >> simp[]) >>
+     conj_tac
+     >- (qpat_assum `EVERY (\h. !j a. _) (f::fs)` mp_tac >>
+         qunabbrev_tac `g` >> rpt (pop_assum kall_tac) >> simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (qpat_assum `!h. MEM h fs0 ==> FRANGE h.lf_H SUBSET ld_slots A fs0 /\ _` mp_tac >>
+         qpat_assum `ld_slots A fs0 SUBSET ld_slots B fs0` mp_tac >>
+         rpt (pop_assum kall_tac) >> simp[SUBSET_DEF] >> metis_tac[]) >>
+     qpat_assum `!a. a IN FDOM A0 INTER _ ==> _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
+  qunabbrev_tac `Point` >> BETA_TAC >>
+  qexistsl_tac [`PG`, `DRESTRICT G keep`, `tn1`, `next`,
+    `sr with vs_inst_idx := SUC s.vs_inst_idx`,
+    `q with vs_inst_idx := SUC t.vs_inst_idx`, `B`, `g::fs`, `N`, `Y`, `p+1`, `0`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qunabbrev_tac `Stable` >> first_assum ACCEPT_TAC) >>
+  simp[NoAsms, listTheory.HD] >>
+  conj_tac >- simp[Abbr `g`, ld_image_def] >>
+  conj_tac >- simp[Abbr `g`] >>
+  conj_tac
+  >- (`active_inst fn' ti (q with vs_inst_idx := SUC t.vs_inst_idx)` by
+        (irule stepWriteFootprintBaseTheory.lookup_instruction_active >>
+         qexists_tac `bb` >>
+         qpat_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb` mp_tac >>
+         qpat_assum `get_instruction bb (SUC t.vs_inst_idx) = SOME ti` mp_tac >>
+         qpat_assum `q.vs_current_bb = t.vs_current_bb` mp_tac >>
+         rpt (pop_assum kall_tac) >> simp[]) >>
+      `0 < LENGTH Y /\ ti = EL 0 Y` by
+        (qpat_assum `ld_envelope _ _ (sr with vs_inst_idx := SUC s.vs_inst_idx) _ Y _` mp_tac >>
+         qpat_assum `active_inst fn' ti _` mp_tac >>
+         qpat_assum `fn' = ld_image f` mp_tac >>
+         qpat_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N` mp_tac >>
+         qpat_assum `q.vs_current_bb = t.vs_current_bb` mp_tac >>
+         qpat_assum `sr.vs_current_bb = s.vs_current_bb` mp_tac >>
+         qpat_assum `t.vs_inst_idx = p` mp_tac >>
+         qpat_assum `f.lf_fn = fn` mp_tac >>
+         qpat_assum `ALL_DISTINCT (MAP _ fn.fn_blocks)` mp_tac >>
+         rpt (pop_assum kall_tac) >> rpt disch_tac >>
+         drule ld_sync_control >> strip_tac >>
+         gvs[ld_image_def] >>
+         drule_at (Pat `ld_envelope _ _ _ _ _ _`)
+           lowerDloadSafetyLocationsTheory.ld_envelope_active_head >>
+         simp[] >>
+         disch_then (qspecl_then [`ti`, `q with vs_inst_idx := SUC t.vs_inst_idx`] mp_tac) >>
+         simp[]) >>
+      simp[ld_prefix_zero] >>
+      qpat_assum `active_inst fn' ti _` mp_tac >>
+      qpat_assum `ti = EL 0 Y` mp_tac >>
+      qpat_assum `fn' = ld_image f` mp_tac >>
+      qpat_assum `t.vs_inst_idx = p` mp_tac >>
+      rpt (pop_assum kall_tac) >> simp[]) >>
+  simp[] >>
+  qpat_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb` mp_tac >>
+  qpat_assum `fn' = ld_image f` mp_tac >>
+  rpt (pop_assum kall_tac) >> simp[]
+QED
