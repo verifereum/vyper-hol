@@ -5,8 +5,9 @@ Ancestors
   exprSimAbiDecodeArrayControl exprSimAbiDecodeLabelledLoop
   exprSimAbiDecodeMemberExecute exprSimAbiDecodeArrayInvariant
   exprSimAbiDecodeArrayMembers exprSimAggregateEncoding valueEncodingProps valueEncoding
+  exprSimAbiDecodeOwnedContext
   exprSimAbiDecodeArraySetup abiDecoderSequenceReach abiDecoderFiniteControl
-  abiDecoderIndexInit abiDecoderSiteEffect instIdxIndep
+  abiDecoderIndexInit abiDecoderSiteEffect abiDecoderExecution instIdxIndep
   compileEnv venomState venomInst words list arithmetic finite_map pred_set
 
 Theorem abi_array_index_init_fetched_reentry:
@@ -119,4 +120,88 @@ Proof
   simp_tac bool_ss [abi_array_source_prefix_def] >>
   qpat_x_assum `abi_array_source_prefix _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [abi_array_source_prefix_def] >> metis_tac[]
+QED
+
+Theorem abi_array_header_effect_frame:
+  decode_site_effect ctx func next V s t /\ decode_protects V {(d,32)} ==>
+  mem_word_at d t.vs_memory = mem_word_at d s.vs_memory
+Proof
+  strip_tac >> drule_all decode_site_effect_mload >>
+  simp[mload_def, mem_word_at_def, mem_bytes_at_def]
+QED
+
+Theorem abi_array_child_writes_protect_header:
+  (!a. d <= a /\ a < d+32+n*m ==> a NOTIN scratch) /\ j < n ==>
+  decode_protects (scratch UNION abi_array_cell d m j) {(d,32)}
+Proof
+  simp[decode_protects_def, abi_array_cell_def] >> rpt strip_tac >>
+  `d+32 <= d+32+j*m /\ d+32 <= d+32+n*m` by decide_tac >>
+  metis_tac[LESS_LESS_EQ_TRANS]
+QED
+
+Theorem abi_array_child_effect_header:
+  abi_decode_owned outer scratch d (32+n*m) origin /\
+  sites SUBSET outer /\ j < n /\
+  decode_site_effect ctx func next
+    (abi_array_child_scratch sites origin UNION abi_array_cell d m j) s t ==>
+  mem_word_at d t.vs_memory = mem_word_at d s.vs_memory
+Proof
+  strip_tac >> irule abi_array_header_effect_frame >>
+  goal_assum (drule_at Any) >>
+  irule abi_array_child_writes_protect_header >>
+  `abi_array_child_scratch sites origin SUBSET scratch` by
+    metis_tac[abi_array_child_scratch_subset, abi_decode_owned_def] >>
+  fs[abi_decode_owned_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem abi_array_backedge_header_frame:
+  (!a. slot <= a /\ a < slot+32 ==> a NOTIN {a | d <= a /\ a < d+32+n*m}) ==>
+  mem_word_at d
+    (jump_to hdr (mstore slot w (update_var nv v s))).vs_memory =
+  mem_word_at d s.vs_memory
+Proof
+  strip_tac >>
+  `slot+32 <= d \/ d+32 <= slot` by
+    (Cases_on `slot+32 <= d` >> simp[] >>
+     Cases_on `d+32 <= slot` >> simp[] >>
+     first_x_assum (qspec_then `MAX d slot` mp_tac) >>
+     simp[MAX_DEF] >> rpt IF_CASES_TAC >> simp[] >> decide_tac) >>
+  `mem_bytes_at d 32 (mstore slot w s).vs_memory = mem_bytes_at d 32 s.vs_memory` by
+    metis_tac[mstore_mem_bytes_at_disjoint] >>
+  fs[mem_word_at_def, mem_bytes_at_def, jump_to_def, mstore_def, update_var_def,
+    write_memory_with_expansion_def]
+QED
+
+Theorem abi_array_control_header_frame:
+  mem_word_at d
+    (jump_to lbl (abi_decode_position_header_state base_op hv B p j n s)).vs_memory =
+  mem_word_at d s.vs_memory
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_position_header_state_def, jump_to_def, update_var_def]
+QED
+
+Theorem abi_array_ready_child_header_frame:
+  abi_array_ready ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s /\
+  j < n /\
+  decode_site_effect ctx func next
+    (abi_array_child_scratch sites origin UNION
+     abi_array_cell d (type_memory_bytes ce ty) j) s t ==>
+  mem_word_at d t.vs_memory = mem_word_at d s.vs_memory
+Proof
+  strip_tac >> drule abi_array_ready_loop_data >>
+  simp_tac bool_ss [abi_array_loop_data_def] >> strip_tac >>
+  irule abi_array_child_effect_header >> metis_tac[]
+QED
+
+Theorem abi_array_body_post_backedge_header:
+  abi_array_body_post ctx func ce env ty tv limit_st first writes origin
+    outer scratch sites idx slot ip st dst src base_op hi B bs p d n j vs s ==>
+  mem_word_at d
+    (jump_to hdr (mstore slot w (update_var nv v s))).vs_memory =
+  mem_word_at d s.vs_memory
+Proof
+  simp_tac bool_ss [abi_array_body_post_def, abi_array_loop_data_def] >>
+  strip_tac >> irule abi_array_backedge_header_frame >> metis_tac[]
 QED
