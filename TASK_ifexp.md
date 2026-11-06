@@ -77,3 +77,7 @@ All paths are relative to this directory (the vyper-hol project root).
 ## Notes
 
 - The result is either arm's operand: `ptr_mem_ok` bounds the site by `val_store_size` of the value, not of the type.
+
+## Your own helper theories (added 2026-11-06)
+
+The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
