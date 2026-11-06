@@ -1,6 +1,7 @@
 Theory bytestringCopyExecution
 Ancestors
   context compileEnv emitHelper emitHelperProps exprLoweringProps
+  fragExec fragGasSeq fragGasMode
   venomExecSemantics venomExecProofs venomState venomInst loweringSlice
   vyperValue vfmConstants words arithmetic list rich_list
 
@@ -26,7 +27,8 @@ Theorem bytestring_word_count_shape:
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   sb.cs_next_var = sa.cs_next_var + 3 /\
   sb.cs_next_id = sa.cs_next_id + 3 /\
-  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS)
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS /\
+             i.inst_opcode <> INVOKE)
     (emitted_insts sa sb)
 Proof
   simp[compile_bytestring_word_count_def, emit_op_def,
@@ -82,4 +84,38 @@ Proof
   gvs[word_size_def, wordsTheory.dimword_def,
       fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   intLib.ARITH_TAC
+QED
+
+Theorem bytestring_word_count_path:
+  compile_bytestring_word_count src sa = (out,sb) /\
+  fn_has_code sa sb func /\
+  eval_operand src s = SOME w /\ mload (w2n w) s = n2w len /\
+  len + 63 < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      eval_operand out t = SOME (n2w (1 + word_size len)) /\
+      (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all bytestring_word_count_run >> strip_tac >>
+  drule bytestring_word_count_shape >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb)
+          (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >>
+     simp[DROP_APPEND, SUB_PLUS]) >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  drule_all tuple_run_inst_seq_gas_path >> strip_tac >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  fs[gas_marked_path_def, same_blocks_def, eval_operand_def, lookup_var_def] >>
+  fs[venom_state_component_equality] >>
+  qpat_x_assum `!ctx. gas_path _ _ _ _ _` (qspec_then `ctx` mp_tac) >>
+  simp[ADD_COMM]
 QED
