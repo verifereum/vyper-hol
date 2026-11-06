@@ -4,6 +4,8 @@ Ancestors
   lowerDloadReturnInvokeArguments lowerDloadReturnInvokeStack lowerDloadSafetyArguments
   lowerDloadSafetyEntry lowerDloadReturnStable lowerDloadReturnAlignment
   venomExecSemantics venomState venomInst finite_map list pred_set
+  ptrDiscipline contextCodegenRel o1ContractLowerDload venomExecProofs
+  lowerDloadLiveAllocation
 Libs
   lowerDloadReturnPackageLib
 
@@ -213,3 +215,233 @@ QED
 
 val _ = if null (hyp ld_sync_call_push) then ()
         else raise Fail "structural call push has kernel hypotheses";
+
+(* Successful initial PHIs cannot select a predecessor: checked, not assumed. *)
+Theorem ld_setup_guarded_entry:
+  setup_callee callee argsS s = SOME cs /\
+  setup_callee calleeT argsT t = SOME ct /\
+  cs.vs_current_bb = ct.vs_current_bb /\
+  lower_dload_function_supply u callee = (calleeT,v) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
+  lookup_block ct.vs_current_bb calleeT.fn_blocks = SOME bb /\
+  eval_phis ct bb.bb_instructions = OK tp /\
+  ^ld_probe_guard C' k bb
+    (tp with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
+  tp = ct /\ phi_prefix_length bb.bb_instructions = 0 /\
+  (tp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = ct /\
+  enters_block callee cs cs /\ enters_block calleeT ct ct /\
+  ?i X. active_inst callee i cs /\
+    ld_envelope u callee cs cs.vs_inst_idx X ct.vs_inst_idx /\
+    X <> [] /\ active_inst calleeT (HD X) ct
+Proof
+  strip_tac >>
+  `cs.vs_prev_bb = NONE /\ ct.vs_prev_bb = NONE /\
+   cs.vs_inst_idx = 0 /\ ct.vs_inst_idx = 0` by
+    gvs[setup_callee_def, AllCaseEqs()] >>
+  drule_all ld_entry_phis >> strip_tac >>
+  `tp with vs_inst_idx := phi_prefix_length bb.bb_instructions = ct` by
+    gvs[] >>
+  `enters_block calleeT ct ct` by
+    (simp[enters_block_def] >> metis_tac[]) >>
+  `enters_block callee ct ct` by
+    metis_tac[lowerDloadConfiguredOriginsTheory.lower_dload_function_supply_enters_block_origin] >>
+  `enters_block callee cs cs` by
+    (qpat_x_assum `enters_block callee ct ct` mp_tac >>
+     simp[enters_block_def] >> strip_tac >>
+     qexistsl_tac [`bb'`,`cs`] >> simp[] >>
+     Cases_on `bb'.bb_instructions` >>
+     gvs[phi_prefix_length_def, eval_phis_def, AllCaseEqs()]) >>
+  `?ti. get_instruction bb ct.vs_inst_idx = SOME ti` by
+    (drule ld_successful_body_fetch >> gvs[]) >>
+  `active_inst calleeT ti ct` by
+    (simp[active_inst_def] >> qexists_tac `bb` >>
+     gvs[get_instruction_def] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  drule_all ld_entry_active_envelope >> strip_tac >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ld_call_stable_push:
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  FDOM A = ld_slots A (f::fs) /\
+  fc.lf_src.vs_allocas = FEMPTY /\ fc.lf_tgt.vs_allocas = FEMPTY /\
+  fc.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
+  fc.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\ fc.lf_H = FEMPTY /\
+  (!a. MEM (SOME a) fc.lf_Q ==> a IN FDOM A) /\
+  fc.lf_supply = Sigma fc.lf_fn.fn_name /\
+  (!j a. j < LENGTH fc.lf_Q /\ EL j fc.lf_Q = SOME a ==>
+    j IN P fc.lf_fn.fn_name) /\
+  (!g. MEM g (f::fs) ==>
+    list_precedes fc.lf_fn.fn_name g.lf_fn.fn_name names) ==>
+  ^ld_probe_stable lo P Sigma names (f::fs) fc A A (fc::f::fs)
+Proof
+  qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
+  `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
+  `ld_global lo A (fc::f::fs)` by
+    (irule ld_global_empty_push >> simp[]) >>
+  `!j k. j < k /\ k < LENGTH (fc::f::fs) ==>
+    list_precedes (EL j (fc::f::fs)).lf_fn.fn_name
+      (EL k (fc::f::fs)).lf_fn.fn_name names` by
+    (rpt strip_tac >> irule ld_order_fresh_push >>
+     fs[Abbr `Stable`] >> metis_tac[]) >>
+  `!g. MEM g (f::fs) ==> FRANGE g.lf_H SUBSET FDOM A /\
+      (!a. MEM (SOME a) g.lf_Q ==> a IN FDOM A)` by
+    (qpat_assum `ld_global lo A (f::fs)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[ld_global_def, SUBSET_DEF] >> metis_tac[]) >>
+  gvs[Abbr `Stable`] >> metis_tac[]
+QED
+
+Theorem ld_setup_empty_shape:
+  setup_callee fn args s = SOME cs ==>
+  cs.vs_allocas = FEMPTY /\ cs.vs_alloca_next = s.vs_alloca_next /\
+  cs.vs_prev_bb = NONE /\ cs.vs_inst_idx = 0
+Proof
+  simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_invoke_guarded_push:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME calleeT /\
+  eval_operands ops t = SOME argsT /\
+  setup_callee calleeT argsT t = SOME ct ==>
+  ?callee argsS cs fc.
+    lookup_function nm C.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
+    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
+      lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
+      lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
+    ^ld_probe_entry C' calleeT
+      (^ld_probe_point lo P C C' vs0
+        (<|cf_fn := fn; cf_inst := inst; cf_state := s;
+           cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+        callee calleeT cs (f::fs) fc A Sigma names) ct
+Proof
+  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Stable = ^ld_probe_stable` >>
+  qabbrev_tac `Point = ^ld_probe_point` >>
+  qabbrev_tac `Guard = ^ld_probe_guard` >>
+  qabbrev_tac `Entry = ^ld_probe_entry` >> strip_tac >>
+  `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
+  qunabbrev_tac `Ambient` >> drule_all ld_invoke_correlated_setup >>
+  disch_then (strip_assume_tac o SRULE []) >>
+  qabbrev_tac `fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
+    lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
+    lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|>` >>
+  qexistsl_tac [`callee`,`argsS`,`cs`,`fc`] >>
+  simp[NoAsms] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[Abbr `fc`] >>
+  simp[Abbr `Entry`] >> rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks)` by
+    (`MEM callee C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+     `o1_fn_shape C callee` by
+       (qpat_assum `MEM callee C.ctx_functions` mp_tac >>
+        qpat_assum `o1_ctx_shape C` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM] >>
+        metis_tac[]) >>
+     drule o1_fn_shape_components >> simp[]) >>
+  `lower_dload_function_supply (Sigma nm) callee =
+      (calleeT, SND (lower_dload_function_supply (Sigma nm) callee))` by
+    metis_tac[pairTheory.PAIR] >>
+  `lookup_block ct.vs_current_bb calleeT.fn_blocks = SOME bb` by
+    (qpat_x_assum `lookup_block ct.vs_current_bb _ = SOME bb` mp_tac >> simp[]) >>
+  qunabbrev_tac `Guard` >>
+  drule_all ld_setup_guarded_entry >> strip_tac >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  `cs.vs_allocas = FEMPTY /\ cs.vs_alloca_next = s.vs_alloca_next /\
+   cs.vs_prev_bb = NONE /\ cs.vs_inst_idx = 0` by
+    metis_tac[ld_setup_empty_shape] >>
+  `ct.vs_allocas = FEMPTY /\ ct.vs_alloca_next = t.vs_alloca_next /\
+   ct.vs_prev_bb = NONE /\ ct.vs_inst_idx = 0` by
+    metis_tac[ld_setup_empty_shape] >>
+  qabbrev_tac `saved = <|cf_fn := fn; cf_inst := inst; cf_state := s;
+    cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>` >>
+  `frame_reachable vs0 C (saved::stk)
+    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) FEMPTY
+    (tn with t_var := FEMPTY) callee i cs` by
+    suspend "reach" >>
+  `ld_sync lo P C vs0 (saved::stk)
+    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) FEMPTY
+    (tn with t_var := FEMPTY) callee i cs ct A (fc::f::fs) (SUC N)` by
+    suspend "sync" >>
+  `Stable lo P Sigma names (f::fs) fc A A (fc::f::fs)` by
+    suspend "stable" >>
+  `ld_return_cont C callee cs cs` by
+    (irule ld_return_cont_entry >> simp[]) >>
+  qexistsl_tac [`MAP (OPTION_MAP (ld_erase A)) fc.lf_Q`,`FEMPTY`,
+    `tn with t_var := FEMPTY`,`i`,`cs`,`ct`,`A`,`fc::f::fs`,
+    `SUC N`,`X`,`ct.vs_inst_idx`,`0`] >>
+  simp[NoAsms, lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
+  fs[Abbr `fc`, Abbr `saved`, ld_image_def] >>
+  metis_tac[listTheory.NOT_NIL_EQ_LENGTH_NOT_0]
+QED
+
+Resume ld_invoke_guarded_push[reach]:
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  simp[Abbr `fc`, Abbr `saved`, ld_arguments_erasure] >>
+  irule frame_reachable_call >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[ld_sync_source, ld_sync_ghosts]
+QED
+
+Resume ld_invoke_guarded_push[sync]:
+  `ld_sync lo P C vs0 (saved::stk)
+    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) (ld_erase A o_f fc.lf_H)
+    (tn with t_var := FEMPTY) fc.lf_fn i fc.lf_src fc.lf_tgt
+    A (fc::f::fs) (SUC N)` suffices_by simp[Abbr `fc`] >>
+  irule ld_sync_call_push >>
+  goal_assum (drule_at Any) >>
+  simp[Abbr `fc`, Abbr `saved`, ld_maps_def, ld_intervals_def] >>
+  conj_tac >-
+    (qpat_assum `lookup_function nm C.ctx_functions = SOME callee` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[lookup_function_MEM]) >>
+  conj_tac >- (qexists_tac `X` >> fs[]) >>
+  conj_tac >- fs[] >>
+  qexistsl_tac [`t`,`tn`] >> simp[]
+QED
+
+Resume ld_invoke_guarded_push[stable]:
+  qpat_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N`
+    (strip_assume_tac o MATCH_MP ld_sync_source) >>
+  `MEM fn C.ctx_functions` by
+    (drule_all frame_reachable_live_order >> simp[]) >>
+  `MEM nm (fn_invoke_targets fn)` by
+    (irule active_invoke_target >> goal_assum (drule_at Any) >> simp[]) >>
+  `list_precedes nm fn.fn_name names` by
+    (qpat_assum `callee_first names C.ctx_functions` mp_tac >>
+     qpat_assum `MEM fn C.ctx_functions` mp_tac >>
+     qpat_assum `MEM nm (fn_invoke_targets fn)` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[o1PassContractTheory.callee_first_def]) >>
+  `!g. MEM g (f::fs) ==> list_precedes nm g.lf_fn.fn_name names` by
+    (gen_tac >> simp[] >> strip_tac >- simp[] >>
+     `?j. j < LENGTH fs /\ g = EL j fs` by metis_tac[MEM_EL] >>
+     `list_precedes f.lf_fn.fn_name g.lf_fn.fn_name names` by
+       (qpat_assum `Stable lo P Sigma names fs0 f0 A0 A (f::fs)` mp_tac >>
+        simp[NoAsms, Abbr `Stable`] >> strip_tac >>
+        qpat_x_assum `!j k. _ ==> list_precedes _ _ names`
+          (qspecl_then [`0`,`SUC j`] mp_tac) >> simp[]) >>
+     metis_tac[lowerDloadSafetyBoundaryTheory.list_precedes_transitive]) >>
+  qunabbrev_tac `Stable` >> irule ld_call_stable_push >>
+  qpat_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N`
+    (mp_tac o MATCH_MP lowerDloadOracleCallAssemblyTheory.ld_sync_slots) >>
+  strip_tac >> simp[Abbr `fc`] >>
+  qexistsl_tac [`A0`,`f0`] >> fs[] >>
+  qpat_assum `!g. MEM g _ ==> FRANGE g.lf_H SUBSET _ /\ _` mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[]
+QED
+
+Finalise ld_invoke_guarded_push
+
+val _ = List.app (fn th => if null (hyp th) then ()
+        else raise Fail "guarded call push has kernel hypotheses")
+  [ld_setup_guarded_entry, ld_call_stable_push, ld_setup_empty_shape,
+   ld_invoke_guarded_push];
