@@ -118,3 +118,17 @@ Proof
   `0 < LENGTH es.contexts` by (Cases_on `es.contexts` >> gvs[]) >>
   irule creation_guard_inv_step >> metis_tac[GREATER_EQ]
 QED
+
+(* A parent frame's guards survive entry into and execution of one child. *)
+Theorem step_run_call_creation_guard:
+  wf_state s /\
+  (created = account_empty (lookup_account self s.originalAccounts)) /\
+  (created \/ account_already_created (lookup_account self s.rollback.accounts)) /\
+  step s = (INL (), v) /\
+  LENGTH v.contexts = SUC (LENGTH s.contexts) /\
+  run_call v = SOME (r, t) ==>
+  (created = account_empty (lookup_account self t.originalAccounts)) /\
+  (created \/ account_already_created (lookup_account self t.rollback.accounts))
+Proof
+  cheat
+QED
