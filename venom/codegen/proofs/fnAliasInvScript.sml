@@ -2809,6 +2809,91 @@ Proof
   gvs[GSYM alias_var_mass_positive]
 QED
 
+Theorem alias_reorder_one_long_support:
+  MEM op targets /\ LENGTH targets <= LENGTH ps.ps_stack /\
+  set targets INTER FDOM ps.ps_spilled = {} /\
+  reorder_one dfg targets idx op ps = (ops,qs) /\ plan_holds qs at ==>
+  plan_holds ps at
+Proof
+  strip_tac >>
+  `FLOOKUP ps.ps_spilled op = NONE` by
+    (gvs[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM] >> pairarg_tac >> simp[] >>
+  `ps1 = ps` by
+    (Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps.ps_stack` >> gvs[]) >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps.ps_stack` >> simp[] >>
+  pairarg_tac >> simp[] >>
+  `LENGTH targets <= LENGTH ps2.ps_stack /\
+   (plan_holds ps2 at ==> plan_holds ps at)` by
+    (Cases_on `x > 16` >> gvs[] >> conj_tac
+     >- (drule alias_reduce_depth_length_floor >>
+         disch_then (qspecl_then [`LENGTH ps.ps_stack`, `targets`, `op`,
+           `LENGTH targets - (idx + 1)`] mp_tac) >> simp[]) >>
+     strip_tac >> drule reduce_depth_plan_inventory_subset >>
+     simp[GSYM plan_holds_def]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+      (LENGTH targets) ps2.ps_stack` >> simp[] >>
+  qpat_assum `stack_get_unfixed_depth _ _ _ ps2.ps_stack = SOME _`
+    (mp_then Any assume_tac stack_get_unfixed_depth_bound) >>
+  qpat_assum `stack_get_unfixed_depth _ _ _ ps2.ps_stack = SOME _`
+    (mp_then Any assume_tac stack_get_unfixed_depth_peek) >>
+  `LENGTH targets - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  Cases_on `x' = LENGTH targets - (idx + 1)` >> simp[] >>
+  Cases_on `operand_equiv dfg op (stack_peek (LENGTH targets - (idx + 1)) ps2.ps_stack)` >> simp[]
+  >- (strip_tac >> gvs[plan_holds_def, stack_poke_exchange_mem] >> metis_tac[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
+    (qspecl_then [`x'`, `ps2`] mp_tac planWfTheory.do_swap_length >> simp[]) >>
+  `LENGTH targets - (idx + 1) < LENGTH ps3.ps_stack` by decide_tac >>
+  qpat_assum `do_swap _ ps3 = _`
+    (mp_then Any mp_tac do_swap_inventory_subset) >> simp[] >>
+  disch_then (qspec_then `at` mp_tac) >>
+  qpat_assum `do_swap _ ps2 = _`
+    (mp_then Any mp_tac do_swap_inventory_subset) >> simp[] >>
+  disch_then (qspec_then `at` mp_tac) >>
+  gvs[plan_holds_def] >> metis_tac[]
+QED
+
+Theorem alias_reorder_fold_long_support:
+  !steps ops ps.
+  EVERY (\p. MEM (SND p) targets) steps /\
+  LENGTH targets <= LENGTH ps.ps_stack /\
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  plan_holds (SND (FOLDL
+    (\(ops, ps) (idx, op).
+      (\(step_ops, ps'). (ops ++ step_ops, ps'))
+        (reorder_one dfg targets idx op ps)) (ops, ps) steps)) at ==>
+  plan_holds ps at
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >> gvs[] >> pairarg_tac >> simp[] >>
+  `LENGTH targets <= LENGTH ps'.ps_stack` by
+    (drule alias_reorder_one_length_floor >>
+     disch_then (qspecl_then [`h1`, `h0`, `dfg`] mp_tac) >> simp[]) >>
+  `set targets INTER FDOM ps'.ps_spilled = {}` by
+    (drule_all alias_reorder_one_target_exclusion >>
+     disch_then (qspecl_then [`h0`, `dfg`] mp_tac) >> simp[]) >>
+  strip_tac >>
+  `plan_holds ps' at` by
+    (first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+  drule_all alias_reorder_one_long_support >> simp[]
+QED
+
+Theorem alias_reorder_plan_long_support:
+  LENGTH targets <= LENGTH ps.ps_stack /\
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  plan_holds (SND (reorder_plan dfg targets ps)) at ==> plan_holds ps at
+Proof
+  strip_tac >> simp[reorder_plan_def] >> strip_tac >>
+  irule alias_reorder_fold_long_support >>
+  goal_assum (drule_at Any) >> simp[] >>
+  simp[EVERY_MEM, indexedListsTheory.MEM_MAPi, pairTheory.FORALL_PROD] >>
+  metis_tac[MEM_EL]
+QED
+
 Theorem alias_reorder_plan_upper_support:
   LENGTH targets <= LENGTH ps.ps_stack /\
   reorder_plan dfg targets ps = (ops,qs) /\ plan_holds qs (Var x) ==>
@@ -2842,6 +2927,99 @@ Proof
      simp[top_n_def, TAKE_LENGTH_TOO_LONG]) >>
   pop_assum (mp_tac o AP_TERM ``LIST_ELEM_COUNT (Var x)``) >>
   simp[elem_count_append, alias_var_mass_def, stack_pop_def] >> decide_tac
+QED
+
+Theorem alias_reorder_residual_mass:
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  alias_var_mass x ((SND (reorder_plan dfg targets ps)) with ps_stack :=
+    stack_pop (LENGTH targets) (SND (reorder_plan dfg targets ps)).ps_stack) <=
+  alias_var_mass x ps
+Proof
+  strip_tac >> Cases_on `LENGTH targets <= LENGTH ps.ps_stack`
+  >- (drule_then (qspecl_then [`x`, `dfg`] assume_tac)
+        (GEN_ALL alias_var_mass_reorder_plan) >>
+      mp_tac (Q.INST [`ps` |-> `SND (reorder_plan dfg targets ps)`,
+        `n` |-> `LENGTH (targets : operand list)`] alias_var_mass_pop) >> decide_tac) >>
+  `LENGTH ps.ps_stack <= LENGTH targets` by decide_tac >>
+  drule_all alias_reorder_plan_short >>
+  disch_then (qspec_then `dfg` strip_assume_tac) >>
+  `LENGTH (SND (reorder_plan dfg targets ps)).ps_stack - LENGTH targets = 0`
+    by decide_tac >>
+  simp[alias_var_mass_def, stack_pop_def, LIST_ELEM_COUNT_THM]
+QED
+
+Theorem alias_reorder_residual_support:
+  set targets INTER FDOM ps.ps_spilled = {} ==>
+  plan_holds ((SND (reorder_plan dfg targets ps)) with ps_stack :=
+    stack_pop (LENGTH targets) (SND (reorder_plan dfg targets ps)).ps_stack) at ==>
+  plan_holds ps at
+Proof
+  strip_tac >> Cases_on `LENGTH targets <= LENGTH ps.ps_stack`
+  >- (strip_tac >>
+      `plan_holds (SND (reorder_plan dfg targets ps)) at` by
+        (gvs[plan_holds_def, stack_pop_def] >> metis_tac[MEM_TAKE]) >>
+      drule_all alias_reorder_plan_long_support >> simp[]) >>
+  `LENGTH ps.ps_stack <= LENGTH targets` by decide_tac >>
+  drule_all alias_reorder_plan_short >>
+  disch_then (qspec_then `dfg` strip_assume_tac) >>
+  `LENGTH (SND (reorder_plan dfg targets ps)).ps_stack - LENGTH targets = 0`
+    by decide_tac >>
+  simp[plan_holds_def, stack_pop_def]
+QED
+
+Theorem alias_reorder_success_mass:
+  set targets INTER FDOM ps.ps_spilled = {} /\
+  qs = SND (reorder_plan dfg targets ps) /\
+  stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+  alias_var_mass x qs <= MAX (alias_var_mass x ps) (LIST_ELEM_COUNT (Var x) targets)
+Proof
+  strip_tac >> Cases_on `LENGTH targets <= LENGTH ps.ps_stack`
+  >- (drule_then (qspecl_then [`x`, `dfg`] assume_tac)
+        (GEN_ALL alias_var_mass_reorder_plan) >> gvs[] >>
+      simp[arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
+  `LENGTH ps.ps_stack <= LENGTH targets` by decide_tac >>
+  drule_all alias_reorder_plan_short >>
+  disch_then (qspec_then `dfg` strip_assume_tac) >>
+  `stack_pop (LENGTH targets) qs.ps_stack = []` by
+    (gvs[stack_pop_def] >>
+     `LENGTH (SND (reorder_plan dfg targets ps)).ps_stack - LENGTH targets = 0`
+       by decide_tac >> simp[]) >>
+  `qs.ps_stack = targets` by gvs[] >>
+  drule_then (qspec_then `dfg` assume_tac) alias_reorder_plan_target_exclusion >>
+  Cases_on `MEM (Var x) targets`
+  >- (`~(Var x IN FDOM qs.ps_spilled)` by
+        (gvs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+      simp[alias_var_mass_def, arithmeticTheory.MAX_DEF] >>
+      IF_CASES_TAC >> decide_tac) >>
+  `LIST_ELEM_COUNT (Var x) targets = 0` by
+    (gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  gvs[alias_var_mass_def] >> decide_tac
+QED
+
+Theorem alias_restored_reorder_success_mass:
+  prepared = SND (restore_spilled_plan targets ps) /\
+  qs = SND (reorder_plan dfg targets prepared) /\
+  stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+  alias_var_mass x qs <= MAX (alias_var_mass x ps) (LIST_ELEM_COUNT (Var x) targets)
+Proof
+  strip_tac >>
+  `set targets INTER FDOM prepared.ps_spilled = {}` by
+    simp[alias_restore_spilled_target_exclusion] >>
+  drule_all alias_reorder_success_mass >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[alias_var_mass_restore_spilled]
+QED
+
+Theorem alias_restored_reorder_success_unique:
+  prepared = SND (restore_spilled_plan targets ps) /\
+  qs = SND (reorder_plan dfg targets prepared) /\
+  stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack /\
+  alias_var_mass x ps <= 1 /\ LIST_ELEM_COUNT (Var x) targets <= 1 ==>
+  alias_var_mass x qs <= 1
+Proof
+  strip_tac >> drule_all alias_restored_reorder_success_mass >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac
 QED
 
 Theorem alias_var_budget_pop_window:
