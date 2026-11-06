@@ -713,3 +713,98 @@ Proof
   gen_tac >> Cases_on `rcf.rcf_max_outsize = 0` >>
   asm_simp_tac bool_ss [] >> simp[cs_appends_def, cs_extends_refl]
 QED
+
+Theorem cs_appends_create_blueprint_args_callback[local]:
+  (!ce ty e. cs_appends (cfn ce ty e)) ==>
+  cs_appends (compile_create_blueprint_args cfn ce raw es)
+Proof
+  strip_tac >> simp_tac bool_ss [compile_create_blueprint_args_def, LET_THM] >>
+  Cases_on `raw` >> asm_simp_tac bool_ss []
+  >- (Cases_on `es` >> simp_tac (srw_ss()) []
+      >- creation_append_tac >>
+      Cases_on `t` >> simp_tac (srw_ss()) [] >> creation_append_tac) >>
+  Cases_on `es = []` >> asm_simp_tac bool_ss [] >> creation_append_tac
+QED
+
+Theorem first_emission_create_call:
+  (!ce ty e. cs_appends (cfn ce ty e)) /\
+  (!e ty a x b. MEM e args /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_create_call cfn ce ck has_salt rof args a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Cases_on `args` >> simp_tac (srw_ss()) [compile_create_call_def]
+  >- call_weak_tac >>
+  Cases_on `t` >> simp_tac (srw_ss()) [] >- call_weak_tac >>
+  IF_CASES_TAC >- call_weak_tac >>
+  Cases_on `ck` >> simp_tac (srw_ss()) [LET_THM]
+  >- suspend "proxy"
+  >- suspend "copy"
+  >- suspend "blueprint"
+  >> suspend "raw"
+QED
+
+Resume first_emission_create_call[raw]:
+  match_mp_tac first_emission_raw_create >> conj_tac >- simp[] >>
+  metis_tac[listTheory.MEM]
+QED
+
+Resume first_emission_create_call[proxy]:
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_create_proxy_buf >>
+  creation_tail_tac
+QED
+
+Resume first_emission_create_call[copy]:
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_create_salt >>
+      Cases_on `has_salt` >> Cases_on `t'` >> gvs[] >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_strong >>
+  MATCH_ACCEPT_TAC first_emission_create_copy
+QED
+Resume first_emission_create_call[blueprint]:
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_create_salt >>
+      Cases_on `has_salt` >> Cases_on `t'` >> gvs[] >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_lower_value >> Cases_on `has_salt`
+      >- (Cases_on `t'` >> gvs[] >> rename1 `HD tail` >>
+          Cases_on `tail` >> gvs[] >> metis_tac[listTheory.MEM]) >>
+      Cases_on `t'` >> gvs[] >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- MATCH_ACCEPT_TAC first_emission_create_blueprint_check >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `tail s = (y,c)` >>
+  `cs_appends tail` suffices_by metis_tac[cs_appends_def] >>
+  simp_tac bool_ss [Abbr `tail`] >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (irule cs_appends_create_blueprint_args_callback >> simp[]) >>
+  simp_tac bool_ss [pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF] >>
+  rpt gen_tac >> simp[cs_appends_def] >>
+  metis_tac[first_emission_create_blueprint_append]
+QED
+Finalise first_emission_create_call
