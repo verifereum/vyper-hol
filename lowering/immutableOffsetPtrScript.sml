@@ -3,7 +3,7 @@ Theory immutableOffsetPtr
 Ancestors
   exprSimCopy context compileEnv emitHelper emitHelperProps exprLoweringProps
   stmtAppendStorageRunPtr fragGasSeqPtr ptrDiscipline venomExecSemantics
-  venomInst venomState finite_map words list bodyPtrDefs
+  venomInst venomState finite_map words list bodyPtrDefs ghostPcTransportPtr
 
 Theorem immutable_offset_add_step[local]:
   eval_operand op s = SOME a ==>
@@ -36,6 +36,21 @@ Proof
   sym_tac >> irule scalar_add_taint >> simp[update_var_def]
 QED
 
+Theorem immutable_offset_add_uniform[local]:
+  eval_operand op s = SOME a /\ op_taint tn op = {} /\
+  ~ctx_has_dalloca ctx ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ADD [op; Lit (n2w off)] [out]] (s with vs_inst_idx := k)
+    (step_prov PG G (mk_inst id ADD [op; Lit (n2w off)] [out])
+      (update_var out (a + n2w off) s))
+    (tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
+    immutable_offset_add_checked) >>
+  simp[step_prov_def, out_prov_def]
+QED
+
 Theorem immutable_offset_add_provenance[local]:
   op_prov (step_prov PG G (mk_inst id ADD [op; Lit k] [out]) t) (Var out) =
     op_prov G op
@@ -55,7 +70,8 @@ Theorem compile_lit_byte_offset_checked:
     copy_runtime_frame sa s sb t /\
     eval_operand r t = SOME (a + n2w off) /\
     copy_old_operand sb r /\ t.vs_memory = s.vs_memory /\
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tf) /\
     op_taint tf r = {} /\ op_prov Gf r = op_prov G op /\
     tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
     tf.t_trans = tn.t_trans /\
@@ -78,7 +94,7 @@ Proof
   qexistsl [`step_prov PG G (mk_inst id ADD ops [out])
                (update_var out (a + n2w off) s)`,
             `tn with t_var := tn.t_var |+ (out,{})`] >>
-  simp[Abbr `ops`, immutable_offset_add_checked, eval_operand_def,
+  simp[Abbr `ops`, immutable_offset_add_uniform, eval_operand_def,
        immutable_offset_add_provenance, op_taint_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >>
   `x <> out` by (gvs[Abbr `out`, not_fresh_at_def] >> metis_tac[]) >>
@@ -95,7 +111,8 @@ Theorem compile_lit_byte_offset_covered:
     r = Var q /\ copy_runtime_frame sa s sb t /\
     lookup_var q t = SOME (a + n2w off) /\
     not_fresh_at sb q /\ t.vs_memory = s.vs_memory /\
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tf) /\
     ptr_covers Gf tf q t n /\
     tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
     tf.t_trans = tn.t_trans /\
