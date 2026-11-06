@@ -22,6 +22,7 @@ Ancestors
   extRetStaticUnrestrictedProbePtr extRetZeroStmtPtr extRetRecursiveDomainProbePtr
   extRetRecursiveDynamicProbePtr extRetEvaluatedStaticPtr
   extRetRecursiveInterfacePtr extRetRecursivePlanPtr extRetSupportedShapePtr
+  extRetPointwiseSourcePtr
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
   extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr extRetAbiArrayBackedgePtr
