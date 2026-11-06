@@ -29,7 +29,7 @@ only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
 Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports two upstream fixes that the HOL lowering follows:
+revision. It backports three upstream fixes that the HOL lowering follows:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -37,8 +37,13 @@ revision. It backports two upstream fixes that the HOL lowering follows:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5322: converting a `Bytes`/`String` value to a signed
+  integer or decimal masks the data word to zero when the length is zero, so
+  stale data in an emptied bytestring cannot make the arithmetic shift
+  return -1.
 
-Only fixtures with external calls that take arguments change. The
+Only fixtures with external calls that take arguments, and the signed
+`Bytes` conversions `bys32_to_i8` and `bys16_to_dec`, change. The
 provenance's `vyper_commit` names the unpatched base revision.
 
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
