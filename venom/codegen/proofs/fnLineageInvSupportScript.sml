@@ -1,7 +1,7 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
-  stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
+  fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
   !inst v. inst.inst_opcode <> LOG /\ MEM v (inst_uses inst) ==>
@@ -168,4 +168,67 @@ Proof
   gvs[SUBSET_DEF, MEM_MAP, MEM_APPEND, dead_stack_marker_def] >>
   rpt strip_tac >> first_x_assum irule >>
   first_x_assum drule >> simp[]
+QED
+
+Theorem native_join_jmp_inventory_subset:
+  !liveness dfg cfg fn inst next halt term cur ps targets ops qs.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops liveness fn cur inst = SOME targets /\
+    pending_inventory_wf targets ps /\
+    generate_inst_plan liveness dfg cfg fn inst next halt term cur ps =
+      SOME (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+      MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?target. inst.inst_operands = [Label target]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_param_opcode_def] >>
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
+       stackPlanTypesTheory.is_label_operand_def,
+       venomEffectsTheory.is_commutative_def,
+       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
+  rename1 `restore_spilled_plan targets ps = (rOps,psR)` >>
+  Cases_on `reorder_plan dfg targets psR` >> simp[stack_pop_def] >>
+  strip_tac >> gvs[] >>
+  `!at. MEM at r.ps_stack \/ at IN FDOM r.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    metis_tac[restore_reorder_inventory_subset] >>
+  metis_tac[fnPlanLineageInventoryTheory.release_dead_spills_inventory_subset]
+QED
+
+Theorem native_join_jmp_support:
+  !liveness dfg cfg fn inst next halt term cur ps targets ops qs.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops liveness fn cur inst = SOME targets /\
+    pending_inventory_wf targets ps /\
+    set targets = set (MAP Var next) /\
+    (!op. (MEM op ps.ps_stack /\ op <> dead_stack_marker) \/
+          op IN FDOM ps.ps_spilled ==> MEM op targets) /\
+    generate_inst_plan liveness dfg cfg fn inst next halt term cur ps =
+      SOME (ops,qs) ==>
+    qs.ps_spilled = FEMPTY /\
+    (!op. (MEM op qs.ps_stack /\ op <> dead_stack_marker) \/
+          op IN FDOM qs.ps_spilled ==> MEM op targets) /\
+    (!v. MEM v next ==> MEM (Var v) qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `qs.ps_spilled = FEMPTY` by
+    (irule generate_inst_plan_jmp_spilled_empty >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+        metis_tac[native_join_jmp_inventory_subset] >>
+      gvs[EXTENSION] >> metis_tac[]) >>
+  drule_all generate_inst_plan_jmp_suffix >> strip_tac >>
+  gvs[EXTENSION, MEM_MAP, MEM_APPEND] >> metis_tac[]
 QED
