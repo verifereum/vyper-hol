@@ -103,8 +103,7 @@ Theorem simplify_cfg_inst_shape:
   EVERY inst_shape_ok (fn_insts (FST (simplify_cfg_fn_with_labels f)))
 Proof
   strip_tac >>
-  `EVERY (\i. ~MEM i.inst_opcode
-      [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET])
+  `EVERY (\i. ~MEM i.inst_opcode [DJMP; OFFSET])
     (fn_insts (FST (simplify_cfg_fn_with_labels f)))` by
     (ho_match_mp_tac simplify_cfg_fn_with_labels_opcodes >>
      gvs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def]) >>
