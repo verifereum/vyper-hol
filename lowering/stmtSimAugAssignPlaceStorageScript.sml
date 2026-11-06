@@ -1575,7 +1575,7 @@ Theorem aug_place_storage_binop_store_nofresh[local]:
       tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
     (ee,z) [] res fin r /\
     ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf z res
+        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
           (fin with gas_obs := []) last) \/
      (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
 Proof
@@ -1684,7 +1684,7 @@ Theorem aug_place_storage_binop_store[local]:
       tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
     (ee,z) [] res fin r /\
     ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf z res
+        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
           (fin with gas_obs := []) last) \/
      (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
 Proof
@@ -1750,7 +1750,7 @@ Theorem aug_place_storage_suffix_outcome_nofresh[local]:
       (\v. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf u)
+    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1901,7 +1901,7 @@ Theorem aug_place_storage_suffix_outcome[local]:
       (\v. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf u)
+    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   strip_tac >> drule_all aug_place_storage_suffix_outcome_nofresh >> simp[]
@@ -2172,10 +2172,12 @@ Theorem aug_place_stmt_post_prefix[local]:
     lookup_var x u = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
     FLOOKUP u.vs_allocas aid = SOME b) /\
-  stmt_post ctx func cx lctx cenv cenv' sp sf u res ee t ==>
-  stmt_post ctx func cx lctx cenv cenv' sa sf s0 res ee t
+  sa.cs_next_id <= sp.cs_next_id /\ alloca_frame cenv es0 sa s0 cenv eu u /\
+  stmt_post ctx func cx lctx cenv cenv' sp sf eu u res ee t ==>
+  stmt_post ctx func cx lctx cenv cenv' sa sf es0 s0 res ee t
 Proof
-  rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >>
+  rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >> rpt conj_tac
+  >~ [`alloca_frame _ _ _ _ _ _ _`] >- (irule alloca_frame_trans >> metis_tac[]) >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
@@ -2315,7 +2317,7 @@ Theorem aug_place_storage_success_continue[local]:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))))
     (mid with gas_obs := [],t)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

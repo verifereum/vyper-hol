@@ -11,7 +11,7 @@ Libs
 
 Theorem continue_jump_post:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted ==>
-  stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sb s
+  stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sb es s
     (INR ContinueException) (es with gas_obs := []) (jump_to inc s)
 Proof
   strip_tac >>
@@ -20,7 +20,7 @@ Proof
      disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
      simp[stmt_state_rel_inst_idx]) >>
   pure_rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
-  simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to,
+  simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to, alloca_frame_same,
        jump_to_def, lookup_var_def]
 QED
 

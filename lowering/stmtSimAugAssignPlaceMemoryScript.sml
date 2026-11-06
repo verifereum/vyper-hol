@@ -482,13 +482,13 @@ Theorem aug_place_binop_store_outcome:
              FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-    stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       ptv bop cur rhs)) (write_place cx (MemoryPlace id path))) (ee,s)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s_entry)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -544,7 +544,7 @@ Resume aug_place_binop_store_outcome[normal]:
   strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t')` by
     (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+  `stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
      (INL ()) (ff with gas_obs := []) t'` by
     (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
@@ -611,7 +611,7 @@ Theorem aug_place_normal_post:
            FLOOKUP t.vs_allocas aid = SOME b) /\
   ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
   t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-  stmt_post ctx func cx lctx cenv cenv sa sf s_entry (INL ()) ff t
+  stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry (INL ()) ff t
 Proof
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_def]
 QED
@@ -649,7 +649,7 @@ Theorem aug_place_store_post[local]:
              FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-    stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t
 Proof
   rpt strip_tac >> irule aug_place_normal_post >>
@@ -1274,7 +1274,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
       ptv bop v v'')) (write_place cx (MemoryPlace id path)))
     (raw' with gas_obs := [],t')
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
@@ -1293,7 +1293,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      metis_tac[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
@@ -1315,7 +1315,7 @@ Resume compile_augassign_place_memory_case[rhs_exit]:
   markerLib.RESUME_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
@@ -1338,7 +1338,7 @@ Resume compile_augassign_place_memory_case[rhs_exempt]:
   markerLib.RESUME_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>

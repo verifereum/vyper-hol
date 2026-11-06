@@ -348,7 +348,7 @@ Theorem assign_storage_word_suffix:
                 (ee with gas_obs := tail) = (INL (), ee' with gas_obs := tail)) /\
       gas_marked_path F ctx func t 0 r /\
       ?t'. r = OK t' /\
-           stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+           stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
              (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>

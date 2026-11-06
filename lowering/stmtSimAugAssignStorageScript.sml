@@ -404,7 +404,7 @@ Theorem augassign_storage_store_post_path:
            FLOOKUP s.vs_allocas aid = SOME b) ==>
   ?fin last. write_storage_slot cx tr (n2w slot) tvt w ee = (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) fin last
 Proof
   strip_tac >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
@@ -694,7 +694,7 @@ Resume compile_augassign_toplevel_case[operator_normal]:
   `?fin last. write_storage_slot cx tr (n2w slot) tvt result
       (ee with gas_obs := []) = (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
+    stmt_post ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s (INL ()) fin last` by
     (irule augassign_storage_store_post_path >> simp[] >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`res_op`, `s3`] >> simp[]) >>
@@ -702,15 +702,15 @@ Resume compile_augassign_toplevel_case[operator_normal]:
 QED
 
 Resume compile_augassign_toplevel_case[store_post]:
-  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
+  `stmt_post ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u (INL ()) fin last` by
     (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
      qexistsl_tac [`s`, `s3`] >> simp[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
+  `stmt_post ctx func cx lctx cenv cenv s1 sb (es with gas_obs := []) t (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last` by
     (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
      qexistsl_tac [`t`, `s1`] >> simp[] >>
      rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>

@@ -693,7 +693,7 @@ QED
 
 Theorem for_body_post_pop[local]:
   !ctx func cx lctx bc bc' sa sb s0 res ee t cenv entry sc rest.
-    stmt_post ctx func cx lctx bc bc' sa sb s0 res ee t /\
+    stmt_post ctx func cx lctx bc bc' sa sb entry s0 res ee t /\
     cenv_top_ext cenv bc entry.scopes /\ entry.scopes = sc :: rest /\
     preserves_scopes_dom entry ee /\
     (!n. n IN FDOM (HD ee.scopes) ==> lookup_scopes n (TL ee.scopes) = NONE) ==>
@@ -741,7 +741,10 @@ Theorem for_round_prepare[local]:
       (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
         value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>,s2)
       (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc
-        (FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)) sb0 sb1 s2)
+        (FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)) sb0 sb1
+        (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
+          value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>)
+        s2)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> fs[for_code_def] >>
@@ -789,7 +792,7 @@ Theorem for_body_finish[local]:
   lookup_scopes id esk.scopes = NONE /\
   preserves_scopes_dom entry ee /\ ee.scopes = sc :: rest /\
   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
-  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2 res ee t /\
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2 res ee t /\
   lookup_var cv s2 = SOME c /\ lookup_var ev s2 = SOME e /\ lookup_var p s2 = SOME w /\
   (!x z. not_fresh_at st x /\ lookup_var x old = SOME z ==> lookup_var x s2 = SOME z) /\
   (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP s2.vs_allocas a = SOME b) ==>
@@ -962,7 +965,7 @@ Resume for_iteration_alloca[normal_finish]:
   `entry.scopes = (FEMPTY |+ (id, <| assignable := F; type := tyv;
     value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes` by simp[Abbr `entry`] >>
   `wrapped = INL (res = INR BreakException)` by
-    (qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[stmt_post_def, stmt_lands_def] >> strip_tac >>
      gvs[Abbr `wrapped`]) >>
   drule_all for_body_finish >> strip_tac >>

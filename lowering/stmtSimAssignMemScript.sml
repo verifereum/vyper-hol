@@ -411,7 +411,7 @@ Theorem assign_local_memory_normal_continuation:
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   rpt gen_tac >> strip_tac >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -475,7 +475,7 @@ Theorem assign_local_memory_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -793,7 +793,7 @@ Theorem assign_local_memory_widen_normal_continuation:
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
     (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -870,7 +870,7 @@ Theorem assign_local_memory_widen_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>

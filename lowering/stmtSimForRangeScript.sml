@@ -1174,7 +1174,7 @@ Theorem for_range_checked_tail_outcome[local]:
         eval_for cx tyv id stmts
           (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
     (es,t0)
-    (stmt_post ctx func cx lctx cenv cenv st sf t0)
+    (stmt_post ctx func cx lctx cenv cenv st sf es t0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1674,7 +1674,7 @@ Resume compile_for_range_checked_frag_active[tail_apply]:
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ source _ _ _` >>
   `gas_outcome F (cx_tops cx) (ctx,func) source
     (mid' with gas_obs := [],t')
-    (stmt_post ctx func cx lctx cenv cenv s2 sb t')
+    (stmt_post ctx func cx lctx cenv cenv s2 sb (mid' with gas_obs := []) t')
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
      simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>

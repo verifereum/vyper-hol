@@ -924,7 +924,7 @@ Theorem augassign_attr_store_post_path:
   ?ff t'. gas_marked_exec F (ctx,func)
     (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
     (ee with gas_obs := [],t) [] (INL ()) ff (OK t') /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff t'
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) ff t'
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   `lookup_var (STRING #"%" (toString sm.cs_next_var)) t = SOME (w0 + n2w off)` by
@@ -1001,7 +1001,7 @@ Theorem augassign_attr_normal_summary[local]:
   t'.vs_current_bb = s2.cs_current_bb /\ t'.vs_inst_idx = LENGTH s2.cs_current_insts ==>
   gas_summary_at F (ctx,func) marks
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>

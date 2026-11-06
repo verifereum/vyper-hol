@@ -833,7 +833,7 @@ Theorem assign_attr_local_store_post[local]:
   ?ff t'. gas_marked_exec F (ctx,func)
     (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
     (ee with gas_obs := [],t) [] (INL ()) ff (OK t') /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff t'
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) ff t'
 Proof
   strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 ftv v)` by
@@ -890,7 +890,7 @@ Theorem assign_attr_local_normal_continuation[local]:
   ?ff u. gas_marked_exec F (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (es,s0) marks (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   strip_tac >> drule_all assign_attr_local_initial_pointer >> strip_tac >>
   `eval_operand (Var p) s = SOME bw` by
@@ -919,7 +919,7 @@ Proof
   `?ff t'. gas_marked_exec F (ctx,func)
       (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
       (ee with gas_obs := [],u) [] (INL ()) ff (OK t') /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff t'` by
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff t'` by
     (irule assign_attr_local_store_post >>
      rpt (goal_assum (drule_at Any)) >>
      simp[] >> metis_tac[]) >>
@@ -957,7 +957,7 @@ Theorem assign_attr_local_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (es,s0) (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (es,s0) (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -970,7 +970,7 @@ Proof
           `?ff u. gas_marked_exec F (ctx,func)
             (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
             (es,s0) marks (INL ()) ff (OK u) /\
-            stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u` by
+            stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u` by
             (irule assign_attr_local_normal_continuation >> simp[] >>
              goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
              goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >>

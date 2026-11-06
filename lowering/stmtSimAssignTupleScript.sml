@@ -621,7 +621,7 @@ Theorem assign_tuple_locals_suffix[local]:
       (!tail. assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids))
         v (ee with gas_obs := tail) = (INL (), ee' with gas_obs := tail)) /\
       gas_marked_path F ctx func sv 0 (OK t') /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
         (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>

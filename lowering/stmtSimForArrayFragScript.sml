@@ -733,7 +733,7 @@ Theorem array_outcome_stmt_post[local]:
     (\res ee r. ?ex. res = INR ex /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) ==>
   gas_outcome F tops (ctx,func) source (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv st st' s0)
+    (stmt_post ctx func cx lctx cenv cenv st st' es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> qhdtm_x_assum `gas_outcome` mp_tac >>

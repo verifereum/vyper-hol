@@ -456,7 +456,7 @@ Theorem augassign_attr_storage_store_post_path:
              FLOOKUP s.vs_allocas aid = SOME b) ==>
     ?fin last. write_storage_slot cx tr k ftv w ee = (INL (),fin) /\
       gas_marked_path F ctx func s 0 (OK last) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+      stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) fin last
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `write_storage_slot cx tr k ftv w ee` >>

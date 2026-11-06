@@ -538,13 +538,22 @@ QED
 
 Theorem stmt_post_expr_entry_frame:
   expr_post ctx func cenv cx e es sa sm s0 em v op t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM em.scopes = MAP FDOM es.scopes /\
+  sa.cs_next_id <= sm.cs_next_id /\
   sa.cs_next_var <= sm.cs_next_var /\
-  stmt_post ctx func cx lctx old c sm sf t res ee last ==>
-  stmt_post ctx func cx lctx old c sa sf s0 res ee last
+  stmt_post ctx func cx lctx cenv c sm sf em t res ee last ==>
+  stmt_post ctx func cx lctx cenv c sa sf es s0 res ee last
 Proof
-  strip_tac >> irule stmt_post_entry_frame >>
-  qexistsl_tac [`t`, `sm`] >> fs[expr_post_def] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv em t` by
+    (irule alloca_frame_of_mem_frame >> fs[expr_post_def] >> metis_tac[]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         not_fresh_at sm x /\ lookup_var x t = SOME w` by
+    (fs[expr_post_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP t.vs_allocas aid = SOME b` by fs[expr_post_def] >>
+  metis_tac[stmt_post_entry_frame]
 QED
 
 Theorem gas_marked_exec_observation:
@@ -683,7 +692,7 @@ Theorem local_word_store_post_path:
              FLOOKUP s.vs_allocas aid = SOME b) ==>
     ?t. res = INL () /\
         gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_post ctx func cx lctx cenv cenv sa sf s0 res es' t
+        stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res es' t
 Proof
   rpt strip_tac >>
   drule_all write_place_local >> strip_tac >> gvs[] >>
@@ -972,21 +981,21 @@ Resume compile_augassign_local_case[write_safe]:
     simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
   `?last. (INL () : unit + exception) = INL () /\
      gas_marked_path F ctx func s 0 (OK last) /\
-     stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
+     stmt_post ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s (INL ()) fin last` by
     (match_mp_tac local_word_store_post_path >> simp[] >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
   suspend "store_post"
 QED
 
 Resume compile_augassign_local_case[store_post]:
-  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
+  `stmt_post ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u (INL ()) fin last` by
     (irule stmt_post_entry_frame >> qexistsl_tac [`s`, `s3`] >> simp[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
+  `stmt_post ctx func cx lctx cenv cenv s1 sb (es with gas_obs := []) t (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >>

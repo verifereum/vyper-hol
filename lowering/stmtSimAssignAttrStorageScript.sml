@@ -829,7 +829,7 @@ Theorem assign_attr_storage_word_suffix[local]:
   ?res ee' r.
     (!tail. k raw (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
     gas_marked_path F ctx func s 0 r /\
-    ?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf s0 res
+    ?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
       (ee' with gas_obs := []) t'
 Proof
   strip_tac >>
