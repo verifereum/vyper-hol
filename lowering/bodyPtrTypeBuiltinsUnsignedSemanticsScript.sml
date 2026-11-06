@@ -286,3 +286,35 @@ Proof
   gvs[mload_def, GSYM mem_word_at_def] >>
   irule unsigned_memory_payload_lsr >> simp[]
 QED
+
+Theorem unsigned_payload_padding:
+  LENGTH bs <= 32 ==>
+  word_lsr (word_of_bytes_be bs:bytes32) (8*(32-LENGTH bs)) =
+    word_of_bytes_be (PAD_LEFT 0w 32 bs)
+Proof
+  strip_tac >>
+  simp[wordsTheory.word_lsr_def, fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >>
+  qspec_then `8` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `i` strip_assume_tac) >>
+  Cases_on `i+8*(32-LENGTH bs) < 256`
+  >- (simp[unsigned_word_bit_byte, unsigned_get_byte_encoding,
+           PAD_LEFT, rich_listTheory.EL_APPEND, EL_GENLIST] >>
+      intLib.ARITH_TAC) >>
+  simp[unsigned_word_bit_byte, unsigned_get_byte_encoding,
+       PAD_LEFT, rich_listTheory.EL_APPEND, EL_GENLIST] >>
+  `31 < i DIV 8+32-LENGTH bs` by intLib.ARITH_TAC >>
+  simp[wordsTheory.word_0, fcpTheory.FCP_BETA]
+QED
+
+Theorem unsigned_payload_bound:
+  LENGTH bs <= 32 ==>
+  w2n (word_lsr (word_of_bytes_be bs:bytes32) (8*(32-LENGTH bs))) <
+    2 ** (8*LENGTH bs)
+Proof
+  strip_tac >> simp[wordsTheory.w2n_lsr] >>
+  `256 = 8*LENGTH bs+8*(32-LENGTH bs)` by decide_tac >>
+  mp_tac (Q.ISPEC `(word_of_bytes_be bs:bytes32)` wordsTheory.w2n_lt) >>
+  simp[wordsTheory.dimword_def, arithmeticTheory.EXP_ADD,
+       arithmeticTheory.DIV_LT_X]
+QED
