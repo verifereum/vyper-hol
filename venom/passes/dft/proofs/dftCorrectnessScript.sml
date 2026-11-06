@@ -2438,28 +2438,6 @@ Proof
   metis_tac[]
 QED
 
-(* topo_sorted transfers through choose_original mapping *)
-Triviality map_choose_original_topo_sorted:
-  !l1 l2 dep.
-    ALL_DISTINCT (MAP (\i. i.inst_id) l1) /\
-    topo_sorted dep l2 /\
-    (!i. MEM i l2 ==> ?j. MEM j l1 /\ j.inst_id = i.inst_id) /\
-    (* dep only depends on inst_id *)
-    (!x y x' y'. x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id ==>
-       (dep x y <=> dep x' y')) ==>
-    topo_sorted dep (MAP (choose_original l1) l2)
-Proof
-  rw[topo_sorted_def, LENGTH_MAP] >>
-  simp[EL_MAP] >>
-  `MEM (EL i l2) l2` by (simp[MEM_EL] >> qexists `i` >> simp[]) >>
-  `MEM (EL j l2) l2` by (simp[MEM_EL] >> qexists `j` >> simp[]) >>
-  `(choose_original l1 (EL i l2)).inst_id = (EL i l2).inst_id` by
-    (irule (cj 2 choose_original_correct) >> metis_tac[]) >>
-  `(choose_original l1 (EL j l2)).inst_id = (EL j l2).inst_id` by
-    (irule (cj 2 choose_original_correct) >> metis_tac[]) >>
-  metis_tac[]
-QED
-
 (* eda_dep only depends on inst_id *)
 Theorem eda_dep_inst_id_only:
   !eda x y x' y'.
