@@ -7865,6 +7865,101 @@ Proof
   simp[GSYM LAST_EL, EL, plan_holds_def] >> metis_tac[plan_holds_def]
 QED
 
+Theorem alias_execution_prefix_extend_edge:
+  alias_execution_prefix states writes /\ LAST states = s /\
+  alias_prefix_edge s t edge_writes ==>
+  alias_execution_prefix (states ++ [t]) (writes UNION edge_writes) /\
+  LAST (states ++ [t]) = t
+Proof
+  strip_tac >> simp[] >> metis_tac[alias_execution_prefix_rules]
+QED
+
+Theorem alias_exec_block_prefix:
+  alias_execution_prefix states writes /\ LAST states = s /\
+  exec_block fuel ctx bb s = OK t ==>
+  ?suffix writes'. alias_execution_prefix (states ++ suffix) writes' /\
+    LAST (states ++ suffix) = t /\
+    writes' SUBSET (writes UNION
+      {x | ?inst. MEM inst bb.bb_instructions /\ MEM x inst.inst_outputs})
+Proof
+  qid_spec_tac `writes` >> qid_spec_tac `states` >> qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK u` >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\ MEM inst bb.bb_instructions` by
+    (gvs[get_instruction_def] >> metis_tac[MEM_EL]) >>
+  `alias_prefix_edge s u (set inst.inst_outputs)` by
+    (simp[alias_prefix_edge_def] >> metis_tac[]) >>
+  `alias_execution_prefix (states ++ [u]) (writes UNION set inst.inst_outputs)` by
+    metis_tac[alias_execution_prefix_extend_edge] >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `u.vs_halted` >> simp[] >> strip_tac >> gvs[] >>
+      qexistsl_tac [`[t]`, `writes UNION set inst.inst_outputs`] >> simp[] >>
+      simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  qabbrev_tac `r = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `alias_prefix_edge u r {}` by
+    (simp[alias_prefix_edge_def, Abbr `r`] >> disj2_tac >> disj2_tac >>
+     qexists_tac `SUC s.vs_inst_idx` >> simp[]) >>
+  `alias_execution_prefix ((states ++ [u]) ++ [r])
+      (writes UNION set inst.inst_outputs)` by
+    (drule alias_execution_prefix_extend_edge >> simp[] >>
+     disch_then drule >> simp[]) >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `r` mp_tac) >>
+  simp[Abbr `r`] >>
+  disch_then (qspecl_then [`states ++ [u] ++ [u with vs_inst_idx := SUC s.vs_inst_idx]`,
+    `writes UNION set inst.inst_outputs`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[u; u with vs_inst_idx := SUC s.vs_inst_idx] ++ suffix`, `writes'`] >>
+  conj_tac >- (qpat_x_assum `alias_execution_prefix (_ ++ _ ++ _ ++ _) _` mp_tac >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  conj_tac >- (qpat_x_assum `LAST _ = t` mp_tac >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  qpat_x_assum `writes' SUBSET _` mp_tac >>
+  simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem alias_run_block_prefix:
+  run_block fuel ctx bb s = OK t ==>
+  ?states writes. alias_execution_prefix states writes /\
+    HD states = s /\ LAST states = t /\
+    writes SUBSET {x | ?inst. MEM inst bb.bb_instructions /\ MEM x inst.inst_outputs}
+Proof
+  strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  gvs[run_block_def] >>
+  qabbrev_tac `pw = {x | ?inst. MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\ MEM x inst.inst_outputs}` >>
+  qabbrev_tac `r = s' with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
+  `alias_prefix_edge s s' pw` by
+    (simp[alias_prefix_edge_def] >> disj2_tac >> disj1_tac >>
+     qexists_tac `bb.bb_instructions` >> simp[Abbr `pw`]) >>
+  `alias_execution_prefix [s; s'] pw` by
+    (mp_tac (Q.SPEC `s` (cj 1 alias_execution_prefix_rules)) >>
+     strip_tac >> drule alias_execution_prefix_extend_edge >> simp[] >>
+     disch_then drule >> simp[]) >>
+  `alias_prefix_edge s' r {}` by
+    (simp[alias_prefix_edge_def, Abbr `r`] >> disj2_tac >> disj2_tac >>
+     qexists_tac `phi_prefix_length bb.bb_instructions` >> simp[]) >>
+  `alias_execution_prefix ([s; s'] ++ [r]) pw` by
+    (drule alias_execution_prefix_extend_edge >> simp[] >>
+     disch_then drule >> simp[]) >>
+  drule alias_exec_block_prefix >>
+  disch_then (qspecl_then [`t`, `r`, `fuel`, `ctx`, `bb`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`([s; s'] ++ [r]) ++ suffix`, `writes'`] >>
+  simp[] >> qpat_x_assum `writes' SUBSET _` mp_tac >>
+  simp[pred_setTheory.SUBSET_DEF, Abbr `pw`] >> metis_tac[]
+QED
+
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
    lineage entry state of the successor (its DFS state with ps_after's
