@@ -194,6 +194,8 @@ Theorem compile_raise_reason_path_frag_ptr:
    vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\
    ghost_inv d cenv cx ee G tn t /\ ptr_vv_ok cx (expr_type r) tv vv ee G tn t /\
    read_result cx tv ee = (INL (StringV str),ee) /\
+   (?gin gout. eval_expr cx r (es with gas_obs := gin) =
+     (INL tv, ee with gas_obs := gout)) /\
    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
    ?Gf tnf u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf (Abort Revert_abort u)) ==>
@@ -225,8 +227,12 @@ Resume compile_raise_reason_path_frag_ptr[normal]:
   markerLib.RESUME_TAC >>
   `~t.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
   drule_all raise_reason_raw_string >> strip_tac >>
+  `?gin gout. eval_expr cx r (es with gas_obs := gin) =
+     (INL tv, (es_end with gas_obs := []) with gas_obs := gout)` by
+    (qexistsl_tac [`gas_explicit marks s0.vs_gas_readings ++ []`, `[]`] >>
+     simp[]) >>
   qpat_x_assum `!sa' vv' sm' sb' s0' ee tv t G tn str. _`
-    (drule_all_then strip_assume_tac) >>
+    (drule_all_then strip_assume_tac o SRULE [PULL_EXISTS]) >>
   qexists_tac `marks` >> disj1_tac >>
   qexistsl_tac [`INR (AssertException str)`, `es_end`, `Gf`, `tnf`,
                 `Abort Revert_abort u`] >>

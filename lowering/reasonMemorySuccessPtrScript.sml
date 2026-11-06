@@ -1,7 +1,7 @@
 (* Reusable raw-value to operand boundary for identity memory unwrap. *)
 Theory reasonMemorySuccessPtr
 Ancestors bodyPtrDefs exprSimUnwrap exprSimUnwrapProps loweringPosts
-  reasonMemoryEncoderPtr reasonRaiseContinuationPtr
+  reasonMemoryEncoderPtr reasonRaiseContinuationPtr stmtSimForArrayFrame
 
 Theorem reason_stack_read_post_ptr:
   vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue ty op) s /\
@@ -29,3 +29,15 @@ Proof
   >- (irule expr_post_of_vv_post_memory >> metis_tac[]) >>
   gvs[vv_post_def, vv_holds_def, ptr_vv_ok_def, ptr_val_ok_def]
 QED
+
+(* Only the source evaluation, not vv_post's frame, fixes the scope domains. *)
+Theorem reason_success_scopes:
+  supported_expr tops e /\
+  ~supported_expr_exists expr_internal_call_root e /\
+  (?gin gout. eval_expr cx e (es with gas_obs := gin) =
+    (res, ee with gas_obs := gout)) ==>
+  MAP FDOM es.scopes = MAP FDOM ee.scopes
+Proof
+  strip_tac >> drule_all supported_expr_scopes >> simp[]
+QED
+
