@@ -4,6 +4,8 @@ Theory exprSimIfExpWidenedAdapter
 Ancestors
   exprSimIfExp exprSimHyps exprSimTypedAlloc valueEncodingTyping loweringPosts
   vyperTypeSystem valueEncodingProps vyperValue valueEncoding vyperMisc
+  exprSimVVFrame exprSimAggregateChildren exprSimUnwrap context venomState
+  vyperState exprSimDefs
 
 Theorem normalize_owned_value_framed_frag:
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf, sm) /\
@@ -124,3 +126,26 @@ Proof
   gvs[expr_post_def, expr_val_rel_def] >>
   gvs[vyperASTTheory.expr_type_def]
 QED
+
+
+(* Conditional adaptation cannot turn a readable result into an admissible
+   failure: its only new failures are type errors. *)
+Theorem conditional_readable_admissible:
+  read_result cx raw ee = (INL v,ee) /\
+  conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
+  ?tv. res = INL tv /\ ss = ee /\
+       read_result cx tv ee = (INL v,ee)
+Proof
+  Cases_on `raw` >>
+  simp[read_result_def, conditional_result_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), expr_vv_res_ok_def] >>
+  gvs[read_result_def, return_def, raise_def] >>
+  imp_res_tac place_type_value_state >> gvs[] >>
+  gvs[COND_RATOR, COND_RAND, COND_EXPAND, bind_def, return_def, raise_def] >>
+  Cases_on `p` >>
+  gvs[place_type_value_def, get_scopes_def, get_immutables_def,
+      lift_option_type_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[option_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+  gvs[read_place_def, get_immutables_def, bind_def]
+QED
+
