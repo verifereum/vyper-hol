@@ -1,7 +1,7 @@
 Theory entryReachBodyFirstEmissionExprSupport
 Ancestors
   entryReachBodyFirstEmissionSupport compilerFirstEmission externalEntryShape
-  exprLowering compileEnv fragExec emitHelper venomInst finite_map
+  exprLowering compileEnv fragExec emitHelper venomInst finite_map list
 
 Theorem first_emission_bytelike_literal[local]:
   !bs n a x b. compile_bytelike_literal bs n a = (x,b) ==>
@@ -231,4 +231,31 @@ Proof
    >- (ho_match_mp_tac first_emission_array_subscript >>
        metis_tac[first_emission_ptr_load]) >>
    simp[comp_return_def, cs_extends_refl])
+QED
+
+Theorem first_emission_multi_vvs:
+  !es ce.
+  (!e a x b. MEM e es /\ cfn ce (expr_type e) e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_multi_vvs cfn ce es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct_on `es`
+  >- simp[compile_multi_vvs_def, comp_return_def, cs_extends_refl] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[compile_multi_vvs_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[MEM] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (first_x_assum ho_match_mp_tac >> metis_tac[MEM]) >>
+  metis_tac[first_emission_return]
 QED
