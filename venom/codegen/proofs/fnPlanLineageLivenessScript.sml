@@ -138,6 +138,42 @@ Proof
   disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]
 QED
 
+(* Logical first reactivation only: this does not assert physical erasure
+   or shielding of residual stack copies by the defining instruction. *)
+Theorem analyzed_phi_incoming_first_reactivation:
+  !fn lbl bb i j v.
+    wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+    phi_block_ready (liveness_analyze fn) bb /\
+    i < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (inst_uses (EL i (collect_phis bb.bb_instructions))) /\
+    i < j /\ j <= LENGTH bb.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl j) ==>
+    ?k. i < k /\ k < j /\ MEM v (inst_defs (EL k bb.bb_instructions)) /\
+      (!r. i < r /\ r <= k ==>
+        ~MEM v (live_vars_at (liveness_analyze fn) lbl r))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM v (live_vars_at (liveness_analyze fn) lbl (i+1))` by
+    (irule analyzed_phi_incoming_dead_after >> simp[] >>
+     qexists_tac `i` >> simp[]) >>
+  `?k. i < k /\ k < j /\ MEM v (inst_defs (EL k bb.bb_instructions))` by
+    (spose_not_then assume_tac >>
+     `MEM v (live_vars_at (liveness_analyze fn) lbl (i+1))` suffices_by simp[] >>
+     irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+     simp[] >> qexists_tac `j` >> simp[] >>
+     rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+  qexists_tac `LEAST k. i < k /\ k < j /\ MEM v (inst_defs (EL k bb.bb_instructions))` >>
+  numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >> simp[] >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl (i+1))` suffices_by simp[] >>
+  irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+  simp[] >> qexists_tac `r` >> simp[] >>
+  qx_gen_tac `t` >> strip_tac >>
+  qpat_x_assum `!m. _` (qspec_then `t` mp_tac) >>
+  `t < n /\ i < t /\ t < j` by decide_tac >> simp[]
+QED
+
 Theorem analyzed_ready_phi_live_through_edge:
   !fn lbl bb pred v.
     wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
