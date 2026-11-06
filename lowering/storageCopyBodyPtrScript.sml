@@ -706,3 +706,253 @@ Resume storage_copy_destination_chunk_ptr[assemble]:
   gvs[lookup_var_def] >> metis_tac[]
 QED
 Finalise storage_copy_destination_chunk_ptr
+
+Theorem storage_copy_body_path_ptr:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+3) ADD [Var root;Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\
+  eval_operand src s = SOME a /\ lookup_var root s = SOME b /\
+  lookup_var cv s = SOME (n2w k) /\ FLOOKUP G cv = NONE /\
+  op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
+  ptr_covers G tn root s span /\ 32*k+32 <= span /\
+  w2n b+32*k < dimword(:256) /\
+  ALL_DISTINCT [root;cv;sv;vv;mv;dv;nv] /\
+  (!x. MEM x [cv;sv;vv;mv;dv;nv] ==> src <> Var x) /\
+  ~ctx_has_dalloca ctx ==>
+  ?G' tn' t u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    run_inst_seq
+      [mk_inst id ADD [src;Var cv] [sv];
+       mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv];
+       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+       mk_inst (id+3) ADD [Var root;Var mv] [dv];
+       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+       mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK u /\
+    t = (u with vs_inst_idx := s.vs_inst_idx+7) /\
+    lookup_var root t = SOME b /\ ptr_covers G' tn' root t span /\
+    eval_operand src t = SOME a /\ op_taint tn' src = {} /\
+    lookup_var cv t = SOME (n2w (k+1)) /\
+    FLOOKUP G' cv = NONE /\ op_taint tn' (Var cv) = {} /\
+    copy_static t = copy_static s /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+7 /\
+    tn'.t_mem = (tn.t_mem DIFF
+      {i | w2n (b+n2w (32*k)) <= i /\ i < w2n (b+n2w (32*k))+32}) UNION
+      {i | ?h. i = w2n (b+n2w (32*k))+h /\
+        h IN key_taint (if tr then tn.t_trans else tn.t_stor) (a+n2w k)} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. ~MEM x [cv;sv;vv;mv;dv;nv] ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `bb.bb_instructions = pre ++
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv]] ++
+    ([mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+      mk_inst (id+3) ADD [Var root;Var mv] [dv];
+      mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+      mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+      mk_inst (id+6) ASSIGN [Var nv] [cv]] ++ post)` by simp[] >>
+  drule_all storage_copy_source_chunk_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t1)` >>
+  `?G2 tn2 t2 u2.
+    gas_path_ptr D 0 ctx fn PG G1 tn1 t1 0 G2 tn2 (OK t2) /\
+    run_inst_seq
+      [mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+       mk_inst ((id+2)+1) ADD [Var root;Var mv] [dv];
+       mk_inst ((id+2)+2) MSTORE [Var dv;Var vv] []] t1 = OK u2 /\
+    t2 = (u2 with vs_inst_idx := t1.vs_inst_idx+3) /\
+    copy_static t2 = copy_static t1 /\
+    t2.vs_current_bb = t1.vs_current_bb /\ t2.vs_inst_idx = t1.vs_inst_idx+3 /\
+    tn2.t_mem = (tn1.t_mem DIFF
+      {i | w2n (b+n2w (32*k)) <= i /\ i < w2n (b+n2w (32*k))+32}) UNION
+      {w2n (b+n2w (32*k))+h | h IN op_taint tn1 (Var vv)} /\
+    tn2.t_stor = tn1.t_stor /\ tn2.t_trans = tn1.t_trans /\ tn2.t_imm = tn1.t_imm /\
+    (!x. x <> mv /\ x <> dv ==> lookup_var x t2 = lookup_var x t1 /\
+      FLOOKUP G2 x = FLOOKUP G1 x /\ op_taint tn2 (Var x) = op_taint tn1 (Var x))`
+    by suspend "destination" >>
+  suspend "increment_and_assemble"
+QED
+
+Resume storage_copy_body_path_ptr[destination]:
+  `~t1.vs_halted /\ lookup_var root t1 = SOME b /\
+   lookup_var cv t1 = SOME (n2w k) /\ op_taint tn1 (Var cv) = {} /\
+   ptr_covers G1 tn1 root t1 span` by
+    (drule copy_static_fields >> strip_tac >>
+     gvs[ALL_DISTINCT, ptr_covers_def, lookup_var_def] >> metis_tac[]) >>
+  irule storage_copy_destination_chunk_ptr >>
+  fs[ALL_DISTINCT] >> simp[] >>
+  conj_tac >-
+    (qexistsl [`[mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+                mk_inst (id+6) ASSIGN [Var nv] [cv]] ++ post`,
+              `pre ++ [mk_inst id ADD [src;Var cv] [sv];
+                mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv]]`] >>
+     simp[APPEND_ASSOC]) >>
+  qexists `span` >> gvs[ptr_covers_def, lookup_var_def]
+QED
+Resume storage_copy_body_path_ptr[increment_and_assemble]:
+  `~t2.vs_halted /\ lookup_var cv t2 = SOME (n2w k) /\
+   FLOOKUP G2 cv = NONE /\ op_taint tn2 (Var cv) = {}` by
+    (qpat_assum `copy_static t2 = copy_static t1`
+       (mp_then Any strip_assume_tac copy_static_fields) >>
+     qpat_assum `copy_static t1 = copy_static s`
+       (mp_then Any strip_assume_tac copy_static_fields) >>
+     fs[ALL_DISTINCT] >> metis_tac[]) >>
+  `?G3 tn3 t3 u3.
+    gas_path_ptr D 0 ctx fn PG G2 tn2 t2 0 G3 tn3 (OK t3) /\
+    run_inst_seq [mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+      mk_inst ((id+5)+1) ASSIGN [Var nv] [cv]] t2 = OK u3 /\
+    t3 = (u3 with vs_inst_idx := t2.vs_inst_idx+2) /\
+    lookup_var cv t3 = SOME (n2w (k+1)) /\
+    FLOOKUP G3 cv = NONE /\ op_taint tn3 (Var cv) = {} /\
+    copy_static t3 = copy_static t2 /\ t3.vs_memory = t2.vs_memory /\
+    t3.vs_current_bb = t2.vs_current_bb /\ t3.vs_inst_idx = t2.vs_inst_idx+2 /\
+    tn3.t_mem = tn2.t_mem /\ tn3.t_stor = tn2.t_stor /\
+    tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
+    (!x. x <> nv /\ x <> cv ==> lookup_var x t3 = lookup_var x t2 /\
+      FLOOKUP G3 x = FLOOKUP G2 x /\ op_taint tn3 (Var x) = op_taint tn2 (Var x))` by
+    (irule storage_copy_increment_chunk_ptr >> simp[] >>
+     qexistsl [`post`, `pre ++
+       [mk_inst id ADD [src;Var cv] [sv];
+        mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv];
+        mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+        mk_inst (id+3) ADD [Var root;Var mv] [dv];
+        mk_inst (id+4) MSTORE [Var dv;Var vv] []]`] >> simp[APPEND_ASSOC]) >>
+  suspend "assemble_body"
+QED
+Resume storage_copy_body_path_ptr[assemble_body]:
+  `EVERY (\inst. ~is_terminator inst.inst_opcode)
+    [mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+     mk_inst ((id+5)+1) ASSIGN [Var nv] [cv]]` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_cursor_append >> strip_tac >>
+  qpat_x_assum `run_inst_seq [mk_inst (id+5) ADD _ _; _] _ = _` kall_tac >>
+  qpat_x_assum `run_inst_seq [mk_inst (id+2) MUL _ _; _; _] _ = _` kall_tac >>
+  `EVERY (\inst. ~is_terminator inst.inst_opcode)
+    ([mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+      mk_inst ((id+2)+1) ADD [Var root;Var mv] [dv];
+      mk_inst ((id+2)+2) MSTORE [Var dv;Var vv] []] ++
+     [mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+      mk_inst ((id+5)+1) ASSIGN [Var nv] [cv]])` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_cursor_append >> strip_tac >>
+  drule_all gas_path_ptr_then >> disch_then (assume_tac o SRULE []) >>
+  qpat_x_assum `gas_path_ptr D 0 ctx fn PG G2 tn2 t2 0 _ _ _` kall_tac >>
+  qpat_x_assum `gas_path_ptr D 0 ctx fn PG G1 tn1 t1 0 G2 tn2 _` kall_tac >>
+  drule_all gas_path_ptr_then >> disch_then (assume_tac o SRULE []) >>
+  suspend "body_frames"
+QED
+Resume storage_copy_body_path_ptr[body_frames]:
+  `lookup_var root t3 = lookup_var root s /\
+   FLOOKUP G3 root = FLOOKUP G root /\
+   op_taint tn3 (Var root) = op_taint tn (Var root)` by
+    (qpat_x_assum `t1 = _` kall_tac >>
+     qpat_x_assum `t2 = _` kall_tac >>
+     rpt (qpat_x_assum `t3 = _` kall_tac) >> fs[ALL_DISTINCT] >> simp[]) >>
+  `ptr_covers G3 tn3 root t3 span` by
+    (qpat_x_assum `t1 = _` kall_tac >> qpat_x_assum `t2 = _` kall_tac >>
+     rpt (qpat_x_assum `t3 = _` kall_tac) >> fs[ptr_covers_def]) >>
+  `eval_operand src t3 = SOME a /\ op_taint tn3 src = {}` by
+    (qpat_x_assum `t1 = _` kall_tac >> qpat_x_assum `t2 = _` kall_tac >>
+     rpt (qpat_x_assum `t3 = _` kall_tac) >>
+     qpat_assum `copy_static t3 = copy_static t2`
+       (mp_then Any strip_assume_tac copy_static_fields) >>
+     qpat_assum `copy_static t2 = copy_static t1`
+       (mp_then Any strip_assume_tac copy_static_fields) >>
+     qpat_assum `copy_static t1 = copy_static s`
+       (mp_then Any strip_assume_tac copy_static_fields) >>
+     Cases_on `src` >> fs[eval_operand_def, op_taint_def,
+       DISJ_IMP_THM, FORALL_AND_THM, lookup_var_def] >> simp[]) >>
+  qexistsl [`G3`, `tn3`, `t3`, `w'`] >> simp[] >>
+  fs[] >> simp[EXTENSION, GSPECIFICATION]
+QED
+Finalise storage_copy_body_path_ptr
+
+(* Semantic and ghost preservation consume the very runtime witness exported
+   by storage_copy_body_path_ptr, never an independently selected execution. *)
+Theorem storage_copy_body_invariant_advance:
+  run_inst_seq
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if tr then TLOAD else SLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+3) ADD [Var root;Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK u /\
+  t = (u with vs_inst_idx := j) /\
+  eval_operand src s = SOME a /\ lookup_var root s = SOME b /\
+  lookup_var cv s = SOME (n2w k) /\
+  ALL_DISTINCT [root;cv;sv;vv;mv;dv;nv] /\
+  (!x. MEM x [cv;sv;vv;mv;dv;nv] ==> src <> Var x) /\
+  copy_prefix (if tr then LocTransient else LocStorage) a (w2n b) n sbase k s /\
+  k < n /\ w2n b+32*n < dimword(:256) /\
+  tn'.t_mem = (tn.t_mem DIFF
+    {i | w2n (b+n2w (32*k)) <= i /\ i < w2n (b+n2w (32*k))+32}) UNION
+    {i | ?h. i = w2n (b+n2w (32*k))+h /\
+      h IN key_taint (if tr then tn.t_trans else tn.t_stor) (a+n2w k)} /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  (!i h. i < k /\ h < 32 ==>
+     (w2n b+32*i+h IN tn.t_mem <=>
+      (a+n2w i,h) IN (if tr then tn.t_trans else tn.t_stor))) /\
+  (!i. (i < w2n b \/ w2n b+32*k <= i) ==> (i IN tn.t_mem <=> i IN M0)) ==>
+  copy_prefix (if tr then LocTransient else LocStorage) a (w2n b) n sbase (k+1) t /\
+  (!i h. i < k+1 /\ h < 32 ==>
+     (w2n b+32*i+h IN tn'.t_mem <=>
+      (a+n2w i,h) IN (if tr then tn'.t_trans else tn'.t_stor))) /\
+  (!i. (i < w2n b \/ w2n b+32*(k+1) <= i) ==> (i IN tn'.t_mem <=> i IN M0))
+Proof
+  strip_tac >>
+  `k < dimword(:256)` by decide_tac >> conj_tac >-
+    (gvs[] >> Cases_on `tr` >> gvs[copy_prefix_idx]
+     >- (drule_at (Pat `run_inst_seq _ _ = OK _`)
+           (SRULE [] (Q.INST [`loc` |-> `LocTransient`] storage_copy_body_prefix)) >>
+         simp[eval_operand_def, ALL_DISTINCT, GSYM dimword_def] >>
+         disch_then irule >> fs[dimword_def] >>
+         `k < 2**256` by (simp[] >> decide_tac) >> simp[] >> metis_tac[]) >>
+     drule_at (Pat `run_inst_seq _ _ = OK _`)
+       (SRULE [] (Q.INST [`loc` |-> `LocStorage`] storage_copy_body_prefix)) >>
+     simp[eval_operand_def, ALL_DISTINCT, GSYM dimword_def] >>
+     disch_then irule >> fs[dimword_def] >>
+         `k < 2**256` by (simp[] >> decide_tac) >> simp[] >> metis_tac[]) >>
+  `w2n (b+n2w (32*k)) = w2n b+32*k` by
+    (`32*k < dimword(:256) /\ w2n b+32*k < dimword(:256)` by decide_tac >>
+     simp[w2n_add_2, w2n_n2w]) >>
+  qpat_x_assum `tn'.t_stor = _` SUBST1_TAC >>
+  qpat_x_assum `tn'.t_trans = _` SUBST1_TAC >>
+  irule storage_copy_payload_taint_advance >>
+  qexists `tn.t_mem` >> simp[] >> fs[]
+QED
+
+Theorem storage_copy_backedge_path_ptr:
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+  ~t.vs_halted /\ lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME (mk_inst id JMP [Label hdr] []) /\
+  ~ctx_has_dalloca ctx /\
+  copy_prefix loc a b n sbase k t /\ ptr_covers G' tn' root t span ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK (jump_to hdr t)) /\
+  copy_prefix loc a b n sbase k (jump_to hdr t) /\
+  ptr_covers G' tn' root (jump_to hdr t) span /\
+  copy_static (jump_to hdr t) = copy_static t /\
+  eval_operand src (jump_to hdr t) = eval_operand src t /\
+  (!x. lookup_var x (jump_to hdr t) = lookup_var x t)
+Proof
+  strip_tac >>
+  `gas_path_ptr D 0 ctx fn PG G' tn' t 0 G' tn' (OK (jump_to hdr t))` by
+    (irule copy_loop_jump_path_ptr >> simp[mk_inst_def, op_taint_def] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                     combinTheory.K_THM, opcode_case_def] >> simp[]) >>
+  conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
+  simp[copy_prefix_jump, ptr_covers_def, copy_static_def, jump_to_def,
+       lookup_var_def] >> fs[ptr_covers_def, lookup_var_def]
+QED
