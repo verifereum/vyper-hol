@@ -264,7 +264,7 @@ Theorem raw_call_alloc_buffer_ghost_stage:
   ?u b H un.
     gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     u.vs_current_bb = sb.cs_current_bb /\ ~u.vs_halted /\
     eval_operand buf.buf_operand u = SOME (n2w b) /\
@@ -295,6 +295,9 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  `wb_frame cenv es sa s (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+       venomStateTheory.lookup_var_def] >> metis_tac[venomStateTheory.lookup_var_def]) >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `b`,
     `G |+ (STRING #"%" (toString sa.cs_next_var),(b,n))`,
     `tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
@@ -384,4 +387,103 @@ Proof
   qexists_tac `sa` >> simp[] >>
   gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, fresh_var_def, fresh_id_def, emit_def]
+QED
+
+Theorem raw_call_alloc_buffer_metadata:
+  compile_alloc_buffer n sa = (buf,sm) ==>
+  ?x. buf.buf_operand = Var x /\ not_fresh_at sm x /\
+    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id
+Proof
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >> simp[not_fresh_at_def] >>
+  qexists_tac `sa.cs_next_var` >> simp[]
+QED
+
+Theorem raw_call_outbuf_capacity:
+  32+cap <= ((cap+31) DIV 32)*32+32
+Proof
+  mp_tac (Q.SPEC `cap+31` (MATCH_MP arithmeticTheory.DIVISION (DECIDE ``0 < 32:num``))) >>
+  ` (cap+31) MOD 32 < 32` by simp[] >>
+  simp[] >> decide_tac
+QED
+
+Theorem raw_call_outbuf_positive_stage:
+  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_inst_ids_distinct func /\ ghost_inv dep cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ((cap+31) DIV 32)*32+32 < dimword(:256) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
+  ?H un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
+    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    ptr_covers H un x u (((cap+31) DIV 32)*32+32) /\
+    ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s)
+Proof
+  strip_tac >> drule_all raw_call_outbuf_split_code >>
+  disch_then (qspec_then `cenv` strip_assume_tac) >>
+  drule raw_call_alloc_buffer_metadata >> strip_tac >> gvs[] >>
+  `!z. not_fresh_at sa z ==> not_fresh_at sm z` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z)` by
+    metis_tac[] >>
+  `?dx. op = Var dx` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >> metis_tac[]) >> gvs[] >>
+  drule_all raw_call_alloc_buffer_ghost_stage >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
+  `32+cap <= ((cap+31) DIV 32)*32+32` by simp[raw_call_outbuf_capacity] >>
+  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z)` by
+    metis_tac[] >>
+  `32+cap <= 32*((cap+31) DIV 32)+32` by simp[raw_call_outbuf_capacity] >>
+  drule_all raw_call_outbuf_add_stage >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u')` by
+    (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
+  `wb_frame cenv es sa s u'` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  qexistsl_tac [`H`, `un`, `u'`] >> simp[] >>
+  fs[ghost_kept_def] >> metis_tac[]
+QED
+
+Theorem raw_call_outbuf_zero_stage:
+  compile_raw_call_outbuf 0 sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
+  ?H un u x. ov = Var x /\ op = Var x /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
+    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    ptr_covers H un x u 0 /\ u.vs_memory = s.vs_memory /\
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s)
+Proof
+  strip_tac >> drule raw_call_outbuf_zero_steps >> strip_tac >> gvs[] >>
+  drule raw_call_alloc_buffer_metadata >> strip_tac >>
+  `0 < dimword(:256)` by simp[] >>
+  drule_all raw_call_alloc_buffer_ghost_stage >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`H`, `un`, `u`, `x`] >> simp[] >>
+  gvs[ptr_covers_def, venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
+  qexists_tac `n2w b` >> simp[wordsTheory.w2n_n2w] >> decide_tac
 QED
