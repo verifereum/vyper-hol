@@ -533,7 +533,7 @@ Proof
   simp[ec_precompile_words, padded_num_to_be_bytes_word32]
 QED
 
-Theorem ec_points_code_shape[local]:
+Theorem ec_points_code_shape:
   (!p1 p2 sa op sb.
   compile_ecadd_points p1 p2 sa = (op,sb) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
@@ -1486,7 +1486,7 @@ Proof
       AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ec_source_tail_cases[local]:
+Theorem ec_source_tail_cases:
   (bt = ECAdd \/ bt = ECMul) ==>
   ec_source_tail cx ann bt tys vs es =
     case exprSimWordArgs$builtin_result cx es.accounts ann bt tys vs of
@@ -1637,7 +1637,7 @@ Proof
   conj_tac >- (qexists `aid` >> gvs[] >> metis_tac[]) >> gvs[]
 QED
 
-Theorem ec_points_run[local]:
+Theorem ec_points_run:
   (!p scalar sf res sb func cenv cx es s point wscalar lo v e.
   compile_ecmul_point p scalar sf = (res,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -1859,7 +1859,7 @@ QED
 
 Finalise ec_points_run
 
-Theorem ec_pre_types[local]:
+Theorem ec_pre_types:
   (!cenv cx env ann args es.
   expr_body_pre cenv cx env (Builtin ann ECAdd args) es ==>
   ann = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
@@ -1879,7 +1879,7 @@ Proof
   gvs[MAP_EQ_CONS] >> metis_tac[]
 QED
 
-Theorem compile_ec_operands[local]:
+Theorem compile_ec_operands:
   (!cenv ty ann a b sa vv sb.
   compile_expr cenv ty (Builtin ann ECMul [a;b]) sa = (vv,sb) ==>
   ?p scalar s1 sm res.
@@ -1910,7 +1910,7 @@ Proof
   Cases_on `result` >> gvs[as_ptr_val_def]
 QED
 
-Theorem ec_point_pointer_bound[local]:
+Theorem ec_point_pointer_bound:
   stmt_state_rel ctx func cenv cx es s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo hi es v p s /\
   eval_operand p s = SOME w ==>
@@ -1924,7 +1924,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ec_memory_semantics[local]:
+Theorem ec_memory_semantics:
   (!v1 v2 cx p1 p2 s.
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v1 /\
   value_has_type (BaseTV (UintT 256)) v2 /\
@@ -2152,7 +2152,7 @@ Proof
   metis_tac[gas_exempt_cert_error_value]
 QED
 
-Theorem ec_eval_bind[local]:
+Theorem ec_eval_bind:
   (bt = ECAdd \/ bt = ECMul) ==>
   eval_expr cx (Builtin ann bt [a;b]) =
   bind (bind (eval_expr cx a) (read_result cx))
@@ -2175,7 +2175,7 @@ Proof
   simp[vyperStateTheory.bind_assoc, vyperStateTheory.bind_return]
 QED
 
-Theorem ec_source_tail_gas_obs[local]:
+Theorem ec_source_tail_gas_obs:
   (bt = ECAdd \/ bt = ECMul) /\
   ec_source_tail cx ann bt tys vs es = (r,es') ==>
   ec_source_tail cx ann bt tys vs (es with gas_obs := g) =

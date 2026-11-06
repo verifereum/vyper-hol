@@ -143,7 +143,7 @@ Proof
   strip_tac >> res_tac >> simp[]
 QED
 
-Theorem literal_alloca_frontier[local]:
+Theorem literal_alloca_frontier:
   run_inst_seq [mk_inst i ALLOCA ops outs] s = OK t ==>
   s.vs_alloca_next <= t.vs_alloca_next
 Proof
