@@ -1,6 +1,6 @@
 (* Pointer destination navigation, including stale output registers. *)
 Theory decoderNavigationPtr
-Ancestors typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
+Ancestors decoderSetupStepPtr typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   ptrDiscipline venomInst arithmetic abiEncoder abiDecoderContract
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
@@ -642,23 +642,23 @@ Proof
   qabbrev_tac `ins = mk_inst sa.cs_next_id MLOAD [Var q] [x]` >>
   qabbrev_tac `H = step_prov PG G ins t` >>
   qabbrev_tac `u = step_taint ins s t tn` >>
+  `op_taint u (Var x) = {} /\ op_prov H (Var x) = NONE /\
+   t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+   t.vs_allocas = s.vs_allocas /\
+   u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+   u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+   (!y. y <> x ==> lookup_var y t = lookup_var y s /\
+     FLOOKUP H y = FLOOKUP G y /\ op_taint u (Var y) = op_taint tn (Var y))` by
+    (irule setup_mload_ghost >> qexistsl_tac [`PG`,`a`,`sa.cs_next_id`,`q`] >>
+     simp[Abbr `H`, Abbr `u`, Abbr `ins`]) >>
   `!y. not_fresh_at sa y ==> y <> x` by
     (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
   qexistsl_tac [`H`,`u`] >>
-  conj_tac >- (simp[Abbr `u`, Abbr `ins`, Abbr `x`] >>
-    irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def] >> metis_tac[]) >>
-  conj_tac >- simp[Abbr `H`, Abbr `ins`, Abbr `x`, op_prov_def, step_prov_def,
-    out_prov_def, set_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
-  conj_tac >- (irule ptr_fragment_step >> simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
-    rpt strip_tac >> gvs[] >> qexists_tac `update_var x (mload (w2n a) s) s` >>
-    simp[Abbr `H`, Abbr `u`, step_inst_base_def, mk_inst_def,
-      exec_read1_def, eval_operand_def, update_var_def] >>
-    rpt strip_tac >> irule (SRULE [mk_inst_def] ptr_inst_ok_mload) >> simp[]) >>
-  `u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans` by
-    (simp[Abbr `u`, Abbr `ins`] >>
-     metis_tac[mload_ghost_clean, eval_operand_def]) >>
-  simp[update_var_def] >> rpt strip_tac >>
-  simp[lookup_var_def, FLOOKUP_UPDATE] >>
-  simp[Abbr `H`, Abbr `u`, Abbr `ins`, step_prov_other_output,
-    step_taint_other_output, mk_inst_def]
+  fs[Abbr `x`] >>
+  (reverse conj_tac >- metis_tac[]) >>
+  irule ptr_fragment_step >> simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >> gvs[] >> qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s) s` >>
+  simp[Abbr `H`, Abbr `u`, step_inst_base_def, mk_inst_def,
+    exec_read1_def, eval_operand_def, update_var_def] >>
+  rpt strip_tac >> irule (SRULE [mk_inst_def] ptr_inst_ok_mload) >> simp[]
 QED
