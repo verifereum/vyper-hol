@@ -203,7 +203,8 @@ QED
 Theorem raw_call_alloca_state_frame:
   step_inst_base (mk_inst id ALLOCA [Lit nw] [out]) s = OK u ==>
   u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
-  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_current_bb = s.vs_current_bb /\ u.vs_halted = s.vs_halted
 Proof
   PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
   simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
@@ -265,6 +266,7 @@ Theorem raw_call_alloc_buffer_ghost_stage:
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
     stmt_state_rel ctx func cenv cx es u /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_current_bb = sb.cs_current_bb /\ ~u.vs_halted /\
     eval_operand buf.buf_operand u = SOME (n2w b) /\
     op_prov H buf.buf_operand = SOME (b,n) /\
     op_taint un buf.buf_operand = {} /\ b+n < dimword(:256) /\
@@ -289,6 +291,10 @@ Proof
      `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
        (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
      metis_tac[]) >>
+  drule raw_call_alloca_state_frame >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `b`,
     `G |+ (STRING #"%" (toString sa.cs_next_var),(b,n))`,
     `tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
@@ -303,4 +309,79 @@ Proof
   >- (rpt strip_tac >> first_x_assum drule >>
       simp[venomStateTheory.lookup_var_def]) >>
   qexists_tac `dirty` >> simp[]
+QED
+
+Theorem raw_call_outbuf_add_stage:
+  emit_op ADD [Var x; Lit 32w] sa = (Var dx,sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ not_fresh_at sa x /\
+  lookup_var x s = SOME (n2w b) /\ FLOOKUP G x = SOME (b,n) /\
+  op_taint tn (Var x) = {} /\ 32+cap <= n /\ b+n < dimword(:256) ==>
+  ?H un u. gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
+    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    ptr_covers H un x u n /\ ptr_covers H un dx u cap /\
+    u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s /\
+      FLOOKUP H z = FLOOKUP G z /\ op_taint un (Var z) = op_taint tn (Var z))
+Proof
+  strip_tac >>
+  `op_taint tn (Lit 32w) = {} /\ eval_operand (Lit 32w) s = SOME 32w /\
+    eval_operand (Var x) s = SOME (n2w b)` by
+    simp[ptrDisciplineTheory.op_taint_def, venomStateTheory.eval_operand_def] >>
+  drule_all rawCallDataHeaderPtrTheory.raw_call_emit_add_path_ptr >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ H un (OK u)` >>
+  `ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un` by
+    (qunabbrev_tac `u` >> irule rawCallHeaderFramePtrTheory.raw_call_emit_add_ghost_frame >>
+     goal_assum (drule_at Any) >> simp[Abbr `H`, Abbr `un`] >>
+     qexistsl_tac [`PG`, `Var x`, `Lit 32w`] >> simp[]) >>
+  `~not_fresh_at sa dx /\ sb.cs_current_bb = sa.cs_current_bb` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[] >>
+     fs[not_fresh_at_def]) >>
+  `x <> dx` by metis_tac[] >>
+  `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u` by
+    (qunabbrev_tac `u` >> irule rawCallDataHeaderPtrTheory.raw_call_fresh_update_state_frame >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `H = G |+ (dx,(b,n)) /\ un = tn with t_var := tn.t_var |+ (dx,{})` by
+    (simp[Abbr `H`, Abbr `un`] >>
+     metis_tac[exprSimPtrLiteralOpsTheory.literal_add_ghost]) >>
+  qexistsl_tac [`H`, `un`, `u`] >> simp[] >>
+  simp[Abbr `u`, Abbr `H`, Abbr `un`, exprSimPtrLiteralOpsTheory.literal_add_ghost,
+    ptr_covers_def, ptrDisciplineTheory.op_taint_def, venomStateTheory.update_var_def,
+    venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+    wordsTheory.w2n_add_2, wordsTheory.w2n_n2w] >>
+  rpt strip_tac >> fs[not_fresh_at_def, ptrDisciplineTheory.op_taint_def,
+    venomStateTheory.lookup_var_def] >>
+  qexists_tac `n2w b` >> simp[wordsTheory.w2n_n2w] >> decide_tac
+QED
+
+Theorem raw_call_outbuf_split_code:
+  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  fn_has_code sa sb func ==>
+  ?buf sm. compile_alloc_buffer (((cap+31) DIV 32)*32+32) sa = (buf,sm) /\
+    ov = buf.buf_operand /\ emit_op ADD [ov; Lit 32w] sm = (op,sb) /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    (local_ptrs_reserved cenv sa ==> local_ptrs_reserved cenv sm)
+Proof
+  strip_tac >> drule_all raw_call_outbuf_steps >> strip_tac >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def, cs_extends_def] >>
+     simp[listTheory.APPEND_ASSOC]) >>
+  drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
+  qexistsl_tac [`buf`, `sm`] >> simp[] >>
+  strip_tac >> irule local_ptrs_reserved_next_var >>
+  qexists_tac `sa` >> simp[] >>
+  gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, fresh_var_def, fresh_id_def, emit_def]
 QED
