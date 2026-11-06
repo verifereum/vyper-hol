@@ -7,6 +7,16 @@ Reuses concretizePtrInterfaceAudit.md (.18), concretizePtrReadBoundaryAudit.md
 references are historical. Only frozen StageStatic/max_live_eom is current.
 .50--.52 supply local write CONTENT, not source execution or writer exclusion.
 
+## Current status (stageBridgeAudit, 2026-11-06)
+
+MCOPY immediate extension is now checked by `ptr_paired_prefix_mcopy` in
+concretizePtrMcopyProducerScript.sml (E0475). The MCOPY audit at the end of the
+older inventory is HISTORICAL: its missing range/producer statements were
+subsequently discharged. It is not evidence of universal dispatch. The current
+stage-bridge supplier audit below identifies the remaining integration boundary.
+All earlier proposed macros and unresolved-status descriptions are historical
+unless explicitly superseded by a checked theorem.
+
 ## Proposed coverage and simultaneous witnesses
 
 Specification macros below are NOT installed HOL constants. A(rpolicy,C,Ct,vs,
@@ -1742,3 +1752,121 @@ MCOPY coverage or new counterexample is made by this diagnostic.
 
 Verification: `holbuild(targets=[concretizePtrUniversalStepSchemaTheory])` passes
 with the candidate quotation. This checks typing only, not the proposed producer.
+
+## Stage-to-paired-code supplier audit (C1.5.90.67.stageBridgeAudit)
+
+`stage_paired_bridge_schema` in UniversalStepSchema:190-211 is a typechecked
+quotation with precisely the frozen antecedent. Its conclusion selects ONE
+`R lp positions`, placements, and all four common conjuncts at schema:27-34.
+No bridge theorem is asserted. Verified build: TO_concretize_ptr-20261105T174221Z_m17136_t001.
+
+### Production witnesses and coherence
+
+`ctx_pass_stage_def` (o1PassContract:224-237) supplies LIST_REL of pairs with
+existential observed/supply/output and fn_pass_step. `fn_pass_step_def`:185-196
+supplies successful dispatcher execution AND output name equality.
+`execute_configured_fn_pass_concretize`:226-233 equates the dispatcher to
+`concretize_function_fuel_in_context (concretize_memloc_fuel f)
+ observed.cu_context observed.cu_context.ctx_global_reserved f`, projecting the
+result into fpo_function. Thus each actual pair has fresh successful execution,
+not just an abstract rewrite relation.
+
+Existing exact boundary `concretize_function_fresh_positions` (StageShape:395):
+```
+f.fn_eom = NONE /\
+concretize_function_fuel_in_context fuel ctx reserved f = SOME g ==>
+?layout. g = apply_context_concretize_layout ctx layout f /\
+ (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP layout.cl_positions (Allocation i.inst_id)))
+```
+This gives rewritten blocks and totality using the SAME layout, but not the
+ALLOCA/global-map equality of ptr_paired_code. Do not combine independently
+chosen layouts from two existential lemmas.
+
+Coherent selection is possible in principle from the finite indexed LIST_REL:
+source names are ALL_DISTINCT by o1_ctx_shape -> ctx_wf ->
+ctx_distinct_fn_names. In particular equal whole source functions cannot occur
+at different indices. Choose one witnessed layout for each source member,
+then extend lp arbitrarily off that finite domain. This requires a checked
+choice/finite-list assembly, not a new source uniqueness hypothesis. No
+uniqueness of layout across different observed contexts is needed.
+
+A suitable production R is the actual indexed graph of source/output pairs,
+carrying the chosen successful execution witnesses (or that graph conjoined
+with those witnesses). It must include name equality from fn_pass_step. Taking
+R=True is unsuitable: the universally quantified paired-code name premise
+ranges beyond the two function lists. Taking R merely name equality gives the
+name premise but forgets actual production correspondence needed downstream.
+The indexed production graph avoids both problems. These are proposed witness
+constructions, not installed predicates or proved existentials.
+
+### Supplier ledger
+
+| Required conjunct | Supplier / remaining assembly |
+| --- | --- |
+| ptr_stage_placements C' positions | `ptr_stage_placements_exists`:28-33: stage + EVERY fresh fn_eom + o1_ctx_shape + ctx_inst_ids_distinct + callee_first names ==> exists positions. All are frozen premises (open existential names once). |
+| rewritten blocks | same layout above; apply_context_concretize_layout_def and apply_concretize_layout_def change metadata only. Reuse StepStructure, never restate rewrite structure. |
+| entry label equality | `concretize_positions_entry_label` and metadata-only updates above. |
+| source fn_inst_wf / first_block_no_phi | o1_ctx_shape_def -> EVERY o1_fn_shape_def directly. |
+| source retpc_shape_ok / opaque_use_ok | o1_fn_shape -> fn_shape_ok_def (unitShapeDefs:419-424). |
+| source EVERY bb_well_formed / distinct labels | o1_fn_shape -> wf_function_def (venomWf:522-529). |
+| source ALLOCA lp totality | same `concretize_function_fresh_positions` witness; not arbitrary lp. |
+| target distinct labels | source distinct labels + `concretize_positions_labels` + metadata-only updates. No full target o1_ctx_shape theorem needed. |
+| universal paired-code name preservation | R's actual production graph and fn_pass_step output name equality, even for arbitrary f,g outside lists. |
+| ALLOCA local/global lookup equality | first missing checked integration implication, spelled out below. |
+
+### First unsupplied implication: same-layout metadata to global lookup
+
+For each actual indexed pair and its CHOSEN fresh execution/layout, need:
+```
+!bb i. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions /\
+ i.inst_opcode = ALLOCA ==>
+ FLOOKUP layout.cl_positions (Allocation i.inst_id) =
+ OPTION_MAP FST (FLOOKUP positions (Allocation i.inst_id))
+```
+under the already selected placements, membership of g in C', and
+`g = apply_context_concretize_layout observed.cu_context layout f` from that
+same successful execution. This is production metadata assembly, not a semantic
+simulation assumption and not a positions-rewrite lemma to duplicate.
+
+Available ingredients: `ptr_concretize_static_items`:39-43 supplies static item
+existence from fresh successful execution (its separate existential layout must
+NOT replace the chosen layout). `static_alloca_items_ALLOCA_exact` and
+`static_alloca_items_MEM` give the allocation item and size.
+`ptr_layout_own_mems`:26-29 gives exactly
+```
+static_alloca_items f = SOME items /\ MEM (a,sz) items ==>
+ MEM (a,THE (FLOOKUP layout.cl_positions a),sz)
+     (apply_context_concretize_layout ctx layout f).fn_mems_used
+```
+It is universally quantified over layout, so can use the chosen layout without
+any uniqueness claim. Totality turns THE lookup into its actual p. Then
+ptr_stage_placements_def turns this SAME metadata tuple into
+FLOOKUP positions (Allocation i.inst_id)=SOME(p,sz). OPTION_MAP FST closes the
+required equality. `ptr_concretize_alloca_mems` alone is too weak for this use:
+it existentially supplies p without linking it to the chosen local map.
+Global coherence is already proved inside ptr_stage_placements_exists; do not
+re-prove it per prefix. The missing integration implication looks derivable
+by these ingredients, but has not been proved by the quotation audit.
+
+### Root consumer match
+
+`ptr_paired_root_normalized`:198-222 consumes a singleton target history,
+empty stack, source entry lookup, paired code for that source/root target,
+placements, initial vars FEMPTY, first_block_no_phi, fn_inst_wf, a nonempty
+first block, target distinct labels and local ALLOCA totality. The bridge
+conclusion supplies code/shape/totality/placements with exactly the same maps.
+It does NOT by itself select the root f or prove the target history singleton:
+entry equality comes from ctx_pass_stage_def, source entry lookup from ctx_wf
+and target entry/history inversion, and pair selection from LIST_REL plus
+name uniqueness. Nonempty first-block instructions follows from wf_function's
+fn_has_entry and bb_well_formed. Initial vars comes from o1_run_state_ok via
+o1_initial_state_ok, not vs_alloca_next=0. Root inversion/lookup assembly is
+still unproved at stage level; it is not an extra frozen hypothesis.
+
+The four bridge conjuncts exactly match UniversalStepSchema:27-34. They are
+static stage witnesses and must be chosen once, outside target-prefix
+induction. Neither this audit nor MCOPY coverage proves exhaustive normalized
+dispatch, arbitrary source prefix coverage, terminal static bounds, or the
+frozen theorem. No new HOL lemmas, axioms, or executable definitions were added
+in this audit; only a typed candidate and this bounded supplier ledger.
