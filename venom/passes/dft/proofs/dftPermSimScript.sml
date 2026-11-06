@@ -78,20 +78,6 @@ Proof
   metis_tac[DISJOINT_SYM]
 QED
 
-(* bi_independent implies the preconditions of effects_independent_commute *)
-Triviality bi_independent_commute_pre:
-  !i1 i2.
-    bi_independent i1 i2 ==>
-    DISJOINT (set (inst_defs i1)) (set (inst_uses i2)) /\
-    DISJOINT (set (inst_defs i2)) (set (inst_uses i1)) /\
-    DISJOINT (set (inst_defs i1)) (set (inst_defs i2)) /\
-    effects_independent i1.inst_opcode i2.inst_opcode /\
-    ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
-    ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode
-Proof
-  simp[bi_independent_def]
-QED
-
 (* ===== Extended bilateral independence (allows INVOKE) ===== *)
 
 (* Like bi_independent but without the ~INVOKE restriction.
@@ -258,25 +244,6 @@ Proof
   irule independent_commute_eq >>
   qexistsl_tac [`ctx`, `fuel`, `a`, `b`, `s`, `sa`, `sb`] >>
   gvs[inst_defs_def, inst_uses_def]
-QED
-
-(* Adjacent swap in run_insts context *)
-Triviality run_insts_swap_adjacent_ok:
-  !fuel ctx prefix a b suffix s s_result.
-    bi_independent a b /\
-    run_insts fuel ctx (prefix ++ [a; b] ++ suffix) s = OK s_result ==>
-    run_insts fuel ctx (prefix ++ [b; a] ++ suffix) s = OK s_result
-Proof
-  rpt strip_tac >>
-  gvs[run_insts_append] >>
-  Cases_on `run_insts fuel ctx prefix s` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx a v` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx b v'` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  drule_all step_swap_ok >> strip_tac >>
-  simp[]
 QED
 
 (* If every element in prefix is bi_independent with x, bubble x
@@ -760,25 +727,6 @@ Proof
   >> (drule_all step_swap_ok_ext_non_invoke >> simp[])
 QED
 
-(* Adjacent swap in run_insts context, ext version *)
-Triviality run_insts_swap_adjacent_ok_ext:
-  !fuel ctx prefix a b suffix s s_result.
-    ext_bi_independent a b /\ inst_wf a /\ inst_wf b /\
-    run_insts fuel ctx (prefix ++ [a; b] ++ suffix) s = OK s_result ==>
-    run_insts fuel ctx (prefix ++ [b; a] ++ suffix) s = OK s_result
-Proof
-  rpt strip_tac >>
-  gvs[run_insts_append] >>
-  Cases_on `run_insts fuel ctx prefix s` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx a v` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx b v'` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  drule_all step_swap_ok_ext >> strip_tac >>
-  simp[]
-QED
-
 (* If every element in prefix is ext-bi-independent with x and all are
    well-formed, bubble x from after the prefix to the front,
    preserving the OK result. Allows INVOKE. *)
@@ -811,17 +759,6 @@ Definition pairwise_ext_bi_independent_def:
   pairwise_ext_bi_independent (x :: rest) =
     (EVERY (ext_bi_independent x) rest /\ pairwise_ext_bi_independent rest)
 End
-
-Triviality pairwise_ext_bi_independent_perm:
-  !l1 l2. PERM l1 l2 ==>
-    (pairwise_ext_bi_independent l1 ==> pairwise_ext_bi_independent l2) /\
-    (!x. EVERY (ext_bi_independent x) l1 ==> EVERY (ext_bi_independent x) l2)
-Proof
-  ho_match_mp_tac PERM_IND >>
-  rw[pairwise_ext_bi_independent_def, EVERY_DEF] >>
-  gvs[pairwise_ext_bi_independent_def, EVERY_DEF] >>
-  metis_tac[ext_bi_independent_sym]
-QED
 
 Triviality run_insts_perm_ok_ext_strong:
   !l1 l2.
@@ -873,40 +810,6 @@ Definition pairwise_bi_independent_def:
   pairwise_bi_independent (x :: rest) =
     (EVERY (bi_independent x) rest /\ pairwise_bi_independent rest)
 End
-
-Triviality pairwise_bi_independent_cons:
-  !x rest.
-    pairwise_bi_independent (x :: rest) <=>
-    EVERY (bi_independent x) rest /\ pairwise_bi_independent rest
-Proof
-  simp[pairwise_bi_independent_def]
-QED
-
-Triviality pairwise_bi_independent_swap:
-  !x y rest.
-    pairwise_bi_independent (x :: y :: rest) ==>
-    pairwise_bi_independent (y :: x :: rest)
-Proof
-  rw[pairwise_bi_independent_def, EVERY_MEM] >>
-  metis_tac[bi_independent_sym]
-QED
-
-(* Key: pairwise bi-independence is preserved by PERM.
-   Proved by PERM induction on the strengthened property
-   that also preserves EVERY (bi_independent x) for all x. *)
-Triviality pairwise_bi_independent_perm:
-  !l1 l2. PERM l1 l2 ==>
-    pairwise_bi_independent l1 ==> pairwise_bi_independent l2
-Proof
-  `!l1 l2. PERM l1 l2 ==>
-     (pairwise_bi_independent l1 ==> pairwise_bi_independent l2) /\
-     (!x. EVERY (bi_independent x) l1 ==> EVERY (bi_independent x) l2)`
-    suffices_by metis_tac[] >>
-  ho_match_mp_tac PERM_IND >> rpt conj_tac >>
-  simp[pairwise_bi_independent_def, EVERY_DEF] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[bi_independent_sym]
-QED
 
 (* ===== Main OK-case permutation theorem ===== *)
 

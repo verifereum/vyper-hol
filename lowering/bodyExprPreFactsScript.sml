@@ -323,8 +323,9 @@ Proof
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>
-  `c.ce_event_info = cenv.ce_event_info` by
-    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
+  `alloc_env_agree cenv c` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >>
+     simp[alloc_env_agree_def]) >>
   `alloc_limits_stmt c = alloc_limits_stmt cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_stmt_struct_fields) >>
      simp[]) >>

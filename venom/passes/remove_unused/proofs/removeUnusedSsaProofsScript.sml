@@ -31,29 +31,6 @@ Ancestors
 (* ===== Fixpoint bridge: edge_transfer ⊆ live_exit ===== *)
 
 
-Theorem edge_transfer_subset_live_exit[local]:
-  !fn pred_lbl pred_bb succ_lbl v.
-    wf_function fn ==>
-    let lr = liveness_analyze fn in
-    let cfg = cfg_analyze fn in
-      MEM pred_lbl cfg.cfg_dfs_pre /\
-      lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
-      MEM succ_lbl (cfg_succs_of cfg pred_lbl) /\
-      MEM v (liveness_edge_transfer fn.fn_blocks succ_lbl pred_lbl
-               (df_boundary [] lr succ_lbl)) ==>
-      MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions))
-Proof
-  rpt gen_tac >> simp_tac std_ss [LET_THM] >>
-  strip_tac >> strip_tac >>
-  `cfg_reachable_of (cfg_analyze fn) pred_lbl` by
-    (drule cfg_analyze_reachable_sets >>
-     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
-  gvs[liveness_analyze_def, livenessBlockProofsTheory.liveness_instrs_def, live_vars_at_def,
-      livenessLocalProofsTheory.liveness_recompute_boundary_entry,
-      pred_setTheory.SUBSET_DEF] >> metis_tac[]
-QED
-
 (* ===== NOP output liveness helpers ===== *)
 
 Theorem remove_unused_inst_nop_outputs_not_live[local]:
@@ -96,27 +73,6 @@ Proof
   `idx < LENGTH bb.bb_instructions` by simp[] >>
   `k = idx` by metis_tac[ssa_form_no_dup_in_block] >>
   gvs[]
-QED
-
-(* v not live at idx+1 (directly from NOP condition) *)
-Theorem nop_output_not_live_after_def[local]:
-  !fn lr cfg lbl bb idx inst v.
-    wf_function fn /\ ssa_form fn /\
-    lr = liveness_analyze fn /\
-    cfg = cfg_analyze fn /\
-    MEM lbl cfg.cfg_dfs_pre /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    idx < LENGTH bb.bb_instructions /\
-    EL idx bb.bb_instructions = inst /\
-    remove_unused_inst
-      (live_after_at lr lbl idx (LENGTH bb.bb_instructions))
-      inst = mk_nop_inst inst /\
-    MEM v inst.inst_outputs ==>
-    ~MEM v (live_vars_at lr lbl (SUC idx))
-Proof
-  rpt strip_tac >>
-  drule remove_unused_inst_nop_outputs_not_live >> strip_tac >>
-  gvs[listTheory.EVERY_MEM, live_after_at_suc]
 QED
 
 (* ===== Main theorem: NOP'd variables not used as operands ===== *)
