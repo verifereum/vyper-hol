@@ -2567,3 +2567,77 @@ Proof
         metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND] >>
       simp[]
 QED
+
+Theorem inventory_spill_length_mono[local]:
+  do_spill_at d ps = (ops,qs) ==>
+  LENGTH qs.ps_stack <= LENGTH ps.ps_stack
+Proof
+  Cases_on `d = 0` >>
+  simp[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  simp[stack_pop_def, stack_swap_length] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem inventory_reduce_length_mono:
+  !fuel targets op f m ps ops qs.
+  reduce_depth_plan fuel targets op f m ps = (ops,qs) ==>
+  LENGTH qs.ps_stack <= LENGTH ps.ps_stack
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < m` >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op f m ps.ps_stack` >> gvs[] >>
+  rename1 `stack_get_unfixed_depth op f m ps.ps_stack = SOME dist` >>
+  Cases_on `dist <= 16` >> gvs[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist m` >> gvs[] >>
+  rename1 `select_spill_candidate ps.ps_stack targets dist m = SOME cand` >>
+  Cases_on `do_spill_at cand ps` >> gvs[] >>
+  rename1 `do_spill_at cand ps = (spill_ops,mid)` >>
+  Cases_on `reduce_depth_plan fuel targets op f m mid` >> gvs[] >>
+  metis_tac[inventory_spill_length_mono, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem inventory_reduce_phase:
+  reduce_depth_plan fuel targets op f m ps = (ops,qs) /\
+  (EVERY P ps.ps_stack \/ LENGTH ps.ps_stack <= n) ==>
+  EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= n
+Proof
+  strip_tac
+  >- (disj1_tac >> gvs[EVERY_MEM] >>
+      metis_tac[inventory_reduce_physical_origin]) >>
+  disj2_tac >> drule inventory_reduce_length_mono >> decide_tac
+QED
+
+Theorem inventory_deep_swap_length[local]:
+  16 < d /\ do_swap d ps = (ops,qs) ==>
+  LENGTH qs.ps_stack = MAX (LENGTH ps.ps_stack) (d + 1)
+Proof
+  simp[do_swap_def, LET_THM] >> strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem inventory_swap_phase:
+  (EVERY P ps.ps_stack \/ LENGTH ps.ps_stack <= n) /\
+  (d < LENGTH ps.ps_stack \/ d < n) /\
+  do_swap d ps = (ops,qs) ==>
+  EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= n
+Proof
+  rpt gen_tac >> disch_tac >>
+  Cases_on `d < LENGTH ps.ps_stack`
+  >- (`LENGTH qs.ps_stack = LENGTH ps.ps_stack` by
+        metis_tac[do_swap_length, pairTheory.SND] >>
+      gvs[] >> disj1_tac >> gvs[EVERY_MEM] >>
+      metis_tac[inventory_swap_physical_origin]) >>
+  `d < n` by metis_tac[] >>
+  Cases_on `d <= 16`
+  >- (`LENGTH qs.ps_stack = LENGTH ps.ps_stack` by
+        (gvs[do_swap_def] >> Cases_on `d = 0` >>
+         gvs[do_swap_def, stack_swap_length]) >>
+      gvs[] >> disj1_tac >> gvs[EVERY_MEM] >>
+      metis_tac[inventory_swap_physical_origin]) >>
+  `16 < d` by decide_tac >>
+  `LENGTH qs.ps_stack = MAX (LENGTH ps.ps_stack) (d + 1)` by
+    metis_tac[inventory_deep_swap_length] >>
+  gvs[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
