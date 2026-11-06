@@ -169,4 +169,55 @@ Proof
       transient_agree_except_def, Excl "consume_call_outcome_eq"]
 QED
 
+Theorem concretize_call_completion_observation:
+  concretize_local_obs s t /\
+  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
+  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
+  rq with <| cr_accounts := rq'.cr_accounts; cr_tStorage := rq'.cr_tStorage |> = rq' /\
+  s.vs_outcomes = t.vs_outcomes /\
+  consume_call_outcome rq ro rs s = (w,post) /\
+  consume_call_outcome rq' ro' rs t = (w',post') ==>
+  w = w' /\ concretize_local_obs post post'
+Proof
+  strip_tac >>
+  qabbrev_tac `M = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+                     d_imm := K UNIV; d_ret := K {} |>` >>
+  `request_agree_except M rq rq' /\
+   LIST_REL (request_agree_except M) s.vs_requests t.vs_requests /\
+   s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions /\
+   s.vs_halted = t.vs_halted /\
+   imms_agree_except M s.vs_immutables t.vs_immutables` by
+    fs[concretize_local_obs_def, dead_result_rel_def, request_agree_except_def,
+       Abbr `M`] >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  Cases_on `take_outcome rq' s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  rename1 `take_outcome rq' s.vs_outcomes = (ocT,restT)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >> rename1 `adopt_outcome rq oc _ = (ac,ats,alg)` >>
+  Cases_on `adopt_outcome rq' ocT (t.vs_accounts,t.vs_transient,t.vs_logs)` >>
+  PairCases_on `r` >> rename1 `adopt_outcome rq' ocT _ = (acT,atsT,algT)` >>
+  drule_all call_completion_fields >> strip_tac >>
+  `take_outcome rq' t.vs_outcomes = (ocT,restT)` by metis_tac[] >>
+  drule_all call_completion_fields >> strip_tac >>
+  drule request_agree_take_outcome >>
+  disch_then (qspec_then `s.vs_outcomes` mp_tac) >> simp[] >> strip_tac >>
+  `adopt_outcome rq (FST (take_outcome rq s.vs_outcomes))
+     (rq.cr_accounts,rq.cr_tStorage,s.vs_logs) = (ac,ats,alg)` by
+    (fs[] >> metis_tac[]) >>
+  `adopt_outcome rq' (FST (take_outcome rq' s.vs_outcomes))
+     (rq'.cr_accounts,rq'.cr_tStorage,s.vs_logs) = (acT,atsT,algT)` by
+    (fs[] >> metis_tac[]) >>
+  drule_all request_agree_adopt_outcome >> strip_tac >>
+  drule_all request_agree_record_request >> strip_tac >>
+  qpat_x_assum `consume_call_outcome rq _ _ _ = _` kall_tac >>
+  qpat_x_assum `consume_call_outcome rq' _ _ _ = _` kall_tac >>
+  `rq.cr_static = rq'.cr_static /\ rq.cr_kind = rq'.cr_kind` by
+    fs[request_agree_except_def, call_request_component_equality] >>
+  qpat_x_assum `rq with <| cr_accounts := _; cr_tStorage := _ |> = _` kall_tac >>
+  fs[Abbr `M`, Excl "consume_call_outcome_eq"] >>
+  simp[concretize_local_obs_def, dead_result_rel_def,
+       adopt_outcome_deletions_def, Excl "consume_call_outcome_eq"]
+QED
+
 val _ = export_theory();
