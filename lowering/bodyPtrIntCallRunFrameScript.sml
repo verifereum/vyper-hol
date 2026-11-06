@@ -1,7 +1,7 @@
 Theory bodyPtrIntCallRunFrame
 Ancestors bodyPtrIntCallAllocation bodyPtrIntCallLowRegion
   bodyPtrIntCallTaintBounds venomExecSemantics ptrDiscipline
-  finite_map pred_set arithmetic words list venomInst vyperCompiler compileVyper bodySim
+  finite_map pred_set arithmetic words list venomInst venomExecProps unitShapeDefs vyperCompiler compileVyper bodySim
 
 (* SETFMP can introduce taint below the static allocation frontier. *)
 Theorem intcall_setfmp_frame_probe:
@@ -62,4 +62,19 @@ Proof
   strip_tac >> drule_all intcall_body_context_ok >> strip_tac >>
   drule lookup_function_MEM >> strip_tac >>
   drule_all intcall_checked_context_no_setfmp >> simp[]
+QED
+
+Theorem intcall_body_instruction_no_setfmp:
+  body_inv tops ctx ce cx /\ ~ce.ce_is_ctor /\
+  lookup_function name ctx.ctx_functions = SOME fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  inst.inst_opcode <> SETFMP
+Proof
+  strip_tac >> irule intcall_body_lookup_no_setfmp >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM inst bb.bb_instructions` by
+    (fs[get_instruction_def, AllCaseEqs()] >> metis_tac[EL_MEM]) >>
+  fs[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
 QED
