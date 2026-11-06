@@ -654,3 +654,33 @@ Proof
      gvs[entry_boundary_resources_def]) >>
   drule_all generate_inst_plan_jmp_live_terminal >> simp[]
 QED
+
+(* Exact incoming-resource transport, not incoming-resource initialization. *)
+Theorem analyzed_single_pred_cleanup_resource:
+  !fn lbl bb ps ops qs v.
+    codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb ps = (ops,qs) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) =
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `NULL (collect_phis bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+     first_x_assum (qspec_then `bb` mp_tac) >> simp[]) >>
+  `?pred. cfg_preds_of (cfg_analyze fn) lbl = [pred]` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  `MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+    simp[livenessDefsTheory.input_vars_from_def] >>
+  drule fnPlanLineageInventoryTheory.clean_stack_plan_spilled_unchanged >> strip_tac >>
+  simp[] >> irule fnPlanLineageInventoryTheory.clean_stack_plan_input_elem_count >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`cfg_analyze fn`,`fn`,`ops`] >> simp[]
+QED
