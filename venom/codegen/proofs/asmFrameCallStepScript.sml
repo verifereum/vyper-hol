@@ -11,7 +11,7 @@
 
 Theory asmFrameCallStep
 Ancestors
-  asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
+  evmCreationGuard frameCreationGuard asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
   vfmPreserves vfmAccountDeletion vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
@@ -1816,7 +1816,7 @@ Resume asm_frame_call_abort_step[relation]:
   qpat_x_assum `Abbrev (t = _)` mp_tac >>
   qmatch_goalsub_abbrev_tac `(ct,rb)::rest` >> disch_tac >>
   `t.contexts = (ct,rb)::rest /\ t.txParams = s.txParams /\
-   t.msdomain = Collect d' /\
+   t.msdomain = Collect d' /\ t.originalAccounts = s.originalAccounts /\
    t.rollback.accounts = s.rollback.accounts /\
    t.rollback.tStorage = s.rollback.tStorage /\
    t.rollback.toDelete = s.rollback.toDelete` by simp[Abbr `t`] >>
@@ -1888,6 +1888,10 @@ Theorem asm_frame_call_effects_restore:
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
   wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+  (a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+  (~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)) /\
   ct.pc = SUC c.pc /\
   take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t)) /\
   gas_readings t = gas_readings s /\
@@ -1934,6 +1938,10 @@ Theorem asm_frame_call_effects_step_ok:
   run_call t = run_call s /\
   wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+  (a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+  (~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)) /\
   ct.pc = SUC c.pc /\
   take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t)) /\
   gas_readings t = gas_readings s /\
@@ -2340,6 +2348,25 @@ Proof
   `LENGTH t.contexts = LENGTH s.contexts` by simp[] >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
+  `a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
+    gvs[asm_frame_rel_def] >>
+  `~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee s.rollback.accounts)` by
+    gvs[asm_frame_rel_def] >>
+  `account_empty (lookup_account c.msgParams.callee t.originalAccounts) =
+    account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
+    (irule step_creation_original_empty >> metis_tac[]) >>
+  `!addr. account_already_created (lookup_account addr s.rollback.accounts) ==>
+    account_already_created (lookup_account addr t.rollback.accounts)` by
+    (mp_tac (Q.INST [`d` |-> `LENGTH s.contexts`, `B` |-> `s.rollback`,
+                    `s` |-> `s`, `t` |-> `t`, `x` |-> `()`]
+      step_continuing_collision_current) >> simp[]) >>
+  `a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)` by metis_tac[] >>
+  `~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)` by
+    metis_tac[] >>
   drule_all asm_frame_call_same_depth_transport >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   `take_outcome (request_of s) a.as_outcomes = (out,MAP SND (call_trace t))` by
@@ -2467,6 +2494,17 @@ Resume asm_frame_call_terminal_exception[effects]:
 QED
 
 Resume asm_frame_call_terminal_exception[apply]:
+  `a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
+    gvs[asm_frame_rel_def] >>
+  `~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee s.rollback.accounts)` by
+    gvs[asm_frame_rel_def] >>
+  `account_empty (lookup_account c.msgParams.callee t.originalAccounts) =
+    account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
+    (irule step_creation_original_empty >> metis_tac[]) >>
+  `a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)` by metis_tac[] >>
   qpat_x_assum `Abbrev (t = _)` mp_tac >>
   qmatch_goalsub_abbrev_tac `(ct,rb)::rest` >> disch_tac >>
   `t.contexts = (ct,rb)::rest /\ t.txParams = s.txParams /\
@@ -2495,6 +2533,9 @@ Resume asm_frame_call_terminal_exception[apply]:
      a.as_pending_deletions = t.rollback.toDelete` by
     ASM_SIMP_TAC (srw_ss()) [failed_outcome_def, adopt_outcome_def,
       adopt_outcome_deletions_def, TAKE_DROP] >>
+  `~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)` by
+    metis_tac[] >>
   (Q.SUBGOAL_THEN `?d. t.msdomain = Collect d` assume_tac >- metis_tac[]) >>
   `gas_readings t = gas_readings s` by metis_tac[] >>
   `asm_call_memory ao az ro rs a.as_memory =
@@ -6804,6 +6845,18 @@ Proof
 QED
 
 Resume asm_frame_call_enter_step_ok[consume]:
+  `a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
+    gvs[asm_frame_rel_def] >>
+  `~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee s.rollback.accounts)` by
+    gvs[asm_frame_rel_def] >>
+  `a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)` by
+    (metis_tac[step_run_call_creation_guard]) >>
+  `~a.as_call_ctx.cc_created_in_tx ==>
+    account_already_created (lookup_account c.msgParams.callee t.rollback.accounts)` by
+    (metis_tac[step_run_call_creation_guard]) >>
   `a.as_accounts = s.rollback.accounts /\ a.as_transient = s.rollback.tStorage /\
    a.as_logs = c.logs /\ a.as_pending_deletions = s.rollback.toDelete /\
    a.as_memory = buffer_to_list c.memory` by
@@ -6823,7 +6876,11 @@ Resume asm_frame_call_enter_step_ok[consume]:
     by metis_tac[] >>
   SUBGOAL_THEN ``?d. t.msdomain = Collect d`` assume_tac >- simp[] >>
   `asm_call_memory ao az ro rs a.as_memory = asm_call_memory ao az ro rs a.as_memory` by simp[] >>
-  drule_all asm_frame_call_effects_step_ok >> simp[]
+  irule asm_frame_call_effects_step_ok >>
+  qpat_assum `asm_call_prepare _ _ = _`
+    (irule_at (Pat `asm_call_prepare _ _ = _`)) >>
+  qpat_assum `t.contexts = _` (irule_at (Pat `_.contexts = _`)) >>
+  simp[]
 QED
 
 Finalise asm_frame_call_enter_step_ok
