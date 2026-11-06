@@ -2,6 +2,7 @@
    keep executable certificates small; no universal body judgment is assumed. *)
 Theory bodyPtrStructLitVariableReturn
 Ancestors bodyPtrStructLitReturnCertificate bodyPtrStructLitReturnBoundary
+  bodyPtrStructLitRequestFrame
   fragGasSeqPtr finite_map ptrSafeRun ptrDiscipline venomInst typedCopyPtr bodyPtrStructLitGhostNormalize
   venomState venomExecSemantics instIdxIndep codegenRel contextCodegenRel list rich_list allocationPtr exprLoweringProps
 Libs wordsLib intLib
@@ -741,3 +742,33 @@ Proof
        FLOOKUP_UPDATE]
 QED
 
+
+Theorem structlit_variable_ordinary_opcodes:
+  !n. MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] ==>
+    MEM (EL n (SND structlit_variable_compiled).cs_current_insts).inst_opcode
+      [ALLOCA;MSTORE;MLOAD;ADD;AND;MCOPY]
+Proof
+  pure_rewrite_tac[structlit_variable_instructions, structlit_return_instructions] >>
+  rpt gen_tac >> simp[] >> strip_tac >> gvs[] >> simp[mk_inst_def]
+QED
+
+Theorem structlit_variable_ptr_checks:
+  !n D fuel ctx fn.
+    MEM n [0;1;2;3;4;5;6;7;8;9;10;11;12;13] /\ ~ctx_has_dalloca ctx ==>
+    ptr_inst_ok D 0 fuel ctx fn (structlit_variable_prov n)
+      (structlit_variable_taint n)
+      (EL n (SND structlit_variable_compiled).cs_current_insts)
+      (structlit_variable_state n)
+Proof
+  rpt strip_tac >>
+  drule structlit_variable_access_checks >>
+  disch_then (qspec_then `fn` assume_tac) >>
+  drule structlit_variable_taint_checks >>
+  disch_then (qspec_then `fn` assume_tac) >>
+  drule structlit_variable_steps >> strip_tac >>
+  drule structlit_variable_ordinary_opcodes >> strip_tac >>
+  drule_all structlit_ordinary_step_requests >> strip_tac >>
+  `~((EL n (SND structlit_variable_compiled).cs_current_insts).inst_opcode = INVOKE)` by
+    (gvs[] >> simp[]) >>
+  simp[ptr_inst_ok_def, allocas_from_def, step_inst_non_invoke]
+QED
