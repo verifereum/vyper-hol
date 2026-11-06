@@ -83,4 +83,20 @@ Proof
      Excl "consume_create_outcome_eq"]
 QED
 
+Theorem concretize_create_abort_observation:
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  concretize_local_obs s t /\ concretize_supplement D tn s t /\
+  tn.t_stor = {} /\ tn.t_trans = {} /\
+  exec_create inst s value off sz salt = Abort a post ==>
+  ?post'. exec_create inst t value offT sz salt = Abort a post' /\
+    concretize_local_obs post post' /\
+    concretize_supplement D (step_taint inst s post tn) post post'
+Proof
+  pure_rewrite_tac[exec_create_abort_iff] >> strip_tac >>
+  qexists_tac `halt_state (set_returndata [] t)` >>
+  gvs[concretize_local_obs_def, dead_result_rel_def, concretize_supplement_def,
+      halt_state_def, set_returndata_def, step_taint_def, adopt_reset_def,
+      store_taint_def, imm_taint_def, MEM, Excl "consume_create_outcome_eq"]
+QED
+
 val _ = export_theory();
