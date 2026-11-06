@@ -273,7 +273,7 @@ QED
 Finalise calldata_fixed_child_contract
 
 (* Instantiate the recursive child once at the actual loop setup endpoint. *)
-Theorem calldata_array_child_success[local]:
+Theorem calldata_array_child_success:
   calldata_member_child_contract ce env sf ctx fn site limit_st ty tv /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
@@ -319,7 +319,7 @@ Proof
   >> Cases_on `FLOOKUP env p` >> simp[] >> Cases_on `x` >> simp[]
 QED
 
-Theorem calldata_dynamic_array_child_admissible[local]:
+Theorem calldata_dynamic_array_child_admissible:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     di av (ArrayV (DynArrayV vs)) /\
@@ -343,7 +343,7 @@ Proof
   fs[abi_decoder_metadata_def, value_has_type_def, all_have_type_EVERY]
 QED
 
-Theorem calldata_static_clamped_child_exclusion[local]:
+Theorem calldata_static_clamped_child_exclusion:
   ~is_abi_dynamic ce.ce_struct_fields ty /\
   dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) ==>
   !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem
