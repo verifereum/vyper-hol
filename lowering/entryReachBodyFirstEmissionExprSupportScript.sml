@@ -378,3 +378,93 @@ Proof
   gen_tac >> PairCases_on `x` >> simp_tac (srw_ss()) [] >>
   metis_tac[first_emission_return]
 QED
+
+Theorem first_emission_fresh_vars[local]:
+  !n a x b. fresh_vars n a = (x,b) ==>
+  cs_extends a b /\ a.cs_blocks = b.cs_blocks /\
+  a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts
+Proof
+  Induct_on `n` >> simp[fresh_vars_def, comp_return_def, cs_extends_refl] >>
+  rpt gen_tac >> simp[comp_bind_def, LET_THM] >>
+  Cases_on `fresh_var a` >> simp[] >>
+  rename1 `fresh_var a = (v,mid)` >>
+  Cases_on `fresh_vars n mid` >> simp[] >> strip_tac >> gvs[] >>
+  drule first_emission_fresh >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[comp_return_def] >>
+  metis_tac[cs_extends_trans]
+QED
+
+Theorem first_emission_emit_multi_op[local]:
+  !opc ops n a x b. emit_multi_op opc ops n a = (x,b) /\ opc <> PHI ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> rewrite_tac[emit_multi_op_def, comp_bind_def, comp_ignore_bind_def] >>
+  Cases_on `fresh_vars n a` >> simp[LET_THM] >>
+  rename1 `fresh_vars n a = (outs,mid)` >>
+  Cases_on `emit_inst opc ops outs mid` >> simp[LET_THM, comp_return_def] >>
+  strip_tac >> gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  drule first_emission_fresh_vars >> strip_tac >>
+  drule_at Any (CONJUNCT1 first_emission_emit_helpers) >> simp[] >>
+  disch_then drule >> strip_tac >> conj_tac >- metis_tac[cs_extends_trans] >>
+  gvs[] >> rpt strip_tac >> drule_all fn_has_code_split >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem first_emission_intcall:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty fid args dr a x b.
+  compile_call cfn ce rt ty (IntCall fid) args dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
+  rename1 `ce.ce_func_info _ = (n,p)` >> PairCases_on `p` >>
+  simp[Once compile_call_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (Cases_on `n > 0` >> simp[]
+      >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+          >- metis_tac[first_emission_alloc_buffer] >>
+          simp[cs_extends_refl]) >>
+      Cases_on `p0 > 0` >> simp[cs_extends_refl] >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- metis_tac[first_emission_stage_intcall_args] >>
+  gen_tac >> Cases_on `n > 0` >> simp[]
+  >- (Cases_on `return_buf` >> simp_tac (srw_ss()) [LET_THM]
+      >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+          >- (rpt strip_tac >> drule_at Any
+               (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+          simp[cs_extends_refl]) >>
+      rewrite_tac[state_pair_let_bind] >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt strip_tac >> drule_at Any first_emission_emit_multi_op >> simp[]) >>
+      gen_tac >> rpt gen_tac >>
+      simp_tac (srw_ss()) [comp_bind_def, LET_THM] >>
+      Cases_on `store_multi_results x.buf_operand results 0 st4` >>
+      simp[] >> strip_tac >> gvs[] >>
+      qspecl_then [`x.buf_operand`, `results`, `0`, `st4`] mp_tac
+        (cj 1 store_multi_results_labels) >> simp[]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT1 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  gen_tac >> Cases_on `return_buf` >> simp[cs_extends_refl]
+QED
