@@ -1026,3 +1026,20 @@ Proof
   drule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
   disch_then (qspec_then `SOME p` assume_tac) >> simp[op_rename_def]
 QED
+
+Theorem current_cut_phi_eff_clear:
+  lookup_block h fn.fn_blocks = SOME old /\ current_phi_cut_clear fn x h ==>
+  phi_eff prev x old.bb_instructions = SOME (Var x)
+Proof
+  strip_tac >>
+  `!xs n. n < LENGTH (collect_phis xs) ==>
+    EL n (collect_phis xs) = EL n xs` by
+    (Induct >> simp[livenessDefsTheory.collect_phis_def] >>
+     gen_tac >> Cases_on `h'.inst_opcode = PHI` >> simp[] >>
+     Cases_on `n` >> simp[]) >>
+  irule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
+  simp[listTheory.EVERY_EL] >> rpt strip_tac >>
+  `EL n (collect_phis old.bb_instructions) = EL n old.bb_instructions` by metis_tac[] >>
+  fs[makeSsaCurrentLastSiteTheory.current_phi_cut_clear_def,
+    venomInstTheory.inst_defs_def] >> metis_tac[]
+QED
