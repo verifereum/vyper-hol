@@ -998,7 +998,8 @@ val encode_bounds_step_conv = ONCE_REWRITE_CONV [encode_value_def];
 val encode_bounds_ss = std_ss ++ listSimps.LIST_ss ++
   rewrites [AllCaseEqs(), PULL_EXISTS, MEM_MAP];
 val encode_bounds_cleanup_ss = encode_bounds_ss ++ rewrites
-  (LET_THM :: MEM_APPEND :: EXISTS_PROD :: MEM_GENLIST :: type_slot_size_def ::
+  (LET_THM :: MEM_APPEND :: MEM_FLAT :: EXISTS_PROD :: MEM_GENLIST ::
+   default_value_well_typed :: type_slot_size_def ::
    value_has_type_def :: encode_dyn_bytes_slots_def ::
    indexedListsTheory.MEM_MAPi :: MULT_CLAUSES ::
    List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))

@@ -318,12 +318,10 @@ Proof
 QED
 
 Theorem default_value_has_type[local]:
-  (∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)) ∧
-  (∀tvs. EVERY well_formed_type_value tvs ⇒
-    values_have_types tvs (MAP default_value tvs)) ∧
-  (∀ftypes. EVERY (well_formed_type_value o SND) ftypes ⇒
-    struct_has_type ftypes (MAP (λ(id,t). (id, default_value t)) ftypes)) ∧
-  (∀p : string # type_value. well_formed_type_value (SND p) ⇒
+  (∀tv. value_has_type tv (default_value tv)) ∧
+  (∀tvs. values_have_types tvs (MAP default_value tvs)) ∧
+  (∀ftypes. struct_has_type ftypes (MAP (λ(id,t). (id, default_value t)) ftypes)) ∧
+  (∀p : string # type_value.
     value_has_type (SND p) (default_value (SND p)))
 Proof
   ho_match_mp_tac
@@ -338,20 +336,16 @@ Proof
      well_formed_type_value_def, within_int_bound_def] >>
    TRY (Cases_on `b'` >> simp[default_value_def, value_has_type_def,
         well_formed_type_value_def]) ,
-   (* TupleTV tvs - IH *)
-   strip_tac >> metis_tac[] ,
    (* ArrayTV tv b *)
    strip_tac >> Cases_on `b` >>
    simp[default_value_def, value_has_type_def, all_have_type_EVERY] ,
-   (* StructTV ftypes - IH *)
-   strip_tac >> metis_tac[] ,
    (* struct cons: p::ftypes *)
    PairCases_on `p` >> simp[value_has_type_def]
   ]
 QED
 
 Theorem default_value_well_typed:
-  ∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)
+  ∀tv. value_has_type tv (default_value tv)
 Proof
   metis_tac[default_value_has_type]
 QED
