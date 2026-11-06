@@ -7,9 +7,10 @@ Ancestors
 Libs
   wordsLib dep_rewrite
 
-(* A successful typed primitive write establishes decodability of the exact
-   region it replaces. *)
+(* A typed write preserves the region's validity, including inactive children
+   that the sparse encoder leaves untouched. *)
 Theorem typed_write_storage_slot_establishes_region:
+  slots_in_range (get_storage cx st b) (w2n slot) tv /\
   value_has_type tv v /\
   well_formed_type_value tv /\
   write_storage_slot cx b slot tv v st = (INL (),st') ==>
@@ -963,6 +964,7 @@ QED
 Theorem typed_write_storage_slot_establishes_region_forward[local]:
   !cx b slot tv v st st'.
     write_storage_slot cx b slot tv v st = (INL (),st') ==>
+    slots_in_range (get_storage cx st b) (w2n slot) tv ==>
     value_has_type tv v ==>
     well_formed_type_value tv ==>
     slots_in_range (get_storage cx st' b) (w2n slot) tv

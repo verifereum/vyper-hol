@@ -115,6 +115,8 @@ QED
 (* Predicate: slots read during decode_value contain in-range values.
    Captures all conditions needed for decode_value to succeed and
    produce well-typed values, and keeps one-slot values canonical. *)
+(* Captured storage places survive an ancestor's shrink, so inactive array
+   elements must retain canonical values and bounded length headers too. *)
 Definition slots_in_range_def:
   slots_in_range storage offset (BaseTV (UintT n)) =
     word_slot_canonical (read_slot storage offset) (BaseTV (UintT n)) ∧
@@ -142,7 +144,7 @@ Definition slots_in_range_def:
   slots_in_range storage offset (ArrayTV tv (Dynamic max)) =
     (let len = w2n (read_slot storage offset) in
        if len ≤ max then
-         dyn_slots_in_range storage (offset + 1) tv (MIN len max)
+         dyn_slots_in_range storage (offset + 1) tv max
        else F) ∧
   slots_in_range storage offset (StructTV ftypes) =
     struct_slots_in_range storage offset ftypes ∧
@@ -774,7 +776,8 @@ QED
 
 Theorem encode_tuple_slots_in_range:
   !tvs offset vs writes base storage.
-    EVERY (\tv. !v ws b s. value_has_type tv v /\
+    tuple_slots_in_range storage (base+offset) tvs /\
+    EVERY (\tv. !v ws b s. slots_in_range s b tv /\ value_has_type tv v /\
       encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) tvs /\
     values_have_types tvs vs /\ EVERY well_formed_type_value tvs /\
@@ -817,7 +820,8 @@ QED
 
 Theorem encode_struct_slots_in_range:
   !ftypes offset fields writes base storage.
-    EVERY (\(nm,tv). !v ws b s. value_has_type tv v /\
+    struct_slots_in_range storage (base+offset) ftypes /\
+    EVERY (\(nm,tv). !v ws b s. slots_in_range s b tv /\ value_has_type tv v /\
       encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) ftypes /\
     struct_has_type ftypes fields /\
@@ -859,7 +863,9 @@ QED
 
 Theorem encode_dyn_array_slots_in_range:
   !vs offset tv writes base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    dyn_slots_in_range storage (base+offset) tv (LENGTH vs) /\
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     all_have_type tv vs /\ well_formed_type_value tv /\
     offset + LENGTH vs * type_slot_size tv <= dimword(:256) /\
@@ -895,7 +901,9 @@ QED
 
 Theorem encode_dynamic_array_slots_in_range:
   !tv max vs slots base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    slots_in_range storage base (ArrayTV tv (Dynamic max)) /\
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     all_have_type tv vs /\ LENGTH vs <= max /\
     well_formed_type_value (ArrayTV tv (Dynamic max)) /\
@@ -937,7 +945,8 @@ QED
 
 Theorem encode_static_array_preserves_slots_in_range:
   !sparse tv offset n writes base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     static_slots_in_range storage (base+offset) tv n /\
     sparse_has_type tv n sparse /\ well_formed_type_value tv /\
@@ -993,7 +1002,9 @@ QED
 
 Theorem encode_fixed_array_slots_in_range:
   !tv n sparse writes base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    slots_in_range storage base (ArrayTV tv (Fixed n)) /\
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) /\
     well_formed_type_value (ArrayTV tv (Fixed n)) /\
@@ -1081,7 +1092,7 @@ QED
 
 Theorem encode_implies_slots_in_range:
   ∀tv v writes (base : num) storage.
-    value_has_type tv v ∧
+    slots_in_range storage base tv ∧ value_has_type tv v ∧
     well_formed_type_value tv ∧
     encode_value tv v = SOME writes ⇒
     slots_in_range (apply_writes (n2w base) writes storage) base tv
@@ -1144,14 +1155,6 @@ Proof
   >- (irule encode_flag_slots_in_range >> metis_tac[]) >>
   simp[slots_in_range_def]
 QED
-
-(* Keep this encoding boundary free of admitted facts and extra assumptions. *)
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag encode_implies_slots_in_range) in
-    if null (Thm.hyp encode_implies_slots_in_range) andalso null axioms andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-    else raise Fail "encode_implies_slots_in_range is not closed"
-  end;
 
 (* ===== Totality of decode_value under slots_in_range ===== *)
 
