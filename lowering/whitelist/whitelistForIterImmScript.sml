@@ -3,6 +3,7 @@
    they belong to the memory-valued iterable case, not this leaf. *)
 Theory whitelistForIterImm
 Ancestors
+  whitelistForIterImmCopy whitelistForIterImmSource whitelistForIterImmFrame
   bodySimDeclCases whitelistForIterDynFrag whitelistForIterDynLoop
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
   bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
