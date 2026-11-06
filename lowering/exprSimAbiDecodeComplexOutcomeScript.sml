@@ -565,3 +565,106 @@ Proof
   simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
   simp[abi_tuple_row_abi_width_def] >> decide_tac
 QED
+
+Theorem abi_decode_guard_rows_code_contexts:
+  abi_decode_complex_head_guard src hi k st = ((),ready) /\
+  compile_abi_decode_complex_elems dst src MLOAD base_op hi
+    infos 0 0 ready = ((),last) /\
+  abi_decode_code_context func fn st last ==>
+  fn_has_code st ready fn /\ abi_decode_code_context func fn ready last /\
+  cs_extends st ready /\ cs_extends ready last
+Proof
+  strip_tac >>
+  drule abi_decode_complex_head_guard_prefix_shape >> strip_tac >>
+  `cs_extends st ready` by
+    (irule cs_extends_same_block >> fs[inst_extends_def]) >>
+  `cs_extends ready last` by metis_tac[abi_decode_complex_elems_extends] >>
+  `fn_has_code st last fn` by fs[abi_decode_code_context_def] >>
+  drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
+  metis_tac[exprSimAbiDecodeRowCodeTheory.abi_decode_code_context_suffix]
+QED
+
+(* The rows precondition is needed only after the head window fits. *)
+Theorem abi_decode_guarded_owned_rows_outcome:
+  abi_decode_complex_head_guard src hi (SUM(MAP abi_tuple_row_abi_width rows))
+    st = ((),ready) /\
+  compile_abi_decode_complex_elems dst src MLOAD base_op hi
+    (MAP abi_tuple_row_code rows) 0 0 ready = ((),last) /\
+  abi_decode_code_context func fn st last /\
+  last.cs_next_var <= limit_st.cs_next_var /\
+  abi_decode_sites st.cs_next_id last.cs_next_id SUBSET sites /\
+  hi <> Lit 0w /\ eval_operand src s = SOME(n2w p) /\
+  eval_operand hi s = SOME(n2w(LENGTH bs)) /\
+  p < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+  SUM(MAP abi_tuple_row_abi_width rows) < dimword(:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  fresh_vars_wrt limit_st s /\ abi_decode_entry st s /\
+  (p+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs ==>
+    abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
+      st dst src base_op hi B bs p d 0 0 rows s) ==>
+  (LENGTH bs < p+SUM(MAP abi_tuple_row_abi_width rows) /\
+    ?u. Dabort ctx fn s Revert_abort u) \/
+  (p+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs /\
+    ((?t vs. Dreach ctx fn s t /\
+      abi_tuple_rows_values env (DROP p bs) 0 0 d rows vs t /\
+      fresh_vars_wrt limit_st t /\
+      decode_site_effect ctx func next
+        (scratch UNION {a | d <= a /\
+          a < d+SUM(MAP abi_tuple_row_mem_width rows)}) s t /\
+      abi_decode_alloc_progress (abi_decode_sites st.cs_next_id last.cs_next_id) s t /\
+      abi_decode_entry last t) \/
+    (?u. Dabort ctx fn s Revert_abort u /\
+      ~(?vs. abi_tuple_rows_accept env (DROP p bs) 0 rows vs))))
+Proof
+  strip_tac >> drule_all abi_decode_guard_rows_code_contexts >> strip_tac >>
+  drule abi_decoder_complex_guard_code >> strip_tac >>
+  `ready.cs_next_var <= limit_st.cs_next_var` by
+    (`ci_mono ready last` by metis_tac[cj 2 ci_mono_compile_abi_decode, pairTheory.SND] >>
+     gvs[ci_mono_def] >> decide_tac) >>
+  Cases_on `p+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs`
+  >- suspend "head_fits" >>
+  disj1_tac >> conj_tac >- decide_tac >>
+  `LENGTH bs < p+SUM(MAP abi_tuple_row_abi_width rows)` by decide_tac >>
+  fs[abi_decode_entry_def] >>
+  drule_all abi_decode_complex_head_guard_abort_reentry >> simp[]
+QED
+
+Resume abi_decode_guarded_owned_rows_outcome[head_fits]:
+  `abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
+    st dst src base_op hi B bs p d 0 0 rows s` by metis_tac[] >>
+  `decode_site_resources ctx func s /\ next <= st.cs_next_var` by
+    fs[exprSimAbiDecodeOwnedRowsTheory.abi_decode_owned_rows_pre_def] >>
+  drule_all abi_decode_complex_head_guard_reach_reentry >>
+  disch_then (qspecl_then
+    [`scratch UNION {a | d <= a /\ a < d+SUM(MAP abi_tuple_row_mem_width rows)}`,
+     `abi_decode_sites st.cs_next_id last.cs_next_id`]
+    strip_assume_tac) >>
+  `decode_site_resources ctx func t` by metis_tac[decode_site_effect_resources] >>
+  `st.cs_next_var <= ready.cs_next_var` by simp[] >>
+  drule_all abi_decode_owned_rows_address_frame >> strip_tac >>
+  `abi_decode_sites ready.cs_next_id last.cs_next_id SUBSET sites` by
+    (irule pred_setTheory.SUBSET_TRANS >>
+     qexists_tac `abi_decode_sites st.cs_next_id last.cs_next_id` >>
+     fs[abi_decode_sites_def, pred_setTheory.SUBSET_DEF] >>
+     drule abi_decode_complex_head_guard_shape >> strip_tac >> decide_tac) >>
+  drule_all abi_decode_owned_rows_conditional_outcome >>
+  reverse strip_tac
+  >- (disj2_tac >> simp[] >> disj2_tac >>
+      metis_tac[Dreach_abort]) >>
+  `abi_decode_sites ready.cs_next_id last.cs_next_id SUBSET
+     abi_decode_sites st.cs_next_id last.cs_next_id` by
+    (drule abi_decode_complex_head_guard_shape >>
+     simp[abi_decode_sites_def, pred_setTheory.SUBSET_DEF] >>
+     rpt strip_tac >> decide_tac) >>
+  `abi_decode_alloc_progress (abi_decode_sites st.cs_next_id last.cs_next_id) t t'` by
+    metis_tac[abi_decode_alloc_progress_widen] >>
+  `decode_site_effect ctx func next
+    (scratch UNION {a | d <= a /\ a < d+SUM(MAP abi_tuple_row_mem_width rows)}) s t` by
+    metis_tac[decode_site_effect_threshold] >>
+  disj2_tac >> simp[] >> disj1_tac >> qexistsl_tac [`t'`,`vs`] >>
+  simp[] >> conj_tac >- metis_tac[Dreach_trans] >>
+  conj_tac >- (fs[] >> metis_tac[decode_site_effect_trans, pred_setTheory.UNION_IDEMPOT]) >>
+  irule abi_decode_alloc_progress_trans >> qexists_tac `t` >> simp[]
+QED
+Finalise abi_decode_guarded_owned_rows_outcome
