@@ -6285,10 +6285,9 @@ Proof
   simp[] >> qexistsl_tac [`q`,`mid`] >> simp[] >> metis_tac[]
 QED
 
-Theorem asm_call_run_pending_suffix:
+Theorem asm_call_run_pending_suffix_any_output:
   wf_state s /\ (?d. s.msdomain = Collect d) /\
   s.contexts = (child,crb)::(parent,prb)::rest /\
-  child.msgParams.outputTo = Memory mr /\
   s.rollback.toDelete = pending /\ crb.toDelete = pending /\
   run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
   ?added. t.rollback.toDelete = added ++ pending
@@ -6310,6 +6309,18 @@ Proof
        (Q.INST [`saved` |-> `(parent,prb)::rest`] asm_call_pending_finite) >>
      simp[Abbr `mid`, Abbr `start`] >> metis_tac[]) >>
   drule_all asm_call_pending_step_result >> simp[]
+QED
+
+Theorem asm_call_run_pending_suffix:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  s.rollback.toDelete = pending /\ crb.toDelete = pending /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?added. t.rollback.toDelete = added ++ pending
+Proof
+  strip_tac >> irule asm_call_run_pending_suffix_any_output >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_frame_call_enter_transport:

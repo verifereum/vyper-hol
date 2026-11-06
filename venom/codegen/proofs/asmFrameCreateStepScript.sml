@@ -688,6 +688,182 @@ Proof
   Cases_on `salt_opt` >> gvs[]
 QED
 
+Theorem asm_frame_create_child_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  s.contexts = (c,rb)::rest /\
+  step_create (IS_SOME salt_opt) s = (INL (),v) /\
+  LENGTH v.contexts = SUC (LENGTH s.contexts) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  strip_tac >>
+  `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
+   asm_evm_rel (prog ++ [AsmDataItem data]) a s` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  `c.stack = a.as_stack /\ buffer_to_list c.memory = a.as_memory /\
+   c.logs = a.as_logs /\ s.rollback.toDelete = a.as_pending_deletions` by
+    gvs[asm_evm_rel_def] >>
+  `(if IS_SOME salt_opt then 4 else 3) <= LENGTH c.stack` by
+    (Cases_on `salt_opt` >> gvs[]) >>
+  `next_opcode c = SOME (if IS_SOME salt_opt then Create2 else Create)` by
+    (drule_at (Pat `asm_evm_rel _ _ _`) asm_frame_create_decode >>
+     Cases_on `salt_opt` >> gvs[]) >>
+  `step s = (INL (),v)` by (irule asm_create_step_success >> metis_tac[]) >>
+  `wf_state v /\ (?dv. v.msdomain = Collect dv) /\ v.txParams = s.txParams` by
+    (rpt conj_tac
+     >- (drule_all vfmRunCallTheory.step_preserves_wf_state >> simp[])
+     >- (drule_at (Pat `step _ = _`) vfmDomainCollectionTheory.step_preserves_collect >> simp[]) >>
+     qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
+  `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
+  drule_all asm_create_raw_child_entry >> strip_tac >>
+  drule_all asm_create_raw_size >> disch_tac >>
+  `2 <= LENGTH v.contexts` by simp[] >>
+  drule_at (Pat `wf_state v`) asm_call_child_run_normal >> simp[] >> strip_tac >>
+  `LENGTH t.contexts = SUC (LENGTH rest)` by gvs[] >>
+  `t.txParams = s.txParams` by
+    (drule asm_call_run_txParams >> simp[]) >>
+  drule_at (Pat `run_call _ = _`) asm_create_run_code_continuation >>
+  simp[] >> strip_tac >>
+  `p.jumpDest = parent.jumpDest` by
+    (drule_at (Pat `run_call _ = _`) asm_create_run_code_jumpDest >> simp[]) >>
+  `?deleted. t.rollback.toDelete = deleted ++ a.as_pending_deletions` by
+    (drule_at (Pat `run_call v = _`) asm_call_run_pending_suffix_any_output >>
+     simp[] >> metis_tac[]) >>
+  drule_at (Pat `step _ = _`) frame_obs_call_enter >> simp[] >> strip_tac >>
+  `run_call t = run_call s` by
+    (drule_at (Pat `step _ = _`) run_call_enter_return >> simp[] >> metis_tac[]) >>
+  `call_requests s = request_of s :: call_requests t` by
+    (Cases_on `salt_opt` >>
+     gvs[call_requests_def, computed_precompile_def, request_of_def]) >>
+  `a.as_outcomes = MAP SND (call_trace s)` by fs[asm_frame_rel_def] >>
+  drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`address`, `salt_opt`] >>
+  Cases_on `salt_opt` >> Cases_on `ex = NONE` >> gvs[]
+QED
+
+Theorem asm_frame_create_normal_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  s.contexts = (c,rb)::rest /\
+  step_create (IS_SOME salt_opt) s = (INL (),v) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  strip_tac >>
+  `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
+   asm_evm_rel (prog ++ [AsmDataItem data]) a s` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  `(if IS_SOME salt_opt then 4 else 3) <= LENGTH c.stack` by
+    (gvs[asm_evm_rel_def] >> Cases_on `salt_opt` >> gvs[]) >>
+  `LENGTH v.contexts = LENGTH s.contexts \/
+   LENGTH v.contexts = SUC (LENGTH s.contexts)` by
+    (drule_all asm_create_success_prefix >> strip_tac >>
+     drule_at (Pat `_ = (INL (),v)`) asm_create_finish_view >>
+     simp[] >> strip_tac >> gvs[])
+  >- (drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_same_depth_step_ok >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_child_step_ok >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_create_step_terminal:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME (if two then Create2 else Create) /\
+  step_create two s = (INR e,u) ==>
+  step s = handle_step e u
+Proof
+  strip_tac >>
+  `FLOOKUP c.msgParams.parsed c.pc = SOME (if two then Create2 else Create)` by
+    (qpat_x_assum `next_opcode c = _` mp_tac >>
+     Cases_on `two` >> simp[next_opcode_def] >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
+  simp_tac (srw_ss()) [step_def, get_current_context_def, handle_def,
+    bind_def, ignore_bind_def, return_def] >>
+  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  Cases_on `two` >>
+  gvs[step_inst_def, bind_def, ignore_bind_def]
+QED
+
+Theorem asm_frame_create_failure_starved:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  s.contexts = (c,rb)::rest /\
+  step_create (IS_SOME salt_opt) s = (INR e,u) ==>
+  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t
+Proof
+  strip_tac >>
+  `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
+   asm_evm_rel (prog ++ [AsmDataItem data]) a s` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  `(if IS_SOME salt_opt then 4 else 3) <= LENGTH c.stack` by
+    (gvs[asm_evm_rel_def] >> Cases_on `salt_opt` >> gvs[]) >>
+  `next_opcode c = SOME (if IS_SOME salt_opt then Create2 else Create)` by
+    (drule_at (Pat `asm_evm_rel _ _ _`) asm_frame_create_decode >>
+     Cases_on `salt_opt` >> gvs[]) >>
+  drule_all asm_create_raw_failure >> strip_tac >> gvs[] >>
+  `s.contexts <> []` by simp[] >>
+  `LENGTH u.contexts = LENGTH s.contexts` by
+    (drule_all vfmStepLengthTheory.step_create_inr_no_grow >> simp[]) >>
+  `same_frame_rel s u` by
+    (irule (INST_TYPE [alpha |-> ``:unit``]
+       vfmStepLengthTheory.same_frame_or_grow_eq_length) >> simp[] >>
+     qexistsl_tac [`step_create (IS_SOME salt_opt)`, `INR (SOME OutOfGas)`] >> simp[]) >>
+  `EVERY (wf_context o FST) u.contexts` by
+    (`EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
+     mp_tac (Q.INST [`two` |-> `IS_SOME (salt_opt:bytes32 option)`]
+       vfmDecreasesGasTheory.decreases_gas_cred_step_create) >>
+     rewrite_tac[vfmDecreasesGasTheory.decreases_gas_cred_def] >>
+     metis_tac[pairTheory.SND]) >>
+  `?p. u.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
+       u.txParams = s.txParams /\ p.gasUsed <= p.msgParams.gasLimit` by
+    (gvs[vfmSameFrameTheory.same_frame_rel_def] >>
+     Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >>
+     gvs[wf_context_def]) >>
+  `step s = handle_step (SOME OutOfGas) u` by
+    (irule asm_create_step_terminal >> metis_tac[]) >>
+  `!address. c.msgParams.outputTo <> Code address` by
+    gvs[asm_evm_rel_def] >>
+  `?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t` by
+    (Cases_on `rest`
+     >- (drule_all asm_handle_step_oog_singleton >> disch_tac >>
+         `step s = (INR (SOME OutOfGas), u with contexts :=
+           [(p with <|gasUsed := p.msgParams.gasLimit; returnData := []|>,rb)])` by
+           metis_tac[] >>
+         drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
+         simp[frame_resource_starved_def, frame_outcome_def] >>
+         qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]) >>
+     PairCases_on `h` >> rename1 `s.contexts = (c,rb)::(h0,h1)::saved` >>
+     `?mr. c.msgParams.outputTo = Memory mr` by
+       (Cases_on `c.msgParams.outputTo` >> gvs[] >>
+        fs[wf_state_def, outputTo_consistent_stack_def]) >>
+     `p.msgParams.outputTo = Memory mr` by simp[] >>
+     `LENGTH h0.stack < stack_limit` by
+       (gvs[wf_state_def, stack_room_ok_def]) >>
+     drule_all asm_handle_step_memory >> disch_tac >>
+     `OutOfGas <> Reverted` by simp[] >>
+     drule_all asm_handle_exception_memory_exception >> disch_tac >>
+     `step s = (INL (), u with <| contexts :=
+       (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
+         memory := buffer_write mr.offset [] h0.memory|>,h1)::saved; rollback := rb|>)` by
+       simp[vfmExecutionTheory.vfm_abort_def] >>
+     drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
+     simp[frame_resource_starved_def, frame_outcome_def] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  simp[asm_frame_rel_def] >> strip_tac >>
+  drule_all frame_resource_starved_mid >> simp[]
+QED
+
 Theorem asm_frame_create_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
@@ -695,5 +871,45 @@ Theorem asm_frame_create_step:
    EL as.as_pc prog = AsmOp "CREATE2") ==>
   asm_frame_step_ok prog data es0 as es
 Proof
-  cheat
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  `!salt_opt value off sz stk.
+     EL as.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+     as.as_stack = value::off::sz::
+       (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
+     asm_frame_step_ok prog data es0 as es` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `step_create (IS_SOME salt_opt) es` >>
+     rename1 `step_create _ es = (res,mid)` >> Cases_on `res`
+     >- (Cases_on `x` >>
+         drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_normal_step_ok >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     drule_at (Pat `step_create _ _ = _`) asm_frame_create_failure_starved >>
+     simp[] >> strip_tac >>
+     simp[asm_frame_step_ok_def] >> metis_tac[]) >>
+  Cases_on `as.as_stack`
+  >- gvs[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
+      asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+      asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  Cases_on `t`
+  >- gvs[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
+      asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+      asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  Cases_on `t'`
+  >- gvs[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
+      asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+      asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  Cases_on `EL as.as_pc prog = AsmOp "CREATE"`
+  >- (first_x_assum (qspec_then `NONE` irule) >> simp[] >> metis_tac[]) >>
+  Cases_on `t`
+  >- gvs[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
+      asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+      asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  rename1 `as.as_stack = value::off::sz::salt::stk` >>
+  first_x_assum (qspec_then `SOME salt` irule) >> simp[] >> metis_tac[]
 QED
