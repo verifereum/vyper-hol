@@ -29,7 +29,8 @@ Theorem layout_ordinary_success_phase:
     (step_taint inst s post tn) un /\
   concretize_supplement D (step_taint inst s post tn) post tpost /\
   relocation_env post tpost /\ relocation_reader_context post tpost /\
-  post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section ==>
+  post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section /\
+  post.vs_initial_fmp = tpost.vs_initial_fmp ==>
   ?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\ k.lop_target_taint = un /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)

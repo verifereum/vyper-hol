@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseEnvironment
-Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
+Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseAdministration
   concretizeLayoutLocalEnvironment concretizeLayoutSupplement concretizeLayoutReaderContext
   frameOriginUpdates frameResolvedTrace
   venomExecSemantics venomState venomInst ptrDiscipline list
@@ -49,19 +49,21 @@ Proof
      pure_once_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[opcode_case_def] >>
      simp[exec_read0_def, exec_gas_def, AllCaseEqs()] >>
      strip_tac >> gvs[] >> simp[update_var_def, venom_state_component_equality] >> metis_tac[]) >>
-  `concretize_supplement D (step_taint inst s post tn) post tpost` by
-    (gvs[] >> irule concretize_supplement_fields >>
-     goal_assum (drule_at (Pat `concretize_supplement _ _ _ _`)) >>
-     simp[update_var_def, step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]) >>
+  `concretize_supplement D (step_taint inst s post tn) post tpost /\
+   post.vs_inst_idx = s.vs_inst_idx /\ relocation_reader_context post tpost /\
+   post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section /\
+   post.vs_initial_fmp = tpost.vs_initial_fmp` by
+    (irule layout_var_gas_administration >>
+     simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+     metis_tac[]) >>
   `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
    ~is_terminator inst.inst_opcode /\ origin_out PG om inst post = NONE` by
     simp[is_terminator_def, origin_out_def] >>
   `step_inst fuel C inst s = OK post` by simp[step_inst_non_invoke] >>
   drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
-    layout_ordinary_success_phase >>
+    concretizeLayoutPhaseSuccessTheory.layout_ordinary_success_phase >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   simp[resolved_out_def, ETA_AX] >>
-  disch_then (qspec_then `tpost` mp_tac) >>
-  gvs[update_var_def, relocation_reader_context_def] >> metis_tac[]
+  disch_then (qspec_then `tpost` mp_tac) >> gvs[] >> metis_tac[]
 QED

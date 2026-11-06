@@ -4,7 +4,7 @@ Ancestors concretizeLayoutLocalReturnCopy frameTerminalCallOrigins
   concretizeLayoutReaderContext frameJointTrace frameJointTransition
   frameResolvedTrace frameActivationLifetime frameRelocationLocal
   frameRelocationTaintOrder frameRelocationGuardedValues frameActivationLookup
-  ptrDiscipline venomExecSemantics venomState venomInst finite_map
+  ptrDiscipline venomExecSemantics venomState venomInst finite_map ctxLookupAgreeHelpers
 
 Datatype:
   layout_block_origin = <| lbo_source : basic_block;
@@ -49,7 +49,7 @@ Definition layout_ordinary_state_def:
           tn g.lop_target_taint /\
         concretize_supplement D tn s t /\ relocation_env s t /\
         relocation_reader_context s t /\ s.vs_code = t.vs_code /\
-        s.vs_data_section = t.vs_data_section
+        s.vs_data_section = t.vs_data_section /\ s.vs_initial_fmp = t.vs_initial_fmp
 End
 
 (* Pending entries name the next trace point, and retain the actual successful
@@ -295,7 +295,7 @@ Theorem layout_ordinary_state_intro:
     tn k.lop_target_taint /\
   concretize_supplement D tn s t /\ relocation_env s t /\
   relocation_reader_context s t /\ s.vs_code = t.vs_code /\
-  s.vs_data_section = t.vs_data_section ==>
+  s.vs_data_section = t.vs_data_section /\ s.vs_initial_fmp = t.vs_initial_fmp ==>
   layout_ordinary_state D lo C' q0 es qs k s t
 Proof
   strip_tac >> simp[layout_ordinary_state_def] >>
@@ -359,6 +359,8 @@ Proof
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ g s t` mp_tac >>
   simp[layout_ordinary_trace_def, layout_ordinary_state_def] >> rpt strip_tac >>
   drule_all concretize_returncopy_local_complete >> strip_tac >>
+  `post.vs_initial_fmp = tpost.vs_initial_fmp` by
+    metis_tac[step_inst_initial_fmp, step_inst_base_initial_fmp] >>
   qexists_tac `tpost` >> asm_rewrite_tac[] >>
   irule layout_ordinary_pending_outcome >>
   simp[layout_phase_origin_def] >>

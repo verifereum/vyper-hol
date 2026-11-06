@@ -67,5 +67,6 @@ Proof
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   simp[resolved_out_def, ETA_AX] >>
   disch_then (qspec_then `update_var v z t` mp_tac) >>
-  gvs[] >> simp[update_var_def] >> metis_tac[]
+  gvs[] >> simp[update_var_def] >>
+  metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp]
 QED
