@@ -149,14 +149,68 @@ Proof
   metis_tac[vyper_decode_valid_enc_static_mutual]
 QED
 
+(* ===== The minimum size: the head section ===== *)
+
+Theorem head_lengths_static[local]:
+  !ts. ~any_dynamic ts ==> head_lengths ts 0 = static_length (Tuple ts)
+Proof
+  Induct >> rw[head_lengths_def] >>
+  once_rewrite_tac[head_lengths_add] >> simp[]
+QED
+
+(* For a static type the head is the whole encoding. *)
+Theorem abi_static_length_static[simp]:
+  !at. ~is_dynamic at ==> abi_static_length at = static_length at
+Proof
+  Cases >> simp[abi_static_length_def, head_lengths_static]
+  >~ [`Bytes b`] >- (Cases_on `b` >> simp[abi_static_length_def])
+  >~ [`Array b _`] >> Cases_on `b` >> gvs[abi_static_length_def]
+QED
+
+(* Every encoding of a well-typed value contains the full head. *)
+Theorem abi_static_length_le_enc:
+  !at av. has_type at av ==> abi_static_length at <= LENGTH (enc at av)
+Proof
+  rpt strip_tac >> Cases_on `is_dynamic at`
+  >- (Cases_on `at` >> gvs[abi_static_length_def]
+      >~ [`Bytes b`] >- (Cases_on `b` >> gvs[abi_static_length_def])
+      >~ [`Array b t`]
+      >- (Cases_on `b` >> gvs[abi_static_length_def] >>
+          Cases_on `av` >> gvs[] >>
+          rename1 `has_types (REPLICATE (LENGTH vs) t) vs` >>
+          qspecl_then [`REPLICATE (LENGTH vs) t`, `vs`,
+                       `head_lengths (REPLICATE (LENGTH vs) t) 0`, `0`,
+                       `[]`, `[]`, `0`] mp_tac head_lengths_leq_LENGTH_enc_tuple >>
+          qspecl_then [`REPLICATE (LENGTH vs) t`, `0`, `LENGTH vs`, `t`]
+            mp_tac head_lengths_REPLICATE >>
+          simp[])
+      >~ [`Tuple ts`]
+      >- (Cases_on `av` >> gvs[] >>
+          rename1 `has_types ts vs` >>
+          qspecl_then [`ts`, `vs`, `head_lengths ts 0`, `0`, `[]`, `[]`, `0`]
+            mp_tac head_lengths_leq_LENGTH_enc_tuple >>
+          simp[]))
+  >> drule (cj 1 enc_has_static_length) >> simp[]
+QED
+
 (* ===== Content of the size window (issue checks 4 and 5) ===== *)
 
 (* Minimum expected ABI encoding size: the declared type's head is readable. *)
 Theorem vyper_valid_enc_length_lower:
   !env t bs. vyper_valid_enc env t bs ⇒
-    static_length (vyper_to_abi_type env t) ≤ LENGTH bs
+    abi_static_length (vyper_to_abi_type env t) ≤ LENGTH bs
 Proof
   rw[vyper_valid_enc_def, vyper_strict_enc_def]
+QED
+
+(* A static type's head is its whole encoding. *)
+Theorem vyper_valid_enc_static_length_lower:
+  !env t bs. vyper_valid_enc env t bs ==>
+    is_dynamic (vyper_to_abi_type env t) \/
+    static_length (vyper_to_abi_type env t) ≤ LENGTH bs
+Proof
+  rw[vyper_valid_enc_def, vyper_strict_enc_def] >>
+  Cases_on `is_dynamic (vyper_to_abi_type env t)` >> gvs[]
 QED
 
 (* Maximum encoding size; also the cap Vyper puts on the decode buffer. *)
@@ -169,7 +223,7 @@ QED
 Theorem vyper_valid_enc_window:
   !env t bs. vyper_valid_enc env t bs ⇔
     (vyper_decode_valid_enc (vyper_to_abi_type env t) bs ∧
-     static_length (vyper_to_abi_type env t) ≤ LENGTH bs ∧
+     abi_static_length (vyper_to_abi_type env t) ≤ LENGTH bs ∧
      LENGTH bs ≤ vyper_abi_size_bound env t)
 Proof
   rw[vyper_valid_enc_def, vyper_strict_enc_def]
@@ -180,7 +234,7 @@ QED
 Theorem vyper_valid_enc_rejects:
   !env t bs. ¬ vyper_valid_enc env t bs ⇔
     ¬ vyper_decode_valid_enc (vyper_to_abi_type env t) bs ∨
-    ¬ (static_length (vyper_to_abi_type env t) ≤ LENGTH bs) ∨
+    ¬ (abi_static_length (vyper_to_abi_type env t) ≤ LENGTH bs) ∨
     ¬ (LENGTH bs ≤ vyper_abi_size_bound env t)
 Proof
   rw[vyper_valid_enc_window]
@@ -265,7 +319,7 @@ Theorem evaluate_abi_decode_returndata_capped:
   !tenv typ bs v cap. cap = vyper_abi_size_bound tenv typ ∧
     evaluate_abi_decode_returndata tenv typ bs = INL v ⇒
     vyper_valid_enc_returndata tenv typ (TAKE cap bs) ∧
-    static_length (vyper_to_abi_type tenv typ) ≤ LENGTH (TAKE cap bs)
+    abi_static_length (vyper_to_abi_type tenv typ) ≤ LENGTH (TAKE cap bs)
 Proof
   rw[] >>
   drule_all evaluate_abi_decode_returndata_vyper_valid_enc >>
