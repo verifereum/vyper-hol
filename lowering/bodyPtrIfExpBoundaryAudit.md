@@ -210,3 +210,28 @@ assuming it. Even successful exclusion of this operand premise only removes
 one widened-arm candidate; it cannot falsify the frozen IfExp implication,
 which assumes that premise. A proof of the general target would still need
 a principled use of the original operand judgments across all arm forms.
+
+## Normal-continuation alignment (C1.31.4)
+
+`bodyPtrIfExpCallAlignment.ifexp_buffer_call_normal_alignment` is checked
+for the actual Call AST, arbitrary arguments and frames. The compiler's
+buffer descriptor plus the existing `vv_post_located_type` projection
+imply `lowered_value_type ce arm = expr_type arm` within that normal post.
+No invocation execution, nonexemption assumption or forced normal outcome
+is used. Search found no existing theorem with this actual AST boundary.
+
+The original `expr_vv_sim_ptr` normal continuation retains `vv_post`
+(bodyPtrDefs:315); its compiler equation is part of the same judgment.
+Thus a compositional IfExp proof can retain that post and apply alignment
+before unwrapping the selected buffer-call arm. It must not first erase
+the vv evidence to a plain expr_post. The existing no-copy consumer
+`ifexp_read_no_copy_ptr_mem_ok` requires equality of memory byte counts
+between lowered arm type and result annotation (NoCopyConsumer:12-13).
+The new equality bridges lowered arm type to arm annotation only. The
+remaining bridge is arm annotation to IfExp result annotation, through
+actual typing/layout hypotheses: this theorem alone does not supply it.
+For copying, it similarly identifies the source interpretation type with
+its actual buffer descriptor; counted pointer-safe copy execution remains
+an independent obligation. Exempt/exit outcomes remain separate branches.
+Zero-buffer calls, stack-return calls, other expressions, and general
+IfExp composition are not discharged by this boundary.
