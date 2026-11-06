@@ -31,7 +31,7 @@ Proof
   simp[compile_zero_memory_def, alloc_run_compile_zero_memory_loop]
 QED
 
-Theorem alloc_run_assign_reserved[local]:
+Theorem alloc_run_assign_reserved:
   alloc_run (\st. fresh_outputs st /\ not_fresh_at st x /\ ~alloc_owned st x)
     (emit_inst ASSIGN ops [x])
     (\u st. fresh_outputs st /\ not_fresh_at st x /\ ~alloc_owned st x)
@@ -41,7 +41,7 @@ Proof
   irule_at Any alloc_run_emit_inst_fresh >> simp[] >> qexists `x` >> simp[]
 QED
 
-Theorem alloc_run_emit_empty_fresh[local]:
+Theorem alloc_run_emit_empty_fresh:
   opc <> ALLOCA ==>
   alloc_run fresh_outputs (emit_inst opc ops []) (\u st. fresh_outputs st)
 Proof
