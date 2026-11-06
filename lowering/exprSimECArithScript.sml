@@ -2303,14 +2303,6 @@ Proof
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
     (qpat_assum `bind (eval_expr cx a) _ _ = _`
-  `post_value_type cenv a = expr_type a` by
-    (irule post_value_type_ec_point >> simp[] >>
-     qexistsl_tac [`cx`,`env`,`es`] >>
-     gvs[expr_body_pre_def, well_typed_expr_def]) >>
-  `expr_sim_inv cenv cx env es /\ well_typed_expr env b` by
-    gvs[expr_body_pre_def, well_typed_expr_def] >>
-  `post_value_type cenv b = expr_type b` by
-    metis_tac[post_value_type_ec_point, post_value_type_word, is_word_type_def] >>
        (mp_then Any mp_tac
          (CONV_RULE (DEPTH_CONV ETA_CONV)
             exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >>
@@ -2403,6 +2395,14 @@ Proof
     (imp_res_tac ec_points_code_shape >>
      simp[cs_extends_def] >> qexists_tac `[]` >>
      gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `post_value_type cenv a = expr_type a` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     gvs[expr_body_pre_def, well_typed_expr_def]) >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env b` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  `post_value_type cenv b = expr_type b` by
+    metis_tac[post_value_type_ec_point, post_value_type_word, is_word_type_def] >>
   gvs[] >> irule ec_binary_call_gas >> simp[] >>
   (reverse conj_tac
   >- (qexists_tac `nocalls` >> simp[]) >>

@@ -611,6 +611,7 @@ Proof
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
   drule_all add_unwrap_post >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -678,8 +679,6 @@ Proof
       value_result_typed_def] >>
   irule store_lays_out_typed >> simp[] >>
   qexistsl_tac [`expr_type e`, `get_tenv cx`] >> simp[]
-      `post_value_type cenv e = expr_type e` by
-        simp[post_value_type_word] >>
 QED
 
 (* The MSTORE of x.f = e, from the state e's unwrap leaves: the field's

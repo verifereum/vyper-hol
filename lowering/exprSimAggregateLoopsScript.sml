@@ -263,6 +263,7 @@ Proof
 QED
 
 Theorem aggregate_tuple_store_marked[local]:
+  post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
