@@ -63,7 +63,8 @@ Theorem toplevel_emit_load_path:
         case eval_operand src s of NONE => {} | SOME a => key_taint tn.t_stor a
       else if opc = TLOAD then
         case eval_operand src s of NONE => {} | SOME a => key_taint tn.t_trans a
-      else {})
+      else {}) /\
+    op_prov G' (Var out) = NONE
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
@@ -99,6 +100,10 @@ Proof
     (rpt strip_tac
      >- (irule step_prov_other_output >> simp[mk_inst_def]) >>
      irule step_taint_other_output >> simp[mk_inst_def]) >>
+  `op_prov (step_prov PG G (mk_inst sa.cs_next_id opc [src] [out])
+      (update_var out w s)) (Var out) = NONE` by
+    (fs[step_prov_def, out_prov_def, set_prov_def, op_prov_def,
+        mk_inst_def, finite_mapTheory.FLOOKUP_DRESTRICT]) >>
   gvs[] >>
   simp[step_taint_def, mk_inst_def, op_taint_def, set_var_taint_def,
        out_taint_def, finite_mapTheory.FLOOKUP_UPDATE, imm_taint_def,
