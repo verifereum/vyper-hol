@@ -24,10 +24,13 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ld_point_owned:
+Theorem ld_owned_prefix_pack:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
-  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
-  active_inst fn' ti t ==>
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+  ^ld_probe_stable lo P Sigma names fs f0 A0 A frames /\
+  fn' = ld_image (HD frames) /\
+  ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\ active_inst fn' ti t ==>
   ^ld_owned lo P C C' vs0 Sigma names fn' ti t
 Proof
   simp[] >> strip_tac >>
@@ -46,6 +49,26 @@ Proof
   simp[] >>
   qexistsl_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`t0`,`A`,`frames`,`N`,`X`,`p`,`h`] >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem ld_point_owned:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
+  active_inst fn' ti t ==>
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
+  fs[] >> drule_all (SRULE [] ld_owned_prefix_pack) >> gvs[Abbr `Goal`]
+QED
+
+Theorem ld_transfer_point_owned:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ^ld_transfer_point lo P C C' vs0 stk fn fn' source fs f0 A0 Sigma names bb t /\
+  active_inst fn' ti t ==>
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
+  fs[] >> drule_all (SRULE [] ld_owned_prefix_pack) >> gvs[Abbr `Goal`]
 QED
 
 Theorem ld_owned_root:
