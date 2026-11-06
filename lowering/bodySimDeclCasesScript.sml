@@ -1181,7 +1181,7 @@ Proof
   fs[wordsTheory.dimword_def] >> decide_tac
 QED
 
-Theorem array_body_fragment_callback[local]:
+Theorem array_body_fragment_callback:
   !cx stmts tops ctx cenv bindings env ei id typ tv v env_b ret_ty
    func RetQ st0 bc sd ex inc.
     body_stmts_ok cx stmts /\ body_inv tops ctx cenv cx /\
