@@ -1594,3 +1594,31 @@ Proof
   Cases_on `x IN FDOM ps.ps_spilled` >>
   simp[rich_listTheory.LIST_ELEM_COUNT_THM] >> decide_tac
 QED
+
+Theorem regional_reduce_supply_le:
+  !fuel targets op f n ps ops qs.
+  reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
+  !x. LIST_ELEM_COUNT x qs.ps_stack +
+        (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+      LIST_ELEM_COUNT x ps.ps_stack +
+        (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < n` >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[] >>
+  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
+  Cases_on `dist <= 16` >> gvs[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> gvs[] >>
+  rename1 `select_spill_candidate ps.ps_stack targets dist n = SOME cand` >>
+  `1 <= LENGTH ps.ps_stack` by
+    (drule stackModelTheory.stack_get_unfixed_depth_bound >> decide_tac) >>
+  `cand <= 16 /\ cand < LENGTH ps.ps_stack` by
+    metis_tac[planWfTheory.select_spill_candidate_bound] >>
+  Cases_on `do_spill_at cand ps` >> gvs[] >>
+  Cases_on `reduce_depth_plan fuel targets op f n (SND (do_spill_at cand ps))` >>
+  gvs[] >>
+  first_x_assum drule >>
+  drule_all regional_spill_supply_le >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
