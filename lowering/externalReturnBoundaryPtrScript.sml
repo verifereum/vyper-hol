@@ -8,6 +8,7 @@ Ancestors
   vyperInterpreter vyperExprNoControl vyperState exprSim
   representationCleanPtr vyperTypeSystem vyperTypeEvalSoundness abiEncoder
   exprSimHyps vyperTypeCallGraph vyperTypeExprSoundness vyperTypeInvariants
+  valueCopyBytes valueEncoding vyperTyping
 Libs
   monadsyntax
 
@@ -611,4 +612,56 @@ Proof
                 `sa.cs_next_id`, `STRING #"%" (toString sa.cs_next_var)`] >>
   simp[ASCIInumbersTheory.toString_inj] >>
   fs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL, LESS_EQ_ADD]
+QED
+
+Theorem external_return_raw_stmt_frag_ptr:
+  !cenv nr nkey ut iv ret_ty d ctx PG func cx e es res es' lctx tv env.
+    cenv.ce_return_pc = NONE /\ cenv.ce_raw_return = T /\
+    cenv.ce_nonreentrant = (nr,nkey,ut,iv) /\ (nr ==> iv) /\
+    expr_type e = ret_ty /\ is_bytestring_type ret_ty /\
+    ~is_word_type ret_ty /\ evaluate_type (get_tenv cx) ret_ty = SOME tv /\
+    expr_sim_inv cenv cx env es /\
+    IS_SOME (type_stmt env ret_ty (Return (SOME e))) /\
+    call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+    expr_sim_ptr d ctx PG func cenv cx ret_ty e es /\
+    eval_stmt cx (Return (SOME e)) es = (res,es') ==>
+    stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
+      (stmt_env cenv lctx ret_ty (Return (SOME e))) es res es'
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule return_expr_continuation_stmt_frag_ptr >>
+  qexistsl [`e`,`ret_ty`] >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `lower_value compile_expr cenv ret_ty e sa` >>
+  rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `compile_external_return (SOME op) F T cenv.ce_ret_enc_info
+    cenv.ce_max_return_size nr nkey ut iv sm` >>
+  rename1 `_ = (u,sb')` >> gvs[] >> conj_tac
+  >- (qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_external_return_def, optional_unlock_view,
+           emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+           emit_def] >>
+      strip_tac >> gvs[cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  rpt gen_tac >> strip_tac >> gvs[expr_post_def, expr_val_rel_def] >>
+  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  `well_typed_expr env e` by
+    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def] >> metis_tac[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    gvs[int_calls_stmt_def, int_calls_expr_def] >>
+  `env_consistent env cx es /\ state_well_typed es /\
+   accounts_well_typed es.accounts /\ context_well_typed cx /\
+   functions_well_typed cx` by gvs[expr_sim_inv_def] >>
+  drule_all eval_expr_read_type_sound >> simp[] >> strip_tac >>
+  `value_has_type tv v` by
+    gvs[value_runtime_typed_def, env_consistent_def, env_context_consistent_def] >>
+  drule_all bytestring_type_value >> strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  irule compile_external_return_raw_state_rel_halt_ptr >> simp[] >>
+  goal_assum (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+  simp[]
 QED
