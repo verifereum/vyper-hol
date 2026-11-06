@@ -19,10 +19,11 @@ QED
 Theorem external_default_exception_test:
   eval_external_defaults cx
     [Call NoneT RawRevert [Literal NoneT (BytesL [])] NONE] st =
-    (INR (Error (RuntimeError "raw_revert")), st)
+    (INR (Error (RevertData [])), st)
 Proof
   simp[eval_external_defaults_run, evaluate_def, evaluate_literal_def,
-       read_result_def, type_check_def, assert_def, bind_def,
+       read_result_def, type_check_def, assert_def, lift_option_type_def,
+       lift_option_def, dest_BytesV_def, bind_def,
        ignore_bind_def, return_def, raise_def]
 QED
 

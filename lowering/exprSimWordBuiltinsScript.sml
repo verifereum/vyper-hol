@@ -612,8 +612,8 @@ Proof
   simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_update_not_fresh] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_update_var, eval_operand_def, lookup_var_update_var] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[eval_operand_update_var, eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_def] >>
   simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def] >>
   simp[] >>
@@ -828,7 +828,9 @@ Proof
       >- metis_tac[expr_body_pre_type_evaluates]
       >- (rpt strip_tac >> drule_all expr_body_pre_word_result >> simp[]) >>
       rpt strip_tac >> drule_all expr_body_pre_word_result >> rw[]) >>
-  strip_tac >> first_x_assum irule >> metis_tac[]
+  strip_tac >> first_x_assum irule >> qexists_tac `nocalls` >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `_ ==> exprs_case _ _ _ _ _ _` irule >> metis_tac[]
 QED
 
 (* The same from expr_sim_ok of each operand, at compile_expr_sim's

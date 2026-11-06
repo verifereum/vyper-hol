@@ -19,6 +19,16 @@ Ancestors
 Libs
   monadsyntax
 
+(* A halting branch cannot acquire instructions from the rest of its body. *)
+Theorem compile_stmts_terminated:
+  block_is_terminated st ==>
+  compile_stmts cenv lctx ty stmts st = ((), st)
+Proof
+  Cases_on `stmts` >>
+  simp[Once compile_stmt_def, comp_bind_def, comp_return_def,
+       comp_get_def]
+QED
+
 (* ===== Per-Statement Lemmas ===== *)
 
 (* --- Pass: no-op --- *)

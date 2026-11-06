@@ -8,6 +8,12 @@ version = "0.2.3"
 [build]
 roots = ["vyperHolScript.sml",
          "tests/vyperTestsHolScript.sml",
+         "lowering/proofs/rawReturnCopyScript.sml",
+         "lowering/defs/exprRecursionRegressionScript.sml",
+         "venom/compiler/unitTransformChecksScript.sml",
+         "venom/proofs/venomCallActivationRegressionScript.sml",
+         "venom/codegen/proofs/asmOracleRegressionScript.sml",
+         "venom/codegen/proofs/asmCallActivationRegressionScript.sml",
          "lowering/e2eBoundaryTestScript.sml",
          "tests/evalCompilerBytecodeLibTestScript.sml",
          "tests/evalCompilerBaseDftLibTestScript.sml",
