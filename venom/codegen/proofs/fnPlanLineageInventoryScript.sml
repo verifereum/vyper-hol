@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineageReduction genericInputReady reorderSim fnPlanLineageReorder doSwapSim stackPlanGen stackModel list rich_list
+  fnPlanPrefix fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineageReduction genericInputReady reorderSim fnPlanLineageReorder doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -262,40 +262,6 @@ Proof
   gvs[FLOOKUP_DEF] >> ASM_SET_TAC[]
 QED
 
-Theorem restore_spilled_plan_domain:
-  !ops ps. FDOM (SND (restore_spilled_plan ops ps)).ps_spilled =
-    FDOM ps.ps_spilled DIFF set ops
-Proof
-  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  first_x_assum (qspec_then `ps1` mp_tac) >> simp[] >> strip_tac >>
-  qspecl_then [`h`, `ps`] mp_tac do_restore_spilled_domain >>
-  simp[] >> strip_tac >> ASM_SET_TAC[]
-QED
-
-Theorem release_spill_pairs_domain[local]:
-  !pairs ps.
-    FDOM (FOLDL (\ps' (op,off).
-      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
-                  ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps pairs).ps_spilled =
-    FDOM ps.ps_spilled DIFF set (MAP FST pairs)
-Proof
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
-  simp[FDOM_DOMSUB] >> ASM_SET_TAC[]
-QED
-
-Theorem release_dead_spills_domain:
-  !next ps. FDOM (release_dead_spills next ps).ps_spilled =
-    FDOM ps.ps_spilled INTER set (MAP Var next)
-Proof
-  rpt gen_tac >>
-  simp[release_dead_spills_def, release_spill_pairs_domain, EXTENSION,
-       MEM_MAP, MEM_FILTER, pairTheory.EXISTS_PROD,
-       alistTheory.MEM_pair_fmap_to_alist_FLOOKUP] >>
-  gen_tac >> Cases_on `x` >> simp[] >>
-  gvs[FLOOKUP_DEF] >> metis_tac[]
-QED
-
 (* JMP integration boundary (not a reachable-state replay theorem):
    compute_operands JMP = [], and a well-formed JMP has no outputs.
    Thus its input emission and subsequent reorder of [] are identities;
@@ -320,43 +286,13 @@ Theorem restore_reorder_release_spilled_empty:
 Proof
   rpt gen_tac >> strip_tac >>
   `FDOM psR.ps_spilled = FDOM ps.ps_spilled DIFF set targets` by
-    (qspec_then `targets` (qspec_then `ps` mp_tac)
-      restore_spilled_plan_domain >> simp[]) >>
-  simp[GSYM FDOM_EQ_EMPTY, release_dead_spills_domain, EXTENSION] >>
+    (drule phi_restore_spilled_domain >> simp[]) >>
+  simp[GSYM FDOM_EQ_EMPTY, EXTENSION,
+       phi_release_dead_spills_domain, GSYM MEM_MAP] >>
   gen_tac >> Cases_on `MEM x (MAP Var next)` >> simp[] >>
   `MEM x targets /\ x NOTIN FDOM psR.ps_spilled` by ASM_SET_TAC[] >>
   drule_all reorder_plan_pending_not_spilled >>
   disch_then (qspec_then `dfg` mp_tac) >> simp[]
-QED
-
-Theorem generate_inst_plan_jmp_spilled_empty:
-  !liveness dfg cfg fn inst next halt term cur ps targets ops ps'.
-    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
-    join_target_ops liveness fn cur inst = SOME targets /\
-    set (MAP Var next) SUBSET set targets /\
-    generate_inst_plan liveness dfg cfg fn inst next halt term cur ps =
-      SOME (ops,ps') ==> ps'.ps_spilled = FEMPTY
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?target. inst.inst_operands = [Label target]` by
-    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
-  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
-       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
-       venomInstTheory.is_raw_fmp_opcode_def,
-       venomInstTheory.is_param_opcode_def] >>
-  strip_tac >>
-  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_regular_inst_plan_def, compute_operands_def,
-       asmIRTheory.get_non_label_operands_def, emit_input_plan_def,
-       stackPlanTypesTheory.is_label_operand_def,
-       venomEffectsTheory.is_commutative_def,
-       generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
-  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
-  rename1 `restore_spilled_plan targets ps = (rOps,psR)` >>
-  Cases_on `reorder_plan dfg targets psR` >> simp[stack_pop_def] >>
-  strip_tac >> gvs[] >>
-  drule_all restore_reorder_release_spilled_empty >> simp[]
 QED
 
 Theorem restore_spilled_plan_inventory_exhausted:
@@ -365,7 +301,9 @@ Theorem restore_spilled_plan_inventory_exhausted:
 Proof
   rpt strip_tac >>
   drule lineage_inventory_spilled_subset >> strip_tac >>
-  simp[GSYM FDOM_EQ_EMPTY, restore_spilled_plan_domain] >> ASM_SET_TAC[]
+  Cases_on `restore_spilled_plan ops ps` >> simp[] >>
+  drule phi_restore_spilled_domain >>
+  simp[GSYM FDOM_EQ_EMPTY] >> ASM_SET_TAC[]
 QED
 
 Theorem lineage_inventory_target_suffix:

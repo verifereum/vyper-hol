@@ -9,7 +9,7 @@
 
 Theory fnPlanLineageJoin
 Ancestors
-  fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
+  fnPlanPrefix fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
   cfgAnalysisProps venomWf venomInst list rich_list simplifyCfgDefs
   livenessConvergenceProofs livenessBlockProofs livenessTransferProofs
 
@@ -134,26 +134,6 @@ Proof
   simp[generate_block_insts_plan_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[LAST_DEF] >> first_x_assum irule >>
   goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem non_param_insts_last_jmp:
-  bb.bb_instructions <> [] /\
-  (LAST bb.bb_instructions).inst_opcode = JMP ==>
-  non_param_insts bb <> [] /\
-  LAST (non_param_insts bb) = LAST bb.bb_instructions
-Proof
-  strip_tac >>
-  `bb.bb_instructions = FRONT bb.bb_instructions ++
-                           [LAST bb.bb_instructions]` by
-    metis_tac[APPEND_FRONT_LAST] >>
-  `non_param_insts bb =
-    FILTER (\inst. ~is_param_opcode inst.inst_opcode)
-      (FRONT bb.bb_instructions) ++ [LAST bb.bb_instructions]` by
-    (simp[non_param_insts_def] >>
-     qpat_x_assum `bb.bb_instructions = _` (fn th =>
-       CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
-     simp[FILTER_APPEND_DISTRIB, is_param_opcode_def]) >>
-  simp[LAST_APPEND_NOT_NIL]
 QED
 
 Theorem successful_block_jmp_suffix:

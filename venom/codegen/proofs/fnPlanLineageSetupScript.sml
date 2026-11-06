@@ -1,6 +1,6 @@
 Theory fnPlanLineageSetup
 Ancestors
-  fnPlanLineageDemand fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState reorderSim list rich_list venomWf venomInst callLayoutDefs
+  fnPlanPrefix fnPlanLineageDemand fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState reorderSim list rich_list venomWf venomInst callLayoutDefs
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory fnPlanLineageReplayTheory doSwapSimTheory planSpillBoundsTheory cleanOpsSimTheory
 
@@ -336,7 +336,8 @@ Proof
        (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
      qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
      Cases_on `h` >> simp[]) >>
-  qexists_tac `core9` >> gvs[release_dead_spills_domain]
+  qexists_tac `core9` >>
+  gvs[EXTENSION, phi_release_dead_spills_domain, MEM_MAP]
 QED
 
 Theorem regular_post_emit_tail_sets:
@@ -725,7 +726,7 @@ Proof
        (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
      qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
      Cases_on `h` >> simp[]) >>
-  gvs[release_dead_spills_domain, MEM_MAP] >> metis_tac[]
+  gvs[phi_release_dead_spills_domain, MEM_MAP] >> metis_tac[]
 QED
 
 Theorem emit_reorder_output_live_coverage:
@@ -1082,5 +1083,5 @@ Proof
     pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
   rpt pairarg_tac >>
   Cases_on `inst.inst_outputs = []` >> simp[] >>
-  rpt strip_tac >> gvs[release_dead_spills_domain, MEM_MAP]
+  rpt strip_tac >> gvs[phi_release_dead_spills_domain, MEM_MAP]
 QED

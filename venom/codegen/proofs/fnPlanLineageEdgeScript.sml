@@ -1,6 +1,6 @@
 Theory fnPlanLineageEdge
 Ancestors
-  fnPlanLineageSuffix fnPlanLineageInventory fnPlanLineageLiveness
+  fnPlanPrefix fnPlanLineageSuffix fnPlanLineageInventory fnPlanLineageLiveness
   stackPlanGen venomInst venomWf venomExecProps cfgAnalysisProps list rich_list
 
 (* stack_get_depth_is_some supplies the generic membership/search boundary. *)
@@ -33,18 +33,6 @@ Proof
   simp[join_target_ops_def] >>
   qpat_x_assum `set _ = set _` mp_tac >>
   simp[pred_setTheory.EXTENSION, listTheory.MEM_MAP] >> metis_tac[]
-QED
-
-Theorem non_param_insts_final_jmp[local]:
-  bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP ==>
-  non_param_insts bb <> [] /\ LAST (non_param_insts bb) = LAST bb.bb_instructions
-Proof
-  strip_tac >>
-  `bb.bb_instructions = FRONT bb.bb_instructions ++ [LAST bb.bb_instructions]` by
-    metis_tac[APPEND_FRONT_LAST] >>
-  simp[non_param_insts_def] >>
-  pop_assum SUBST1_TAC >>
-  simp[FILTER_APPEND, is_param_opcode_def]
 QED
 
 Theorem ready_join_edge_terminator[local]:
@@ -95,7 +83,7 @@ Theorem generate_block_plan_join_edge_suffix:
     MAP Var (input_vars_from pred sb.bb_instructions (live_vars_at lv succ 0))
 Proof
   strip_tac >> drule_all ready_join_edge_terminator >> strip_tac >>
-  drule_all non_param_insts_final_jmp >> strip_tac >>
+  drule_all non_param_insts_last_jmp >> strip_tac >>
   `pb.bb_label = pred` by metis_tac[lookup_block_label] >>
   `join_target_ops lv fn pb.bb_label (LAST (non_param_insts pb)) =
    SOME (MAP Var (input_vars_from pred sb.bb_instructions (live_vars_at lv succ 0)))` by
@@ -119,7 +107,7 @@ Theorem analyzed_terminal_jmp_spilled_empty:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all analyzed_live_out_jmp >> strip_tac >>
-  irule generate_inst_plan_jmp_spilled_empty >>
+  irule phi_jmp_plan_spills_empty >>
   goal_assum (drule_at Any) >> simp[join_target_ops_def] >>
   qpat_x_assum `set _ = set _` mp_tac >>
   simp[pred_setTheory.EXTENSION, pred_setTheory.SUBSET_DEF, MEM_MAP] >>

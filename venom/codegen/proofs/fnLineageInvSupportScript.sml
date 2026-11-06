@@ -243,9 +243,12 @@ Theorem native_join_jmp_support:
     (!v. MEM v next ==> MEM (Var v) qs.ps_stack)
 Proof
   rpt gen_tac >> strip_tac >>
+  `?succ. inst.inst_operands = [Label succ]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
   `qs.ps_spilled = FEMPTY` by
-    (irule generate_inst_plan_jmp_spilled_empty >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (irule phi_jmp_plan_spills_empty >>
+     goal_assum (drule_at Any) >> simp[] >>
+     gvs[EXTENSION, MEM_MAP] >> metis_tac[]) >>
   simp[] >> conj_tac
   >- (rpt strip_tac >>
       `MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
