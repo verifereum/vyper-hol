@@ -2670,6 +2670,66 @@ Proof
   gvs[stackPlanTypesTheory.operand_to_string_def]
 QED
 
+Theorem regional_filter_take_distinct[local]:
+  !xs n. ALL_DISTINCT (FILTER P xs) ==>
+    ALL_DISTINCT (FILTER P (TAKE n xs))
+Proof
+  Induct >> simp[] >> Cases_on `n` >> simp[] >>
+  Cases_on `P h` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[MEM_TAKE, MEM_FILTER]
+QED
+
+Theorem regional_perm_pop_inventory[local]:
+  PERM ys xs /\ ALL_DISTINCT (FILTER P xs) ==>
+  ALL_DISTINCT (FILTER P (stack_pop n ys)) /\
+  (!op. MEM op (stack_pop n ys) ==> MEM op xs)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FILTER P ys)` by
+    metis_tac[PERM_FILTER, ALL_DISTINCT_PERM] >>
+  conj_tac
+  >- (simp[stack_pop_def] >> irule regional_filter_take_distinct >> simp[]) >>
+  simp[stack_pop_def] >> metis_tac[MEM_TAKE, PERM_MEM_EQ]
+QED
+
+Theorem regional_popmany_fold_marked_inventory[local]:
+  !xs acc ps.
+  ALL_DISTINCT (FILTER P ps.ps_stack) ==>
+  let qs = SND (FOLDL (\(ops, ps) v.
+      case stack_get_depth v ps.ps_stack of
+        NONE => (ops, ps)
+      | SOME dist =>
+          let (swap_ops, qs) =
+            if dist = 0 then ([], ps) else do_swap dist ps in
+          (ops ++ swap_ops ++ [SOPop 1],
+           qs with ps_stack := stack_pop 1 qs.ps_stack)) (acc,ps) xs) in
+  ALL_DISTINCT (FILTER P qs.ps_stack) /\
+  (!op. MEM op qs.ps_stack ==> MEM op ps.ps_stack)
+Proof
+  Induct >> simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  fs[LET_THM] >> Cases_on `stack_get_depth h ps.ps_stack`
+  >- (first_x_assum (qspecl_then [`acc`, `ps`] mp_tac) >> simp[]) >>
+  rename1 `stack_get_depth h ps.ps_stack = SOME d` >>
+  drule stack_get_depth_props >> strip_tac >>
+  `PERM (SND (do_swap d ps)).ps_stack ps.ps_stack` by
+    (irule do_swap_stack_perm >> simp[]) >>
+  Cases_on `d = 0`
+  >- (simp[] >>
+      `ALL_DISTINCT (FILTER P (stack_pop 1 ps.ps_stack)) /\
+       (!op. MEM op (stack_pop 1 ps.ps_stack) ==> MEM op ps.ps_stack)` by
+        (irule regional_perm_pop_inventory >> simp[]) >>
+      first_x_assum (qspecl_then [`acc ++ [SOPop 1]`,
+        `ps with ps_stack := stack_pop 1 ps.ps_stack`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  simp[] >> pairarg_tac >> gvs[] >>
+  `ALL_DISTINCT (FILTER P (stack_pop 1 qs.ps_stack)) /\
+   (!op. MEM op (stack_pop 1 qs.ps_stack) ==> MEM op ps.ps_stack)` by
+    (irule regional_perm_pop_inventory >> metis_tac[SND]) >>
+  first_x_assum (qspecl_then [`acc ++ swap_ops ++ [SOPop 1]`,
+    `qs with ps_stack := stack_pop 1 qs.ps_stack`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem regional_popmany_fold_slots_layout[local]:
   !xs acc ps.
   plan_slots_bounded sb ps /\
@@ -2697,6 +2757,27 @@ Proof
   >- (simp[] >> first_x_assum irule >> gvs[plan_slots_bounded_def]) >>
   simp[] >> pairarg_tac >> gvs[] >> first_x_assum irule >>
   gvs[plan_slots_bounded_def]
+QED
+
+Theorem regional_popmany_marked_inventory:
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) ==>
+  ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+    (SND (popmany_plan vs ps)).ps_stack) /\
+  (!op. MEM op (SND (popmany_plan vs ps)).ps_stack ==> MEM op ps.ps_stack)
+Proof
+  strip_tac >> Cases_on `vs` >- simp[popmany_plan_def] >>
+  simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (`LENGTH (h::t) < LENGTH ps.ps_stack` by
+            (irule contiguous_top_stack_bound >> simp[]) >>
+          drule do_swap_stack_perm >> strip_tac >>
+          pairarg_tac >> gvs[] >>
+          irule regional_perm_pop_inventory >> metis_tac[SND]) >>
+      simp[popmany_individual_def, LET_THM] >>
+      irule (SRULE[LET_THM] regional_popmany_fold_marked_inventory) >> simp[]) >>
+  simp[popmany_individual_def, LET_THM] >>
+  irule (SRULE[LET_THM] regional_popmany_fold_marked_inventory) >> simp[]
 QED
 
 Theorem regional_popmany_slots_layout:
