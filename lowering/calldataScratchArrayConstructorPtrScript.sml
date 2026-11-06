@@ -277,6 +277,7 @@ Proof
   irule (calldata_scratch_array_constructor_ptr |> Q.INST
     [`lo` |-> `loop_st.cs_next_id-2`, `hi` |-> `final.cs_next_id`]) >>
   asm_simp_tac bool_ss [] >>
+  conj_tac >- decide_tac >>
   qexistsl [`bs`,`env`,`loop_st`,`sb`,`setup`,`sf`,`src`] >>
   rpt conj_tac >>
   FIRST [first_assum MATCH_ACCEPT_TAC,
