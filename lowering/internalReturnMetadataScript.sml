@@ -3,7 +3,8 @@ Theory internalReturnMetadata
 Ancestors
   externalReturnPrefix compileVyper moduleLowering entryStateRel bodySim
   externalNormalizePremises supportedNames vyperInterpreter compileEnv loweringShapeProps
-  memoryLocalRhsProps supportedProgram
+  memoryLocalRhsProps supportedProgram supportedDecls e2eDefs vyperTypeContractSoundness
+  exprSimHypsDefs vyperTypeInvariants vyperContext
 
 Theorem external_package_frame_internal_maps:
   set_external_package_target tgt
@@ -75,4 +76,60 @@ Proof
   drule_at (Pos last) build_func_info_distinct >> simp[] >>
   Cases_on `id` >>
   gvs[nsid_to_string_def, GSYM type_mem_bytes_type_memory_bytes]
+QED
+
+Theorem internal_lookup_supported_decl:
+  !tops name mut nr args dflts ret body.
+    lookup_function NONE name Internal tops =
+      SOME (mut,nr,args,dflts,ret,body) ==>
+    ?rr. supported_function_decl tops (NONE,name) Internal =
+      SOME (mut,nr,rr,args,dflts,ret,body)
+Proof
+  Induct >> simp[lookup_function_def, supported_function_decl_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[lookup_function_def, supported_function_decl_def] >>
+  rpt IF_CASES_TAC >> gvs[] >> rpt strip_tac >>
+  Cases_on `v` >> gvs[lookup_function_def] >>
+  first_x_assum drule >> strip_tac >> simp[]
+QED
+
+Theorem source_signature_internal_decl:
+  source_typing_ok tops am tx /\
+  expr_sim_inv c
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+  FLOOKUP env.fn_sigs id = SOME sig ==>
+  FST id = NONE /\
+  ?mut nr rr args dflts body.
+    supported_function_decl tops id Internal =
+      SOME (mut,nr,rr,args,dflts,sig.ret_ty,body)
+Proof
+  strip_tac >>
+  `fn_sigs_consistent env.fn_sigs
+     (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  qpat_x_assum `fn_sigs_consistent _ _` mp_tac >>
+  simp[fn_sigs_consistent_def] >>
+  Cases_on `id` >> disch_then drule >> strip_tac >>
+  gvs[source_typing_ok_def, checked_contract_runtime_ready_def,
+      get_module_code_def, initial_evaluation_context_def,
+      lookup_callable_function_def, AllCaseEqs()] >>
+  drule internal_lookup_supported_decl >> metis_tac[]
+QED
+
+Theorem typed_return_internal_decl:
+  source_typing_ok tops am tx /\
+  expr_sim_inv c
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+  IS_SOME (type_stmt env ret (Return (SOME (Call ann (IntCall id) xs drv)))) ==>
+  FST id = NONE /\
+  ?mut nr rr args dflts declared body.
+    supported_function_decl tops id Internal =
+      SOME (mut,nr,rr,args,dflts,declared,body) /\
+    type_widens_to env.type_defs declared ann
+Proof
+  Cases_on `id` >>
+  simp[vyperTypeSystemTheory.type_stmt_def,
+       vyperTypeSystemTheory.well_typed_expr_def, AllCaseEqs()] >>
+  rpt strip_tac >> drule_all source_signature_internal_decl >>
+  simp[] >> metis_tac[]
 QED
