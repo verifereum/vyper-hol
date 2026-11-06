@@ -4,7 +4,7 @@ Theory asmFrameCreateStep
 Ancestors
   asmFrameRel asmFrameCallStep frameObsStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
-  vfmExecution vfmExecutionProp
+  vfmExecution vfmExecutionProp frameCreationGuard
 
 (* Actual failure is a handler exception, not a zero returned address. *)
 Theorem asm_create_failed_pop_effects:
@@ -190,7 +190,8 @@ Theorem asm_create_code_pop_selectors:
   child.msgParams.outputTo = Code address /\
   handle_exception ex s = (INL (),t) ==>
   ?p. t.contexts = (p,prb)::rest /\
-    p.msgParams = parent.msgParams /\ p.memory = parent.memory /\
+    p.msgParams = parent.msgParams /\ p.jumpDest = parent.jumpDest /\
+    p.memory = parent.memory /\
     p.pc = SUC parent.pc /\
     p.stack = (if ex = NONE then w2w address else 0w)::parent.stack /\
     p.returnData = (if ex = SOME Reverted then child.returnData else []) /\
@@ -249,7 +250,8 @@ Theorem asm_create_run_code_continuation:
   ?ex u c p. u.contexts = (c,crb)::(parent,prb)::rest /\
     c.msgParams = child.msgParams /\ handle_exception ex u = (INL (),t) /\
     t.contexts = (p,prb)::rest /\
-    p.msgParams = parent.msgParams /\ p.memory = parent.memory /\
+    p.msgParams = parent.msgParams /\ p.jumpDest = parent.jumpDest /\
+    p.memory = parent.memory /\
     p.pc = SUC parent.pc /\
     p.stack = (if ex = NONE then w2w address else 0w)::parent.stack /\
     p.returnData = (if ex = SOME Reverted then c.returnData else []) /\
@@ -506,37 +508,6 @@ Proof
   drule_at (Pat `_ = (INL (),t)`) asm_create_finish_view >>
   simp[] >> strip_tac >> gvs[] >> metis_tac[]
 QED
-Theorem asm_create_code_pop_jumpDest:
-  s.contexts = (child,crb)::(parent,prb)::rest /\
-  child.msgParams.outputTo = Code address /\
-  handle_exception ex s = (INL (),t) ==>
-  (FST (HD t.contexts)).jumpDest = parent.jumpDest
-Proof
-  strip_tac >> Cases_on `ex` >> Cases_on `x = Reverted` >>
-  gvs[handle_exception_def, bind_def, ignore_bind_def,
-      get_gas_left_def, get_current_context_def, return_def,
-      consume_gas_def, set_return_data_def, set_current_context_def,
-      get_num_contexts_def, get_return_data_def, get_output_to_def,
-      reraise_def, assert_def, fail_def, inc_pc_def, push_stack_def,
-      pop_and_incorporate_context_def, pop_context_def,
-      set_rollback_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
-      AllCaseEqs()]
-QED
-
-Theorem asm_create_run_code_jumpDest:
-  wf_state s /\ (?d. s.msdomain = Collect d) /\
-  s.contexts = (child,crb)::(parent,prb)::rest /\
-  child.msgParams.outputTo = Code address /\
-  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
-  (FST (HD t.contexts)).jumpDest = parent.jumpDest
-Proof
-  strip_tac >>
-  drule_at (Pat `run_call _ = _`) asm_create_run_final_view >>
-  simp[] >> strip_tac >>
-  irule asm_create_code_pop_jumpDest >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
 Theorem asm_frame_create_consume[local]:
   asm_evm_rel (prog ++ [AsmDataItem data]) a s /\
   s.contexts = (c,rb)::rest /\
@@ -567,6 +538,10 @@ Theorem asm_frame_create_effects_step_ok:
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   w2n sz <= 2 * max_code_size /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  (a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+  (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
+    (lookup_account c.msgParams.callee t.rollback.accounts)) /\
   run_call t = run_call s /\ wf_state t /\ t.txParams = s.txParams /\
   (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
@@ -682,6 +657,19 @@ Proof
     (Cases_on `salt_opt` >>
      gvs[call_requests_def, computed_precompile_def, request_of_def]) >>
   `a.as_outcomes = MAP SND (call_trace s)` by fs[asm_frame_rel_def] >>
+  `(a.as_call_ctx.cc_created_in_tx =
+      account_empty (lookup_account c.msgParams.callee s.originalAccounts)) /\
+    (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
+      (lookup_account c.msgParams.callee s.rollback.accounts))` by
+    gvs[asm_frame_rel_def] >>
+  `account_empty (lookup_account c.msgParams.callee t.originalAccounts) =
+    account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
+    (irule evmCreationGuardTheory.step_creation_original_empty >> metis_tac[]) >>
+  `!addr. account_already_created (lookup_account addr s.rollback.accounts) ==>
+      account_already_created (lookup_account addr t.rollback.accounts)` by
+    (mp_tac (Q.INST [`d` |-> `LENGTH s.contexts`, `B` |-> `s.rollback`,
+                    `s` |-> `s`, `t` |-> `t`, `x` |-> `()`]
+       vfmRunCallTheory.step_continuing_collision_current) >> simp[]) >>
   drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `salt_opt` >>
@@ -727,8 +715,6 @@ Proof
     (drule asm_call_run_txParams >> simp[]) >>
   drule_at (Pat `run_call _ = _`) asm_create_run_code_continuation >>
   simp[] >> strip_tac >>
-  `p.jumpDest = parent.jumpDest` by
-    (drule_at (Pat `run_call _ = _`) asm_create_run_code_jumpDest >> simp[]) >>
   `?deleted. t.rollback.toDelete = deleted ++ a.as_pending_deletions` by
     (drule_at (Pat `run_call v = _`) asm_call_run_pending_suffix_any_output >>
      simp[] >> metis_tac[]) >>
@@ -739,6 +725,14 @@ Proof
     (Cases_on `salt_opt` >>
      gvs[call_requests_def, computed_precompile_def, request_of_def]) >>
   `a.as_outcomes = MAP SND (call_trace s)` by fs[asm_frame_rel_def] >>
+  `(a.as_call_ctx.cc_created_in_tx =
+      account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+    (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
+      (lookup_account c.msgParams.callee t.rollback.accounts))` by
+    (mp_tac (Q.INST [`s` |-> `s`, `v` |-> `v`, `r` |-> `INL ()`,
+       `t` |-> `t`, `self` |-> `c.msgParams.callee`,
+       `created` |-> `a.as_call_ctx.cc_created_in_tx`]
+       step_run_call_creation_guard) >> gvs[asm_frame_rel_def] >> metis_tac[]) >>
   drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`address`, `salt_opt`] >>
