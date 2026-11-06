@@ -185,3 +185,33 @@ Proof
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   simp[next_inst_def, write_memory_with_expansion_def] >> decide_tac
 QED
+
+(* The entire forwarding segment is literally unchanged at block entry. *)
+Theorem ld_lower_revert_pair_zero:
+  revert_forward_pair src 0 j /\
+  lower_dload_block_supply q src = (dst,qe) ==>
+  revert_forward_pair dst 0 j
+Proof
+  strip_tac >> drule ld_revert_pair_segment >> strip_tac >>
+  `pre = []` by gvs[] >> gvs[] >>
+  Cases_on `lower_dload_insts_supply q post` >>
+  rename1 `lower_dload_insts_supply q post = (after,qf)` >>
+  `lower_dload_insts_supply q (copy::(mid ++ rev::post)) =
+     (copy::(mid ++ rev::after),qf)` by
+    (irule (SRULE [cj 1 lower_dload_insts_supply_def]
+       (Q.INST [`pre` |-> `[]`, `before` |-> `[]`]
+          (SPEC_ALL ld_lower_revert_segment))) >> simp[]) >>
+  `dst.bb_instructions = copy::(mid ++ rev::after)` by
+    (qpat_x_assum `src.bb_instructions = _`
+       (assume_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+     gvs[lower_dload_block_supply_def]) >>
+  `0 < j` by metis_tac[revert_forward_pair_def] >>
+  `j = SUC (LENGTH mid)` by decide_tac >>
+  qpat_x_assum `LENGTH mid = _` kall_tac >>
+  qpat_x_assum `j = _` SUBST_ALL_TAC >>
+  qpat_x_assum `revert_forward_pair src 0 _` mp_tac >>
+  qpat_x_assum `src.bb_instructions = _`
+    (assume_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  simp[revert_forward_pair_def, get_instruction_def, EL_APPEND_EQN,
+       TAKE_APPEND, TAKE_LENGTH_TOO_LONG, EL_CONS]
+QED
