@@ -10,6 +10,7 @@ Ancestors
   abiDecoderArraySetupInputs abiDecoderLoop entrySinkExtraction
   abiEncoder ptrDiscipline abiDecoderArrayInitExec abiScratchDecoderTuple
   decoderGhostFramePtr abiDecoderAllocation abiScratchEffect
+  abiScratchDecoderLoopInput abiScratchDecoderLoopInvariant
 
 Theorem calldata_scratch_array_body_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
@@ -260,3 +261,30 @@ Resume calldata_scratch_array_body_ptr[compose]:
 QED
 
 Finalise calldata_scratch_array_body_ptr
+
+(* This boundary starts at the header: it does not execute the incoming jump. *)
+Theorem calldata_scratch_initialized_loop_inputs:
+  abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w)
+    sb d first last b cap s /\
+  abi_decoder_valid_array_memory CALLDATALOAD bs tv vs sb d 0 s /\
+  fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s /\
+  first <= site /\ site < last /\
+  FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  eval_operand (Var q) s = SOME (n2w slot) /\
+  abi_decoder_operand_live loop_st.cs_next_var (Var q) /\
+  mload slot s = 0w /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  (is_dynamic (vyper_to_abi_type env ty) ==>
+    !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) ==>
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
+    (Var q) src (Var root) sb d slot first last b cap loop_st.cs_next_var s /\
+  abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+    first last lo hi loop_st.cs_next_var limit_st b cap s hdr 0 s
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_tac
+  >- (irule abi_scratch_decoder_loop_input >> goal_assum (drule_at Any) >>
+      asm_rewrite_tac[] >> qexists_tac `site` >> asm_rewrite_tac[]) >>
+  irule abi_scratch_decoder_loop_inv_init >> asm_rewrite_tac[]
+QED
