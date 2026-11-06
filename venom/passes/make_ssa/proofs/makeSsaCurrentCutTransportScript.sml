@@ -137,3 +137,25 @@ Proof
   simp[current_source_cut_def, current_event_input_block_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+Theorem current_transport_cleanup_ordinary_outputs:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM new renamed /\
+  k < LENGTH new.bb_instructions /\
+  (EL k new.bb_instructions).inst_opcode <> PHI ==>
+  (EL k (simplify_current_phi_block new).bb_instructions).inst_outputs =
+  (EL k new.bb_instructions).inst_outputs
+Proof
+  strip_tac >> drule_all current_wf_phi_context_cleanup_split >> strip_tac >>
+  `LENGTH pre <= k` by
+    (Cases_on `k < LENGTH pre` >> simp[] >>
+     `MEM (EL k pre) pre` by metis_tac[listTheory.EL_MEM] >>
+     fs[listTheory.EL_APPEND_EQN, listTheory.EVERY_MEM]) >>
+  `k - LENGTH pre < LENGTH tail` by fs[] >>
+  `current_inst_no_id (EL (k - LENGTH pre) tail) =
+   current_inst_no_id (EL (k - LENGTH pre) tail')` by
+    (fs[listTheory.LIST_REL_EL_EQN] >> metis_tac[]) >>
+  fs[listTheory.EL_APPEND_EQN, makeSsaCurrentCleanupShapeTheory.current_inst_no_id_def] >>
+  qpat_x_assum `_ with inst_id := 0 = _` (mp_tac o Q.AP_TERM `\inst. inst.inst_outputs`) >>
+  simp[]
+QED

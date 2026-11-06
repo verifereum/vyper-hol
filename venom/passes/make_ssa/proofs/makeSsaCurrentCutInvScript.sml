@@ -329,3 +329,67 @@ Proof
   Cases_on `h` >> simp[makeSsaCurrentDefsTheory.rename_current_operands_def,
     op_rename_def] >> metis_tac[]
 QED
+
+Theorem current_cut_ordinary_operand_lookup:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM ev events /\ current_event_label ev = l /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  A l = current_block_annotations old pre /\
+  current_source_cut A ev (LENGTH pre + i) rs E /\
+  i < LENGTH old.bb_instructions /\
+  (EL i old.bb_instructions).inst_opcode <> PHI /\
+  MEM (Var v) (EL i old.bb_instructions).inst_operands ==>
+  FLOOKUP (current_cut_sg fn A renamed H events l i)
+    (latest_current_name rs v) = SOME v
+Proof
+  strip_tac >>
+  `current_demand fn v l i /\ MEM v (FLAT (MAP block_ir_vars fn.fn_blocks))` by
+    metis_tac[current_wf_ordinary_demand] >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  `current_token_name H (E v) = SOME (latest_current_name rs v)` by
+    metis_tac[current_wf_precleanup_cut_name] >>
+  drule_all current_cut_sg_lookup >> disch_then (rewrite_tac o single) >>
+  simp[current_cut_pair_def] >>
+  qexistsl_tac [`ev`, `pre`, `rs`, `E`] >>
+  simp[arithmeticTheory.ADD_COMM] >>
+  metis_tac[current_wf_nonphi_after_collect, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem current_cut_ordinary_operands_rel:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM ev events /\ current_event_label ev = l /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  A l = current_block_annotations old pre /\
+  current_source_cut A ev (LENGTH pre + i) rs E /\
+  i < LENGTH old.bb_instructions /\
+  (EL i old.bb_instructions).inst_opcode <> PHI ==>
+  LIST_REL (op_rename (current_cut_sg fn A renamed H events l i))
+    (EL i old.bb_instructions).inst_operands
+    (rename_current_operands rs (EL i old.bb_instructions).inst_operands)
+Proof
+  strip_tac >> irule current_cut_rename_operands_rel >>
+  metis_tac[current_cut_ordinary_operand_lookup]
+QED
+
+Theorem current_cut_pair_cleanup_output_exclusion:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  lookup_block l renamed = SOME new /\
+  A l = current_block_annotations old pre /\ i < LENGTH old.bb_instructions /\
+  LENGTH pre + i < LENGTH new.bb_instructions /\
+  (EL (LENGTH pre + i) new.bb_instructions).inst_opcode <> PHI /\
+  current_cut_pair fn A renamed H events l (SUC i) n v /\
+  ~MEM v (EL i old.bb_instructions).inst_outputs ==>
+  ~MEM n (EL (LENGTH pre + i)
+    (simplify_current_phi_block new).bb_instructions).inst_outputs
+Proof
+  strip_tac >>
+  `MEM new renamed` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  drule_all current_transport_cleanup_ordinary_outputs >>
+  disch_then (rewrite_tac o single) >>
+  metis_tac[current_cut_pair_precleanup_output_exclusion]
+QED
