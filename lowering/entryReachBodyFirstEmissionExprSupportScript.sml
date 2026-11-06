@@ -1023,3 +1023,218 @@ Proof
      irule raw_create_suffix_extension_only >> first_assum ACCEPT_TAC) >>
   gvs[cs_appends_def]
 QED
+
+Theorem first_emission_create_proxy_buf[local]:
+  !target a x b. compile_create_proxy_buf target a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> rewrite_tac[builtinCreateTheory.compile_create_proxy_buf_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_alloc_buffer] >>
+  gen_tac >> map_every qx_gen_tac [`a`, `x`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (x,b)` >>
+  `!s. cs_extends s (SND (tail s)) /\
+       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
+    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem first_emission_create_copy[local]:
+  !target value salt rof a x b. compile_create_copy target value salt rof a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> simp_tac (srw_ss()) [builtinCreateTheory.compile_create_copy_def, LET_THM] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  gen_tac >> map_every qx_gen_tac [`a`, `x`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (x,b)` >>
+  `!s. cs_extends s (SND (tail s)) /\
+       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
+    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gen_tac >> Cases_on `salt` >> Cases_on `rof` >>
+  simp_tac (srw_ss()) [Abbr `tail`] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels,
+            compile_alloc_dynamic_labels, compile_check_create_result_labels])
+QED
+
+Theorem first_emission_create_blueprint_check[local]:
+  !target offset a x b. compile_create_blueprint_check target offset a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >> rewrite_tac[builtinCreateTheory.compile_create_blueprint_check_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+  gen_tac >> map_every qx_gen_tac [`a`, `x`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (x,b)` >>
+  `!s. cs_extends s (SND (tail s)) /\
+       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
+    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem first_emission_create_salt[local]:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce se a x b. compile_create_salt cfn ce se a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> map_every qx_gen_tac [`ce`, `se`] >> Cases_on `se`
+  >- simp[compile_create_salt_def, comp_return_def, cs_extends_refl] >>
+  rewrite_tac[compile_create_salt_def] >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  simp[comp_return_def, cs_extends_refl]
+QED
+
+Theorem first_emission_create_call:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce ck salt rof es a x b. compile_create_call cfn ce ck salt rof es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >>
+  `!ce ty e s. cs_extends s (SND (cfn ce ty e s))` by
+    (rpt gen_tac >> Cases_on `cfn ce ty e s` >> first_x_assum drule >> simp[]) >>
+  map_every qx_gen_tac [`ce`, `ck`, `salt`, `rof`, `es`] >> Cases_on `es`
+  >- (simp_tac (srw_ss()) [compile_create_call_def] >> suspend "invalid_create") >>
+  Cases_on `t`
+  >- (simp_tac (srw_ss()) [compile_create_call_def] >> suspend "invalid_create") >>
+  simp_tac (srw_ss()) [compile_create_call_def] >> IF_CASES_TAC
+  >- suspend "invalid_create" >>
+  Cases_on `ck` >> simp_tac (srw_ss()) [LET_THM]
+  >~ [`compile_raw_create`]
+  >- (drule first_emission_raw_create >> disch_then MATCH_ACCEPT_TAC) >>
+  ntac 2 (ho_match_mp_tac first_emission_bind >> conj_tac
+    >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+    gen_tac >> BETA_TAC)
+  >~ [`compile_create_proxy_buf`] >- suspend "proxy"
+  >~ [`compile_create_copy`] >- suspend "copy" >>
+  suspend "blueprint"
+QED
+
+Resume first_emission_create_call[invalid_create]:
+  markerLib.RESUME_TAC >> (
+  rewrite_tac[comp_ignore_bind_def] >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any
+       (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >>
+  simp[comp_return_def, cs_extends_refl])
+QED
+
+Resume first_emission_create_call[proxy]:
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_create_proxy_buf] >>
+  gen_tac >> BETA_TAC >> map_every qx_gen_tac [`a`, `res`, `b`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (res,b)` >>
+  `cs_appends tail` by
+    (simp_tac (srw_ss()) [Abbr `tail`] >> irule cs_appends_bind >> reverse conj_tac
+     >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
+     gen_tac >> BETA_TAC >> rw[cs_appends_def] >>
+     metis_tac[cj 1 compile_create_dispatch_labels, pairTheory.SND]) >>
+  gvs[cs_appends_def]
+QED
+
+Resume first_emission_create_call[copy]:
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (drule first_emission_create_salt >> disch_then MATCH_ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_strong >>
+  metis_tac[first_emission_create_copy]
+QED
+
+Resume first_emission_create_call[blueprint]:
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (drule first_emission_create_salt >> disch_then MATCH_ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[first_emission_create_blueprint_check] >>
+  gen_tac >> BETA_TAC >> map_every qx_gen_tac [`a`, `res`, `last`] >>
+  qmatch_goalsub_abbrev_tac `tail a = (res,last)` >>
+  `cs_appends tail` by
+    (simp_tac (srw_ss()) [Abbr `tail`] >> irule cs_appends_bind >> reverse conj_tac
+     >- (irule create_blueprint_args_extension_only >> first_assum ACCEPT_TAC) >>
+     qx_gen_tac `pl` >> PairCases_on `pl` >> simp_tac (srw_ss()) [] >>
+     rw[cs_appends_def] >> metis_tac[cj 1 compile_create_blueprint_append_labels, pairTheory.SND]) >>
+  gvs[cs_appends_def]
+QED
+
+Finalise first_emission_create_call
+
+Theorem first_emission_call:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty target es dr a x b. compile_call cfn ce rt ty target es dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> map_every qx_gen_tac [`ce`, `rt`, `ty`, `target`, `es`, `dr`] >>
+  Cases_on `target`
+  >- (drule first_emission_intcall >> disch_then MATCH_ACCEPT_TAC)
+  >- (drule first_emission_extcall >> disch_then MATCH_ACCEPT_TAC)
+  >- (drule first_emission_send >> disch_then MATCH_ACCEPT_TAC)
+  >- (drule first_emission_raw_call >> disch_then MATCH_ACCEPT_TAC)
+  >- (drule first_emission_raw_calldata >> disch_then MATCH_ACCEPT_TAC)
+  >- (rpt gen_tac >> strip_tac >> drule_at Any first_emission_invalid_call >>
+      simp[MEM] >> strip_tac >> simp[])
+  >- (rpt gen_tac >> strip_tac >> drule_at Any first_emission_invalid_call >>
+      simp[MEM] >> strip_tac >> simp[])
+  >- (rpt gen_tac >> strip_tac >> drule_at Any first_emission_invalid_call >>
+      simp[MEM] >> strip_tac >> simp[]) >>
+  simp_tac (srw_ss()) [compile_call_def] >>
+  ho_match_mp_tac first_emission_as_stack_val >>
+  drule first_emission_create_call >> disch_then MATCH_ACCEPT_TAC
+QED
