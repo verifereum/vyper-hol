@@ -3,10 +3,10 @@ Theory bodyPtrTypeBuiltinsUintCounted
 Ancestors bodyPtrTypeBuiltinsUnsignedValue bodyPtrTypeBuiltinsUnsignedLoad
   bodyPtrTypeBuiltinsClamp bodyPtrTypeBuiltinsUintActual
   bodyPtrTypeBuiltinsScalarCompose bodyPtrTypeBuiltinsSourceFrame
-  fragGasPathPtr fragExec emitHelperProps exprLoweringProps exprLowering
+  fragGasPathPtr fragGasSeqPtr fragGasSeqAbort fragExec emitHelperProps exprLoweringProps exprLowering
   builtinConvertPrefix venomState venomInst venomExecSemantics opcodeClass
   rich_list list arithmetic finite_map ptrDiscipline instIdxIndep
-  compileEnv loweringShapeDefs
+  compileEnv loweringShapeDefs venomInstProps
 
 Theorem appended_prefix_drop:
   isPREFIX (xs ++ ys) zs ==>
@@ -227,3 +227,125 @@ Resume bytes_uint_counted_success[frame]:
 QED
 
 Finalise bytes_uint_counted_success
+
+(* No GAS instructions means the executed abort prefix has zero observations. *)
+Theorem no_gas_seq_abort_counted:
+  !code s t a G tn H th ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                i.inst_opcode <> GAS) code /\
+    inst_seq_ptr D lo ctx fn PG G tn code s H th /\
+    run_inst_seq code s = Abort a t ==>
+    ?j. gas_path_ptr D lo ctx fn PG G tn s 0 H th
+          (Abort a (t with vs_inst_idx := j))
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def]
+  >~ [`step_inst_base h s = OK u`]
+  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `step_prov PG G h u`,
+        `step_taint h s u tn`, `H`, `th`, `ctx`, `fn`, `bb`] mp_tac) >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+      drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`) gas_path_ptr_step >>
+      simp[] >> metis_tac[]) >>
+  qexists_tac `t.vs_inst_idx` >>
+  simp[] >> drule_all gas_path_ptr_abort >> simp[]
+QED
+
+Theorem int_clamp_abort_zero_counted:
+  compile_int_clamp signed bits x sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th j. gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+    (Abort err (t with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  drule_all (cj 2 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] int_clamp_fixed_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  drule int_clamp_instruction_filter >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+     i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+    (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+  drule_all no_gas_seq_abort_counted >> metis_tac[]
+QED
+
+Theorem bytes_uint_counted_abort:
+  compile_type_convert (Var src) (mk_convert_op (BaseT (BytesT (Dynamic n)))
+    (BaseT (UintT b))) sa = (out,sb) /\
+  not_fresh_at sa src /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fn_has_code sa sb fn /\ lookup_var src s = SOME a /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  ptr_mem_ok cx (expr_type e) (BytesV bs) (Var src) G tn s /\
+  ptr_buf_ok cenv e (Var src) G s /\ op_taint tn (Var src) = {} /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k))) /\
+  LENGTH bs <= 32 /\ 64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
+  w2n a+32 < dimword(:256) /\ run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  s0a.cs_next_var <= sa.cs_next_var /\
+  (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
+  ?H th j. gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+    (Abort err (t with vs_inst_idx := j))
+Proof
+  strip_tac >> drule_all uint_convert_parts >> strip_tac >>
+  Cases_on `8*n > b` >> gvs[]
+  >- suspend "clamp" >>
+  drule_all unsigned_loader_no_abort >> metis_tac[]
+QED
+
+Resume bytes_uint_counted_abort[clamp]:
+  `inst_extends sm sb` by metis_tac[inst_extends_compile_int_clamp] >>
+  `sb.cs_current_bb = sm.cs_current_bb` by metis_tac[int_clamp_unsigned_code] >>
+  drule_all fn_code_emitted_parts >> strip_tac >>
+  `?u. run_inst_seq (emitted_insts sa sm) s = OK u /\
+       run_inst_seq (emitted_insts sm sb) u = Abort err t` by
+    (drule_all unsigned_loader_no_abort >> strip_tac >>
+     fs[scalar_seq_append_abort_iff] >> metis_tac[]) >>
+  `isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (fs[IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  `ptr_mem_ok cx (expr_type e) (BytesV bs) (Var src) G tn s /\
+   evaluate_type (get_tenv cx) (expr_type e) = SOME tv` by simp[] >>
+  drule_all unsigned_loader_from_bytes_value >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `LENGTH (emitted_insts sa sm) = 6` by
+    (drule_all unsigned_loader_shape_fresh >> strip_tac >> simp[]) >>
+  `u.vs_current_bb = s.vs_current_bb /\ ~u.vs_halted` by
+    (qpat_x_assum `u with vs_inst_idx := _ = _` mp_tac >>
+     disch_then (fn th => map_every mp_tac
+       [Q.AP_TERM `\v. v.vs_current_bb` th, Q.AP_TERM `\v. v.vs_halted` th]) >>
+     simp[]) >>
+  `run_inst_seq (emitted_insts sm sb) (u with vs_inst_idx := s.vs_inst_idx+6) =
+     Abort err (t with vs_inst_idx := s.vs_inst_idx+6)` by
+    (drule int_clamp_instruction_filter >> strip_tac >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     qpat_x_assum `u with vs_inst_idx := _ = _` kall_tac >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
+  `lookup_block (u with vs_inst_idx := s.vs_inst_idx+6).vs_current_bb
+    fn.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sm sb)
+    (DROP (u with vs_inst_idx := s.vs_inst_idx+6).vs_inst_idx bb.bb_instructions) /\
+   ~(u with vs_inst_idx := s.vs_inst_idx+6).vs_halted` by gs[] >>
+  qpat_x_assum `run_inst_seq (emitted_insts sm sb) u = _` kall_tac >>
+  qpat_x_assum `u with vs_inst_idx := _ = _` kall_tac >>
+  drule_all int_clamp_abort_zero_counted >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  drule_all gas_path_ptr_then >> gs[] >> metis_tac[]
+QED
+
+Finalise bytes_uint_counted_abort
