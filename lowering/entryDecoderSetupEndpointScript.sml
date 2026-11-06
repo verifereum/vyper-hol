@@ -10,7 +10,7 @@ Ancestors
   abiDecoderContract abiDecoderDynamicLoopSetup fragExec safeSequence fragExecMem
   venomInstProofs venomExecProps finite_map
 
-Theorem entry_element_setup_reentry_code[local]:
+Theorem entry_element_setup_reentry_code:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
     abi_sz mem_sz st = (ops,ready) ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
