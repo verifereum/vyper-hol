@@ -2,7 +2,7 @@ Theory fnBlockPlanStaticRegion
 Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
-  fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs
+  fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
 
 Theorem dfs_saved_parent_origin_mutual[local]:
@@ -578,3 +578,50 @@ Proof
   Cases_on `EL d (REVERSE stk)` >> gvs[stackPlanTypesTheory.is_var_operand_def]
 QED
 
+
+Theorem regional_fn_path_first_visit[local]:
+  !path fn target. is_fn_path fn path /\ MEM target path ==>
+    ?pre. is_fn_path fn (pre ++ [target]) /\
+      HD (pre ++ [target]) = HD path /\ ~MEM target pre
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `is_fn_path fn (head :: rest)` >> strip_tac >>
+  Cases_on `head = target`
+  >- (qexists_tac `[]` >> gvs[is_fn_path_def]) >>
+  `MEM target rest` by gvs[] >>
+  `is_fn_path fn rest` by (Cases_on `rest` >> gvs[is_fn_path_def]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `head :: pre` >>
+  Cases_on `rest` >> Cases_on `pre` >> gvs[is_fn_path_def]
+QED
+
+Theorem regional_fn_path_unsnoc[local]:
+  !pre fn target. pre <> [] /\ is_fn_path fn (pre ++ [target]) ==>
+    is_fn_path fn pre /\ fn_cfg_edge fn (LAST pre) target
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  rename1 `is_fn_path fn ((head :: rest) ++ [target])` >>
+  Cases_on `rest` >> gvs[is_fn_path_def] >> metis_tac[]
+QED
+
+Theorem regional_first_entry_edge:
+  !fn target. fn_reachable fn target /\ fn_entry_label fn <> SOME target ==>
+    ?pred. fn_reachable fn pred /\ fn_cfg_edge fn pred target /\
+      ~fn_dominates fn target pred
+Proof
+  rpt strip_tac >>
+  `?entry. fn_entry_label fn = SOME entry /\
+     RTC (fn_cfg_edge fn) entry target` by gvs[fn_reachable_def] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `MEM target path` by metis_tac[MEM_LAST_NOT_NIL] >>
+  drule_all regional_fn_path_first_visit >> strip_tac >>
+  `pre <> []` by (strip_tac >> gvs[]) >>
+  `HD pre = entry` by (Cases_on `pre` >> gvs[]) >>
+  drule_all regional_fn_path_unsnoc >> strip_tac >>
+  qexists_tac `LAST pre` >> simp[] >> conj_tac
+  >- (simp[fn_reachable_def] >>
+      qspecl_then [`fn`, `pre`] mp_tac is_fn_path_rtc >> simp[]) >>
+  strip_tac >> qpat_x_assum `fn_dominates _ _ _` mp_tac >>
+  simp[fn_dominates_def] >>
+  disj2_tac >> qexists_tac `pre` >> simp[]
+QED
