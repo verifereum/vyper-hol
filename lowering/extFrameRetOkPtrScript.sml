@@ -20,7 +20,7 @@ Ancestors
   extRetStaticFrameConsumerPtr extRetStaticCapacityPtr extRetStaticBoundedConsumerPtr
   extRetTypedStaticConsumerPtr extRetStaticLoweredFramePtr extRetStaticPlanSelectionPtr
   extRetStaticUnrestrictedProbePtr extRetZeroStmtPtr extRetRecursiveDomainProbePtr
-  extRetRecursiveDynamicProbePtr
+  extRetRecursiveDynamicProbePtr extRetEvaluatedStaticPtr
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
   extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr extRetAbiArrayBackedgePtr
@@ -142,9 +142,10 @@ Proof
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
-  Cases_on `assignable_type (type_env tops) ret /\
-            ~is_abi_dynamic cenv'.ce_struct_fields ret`
-  >- (pop_assum strip_assume_tac >>
+  Cases_on `~is_abi_dynamic cenv'.ce_struct_fields ret`
+  >- (drule_all source_external_return_contract >> strip_tac >>
+      `?tv. evaluate_type (type_env tops) ret = SOME tv` by
+        fs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
       drule source_deployment_context >> strip_tac >>
       `expr_type x = ret` by
         (drule_all typed_abi_static_return_annotation >> simp[]) >>
@@ -156,8 +157,7 @@ Proof
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-      drule_all external_frame_static_copy_selection >> strip_tac >>
-      irule external_frame_typed_static_copy_stmt_frag_ptr_bounded >> simp[] >>
+      irule external_frame_evaluated_static_stmt_frag_ptr >> simp[] >>
       conj_tac >- fs[int_calls_stmt_def, int_calls_expr_def] >>
       reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
       goal_assum (drule_at Any) >>

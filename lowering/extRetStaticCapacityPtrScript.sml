@@ -3,7 +3,7 @@ Ancestors
   extRetStaticFrameMetadataPtr returnMetadataPtr vyperABI contractABI
   valueEncoding valueEncodingProofs vyperValue vyperTypeDefaults list rich_list finite_map
 
-Theorem evaluated_abi_dynamic[local]:
+Theorem evaluated_abi_dynamic:
   (!tenv ty tv. evaluate_type tenv ty = SOME tv ==>
     is_dynamic (vyper_to_abi_type tenv ty) = vyper_is_dynamic tenv ty) /\
   (!tenv ts acc tvs. evaluate_types tenv ts acc = SOME tvs ==>
