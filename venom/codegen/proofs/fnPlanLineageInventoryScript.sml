@@ -5476,3 +5476,15 @@ Proof
   `~MEM (Var v) ps2.ps_stack /\ Var v NOTIN FDOM ps2.ps_spilled` by metis_tac[] >>
   simp[stack_pop_def] >> metis_tac[MEM_TAKE]
 QED
+
+(* Exact copy from reorderSim.all_distinct_elem_count_le_one (local there). *)
+Theorem all_distinct_elem_count_le_one:
+  !(xs : 'a list) x.
+    ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1
+Proof
+  Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
+  Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
+  >- (`~(LIST_ELEM_COUNT h xs > 0)` by
+        metis_tac[LIST_ELEM_COUNT_MEM] >> decide_tac)
+  >> first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED

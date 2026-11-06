@@ -1112,3 +1112,59 @@ Proof
   qpat_x_assum `ps8 = _` kall_tac >>
   qpat_x_assum `ps9 = _` kall_tac >> asm_rewrite_tac []
 QED
+
+Theorem native_regular_next_live_upper:
+  !lv dfg cfg fn inst nl halting term lbl ps ops qs.
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    (!v. MEM v (operand_vars (compute_operands inst) ++ nl) ==>
+      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+        (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) /\
+    (!v. MEM (Var v) (compute_operands inst) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    ALL_DISTINCT inst.inst_outputs /\
+    EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+      ~MEM (Var v) (compute_operands inst)) inst.inst_outputs /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs)
+    ==> !v. MEM v nl ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack +
+        (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_regular_stages >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `!v. MEM v nl ==>
+    LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) +
+      (if Var v IN FDOM ps4.ps_spilled then 1 else 0) <= 1` by
+    (rpt strip_tac >> irule emit_reorder_pop_next_live_upper >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >> simp[]) >>
+  `!v. MEM v inst.inst_outputs ==>
+    ~MEM (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) /\
+    Var v NOTIN FDOM ps4.ps_spilled` by
+    (gen_tac >> disch_tac >> irule emit_reorder_pop_variable_absent >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
+  disch_then (strip_assume_tac o SRULE [parameter_push_fold]) >>
+  `!v. MEM v nl ==>
+    LIST_ELEM_COUNT (Var v) ps7.ps_stack +
+      (if Var v IN FDOM ps7.ps_spilled then 1 else 0) <= 1` by
+    (rpt strip_tac >>
+     Cases_on `MEM v inst.inst_outputs`
+     >- (`~MEM (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) /\
+          Var v NOTIN FDOM ps4.ps_spilled` by metis_tac[] >>
+         `LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) = 0` by
+           (qpat_x_assum `~MEM (Var v) (stack_pop _ _)` mp_tac >>
+            simp_tac std_ss [GSYM LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]) >>
+         `ALL_DISTINCT (MAP Var inst.inst_outputs)` by
+           (irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+         drule all_distinct_elem_count_le_one >>
+         disch_then (qspec_then `Var v` mp_tac) >> gvs[elem_count_append]) >>
+     `~MEM (Var v) (MAP Var inst.inst_outputs)` by simp[MEM_MAP] >>
+     `LIST_ELEM_COUNT (Var v) (MAP Var inst.inst_outputs) = 0` by
+       gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+     gvs[elem_count_append]) >>
+  drule_all regular_post_emit_tail_resource_nonincrease >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
