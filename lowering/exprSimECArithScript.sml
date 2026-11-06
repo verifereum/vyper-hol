@@ -397,6 +397,7 @@ Proof
 QED
 
 Theorem ec_point_operand_kept[local]:
+  post_value_type cenv e1 = expr_type e1 /\
   expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
@@ -731,6 +732,7 @@ Proof
 QED
 
 Theorem ec_result_pointer_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   stmt_state_rel ctx func cenv cx es' t /\ wb_frame cenv es sa s0 t /\
   eval_operand pop t = SOME w /\
@@ -1589,6 +1591,7 @@ Theorem ec_suffix_pointer_post[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   ?t. run_inst_seq (emitted_insts sm sb) st = OK t /\
       vv_post ctx func cenv cx e es sf sb s0 (es with outcomes := SOME rest)
@@ -1647,6 +1650,7 @@ Theorem ec_points_run[local]:
   (!z. MEM (Var z) [p;scalar] ==> not_fresh_at sf z) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
   w2n point + 64 < dimword (:256) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   case vfmExecution$ecmul
     (w2n (mem_word_at (w2n point) s.vs_memory),
@@ -1670,6 +1674,7 @@ Theorem ec_points_run[local]:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
   w2n point + 64 < dimword (:256) /\ w2n point2 + 64 < dimword (:256) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   case vfmExecution$ecadd
     (w2n (mem_word_at (w2n point) s.vs_memory),
@@ -1983,6 +1988,7 @@ Theorem ec_points_path[local]:
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v p s /\
   expr_val_rel cx (BaseT (UintT 256)) k scalar s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   ec_source_tail cx ann ECMul tys [v;k] es = (r,es') /\
   fn_has_code sf sb func /\ ~s.vs_halted /\
@@ -2008,6 +2014,7 @@ Theorem ec_points_path[local]:
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 p2 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   ec_source_tail cx ann ECAdd tys [v1;v2] es = (r,es') /\
   fn_has_code sf sb func /\ ~s.vs_halted /\
@@ -2246,6 +2253,9 @@ Proof
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
   `nocalls ==> int_calls_expr b = []` by
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
+  `post_value_type cenv a = expr_type a` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >> fs[expr_body_pre_def]) >>
   `expr_sim ctx func cenv cx (expr_type a) a es` by
     (gvs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
   qpat_assum `lower_value _ _ _ a _ = _`
@@ -2406,7 +2416,9 @@ QED
 
 Resume compile_ec_call_case[point_payload]:
   markerLib.RESUME_TAC >~ [`compile_ecmul_point _ _ _ = _`]
-  >- (`expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
+  >- (`post_value_type cenv b = expr_type b` by
+        simp[post_value_type_word, is_word_type_def] >>
+      `expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
       irule (SRULE []
         (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`]
           (SPEC_ALL (CONJUNCT1 ec_points_path)))) >>
@@ -2414,6 +2426,11 @@ Resume compile_ec_call_case[point_payload]:
       conj_tac >- metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
       goal_assum (drule_at (Pat `ec_source_tail _ _ _ _ _ _ = _`)) >>
       qexistsl_tac [`sa`, `p`, `scalar`] >> simp[] >> metis_tac[]) >>
+  `post_value_type cenv b = expr_type b` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def]) >>
   `expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 q u /\
    expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) s1 sm es2 v2 q u` by
     gvs[expr_post_def] >>

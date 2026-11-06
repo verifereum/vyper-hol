@@ -48,7 +48,8 @@ Theorem literal_word_post_operand:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op s = SOME (typed_val_to_w256 tv v)
 Proof
-  metis_tac[expr_post_def, literal_word_operand]
+  rw[expr_post_def] >> gvs[post_value_type_word] >>
+  metis_tac[literal_word_operand]
 QED
 
 Theorem literal_word_post_cons:

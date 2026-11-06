@@ -2056,7 +2056,10 @@ Proof
   `vv_post ctx func cenv cx
      (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
    vv_post ctx func cenv cx lit` by
-    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def] >>
+    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def,
+         supportedExprTraverseTheory.expr_has_effect_def,
+         supportedExprTraverseTheory.supported_expr_exists_def,
+         supportedExprTraverseTheory.expr_effect_root_def] >>
   simp[expr_vv_sim_def]
 QED
 
@@ -2095,6 +2098,7 @@ Proof
 QED
 
 Theorem hash_post_footprint_bound:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es' v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ eval_operand op s = SOME p ==>
@@ -2122,6 +2126,8 @@ Theorem hash_dynamic_post_view:
     b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e) (BytesV bs) op s` by gvs[expr_post_def] >>
   `?p. eval_operand op s = SOME p` by gvs[expr_val_rel_def] >>
   `evaluate_type (get_tenv cx) (expr_type e) =
@@ -2145,6 +2151,8 @@ Theorem hash_string_post_view:
     b + 32 < dimword (:256) /\ LENGTH str < dimword (:256)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e) (StringV str) op s` by gvs[expr_post_def] >>
   `?p. eval_operand op s = SOME p` by gvs[expr_val_rel_def] >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
@@ -2433,9 +2441,11 @@ Proof
 QED
 
 Theorem vv_post_frame_intro:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
+  (~expr_has_effect e ==> vv_storage_live cx vv es' t) /\
   wb_frame cenv es sa s0 t ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
 Proof
@@ -2451,7 +2461,7 @@ Theorem vv_post_word_intro:
   vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue ty op) s
 Proof
   strip_tac >> irule vv_post_frame_intro >>
-  simp[vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
+  simp[post_value_type_word, vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
        read_result_def, return_def] >>
   metis_tac[]
 QED
@@ -2485,6 +2495,7 @@ Proof
 QED
 
 Theorem vv_post_allocated_memory_intro:
+  post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
@@ -3797,7 +3808,8 @@ Theorem vv_post_pointer_cong:
 Proof
   strip_tac >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def]
+  asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+                  vv_storage_live_def]
 QED
 
 Theorem compile_method_id_runtime_typed_vv_sim:
