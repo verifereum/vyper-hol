@@ -1,4 +1,6 @@
 (* Descriptor-level observations, independent of successful execution. *)
+(* FIRST [gvs ...] after Cases_on on the opcode runs gvs as one timed step
+   per opcode goal: over all ~200 goals at once it takes over 2 s. *)
 Theory lowerDloadDescriptorObservation
 Ancestors lowerDloadOracleCallAssembly memLocDefs list venomInst
           ptrDiscipline lowerDloadSafetyValues pred_set words pointerConfinedDefs
@@ -9,7 +11,7 @@ Theorem ld_descriptor_offset_operand:
   ~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET]
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  FIRST [gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]] >>
   metis_tac[MEM_REVERSE, MEM]
 QED
 
@@ -19,7 +21,7 @@ Theorem ld_descriptor_size_operand:
   (?w. szop = Lit w) \/ MEM szop inst.inst_operands
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  FIRST [gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]] >>
   metis_tac[MEM_REVERSE, MEM]
 QED
 
@@ -29,7 +31,7 @@ Theorem ld_descriptor_size_clean:
   ops.iao_max_size = SOME szop ==> op_taint tn szop = {}
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  FIRST [gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]] >>
   FIRST [rename1 `op_taint tn (Lit _) = {}` >> simp[op_taint_def],
          irule ld_numeric_operand_untainted >>
          qexistsl_tac [`fn`,`inst`,`s`] >> simp[] >>
@@ -42,7 +44,7 @@ Theorem ld_descriptor_offset_clean:
   op_taint tn ops.iao_ofst = {}
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  FIRST [gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]] >>
   fs[taint_ok_def] >> metis_tac[MEM, MEM_REVERSE]
 QED
 
@@ -55,7 +57,7 @@ Proof
   `ptr_use_ok P (fn_pv P fn) inst` by metis_tac[fn_ptr_ok_def] >>
   qpat_x_assum `fn_ptr_ok _ _` kall_tac >> disch_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  FIRST [gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]] >>
   qpat_x_assum `ptr_use_ok _ _ _`
     (mp_tac o REWRITE_RULE [ptr_use_ok_def]) >>
   disch_then (CONJUNCTS_THEN2 kall_tac (qspec_then `v` mp_tac)) >>
