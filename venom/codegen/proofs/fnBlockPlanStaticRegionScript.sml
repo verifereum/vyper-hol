@@ -3,7 +3,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
-  removeUnusedSsaProofs venomInst cfgNormSupplyProofs
+  removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
 
 Theorem dfs_saved_parent_origin_mutual[local]:
@@ -696,4 +696,93 @@ Proof
   simp[inst_defs_def] >> rpt strip_tac >>
   `k < LENGTH bb.bb_instructions` by decide_tac >>
   metis_tac[EL_MEM]
+QED
+
+Theorem regional_nonentry_lineage_edge[local]:
+  !lv dfg cfg fn ps0 lbl ps.
+    lineage_state lv dfg cfg fn ps0 lbl ps /\
+    fn_entry_label fn <> SOME lbl ==>
+    ?pred. lineage_entry lv dfg cfg fn ps0 pred lbl ps /\
+           MEM lbl (cfg_succs_of cfg pred)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+  once_rewrite_tac[lineage_state_cases] >>
+  simp[lineage_entry_def] >> metis_tac[]
+QED
+
+Theorem regional_lineage_phi_source:
+  !fn lv dfg cfg bb ch growth sb ctr ps phi.
+    codegen_ready_fn fn /\ lv = liveness_analyze fn /\
+    dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn
+      (init_cleanup_plan_state ch growth sb ctr) bb.bb_label ps /\
+    MEM phi (collect_phis bb.bb_instructions) ==>
+    ?src. MEM (Var src) phi.inst_operands /\ MEM (Var src) ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_entry_label fn <> SOME bb.bb_label` by metis_tac[regional_phi_nonentry] >>
+  drule_all regional_nonentry_lineage_edge >> strip_tac >>
+  `fn_reachable fn bb.bb_label` by
+    (drule lineage_state_dfs_fields >> strip_tac >>
+     drule_all dfs_block_state_cfg_reachable >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI` by
+    metis_tac[collect_phis_mem] >>
+  `phi_edge_uses_wf fn bb phi` by
+    (gvs[codegen_ready_fn_def, def_dominates_uses_def] >> metis_tac[]) >>
+  `fn_cfg_edge fn pred bb.bb_label` by metis_tac[fn_cfg_edge_cfg_analyze] >>
+  `?src. MEM (pred,src) (phi_pairs phi.inst_operands)` by
+    (gvs[phi_edge_uses_wf_def] >> Cases_on `p` >> gvs[] >> metis_tac[]) >>
+  drule_all regional_phi_live_trigger >> strip_tac >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    (drule_all ready_phi_block >> simp[phi_block_ready_def]) >>
+  `MEM src (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+    (irule input_vars_from_trigger_phi >> simp[] >> qexistsl_tac [`phi`, `w`] >>
+     gvs[phi_edge_uses_wf_def]) >>
+  `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1` by
+    (strip_tac >>
+     `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <= 1` by simp[] >>
+     gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM, NULL_EQ] >>
+     metis_tac[MEM]) >>
+  qexists_tac `src` >> conj_tac >- metis_tac[phi_pairs_mem_var] >>
+  irule regional_lineage_join_input_physical >> simp[] >>
+  goal_assum (drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)) >> simp[]
+QED
+
+Theorem regional_lineage_phi_depth:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps phi.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps /\ MEM phi (collect_phis bb.bb_instructions) ==>
+    ?src d. MEM (Var src) phi.inst_operands /\ MEM (Var src) ps.ps_stack /\
+      stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
+      d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+      (!v. MEM (Var v) phi.inst_operands /\
+        (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all regional_lineage_phi_source >> strip_tac >>
+  drule_all lineage_state_static >> strip_tac >>
+  `?!v. MEM (Var v) phi.inst_operands /\
+      (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)` by
+    (qpat_x_assum `EVERY _ (collect_phis _)` mp_tac >>
+     simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `!v. MEM (Var v) phi.inst_operands /\
+      (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src` by
+    metis_tac[EXISTS_UNIQUE_THM] >>
+  `?d. stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
+       d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src` by
+    (irule regional_phi_physical_depth >> simp[]) >>
+  qexistsl_tac [`src`, `d`] >> simp[] >> metis_tac[]
 QED
