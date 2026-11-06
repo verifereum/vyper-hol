@@ -22,7 +22,7 @@ Ancestors
   makeSsaCurrentPrefixMaps makeSsaCurrentPrefixOwner makeSsaCurrentCleanupShape
   makeSsaCurrentLockstepShape makeSsaCurrentPrefixRuntime
   makeSsaCurrentRetainedContext makeSsaCurrentPrefixPayload
-  makeSsaCurrentEdgeTransport
+  makeSsaCurrentEdgeTransport makeSsaCurrentPrefixEndpoints
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -975,4 +975,54 @@ Proof
   `current_event_exit_env pev v = current_event_entry_env hev v` by
     (irule current_edge_unaffected_env >> metis_tac[]) >>
   irule current_cut_sg_exit_lookup >> metis_tac[]
+QED
+
+Theorem current_cut_prefix_back_demand:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_prefix_back xs (current_cut_sg fn A renamed H events h i) z x ==>
+  current_demand fn x h i
+Proof
+  strip_tac >> drule current_prefix_back_range >> strip_tac >>
+  drule_all current_cut_sg_lookup >> strip_tac >>
+  fs[current_cut_pair_def]
+QED
+
+Definition current_cut_semantic_endpoint_def:
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x <=>
+    (?k q slots v.
+      current_wf_original_phi_at fn A renamed h k q slots /\
+      ALL_DISTINCT (MAP FST slots) /\ MEM (p,v) slots /\
+      (EL k old.bb_instructions).inst_outputs = [x] /\
+      (EL q new.bb_instructions).inst_outputs = [z] /\
+      simplify_current_phi (EL q new.bb_instructions) = EL q new.bb_instructions) \/
+    (?q. current_wf_inserted_phi_at A renamed h q x /\
+      (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==>
+        ~MEM x di.inst_outputs) /\
+      (EL q new.bb_instructions).inst_outputs = [z] /\
+      simplify_current_phi (EL q new.bb_instructions) = EL q new.bb_instructions) \/
+    (?u. EVERY (\j. ~MEM z j.inst_outputs)
+        (collect_phis (simplify_current_phi_block new).bb_instructions) /\
+      phi_eff (SOME p) x old.bb_instructions = SOME (Var u) /\
+      FLOOKUP (current_cut_sg fn A renamed H events p
+        (LENGTH pred.bb_instructions)) z = SOME u)
+End
+
+Theorem current_cut_semantic_endpoint_effect:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x ==>
+  OPTREL (op_rename (current_cut_sg fn A renamed H events p
+    (LENGTH pred.bb_instructions)))
+    (phi_eff (SOME p) x old.bb_instructions)
+    (phi_eff (SOME p) z (simplify_current_phi_block new).bb_instructions)
+Proof
+  pure_rewrite_tac[current_cut_semantic_endpoint_def] >> strip_tac
+  >- (irule current_cut_original_phi_cleanup_effect >> metis_tac[])
+  >- (irule current_cut_inserted_phi_cleanup_effect >> metis_tac[]) >>
+  drule makeSsaCurrentPrefixEffectTheory.current_prefix_phi_eff_absent >>
+  disch_then (qspec_then `SOME p` assume_tac) >> simp[op_rename_def]
 QED
