@@ -6462,6 +6462,129 @@ Proof
   metis_tac[gas_path_rules, ADD_0]
 QED
 
+Theorem place_store_copy_test_path:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~s.vs_halted /\ s.vs_current_bb = slot_copy_cond cs /\ s.vs_inst_idx = 0 /\
+  lookup_var (slot_copy_var cs 0) s = SOME (n2w k) /\
+  k <= n /\ n < dimword (:256) ==>
+  gas_marked_path F ctx func s 0
+    (OK (jump_to (if k = n then slot_copy_exit cs else slot_copy_body cs)
+      (update_var (slot_copy_var cs 1) (bool_to_word (k = n)) s)))
+Proof
+  strip_tac >> drule place_store_copy_lookup >> strip_tac >>
+  `n2w k = (n2w n : 256 word) <=> k = n` by
+    (`k < dimword (:256)` by decide_tac >>
+     gvs[wordsTheory.dimword_def] >>
+     simp_tac (srw_ss()) [wordsTheory.n2w_11, arithmeticTheory.LESS_MOD]) >>
+  `get_instruction
+     <|bb_label := slot_copy_cond cs; bb_instructions := slot_copy_cond_insts cs n|>
+     s.vs_inst_idx = SOME (mk_inst (cs.cs_next_id + 2) EQ
+       [Var (slot_copy_var cs 0); Lit (n2w n)] [slot_copy_var cs 1])` by
+    simp[get_instruction_def, slot_copy_cond_insts_def] >>
+  `step_inst_base (mk_inst (cs.cs_next_id + 2) EQ
+     [Var (slot_copy_var cs 0); Lit (n2w n)] [slot_copy_var cs 1]) s =
+     OK (update_var (slot_copy_var cs 1) (bool_to_word (k = n)) s)` by
+    simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+         eval_operands_def, eval_operand_def] >>
+  `gas_path_edge ctx func s 0
+     (OK ((update_var (slot_copy_var cs 1) (bool_to_word (k = n)) s)
+       with vs_inst_idx := 1))` by
+    (drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
+     simp[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `gas_path_edge ctx func s 0 (OK u)` >>
+  `gas_marked_path F ctx func u 0
+     (OK (jump_to (if k = n then slot_copy_exit cs else slot_copy_body cs) u))` by
+    (irule place_store_copy_jump_path >>
+     (conj_tac >- simp[Abbr `u`, update_var_def]) >>
+     qexistsl_tac
+       [`<|bb_label := slot_copy_cond cs; bb_instructions := slot_copy_cond_insts cs n|>`,
+        `mk_inst (cs.cs_next_id + 3) JNZ
+           [Var (slot_copy_var cs 1); Label (slot_copy_exit cs);
+            Label (slot_copy_body cs)] []`] >>
+     Cases_on `k = n` >>
+     simp[Abbr `u`, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+          get_instruction_def, slot_copy_cond_insts_def, step_inst_base_def,
+          mk_inst_def, eval_operand_def, bool_to_word_def, jump_to_def]) >>
+  `jump_to (if k = n then slot_copy_exit cs else slot_copy_body cs) u =
+   jump_to (if k = n then slot_copy_exit cs else slot_copy_body cs)
+     (update_var (slot_copy_var cs 1) (bool_to_word (k = n)) s)` by
+    simp[Abbr `u`, jump_to_def] >>
+  gvs[gas_marked_path_def] >> metis_tac[gas_path_rules, ADD_0]
+QED
+
+Theorem place_store_copy_body_path:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~s.vs_halted /\ s.vs_current_bb = slot_copy_body cs /\ s.vs_inst_idx = 0 /\
+  run_inst_seq (TAKE 7 (place_store_copy_body_insts cs src dst tr)) s = OK t ==>
+  gas_marked_path F ctx func s 0 (OK (jump_to (slot_copy_cond cs) t))
+Proof
+  strip_tac >> drule place_store_copy_lookup >> strip_tac >>
+  `gas_path ctx func s 0 (OK (t with vs_inst_idx := 7))` by
+    (drule_at (Pat `run_inst_seq _ _ = _`) tuple_run_inst_seq_gas_path >>
+     disch_then (qspecl_then
+       [`ctx`, `func`,
+        `<|bb_label := slot_copy_body cs;
+           bb_instructions := place_store_copy_body_insts cs src dst tr|>`] mp_tac) >>
+     Cases_on `tr` >>
+     simp[place_store_copy_body_insts_def, mk_inst_def, is_terminator_def,
+          rich_listTheory.IS_PREFIX_APPEND]) >>
+  `~t.vs_halted` by
+    (drule gas_path_normal >> simp[]) >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (irule (BETA_RULE (Q.ISPEC `\u:venom_state. u.vs_current_bb` run_inst_seq_preserves_field)) >>
+     goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
+     rpt strip_tac >>
+     `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+       (Cases_on `tr` >> gvs[place_store_copy_body_insts_def, mk_inst_def, is_terminator_def]) >>
+     `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
+     metis_tac[venomInstProofsTheory.step_preserves_control_flow]) >>
+  `gas_marked_path F ctx func (t with vs_inst_idx := 7) 0
+     (OK (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)))` by
+    (irule place_store_copy_jump_path >> (conj_tac >- simp[]) >>
+     qexistsl_tac
+       [`<|bb_label := slot_copy_body cs;
+           bb_instructions := place_store_copy_body_insts cs src dst tr|>`,
+        `mk_inst (cs.cs_next_id + 11) JMP [Label (slot_copy_cond cs)] []`] >>
+     simp[get_instruction_def, place_store_copy_body_insts_def,
+          step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+  gvs[gas_marked_path_def, jump_to_def] >>
+  metis_tac[gas_path_then, ADD_0]
+QED
+
+Theorem place_store_copy_iteration_path:
+  fn_has_code cs (place_store_copy_final cs src dst n tr) func /\
+  ~s.vs_halted /\ s.vs_current_bb = slot_copy_body cs /\ s.vs_inst_idx = 0 /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at cs x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  lookup_var (slot_copy_var cs 0) s = SOME k /\ ~s.vs_call_ctx.cc_static ==>
+  let a = sw + k * 32w; w = mload (w2n a) s;
+      s1 = update_var (slot_copy_var cs 2) (k * 32w) s;
+      s2 = update_var (slot_copy_var cs 3) a s1;
+      s3 = update_var (slot_copy_var cs 4) w s2;
+      s4 = update_var (slot_copy_var cs 5) (dw + k) s3;
+      s5 = (if tr then tstore else sstore) (dw + k) w s4;
+      s6 = update_var (slot_copy_var cs 6) (k + 1w) s5;
+      s7 = update_var (slot_copy_var cs 0) (k + 1w) s6
+  in gas_marked_path F ctx func s 0 (OK (jump_to (slot_copy_cond cs) s7))
+Proof
+  strip_tac >> simp_tac pure_ss [LET_THM] >>
+  irule place_store_copy_body_path >>
+  simp[] >> goal_assum (drule_at (Pat `fn_has_code _ _ _`)) >> simp[] >>
+  simp_tac (srw_ss()) [place_store_copy_body_insts_def] >>
+  `ALL_DISTINCT [slot_copy_var cs 0; slot_copy_var cs 2;
+     slot_copy_var cs 3; slot_copy_var cs 4; slot_copy_var cs 5;
+     slot_copy_var cs 6]` by
+    simp[slot_copy_var_def, listTheory.ALL_DISTINCT, ASCIInumbersTheory.toString_inj] >>
+  `!x. src = Var x \/ dst = Var x ==>
+     ~MEM x [slot_copy_var cs 0; slot_copy_var cs 2;
+       slot_copy_var cs 3; slot_copy_var cs 4; slot_copy_var cs 5;
+       slot_copy_var cs 6]` by
+    (rpt strip_tac >> gvs[listTheory.MEM] >> metis_tac[place_store_copy_old_var]) >>
+  drule_all place_store_forward_body_run >>
+  disch_then (qspecl_then [`tr`, `cs.cs_next_id + 4`] mp_tac) >>
+  simp[LET_THM]
+QED
+
 (* The allocation-limit check bounds the natural size, before n2w. *)
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
