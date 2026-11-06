@@ -28,6 +28,7 @@ Theorem hash_bytes_keccak_ptr_frame:
       stmt_state_rel ctx fn cenv cx es t /\
       ghost_inv d cenv cx es G' tn' t /\
       ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {} /\
+      op_prov G' op = NONE /\
       ghost_inv d cenv cx es G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))
 Proof
@@ -74,7 +75,8 @@ Theorem hash_bytes_keccak_ptr_post:
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
       ghost_inv d cenv cx es' G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
-      ghost_kept cenv es' sm G tn s G' tn' /\ op_taint tn' op = {}
+      ghost_kept cenv es' sm G tn s G' tn' /\ op_taint tn' op = {} /\
+      op_prov G' op = NONE
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel ctx fn cenv cx es' s` by fs[loweringPostsTheory.expr_post_def] >>

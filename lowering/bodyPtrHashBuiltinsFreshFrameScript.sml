@@ -60,10 +60,12 @@ Theorem hash_sha3_fresh_frame:
       (step_prov PG G (mk_inst id SHA3 [src;len] [out]) (update_var out v s))
       (step_taint (mk_inst id SHA3 [src;len] [out]) s (update_var out v s) tn) /\
     op_taint (step_taint (mk_inst id SHA3 [src;len] [out]) s
-      (update_var out v s) tn) (Var out) = {}
+      (update_var out v s) tn) (Var out) = {} /\
+    op_prov (step_prov PG G (mk_inst id SHA3 [src;len] [out])
+      (update_var out v s)) (Var out) = NONE
 Proof
   rpt gen_tac >> strip_tac >> simp[hash_sha3_ghost] >>
   conj_tac >- (irule hash_fresh_output_ghost_inv >> metis_tac[]) >>
   conj_tac >- (irule hash_fresh_output_kept_tail >> simp[]) >>
-  simp[op_taint_def, FLOOKUP_UPDATE]
+  simp[op_taint_def, op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED

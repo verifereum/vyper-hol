@@ -30,7 +30,7 @@ Theorem hash_fixed_keccak_ptr_frame:
       stmt_state_rel ctx fn cenv cx es u /\
       (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
       ghost_inv d cenv cx es G3 tn3 u /\ ghost_kept cenv es sa G tn s G3 tn3 /\
-      op_taint tn3 op = {} /\
+      op_taint tn3 op = {} /\ op_prov G3 op = NONE /\
       ghost_inv d cenv cx es G3 tn3 (u with vs_inst_idx := s.vs_inst_idx+3) /\
       eval_operand op (u with vs_inst_idx := s.vs_inst_idx+3) =
         SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs))
@@ -91,7 +91,8 @@ Resume hash_fixed_keccak_ptr_frame[finish]:
     simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   `G' = step_prov PG G2 i3 u /\ tn' = step_taint i3 s2 u tn2` by metis_tac[] >>
   `ghost_inv d cenv cx es G' tn' u /\
-   ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {}` by
+   ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {} /\
+   op_prov G' op = NONE` by
     (qpat_assum `G' = step_prov PG G2 i3 u` (fn th => pure_rewrite_tac[th]) >>
      qpat_assum `tn' = step_taint i3 s2 u tn2` (fn th => pure_rewrite_tac[th]) >>
      qpat_assum `u = update_var _ _ _` (fn th => pure_rewrite_tac[th]) >>

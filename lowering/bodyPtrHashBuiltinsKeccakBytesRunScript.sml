@@ -150,7 +150,7 @@ Theorem hash_keccak_bytes_inst_seq:
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
     mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
     ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
-      op_taint tn' op = {} /\
+      op_taint tn' op = {} /\ op_prov G' op = NONE /\
       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
       tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
       (!z. not_fresh_at sa z ==>
@@ -167,7 +167,7 @@ Proof
     (qpat_x_assum `emitted_insts sa sb = _` (fn th => rewrite_tac[th]) >>
      irule hash_keccak_bytes_triple >> simp[] >>
      qexistsl_tac [`b`, `n`] >> simp[] >> decide_tac) >>
-  gvs[op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  gvs[op_taint_def, op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> res_tac >> simp[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
@@ -185,7 +185,7 @@ Theorem hash_keccak_bytes_counted:
     run_inst_seq (emitted_insts sa sb) s = OK t ==>
     ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
         (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
-      op_taint tn' op = {} /\
+      op_taint tn' op = {} /\ op_prov G' op = NONE /\
       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
       tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
       (!z. not_fresh_at sa z ==>
