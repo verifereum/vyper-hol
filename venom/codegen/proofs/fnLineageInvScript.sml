@@ -31,7 +31,31 @@ Ancestors
    variables, disjoint from the spill map, that together with it are the
    live set).  Nothing is live at the function's entry
    (fnLiveDefDom$live_def_dominates at index 0 of the entry block), which
-   starts the lower half. *)
+   starts the lower half.
+
+   The JMP reorder stays in range: before reordering, the JMP's plan
+   restores every spilled target (restore_spilled_plan), and reorder_one
+   keeps the stack length.  So the stack has at least LENGTH targets slots,
+   and no do_swap depth LENGTH targets - 1 - i passes its bottom, provided
+   the targets (MAP Var (input_vars_from pred ..)) are distinct and each is
+   on the stack or spilled at the JMP.  Distinctness comes from readiness,
+   not from the reorder's result: shared incoming PHI operands are
+   rejected, PHI slots are injective, phi_uses_disjoint keeps PHI inputs
+   apart from the other live-ins, and live_vars_at is duplicate free.  The
+   rest is the coverage half of this induction.
+
+   Spill layout: the lineage state takes ps_alloc from the successor's DFS
+   state, which extends the alloc after pred's DFS plan
+   (dfs_block_state_owner_alloc_origin: same free list, larger next
+   offset).  So spill_alloc_layout_wf follows once the lineage spill map is
+   the DFS one.  Carry that as an invariant over lineage_state: ps_spilled
+   is the DFS state's, and ps_stack is the DFS stack up to the
+   dead_stack_marker prefix (and, at a join, PHI inputs from the other
+   predecessor).  At a join both spill maps are empty (the argument of
+   fnFrameStepsPhi$phi_join_entry_spill_empty).  Within a block both runs
+   emit the same ops, but release_dead_spills frees slots without emitting
+   any, so the invariant must carry the spill map itself, not just the
+   ops. *)
 Theorem lineage_entry_inventory:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn pred pred_bb succ ps.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
