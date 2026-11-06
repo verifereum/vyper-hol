@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
   stackPlanTypes stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -454,4 +454,24 @@ Proof
    (strip_tac >> drule_all analyzed_small_preds_live_out_excludes_outputs >> gvs[]) >>
  gvs[SUBSET_DEF, MEM_MAP, dead_stack_marker_def] >>
  metis_tac[venomStateTheory.operand_distinct, venomStateTheory.operand_11]
+QED
+
+Theorem analyzed_join_run_incoming_on_stack:
+ !fn entry pred pb succ sb dfg ps0 ops ps i v.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+ i < LENGTH (collect_phis sb.bb_instructions) /\
+ FIND (\(l,w). l = pred)
+   (phi_pairs (EL i (collect_phis sb.bb_instructions)).inst_operands) = SOME (pred,v)
+ ==> MEM (Var v) ps.ps_stack
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all reachable_phi_incoming_activated >> disch_tac >>
+ drule_all generate_block_plan_join_edge_suffix >> strip_tac >>
+ simp[MEM_APPEND, MEM_MAP] >> metis_tac[]
 QED
