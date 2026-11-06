@@ -84,7 +84,7 @@ Proof
      simp[] >>
      `~MEM v (inst_uses (EL j bb.bb_instructions))` by
        (first_x_assum irule >> decide_tac) >>
-     simp[liveness_transfer_def, live_update_def, listTheory.MEM_FILTER]) >>
+     simp[liveness_transfer_def, livenessProofsTheory.live_update_mem]) >>
   first_x_assum irule >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> decide_tac
 QED
