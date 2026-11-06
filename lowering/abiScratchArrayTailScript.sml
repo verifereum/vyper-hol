@@ -82,7 +82,7 @@ Theorem abi_scratch_array_tail_reach:
     actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
-  strip_tac >> drule_all abi_scratch_array_tail_sequence >> strip_tac >>
+  strip_tac >> drule_all (SIMP_RULE bool_ss [pred_setTheory.IN_UNIV] (Q.INST [`sites` |-> `UNIV:num set`] abi_scratch_array_tail_sequence)) >> strip_tac >>
   drule abi_encode_array_tail_init_shape >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') initial = OK encoded` >>
   `~encoded.vs_halted` by fs[abi_encoder_complex_prefix_post_def] >>
