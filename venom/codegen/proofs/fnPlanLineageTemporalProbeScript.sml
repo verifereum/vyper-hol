@@ -843,11 +843,14 @@ val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
    argument, the first-event premise must likewise precede the write; using
    the new output's unit bound there would be circular.
 
-   Still uncomputed: whole-function success, explicit E11 instruction-phase
-   and repeated D-prefix equations, and U's immediate pre-JMP phase at wide
-   widths. Its full native block SOME equation is checked, but a separate
-   recursive-prefix evaluation exceeds 2.5s even with prefix4 and liveness
-   query caches. This is an unfinished diagnostic, not NONE or falsehood.
+   Subsequent equations below now check U's exact immediate pre-JMP phase
+   at all three widths, including the width17 restore/pop of spilled t16.
+   They also check the explicit E11 PHI phase and rebased header state.
+   Whole-function SOME is now checked separately at widths1/16/17 below,
+   after caching the exact block equations at generate_block_plan's native
+   interface. Repeated D tracked definitions and b/carry writes are also
+   checked from the normalized reentry header, shared by both incoming paths.
+   All results here remain bounded diagnostics, not universal freshness.
 *)
 
 Theorem bypass_consume_five_wide:
@@ -883,4 +886,509 @@ Proof
   pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
   simp[Once bypass_prefix_def,
     bypass_consume_five_wide |> SRULE [listTheory.EVERY_DEF]] >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
+  (CONJUNCTS (SRULE [listTheory.EVERY_DEF] bypass_consume_six_wide)));
+
+(* Concrete audit notation only: j is the number of tracked POPs. The
+   two list segments record the swap-last permutation, not a stable DROP. *)
+Definition bypass_consumed_result_def:
+  bypass_consumed_result (n:num) j =
+    ([SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1] ++
+      (if n = 17 then [SOSwap 1; SOSpill 0] else []) ++ REPLICATE j (SOPop 1),
+      entry_probe_start with <|
+        ps_stack := [Var "carry"] ++
+          MAP Var (if j <= 8 then
+            REVERSE (DROP (17-j) (TAKE 16 cycle_deep_names)) ++
+            TAKE (17-2*j) (DROP j cycle_deep_names)
+            else REVERSE (TAKE (16-j) (DROP j cycle_deep_names)));
+        ps_spilled := if n = 17 then FEMPTY |+ (Var "t16",0) else FEMPTY;
+        ps_alloc := <| sa_free_slots := []; sa_next_offset := if n = 17 then 32 else 0;
+          sa_spill_base := 0 |> |>)
+End
+
+Theorem bypass_consume_seven_wide:
+  EVERY (\n. bypass_prefix n 3 7 (bypass_defined n) =
+    SOME (bypass_consumed_result n 3)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``7:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_six_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_eight_wide:
+  EVERY (\n. bypass_prefix n 3 8 (bypass_defined n) =
+    SOME (bypass_consumed_result n 4)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``8:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_seven_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_nine_wide:
+  EVERY (\n. bypass_prefix n 3 9 (bypass_defined n) =
+    SOME (bypass_consumed_result n 5)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``9:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_eight_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_ten_wide:
+  EVERY (\n. bypass_prefix n 3 10 (bypass_defined n) =
+    SOME (bypass_consumed_result n 6)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``10:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_nine_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_eleven_wide:
+  EVERY (\n. bypass_prefix n 3 11 (bypass_defined n) =
+    SOME (bypass_consumed_result n 7)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``11:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_ten_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_twelve_wide:
+  EVERY (\n. bypass_prefix n 3 12 (bypass_defined n) =
+    SOME (bypass_consumed_result n 8)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``12:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_eleven_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_thirteen_wide:
+  EVERY (\n. bypass_prefix n 3 13 (bypass_defined n) =
+    SOME (bypass_consumed_result n 9)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``13:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_twelve_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_fourteen_wide:
+  EVERY (\n. bypass_prefix n 3 14 (bypass_defined n) =
+    SOME (bypass_consumed_result n 10)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``14:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_thirteen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_fifteen_wide:
+  EVERY (\n. bypass_prefix n 3 15 (bypass_defined n) =
+    SOME (bypass_consumed_result n 11)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``15:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_fourteen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_sixteen_wide:
+  EVERY (\n. bypass_prefix n 3 16 (bypass_defined n) =
+    SOME (bypass_consumed_result n 12)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``16:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_fifteen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_seventeen_wide:
+  EVERY (\n. bypass_prefix n 3 17 (bypass_defined n) =
+    SOME (bypass_consumed_result n 13)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``17:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_sixteen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_eighteen_wide:
+  EVERY (\n. bypass_prefix n 3 18 (bypass_defined n) =
+    SOME (bypass_consumed_result n 14)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``18:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_seventeen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_nineteen_wide:
+  EVERY (\n. bypass_prefix n 3 19 (bypass_defined n) =
+    SOME (bypass_consumed_result n 15)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``19:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_eighteen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_twenty_wide:
+  EVERY (\n. bypass_prefix n 3 20 (bypass_defined n) =
+    SOME (bypass_consumed_result n 16)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``20:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_nineteen_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_prejmp_seventeen:
+  bypass_prefix 17 3 21 (bypass_defined 17) =
+    SOME ([SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1; SOSwap 1; SOSpill 0] ++
+      REPLICATE 16 (SOPop 1) ++ [SORestore 0; SOPop 1],
+      entry_probe_start with <| ps_stack := [Var "carry"];
+        ps_alloc := <| sa_free_slots := [0]; sa_next_offset := 32;
+          sa_spill_base := 0 |> |>)
+Proof
+  pure_rewrite_tac [numLib.num_CONV ``21:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_consume_twenty_wide |> SRULE [listTheory.EVERY_DEF]] >> EVAL_TAC
+QED
+
+Theorem bypass_consume_prejmp_one:
+  bypass_prefix 1 3 5 (bypass_defined 1) =
+    SOME ([SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1; SOPop 1],
+      entry_probe_start with ps_stack := [Var "carry"])
+Proof
+  EVAL_TAC
+QED
+
+(* Cache the concrete native prefix calls, with original start states. *)
+val _ = app (fn th => computeLib.add_funs
+  (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
+    (CONJUNCTS (SRULE [listTheory.EVERY_DEF] th))))
+  [bypass_consume_seven_wide, bypass_consume_eight_wide,
+   bypass_consume_nine_wide, bypass_consume_ten_wide,
+   bypass_consume_eleven_wide, bypass_consume_twelve_wide,
+   bypass_consume_thirteen_wide, bypass_consume_fourteen_wide,
+   bypass_consume_fifteen_wide, bypass_consume_sixteen_wide,
+   bypass_consume_seventeen_wide, bypass_consume_eighteen_wide,
+   bypass_consume_nineteen_wide, bypass_consume_twenty_wide];
+
+Definition bypass_return_input_def:
+  bypass_return_input n i = entry_probe_start with <|
+    ps_stack := (bypass_step n 5 (bypass_step n i (bypass_defined n))).ps_stack;
+    ps_spilled := (bypass_step n 5 (bypass_step n i (bypass_defined n))).ps_spilled |>
+End
+
+Theorem bypass_return_inputs:
+  EVERY (\n. EVERY (\i. bypass_return_input n i =
+    (entry_probe_start with ps_stack := [Var "back"])) [3;4]) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [bypass_return_input_def] >>
+  pure_once_rewrite_tac [bypass_step_def] >>
+  simp[bypass_returns |> SRULE [listTheory.EVERY_DEF]] >> EVAL_TAC
+QED
+
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_return_inputs));
+
+Theorem bypass_return_phi_phase:
+  EVERY (\n. EVERY (\i.
+    bypass_prefix n 1 1 (bypass_return_input n i) =
+      SOME ([SOPoke 0 (Var "x")], entry_probe_start with ps_stack := [Var "x"]))
+    [3;4]) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  BETA_TAC >> rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem bypass_repeated_header_states:
+  EVERY (\n. EVERY (\i. bypass_step n 1 (bypass_return_input n i) =
+    (entry_probe_start with ps_stack := [Var "x"])) [3;4]) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  simp[bypass_return_inputs |> SRULE [listTheory.EVERY_DEF]] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_repeated_header_states));
+
+
+Theorem bypass_redefine_one:
+  bypass_prefix 1 2 1 (entry_probe_start with ps_stack := [Var "x"]) =
+    SOME ([SOPush (Lit 1w); SOSwap 1],
+      entry_probe_start with ps_stack := [Var "t0";Var "x"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem bypass_redefine_four:
+  EVERY (\n. bypass_prefix n 2 4 (entry_probe_start with ps_stack := [Var "x"]) =
+    SOME (FLAT (REPLICATE 4 [SOPush (Lit 1w); SOSwap 1]),
+      entry_probe_start with ps_stack :=
+        MAP Var (TAKE 4 cycle_deep_names) ++ [Var "x"])) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
+  (CONJUNCTS (SRULE [listTheory.EVERY_DEF] bypass_redefine_four)));
+
+Definition bypass_redefine_result_def:
+  bypass_redefine_result k = SOME
+    (FLAT (REPLICATE k [SOPush (Lit 1w); SOSwap 1]),
+      entry_probe_start with ps_stack := MAP Var (TAKE k cycle_deep_names) ++ [Var "x"])
+End
+
+Theorem bypass_redefine_five:
+  EVERY (\n. bypass_prefix n 2 5 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 5) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``5:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_four |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_six:
+  EVERY (\n. bypass_prefix n 2 6 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 6) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``6:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_five |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_seven:
+  EVERY (\n. bypass_prefix n 2 7 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 7) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``7:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_six |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_eight:
+  EVERY (\n. bypass_prefix n 2 8 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 8) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``8:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_seven |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_nine:
+  EVERY (\n. bypass_prefix n 2 9 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 9) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``9:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_eight |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_ten:
+  EVERY (\n. bypass_prefix n 2 10 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 10) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``10:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_nine |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_eleven:
+  EVERY (\n. bypass_prefix n 2 11 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 11) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``11:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_ten |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_twelve:
+  EVERY (\n. bypass_prefix n 2 12 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 12) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``12:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_eleven |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_thirteen:
+  EVERY (\n. bypass_prefix n 2 13 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 13) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``13:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_twelve |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_fourteen:
+  EVERY (\n. bypass_prefix n 2 14 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 14) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``14:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_thirteen |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_fifteen:
+  EVERY (\n. bypass_prefix n 2 15 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 15) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``15:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_fourteen |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_sixteen_wide:
+  EVERY (\n. bypass_prefix n 2 16 (entry_probe_start with ps_stack := [Var "x"]) =
+    bypass_redefine_result 16) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_rewrite_tac [numLib.num_CONV ``16:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_fifteen |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_seventeen:
+  bypass_prefix 17 2 17 (entry_probe_start with ps_stack := [Var "x"]) =
+    SOME (FLAT (REPLICATE 17 [SOPush (Lit 1w); SOSwap 1]),
+      entry_probe_start with ps_stack :=
+        MAP Var (TAKE 17 cycle_deep_names) ++ [Var "x"])
+Proof
+  pure_rewrite_tac [numLib.num_CONV ``17:num``] >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_sixteen_wide |> SRULE [listTheory.EVERY_DEF]] >> EVAL_TAC
+QED
+
+Theorem bypass_repeated_definitions:
+  EVERY (\n. EVERY (\i.
+    bypass_prefix n 2 n (bypass_step n 1 (bypass_return_input n i)) =
+      SOME (FLAT (REPLICATE n [SOPush (Lit 1w); SOSwap 1]),
+        entry_probe_start with ps_stack :=
+          MAP Var (TAKE n cycle_deep_names) ++ [Var "x"])) [3;4]) [1;16;17]
+Proof
+  simp[listTheory.EVERY_DEF,
+    bypass_repeated_header_states |> SRULE [listTheory.EVERY_DEF],
+    bypass_redefine_one, bypass_redefine_seventeen,
+    bypass_redefine_sixteen_wide |> SRULE [listTheory.EVERY_DEF, bypass_redefine_result_def]] >> EVAL_TAC
+QED
+
+(* Reuse the certified block equations at the native DFS interface. *)
+val _ = app (fn th => computeLib.add_funs
+  (map (CONV_RULE (LAND_CONV
+    (computeLib.RESTR_EVAL_CONV [``generate_block_plan``])))
+    (CONJUNCTS (SRULE [listTheory.EVERY_DEF] th))))
+  [bypass_entry_calls, bypass_header_calls, bypass_define_one,
+   bypass_define_wide, bypass_consume_one, bypass_consume_wide,
+   bypass_skip_one, bypass_skip_wide];
+
+Theorem bypass_whole_one:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (bypass_live 1) (bypass_dfg 1) (bypass_cfg 1) NONE []
+    (bypass_pressure_fn 1) 0 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem bypass_whole_sixteen:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (bypass_live 16) (bypass_dfg 16) (bypass_cfg 16) NONE []
+    (bypass_pressure_fn 16) 0 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem bypass_whole_seventeen:
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (bypass_live 17) (bypass_dfg 17) (bypass_cfg 17) NONE []
+    (bypass_pressure_fn 17) 0 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem bypass_redefine_b:
+  EVERY (\n. bypass_prefix n 2 (SUC n)
+    (entry_probe_start with ps_stack := [Var "x"]) =
+    SOME (FLAT (REPLICATE n [SOPush (Lit 1w); SOSwap 1]) ++
+      [SOPush (Lit 3w); SOPush (Lit 2w); SOEmit "ADD"; SOSwap 1],
+      entry_probe_start with ps_stack :=
+        MAP Var (TAKE n cycle_deep_names) ++ [Var "b";Var "x"])) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_one, bypass_redefine_seventeen,
+    bypass_redefine_sixteen_wide |> SRULE [listTheory.EVERY_DEF, bypass_redefine_result_def]] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_redefine_carry:
+  EVERY (\n. bypass_prefix n 2 (SUC (SUC n))
+    (entry_probe_start with ps_stack := [Var "x"]) =
+    SOME (FLAT (REPLICATE n [SOPush (Lit 1w); SOSwap 1]) ++
+      [SOPush (Lit 3w); SOPush (Lit 2w); SOEmit "ADD"; SOSwap 1; SOPush (Lit 1w)],
+      entry_probe_start with ps_stack :=
+        MAP Var (TAKE n cycle_deep_names) ++ [Var "b";Var "x";Var "carry"])) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >> BETA_TAC >>
+  pure_once_rewrite_tac [bypass_prefix_def] >>
+  simp[bypass_redefine_b |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_repeated_last_definitions:
+  EVERY (\n. EVERY (\i. EVERY (\k.
+    bypass_prefix n 2 k (bypass_step n 1 (bypass_return_input n i)) =
+      bypass_prefix n 2 k (entry_probe_start with ps_stack := [Var "x"]))
+    [SUC n;SUC (SUC n)]) [3;4]) [1;16;17]
+Proof
+  simp[listTheory.EVERY_DEF,
+    bypass_repeated_header_states |> SRULE [listTheory.EVERY_DEF]]
 QED
