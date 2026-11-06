@@ -6665,6 +6665,21 @@ Proof
   Cases_on `inst.inst_operands` >> gvs[]
 QED
 
+Theorem alias_live_cut_origin:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\
+  MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)) ==>
+  MEM x (live_vars_at (liveness_analyze fn) lbl i) \/ MEM x inst.inst_outputs
+Proof
+  strip_tac >>
+  drule livenessAnalysisPropsTheory.live_vars_at_transfer >> simp[] >>
+  disch_then (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `MEM x inst.inst_outputs` >> simp[] >>
+  gvs[liveness_transfer_def, live_update_def, inst_defs_def, MEM_FILTER]
+QED
+
 Theorem alias_regular_plan_live_cut_coverage:
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
@@ -6682,12 +6697,109 @@ Proof
      drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
      disch_then irule >> goal_assum (drule_at Any) >> gvs[]) >>
   `MEM x (live_vars_at (liveness_analyze fn) lbl i) \/ MEM x inst.inst_outputs` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_transfer >> simp[] >>
-     disch_then (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >>
-     simp[] >> strip_tac >>
-     Cases_on `MEM x inst.inst_outputs` >> simp[] >>
-     gvs[liveness_transfer_def, live_update_def, inst_defs_def, MEM_FILTER]) >>
+    metis_tac[alias_live_cut_origin] >>
   metis_tac[alias_regular_plan_holds_live]
+QED
+
+Theorem alias_jmp_plan_live_cut_coverage:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ inst_wf inst /\ inst.inst_opcode = JMP /\
+  (!y. MEM y (live_vars_at (liveness_analyze fn) lbl i) ==> plan_holds ps (Var y)) /\
+  generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) lbl (SUC i)) halting next_term lbl ps = (ops,qs) ==>
+  !x. MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)) ==> plan_holds qs (Var x)
+Proof
+  rpt strip_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl i) \/ MEM x inst.inst_outputs` by
+    metis_tac[alias_live_cut_origin] >>
+  `?target. inst.inst_operands = [Label target] /\ inst.inst_outputs = []` by
+    gvs[inst_wf_def] >>
+  metis_tac[alias_jmp_plan_holds_live, MEM]
+QED
+
+Theorem alias_offset_plan_live_cut_coverage:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ inst_wf inst /\ inst.inst_opcode = OFFSET /\
+  (!y. MEM y (live_vars_at (liveness_analyze fn) lbl i) ==> plan_holds ps (Var y)) ==>
+  !x. MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)) ==>
+    plan_holds (SND (generate_offset_plan inst ps)) (Var x)
+Proof
+  rpt strip_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl i) \/ MEM x inst.inst_outputs` by
+    metis_tac[alias_live_cut_origin] >>
+  `?v target out. inst.inst_operands = [Lit v; Label target] /\ inst.inst_outputs = [out]` by
+    gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  gvs[generate_offset_plan_def, plan_holds_def, stackModelTheory.stack_push_def] >>
+  metis_tac[]
+QED
+
+Theorem alias_inst_plan_live_cut_coverage:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ inst_wf inst /\ inst.inst_opcode <> PHI /\
+  ~is_param_opcode inst.inst_opcode /\
+  (!y. MEM y (live_vars_at (liveness_analyze fn) lbl i) ==> plan_holds ps (Var y)) /\
+  generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) lbl (SUC i)) halting next_term lbl ps = SOME (ops,qs) ==>
+  !x. MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)) ==> plan_holds qs (Var x)
+Proof
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def] >>
+  Cases_on `is_pre_codegen_opcode (EL i bb.bb_instructions).inst_opcode` >> simp[] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = INVOKE /\ ~invoke_operands_wf (EL i bb.bb_instructions)` >> simp[] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = OFFSET`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      metis_tac[alias_offset_plan_live_cut_coverage, pairTheory.SND]) >>
+  simp[] >> Cases_on `(EL i bb.bb_instructions).inst_opcode = NOP`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      `MEM x (live_vars_at (liveness_analyze fn) lbl i) \/ MEM x (EL i bb.bb_instructions).inst_outputs` by
+        metis_tac[alias_live_cut_origin] >>
+      gvs[inst_wf_def]) >>
+  simp[] >>
+  Cases_on `generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn (EL i bb.bb_instructions)
+    (live_vars_at (liveness_analyze fn) lbl (SUC i)) halting next_term lbl ps` >> simp[] >>
+  strip_tac >> gvs[] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = JMP`
+  >- metis_tac[alias_jmp_plan_live_cut_coverage] >>
+  metis_tac[alias_regular_plan_live_cut_coverage]
+QED
+
+Theorem alias_body_plan_live_cut_coverage:
+  !insts prefix i ps ops qs.
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ insts /\ LENGTH prefix = i + n_params /\
+  EVERY (\inst. inst_wf inst /\ inst.inst_opcode <> PHI /\
+                  ~is_param_opcode inst.inst_opcode) insts /\
+  (!y. MEM y (live_vars_at (liveness_analyze fn) lbl (i + n_params)) ==> plan_holds ps (Var y)) /\
+  generate_block_insts_plan (liveness_analyze fn) dfg cfg fn lbl halting
+    n_params (LENGTH bb.bb_instructions) i insts ps = SOME (ops,qs) ==>
+  !x. MEM x (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
+    plan_holds qs (Var x)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[generate_block_insts_plan_def] >> metis_tac[]) >>
+  `i + n_params < LENGTH bb.bb_instructions /\
+   EL (i + n_params) bb.bb_instructions = h` by
+    simp[EL_APPEND_EQN] >>
+  `i + n_params + 1 = SUC (i + n_params)` by decide_tac >>
+  `live_vars_at (liveness_analyze fn) lbl
+      (if insts = [] then LENGTH bb.bb_instructions else i + n_params + 1) =
+   live_vars_at (liveness_analyze fn) lbl (SUC (i + n_params))` by
+    (Cases_on `insts` >> gvs[] >> AP_TERM_TAC >> simp[]) >>
+  gvs[Once generate_block_insts_plan_def, AllCaseEqs()] >>
+  `!y. MEM y (live_vars_at (liveness_analyze fn) lbl (SUC (i + n_params))) ==>
+       plan_holds ps' (Var y)` by
+    (rpt strip_tac >> irule alias_inst_plan_live_cut_coverage >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `i + 1 + n_params = SUC (i + n_params) /\
+   i + (n_params + SUC (LENGTH insts)) = LENGTH insts + SUC (i + n_params) /\
+   i + (n_params + (LENGTH insts + 1)) = LENGTH insts + SUC (i + n_params)` by decide_tac >>
+  first_x_assum (qspecl_then [`i + 1`, `ps'`, `rest_ops`, `qs`] mp_tac) >>
+  simp[]
 QED
 
 Theorem alias_clean_stack_holds_input:
