@@ -1618,10 +1618,10 @@ Proof
        vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
        append_logs_def, adopt_call_outcome_equation] >>
-  rpt strip_tac >> rpt CASE_TAC >>
-  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+  rpt strip_tac >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(), COND_RAND,
       vyperStateTheory.return_def, vyperStateTheory.raise_def,
-      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND3,
       rich_listTheory.IS_PREFIX_REFL]
 QED
 
