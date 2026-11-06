@@ -271,6 +271,10 @@ Theorem raw_call_alloc_buffer_ghost_stage:
     op_prov H buf.buf_operand = SOME (b,n) /\
     op_taint un buf.buf_operand = {} /\ b+n < dimword(:256) /\
     u.vs_memory = s.vs_memory /\
+    (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+      regions_disjoint b n a len) /\
+    (!name a len. local_region cenv es.scopes s name a len ==>
+      regions_disjoint b n a len) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     H = G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)) /\
     (?dirty. dirty SUBSET {i | b <= i /\ i < b+n} /\
@@ -291,6 +295,12 @@ Proof
      `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
        (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
      metis_tac[]) >>
+  `!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b n a len` by
+    (`!name a len. local_region cenv es.scopes u name a len <=>
+        local_region cenv es.scopes s name a len` by
+       (irule literal_ptr_local_region_frame >> simp[] >> metis_tac[]) >>
+     metis_tac[]) >>
   drule raw_call_alloca_state_frame >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
@@ -308,7 +318,10 @@ Proof
       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
   simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
     ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE,
-    venomStateTheory.lookup_var_def] >> conj_tac
+    venomStateTheory.lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
   >- (rpt strip_tac >> first_x_assum drule >>
       simp[venomStateTheory.lookup_var_def]) >>
   qexists_tac `dirty` >> simp[]
@@ -331,6 +344,7 @@ Theorem raw_call_outbuf_add_stage:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u n /\ ptr_covers H un dx u cap /\
+    eval_operand (Var dx) u = SOME (n2w (b+32)) /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s /\
       FLOOKUP H z = FLOOKUP G z /\ op_taint un (Var z) = op_taint tn (Var z))
@@ -362,6 +376,7 @@ Proof
   simp[Abbr `u`, Abbr `H`, Abbr `un`, exprSimPtrLiteralOpsTheory.literal_add_ghost,
     ptr_covers_def, ptrDisciplineTheory.op_taint_def, venomStateTheory.update_var_def,
     venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+    venomStateTheory.eval_operand_def, GSYM wordsTheory.word_add_n2w,
     wordsTheory.w2n_add_2, wordsTheory.w2n_n2w] >>
   rpt strip_tac >> fs[not_fresh_at_def, ptrDisciplineTheory.op_taint_def,
     venomStateTheory.lookup_var_def] >>
@@ -427,7 +442,13 @@ Theorem raw_call_outbuf_positive_stage:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (((cap+31) DIV 32)*32+32) /\
     ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
-    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s)
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
+    (?dst. eval_operand op u = SOME (n2w dst) /\
+      dst < dimword(:256) /\ dst+cap < dimword(:256) /\
+      (!name a len. local_region cenv es.scopes s name a len ==>
+        regions_disjoint dst cap a len) /\
+      (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+        regions_disjoint dst cap a len))
 Proof
   strip_tac >> drule_all raw_call_outbuf_split_code >>
   disch_then (qspec_then `cenv` strip_assume_tac) >>
@@ -456,8 +477,22 @@ Proof
   `wb_frame cenv es sa s u'` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `?dst. eval_operand (Var dx) u' = SOME (n2w dst) /\
+    dst < dimword(:256) /\ dst+cap < dimword(:256) /\
+    (!name a len. local_region cenv es.scopes s name a len ==>
+      regions_disjoint dst cap a len) /\
+    (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+      regions_disjoint dst cap a len)` by
+    (qexists_tac `b+32` >> simp[] >>
+     conj_tac
+     >- (rpt strip_tac >> qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _`
+           drule >> simp[regions_disjoint_def] >> decide_tac) >>
+     rpt strip_tac >>
+     qpat_x_assum `!aid a len. _ /\ FLOOKUP _ _ = SOME _ ==> _` drule_all >>
+     simp[regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`H`, `un`, `u'`] >> simp[] >>
-  fs[ghost_kept_def] >> metis_tac[]
+  gvs[ghost_kept_def, venomStateTheory.eval_operand_def] >>
+  reverse conj_tac >- (qexists_tac `b+32` >> simp[] >> metis_tac[]) >> metis_tac[]
 QED
 
 Theorem raw_call_outbuf_zero_stage:
@@ -476,7 +511,13 @@ Theorem raw_call_outbuf_zero_stage:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u 0 /\ u.vs_memory = s.vs_memory /\
-    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s)
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
+    (?dst. eval_operand op u = SOME (n2w dst) /\
+      dst < dimword(:256) /\ dst+0 < dimword(:256) /\
+      (!name a len. local_region cenv es.scopes s name a len ==>
+        regions_disjoint dst 0 a len) /\
+      (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+        regions_disjoint dst 0 a len))
 Proof
   strip_tac >> drule raw_call_outbuf_zero_steps >> strip_tac >> gvs[] >>
   drule raw_call_alloc_buffer_metadata >> strip_tac >>
@@ -485,7 +526,7 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`H`, `un`, `u`, `x`] >> simp[] >>
   gvs[ptr_covers_def, venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
-  qexists_tac `n2w b` >> simp[wordsTheory.w2n_n2w] >> decide_tac
+  qexists_tac `b` >> simp[] >> metis_tac[]
 QED
 
 Theorem raw_call_outbuf_stage:
@@ -506,15 +547,24 @@ Theorem raw_call_outbuf_stage:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
     ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
-    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s)
+    (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
+    (?dst. eval_operand op u = SOME (n2w dst) /\
+      dst < dimword(:256) /\ dst+cap < dimword(:256) /\
+      (!name a len. local_region cenv es.scopes s name a len ==>
+        regions_disjoint dst cap a len) /\
+      (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+        regions_disjoint dst cap a len))
 Proof
   strip_tac >> Cases_on `cap = 0`
   >- (gvs[] >> drule_all raw_call_outbuf_zero_stage >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-      qexistsl_tac [`H`, `un`, `u`, `x`, `x`] >> simp[]) >>
+      qexistsl_tac [`H`, `un`, `u`, `x`, `x`] >> simp[] >>
+      qexists_tac `dst` >> simp[] >> metis_tac[]) >>
   `0 < cap` by decide_tac >> gvs[] >>
-  irule (SIMP_RULE (srw_ss()) [arithmeticTheory.MULT_COMM] raw_call_outbuf_positive_stage) >>
-  simp[] >> metis_tac[]
+  drule_all (SIMP_RULE (srw_ss()) [arithmeticTheory.MULT_COMM] raw_call_outbuf_positive_stage) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
+  qexists_tac `dst` >> simp[] >> metis_tac[]
 QED
 
 Theorem raw_call_outbuf_ready_stage:
@@ -546,7 +596,13 @@ Theorem raw_call_outbuf_ready_stage:
     (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
     (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
       eval_operand arg u = eval_operand arg s /\
-      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg)
+      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+    (?dst. eval_operand op u = SOME (n2w dst) /\
+      dst < dimword(:256) /\ dst+cap < dimword(:256) /\
+      (!name a len. local_region cenv es.scopes s name a len ==>
+        regions_disjoint dst cap a len) /\
+      (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+        regions_disjoint dst cap a len))
 Proof
   strip_tac >> drule_all raw_call_outbuf_stage >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -559,6 +615,7 @@ Proof
   `op_prov H data_op = SOME (region_base,sz)` by
     (Cases_on `data_op` >> fs[ptrDisciplineTheory.op_prov_def, ghost_kept_def]) >>
   qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
+  reverse conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >>
   rpt strip_tac >> spose_not_then assume_tac >>
   `i IN tn.t_mem` suffices_by
     (strip_tac >> qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem`
@@ -610,7 +667,13 @@ Theorem raw_call_outbuf_ready_outcome:
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
       (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
         eval_operand arg u = eval_operand arg t /\
-        op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg)) R
+        op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+      (?dst. eval_operand op u = SOME (n2w dst) /\
+        dst < dimword(:256) /\ dst+cap < dimword(:256) /\
+        (!name a len. local_region cenv ee.scopes t name a len ==>
+          regions_disjoint dst cap a len) /\
+        (!aid a len. aid < sa.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (a,len) ==>
+          regions_disjoint dst cap a len))) R
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` mp_tac >>
@@ -638,7 +701,13 @@ Resume raw_call_outbuf_ready_outcome[normal]:
     (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
     (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
       eval_operand arg u = eval_operand arg t /\
-      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg)` by
+      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+    (?dst. eval_operand op u = SOME (n2w dst) /\
+      dst < dimword(:256) /\ dst+cap < dimword(:256) /\
+      (!name a len. local_region cenv (es_end with gas_obs := []).scopes t name a len ==>
+        regions_disjoint dst cap a len) /\
+      (!aid a len. aid < sa.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (a,len) ==>
+        regions_disjoint dst cap a len))` by
     (irule raw_call_outbuf_ready_stage >> simp[] >> conj_tac
      >- (qexists_tac `env` >> fs[]) >>
      qexistsl_tac [`data`, `lim`, `sd`] >> simp[]) >>
@@ -652,7 +721,7 @@ Resume raw_call_outbuf_ready_outcome[package]:
       goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
   disj1_tac >> qexists_tac `u` >> simp[] >>
   qexistsl_tac [`G`, `tn`, `t`, `b`, `bs`, `sd`, `lim`] >>
-  fs[]
+  fs[] >> qexists_tac `dst` >> simp[] >> metis_tac[]
 QED
 
 Finalise raw_call_outbuf_ready_outcome
