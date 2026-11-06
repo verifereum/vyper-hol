@@ -1,7 +1,7 @@
 (* Structural proofs for target-checked DRET desugaring. *)
 Theory dretDesugarProofs
 Ancestors
-  dretDesugarDefs irSupply fcgDefs
+  dretDesugarDefs irSupply fcgDefs venomInst
 Libs
   bossLib listTheory
 
@@ -550,14 +550,6 @@ Proof
   metis_tac[dret_desugar_insts_labels]
 QED
 
-Theorem mem_fn_insts_blocks:
-  MEM bb blocks /\ MEM inst bb.bb_instructions ==>
-  MEM inst (fn_insts_blocks blocks)
-Proof
-  map_every qid_spec_tac [`inst`,`bb`] >> Induct_on `blocks` >>
-  simp[venomInstTheory.fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Theorem dret_desugar_input_blocks_legal:
   dret_desugar_input fn ==>
   EVERY (\bb. EVERY (\inst. inst.inst_opcode = DRET ==>
@@ -568,7 +560,7 @@ Proof
   gvs[dret_desugar_input_def] >>
   `MEM inst (fn_insts fn)` by
     (simp[venomInstTheory.fn_insts_def] >>
-     metis_tac[mem_fn_insts_blocks]) >>
+     metis_tac[fmp_fn_insts_blocks_intro]) >>
   `EVERY dret_value_operand inst.inst_operands` by metis_tac[] >>
   gvs[EVERY_MEM]
 QED

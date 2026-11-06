@@ -44,7 +44,7 @@ Ancestors
   (* configured pipeline runner structural guarantees *)
   venomPipelineRunnerProps venomPipelineData
   (* dead function traversal *)
-  venomDft
+  dftCorrectnessFinal
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs

@@ -1,7 +1,7 @@
 Theory convertScalarTyping
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts
-  exprSimConvert  exprSimHyps exprLowering compileEnv vyperAST
+  exprSimConvert exprSimHypsDefs exprSimHyps exprLowering compileEnv vyperAST
   vyperTypeSystem vyperValue exprLoweringProps emitHelper exprBopLowering
 Libs
   pairLib
