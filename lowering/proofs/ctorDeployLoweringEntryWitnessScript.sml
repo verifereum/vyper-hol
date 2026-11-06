@@ -3,7 +3,7 @@ Ancestors
   ctorDeployLoweringEntrySource ctorDeployLoweringDefs vyperInterpreter
   vyperContext vyperState asmOracleRegression asmSem vfmContext vfmState e2eDefs e2eDeployDefs
   vfmExecution vfmExecutionProp vfmConstants vfmOperation venomExecSemantics
-  stackPlanTypes venomCompilerTypes stackPlanGen asmIR
+  stackPlanTypes venomCompilerTypes stackPlanGen asmIR asmParseProofs
   vyperTypeEntryReadiness vyperTypeInitialState vyperTypeContractSoundness
 Libs finite_mapLib wordsLib
 
@@ -122,6 +122,25 @@ Proof
   simp_tac (srw_ss()) [stackPlanGenTheory.context_plan_ops_def,
                        asmIRTheory.data_segment_asm_def] >>
   CONV_TAC (computeLib.CBV_CONV witness_cs)
+QED
+
+Theorem deploy_ctor_noninit_terminal:
+  ISR (FST (step ^witness_es))
+Proof
+  irule deploy_ctor_zero_gas_jumpdest_terminal >>
+  simp[deploy_ctor_noninit_bytecode, make_asm_call_state_def,
+       vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, make_sub_tx_def] >>
+  irule asmParseProofsTheory.parse_code_entry >>
+  simp[parse_opcode_cond_thm, wordsTheory.dimword_8]
+QED
+
+Theorem deploy_ctor_noninit_trace:
+  call_trace ^witness_es = []
+Proof
+  irule deploy_ctor_empty_stack_terminal_trace >>
+  simp[deploy_ctor_noninit_terminal, make_asm_call_state_def,
+       vfmContextTheory.initial_context_def]
 QED
 
 end
