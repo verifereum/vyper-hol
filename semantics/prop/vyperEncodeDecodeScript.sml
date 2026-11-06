@@ -1224,7 +1224,7 @@ Proof
   Induct >> rw[enumerate_static_array_def]
 QED
 
-Theorem decode_value_zero_is_default[local]:
+Theorem decode_value_zero_is_default:
   (∀s offset tv.
     (∀k. s k = 0w) ∧ well_formed_type_value tv ⇒
     decode_value s offset tv = SOME (default_value tv)) ∧
@@ -1968,18 +1968,135 @@ Proof
   simp[MAP_GENLIST, o_DEF, ALL_DISTINCT_GENLIST, MEM_GENLIST]
 QED
 
+(* Structural default blocks above an element do not change its decoding. *)
+Theorem decode_default_blocks_above[local]:
+  !tv defaults sparse n start i base storage.
+    (!off. MEM off (MAP FST defaults) ==> off < type_slot_size tv) /\
+    i < start /\ (start + n) * type_slot_size tv <= dimword(:256) ==>
+    decode_value (apply_writes (n2w base)
+      (FLAT (GENLIST (\k. if MEM (start + k) (MAP FST sparse) then []
+        else MAP (\(off,s). (off + (start + k) * type_slot_size tv,s)) defaults) n)) storage)
+      (base + i * type_slot_size tv) tv =
+    decode_value storage (base + i * type_slot_size tv) tv
+Proof
+  rpt strip_tac >>
+  `!off. MEM off (MAP FST
+      (FLAT (GENLIST (\k. if MEM (start + k) (MAP FST sparse) then []
+        else MAP (\(off,s). (off + (start + k) * type_slot_size tv,s)) defaults) n))) ==>
+      start * type_slot_size tv <= off /\ off < (start + n) * type_slot_size tv` by
+    (simp[MEM_MAP, MEM_FLAT, MEM_GENLIST, EXISTS_PROD, PULL_EXISTS] >>
+     rpt gen_tac >> strip_tac >>
+     Cases_on `?v. MEM (k + start,v) sparse` >>
+     gvs[MEM_MAP, EXISTS_PROD] >>
+     rename1 `MEM (d,s) defaults` >>
+     `d < type_slot_size tv` by
+       (first_x_assum irule >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]) >>
+     `start * type_slot_size tv <= (start + k) * type_slot_size tv` by simp[] >>
+     `(start + k + 1) * type_slot_size tv <= (start + n) * type_slot_size tv` by
+       simp[LE_MULT_RCANCEL] >>
+     pop_assum mp_tac >>
+     simp_tac bool_ss [RIGHT_ADD_DISTRIB, LEFT_ADD_DISTRIB, MULT_CLAUSES] >>
+     decide_tac) >>
+  irule decode_after_disjoint_writes >> reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      `(i + 1) * type_slot_size tv <= start * type_slot_size tv` by
+        simp[LE_MULT_RCANCEL] >>
+      qpat_x_assum `(_ + 1) * _ <= _` mp_tac >>
+      simp_tac bool_ss [RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >> irule n2w_add_cancel >>
+  first_x_assum drule >> strip_tac >>
+  `(i + 1) * type_slot_size tv <= start * type_slot_size tv` by
+    simp[LE_MULT_RCANCEL] >>
+  qpat_x_assum `(_ + 1) * _ <= _` mp_tac >>
+  simp_tac bool_ss [RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem decode_default_blocks_missing[local]:
+  !n start tv defaults sparse i base storage.
+    encode_decode_roundtrip_ok tv (default_value tv) /\
+    encode_value tv (default_value tv) = SOME defaults /\
+    (!off. MEM off (MAP FST defaults) ==> off < type_slot_size tv) /\
+    start <= i /\ i < start + n /\
+    (start + n) * type_slot_size tv <= dimword(:256) /\
+    ~MEM i (MAP FST sparse) ==>
+    decode_value (apply_writes (n2w base)
+      (FLAT (GENLIST (\k. if MEM (start + k) (MAP FST sparse) then []
+        else MAP (\(off,s). (off + (start + k) * type_slot_size tv,s)) defaults) n)) storage)
+      (base + i * type_slot_size tv) tv = SOME (default_value tv)
+Proof
+  Induct >- (rpt strip_tac >> fs[]) >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[GENLIST_CONS, FLAT, apply_writes_append] >>
+  `(\k. if MEM (start + k) (MAP FST sparse) then []
+        else MAP (\(off,s). (off + (start + k) * type_slot_size tv,s)) defaults) o SUC =
+    (\k. if MEM (SUC start + k) (MAP FST sparse) then []
+        else MAP (\(off,s). (off + (SUC start + k) * type_slot_size tv,s)) defaults)` by
+    simp[FUN_EQ_THM, ADD_CLAUSES] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `i = start`
+  >- (qpat_x_assum `!start' tv' defaults' sparse' i' base storage. _` kall_tac >>
+      gvs[] >>
+      dep_rewrite.DEP_REWRITE_TAC
+        [SRULE [ADD_COMM, MULT_COMM] decode_default_blocks_above] >>
+      conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- decide_tac >>
+        `n + SUC i = i + SUC n` by decide_tac >>
+        asm_rewrite_tac[]) >>
+      irule encode_decode_roundtrip_ok_at_offset >> simp[]) >>
+  first_x_assum irule >> simp[ADD_CLAUSES] >>
+  qpat_x_assum `(_ + SUC _) * _ <= _` mp_tac >>
+  simp_tac bool_ss [ADD_CLAUSES, ADD_COMM, MULT_COMM] >>
+  CONV_TAC (DEPTH_CONV wordsLib.WORD_CONV) >> simp[]
+QED
+
+Theorem decode_static_array_missing[local]:
+  !tv n sparse defaults nonzeros i base storage.
+    (!v. value_has_type tv v ==> encode_decode_roundtrip_ok tv v) /\
+    sparse_has_type tv n sparse /\
+    n * type_slot_size tv <= dimword(:256) /\
+    encode_value tv (default_value tv) = SOME defaults /\
+    encode_static_array tv 0 sparse = SOME nonzeros /\
+    i < n /\ ALOOKUP sparse i = NONE ==>
+    decode_value (apply_writes (n2w base)
+      (FLAT (GENLIST (\k. if MEM k (MAP FST sparse) then []
+        else MAP (\(off,s). (off + k * type_slot_size tv,s)) defaults) n) ++ nonzeros) storage)
+      (base + i * type_slot_size tv) tv = SOME (default_value tv)
+Proof
+  rpt strip_tac >>
+  `!off. MEM off (MAP FST defaults) ==> off < type_slot_size tv` by
+    metis_tac[CONJUNCT1 encode_writes_bounded, default_value_well_typed] >>
+  `!off. MEM off (MAP FST nonzeros) ==> off < n * type_slot_size tv` by
+    metis_tac[el 3 (CONJUNCTS encode_writes_bounded), ADD_CLAUSES] >>
+  `!k v. MEM (k,v) sparse ==> value_has_type tv v` by
+    metis_tac[sparse_has_type_value_has_type] >>
+  rewrite_tac[apply_writes_append] >>
+  dep_rewrite.DEP_ONCE_REWRITE_TAC [decode_after_disjoint_writes] >>
+  conj_tac
+  >- (reverse conj_tac
+      >- (rpt gen_tac >> strip_tac >> irule n2w_add_cancel >>
+          `i' < n * type_slot_size tv` by
+            (irule LESS_LESS_EQ_TRANS >> qexists_tac `(i + 1) * type_slot_size tv` >>
+             simp[RIGHT_ADD_DISTRIB, LE_MULT_RCANCEL]) >>
+          metis_tac[LESS_LESS_EQ_TRANS]) >>
+      metis_tac[encode_static_array_miss]) >>
+  irule (SRULE [] (Q.SPECL [`n`, `0`] decode_default_blocks_missing)) >> simp[] >>
+  conj_tac >- metis_tac[alistTheory.ALOOKUP_NONE] >>
+  conj_tac >- fs[] >> metis_tac[default_value_well_typed]
+QED
+
 (* Helper: Static array roundtrip *)
 Theorem encode_decode_roundtrip_static_array[local]:
-  ∀tv n sparse nonzeros base storage.
+  ∀tv n sparse defaults nonzeros base storage.
     (∀v. value_has_type tv v ⇒
          encode_decode_roundtrip_ok tv v) ∧
     sparse_has_type tv n sparse ∧ well_formed_type_value tv ∧
     SORTED $< (MAP FST sparse) ∧
     n * type_slot_size tv ≤ dimword(:256) ∧
+    encode_value tv (default_value tv) = SOME defaults ∧
     encode_static_array tv 0 sparse = SOME nonzeros ⇒
     decode_value
       (apply_writes (n2w base)
-         (GENLIST (λi. (i,0w)) (n * type_slot_size tv) ++ nonzeros) storage)
+         (FLAT (GENLIST (\k. if MEM k (MAP FST sparse) then [] else
+             MAP (\(off,s). (off + k * type_slot_size tv,s)) defaults) n) ++ nonzeros) storage)
       base (ArrayTV tv (Fixed n)) = SOME (ArrayV (SArrayV sparse))
 Proof
   rpt strip_tac >>
@@ -1989,70 +2106,21 @@ Proof
   (* Step 1: decode_static_array gives GENLIST f n *)
   sg `decode_static_array
      (apply_writes (n2w base)
-        (GENLIST (λi. (i,0w)) (n * type_slot_size tv) ⧺ nonzeros) storage)
+        (FLAT (GENLIST (\k. if MEM k (MAP FST sparse) then [] else
+             MAP (\(off,s). (off + k * type_slot_size tv,s)) defaults) n) ⧺ nonzeros) storage)
      base tv n = SOME (GENLIST f n)` >- (
     irule decode_static_array_GENLIST >>
     rpt strip_tac >> simp[Abbr`f`] >>
-    REWRITE_TAC [apply_writes_append] >>
     Cases_on `ALOOKUP sparse i` >> simp[]
-    (* NONE case first (Cases_on puts NONE as first subgoal) *)
-    >- (
-      `decode_value (λk. 0w) (base + i * type_slot_size tv) tv =
-         SOME (default_value tv)` by
-        simp[CONJUNCT1 decode_value_zero_is_default] >>
-      pop_assum (SUBST1_TAC o SYM) >>
-      irule (CONJUNCT1 decode_storage_agree) >>
-      rpt gen_tac >> strip_tac >>
-      rename1 `j < type_slot_size tv` >>
-      simp[lookup_storage_def] >>
-      `i * type_slot_size tv + j < n * type_slot_size tv` by (
-        irule LESS_LESS_EQ_TRANS >>
-        qexists_tac `(i + 1) * type_slot_size tv` >>
-        simp[LE_MULT_RCANCEL]) >>
-      ONCE_REWRITE_TAC [GSYM vfmStateTheory.lookup_storage_def] >>
-      `lookup_storage (n2w (base + (j + i * type_slot_size tv)))
-         (apply_writes (n2w base) nonzeros
-           (apply_writes (n2w base)
-              (GENLIST (λi. (i,0w)) (n * type_slot_size tv)) storage)) =
-       lookup_storage (n2w (base + (j + i * type_slot_size tv)))
-         (apply_writes (n2w base)
-            (GENLIST (λi. (i,0w)) (n * type_slot_size tv)) storage)` by (
-        irule apply_writes_lookup_miss_num >>
-        rpt gen_tac >> strip_tac >>
-        irule n2w_add_cancel >>
-        (* irule gives: off ≠ k ∧ k < dimword ∧ off < dimword *)
-        conj_tac >- (
-          CCONTR_TAC >> gvs[] >>
-          `∀k' v'. MEM (k',v') sparse ⇒ value_has_type tv v'` by
-            metis_tac[sparse_has_type_value_has_type] >>
-          qspecl_then [`sparse`, `tv`, `nonzeros`, `i`]
-            mp_tac encode_static_array_miss >>
-          impl_tac >- (
-            rpt conj_tac >> first_x_assum ACCEPT_TAC
-          ) >>
-          disch_then (qspec_then `j + i * type_slot_size tv` mp_tac) >>
-          simp[]
-        ) >>
-        conj_tac >- (
-          irule LESS_LESS_EQ_TRANS >>
-          qexists_tac `n * type_slot_size tv` >> gvs[]
-        ) >>
-        irule LESS_LESS_EQ_TRANS >>
-        qexists_tac `n * type_slot_size tv` >> conj_tac >- (
-          qspecl_then [`tv`, `0`, `sparse`, `nonzeros`, `n`]
-            mp_tac (el 3 (CONJUNCTS encode_writes_bounded)) >>
-          impl_tac >- simp[] >>
-          disch_then drule >> simp[]
-        ) >> gvs[]
-      ) >> simp[] >>
-      irule genlist_zeros_lookup >> simp[]
-    )
+    >- (irule decode_static_array_missing >> simp[]) >>
+    rewrite_tac[apply_writes_append]
     (* SOME case: use encode_decode_static_array *)
     >> (
       rename1 `_ = SOME v0` >>
       qspecl_then [`sparse`, `tv`, `n`, `0`, `nonzeros`, `base`,
         `apply_writes (n2w base)
-           (GENLIST (λi. (i,0w)) (n * type_slot_size tv)) storage`]
+           (FLAT (GENLIST (\k. if MEM k (MAP FST sparse) then [] else
+             MAP (\(off,s). (off + k * type_slot_size tv,s)) defaults) n)) storage`]
         mp_tac encode_decode_static_array >>
       impl_tac >- gvs[] >>
       disch_then (qspecl_then [`i`, `v0`] mp_tac) >>
