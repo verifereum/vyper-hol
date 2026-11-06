@@ -1,5 +1,5 @@
 Theory fnLineageInvTwoDemandProbe
-Ancestors fnLineageInvSpliceProbe stackPlanGen
+Ancestors fnLineageInvSpliceProbe fnLineageInvLiteral stackPlanGen
 
 (* The extra early output u uses the previously unused instruction ID 40.
    The two-demand store kills both early outputs; all other blocks and IDs
@@ -50,17 +50,18 @@ Theorem splice_two_first_add:
     splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"])
 Proof
   mp_tac splice_two_live_observe >> simp[] >> strip_tac >>
-  asm_rewrite_tac[splice_loop_e_exact, generate_inst_plan_def,
-    generate_regular_inst_plan_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``reorder_one``, ``liveness_analyze``, ``dfg_build_function``,
-     ``cfg_analyze``, ``splice_two_fn``]) >>
-  simp[listTheory.FOLDL, pairTheory.UNCURRY_DEF] >>
-  simp[SRULE [splice_loop_e_exact] splice_loop_literal_reorder,
-    SRULE [splice_loop_e_exact] splice_loop_literal_reorder_noops] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``, ``splice_two_fn``]) >>
-  simp[]
+  `optimistic_swap_plan (dfg_build_function splice_two_fn)
+    (mk_inst 21 ADD [Lit 1w; Lit 2w] ["t"])
+    (live_vars_at (liveness_analyze splice_two_fn) "H" 1) F
+    (splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"]) =
+    ([], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"])` by
+    (asm_rewrite_tac[splice_loop_e_exact, optimistic_swap_plan_def,
+       venomInstTheory.mk_inst_def] >> EVAL_TAC) >>
+  `1w <> (2w:256 word)` by simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
+  `MEM "t" (live_vars_at (liveness_analyze splice_two_fn) "H" 1)` by simp[] >>
+  drule_all literal_add_inst_plan >>
+  simp[stackPlanOpsTheory.release_dead_spills_def, splice_loop_e_exact] >>
+  strip_tac >> first_x_assum irule
 QED
 
 Theorem splice_two_second_reorder_swap:
@@ -107,19 +108,21 @@ Theorem splice_two_second_add:
     splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "u"; Var "t"])
 Proof
   mp_tac splice_two_live_observe >> simp[] >> strip_tac >>
-  asm_rewrite_tac[splice_loop_e_exact, generate_inst_plan_def,
-    generate_regular_inst_plan_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``reorder_one``, ``operand_equiv``, ``liveness_analyze``, ``dfg_build_function``,
-     ``cfg_analyze``, ``splice_two_fn``]) >>
-  simp[listTheory.FOLDL, pairTheory.UNCURRY_DEF,
-    SRULE [splice_loop_e_exact] splice_two_second_reorder_swap,
-    SRULE [splice_loop_e_exact] splice_two_second_reorder_noops,
-    SRULE [dfgDefsTheory.operand_equiv_def, EQ_SYM_EQ] splice_two_t_u_inequivalent,
-    dfgDefsTheory.operand_equiv_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``, ``splice_two_fn``]) >>
-  simp[]
+  qabbrev_tac `ps0 = splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "t"]` >>
+  `optimistic_swap_plan (dfg_build_function splice_two_fn)
+    (mk_inst 40 ADD [Lit 3w; Lit 4w] ["u"])
+    (live_vars_at (liveness_analyze splice_two_fn) "H" 2) F
+    (ps0 with ps_stack := ps0.ps_stack ++ [Var "u"]) =
+    ([SOSwap 1], splice_loop_e with ps_stack := splice_loop_e.ps_stack ++ [Var "u"; Var "t"])` by
+    (simp[Abbr `ps0`] >>
+     asm_rewrite_tac[optimistic_swap_plan_def, venomInstTheory.mk_inst_def] >>
+     simp[splice_two_t_u_inequivalent] >>
+     rewrite_tac[splice_loop_e_exact] >> EVAL_TAC) >>
+  `3w <> (4w:256 word)` by simp[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
+  `MEM "u" (live_vars_at (liveness_analyze splice_two_fn) "H" 2)` by simp[] >>
+  drule_all literal_add_inst_plan >>
+  simp[stackPlanOpsTheory.release_dead_spills_def, splice_loop_e_exact] >>
+  strip_tac >> first_x_assum irule
 QED
 
 Theorem splice_two_entry_result:
