@@ -105,8 +105,6 @@ QED
 (* The frame starts in the relation with its own entry assembly state. *)
 Theorem asm_frame_rel_entry:
   initial_ctx_rel cplan prog ctx vs es /\
-  (vs.vs_call_ctx.cc_created_in_tx = account_empty
-    (lookup_account (FST (HD es.contexts)).msgParams.callee es.originalAccounts)) /\
   (vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
     (lookup_account (FST (HD es.contexts)).msgParams.callee
       es.rollback.accounts)) ==>
