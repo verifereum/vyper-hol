@@ -1,6 +1,6 @@
 Theory fnPlanLineageEntryProduction
 Ancestors
-  fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath
+  fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix
   stackPlanGen venomWf venomInst passSharedDefs removeUnusedProofs removeUnusedSsaProofs list rich_list finite_map bag
 
 (* Chronological origins include dead definitions retained by native emission.
@@ -559,4 +559,98 @@ Proof
         (CONV_TAC (RAND_CONV EVAL) >> simp[]) >>
       gvs[EVERY_GENLIST]) >>
   strip_tac >> drule_all short_full_reorder_conditional_guard_probe >> simp[]
+QED
+
+(* Live names have no resources in the residual prefix. Native targets may
+   repeat: membership alone suffices for the truncated-subtraction bound. *)
+Theorem generate_inst_plan_jmp_live_residual_zero:
+  !lv dfg cfg fn inst next halt term cur ps targets ops qs.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops lv fn cur inst = SOME targets /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs) /\
+    set (MAP Var next) SUBSET set targets /\
+    (!v. MEM v next ==> LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) ==>
+    !v. MEM v next ==>
+      LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH targets) qs.ps_stack) = 0
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  `MEM (Var v) targets` by
+    (gvs[pred_setTheory.SUBSET_DEF, MEM_MAP] >> metis_tac[]) >>
+  `0 < LIST_ELEM_COUNT (Var v) targets` by
+    gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  drule_all fnPlanLineageInventoryTheory.generate_inst_plan_jmp_residual_count >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp[] >> decide_tac
+QED
+
+Theorem generate_inst_plan_jmp_live_target_count:
+  !lv dfg cfg fn inst next halt term cur ps targets ops qs.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops lv fn cur inst = SOME targets /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs) /\
+    set (MAP Var next) SUBSET set targets /\
+    (!v. MEM v next ==> LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) ==>
+    !v. MEM v next ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack = LIST_ELEM_COUNT (Var v) targets
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all generate_inst_plan_jmp_live_residual_zero >> strip_tac >>
+  drule_all generate_inst_plan_jmp_suffix >> strip_tac >>
+  gvs[stackModelTheory.stack_pop_def, TAKE_APPEND,
+      reorderSimTheory.elem_count_append]
+QED
+
+Theorem generate_inst_plan_jmp_live_terminal:
+  !lv dfg cfg fn inst next halt term cur ps targets ops qs.
+    inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+    join_target_ops lv fn cur inst = SOME targets /\
+    generate_inst_plan lv dfg cfg fn inst next halt term cur ps = SOME (ops,qs) /\
+    set (MAP Var next) SUBSET set targets /\
+    (!v. MEM v next ==> LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) ==>
+    qs.ps_spilled = FEMPTY /\
+    (!v. MEM v next ==>
+      LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH targets) qs.ps_stack) = 0) /\
+    (!v. MEM v next ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack = LIST_ELEM_COUNT (Var v) targets)
+Proof
+  metis_tac[generate_inst_plan_jmp_live_residual_zero,
+    generate_inst_plan_jmp_live_target_count,
+    fnPlanLineageInventoryTheory.generate_inst_plan_jmp_spilled_empty]
+QED
+
+(* Demand transport needs a reachable instruction position. This is not an
+   arbitrary-block initialization or an all-operands residual budget. *)
+Theorem entry_jmp_live_terminal:
+  !fn bb i ps dfg cfg halt term targets ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = JMP /\
+    (EL i bb.bb_instructions).inst_outputs = [] /\
+    entry_boundary_resources fn bb i ps /\
+    join_target_ops (liveness_analyze fn) fn bb.bb_label
+      (EL i bb.bb_instructions) = SOME targets /\
+    set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)))
+      SUBSET set targets /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn
+      (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+      halt term bb.bb_label ps = SOME (ops,qs) ==>
+    qs.ps_spilled = FEMPTY /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+      LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH targets) qs.ps_stack) = 0) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack = LIST_ELEM_COUNT (Var v) targets)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1` by
+    (rpt strip_tac >>
+     `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+       (irule analyzed_computed_operand_demand >> simp[]) >>
+     gvs[entry_boundary_resources_def]) >>
+  drule_all generate_inst_plan_jmp_live_terminal >> simp[]
 QED
