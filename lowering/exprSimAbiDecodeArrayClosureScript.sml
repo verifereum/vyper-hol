@@ -5,7 +5,7 @@ Ancestors
   exprSimAbiDecodeArrayControl exprSimAbiDecodeLabelledLoop
   exprSimAbiDecodeMemberExecute exprSimAbiDecodeArrayInvariant
   exprSimAbiDecodeArrayMembers exprSimAggregateEncoding valueEncodingProps valueEncoding
-  exprSimAbiDecodeOwnedContext
+  exprSimAbiDecodeOwnedContext exprSimAbiDecodeScratchCover
   exprSimAbiDecodeArraySetup abiDecoderSequenceReach abiDecoderFiniteControl
   abiDecoderIndexInit abiDecoderSiteEffect abiDecoderExecution instIdxIndep
   compileEnv venomState venomInst words list arithmetic finite_map pred_set
@@ -204,4 +204,27 @@ Theorem abi_array_body_post_backedge_header:
 Proof
   simp_tac bool_ss [abi_array_body_post_def, abi_array_loop_data_def] >>
   strip_tac >> irule abi_array_backedge_header_frame >> metis_tac[]
+QED
+
+Theorem abi_array_initial_slot_scratch:
+  abi_decode_scratch_cover outer scratch s /\ idx IN outer /\
+  (slot = s.vs_alloca_next \/ FLOOKUP s.vs_allocas idx = SOME(slot,32)) ==>
+  {a | slot <= a /\ a < slot+32} SUBSET scratch
+Proof
+  simp[abi_decode_scratch_cover_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem abi_array_initial_slot_header:
+  abi_decode_owned outer scratch d (32+n*m) origin /\ idx IN outer /\
+  (slot = origin.vs_alloca_next \/ FLOOKUP origin.vs_allocas idx = SOME(slot,32)) /\
+  decode_site_effect ctx func next {a | slot <= a /\ a < slot+32} s t ==>
+  mem_word_at d t.vs_memory = mem_word_at d s.vs_memory
+Proof
+  strip_tac >>
+  `{a | slot <= a /\ a < slot+32} SUBSET scratch` by
+    metis_tac[abi_array_initial_slot_scratch, abi_decode_owned_def] >>
+  irule abi_array_header_effect_frame >> goal_assum (drule_at Any) >>
+  fs[abi_decode_owned_def, decode_protects_def, SUBSET_DEF] >>
+  rpt strip_tac >>
+  `a < d+(m*n+32)` by decide_tac >> metis_tac[]
 QED
