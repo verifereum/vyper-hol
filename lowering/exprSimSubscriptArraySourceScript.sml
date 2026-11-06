@@ -433,9 +433,10 @@ Proof
   rpt conj_tac
   >- (drule call_evaluation_safe_append_left >> simp[]) >>
   rpt strip_tac >>
-  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
-    (qspec_then `target` irule) >>
-  simp[supported_expr_exists_def]
+  TRY (qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
+         (qspec_then `target` irule) >>
+       simp[supported_expr_exists_def] >> NO_TAC) >>
+  gvs[supported_expr_exists_def]
 QED
 
 Theorem expr_body_pre_subscript_index:
@@ -450,9 +451,10 @@ Proof
   conj_tac
   >- (drule call_evaluation_safe_append_right >> simp[]) >>
   rpt strip_tac >>
-  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
-    (qspec_then `target` irule) >>
-  simp[supported_expr_exists_def]
+  TRY (qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
+         (qspec_then `target` irule) >>
+       simp[supported_expr_exists_def] >> NO_TAC) >>
+  gvs[supported_expr_exists_def]
 QED
 
 Theorem expr_body_pre_array_subscript_index_after_base:
