@@ -3,6 +3,7 @@ Theory exprPtrUnwrapStorageSource
 Ancestors
   exprPtrUnwrapStorage loweringPosts exprSimUnwrap vyperStorageBackend
   vyperState vyperStorage vyperTypeValues accountsRelProps exprSimProps
+  vyperTypeStatePreservation valueEncodingTyping
 
 Theorem storage_holds_decode:
   storage_holds cx tr t tv w es s /\
@@ -35,4 +36,17 @@ Theorem ptr_vv_ok_storage_frame:
   ptr_vv_ok cx t tv (LocatedValue t' p) es H tm u
 Proof
   Cases_on `tr` >> simp[slot_loc_def, bodyPtrDefsTheory.ptr_vv_ok_def]
+QED
+
+(* Successful source decoding gives both semantic-copy size obligations. *)
+Theorem storage_holds_value_bounds:
+  storage_holds cx tr t tv w es s /\
+  evaluate_type (get_tenv cx) t = SOME ty /\
+  read_result cx tv es = (INL v,es) ==>
+  val_wf ty v /\ val_footprint ty v <= type_memory_size ty
+Proof
+  strip_tac >> drule_all storage_holds_decode >> strip_tac >> gvs[] >>
+  drule_all (cj 1 decode_value_well_typed) >> strip_tac >>
+  drule (cj 1 value_has_type_val_wf) >> strip_tac >>
+  simp[val_footprint_le]
 QED
