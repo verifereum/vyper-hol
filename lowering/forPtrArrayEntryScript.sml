@@ -313,3 +313,20 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
+
+Theorem for_array_done_stmt_post_ptr:
+  for_array_done_ptr ctx func cenv cx exit st s0 G0 tn0 d es G tn t /\
+  sb.cs_current_bb = exit /\ sb.cs_current_insts = [] ==>
+  ?cenv'.
+    stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\
+    ~block_is_terminated sb /\ cenv' = cenv /\
+    cenv_top_ext cenv cenv' es.scopes /\
+    stmt_state_rel ctx func cenv' cx es t /\ ghost_inv d cenv' cx es G tn t /\
+    (!x w. not_fresh_at st x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+    (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
+      op_taint tn (Var x) = op_taint tn0 (Var x))
+Proof
+  simp[for_array_done_ptr_def] >> strip_tac >>
+  simp[stmt_lands_def, block_is_terminated_def,
+    cenv_top_ext_def]
+QED
