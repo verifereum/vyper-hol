@@ -548,3 +548,83 @@ Proof
   simp[Abbr `r`, fresh_vars_wrt_def] >> fs[fresh_vars_wrt_def]
 QED
 
+
+Theorem compile_slice_extcode_counted_ok:
+  compile_slice_extcode addr start len (Var root) (Var data) sa = (out,sb) /\
+  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\ eval_operand addr s = SOME a /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  lookup_var root s = SOME b /\ lookup_var data s = SOME d /\
+  32 <= N /\ ptr_covers G tn root s N /\ ptr_covers G tn data s (w2n wn) /\
+  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
+       vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
+  out = Var root /\ ?r v t H tm.
+    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
+    v = (write_memory_with_expansion (w2n d)
+      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
+         REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx /\
+    t = (mstore (w2n b) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
+  `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `s1 = sc` SUBST_ALL_TAC >> qpat_x_assum `s2 = sd` SUBST_ALL_TAC >>
+  `cs_extends sd sb /\ cs_extends sc sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sd fn /\
+   fn_has_code sd s3 fn /\ fn_has_code s3 sb fn` by metis_tac[fn_has_code_split] >>
+  `step_inst_base
+    (mk_inst sa.cs_next_id EXTCODESIZE [addr] [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s)` by
+    (irule external_size_step >> simp[] >> metis_tac[]) >>
+  `!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}` by (simp[] >> metis_tac[]) >>
+  `!arg. MEM arg [addr] ==> op_taint tn arg = {}` by (simp[] >> metis_tac[]) >>
+  `MEM EXTCODESIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH [addr] <= 1` by simp[] >>
+  qpat_assum `step_inst_base _ s = _`
+    (mp_then Any mp_tac external_query_bounds_counted_ok) >>
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `eval_operand addr r = SOME a /\ eval_operand start r = SOME wa /\
+   eval_operand len r = SOME wn /\ lookup_var root r = SOME b /\
+   lookup_var data r = SOME d /\ op_taint tm addr = {} /\
+   op_taint tm start = {} /\ op_taint tm len = {}` by
+    (qpat_x_assum `r = _` kall_tac >>
+     qpat_assum `!op v. eval_operand op s = SOME v ==> _`
+       (fn th => map_every (fn opq => qspec_then opq mp_tac th)
+         [`addr`,`start`,`len`]) >> simp[eval_operand_def] >>
+     qpat_x_assum `!op v. eval_operand op s = SOME v ==> _` mp_tac >>
+     qpat_x_assum `lookup_var root s = SOME b` mp_tac >>
+     qpat_x_assum `lookup_var data s = SOME d` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[eval_operand_def]) >>
+  `ptr_covers H tm root r N /\ ptr_covers H tm data r (w2n wn)` by metis_tac[] >>
+  `step_inst_base (mk_inst sd.cs_next_id EXTCODECOPY [addr;Var data;start;len] []) r =
+   OK (write_memory_with_expansion (w2n d)
+    (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
+     REPLICATE (w2n wn) 0w)) r)` by
+    (qpat_x_assum `r = _` kall_tac >> irule external_copy_step >>
+     qexists_tac `a` >> simp[eval_operand_def]) >>
+  qpat_assum `eval_operand addr r = SOME a` (fn ev =>
+    qpat_assum `step_inst_base _ r = _`
+      (mp_then Any (mp_tac o SRULE [ev]) external_copy_store_counted)) >>
+  disch_then drule_all >> disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG H tm r 0 H tm' (OK t)` >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm' (OK t)` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac >- simp[] >> qexistsl_tac [`r`,
+    `(write_memory_with_expansion (w2n d)
+      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
+       REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx`, `t`,`H`,`tm'`] >>
+  conj_tac >- simp[] >> qpat_x_assum `r = _` kall_tac >>
+  simp[Abbr `t`, op_taint_def] >> qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >>
+  simp[op_taint_def]
+QED
