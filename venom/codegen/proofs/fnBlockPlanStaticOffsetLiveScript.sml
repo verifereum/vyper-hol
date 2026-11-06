@@ -474,3 +474,49 @@ Proof
   qexistsl_tac [`db`, `fn`, `k`] >> simp[] >>
   metis_tac[lookup_block_MEM, lookup_block_label]
 QED
+
+Theorem ready_output_dominated_live:
+  !fn db k v ub j.
+    codegen_ready_fn fn /\ MEM db fn.fn_blocks /\
+    k < LENGTH db.bb_instructions /\
+    MEM v (EL k db.bb_instructions).inst_outputs /\
+    MEM ub fn.fn_blocks /\ fn_dominates fn db.bb_label ub.bb_label /\
+    LENGTH (collect_phis ub.bb_instructions) <= j /\
+    j <= LENGTH ub.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) ub.bb_label j) /\
+    (ub = db ==> k < j) ==>
+    MEM v (live_vars_at (liveness_analyze fn) db.bb_label (k+1))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fn_reachable fn db.bb_label` by metis_tac[fn_dominates_dom_reachable] >>
+  Cases_on `ub = db`
+  >- (gvs[] >> irule ready_output_suffix_live >> simp[] >> metis_tac[]) >>
+  `lookup_block db.bb_label fn.fn_blocks = SOME db /\
+   lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
+    (conj_tac >> irule MEM_lookup_block >> simp[] >>
+     gvs[codegen_ready_fn_def, wf_function_def, fn_labels_def]) >>
+  drule fn_dominates_last_visit >> strip_tac >>
+  Cases_on `tail`
+  >- (gvs[] >> metis_tac[]) >>
+  rename1 `is_fn_path fn (db.bb_label :: first :: rest)` >>
+  `?fb. lookup_block first fn.fn_blocks = SOME fb` by
+    (irule ready_reachable_lookup >> gvs[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) first
+      (LENGTH (collect_phis fb.bb_instructions)))` by
+    (irule (SRULE [] (Q.SPEC `first :: rest` ready_live_path)) >> simp[] >>
+     (conj_tac >- gvs[]) >>
+     qexistsl_tac [`j`, `rest`, `ub`] >>
+     gvs[Once is_fn_path_def] >> rpt gen_tac >> strip_tac >>
+     irule ready_output_other_block_no_defs >> simp[] >>
+     qexistsl_tac [`db`, `fn`, `k`, `lbl`] >> simp[] >> metis_tac[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) db.bb_label
+      (LENGTH db.bb_instructions))` by
+    (irule ready_postprefix_predecessor >> simp[] >>
+     qexistsl_tac [`fb`, `first`] >>
+     gvs[Once is_fn_path_def] >> qx_gen_tac `p` >> disch_tac >>
+     irule ready_output_other_block_no_defs >> simp[] >>
+     (conj_tac >- (mp_tac (Q.SPEC `fb.bb_instructions` collect_phis_length_bound) >> decide_tac)) >>
+     qexistsl_tac [`db`, `fn`, `k`, `first`] >> simp[]) >>
+  irule ready_output_suffix_live >> simp[] >>
+  qexists_tac `LENGTH db.bb_instructions` >> simp[]
+QED
