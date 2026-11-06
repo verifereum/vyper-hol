@@ -4,6 +4,7 @@ Ancestors
   bodyMemoryPreds gasSummary gasOutcome gasSummaryCompose gasExemptCert vyperState
   exprSimHyps vyperEvalExprPreservesScopesDom vyperImmutableMetadataFrame
   loweringPosts exprSimSource exprLoweringProps compileEnv
+  fragGasMode fragGasPathMem exprSimMemDefs exprSimWordArgs
 
 Theorem aggregate_body_exprs_mem_tail:
   body_exprs_mem_ok cx (e::args) /\
@@ -197,4 +198,42 @@ Theorem aggregate_regions_disjoint_slice:
   regions_disjoint io k (b+off) n
 Proof
   simp[regions_disjoint_def] >> decide_tac
+QED
+
+Theorem aggregate_tuple_nil_outcome_mem:
+  ~s.vs_halted /\ Q (INL []) (es with gas_obs := []) s ==>
+  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx []) (es,s) Q R
+Proof
+  strip_tac >> rewrite_tac[gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL []`, `es`, `OK s`] >>
+  simp[gas_marked_exec_def, exprSimWordArgsTheory.eval_exprs_nil,
+       gas_marked_path_def] >>
+  irule (cj 1 gas_path_mem_rules) >> simp[]
+QED
+
+Theorem aggregate_tuple_child_outcome_mem:
+  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx (e::args) /\
+  expr_body_pre ce cx env e es /\
+  compile_expr ce (expr_type e) e sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  alloca_history func s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
+    (\res ee t. ?tv. res = INL tv /\
+      vv_post ctx func ce cx e es sa sb s0 ee tv vv t /\
+      vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `expr_vv_sim_mem ctx func ce cx (expr_type e) e es` by
+    (fs[body_exprs_mem_ok_def, body_expr_mem_ok_def] >> metis_tac[]) >>
+  drule expr_body_pre_vv_gas_admissible >> strip_tac >>
+  fs[expr_vv_sim_mem_def]
 QED
