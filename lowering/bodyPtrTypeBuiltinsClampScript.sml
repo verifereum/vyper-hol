@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsClamp
 Ancestors
   bodyPtrTypeBuiltinsScalarOps bodyPtrTypeBuiltinsBool bodyPtrTypeBuiltinsIszero
   venomExecSemantics exprSendPtr fragGasSeqPtr bodyPtrTypeBuiltinsScalarTransfer list
-  instSeqComposePtr exprLowering exprLoweringProps emitHelperProps
+  instSeqComposePtr fragExec instIdxIndep exprLowering exprLoweringProps emitHelperProps
   compileEnv ASCIInumbers rich_list ptrDiscipline finite_map venomState venomInst
 
 Theorem int_clamp_unsigned_code:
@@ -207,4 +207,361 @@ Proof
   simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
   drule iszero_run_shape >> strip_tac >>
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem unsigned_clamp_success_prefix:
+  run_inst_seq
+    [mk_inst id GT [x; Lit hi] [a];
+     mk_inst (id+1) ISZERO [Var a] [b];
+     mk_inst (id+2) ASSERT [Var b] []] s = OK t ==>
+  ?u. run_inst_seq
+    [mk_inst id GT [x; Lit hi] [a];
+     mk_inst (id+1) ISZERO [Var a] [b]] s = OK u
+Proof
+  simp[run_inst_seq_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem unsigned_clamp_abort_prefix:
+  run_inst_seq
+    [mk_inst id GT [x; Lit hi] [a];
+     mk_inst (id+1) ISZERO [Var a] [b];
+     mk_inst (id+2) ASSERT [Var b] []] s = Abort err t ==>
+  ?u. run_inst_seq
+    [mk_inst id GT [x; Lit hi] [a];
+     mk_inst (id+1) ISZERO [Var a] [b]] s = OK u
+Proof
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac
+  >~ [`step_inst_base (mk_inst _ ASSERT _ _) _ = Abort _ _`]
+  >- metis_tac[] >>
+  qpat_x_assum `step_inst_base _ _ = Abort _ _` mp_tac >>
+  CONV_TAC (LAND_CONV (LAND_CONV (REWRITE_CONV
+    [step_inst_base_def, mk_inst_def, instruction_accessors,
+     instruction_accfupds, combinTheory.K_THM, opcode_case_def]))) >>
+  simp[exec_pure2_def, exec_pure1_def, AllCaseEqs()]
+QED
+
+Theorem int_clamp_unsigned_fixed_certificate:
+  compile_int_clamp F bits x sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  (run_inst_seq (emitted_insts sa sb) s = OK t \/
+   run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
+  ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> (drule int_clamp_unsigned_code >> strip_tac >> gvs[] >>
+  imp_res_tac unsigned_clamp_success_prefix >>
+  imp_res_tac unsigned_clamp_abort_prefix >>
+  qexistsl_tac [`DRESTRICT (DRESTRICT G (COMPL {a})) (COMPL {b})`,
+    `tn with t_var := tn.t_var |+ (a,{}) |+ (b,{})`] >>
+  conj_tac
+  >- (irule (PURE_REWRITE_RULE [APPEND] scalar_iszero_assert_certificate) >>
+      simp[op_prov_def, op_taint_def] >> goal_assum (drule_at Any)) >>
+  simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  Cases_on `out` >> gvs[op_prov_def, op_taint_def] >>
+  rpt IF_CASES_TAC >> simp[])
+QED
+
+Theorem scalar_iszero_clean_frame_certificate:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_prov G y = NONE /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq [mk_inst id opc [x;y] [a];
+                mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
+  ?H th.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id opc [x;y] [a]; mk_inst (id+1) ISZERO [Var a] [b]]
+      (s with vs_inst_idx := k) H th) /\
+    op_prov H (Var b) = NONE /\ op_taint th (Var b) = {} /\
+    (!op. op_prov G op = NONE /\ op_taint tn op = {} ==>
+      op_prov H op = NONE /\ op_taint th op = {}) /\
+    (!p. p <> a /\ p <> b ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  qexistsl_tac [`DRESTRICT (DRESTRICT G (COMPL {a})) (COMPL {b})`,
+    `tn with t_var := tn.t_var |+ (a,{}) |+ (b,{})`] >> conj_tac
+  >- (gen_tac >> irule scalar_iszero_certificate >> simp[] >>
+      qexists_tac `t with vs_inst_idx := k` >>
+      `~is_terminator opc` by gvs[MEM, is_terminator_def] >>
+      simp[run_inst_seq_inst_idx, GSYM mk_inst_def, is_terminator_def,
+           exec_result_map_def]) >>
+  simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  Cases >> simp[op_prov_def, op_taint_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem scalar_clean_frame_certificate:
+  MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_prov G y = NONE /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq [mk_inst id opc [x;y] [z]] s = OK t ==>
+  ?H th.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id opc [x;y] [z]]
+      (s with vs_inst_idx := k) H th) /\
+    op_prov H (Var z) = NONE /\ op_taint th (Var z) = {} /\
+    (!op. op_prov G op = NONE /\ op_taint tn op = {} ==>
+      op_prov H op = NONE /\ op_taint th op = {}) /\
+    (!p. p <> z ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id opc [x;y] [z]) s = OK t` by
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
+  qexistsl_tac [`DRESTRICT G (COMPL {z})`,
+    `tn with t_var := tn.t_var |+ (z,{})`] >> conj_tac
+  >- (gen_tac >>
+      `step_inst_base (mk_inst id opc [x;y] [z])
+        (s with vs_inst_idx := k) = OK (t with vs_inst_idx := k)` by
+        (`~is_terminator opc` by gvs[MEM, is_terminator_def] >>
+         simp[step_inst_inst_idx_indep, GSYM mk_inst_def, exec_result_map_def]) >>
+      simp[inst_seq_ptr_def] >> conj_tac
+      >- (irule convert_scalar_ptr_inst_ok >> simp[] >> goal_assum (drule_at Any)) >>
+      `step_prov PG G (mk_inst id opc [x;y] [z]) t =
+        DRESTRICT G (COMPL {z})` by
+        (simp[step_prov_def, set_prov_def, mk_inst_def] >>
+         `out_prov PG G (mk_inst id opc [x;y] [z]) t = NONE` by
+           (irule out_prov_clearing_none >> gvs[MEM, mk_inst_def]) >>
+         gvs[mk_inst_def]) >>
+      simp[] >> sym_tac >> irule convert_scalar_ghost_update >>
+      simp[] >> goal_assum (drule_at Any)) >>
+  simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  Cases >> simp[op_prov_def, op_taint_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem checked_prefix_assert_certificate:
+  EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+  run_inst_seq xs s = OK t /\
+  (!k. inst_seq_ptr D 0 ctx fn PG G tn xs (s with vs_inst_idx := k) H th) /\
+  ~ctx_has_dalloca ctx /\ op_taint th op = {} /\
+  eval_operand op t = SOME w ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (xs ++ [mk_inst id ASSERT [op] []]) s H th
+Proof
+  strip_tac >> irule inst_seq_ptr_append >> simp[] >>
+  qexistsl_tac [`H`,`th`] >> reverse conj_tac
+  >- (simp[] >>
+      first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+  gen_tac >> irule clamp_assert_certificate >>
+  simp[eval_operand_def, lookup_var_def] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem signed_clamp_prefix_runs:
+  (run_inst_seq
+    [mk_inst id SLT [x; Lit lo] [a];
+     mk_inst (id+1) ISZERO [Var a] [b];
+     mk_inst (id+2) SGT [x; Lit hi] [c];
+     mk_inst (id+3) ISZERO [Var c] [d];
+     mk_inst (id+4) AND [Var b; Var d] [e];
+     mk_inst (id+5) ASSERT [Var e] []] s = OK t \/
+   run_inst_seq
+    [mk_inst id SLT [x; Lit lo] [a];
+     mk_inst (id+1) ISZERO [Var a] [b];
+     mk_inst (id+2) SGT [x; Lit hi] [c];
+     mk_inst (id+3) ISZERO [Var c] [d];
+     mk_inst (id+4) AND [Var b; Var d] [e];
+     mk_inst (id+5) ASSERT [Var e] []] s = Abort err t) ==>
+  ?u v w.
+    run_inst_seq [mk_inst id SLT [x; Lit lo] [a];
+                 mk_inst (id+1) ISZERO [Var a] [b]] s = OK u /\
+    run_inst_seq [mk_inst (id+2) SGT [x; Lit hi] [c];
+                 mk_inst (id+3) ISZERO [Var c] [d]] u = OK v /\
+    run_inst_seq [mk_inst (id+4) AND [Var b; Var d] [e]] v = OK w /\
+    (?value. eval_operand (Var e) w = SOME value)
+Proof
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac
+  >~ [`step_inst_base (mk_inst _ ASSERT _ _) _ = OK _`]
+  >- (qpat_assum `step_inst_base (mk_inst _ AND _ _) _ = OK _`
+        (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >> strip_tac >>
+      gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[]) 
+  >~ [`step_inst_base (mk_inst _ ASSERT _ _) _ = Abort _ _`]
+  >- (qpat_assum `step_inst_base (mk_inst _ AND _ _) _ = OK _`
+        (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >> strip_tac >>
+      gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[]) >>
+  qpat_x_assum `step_inst_base _ _ = Abort _ _` mp_tac >>
+  CONV_TAC (LAND_CONV (LAND_CONV (REWRITE_CONV
+    [step_inst_base_def, mk_inst_def, instruction_accessors,
+     instruction_accfupds, combinTheory.K_THM, opcode_case_def]))) >>
+  simp[exec_pure2_def, exec_pure1_def, AllCaseEqs()]
+QED
+
+Theorem signed_clamp_checked_prefix:
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq [mk_inst id SLT [x; Lit lo] [a];
+               mk_inst (id+1) ISZERO [Var a] [b]] s = OK u /\
+  run_inst_seq [mk_inst (id+2) SGT [x; Lit hi] [c];
+               mk_inst (id+3) ISZERO [Var c] [d]] u = OK v /\
+  run_inst_seq [mk_inst (id+4) AND [Var b; Var d] [e]] v = OK w ==>
+  ?H th.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id SLT [x; Lit lo] [a];
+       mk_inst (id+1) ISZERO [Var a] [b];
+       mk_inst (id+2) SGT [x; Lit hi] [c];
+       mk_inst (id+3) ISZERO [Var c] [d];
+       mk_inst (id+4) AND [Var b; Var d] [e]]
+      (s with vs_inst_idx := k) H th) /\
+    op_prov H (Var e) = NONE /\ op_taint th (Var e) = {} /\
+    (!op. op_prov G op = NONE /\ op_taint tn op = {} ==>
+      op_prov H op = NONE /\ op_taint th op = {}) /\
+    (!p. ~MEM p [a;b;c;d;e] ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `MEM SLT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+   op_prov G (Lit lo) = NONE /\ op_taint tn (Lit lo) = {}` by
+    simp[op_prov_def, op_taint_def] >>
+  drule_all scalar_iszero_clean_frame_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H1` (qx_choose_then `tn1` strip_assume_tac))) >>
+  `op_prov H1 x = NONE /\ op_taint tn1 x = {}` by metis_tac[] >>
+  qpat_x_assum `MEM SLT _` kall_tac >>
+  `MEM SGT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+   op_prov H1 (Lit hi) = NONE /\ op_taint tn1 (Lit hi) = {}` by
+    simp[op_prov_def, op_taint_def] >>
+  drule_all (GEN_ALL (PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC, EVAL ``2+1:num``]
+    (Q.INST [`id` |-> `id+2`] (SPEC_ALL scalar_iszero_clean_frame_certificate)))) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H2` (qx_choose_then `tn2` strip_assume_tac))) >>
+  `op_prov H2 (Var b) = NONE /\ op_taint tn2 (Var b) = {}` by metis_tac[] >>
+  `MEM AND [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  drule_all scalar_clean_frame_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `H3` (qx_choose_then `tn3` strip_assume_tac))) >>
+  qexistsl_tac [`H3`,`tn3`] >> conj_tac
+  >- (irule (PURE_REWRITE_RULE [APPEND] (Q.INST
+        [`xs` |-> `[mk_inst id SLT [x; Lit lo] [a];
+                    mk_inst (id+1) ISZERO [Var a] [b]]`]
+        (Q.INST [`lo` |-> `0:num`] (SPEC_ALL inst_seq_ptr_uniform_append)))) >>
+      simp[mk_inst_def, is_terminator_def] >>
+      qexistsl_tac [`H1`,`tn1`] >> simp[GSYM mk_inst_def] >>
+      irule (PURE_REWRITE_RULE [APPEND] (Q.INST
+        [`xs` |-> `[mk_inst (id+2) SGT [x; Lit hi] [c];
+                    mk_inst (id+3) ISZERO [Var c] [d]]`]
+        (Q.INST [`lo` |-> `0:num`] (SPEC_ALL inst_seq_ptr_uniform_append)))) >>
+      simp[mk_inst_def, is_terminator_def] >>
+      qexistsl_tac [`H2`,`tn2`] >> simp[GSYM mk_inst_def]) >>
+  simp[]
+QED
+
+Theorem int_clamp_signed_fixed_certificate:
+  compile_int_clamp T bits x sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  (run_inst_seq (emitted_insts sa sb) s = OK t \/
+   run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
+  ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> (drule int_clamp_signed_code >> strip_tac >> gvs[] >>
+  imp_res_tac signed_clamp_prefix_runs >>
+  drule_all signed_clamp_checked_prefix >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`th`] >> reverse conj_tac
+  >- (simp[] >> rpt strip_tac >> metis_tac[]) >>
+  irule (PURE_REWRITE_RULE [APPEND] (Q.INST
+    [`xs` |-> `[mk_inst sa.cs_next_id SLT [out; Lit (i2w (- &(2 ** (bits-1))))] [a];
+     mk_inst (sa.cs_next_id+1) ISZERO [Var a] [b];
+     mk_inst (sa.cs_next_id+2) SGT [out; Lit (i2w (&(2 ** (bits-1)-1)))] [c];
+     mk_inst (sa.cs_next_id+3) ISZERO [Var c] [d];
+     mk_inst (sa.cs_next_id+4) AND [Var b; Var d] [e]]`]
+    (SPEC_ALL checked_prefix_assert_certificate))) >>
+  simp[GSYM mk_inst_def, is_terminator_def] >>
+  qexistsl_tac [`w`,`value`] >> simp[] >>
+  gvs[run_inst_seq_def, AllCaseEqs()] >> metis_tac[])
+QED
+
+Theorem int_clamp_fixed_certificate:
+  compile_int_clamp signed bits x sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  (run_inst_seq (emitted_insts sa sb) s = OK t \/
+   run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
+  ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
+    out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  Cases_on `signed`
+  >- MATCH_ACCEPT_TAC int_clamp_signed_fixed_certificate >>
+  MATCH_ACCEPT_TAC int_clamp_unsigned_fixed_certificate
+QED
+
+Theorem int_clamp_instruction_filter:
+  compile_int_clamp signed bits x sa = (out,sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
+Proof
+  strip_tac >> Cases_on `signed`
+  >- (drule int_clamp_signed_code >> strip_tac >>
+      simp[mk_inst_def, is_terminator_def]) >>
+  drule int_clamp_unsigned_code >> strip_tac >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem int_clamp_counted_certificate:
+  compile_int_clamp signed bits x sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+    out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule_all (cj 1 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] int_clamp_fixed_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`th`] >> simp[] >>
+  drule int_clamp_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Theorem int_clamp_abort_counted_certificate:
+  compile_int_clamp signed bits x sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th n j.
+    gas_path_ptr D 0 ctx fn PG G tn s n H th
+      (Abort err (t with vs_inst_idx := j)) /\
+    out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule_all (cj 2 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] int_clamp_fixed_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  drule int_clamp_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
+  qexistsl_tac [`H`,`th`,`n`,`j`] >> simp[]
 QED
