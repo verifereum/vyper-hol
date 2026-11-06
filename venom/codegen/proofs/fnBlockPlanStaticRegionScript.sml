@@ -4657,3 +4657,16 @@ Proof
   rpt gen_tac >> strip_tac >> irule regional_phi_upper_family_transition >> simp[] >>
   drule regional_selected_phi_initial_unique >> simp[]
 QED
+
+Theorem regional_dfs_incoming_lineage_entry:
+  dfs_block_state lv dfg cfg fn ps0 succ ds /\ fn_entry_label fn <> SOME succ ==>
+  ?pred pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    MEM succ (cfg_succs_of cfg pred) /\
+    lineage_entry lv dfg cfg fn ps0 pred succ ds
+Proof
+  strip_tac >> drule dfs_block_state_inverse_origin >> strip_tac >> gvs[] >>
+  drule_all dfs_edge_lineage_entry >> simp[] >> strip_tac >>
+  qpat_x_assum `ds.ps_stack = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `ds.ps_spilled = _` (SUBST_ALL_TAC o SYM) >>
+  gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
