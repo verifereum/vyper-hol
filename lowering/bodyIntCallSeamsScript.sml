@@ -12,7 +12,7 @@
 
 Theory bodyIntCallSeams
 Ancestors
-  bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
+  bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
   intCallCallee intCallFrame fragGasFocus gasOutcome gasContext
   compileVyper exprLowering exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperAST venomState venomExecSemantics
