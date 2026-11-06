@@ -157,7 +157,7 @@ unless the cited conditional boundary's premises are derived from I.
 | N2 | MUL, Div, SDIV, Mod, SMOD, Exp, ADDMOD, MULMOD, SLT, SGT, ISZERO, AND, OR, XOR, NOT, SHL, SHR, SAR, SIGNEXTEND, BYTE, OFFSET | next; scalar/masked operation, shape/evaluation/Label success residual; OFFSET is not automatically affine ADD |
 | N3 | EQ, LT, GT | next; common numerical provenance must imply compatible displacement; ordered comparisons need nonwrapping target closed endpoint; coincident zero-size distinct tags remain explicit |
 | N4 | ASSIGN | exact immediate mixed paired-prefix extension checked in AssignProducer; includes opaque copies; ALLOCA preimage is N17 |
-| N5 | PARAM | next; selection boundary conditional on PT/masks; integrate actual historical parameter relation |
+| N5 | PARAM | exact immediate mixed paired-prefix extension checked by ptr_paired_prefix_param (concretizePtrParamProducer); root empty-PT/equal-params and transported callee parameters handled, without supplied source success; normalization/universal dispatch remains open |
 | N6 | INITIAL_FMP, BUMP, RETPC_PARAM | next; explicit FMP/return-PC relation and two-output BUMP residual; NOT in fn_ptr_ok exclusion list |
 | N7 | MLOAD, ILOAD | next; D, masked load/taint and prefix attachment; ILOAD scalar-address syntax does not make its byte read disappear |
 | N8 | MSTORE, MSTORE8, ISTORE | next; actual footprint, masked value bytes/taint/bookkeeping; MSTORE local boundaries do not prove entire family |
