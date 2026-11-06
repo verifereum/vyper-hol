@@ -24,6 +24,7 @@ Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
   fnBlockPlanStaticAccounting fnBlockPlanStaticBalance simplifyCfgStruct venomExecProps venomInst
   fnBlockPlanStaticDfsTrace cfgAnalysisProps fnPlanLineageJoin
+  fnBlockPlanStaticJoinCardinality
 
 (* The planner state at instruction index k of bb, when generate_block_plan
    plans bb from ps_in: the parameter and cleanup prefixes, then the
