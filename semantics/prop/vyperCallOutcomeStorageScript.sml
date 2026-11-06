@@ -96,6 +96,57 @@ Proof
     irule oracle_storage_ok_suffix >> qexists_tac `st` >> simp[]]
 QED
 
+(* A delegate request is never a computed precompile, so a success payload
+   always comes from the supplied outcome list. *)
+Theorem take_delegate_outcome_outcome_suffix:
+  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  rpt strip_tac >> Cases_on `st.outcomes`
+  >- (gvs[take_delegate_outcome_NONE] >> simp[]) >>
+  drule_all take_delegate_outcome_suffix >> strip_tac >>
+  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+QED
+
+Theorem take_delegate_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  rpt strip_tac >> drule take_delegate_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  imp_res_tac take_delegate_outcome_outcome_suffix >>
+  imp_res_tac oracle_storage_ok_suffix >> simp[] >>
+  irule contract_storage_well_formed_backends_frame >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem take_adopt_delegate_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_delegate_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+  adopt_call_outcome rq co st1 = (INL (),st2) ==>
+  contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
+  outcome_suffix st.outcomes st2.outcomes
+Proof
+  rpt strip_tac >> drule_all take_delegate_outcome_storage_suffix >>
+  strip_tac >> drule take_delegate_outcome_success >> strip_tac >>
+  `co.co_success ==> contract_storage_well_formed cx
+     (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)` by
+    (strip_tac >> Cases_on `os` >>
+     gvs[take_outcome_def, oracle_storage_ok_def,
+         extCallOracleTheory.computed_precompile_def,
+         delegate_outcome_request_def]) >>
+  Cases_on `rq.cr_static` >> Cases_on `co.co_success` >>
+  gvs[adopt_call_outcome_equation, delegate_outcome_request_def,
+      call_outcome_request_def] >>
+  FIRST [
+    irule contract_storage_well_formed_backends_frame >>
+    qexists_tac `st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>` >>
+    simp[] >> NO_TAC,
+    irule oracle_storage_ok_suffix >> qexists_tac `st` >> simp[]]
+QED
+
 (* No-adoption needs no payload assumption: even arbitrary bad storage/code
    is ignored for static/failed outcomes. take still consumes atomically. *)
 Theorem take_adopt_call_outcome_no_adoption_storage:
@@ -173,7 +224,7 @@ Proof
 QED
 
 Theorem take_adopt_create_outcome_storage_suffix:
-  kind <> MessageCall /\
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   take_create_outcome kind value code st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>

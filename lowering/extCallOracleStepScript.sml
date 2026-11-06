@@ -142,6 +142,7 @@ Proof
       adopt_outcome_deletions_def, logs_rel_eq, record_request_def] >>
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
   Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[immutables_rel_def] >>

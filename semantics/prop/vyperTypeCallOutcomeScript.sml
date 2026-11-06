@@ -59,6 +59,33 @@ Proof
   qexists_tac `st` >> simp[]
 QED
 
+Theorem take_delegate_outcome_runtime_consistent:
+  runtime_consistent env cx st /\
+  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  runtime_consistent env cx st'
+Proof
+  rpt strip_tac >> drule take_delegate_outcome_frame >> strip_tac >>
+  irule runtime_consistent_call_frame >> conj_tac
+  >- gvs[evaluation_state_component_equality, runtime_consistent_def] >>
+  qexists_tac `st` >> simp[] >>
+  gvs[evaluation_state_component_equality]
+QED
+
+Theorem take_adopt_delegate_outcome_runtime_consistent:
+  runtime_consistent env cx st /\
+  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
+  runtime_consistent env cx st2
+Proof
+  rpt strip_tac >> drule_all checked_delegate_outcome_success_frame >> strip_tac >>
+  `accounts_runtime_well_typed st.accounts` by
+    gvs[runtime_consistent_def, accounts_runtime_well_typed_accounts_well_typed] >>
+  drule_all take_adopt_delegate_outcome_typed >> strip_tac >>
+  irule runtime_consistent_call_frame >> conj_tac
+  >- gvs[accounts_runtime_well_typed_accounts_well_typed] >>
+  qexists_tac `st` >> simp[]
+QED
+
 (* Q is the actual expression postcondition; all new failures satisfy Q only
    through its RuntimeError rule. Successful take/adopt gives the IH its own
    typed accounts, not an assumption about all future payloads. *)
