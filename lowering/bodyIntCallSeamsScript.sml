@@ -233,11 +233,13 @@ End
 
 (* The caller's compile env agrees with every function's
    build_compile_env for tops on the module-level fields the callee's
-   package env takes from tops: immutable and module-variable locations,
-   flag metadata and method ids.  body_inv pins the other module-level
+   package env takes from tops: the module, module-variable types and
+   locations (immutables included), flag metadata and method ids.  body_inv pins the other module-level
    fields this way. *)
 Definition cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
+    cenv.ce_module = NONE /\
+    cenv.ce_module_var_type = build_var_type_map tops /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
         tops 0 (add_module_var_locations tops FEMPTY) /\
