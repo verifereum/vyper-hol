@@ -2,8 +2,20 @@
 Theory exprPtrUnwrapEnsureExecution
 Ancestors
   exprPtrUnwrapEnsureSingle exprPtrUnwrapEnsureLoop exprPtrUnwrapRuntimeFrame
-  exprPtrUnwrapLoopEntry createMemoryInterface slotCopyExecution
+  exprPtrUnwrapLoopEntry exprPtrUnwrapLoopInvariant copyExecution
+  createMemoryInterface slotCopyExecution
   bodyPtrDefs compileEnv context venomState venomInst words arithmetic
+
+Theorem unwrap_loop_ghost_projections[local]:
+  slot_copy_ghost_inv cs load p d root n G0 tn0 n G tn s ==>
+  tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans /\ tn.t_imm = tn0.t_imm /\
+  (!x. slot_copy_external cs (Var x) ==>
+    FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+  (!j. j < w2n d \/ w2n d+32*n <= j ==> (j IN tn.t_mem <=> j IN tn0.t_mem))
+Proof
+  simp[slot_copy_ghost_inv_def] >> strip_tac >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
 
 Theorem unwrap_ensure_slot_execution:
   (loc = LocStorage \/ loc = LocTransient) /\
@@ -19,7 +31,13 @@ Theorem unwrap_ensure_slot_execution:
   EVERY (\(off,bs). off+LENGTH bs <= LENGTH s.vs_memory /\
     (off+LENGTH bs <= buffer_allocation_base s sa.cs_next_id \/
       buffer_allocation_base s sa.cs_next_id+32*n <= off)) regions ==>
-  ?root d a G0 tn0 Gf tnf t sm buf.
+  ?root d a G0 tn0 Gf tnf t sm buf u.
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
     op = Var root /\ (d:bytes32) = n2w (buffer_allocation_base s sa.cs_next_id) /\
     compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G0 tn0 (OK a) /\
@@ -28,6 +46,10 @@ Theorem unwrap_ensure_slot_execution:
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ptr_covers Gf tnf root t nb /\ lookup_var root a = SOME d /\
     tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
+    (!x. slot_copy_external sm (Var x) ==>
+      FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x)) /\
+    (!j. j < w2n d \/ w2n d+32*n <= j ==> (j IN tnf.t_mem <=> j IN tn0.t_mem)) /\
     (!x k. slot_copy_external sm (Var x) ==>
       (ptr_covers Gf tnf x t k <=> ptr_covers G0 tn0 x a k)) /\
     slot_copy_runtime_frame sm d n a t /\
@@ -48,11 +70,20 @@ Proof
   >- (qpat_x_assum `n=1` SUBST_ALL_TAC >>
       `32 <= nb` by fs[] >> drule_all unwrap_ensure_slot_single >>
       disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
-      qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`] >>
+      `!x. slot_copy_external sm (Var x) ==>
+        FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x)` by
+        (rpt strip_tac >>
+         `x <> STRING #"%" (toString sm.cs_next_var)` by
+           (qpat_x_assum `slot_copy_external sm (Var x)` mp_tac >>
+            simp[slot_copy_external_def, slot_copy_var_def] >>
+            disch_then (qspec_then `0` mp_tac) >> simp[]) >> metis_tac[]) >>
+      qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`, `u`] >>
       qpat_x_assum `t = _` kall_tac >>
+      qpat_x_assum `tnf.t_mem = _` kall_tac >>
       gvs[slot_copy_runtime_frame_def, WORD_ADD_0] >> metis_tac[ADD_COMM]) >>
   drule_all unwrap_ensure_slot_loop >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
-  qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`] >>
+  drule unwrap_loop_ghost_projections >> strip_tac >>
+  qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`, `u`] >>
   asm_rewrite_tac[]
 QED

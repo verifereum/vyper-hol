@@ -62,6 +62,19 @@ Proof
   gen_tac >> Cases_on `loc=LocStorage` >> simp[]
 QED
 
+Theorem unwrap_single_taint_outside[local]:
+  tf.t_mem = (tn.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
+    {w2n d+k | k IN key_taint keys p} ==>
+  !j. j < w2n d \/ w2n d+32 <= j ==> (j IN tf.t_mem <=> j IN tn.t_mem)
+Proof
+  strip_tac >> rpt strip_tac >>
+  `~(w2n d <= j /\ j < w2n d+32)` by decide_tac >>
+  `~(?k. j = w2n d+k /\ k IN key_taint keys p)` by
+    (strip_tac >> fs[key_taint_def] >> decide_tac) >>
+  simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION] >>
+  metis_tac[ADD_COMM]
+QED
+
 Theorem unwrap_ensure_slot_single:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_ensure_in_memory src loc nb 1 ctor imm sa = (op,sb) /\
@@ -72,7 +85,13 @@ Theorem unwrap_ensure_slot_single:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME p /\ op_taint tn src = {} ==>
-  ?root d a G0 tn0 Gf tnf t sm buf.
+  ?root d a G0 tn0 Gf tnf t sm buf u.
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
     op = Var root /\ (d:bytes32) = n2w (buffer_allocation_base s sa.cs_next_id) /\
     compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G0 tn0 (OK a) /\
@@ -88,6 +107,7 @@ Theorem unwrap_ensure_slot_single:
       {w2n d+k | k IN key_taint (if loc=LocStorage then tn.t_stor else tn.t_trans) p} /\
     (!b. b < 32 /\ w2n d+b IN tnf.t_mem ==>
       b IN key_taint (if loc=LocStorage then tn.t_stor else tn.t_trans) p) /\
+    (!j. j < w2n d \/ w2n d+32 <= j ==> (j IN tnf.t_mem <=> j IN tn0.t_mem)) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
     (!x. x <> STRING #"%" (toString sm.cs_next_var) ==>
        FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x)) /\
@@ -138,7 +158,8 @@ Proof
     slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) s p` by
     simp[slot_copy_word_def, sload_def, tload_def, contract_storage_def,
       contract_transient_def] >>
-  qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`] >>
+  drule unwrap_single_taint_outside >> strip_tac >>
+  qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`, `u`] >>
   `ptr_covers Gf tnf root t nb` by metis_tac[] >>
   simp[] >> Cases_on `loc=LocStorage` >> gvs[] >>
   rpt strip_tac >> gvs[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF,

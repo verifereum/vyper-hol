@@ -21,7 +21,13 @@ Theorem unwrap_ensure_slot_loop:
   EVERY (\(off,bs). off+LENGTH bs <= LENGTH s.vs_memory /\
     (off+LENGTH bs <= buffer_allocation_base s sa.cs_next_id \/
       buffer_allocation_base s sa.cs_next_id+32*n <= off)) regions ==>
-  ?root d a G0 tn0 Gf tnf t sm buf.
+  ?root d a G0 tn0 Gf tnf t sm buf u.
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
     op = Var root /\ (d:bytes32) = n2w (buffer_allocation_base s sa.cs_next_id) /\
     compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G0 tn0 (OK a) /\
@@ -66,7 +72,7 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t)` by
     metis_tac[gas_path_ptr_then, ADD_0] >>
-  qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`] >>
+  qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`, `u`] >>
   `!key. slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a key =
     slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) s key` by
     simp[slot_copy_word_def, sload_def, tload_def, contract_storage_def,

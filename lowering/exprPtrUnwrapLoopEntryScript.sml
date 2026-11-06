@@ -37,7 +37,12 @@ Theorem unwrap_alloc_loop_entry:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME p /\ op_taint tn src = {} /\ 32*n <= nb ==>
-  ?root d a G0 tn0.
+  ?root d a G0 tn0 u.
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
     buf.buf_operand = Var root /\
     d = n2w (buffer_allocation_base s sa.cs_next_id) /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G0 tn0 (OK a) /\
@@ -68,7 +73,7 @@ Proof
   drule_all unwrap_alloc_taint_frame >>
   disch_then (qspec_then `tn` strip_assume_tac) >>
   qexistsl [`out`, `n2w (buffer_allocation_base s sa.cs_next_id)`,
-    `a`, `Gf`, `tnf`] >>
+    `a`, `Gf`, `tnf`, `u`] >>
   gvs[eval_operand_def] >>
   conj_tac
   >- (simp[update_var_def, buffer_allocation_fields_def] >>
