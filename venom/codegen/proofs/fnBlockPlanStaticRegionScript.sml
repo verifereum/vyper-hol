@@ -4659,12 +4659,17 @@ Proof
 QED
 
 Theorem regional_dfs_incoming_lineage_entry:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
   dfs_block_state lv dfg cfg fn ps0 succ ds /\ fn_entry_label fn <> SOME succ ==>
   ?pred pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
-    MEM succ (cfg_succs_of cfg pred) /\
+    fn_reachable fn pred /\ MEM succ (cfg_succs_of cfg pred) /\
     lineage_entry lv dfg cfg fn ps0 pred succ ds
 Proof
   strip_tac >> drule dfs_block_state_inverse_origin >> strip_tac >> gvs[] >>
+  `fn_reachable fn pred` by
+    (drule_all dfs_block_state_cfg_reachable >>
+     `wf_function fn` by gvs[codegen_ready_fn_def] >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
   drule_all dfs_edge_lineage_entry >> simp[] >> strip_tac >>
   qpat_x_assum `ds.ps_stack = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `ds.ps_spilled = _` (SUBST_ALL_TAC o SYM) >>
@@ -4709,5 +4714,68 @@ Proof
   strip_tac >>
   `qs = ps` by gvs[clean_stack_plan_def] >> gvs[] >>
   irule regional_lineage_single_successor_upper >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem regional_lineage_join_upper[local]:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+  lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    pred bb.bb_label ps /\ ~MEM dead_stack_marker ps.ps_stack ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))) ps.ps_stack
+Proof
+  strip_tac >> drule_all lineage_entry_join_stack >> strip_tac >> gvs[] >>
+  `pre = []` by
+    (Cases_on `pre` >> gvs[EVERY_DEF]) >>
+  gvs[EVERY_MAP, combinTheory.o_DEF, EVERY_MEM]
+QED
+
+Theorem regional_dfs_nonentry_cleanup_upper:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ fn_entry_label fn <> SOME lbl /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) lbl ps /\
+  cfg_path cfg lbl target /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then clean_stack_plan lv cfg fn bb ps
+   else ([],ps)) = (clean_ops,qs) ==>
+  ?pred pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    fn_reachable fn pred /\ MEM lbl (cfg_succs_of cfg pred) /\
+    EVERY (\op. ?v. op = Var v /\ MEM v
+      (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))) qs.ps_stack
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `~MEM dead_stack_marker ps.ps_stack` by
+    (irule regional_ret_reaching_dfs_marker_free >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all ret_region_dfs_block_unpromised >> strip_tac >>
+  drule_all regional_dfs_incoming_lineage_entry >> strip_tac >>
+  qexistsl [`pred`,`pred_bb`] >> simp[] >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1`
+  >- (gvs[] >>
+      `cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred]` by
+        (`MEM pred (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+           metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+         Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
+         rename1 `LENGTH rest = 0` >> Cases_on `rest` >> gvs[]) >>
+      Cases_on `LENGTH (cfg_succs_of (cfg_analyze fn) pred) = 1`
+      >- (`cfg_succs_of (cfg_analyze fn) pred = [bb.bb_label]` by
+            (Cases_on `cfg_succs_of (cfg_analyze fn) pred` >> gvs[] >>
+             rename1 `LENGTH rest = 0` >> Cases_on `rest` >> gvs[]) >>
+          irule regional_lineage_single_successor_cleanup_upper >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      `1 < LENGTH (cfg_succs_of (cfg_analyze fn) pred)` by
+        (Cases_on `cfg_succs_of (cfg_analyze fn) pred` >> gvs[] >>
+         rename1 `rest <> []` >> Cases_on `rest` >> gvs[]) >>
+      `!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth
+        (cfg_analyze fn) fn bb n` by
+        (gen_tac >> irule (cj 2 ret_reaching_cleanup_not_safe) >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      irule regional_lineage_cleanup_upper >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  gvs[] >> irule regional_lineage_join_upper >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
