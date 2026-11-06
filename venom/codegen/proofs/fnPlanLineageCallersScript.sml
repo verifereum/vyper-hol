@@ -109,6 +109,60 @@ Proof
   drule_all interval_computed_query_origin >> metis_tac[]
 QED
 
+Theorem ordinary_interval_prefix_exclusion:
+  !fn bb a j prefix.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= j /\ j < LENGTH bb.bb_instructions /\
+    EVERY (\v. ~MEM (Var v) prefix)
+      (live_vars_at (liveness_analyze fn) bb.bb_label a) /\
+    (!k. a <= k /\ k <= j ==>
+      EVERY (\v. ~MEM (Var v) prefix) (EL k bb.bb_instructions).inst_outputs) ==>
+    EVERY (\v. ~MEM (Var v) prefix)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) ++
+       (EL j bb.bb_instructions).inst_outputs)
+Proof
+  rpt gen_tac >> strip_tac >> simp[EVERY_APPEND] >>
+  simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label a) \/
+   ?k. a <= k /\ k < SUC j /\ MEM v (EL k bb.bb_instructions).inst_outputs` by
+    (irule interval_live_origin >> simp[]) >>
+  gvs[EVERY_MEM] >>
+  `k <= j` by decide_tac >> metis_tac[]
+QED
+
+Theorem ordinary_interval_shared_core_replay:
+  !fn bb a j prefixP prefixQ inst nl dfg cfg halting term lbl ps.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= j /\ j < LENGTH bb.bb_instructions /\
+    EVERY (\v. ~MEM (Var v) prefixP)
+      (live_vars_at (liveness_analyze fn) bb.bb_label a) /\
+    EVERY (\v. ~MEM (Var v) prefixQ)
+      (live_vars_at (liveness_analyze fn) bb.bb_label a) /\
+    (!k. a <= k /\ k <= j ==>
+      EVERY (\v. ~MEM (Var v) prefixP) (EL k bb.bb_instructions).inst_outputs) /\
+    (!k. a <= k /\ k <= j ==>
+      EVERY (\v. ~MEM (Var v) prefixQ) (EL k bb.bb_instructions).inst_outputs) /\
+    inst = EL j bb.bb_instructions /\
+    nl = live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) /\
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) ==>
+    ?ops qs.
+      generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst nl halting term lbl
+        (ps with ps_stack := prefixP ++ ps.ps_stack) =
+        (ops,qs with ps_stack := prefixP ++ qs.ps_stack) /\
+      generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst nl halting term lbl
+        (ps with ps_stack := prefixQ ++ ps.ps_stack) =
+        (ops,qs with ps_stack := prefixQ ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\v. ~MEM (Var v) prefixP) (nl ++ inst.inst_outputs)` by
+    metis_tac[ordinary_interval_prefix_exclusion] >>
+  `EVERY (\v. ~MEM (Var v) prefixQ) (nl ++ inst.inst_outputs)` by
+    metis_tac[ordinary_interval_prefix_exclusion] >>
+  irule native_regular_shared_core_replay >> simp[]
+QED
+
 (* Exact copies of genBlockSim's local helper and readiness boundary.
    Importing that frame-level theory here would cross the planner boundary. *)
 Theorem all_distinct_flat_map_member[local]:
