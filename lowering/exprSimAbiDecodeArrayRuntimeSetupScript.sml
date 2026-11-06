@@ -247,6 +247,9 @@ Proof
   `abi_decoder_vars_extend s.vs_vars (abi_decoder_prune_vars st.cs_next_var s) s` by
     irule abi_decoder_prune_extension >>
   drule abi_array_pointer_reentry_opcodes >> strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ADD; MUL; LT; GT; AND; ISZERO; MLOAD; ASSERT])
+    (emitted_insts st last)` by
+    (fs[EVERY_MEM] >> metis_tac[MEM]) >>
   drule_all abi_decode_guard_sequence_vars_extend_abort >> simp[]
 QED
 
