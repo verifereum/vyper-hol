@@ -2524,3 +2524,124 @@ Resume first_emission_type_builtin_abi_encode[abi_stage]:
 QED
 
 Finalise first_emission_type_builtin_abi_encode
+
+Theorem first_emission_list_membership[local]:
+  (!needle ops a x b. compile_list_membership_in needle ops a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  (!needle ops a x b. compile_list_membership_notin needle ops a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)))
+Proof
+  conj_tac
+  >- (gen_tac >> gen_tac >> Cases_on `ops`
+      >- simp[compile_list_membership_in_def, comp_return_def, cs_extends_refl] >>
+      Cases_on `t` >> rewrite_tac[compile_list_membership_in_def]
+      >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >>
+          simp[] >> metis_tac[]) >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+      gen_tac >> BETA_TAC >> simp[GSYM cs_appends_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule cs_appends_bind >> conj_tac
+      >- simp[cs_appends_emit_helpers] >> rw[cs_appends_def] >>
+      metis_tac[cj 1 compile_list_membership_in_labels, pairTheory.SND]) >>
+  gen_tac >> gen_tac >> Cases_on `ops`
+  >- simp[compile_list_membership_notin_def, comp_return_def, cs_extends_refl] >>
+  Cases_on `t` >> rewrite_tac[compile_list_membership_notin_def] >>
+  (ho_match_mp_tac first_emission_strong >>
+   ho_match_mp_tac first_emission_strong_bind >> conj_tac
+   >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+   gen_tac >> BETA_TAC >> simp[GSYM cs_appends_def] >>
+   CONV_TAC (DEPTH_CONV ETA_CONV))
+  >- simp[cs_appends_emit_helpers] >>
+  irule cs_appends_bind >> reverse conj_tac
+  >- simp[cs_appends_emit_helpers] >> gen_tac >> BETA_TAC >>
+  irule cs_appends_bind >> conj_tac
+  >- simp[cs_appends_emit_helpers] >> rw[cs_appends_def] >>
+  metis_tac[cj 1 compile_list_membership_notin_labels, pairTheory.SND]
+QED
+
+Theorem first_emission_fresh_label[local]:
+  !sfx a x b. fresh_label sfx a = (x,b) ==>
+    cs_extends a b /\ a.cs_blocks = b.cs_blocks /\
+    a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[cs_extends_fresh_label] >>
+  gvs[fresh_label_def]
+QED
+
+Theorem first_emission_bytestring_hash[local]:
+  !p a x b. compile_bytestring_hash p a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==> ?bb i.
+      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  gen_tac >> rewrite_tac[compile_bytestring_hash_def] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> BETA_TAC >> simp[GSYM cs_appends_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> irule cs_appends_bind >>
+  simp[cs_appends_emit_helpers]
+QED
+
+Theorem first_emission_array_membership_loop[local]:
+  (!op. cs_appends (loader op)) ==>
+  !needle arr len size offset is_in a x b.
+  compile_array_membership_loop needle arr len size offset loader is_in a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> ntac 6 gen_tac >>
+  rewrite_tac[compile_array_membership_loop_def] >>
+  ntac 7 (ho_match_mp_tac first_emission_bind >> conj_tac
+    >- metis_tac[first_emission_fresh, first_emission_fresh_label] >>
+    gen_tac >> BETA_TAC) >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[]) >>
+  simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac,
+              IF_CASES_TAC, gen_tac] >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_prims, cs_appends_return])
+QED
+
+Theorem first_emission_var_array_membership[local]:
+  !ce needle arr ty is_in a x b.
+  compile_var_array_membership ce needle arr ty is_in a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ntac 5 gen_tac >> Cases_on `ty` >>
+  simp[compile_var_array_membership_def, LET_THM] >>
+  TRY (rename1 `case sz of Fixed _ => _ | Dynamic _ => _` >>
+       Cases_on `sz` >> simp[]) >>
+  (ho_match_mp_tac first_emission_bind >> conj_tac
+   >- metis_tac[first_emission_return, first_emission_ptr_load] >>
+   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+   >- (rpt (FIRST [ho_match_mp_tac first_emission_bind >> conj_tac,
+                   gen_tac] >> BETA_TAC) >>
+       rpt strip_tac >> imp_res_tac first_emission_emit_helpers >>
+       imp_res_tac first_emission_return >> gvs[]) >>
+   rpt gen_tac >> strip_tac >> irule first_emission_array_membership_loop >>
+   goal_assum (drule_at Any) >> rw[cs_appends_def] >>
+   metis_tac[first_emission_ptr_load])
+QED
