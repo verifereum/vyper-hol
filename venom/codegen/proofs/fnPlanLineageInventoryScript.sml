@@ -5449,3 +5449,30 @@ Proof
   Cases_on `x IN FDOM ps.ps_spilled` >> simp[] >>
   Cases_on `MEM x (MAP Var nl)` >> simp[]
 QED
+
+Theorem emit_reorder_pop_variable_absent:
+  !opc operands selected nl dfg ps iops ps1 rops ps2 v.
+    PERM operands selected /\
+    (!w. MEM (Var w) operands ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    ~MEM (Var v) operands ==>
+    ~MEM (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) /\
+    Var v NOTIN FDOM ps2.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `LENGTH selected <= LENGTH ps1.ps_stack` by simp[] >>
+  drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_inventory_subset_nb >>
+  simp[] >> strip_tac >>
+  `~MEM (Var v) ps1.ps_stack /\ Var v NOTIN FDOM ps1.ps_spilled` by
+    metis_tac[emit_input_plan_variable_origins] >>
+  `~MEM (Var v) ps2.ps_stack /\ Var v NOTIN FDOM ps2.ps_spilled` by metis_tac[] >>
+  simp[stack_pop_def] >> metis_tac[MEM_TAKE]
+QED
