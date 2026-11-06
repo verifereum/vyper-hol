@@ -27,7 +27,7 @@
 Theory makeSsaCurrentSim
 Ancestors
   o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
-  unitShapeDefs o1PassContract makeSsaCurrentLockstep
+  unitShapeDefs o1PassContract makeSsaCurrentLockstep o1FrameLockstep
 
 (* Terminating runs of the input and the output correspond. *)
 Theorem make_ssa_current_fn_fn_bisim:
@@ -50,5 +50,31 @@ Theorem make_ssa_current_fn_frame_sim:
   make_ssa_current_fn s fn = (fn',s') ==>
   frame_sim L C C' fn fn'
 Proof
-  cheat
+  strip_tac >> drule_all make_ssa_current_fn_frame_lockstep >>
+  simp[frame_lockstep_def] >> strip_tac >>
+  simp[frame_sim_def] >> rpt strip_tac >>
+  qpat_x_assum `!L. ?R. _` (qspec_then `L` strip_assume_tac) >>
+  drule_all frame_reach_lockstep_rel >> strip_tac >>
+  rename1 `R p (inst,st) sg (inst',st')` >>
+  drule_all lockstep_rel >> strip_tac >>
+  qexistsl_tac [`inst`, `st`] >> simp[] >>
+  `execution_frame st' = execution_frame st` by fs[state_rel_def] >>
+  Cases_on `p`
+  >- (fs[] >> drule_all inst_mem_ranges_pair >> strip_tac >>
+      simp[mem_corr_def, call_corr_def] >>
+      strip_tac >>
+      `inst_wf inst` by
+        (fs[contextCodegenRelTheory.active_inst_def, fn_inst_wf_def, listTheory.EVERY_MEM] >>
+         metis_tac[listTheory.EL_MEM]) >>
+      `?nm ops. inst.inst_operands = Label nm :: ops` by
+        (gvs[inst_pair_def] >> fs[inst_wf_def] >> gvs[]) >>
+      drule_all inst_pair_ops >>
+      fs[ops_pair_def, inst_pair_def, venomExecSemanticsTheory.decode_invoke_def,
+         AllCaseEqs(), listTheory.LIST_REL_CONS2, op_rename_label] >>
+      `y = Label nm` by (Cases_on `y` >> gvs[op_rename_def]) >>
+      gvs[] >> metis_tac[eval_operands_rel]) >>
+  fs[] >> simp[mem_corr_def, call_corr_def,
+    unitMemInvTheory.inst_mem_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def]
 QED
