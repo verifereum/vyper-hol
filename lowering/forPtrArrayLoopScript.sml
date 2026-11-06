@@ -3,6 +3,7 @@
 Theory forPtrArrayLoop
 Ancestors forPtrArrayAssemble forPtrArrayTerminal forPtrArrayInvariant forPtrRounds
   bodyPtrDefs loweringPosts stmtSimForArrayLoop vyperInterpreter
+  forPtrRangeRound gasSummaryComposePtr
 Libs monadsyntax
 
 Theorem array_code_loop_counted_ptr:
@@ -10,12 +11,19 @@ Theorem array_code_loop_counted_ptr:
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
   stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = (bc',sb1) /\
-  (!j ei. j < LENGTH vs /\ lookup_scopes name ei.scopes = SOME snapshot ==>
+  (!j ei. j < LENGTH vs /\ P ei /\
+    lookup_scopes name ei.scopes = SOME snapshot /\
+    lookup_scopes id ei.scopes = NONE ==>
     stmt_frag_ptr d ctx PG func cx (InLoop exit_lbl incr_lbl) RetQ bc
       (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
       (ei with <|scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes;
         gas_obs := []|>)) /\
+  (!j ei obs ee. j < LENGTH vs /\ P ei /\
+    (do push_scope_with_var id tv (EL j vs);
+        finally (try (do eval_stmts cx stmts; return F od)
+          handle_loop_exception) pop_scope od) (ei with gas_obs := obs) = (INL F,ee) ==>
+    P ee) /\
   (!j ei G tn s. Inv j ei G tn s <=>
     for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
       cond_lbl st s0 G0 tn0 d name snapshot j ei G tn s) /\
@@ -45,7 +53,7 @@ Theorem array_code_loop_counted_ptr:
   (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) ==>
   !k es s G tn.
-    k <= LENGTH vs /\ Inv k es G tn s /\
+    k <= LENGTH vs /\ (Inv k es G tn s /\ P es) /\
     gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (eval_for cx tv id stmts (DROP k vs)) (es,s,G,tn)
@@ -66,7 +74,16 @@ Proof
       `not_local_ptr bc (FEMPTY :: es.scopes) p /\
        value_has_type tv (EL k vs) /\ val_wf tv (EL k vs) /\
        w2n arr_base + k * stride < dimword (:256)` by metis_tac[] >>
-      drule_all for_array_round_ptr >> simp[IgnAsm `vs = _`]) >>
+      drule_all for_array_round_ptr >> strip_tac >>
+      drule for_outcome_semantic_post_ptr >>
+      disch_then (qspec_then `\res ee. res = INL F ==> P ee` mp_tac) >>
+      (impl_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+        disch_then SUBST_ALL_TAC >>
+        qpat_x_assum `!j ei obs ee. _` drule_all >> simp[NoAsms])) >>
+      strip_tac >> irule gas_outcome_ptr_conseq >>
+      goal_assum (drule_at Any) >> simp[NoAsms] >>
+      rpt gen_tac >> strip_tac >> qexists_tac `broke` >>
+      qpat_x_assum `vs = _` kall_tac >> Cases_on `broke` >> fs[]) >>
   rpt gen_tac >> strip_tac >>
   `for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot (LENGTH vs) es G tn s` by metis_tac[] >>
