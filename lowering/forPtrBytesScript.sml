@@ -34,7 +34,9 @@ Theorem for_copy_len_binop_step:
 Proof
   strip_tac >> gvs[] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure2_def]
+  PURE_REWRITE_TAC[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure2_def]
 QED
 
 Theorem for_copy_len_binop_checked:
