@@ -111,9 +111,16 @@ Definition alloc_limits_expr_def:
              (abi_size_bound cenv.ce_struct_fields enc_ty + mid_size) < 2 ** 64 /\
            (~single ==> type_memory_bytes cenv enc_ty < 2 ** 64))
       | AbiDecode unwrap =>
-          type_memory_bytes cenv
-            (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <
-          2 ** 64
+          (let wty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
+                     else ty in
+           type_memory_bytes cenv wty < 2 ** 64 /\
+           (case es of
+              e :: _ =>
+                (case expr_type e of
+                   BaseT (BytesT (Dynamic n)) =>
+                     abi_size_bound cenv.ce_struct_fields wty <= n
+                 | _ => F)
+            | [] => F))
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
@@ -286,7 +293,20 @@ Theorem alloc_limits_abi_decode_output:
   type_memory_bytes ce
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64
 Proof
-  simp[Once alloc_limits_expr_def]
+  simp[Once alloc_limits_expr_def, LET_THM]
+QED
+
+(* Vyper rejects an abi_decode whose input Bytes[n] is shorter than the
+   decoded type's ABI size bound. *)
+Theorem alloc_limits_abi_decode_bound:
+  alloc_limits_expr ce (TypeBuiltin t (AbiDecode unwrap) ty es) ==>
+  ?e rest n. es = e :: rest /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
+    abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <= n
+Proof
+  simp[Once alloc_limits_expr_def, LET_THM] >>
+  Cases_on `es` >> simp[] >>
+  every_case_tac >> simp[]
 QED
 
 Theorem alloc_limits_abi_rounded_regressions:
