@@ -4348,3 +4348,27 @@ Proof
     (simp[EVERY_MEM] >> metis_tac[]) >>
   drule_all inventory_cleanup_support >> simp[]
 QED
+
+Theorem regional_dfs_single_pred_exit:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fops,pend) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_preds_of cfg lbl = [pred] /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) lbl ds /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin /\
+  generate_block_plan lv dfg cfg fn pred_bb pin = SOME (bops,pout) ==>
+  ds.ps_stack = pout.ps_stack /\ ds.ps_spilled = pout.ps_spilled
+Proof
+  strip_tac >> gvs[] >>
+  qpat_x_assum `dfs_block_state _ _ _ _ _ lbl ds` mp_tac >>
+  disch_then (strip_assume_tac o MATCH_MP dfs_block_state_inverse_origin)
+  >- (drule regional_entry_no_preds >>
+      gvs[fn_entry_label_def, entry_block_def, AllCaseEqs()]) >>
+  rename1 `MEM lbl (cfg_succs_of (cfg_analyze fn) origin)` >>
+  `MEM origin (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  gvs[] >>
+  rename1 `generate_block_plan _ _ _ _ pred_bb origin_in = SOME _` >>
+  `origin_in = pin` by metis_tac[dfs_block_state_unique] >> gvs[]
+QED
