@@ -51,6 +51,7 @@ Theorem immutable_runtime_buffer_ptr_path:
   w2n b + type_memory_size tv < dimword(:256) ==>
   ?z Gf tnf.
     copy_runtime_frame sa u sb z /\
+    z.vs_memory = (immutable_transfers F F a b (type_slot_size tv) 0 u).vs_memory /\
     gas_path_ptr D 0 ctx func PG G tn u 0 Gf tnf
       (OK (z with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     val_wf tv v /\ val_footprint tv v <= type_memory_size tv /\
