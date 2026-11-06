@@ -905,14 +905,6 @@ Proof
     else all_tac g) >>
   gvs[evaluate_def, bind_def, return_def, raise_def,
       pairTheory.UNCURRY, COND_RATOR, AllCaseEqs()]
-  (* Previous integration tail:
-  Cases_on `c` >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
-  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
-  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
-  simp[bind_def, raise_def, lift_option_def, return_def,
-       pairTheory.UNCURRY, AllCaseEqs()]
-  *)
   >- metis_tac[expr_no_fallthrough_no_success] >>
   Cases_on `c` >> simp[] >>
   BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
@@ -4136,16 +4128,6 @@ Resume eval_scc_type_sound_results_mutual[Iterator_Range]:
       strip_tac >> gvs[return_def, no_type_error_result_def] >> metis_tac[]) >>
     qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
     strip_tac >> gvs[no_type_error_result_def]) >>
-  (* Previous tail used iterator_range_expr_error_eq after evaluate_def
-     had already expanded the iterator equation:
-  strip_tac >>
-  drule_all iterator_range_expr_error_eq >> strip_tac >>
-  qpat_x_assum `res = INR y` SUBST_ALL_TAC >>
-  qpat_x_assum `st' = st1` SUBST_ALL_TAC >>
-  qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
-  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
-  simp[no_type_error_result_def]
-  *)
   qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
   qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T` kall_tac >>
@@ -4398,8 +4380,6 @@ Resume eval_scc_type_sound_results_mutual[Expr_IfExp]:
   >- (asm_x "true_branch" kall_tac >> asm_x "false_branch" kall_tac >>
       qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def] >> strip_tac >> gvs[]) >>
-  (* Previously: rename1 `eval_expr cx e st = (INL cp,st1)`;
-     cp is a constant in the integrated grammar. *)
   rename1 `eval_expr cx e st = (INL cond_pv,st1)` >>
   qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
     (qspecl_then [`env`,`st`,`INL cond_pv`,`st1`] mp_tac) >>
@@ -8243,7 +8223,6 @@ Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_CreateTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_CreateTarget"
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_SelfDestructTarget]:
-  (* Previously: RESUME_TAC >> trace_result_tac "Trace_Expr_Call_SelfDestructTarget" *)
   RESUME_TAC >> trace_value_start_tac >>
   drule selfdestruct_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -8406,14 +8385,12 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   imp_res_tac read_results_state >>
   imp_res_tac finally_set_scopes >>
-  (* Previously the old finalizer equation matched the lock frame directly. *)
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM DE_MORGAN_THM]) >>
   imp_res_tac finally_unless_halt_pop_release_cases >>
   imp_res_tac finally_conditional_lock_scopes >>
   qpat_assum `typed_scope_transition _ _`
     (mp_then Any irule typed_scope_transition_trans) >>
   irule typed_scope_transition_scopes >>
-  (* Previously: asm_rewrite_tac[] (loops on reflexive state equations). *)
   simp[] >>
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
@@ -9416,7 +9393,6 @@ Proof
        update_accounts_def, update_transient_def, append_logs_def] >>
   rpt (IF_CASES_TAC >>
     simp[bind_apply, ignore_bind_apply, return_def, raise_def]) >>
-  (* Previously: rpt strip_tac >> gvs[]; pending deletions now also update. *)
   rpt strip_tac >> gvs[update_pending_deletions_def, bind_apply, return_def]
 QED
 

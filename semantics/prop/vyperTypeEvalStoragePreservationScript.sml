@@ -3349,9 +3349,6 @@ Proof
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  (* Previous composition attempted drule_all directly while the effects
-     evaluation was still beneath the calldata/precheck monadic binds:
-     drule_all eval_ext_call_effects_storage_preserved >> simp[] *)
   gvs[bind_def, ignore_bind_def, return_def, raise_def,
       get_accounts_def, assert_def, AllCaseEqs()] >>
   gvs[COND_RATOR, vfmTypesTheory.option_CASE_rator,

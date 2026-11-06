@@ -94,7 +94,6 @@ Proof
      (!a. ctxt.msgParams.outputTo <> Code a) /\ ctxt.logs = []`
     by simp[Abbr `es`, static_call_setup] >>
   gvs[]
-  (* Replaced: metis_tac[extract_precompile_call_result, extract_static_call_result] *)
   >- (drule_at (Pos last) extract_precompile_call_result >>
       disch_then (qspecl_then [`rb`, `es`, `ctxt`, `callee`] mp_tac) >> simp[]) >>
   drule_at (Pos last) extract_static_call_result >>
