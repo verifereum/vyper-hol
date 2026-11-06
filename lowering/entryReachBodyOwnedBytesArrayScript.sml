@@ -343,7 +343,7 @@ Proof
 QED
 
 (* Canonical initialization keeps the decoded interval inside its actual owner. *)
-Theorem owned_array_canonical_initializer[local]:
+Theorem owned_array_canonical_initializer:
   entry_array_init_resources dst src maxn abi_sz
     (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,b,cap,p,initial) /\
   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
