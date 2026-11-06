@@ -30,3 +30,12 @@ Proof
   EVAL_TAC >> simp[SF wordsLib.SIZES_ss, type_slot_size_def] >>
   EVAL_TAC >> simp[] >> EVAL_TAC >> simp[] >> EVAL_TAC >> simp[return_def]
 QED
+
+Theorem pop_global_pop_evaluates:
+  ?s. eval_expr pop_global_cx (Pop (BaseT (UintT 256)) pop_global_target)
+    pop_global_es = (INL (PlaceR (StoragePlace F 3w (BaseTV (UintT 256)))),s)
+Proof
+  EVAL_TAC >> simp[SF wordsLib.SIZES_ss, type_slot_size_def] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[] >> EVAL_TAC >>
+  simp[return_def] >> EVAL_TAC >> simp[return_def]
+QED
