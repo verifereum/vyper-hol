@@ -1,5 +1,6 @@
 Theory concretizePtrMloadProducer
 Ancestors concretizePtrMloadExecution concretizePtrMstoreProducer
+  concretizePtrPairedNextAttach
   concretizePtrMloadEndpoint concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrSourceOwnership concretizePtrChronologicalHistory
@@ -156,19 +157,19 @@ Resume ptr_paired_prefix_mload[assembly]:
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   `LAST h = a /\ LAST ht = at` by metis_tac[ptr_chrono_history_end] >>
-  qpat_x_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [ptr_paired_prefix_def]) >>
-  rewrite_tac[ptr_paired_prefix_def] >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[] >>
-  conj_tac >- suspend "sample" >>
-  conj_tac >- suspend "alignment" >>
-  conj_tac >- suspend "callers" >>
-  suspend "writes"
+  `z.po_fn = a.po_fn` by simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
+  `ptr_paired_sample positions z zt
+     (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
+    suspend "sample" >>
+  `ptr_paired_cursor lp z zt /\ ptr_paired_params positions z zt
+     (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
+    suspend "alignment" >>
+  drule ptr_paired_prefix_nonwrite_attach >> disch_then irule >>
+  simp[step_writes_def, source_memory_write_ranges_def, fixed_source_write_range_def,
+       range_bytes_def]
 QED
 
 Resume ptr_paired_prefix_mload[sample]:
-  irule ptr_paired_samples_pair >> simp[] >>
   qpat_x_assum `step_inst 0 C _ _ = OK post` mp_tac >>
   qpat_x_assum `step_inst fuel C' _ _ = OK s'` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def, AllCaseEqs()] >>
@@ -186,7 +187,7 @@ Resume ptr_paired_prefix_mload[sample]:
 QED
 Resume ptr_paired_prefix_mload[alignment]:
   `z.po_fn = a.po_fn` by simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
-  irule ptr_paired_alignment_pair >> simp[] >>
+  simp[] >>
   qpat_x_assum `step_inst 0 C _ _ = OK post` mp_tac >>
   qpat_x_assum `step_inst fuel C' _ _ = OK s'` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def, AllCaseEqs()] >>
@@ -249,24 +250,5 @@ Resume ptr_paired_prefix_mload[cursor_order]:
        (qpat_x_assum `!j. j < LENGTH bbt.bb_instructions ==> _`
           (qspec_then `SUC (LAST ht).po_state.vs_inst_idx` mp_tac) >> simp[]) >> decide_tac) >>
   drule_all ptr_positioned_block_nop_iff >> simp[]
-QED
-Resume ptr_paired_prefix_mload[callers]:
-  irule ptr_paired_callers_retained >> simp[] >>
-  conj_tac >- fs[ptr_paired_samples_def] >>
-  fs[ptr_event_embedding_def, EVERY_EL] >> qexistsl_tac [`a`,`at`] >> simp[]
-QED
-Resume ptr_paired_prefix_mload[writes]:
-  `EVERY (\n. SUC n < LENGTH h) done` by
-    (qpat_assum `ptr_structural_transcript _ _ _ _ (h ++ _) _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     disch_then (strip_assume_tac o MATCH_MP ptr_structural_transcript_erasure) >>
-     drule ptr_structural_trace_embedding >>
-     simp[ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
-     gen_tac >> strip_tac >>
-     qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
-     simp[EL_APPEND_EQN] >> fs[ptr_paired_samples_def] >> decide_tac) >>
-  CONV_TAC (RAND_CONV (REWR_CONV (GSYM APPEND_NIL))) >>
-  irule ptr_paired_writes_pair >>
-  simp[step_writes_def, source_memory_write_ranges_def, fixed_source_write_range_def,
-       range_bytes_def] >> fs[ptr_paired_samples_def]
 QED
 Finalise ptr_paired_prefix_mload

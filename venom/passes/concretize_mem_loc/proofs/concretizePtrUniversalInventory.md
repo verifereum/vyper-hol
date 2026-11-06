@@ -1654,3 +1654,17 @@ still be matched at dispatch, and final terminal access bounds remain separate.
 MLOAD/MSTORE immediate producers still require common normalization at their
 consumer. No claim of universal target-prefix construction or of the frozen
 static-memory theorem follows from restricted ALLOCA/RET coverage.
+
+## Shared non-writing attachment (C1.5.90.67.nonwriteAttach)
+
+`concretizePtrPairedNextAttach.ptr_paired_prefix_nonwrite_attach` now composes
+sample/alignment extension, unchanged-stack caller retention and empty-write
+ledger retention into one full immediate-prefix boundary. It consumes the actual
+extended transcript and local endpoint sample/code/cursor/parameter relations;
+it does not construct source execution or endpoint mixedness. Unchanged births,
+tokens, registry, PT, saved entries and calls are intentional scope restrictions.
+The existing exact MLOAD producer uses this boundary, with its statement and
+actual-target-success-only execution premise unchanged. Its source-success,
+transcript, mixedness and cursor proofs remain semantic obligations discharged
+inside that producer, not added premises. This refactoring adds infrastructure,
+not any additional opcode coverage or proof of the global static bridges.
