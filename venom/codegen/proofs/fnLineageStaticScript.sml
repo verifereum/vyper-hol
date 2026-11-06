@@ -107,50 +107,6 @@ Proof
   simp[is_fn_path_def]
 QED
 
-Theorem ready_entry_no_preds[local]:
-  codegen_ready_fn fn /\ entry_block fn = SOME eb ==>
-  cfg_preds_of (cfg_analyze fn) eb.bb_label = []
-Proof
-  strip_tac >> gvs[codegen_ready_fn_def, block_entries_ready_def, NULL_EQ]
-QED
-
-Theorem small_preds_not_dominates_pred[local]:
-  codegen_ready_fn fn /\ fn_reachable fn pred /\
-  fn_cfg_edge fn pred succ /\
-  LENGTH (cfg_preds_of (cfg_analyze fn) succ) <= 1 ==>
-  ~fn_dominates fn succ pred
-Proof
-  strip_tac >>
-  `wf_function fn` by gvs[codegen_ready_fn_def] >>
-  `?eb. entry_block fn = SOME eb` by
-    (gvs[wf_function_def, fn_has_entry_def, entry_block_def] >>
-     Cases_on `fn.fn_blocks` >> gvs[]) >>
-  `MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
-    metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond] >>
-  `succ <> eb.bb_label` by metis_tac[ready_entry_no_preds, MEM] >>
-  `cfg_reachable_of (cfg_analyze fn) succ` by
-    metis_tac[fn_reachable_step, fn_reachable_cfg_analyze] >>
-  drule_all exists_pred_not_dominated >>
-  disch_then (qx_choose_then `other` strip_assume_tac) >>
-  `other = pred` by
-    (Cases_on `cfg_preds_of (cfg_analyze fn) succ` >> gvs[] >>
-     rename1 `SUC (LENGTH rest) <= 1` >> Cases_on `rest` >> gvs[]) >>
-  metis_tac[fn_dominates_cfg_analyze]
-QED
-
-Theorem dominating_def_excludes_outputs[local]:
-  codegen_ready_fn fn /\
-  MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
-  MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label pred /\
-  MEM target fn.fn_blocks /\ ~fn_dominates fn target.bb_label pred ==>
-  ~MEM v (FLAT (MAP (\i. i.inst_outputs) target.bb_instructions))
-Proof
-  strip_tac >> strip_tac >>
-  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
-  gvs[MEM_FLAT, MEM_MAP] >>
-  metis_tac[ssa_unique_output_block]
-QED
-
 Theorem strict_dominating_def_excludes_outputs[local]:
   codegen_ready_fn fn /\
   MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
@@ -858,20 +814,6 @@ Proof
   strip_tac >> irule phi_index_in_collect >> simp[] >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
   gvs[codegen_ready_fn_def, wf_function_def, bb_well_formed_def] >>
-  metis_tac[]
-QED
-
-Theorem live_end_dominating_def[local]:
-  codegen_ready_fn fn /\ fn_reachable fn lbl /\
-  lookup_block lbl fn.fn_blocks = SOME bb /\
-  MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
-  ?def_bb inst. MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
-    MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label lbl
-Proof
-  strip_tac >>
-  mp_tac (live_def_dominates |> Q.SPEC `fn` |> Q.SPEC `lbl` |>
-    Q.SPEC `bb` |> Q.SPEC `LENGTH bb.bb_instructions` |> Q.SPEC `v`) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >> decide_tac)) >>
   metis_tac[]
 QED
 

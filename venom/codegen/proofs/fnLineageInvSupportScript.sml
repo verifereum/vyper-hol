@@ -404,3 +404,54 @@ Proof
  goal_assum (drule_at Any) >>
  gvs[SUBSET_DEF, MEM_MAP] >> metis_tac[]
 QED
+
+Theorem analyzed_small_preds_live_out_excludes_outputs:
+  codegen_ready_fn fn /\ fn_reachable fn pred /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  fn_cfg_edge fn pred succ /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) succ) <= 1 /\
+  MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) ==>
+  ~MEM v (FLAT (MAP (\i. i.inst_outputs) sb.bb_instructions))
+Proof
+  strip_tac >>
+  drule_all live_end_dominating_def >> strip_tac >>
+  `~fn_dominates fn succ pred` by
+    (irule small_preds_not_dominates_pred >> simp[]) >>
+  `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  irule dominating_def_excludes_outputs >> metis_tac[]
+QED
+
+Theorem analyzed_active_cleanup_outputs_fresh:
+ !fn pred succ pb sb ps base ops qs.
+ codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+ cfg_preds_of (cfg_analyze fn) succ = [pred] /\
+ 1 < LENGTH (cfg_succs_of (cfg_analyze fn) pred) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)))) ps /\
+ generated_plan_state_wf_marked base ps /\
+ clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn sb ps = (ops,qs)
+ ==>
+ EVERY (\v. ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled)
+   (FLAT (MAP (\i. i.inst_outputs) sb.bb_instructions))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `wf_function fn` by gvs[codegen_ready_fn_def] >>
+ `fn_reachable fn pred /\ fn_cfg_edge fn pred succ` by
+   metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze,
+             codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze] >>
+ `LENGTH (cfg_preds_of (cfg_analyze fn) succ) <= 1` by simp[] >>
+ drule lineage_inventory_spilled_subset >> disch_tac >>
+ drule_all analyzed_live_out_edge_subset >> disch_tac >>
+ drule_all analyzed_active_cleanup_resources >> strip_tac >>
+ drule_at (Pat `lineage_inventory _ qs`) lineage_inventory_stack_subset >> disch_tac >>
+ drule_at (Pat `lineage_inventory _ qs`) lineage_inventory_spilled_subset >> disch_tac >>
+ simp[EVERY_MEM] >> rpt strip_tac >>
+ `~MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+   (strip_tac >> drule_all analyzed_small_preds_live_out_excludes_outputs >> gvs[]) >>
+ gvs[SUBSET_DEF, MEM_MAP, dead_stack_marker_def] >>
+ metis_tac[venomStateTheory.operand_distinct, venomStateTheory.operand_11]
+QED
