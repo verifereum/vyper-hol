@@ -971,7 +971,7 @@ Theorem compile_internal_return_fixed_tuple:
   ¬is_abi_dynamic cenv.ce_struct_fields (TupleT dst_tys) ⇒
   compile_internal_return cenv (SOME val_op) return_pc 0
       (TupleT dst_tys) (TupleT src_tys) elem_types (SOME buf_op) =
-    do (if dst_tys = src_tys then
+    do (if tuple_memory_layout_eq (TupleT dst_tys) (TupleT src_tys) then
           compile_copy_memory buf_op val_op
             (type_memory_bytes cenv (TupleT dst_tys))
         else
@@ -981,9 +981,11 @@ Theorem compile_internal_return_fixed_tuple:
     od
 Proof
   Cases_on `dst_tys = src_tys` >>
-  simp[stmtLoweringTheory.compile_internal_return_def,
+  Cases_on `tuple_memory_layout_eq (TupleT dst_tys) (TupleT src_tys)` >>
+  gvs[stmtLoweringTheory.compile_internal_return_def,
        contextTheory.compile_store_memory_def,
        Once contextTheory.compile_store_memory_typed_def,
+       memoryLayoutDefsTheory.tuple_memory_layout_eq_def,
        compileEnvTheory.is_word_type_def,
        compileEnvTheory.is_bytestring_type_def]
 QED
@@ -1009,6 +1011,7 @@ val internal_tuple_call_internal_return_clean_step0 = QCONV
       ^internal_tuple_call_state15``
 val internal_tuple_call_internal_return_clean_step1 = SIMP_CONV (srw_ss())
   [compile_internal_return_fixed_tuple,
+   memoryLayoutDefsTheory.tuple_memory_layout_eq_def,
    internal_tuple_call_cenv2_acyclic,
    internal_tuple_call_is_dynamic_eval]
   (rhs (concl internal_tuple_call_internal_return_clean_step0))
