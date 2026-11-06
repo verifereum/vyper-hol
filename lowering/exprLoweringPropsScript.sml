@@ -383,18 +383,17 @@ Theorem immutable_alloca_sep_frame:
     immutable_alloca_sep func cenv cx vs' ss'
 Proof
   rpt gen_tac >> rewrite_tac[immutable_alloca_sep_def] >> strip_tac >>
-  conj_tac >> strip_tac >>
+  conj_tac >> strip_tac >> (
   rpt (qpat_x_assum `cenv.ce_is_ctor ==> _`
          (fn th => first_assum (assume_tac o MP th))) >>
   rpt gen_tac >> strip_tac >>
-  first_x_assum (drule_all_then strip_assume_tac) >> rpt conj_tac
-  >- decide_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid b sz. FLOOKUP ss'.vs_allocas _ = _ ==> _` drule >>
-      strip_tac >> res_tac >> gvs[compileEnvTheory.regions_disjoint_def]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!id b sz. local_region _ vs'.scopes _ _ _ _ ==> _` drule >>
-  strip_tac >> res_tac >> gvs[compileEnvTheory.regions_disjoint_def]
+  qpat_x_assum `vs'.immutables = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `!b sz. ss.vs_alloca_next <= b ==>
+          regions_disjoint off (type_memory_size tv) b sz` by
+    (rw[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  rpt conj_tac >- decide_tac >> metis_tac[])
 QED
 
 Theorem immutable_alloca_sep_exec_alloca:
