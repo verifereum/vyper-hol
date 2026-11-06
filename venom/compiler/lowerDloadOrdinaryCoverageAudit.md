@@ -1280,3 +1280,144 @@ correlated next/branch/call assembly, forwarding-suffix alternative and general
 current safety, followed by the four-rule induction. These need strategist-owned
 executable leaves before proof edits. This audit adds no definitions or axioms,
 and does not certify the frozen theorem (its single cheat remains at Mem:23).
+
+## Current-range interface checkpoint (C1.4.8.1, 2026-11-06)
+
+### Correction to the provisional LOG-zero concern
+
+The provisional concern in E0089/STATE was **wrong**. The HOL list pattern
+`ofst :: sz :: _ :: _` has three cons cells and an arbitrary final tail;
+it does NOT require four elements. Thus a three-operand zero-topic LOG is
+covered by mem_read_ops. The checked theorem
+`lowerDloadRangeAuditTheory.ld_log_zero_topics_range_audit` states exactly:
+
+```
+!inst s.
+  inst.inst_opcode = LOG /\
+  inst.inst_operands = [Lit 0w; Lit 1w; Lit 0w] ==>
+  mem_read_ops inst = SOME <| iao_ofst := Lit 0w;
+    iao_size := SOME (Lit 1w); iao_max_size := SOME (Lit 1w) |> /\
+  source_memory_read_ranges inst s = [(0,1)]
+```
+
+It builds without cheats (TO_ld_mem-20261105T144418Z_m3603_t001).
+The attempted NONE version simplified to F, rather than verifying a
+counterexample (m3600_t001). No LOG exception or protected-definition
+change is needed for the proposed single-range transport theorem.
+
+### Exact coverage packages: planned, not checked producers
+
+O is the correlated existential displayed above at lines 1024-1037.
+C1.4.6 proposes O+ by adding, **inside the same existential**, exactly
+
+```
+!g. MEM g (TL frames) ==>
+  FRANGE g.lf_H SUBSET ld_slots A (TL frames) /\
+  (!a. MEM (SOME a) g.lf_Q ==> a IN ld_slots A (TL frames))
+```
+
+The extra saved-tail locality is not a consequence of ld_global alone.
+C1.4.7 proposes the following report abbreviation, not a HOL definition:
+
+```
+F C' fn' ti t =
+  ?bb i j. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+    revert_forward_pair bb i j /\ i <= t.vs_inst_idx /\
+    t.vs_inst_idx <= j /\ get_instruction bb t.vs_inst_idx = SOME ti /\
+    t.vs_alloca_next < dimword (:256)
+```
+
+Neither O+ transition production nor F production/closure is a completed
+export. The intended downstream induction carries O+ OR F. The actual
+current-safety conclusion is `raw_mem_ok C' fn' ti t`, i.e.
+`t.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn' ti t`;
+see unitMemInvScript.sml and the elimination target above. Future successful
+execution is not a premise of this goal.
+
+### Exhaustive descriptor/range table audit
+
+Read table: contextCodegenRelScript.sml:105-201. Descriptor table:
+memLocDefsScript.sml:266-344. Write table: codegenRelScript.sml:131-225;
+write descriptors: memLocDefsScript.sml:188-259.
+
+* Fixed reads MLOAD/ILOAD select their sole operand and length 32.
+* MCOPY reads operand 2 with operand 3 length; it additionally checks the
+  destination evaluation. RETURN/REVERT/SHA3 select operands 1 and 2.
+* CALL selects input offset/length 4/5, STATICCALL and DELEGATECALL 3/4.
+  All other operand evaluations are guards, not equality requirements.
+* CREATE selects 2/3 and guards value evaluation; CREATE2 additionally
+  guards salt evaluation. Neither has a source write range.
+* LOG requires a literal topic count, LENGTH rest = count+2, evaluated
+  topics, and evaluated last two operands. These imply total length >=3,
+  hence exactly the reverse-list shape accepted by its descriptor. The
+  descriptor selects last operand as offset, penultimate as size. Malformed
+  LOGs may have a descriptor but no range, harmless for membership transport.
+* Fixed writes MSTORE/ISTORE length 32, MSTORE8 length 1, select destination
+  operand 1 and additionally guard value evaluation.
+* Sized writes MCOPY/CALLDATACOPY/RETURNDATACOPY/DLOADBYTES/CODECOPY use
+  destination 1, size 3, and guard source evaluation. EXTCODECOPY uses
+  destination 2, size 4, and also guards address evaluation.
+* CALL output uses 6/7; STATICCALL and DELEGATECALL use 5/6. The range is
+  output **capacity**, so equality must use iao_max_size, not iao_size
+  (which is NONE for these outputs). All input evaluations are guards.
+* DRET is exceptional in BOTH tables. Reads are multiple dynamic pairs;
+  writes use parsed pairs and call-entry FMP. It has no descriptor. The
+  generic theorem must exclude it. o1PassContractScript.sml:354-375 puts
+  no_dret in o1_fn_shape, inherited by members under o1_ctx_shape. This,
+  not fmp_free_ctx alone, excludes DRET at synchronized source points;
+  target ordinary envelopes preserve opcode and generated instructions
+  are ADD/ALLOCA/CODECOPY/MLOAD. A consumer must explicitly use this fact.
+* Every other opcode returns [] in both semantic tables.
+
+Thus the displayed C1.4.8.2 interface survives this audit: target-defined
+operands imply source-defined operands, descriptor maximum-size equality
+preserves length, and nonempty membership selects a descriptor outside
+DRET. No address equality or step success is justified or needed here.
+The proposed theorem itself remains unproved. LOG additionally needs the
+routine list-evaluation definedness implication across its topic list.
+
+access_ok (ptrDisciplineScript.sml:530-558) classifies nonempty ranges
+ending above lo or using a provenance-bearing selected offset, under
+~in_revert_forward. In a hypothetical missing-descriptor case it would
+force the source range below lo, but transport would still need operand
+observation; that hypothetical workaround is NOT needed for LOG.
+
+### Generated DLOADBYTES: remaining unconditional prefix boundary
+
+PublicTraceScript.sml:9-39 `ld_dloadbytes_trace_operands` explicitly assumes
+`step_inst fuel C' (EL 1 X) t1 = OK u`. Its synchronized wrapper at
+400-447 has the same success premise. Neither establishes safety of a
+currently failing CODECOPY. Do not apply either in the raw-safety consumer.
+
+For a nonempty current CODECOPY range, range membership supplies defined
+dest, Var z and len at t1. The strict prefix at h=1 already contains the
+successful ADD; ld_prefix_predecessor and ld_prefix_zero recover this
+without CODECOPY success. The fresh temporary boundary
+ld_dloadbytes_envelope_temporary (PublicTrace:196) gives z outside fn_ir_vars,
+so dest and len cannot equal Var z. ADD updates only z and preserves code,
+labels and frontier. Therefore their current evaluations can be moved
+back to t0. The missing boundary should expose these prefix-only facts
+(possibly conditioned on current range membership), not future success.
+
+Checked reusable source interface `ld_dloadbytes_source_operands`
+(PublicTrace:375-398) assumes ld_vars, equal labels, fn_shape_ok, fn_ptr_ok,
+source membership, DLOADBYTES shape, taint_ok and target t0 evaluations;
+it concludes source dest is defined and source off/len equal target off/len.
+`ld_sync_dloadbytes_destination_cases` (449-489), with non-forwarding and
+headroom, then concludes length zero, or equal low addresses with end<=lo,
+or source/target offsets b+delta/c+delta with delta+length<=sz in A.
+Combine with ld_alloc_target_frontier and lo<=frontier. ADD preserves the
+frontier, so the bound applies at CODECOPY t1. No code-offset bound or
+CODECOPY success is required merely for its memory range safety.
+At h=0 ADD has empty ranges. Source forwarding must instead use F.
+
+### Checkpoint disposition requested
+
+No falsehood of the frozen theorem was found. The LOG suspicion is closed
+by a checked theorem; generic transport needs no exceptional LOG branch.
+Still missing: formal generic descriptor/range transport, its classified
+frontier corollary, the prefix-only DLOADBYTES observation boundary, O+
+transition producers, F producers/closure, and their final safety consumer.
+Review C1.4.8.4 decomposition to give the missing prefix-only boundary its
+own executable obligation before integration. Keep producer packages
+explicitly dependency-gated; this source audit does not certify them.
