@@ -69,6 +69,9 @@ Proof
    (drule slice_ordinary_actions >>
     strip_tac >>
     fs[] >> drule slice_gas_admissible_expr_head >> simp[]) >>
+ `!e. MEM e [start; len] ==> ~is_extcode e` by
+   (gvs[vyperTypeSystemTheory.well_typed_expr_def] >> rpt strip_tac >>
+    imp_res_tac exprSimSourceTheory.well_typed_extcode_type >> gvs[]) >>
  `~names_builtin (Slice n) [src; start; len]` by simp[names_builtin_slice] >>
  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
  simp[compile_expr_builtin_dispatch, compile_builtin_dispatch_component_eq,
