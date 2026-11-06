@@ -2391,3 +2391,70 @@ Proof
   disch_then (qspec_then `halting` mp_tac) >> gvs[]
 QED
 
+
+(* Marker exclusion uses physical origins, not variable-only inventory. *)
+Theorem inventory_emit_marker_free:
+  emit_input_plan opc operands nl ps = (ops,qs) /\
+  ~MEM dead_stack_marker ps.ps_stack /\ ~MEM dead_stack_marker operands ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  metis_tac[inventory_emit_physical_origin]
+QED
+
+Theorem inventory_reorder_bounded_marker_free:
+  LENGTH pending <= 16 /\ reorder_plan dfg pending ps = (ops,qs) /\
+  ~MEM dead_stack_marker ps.ps_stack /\ ~MEM dead_stack_marker pending ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  metis_tac[inventory_reorder_bounded_physical_origin]
+QED
+
+Theorem inventory_pop_singleton_physical_origin[local]:
+  popmany_plan [v] ps = (ops,qs) ==>
+  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
+Proof
+  Cases_on `stack_get_depth v ps.ps_stack`
+  >- simp[popmany_plan_def, popmany_individual_def, QSORT_DEF,
+          PARTITION_DEF, PART_DEF] >>
+  rename1 `stack_get_depth v ps.ps_stack = SOME d` >>
+  drule stack_get_depth_props >> strip_tac >>
+  simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+       QSORT_DEF, PARTITION_DEF, PART_DEF, LET_THM] >>
+  Cases_on `d = 1` >> gvs[] >>
+  Cases_on `d = 0`
+  >- (gvs[do_swap_def, stack_pop_def] >> rpt strip_tac >> gvs[] >>
+      metis_tac[MEM_TAKE, inventory_stack_swap_origin]) >>
+  gvs[stack_pop_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  drule MEM_TAKE >> strip_tac >>
+  drule_at (Pat `do_swap _ _ = _`) inventory_swap_physical_origin >>
+  simp[] >> disch_then (qspec_then `x` irule) >> simp[]
+QED
+
+Theorem inventory_phi_marker_free:
+  generate_phi_plan inst nl F ps = (ops,qs) /\
+  ~MEM dead_stack_marker ps.ps_stack ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- gvs[generate_phi_plan_def] >>
+  rename1 `stack_get_phi_depth _ ps.ps_stack = SOME d` >>
+  `d < LENGTH ps.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >> drule stack_find_bound >> simp[]) >>
+  `~MEM dead_stack_marker (SND (do_dup d ps)).ps_stack` by
+    (drule do_dup_stack_exact >> simp[] >> strip_tac >>
+     metis_tac[stack_peek_mem]) >>
+  `!i stk out. ~MEM dead_stack_marker stk ==>
+      ~MEM dead_stack_marker (stack_poke i (Var out) stk)` by
+    (rpt strip_tac >> drule inventory_poke_physical_origin >>
+     simp[dead_stack_marker_def]) >>
+  qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
+  simp[generate_phi_plan_def, LET_THM] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) nl` >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  IF_CASES_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[] >>
+  drule inventory_pop_singleton_physical_origin >> simp[] >>
+  metis_tac[]
+QED
