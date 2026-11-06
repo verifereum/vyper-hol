@@ -158,7 +158,7 @@ Proof
   `ho+32 <= off /\ off+LENGTH (enc ty av) <= sz` by decide_tac >>
   `abi_decoder_operand_live p.cs_next_var dp /\
     eval_operand dp r = SOME (n2w slot) /\ mload slot r = n2w off /\
-    first <= site /\ site < p.cs_next_id /\ FLOOKUP r.vs_allocas site = SOME (slot,32)` by
+    site IN sites /\ first <= site /\ site < p.cs_next_id /\ FLOOKUP r.vs_allocas site = SOME (slot,32)` by
     (qpat_assum `active` (fn ath =>
        qpat_assum `abi_sites_encoder_cursor sites _ _ _ _ _ _ _ _ _`
          (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_sites_encoder_cursor_def,ath])) >>
