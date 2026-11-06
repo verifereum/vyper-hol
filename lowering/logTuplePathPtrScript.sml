@@ -55,7 +55,8 @@ Theorem log_allocated_tuple_path_ptr:
     (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) = SOME w)
+      eval_operand op (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) = SOME w) /\
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all log_allocated_tuple_sequence_ptr >>

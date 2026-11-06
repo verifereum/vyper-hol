@@ -203,7 +203,8 @@ Theorem log_allocated_tuple_sequence_ptr:
     ghost_inv d ce cx es H tm actual /\ ghost_kept ce es st G tn s H tm /\
     (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv actual outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op actual = SOME w)
+      eval_operand op actual = SOME w) /\
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule abi_encoder_counters >> strip_tac >>
@@ -213,6 +214,11 @@ Proof
     (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `H`
       (qx_choose_then `tm` (qx_choose_then `dv`
         (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))) >>
+  `!p. not_fresh_at st p ==> FLOOKUP H p = FLOOKUP G p /\
+     op_taint tm (Var p) = op_taint tn (Var p)` by
+    (match_mp_tac (Q.INST [`sb` |-> `prepared`, `cap` |-> `outcap`,
+       `buf` |-> `dst`] log_buffer_old_ghost_seq_ptr) >>
+     goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >> metis_tac[]) >>
   drule_all log_buffer_ghost_seq_ptr >>
   disch_then (qspec_then `s.vs_inst_idx + LENGTH (emitted_insts st prepared)`
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
@@ -351,6 +357,13 @@ Resume log_allocated_tuple_sequence_ptr[result]:
   asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx, eval_operand_def,
     ptr_covers_inst_idx,
     PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize] >>
-  qexists_tac `dv` >> asm_simp_tac bool_ss []
+  conj_tac >- (qexists_tac `dv` >> asm_simp_tac bool_ss []) >>
+  rpt strip_tac >>
+  `not_fresh_at prepared p` by
+    (irule not_fresh_at_mono >> qexists_tac `st` >>
+     asm_simp_tac bool_ss [] >>
+     drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >> simp[]) >>
+  metis_tac[]
 QED
 Finalise log_allocated_tuple_sequence_ptr

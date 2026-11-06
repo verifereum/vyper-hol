@@ -302,3 +302,23 @@ Proof
     (irule alloca_step_ptr_buf_ok >> metis_tac[]) >>
   gvs[ptr_buf_ok_def]
 QED
+
+Theorem log_buffer_old_ghost_seq_ptr:
+  compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tm /\
+  stmt_state_rel ctx func ce cx es s /\ cap < dimword(:256) ==>
+  !p. not_fresh_at sa p ==>
+    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)
+Proof
+  strip_tac >> drule_all log_buffer_alloca_step >> strip_tac >>
+  drule alloca_step_old_ghost >>
+  disch_then drule >> simp[] >>
+  disch_then (qspecl_then [`PG`,`G`,`tn`] assume_tac) >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  gvs[inst_seq_ptr_def, run_inst_seq_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  `p <> STRING #"%" (toString sa.cs_next_var)` by
+    metis_tac[not_fresh_at_def, LESS_EQ_REFL] >> metis_tac[]
+QED
