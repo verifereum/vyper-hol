@@ -111,3 +111,61 @@ Proof
  drule_all analyzed_ordinary_live_inventory >> strip_tac >>
  simp[] >> metis_tac[]
 QED
+
+Theorem analyzed_ordinary_suffix_inventory:
+ !fn bb dfg cfg base p j ps ops qs.
+ codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+ j + p <= LENGTH bb.bb_instructions /\
+ EVERY (\inst. inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+   inst.inst_opcode <> OFFSET /\ ~is_param_opcode inst.inst_opcode)
+   (DROP (j+p) bb.bb_instructions) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (j+p)))) ps /\
+ (?m core. lineage_core m core ps /\ residual_budget_wf base [] (ps with ps_stack := core)) /\
+ generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label F p
+   (LENGTH bb.bb_instructions) j (DROP (j+p) bb.bb_instructions) ps = SOME (ops,qs)
+ ==>
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)))) qs /\
+ (?n tail. lineage_core n tail qs /\ residual_budget_wf base [] (qs with ps_stack := tail))
+Proof
+ rpt gen_tac >>
+ map_every qid_spec_tac [`ps`,`ops`,`qs`,`j`] >>
+ measureInduct_on `LENGTH bb.bb_instructions - (j+p)` >>
+ rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+ Cases_on `j+p = LENGTH bb.bb_instructions`
+ >- (gvs[DROP_LENGTH_TOO_LONG, generate_block_insts_plan_def] >> metis_tac[]) >>
+ `j+p < LENGTH bb.bb_instructions` by decide_tac >>
+ `DROP (j+p) bb.bb_instructions =
+   EL (j+p) bb.bb_instructions :: DROP (SUC (j+p)) bb.bb_instructions` by
+   simp[DROP_CONS_EL] >>
+ `DROP (SUC (j+p)) bb.bb_instructions = [] ==>
+    SUC (j+p) = LENGTH bb.bb_instructions` by
+   (simp[DROP_EQ_NIL] >> decide_tac) >>
+ qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+ once_rewrite_tac[generate_block_insts_plan_def] >>
+ asm_rewrite_tac[] >>
+ simp[Once generate_block_insts_plan_def, AllCaseEqs()] >> strip_tac >>
+ ` (if LENGTH bb.bb_instructions <= SUC (j+p) then
+      live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
+    else live_vars_at (liveness_analyze fn) bb.bb_label (j+(p+1))) =
+    live_vars_at (liveness_analyze fn) bb.bb_label (SUC (j+p))` by
+   (IF_CASES_TAC >> simp[] >> AP_TERM_TAC >> decide_tac) >>
+ gvs[] >>
+ `EVERY (\inst. inst.inst_opcode <> PHI) (DROP (j+p) bb.bb_instructions)` by
+   (gvs[EVERY_MEM] >> metis_tac[]) >>
+ ` (EL (j+p) bb.bb_instructions).inst_opcode <> JMP /\
+   (EL (j+p) bb.bb_instructions).inst_opcode <> OFFSET /\
+   ~is_param_opcode (EL (j+p) bb.bb_instructions).inst_opcode` by
+   (qpat_x_assum `EVERY (\inst. _ /\ _) _` mp_tac >>
+    once_asm_rewrite_tac[] >> simp[]) >>
+ rename1 `residual_budget_wf spillbase [] (ps with ps_stack := core)` >>
+ drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+   analyzed_ordinary_inst_inventory >>
+ disch_then (qspec_then `spillbase` mp_tac) >>
+ (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+ first_x_assum (qspec_then `SUC (j+p)` mp_tac) >>
+ (impl_tac >- decide_tac) >>
+ disch_then (qspecl_then [`j+1`,`p`] mp_tac) >> simp[arithmeticTheory.ADD_CLAUSES] >>
+ disch_then (qspecl_then [`qs`,`rest_ops`,`ps'`] mp_tac) >>
+ `j+(p+1) = SUC (j+p)` by decide_tac >>
+ simp[] >> metis_tac[]
+QED
