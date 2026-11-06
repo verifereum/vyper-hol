@@ -257,3 +257,36 @@ Resume intcall_compile_scratch_path[fresh]:
   first_x_assum drule >> decide_tac
 QED
 Finalise intcall_compile_scratch_path
+
+(* Deterministic raw execution aligns the semantic and constructive witnesses. *)
+Theorem intcall_runtime_prologue_raw_post:
+  compile_internal_prologue ce params has_rb ret_type st0 = ((ce2,rpc),st1) /\
+  fn_has_code st0 st1 fn /\ fn_inst_ids_distinct fn /\
+  setup_callee fn args caller = SOME s0 /\
+  state_rel f ce cx (vs with scopes := []) caller /\
+  internal_immutable_regions ce cx vs caller.vs_alloca_next /\
+  internal_args_rel ce params src (if has_rb then 1 else 0) args
+    caller.vs_alloca_next caller.vs_memory /\ ~ce.ce_is_ctor /\
+  caller.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
+  run_inst_seq (emitted_insts st0 st1) s0 = OK u ==>
+  state_rel fn (ce2 with ce_alloca_locals := T) cx (vs with scopes := [src]) u /\
+  immutable_alloca_sep fn (ce2 with ce_alloca_locals := T) cx
+    (vs with scopes := [src]) u /\ alloca_inv u /\
+  fresh_vars_wrt st1 u /\ mat_frame st0 s0 u /\
+  (?x. rpc = Var x /\ not_fresh_at st1 x /\
+       lookup_var x u = SOME s0.vs_return_pc_token) /\
+  (has_rb ==> ?rb. not_fresh_at st1 rb /\ lookup_var rb u = SOME (HD args) /\
+    !off sz. ce.ce_return_buf = SOME (MemLoc off sz) ==>
+       ce2.ce_return_buf = SOME (PtrVar (Var rb) sz))
+Proof
+  strip_tac >> drule internal_prologue_run >> simp[] >>
+  disch_then drule_all >> strip_tac >> gvs[]
+QED
+
+Theorem intcall_ghost_inv_alloca_locals:
+  ghost_inv d (ce with ce_alloca_locals := flag) cx es G tn s <=>
+  ghost_inv d ce cx es G tn s
+Proof
+  Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def] >>
+  PairCases_on `x` >> simp[ghost_inv_def, return_buf_ptr_def]
+QED
