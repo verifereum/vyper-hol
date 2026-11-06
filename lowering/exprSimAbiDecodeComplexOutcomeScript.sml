@@ -12,7 +12,7 @@ Ancestors
   venomState venomInst words list rich_list arithmetic
   abiDecoderCoherence abiDecodeRanges valueEncodingProps vyperTypeSystem vyperValue
   vyperABI vyperTypeABI abiDecoderMembers contractABI
-  abiDecoderMemberInfos abiDecoderHeadAdequacy valueEncoding
+  abiDecoderMemberInfos abiDecoderHeadAdequacy valueEncoding valueEncodingTyping
 
 Theorem abi_decode_complex_guard_abort_opcodes[local]:
   abi_decode_complex_head_guard src hi k st = ((),st') ==>
@@ -691,7 +691,7 @@ Theorem abi_decode_constructor_rows_pre:
   EVERY (\(ei,ty,tv,asz,msz). abi_decode_owned_child_contract ce env ty tv) rows /\
   SUM(MAP abi_tuple_row_mem_width rows) = type_memory_bytes ce ty /\
   abi_decode_owned sites scratch d (type_memory_bytes ce ty) s /\
-  abi_decode_context_pre ctx func ce env ty tv limit_st next
+  abi_decode_context_pre ctx func ce parent_env ty tv limit_st next
     (scratch UNION {a | d <= a /\ a < d+type_memory_bytes ce ty}) sites
     st dst src base_op hi B bs p d s /\
   p+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs ==>
@@ -742,7 +742,7 @@ Proof
     abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
       st dst src base_op hi B bs pos d 0 0 rows s` by
     (strip_tac >> irule abi_decode_constructor_rows_pre >>
-     asm_simp_tac bool_ss [] >> qexistsl_tac [`atv`,`TupleT tys`] >> simp[]) >>
+     asm_simp_tac bool_ss [] >> qexistsl_tac [`env`,`atv`,`TupleT tys`] >> simp[]) >>
   qpat_x_assum `LET _ _ = ((),last)` mp_tac >>
   qpat_assum `FOLDR _ _ _ = _` (fn th => pure_rewrite_tac [th]) >>
   qpat_assum `abi_decode_complex_head_guard _ _ _ _ = _`
@@ -785,3 +785,110 @@ Resume abi_decode_tuple_owned_contract_rows[tuple_reject]:
   qexists_tac `u` >> metis_tac[]
 QED
 Finalise abi_decode_tuple_owned_contract_rows
+
+Theorem abi_decode_struct_owned_contract_rows:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  FLOOKUP ce.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+  args = MAP (\(name,ty,sz). (name,ty)) fields /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\
+  MAP (\(ei,ty,tv,asz,msz). ty) rows = MAP (FST o SND) fields /\
+  atv = StructTV (ZIP (MAP FST args,MAP (\(ei,ty,tv,asz,msz). tv) rows)) /\
+  MAP abi_tuple_row_code rows = abi_decoder_member_infos
+    (ce.ce_struct_fields \\ nsid_to_string nsid) ce (MAP (FST o SND) fields) /\
+  SUM(MAP abi_tuple_row_abi_width rows) <= SUM(MAP abi_tuple_row_mem_width rows) /\
+  EVERY (\(ei,ty,tv,asz,msz). abi_decode_owned_child_contract ce (env \\ nsid) ty tv) rows ==>
+  abi_decode_owned_child_contract ce env (StructT nsid) atv
+Proof
+  strip_tac >> simp_tac bool_ss [exprSimAbiDecodeOwnedContextTheory.abi_decode_owned_child_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  `abi_decoder_coherent ce env ce.ce_struct_fields (StructT nsid) atv /\
+    assignable_type env (StructT nsid)` by fs[abi_decode_context_pre_def] >>
+  `MAP SND args = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+    LENGTH args = LENGTH rows` by
+    (conj_asm1_tac
+     >- (asm_simp_tac bool_ss [MAP_MAP_o] >>
+         irule MAP_CONG >> simp[] >> rpt strip_tac >> PairCases_on `x` >> simp[]) >>
+     metis_tac[LENGTH_MAP]) >>
+  `SUM(MAP abi_tuple_row_mem_width rows) = type_memory_bytes ce (StructT nsid)` by
+    (drule abi_decode_schema_rows_layout >> strip_tac >>
+     drule abi_decoder_coherent_header >>
+     simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+     `type_memory_size_fields (ZIP (MAP FST args,
+       MAP (\(ei,ty,tv,asz,msz). tv) rows)) =
+       type_memory_size_list (MAP (\(ei,ty,tv,asz,msz). tv) rows)` by
+       (irule type_memory_size_fields_zip >> simp[]) >>
+     gvs[type_memory_size_def]) >>
+  `type_to_abi_dec_info ce.ce_struct_fields ce (StructT nsid) =
+    DecComplex (EXISTS (is_abi_dynamic ce.ce_struct_fields) (MAP (FST o SND) fields))
+      (MAP abi_tuple_row_code rows)` by
+    (drule abi_decoder_struct_infos >> simp[]) >>
+  `hi <> Lit 0w /\ eval_operand src s = SOME(n2w pos) /\
+    eval_operand hi s = SOME(n2w(LENGTH bs)) /\ pos < dimword(:256) /\
+    LENGTH bs < dimword(:256) /\
+    SUM(MAP abi_tuple_row_abi_width rows) < dimword(:256) /\
+    abi_decoder_operand_live st.cs_next_var src /\
+    abi_decoder_operand_live st.cs_next_var hi /\
+    fresh_vars_wrt limit_st s /\ abi_decode_entry st s` by
+    (fs[abi_decode_context_pre_def, EVERY_DEF] >> decide_tac) >>
+  `FOLDR (\(_,asz,_) acc. asz+acc) 0 (MAP abi_tuple_row_code rows) =
+    SUM(MAP abi_tuple_row_abi_width rows)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> Induct_on `rows` >- simp[] >>
+     gen_tac >> PairCases_on `h` >>
+     asm_simp_tac (srw_ss()) [MAP, FOLDR, SUM,
+       abi_tuple_row_code_def, abi_tuple_row_abi_width_def]) >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_complex_phases, comp_ignore_bind_def, comp_bind_def] >>
+  Cases_on `abi_decode_complex_head_guard src hi
+    (SUM(MAP abi_tuple_row_abi_width rows)) st` >>
+  rename1 `abi_decode_complex_head_guard src hi _ st = (u,ready)` >>
+  Cases_on `u` >> asm_simp_tac bool_ss [] >> strip_tac >>
+  `pos+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs ==>
+    abi_decode_owned_rows_pre ctx func ce (env \\ nsid) limit_st next scratch sites
+      st dst src base_op hi B bs pos d 0 0 rows s` by
+    (strip_tac >> irule abi_decode_constructor_rows_pre >>
+     asm_simp_tac bool_ss [] >> qexistsl_tac [`env`,`atv`,`StructT nsid`] >> simp[]) >>
+  qpat_x_assum `LET _ _ = ((),last)` mp_tac >>
+  qpat_assum `MAP abi_tuple_row_code rows = _`
+    (fn th => pure_rewrite_tac [GSYM th]) >>
+  qpat_assum `FOLDR _ _ _ = _` (fn th => pure_rewrite_tac [th]) >>
+  qpat_assum `abi_decode_complex_head_guard _ _ _ _ = _`
+    (fn th => pure_rewrite_tac [th, LET_THM, pairTheory.UNCURRY_DEF]) >>
+  BETA_TAC >> strip_tac >>
+  drule_all abi_decode_guarded_owned_rows_outcome >>
+  strip_tac
+  >- (simp_tac bool_ss [abi_decode_context_result_def] >> disj2_tac >>
+      metis_tac[abi_decode_assignable_struct_short_head_reject])
+  >- suspend "struct_accept"
+  >> suspend "struct_reject"
+QED
+Resume abi_decode_struct_owned_contract_rows[struct_accept]:
+  `SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH(DROP pos bs) /\
+    LENGTH rows < dimword(:256)` by
+    (drule abi_decode_schema_row_count_bound >> simp[LENGTH_DROP] >> decide_tac) >>
+  `!v. abi_decode_source_accepts env (StructT nsid)
+    (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs pos) v <=>
+    ?vs. v = StructV (ZIP (MAP FST args,vs)) /\
+      abi_tuple_rows_accept (env \\ nsid) (DROP pos bs) 0 rows vs` by
+    (gen_tac >> metis_tac[abi_decode_struct_rows_view_accept]) >>
+  `abi_tuple_rows_accept (env \\ nsid) (DROP pos bs) 0 rows vs` by
+    metis_tac[abi_tuple_rows_values_accept] >>
+  `val_in_memory atv (StructV (ZIP (MAP FST args,vs))) d t.vs_memory` by
+    (`LENGTH(MAP FST args) = LENGTH rows` by simp[] >>
+     drule_all abi_tuple_rows_struct_memory >> simp[]) >>
+  simp_tac bool_ss [abi_decode_context_result_def] >> disj1_tac >>
+  qexistsl_tac [`t`,`StructV (ZIP (MAP FST args,vs))`] >>
+  simp_tac bool_ss [] >> metis_tac[]
+QED
+Resume abi_decode_struct_owned_contract_rows[struct_reject]:
+  `SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH(DROP pos bs) /\
+    LENGTH rows < dimword(:256)` by
+    (drule abi_decode_schema_row_count_bound >> simp[LENGTH_DROP] >> decide_tac) >>
+  `!v. abi_decode_source_accepts env (StructT nsid)
+    (abi_decode_source_view (vyper_to_abi_type env (StructT nsid)) bs pos) v <=>
+    ?vs. v = StructV (ZIP (MAP FST args,vs)) /\
+      abi_tuple_rows_accept (env \\ nsid) (DROP pos bs) 0 rows vs` by
+    (gen_tac >> metis_tac[abi_decode_struct_rows_view_accept]) >>
+  simp_tac bool_ss [abi_decode_context_result_def] >> disj2_tac >>
+  qexists_tac `u` >> metis_tac[]
+QED
+Finalise abi_decode_struct_owned_contract_rows
