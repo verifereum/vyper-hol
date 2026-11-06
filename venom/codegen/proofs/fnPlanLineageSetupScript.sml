@@ -1202,3 +1202,173 @@ Proof
   Cases_on `Var v IN FDOM qs.ps_spilled` >>
   gvs[GSYM LIST_ELEM_COUNT_MEM]
 QED
+
+(* Arbitrary bottom-prefix replay needs absence only for the queried name;
+   the observable suffix need not be distinct. *)
+Theorem optimistic_swap_plan_bottom_frame:
+  !dfg inst live term ps prefix ops qs.
+    EVERY (\v. ~MEM (Var v) prefix) live /\
+    optimistic_swap_plan dfg inst live term ps = (ops,qs) ==>
+    optimistic_swap_plan dfg inst live term
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `live = []` >- gvs[optimistic_swap_plan_def] >>
+  `~MEM (Var (LAST live)) prefix` by
+    (gvs[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]) >>
+  `stack_get_depth (Var (LAST live)) (prefix ++ ps.ps_stack) =
+   stack_get_depth (Var (LAST live)) ps.ps_stack` by
+    metis_tac[stack_get_depth_bottom_excluded] >>
+  gvs[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
+  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_props] >>
+  drule_all do_swap_bottom_frame >> simp[]
+QED
+
+Theorem popmany_plan_bottom_frame:
+  !requests ps prefix ops qs.
+    DISJOINT (set prefix) (set requests) /\
+    popmany_plan requests ps = (ops,qs) ==>
+    popmany_plan requests (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `requests` mp_tac popmany_plan_shared_core_replay >>
+  disch_then (qspecl_then [`ps`,
+    `ps with ps_stack := prefix ++ ps.ps_stack`] mp_tac) >>
+  disch_then (qspecl_then [`[]`, `prefix`, `ps.ps_stack`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem generate_emit_ops_stack_update:
+  !inst n ps stack ops qs.
+    generate_emit_ops inst n ps = (ops,qs) ==>
+    generate_emit_ops inst n (ps with ps_stack := stack) =
+      (ops,qs with ps_stack := stack)
+Proof
+  rpt gen_tac >>
+  simp[generate_emit_ops_def, fresh_label_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  Cases_on `venom_to_evm_name inst.inst_opcode` >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem release_dead_spills_stack_update:
+  !live ps stack.
+    release_dead_spills live (ps with ps_stack := stack) =
+      (release_dead_spills live ps) with ps_stack := stack
+Proof
+  rpt gen_tac >> simp[release_dead_spills_def] >>
+  qmatch_goalsub_abbrev_tac `FOLDL f _ dead` >>
+  `!ps. FOLDL f (ps with ps_stack := stack) dead =
+        (FOLDL f ps dead) with ps_stack := stack` suffices_by simp[] >>
+  qpat_x_assum `Abbrev (dead = _)` kall_tac >>
+  Induct_on `dead` >- simp[] >>
+  Cases_on `h` >> simp[Abbr `f`] >>
+  gen_tac >> first_x_assum (qspec_then
+    `ps' with <|ps_spilled := ps'.ps_spilled \\ q;
+                ps_alloc := free_spill_slot r ps'.ps_alloc|>` mp_tac) >> simp[]
+QED
+
+(* This is a code/metadata frame, not an inventory or future-demand theorem.
+   In particular, neither core distinctness nor output freshness is needed. *)
+Theorem native_regular_bottom_frame:
+  !liveness dfg cfg fn inst nl halting term lbl ps prefix ops qs.
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    EVERY (\v. ~MEM (Var v) prefix) (nl ++ inst.inst_outputs) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  namedCases_on `emit_input_plan inst.inst_opcode (compute_operands inst) nl ps`
+    ["iops ps1"] >>
+  `!v. MEM (Var v) (compute_operands inst) ==>
+    ~MEM (Var v) prefix \/ MEM (Var v) ps.ps_stack \/
+    Var v IN FDOM ps.ps_spilled` by
+    (gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]) >>
+  drule_all emit_input_plan_shielded_bottom_frame >> strip_tac >>
+  qabbrev_tac `choice =
+    if is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) then
+      case reorder_plan dfg (compute_operands inst) ps1 of (oa,pa) =>
+      case reorder_plan dfg
+        (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+          [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+           EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) ps1 of (ob,pb) =>
+      if reorder_cost oa < reorder_cost ob then (oa,pa) else (ob,pb)
+    else reorder_plan dfg (compute_operands inst) ps1` >>
+  namedCases_on `choice` ["rops ps4"] >>
+  qpat_x_assum `Abbrev ((rops,ps4) = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all emitted_commutative_preparation_bottom_frame >>
+  disch_then (qspec_then `prefix` strip_assume_tac) >>
+  `stack_pop (LENGTH (compute_operands inst)) (prefix ++ ps4.ps_stack) =
+    prefix ++ stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` by
+    (irule stack_pop_bottom_extension >> simp[]) >>
+  rule_assum_tac (SIMP_RULE bool_ss [pairTheory.pair_CASE_def,
+    pairTheory.UNCURRY, pairTheory.PAIR]) >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM, parameter_push_fold,
+       arithmeticTheory.GREATER_EQ, APPEND_ASSOC, pairTheory.pair_CASE_def,
+       pairTheory.UNCURRY, pairTheory.PAIR] >>
+  Cases_on `inst.inst_outputs = []` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic (ps4 with ps_stack := core)` >>
+  namedCases_on `generate_emit_ops inst topic (ps4 with ps_stack := core)` ["eops ps7"] >>
+  drule generate_emit_ops_stack_update >>
+  disch_then (qspec_then `prefix ++ core` assume_tac) >>
+  qpat_assum `generate_emit_ops inst topic (ps4 with ps_stack := core) = _`
+    (mp_then Any strip_assume_tac fnPlanLineageReorderTheory.generate_emit_ops_slots) >>
+  gvs[] >>
+  TRY (qpat_assum `inst.inst_outputs = []` kall_tac >>
+       strip_tac >> gvs[release_dead_spills_stack_update, release_dead_spills_stack] >> NO_TAC) >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic framed` >>
+  `framed = ps4 with ps_stack := prefix ++ ps7.ps_stack` by
+    (simp[Abbr `framed`, stackPlanTypesTheory.plan_state_component_equality] >>
+     metis_tac[APPEND_ASSOC]) >>
+  gvs[] >>
+  `DISJOINT (set prefix)
+    (set (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)))` by
+    (gvs[DISJOINT_ALT, EVERY_MEM, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  namedCases_on `popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) ps7`
+    ["pops ps8"] >>
+  drule_all popmany_plan_bottom_frame >> strip_tac >>
+  Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >> simp[] >>
+  Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> simp[] >>
+  TRY (strip_tac >> gvs[release_dead_spills_stack_update,
+                        release_dead_spills_stack] >> NO_TAC) >>
+  qmatch_goalsub_abbrev_tac `optimistic_swap_plan dfg inst nl term tailps` >>
+  namedCases_on `optimistic_swap_plan dfg inst nl term tailps` ["oops ps9"] >>
+  drule_all optimistic_swap_plan_bottom_frame >> strip_tac >>
+  strip_tac >> gvs[release_dead_spills_stack_update, release_dead_spills_stack]
+QED
+
+(* Paired replay exposes one shared resulting core and identical metadata.
+   This does not assert preservation of availability for a later instruction. *)
+Theorem native_regular_shared_core_replay:
+  !liveness dfg cfg fn inst nl halting term lbl ps prefixP prefixQ.
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    EVERY (\v. ~MEM (Var v) prefixP) (nl ++ inst.inst_outputs) /\
+    EVERY (\v. ~MEM (Var v) prefixQ) (nl ++ inst.inst_outputs) ==>
+    ?ops qs.
+      generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl
+        (ps with ps_stack := prefixP ++ ps.ps_stack) =
+        (ops,qs with ps_stack := prefixP ++ qs.ps_stack) /\
+      generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl
+        (ps with ps_stack := prefixQ ++ ps.ps_stack) =
+        (ops,qs with ps_stack := prefixQ ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  namedCases_on `generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps`
+    ["ops qs"] >>
+  qexistsl [`ops`, `qs`] >> conj_tac >>
+  irule native_regular_bottom_frame >> simp[]
+QED

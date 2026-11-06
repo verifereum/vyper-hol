@@ -3215,11 +3215,14 @@ Theorem emitted_commutative_preparation_bottom_frame:
        else (ops_b,ps_b)
      else reorder_plan dfg operands
        (ps1 with ps_stack := prefix ++ ps1.ps_stack)) =
-      (rops,ps2 with ps_stack := prefix ++ ps2.ps_stack)
+      (rops,ps2 with ps_stack := prefix ++ ps2.ps_stack) /\
+    LENGTH operands <= LENGTH ps2.ps_stack
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all available_input_plan_length >> strip_tac >>
   Cases_on `reorder_plan dfg operands ps1` >>
   rename1 `reorder_plan dfg operands ps1 = (ops_a,ps_a)` >>
+  drule_all reorder_plan_target_length >> strip_tac >>
   `PERM operands operands` by simp[] >>
   drule_all emit_reorder_plan_shielded_bottom_frame >> strip_tac >>
   Cases_on `is_commutative opc /\ 2 <= LENGTH operands`
@@ -3230,11 +3233,16 @@ Proof
          [EL (LENGTH operands - 1) operands;
           EL (LENGTH operands - 2) operands]) ps1` >>
       rename1 `reorder_plan _ _ _ = (ops_b,ps_b)` >>
+      drule sortingTheory.PERM_LENGTH >> strip_tac >>
+      `LENGTH operands <= LENGTH ps_b.ps_stack` by
+        (drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_target_length >>
+         simp[]) >>
       qpat_x_assum `reorder_plan dfg operands ps1 = _` kall_tac >>
       drule_all emit_reorder_plan_shielded_bottom_frame >>
       disch_then (qspec_then `prefix` strip_assume_tac) >>
-      Cases_on `reorder_cost ops_a < reorder_cost ops_b` >> gvs[]) >>
-  gvs[]
+      Cases_on `reorder_cost ops_a < reorder_cost ops_b` >> gvs[] >>
+      metis_tac[reorder_plan_target_length, sortingTheory.PERM_LENGTH]) >>
+  gvs[] >> metis_tac[reorder_plan_target_length]
 QED
 
 Theorem reorder_fold_bottom_frame[local]:
