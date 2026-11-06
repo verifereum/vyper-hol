@@ -5,6 +5,8 @@ Ancestors
   abiTupleValueEncoding abiEncoderStaticRepresentative abiEncoderWindow abiEncoderLeaves
   exprSimSource exprSimHypsDefs vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   abiBuiltinAllocation exprSimAbiEncodeConcreteResources
+  abiEncoderSourceFootprint exprSimAbiEncodeProducerBoundary
+  abiEncodeArgsSim abiTupleEncodePrepare abiTupleEncodeInput contractABI exprLowering
   valueEncodingProps compileEnv exprLoweringProps emitHelper emitHelperProps rich_list
   venomMemDefs venomInst venomState words finite_map list arithmetic
 
@@ -335,4 +337,111 @@ Proof
   drule_all abi_encode_word_source_window >>
   disch_then (qspecl_then [`sf`, `ce`] strip_assume_tac) >>
   qexistsl_tac [`ct`, `rv`, `p`] >> gvs[]
+QED
+
+(* Actual footprint, including dynamic bytelikes and empty aggregates: no
+   declared-capacity or literal ABI typing premise is used. *)
+Theorem abi_encode_nonword_expr_window:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  ~is_word_type (expr_type e) /\
+  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
+  ?w ct rv. eval_operand op s = SOME w /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  `?w. eval_operand op s = SOME w /\
+       val_in_memory tv v (w2n w) s.vs_memory` by
+    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  drule_all abi_encoder_source_footprint >> strip_tac >>
+  drule abi_encoder_open_input_window >> metis_tac[]
+QED
+
+Theorem abi_encode_nonword_expr_bound:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  eval_operand op s = SOME w ==>
+  val_footprint tv v = 0 \/ w2n w + val_footprint tv v <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  `expr_val_at ce cx (expr_type e) origin sa es' v op s /\
+   alloca_inv s /\ local_ptrs_rel func ce es'.scopes s` by
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  drule_all expr_val_at_footprint >> strip_tac
+  >- (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[LESS_EQ_TRANS])
+  >- (gvs[local_region_def, local_ptrs_rel_def] >>
+      first_x_assum drule_all >> strip_tac >> gvs[lookup_var_def] >> decide_tac) >>
+  simp[]
+QED
+
+Theorem abi_encode_nonword_expr_site_disjoint:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  eval_operand op s = SOME w /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
+  not_local_ptr ce es'.scopes q /\ sa.cs_next_id <= inst.inst_id /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  venomMemDefs$regions_disjoint (w2n w,val_footprint tv v) (b,sz)
+Proof
+  strip_tac >> irule abi_encode_expr_footprint_site_disjoint >>
+  fs[expr_post_def, stmt_state_rel_def, state_rel_def] >> metis_tac[]
+QED
+
+(* A representative nonempty tuple consumer uses the actual args post,
+   not an assumed ABI input. The raw word's valid bytes32 representative
+   avoids imposing literal ABI validity (e.g. bytes0) on source values. *)
+Theorem abi_encode_args_single_word_input:
+  abi_args_post ctx func ce cx es sa sb s0 es' [e] [op] [v] s /\
+  is_word_type (expr_type e) /\
+  abi_decoder_operand_live next op ==>
+  ?w. eval_operand op s = SOME w /\
+    abi_tuple_encode_inputs sf ce [(op,expr_type e)] [Bytes (SOME 32)]
+      [contractABI$BytesV (word_to_bytes w T)] next lo hi s
+Proof
+  strip_tac >>
+  `?w. eval_operand op s = SOME w` by
+    (gvs[abi_args_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  qexists_tac `w` >>
+  simp[abi_tuple_encode_inputs_def, abi_tuple_encode_input_def] >>
+  drule abi_word_metadata >> strip_tac >>
+  simp[has_type_def, valid_length_def, is_dynamic_def, static_length_def,
+       enc_def, type_memory_bytes_def, byteTheory.LENGTH_word_to_bytes,
+       dimword_def]
+QED
+
+Theorem abi_encode_args_empty_store:
+  abi_args_post ctx func ce cx es sa sb s0 es' [] ops vs s ==>
+  compile_store_abi_tuple ce buf 0 (ZIP (ops,[])) sb = ((),sb) /\
+  run_inst_seq (emitted_insts sb sb) s = OK s
+Proof
+  strip_tac >> gvs[abi_args_post_def, compile_store_abi_tuple_def,
+       comp_return_def, emitted_insts_def, run_inst_seq_def]
+QED
+
+Theorem abi_encode_args_single_word_store:
+  abi_args_post ctx func ce cx es sa sb s0 es' [e] [op] [v] s /\
+  is_word_type (expr_type e) /\
+  compile_store_abi_tuple ce buf off [(op,expr_type e)] sb = ((),final) /\
+  abi_decoder_operand_live sb.cs_next_var op /\
+  eval_operand buf s = SOME (n2w baddr) /\
+  abi_decoder_operand_live sb.cs_next_var buf /\
+  lo <= baddr+off /\ baddr+off+32 <= hi /\ hi < dimword (:256) /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  ?w actual. eval_operand op s = SOME w /\
+    abi_tuple_encode_result sf ce [(op,expr_type e)] [Bytes (SOME 32)]
+      [contractABI$BytesV (word_to_bytes w T)] sb final limit_st
+      (baddr+off) s actual
+Proof
+  strip_tac >> drule_all (SRULE [] abi_encode_args_single_word_input) >>
+  disch_then (qspecl_then [`sf`, `lo`, `hi`] strip_assume_tac) >>
+  drule abi_word_metadata >> strip_tac >>
+  `abi_tuple_bytes ce [(op,expr_type e)] = 32` by
+    simp[abiTuplePropsTheory.abi_tuple_bytes_def] >>
+  qexists_tac `w` >> simp[] >> irule abi_tuple_encode_sequence >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[ADD_ASSOC]
 QED
