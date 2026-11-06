@@ -2904,6 +2904,13 @@ Proof
   gvs[] >> first_x_assum drule >> simp[]
 QED
 
+Theorem alias_terminator_regular_dispatch:
+  is_terminator opc ==>
+  opc <> PHI /\ opc <> OFFSET /\ ~is_param_opcode opc /\ opc <> NOP
+Proof
+  Cases_on `opc` >> simp[is_terminator_def, is_param_opcode_def]
+QED
+
 Theorem alias_control_plan_spill_support:
   MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
   generate_inst_plan liveness dfg cfg fn inst live halting next_term lbl ps =
@@ -2928,6 +2935,30 @@ Proof
   rpt strip_tac >> irule alias_block_insts_final_regular_spill_support >>
   goal_assum (drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[is_param_opcode_def]
+QED
+
+Theorem alias_block_plan_final_spill_support:
+  bb_well_formed bb /\
+  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops,qs) ==>
+  !at. at IN FDOM qs.ps_spilled ==>
+    ?v. at = Var v /\
+      MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions))
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> [] /\
+   is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    gvs[bb_well_formed_def] >>
+  drule alias_terminator_regular_dispatch >> strip_tac >>
+  `?prefix. non_param_insts bb = prefix ++ [LAST bb.bb_instructions]` by
+    (`?front. bb.bb_instructions = front ++ [LAST bb.bb_instructions]` by
+       metis_tac[APPEND_FRONT_LAST] >>
+     simp[non_param_insts_def] >>
+     qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
+     simp[FILTER_APPEND]) >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  metis_tac[alias_block_insts_final_regular_spill_support]
 QED
 
 Theorem alias_block_plan_final_control_spill_support:
