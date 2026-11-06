@@ -395,7 +395,7 @@ Proof
   `wf_function (remove_unreachable_blocks f)` by
     simp[remove_unreachable_blocks_wf] >>
   `fn_inst_wf (remove_unreachable_blocks f)` by
-    simp[simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf] >>
+    simp[simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf] >>
   irule retpc_normalized_reachable_identity >> conj_tac
   >- (rpt strip_tac >>
       irule simplifyCfgPhiShapeTheory.fix_all_phis_phi_preds >>
@@ -1370,7 +1370,7 @@ Proof
       `wf_function (remove_unreachable_blocks f)` by
         metis_tac[remove_unreachable_blocks_wf] >>
       `fn_inst_wf (remove_unreachable_blocks f)` by
-        metis_tac[simplifyCfgWfssaTheory.remove_unreachable_blocks_fn_inst_wf] >>
+        metis_tac[simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf] >>
       fs[wf_function_def, fn_inst_wf_def, EVERY_MEM,
          fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
   rpt strip_tac >> irule retpc_initial_phi_distinct >>

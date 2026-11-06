@@ -680,7 +680,7 @@ Proof
   simp[remove_unreachable_blocks_entry, scfg_restriction_frame_sim_rf] >>
   irule scfg_fix_all_phis_frame_sim_rf >>
   simp[remove_unreachable_blocks_wf,
-    simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf,
+    simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf,
     scfg_restriction_ok] >>
   rpt strip_tac >> irule scfg_restriction_blocks_reachable >>
   Cases_on `fn.fn_blocks` >>
