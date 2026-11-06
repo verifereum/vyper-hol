@@ -3,6 +3,7 @@ Theory exprSimPtrTopLevelImmutableCopy
 Ancestors
   exprSimPtrTopLevelCopy immutableCopyExecution compileEnv emitHelper
   fragGasSeqPtr context exprLoweringProps emitHelperProps venomInst list
+  bodyPtrDefs typedCopyPtr ptrDiscipline ptrSafeRun venomState words
 
 Theorem toplevel_immutable_copy_one_layout:
   compile_imm_copy_to_memory F imm src dst (SUC 0) 0 sa = ((),sb) ==>
@@ -35,4 +36,27 @@ Proof
    LENGTH (emitted_insts sa sb) = 2` by
     simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Theorem toplevel_immutable_offset_coverage:
+  ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
+  off+len <= capacity /\ w2n a+capacity < dimword (:256) ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out])
+      (update_var out (a+n2w off) s))
+    (step_taint (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s
+      (update_var out (a+n2w off) s) tn)
+    out (update_var out (a+n2w off) s) len
+Proof
+  strip_tac >> gvs[ptr_covers_def] >>
+  simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def,
+       op_prov_def, mk_inst_def, finite_mapTheory.FLOOKUP_UPDATE,
+       lookup_var_def, update_var_def] >>
+  conj_tac
+  >- (simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
+           mk_inst_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      Cases_on `eval_operand (Var root) s` >> simp[]) >>
+  `w2n (a+n2w off) = w2n a+off` by
+    (Cases_on `a` >> gvs[wordsTheory.word_add_n2w] >> decide_tac) >>
+  simp[] >> decide_tac
 QED
