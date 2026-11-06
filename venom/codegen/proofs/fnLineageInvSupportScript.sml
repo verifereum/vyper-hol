@@ -1591,3 +1591,33 @@ Proof
  simp[EL_GENLIST, MAP_GENLIST, combinTheory.o_DEF] >>
  irule GENLIST_EL >> simp[]
 QED
+
+Theorem analyzed_join_actual_phi_prefix_inventory:
+ !fn entry pred pb succ sb dfg ps0 ops ps m core spillbase insts k bl pops qs.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions)))) ps /\
+ lineage_core m core ps /\ EVERY is_var_operand core /\
+ residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+ k = LENGTH (collect_phis sb.bb_instructions) /\ k <= LENGTH insts /\
+ TAKE k insts = collect_phis sb.bb_instructions /\
+ (k < LENGTH insts \/ bl = k) /\
+ generate_block_insts_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+   F 0 bl 0 k insts ps = SOME (pops,qs) ==>
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) succ k))) qs /\
+ ?rest. lineage_core m rest qs /\ EVERY is_var_operand rest /\
+   residual_budget_wf spillbase [] (qs with ps_stack := rest)
+Proof
+ rpt gen_tac >> strip_tac >>
+ mp_tac (Q.INST [`halt` |-> `F`] (SPEC_ALL analyzed_join_actual_phi_prefix_schedule)) >>
+ (impl_tac >- simp[]) >> strip_tac >>
+ mp_tac (Q.INST [`n` |-> `k`] (SPEC_ALL analyzed_join_released_phi_inventory)) >>
+ (impl_tac >- simp[]) >> simp[]
+QED
