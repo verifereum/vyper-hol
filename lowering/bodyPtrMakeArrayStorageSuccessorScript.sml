@@ -160,3 +160,88 @@ Resume storage_copy_body_ptr_step[prefix]:
   gvs[]
 QED
 Finalise storage_copy_body_ptr_step
+
+(* The loop invariant packages the stable frame and the initialized/tainted
+   prefix once, so the header/body/exit consumers need not repeat them.
+   The PC is intentionally excluded: control edges transport this invariant. *)
+Definition storage_body_inv_def:
+  storage_body_inv src dst cv writes loc a b n Gbase tnbase sbase k G tn s <=>
+    storage_body_frame writes Gbase tnbase sbase G tn s /\
+    eval_operand src s = SOME a /\ op_prov G src = NONE /\ op_taint tn src = {} /\
+    lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+    lookup_var cv s = SOME (n2w k) /\ op_prov G (Var cv) = NONE /\
+    op_taint tn (Var cv) = {} /\ allocas_from 0 s /\ ~s.vs_halted /\
+    copy_prefix loc a b n sbase k s /\ LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
+    (!i j. i < k /\ j < 32 /\ b+32*i+j IN tn.t_mem ==>
+      j IN key_taint (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) (a+n2w i))
+End
+
+Theorem storage_body_inv_frame:
+  storage_body_inv src dst cv writes loc a b n Gbase tnbase sbase k G tn s ==>
+  storage_body_frame writes Gbase tnbase sbase G tn s
+Proof
+  simp[storage_body_inv_def]
+QED
+
+Theorem storage_body_inv_prefix:
+  storage_body_inv src dst cv writes loc a b n Gbase tnbase sbase k G tn s ==>
+  copy_prefix loc a b n sbase k s
+Proof
+  simp[storage_body_inv_def]
+QED
+
+Theorem storage_body_frame_operand:
+  storage_body_frame writes G tn s H tm t /\
+  (!x. op = Var x ==> x NOTIN writes) ==>
+  eval_operand op t = eval_operand op s /\
+  op_prov H op = op_prov G op /\ op_taint tm op = op_taint tn op
+Proof
+  strip_tac >> drule storage_body_frame_static >> strip_tac >>
+  drule copy_static_fields >> strip_tac >>
+  Cases_on `op` >> gvs[eval_operand_def, op_prov_def, op_taint_def,
+    storage_body_frame_def] >> metis_tac[]
+QED
+
+Theorem storage_copy_body_ptr_successor:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [src;Var cv] [sv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME
+    (mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]) /\
+  get_instruction bb (s.vs_inst_idx+2) = SOME (mk_inst (id+2) MUL [Var cv;Lit 32w] [mv]) /\
+  get_instruction bb (s.vs_inst_idx+3) = SOME (mk_inst (id+3) ADD [Var dst;Var mv] [dv]) /\
+  get_instruction bb (s.vs_inst_idx+4) = SOME (mk_inst (id+4) MSTORE [Var dv;Var vv] []) /\
+  get_instruction bb (s.vs_inst_idx+5) = SOME (mk_inst (id+5) ADD [Var cv;Lit 1w] [nv]) /\
+  get_instruction bb (s.vs_inst_idx+6) = SOME (mk_inst (id+6) ASSIGN [Var nv] [cv]) /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  {cv;sv;vv;mv;dv;nv} SUBSET writes /\ dst NOTIN writes /\
+  (!x. src = Var x ==> x NOTIN writes) /\
+  k < n /\ b+32*n < dimword(:256) /\
+  storage_body_inv src dst cv writes loc a b n Gbase tnbase sbase k G tn s ==>
+  ?t H tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    storage_body_inv src dst cv writes loc a b n Gbase tnbase sbase (k+1) H tm t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+7
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `storage_body_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_body_inv_def] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `dst NOTIN {cv;sv;vv;mv;dv;nv} /\
+   (!x. src = Var x ==> x NOTIN {cv;sv;vv;mv;dv;nv})` by
+    (gvs[SUBSET_DEF] >> metis_tac[]) >>
+  drule_all storage_copy_body_ptr_step >>
+  disch_then (qspecl_then [`PG`, `D`]
+    (qx_choose_then `t` (qx_choose_then `H` (qx_choose_then `tm` strip_assume_tac)))) >>
+  qexistsl_tac [`t`, `H`, `tm`] >> simp[] >>
+  `storage_body_frame writes G tn s H tm t` by
+    (drule_all storage_body_frame_mono >> simp[]) >>
+  `eval_operand src t = SOME a /\ op_prov H src = NONE /\ op_taint tm src = {}` by
+    (drule storage_body_frame_operand >> disch_then (qspec_then `src` mp_tac) >> simp[]) >>
+  `lookup_var dst t = SOME (n2w b)` by
+    (drule storage_body_frame_register >> disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
+  conj_tac >- (drule_all storage_body_frame_trans >> simp[]) >>
+  simp[] >>
+  imp_res_tac storage_body_frame_static >>
+  qpat_x_assum `!sbase. _` (qspec_then `sbase` mp_tac) >>
+  simp[] >> strip_tac >> simp[]
+QED
