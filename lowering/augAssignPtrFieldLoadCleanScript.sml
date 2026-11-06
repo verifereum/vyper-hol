@@ -19,7 +19,8 @@ Theorem augassign_field_load_clean_ptr:
   word_value_type ty /\ evaluate_type (get_tenv cx) ty = SOME ftv /\
   value_has_type ftv fv /\
   local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s /\
-  return_buf_frame d cenv sa s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H tm t.

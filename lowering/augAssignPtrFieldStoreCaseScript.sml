@@ -18,28 +18,34 @@ Theorem augassign_field_store_case_ptr:
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   fields_layout flds fs /\ struct_has_type fs vals /\ fields_val_wf vals fs /\
   ALOOKUP fs fld = SOME ftv /\ type_memory_size ftv = 32 /\ word_value v /\
-  store_lays_out ftv ftv v /\ struct_field_offset flds fld + 32 <= sz /\
-  fin = es with scopes := pre ++ (env |+ (name,entry with
-    <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest ==>
+  store_lays_out ftv ftv v /\ struct_field_offset flds fld + 32 <= sz ==>
   ?tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
-    stmt_state_rel ctx fn cenv cx fin sf /\ ghost_inv d cenv cx fin G tnf sf /\
+    stmt_state_rel ctx fn cenv cx
+      (es with scopes := pre ++ (env |+ (name,entry with
+        <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) sf /\
+    ghost_inv d cenv cx
+      (es with scopes := pre ++ (env |+ (name,entry with
+        <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) G tnf sf /\
     ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!q. lookup_var q sf = lookup_var q s) /\
     tnf.t_var = tn.t_var
 Proof
-  strip_tac >> drule_all emit_mstore_path_ptr >>
+  strip_tac >>
+  qabbrev_tac `fin = es with scopes := pre ++ (env |+ (name,entry with
+    <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest` >>
+  drule_all emit_mstore_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `local_ptrs_rel fn cenv es.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
   `ghost_inv d cenv cx fin G tnf sf` by
     (drule_all ghost_inv_write_local_field_word >>
      disch_then (qspecl_then [`LENGTH sb.cs_current_insts`, `sa.cs_next_id`] mp_tac) >>
-     gvs[]) >>
+     gvs[Abbr `fin`]) >>
   `stmt_state_rel ctx fn cenv cx fin (mstore (w2n da) (val_to_w256 v) s)` by
     (`typed_val_to_w256 ftv v = val_to_w256 v` by
        simp[typed_val_to_w256_word_value] >>
-     drule_all stmt_state_rel_write_field >> simp[]) >>
+     drule_all stmt_state_rel_write_field >> simp[Abbr `fin`]) >>
   qexistsl [`tnf`, `sf`] >> simp[] >>
   qpat_x_assum `sf = _` SUBST1_TAC >>
   metis_tac[stmt_state_rel_inst_idx]

@@ -241,7 +241,7 @@ Theorem augassign_field_load_ptr:
   (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==> i NOTIN tn.t_mem) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
   ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
-  return_buf_frame d cenv sa s ==>
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     stmt_state_rel ctx fn cenv cx es sf /\ ghost_inv d cenv cx es Gf tnf sf /\
@@ -277,7 +277,6 @@ Proof
   conj_tac
   >- (qpat_x_assum `sf = _` kall_tac >> irule ghost_inv_load_frame >>
       qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[] >>
-      Cases_on `d` >> gvs[return_buf_frame_def, ret_pc_ok_def] >>
-      PairCases_on `x` >> gvs[return_buf_frame_def]) >>
+      gvs[ret_pc_ok_def] >> metis_tac[]) >>
   simp[ghost_kept_def, not_fresh_at_def]
 QED
