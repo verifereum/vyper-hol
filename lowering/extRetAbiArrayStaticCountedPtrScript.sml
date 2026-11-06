@@ -34,6 +34,11 @@ Theorem abi_array_static_index_init_counted_ptr[local]:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var ip sf = SOME (n2w addr) /\ ptr_covers Gf tnf ip sf 32 /\
+    sf.vs_allocas = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas /\
+    sf.vs_alloca_next = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_alloca_next /\
+    sf.vs_fmp = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_fmp /\
+    mem_agree_outside {i | addr <= i /\ i < addr+32} sf.vs_memory s.vs_memory /\
+    (!i. i < addr \/ addr+32 <= i ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     mload addr sf = 0w /\
     (!i. addr <= i /\ i < addr+32 ==> i NOTIN tnf.t_mem) /\
     lookup_var src sf = SOME a /\ ptr_covers Gf tnf src sf scap /\
@@ -70,6 +75,7 @@ Proof
   `!i. i < scap ==> (w2n a+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)` by
     (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
   rpt strip_tac >> drule_all copied_window_agree_witness >> strip_tac >>
   `abi_encoder_input info ty v (w2n a) scap mix` by metis_tac[] >>
   drule_all abi_encoder_input_mem_agree >> simp[]
@@ -215,6 +221,16 @@ Theorem compile_abi_encode_dyn_static_loop_counted_ptr:
     lookup_var dst sf = SOME b /\ ptr_covers Gf tnf dst sf dcap /\
     (!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
       abi_encoder_input (AbiDynArray ei asz msz F) (Array NONE ty) (ListV avs) (w2n a) scap mem') /\
+    sf.vs_allocas = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas /\
+    sf.vs_alloca_next = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_alloca_next /\
+    sf.vs_fmp = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_fmp /\
+    (!site region. FLOOKUP s.vs_allocas site = SOME region ==>
+      FLOOKUP sf.vs_allocas site = SOME region) /\
+    mem_agree_outside
+      ({i | w2n b <= i /\ i < w2n b+dcap} UNION {i | addr <= i /\ i < addr+32})
+      sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+      {i | addr <= i /\ i < addr+32}) ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!x. not_fresh_at sa x ==>
       lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
@@ -263,6 +279,16 @@ Resume compile_abi_encode_dyn_static_loop_counted_ptr[run]:
   `?G2 tn2 s2.
     gas_path_ptr D 0 ctx fn PG Gf tnf (jump_to labels0 sf) 0 G2 tn2 (OK s2) /\
     s2.vs_current_bb = labels2 /\ s2.vs_inst_idx = 0 /\
+    s2.vs_allocas = (jump_to labels0 sf).vs_allocas /\
+    s2.vs_alloca_next = (jump_to labels0 sf).vs_alloca_next /\
+    s2.vs_fmp = (jump_to labels0 sf).vs_fmp /\
+    mem_agree_outside
+      ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n (n2w addr : bytes32) <= i /\ i < w2n (n2w addr : bytes32)+32})
+      s2.vs_memory (jump_to labels0 sf).vs_memory /\
+    (!i. i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n (n2w addr : bytes32) <= i /\ i < w2n (n2w addr : bytes32)+32}) ==>
+      (i IN tn2.t_mem <=> i IN tnf.t_mem)) /\
     abi_array_static_loop_inv ip src dst cv (n2w addr) a b scap dcap ei ty avs asz msz header
       (LENGTH avs) G2 tn2 s2 /\
     mem_bytes_at (w2n b) (32+LENGTH avs*asz) s2.vs_memory = header ++ FLAT (MAP (enc ty) avs) /\
@@ -301,6 +327,32 @@ Resume compile_abi_encode_dyn_static_loop_counted_ptr[exit]:
   `!x. not_fresh_at owner_st x ==> not_fresh_at exit_st x` by
     (simp[not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum irule >> decide_tac) >>
+  `!site region. FLOOKUP s.vs_allocas site = SOME region ==>
+    FLOOKUP sf'.vs_allocas site = SOME region` by
+    (asm_simp_tac (srw_ss()) [jump_to_def] >> rpt strip_tac >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE` >>
+     asm_simp_tac (srw_ss()) [abiBuiltinAllocationTheory.abi_builtin_allocate_state_def, FLOOKUP_UPDATE] >>
+     Cases_on `site = sa.cs_next_id` >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `mem_agree_outside
+    ({i | w2n b <= i /\ i < w2n b+dcap} UNION {i | addr <= i /\ i < addr+32})
+    sf'.vs_memory s.vs_memory` by
+    (qpat_x_assum `mem_agree_outside _ s2.vs_memory _` mp_tac >>
+     qpat_x_assum `mem_agree_outside _ sf.vs_memory _` mp_tac >>
+     asm_simp_tac (srw_ss()) [jump_to_def] >>
+     simp_tac bool_ss [mem_agree_outside_def, IN_UNION] >>
+     metis_tac[]) >>
+  `!i. i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+    {i | addr <= i /\ i < addr+32}) ==> (i IN tnf'.t_mem <=> i IN tn.t_mem)` by
+    (asm_simp_tac bool_ss [] >> gen_tac >> disch_tac >>
+     `i < addr \/ addr+32 <= i` by
+       (qpat_x_assum `i NOTIN _` mp_tac >> simp[] >> decide_tac) >>
+     `i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n (n2w addr : bytes32) <= i /\ i < w2n (n2w addr : bytes32)+32})` by
+       (asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `!i. i NOTIN _ ==> (i IN tn2.t_mem <=> _)`
+       (qspec_then `i` mp_tac) >>
+     qpat_x_assum `!i. i < addr \/ _ ==> _` (qspec_then `i` mp_tac) >>
+     asm_simp_tac (srw_ss()) [] >> metis_tac[]) >>
   qexistsl_tac [`Gf'`,`tnf'`,`sf'`] >>
   conj_tac >-
     (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`,`m` |-> `0`] |> SRULE []) >>

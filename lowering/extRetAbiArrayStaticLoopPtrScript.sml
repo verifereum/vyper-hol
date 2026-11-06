@@ -142,6 +142,14 @@ Theorem abi_array_static_loop_step:
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
+    mem_agree_outside
+      ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) ==>
+       (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     abi_array_static_loop_inv ip src dst cv p a b scap dcap ei ty avs asz msz header (j+1) Gf tnf sf /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sh v ==>
@@ -203,9 +211,30 @@ Proof
   `lookup_var cv h = SOME (n2w (LENGTH avs)) /\
    op_taint th (Var cv) = {} /\ op_prov Gh (Var cv) = NONE` by
     (simp[op_prov_def] >> gvs[op_prov_def] >> metis_tac[]) >>
+  asm_simp_tac bool_ss [] >>
+  conj_tac >- suspend "exterior_memory" >>
+  conj_tac >- suspend "exterior_taint" >>
   asm_simp_tac bool_ss [abi_array_static_loop_inv_def, ADD_ASSOC] >>
   metis_tac[]
 QED
+
+Resume abi_array_static_loop_step[exterior_memory]:
+  simp[mem_agree_outside_def] >> rpt strip_tac >>
+  `~(w2n p <= i /\ i < w2n p+32) /\
+   ~(w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz)` by
+    decide_tac >>
+  fs[mem_agree_outside_def] >> metis_tac[]
+QED
+
+Resume abi_array_static_loop_step[exterior_taint]:
+  simp[] >> rpt strip_tac >>
+  `~(w2n p <= i /\ i < w2n p+32) /\
+   ~(w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz)` by
+    decide_tac >>
+  metis_tac[IN_DIFF, GSPECIFICATION]
+QED
+
+Finalise abi_array_static_loop_step
 
 Theorem abi_array_static_loop_counted_ptr:
   !r j G tn s.
@@ -229,6 +258,14 @@ Theorem abi_array_static_loop_counted_ptr:
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = exit_lbl /\ sf.vs_inst_idx = 0 /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
+    mem_agree_outside
+      ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) ==>
+       (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     abi_array_static_loop_inv ip src dst cv p a b scap dcap ei ty avs asz msz header
       (LENGTH avs) Gf tnf sf /\
     mem_bytes_at (w2n b) (32+LENGTH avs*asz) sf.vs_memory =
@@ -258,6 +295,7 @@ Resume abi_array_static_loop_counted_ptr[exit]:
      conj_tac >- simp[] >> qexistsl_tac [`G`,`s`,`sh`,`tn`] >> simp[]) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >>
   qpat_x_assum `LENGTH avs = 0+j` kall_tac >>
+  asm_simp_tac bool_ss [mem_agree_outside_def] >>
   gvs[abi_array_static_loop_inv_def]
 QED
 
@@ -292,7 +330,12 @@ Resume abi_array_static_loop_counted_ptr[more]:
   qpat_x_assum `abi_array_static_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Gf'' tnf'' sf''` mp_tac >>
   pure_rewrite_tac[abi_array_static_loop_inv_def] >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
+  asm_simp_tac bool_ss [] >>
+  conj_tac >-
+    (qpat_x_assum `mem_agree_outside _ sf''.vs_memory _` mp_tac >>
+     qpat_x_assum `mem_agree_outside _ sf'.vs_memory _` mp_tac >>
+     simp_tac bool_ss [mem_agree_outside_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Finalise abi_array_static_loop_counted_ptr
