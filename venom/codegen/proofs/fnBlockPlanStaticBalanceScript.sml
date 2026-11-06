@@ -443,3 +443,25 @@ Proof
   drule prefix_wf_signed_balance >>
   impl_tac >- metis_tac[reorder_plan_no_push_var] >> simp[]
 QED
+
+Theorem do_swap_signed_balance:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  strip_tac >> drule do_swap_wf_len >>
+  disch_then (qspec_then `FEMPTY` mp_tac) >> simp[] >> strip_tac >>
+  drule prefix_wf_signed_balance >>
+  impl_tac >- metis_tac[do_swap_no_push_var] >> simp[]
+QED
+
+Theorem optimistic_swap_plan_signed_balance:
+  optimistic_swap_plan dfg inst nl nt ps = (ops, qs) ==>
+  &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
+Proof
+  simp[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >>
+  simp[] >> rpt strip_tac >> gvs[trace_weight_def] >>
+  irule do_swap_signed_balance >>
+  metis_tac[stack_get_depth_bound]
+QED
