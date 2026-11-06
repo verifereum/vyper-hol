@@ -1,7 +1,7 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): raw_log. *)
 Theory bodyMemRawLog
 Ancestors
-  bodyMemoryPreds bodyMemRawLogSuffix
+  bodyMemoryPreds bodyMemRawLogExecution
 
 Theorem body_raw_log_mem_case:
   !cx v20 es v21.
