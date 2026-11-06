@@ -2472,6 +2472,29 @@ Proof
   Cases_on `P h` >> gvs[]
 QED
 
+Theorem stack_get_unfixed_depth_suffix_hit:
+  !op f n core d prefix.
+    stack_get_unfixed_depth op f n core = SOME d ==>
+    stack_get_unfixed_depth op f n (prefix ++ core) = SOME d
+Proof
+  rpt gen_tac >> Cases_on `n <= f + 1`
+  >- simp[stack_get_unfixed_depth_def, stack_get_depth_suffix_hit] >>
+  asm_rewrite_tac[stack_get_unfixed_depth_def, LENGTH_APPEND] >>
+  strip_tac >>
+  `GENLIST I (LENGTH prefix + LENGTH core) =
+    GENLIST I (LENGTH core) ++
+    GENLIST (\t. t + LENGTH core) (LENGTH prefix)` by
+      simp[Once arithmeticTheory.ADD_COMM, GENLIST_APPEND] >>
+  asm_rewrite_tac[callLayoutDefsTheory.FIND_APPEND_CASE] >>
+  `FIND (\d. ~(f < d /\ d < n) /\ stack_peek d (prefix ++ core) = op)
+      (GENLIST I (LENGTH core)) =
+    FIND (\d. ~(f < d /\ d < n) /\ stack_peek d core = op)
+      (GENLIST I (LENGTH core))` by
+    (irule FIND_member_cong >> simp[MEM_GENLIST] >> rpt strip_tac >>
+     simp[stack_peek_def, EL_APPEND2]) >>
+  asm_rewrite_tac[] >> simp[]
+QED
+
 Theorem stack_get_unfixed_depth_bottom_excluded:
   !op prefix core f n. ~MEM op prefix ==>
     stack_get_unfixed_depth op f n (prefix ++ core) =
@@ -2506,6 +2529,17 @@ Proof
   `MEM (stack_peek x (prefix ++ core)) prefix` by
     (simp[stack_peek_def, EL_APPEND1] >> irule EL_MEM >> decide_tac) >>
   metis_tac[]
+QED
+
+Theorem stack_get_unfixed_depth_shielded[local]:
+  !op f n core prefix.
+    (~MEM op prefix \/ IS_SOME (stack_get_unfixed_depth op f n core)) ==>
+    stack_get_unfixed_depth op f n (prefix ++ core) =
+      stack_get_unfixed_depth op f n core
+Proof
+  rpt strip_tac >- simp[stack_get_unfixed_depth_bottom_excluded] >>
+  Cases_on `stack_get_unfixed_depth op f n core` >> gvs[] >>
+  metis_tac[stack_get_unfixed_depth_suffix_hit]
 QED
 
 Theorem select_spill_candidate_bottom_frame:
@@ -2561,19 +2595,39 @@ Proof
   gvs[stackPlanTypesTheory.plan_state_component_equality]
 QED
 
-Theorem reduce_depth_plan_bottom_frame:
+Theorem reduce_depth_plan_unfixed_hit:
+  !fuel targets op f n ps ops qs.
+    MEM op targets /\ IS_SOME (stack_get_unfixed_depth op f n ps.ps_stack) /\
+    reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
+    IS_SOME (stack_get_unfixed_depth op f n qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[] >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME d` >>
+  Cases_on `d <= 16`
+  >- (`reduce_depth_plan fuel targets op f n ps = ([],ps)` by
+        (irule planWfTheory.reduce_depth_plan_le_16 >> simp[]) >> gvs[]) >>
+  `d > 16` by decide_tac >>
+  drule_all planWfTheory.reduce_depth_plan_dist_ge >>
+  disch_then (qspec_then `fuel` mp_tac) >> simp[] >>
+  strip_tac >> simp[]
+QED
+
+Theorem reduce_depth_plan_shielded_bottom_frame:
   !fuel targets op f n ps prefix ops qs.
-    ~MEM op prefix /\ reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
+    (~MEM op prefix \/
+      (MEM op targets /\ IS_SOME (stack_get_unfixed_depth op f n ps.ps_stack))) /\
+    reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
     reduce_depth_plan fuel targets op f n
       (ps with ps_stack := prefix ++ ps.ps_stack) =
       (ops,qs with ps_stack := prefix ++ qs.ps_stack)
 Proof
   Induct_on `fuel` >- simp[reduce_depth_plan_def] >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   Cases_on `f + 1 < n` >- gvs[reduce_depth_plan_def] >>
   `stack_get_unfixed_depth op f n (prefix ++ ps.ps_stack) =
     stack_get_unfixed_depth op f n ps.ps_stack` by
-      simp[stack_get_unfixed_depth_bottom_excluded] >>
+      (irule stack_get_unfixed_depth_shielded >> metis_tac[]) >>
   Cases_on `stack_get_unfixed_depth op f n ps.ps_stack`
   >- gvs[reduce_depth_plan_def] >>
   rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
@@ -2594,9 +2648,48 @@ Proof
   rename1 `do_spill_at cand ps = (spill_ops, mid)` >>
   drule_all do_spill_at_bottom_frame >>
   disch_then (qspec_then `prefix` assume_tac) >>
+  `~MEM op prefix \/
+    (MEM op targets /\ IS_SOME (stack_get_unfixed_depth op f n mid.ps_stack))` by
+    (Cases_on `MEM op prefix` >> gvs[] >>
+     `reduce_depth_plan (SUC 0) targets op f n ps = (spill_ops,mid)` by
+       simp[reduce_depth_plan_def] >>
+     irule reduce_depth_plan_unfixed_hit >>
+     qexistsl [`SUC 0`, `spill_ops`, `ps`, `targets`] >> simp[]) >>
   Cases_on `reduce_depth_plan fuel targets op f n mid` >>
-  gvs[reduce_depth_plan_def] >>
-  first_x_assum drule >> disch_then drule >> simp[]
+  `reduce_depth_plan fuel targets op f n
+     (mid with ps_stack := prefix ++ mid.ps_stack) =
+   (q,r with ps_stack := prefix ++ r.ps_stack)` by
+    (first_x_assum irule >> simp[]) >>
+  qpat_x_assum `!targets op f n ps prefix ops qs. _` kall_tac >>
+  qpat_x_assum `reduce_depth_plan (SUC fuel) _ _ _ _ _ = _` mp_tac >>
+  simp[Once reduce_depth_plan_def] >> strip_tac >>
+  simp[Once reduce_depth_plan_def] >> gvs[]
+QED
+
+Theorem reduce_depth_plan_bottom_frame:
+  !fuel targets op f n ps prefix ops qs.
+    ~MEM op prefix /\ reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
+    reduce_depth_plan fuel targets op f n
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt strip_tac >> irule reduce_depth_plan_shielded_bottom_frame >> simp[]
+QED
+
+Theorem reduce_depth_plan_height_shielded_bottom_frame:
+  !targets op f n ps prefix ops qs.
+    (~MEM op prefix \/
+      (MEM op targets /\ IS_SOME (stack_get_unfixed_depth op f n ps.ps_stack))) /\
+    reduce_depth_plan (LENGTH ps.ps_stack) targets op f n ps = (ops,qs) ==>
+    reduce_depth_plan (LENGTH (prefix ++ ps.ps_stack)) targets op f n
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `reduce_depth_plan (LENGTH (prefix ++ ps.ps_stack)) targets op f n ps =
+   reduce_depth_plan (LENGTH ps.ps_stack) targets op f n ps` by
+    (irule reduce_depth_plan_adequate_fuel >> simp[]) >>
+  irule reduce_depth_plan_shielded_bottom_frame >> simp[]
 QED
 
 Theorem reduce_depth_plan_height_bottom_frame:
@@ -2607,11 +2700,7 @@ Theorem reduce_depth_plan_height_bottom_frame:
       (ps with ps_stack := prefix ++ ps.ps_stack) =
       (ops,qs with ps_stack := prefix ++ qs.ps_stack)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `reduce_depth_plan (LENGTH (prefix ++ ps.ps_stack)) targets op f n ps =
-   reduce_depth_plan (LENGTH ps.ps_stack) targets op f n ps` by
-    (irule reduce_depth_plan_adequate_fuel >> simp[]) >>
-  irule reduce_depth_plan_bottom_frame >> simp[]
+  rpt strip_tac >> irule reduce_depth_plan_height_shielded_bottom_frame >> simp[]
 QED
 
 Theorem stack_poke_bottom_extension:
@@ -2624,18 +2713,27 @@ Proof
   simp[stack_poke_def, LUPDATE_APPEND2]
 QED
 
-Theorem reorder_one_bottom_frame:
+Theorem reorder_one_shielded_bottom_frame:
   !dfg targets idx op ps prefix ops qs.
-    ~MEM op prefix /\ idx < LENGTH targets /\
+    (~MEM op prefix \/
+      (MEM op targets /\ IS_SOME (stack_get_unfixed_depth op
+        (LENGTH targets - (idx + 1)) (LENGTH targets) ps.ps_stack))) /\
+    idx < LENGTH targets /\
     LENGTH targets <= LENGTH ps.ps_stack /\
     reorder_one dfg targets idx op ps = (ops,qs) ==>
     reorder_one dfg targets idx op
       (ps with ps_stack := prefix ++ ps.ps_stack) =
       (ops,qs with ps_stack := prefix ++ qs.ps_stack)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac STRIP_ASSUME_TAC) >>
+  `stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets)
+     (prefix ++ ps.ps_stack) =
+   stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets)
+     ps.ps_stack` by
+    (irule stack_get_unfixed_depth_shielded >> metis_tac[]) >>
   qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_bottom_excluded] >>
+  simp[reorder_one_def, LET_THM] >>
   pairarg_tac >> simp[] >>
   rename1 `_ = (restore_ops, ps1)` >>
   `LENGTH targets <= LENGTH ps1.ps_stack` by
@@ -2649,7 +2747,16 @@ Proof
        | NONE => ([], ps with ps_stack := prefix ++ ps.ps_stack)) =
      (restore_ops, ps1 with ps_stack := prefix ++ ps1.ps_stack))` by
     (gvs[AllCaseEqs()] >> metis_tac[do_restore_bottom_frame]) >>
-  simp[stack_get_unfixed_depth_bottom_excluded] >>
+  (Q.SUBGOAL_THEN `~MEM op prefix \/
+    (MEM op targets /\ IS_SOME (stack_get_unfixed_depth op
+      (LENGTH targets - (idx + 1)) (LENGTH targets) ps1.ps_stack))` assume_tac
+    >- (gvs[AllCaseEqs()] >> metis_tac[])) >>
+  `stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets)
+     (prefix ++ ps1.ps_stack) =
+   stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets)
+     ps1.ps_stack` by
+    (irule stack_get_unfixed_depth_shielded >> metis_tac[]) >>
+  simp[] >>
   Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
     (LENGTH targets) ps1.ps_stack` >- (simp[] >> strip_tac >> gvs[]) >>
   simp[] >> pairarg_tac >> simp[] >>
@@ -2664,11 +2771,27 @@ Proof
     else ([],ps1 with ps_stack := prefix ++ ps1.ps_stack)) =
     (reduce_ops,ps2 with ps_stack := prefix ++ ps2.ps_stack)` by
     (Cases_on `x > 16` >> gvs[] >>
-     drule_all reduce_depth_plan_height_bottom_frame >> simp[]) >>
+     irule (SRULE [LENGTH_APPEND] reduce_depth_plan_height_shielded_bottom_frame) >>
+     simp[]) >>
   `LENGTH targets - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
-  simp[stack_get_unfixed_depth_bottom_excluded] >>
+  (Q.SUBGOAL_THEN `~MEM op prefix \/
+    (MEM op targets /\ IS_SOME (stack_get_unfixed_depth op
+      (LENGTH targets - (idx + 1)) (LENGTH targets) ps2.ps_stack))` assume_tac
+    >- (Cases_on `MEM op prefix` >> gvs[] >>
+        Cases_on `x > 16` >> gvs[] >>
+        irule reduce_depth_plan_unfixed_hit >>
+        qexistsl [`LENGTH ps1.ps_stack`, `reduce_ops`, `ps1`, `targets`] >> simp[])) >>
+  `stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets)
+     (prefix ++ ps2.ps_stack) =
+   stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets)
+     ps2.ps_stack` by
+    (irule stack_get_unfixed_depth_shielded >> metis_tac[]) >>
+  rpt (qpat_x_assum `~MEM op prefix \/ _` kall_tac) >>
+  simp[] >>
   Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
     (LENGTH targets) ps2.ps_stack` >- (simp[] >> strip_tac >> gvs[]) >>
+  fs[] >>
+  rename1 `stack_get_unfixed_depth _ _ _ ps2.ps_stack = SOME x'` >>
   `x' < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >>
   Cases_on `x' = LENGTH targets - (idx + 1)`
   >- (simp[] >> strip_tac >> gvs[]) >>
@@ -2696,6 +2819,18 @@ Proof
   qpat_x_assum `do_swap x' ps2 = _` kall_tac >>
   drule_all do_swap_bottom_frame >>
   disch_then (qspec_then `prefix` assume_tac) >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem reorder_one_bottom_frame:
+  !dfg targets idx op ps prefix ops qs.
+    ~MEM op prefix /\ idx < LENGTH targets /\
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_one dfg targets idx op ps = (ops,qs) ==>
+    reorder_one dfg targets idx op
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt strip_tac >> irule reorder_one_shielded_bottom_frame >> simp[]
 QED
 
 Theorem reorder_fold_bottom_frame[local]:
