@@ -168,10 +168,16 @@ Theorem concat_fixed_address_counted:
       op_prov Gf (Var tmp) = NONE /\ op_taint tnf (Var tmp) = {} /\
       ptr_covers Gf tnf dst t width /\
       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
-      t.vs_labels = s.vs_labels /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+      t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
+      t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+      t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels /\
       t.vs_inst_idx = s.vs_inst_idx + 2 /\
       t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
-      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\
       tnf.t_trans = tn.t_trans /\
       (!q. q <> tmp /\ q <> dst ==>
         lookup_var q t = lookup_var q s /\
@@ -252,7 +258,7 @@ Resume concat_fixed_address_counted[endpoint]:
        step_prov_def, set_prov_def, out_prov_def, mk_inst_def,
        FLOOKUP_DRESTRICT] >>
   simp[Abbr `tn1`, step_taint_def, set_var_taint_def, op_taint_def,
-       mk_inst_def, FLOOKUP_UPDATE]
+       mk_inst_def, FLOOKUP_UPDATE, imm_taint_def, adopt_reset_def]
 QED
 
 Finalise concat_fixed_address_counted
@@ -281,12 +287,20 @@ Theorem concat_fixed_store_counted:
       lookup_var next t = SOME (n2w k + n2w m) /\
       op_prov Gf (Var next) = NONE /\ op_taint tnf (Var next) = {} /\
       ptr_covers Gf tnf dst t 32 /\ ptr_covers Gf tnf off t 32 /\
-      t.vs_allocas = s.vs_allocas /\ t.vs_inst_idx = s.vs_inst_idx+3 /\
+      t.vs_allocas = s.vs_allocas /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+      t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
+      t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+      t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels /\
+      t.vs_inst_idx = s.vs_inst_idx+3 /\
       t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
       tnf.t_mem = tn.t_mem DIFF
         ({i | w2n a <= i /\ i < w2n a + 32} UNION
          {i | w2n b <= i /\ i < w2n b + 32}) /\
-      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
       (!q. q <> next ==>
         lookup_var q t = lookup_var q s /\
         FLOOKUP Gf q = FLOOKUP G q /\
@@ -310,7 +324,7 @@ Proof
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 g1 tn1 (OK s1)` by
     (unabbrev_all_tac >> irule concat_word_store_counted_edge >> simp[]) >>
   `g1 = G /\ tn1.t_var = tn.t_var /\ tn1.t_stor = tn.t_stor /\
-   tn1.t_trans = tn.t_trans /\
+   tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
    tn1.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}`
     by suspend "first_frame" >>
   `gas_path_ptr_edge D 0 ctx fn PG g1 tn1 s1 0 g2 tn2 (OK s2)`
@@ -325,7 +339,8 @@ QED
 
 Resume concat_fixed_store_counted[first_frame]:
   simp[Abbr `g1`, Abbr `tn1`, Abbr `u`, mstore_ghost_frame,
-       step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV]
+       step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV,
+       step_taint_def, imm_taint_def, adopt_reset_def, set_var_taint_def]
 QED
 
 Resume concat_fixed_store_counted[increment]:
@@ -372,16 +387,19 @@ Resume concat_fixed_store_counted[endpoint]:
      qpat_x_assum `lookup_var off s = _` mp_tac >> simp[lookup_var_def]) >>
   `op_prov g2 (Var next) = NONE /\ op_taint tn2 (Var next) = {} /\
    tn2.t_mem = tn1.t_mem /\ tn2.t_stor = tn1.t_stor /\
-   tn2.t_trans = tn1.t_trans` by
-    (simp[Abbr `g2`, Abbr `tn2`, Abbr `v`, copy_len_binop_ghost_frame] >>
+   tn2.t_trans = tn1.t_trans /\ tn2.t_imm = tn1.t_imm` by
+    (simp[Abbr `g2`, Abbr `tn2`, Abbr `v`, copy_len_binop_ghost_frame,
+           step_taint_def, imm_taint_def, adopt_reset_def, set_var_taint_def,
+           mk_inst_def] >>
      irule step_prov_out_none >> simp[mk_inst_def] >>
      irule out_prov_arith_none >> simp[mk_inst_def, op_prov_def] >>
      qpat_x_assum `op_prov G (Var offset) = _` mp_tac >> simp[op_prov_def]) >>
   `g3 = g2 /\ tn3.t_var = tn2.t_var /\ tn3.t_stor = tn2.t_stor /\
-   tn3.t_trans = tn2.t_trans /\
+   tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
    tn3.t_mem = tn2.t_mem DIFF {i | w2n b <= i /\ i < w2n b + 32}` by
     simp[Abbr `g3`, Abbr `tn3`, Abbr `z`, mstore_ghost_frame,
-         step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV] >>
+         step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV,
+       step_taint_def, imm_taint_def, adopt_reset_def, set_var_taint_def] >>
   `ptr_covers g3 tn3 dst s3 32 /\ ptr_covers g3 tn3 off s3 32` by
     (gvs[ptr_covers_def, op_taint_def, Abbr `s3`, Abbr `z`,
          mstore_def, lookup_var_def]) >>
@@ -463,12 +481,20 @@ Theorem concat_fixed_arm_counted:
       lookup_var next t = SOME (n2w k+n2w m) /\
       op_prov Gf (Var next) = NONE /\ op_taint tnf (Var next) = {} /\
       ptr_covers Gf tnf dst t 32 /\ ptr_covers Gf tnf off t 32 /\
-      t.vs_allocas = s.vs_allocas /\ t.vs_inst_idx = s.vs_inst_idx+5 /\
+      t.vs_allocas = s.vs_allocas /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+      t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
+      t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+      t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels /\
+      t.vs_inst_idx = s.vs_inst_idx+5 /\
       t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
       tnf.t_mem = tn.t_mem DIFF
         ({i | w2n (a+n2w k) <= i /\ i < w2n (a+n2w k)+32} UNION
          {i | w2n b <= i /\ i < w2n b+32}) /\
-      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
       (!q. q <> tmp /\ q <> dst /\ q <> next ==>
         lookup_var q t = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
         op_taint tnf (Var q) = op_taint tn (Var q))
@@ -489,12 +515,20 @@ Proof
       lookup_var next t = SOME (n2w k+n2w m) /\
       op_prov Gf (Var next) = NONE /\ op_taint tnf (Var next) = {} /\
       ptr_covers Gf tnf dst t 32 /\ ptr_covers Gf tnf off t 32 /\
-      t.vs_allocas = s1.vs_allocas /\ t.vs_inst_idx = s1.vs_inst_idx+3 /\
+      t.vs_allocas = s1.vs_allocas /\
+      t.vs_accounts = s1.vs_accounts /\ t.vs_transient = s1.vs_transient /\
+      t.vs_call_ctx = s1.vs_call_ctx /\ t.vs_tx_ctx = s1.vs_tx_ctx /\
+      t.vs_block_ctx = s1.vs_block_ctx /\ t.vs_logs = s1.vs_logs /\
+      t.vs_outcomes = s1.vs_outcomes /\ t.vs_requests = s1.vs_requests /\
+      t.vs_pending_deletions = s1.vs_pending_deletions /\
+      t.vs_immutables = s1.vs_immutables /\ t.vs_data_section = s1.vs_data_section /\
+      t.vs_alloca_next = s1.vs_alloca_next /\ t.vs_fmp = s1.vs_fmp /\ t.vs_labels = s1.vs_labels /\
+      t.vs_inst_idx = s1.vs_inst_idx+3 /\
       t.vs_current_bb = s1.vs_current_bb /\ ~t.vs_halted /\
       tnf.t_mem = tn1.t_mem DIFF
         ({i | w2n (a+n2w k) <= i /\ i < w2n (a+n2w k)+32} UNION
          {i | w2n b <= i /\ i < w2n b+32}) /\
-      tnf.t_stor = tn1.t_stor /\ tnf.t_trans = tn1.t_trans /\
+      tnf.t_imm = tn1.t_imm /\ tnf.t_stor = tn1.t_stor /\ tnf.t_trans = tn1.t_trans /\
       (!q. q <> next ==> lookup_var q t = lookup_var q s1 /\
         FLOOKUP Gf q = FLOOKUP G1 q /\
         op_taint tnf (Var q) = op_taint tn1 (Var q))`
@@ -642,14 +676,22 @@ Theorem concat_fixed_arm_ptr:
         mem_bytes_at (w2n a) k s.vs_memory ++ bs /\
       mload (w2n b) t = n2w (k+LENGTH bs) /\
       ptr_covers Gf tnf root t cap /\ ptr_covers Gf tnf off t 32 /\
-      t.vs_allocas = s.vs_allocas /\ t.vs_inst_idx = s.vs_inst_idx+5 /\
+      t.vs_allocas = s.vs_allocas /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+      t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
+      t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+      t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels /\
+      t.vs_inst_idx = s.vs_inst_idx+5 /\
       t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
       (!i. w2n a <= i /\ i < w2n a+k+LENGTH bs ==> i NOTIN tnf.t_mem) /\
       (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem) /\
       tnf.t_mem = tn.t_mem DIFF
         ({i | w2n a+k <= i /\ i < w2n a+k+32} UNION
          {i | w2n b <= i /\ i < w2n b+32}) /\
-      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
       mem_agree_outside
         ({i | w2n a+k <= i /\ i < w2n a+k+32} UNION
          {i | w2n b <= i /\ i < w2n b+32}) t.vs_memory s.vs_memory /\
