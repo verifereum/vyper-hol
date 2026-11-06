@@ -1,8 +1,6 @@
 (*
  * Memmerging — wf_function preservation for the supply-threaded transform
  * (transform_function_supply).
- *
- * Re-exported by mmWfScript.sml.
  *)
 
 Theory mmSupplyWfProofs

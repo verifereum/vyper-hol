@@ -137,6 +137,13 @@ Proof
   simp[gas_shadow_toplevel_def, build_func_return_type_def]
 QED
 
+Theorem gas_shadow_build_func_mutability[simp]:
+  !tops. build_func_mutability (MAP gas_shadow_toplevel tops) = build_func_mutability tops
+Proof
+  Induct >> simp[build_func_mutability_def] >> Cases_on `h` >>
+  simp[gas_shadow_toplevel_def, build_func_mutability_def]
+QED
+
 Theorem gas_shadow_build_func_ids[simp]:
   !tops n. build_func_ids n (MAP gas_shadow_toplevel tops) = build_func_ids n tops
 Proof

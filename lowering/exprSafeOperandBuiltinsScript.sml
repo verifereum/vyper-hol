@@ -397,8 +397,8 @@ Proof
 QED
 
 Theorem compile_external_call_zero_safe_operand:
-  compile_external_call_kwargs cenv addr vals tys memsz abisz mid 0 minsz retsz
-    static value gas skip default dop rt dt einfo dinfo sa = (r,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz minsz
+    outsz static value gas skip default dop NoneT dt einfo dinfo sa = (r,sb) ==>
   safe_operand sb r
 Proof
   simp[compile_external_call_kwargs_def, LET_THM,
@@ -556,6 +556,8 @@ Proof
     >- suspend "external"
   >~ [`as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa)`]
     >- suspend "create"
+  >~ [`raw_log_topic_exprs _`] >- suspend "log"
+  >~ [`compile_raw_revert _ _`] >- suspend "revert"
   >> suspend "send"
 QED
 
@@ -588,6 +590,23 @@ Resume compile_call_word_result_ok[send]:
   Cases_on `args1` >> gvs[word_result_ok_def] >>
   rename1 `LENGTH args2 = if flag then 1 else 0` >>
   Cases_on `LENGTH args2 = if flag then 1 else 0` >> gvs[word_result_ok_def] >>
+  rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+(* These system calls return a literal placeholder on every path, including
+   invalid arities. Split their argument shapes before destructing the lets. *)
+Resume compile_call_word_result_ok[log]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE args1 _ _` >>
+  Cases_on `args1` >> gvs[word_result_ok_def] >> rename1 `list_CASE args2 _ _` >>
+  Cases_on `args2` >> gvs[word_result_ok_def] >>
+  rename1 `expr_type data_e = BaseT (BytesT (Fixed 32))` >>
+  Cases_on `expr_type data_e = BaseT (BytesT (Fixed 32))` >>
+  gvs[word_result_ok_def] >> rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+Resume compile_call_word_result_ok[revert]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE rest _ _` >>
+  Cases_on `rest` >> gvs[word_result_ok_def] >>
   rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
 
@@ -679,7 +698,7 @@ Proof
   simp[compile_external_call_kwargs_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `rsz = 0` >> simp[comp_return_def] >>
+  Cases_on `rt = NoneT` >> simp[comp_return_def] >>
   Cases_on `hasdef` >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>

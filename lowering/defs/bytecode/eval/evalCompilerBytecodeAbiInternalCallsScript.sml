@@ -52,6 +52,11 @@ Proof
   EVAL_TAC
 QED
 
+val internal_struct_call_compile_eval =
+  EVAL ``compile_vyper (K SOME) (o1_policy all_capabilities)
+           task090_internal_struct_call_program``
+val () = evalCompilerBytecodeLib.add_compile_eval internal_struct_call_compile_eval
+
 Theorem internal_struct_call_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_internal_struct_call_program =
@@ -110,6 +115,8 @@ val internal_bytes_call_context_safe_eval = EVAL
 val internal_bytes_call_assembly_safe_eval = EVAL
   ``assembly_target_safe (^internal_bytes_call_rpolicy).rpol_target
       ^internal_bytes_call_raw_asm``
+val internal_bytes_call_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^internal_bytes_call_raw_asm``
 val internal_bytes_call_codegen_step0 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def,
    internal_bytes_call_target_wf_eval,
@@ -126,7 +133,8 @@ val internal_bytes_call_codegen_step1 = SIMP_CONV pure_ss
    internal_bytes_call_execute_plan_eval,
    internal_bytes_call_data_asm_eval,
    internal_bytes_call_raw_asm_eval,
-   internal_bytes_call_assembly_safe_eval]
+   internal_bytes_call_assembly_safe_eval,
+   internal_bytes_call_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl internal_bytes_call_codegen_step0))
 val internal_bytes_call_codegen_step2 =
   EVAL (rhs (concl internal_bytes_call_codegen_step1))

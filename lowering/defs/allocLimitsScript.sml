@@ -35,6 +35,21 @@ Definition type_alloc_ok_def:
     (~is_word_type t ==> type_memory_bytes cenv t < 2 ** 64)
 End
 
+(* The buffers _lower_external_call allocates for an external call: the
+   argument tuple in memory (new_temporary_value) and the call buffer, the
+   larger of the argument and return ABI size bounds plus the method id word
+   (allocate_buffer).  Their sizes are sums over the arguments, which no
+   node's type_alloc_ok bounds. *)
+Definition ext_call_alloc_ok_def:
+  ext_call_alloc_ok cenv (ExtCall _ _ (_, arg_tys, ret) _) es =
+    (let tys = MAP (lowered_value_type cenv) (TAKE (LENGTH arg_tys) (DROP 1 es));
+         wrapped = if needs_external_call_wrap ret then TupleT [ret] else ret in
+       SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 /\
+       MAX (abi_size_bound cenv.ce_struct_fields (TupleT tys))
+           (abi_size_bound cenv.ce_struct_fields wrapped) + 32 < 2 ** 64) /\
+  ext_call_alloc_ok cenv _ _ = T
+End
+
 (* A slice's .code source, replaced by its address, is smaller. *)
 val is_extcode_def = exprLoweringTheory.is_extcode_def;
 val extcode_addr_expr_def = exprLoweringTheory.extcode_addr_expr_def;
@@ -58,9 +73,10 @@ QED
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
    is not a word, a convert to a bytestring (the copy of a widening cast),
-   the output of a calldata slice, and the copy unwrap_value makes of the
-   node's value when it is not in memory, which every node's type_alloc_ok
-   bounds.  The same recursion as byte_widths_expr. *)
+   the output of a calldata slice, an external call's argument and call
+   buffers, and the copy unwrap_value makes of the node's value when it is
+   not in memory, which every node's type_alloc_ok bounds.  The same
+   recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
   alloc_limits_expr cenv (Name t _) = type_alloc_ok cenv t /\
   alloc_limits_expr cenv (TopLevelName t _) = type_alloc_ok cenv t /\
@@ -92,6 +108,7 @@ Definition alloc_limits_expr_def:
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
       | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
+      | Concat _ => concat_alloc_size (MAP expr_type es) < 2 ** 64
       | _ => T) /\
      alloc_limits_exprs cenv
        (if (?n. bi = Slice n) /\ es <> [] /\ is_extcode (HD es)
@@ -117,9 +134,9 @@ Definition alloc_limits_expr_def:
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
     (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
-  alloc_limits_expr cenv (Call t _ es dflt) =
-    (type_alloc_ok cenv t /\ alloc_limits_exprs cenv es /\
-     alloc_limits_opt cenv dflt) /\
+  alloc_limits_expr cenv (Call t ct es dflt) =
+    (type_alloc_ok cenv t /\ ext_call_alloc_ok cenv ct es /\
+     alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
 
   alloc_limits_target cenv (NameTarget _) = T /\
   alloc_limits_target cenv (TopLevelNameTarget _) = T /\
@@ -211,6 +228,54 @@ Definition log_alloc_ok_def:
           abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
 End
 
+(* For a target in storage or transient storage, SOME of the place type
+   compile_get_target_ptr gives it; NONE for any other target.  It reads
+   only the module's variables and struct fields, so a local's frame
+   doesn't change it. *)
+Definition target_store_place_def:
+  target_store_place cenv (NameTarget id) = NONE ∧
+  target_store_place cenv (TopLevelNameTarget nsid) =
+    (let pt = (case cenv.ce_hashmap_info nsid of
+                 SOME (_, kt, vt) => SOME (MapPT kt vt)
+               | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) in
+     case FLOOKUP cenv.ce_module_vars nsid of
+       SOME (StorageLoc _) => SOME pt
+     | SOME (TransientLoc _) => SOME pt
+     | _ => NONE) ∧
+  target_store_place cenv (SubscriptTarget bt idx_e) =
+    OPTION_MAP (λpt. case pt of
+                       SOME (MapPT kt vt) => SOME (value_type_place vt)
+                     | SOME (ValPT (ArrayT t _)) => SOME (ValPT t)
+                     | _ => SOME (ValPT (BaseT (UintT 256))))
+      (target_store_place cenv bt) ∧
+  target_store_place cenv (AttributeTarget bt fld) =
+    OPTION_MAP (λpt. case ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                                     (case pt of
+                                        SOME (ValPT (StructT sn)) =>
+                                          nsid_to_string sn
+                                      | _ => "")) fld of
+                       SOME (fty, _) => SOME (ValPT fty)
+                     | NONE => NONE)
+      (target_store_place cenv bt)
+End
+
+(* Assigning e to a storage or transient target of another type first
+   converts the value to the target's layout in a buffer of the target's
+   size (compile_assign_value; Python's _store_complex_type allocates it
+   with Context.new_temporary_value), so that buffer is below the limit.
+   No other assignment allocates it, so no other is checked. *)
+Definition assign_alloc_ok_def:
+  assign_alloc_ok cenv bt e ⇔
+    case target_store_place cenv bt of
+      SOME (SOME (ValPT dty)) =>
+        (let sty = lowered_value_type cenv e in
+           ¬is_word_type dty ∧ dty ≠ sty ∧
+           ¬(is_bytestring_type dty ∧ is_bytestring_type sty) ∧
+           ¬(has_length_word (expr_type e) ∧ is_empty_value_expr e) ⇒
+           type_memory_bytes cenv dty < 2 ** 64)
+    | _ => T
+End
+
 (* alloc_limits_expr of every expression of a statement, targets' keys
    included, and the limit for every local it declares: Python allocates a
    declared local and a loop variable with Context.new_variable.  A tuple
@@ -234,7 +299,7 @@ Definition alloc_limits_stmt_def:
      (case g of
         TupleTarget _ =>
           is_memory_view e ⇒ type_memory_bytes cenv (expr_type e) < 2 ** 64
-      | _ => T)) ∧
+      | BaseTarget bt => assign_alloc_ok cenv bt e)) ∧
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =

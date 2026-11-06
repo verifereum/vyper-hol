@@ -6,7 +6,7 @@ Ancestors
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
   codegenEncodingWf ctorDeployShape o1PipelineCorrect asmToBytecodeProofs list rich_list venomPipelineData unitLabelMap venomFnScheduleRunner
   venomPipelineRunner venomPipelineDriver vyperCompiler compileVyper asmIR
-  ctorDeployLoweringReturnPending
+  ctorDeployLoweringReturnPending ctorDeployDefsReach
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractSoundness
   vyperImmutableMetadataFrame
   entryStateRel structFieldsProps vyperTypeDeploymentSoundness moduleLowering compileEnv
@@ -672,6 +672,7 @@ Proof
   `LENGTH (assemble prog) < 65536` by
     (irule deploy_assembled_size_bound >> metis_tac[]) >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `unit_shape_ok dout.po_unit` by
     (irule run_venom_pipeline_output_shape >>
      gvs[deploy_phases_def] >> metis_tac[]) >>
