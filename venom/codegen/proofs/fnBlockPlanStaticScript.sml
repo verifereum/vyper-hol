@@ -1262,3 +1262,47 @@ Proof
   drule_all regional_dfs_block_signed_balance >> strip_tac >>
   intLib.ARITH_TAC
 QED
+
+Theorem regional_ret_reaching_lineage_height:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,pend) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks ==>
+  !lbl ps. lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    lbl ps ==>
+  !target retbb ret ds.
+    lookup_block target fn.fn_blocks = SOME retbb /\
+    MEM ret retbb.bb_instructions /\ ret.inst_opcode = RET /\
+    cfg_path cfg lbl target /\
+    dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      lbl ds ==> LENGTH ps.ps_stack = LENGTH ds.ps_stack
+Proof
+  strip_tac >> ho_match_mp_tac lineage_state_strongind >> rpt strip_tac
+  >- (drule regional_entry_structure >> strip_tac >>
+      gvs[] >> drule_all regional_entry_dfs_initial >>
+      simp[init_cleanup_plan_state_def, init_plan_state_def]) >>
+  rename1 `MEM succ (cfg_succs_of cfg lbl)` >>
+  `cfg_path cfg lbl target` by metis_tac[cfg_path_predecessor_closed] >>
+  `LENGTH ps.ps_stack = LENGTH ps_dfs.ps_stack` by
+    (first_x_assum irule >> metis_tac[]) >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_label] >>
+  `(&(LENGTH ps_after.ps_stack):int) - &(LENGTH ps_dfs_after.ps_stack) =
+    &(LENGTH ps.ps_stack) - &(LENGTH ps_dfs.ps_stack)` by
+    (irule regional_replay_dfs_block_height_delta >> metis_tac[]) >>
+  `?succbb. lookup_block succ fn.fn_blocks = SOME succbb` by
+    (`cfg_reachable_of (cfg_analyze fn) succ` by
+       metis_tac[dfs_block_state_cfg_reachable] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+     simp[fn_labels_def, listTheory.MEM_MAP] >> strip_tac >>
+     irule_at Any MEM_lookup_block >> simp[] >>
+     gvs[codegen_ready_fn_def, wf_function_def, fn_labels_def] >> metis_tac[]) >>
+  `fn_entry_label fn <> SOME succ` by
+    (drule regional_entry_structure >> strip_tac >> strip_tac >> gvs[] >>
+     drule regional_entry_no_preds >>
+     metis_tac[cfg_edge_symmetry_uncond, listTheory.MEM]) >>
+  `LENGTH ps_dfs_after.ps_stack = LENGTH ds.ps_stack` by
+    (irule regional_ret_reaching_dfs_edge_height >> metis_tac[]) >>
+  simp[] >> intLib.ARITH_TAC
+QED
