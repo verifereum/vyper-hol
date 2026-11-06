@@ -2643,18 +2643,34 @@ val ld_recursive_geometry_load_complete =
                       ``SUC ^n = LENGTH ^code``])
   in list_mk_abs(args,list_mk_conj [current,saved,restricted]) end;
 
-Theorem ld_recursive_geometry_load_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+fun ld_geometry_retain_saved term =
+  let
+    val (args,b) = strip_abs term
+    val [current,saved,normal] = strip_conj b
+  in list_mk_abs(args,list_mk_conj
+       [current,saved,ld_retain_saved_normal normal]) end;
+val ld_recursive_load_witness_complete =
+  ld_geometry_retain_saved ld_recursive_geometry_load_complete;
+val ld_recursive_load_witness_candidate =
+  let
+    val (args,b) = strip_abs ld_recursive_geometry_candidate
+    val [current,saved,alts] = strip_conj b
+    val (normal,exceptional) = dest_disj alts
+  in list_mk_abs(args,list_mk_conj [current,saved,
+       mk_disj(ld_retain_saved_normal normal,exceptional)]) end;
+
+Theorem ld_recursive_geometry_load_next_witness[local]:
+  !R. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
-  (^ld_recursive_geometry_load_complete) vs0 CT stk un gn j t /\
+  (^ld_recursive_load_witness_complete) vs0 CT stk un gn j t /\
   step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  (^ld_recursive_geometry_candidate) vs0 CT stk (step_taint j t z un) gn j'
+  (^ld_recursive_load_witness_candidate) vs0 CT stk (step_taint j t z un) gn j'
     (z with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  BETA_TAC >> strip_tac >>
+  gen_tac >> BETA_TAC >> strip_tac >>
   qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved") >>
   `inst_wf i` by metis_tac[ld_annotated_inst_wf] >>
   `?off out. i.inst_operands = [off] /\ i.inst_outputs = [out]` by
@@ -2934,6 +2950,7 @@ Proof
     `nexta`, `a3`, `pre ++ [i]`, `rest`, `p ++ [a;b;c;d]`, `nextcode`,
     `nexttail`, `bpre`, `bpost`, `qpre`, `qpost`, `supports`, `savedkeys`,
     `s0`, `0`] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   asm "saved" (fn th => asm_rewrite_tac [th]) >>
   (conj_tac
    >- (qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
@@ -2959,7 +2976,7 @@ Proof
   qpat_x_assum `(if _ then _ else _) <= _` mp_tac >> decide_tac
 QED
 
-Resume ld_recursive_geometry_load_next[revert_successor]:
+Resume ld_recursive_geometry_load_next_witness[revert_successor]:
   `lookup_block (zs with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
      fn.fn_blocks = SOME bb` by
     (qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` mp_tac >> simp[]) >>
@@ -2994,7 +3011,23 @@ Resume ld_recursive_geometry_load_next[revert_successor]:
   disj2_tac >> qexistsl_tac [`gb`, `copypos`, `endpos`] >> gvs[]
 QED
 
-Finalise ld_recursive_geometry_load_next
+Finalise ld_recursive_geometry_load_next_witness
+
+Theorem ld_recursive_geometry_load_next:
+  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_recursive_geometry_load_complete) vs0 CT stk un gn j t /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_geometry_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  qspec_then `\E astk gstk savedkeys. T` mp_tac
+    ld_recursive_geometry_load_next_witness >>
+  BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
+QED
 
 (* CALL/RETURN compatibility audit (geometry refinement, C2.calls_compatibility).
    These are exact constructor TERMS, not closure theorems. They use the same
@@ -3880,5 +3913,44 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   pop_assum mp_tac >> pure_rewrite_tac [CONJ_ASSOC] >>
+  disch_then ACCEPT_TAC
+QED
+
+val ld_recursive_combined_load_complete =
+  let
+    val (args,b) = strip_abs ld_recursive_geometry_load_complete
+    val [_,_,normal] = strip_conj b
+    val (ws,nb) = strip_exists normal
+    val (base_anchor,restriction) = dest_conj nb
+    val (base,_) = dest_conj base_anchor
+    val base_restriction = list_mk_abs(args,
+      list_mk_exists(ws,mk_conj(base,restriction)))
+  in ld_combined_restriction base_restriction end;
+
+Theorem ld_recursive_combined_load_next:
+  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_recursive_combined_load_complete) vs0 CT stk un gn j t /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_combined_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  qspec_then `\E astk gstk savedkeys.
+    (^ld_indexed_saved_geometry) lo E astk gstk savedkeys`
+    mp_tac ld_recursive_geometry_load_next_witness >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  (impl_tac >-
+    (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `?astk gstk. _` mp_tac >>
+      rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+      simp_tac pure_ss [AC CONJ_ASSOC CONJ_COMM] >>
+      disch_then ACCEPT_TAC])) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  simp_tac pure_ss [AC CONJ_ASSOC CONJ_COMM] >>
   disch_then ACCEPT_TAC
 QED
