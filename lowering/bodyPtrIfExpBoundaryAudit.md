@@ -235,3 +235,21 @@ its actual buffer descriptor; counted pointer-safe copy execution remains
 an independent obligation. Exempt/exit outcomes remain separate branches.
 Zero-buffer calls, stack-return calls, other expressions, and general
 IfExp composition are not discharged by this boundary.
+
+## Typed buffer-call consumer (C1.33)
+
+Checked `bodyPtrIfExpCallConsumer` combines the retained original vv post
+with IfExp typing, deriving lowered arm type = result annotation. Its
+non-word consumer transports both ptr_mem_ok and ptr_buf_ok at an arbitrary
+later state u, independent of the original vv witness endpoint t. A single
+general `ptr_buf_ok_bytes_cong` captures capacity extensionality; repository
+search found no equivalent exported helper. No new definition was needed.
+
+For this normal buffer internal-call boundary the suspected physical-layout
+obstruction no longer survives: the original vv post forces declared call
+return type to equal arm annotation, and typing equates arm/result
+annotations. This is not a realizability proof or a generic widening rule.
+The next semantic boundary is counted pointer-safe materialization retaining
+this evidence and delivering ptr_buf_ok at u, followed by control/branch
+composition. Other lowered-type exceptions (bytelike literals, AbiEncode),
+stack/zero-buffer calls, and exceptional/exempt outcomes remain unresolved.
