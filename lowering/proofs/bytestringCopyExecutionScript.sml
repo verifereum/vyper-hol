@@ -68,3 +68,18 @@ Proof
   gvs[not_fresh_at_def, Abbr `v1`, Abbr `v2`,
       ASCIInumbersTheory.toString_11, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
+
+(* A representable padded allocation leaves room for the ADD 63 used to
+   compute the live word count, even when it reaches the largest word. *)
+Theorem bytestring_word_count_no_wrap:
+  32 + 32 * word_size len < dimword (:256) ==>
+  len + 63 < dimword (:256)
+Proof
+  strip_tac >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `len + 31` strip_assume_tac) >>
+  `(len + 31) MOD 32 < 32` by simp[] >>
+  gvs[word_size_def, wordsTheory.dimword_def,
+      fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  intLib.ARITH_TAC
+QED
