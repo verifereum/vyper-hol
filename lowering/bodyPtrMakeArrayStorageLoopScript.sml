@@ -32,7 +32,7 @@ Proof
   Cases_on `src` >> strip_tac >>
   gvs[storage_body_inv_def, storage_body_frame_def, copy_prefix_def, copy_static_def,
     jump_to_def, lookup_var_def, eval_operand_def, ptr_covers_def,
-    allocas_from_def] >> first_assum ACCEPT_TAC
+    allocas_from_def] >> metis_tac[]
 QED
 
 Theorem storage_loop_header:

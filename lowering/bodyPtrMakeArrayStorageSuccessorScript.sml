@@ -52,6 +52,7 @@ Theorem storage_copy_body_ptr_step:
     ptr_covers H tm dst t (32*n) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     mem_agree_outside {i | b <= i /\ i < b+32*n} t.vs_memory s.vs_memory /\
+    (!i. i < b \/ b+32*n <= i ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
     (!sbase.
       copy_static s = copy_static sbase /\ copy_prefix loc a b n sbase k s /\
       (!i j. i < k /\ j < 32 /\ b+32*i+j IN tn.t_mem ==>
@@ -122,6 +123,7 @@ Resume storage_copy_body_ptr_step[counter]:
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
   conj_tac >- suspend "coverage" >>
   conj_tac >- gvs[] >> conj_tac >- suspend "exterior" >>
+  conj_tac >- suspend "taint_exterior" >>
   suspend "prefix"
 QED
 
@@ -159,6 +161,10 @@ Resume storage_copy_body_ptr_step[prefix]:
     (irule copy_prefix_transfer >> qexists_tac `ss` >> simp[]) >>
   gvs[]
 QED
+Resume storage_copy_body_ptr_step[taint_exterior]:
+  gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!i. i < b + 32 * k \/ _ ==> _` irule >> decide_tac
+QED
 Finalise storage_copy_body_ptr_step
 
 (* The loop invariant packages the stable frame and the initialized/tainted
@@ -173,7 +179,8 @@ Definition storage_body_inv_def:
     op_taint tn (Var cv) = {} /\ allocas_from 0 s /\ ~s.vs_halted /\
     copy_prefix loc a b n sbase k s /\ LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
     (!i j. i < k /\ j < 32 /\ b+32*i+j IN tn.t_mem ==>
-      j IN key_taint (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) (a+n2w i))
+      j IN key_taint (if loc = LocStorage then tnbase.t_stor else tnbase.t_trans) (a+n2w i)) /\
+    (!i. i < b \/ b+32*n <= i ==> (i IN tn.t_mem <=> i IN tnbase.t_mem))
 End
 
 Theorem storage_body_inv_frame:
@@ -243,5 +250,5 @@ Proof
   simp[] >>
   imp_res_tac storage_body_frame_static >>
   qpat_x_assum `!sbase. _` (qspec_then `sbase` mp_tac) >>
-  simp[] >> strip_tac >> simp[]
+  simp[] >> strip_tac >> simp[] >> metis_tac[]
 QED
