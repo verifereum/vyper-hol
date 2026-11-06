@@ -2477,3 +2477,93 @@ Proof
   simp[finite_mapTheory.FLOOKUP_DEF, EXTENSION] >> metis_tac[]
 QED
 
+
+Theorem inventory_selected_not_target[local]:
+  select_spill_candidate stk targets dist n = SOME cand ==>
+  ~MEM (stack_peek cand stk) targets
+Proof
+  simp[select_spill_candidate_def, LET_THM] >> strip_tac >>
+  drule FIND_SOME_MEM >> simp[]
+QED
+
+Theorem inventory_spill_key[local]:
+  d < LENGTH ps.ps_stack /\ do_spill_at d ps = (ops,qs) ==>
+  ?off. qs.ps_spilled = ps.ps_spilled |+ (stack_peek d ps.ps_stack,off)
+Proof
+  Cases_on `d = 0` >>
+  simp[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >> simp[] >>
+  rpt strip_tac >> gvs[stack_peek_def, stack_swap_def, LET_THM,
+                         LENGTH_LUPDATE, EL_LUPDATE] >>
+  qexists_tac `FST (alloc_spill_slot ps.ps_alloc)` >> simp[]
+QED
+
+Theorem inventory_reduce_target_exclusion:
+  !fuel targets op f n ps ops qs.
+  (!x. MEM x targets ==> FLOOKUP ps.ps_spilled x = NONE) /\
+  reduce_depth_plan fuel targets op f n ps = (ops,qs) ==>
+  !x. MEM x targets ==> FLOOKUP qs.ps_spilled x = NONE
+Proof
+  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < n` >> gvs[] >>
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[] >>
+  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
+  Cases_on `dist <= 16` >> gvs[] >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> gvs[] >>
+  rename1 `select_spill_candidate ps.ps_stack targets dist n = SOME cand` >>
+  `1 <= LENGTH ps.ps_stack` by
+    (drule stack_get_unfixed_depth_bound >> decide_tac) >>
+  `cand < LENGTH ps.ps_stack` by
+    metis_tac[select_spill_candidate_bound] >>
+  drule inventory_selected_not_target >> strip_tac >>
+  Cases_on `do_spill_at cand ps` >> gvs[] >>
+  rename1 `do_spill_at cand ps = (spill_ops,mid)` >>
+  drule_all inventory_spill_key >> strip_tac >>
+  `!x. MEM x targets ==> FLOOKUP mid.ps_spilled x = NONE` by
+    (rpt strip_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  Cases_on `reduce_depth_plan fuel targets op f n mid` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem inventory_reorder_one_target_exclusion:
+  (!x. MEM x targets ==> FLOOKUP ps.ps_spilled x = NONE) /\
+  reorder_one dfg targets idx op ps = (ops,qs) ==>
+  !x. MEM x targets ==> FLOOKUP qs.ps_spilled x = NONE
+Proof
+  strip_tac >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  `!x. MEM x targets ==> FLOOKUP ps1.ps_spilled x = NONE` by
+    (gvs[AllCaseEqs(), do_restore_def, finite_mapTheory.FLOOKUP_DEF, finite_mapTheory.FDOM_DOMSUB, finite_mapTheory.DOMSUB_FAPPLY] >>
+     metis_tac[]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+                (LENGTH targets) ps1.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >> simp[] >>
+  pairarg_tac >> simp[] >>
+  `!x. MEM x targets ==> FLOOKUP ps2.ps_spilled x = NONE` by
+    (Cases_on `dist > 16` >> gvs[] >>
+     metis_tac[inventory_reduce_target_exclusion]) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+                (LENGTH targets) ps2.ps_stack`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >> IF_CASES_TAC
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >> IF_CASES_TAC
+  >- (simp[] >> IF_CASES_TAC
+      >- (simp[] >> rpt strip_tac >> gvs[]) >>
+      simp[] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+      `ps3.ps_spilled = ps2.ps_spilled` by
+        metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND] >>
+      `ps4.ps_spilled = ps3.ps_spilled` by
+        metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND] >>
+      simp[]) >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  `ps3.ps_spilled = ps2.ps_spilled` by
+        metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND] >>
+      `ps4.ps_spilled = ps3.ps_spilled` by
+        metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND] >>
+      simp[]
+QED
