@@ -1,7 +1,7 @@
 Theory lowerDloadPtrJointReturn
 Ancestors lowerDloadPtrJointCall lowerDloadPtrNormalReturn
   lowerDloadPtrTerminalClosure lowerDloadPtrPhase o1ContractSimplifyCfg
-  o1PassContract o1ContractLowerDload lowerDloadPtrRawReachable unitShapeDefs ptrDiscipline venomWf
+  o1ContractSimplifyCfgSrcFrame o1PassContract o1ContractLowerDload lowerDloadPtrRawReachable unitShapeDefs ptrDiscipline venomWf
   lowerDloadPtrStatic lowerDloadPtrRel lowerDloadDefs venomInst contextCodegenRel
   venomExecSemantics venomState list rich_list pred_set finite_map option
 
