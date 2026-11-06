@@ -7049,12 +7049,24 @@ Proof
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
       >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >>
-      simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC) >>
+      simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
+      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC) >>
   Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
   >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
+  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
+      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
   >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
+  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
+      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
+      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
   >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
   >- (rewrite_tac[Once alias_buried_path_def] >>
       CONV_TAC (RAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV
@@ -8863,6 +8875,24 @@ Theorem alias_cut_phi_root_write_barrier:
     (\dst src. F) H
 Proof
   strip_tac >> irule alias_cut_closure_barrier >> simp[] >> metis_tac[]
+QED
+
+(* Endpoint demand cannot cross a PHI root-write barrier unchanged.
+   The producer must delete this demand or supply a later ASSIGN repair. *)
+Theorem alias_cut_phi_demand_exclusion:
+  Q SUBSET alias_cut_closure {a | normalize_operand dfg [] a = a}
+    (\a. (!x t. a = Var x /\ MEM t instructions /\ t.inst_opcode = PHI ==>
+            ~MEM x t.inst_outputs) /\
+         (!x t. normalize_operand dfg [] a = Var x /\
+            MEM t instructions /\ t.inst_opcode = PHI ==> ~MEM x t.inst_outputs))
+    (\dst src. F) H /\
+  normalize_operand dfg [] a <> a /\
+  normalize_operand dfg [] a = Var r /\ MEM inst instructions /\
+  inst.inst_opcode = PHI /\ MEM r inst.inst_outputs ==>
+  a NOTIN Q
+Proof
+  strip_tac >> drule_all alias_cut_phi_root_write_barrier >>
+  gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
 (* Root-cut diagnostic: an incoming PHI source may alias that PHI's output.
