@@ -286,3 +286,13 @@ Proof
       (qspec_then `k` mp_tac) >> simp[]) >>
  drule_all generate_phi_plan_released_core_resource >> simp[]
 QED
+
+Theorem halting_phi_retains_dead_output_probe:
+ !inst ps.
+ (release_dead_spills []
+   (SND (generate_phi_plan
+     (inst with <|inst_operands := [Var "x"]; inst_outputs := ["y"]|>) [] T
+     (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)))).ps_stack = [Var "y"]
+Proof
+ EVAL_TAC >> simp[]
+QED
