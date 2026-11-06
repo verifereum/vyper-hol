@@ -2775,3 +2775,115 @@ Proof
      simp[EVERY_MEM] >> metis_tac[]) >>
   gvs[EVERY_MEM]
 QED
+
+Theorem inventory_popmany_individual_every:
+  EVERY P ps.ps_stack ==>
+  EVERY P (SND (popmany_individual items ps)).ps_stack
+Proof
+  strip_tac >> simp[popmany_individual_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `FOLDL f acc sorted` >>
+  `!xs acc. EVERY P (SND acc).ps_stack ==>
+     EVERY P (SND (FOLDL f acc xs)).ps_stack` suffices_by
+    (disch_then irule >> simp[Abbr `acc`]) >>
+  Induct >> simp[] >> qx_gen_tac `item` >> qx_gen_tac `st` >> strip_tac >>
+  first_x_assum irule >> PairCases_on `st` >> gvs[] >>
+  simp[Abbr `f`] >>
+  Cases_on `stack_get_depth item st1.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth _ _ = SOME d` >>
+  drule stack_get_depth_props >> strip_tac >>
+  Cases_on `d = 0` >> simp[stack_pop_def, EVERY_TAKE] >>
+  pairarg_tac >> gvs[] >>
+  `EVERY P ps'.ps_stack` by
+    (gvs[EVERY_MEM] >> metis_tac[inventory_swap_physical_origin]) >>
+  simp[stack_pop_def, EVERY_TAKE]
+QED
+
+Theorem inventory_popmany_every:
+  EVERY P ps.ps_stack ==> EVERY P (SND (popmany_plan items ps)).ps_stack
+Proof
+  strip_tac >> Cases_on `items` >- simp[popmany_plan_def] >>
+  simp[popmany_plan_def, LET_THM] >>
+  reverse IF_CASES_TAC >- metis_tac[inventory_popmany_individual_every] >>
+  reverse IF_CASES_TAC >- metis_tac[inventory_popmany_individual_every] >>
+  `LENGTH (h::t) < LENGTH ps.ps_stack` by
+    (irule inventory_contiguous_bound >> simp[] >> metis_tac[]) >>
+  pairarg_tac >> gvs[] >>
+  `EVERY P ps'.ps_stack` by
+    (gvs[EVERY_MEM] >> metis_tac[inventory_swap_physical_origin]) >>
+  simp[stack_pop_def, EVERY_TAKE]
+QED
+
+Theorem inventory_regular_nonjmp_marker_free:
+  inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+  ~MEM dead_stack_marker (compute_operands inst) /\
+  ~MEM dead_stack_marker ps.ps_stack /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl F next_term lbl ps = (ops,qs) ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,mid)` >>
+  rename1 `_ = (rops,arranged)` >>
+  `?pending. PERM pending (compute_operands inst) /\
+    reorder_plan dfg pending mid = (rops,arranged)` by
+    (irule inventory_selected_reorder >> qexists_tac `inst.inst_opcode` >>
+     simp[LET_THM]) >>
+  qpat_x_assum `(if _ then _ else _) = (rops,arranged)` kall_tac >>
+  `~MEM dead_stack_marker mid.ps_stack` by metis_tac[inventory_emit_marker_free] >>
+  `~MEM dead_stack_marker arranged.ps_stack` by
+    metis_tac[inventory_reorder_bounded_marker_free, PERM_LENGTH, PERM_MEM_EQ] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics pushed` >>
+  `~MEM dead_stack_marker pushed.ps_stack` by
+    (simp[Abbr `pushed`, inventory_output_push_stack, MEM_APPEND,
+          MEM_MAP, dead_stack_marker_def, stack_pop_def] >>
+     metis_tac[rich_listTheory.MEM_TAKE, dead_stack_marker_def]) >>
+  pairarg_tac >> simp[] >>
+  rename1 `generate_emit_ops _ _ _ = (eops,emitted)` >>
+  `emitted.ps_stack = pushed.ps_stack` by metis_tac[generate_emit_ops_stack, pairTheory.SND] >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  qpat_x_assum `Abbrev (pushed = _)` kall_tac >>
+  Cases_on `inst.inst_outputs = []`
+  >- (simp[] >> strip_tac >> gvs[release_dead_spills_stack]) >>
+  `EVERY (\x. x <> dead_stack_marker)
+    (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) emitted)).ps_stack` by
+    (irule inventory_popmany_every >> simp[EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> pairarg_tac >> fs[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (oopt,optimised)` >>
+  `EVERY (\x. x <> dead_stack_marker) optimised.ps_stack` by
+    (Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> gvs[] >>
+     metis_tac[inventory_optimistic_swap_every, pairTheory.SND]) >>
+  strip_tac >> gvs[release_dead_spills_stack, EVERY_MEM]
+QED
+
+Theorem inventory_regular_jmp_marker_free:
+  inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [Label target] /\
+  ~MEM dead_stack_marker ps.ps_stack /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl F next_term lbl ps = (ops,qs) /\
+  join_reached lv fn lbl inst qs ==>
+  ~MEM dead_stack_marker qs.ps_stack
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `!s. reorder_plan dfg [] s = ([],s)` by simp[reorder_plan_def] >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def,
+       emit_input_plan_def, LET_THM] >>
+  Cases_on `join_target_ops lv fn lbl inst`
+  >- (simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+      gvs[release_dead_spills_stack, stack_pop_def] >>
+      metis_tac[generate_emit_ops_stack, pairTheory.SND]) >>
+  rename1 `join_target_ops lv fn lbl inst = SOME targets` >>
+  `~MEM dead_stack_marker targets` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >>
+     simp[MEM_MAP, dead_stack_marker_def]) >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[release_dead_spills_stack] >>
+  rename1 `generate_emit_ops _ _ _ = (emit_ops,emitted)` >>
+  `emitted.ps_stack = ps2.ps_stack` by
+    (gvs[stack_pop_def] >> metis_tac[generate_emit_ops_stack, pairTheory.SND]) >>
+  qpat_x_assum `_ = (join_ops,ps2)` mp_tac >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[join_reached_def] >>
+  metis_tac[inventory_restore_reorder_marker_free]
+QED
