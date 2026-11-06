@@ -127,23 +127,3 @@ Proof
   qexists_tac `a` >> simp[]
 QED
 
-Theorem inst_seq_no_abort[local]:
-  !code s err t.
-    EVERY (\i. !ss a tt. step_inst_base i ss <> Abort a tt) code ==>
-    run_inst_seq code s <> Abort err t
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >> metis_tac[]
-QED
-
-Theorem unsigned_loader_no_abort:
-  load_bytestring_as_word (Var src) SHR sa = ((out,bits),sb) /\
-  not_fresh_at sa src ==>
-  run_inst_seq (emitted_insts sa sb) s <> Abort err t
-Proof
-  strip_tac >> drule_all unsigned_loader_shape_fresh >> strip_tac >>
-  irule inst_seq_no_abort >> simp[] >> rpt conj_tac >>
-  rpt strip_tac >> drule step_inst_base_abort_opcodes >>
-  simp[mk_inst_def]
-QED
-
