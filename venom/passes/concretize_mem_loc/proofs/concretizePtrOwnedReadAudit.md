@@ -256,3 +256,39 @@ PairedCallSchema, HistoricalWriteExclusion, PairedPrefixProbe and
 OwnedReadAudit rebuilt successfully after the change. This validates the
 refactor and existing empty-extra normalizers, not nonempty certificate
 production or live-owner relocation consumption.
+
+## Nonempty MSTORE producer checkpoint (.40)
+
+`mstore_write_producer_candidate` in OwnedReadAuditScript is a typechecked
+quotation, NOT a theorem. Its inputs are the existing paired prefix, the
+source TASK invariants and stage, an MSTORE source endpoint and an actual
+target chronological step. Its output asks for the actual extended source
+transcript and one nonempty paired-write record at the new departed indices.
+It does not assume source success, owner certificates, paired bytes, or
+writes_pair's extra-event premise. No recovery theorem is certified by it.
+
+| New certificate component | Existing supplier / remaining obligation |
+|---|---|
+| source operand definedness | PairedPrefix `ptr_paired_samples_eval_operands` gives OPTREL only under EVERY nonopaque operand. Alignment supplies the current code, not that nonopaque premise. OpaqueRetpc `ptr_nonopaque_instruction_operands` supplies this for MSTORE from opaque_use_ok and instruction membership. o1_fn_shape includes fn_shape_ok, which supplies opaque_use_ok (as also used in o1ContractSimplifyCfgStep:140). Source transcript membership and source context shape therefore give the intended route; it is not a missing semantic theorem. No source step should be assumed to supply it. |
+| source successful MSTORE | StoreSteps `ptr_mstore_backward` requires both addresses evaluated and the SAME stored value on both sides. ValueTransport `ptr_value_transport` supplies word_agree_except for scalar tags and relocation for pointer tags, not unconditional equal words. Thus this checked lemma alone is not a producer for masked/tainted values. A masked-value execution boundary is missing even after definedness is supplied. |
+| fixed destination relocation | HistoricalWriteClassification `ptr_historical_write_classification` fixed branch gives op_prov=NONE, empty destination mask and d+32<=lo, once actual access_ok, taint_ok and non-forwarding premises are supplied. ValueTransport scalar-empty gives address equality. Use identity on the actual written interval; the classifier does not itself construct a step. |
+| owned destination relocation/position | Classifier owned branch gives destination tag, source provenance bounds, production position and strict word bound. Mixed operand transport must identify its birth/provenance base with this same tag and derive target address=position+(source address-base). Active membership alone supplies neither this equation nor the position. |
+| active membership at successor | Source ownership/provenance plus birth slices can expose a live destination owner before the store. MSTORE does not allocate or return; the chronological successor ownership transition must preserve that token and birth. This must be assembled for the new snapshot, not inferred from endpoint membership of a later read. ActiveWriteOwner is an elimination theorem, not this constructor. |
+| footprint nonemptiness and inclusion | source_memory_write_ranges/step_writes for successfully evaluated MSTORE give the 32-byte destination interval; byte offsets k<32 and destination relocation give inclusion. Nonempty is k=0. No whole-memory separation is needed for this new write. |
+| paired untainted written bytes | `ptr_mstore_written_bytes` accepts equality of EL k word_to_bytes, so it can be used bytewise. written_taint/mem_taint remove precisely the stored value's tainted offsets from the obligation. Need a checked bridge from mixed value transport plus source taint/provenance discipline to equality at every surviving k. The stronger same-word premise of ptr_mstore_backward is not an acceptable substitute. |
+| chronological/history assembly | Actual steps must be wrapped with their real cursor and taint updates and source snapshot. Existing writes_pair can retain old entries after this new record is established; it cannot establish this record. |
+
+Precise first missing interface: after using the existing nonopaque operand
+supplier at a paired MSTORE endpoint, derive successful source evaluation
+and byte agreement **outside the actual successor memory taint**, allowing
+distinct stored words. The checked ptr_mstore_backward theorem requires
+whole-word equality and therefore does not directly consume the mixed-value
+relation at this point. The needed byte conclusion is
+`k<32 /\ w2n addr+k NOTIN z.po_taint.t_mem ==> 
+EL k (word_to_bytes value T)=EL k (word_to_bytes valuet T)`.
+It is a semantic bridge to be proved from the mixed-value and taint inputs,
+not a new hypothesis to stuff into the producer statement. Pointer-valued
+and partially tainted scalar stored values must be checked separately.
+
+The quotation is only an interface test. No full source extension, fixed/owned
+certificate construction, or universal prefix coverage has been proved here.

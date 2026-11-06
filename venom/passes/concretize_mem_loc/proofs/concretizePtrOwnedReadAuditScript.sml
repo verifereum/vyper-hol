@@ -103,3 +103,28 @@ Proof
   simp[ptr_paired_write_owner_def, FLOOKUP_UPDATE] >>
   qexistsl [`1`,`20`,`1`] >> simp[]
 QED
+
+(* .40 proposed nonempty producer obligation only; not a proved theorem.
+   The existential snapshot must be the actual source successor, not an
+   independently supplied owner certificate. *)
+val mstore_write_producer_candidate = ``
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  a.po_inst.inst_opcode = MSTORE /\ ptr_chrono_step C' at zt ==>
+  ?z snapshot reloc.
+    ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
+      (H ++ [snapshot]) /\
+    ptr_paired_write lo positions C C' (h ++ [z]) (ht ++ [zt])
+      (done ++ [LENGTH h - 1]) (H ++ [snapshot])
+      (LENGTH h - 1,LENGTH done,reloc)``;
