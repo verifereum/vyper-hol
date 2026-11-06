@@ -1648,7 +1648,8 @@ Theorem ld_recursive_alloca_next_anchor[local]:
 Proof
   gen_tac >> qspecl_then [`\E astk gstk savedkeys. T`, `Q`]
     mp_tac ld_recursive_alloca_next_witness >>
-  BETA_TAC >> simp[]
+  BETA_TAC >> simp_tac pure_ss [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem ld_recursive_alloca_next:
@@ -4089,10 +4090,18 @@ Proof
       qpat_assum `?astk gstk. _` mp_tac >>
       rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
       CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-      simp_tac pure_ss [AC CONJ_ASSOC CONJ_COMM] >>
-      disch_then ACCEPT_TAC])) >>
+      disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+      rpt conj_tac >> first_assum ACCEPT_TAC])) >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  simp_tac pure_ss [AC CONJ_ASSOC CONJ_COMM] >>
+  disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  BETA_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `(?astk gstk. _) \/ _` mp_tac >>
+  ho_match_mp_tac MONO_OR >> conj_tac
+  >- (rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC
 QED
 
@@ -4279,4 +4288,106 @@ Proof
   asm_rewrite_tac [] >> simp[] >>
   qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
   asm_rewrite_tac []
+QED
+
+(* Exposed normal witnesses: no existential repackaging before paired pop. *)
+val ld_combined_return_witness =
+  let
+    val (_,body) = strip_abs ld_recursive_combined_return_zero
+    val (_,rest) = dest_conj body
+    val (_,normal) = dest_conj rest
+  in snd (strip_exists normal) end;
+
+Theorem ld_recursive_paired_return_pop:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next /\
+  ^ld_combined_return_witness /\ astk = sf::astail /\ gstk = tf::gtail /\
+  i.inst_opcode = RET /\ ret.iret_adopt_fmp = NONE /\
+  step_inst fuel CT i t = IntRet ret t /\
+  bind_outputs tf.lf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state tf.lf_state t)) = SOME t' ==>
+  ?s' fuelS.
+    step_inst fuel CS i s = IntRet ret s /\
+    bind_outputs sf.lf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state sf.lf_state s)) = SOME s' /\
+    step_inst fuelS CS sf.lf_inst sf.lf_state = OK s' /\
+    (!inst'. active_inst sf.lf_fn inst'
+       (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx) ==>
+     ld_annotated_reachable vs0 CS astail k sf.lf_local sf.lf_params
+       (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs)))
+       (tn with t_var := DRESTRICT sf.lf_tvar
+         (COMPL (set sf.lf_inst.inst_outputs)))
+       sf.lf_fn inst' (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx)) /\
+    ld_owned_vars {v | v IN EL 0 supports /\ ~retpc_var sf.lf_fn v} E
+      (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs)))
+      (DRESTRICT tf.lf_prov (COMPL (set tf.lf_inst.inst_outputs)))
+      (entry_taint with t_var := DRESTRICT sf.lf_tvar
+        (COMPL (set sf.lf_inst.inst_outputs)))
+      (entry_taint with t_var := DRESTRICT tf.lf_tvar
+        (COMPL (set tf.lf_inst.inst_outputs))) s' t'
+Proof
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >>
+  TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
+  qpat_x_assum `t = ta` SUBST_ALL_TAC >>
+  qpat_x_assum `astk = sf::astail` SUBST_ALL_TAC >>
+  qpat_x_assum `gstk = tf::gtail` SUBST_ALL_TAC >>
+  `?floor. ptr_discipline floor CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+  `MEM fn CS.ctx_functions` by asm_rewrite_tac[MEM_APPEND, MEM] >>
+  `MEM i (fn_insts fn)` by
+    (qpat_assum `active_inst fn i s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `opaque_use_ok fn` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `MEM fn CS.ctx_functions` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+  `taint_ok fn tn i s` by
+    (drule_all lowerDloadReachableDisciplineTheory.ld_annotated_taint_ok >> simp[]) >>
+  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
+    (qpat_assum `ptr_discipline floor CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `fn_ptr_ok P fn` by metis_tac[] >>
+  `FDOM AG SUBSET fn_pv P fn` by
+    (drule_all lowerDloadProvenanceSupportTheory.ld_annotated_prov_support >> simp[]) >>
+  drule ld_normal_data_frame >> strip_tac >>
+  `ld_owned_vars {v | v IN V /\ ~retpc_var fn v} E AG BH tn ua s ta` by
+    (drule lowerDloadCoverageInvariantTheory.ld_frame_data_vars >>
+     asm_rewrite_tac[]) >>
+  `!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v ta = NONE)` by
+    (drule lowerDloadCoverageInvariantTheory.ld_frame_data_definedness >> simp[]) >>
+  `!v. MEM (Var v) i.inst_operands ==> v IN V` by
+    (rpt strip_tac >> asm_rewrite_tac[] >>
+     irule lowerDloadSourceInterfaceTheory.ld_original_operand_support >>
+     goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!q. q < LENGTH (sf::astail) ==> ld_saved_embedded _ _ _ _ _ _ _ /\ _`
+    (qspec_then `0` mp_tac) >>
+  simp_tac (srw_ss()) [LENGTH, EL, DROP] >> strip_tac >>
+  (
+  `sf.lf_inst.inst_outputs = tf.lf_inst.inst_outputs` by simp[] >>
+  drule_all lowerDloadOpaqueExecutionTheory.ld_nonopaque_ret_resumed_owned_backward >>
+  disch_then (qspecl_then [`fuel`, `CS`] strip_assume_tac) >>
+  `bind_outputs sf.lf_inst.inst_outputs ret.iret_values
+     (adopt_return_fmp ret (merge_callee_state sf.lf_state s)) = SOME s'` by
+    (qpat_assum `ret.iret_adopt_fmp = NONE` mp_tac >>
+     qpat_assum `bind_outputs _ _ (merge_callee_state sf.lf_state s) = SOME s'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[adopt_return_fmp_def]) >>
+  drule_all lowerDloadOperationalClosureTheory.ld_annotated_return_pop >>
+  strip_tac >>
+  qexistsl_tac [`s'`, `fuelS`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `ld_owned_vars _ _ (DRESTRICT _ _) _ _ _ _ _` mp_tac >>
+  qpat_x_assum `HD supports = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> simp[EL])
 QED
