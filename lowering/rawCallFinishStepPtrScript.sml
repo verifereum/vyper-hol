@@ -166,3 +166,8 @@ Proof
   simp[]
 
 QED
+
+val _ = if List.all (null o hyp)
+  [raw_call_emit_checked_full, raw_call_emit_suffix_ready,
+   raw_call_extracted_checked_full] then ()
+  else raise Fail "emitted oracle adapters have kernel hypotheses";
