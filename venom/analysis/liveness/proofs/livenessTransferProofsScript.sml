@@ -183,18 +183,6 @@ Proof
   imp_res_tac lookup_block_mem >> metis_tac[]
 QED
 
-Theorem list_union_mem:
-  MEM v (list_union a b) <=> MEM v a \/ MEM v b
-Proof
-  simp[list_union_mem_proof]
-QED
-
-Theorem list_union_set:
-  set (list_union a b) = set a UNION set b
-Proof
-  simp[EXTENSION, list_union_mem]
-QED
-
 Theorem list_union_bounded:
   !a b U.
     (!v. MEM v a ==> MEM v U) /\ (!v. MEM v b ==> MEM v U) ==>

@@ -258,18 +258,6 @@ Proof
     res_tac >> gvs[])
 QED
 
-(* process_frontiers preserves labels *)
-Triviality process_frontiers_labels:
-  !fs var pm li bbs rest hp bbs' rest' hp'.
-    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ==>
-    MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs
-Proof
-  Induct >> rw[process_frontiers_def] >> gvs[] >>
-  rpt CASE_TAC >> gvs[] >>
-  first_x_assum drule >> rw[MAP_MAP_o, insert_phi_at_block_def] >>
-  irule MAP_CONG >> rw[]
-QED
-
 (* process_frontiers extends has_phi *)
 Triviality process_frontiers_hp_mono:
   !fs var pm li bbs rest hp bbs' rest' hp'.
@@ -1935,16 +1923,6 @@ Proof
       first_x_assum (qspecl_then [`d'`, `j`] mp_tac) >> simp[]))
 QED
 
-Triviality phi_extends_trans:
-  !bbs1 bbs2 bbs3.
-    phi_extends bbs1 bbs2 /\ phi_extends bbs2 bbs3 ==>
-    phi_extends bbs1 bbs3
-Proof
-  rw[phi_extends_def] >>
-  `j < LENGTH bbs2` by DECIDE_TAC >>
-  res_tac >> qexists_tac `phis ++ phis'` >> gvs[EVERY_APPEND]
-QED
-
 (* add_phi_nodes: if d defines var (in compute_defs),
    and f is in dom_frontiers[d], and var is live at f,
    then PHI for var at f in the output *)
@@ -3515,7 +3493,7 @@ Proof
   `succs_preserved func.fn_blocks bbs1` by (
     irule phi_extends_succs_preserved >> simp[] >> gvs[fn_labels_def]) >>
   `succs_preserved bbs1 bbs2` by
-    simp[Abbr `bbs2`, CONJUNCT1 rename_blocks_succs_preserved_export] >>
+    simp[Abbr `bbs2`, CONJUNCT1 rename_blocks_succs_preserved] >>
   `succs_preserved func.fn_blocks bbs2` by
     metis_tac[succs_preserved_trans] >>
   (* bbs1 block for lbl_b *)

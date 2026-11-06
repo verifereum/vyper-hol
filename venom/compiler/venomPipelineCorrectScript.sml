@@ -45,7 +45,7 @@ Ancestors
   passSimulationDefs passSimulationProps crossBlockSimProps
   stateEquiv stateEquivProps
   pointerConfinedDefs
-  venomExecSemantics
+  venomExecSemantics crossBlockSimProofs passSimulationProofs
 
 (* ===== Composition Infrastructure ===== *)
 

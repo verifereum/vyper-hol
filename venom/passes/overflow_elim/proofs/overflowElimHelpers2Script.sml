@@ -29,7 +29,6 @@ Ancestors
   rangeAnalysisDefs
   rangeEvalDefs
   valueRangeDefs
-  variableRangeAnalysisProps
   rangeAnalysisProofs
   dfAnalyzeWidenDefs
   dfgDefs

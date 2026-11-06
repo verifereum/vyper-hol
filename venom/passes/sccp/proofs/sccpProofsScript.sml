@@ -16,15 +16,8 @@ Ancestors
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
   passSimulationDefs passSimulationProps passSimulationProofs
-  finite_map worklistDefs worklistProps venomState
+  finite_map worklistDefs worklistProofs venomState
   list
-
-(* state_equiv {} implies full equality of venom_state *)
-Triviality state_equiv_empty_eq[local]:
-  !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
-Proof
-  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
-QED
 
 (* Nophi invariant predicate for the function-level proof *)
 Definition nophi_inv_def:

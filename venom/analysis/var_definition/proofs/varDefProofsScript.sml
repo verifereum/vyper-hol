@@ -1,12 +1,12 @@
 (*
  * Variable Definition Analysis — Internal Proofs
  *
- * Proofs re-exported via varDefAnalysisPropsScript.sml.
+ * Consumers import it through varDefAnalysisScript.sml.
  *)
 
 Theory varDefProofs
 Ancestors
-  varDefDefs cfgAnalysisProps dfAnalyzeProps dfHelperProps venomWf
+  varDefDefs cfgAnalysisProps dfAnalyzeProps venomWf cfgCorrectnessProof dfHelperProofs dfHelperDefs
 
 (* ===== Convergence infrastructure ===== *)
 
@@ -123,86 +123,12 @@ Proof
   rw[pred_setTheory.IMAGE_FINITE]
 QED
 
-(* Helper: INJ for label-index pairing *)
-Theorem label_index_inj[local]:
-  !(lbl:string). INJ (\i:num. (lbl, i)) (count n) UNIV
-Proof
-  rw[pred_setTheory.INJ_DEF]
-QED
-
-(* Helper: finite for the BIGUNION used in valid_inst_keys *)
-Theorem valid_inst_keys_bbs_finite[local]:
-  !bbs. FINITE (BIGUNION (set (MAP (\bb.
-     IMAGE (\i. (bb.bb_label, i))
-       (count (LENGTH bb.bb_instructions + 1))) bbs)))
-Proof
-  Induct >> rw[listTheory.MAP, listTheory.MEM_MAP] >>
-  rw[pred_setTheory.IMAGE_FINITE]
-QED
-
-(* Helper: CARD of BIGUNION of IMAGE sets ≤ SUM of sizes *)
-Theorem bigunion_image_card_le_sum[local]:
-  !bbs. CARD (BIGUNION (set (MAP (\bb.
-     IMAGE (\i. (bb.bb_label, i))
-       (count (LENGTH bb.bb_instructions + 1))) bbs))) <=
-    SUM (MAP (\bb. LENGTH bb.bb_instructions + 1) bbs)
-Proof
-  Induct >> rw[listTheory.MAP, listTheory.SUM] >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  qexists_tac `CARD (IMAGE (\i. (h.bb_label, i))
-     (count (LENGTH h.bb_instructions + 1))) +
-    CARD (BIGUNION (set (MAP (\bb.
-     IMAGE (\i. (bb.bb_label, i))
-       (count (LENGTH bb.bb_instructions + 1))) bbs)))` >>
-  conj_tac
-  >- (irule pred_setTheory.CARD_UNION_LE >>
-      rw[pred_setTheory.IMAGE_FINITE, valid_inst_keys_bbs_finite])
-  >- (rw[pred_setTheory.CARD_INJ_IMAGE, label_index_inj,
-         pred_setTheory.CARD_COUNT] >> DECIDE_TAC)
-QED
-
 (* Valid inst keys CARD ≤ total_slots *)
 Theorem valid_inst_keys_card[local]:
   !fn. CARD (vardef_valid_inst_keys fn) <= vardef_total_inst_slots fn
 Proof
   rw[vardef_valid_inst_keys_def, vardef_total_inst_slots_def,
-     bigunion_image_card_le_sum]
-QED
-
-(* df_fold_forward FDOM — expressed with IMAGE *)
-Theorem df_fold_forward_fdom[local]:
-  !instrs transfer lbl idx acc inst_map fv im.
-    df_fold_forward transfer lbl instrs idx acc inst_map = (fv, im) ==>
-    FDOM im = FDOM inst_map UNION
-              IMAGE (\j. (lbl, idx + j)) (count (LENGTH instrs + 1))
-Proof
-  Induct >>
-  rw[dfAnalyzeDefsTheory.df_fold_forward_def]
-  >- (rw[finite_mapTheory.FDOM_FUPDATE,
-         pred_setTheory.EXTENSION, pred_setTheory.IN_INSERT,
-         pred_setTheory.IN_UNION, pred_setTheory.IN_IMAGE,
-         pred_setTheory.IN_COUNT] >>
-      Cases_on `x` >> EQ_TAC >> rw[] >> fs[])
-  >> rw[LET_THM] >>
-     first_x_assum drule >> strip_tac >>
-     rw[finite_mapTheory.FDOM_FUPDATE,
-        pred_setTheory.EXTENSION, pred_setTheory.IN_INSERT,
-        pred_setTheory.IN_UNION, pred_setTheory.IN_IMAGE,
-        pred_setTheory.IN_COUNT] >>
-     Cases_on `x` >> EQ_TAC >> rw[] >> fs[] >>
-     TRY DECIDE_TAC >>
-     Cases_on `j` >> fs[] >> disj2_tac >> qexists_tac `n` >> DECIDE_TAC
-QED
-
-(* df_fold_block FDOM from FEMPTY *)
-Theorem df_fold_block_fdom[local]:
-  !transfer lbl instrs init_val fv im.
-    df_fold_block Forward transfer lbl instrs init_val = (fv, im) ==>
-    FDOM im = IMAGE (\i. (lbl, i)) (count (LENGTH instrs + 1))
-Proof
-  rw[dfAnalyzeDefsTheory.df_fold_block_def] >>
-  drule df_fold_forward_fdom >>
-  simp[finite_mapTheory.FDOM_FEMPTY, pred_setTheory.UNION_EMPTY]
+     dfAnalyzeProofsTheory.bigunion_image_card_le_sum]
 QED
 
 (* FDOM of fold result ⊆ valid_inst_keys when label is in fn_blocks *)
@@ -213,7 +139,7 @@ Theorem df_fold_block_fdom_subset[local]:
       bb.bb_instructions init_val = (fv, im) ==>
     FDOM im SUBSET vardef_valid_inst_keys fn
 Proof
-  rw[] >> drule df_fold_block_fdom >> rw[] >>
+  rw[] >> drule dfAnalyzeProofsTheory.df_fold_block_fdom >> rw[] >>
   rw[vardef_valid_inst_keys_def, pred_setTheory.SUBSET_DEF,
      pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP,
      pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
@@ -296,7 +222,7 @@ Proof
        LENGTH (df_boundary (fn_all_assignments fn) st lbl))
        (fn_labels fn)) <=
    LENGTH (fn_all_assignments fn) * LENGTH (fn_labels fn)` by
-    (irule sum_map_bounded >> rw[listTheory.EVERY_MEM] >>
+    (irule dfAnalyzeProofsTheory.sum_map_le_bound >> rw[listTheory.EVERY_MEM] >>
      metis_tac[df_boundary_length_le]) >>
   `vardef_inst_complement fn st <=
    CARD (set (fn_all_assignments fn)) * vardef_total_inst_slots fn` by
@@ -444,32 +370,6 @@ Proof
   fs[venomInstTheory.lookup_block_def]
 QED
 
-(* FOLDL list_intersect bse xs is always a FILTER of bse *)
-Triviality foldl_intersect_is_filter:
-  !xs bse. ?P. FOLDL list_intersect bse xs = FILTER P bse
-Proof
-  Induct >> rw[]
-  >- (qexists_tac `\x. T` >> rw[listTheory.FILTER_T])
-  >> simp[dfHelperDefsTheory.list_intersect_def] >>
-  first_x_assum (qspec_then `FILTER (\x. MEM x h) bse` strip_assume_tac) >>
-  qexists_tac `\x. P x /\ MEM x h` >>
-  simp[rich_listTheory.FILTER_FILTER]
-QED
-
-(* Two FILTERs of an ALL_DISTINCT list with equal sets are equal *)
-Triviality filter_set_eq_filter_eq:
-  !P Q bse. ALL_DISTINCT bse ==>
-    set (FILTER P bse) = set (FILTER Q bse) ==>
-    FILTER P bse = FILTER Q bse
-Proof
-  rpt strip_tac >>
-  irule (GSYM rich_listTheory.FILTER_EQ |> iffLR) >>
-  rpt strip_tac >>
-  `MEM x (FILTER P bse) <=> MEM x (FILTER Q bse)` suffices_by
-    (simp[listTheory.MEM_FILTER]) >>
-  fs[pred_setTheory.EXTENSION]
-QED
-
 (* vardef_state_inv is preserved by df_process_block *)
 Theorem vardef_inv_preserved[local]:
   !fn lbl st.
@@ -535,47 +435,6 @@ Finalise vardef_inv_preserved
 (* ===== Measure increases helpers ===== *)
 
 (* ===== Measure increases ===== *)
-
-Triviality three_sum_strict:
-  !(a1:num) b1 c1 a2 b2 c2.
-    a1 <= a2 /\ b1 <= b2 /\ c1 <= c2 /\
-    (a1 < a2 \/ b1 < b2 \/ c1 < c2) ==>
-    a1 + b1 + c1 < a2 + b2 + c2
-Proof
-  DECIDE_TAC
-QED
-
-(* SUM of complement (n - f) is monotone when f shrinks pointwise *)
-Triviality sum_complement_mono:
-  !f g (n:num) ls.
-    (!x. MEM x ls ==> g x <= f x /\ f x <= n) ==>
-    SUM (MAP (\x. n - f x) ls) <= SUM (MAP (\x. n - g x) ls)
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  `g h <= f h /\ f h <= n` by metis_tac[] >>
-  `!x. MEM x ls ==> g x <= f x /\ f x <= n` by metis_tac[] >>
-  res_tac >> DECIDE_TAC
-QED
-
-(* Strict version: one strict element gives strict inequality *)
-Triviality sum_complement_strict:
-  !f g (n:num) ls x.
-    MEM x ls /\ g x < f x /\ f x <= n /\
-    (!y. MEM y ls ==> g y <= f y /\ f y <= n) ==>
-    SUM (MAP (\y. n - f y) ls) < SUM (MAP (\y. n - g y) ls)
-Proof
-  Induct_on `ls` >> rw[] >> fs[] >> (
-    `g h <= f h /\ f h <= n` by metis_tac[] >>
-    `!y. MEM y ls ==> g y <= f y /\ f y <= n` by metis_tac[]
-  )
-  >- (`SUM (MAP (\y. n - f y) ls) <= SUM (MAP (\y. n - g y) ls)` by
-        (irule sum_complement_mono >> metis_tac[]) >>
-      DECIDE_TAC)
-  >> `SUM (MAP (\y. n - f y) ls) < SUM (MAP (\y. n - g y) ls)` by
-       (first_x_assum (qspecl_then [`f`, `g`, `n`, `x`] mp_tac) >> simp[] >>
-        metis_tac[]) >>
-     DECIDE_TAC
-QED
 
 (* Boundary length at any label: boundary-only update ≤ old state *)
 Triviality df_boundary_len_mono:
@@ -663,7 +522,7 @@ Proof
       `new_bv <> old_bv` by fs[markerTheory.Abbrev_def] >>
       `LENGTH new_bv < LENGTH old_bv` by
         (fs[markerTheory.Abbrev_def] >>
-         metis_tac[dfHelperPropsTheory.list_intersect_strict_length]) >>
+         metis_tac[dfHelperProofsTheory.list_intersect_strict_length]) >>
       simp[dfAnalyzeDefsTheory.df_boundary_def,
            finite_mapTheory.FLOOKUP_UPDATE] >>
       fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_boundary_def] >>
@@ -695,16 +554,7 @@ Proof
   `cfg_reachable_of (cfg_analyze fn) lbl` by
     (fs[pred_setTheory.EXTENSION, pred_setTheory.GSPECIFICATION] >>
      metis_tac[listTheory.MEM]) >>
-  metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels]
-QED
-
-(* FOLDL of constant updates on FEMPTY always yields that constant *)
-Triviality foldl_fupdate_const[local]:
-  !ls bot k v.
-    FLOOKUP (FOLDL (\m l. m |+ (l, bot)) FEMPTY ls) k = SOME v ==> v = bot
-Proof
-  metis_tac[dfAnalyzeProofsTheory.foldl_fupdate_flookup,
-            finite_mapTheory.FLOOKUP_EMPTY, optionTheory.NOT_SOME_NONE]
+  metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels]
 QED
 
 (* Initial state satisfies vardef_state_inv *)
@@ -732,7 +582,7 @@ Proof
            (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_UPDATE]) >>
          IF_CASES_TAC >> simp[] >> strip_tac) >>
     (* FLOOKUP(FOLDL ... FEMPTY labels) _ = SOME v => v = fn_all_assignments *)
-    imp_res_tac foldl_fupdate_const >>
+    imp_res_tac dfAnalyzeProofsTheory.foldl_fempty_val >>
     simp[listTheory.all_distinct_nub,
          venomInstTheory.fn_all_assignments_def])
 QED
@@ -743,7 +593,7 @@ val fixpoint_restricted_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
     dfAnalyzeProofsTheory.df_analyze_fixpoint_process_restricted));
 
-Theorem vardef_fixpoint_proof:
+Theorem vardef_fixpoint:
   !fn.
     wf_function fn ==>
     let cfg = cfg_analyze fn in
@@ -771,7 +621,7 @@ Proof
       >- (rpt strip_tac >> fs[] >>
           metis_tac[vardef_measure_increases])
       >- (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
-          metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels])
+          metis_tac[cfgCorrectnessProofTheory.cfg_analyze_succ_labels])
       >- metis_tac[dfs_pre_in_fn_labels]
       >- metis_tac[vardef_init_state_inv])
   >>
@@ -786,7 +636,7 @@ QED
 
 (* ===== Boundedness ===== *)
 
-Theorem vardef_out_bounded_proof:
+Theorem vardef_out_bounded:
   !fn lbl v.
     wf_function fn /\
     MEM v (vardef_out_of fn lbl) ==>
@@ -799,7 +649,7 @@ Proof
     suffices_by (rw[listTheory.EVERY_MEM]) >>
   simp_tac std_ss [varDefDefsTheory.vardef_analyze_def, LET_THM] >>
   irule (SIMP_RULE std_ss [LET_THM]
-    dfAnalyzePropsTheory.df_analyze_boundary_invariant_restricted) >>
+    dfAnalyzeProofsTheory.df_analyze_boundary_invariant_restricted) >>
   rpt conj_tac
   >- simp[listTheory.EVERY_MEM]
   >- (rpt strip_tac >>
@@ -815,7 +665,7 @@ Proof
   >- metis_tac[vardef_measure_increases]
   >- (simp[dfAnalyzeDefsTheory.direction_case_def] >>
       rw[listTheory.EVERY_MEM] >>
-      metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels])
+      metis_tac[cfgCorrectnessProofTheory.cfg_analyze_succ_labels])
   >- (simp[dfAnalyzeDefsTheory.direction_case_def] >>
       metis_tac[dfs_pre_in_fn_labels])
   >- metis_tac[vardef_init_state_inv]
@@ -832,7 +682,7 @@ Proof
   Induct >> rw[]
   >- (`set (FOLDL list_intersect (list_intersect a h) xs) SUBSET
        set (list_intersect a h)` by
-        metis_tac[dfHelperPropsTheory.foldl_list_intersect_subset] >>
+        metis_tac[dfHelperProofsTheory.foldl_list_intersect_subset] >>
       fs[dfHelperDefsTheory.list_intersect_def, listTheory.MEM_FILTER,
          pred_setTheory.SUBSET_DEF])
   >- metis_tac[]
@@ -844,7 +694,7 @@ val vardef_analyze_unfold =
 
 (* Reusable: establish fixpoint in unfolded form *)
 val vardef_fixpoint_unfolded =
-  SIMP_RULE std_ss [LET_THM] vardef_fixpoint_proof;
+  SIMP_RULE std_ss [LET_THM] vardef_fixpoint;
 
 (* Vardef-specialized intra-transfer: df_at at SUC idx = transfer applied *)
 Triviality vardef_at_intra[local]:
@@ -909,7 +759,7 @@ Triviality vardef_transfer_mem[local]:
     MEM v input \/ MEM v (inst_defs inst)
 Proof
   rw[varDefDefsTheory.vardef_transfer_def] >>
-  fs[dfHelperPropsTheory.list_union_mem]
+  fs[dfHelperProofsTheory.list_union_mem]
 QED
 
 (* df_at unwinding: v at index n => v at index 0 or assigned in block *)
@@ -968,7 +818,7 @@ Proof
   simp[dfAnalyzeDefsTheory.direction_case_def, vardef_analyze_unfold] >>
   strip_tac >>
   (* Step 3: from list_intersect(boundary, df_at) = boundary, get MEM *)
-  metis_tac[dfHelperPropsTheory.list_intersect_mem]
+  metis_tac[dfHelperProofsTheory.list_intersect_mem]
 QED
 
 (* Joined value membership => every predecessor boundary has v *)
@@ -1089,22 +939,6 @@ Proof
   simp[] >> first_x_assum irule >> simp[]
 QED
 
-(* Reachable labels are in dfs_pre *)
-Triviality reachable_in_dfs_pre[local]:
-  !fn lbl.
-    wf_function fn /\
-    cfg_reachable_of (cfg_analyze fn) lbl ==>
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  `set (cfg_analyze fn).cfg_dfs_post = set (cfg_analyze fn).cfg_dfs_pre /\
-   set (cfg_analyze fn).cfg_dfs_post =
-   {lbl | cfg_reachable_of (cfg_analyze fn) lbl}` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_sets] >>
-  fs[pred_setTheory.EXTENSION, pred_setTheory.GSPECIFICATION] >>
-  metis_tac[listTheory.MEM]
-QED
-
 (* Entry label is reachable *)
 Triviality entry_reachable[local]:
   !fn.
@@ -1130,15 +964,6 @@ QED
    
    Proof via wl_iterate_invariant with P = vardef_state_inv ∧ entry_boundary = []. *)
 
-(* FOLDL that only modifies ds_inst preserves ds_boundary *)
-Triviality foldl_inst_only_boundary[local]:
-  !lbls (f : 'a df_state -> string -> 'a df_state) acc.
-    (!st lbl. (f st lbl).ds_boundary = st.ds_boundary) ==>
-    (FOLDL f acc lbls).ds_boundary = acc.ds_boundary
-Proof
-  Induct >> simp[]
-QED
-
 (* df_populate_inst preserves ds_boundary *)
 Triviality populate_inst_ds_boundary[local]:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
@@ -1147,7 +972,7 @@ Triviality populate_inst_ds_boundary[local]:
 Proof
   rpt gen_tac >>
   simp[dfAnalyzeDefsTheory.df_populate_inst_def] >>
-  irule foldl_inst_only_boundary >>
+  irule dfAnalyzeProofsTheory.foldl_inst_only_boundary >>
   simp[LET_THM] >> rpt gen_tac >> pairarg_tac >> simp[]
 QED
 
@@ -1198,7 +1023,7 @@ QED
 
 (* ===== Soundness ===== *)
 
-Theorem vardef_sound_proof:
+Theorem vardef_sound:
   !fn lbl v path.
     wf_function fn /\
     fn.fn_blocks <> [] /\

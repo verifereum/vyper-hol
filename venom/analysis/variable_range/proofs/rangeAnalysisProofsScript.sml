@@ -1,16 +1,15 @@
 (*
  * Range Analysis — Proofs
  *
- * Internal proof machinery for range analysis soundness.
- * Consumer-facing theorems are in variableRangeAnalysisPropsScript.sml.
+ * Range analysis soundness, re-exported by variableRangeAnalysisScript.sml.
  *)
 
 Theory rangeAnalysisProofs
 Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
   venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
-  dfAnalyzeWidenProofs dfAnalyzeWidenProps cfgAnalysisProps
-  dfgAnalysisProps dfgCorrectnessProof
+  dfAnalyzeWidenProofs cfgAnalysisProps
+  dfgAnalysisProps dfgCorrectnessProof cfgHelpers
 
 (* ===== rs_write helper ===== *)
 
@@ -30,7 +29,7 @@ QED
 
 (* If in_range_state holds and we look up a variable, its range contains
    the concrete value. Bridges rs_lookup and in_range_state. *)
-Theorem rs_lookup_in_range[local]:
+Theorem rs_lookup_in_range:
   ∀rs env v w.
     in_range_state rs env ∧ FLOOKUP env v = SOME w ⇒
     in_range (rs_lookup rs v) w
@@ -969,7 +968,7 @@ Proof
       ``lbl : string``,
       ``bb : basic_block``,
       ``idx : num``]
-    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
+    dfAnalyzeWidenProofsTheory.df_widen_at_intra_transfer))) >>
   impl_tac >- (
     conj_tac >- first_assum ACCEPT_TAC >>
     mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
@@ -1446,7 +1445,7 @@ QED
 
 (* Combined invariant: range_fixpoint_P + visits bound + unvisited boundary.
    Gives everything needed for block soundness proof.
-   Uses df_widen_process_boundary_other from dfAnalyzeWidenProofs. *)
+   Uses df_widen_process_boundary from dfAnalyzeWidenProofs. *)
 Triviality foldl_update_all_same[local]:
   ∀lbls v fm k w.
     FLOOKUP (FOLDL (λm l. m |+ (l, v)) fm lbls) k = SOME w ⇒
@@ -1503,7 +1502,7 @@ Proof
   mp_tac (INST_TYPE [alpha |-> ``:(string |-> value_range) option``,
                      beta |-> ``:dfg_analysis # basic_block list``]
     (SIMP_RULE std_ss [LET_THM]
-      dfAnalyzeWidenProofsTheory.df_widen_process_boundary_other)) >>
+      dfAnalyzeWidenProofsTheory.df_widen_process_boundary)) >>
   disch_then (qspecl_then [`Forward`, `NONE`,
     `range_join_opt`, `range_widen_opt`, `WIDEN_THRESHOLD`,
     `range_transfer_opt`, `range_edge_transfer_opt`,
@@ -1559,37 +1558,6 @@ Proof
       res_tac >> simp[])
 QED
 
-Triviality foldl_inst_only_preserves[local]:
-  ∀lbls (f:'a df_widen_state -> string -> 'a df_widen_state) acc.
-    (∀st lbl. (f st lbl).dws_boundary = st.dws_boundary) ∧
-    (∀st lbl. (f st lbl).dws_entry = st.dws_entry) ∧
-    (∀st lbl. (f st lbl).dws_visits = st.dws_visits) ⇒
-    (FOLDL f acc lbls).dws_boundary = acc.dws_boundary ∧
-    (FOLDL f acc lbls).dws_entry = acc.dws_entry ∧
-    (FOLDL f acc lbls).dws_visits = acc.dws_visits
-Proof
-  Induct >> rw[]
-QED
-
-Triviality populate_widen_preserves[local]:
-  ∀dir bottom join widen threshold transfer edge_transfer ctx entry_val
-   cfg bbs lbls (st:'a df_widen_state).
-  (df_populate_widen_inst dir bottom join widen threshold transfer
-    edge_transfer ctx entry_val cfg bbs lbls st).dws_boundary =
-    st.dws_boundary ∧
-  (df_populate_widen_inst dir bottom join widen threshold transfer
-    edge_transfer ctx entry_val cfg bbs lbls st).dws_entry =
-    st.dws_entry ∧
-  (df_populate_widen_inst dir bottom join widen threshold transfer
-    edge_transfer ctx entry_val cfg bbs lbls st).dws_visits =
-    st.dws_visits
-Proof
-  rpt gen_tac >>
-  simp[dfAnalyzeWidenDefsTheory.df_populate_widen_inst_def] >>
-  irule foldl_inst_only_preserves >>
-  rw[] >> pairarg_tac >> rw[]
-QED
-
 Triviality range_analyze_invariant[local]:
   ∀fn.
     let ra = range_analyze fn in
@@ -1628,7 +1596,7 @@ Resume range_analyze_invariant[wl_inv]:
   (* 3. Rewrite field accesses through populate to swli *)
   simp[range_fixpoint_P_def, df_widen_visits_def, df_widen_boundary_def,
        df_widen_entry_def, range_fold_result_def,
-       populate_widen_preserves] >>
+       populate_widen_inst_preserves_fields] >>
   (* 4. Re-package as (λst. P st) swli for irule *)
   `(λst. range_fixpoint_P fn st ∧
          (∀l. df_widen_visits st l ≤ WIDEN_THRESHOLD + 1) ∧
@@ -1656,8 +1624,8 @@ Resume range_analyze_invariant[wl_inv]:
   rpt conj_tac >|
   [(* 1: measure bounded *)
    rpt strip_tac >>
-   irule dfAnalyzeWidenProofsTheory.sum_bound >>
-   simp[markerTheory.Abbrev_def],
+   irule dfAnalyzeProofsTheory.sum_map_le_bound >>
+   simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM],
    (* 2: P preserved *)
    rpt strip_tac >>
    mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`, `lbl`, `st`]
@@ -1991,7 +1959,7 @@ Proof
   drule_all step_eval_range_sound >> simp[]
 QED
 
-Theorem range_analyze_block_sound_proof:
+Theorem range_analyze_block_sound:
   ∀fn lbl bb fuel ctx s s'.
     let ra = range_analyze fn in
     lookup_block lbl fn.fn_blocks = SOME bb ∧
@@ -2061,7 +2029,7 @@ Proof
   fs[range_unwrap_def]
 QED
 
-Theorem range_get_range_sound_proof:
+Theorem range_get_range_sound:
   ∀ra lbl idx op w env.
     in_range_state (range_at_inst ra lbl idx) env ∧
     (∀v. op = Var v ⇒ FLOOKUP env v = SOME w) ∧

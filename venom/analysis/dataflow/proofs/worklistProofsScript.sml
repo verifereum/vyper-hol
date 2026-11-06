@@ -113,7 +113,7 @@ Proof
   Cases_on `process h r = r` >> fs[]
 QED
 
-Theorem wl_iterate_terminates_proof:
+Theorem wl_iterate_terminates:
   !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
     (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
@@ -131,7 +131,7 @@ Proof
   rw[]
 QED
 
-Theorem wl_iterate_invariant_proof:
+Theorem wl_iterate_invariant:
   !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
     (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
@@ -149,7 +149,7 @@ Proof
   rw[]
 QED
 
-Theorem wl_iterate_above_proof:
+Theorem wl_iterate_above:
   !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
     (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
@@ -176,7 +176,7 @@ Proof
   >> rw[]
 QED
 
-Theorem wl_iterate_fixpoint_proof:
+Theorem wl_iterate_fixpoint:
   !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
     (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\

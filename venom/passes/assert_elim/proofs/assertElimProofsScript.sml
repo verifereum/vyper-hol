@@ -29,14 +29,13 @@ Ancestors
   stateEquiv
   stateEquivProps
   valueRangeDefs
-  variableRangeAnalysisProps
   venomExecProps
   venomExecSemantics
   venomInst
   venomInstProps
   venomState
   venomWf
-  worklistDefs
+  worklistDefs cfgCorrectnessProof dfAnalyzeWidenProofs
 Libs
   pairLib
 
@@ -94,19 +93,6 @@ Proof
   simp[]
 QED
 
-(* in_range_state implies in_range for any looked-up variable *)
-Theorem in_range_state_lookup[local]:
-  !rs env v w.
-    in_range_state rs env /\ FLOOKUP env v = SOME w ==>
-    in_range (rs_lookup rs v) w
-Proof
-  rpt strip_tac >>
-  simp[rs_lookup_def] >>
-  Cases_on `FLOOKUP rs v` >> simp[in_range_def] >>
-  fs[in_range_state_def] >>
-  first_x_assum drule >> disch_then drule >> simp[]
-QED
-
 (* ===== Per-instruction simulation ===== *)
 
 (* ASSERT transform preserves per-instruction behavior under range_sound *)
@@ -150,7 +136,7 @@ Proof
       simp[eval_operand_def, lookup_var_def, mk_nop_inst_correct] >>
       Cases_on `FLOOKUP s.vs_vars var` >> simp[lift_result_def, state_equiv_refl] >>
       rename1 `SOME w` >>
-      imp_res_tac in_range_state_lookup >>
+      imp_res_tac rs_lookup_in_range >>
       imp_res_tac in_range_excludes_zero_nonzero >>
       gvs[lift_result_def, state_equiv_refl])
   (* Label case: identity *)
@@ -231,44 +217,6 @@ QED
 
 (* ===== Pre-instantiated framework lemma for range analysis ===== *)
 
-Theorem range_intra_transfer_early[local]:
-  !fn lbl bb idx.
-    wf_function fn /\
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    SUC idx <= LENGTH bb.bb_instructions ==>
-    df_widen_at NONE (range_analyze fn) lbl (SUC idx) =
-    range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
-      (EL idx bb.bb_instructions)
-      (df_widen_at NONE (range_analyze fn) lbl idx)
-Proof
-  rpt strip_tac >>
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-    (REWRITE_RULE [GSYM (SIMP_RULE std_ss [LET_THM] range_analyze_def)]
-    (ISPECL [
-      ``Forward``,
-      ``NONE : (string |-> value_range) option``,
-      ``range_join_opt``,
-      ``range_widen_opt : (string |-> value_range) option
-          -> (string |-> value_range) option
-          -> (string |-> value_range) option``,
-      ``WIDEN_THRESHOLD``,
-      ``range_transfer_opt``,
-      ``range_edge_transfer_opt``,
-      ``(dfg_build_function fn, fn.fn_blocks)``,
-      ``OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : string |-> value_range)))
-          (fn_entry_label fn)``,
-      ``fn : ir_function``,
-      ``lbl : string``,
-      ``bb : basic_block``,
-      ``idx : num``]
-    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
-  impl_tac >- (
-    conj_tac >- first_assum ACCEPT_TAC >>
-    mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
-  simp[]
-QED
-
 Theorem range_analysis_block_sim_boundary[local]:
   !fn sound state_inv f bb fuel run_ctx s.
     transfer_sound sound range_transfer_opt
@@ -320,7 +268,7 @@ Proof
       simp[analysisSimProofsWidenTheory.widen_to_df_def,
            dfAnalyzeWidenDefsTheory.df_widen_at_def,
            dfAnalyzeDefsTheory.df_at_def] >>
-    simp[] >> irule range_intra_transfer_early >> simp[]) >>
+    simp[] >> irule range_intra_transfer >> simp[]) >>
   qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
     eval_phis_ok_or_error_defs
   >- (
@@ -547,7 +495,7 @@ Proof
       ``state_inv : venom_state -> bool``,
       ``f : (string |-> value_range) option
           -> instruction -> instruction list``]
-    analysisSimPropsTheory.df_analysis_pass_correct_widen_sound_inv2)))) >>
+    analysisSimProofsWidenTheory.df_analysis_pass_correct_widen_sound_inv2)))) >>
   impl_tac >- (
     rpt conj_tac
     (* valid_state_rel *)
@@ -671,7 +619,7 @@ Proof
       ``state_inv : venom_state -> bool``,
       ``f : (string |-> value_range) option
           -> instruction -> instruction list``]
-    analysisSimPropsTheory.df_analysis_pass_correct_widen_sound_inv2)))) >>
+    analysisSimProofsWidenTheory.df_analysis_pass_correct_widen_sound_inv2)))) >>
   impl_tac >- (
     rpt conj_tac
     (* valid_state_rel *)
@@ -767,7 +715,7 @@ Proof
       ``fn : ir_function``,
       ``lbl : string``,
       ``bb : basic_block``]
-    dfAnalyzeWidenPropsTheory.df_widen_at_inter_transfer))) >>
+    dfAnalyzeWidenProofsTheory.df_widen_at_inter_transfer))) >>
   impl_tac >- (
     conj_tac >- first_assum ACCEPT_TAC >>
     mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
@@ -1051,7 +999,7 @@ Proof
       ``bb.bb_label``,
       ``bb : basic_block``,
       ``n : num``]
-    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
+    dfAnalyzeWidenProofsTheory.df_widen_at_intra_transfer))) >>
   impl_tac >- (
     conj_tac >- first_assum ACCEPT_TAC >>
     mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
@@ -1251,7 +1199,7 @@ Proof
       `cfg_reachable_of (cfg_analyze fn) succ` by (
         imp_res_tac cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
         fs[pred_setTheory.EXTENSION, Abbr `succ`]) >>
-      metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels]) >>
+      metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels]) >>
     fs[fn_labels_def, MEM_MAP] >>
     metis_tac[venomExecPropsTheory.MEM_lookup_block, fn_labels_def]) >>
   `MEM bb.bb_label (cfg_preds_of (cfg_analyze fn) succ)` by
@@ -1486,7 +1434,7 @@ Proof
   >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem assert_elim_inst_cases[local]:
+Theorem assert_elim_inst_cases:
   !v inst. assert_elim_inst v inst = inst \/
            assert_elim_inst v inst = mk_nop_inst inst
 Proof
@@ -1494,7 +1442,7 @@ Proof
   rpt (BasicProvers.PURE_CASE_TAC >> simp[])
 QED
 
-Theorem assert_elim_inst_id[local]:
+Theorem assert_elim_inst_id:
   !v inst. (assert_elim_inst v inst).inst_id = inst.inst_id
 Proof
   rpt gen_tac >>
@@ -1503,7 +1451,7 @@ Proof
   simp[mk_nop_inst_def]
 QED
 
-Theorem assert_elim_inst_terminator[local]:
+Theorem assert_elim_inst_terminator:
   !v inst. is_terminator inst.inst_opcode ==> assert_elim_inst v inst = inst
 Proof
   rpt strip_tac >> simp[assert_elim_inst_def] >>
@@ -1511,7 +1459,7 @@ Proof
   fs[is_terminator_def]
 QED
 
-Theorem assert_elim_inst_not_terminator[local]:
+Theorem assert_elim_inst_not_terminator:
   !v inst. ~is_terminator inst.inst_opcode ==>
            ~is_terminator (assert_elim_inst v inst).inst_opcode
 Proof
@@ -1521,14 +1469,14 @@ Proof
   simp[mk_nop_inst_def, is_terminator_def]
 QED
 
-Theorem assert_elim_inst_phi[local]:
+Theorem assert_elim_inst_phi:
   !v inst. inst.inst_opcode = PHI ==>
            (assert_elim_inst v inst).inst_opcode = PHI
 Proof
   rpt strip_tac >> simp[assert_elim_inst_def]
 QED
 
-Theorem assert_elim_inst_not_phi[local]:
+Theorem assert_elim_inst_not_phi:
   !v inst. inst.inst_opcode <> PHI ==>
            (assert_elim_inst v inst).inst_opcode <> PHI
 Proof
@@ -1538,7 +1486,7 @@ Proof
   simp[mk_nop_inst_def]
 QED
 
-Theorem aftw_singleton_eq_fmt_mapi[local]:
+Theorem aftw_singleton_eq_fmt_mapi:
   !bottom result (f : 'a -> instruction -> instruction) fn.
     analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
     function_map_transform

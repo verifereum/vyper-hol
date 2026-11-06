@@ -1,16 +1,26 @@
 (*
  * PHI Elimination Pass — Correctness Statement
  *
- * Single top-level theorem re-exported from proofs/.
+ * Single top-level theorem, built on the block simulation in proofs/phiBlockScript.sml.
  *)
 
 Theory phiElimCorrectness
 Ancestors
-  phiCorrectnessProof phiTransform phiWellFormed venomWf sorting list
+  phiTransform phiWellFormed venomWf sorting list
+  phiBlock passSimulationProps passSimulationDefs execEquivParamProps venomExecSemantics venomInst stateEquiv stateEquivProps phiDefs passSimulationProofs
+
+Theorem transform_function_is_function_map_transform[local]:
+  !fn. transform_function fn =
+       function_map_transform (transform_block (dfg_build_function fn)) fn
+Proof
+  simp[transform_function_def, function_map_transform_def, LET_DEF]
+QED
 
 (* After PHI elimination on a well-formed, PHI-elim-safe function, there exists a
    transformed function in the new context that produces execution-equivalent results
-   (matching OK values, halts, reverts, and errors) under state equivalence. *)
+   (matching OK values, halts, reverts, and errors) under state equivalence.
+   Proof: lift per-block simulation (phi_elim_run_block_lift_result) to function
+   level via block_sim_function_pointwise_reachable. *)
 Theorem phi_elim_pass_correct:
   !ctx fn_name fuel (func:ir_function) s.
     MEM func ctx.ctx_functions /\
@@ -31,7 +41,36 @@ Theorem phi_elim_pass_correct:
         (run_blocks fuel ctx func s)
         (run_blocks fuel ctx func' s)
 Proof
-  ACCEPT_TAC phi_elimination_correct
+  rpt gen_tac >>
+  DISCH_TAC >>
+  qexists_tac `transform_function func` >>
+  `MEM func ctx.ctx_functions` by fs[] >>
+  `func.fn_name = fn_name` by fs[] >>
+  `wf_ir_fn func` by fs[] >>
+  `phi_elim_safe_fn func` by fs[] >>
+  `wf_function func` by fs[] >>
+  `fn_pseudos_prefix func` by fs[] >>
+  `func.fn_blocks <> []` by fs[] >>
+  `s.vs_inst_idx = 0` by fs[] >>
+  `phi_wf_fn func` by metis_tac[wf_ir_implies_phi_wf] >>
+  fs[phi_wf_fn_def, LET_DEF] >>
+  conj_tac >- (
+    simp[transform_context_def, MEM_MAP] >>
+    qexists_tac `func` >> simp[]) >>
+  conj_tac >- simp[transform_function_def] >>
+  simp[transform_function_is_function_map_transform] >>
+  irule block_sim_function_pointwise_reachable >>
+  simp[state_equiv_execution_equiv_valid_state_rel, transform_block_label,
+       state_equiv_def, execution_equiv_def] >>
+  (* Per-block simulation: real PHI-prefix/eval_phis simulation. *)
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `run_block fuel0 ctx0 bb st` >>
+  qspecl_then [`func`, `bb`, `fuel0`, `ctx0`, `st`]
+    mp_tac phi_elim_run_block_lift_result >>
+  simp[] >>
+  fs[wf_function_def, fn_pseudos_prefix_def] >>
+  Cases_on `st.vs_prev_bb = NONE` >> fs[]
 QED
 
 (* ===== Obligations ===== *)

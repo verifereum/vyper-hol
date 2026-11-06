@@ -128,18 +128,6 @@ Proof
   strip_tac >> simp[MEM_MAP] >> qexists `(alloc,sz)` >> simp[]
 QED
 
-Theorem all_distinct_item_key_unique[local]:
-  !items alloc sz1 sz2.
-    ALL_DISTINCT (MAP FST items) /\
-    MEM (alloc,sz1) items /\ MEM (alloc,sz2) items ==>
-    sz1 = sz2
-Proof
-  Induct_on `items`
-  >- simp[]
-  >> gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac
-  >> gvs[] >> metis_tac[item_key_MEM_MAP]
-QED
-
 Theorem completion_state_inv_insert[local]:
   ALL_DISTINCT (MAP FST items) /\ MEM (alloc,sz) items /\
   FLOOKUP positions alloc = NONE /\
@@ -153,7 +141,7 @@ Proof
        (fn th => assume_tac (MATCH_MP checked_first_fit_SOME th))
   >> gvs[completion_state_inv_def]
   >> rpt gen_tac >> strip_tac >> Cases_on `alloc' = alloc`
-  >- (`sz' = sz` by metis_tac[all_distinct_item_key_unique] >>
+  >- (`sz' = sz` by metis_tac[ALL_DISTINCT_MAP_FST_size_unique] >>
       gvs[FLOOKUP_UPDATE])
   >> gvs[FLOOKUP_UPDATE]
   >> qpat_x_assum
@@ -362,7 +350,7 @@ Proof
                   >- (rpt strip_tac >> Cases_on `x = 0` >> gvs[])
                   >> rpt gen_tac >> strip_tac
                   >> Cases_on `a = Allocation h.inst_id`
-                  >- (`sz = x` by metis_tac[all_distinct_item_key_unique]
+                  >- (`sz = x` by metis_tac[ALL_DISTINCT_MAP_FST_size_unique]
                       >> gvs[FLOOKUP_UPDATE]
                       >> qpat_x_assum `checked_first_fit occupied x = SOME x'`
                            (fn th => assume_tac (MATCH_MP checked_first_fit_SOME th))
@@ -922,7 +910,7 @@ Proof
           >- (rpt strip_tac >> Cases_on `x = 0` >> gvs[]) >>
           rpt gen_tac >> strip_tac >>
           Cases_on `a = Allocation h.inst_id`
-          >- (`sz = x` by metis_tac[all_distinct_item_key_unique] >>
+          >- (`sz = x` by metis_tac[ALL_DISTINCT_MAP_FST_size_unique] >>
               gvs[FLOOKUP_UPDATE] >>
               drule checked_first_fit_SOME >>
               simp[EVERY_MEM] >> metis_tac[]) >>

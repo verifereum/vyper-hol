@@ -17,7 +17,7 @@ proofs/
   worklistProofsScript.sml  — convergence: termination, fixpoint, above-initial, invariant
 dfIteratePropsScript.sml   — re-exports df_iterate proofs via ACCEPT_TAC
 latticePropsScript.sml     — re-exports lattice proofs via ACCEPT_TAC
-worklistPropsScript.sml    — re-exports worklist proofs via ACCEPT_TAC
+worklistPropsScript.sml    — empty; import worklistProofs instead
 ```
 
 ## Design

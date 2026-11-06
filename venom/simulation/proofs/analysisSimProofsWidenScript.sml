@@ -2,11 +2,11 @@
  * Analysis-Driven Simulation — Proofs (Part 3: Widen Correctness)
  *
  * Main theorems:
- *   df_analysis_pass_correct_widen_sound_proof
+ *   df_analysis_pass_correct_widen_sound
  *   df_analysis_pass_correct_widen_block_sim_proof
- *   df_analysis_pass_correct_block_sim_proof
- *   df_analysis_pass_correct_widen_sound_inv_proof
- *   df_analysis_pass_correct_widen_sound_inv2_proof
+ *   df_analysis_pass_correct_block_sim
+ *   df_analysis_pass_correct_widen_sound_inv
+ *   df_analysis_pass_correct_widen_sound_inv2
  *)
 
 Theory analysisSimProofsWiden
@@ -22,15 +22,15 @@ Ancestors
 (* Forward-specialized widen dataflow theorems *)
 val widen_fixpoint_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeWidenProofsTheory.df_analyze_widen_fixpoint_proof));
+    dfAnalyzeWidenProofsTheory.df_analyze_widen_fixpoint));
 val widen_inter_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeWidenProofsTheory.df_widen_at_inter_transfer_proof));
+    dfAnalyzeWidenProofsTheory.df_widen_at_inter_transfer));
 val widen_intra_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeWidenProofsTheory.df_widen_at_intra_transfer_proof));
+    dfAnalyzeWidenProofsTheory.df_widen_at_intra_transfer));
 val widen_entry_sound = SIMP_RULE (srw_ss()) [LET_THM]
-  dfAnalyzeWidenProofsTheory.df_widen_entry_sound_proof;
+  dfAnalyzeWidenProofsTheory.df_widen_entry_sound;
 
 val widen_to_df_def = Define `
   widen_to_df (st : 'a df_widen_state) : 'a df_state =
@@ -88,7 +88,7 @@ val widen_state_inv_tac =
 
 (* Widening variant. Uses widen_to_df bridge to reduce to non-widen case.
  * The caller must establish is_fixpoint for the WIDEN process. *)
-Theorem df_analysis_pass_correct_widen_sound_proof:
+Theorem df_analysis_pass_correct_widen_sound:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join widen threshold
@@ -575,7 +575,7 @@ QED
 
 (* Non-widen block-level simulation: like widen_block_sim but for df_analyze.
    Takes block-level sim + cross-block hypotheses, NO per-inst transfer/state_inv. *)
-Theorem df_analysis_pass_correct_block_sim_proof:
+Theorem df_analysis_pass_correct_block_sim:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join
@@ -778,7 +778,7 @@ Proof
 QED
 
 (* Widening + state_inv: uses transfer_sound + analysis_inst_simulates *)
-Theorem df_analysis_pass_correct_widen_sound_inv_proof:
+Theorem df_analysis_pass_correct_widen_sound_inv:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join widen threshold
@@ -907,7 +907,7 @@ Proof
 QED
 
 (* Widening + state_inv + transfer_sound_wf + per-inst state_inv threading *)
-Theorem df_analysis_pass_correct_widen_sound_inv2_proof:
+Theorem df_analysis_pass_correct_widen_sound_inv2:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join widen threshold

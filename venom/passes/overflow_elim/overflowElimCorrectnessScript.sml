@@ -9,9 +9,54 @@ Ancestors
   passSharedDefs passSimulationProps passSharedProps
   passSimulationDefs venomInst dfgDefs
   rangeAnalysisDefs dfAnalyzeWidenDefs stateEquiv
+  assertElimProofs analysisSimDefs analysisSimProps stateEquivProps venomExecSemantics venomState venomInstProps venomExecProps execEquivParamProps rangeEvalDefs valueRangeDefs rangeAnalysisProofs dfgAnalysisProps dfgSoundStep worklistDefs list finite_map indexedLists
 
 Libs
   BasicProvers
+
+(* Lift clear_nops_function_correct from run_blocks to run_function *)
+Triviality fn_entry_label_clear_nops[local]:
+  !fn. fn_entry_label (clear_nops_function fn) = fn_entry_label fn
+Proof
+  gen_tac >> simp[fn_entry_label_def, entry_block_def,
+    clear_nops_function_def, listTheory.NULL_EQ, listTheory.MAP_EQ_NIL] >>
+  Cases_on `fn.fn_blocks` >> simp[clear_nops_block_def]
+QED
+
+Triviality clear_nops_function_correct_run_function[local]:
+  !fuel ctx fn s.
+    wf_function fn /\ s.vs_inst_idx = 0 ==>
+    result_equiv {} (run_function fuel ctx fn s)
+      (run_function fuel ctx (clear_nops_function fn) s)
+Proof
+  rpt strip_tac >>
+  simp[run_function_def, fn_entry_label_clear_nops] >>
+  Cases_on `fn_entry_label fn`
+  >- simp[result_equiv_def]
+  >> simp_tac std_ss [GSYM result_equiv_is_lift_result] >>
+  irule passSharedPropsTheory.clear_nops_function_correct >>
+  simp[]
+QED
+
+(* Helper: run_function = run_blocks when fn_entry_label known *)
+Triviality run_function_is_run_blocks[local]:
+  fn_entry_label fn = SOME s.vs_current_bb /\ s.vs_inst_idx = 0 ==>
+  run_function fuel ctx fn s = run_blocks fuel ctx fn s
+Proof
+  strip_tac >> simp[run_function_def] >>
+  Cases_on `s` >> gvs[venom_state_fn_updates]
+QED
+
+(* Helper: fn_entry_label preserved by function_map_transform when bt preserves label *)
+Triviality fn_entry_label_function_map_transform[local]:
+  (!bb. (bt bb).bb_label = bb.bb_label) ==>
+  fn_entry_label (function_map_transform bt fn) = fn_entry_label fn
+Proof
+  strip_tac >>
+  simp[fn_entry_label_def, entry_block_def, function_map_transform_def,
+       listTheory.NULL_EQ, listTheory.MAP_EQ_NIL] >>
+  Cases_on `fn.fn_blocks` >> simp[]
+QED
 
 Theorem overflow_elim_function_correct:
   !fuel ctx fn s.
@@ -39,7 +84,76 @@ Theorem overflow_elim_function_correct:
       (run_function fuel ctx fn s)
       (run_function fuel ctx (overflow_elim_function fn) s)
 Proof
-  ACCEPT_TAC overflow_elim_function_correct_proof
+  rpt strip_tac
+  \\ REWRITE_TAC[BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_function_eq)]
+  \\ qabbrev_tac `bt = analysis_block_transform_widen NONE (range_analyze fn)
+       (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                    (range_unwrap v) inst])`
+  (* Bridge: all run_function = run_blocks *)
+  \\ `!fn'. fn_entry_label fn' = fn_entry_label fn ==>
+       run_function fuel ctx fn' s = run_blocks fuel ctx fn' s` by
+    (rpt strip_tac >> irule run_function_is_run_blocks >> simp[])
+  \\ `(bt (HD fn.fn_blocks)).bb_label = (HD fn.fn_blocks).bb_label` by
+    simp[analysis_block_transform_widen_def, Abbr `bt`]
+  \\ `fn_entry_label (function_map_transform bt fn) = fn_entry_label fn` by
+    (irule fn_entry_label_function_map_transform >> simp[Abbr `bt`,
+       analysis_block_transform_widen_def])
+  \\ `fn_entry_label (clear_nops_function (function_map_transform bt fn)) =
+      fn_entry_label fn` by
+    simp[fn_entry_label_clear_nops]
+  (* Rewrite all run_function to run_blocks *)
+  \\ fs[]
+  (* Apply overflow_elim_function_sim for run_blocks *)
+  \\ mp_tac overflow_elim_function_sim
+  \\ disch_then (qspecl_then [`fn`, `fuel`, `ctx`, `s`] mp_tac)
+  \\ simp[Abbr `bt`]
+  \\ (impl_tac >- (
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    fs[fn_entry_label_def] >> Cases_on `entry_block fn` >> gvs[] >>
+    drule cfgAnalysisPropsTheory.cfg_analyze_preorder_entry_first >>
+    strip_tac >> metis_tac[rich_listTheory.HEAD_MEM]))
+  \\ strip_tac
+  >- (DISJ1_TAC >> metis_tac[])
+  \\ DISJ2_TAC
+  \\ irule lift_result_trans
+  \\ conj_tac >- metis_tac[state_equiv_trans]
+  \\ conj_tac >- metis_tac[execution_equiv_trans]
+  \\ qexists_tac `run_blocks fuel ctx
+       (function_map_transform
+         (analysis_block_transform_widen NONE (range_analyze fn)
+           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                        (range_unwrap v) inst])) fn) s`
+  \\ conj_tac >- first_assum ACCEPT_TAC
+  \\ `run_function fuel ctx
+        (clear_nops_function (function_map_transform
+           (analysis_block_transform_widen NONE (range_analyze fn)
+             (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                          (range_unwrap v) inst])) fn)) s =
+      run_blocks fuel ctx
+        (clear_nops_function (function_map_transform
+           (analysis_block_transform_widen NONE (range_analyze fn)
+             (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                          (range_unwrap v) inst])) fn)) s` by
+    (first_x_assum irule >> simp[fn_entry_label_clear_nops])
+  \\ pop_assum (fn th => REWRITE_TAC [GSYM th])
+  \\ simp_tac std_ss [GSYM result_equiv_is_lift_result,
+       GSYM analysis_function_transform_widen_def]
+  (* run_blocks (aft fn) s = run_function (aft fn) s *)
+  \\ `run_blocks fuel ctx
+        (analysis_function_transform_widen NONE (range_analyze fn)
+           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                        (range_unwrap v) inst]) fn) s =
+      run_function fuel ctx
+        (analysis_function_transform_widen NONE (range_analyze fn)
+           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                        (range_unwrap v) inst]) fn) s` by
+    (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [GSYM run_function_is_run_blocks])) >>
+     simp[fn_entry_label_function_map_transform,
+          analysis_function_transform_widen_def,
+          analysis_block_transform_widen_def])
+  \\ pop_assum SUBST1_TAC
+  \\ irule clear_nops_function_correct_run_function
+  \\ simp[overflow_elim_analysis_transform_wf]
 QED
 
 (* ===== Core structural lemma: identity or mk_nop ===== *)

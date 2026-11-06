@@ -1757,7 +1757,7 @@ Proof
 QED
 
 (* Helper: INDEX_OF returning SOME implies MEM *)
-Triviality INDEX_OF_SOME_MEM:
+Theorem INDEX_OF_SOME_MEM:
   !x l i. INDEX_OF x l = SOME i ==> MEM x l
 Proof
   rpt strip_tac >> CCONTR_TAC >> fs[GSYM INDEX_OF_eq_NONE]

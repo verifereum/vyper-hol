@@ -1056,7 +1056,7 @@ Proof
     qspecl_then [`state_equiv (fresh_vars_in_context ctx)`,
                  `execution_equiv (fresh_vars_in_context ctx)`,
                  `fn`, `transform_block fn`]
-      mp_tac resolving_block_sim_function_v2 >>
+      mp_tac resolving_block_sim_function >>
     simp[LET_THM] >>
     impl_tac >- (
       rpt conj_tac

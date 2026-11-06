@@ -2,16 +2,16 @@
  * Memory SSA Analysis — Proofs
  *
  * Proves safety properties of the memory SSA construction.
- * Consumed by memSSAPropsScript.sml via ACCEPT_TAC.
+ * Consumers import it through memSSAAnalysisScript.sml.
  *)
 
 Theory memSSAProofs
 Ancestors
   memSSADefs
-  dominatorAnalysisProps
+  dominatorProofs
   cfgAnalysisProps
   cfgHelpers
-  memAliasProps
+  memAliasProps cfgCorrectnessProof
 Libs
   listTheory rich_listTheory finite_mapTheory pairTheory pred_setTheory
   memSSAProofsLib
@@ -3262,17 +3262,17 @@ Proof
   >- (
     `strict_dominates (dom_analyze (cfg_analyze fn) fn) x lbl` by (
       mp_tac (Q.SPECL [`fn`, `lbl`, `x`]
-        (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate)) >> simp[]) >>
+        (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate)) >> simp[]) >>
     fs[dominatorDefsTheory.strict_dominates_def] >>
-    match_mp_tac (SIMP_RULE (srw_ss()) [] dominates_reachable) >>
+    match_mp_tac (SIMP_RULE (srw_ss()) [] dominatorProofsTheory.dominates_reachable) >>
     qexists_tac `lbl` >> simp[])
   >> mp_tac (Q.SPECL [`fn`, `lbl`, `x`]
-       (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate)) >>
+       (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate)) >>
   simp[dominatorDefsTheory.strict_dominates_def]
 QED
 
-(* Simplified dominates_trans: chain two dominance facts *)
-Triviality dominates_chain:
+(* Simplified dominatorProofsTheory.dominates_trans: chain two dominance facts *)
+Triviality dominates_chain_trans:
   ∀fn a b c.
     wf_function fn ∧
     cfg_reachable_of (cfg_analyze fn) c ∧
@@ -3282,7 +3282,7 @@ Triviality dominates_chain:
 Proof
   rpt strip_tac >>
   mp_tac (SIMP_RULE (srw_ss()) [LET_THM, AND_IMP_INTRO,
-    GSYM CONJ_ASSOC] dominates_trans) >>
+    GSYM CONJ_ASSOC] dominatorProofsTheory.dominates_trans) >>
   disch_then (qspecl_then [`fn`, `a`, `b`, `c`] mp_tac) >> simp[]
 QED
 
@@ -3330,7 +3330,7 @@ Triviality block_defs_dom_self:
               (mn_block (THE (FLOOKUP ms.ms_nodes d))) lbl
 Proof
   rpt strip_tac >> fs[block_maps_correct_def] >> res_tac >> gvs[] >>
-  fs[flookup_thm] >> match_mp_tac dom_self >> simp[]
+  fs[flookup_thm] >> match_mp_tac dominatorProofsTheory.dom_self >> simp[]
 QED
 
 Triviality block_phis_dom_self:
@@ -3346,7 +3346,7 @@ Proof
     fs[block_maps_correct_def] >> res_tac >> fs[]) >>
   simp[memSSADefsTheory.mn_block_def] >>
   conj_tac >- fs[flookup_thm] >>
-  match_mp_tac dom_self >> simp[]
+  match_mp_tac dominatorProofsTheory.dom_self >> simp[]
 QED
 
 (* Dom set at idom is a proper subset of dom set at lbl *)
@@ -3364,7 +3364,7 @@ Proof
   `MEM lbl (fn_labels fn)` by
     metis_tac[cfg_analyze_reachable_in_labels] >>
   imp_res_tac idom_dominates >>
-  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] idom_is_immediate) >>
+  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] dominatorProofsTheory.idom_is_immediate) >>
   simp[LET_THM] >> strip_tac >>
   simp[PSUBSET_DEF] >> conj_tac
   >- (
@@ -3373,13 +3373,13 @@ Proof
     `dominates dom x d` by fs[dominatorDefsTheory.dominates_def] >>
     `dominates dom d lbl` by
       fs[dominatorDefsTheory.strict_dominates_def] >>
-    mp_tac dominates_trans >>
+    mp_tac dominatorProofsTheory.dominates_trans >>
     disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `x`, `d`, `lbl`] mp_tac) >>
     simp[LET_THM])
   >- (
     SPOSE_NOT_THEN ASSUME_TAC >>
     `dominates dom lbl lbl` by
-      (simp[Abbr `dom`] >> match_mp_tac dom_self >> simp[]) >>
+      (simp[Abbr `dom`] >> match_mp_tac dominatorProofsTheory.dom_self >> simp[]) >>
     `MEM lbl (fmap_lookup_list dom.da_dominators lbl)` by
       fs[dominatorDefsTheory.dominates_def] >>
     `MEM lbl (fmap_lookup_list dom.da_dominators d)` by
@@ -3387,7 +3387,7 @@ Proof
     `dominates dom lbl d` by fs[dominatorDefsTheory.dominates_def] >>
     `dominates dom d lbl` by fs[dominatorDefsTheory.strict_dominates_def] >>
     `lbl = d` by (
-      mp_tac dominates_antisym >>
+      mp_tac dominatorProofsTheory.dominates_antisym >>
       disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `lbl`, `d`] mp_tac) >>
       gvs[LET_THM]) >>
     fs[dominatorDefsTheory.strict_dominates_def])
@@ -3406,7 +3406,7 @@ Proof
   `set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators lbl) ⊆
    set (fn_labels fn)` by (
     rw[SUBSET_DEF] >>
-    mp_tac dom_labels_bounded >>
+    mp_tac dominatorProofsTheory.dom_labels_bounded >>
     disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `lbl`, `x`] mp_tac) >>
     simp[LET_THM]) >>
   `CARD (set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators lbl)) ≤
@@ -3438,7 +3438,7 @@ Proof
   `MEM lbl (fn_labels fn)` by metis_tac[cfg_analyze_reachable_in_labels] >>
   qabbrev_tac `dom = dom_analyze (cfg_analyze fn) fn` >>
   `dominates dom lbl lbl` by
-    (simp[Abbr `dom`] >> match_mp_tac dom_self >> simp[]) >>
+    (simp[Abbr `dom`] >> match_mp_tac dominatorProofsTheory.dom_self >> simp[]) >>
   `MEM lbl (fmap_lookup_list dom.da_dominators lbl)` by
     fs[dominatorDefsTheory.dominates_def] >>
   `0 < n` by
@@ -3468,14 +3468,14 @@ Proof
       Cases_on `fn.fn_blocks` >> gvs[]) >>
     `lbl <> bb.bb_label` by (
       CCONTR_TAC >> gvs[] >>
-      mp_tac dom_entry_self >>
+      mp_tac dominatorProofsTheory.dom_entry_self >>
       disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `bb`] mp_tac) >>
       simp[] >> strip_tac >>
       fs[dominatorDefsTheory.dominates_def] >>
       `c ∈ set (fmap_lookup_list dom.da_dominators bb.bb_label)` by fs[] >>
       gvs[]) >>
     `?d. idom_of dom lbl = SOME d` by
-      (simp[Abbr `dom`] >> irule idom_exists >> simp[]) >>
+      (simp[Abbr `dom`] >> irule dominatorProofsTheory.idom_exists >> simp[]) >>
     simp[] >>
     `cfg_reachable_of (cfg_analyze fn) d ∧ dominates dom d lbl` by (
       mp_tac idom_dominates >>
@@ -3485,9 +3485,9 @@ Proof
       fs[dominatorDefsTheory.strict_dominates_def] >>
     `dominates dom c d` by (
       Cases_on `c = d`
-      >- (simp[Abbr `dom`] >> match_mp_tac dom_self >>
+      >- (simp[Abbr `dom`] >> match_mp_tac dominatorProofsTheory.dom_self >>
           simp[] >> metis_tac[cfg_analyze_reachable_in_labels])
-      >> mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] idom_is_immediate) >>
+      >> mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] dominatorProofsTheory.idom_is_immediate) >>
       simp[Abbr `dom`, LET_THM] >> strip_tac >>
       first_x_assum match_mp_tac >>
       fs[dominatorDefsTheory.strict_dominates_def]) >>
@@ -3632,7 +3632,7 @@ Proof
     drule_all idom_dominates >> strip_tac >>
     last_x_assum (qspecl_then [`ms`, `fn`, `x`] mp_tac) >>
     simp[] >> strip_tac >>
-    match_mp_tac dominates_chain >> qexists_tac `x` >> simp[])
+    match_mp_tac dominates_chain_trans >> qexists_tac `x` >> simp[])
   >> gvs[] >> metis_tac[block_phis_dom_self]
 QED
 
@@ -3647,12 +3647,12 @@ Triviality sdom_dom_idom:
     dominates (dom_analyze (cfg_analyze fn) fn) c d
 Proof
   rpt strip_tac >>
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate) >>
+  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate) >>
   disch_then (qspecl_then [`fn`, `lbl`] mp_tac) >> simp[] >> strip_tac >>
   Cases_on `c = d`
-  >- metis_tac[SIMP_RULE (srw_ss()) [] dom_self,
+  >- metis_tac[SIMP_RULE (srw_ss()) [] dominatorProofsTheory.dom_self,
                cfg_analyze_reachable_in_labels,
-               SIMP_RULE (srw_ss()) [] dominates_reachable,
+               SIMP_RULE (srw_ss()) [] dominatorProofsTheory.dominates_reachable,
                dominatorDefsTheory.strict_dominates_def]
   >> first_x_assum match_mp_tac >>
   fs[dominatorDefsTheory.strict_dominates_def]
@@ -3742,7 +3742,7 @@ Proof
         UNABBREV_ALL_TAC >>
         match_mp_tac (SIMP_RULE (srw_ss()) [] get_exit_def_dominates) >> simp[]) >>
       conj_tac >- simp[] >>
-      match_mp_tac dominates_chain >> qexists_tac `x'` >> simp[])
+      match_mp_tac dominates_chain_trans >> qexists_tac `x'` >> simp[])
     >> (* block_phis = SOME x': use block_phis_dom_self *)
     metis_tac[block_phis_dom_self])
   >> (* SOME x': find_prev_def found a def *)
@@ -4592,7 +4592,7 @@ Proof
   (* IH: b ∈ FDOM ∧ dom(b, mid) *)
   first_x_assum (qspecl_then [`mid`, `b`, `bp`, `fn`, `addr_sp`] mp_tac) >>
   simp[] >> strip_tac >>
-  match_mp_tac dominates_chain >>
+  match_mp_tac dominates_chain_trans >>
   qexists_tac `mn_block (THE (FLOOKUP
     (mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
      bp fn addr_sp).ms_nodes mid))` >>
@@ -4641,14 +4641,14 @@ Proof
         `fuel`, `x`, `d`, `cfg_analyze fn`] get_exit_def_dominates) >>
       simp[] >> strip_tac >>
       mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `x`, `blk_lbl`]
-        dominates_antisym) >>
+        dominatorProofsTheory.dominates_antisym) >>
       simp[LET_THM] >> strip_tac >>
       (* x = blk_lbl; substitute *)
       pop_assum SUBST_ALL_TAC >>
       (* idom_of ... blk_lbl = SOME blk_lbl → strict_dominates blk_lbl blk_lbl *)
       mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
         (Q.SPECL [`fn`, `cfg_analyze fn`, `blk_lbl`, `blk_lbl`]
-          idom_is_immediate)) >>
+          dominatorProofsTheory.idom_is_immediate)) >>
       simp[dominatorDefsTheory.strict_dominates_def])
     (* phi case → x ≠ d because d is not MnPhi but x is *)
     >> CCONTR_TAC >> fs[] >>
@@ -5441,7 +5441,7 @@ Proof
          (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes mid))`,
       `mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
          (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes b))`]
-      dominates_antisym) >>
+      dominatorProofsTheory.dominates_antisym) >>
     simp[LET_THM])
   (* mn_block mid = mn_block a follows from mid=b and a=b *)
   \\ `mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
@@ -6551,14 +6551,14 @@ Proof
     qpat_x_assum `Abbrev (cfg = _)`
       (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
     `cfg_reachable_of (cfg_analyze fn) def_blk` by
-      metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_reachable] >>
+      metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_reachable] >>
     `dominates (dom_analyze (cfg_analyze fn) fn) bb.bb_label def_blk` by (
-      irule (SIMP_RULE (srw_ss()) [LET_THM] dom_entry_dominates_all) >>
+      irule (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dom_entry_dominates_all) >>
       simp[]) >>
-    metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_antisym]) >>
+    metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_antisym]) >>
   (* idom exists for access_blk *)
   `?idom_lbl. idom_of dom access_blk = SOME idom_lbl` by (
-    mp_tac idom_exists >>
+    mp_tac dominatorProofsTheory.idom_exists >>
     disch_then (qspecl_then [`fn`, `cfg`, `bb`, `access_blk`] mp_tac) >>
     simp[Abbr `dom`, LET_THM, Abbr `cfg`]) >>
   (* Unpack build: rd = reaching_in_block ms2 ... *)
@@ -6596,23 +6596,23 @@ Proof
         simp[mem_ssa_build_def, LET_THM, remove_redundant_phis_fields,
              connect_all_fields, Abbr `cfg`, Abbr `dom`]) >>
       `dominates dom def_blk idom_lbl` by (
-        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate) >>
+        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate) >>
         disch_then (qspecl_then [`fn`, `access_blk`, `idom_lbl`] mp_tac) >>
         impl_tac >- simp[Abbr `cfg`] >>
         simp[Abbr `dom`, Abbr `cfg`] >> strip_tac >>
         Cases_on `def_blk = idom_lbl` >> gvs[]
-        >- (irule (SIMP_RULE (srw_ss()) [LET_THM] dom_self) >> simp[] >>
+        >- (irule (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dom_self) >> simp[] >>
             fs[dominatorDefsTheory.strict_dominates_def] >>
-            metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_reachable,
+            metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_reachable,
                       cfg_analyze_reachable_in_labels])
         >> first_x_assum (qspec_then `def_blk` mp_tac) >> simp[]) >>
       `cfg_reachable_of cfg idom_lbl` by (
-        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate) >>
+        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate) >>
         disch_then (qspecl_then [`fn`, `access_blk`, `idom_lbl`] mp_tac) >>
         impl_tac >- simp[Abbr `cfg`] >>
         simp[Abbr `dom`, Abbr `cfg`] >> strip_tac >>
         gvs[dominatorDefsTheory.strict_dominates_def] >>
-        metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_reachable]) >>
+        metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_reachable]) >>
       `fmap_lookup_list ms2.ms_block_defs def_blk <> []` by (
         qpat_assum `FLOOKUP (mem_ssa_build _ _ _ _ _).ms_nodes def_id = _`
           (mp_tac o MATCH_MP build_MnDef_block_defs_nonempty) >>
@@ -7841,7 +7841,7 @@ Proof
   simp[cfgHelpersTheory.cfg_analyze_preds,
        cfgHelpersTheory.mem_build_preds] >>
   sg `MEM p (fn_labels fn)`
-  >- metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels] >>
+  >- metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels] >>
   fs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
   qexists_tac `bb` >> gvs[] >>
   gvs[GSYM cfgDefsTheory.cfg_succs_of_def,
@@ -7978,14 +7978,6 @@ Proof
   simp[]
 QED
 
-(* INDEX_OF x l = SOME i ==> MEM x l.
-   INDEX_OF_SOME_MEM is local to cfgHelpers, so we provide our own. *)
-Triviality index_of_some_mem:
-  !x l i. INDEX_OF x l = SOME i ==> MEM x l
-Proof
-  CCONTR_TAC >> gvs[GSYM INDEX_OF_eq_NONE]
-QED
-
 (* A strictly dominated label cannot be the entry block. *)
 Triviality sdom_not_entry:
   !fn ebb d lbl.
@@ -7996,10 +7988,10 @@ Triviality sdom_not_entry:
     ==> lbl <> ebb.bb_label
 Proof
   rpt strip_tac >> gvs[] >>
-  mp_tac dominatorAnalysisPropsTheory.dom_entry_dominates_all >>
+  mp_tac dominatorProofsTheory.dom_entry_dominates_all >>
   disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `ebb`, `d`] mp_tac) >>
   simp[] >> strip_tac >>
-  metis_tac[dominatorProofsTheory.dominates_antisym_proof,
+  metis_tac[dominatorProofsTheory.dominates_antisym,
             dominatorDefsTheory.strict_dominates_def]
 QED
 
@@ -8040,7 +8032,7 @@ Proof
   qpat_x_assum `dfs_pre = cfg.cfg_dfs_pre`
     (ASSUME_TAC o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
   (* P1: MEM qb dfs_pre *)
-  sg `MEM qb dfs_pre` >- (imp_res_tac index_of_some_mem) >>
+  sg `MEM qb dfs_pre` >- (imp_res_tac INDEX_OF_SOME_MEM) >>
   (* P2: cfg_reachable_of cfg qb *)
   sg `cfg_reachable_of cfg qb` >- res_tac >>
   (* P3: cfg_reachable_of cfg def_blk *)
@@ -8066,7 +8058,7 @@ Proof
   simp[GSYM cfgDefsTheory.cfg_succs_of_def] >>
   strip_tac >>
   (* P6: MEM p dfs_pre *)
-  sg `MEM p dfs_pre` >- (imp_res_tac index_of_some_mem) >>
+  sg `MEM p dfs_pre` >- (imp_res_tac INDEX_OF_SOME_MEM) >>
   (* P7: cfg_reachable_of cfg p *)
   sg `cfg_reachable_of cfg p` >- res_tac >>
   (* P8: MEM p (cfg_preds_of cfg qb) *)
@@ -8108,16 +8100,8 @@ Proof
   simp[]
 QED
 
-(* Bidirectional: reachable ↔ MEM in dfs_pre. Avoids expanding cfg_analyze_def. *)
-Triviality reachable_mem_dfs_pre:
-  !fn x. wf_function fn /\ cfg_reachable_of (cfg_analyze fn) x ==>
-         MEM x (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  imp_res_tac cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
-  gvs[EXTENSION, SPECIFICATION]
-QED
-
+(* MEM in dfs_pre implies reachable (the converse is reachable_in_dfs_pre).
+   Avoids expanding cfg_analyze_def. *)
 Triviality mem_dfs_pre_reachable:
   !fn x. wf_function fn /\ MEM x (cfg_analyze fn).cfg_dfs_pre ==>
          cfg_reachable_of (cfg_analyze fn) x
@@ -8142,14 +8126,14 @@ Proof
   rpt strip_tac >>
   gvs[dominatorDefsTheory.strict_dominates_def] >>
   (* MEM x dfs_pre from reachable *)
-  imp_res_tac reachable_mem_dfs_pre >>
+  imp_res_tac reachable_in_dfs_pre >>
   sg `?i. INDEX_OF x (cfg_analyze fn).cfg_dfs_pre = SOME i`
   >- (Cases_on `INDEX_OF x (cfg_analyze fn).cfg_dfs_pre` >>
       gvs[INDEX_OF_eq_NONE]) >>
   qexists_tac `i` >> simp[] >>
   (* cfg_reachable y from INDEX_OF *)
   sg `cfg_reachable_of (cfg_analyze fn) y`
-  >- (imp_res_tac index_of_some_mem >> imp_res_tac mem_dfs_pre_reachable) >>
+  >- (imp_res_tac INDEX_OF_SOME_MEM >> imp_res_tac mem_dfs_pre_reachable) >>
   mp_tac dominates_index_le >>
   disch_then (qspecl_then [`fn`, `ebb`, `x`, `y`, `i`, `j`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -8263,7 +8247,7 @@ Proof
   irule walk_reachable_trans >> qexists_tac `z` >> simp[] >>
   (* INDEX_OF b dfs_pre from reachable *)
   sg `?qi. INDEX_OF b dfs_pre = SOME qi`
-  >- (imp_res_tac reachable_mem_dfs_pre >>
+  >- (imp_res_tac reachable_in_dfs_pre >>
       Cases_on `INDEX_OF b dfs_pre` >> gvs[Abbr `dfs_pre`, INDEX_OF_eq_NONE]) >>
   (* qi <= idx via dominates_index_le *)
   sg `qi <= idx`
@@ -8396,7 +8380,7 @@ Proof
   rpt strip_tac >>
   wrap_build_abbrevs >>
   sg `cfg_reachable_of cfg (mn_block (THE (FLOOKUP ms.ms_nodes rd)))`
-  >- (imp_res_tac index_of_some_mem >> gvs[]) >>
+  >- (imp_res_tac INDEX_OF_SOME_MEM >> gvs[]) >>
   sg `cfg_reachable_of cfg b`
   >- (gvs[dominatorDefsTheory.strict_dominates_def] >>
       metis_tac[dominatorProofsTheory.dominates_reachable]) >>
@@ -8690,7 +8674,7 @@ Proof
   mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] build_node_block_reachable)) >>
   disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `rd`, `rd_node`] mp_tac) >>
   simp[] >> strip_tac >>
-  imp_res_tac reachable_mem_dfs_pre >>
+  imp_res_tac reachable_in_dfs_pre >>
   `?idx. INDEX_OF (mn_block rd_node) (cfg_analyze fn).cfg_dfs_pre = SOME idx`
     by metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_SOME_NONE,
                  optionTheory.option_nchotomy] >>

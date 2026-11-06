@@ -108,21 +108,6 @@ Proof
   gvs[venomInstTheory.is_terminator_def]
 QED
 
-(* PHI opcodes are unchanged by lit_codesize_inst. *)
-Triviality lit_codesize_inst_phi:
-  !inst. inst.inst_opcode = PHI ==> (lit_codesize_inst inst).inst_opcode = PHI
-Proof
-  rw[literalsCodesizeDefsTheory.lit_codesize_inst_def]
-QED
-
-(* lit_codesize_inst never produces a PHI opcode from a non-PHI input. *)
-Triviality lit_codesize_inst_nonphi:
-  !inst. inst.inst_opcode <> PHI ==> (lit_codesize_inst inst).inst_opcode <> PHI
-Proof
-  rw[literalsCodesizeDefsTheory.lit_codesize_inst_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
-QED
-
 (* The literal codesize transform preserves SSA form — it only replaces
    opcodes, not variable definitions. *)
 Theorem lit_codesize_preserves_ssa_form:
@@ -154,6 +139,6 @@ Proof
   simp[literalsCodesizeDefsTheory.lit_codesize_function_def] >>
   irule passSimulationPropsTheory.map_transform_preserves_wf >>
   simp[lit_codesize_inst_id, lit_codesize_inst_terminator_identity,
-       lit_codesize_inst_nonterminator, lit_codesize_inst_phi,
-       lit_codesize_inst_nonphi]
+       lit_codesize_inst_nonterminator, lit_codesize_inst_phi_opcode_preserving,
+       lit_codesize_inst_non_phi_opcode_preserving]
 QED

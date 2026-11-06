@@ -458,7 +458,7 @@ End
 (* Helper: adding an element to the exclusion set decreases filter count
    by exactly 1 when the element is in the list and not yet excluded,
    and the list has no duplicates. *)
-Triviality filter_add_mem_decrease:
+Theorem filter_add_mem_decrease:
   ∀U (h:'a) hp.
     MEM h U ∧ ¬MEM h hp ∧ ALL_DISTINCT U ⇒
     LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) + 1 ≤
@@ -486,7 +486,7 @@ Proof
 QED
 
 (* Helper: strengthening the exclusion set cannot increase filter count *)
-Triviality filter_weaken_exclusion:
+Theorem filter_weaken_exclusion:
   ∀(U:'a list) hp1 hp2.
     (∀x. MEM x hp1 ⇒ MEM x hp2) ⇒
     LENGTH (FILTER (λx. ¬MEM x hp2) U) ≤
@@ -496,7 +496,7 @@ Proof
 QED
 
 (* process_frontiers preserves block labels (only modifies instructions) *)
-Triviality process_frontiers_labels:
+Theorem process_frontiers_labels:
   ∀fs var pm li bbs rest hp bbs' rest' hp'.
     process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ⇒
     MAP (λbb. bb.bb_label) bbs' = MAP (λbb. bb.bb_label) bbs

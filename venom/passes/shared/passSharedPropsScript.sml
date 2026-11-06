@@ -12,6 +12,8 @@
  *   NOP clearing:
  *     clear_nops_block_correct    — removing NOPs preserves execution (result_equiv)
  *     clear_nops_function_correct — removing NOPs preserves execution (result_equiv)
+ *     clear_nops_function_correct_blocks_wf — the same, assuming only that
+ *                                   every block is well formed
  *
  *   Operand substitution:
  *     subst_operand_eval           — single substitution preserves eval_operand
@@ -56,7 +58,7 @@ Ancestors
   venomInstProps
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep venomState venomInst venomWf
-  copyFwdEquiv pred_set list rich_list
+  copyFwdEquiv pred_set list rich_list stateEquivProps passSimulationProofs
 
 
 
@@ -428,12 +430,6 @@ Proof
   gen_tac >> Induct >>
   simp[lookup_block_def, listTheory.FIND_thm, clear_nops_block_def] >>
   rw[] >> fs[lookup_block_def, clear_nops_block_def]
-QED
-
-Triviality state_equiv_empty_eq:
-  !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
-Proof
-  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 (* If no element in the list is PHI, phi_prefix_length = 0 *)
@@ -823,9 +819,9 @@ Proof
   rpt strip_tac >> Cases_on `P h` >> fs[] >> metis_tac[]
 QED
 
-Theorem clear_nops_function_correct:
+Theorem clear_nops_function_correct_blocks_wf:
   !fuel ctx fn s.
-    wf_function fn /\ s.vs_inst_idx = 0 ==>
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\ s.vs_inst_idx = 0 ==>
     result_equiv {}
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (clear_nops_function fn) s)
@@ -839,42 +835,43 @@ Proof
     simp[result_equiv_def] >>
   rename1 `SOME bb` >>
   `bb_well_formed bb` by (
-    fs[wf_function_def, lookup_block_def] >>
-    drule find_some_mem >> metis_tac[]) >>
+    fs[lookup_block_def] >> drule find_some_mem >> metis_tac[]) >>
   `result_equiv {} (run_block fuel ctx bb s)
      (run_block fuel ctx (clear_nops_block bb) s)` by
     simp[clear_nops_run_block_equiv] >>
-  (* Now we need: result_equiv on both sides of the case-match on run_block *)
   Cases_on `run_block fuel ctx bb s`
   >- (
-    (* OK case *)
     Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
     gvs[result_equiv_def] >>
     TRY (imp_res_tac state_equiv_empty_eq >> gvs[result_equiv_def]) >>
-    (* Only OK-OK survives *)
     imp_res_tac state_equiv_empty_eq >> gvs[] >>
     imp_res_tac run_block_OK_inst_idx_0 >>
     Cases_on `v.vs_halted` >> gvs[result_equiv_def]
     >- simp[result_equiv_def, execution_equiv_def] >>
     once_rewrite_tac[GSYM clear_nops_function_def] >>
     first_x_assum irule >> simp[] >>
-    irule clear_nops_function_preserves_wf >> simp[])
-  >- (
-    (* Halt case *)
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def])
-  >- (
-    (* Abort case *)
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def])
-  >- (
-    (* IntRet case *)
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def])
-  >>
-  (* Error case *)
+    rpt strip_tac >>
+    gvs[clear_nops_function_def, MEM_MAP] >>
+    irule clear_nops_block_preserves_wf >> metis_tac[])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def]) >>
   Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
   gvs[result_equiv_def]
+QED
+
+Theorem clear_nops_function_correct:
+  !fuel ctx fn s.
+    wf_function fn /\ s.vs_inst_idx = 0 ==>
+    result_equiv {}
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (clear_nops_function fn) s)
+Proof
+  rpt strip_tac >> irule clear_nops_function_correct_blocks_wf >>
+  fs[wf_function_def]
 QED
 
 
@@ -914,7 +911,7 @@ Theorem clear_nops_function_preserves_ssa:
   !fn. ssa_form fn ==> ssa_form (clear_nops_function fn)
 Proof
   rpt strip_tac >>
-  irule passSimulationProofsTheory.ssa_form_sublist_proof >>
+  irule passSimulationProofsTheory.ssa_form_sublist >>
   qexists_tac `fn` >> simp[fn_insts_def, clear_nops_function_def] >>
   simp[clear_nops_fn_insts_sublist]
 QED

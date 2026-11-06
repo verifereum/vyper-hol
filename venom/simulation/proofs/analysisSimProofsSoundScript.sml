@@ -2,8 +2,8 @@
  * Analysis-Driven Simulation — Proofs (Part 2: Sound Correctness)
  *
  * Main theorems:
- *   df_analysis_pass_correct_sound_proof
- *   df_analysis_pass_correct_sound_inv2_proof
+ *   df_analysis_pass_correct_sound
+ *   df_analysis_pass_correct_sound_inv2
  *   df_analysis_pass_correct_sound_inv3_proof
  *)
 
@@ -20,7 +20,7 @@ Ancestors
 (* Forward-specialized dataflow theorems for sound proofs *)
 val fixpoint_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
-    dfAnalyzeProofsTheory.df_analyze_fixpoint_proof));
+    dfAnalyzeProofsTheory.df_analyze_fixpoint));
 val inter_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
     dfAnalyzeProofsTheory.df_at_inter_transfer_proof));
@@ -148,7 +148,7 @@ val sound_lift_tac =
      TRY (first_assum ACCEPT_TAC))) >>
   (ALL_TAC THEN_LT TRYALL sound_OK_tac);
 
-Theorem df_analysis_pass_correct_sound_proof:
+Theorem df_analysis_pass_correct_sound:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join transfer edge_transfer ctx
@@ -366,13 +366,13 @@ val sound_inv_block_entry_tac =
                             (run_block fuel run_ctx bb s2)` by
     sound_preserves_R_tac;
 
-(* Like df_analysis_pass_correct_sound_proof but:
+(* Like df_analysis_pass_correct_sound but:
    - Uses transfer_sound_wf (inst_wf available)
    - Threads state_inv alongside soundness
    - Per-inst sim gets both sound and state_inv
    Useful when soundness depends on a property (e.g. dfg_assigns_sound)
    that's preserved by well-formed step_inst but not by arbitrary ones. *)
-Theorem df_analysis_pass_correct_sound_inv2_proof:
+Theorem df_analysis_pass_correct_sound_inv2:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join transfer edge_transfer ctx

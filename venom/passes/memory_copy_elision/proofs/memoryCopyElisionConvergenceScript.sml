@@ -366,7 +366,7 @@ Theorem cf_init_state_inv[local]:
 Proof
   simp[cf_state_inv_def, init_df_state_def, FDOM_FEMPTY] >>
   rpt strip_tac >>
-  imp_res_tac dfAnalyzeProofsTheory.foldl_fupdate_const >> gvs[]
+  imp_res_tac dfAnalyzeProofsTheory.foldl_fempty_val >> gvs[]
 QED
 
 Theorem cf_init_state_inv_entry[local]:
@@ -379,19 +379,10 @@ Theorem cf_init_state_inv_entry[local]:
 Proof
   simp[cf_state_inv_def, init_df_state_def, FLOOKUP_UPDATE, FDOM_FEMPTY] >>
   rpt strip_tac >> Cases_on `lbl = lbl'` >> gvs[] >>
-  imp_res_tac dfAnalyzeProofsTheory.foldl_fupdate_const >> gvs[]
+  imp_res_tac dfAnalyzeProofsTheory.foldl_fempty_val >> gvs[]
 QED
 
 (* ===== Measure boundedness ===== *)
-
-Triviality sum_map_le_bound[local]:
-  !f bound l. EVERY (\x. f x <= bound) l ==>
-    SUM (MAP f l) <= bound * LENGTH l
-Proof
-  Induct_on `l` >> simp[MULT_CLAUSES] >> rpt strip_tac >>
-  `SUM (MAP f l) <= bound * LENGTH l` by (first_x_assum irule >> fs[]) >>
-  DECIDE_TAC
-QED
 
 Triviality cf_val_measure_boundary_le[local]:
   !bp fn st lbl.
@@ -534,28 +525,6 @@ Proof
   simp[LE_SUB_LCANCEL]
 QED
 
-(* ===== SUM helpers ===== *)
-
-Triviality sum_map_le[local]:
-  !f g l. EVERY (\x. f x <= g x) l ==> SUM (MAP f l) <= SUM (MAP g l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >> DECIDE_TAC
-QED
-
-Triviality sum_map_lt[local]:
-  !f g l.
-    EVERY (\x. f x <= g x) l /\
-    (?y. MEM y l /\ f y < g y) ==>
-    SUM (MAP f l) < SUM (MAP g l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (`SUM (MAP f l) <= SUM (MAP g l)` by
-        (irule sum_map_le >> fs[]) >> DECIDE_TAC)
-  >- (`f h <= g h` by fs[] >>
-      `SUM (MAP f l) < SUM (MAP g l)` by metis_tac[] >> DECIDE_TAC)
-QED
-
 (* ===== Boundary strict increase ===== *)
 
 Triviality boundary_measure_strict[local]:
@@ -589,21 +558,6 @@ Proof
   qexists_tac `lbl` >> fs[MEM_APPEND]
 QED
 
-
-(* ===== Weighted inequality helper ===== *)
-
-Triviality weighted_lt_cancel[local]:
-  !w (a:num) a' c. a < a' /\ c <= w ==> (w + 1) * a + c < (w + 1) * a'
-Proof
-  rpt strip_tac >>
-  `(w + 1) * a + c <= (w + 1) * a + w` by simp[] >>
-  `(w + 1) * a + w < (w + 1) * (a + 1)` by simp[LEFT_ADD_DISTRIB] >>
-  `a + 1 <= a'` by simp[] >>
-  `(w + 1) * (a + 1) <= (w + 1) * a'` by simp[LE_MULT_LCANCEL] >>
-  simp[]
-QED
-
-(* ===== cf_joined boundary equality ===== *)
 
 (* ===== Invariant preservation ===== *)
 

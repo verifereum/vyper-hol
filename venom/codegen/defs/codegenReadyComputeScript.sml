@@ -10,7 +10,7 @@ Theory codegenReadyCompute
 Ancestors
   stackPlanGen dominatorProofs dominatorDefs cfgAnalysisProps
   simplifyCfgCompute venomExecProps venomWf venomInst cfgTransform cfgDefs
-  passSharedDefs fcgDefs relation rich_list
+  passSharedDefs fcgDefs relation rich_list cfgCorrectnessProof
 
 (* ===== Relational / computed CFG bridges ===== *)
 
@@ -159,7 +159,7 @@ Proof
       `cfg_reachable_of (cfg_analyze fn) d` by
         metis_tac[fn_reachable_cfg_analyze] >>
       `MEM d (fn_labels fn)` by
-        metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels] >>
+        metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels] >>
       simp[dominatorDefsTheory.dominates_def] >>
       irule dominatorProofsTheory.on_every_path_dom >>
       simp[] >>

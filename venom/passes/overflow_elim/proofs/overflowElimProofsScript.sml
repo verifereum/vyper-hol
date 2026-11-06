@@ -3,8 +3,8 @@
  *
  * Depends on overflowElimHelpers for all DFG soundness infrastructure.
  * This file contains: overflow_elim_block_sim_ind, overflow_elim_block_sim,
- * overflow_elim_inv_step, overflow_elim_function_sim, and the
- * final theorem overflow_elim_function_correct_proof.
+ * overflow_elim_inv_step and overflow_elim_function_sim, used by
+ * overflowElimCorrectness.overflow_elim_function_correct.
  *)
 
 Theory overflowElimProofs
@@ -31,7 +31,6 @@ Ancestors
   rangeAnalysisDefs
   rangeEvalDefs
   valueRangeDefs
-  variableRangeAnalysisProps
   rangeAnalysisProofs
   dfAnalyzeWidenDefs
   dfgDefs
@@ -140,14 +139,6 @@ Proof
         step_pure2_output_in_fdom) >> simp[])
   >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
         step_pure2_output_in_fdom) >> simp[])
-QED
-
-Triviality state_equiv_empty_eq[local]:
-  !s1 s2. state_equiv {} s1 s2 ==> (s1 = s2)
-Proof
-  rw[state_equiv_def, execution_equiv_def] >>
-  Cases_on `s1` >> Cases_on `s2` >> gvs[] >>
-  fs[fmap_eq_flookup, lookup_var_def]
 QED
 
 Triviality lift_result_OK_left[local]:
@@ -311,7 +302,7 @@ Proof
   mp_tac (ISPECL [``range_sound``,
     ``range_transfer_opt``,
     ``(dfg_build_function fn, fn.fn_blocks)``]
-    transfer_sound_step) >>
+    analysisSimProofsTheory.transfer_sound_step) >>
   disch_then (qspecl_then [`EL st.vs_inst_idx bb.bb_instructions`,
     `fuel`, `ctx`, `st`, `s1`,
     `df_widen_at NONE (range_analyze fn) bb.bb_label st.vs_inst_idx`] mp_tac) >>
@@ -492,13 +483,13 @@ Proof
     qabbrev_tac `v_opt = df_widen_at NONE (range_analyze fn) bb.bb_label idx` >>
     (* Transformed block has same length and known instruction at idx *)
     `idx < LENGTH (bt bb).bb_instructions` by
-      simp[Abbr`bt`, analysis_block_transform_widen_def, FLAT_MAPi_SING,
+      simp[Abbr`bt`, analysis_block_transform_widen_def, flat_mapi_singleton,
            LENGTH_MAPi] >>
     `EL idx (bt bb).bb_instructions =
        overflow_elim_inst_v (dfg_build_function fn) (range_unwrap v_opt)
          dinst` by
       simp[Abbr`bt`, Abbr`dinst`, Abbr`v_opt`,
-           analysis_block_transform_widen_def, FLAT_MAPi_SING, EL_MAPi] >>
+           analysis_block_transform_widen_def, flat_mapi_singleton, EL_MAPi] >>
     qabbrev_tac `tinst = overflow_elim_inst_v (dfg_build_function fn)
                            (range_unwrap v_opt) dinst` >>
     `inst_wf dinst` by
@@ -577,7 +568,7 @@ Proof
   >- (
     (* Base case: st.vs_inst_idx >= LENGTH => get_instruction = NONE => Error *)
     simp[Once exec_block_def, get_instruction_def] >>
-    simp[Abbr`bt`, analysis_block_transform_widen_def, FLAT_MAPi_SING,
+    simp[Abbr`bt`, analysis_block_transform_widen_def, flat_mapi_singleton,
          LENGTH_MAPi] >>
     simp[Once exec_block_def, get_instruction_def]
   )
@@ -730,7 +721,7 @@ Proof
     simp[])
 QED
 
-Theorem overflow_elim_function_sim[local]:
+Theorem overflow_elim_function_sim:
   !fn fuel ctx s.
     wf_function fn /\ fn_inst_wf fn /\
     (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
@@ -824,46 +815,7 @@ QED
 
 Finalise overflow_elim_function_sim
 
-(* Lift clear_nops_function_correct from run_blocks to run_function *)
-Triviality fn_entry_label_clear_nops[local]:
-  !fn. fn_entry_label (clear_nops_function fn) = fn_entry_label fn
-Proof
-  gen_tac >> simp[fn_entry_label_def, entry_block_def,
-    clear_nops_function_def, listTheory.NULL_EQ, listTheory.MAP_EQ_NIL] >>
-  Cases_on `fn.fn_blocks` >> simp[clear_nops_block_def]
-QED
-
-Triviality clear_nops_function_correct_run_function[local]:
-  !fuel ctx fn s.
-    wf_function fn /\ s.vs_inst_idx = 0 ==>
-    result_equiv {} (run_function fuel ctx fn s)
-      (run_function fuel ctx (clear_nops_function fn) s)
-Proof
-  rpt strip_tac >>
-  simp[run_function_def, fn_entry_label_clear_nops] >>
-  Cases_on `fn_entry_label fn`
-  >- simp[result_equiv_def]
-  >> simp_tac std_ss [GSYM result_equiv_is_lift_result] >>
-  irule passSharedPropsTheory.clear_nops_function_correct >>
-  simp[]
-QED
-
-Triviality aftw_singleton_eq_fmt_mapi[local]:
-  !bottom result (f : 'a -> instruction -> instruction) fn.
-    analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
-    function_map_transform
-      (\bb. bb with bb_instructions :=
-        MAPi (\idx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
-             bb.bb_instructions) fn
-Proof
-  rw[analysis_function_transform_widen_def, function_map_transform_def,
-     ir_function_component_equality] >>
-  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
-  simp[analysis_block_transform_widen_def,
-       basic_block_component_equality, FLAT_MAPi_SING]
-QED
-
-Triviality overflow_elim_analysis_transform_wf[local]:
+Theorem overflow_elim_analysis_transform_wf:
   !fn. wf_function fn ==>
     wf_function
       (analysis_function_transform_widen NONE (range_analyze fn)
@@ -884,120 +836,3 @@ Proof
        oe_phi_pres, oe_not_phi_pres]
 QED
 
-(* Helper: run_function = run_blocks when fn_entry_label known *)
-Triviality run_function_is_run_blocks[local]:
-  fn_entry_label fn = SOME s.vs_current_bb /\ s.vs_inst_idx = 0 ==>
-  run_function fuel ctx fn s = run_blocks fuel ctx fn s
-Proof
-  strip_tac >> simp[run_function_def] >>
-  Cases_on `s` >> gvs[venom_state_fn_updates]
-QED
-
-(* Helper: fn_entry_label preserved by function_map_transform when bt preserves label *)
-Triviality fn_entry_label_function_map_transform[local]:
-  (!bb. (bt bb).bb_label = bb.bb_label) ==>
-  fn_entry_label (function_map_transform bt fn) = fn_entry_label fn
-Proof
-  strip_tac >>
-  simp[fn_entry_label_def, entry_block_def, function_map_transform_def,
-       listTheory.NULL_EQ, listTheory.MAP_EQ_NIL] >>
-  Cases_on `fn.fn_blocks` >> simp[]
-QED
-
-Theorem overflow_elim_function_correct_proof:
-  !fuel ctx fn s.
-    wf_function fn /\
-    fn_inst_wf fn /\
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    ALL_DISTINCT (fn_labels fn) /\
-    dfg_block_local fn /\
-    assert_local fn /\
-    (!bb. MEM bb fn.fn_blocks ==>
-      !i. i < LENGTH bb.bb_instructions - 1 ==>
-        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-      (LAST bb.bb_instructions).inst_opcode = JNZ /\
-      (LAST bb.bb_instructions).inst_operands =
-        [cond; Label true_lbl; Label false_lbl] ==>
-      true_lbl <> false_lbl) /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb /\
-    dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
-    range_sound (df_widen_at NONE (range_analyze fn) s.vs_current_bb 0) s ==>
-    (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (overflow_elim_function fn) s)
-Proof
-  rpt strip_tac
-  \\ REWRITE_TAC[BETA_RULE (PURE_REWRITE_RULE [LET_THM] overflow_elim_function_eq)]
-  \\ qabbrev_tac `bt = analysis_block_transform_widen NONE (range_analyze fn)
-       (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                    (range_unwrap v) inst])`
-  (* Bridge: all run_function = run_blocks *)
-  \\ `!fn'. fn_entry_label fn' = fn_entry_label fn ==>
-       run_function fuel ctx fn' s = run_blocks fuel ctx fn' s` by
-    (rpt strip_tac >> irule run_function_is_run_blocks >> simp[])
-  \\ `(bt (HD fn.fn_blocks)).bb_label = (HD fn.fn_blocks).bb_label` by
-    simp[analysis_block_transform_widen_def, Abbr `bt`]
-  \\ `fn_entry_label (function_map_transform bt fn) = fn_entry_label fn` by
-    (irule fn_entry_label_function_map_transform >> simp[Abbr `bt`,
-       analysis_block_transform_widen_def])
-  \\ `fn_entry_label (clear_nops_function (function_map_transform bt fn)) =
-      fn_entry_label fn` by
-    simp[fn_entry_label_clear_nops]
-  (* Rewrite all run_function to run_blocks *)
-  \\ fs[]
-  (* Apply overflow_elim_function_sim for run_blocks *)
-  \\ mp_tac overflow_elim_function_sim
-  \\ disch_then (qspecl_then [`fn`, `fuel`, `ctx`, `s`] mp_tac)
-  \\ simp[Abbr `bt`]
-  \\ (impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    fs[fn_entry_label_def] >> Cases_on `entry_block fn` >> gvs[] >>
-    drule cfgAnalysisPropsTheory.cfg_analyze_preorder_entry_first >>
-    strip_tac >> metis_tac[rich_listTheory.HEAD_MEM]))
-  \\ strip_tac
-  >- (DISJ1_TAC >> metis_tac[])
-  \\ DISJ2_TAC
-  \\ irule lift_result_trans
-  \\ conj_tac >- metis_tac[state_equiv_trans]
-  \\ conj_tac >- metis_tac[execution_equiv_trans]
-  \\ qexists_tac `run_blocks fuel ctx
-       (function_map_transform
-         (analysis_block_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst])) fn) s`
-  \\ conj_tac >- first_assum ACCEPT_TAC
-  \\ `run_function fuel ctx
-        (clear_nops_function (function_map_transform
-           (analysis_block_transform_widen NONE (range_analyze fn)
-             (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                          (range_unwrap v) inst])) fn)) s =
-      run_blocks fuel ctx
-        (clear_nops_function (function_map_transform
-           (analysis_block_transform_widen NONE (range_analyze fn)
-             (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                          (range_unwrap v) inst])) fn)) s` by
-    (first_x_assum irule >> simp[fn_entry_label_clear_nops])
-  \\ pop_assum (fn th => REWRITE_TAC [GSYM th])
-  \\ simp_tac std_ss [GSYM result_equiv_is_lift_result,
-       GSYM analysis_function_transform_widen_def]
-  (* run_blocks (aft fn) s = run_function (aft fn) s *)
-  \\ `run_blocks fuel ctx
-        (analysis_function_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst]) fn) s =
-      run_function fuel ctx
-        (analysis_function_transform_widen NONE (range_analyze fn)
-           (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
-                        (range_unwrap v) inst]) fn) s` by
-    (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [GSYM run_function_is_run_blocks])) >>
-     simp[fn_entry_label_function_map_transform,
-          analysis_function_transform_widen_def,
-          analysis_block_transform_widen_def])
-  \\ pop_assum SUBST1_TAC
-  \\ irule clear_nops_function_correct_run_function
-  \\ simp[overflow_elim_analysis_transform_wf]
-QED

@@ -6,7 +6,7 @@
  *
  * 1. mem_ssa_reaching_acyclic: FALSE without cfg = cfg_analyze fn /\
  *    dom = dom_analyze cfg fn. Cyclic idom creates reaching cycles.
- *    MECHANICAL proof below. Corrected: memSSAPropsTheory.mem_ssa_reaching_acyclic
+ *    MECHANICAL proof below. Corrected: memSSAProofsTheory.mem_ssa_reaching_acyclic
  *
  * 2. mem_ssa_clobber_sound: FALSE in two ways:
  *    (a) MnPhi access nodes trivially satisfy completely_contains via
@@ -14,7 +14,7 @@
  *    (b) Same-block later defs are not on the reaching chain but do
  *        dominate the access. Fixed by using strict_dominates instead
  *        of dominates. INFORMAL argument + supporting lemmas below.
- *    Corrected: memSSAPropsTheory.mem_ssa_clobber_sound
+ *    Corrected: memSSAProofsTheory.mem_ssa_clobber_sound
  *
  * 3. mem_ssa_phi_at_frontier: FALSE because Phase 4 removes redundant
  *    phis, breaking the frontier witness. No consumer. DROPPED from Props.

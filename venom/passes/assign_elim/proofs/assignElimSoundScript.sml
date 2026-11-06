@@ -17,7 +17,7 @@ Ancestors
   venomState venomWf venomInst venomInstProps
   venomExecSemantics venomExecProps
   dfAnalyzeDefs
-  finite_map list pred_set
+  finite_map list pred_set analysisSimProofsFwd
 
 (* ===== Proof predicate ===== *)
 
@@ -246,7 +246,7 @@ Proof
     ``\v inst. [assign_subst_inst v inst]``,
     ``\v inst. [assign_elim_inst (phi_used_vars fn) v inst]``,
     ``fn : ir_function``
-  ] analysisSimPropsTheory.analysis_function_transform_compare) >>
+  ] analysisSimProofsFwdTheory.analysis_function_transform_compare) >>
   simp_tac std_ss [LET_THM] >>
   (impl_tac >- (
     simp[state_equiv_execution_equiv_valid_state_rel,

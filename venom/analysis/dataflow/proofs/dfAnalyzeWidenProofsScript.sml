@@ -5,12 +5,12 @@
  * Mirror of dfAnalyzeProofs for the df_analyze_widen variant.
  *
  * TOP-LEVEL:
- *   df_analyze_widen_fixpoint_proof       — worklist converges to fixpoint
- *   df_widen_at_intra_transfer_proof      — within-block transfer
- *   df_widen_at_inter_transfer_proof      — inter-block: fold input = widened join
- *   df_analyze_widen_invariant_proof      — lattice invariant propagation
- *   df_process_widen_inflationary_proof   — monotone ops → inflationary
- *   df_process_widen_deps_complete_proof  — CFG inverse → deps complete
+ *   df_analyze_widen_fixpoint       — worklist converges to fixpoint
+ *   df_widen_at_intra_transfer      — within-block transfer
+ *   df_widen_at_inter_transfer      — inter-block: fold input = widened join
+ *   df_analyze_widen_invariant      — lattice invariant propagation
+ *   df_process_widen_inflationary   — monotone ops → inflationary
+ *   df_process_widen_deps_complete  — CFG inverse → deps complete
  *)
 
 Theory dfAnalyzeWidenProofs
@@ -84,7 +84,7 @@ Proof
 QED
 
 (* populate only changes dws_inst, so boundary/entry/visits are preserved *)
-Triviality populate_widen_inst_preserves_fields:
+Theorem populate_widen_inst_preserves_fields:
   !dir bottom join widen threshold transfer edge_transfer ctx entry_val
    cfg bbs lbls (st:'a df_widen_state).
     (df_populate_widen_inst dir bottom join widen threshold transfer
@@ -173,24 +173,6 @@ Proof
        LET_THM]
 QED
 
-Triviality fold_inst_disjoint_snd[local]:
-  !dir transfer l1 i1 e1 l2 i2 e2.
-    l1 <> l2 ==>
-    DISJOINT (FDOM (SND (df_fold_block dir transfer l1 i1 e1)))
-             (FDOM (SND (df_fold_block dir transfer l2 i2 e2)))
-Proof
-  rpt strip_tac >>
-  Cases_on `df_fold_block dir transfer l1 i1 e1` >>
-  Cases_on `df_fold_block dir transfer l2 i2 e2` >>
-  fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
-     pred_setTheory.IN_INTER, pred_setTheory.NOT_IN_EMPTY] >>
-  rpt strip_tac >> CCONTR_TAC >> fs[] >>
-  imp_res_tac dfAnalyzeProofsTheory.df_fold_block_keys >>
-  `FST x = l1` by (first_x_assum irule >> fs[finite_mapTheory.FLOOKUP_DEF]) >>
-  `FST x = l2` by (first_x_assum irule >> fs[finite_mapTheory.FLOOKUP_DEF]) >>
-  fs[]
-QED
-
 (* For a label in lbls, the fold inst_map is a submap of populate result *)
 Triviality populate_widen_inst_submap[local]:
   !dir (bottom:'a) join widen threshold transfer edge_transfer ctx
@@ -227,7 +209,7 @@ Proof
     pairarg_tac >> gvs[]) >>
   pop_assum SUBST1_TAC >>
   irule foldl_funion_submap >> simp[] >> rw[Abbr`g`] >>
-  metis_tac[fold_inst_disjoint_snd]
+  metis_tac[dfAnalyzeProofsTheory.fold_block_keys_disjoint]
 QED
 
 (* is_fixpoint transfers through populate when process only depends on
@@ -470,7 +452,7 @@ QED
 (* ===== Self-idempotent ===== *)
 
 (* Non-lbl boundary stability: process only updates lbl's boundary *)
-Theorem df_widen_process_boundary[local]:
+Theorem df_widen_process_boundary:
   !dir bottom join widen threshold transfer edge_transfer ctx entry_val
    cfg bbs lbl st l.
     l <> lbl ==>
@@ -653,7 +635,7 @@ Proof
   fs[Abbr`fv_b1`, Abbr`fv_b0`]
 QED
 
-Theorem df_process_widen_deps_complete_proof:
+Theorem df_process_widen_deps_complete:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs.
     (!a b. MEM b (cfg_succs_of cfg a) <=> MEM a (cfg_preds_of cfg b)) /\
@@ -724,7 +706,7 @@ Theorem df_process_widen_deps_complete_simple:
                 | Backward => cfg_preds_of cfg) ==>
     wl_deps_complete changed process deps
 Proof
-  mp_tac df_process_widen_deps_complete_proof \\ rw[]
+  mp_tac df_process_widen_deps_complete \\ rw[]
 QED
 
 (* Convergence: widening ensures the worklist empties.
@@ -732,7 +714,7 @@ QED
    for each block stabilizes after finitely many steps.
    widen_bounded: widening produces a value that is an upper bound AND
    the ascending chain from repeated widening has bounded length. *)
-Theorem df_analyze_widen_fixpoint_proof:
+Theorem df_analyze_widen_fixpoint:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn
    (leq : 'a df_widen_state -> 'a df_widen_state -> bool)
@@ -770,7 +752,7 @@ Proof
   >- (rw[] >>
       irule process_fields_independent >>
       metis_tac[]) >>
-  irule wl_iterate_fixpoint_proof >>
+  irule wl_iterate_fixpoint >>
   conj_tac >- (
     rw[] >> irule df_widen_process_changed_equiv_simple >>
     metis_tac[]) >>
@@ -976,32 +958,6 @@ Proof
   strip_tac >> res_tac
 QED
 
-(* Helper: FOLDL of constant fupdate preserves acc-values = c *)
-Triviality foldl_fupdate_all_const_gen[local]:
-  !lbls c acc k v.
-    (!k' v'. FLOOKUP acc k' = SOME v' ==> v' = c) ==>
-    FLOOKUP (FOLDL (\m lbl. m |+ (lbl, c)) acc lbls) k = SOME v ==> v = c
-Proof
-  Induct >> simp[] >> rpt strip_tac
-  >- res_tac
-  \\ first_x_assum (qspecl_then [`c`, `acc |+ (h,c)`, `k`, `v`] mp_tac) >>
-     disch_then irule >>
-     conj_tac
-     >- (rpt gen_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-         rpt strip_tac >> Cases_on `h = k'` >> gvs[] >> res_tac)
-     >> first_x_assum ACCEPT_TAC
-QED
-
-(* Corollary for FEMPTY accumulator *)
-Triviality foldl_fupdate_all_const[local]:
-  !lbls c k v.
-    FLOOKUP (FOLDL (\m lbl. m |+ (lbl, c)) FEMPTY lbls) k = SOME v ==> v = c
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`lbls`, `c`, `FEMPTY`, `k`, `v`] foldl_fupdate_all_const_gen) >>
-  simp[finite_mapTheory.FLOOKUP_EMPTY]
-QED
-
 (* Helper: df_process_block_widen preserves dws_inst field *)
 Triviality process_widen_preserves_inst[local]:
   !(dir : direction) (bottom : 'a) join widen threshold transfer
@@ -1055,7 +1011,7 @@ QED
 (* Lattice invariant for widening: if P is closed under all operations
    including widen, then P holds everywhere in the result.
    Requires convergence so WHILE result is well-defined. *)
-Theorem df_analyze_widen_invariant_proof:
+Theorem df_analyze_widen_invariant:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn (P : 'a -> bool)
    (leq : 'a df_widen_state -> 'a df_widen_state -> bool)
@@ -1093,14 +1049,14 @@ Proof
   \\ simp[dfAnalyzeWidenDefsTheory.df_analyze_widen_def, LET_THM]
   \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
   \\ qmatch_goalsub_abbrev_tac `SND (wl_iterate chg proc depf wl0 st0')`
-  (* Step 1: boundary/entry/inst P via wl_iterate_invariant_proof *)
+  (* Step 1: boundary/entry/inst P via wl_iterate_invariant *)
   \\ `(\st. Q st /\
        (!k v. FLOOKUP st.dws_boundary k = SOME v ==> P v) /\
        (!k v. FLOOKUP st.dws_entry k = SOME v ==> P v) /\
        (!k v. FLOOKUP st.dws_inst k = SOME v ==> P v))
      (SND (wl_iterate chg proc depf wl0 st0'))` by (
     MAP_EVERY qunabbrev_tac [`chg`, `proc`, `depf`, `wl0`, `st0'`] >>
-    irule wl_iterate_invariant_proof >> simp[] >>
+    irule wl_iterate_invariant >> simp[] >>
     (* 1. Initial *)
     conj_tac >- (conj_tac
         >- (BasicProvers.every_case_tac >> first_x_assum ACCEPT_TAC)
@@ -1109,7 +1065,7 @@ Proof
                 finite_mapTheory.FLOOKUP_UPDATE] >>
            rpt strip_tac >>
            BasicProvers.every_case_tac >> gvs[] >>
-           drule foldl_fupdate_all_const >> gvs[]) >>
+           drule dfAnalyzeProofsTheory.foldl_fempty_val >> gvs[]) >>
     (* 2. Changed *)
     conj_tac >- (rpt gen_tac >>
         PURE_ONCE_REWRITE_TAC
@@ -1234,7 +1190,7 @@ QED
    soundness, so the widening step also preserves entry soundness.
    Requires convergence witnesses (Q, leq, m, b) so wl_iterate result
    is well-defined. *)
-Theorem df_widen_entry_sound_proof:
+Theorem df_widen_entry_sound:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn
    (sound : 'a -> 'b -> bool)
@@ -1278,7 +1234,7 @@ Proof
   \\ sg `(\st. Q st /\ !k v. FLOOKUP st.dws_entry k = SOME v ==> !s. sound v s)
        (SND (wl_iterate chg proc depf wl0 st0'))`
   >- (
-    irule wl_iterate_invariant_proof >> simp[] >>
+    irule wl_iterate_invariant >> simp[] >>
     (* After simp[]: 4 conjuncts: initial, changed, entry-pres, measure *)
     conj_tac
     (* 1. Initial: Q st0' /\ entry-sound st0' *)
@@ -1324,7 +1280,7 @@ QED
    the pointwise boundary ordering. Same argument as base variant:
    boundary(lbl) := join old final_val ≥ old. Widening affects entry
    (fold input), not boundary (fold output joined with old). *)
-Theorem df_process_widen_inflationary_proof:
+Theorem df_process_widen_inflationary:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val cfg bbs
    (elem_leq : 'a -> 'a -> bool).
@@ -1647,7 +1603,7 @@ QED
 val widen_fixpoint_at_clean =
   PairRules.PBETA_RULE (SIMP_RULE std_ss [LET_THM] df_widen_fixpoint_at);
 
-Theorem df_widen_at_intra_transfer_proof:
+Theorem df_widen_at_intra_transfer:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn lbl (bb : basic_block) idx.
     let cfg = cfg_analyze fn in
@@ -1698,7 +1654,7 @@ Proof
   \\ simp[]
 QED
 
-Theorem df_widen_at_inter_transfer_proof:
+Theorem df_widen_at_inter_transfer:
   !(dir : direction) (bottom : 'a) join widen threshold
    transfer edge_transfer ctx entry_val fn lbl (bb : basic_block).
     let cfg = cfg_analyze fn in
@@ -1818,18 +1774,6 @@ Proof
      finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-(* SUM helpers for visit-counting proofs *)
-Triviality sum_map_le[local]:
-  !(f:'b->num) g ls. (!l. MEM l ls ==> f l <= g l) ==>
-    SUM (MAP f ls) <= SUM (MAP g ls)
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  `f h <= g h` by simp[] >>
-  `SUM (MAP f ls) <= SUM (MAP g ls)` by
-    (first_x_assum irule >> metis_tac[]) >>
-  fs[]
-QED
-
 Theorem sum_map_inc:
   !(f:'b->num) g ls x.
     MEM x ls /\ f x < g x /\ (!l. l <> x ==> f l = g l) ==>
@@ -1838,29 +1782,18 @@ Proof
   Induct_on `ls` >> rw[]
   (* x = h *)
   >- (`SUM (MAP f ls) <= SUM (MAP g ls)` by
-        (irule sum_map_le >> rw[] >>
-         Cases_on `l = h` >> fs[]) >> simp[])
+        (irule dfAnalyzeProofsTheory.sum_map_le >> rw[listTheory.EVERY_MEM] >>
+         rename1 `MEM y ls` >> Cases_on `y = h` >> fs[]) >> simp[])
   (* x in ls *)
   >> Cases_on `x = h` >> fs[]
   (* x = h again: both h in ls and head *)
   >- (`SUM (MAP f ls) <= SUM (MAP g ls)` by
-        (irule sum_map_le >> rw[] >>
-         Cases_on `l = h` >> fs[]) >> simp[])
+        (irule dfAnalyzeProofsTheory.sum_map_le >> rw[listTheory.EVERY_MEM] >>
+         rename1 `MEM y ls` >> Cases_on `y = h` >> fs[]) >> simp[])
   (* x ≠ h: h unchanged, recurse *)
   >> `f h = g h` by (first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
      simp[] >>
      first_x_assum irule >> metis_tac[]
-QED
-
-Theorem sum_bound:
-  !(f:'b->num) k ls.
-    (!l. MEM l ls ==> f l <= k) ==>
-    SUM (MAP f ls) <= k * LENGTH ls
-Proof
-  Induct_on `ls` >> rw[] >> fs[] >>
-  `f h <= k` by simp[] >>
-  `SUM (MAP f ls) <= k * LENGTH ls` by (first_x_assum irule >> simp[]) >>
-  simp[arithmeticTheory.MULT_SUC]
 QED
 
 Triviality cfg_dfs_post_mem_pre:
@@ -1938,7 +1871,7 @@ Proof
            dfAnalyzeWidenDefsTheory.init_df_widen_state_def] >>
       CASE_TAC >> gvs[] >> CASE_TAC >> gvs[]) >>
     (* m x ≤ b *)
-    conj_tac >- (rw[] >> irule sum_bound >> rw[]) >>
+    conj_tac >- (rw[] >> irule dfAnalyzeProofsTheory.sum_map_le_bound >> rw[listTheory.EVERY_MEM]) >>
     (* P' preserved by process for valid labels *)
     conj_tac >- (
       rw[] >> fs[] >>
@@ -2039,7 +1972,7 @@ Proof
     simp[Abbr`cst`, dfAnalyzeWidenDefsTheory.df_widen_visits_def,
          dfAnalyzeWidenDefsTheory.init_df_widen_state_def] >>
     CASE_TAC >> gvs[] >> CASE_TAC >> gvs[]) >>
-  conj_tac >- (rw[] >> irule sum_bound >> rw[]) >>
+  conj_tac >- (rw[] >> irule dfAnalyzeProofsTheory.sum_map_le_bound >> rw[listTheory.EVERY_MEM]) >>
   conj_tac >- (
     rw[] >> fs[] >>
     mp_tac (SIMP_RULE std_ss [LET_THM] df_widen_process_visits_inc) >>
@@ -2065,20 +1998,4 @@ Proof
     fs[]) >>
   Cases_on `dir` >> simp[listTheory.EVERY_MEM] >> rw[Abbr`all_lbls`] >>
   metis_tac[cfg_dfs_post_mem_pre]
-QED
-
-Theorem df_widen_process_boundary_other:
-  ∀dir bottom join widen threshold transfer edge_transfer ctx entry_val
-   cfg bbs lbl st l.
-    l ≠ lbl ⇒
-    df_widen_boundary bottom (df_process_block_widen dir bottom join widen
-      threshold transfer edge_transfer ctx entry_val cfg bbs lbl st) l =
-    df_widen_boundary bottom st l
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[dfAnalyzeWidenDefsTheory.df_process_block_widen_def] >>
-  simp_tac std_ss [LET_THM] >>
-  pairarg_tac >> simp[] >>
-  rw[dfAnalyzeWidenDefsTheory.df_widen_boundary_def,
-     finite_mapTheory.FLOOKUP_UPDATE]
 QED
