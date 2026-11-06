@@ -2,7 +2,7 @@ Theory bodyIntCallCallerFrame
 Ancestors
   bodyIntCallReturnFrame bodyIntCallReturnSource bodyIntCallReturnBoundaryChecks
   bodyMemoryDefs exprLoweringProps compileEnv venomExecSemantics venomState
-  finite_map list
+  finite_map list exprSimProps loweringPosts venomMemDefs
 
 Theorem window_frame_local_regions:
   stmt_state_rel ctx func ce cx es t /\
@@ -52,4 +52,51 @@ Theorem setup_run_intret_data_section:
 Proof
   strip_tac >> drule intCallReturnTheory.run_blocks_intret_data_section >>
   gvs[setup_callee_def, AllCaseEqs()]
+QED
+
+(* Whole-region agreement composes the entry frame without identifying the
+   saved caller scopes with the scopes before argument evaluation. *)
+Theorem locals_kept_window_return:
+  locals_kept ce es0 s0 t /\
+  (!n b sz. local_region ce es0.scopes s0 n b sz ==>
+    local_region ce es.scopes t n b sz) /\
+  stmt_state_rel ctx func ce cx es t /\
+  (!n b sz aid off asz.
+    local_region ce es.scopes t n b sz /\
+    FLOOKUP t.vs_allocas aid = SOME (off,asz) /\ lo <= aid /\ aid < hi ==>
+    regions_disjoint b sz off asz) /\
+  (!b sz. b + sz <= t.vs_alloca_next /\
+    (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+      lo <= aid /\ aid < hi ==> regions_disjoint b sz off asz) ==>
+    mem_bytes_at b sz mem = mem_bytes_at b sz t.vs_memory) /\
+  u.vs_memory = mem ==>
+  locals_kept ce es0 s0 u
+Proof
+  strip_tac >> irule locals_kept_regions_tail >>
+  qexists_tac `t` >> simp[] >> rpt strip_tac >>
+  irule window_frame_local_regions >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+(* Old ids cannot coincide with the call-window ids. The allocation invariant,
+   not an assumed ordering of addresses, provides the required separation. *)
+Theorem old_alloca_window_return:
+  alloca_inv t /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) /\ aid < lo /\
+  (!b n. b + n <= t.vs_alloca_next /\
+    (!id p k. FLOOKUP t.vs_allocas id = SOME (p,k) /\
+      lo <= id /\ id < hi ==> regions_disjoint b n p k) ==>
+    mem_bytes_at b n mem = mem_bytes_at b n t.vs_memory) /\
+  mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz initial /\
+  u.vs_memory = mem ==>
+  mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz initial
+Proof
+  strip_tac >> gvs[] >>
+  `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz t.vs_memory` suffices_by simp[] >>
+  qpat_x_assum `!b n. _ ==> mem_bytes_at _ _ _ = _` irule >>
+  reverse conj_tac
+  >- (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `aid <> id` by decide_tac >>
+  fs[alloca_inv_def, allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
