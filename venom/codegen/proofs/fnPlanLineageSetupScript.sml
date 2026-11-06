@@ -1589,3 +1589,27 @@ Proof
   drule_all stack_swap_get_depth_deep >> strip_tac >>
   irule stack_pop_get_depth >> simp[]
 QED
+
+(* Executable shielding probes: a contiguous fast path, a mixed >16-output
+   individual path, and a bulk swap at depth 19. Old query copies remain. *)
+Theorem popmany_fresh_output_shielding_probes:
+  (!dead outs prefix.
+    (dead = [Var "a"; Var "b"; Var "c"] /\
+     outs = [Var "a"; Var "b"; Var "c"; Var "d"] /\
+     prefix = [Var "a"; Var "c"]) \/
+    (dead = MAP Var ["a";"c";"e";"g";"i";"k";"m";"o";"q";"s"] /\
+     outs = MAP Var ["a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n";"o";"p";"q";"r";"s";"t"] /\
+     prefix = [Var "a"; Var "s"]) \/
+    (dead = [Var "a"] /\
+     outs = MAP Var ["a";"b";"c";"d";"e";"f";"g";"h";"i";"j";"k";"l";"m";"n";"o";"p";"q";"r";"s";"t"] /\
+     prefix = [Var "a"]) ==>
+    popmany_plan dead ((init_plan_state 0) with ps_stack := prefix ++ outs) =
+      (FST (popmany_plan dead ((init_plan_state 0) with ps_stack := outs)),
+       (SND (popmany_plan dead ((init_plan_state 0) with ps_stack := outs))) with
+         ps_stack := prefix ++
+           (SND (popmany_plan dead ((init_plan_state 0) with ps_stack := outs))).ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  CONV_TAC (LAND_CONV EVAL) >>
+  CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
+QED
