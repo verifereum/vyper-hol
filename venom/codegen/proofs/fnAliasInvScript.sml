@@ -944,6 +944,54 @@ Proof
   metis_tac[alias_selected_input_liveout]
 QED
 
+Theorem alias_path_cut_liveout_backward:
+  !tail fn d db endbb v j.
+  wf_function fn /\ tail <> [] /\ is_fn_path fn (d::tail) /\
+  (!l. MEM l (d::tail) ==> ?bb. lookup_block l fn.fn_blocks = SOME bb /\
+    MEM l (cfg_analyze fn).cfg_dfs_pre /\ phi_block_ready (liveness_analyze fn) bb) /\
+  (!l bb k. MEM l tail /\ lookup_block l fn.fn_blocks = SOME bb /\
+    k < LENGTH bb.bb_instructions ==> ~MEM v (inst_defs (EL k bb.bb_instructions))) /\
+  lookup_block d fn.fn_blocks = SOME db /\
+  lookup_block (LAST (d::tail)) fn.fn_blocks = SOME endbb /\
+  LENGTH (collect_phis endbb.bb_instructions) <= j /\ j <= LENGTH endbb.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) (LAST (d::tail)) j) ==>
+  MEM v (live_vars_at (liveness_analyze fn) d (LENGTH db.bb_instructions))
+Proof
+  Induct >- simp[] >> rpt strip_tac >>
+  `?hb. lookup_block h fn.fn_blocks = SOME hb /\
+    MEM h (cfg_analyze fn).cfg_dfs_pre /\ phi_block_ready (liveness_analyze fn) hb` by
+    metis_tac[MEM] >>
+  `LENGTH (collect_phis hb.bb_instructions) <= LENGTH hb.bb_instructions` by
+    (qspec_then `hb.bb_instructions` strip_assume_tac alias_collect_phis_prefix >>
+     pop_assum (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) h
+      (LENGTH (collect_phis hb.bb_instructions)))` by
+    (Cases_on `tail = []`
+     >- (gvs[] >>
+         qspecl_then [`fn`, `h`, `endbb`, `LENGTH (collect_phis endbb.bb_instructions)`]
+           mp_tac livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+         simp[] >> disch_then irule >> qexists_tac `j` >> simp[] >>
+         metis_tac[MEM]) >>
+     `MEM v (live_vars_at (liveness_analyze fn) h (LENGTH hb.bb_instructions))` by
+       (first_x_assum irule >> simp[] >>
+        gvs[is_fn_path_def, LAST_DEF] >> metis_tac[MEM]) >>
+     qspecl_then [`fn`, `h`, `hb`, `LENGTH (collect_phis hb.bb_instructions)`]
+       mp_tac livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+     simp[] >> disch_then irule >>
+     qexists_tac `LENGTH hb.bb_instructions` >> simp[] >> metis_tac[MEM]) >>
+  `MEM v (input_vars_from d hb.bb_instructions
+      (live_vars_at (liveness_analyze fn) h 0))` by
+    (irule alias_phi_ready_postprefix_input >> simp[] >> rpt strip_tac >>
+     `k < LENGTH hb.bb_instructions` by decide_tac >> metis_tac[MEM]) >>
+  `fn_cfg_edge fn d h` by gvs[is_fn_path_def] >>
+  `MEM h (cfg_succs_of (cfg_analyze fn) d)` by metis_tac[alias_fn_edge_succs] >>
+  `MEM d (cfg_analyze fn).cfg_dfs_pre` by metis_tac[MEM] >>
+  `cfg_reachable_of (cfg_analyze fn) d` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  metis_tac[alias_selected_input_liveout]
+QED
+
 Theorem alias_ready_entry_path_member:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME witness /\
   MEM phi (collect_phis witness.bb_instructions) /\
@@ -8438,71 +8486,29 @@ Definition alias_buried_path_ok_def:
     IS_SOME (alias_buried_plan phi n b idx (alias_buried_path phi n b rest)))
 End
 
+(* Evaluate one innermost closed planner application per proof step. *)
+local
+  fun buried_plan_stage tm =
+    ((RAND_CONV buried_plan_stage) ORELSEC
+     (RATOR_CONV buried_plan_stage) ORELSEC
+     (fn t =>
+       if same_const (fst (strip_comb t)) ``alias_buried_plan`` andalso
+          length (snd (strip_comb t)) = 5
+       then computeLib.EVAL_CONV t
+       else NO_CONV t)) tm
+in
 Theorem alias_buried_padding_plans_succeed:
   !n b phi. n <= 4 ==>
     alias_buried_path_ok phi n b [6; 4; (if b then 2 else 3); 1; 0]
 Proof
   map_every qx_gen_tac [`n`, `b`, `phi`] >> strip_tac >>
   rewrite_tac[alias_buried_path_ok_def] >>
-  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[]
-  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC)
-  >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >>
-      simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
-      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC) >>
-  Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
-      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
-  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
-      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 3] >>
-      CONV_TAC (funpow 11 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (simp[] >> rewrite_tac[Ntimes alias_buried_path_def 2] >>
-      CONV_TAC (funpow 8 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 5 RAND_CONV computeLib.EVAL_CONV) >>
-      CONV_TAC (funpow 2 RAND_CONV computeLib.EVAL_CONV) >> EVAL_TAC)
-  >- (rewrite_tac[Once alias_buried_path_def] >>
-      CONV_TAC (RAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV
-        (RAND_CONV computeLib.EVAL_CONV))))) >> EVAL_TAC)
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC) >>
-  CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >> gvs[] >>
+  Cases_on `b` >> Cases_on `phi` >> rpt conj_tac >>
+  simp[] >> rewrite_tac[alias_buried_path_def] >>
+  rpt (CONV_TAC buried_plan_stage) >> EVAL_TAC
 QED
+end
 
 Theorem alias_buried_four_inventory:
   (alias_buried_path F 4 F [4;3;1;0]).ps_stack =
