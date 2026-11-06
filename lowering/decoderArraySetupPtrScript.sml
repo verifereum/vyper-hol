@@ -183,8 +183,13 @@ Proof
   `!x. not_fresh_at st x ==> not_fresh_at c1 x /\ not_fresh_at c2 x` by
     (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `s1.vs_labels = s.vs_labels` by
-    (qpat_assum `emit_op ADD [Var root; Lit 32w] st = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def, update_var_def]) >>
+    (qpat_assum `emit_op ADD [Var root; Lit 32w] st = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     qpat_x_assum `run_inst_seq (emitted_insts st c1) s = OK s1` mp_tac >>
+     asm_rewrite_tac[] >> POP_ASSUM_LIST (K all_tac) >>
+     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+          eval_operand_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[update_var_def]) >>
   `eval_operand idx s1 = SOME (n2w j) /\ op_taint u1 idx = {} /\ op_prov H1 idx = NONE` by
     (Cases_on `idx` >> gvs[eval_operand_def, op_taint_def, op_prov_def] >> metis_tac[]) >>
   `eval_operand (Lit (n2w stride)) s1 = SOME (n2w stride) /\
@@ -209,9 +214,14 @@ Proof
     (irule decoderGhostFramePtrTheory.ptr_covers_frame >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `lookup_var q s2 = SOME (n2w (d + 32))` by metis_tac[] >>
   `eval_operand offset_op s2 = SOME (n2w (j * stride))` by
-    (qpat_assum `emit_op MUL _ c1 = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE, GSYM word_mul_n2w]) >>
+    (qpat_assum `emit_op MUL _ c1 = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     qpat_x_assum `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` mp_tac >>
+     asm_rewrite_tac[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+                     exec_pure2_def, eval_operand_def, GSYM word_mul_n2w] >>
+     qpat_assum `eval_operand idx s1 = SOME (n2w j)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> strip_tac >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qabbrev_tac `ss2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
   `run_inst_seq (emitted_insts c2 ready) ss2 = OK (t with vs_inst_idx := ss2.vs_inst_idx)` by
     (qpat_assum `emit_op ADD _ c2 = _` (mp_then Any mp_tac emit_op_run_pc) >>
