@@ -192,6 +192,9 @@ Proof
       (update_var tmp (mload (w2n a) s) s) tn) (Var tmp) = {}` by
     (drule_all mload_ghost_clean >> simp[]) >>
   simp[ptr_val_ok_def] >>
+  conj_tac >- simp[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.step_prov_def,
+                    ptrDisciplineTheory.set_prov_def, ptrDisciplineTheory.out_prov_def,
+                    venomInstTheory.mk_inst_def, finite_mapTheory.FLOOKUP_DRESTRICT] >>
   conj_tac >-
     (qpat_x_assum `SUC _ = _` (fn th => rewrite_tac[GSYM th]) >>
      irule mload_ghost_inv >> simp[] >> metis_tac[]) >>

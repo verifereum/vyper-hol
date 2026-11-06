@@ -106,6 +106,10 @@ Proof
   `op_taint (step_taint (mk_inst id opc [left;right] [out]) s
      (update_var out w s) tn) op = op_taint tn op` by
     (irule binop_source_op_taint >> metis_tac[]) >>
+  `op_prov (step_prov PG G (mk_inst id opc [left;right] [out])
+     (update_var out w s)) op = op_prov G op` by
+    (Cases_on `op` >>
+     gvs[op_prov_def, typedCopyPtrTheory.copy_len_binop_ghost_frame]) >>
   gvs[ptr_val_ok_def] >> strip_tac >>
   irule binop_source_ptr_mem_ok >> simp[]
 QED

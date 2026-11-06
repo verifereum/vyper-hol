@@ -15,8 +15,8 @@ Theorem typed_tuple_child_window:
 Proof
   rpt strip_tac >>
   `LENGTH tys = LENGTH tvs` by metis_tac[LIST_REL_LENGTH] >>
-  `type_memory_bytes cenv (EL i tys) = type_memory_size (EL i tvs)` by
-    metis_tac[LIST_REL_EL_EQN] >>
+  qpat_assum `LIST_REL _ tys tvs` mp_tac >>
+  rewrite_tac[LIST_REL_EL_EQN] >> strip_tac >>
   drule tuple_prefix_sizes >> disch_then (qspec_then `i` assume_tac) >>
   gvs[] >> irule tuple_element_interval >> simp[]
 QED
@@ -51,26 +51,32 @@ QED
    this separately with the source stride and the destination stride;
    neither stride nor capacity is required to coincide. *)
 Theorem typed_array_child_window:
-  i < count /\ n <= stride ==>
-  prefix + i * stride + n <= prefix + count * stride
+  !i len n stride prefix:num.
+  (i:num) < len /\ n <= stride ==>
+  prefix + i * stride + n <= prefix + len * stride
 Proof
   rpt strip_tac >>
-  `SUC i * stride <= count * stride` by
+  `SUC i * stride <= len * stride` by
     (irule LESS_MONO_MULT >> decide_tac) >>
-  gvs[MULT_CLAUSES] >> decide_tac
+  qpat_x_assum `SUC i * stride <= _` mp_tac >>
+  simp_tac bool_ss [MULT_CLAUSES] >> decide_tac
 QED
 
 Theorem typed_array_child_access_window:
-  i < count /\ 0 < n /\ n <= stride ==>
-  prefix + i * stride < prefix + count * stride /\
-  prefix + i * stride + n <= prefix + count * stride
+  !i len n stride prefix:num.
+  (i:num) < len /\ 0 < n /\ n <= stride ==>
+  prefix + i * stride < prefix + len * stride /\
+  prefix + i * stride + n <= prefix + len * stride
 Proof
-  strip_tac >> drule_all typed_array_child_window >> decide_tac
+  rpt gen_tac >> strip_tac >>
+  `prefix + i * stride + n <= prefix + len * stride` suffices_by decide_tac >>
+  irule typed_array_child_window >> simp[]
 QED
 
 Theorem typed_array_terminal_window:
-  i <= count ==>
-  prefix + i * stride <= prefix + count * stride
+  !i len stride prefix:num.
+  (i:num) <= len ==>
+  prefix + i * stride <= prefix + len * stride
 Proof
-  strip_tac >> simp[] >> irule LESS_MONO_MULT >> simp[]
+  rpt strip_tac >> simp[] >> irule LESS_MONO_MULT >> simp[]
 QED

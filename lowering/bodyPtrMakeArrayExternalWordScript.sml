@@ -24,6 +24,7 @@ Theorem external_word_materialize_endpoint:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf = ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx) /\
     eval_operand (Var tmp) sf = SOME w /\ op_taint tnf (Var tmp) = {} /\
+    op_prov Gf (Var tmp) = NONE /\
     ghost_inv d cenv cx es' Gf tnf sf /\
     ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
     sf.vs_memory = s.vs_memory /\
@@ -42,6 +43,7 @@ Proof
   simp[] >>
   conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   conj_tac >- (drule_all external_load_output_ghost >> gvs[]) >>
+  conj_tac >- (drule_all external_load_output_ghost >> simp[ptrDisciplineTheory.op_prov_def]) >>
   conj_tac >- (irule external_load_ghost_inv >> simp[] >> metis_tac[]) >>
   conj_tac >- (irule external_load_ghost_kept >> simp[] >> metis_tac[]) >>
   conj_tac >- simp[update_var_def] >>
