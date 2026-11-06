@@ -7,7 +7,7 @@ Ancestors
   emitHelperProps rich_list abiDecoderGuards abiDecoderReentry abiEncoder
   compileEnv emitHelper venomInst context abiDecoderGuard abiDecoderVarSequence
   abiDecoderDynarrayBound calldataValidInitHeader finite_map venomWf
-  ctorAbiActualArrayRun
+  ctorAbiActualArrayRun venomMemDefs
   calldataOwnedLoopClosure calldataDynOwned decoderPrefixEdges
   abiDecoderLoopRegisters abiDecoderDynamic abiDecoderContract
   abiDecoderExecution abiDecoderArrayBackedge
@@ -240,4 +240,176 @@ val () =
   in if null axioms andalso null (Thm.hyp entry_valid_initializer_header) andalso
         List.all (fn name => name = "DISK_THM") oracles
      then () else raise Fail "entry valid initializer inherited admission"
+  end;
+
+(* Resource/control package at the chosen terminal header endpoint. *)
+Theorem entry_joint_terminal_resources:
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial
+    (LENGTH vs) s scratch /\
+  lookup_block hdr fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_header_insts hid ip src CALLDATALOAD
+        (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
+        (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3)))
+        body_lbl exit_lbl|> /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 /\
+  abi_decoder_operand_live next src /\
+  (!op. abi_decoder_operand_live st.cs_next_var op ==> abi_decoder_operand_live next op) /\
+  LENGTH vs < dimword (:256) /\ p < dimword (:256) /\
+  EVERY (val_wf tv) vs /\ next+4 <= limit_st.cs_next_var /\
+  alloca_history fn s /\
+  t = jump_to exit_lbl
+    (abi_decode_header_state (STRING #"%" (toString next))
+      (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+      (STRING #"%" (toString (next+3))) (LENGTH vs) (LENGTH vs) s) ==>
+  ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+  val_wf (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) /\
+  val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d t.vs_memory /\
+  fresh_vars_wrt limit_st t /\
+  t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_data_section = initial.vs_data_section /\
+  alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+  EntryLoopOwn fn st.cs_next_id end_st.cs_next_id t /\
+  initial.vs_alloca_next <= t.vs_alloca_next /\
+  (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+    FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+  (!id. id < st.cs_next_id \/ end_st.cs_next_id <= id ==>
+    FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+  (!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op initial) /\
+  abi_decode_footprint_frame ((d,32+maxn*type_memory_size tv)::scratch) initial t /\
+  (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
+    FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+  EntryLoopSafe ctx fn s t /\ EntryLoopPull ctx fn s t /\
+  entry_decoder_obs s t /\ alloca_history fn t
+Proof
+  strip_tac >>
+  qhdtm_x_assum `EntryLoopInv`
+    (strip_assume_tac o REWRITE_RULE [EntryLoopInv_def, EntryLoopHeader_def]) >>
+  `p+32 <= s.vs_alloca_next` by
+    (qhdtm_assum `alloca_inv` mp_tac >>
+     qpat_assum `FLOOKUP s.vs_allocas iid = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `w2n (n2w p : bytes32) = p` by simp[] >>
+  qpat_assum `lookup_block hdr _ = _` mp_tac >>
+  qpat_assum `s.vs_current_bb = hdr` (fn th => pure_rewrite_tac[GSYM th]) >>
+  disch_tac >>
+  `mload (w2n (n2w p : bytes32)) s = n2w (LENGTH vs) /\
+   w2n (n2w p : bytes32)+32 <= s.vs_alloca_next` by asm_rewrite_tac[] >>
+  drule_all entry_terminal_header_endpoint >>
+  disch_then (qspecl_then [`site`,`ctx`] strip_assume_tac) >>
+  qpat_x_assum `t = _` kall_tac >>
+  suspend "resources"
+QED
+Resume entry_joint_terminal_resources[resources]:
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op initial` by
+    (qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> abi_decoder_operand_live next op` mp_tac >>
+     qpat_assum `!op. abi_decoder_operand_live next op ==> _` mp_tac >>
+     qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op s = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  qhdtm_x_assum `EntryLoopOwn`
+    (assume_tac o REWRITE_RULE [EntryLoopOwn_def]) >>
+  qhdtm_x_assum `abi_decode_footprint_frame`
+    (assume_tac o REWRITE_RULE [abi_decode_footprint_frame_def]) >>
+  asm_rewrite_tac[EntryLoopSafe_def, EntryLoopPull_def, EntryLoopOwn_def,
+    abi_decode_footprint_frame_def]
+QED
+Finalise entry_joint_terminal_resources
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_joint_terminal_resources)
+  in if null axioms andalso null (Thm.hyp entry_joint_terminal_resources) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then () else raise Fail "entry joint terminal resources inherited admission"
+  end;
+
+
+(* Close the finite header iteration at its own terminal witness. *)
+Theorem entry_joint_loop_endpoint:
+  EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
+    hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
+    p d iid oid base_addr cap /\
+  EntryLoopInv ctx fn site st end_st limit_st ce ty tv vs maxn hdr
+    src srcword dst ip d p iid oid base_addr cap sb bs b reserve_cap initial j s old /\
+  j <= LENGTH vs /\ alloca_history fn s /\ fn_inst_ids_distinct fn /\
+  entry_decoder_obs initial s /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 /\
+  (!k head entry.
+    k < LENGTH vs /\
+    abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
+      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+    ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+    entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
+    alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
+    EntryLoopOwn fn ready.cs_next_id st1.cs_next_id entry /\
+    FLOOKUP entry.vs_allocas oid = SOME (base_addr,cap) /\
+    base_addr <= d+32+k*type_memory_size tv /\
+    d+32+k*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+    d+32+k*type_memory_size tv+type_memory_size tv < dimword (:256) /\
+    alloca_history fn entry ==>
+    ?child new. EntryChildResources ctx fn site ready st1 limit_st tv vs d k entry child new /\
+      EntryLoopSafe ctx fn entry child /\ EntryLoopPull ctx fn entry child /\
+      entry_decoder_obs entry child /\ alloca_history fn child) ==>
+  ?t scratch.
+    ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    val_wf (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d t.vs_memory /\
+    fresh_vars_wrt limit_st t /\
+    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_data_section = initial.vs_data_section /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    EntryLoopOwn fn st.cs_next_id end_st.cs_next_id t /\
+    initial.vs_alloca_next <= t.vs_alloca_next /\
+    (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+    (!id. id < st.cs_next_id \/ end_st.cs_next_id <= id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op initial) /\
+    abi_decode_footprint_frame ((d,32+maxn*type_memory_size tv)::scratch) initial t /\
+    (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+    EntryLoopSafe ctx fn s t /\ EntryLoopPull ctx fn s t /\
+    entry_decoder_obs s t /\ entry_decoder_obs initial t /\ alloca_history fn t
+Proof
+  strip_tac >> drule_all entry_joint_loop_from_header >>
+  disch_then (qx_choose_then `head` (qx_choose_then `scratch` strip_assume_tac)) >>
+  qhdtm_x_assum `EntryLoopConfig`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [EntryLoopConfig_def]) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==> abi_decoder_operand_live next op` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  qpat_x_assum `!k head entry. _` kall_tac >>
+  qabbrev_tac `t = jump_to exit_lbl
+    (abi_decode_header_state (STRING #"%" (toString next))
+      (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+      (STRING #"%" (toString (next+3))) (LENGTH vs) (LENGTH vs) head)` >>
+  `t = jump_to exit_lbl
+    (abi_decode_header_state (STRING #"%" (toString next))
+      (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+      (STRING #"%" (toString (next+3))) (LENGTH vs) (LENGTH vs) head)` by
+    simp[Abbr `t`] >>
+  drule_all entry_joint_terminal_resources >> strip_tac >>
+  suspend "compose"
+QED
+Resume entry_joint_loop_endpoint[compose]:
+  `EntryLoopSafe ctx fn s t` by
+    (irule entry_joint_loop_safe_trans >> qexists_tac `head` >> asm_rewrite_tac[]) >>
+  `EntryLoopPull ctx fn s t` by
+    (irule entry_joint_loop_pull_trans >> qexists_tac `head` >> asm_rewrite_tac[]) >>
+  `entry_decoder_obs s t` by
+    (irule entry_decoder_obs_trans >> qexists_tac `head` >> asm_rewrite_tac[]) >>
+  `entry_decoder_obs initial t` by
+    (irule entry_decoder_obs_trans >> qexists_tac `s` >> asm_rewrite_tac[]) >>
+  qexistsl_tac [`t`,`scratch`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise entry_joint_loop_endpoint
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_joint_loop_endpoint)
+  in if null axioms andalso null (Thm.hyp entry_joint_loop_endpoint) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then () else raise Fail "entry joint loop endpoint inherited admission"
   end;
