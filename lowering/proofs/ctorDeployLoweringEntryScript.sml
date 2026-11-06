@@ -3,6 +3,7 @@
 Theory ctorDeployLoweringEntry
 Ancestors
   ctorDeployLoweringDefs o1PassContract stmtSimDefs ctorDeployLoweringEntryFmp
+  ctorDeployLoweringEntryPrefix
 
 (* The run from the unit's entry, after the payable check, the immutables
    region, the constructor arguments' registration and the lock, reaches
