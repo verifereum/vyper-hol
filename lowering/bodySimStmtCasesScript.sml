@@ -1380,7 +1380,9 @@ Theorem body_assign_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  irule body_assign_place_widened_aggregate_call >>
+  simp[body_base_target_ok_def] >> metis_tac[]
 QED
 
 Theorem body_assign_case:
