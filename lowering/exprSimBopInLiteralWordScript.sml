@@ -267,6 +267,7 @@ Proof
     (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_bop_bind))) >>
   simp[expr_type_def, vyperStateTheory.bind_assoc] >>
   AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> ABS_TAC >>
+  rename1 `bop_result cx ann bop _ v1 _ _` >>
   drule_all literal_make_array_value_continuation >>
   disch_then (qspecl_then [
     `\v' ee. (bop_result cx ann bop
@@ -562,7 +563,9 @@ Proof
   Cases_on `ws` >>
   simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `LIST_REL _ xs t` >>
   drule_all emit_op_EQ_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK ss'` >>
   `LIST_REL (\x u. eval_operand x ss' = SOME u) xs t` by
     (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   `eval_operand needle ss' = SOME w` by metis_tac[] >>
@@ -570,6 +573,7 @@ Proof
   disch_then drule >> disch_then drule >> simp[] >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
   drule_all run_inst_seq_chain >> strip_tac >>
+  rename1 `fresh_vars_wrt sb tt` >>
   qexists_tac `tt` >> simp[] >> metis_tac[]
 QED
 
@@ -589,7 +593,10 @@ Proof
            run_inst_seq_def] >> metis_tac[]) >>
   Cases_on `bs` >> simp[fold_membership_or_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `eval_operand _ ss = SOME (bool_to_word h')` >>
+  rename1 `LIST_REL _ cs t` >>
   drule_all emit_op_OR_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK ss'` >>
   `bool_to_word a || bool_to_word h' = bool_to_word (a \/ h')` by
     (Cases_on `a` >> Cases_on `h'` >>
      simp[bool_to_word_def, WORD_OR_IDEM, WORD_OR_CLAUSES]) >>
@@ -601,6 +608,7 @@ Proof
   disch_then (qspec_then `a \/ h'` mp_tac) >> simp[] >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
   drule_all run_inst_seq_chain >> strip_tac >>
+  rename1 `fresh_vars_wrt sb tt` >>
   qexists_tac `tt` >> simp[DISJ_ASSOC] >> metis_tac[]
 QED
 
@@ -620,11 +628,17 @@ Proof
            run_inst_seq_def] >> metis_tac[]) >>
   Cases_on `bs` >> simp[fold_membership_and_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `eval_operand _ ss = SOME (bool_to_word h')` >>
+  rename1 `LIST_REL _ cs t` >>
+  rename1 `emit_op ISZERO _ sa = (_, cs')` >>
+  rename1 `emit_op AND _ cs' = (_, cs'')` >>
   drule_all emit_op_ISZERO_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa cs') ss = OK ss'` >>
   `bool_to_word (bool_to_word h' = 0w) = bool_to_word (~h')` by
     (Cases_on `h'` >> simp[bool_to_word_def]) >> gvs[] >>
   `eval_operand acc ss' = SOME (bool_to_word a)` by metis_tac[] >>
   drule_all emit_op_AND_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs' cs'') ss' = OK ss''` >>
   `bool_to_word a && bool_to_word (~h') = bool_to_word (a /\ ~h')` by
     (Cases_on `a` >> Cases_on `h'` >>
      simp[bool_to_word_def, WORD_AND_IDEM, WORD_AND_CLAUSES]) >> gvs[] >>
@@ -637,6 +651,7 @@ Proof
   drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> strip_tac >>
   `run_inst_seq (emitted_insts sa cs'') ss = OK ss''` by simp[] >>
   drule_all (Q.SPECL [`sa`, `cs''`, `sb`] run_inst_seq_chain) >> strip_tac >>
+  rename1 `fresh_vars_wrt sb tt` >>
   qexists_tac `tt` >> simp[CONJ_ASSOC] >> metis_tac[]
 QED
 
@@ -654,7 +669,9 @@ Proof
   rpt gen_tac >>
   simp[compile_list_membership_in_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, _)` >>
   drule_all literal_eqs_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK tt` >>
   Cases_on `cs` >> gvs[comp_return_def]
   >- simp[eval_operand_def] >>
   Cases_on `ws` >> gvs[] >>
@@ -677,12 +694,18 @@ Proof
   rpt gen_tac >>
   simp[compile_list_membership_notin_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, _)` >>
   drule_all literal_eqs_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK tt` >>
   Cases_on `cs` >> gvs[comp_return_def]
   >- simp[eval_operand_def] >>
   Cases_on `ws` >> gvs[] >>
   gvs[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  rename1 `LIST_REL _ t (MAP (\u. w = u) t')` >>
+  rename1 `emit_op ISZERO _ cs' = (_, cs'')` >>
+  rename1 `eval_operand _ _ = SOME (bool_to_word (w = h'))` >>
   drule_all emit_op_ISZERO_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs' cs'') _ = OK ss'` >>
   `bool_to_word (bool_to_word (w = h') = 0w) = bool_to_word (w <> h')` by
     (Cases_on `w = h'` >> simp[bool_to_word_def]) >> gvs[] >>
   `LIST_REL (\c b. eval_operand c ss' = SOME (bool_to_word b))
