@@ -43,17 +43,6 @@ Proof
    metis_tac[]
 QED
 
-Theorem finally_unless_halt_nonhalt[local]:
-  finally_unless_halt f g s = (res,t) ==> res <> INR HaltException ==>
-  finally f g s = (res,t)
-Proof
-  Cases_on `f s` >> rename1 `f s = (outcome,post)` >>
-  Cases_on `outcome` >>
-  simp[finally_unless_halt_def, finally_def, bind_def] >>
-  rename1 `f s = (INR error,post)` >> Cases_on `error` >>
-  simp[finally_unless_halt_def, finally_def, bind_def]
-QED
-
 Theorem finally_pop_function_compose[local]:
   finally (finally f (pop_function prev)) g s =
   finally f (do pop_function prev; g od) s

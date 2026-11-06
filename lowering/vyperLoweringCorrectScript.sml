@@ -225,7 +225,8 @@ QED
 
 (* An external function's return sequences, run from state_rel at the
    return (whose accounts_rel gives every address's accounts and transient
-   storage as in the source, with no pending deletions), halt in the
+   storage as in the source, and which equates the two sides' pending
+   deletions), halt in the
    success case of external_call_result_rel.  The source result is the one
    call_external_function builds: the returned value cast to the return
    type (NoneV when the body returns without a value or falls off its

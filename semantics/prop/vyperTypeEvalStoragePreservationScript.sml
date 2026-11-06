@@ -3611,7 +3611,7 @@ Proof
   Cases_on `cleanup_res` >> gvs[] >> metis_tac[]
 QED
 
-Theorem intcall_halt_cleanup_preserves_contract_storage[local]:
+Theorem intcall_halt_cleanup_preserves_contract_storage:
   !cx f st prev nr is_view res st'.
   (!r s. f st = (r,s) ==> contract_storage_well_formed cx s) /\
   storage_layout_safe cx /\

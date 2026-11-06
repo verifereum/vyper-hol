@@ -1627,26 +1627,12 @@ Theorem body_intcall_actual_finally_storage[local]:
   contract_storage_well_formed cx st'
 Proof
   strip_tac >>
-  Cases_on `try (do eval_stmts cxf ss; return NoneV od) handle_function st` >>
-  rename1 `try _ _ st = (body_res,body_st)` >>
-  `contract_storage_well_formed cx body_st` by
-    (drule body_try_handle_function_predicate >> disch_then irule >> simp[]) >>
-  `contract_storage_well_formed cx (body_st with scopes := prev)` by
-    (irule contract_storage_well_formed_backends_frame >>
-     qexists_tac `body_st` >> simp[]) >>
-  `!r s. unlock_if_nr cx nr is_view (body_st with scopes := prev) = (r,s) ==>
-       contract_storage_well_formed cx s` by
-    (rpt strip_tac >> irule body_intcall_cleanup_storage >>
-     simp[] >> qexistsl_tac [`is_view`, `nr`, `prev`, `r`, `body_st`] >>
-     gvs[pop_function_def, set_scopes_def, ignore_bind_apply, return_def,
-         unlock_if_nr_def]) >>
-  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
-  Cases_on `body_res`
-  >- (gvs[finally_def, pop_function_def, set_scopes_def, return_def,
-          ignore_bind_apply, finally_unless_halt_def, AllCaseEqs()] >> metis_tac[]) >>
-  Cases_on `y` >>
-  gvs[finally_def, pop_function_def, set_scopes_def, finally_unless_halt_def,
-      ignore_bind_apply, return_def, raise_def, AllCaseEqs()] >> metis_tac[]
+  drule_at (Pos last)
+    (REWRITE_RULE [GSYM unlock_if_nr_def]
+       intcall_halt_cleanup_preserves_contract_storage) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  drule_at Any body_try_handle_function_predicate >> disch_then irule >>
+  simp[]
 QED
 
 Theorem body_intcall_actual_return_storage:
