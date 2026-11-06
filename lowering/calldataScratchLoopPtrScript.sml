@@ -502,3 +502,126 @@ Proof
   strip_tac >> qexistsl_tac [`t`,`H`,`u`] >> asm_simp_tac bool_ss [] >>
   qpat_assum `!k a. _` mp_tac >> POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
+
+Theorem calldata_scratch_loop_finite_prefix_ptr:
+  (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
+      G tn lower P D PG.
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+    fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
+    (start.cs_blocks = end_st.cs_blocks \/
+      !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
+      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
+    end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+    fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+    initial.vs_current_bb = start.cs_current_bb /\
+    initial.vs_inst_idx = LENGTH start.cs_current_insts /\
+    ptr_covers G tn root initial (type_memory_bytes ce ty) /\
+    op_taint tn src = {} /\ op_prov G src = NONE /\
+    allocas_from lower initial /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+    ?actual H u.
+      val_in_memory tv v d actual.vs_memory /\
+      (!mem. mem_agree_outside u.t_mem actual.vs_memory mem ==>
+        val_in_memory tv v d mem) /\
+      abi_scratch_effect first last start.cs_next_id end_st.cs_next_id
+        start.cs_next_var limit_st d (type_memory_bytes ce ty) b cap initial actual /\
+      actual.vs_current_bb = end_st.cs_current_bb /\
+      actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+      abi_decode_sim ctx func initial actual /\
+      ptr_covers H u root actual (type_memory_bytes ce ty) /\
+      u.t_mem SUBSET tn.t_mem /\ DISJOINT P u.t_mem /\
+      u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+      (!x. not_fresh_at start x ==> lookup_var x actual = lookup_var x initial /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      allocas_from lower actual /\
+      (!site slot. site IN abi_decoder_ids first last /\
+        ~(site IN abi_decoder_ids start.cs_next_id end_st.cs_next_id) /\
+        FLOOKUP initial.vs_allocas site = SOME (slot,32) ==>
+        FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+        mload slot actual = mload slot initial) /\
+      ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+        !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
+    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
+    (Var q) src (Var root) sb d slot first last b cap next initial /\
+  abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+    first last lo hi next limit_st b cap initial hdr j s /\
+  fn_inst_ids_distinct func /\ j <= LENGTH vs /\
+  (!k. k < j ==> !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem) /\
+  ptr_covers G tn root s (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+  ptr_covers G tn q s 32 /\ DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  allocas_from lower s /\ ~ctx_has_dalloca ctx /\ DISJOINT P tn.t_mem ==>
+  ?t H u.
+    abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
+      first last lo hi next limit_st b cap initial hdr (LENGTH vs) t /\
+    abi_decode_sim ctx func s t /\
+    ptr_covers H u root t (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+    ptr_covers H u q t 32 /\
+    DISJOINT {a | slot <= a /\ a < slot+32} u.t_mem /\ DISJOINT P u.t_mem /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\ allocas_from lower t /\
+    (!x. abi_decoder_older_vars next x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!k a. k IN abi_decoder_ids first last /\ ~(k IN abi_decoder_ids lo hi) /\
+      FLOOKUP s.vs_allocas k = SOME (a,32) ==>
+      FLOOKUP t.vs_allocas k = SOME (a,32) /\ mload a t = mload a s) /\
+    (!k. k < LENGTH vs ==> !mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u t) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
+Proof
+  qid_spec_tac `tn` >> qid_spec_tac `G` >> qid_spec_tac `s` >>
+  measureInduct_on `LENGTH vs - j` >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `j = LENGTH vs`
+  >- (qexistsl_tac [`s`,`G`,`tn`] >> fs[abi_decode_sim_refl]) >>
+  `j < LENGTH vs` by decide_tac >>
+  mp_tac (Q.INST [`n` |-> `j`] calldata_scratch_loop_iteration_prefix_ptr) >>
+  (impl_tac >- (conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+    asm_simp_tac bool_ss [LESS_EQ_REFL])) >>
+  strip_tac >> rename1 `abi_decode_sim ctx func s h` >>
+  `op_taint u src = {} /\ op_prov H src = NONE` by suspend "source_frame" >>
+  qpat_x_assum `!y. LENGTH vs - y < LENGTH vs - j ==> _`
+    (qspec_then `SUC j` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (qspecl_then [`h`,`H`,`u`] mp_tac) >>
+  (impl_tac >- (conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+    asm_simp_tac bool_ss [DECIDE ``k < SUC j <=> k < j \/ k = j``] >>
+    conj_tac >- decide_tac >> first_assum MATCH_ACCEPT_TAC)) >>
+  strip_tac >>
+  qpat_x_assum `!start end_st func ctx src root bs v sb d first last b cap limit_st initial G tn lower P D PG. _` kall_tac >>
+  `abi_decode_sim ctx func s t` by
+    (irule abi_decode_sim_trans >> qexists_tac `h` >> asm_simp_tac bool_ss []) >>
+  `u'.t_mem SUBSET tn.t_mem` by
+    (irule pred_setTheory.SUBSET_TRANS >> qexists_tac `u.t_mem` >> asm_simp_tac bool_ss []) >>
+  qexistsl_tac [`t`,`H'`,`u'`] >> asm_simp_tac bool_ss [] >>
+  suspend "finite_scratch"
+QED
+
+Resume calldata_scratch_loop_finite_prefix_ptr[source_frame]:
+  `abi_decoder_operand_live next src` by
+    fs[abi_scratch_decoder_loop_data_def] >>
+  qpat_assum `abi_decoder_operand_live next src` mp_tac >>
+  qpat_assum `!x. abi_decoder_older_vars next x ==> _` mp_tac >>
+  qpat_assum `op_taint tn src = {}` mp_tac >>
+  qpat_assum `op_prov G src = NONE` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `src` >> simp[abi_decoder_operand_live_def, op_taint_def, op_prov_def] >>
+  metis_tac[pred_setTheory.SPECIFICATION]
+QED
+
+Resume calldata_scratch_loop_finite_prefix_ptr[finite_scratch]:
+  qpat_assum `!k a. _ /\ _ /\ FLOOKUP h.vs_allocas k = _ ==> _` mp_tac >>
+  qpat_assum `!k a. _ /\ _ /\ FLOOKUP s.vs_allocas k = _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
+Finalise calldata_scratch_loop_finite_prefix_ptr
