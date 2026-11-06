@@ -181,7 +181,16 @@ Proof
     `FST (THE (native_loop_run 2 native_loop_header_after))`, `NONE`, `"back"`, `F`,
     `native_loop_header_after`, `native_loop_header_after`, `native_loop_back_after`] >>
   simp[native_loop_back_lineage, native_loop_dfs_states] >>
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- EVAL_TAC >>
+  `native_loop_header_after with
+     <|ps_cleanup_height := NONE; ps_cleanup_promised := F|> =
+   native_loop_header_after` by EVAL_TAC >>
+  simp[GSYM native_loop_run_def] >>
+  conj_tac
+  >- (mp_tac native_loop_back_success >>
+      Cases_on `native_loop_run 2 native_loop_header_after` >>
+      simp[native_loop_back_after_def]) >>
+  EVAL_TAC
 QED
 
 Theorem native_loop_reentry_cache:
