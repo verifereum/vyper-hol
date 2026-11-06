@@ -516,3 +516,57 @@ Proof
   irule (SIMP_RULE (srw_ss()) [arithmeticTheory.MULT_COMM] raw_call_outbuf_positive_stage) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem raw_call_outbuf_ready_stage:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword(:256) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  expr_sim_inv cenv cx env es /\
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic lim))) sd sa es (BytesV bs) data s /\
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic lim))) =
+    SOME (BaseTV (BytesT (Dynamic lim))) /\
+  eval_operand data s = SOME (n2w b) /\ b < dimword(:256) /\
+  (!z. data_op = Var z ==> not_fresh_at sa z) /\
+  op_prov G data_op = SOME (region_base,sz) /\
+  (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) ==>
+  ?H un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
+    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+    ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    op_prov H data_op = SOME (region_base,sz) /\
+    (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
+    (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
+      eval_operand arg u = eval_operand arg s /\
+      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg)
+Proof
+  strip_tac >> drule_all raw_call_outbuf_stage >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
+      eval_operand arg u = eval_operand arg s /\
+      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg` by
+    (rpt strip_tac >> Cases_on `arg` >>
+     fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+       ptrDisciplineTheory.op_taint_def, ghost_kept_def]) >>
+  `op_prov H data_op = SOME (region_base,sz)` by
+    (Cases_on `data_op` >> fs[ptrDisciplineTheory.op_prov_def, ghost_kept_def]) >>
+  qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
+  rpt strip_tac >> spose_not_then assume_tac >>
+  `i IN tn.t_mem` suffices_by
+    (strip_tac >> qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem`
+      (qspec_then `i` mp_tac) >> simp[]) >>
+  irule rawCallKeywordPrefixPtrTheory.saved_value_footprint_taint_kept >>
+  first_assum (irule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+  simp[compileEnvTheory.is_word_type_def, loweringPostsTheory.val_footprint_def,
+    wordsTheory.w2n_n2w] >>
+  qexistsl_tac [`un`, `G`, `H`] >> simp[] >>
+  irule stmtSimLogArgsTheory.log_arg_clear_base >> goal_assum (drule_at Any)
+QED
