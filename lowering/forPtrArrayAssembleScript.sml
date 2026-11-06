@@ -1,7 +1,7 @@
 (* Checked array-round control boundaries. The header transports the shared
    invariant to the element-installation block without erasing the path. *)
 Theory forPtrArrayAssemble
-Ancestors forPtrArrayTerminal forPtrArrayInvariant forPtrArrayPrepare
+Ancestors forPtrArrayTerminal forPtrArrayInvariant forPtrArrayPrepare forPtrArrayFinish
   forPtrRangePrepare stmtSimForArrayLoop bodyPtrDefs venomState
   ptrDiscipline finite_map exprLoweringProps ghostPcTransportPtr stmtFragPtr compileEnv stmtSimProps loweringPosts
 
@@ -64,19 +64,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* The code changes only the fresh binder. Arbitrary head scopes let the
-   same extension interface serve both preparation and callback cleanup. *)
-Theorem for_array_code_top_ext_ptr:
-  array_for_code func cenv bc ty stmts id et tv n stride saved_base
-    p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
-    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
-  lookup_scopes id rest = NONE ==>
-  cenv_top_ext cenv bc (sc :: rest)
-Proof
-  strip_tac >> fs[array_for_code_def, cenv_top_ext_def] >>
-  rpt strip_tac >> `n' = id` by metis_tac[] >> gvs[] >>
-  metis_tac[]
-QED
 
 Theorem for_array_prepare_inputs_ptr:
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride (Var bp)
