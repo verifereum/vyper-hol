@@ -1117,6 +1117,30 @@ Proof
   gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
 QED
 
+Theorem regional_output_root_origin:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\ MEM out inst.inst_outputs ==>
+  normalize_operand (dfg_build_function fn) [] (Var out) = Var out \/
+  ?op. MEM op (compute_operands inst) /\
+    normalize_operand (dfg_build_function fn) [] (Var out) =
+      normalize_operand (dfg_build_function fn) [] op
+Proof
+  strip_tac >>
+  `ssa_form fn /\ inst_wf inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM,
+         fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `dfg_get_def (dfg_build_function fn) out = SOME inst` by
+    metis_tac[dfg_build_function_ssa_def] >>
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- (`LENGTH inst.inst_operands = 1` by gvs[inst_wf_def] >>
+      `?op. inst.inst_operands = [op]` by
+        (qpat_x_assum `LENGTH _ = 1` mp_tac >> simp[LENGTH_EQ_NUM_compute]) >>
+      disj2_tac >> qexists_tac `op` >>
+      conj_tac >- simp[compute_operands_def] >>
+      irule normalize_operand_codegen_assign >> simp[] >>
+      qexists_tac `inst` >> simp[]) >>
+  disj1_tac >> gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
+QED
+
 Theorem regional_fresh_exemption_transfer:
   (!op:operand. op IN old /\ ~(op IN C UNION R) ==>
     fresh op /\ fresh (root op)) /\
