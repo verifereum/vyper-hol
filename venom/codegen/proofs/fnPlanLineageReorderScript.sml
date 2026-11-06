@@ -227,6 +227,34 @@ Proof
   simp[] >> decide_tac
 QED
 
+Theorem reorder_fold_target_length[local]:
+  !items dfg targets acc ps ops qs.
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    FOLDL (\(ops,ps) (idx,op).
+      (\(step_ops,ps'). (ops ++ step_ops,ps'))
+        (reorder_one dfg targets idx op ps)) (acc,ps) items = (ops,qs) ==>
+    LENGTH targets <= LENGTH qs.ps_stack
+Proof
+  Induct >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `reorder_one dfg targets h0 h1 ps` >> gvs[] >>
+  drule_all reorder_one_target_length >> strip_tac >>
+  first_x_assum irule >> qexistsl [`acc ++ q`, `dfg`, `ops`, `r`] >> simp[]
+QED
+
+Theorem reorder_plan_target_length:
+  !dfg targets ps ops qs.
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_plan dfg targets ps = (ops,qs) ==>
+    LENGTH targets <= LENGTH qs.ps_stack
+Proof
+  rpt gen_tac >> simp[reorder_plan_def] >> strip_tac >>
+  irule reorder_fold_target_length >>
+  qexistsl [`[]`, `dfg`, `MAPi (\i op. (i,op)) targets`, `ops`, `ps`] >>
+  simp[]
+QED
+
 Theorem reduce_depth_plan_not_spilled:
   !fuel pending op f n ps y.
     MEM y pending /\ y NOTIN FDOM ps.ps_spilled ==>
