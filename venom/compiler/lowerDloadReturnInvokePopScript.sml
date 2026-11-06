@@ -230,3 +230,240 @@ QED
 
 val _ = if null (hyp ld_vars_return_restore) then ()
         else raise Fail "resumed variable restoration has kernel hypotheses";
+
+Theorem ld_return_frame_geometry:
+  bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
+  bind_outputs outs vals (merge_callee_state f.lf_tgt tc) = SOME tr /\
+  g = (f with <|lf_src := sr with vs_inst_idx := si;
+    lf_tgt := tr with vs_inst_idx := ti;
+    lf_H := DRESTRICT f.lf_H keep;
+    lf_tv := DRESTRICT f.lf_tv keep|>) ==>
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas /\
+  g.lf_tgt.vs_allocas = f.lf_tgt.vs_allocas /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+  g.lf_src.vs_current_bb = f.lf_src.vs_current_bb /\
+  g.lf_tgt.vs_current_bb = f.lf_tgt.vs_current_bb /\
+  g.lf_src.vs_prev_bb = f.lf_src.vs_prev_bb /\
+  g.lf_tgt.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
+  g.lf_serial = f.lf_serial /\ g.lf_E = f.lf_E /\
+  g.lf_fn = f.lf_fn /\ g.lf_supply = f.lf_supply /\
+  g.lf_Q = f.lf_Q /\ FRANGE g.lf_H SUBSET FRANGE f.lf_H
+Proof
+  strip_tac >>
+  `sr = (merge_callee_state f.lf_src sc) with vs_vars := sr.vs_vars` by
+    (irule o1LowerDloadJointRestoreTheory.ld_bind_outputs_vars_only >>
+     goal_assum drule) >>
+  `tr = (merge_callee_state f.lf_tgt tc) with vs_vars := tr.vs_vars` by
+    (irule o1LowerDloadJointRestoreTheory.ld_bind_outputs_vars_only >>
+     goal_assum drule) >>
+  qpat_x_assum `sr = _` SUBST_ALL_TAC >>
+  qpat_x_assum `tr = _` SUBST_ALL_TAC >>
+  gvs[merge_callee_state_def] >>
+  simp[SUBSET_DEF, FRANGE_FLOOKUP, FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+Theorem ld_global_return_restore:
+  ld_global lo A (f::fs) /\ FDOM A = ld_slots A (f::fs) /\
+  (!a. a IN ld_slots A (f::fs) ==> FLOOKUP Ar a = FLOOKUP A a) /\
+  bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
+  bind_outputs outs vals (merge_callee_state f.lf_tgt tc) = SOME tr /\
+  g = (f with <|lf_src := sr with vs_inst_idx := si;
+    lf_tgt := tr with vs_inst_idx := ti;
+    lf_H := DRESTRICT f.lf_H keep;
+    lf_tv := DRESTRICT f.lf_tv keep|>) ==>
+  ld_global lo (DRESTRICT Ar (ld_slots Ar (f::fs))) (g::fs)
+Proof
+  strip_tac >>
+  drule_all ld_return_frame_geometry >> strip_tac >>
+  qpat_x_assum `g = _` kall_tac >>
+  `ld_global lo A ((g with lf_H := f.lf_H)::fs)` by
+    (irule ld_global_head_cong >> qexists_tac `f` >> simp[]) >>
+  `FDOM A SUBSET FDOM (DRESTRICT Ar (ld_slots Ar (f::fs)))` by
+    (`ld_slots A (f::fs) SUBSET ld_slots Ar (f::fs)` by
+      (irule lowerDloadReturnInvokeStackTheory.ld_slots_agree_subset >> simp[]) >>
+     simp[FDOM_DRESTRICT, SUBSET_DEF] >> rpt strip_tac >>
+     `x IN ld_slots A (f::fs)` by metis_tac[] >>
+     `FLOOKUP Ar x = FLOOKUP A x` by metis_tac[] >>
+     Cases_on `x IN FDOM Ar` >> fs[SUBSET_DEF, FLOOKUP_DEF] >>
+     metis_tac[]) >>
+  `!source. ld_sites ((g with lf_H := f.lf_H)::fs) source =
+    ld_sites (g::fs) source` by
+    (gen_tac >> simp[ld_sites_def, EXTENSION] >>
+     gen_tac >> PairCases_on `x` >> simp[] >> Cases_on `x0` >> simp[]) >>
+  qpat_x_assum `ld_global lo A ((g with lf_H := _)::fs)` mp_tac >>
+  qpat_x_assum `!source. ld_sites _ source = _` (fn th => rewrite_tac[ld_global_def,th]) >>
+  qpat_x_assum `FRANGE g.lf_H SUBSET _` mp_tac >>
+  qpat_x_assum `FDOM A SUBSET _` mp_tac >>
+  qpat_x_assum `g.lf_src.vs_alloca_next = _` mp_tac >>
+  qpat_x_assum `g.lf_tgt.vs_alloca_next = _` mp_tac >>
+  qpat_x_assum `g.lf_Q = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[ld_global_def, SUBSET_DEF] >> ntac 6 strip_tac >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!source j aid b n. _ ==> _ /\ _` drule >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> disch_tac >>
+  Cases_on `f' = g`
+  >- (gvs[] >>
+      qpat_x_assum `!h a. (_ \/ MEM h fs) /\ _ ==> _`
+        (qspec_then `g with lf_H := f.lf_H` mp_tac) >>
+      simp[] >> strip_tac >> metis_tac[]) >>
+  fs[] >> metis_tac[]
+QED
+
+Theorem ld_return_stack_geometry:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  EVERY (\h. h.lf_supply = Sigma h.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+      (EL k (f::fs)).lf_fn.fn_name names) /\
+  bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
+  bind_outputs outs vals (merge_callee_state f.lf_tgt tc) = SOME tr /\
+  g = (f with <|lf_src := sr with vs_inst_idx := si;
+    lf_tgt := tr with vs_inst_idx := ti;
+    lf_H := DRESTRICT f.lf_H keep;
+    lf_tv := DRESTRICT f.lf_tv keep|>) ==>
+  LENGTH (g::fs) = SUC (LENGTH stk) /\
+  ALL_DISTINCT (MAP (\h. h.lf_serial) (g::fs)) /\
+  EVERY (\h. h.lf_serial < N /\ h.lf_supply = Sigma h.lf_fn.fn_name /\
+    MEM h.lf_fn C.ctx_functions /\ ld_intervals lo h.lf_src /\
+    ld_intervals lo h.lf_tgt /\
+    h.lf_src.vs_prev_bb = h.lf_tgt.vs_prev_bb /\
+    h.lf_src.vs_current_bb = h.lf_tgt.vs_current_bb) (g::fs) /\
+  (!j k. j < k /\ k < LENGTH (g::fs) ==>
+    list_precedes (EL j (g::fs)).lf_fn.fn_name
+      (EL k (g::fs)).lf_fn.fn_name names) /\
+  ld_charge (g::fs) = ld_charge (f::fs) /\
+  ld_charge (g::fs) <= ctx_dload_count C /\
+  (!j. j < LENGTH (g::fs) ==>
+    (EL j (g::fs)).lf_tgt.vs_alloca_next =
+    (EL j (g::fs)).lf_src.vs_alloca_next + 32 * ld_charge (DROP j (g::fs))) /\
+  (!j. j < LENGTH fs ==>
+    ?X p. ld_envelope (EL j fs).lf_supply (EL j fs).lf_fn
+      (EL j fs).lf_src (EL j fs).lf_src.vs_inst_idx X p /\
+      (EL j fs).lf_tgt.vs_inst_idx = p) /\
+  (!j. j < LENGTH stk ==>
+    (EL j stk).cf_fn = (EL j fs).lf_fn /\
+    (EL j stk).cf_state = (EL j fs).lf_src /\
+    (EL j stk).cf_prov = ld_erase A o_f (EL j fs).lf_H /\
+    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL j fs).lf_Q /\
+    (EL j stk).cf_tvar = (EL j fs).lf_tv)
+Proof
+  strip_tac >> drule_all ld_return_frame_geometry >> strip_tac >>
+  qpat_x_assum `g = _` kall_tac >>
+  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_sync_def, ld_charge_def] >> strip_tac >>
+  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `active_inst _ _ _` kall_tac >>
+  qpat_x_assum `ld_memory _ _ _ _ _` kall_tac >>
+  qpat_x_assum `ld_nonghost _ _ _` kall_tac >>
+  ntac 2 (qpat_x_assum `bind_outputs _ _ _ = _` kall_tac) >>
+  qpat_x_assum `f.lf_src = s` kall_tac >>
+  qpat_x_assum `f.lf_tgt = t` kall_tac >>
+  `ld_intervals lo g.lf_src /\ ld_intervals lo g.lf_tgt` by
+    (simp[ld_intervals_def] >>
+     qpat_assum `ld_intervals lo f.lf_src` mp_tac >>
+     qpat_assum `ld_intervals lo f.lf_tgt` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[ld_intervals_def] >> metis_tac[]) >>
+  gvs[EVERY_MEM] >> rpt conj_tac
+  >- (rpt gen_tac >>
+      qpat_x_assum `!j k. _ ==> list_precedes _ _ _`
+        (qspecl_then [`j`, `k`] mp_tac) >>
+      map_every Cases_on [`j`, `k`] >> simp[])
+  >- (gen_tac >>
+      qpat_x_assum `!j. _ ==> _ = _` (qspec_then `j` mp_tac) >>
+      Cases_on `j` >> simp[ld_charge_def])
+  >> rpt strip_tac >>
+  qpat_x_assum `!j. _ ==> ?X. _`
+    (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+Theorem ld_call_global_return_restore:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  ^ld_probe_stable lo P Sigma names (f::fs) fc A Ar fr /\
+  bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
+  bind_outputs outs vals (merge_callee_state f.lf_tgt tc) = SOME tr /\
+  g = (f with <|lf_src := sr with vs_inst_idx := si;
+    lf_tgt := tr with vs_inst_idx := ti;
+    lf_H := DRESTRICT f.lf_H keep;
+    lf_tv := DRESTRICT f.lf_tv keep|>) ==>
+  ld_global lo (DRESTRICT Ar (ld_slots Ar (f::fs))) (g::fs)
+Proof
+  qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
+  `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
+  `FDOM A = ld_slots A (f::fs)` by fs[ld_sync_def] >>
+  `!a. a IN ld_slots A (f::fs) ==> FLOOKUP Ar a = FLOOKUP A a` by
+    (fs[Abbr `Stable`] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     fs[ld_slots_def, FLOOKUP_DEF]) >>
+  drule_all ld_global_return_restore >> simp[]
+QED
+
+Theorem ld_saved_stack_alloc_agree:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  (!a. a IN ld_slots A (f::fs) ==> FLOOKUP B a = FLOOKUP A a) ==>
+  !j. j < LENGTH stk ==>
+    (EL j stk).cf_fn = (EL j fs).lf_fn /\
+    (EL j stk).cf_state = (EL j fs).lf_src /\
+    (EL j stk).cf_prov = ld_erase B o_f (EL j fs).lf_H /\
+    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase B)) (EL j fs).lf_Q /\
+    (EL j stk).cf_tvar = (EL j fs).lf_tv
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `FDOM A = ld_slots A (f::fs)` by fs[ld_sync_def] >>
+  `MEM (EL j fs) (f::fs)` by
+    (`LENGTH fs = LENGTH stk` by fs[ld_sync_def] >> simp[EL_MEM]) >>
+  `!a. a IN FRANGE (EL j fs).lf_H \/ MEM (SOME a) (EL j fs).lf_Q ==>
+    FLOOKUP B a = FLOOKUP A a` by
+    (rpt strip_tac >>
+     qpat_x_assum `!a. a IN ld_slots A (f::fs) ==> _` irule >>
+     `a IN FDOM A` by (irule ld_global_selected >> metis_tac[]) >>
+     metis_tac[]) >>
+  `ld_erase B o_f (EL j fs).lf_H = ld_erase A o_f (EL j fs).lf_H` by
+    (simp[fmap_eq_flookup, FLOOKUP_o_f] >> gen_tac >>
+     Cases_on `FLOOKUP (EL j fs).lf_H x` >> simp[] >>
+     `FLOOKUP B x' = FLOOKUP A x'` by
+       (first_x_assum irule >> simp[FRANGE_FLOOKUP] >> metis_tac[]) >>
+     simp[ld_erase_def]) >>
+  `MAP (OPTION_MAP (ld_erase B)) (EL j fs).lf_Q =
+    MAP (OPTION_MAP (ld_erase A)) (EL j fs).lf_Q` by
+    (irule MAP_CONG >> simp[] >> rpt strip_tac >>
+     Cases_on `x` >> simp[ld_erase_def]) >>
+  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_sync_def] >> strip_tac >>
+  qpat_x_assum `!j. j < LENGTH stk ==> _` (qspec_then `j` mp_tac) >> simp[]
+QED
+
+Theorem ld_call_saved_stack_return:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  ^ld_probe_stable lo P Sigma names (f::fs) fc A Ar fr ==>
+  !j. j < LENGTH stk ==>
+    (EL j stk).cf_fn = (EL j fs).lf_fn /\
+    (EL j stk).cf_state = (EL j fs).lf_src /\
+    (EL j stk).cf_prov =
+      ld_erase (DRESTRICT Ar (ld_slots Ar (f::fs))) o_f (EL j fs).lf_H /\
+    (EL j stk).cf_params = MAP
+      (OPTION_MAP (ld_erase (DRESTRICT Ar (ld_slots Ar (f::fs))))) (EL j fs).lf_Q /\
+    (EL j stk).cf_tvar = (EL j fs).lf_tv
+Proof
+  qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
+  `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
+  `!a. a IN ld_slots A (f::fs) ==> FLOOKUP Ar a = FLOOKUP A a` by
+    (fs[Abbr `Stable`] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     fs[ld_slots_def, FLOOKUP_DEF]) >>
+  `ld_slots A (f::fs) SUBSET ld_slots Ar (f::fs)` by
+    (irule lowerDloadReturnInvokeStackTheory.ld_slots_agree_subset >> simp[]) >>
+  `!a. a IN ld_slots A (f::fs) ==>
+    FLOOKUP (DRESTRICT Ar (ld_slots Ar (f::fs))) a = FLOOKUP A a` by
+    (simp[FLOOKUP_DRESTRICT] >> fs[SUBSET_DEF]) >>
+  rpt strip_tac >> drule_all ld_saved_stack_alloc_agree >> simp[]
+QED
+
+val _ = List.app (fn th => if null (hyp th) then ()
+        else raise Fail "structural return restoration has kernel hypotheses")
+  [ld_return_frame_geometry, ld_global_return_restore, ld_return_stack_geometry,
+   ld_call_global_return_restore, ld_saved_stack_alloc_agree,
+   ld_call_saved_stack_return];
