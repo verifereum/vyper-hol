@@ -252,6 +252,79 @@ Proof
   Cases_on `h.inst_opcode = PHI` >> simp[]
 QED
 
+Theorem regional_dfs_preorder_member:
+  codegen_ready_fn fn /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl ps ==>
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre
+Proof
+  strip_tac >> drule_all dfs_block_state_cfg_reachable >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem regional_replay_prefix_lower_certificate:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_l /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn
+     (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+   else ([], ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+    (param_ops,ps1) /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+   then clean_stack_plan lv cfg fn bb ps1 else ([],ps1)) = (clean_ops,ps2) /\
+  a = LENGTH (get_params bb.bb_instructions) ==>
+  !j q pre. a <= j /\ j < LENGTH bb.bb_instructions /\
+    generate_block_insts_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+      a (LENGTH bb.bb_instructions) 0 (j-a) (DROP a bb.bb_instructions) ps2 =
+        SOME (pre,q) /\ (EL j bb.bb_instructions).inst_opcode <> PHI ==>
+    regional_body_lower_inv lv dfg sb bb j q
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  irule regional_actual_lower_inv_at_phi_index >>
+  rpt (first_assum $ irule_at Any) >>
+  qexistsl [`promised`, `h`] >>
+  conj_tac >- metis_tac[non_phi_index_after_prefix] >>
+  simp[block_plan_state_def] >> rpt (first_assum $ irule_at Any) >>
+  gvs[]
+QED
+
+Theorem regional_dfs_prefix_lower_certificate:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\
+  (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps_dfs
+   else ([],ps_dfs)) = (param_ops,ps1) /\
+  (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+   then clean_stack_plan lv cfg fn bb ps1 else ([],ps1)) = (clean_ops,ps2) /\
+  a = LENGTH (get_params bb.bb_instructions) ==>
+  !j q pre. a <= j /\ j < LENGTH bb.bb_instructions /\
+    generate_block_insts_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+      a (LENGTH bb.bb_instructions) 0 (j-a) (DROP a bb.bb_instructions) ps2 =
+        SOME (pre,q) /\ (EL j bb.bb_instructions).inst_opcode <> PHI ==>
+    regional_body_lower_inv lv dfg sb bb j q
+Proof
+  strip_tac >> drule dfs_block_state_lineage_state >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  irule regional_replay_prefix_lower_certificate >>
+  rpt (first_assum $ irule_at Any) >>
+  qexistsl [`ps_dfs.ps_cleanup_promised`, `param_ops`, `ps_dfs.ps_cleanup_height`] >> gvs[]
+QED
+
 (* Used at each instruction of the block body's induction, for the
    planner-only premises of the step it takes there.  next_live and
    next_is_term are the lookahead generate_block_insts_plan passes for
