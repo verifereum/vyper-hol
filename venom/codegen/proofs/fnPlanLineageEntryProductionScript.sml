@@ -684,3 +684,198 @@ Proof
   goal_assum (drule_at Any) >>
   qexistsl_tac [`cfg_analyze fn`,`fn`,`ops`] >> simp[]
 QED
+
+Theorem native_worker_terminal_prefix:
+  !rest lv dfg cfg fn label halt n len k ps ops qs xs ps0.
+    rest <> [] /\ DROP k xs = rest /\ k + LENGTH rest = LENGTH xs /\
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps0 k ps /\
+    generate_block_insts_plan lv dfg cfg fn label halt n len k rest ps =
+      SOME (ops,qs) ==>
+    ?before chunk.
+      native_inst_prefix lv dfg cfg fn label halt n len xs ps0
+        (PRE (LENGTH xs)) before /\
+      generate_inst_plan lv dfg cfg fn (LAST xs) (live_vars_at lv label len)
+        halt F label before = SOME (chunk,qs)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `rest`
+  >- (gvs[generate_block_insts_plan_def] >>
+      `k = PRE (LENGTH xs)` by decide_tac >>
+      `LAST xs = h` by
+        (`xs = TAKE k xs ++ [h]` by metis_tac[TAKE_DROP] >>
+         pop_assum (fn th => once_rewrite_tac[th]) >> simp[LAST_APPEND]) >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_block_insts_plan_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >> first_x_assum irule >> simp[] >>
+  qexistsl_tac [`k+1`, `rest_ops`, `ps'`] >> simp[] >>
+  conj_tac
+  >- (`DROP (k+1) xs = DROP 1 (DROP k xs)` by simp[DROP_DROP] >> simp[]) >>
+  `k+1 = SUC k` by decide_tac >> pop_assum SUBST1_TAC >>
+  irule (cj 2 native_inst_prefix_rules) >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`h`, `step_ops`, `h'::t`] >> simp[GSYM arithmeticTheory.ADD_ASSOC]
+
+QED
+
+Theorem ready_entry_static_boundary:
+  !fn. codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
+    cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = [] /\
+    collect_phis (HD fn.fn_blocks).bb_instructions = [] /\
+    bb_well_formed (HD fn.fn_blocks) /\
+    fn_reachable fn (HD fn.fn_blocks).bb_label
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[NULL_EQ]) >>
+  conj_tac
+  >- (gvs[codegen_ready_fn_def, block_entries_ready_def, entry_block_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[NULL_EQ]) >>
+  conj_tac
+  >- (gvs[codegen_ready_fn_def, block_entries_ready_def, entry_block_def] >>
+      Cases_on `fn.fn_blocks` >> gvs[NULL_EQ]) >>
+  conj_tac >- metis_tac[codegen_ready_fn_def, wf_function_def] >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_reachable_def, fn_entry_label_def, entry_block_def] >>
+  metis_tac[relationTheory.RTC_REFL]
+QED
+
+Theorem well_formed_no_collected_phi:
+  !bb i. bb_well_formed bb /\ collect_phis bb.bb_instructions = [] /\
+    i < LENGTH bb.bb_instructions ==>
+    (EL i bb.bb_instructions).inst_opcode <> PHI
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  `h.inst_opcode <> PHI` by (gvs[livenessDefsTheory.collect_phis_def, AllCaseEqs()]) >>
+  Cases_on `i` >- simp[] >>
+  gvs[bb_well_formed_def] >>
+  first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]
+QED
+
+Theorem initialized_entry_jmp_preterminal:
+  !fn dfg ch growth spill_base lbl_ctr ops qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode = JMP /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      SOME (ops,qs) ==>
+    ?before chunk.
+      entry_boundary_resources fn (HD fn.fn_blocks)
+        (PRE (LENGTH (HD fn.fn_blocks).bb_instructions)) before /\
+      generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (LAST (HD fn.fn_blocks).bb_instructions)
+        (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+          (LENGTH (HD fn.fn_blocks).bb_instructions))
+        (bb_is_halting (HD fn.fn_blocks)) F (HD fn.fn_blocks).bb_label before =
+        SOME (chunk,qs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_entry_static_boundary >> strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> pairarg_tac >> gvs[] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `non_param_insts (HD fn.fn_blocks) <> []` by
+    (`MEM (LAST (HD fn.fn_blocks).bb_instructions)
+        (non_param_insts (HD fn.fn_blocks))` suffices_by metis_tac[MEM] >>
+     simp[non_param_insts_def, MEM_FILTER, is_param_opcode_def] >>
+     `(HD fn.fn_blocks).bb_instructions <> []` by metis_tac[bb_well_formed_def] >>
+     Cases_on `(HD fn.fn_blocks).bb_instructions` >> gvs[MEM_LAST]) >>
+  `entry_boundary_resources fn (HD fn.fn_blocks)
+     (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1` by
+    (irule initialized_entry_boundary_resources >>
+     simp[] >> qexistsl_tac [`ch`, `growth`, `lbl_ctr`, `spill_base`] >> simp[]) >>
+  `?before chunk.
+     native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn
+       (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+       (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+       (LENGTH (HD fn.fn_blocks).bb_instructions)
+       (non_param_insts (HD fn.fn_blocks)) ps1
+       (PRE (LENGTH (non_param_insts (HD fn.fn_blocks)))) before /\
+     generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+       (LAST (non_param_insts (HD fn.fn_blocks)))
+       (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+         (LENGTH (HD fn.fn_blocks).bb_instructions))
+       (bb_is_halting (HD fn.fn_blocks)) F (HD fn.fn_blocks).bb_label before =
+       SOME (chunk,qs)` by
+    (irule native_worker_terminal_prefix >>
+     goal_assum (drule_at Any) >> simp[native_inst_prefix_zero]) >>
+  drule_all ready_block_parameter_suffix >> disch_tac >>
+  `LENGTH (HD fn.fn_blocks).bb_instructions =
+     LENGTH (get_params (HD fn.fn_blocks).bb_instructions) +
+     LENGTH (non_param_insts (HD fn.fn_blocks))` by metis_tac[LENGTH_APPEND] >>
+  `LAST (HD fn.fn_blocks).bb_instructions =
+     LAST (non_param_insts (HD fn.fn_blocks))` by
+    (qpat_x_assum `(HD fn.fn_blocks).bb_instructions = _`
+      (fn th => once_rewrite_tac[th]) >>
+     Cases_on `non_param_insts (HD fn.fn_blocks)` >> gvs[LAST_APPEND]) >>
+  qexistsl_tac [`before`, `chunk`] >>
+  reverse conj_tac >- metis_tac[] >>
+  `PRE (LENGTH (HD fn.fn_blocks).bb_instructions) =
+     LENGTH (get_params (HD fn.fn_blocks).bb_instructions) +
+     PRE (LENGTH (non_param_insts (HD fn.fn_blocks)))` by
+    (Cases_on `non_param_insts (HD fn.fn_blocks)` >> gvs[]) >>
+  pop_assum SUBST1_TAC >>
+  drule native_inst_prefix_resources >> disch_then irule >> simp[] >>
+  qx_gen_tac `j` >> strip_tac >>
+  `j < LENGTH (non_param_insts (HD fn.fn_blocks))` by decide_tac >>
+  drule_all ready_block_suffix_index >> disch_then SUBST1_TAC >>
+  conj_tac
+  >- (gvs[bb_well_formed_def] >>
+      `LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + j <
+       LENGTH (HD fn.fn_blocks).bb_instructions` by decide_tac >>
+      CCONTR_TAC >> fs[] >>
+      qpat_x_assum `!i. _ /\ is_terminator _ ==> _`
+        (qspec_then `j + LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` mp_tac) >>
+      asm_simp_tac std_ss [is_terminator_def] >> decide_tac) >>
+  irule well_formed_no_collected_phi >> simp[] >> decide_tac
+QED
+
+Theorem initialized_entry_jmp_residual_zero:
+  !fn dfg ch growth spill_base lbl_ctr ops qs targets.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode = JMP /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      SOME (ops,qs) /\
+    join_target_ops (liveness_analyze fn) fn (HD fn.fn_blocks).bb_label
+      (LAST (HD fn.fn_blocks).bb_instructions) = SOME targets ==>
+    !v. MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+          (LENGTH (HD fn.fn_blocks).bb_instructions)) ==>
+      LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH targets) qs.ps_stack) = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all initialized_entry_jmp_preterminal >> strip_tac >>
+  drule_all ready_entry_static_boundary >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `inst_wf (LAST (HD fn.fn_blocks).bb_instructions)` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >>
+     metis_tac[LAST_MEM, bb_well_formed_def]) >>
+  `?succ. (LAST (HD fn.fn_blocks).bb_instructions).inst_operands = [Label succ] /\
+      (LAST (HD fn.fn_blocks).bb_instructions).inst_outputs = []` by gvs[inst_wf_def] >>
+  `set (MAP Var (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (HD fn.fn_blocks).bb_instructions))) SUBSET set targets` by
+    (qpat_x_assum `join_target_ops _ _ _ _ = _` mp_tac >>
+     simp[join_target_ops_def, AllCaseEqs()] >> strip_tac >>
+     `lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks)` by
+       (Cases_on `fn.fn_blocks` >> gvs[lookup_block_def, FIND_thm]) >>
+     `cfg_reachable_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label` by
+       metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+     `(HD fn.fn_blocks).bb_instructions <> []` by metis_tac[bb_well_formed_def] >>
+     `set (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (HD fn.fn_blocks).bb_instructions)) =
+      set (input_vars_from (HD fn.fn_blocks).bb_label target_bb.bb_instructions
+        (live_vars_at (liveness_analyze fn) succ 0))` by
+       (irule fnPlanLineageLivenessTheory.analyzed_live_out_jmp >> simp[]) >>
+     gvs[pred_setTheory.EXTENSION, pred_setTheory.SUBSET_DEF, MEM_MAP] >> metis_tac[]) >>
+  `(HD fn.fn_blocks).bb_instructions <> []` by metis_tac[bb_well_formed_def] >>
+  `SUC (PRE (LENGTH (HD fn.fn_blocks).bb_instructions)) =
+    LENGTH (HD fn.fn_blocks).bb_instructions` by
+    (Cases_on `(HD fn.fn_blocks).bb_instructions` >> gvs[]) >>
+  `EL (PRE (LENGTH (HD fn.fn_blocks).bb_instructions))
+     (HD fn.fn_blocks).bb_instructions = LAST (HD fn.fn_blocks).bb_instructions` by
+    metis_tac[LAST_EL] >>
+  drule_at (Pat `entry_boundary_resources _ _ _ _`)
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] entry_jmp_live_terminal) >>
+  simp[] >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
