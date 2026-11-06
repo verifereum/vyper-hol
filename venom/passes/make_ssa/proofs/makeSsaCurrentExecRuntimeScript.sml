@@ -1,6 +1,7 @@
 Theory makeSsaCurrentExecRuntime
 Ancestors
   makeSsaCurrentRuntime o1FrameLockstep venomExecProps venomExecProofs
+  venomCallOracleDefs
   venomInstProps venomWf venomState venomExecSemantics stateFrame finite_map list pred_set
 Libs
   stepInstBaseLib
@@ -416,4 +417,203 @@ Proof
   Cases_on `inst.inst_outputs` >> gvs[] >>
   irule current_exec_update_last_slots >> qexists_tac `sg` >> simp[] >>
   fs[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def]
+QED
+
+Theorem current_exec_log_pair:
+  inst.inst_opcode = LOG /\ inst.inst_outputs = [] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = LOG` by fs[inst_pair_def] >>
+  `st'.vs_call_ctx = st.vs_call_ctx /\ st'.vs_memory = st.vs_memory /\
+   st'.vs_logs = st.vs_logs` by fs[state_rel_def, execution_frame_def] >>
+  `eval_operands inst'.inst_operands st' = eval_operands inst.inst_operands st` by
+    metis_tac[eval_operands_rel] >>
+  `inst'.inst_outputs = []` by gvs[current_last_output_slots_def] >>
+  stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs(), op_rename_lit] >>
+  rename1 `LIST_REL (\op op'. op_rename sg op op' /\
+    eval_operand op' st' = eval_operand op st) source_ops target_ops` >>
+  `LENGTH source_ops = LENGTH target_ops` by metis_tac[LIST_REL_LENGTH] >>
+  `LIST_REL (\op op'. op_rename sg op op' /\
+       eval_operand op' st' = eval_operand op st)
+       (REVERSE source_ops) (REVERSE target_ops)` by
+    metis_tac[LIST_REL_REVERSE] >>
+  `eval_operand (EL 0 (REVERSE target_ops)) st' =
+   eval_operand (EL 0 (REVERSE source_ops)) st /\
+   eval_operand (EL 1 (REVERSE target_ops)) st' =
+   eval_operand (EL 1 (REVERSE source_ops)) st` by
+    (gvs[LIST_REL_EL_EQN, EL_REVERSE] >> metis_tac[]) >>
+  `eval_operands (DROP 2 (REVERSE target_ops)) st' =
+   eval_operands (DROP 2 (REVERSE source_ops)) st` by
+    (irule eval_operands_rel >> qexists_tac `sg` >>
+     irule rich_listTheory.LIST_REL_DROP >>
+     first_assum MATCH_ACCEPT_TAC) >>
+  gvs[] >>
+  qpat_x_assum `SOME off = _` (assume_tac o SYM) >> simp[] >>
+  irule current_exec_empty_last_slots >> qexists_tac `sg` >> simp[] >>
+  fs[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def]
+QED
+
+Theorem current_exec_oracle_requests_pair:
+  state_rel sg a b ==>
+  venom_call_request a addr value ao sz static =
+    venom_call_request b addr value ao sz static /\
+  venom_create_request a value ao sz salt = venom_create_request b value ao sz salt
+Proof
+  simp[state_rel_def, execution_frame_def, venom_call_request_def,
+       venom_create_request_def, read_memory_def]
+QED
+
+Theorem current_exec_consume_call_pair:
+  state_rel sg a b ==>
+  FST (consume_call_outcome rq ro rs a) = FST (consume_call_outcome rq ro rs b) /\
+  state_rel sg (SND (consume_call_outcome rq ro rs a))
+               (SND (consume_call_outcome rq ro rs b))
+Proof
+  simp[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def,
+       write_memory_with_expansion_def]
+QED
+
+Theorem current_exec_consume_create_pair:
+  state_rel sg a b ==>
+  FST (consume_create_outcome rq a) = FST (consume_create_outcome rq b) /\
+  state_rel sg (SND (consume_create_outcome rq a))
+               (SND (consume_create_outcome rq b))
+Proof
+  simp[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def]
+QED
+
+Theorem current_exec_ext_call_pair:
+  state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  exec_ext_call inst' st' gas addr value ao sz ro rs static = OK t' ==>
+  ?t. exec_ext_call inst st gas addr value ao sz ro rs static = OK t /\
+      state_rel sg1 t t'
+Proof
+  strip_tac >>
+  `venom_call_request st addr value ao sz static =
+   venom_call_request st' addr value ao sz static` by
+    metis_tac[current_exec_oracle_requests_pair] >>
+  qmatch_asmsub_abbrev_tac `venom_call_request st addr value ao sz static = rq` >>
+  `FST (consume_call_outcome rq (w2n ro) (w2n rs) st) = FST (consume_call_outcome rq (w2n ro) (w2n rs) st') /\
+   state_rel sg (SND (consume_call_outcome rq (w2n ro) (w2n rs) st))
+                (SND (consume_call_outcome rq (w2n ro) (w2n rs) st'))` by
+    metis_tac[current_exec_consume_call_pair] >>
+  fs[exec_ext_call_def, AllCaseEqs()] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  metis_tac[current_exec_update_last_slots]
+QED
+
+Theorem current_exec_create_pair:
+  state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  exec_create inst' st' value off sz salt = OK t' ==>
+  ?t. exec_create inst st value off sz salt = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >>
+  `venom_create_request st value off sz salt =
+   venom_create_request st' value off sz salt` by
+    metis_tac[current_exec_oracle_requests_pair] >>
+  qmatch_asmsub_abbrev_tac `venom_create_request st value off sz salt = rq` >>
+  `FST (consume_create_outcome rq st) = FST (consume_create_outcome rq st') /\
+   state_rel sg (SND (consume_create_outcome rq st))
+                (SND (consume_create_outcome rq st'))` by
+    metis_tac[current_exec_consume_create_pair] >>
+  fs[exec_create_def, AllCaseEqs()] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  metis_tac[current_exec_update_last_slots]
+QED
+
+Theorem current_exec_call_opcodes_pair:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_call_ctx = st.vs_call_ctx` by fs[state_rel_def, execution_frame_def] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs()] >>
+  metis_tac[current_exec_ext_call_pair]
+QED
+
+Theorem current_exec_create_opcodes_pair:
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
+  `st'.vs_call_ctx = st.vs_call_ctx` by fs[state_rel_def, execution_frame_def] >>
+  `eval_operands inst'.inst_operands st' = eval_operands inst.inst_operands st` by
+    metis_tac[eval_operands_rel] >>
+  fs[MEM] >>
+  qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
+  strip_tac >> stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs()] >>
+  metis_tac[current_exec_create_pair]
+QED
+
+Theorem current_exec_delegatecall_state_pair:
+  state_rel sg a b ==>
+  make_venom_delegatecall_state a target gas data code static =
+    make_venom_delegatecall_state b target gas data code static
+Proof
+  simp[state_rel_def, execution_frame_def, make_venom_delegatecall_state_def,
+       venom_to_tx_params_def]
+QED
+
+Theorem current_exec_extract_result_pair:
+  state_rel sg a b /\
+  extract_venom_result b output ro rs result = SOME (v,t') ==>
+  ?t. extract_venom_result a output ro rs result = SOME (v,t) /\ state_rel sg t t'
+Proof
+  strip_tac >> gvs[extract_venom_result_def, AllCaseEqs()] >>
+  fs[state_rel_def, execution_frame_def] >>
+  pairarg_tac >> gvs[] >>
+  simp[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def,
+       write_memory_with_expansion_def] >>
+  fs[vars_rel_def, lookup_var_def]
+QED
+
+Theorem current_exec_delegatecall_pair:
+  state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  exec_delegatecall inst' st' gas addr ao sz ro rs = OK t' ==>
+  ?t. exec_delegatecall inst st gas addr ao sz ro rs = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >>
+  `st'.vs_memory = st.vs_memory /\ st'.vs_accounts = st.vs_accounts /\
+   st'.vs_call_ctx = st.vs_call_ctx` by fs[state_rel_def, execution_frame_def] >>
+  fs[exec_delegatecall_def, read_memory_def, AllCaseEqs()] >>
+  `!target gas data code static.
+    make_venom_delegatecall_state st target gas data code static =
+    make_venom_delegatecall_state st' target gas data code static` by
+    metis_tac[current_exec_delegatecall_state_pair] >>
+  gvs[] >> drule_all current_exec_extract_result_pair >> strip_tac >> simp[] >>
+  `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  metis_tac[current_exec_update_last_slots]
+QED
+
+Theorem current_exec_delegatecall_opcode_pair:
+  inst.inst_opcode = DELEGATECALL /\
+  inst_pair sg inst inst' /\ state_rel sg st st' /\
+  current_last_output_slots sg inst.inst_outputs inst'.inst_outputs sg1 /\
+  step_inst_base inst' st' = OK t' ==>
+  ?t. step_inst_base inst st = OK t /\ state_rel sg1 t t'
+Proof
+  strip_tac >> drule_all inst_pair_ops >> simp[ops_pair_def] >> strip_tac >>
+  `inst'.inst_opcode = DELEGATECALL` by fs[inst_pair_def] >>
+  stepInstBaseLib.with_opcode_clause fs >> gvs[AllCaseEqs()] >>
+  metis_tac[current_exec_delegatecall_pair]
 QED
