@@ -668,3 +668,20 @@ Resume abi_decode_guarded_owned_rows_outcome[head_fits]:
   irule abi_decode_alloc_progress_trans >> qexists_tac `t` >> simp[]
 QED
 Finalise abi_decode_guarded_owned_rows_outcome
+
+(* This boundary intentionally does not discharge the child schema or the
+   agreement between descended and full-map descriptors. Those are separate
+   obligations of recursive closure, not consequences of layout transport. *)
+Theorem abi_decode_struct_constructor_rows_conditional:
+  FLOOKUP ce.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+  abi_tuple_rows_schema ce (env \\ nsid) rows /\
+  MAP (\(ei,ty,tv,asz,msz). (ei,asz,msz)) rows =
+    abi_decoder_member_infos (ce.ce_struct_fields \\ nsid_to_string nsid)
+      ce (MAP (FST o SND) fields) ==>
+  type_to_abi_dec_info ce.ce_struct_fields ce (StructT nsid) =
+    DecComplex (EXISTS (is_abi_dynamic ce.ce_struct_fields)
+      (MAP (FST o SND) fields))
+      (MAP (\(ei,ty,tv,asz,msz). (ei,asz,msz)) rows)
+Proof
+  strip_tac >> drule abi_decoder_struct_infos >> simp[]
+QED
