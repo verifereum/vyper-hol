@@ -1,6 +1,6 @@
 (* Account family consumer boundaries. *)
 Theory bodyPtrEnvBuiltinsAccountCase
-Ancestors bodyPtrEnvBuiltinsAccounts bodyPtrEnvBuiltinsAccountOperand
+Ancestors bodyPtrEnvBuiltinsEntryFrame bodyPtrEnvBuiltinsAccounts bodyPtrEnvBuiltinsAccountOperand
   bodyPtrEnvBuiltinsOperandCompose bodyPtrEnvBuiltinsBoundary bodyPtrEnvBuiltinsMethodTyping
   exprSimAccounts exprSimUnopProps exprSimUnopComposeProps
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimProps
@@ -41,20 +41,6 @@ Proof
   simp[value_has_type_def] >> conj_tac
   >- gvs[accounts_well_typed_def] >>
   qexists_tac `get_tenv cx` >> simp[]
-QED
-
-Theorem expr_post_entry_gas_obs[local]:
-  expr_post ctx fn cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
-  expr_post ctx fn cenv cx e es sa sb s0 ee v op s
-Proof
-  simp[expr_post_def, locals_kept_def]
-QED
-
-Theorem ghost_kept_entry_gas_obs[local]:
-  ghost_kept cenv (es with gas_obs := gs) sa G0 tn0 s0 G tn <=>
-  ghost_kept cenv es sa G0 tn0 s0 G tn
-Proof
-  simp[ghost_kept_def]
 QED
 
 Theorem account_singleton_sim_ptr:
