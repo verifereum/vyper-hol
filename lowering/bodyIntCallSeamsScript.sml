@@ -67,7 +67,8 @@ End
      t's frontier, and clear of the constructor's immutables.
    - Caller frame: t is related at es1 with the caller's scopes, and keeps
      s0's variables, allocas, and memory outside the caller's locals, as
-     vv_post asks.
+     vv_post asks; the call's own ALLOCAs (ids in [sa, sb)) are clear of
+     the caller's live locals.
    - Callee entry: the INVOKE enters a callee, and at the internal
      function's package (any nonreentrancy keys and transient flag, the
      caller's target) whose label is the INVOKE's and whose return-buffer
@@ -100,6 +101,11 @@ Definition intcall_entry_def:
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es0 s0 t /\
+    (!n lo sz aid off asz.
+       local_region cenv prev t n lo sz /\
+       FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+       sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
+       regions_disjoint lo sz off asz) /\
     ?arg_vals st1 st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
       compile_multi_vvs compile_expr cenv es sa = (arg_vals,st1) /\
@@ -109,12 +115,14 @@ Definition intcall_entry_def:
               (nsid_to_string (NONE,name))
               (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
               cenv.ce_is_ctor /\
-      (rc = 0 /\ rbs = 0 ==>
+      (rc = 0 /\
+       cenv.ce_func_return_type (nsid_to_string (NONE,name)) = NoneT ==>
        st2 = st1 /\ arg_ops = invoke_args /\
        (?u. emit_void INVOKE (Label lbl :: invoke_args) st3 = (u,sb)) /\
        vv = StackValue (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
               (Lit 0w)) /\
-      (0 < rc \/ 0 < rbs ==>
+      (0 < rc \/
+       cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT ==>
        ?rbuf aid off.
          compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) st1 =
            (rbuf,st2) /\
@@ -152,7 +160,10 @@ Definition intcall_entry_def:
              cenv.ce_is_ctor imm_len
              (mut,F,rr,name,args,([] : expr list),ret,ss)) =
           (lbl',ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len',ss',rt) ==>
-        lbl' = lbl /\ (has_rb <=> rc = 0 /\ 0 < rbs) /\
+        lbl' = lbl /\
+        (has_rb <=>
+           rc = 0 /\
+           cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT) /\
         (ce.ce_is_ctor ==> IS_SOME (FLOOKUP t.vs_labels "runtime_begin")) /\
         state_rel func ce cx (es1 with scopes := []) t /\
         internal_immutable_regions ce cx es1 t.vs_alloca_next /\
@@ -192,7 +203,7 @@ Definition intcall_entry_def:
 End
 
 (* How the callee's run ends, seen from the caller's state t at the
-   INVOKE, whose call's code allocates from ALLOCA id n on: an abort the
+   INVOKE, whose call's code has the ALLOCA ids in [n, m): an abort the
    call's source exception allows (expr_exit), or an IntRet with the
    returned value v: the callee's global state related at the caller's
    compile env, its stack values v's words (rc of them), the return
@@ -204,6 +215,7 @@ End
    body's simulation: stmt_frag's post carries no memory frame. *)
 Definition intcall_callee_exit_def:
   intcall_callee_exit func cenv cx rtv rc (rb:bytes32 option) (n:num)
+                      (m:num)
                       (t:venom_state) res (ee:evaluation_state) r <=>
     expr_exit res r \/
     ?v ir s'.
@@ -213,7 +225,8 @@ Definition intcall_callee_exit_def:
       LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
       (!b sz. b + sz <= t.vs_alloca_next /\
               (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-                             n <= aid ==> regions_disjoint b sz off asz) ==>
+                             n <= aid /\ aid < m ==>
+                             regions_disjoint b sz off asz) ==>
               mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory) /\
       (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
 End
@@ -280,8 +293,10 @@ Theorem intcall_callee_body_sim:
       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
         (es1,entered) (\res ee r. F)
         (intcall_callee_exit func cenv cx rtv rc
-           (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
-           sa.cs_next_id t)
+           (if rc = 0 /\
+               cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
+            then SOME (HD argv) else NONE)
+           sa.cs_next_id sb.cs_next_id t)
 Proof
   cheat
 QED
@@ -314,8 +329,10 @@ Theorem intcall_return_restore:
        gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
          (es1,entered) (\res ee r. F)
          (intcall_callee_exit func cenv cx rtv rc
-            (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
-            sa.cs_next_id t)) ==>
+            (if rc = 0 /\
+               cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
+            then SOME (HD argv) else NONE)
+            sa.cs_next_id sb.cs_next_id t)) ==>
     gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut ss prev rtv)
       (es1,t)
       (\res ee t'. ?tv. res = INL tv /\

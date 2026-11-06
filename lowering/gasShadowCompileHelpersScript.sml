@@ -647,7 +647,8 @@ Proof
    gen_tac >> BETA_TAC >>
    simp[gasShadowCompileBaseTheory.comp_bind_uncurry] >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- (Cases_on `info0 > 0` >> Cases_on `info1 > 0` >>
+   >- (Cases_on `info0 > 0` >>
+       Cases_on `cenv.ce_func_return_type (nsid_to_string fid) = NoneT` >>
        simp[SF ETA_ss, gas_shadow_compiles_return] >>
        match_mp_tac gas_shadow_compiles_bind >>
        simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return]) >>

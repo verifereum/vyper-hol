@@ -7203,8 +7203,9 @@ Proof
   qx_gen_tac `vals` >> simp[] >>
   Cases_on `info0 > 0` >> simp[]
   >- suspend "stack_returns" >>
-  Cases_on `info1 > 0` >> simp[]
-  >- suspend "buffer_return" >> suspend "void_return"
+  Cases_on `cenv.ce_func_return_type (nsid_to_string func_id) = NoneT` >>
+  simp[]
+  >- suspend "void_return" >> suspend "buffer_return"
 QED
 Resume compile_call_int_shape[stack_returns]:
   simp[Once pairTheory.UNCURRY_RAND, combinTheory.o_DEF] >>

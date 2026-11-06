@@ -567,7 +567,7 @@ Resume compile_call_word_result_ok[internal]:
   rpt (pairarg_tac >> gvs[word_result_ok_def, contextTheory.base_ptr_def]) >>
   imp_res_tac compile_call_steps_next_var >>
   imp_res_tac alloc_buffer_safe_operand >>
-  disj2_tac >> Cases_on `return_buf_size > 0` >> gvs[] >>
+  disj2_tac >> Cases_on `cenv.ce_func_return_type name = NoneT` >> gvs[] >>
   safe_buf_mono_tac
 QED
 
