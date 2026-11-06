@@ -6655,6 +6655,41 @@ Proof
   simp[eval_one_phi_def] >> Cases_on `inst.inst_outputs` >> simp[]
 QED
 
+Theorem alias_compute_operand_use:
+  MEM (Var x) (compute_operands inst) ==> MEM x (inst_uses inst)
+Proof
+  simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var,
+       compute_operands_def] >>
+  rpt IF_CASES_TAC >> simp[asmIRTheory.get_non_label_operands_def, MEM_FILTER] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `inst.inst_operands` >> gvs[]
+QED
+
+Theorem alias_regular_plan_live_cut_coverage:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ inst.inst_opcode <> JMP /\
+  (!y. MEM y (live_vars_at (liveness_analyze fn) lbl i) ==> plan_holds ps (Var y)) /\
+  generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) lbl (SUC i)) halting next_term lbl ps = (ops,qs) ==>
+  !x. MEM x (live_vars_at (liveness_analyze fn) lbl (SUC i)) ==> plan_holds qs (Var x)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op` by
+    (rpt strip_tac >> Cases_on `op` >> gvs[is_var_operand_def] >>
+     first_x_assum irule >>
+     drule alias_compute_operand_use >> strip_tac >>
+     drule livenessAnalysisPropsTheory.live_vars_at_uses >> simp[] >>
+     disch_then irule >> goal_assum (drule_at Any) >> gvs[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) lbl i) \/ MEM x inst.inst_outputs` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_transfer >> simp[] >>
+     disch_then (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >>
+     simp[] >> strip_tac >>
+     Cases_on `MEM x inst.inst_outputs` >> simp[] >>
+     gvs[liveness_transfer_def, live_update_def, inst_defs_def, MEM_FILTER]) >>
+  metis_tac[alias_regular_plan_holds_live]
+QED
+
 Theorem alias_clean_stack_holds_input:
   cfg_preds_of cfg bb.bb_label = [pred] /\
   MEM x (input_vars_from pred bb.bb_instructions (live_vars_at live bb.bb_label 0)) /\
