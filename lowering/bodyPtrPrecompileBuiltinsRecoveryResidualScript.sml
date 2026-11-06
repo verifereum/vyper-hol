@@ -1,6 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsRecoveryResidual
 Ancestors bodyPtrPrecompileBuiltinsRecoveryRun bodyPtrPrecompileBuiltinsRecoveryFrame
           bodyPtrPrecompileBuiltinsFramedContinuation bodyPtrPrecompileBuiltinsRecoveryValue
+          bodyPtrPrecompileBuiltinsRecoveryContinuation
           bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsRunAllocation
           stmtSimDeclPath valueEncodingProps venomExecSemantics venomInst venomState
           compileEnv emitHelper exprLoweringProps rich_list emitHelperProps fragGasSeqPtr fragGasPathPtr entrySinkExtraction
@@ -423,3 +424,82 @@ Resume recovery_residual_success[pack_success]:
 QED
 
 Finalise recovery_residual_success
+
+Theorem recovery_residual_oracle_failure:
+  compile_ecrecover h v r q sf = (res,sb) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
+  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
+  eval_operand r s = SOME wr /\ eval_operand q s = SOME wq /\
+  EVERY (\x. op_taint tn x = {} /\ (!l. x <> Label l) /\
+    (!p. x = Var p ==> not_fresh_at sf p)) [h;v;r;q] /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  ~(?co rest. s.vs_outcomes = co::rest /\ co.co_success) ==>
+  ?t n G' tn'. gas_path_ptr D 0 ctx fn PG G tn s n G' tn' (Abort Revert_abort t)
+Proof
+  strip_tac >> drule_all recovery_framed_input >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `isPREFIX (emitted_insts sf sz) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[listTheory.APPEND_ASSOC]) >>
+  drule_all staging_counted_prefix >> strip_tac >>
+  suspend "suffix"
+QED
+
+Resume recovery_residual_oracle_failure[suffix]:
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sf sz)` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i _ ==> _ \/ _` drule >> strip_tac >>
+     gvs[is_terminator_def]) >>
+  `isPREFIX (emitted_insts sf sz ++ emitted_insts sz sb)
+    (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  drule_all straightline_continuation_placement >> strip_tac >>
+  drule_all staging_sequence_outcomes >> strip_tac >>
+  drule_all staging_prefix_nonmemory_frames >> strip_tac >>
+  qabbrev_tac `u = t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sf sz)` >>
+  `eval_operand (Var src) u = SOME b /\ eval_operand (Var dst) u = SOME c` by
+    gvs[Abbr `u`, eval_operand_def, lookup_var_def] >>
+  suspend "apply_suffix"
+QED
+
+Resume recovery_residual_oracle_failure[apply_suffix]:
+  `ptr_covers Gf tnf src u (w2n (128w:bytes32)) /\ ptr_covers Gf tnf dst u 32 /\
+   allocas_from 0 u /\ ~u.vs_halted /\
+   lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sz sb) (DROP u.vs_inst_idx bb.bb_instructions) /\
+   tnf.t_stor SUBSET D.d_stor u.vs_call_ctx.cc_address
+     (u.vs_accounts u.vs_call_ctx.cc_address).storage /\
+   tnf.t_trans SUBSET D.d_trans u.vs_call_ctx.cc_address
+     (u.vs_transient u.vs_call_ctx.cc_address)` by
+    (simp[Abbr `u`, wordsTheory.dimword_def] >>
+     qpat_x_assum `isPREFIX (emitted_insts sz sb) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `mem_bytes_at (w2n b) 128 u.vs_memory =
+    word_to_bytes wh T ++ word_to_bytes wv T ++
+    word_to_bytes wr T ++ word_to_bytes wq T` by simp[Abbr `u`] >>
+  drule recovery_request_result >> strip_tac >>
+  `computed_precompile (venom_call_request u 1w 0w b 128w T)` by
+    (simp[computed_precompile_def] >> simp[venom_call_request_def]) >>
+  `!i. w2n b <= i /\ i < w2n b + w2n (128w:bytes32) ==> i NOTIN tnf.t_mem` by
+    simp[wordsTheory.dimword_def] >>
+  Q.SUBGOAL_THEN `(u.vs_outcomes = [] \/
+    ?co rest. u.vs_outcomes = co::rest /\ ~co.co_success)` assume_tac
+  >- (Cases_on `s.vs_outcomes` >> gvs[Abbr `u`]) >>
+  `ptr_covers Gf tnf dst u (w2n (32w:bytes32))` by simp[wordsTheory.dimword_def] >>
+  drule_all computed_load_suffix_oracle_failure_path >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule_all gas_path_ptr_then >> strip_tac >>
+  qexistsl [`t' with vs_inst_idx := j`,`0+n`,`G'`,`tn'`] >>
+  first_assum ACCEPT_TAC
+QED
+
+Finalise recovery_residual_oracle_failure
