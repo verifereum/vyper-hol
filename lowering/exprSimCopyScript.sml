@@ -82,13 +82,13 @@ Proof
 QED
 
 Theorem copy_buffer_locals_kept_frame:
-  !cenv es0 s0 s t b sz.
-    locals_kept cenv es0 es0 s0 s /\
+  !cenv es0 es' s0 s t b sz.
+    locals_kept cenv es0 es' s0 s /\
     (!name lb len. local_region cenv es0.scopes s0 name lb len ==>
        b + sz <= lb \/ lb + len <= b) /\
     (!off len. off + len <= b \/ b + sz <= off ==>
        mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-    locals_kept cenv es0 es0 s0 t
+    locals_kept cenv es0 es' s0 t
 Proof
   rpt strip_tac >> irule locals_kept_regions_tail >>
   qexists_tac `s` >> simp[] >> rpt strip_tac >>
@@ -282,9 +282,11 @@ Proof
      simp[] >> gvs[regions_disjoint_def] >> metis_tac[]) >>
   `locals_kept cenv es es' s0 z` by
     (irule copy_buffer_locals_kept_frame >>
-     qexistsl_tac [`w2n w`, `u`, `sz`] >>
-     gvs[vv_post_def, locals_kept_def, regions_disjoint_def] >>
-     metis_tac[]) >>
+     qexistsl_tac [`w2n w`, `u`, `sz`] >> rpt conj_tac
+     >~ [`locals_kept _ _ _ _ u`]
+     >- (irule locals_kept_mem_tail >> qexists_tac `s` >>
+         gvs[vv_post_def]) >>
+     gvs[regions_disjoint_def] >> metis_tac[]) >>
   drule copy_static_fields >> strip_tac >>
   irule copy_buffer_expr_post_physical >>
   simp[] >> conj_tac

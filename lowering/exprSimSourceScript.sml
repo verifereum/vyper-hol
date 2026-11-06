@@ -207,7 +207,7 @@ Proof
       >- (drule_all evaluate_subscripts_append >>
           disch_then (qspec_then `[ValueSubscript (IntV &(LENGTH vs - 1))]`
                         SUBST1_TAC) >>
-          simp[evaluate_subscripts_def, array_index_def, listTheory.oEL_THM,
+          simp[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def, listTheory.oEL_THM,
                rich_listTheory.LENGTH_FRONT]) >>
       `!tv' k e. evaluate_subscripts tv' (ArrayV (DynArrayV vs)) k = INR e ==>
                  ?e'. evaluate_subscripts tv' (ArrayV (DynArrayV (FRONT vs))) k =

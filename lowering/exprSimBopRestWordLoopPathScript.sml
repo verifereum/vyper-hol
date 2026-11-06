@@ -145,9 +145,9 @@ Proof
   conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
       qexistsl [`h.rw_cond`, `u`] >>
-      simp[rest_word_init_sequence, Abbr `u`, update_var_def,
-           mk_inst_def, step_inst_base_def, jump_to_def, is_terminator_def,
-           fragExecMemTheory.run_inst_seq_mem_ok_def] >>
+      simp[rest_word_init_sequence, Abbr `u`] >>
+      simp[update_var_def, mk_inst_def, step_inst_base_def, jump_to_def,
+           is_terminator_def, fragExecMemTheory.run_inst_seq_mem_ok_def] >>
       rpt strip_tac >> simp[eval_operand_def] >>
       rpt conj_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `R (jump_to h.rw_cond u)` by metis_tac[] >>
@@ -216,9 +216,10 @@ Proof
   qexists `jump_to exit u` >> conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
       qexistsl [`exit`, `u`] >>
-      simp[exprLoweringPropsTheory.run_inst_seq_def, Abbr `u`, update_var_def,
-           mk_inst_def, step_inst_base_def, eval_operand_def, jump_to_def,
-           is_terminator_def, fragExecMemTheory.run_inst_seq_mem_ok_def] >>
+      simp[exprLoweringPropsTheory.run_inst_seq_def, Abbr `u`] >>
+      simp[update_var_def, mk_inst_def, step_inst_base_def, eval_operand_def,
+           jump_to_def, is_terminator_def,
+           fragExecMemTheory.run_inst_seq_mem_ok_def] >>
       strip_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `R (jump_to exit u)` by metis_tac[] >>
   gvs[jump_to_def, eval_operand_def, lookup_var_def, Abbr `u`,

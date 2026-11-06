@@ -26,16 +26,11 @@ Ancestors
    array's new length word inside the local's region, which locals_kept
    exempts (dynarray_len_at), and the result is the element's pointer,
    read back through the popped history. *)
-Theorem pop_nested_local_live_case:
+Theorem pop_nested_local_sim:
   !ctx func cenv cx env ann bt ty es id.
     pop_target_frag ctx func cenv cx env bt es /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = NameTarget id /\
-    (!s path t entry err.
-       eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
-       lookup_scopes id t.scopes = SOME entry /\
-       evaluate_subscripts entry.type entry.value path = INR err ==>
-       read_popped entry.type path entry.popped = NONE) ==>
+    target_root bt = NameTarget id ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -71,7 +66,7 @@ Proof
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_place)
 QED
 
-Resume pop_nested_local_live_case[summary]:
+Resume pop_nested_local_sim[summary]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >>
   disch_then (qx_choosel_then [`tres`, `tend`, `tr0`] strip_assume_tac) >>
@@ -83,7 +78,18 @@ Resume pop_nested_local_live_case[summary]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Resume pop_nested_local_live_case[normal]:
+Resume pop_nested_local_sim[normal]:
+  Cases_on `?path entry err v. p = MemoryPlace id path /\
+              lookup_scopes id tend.scopes = SOME entry /\
+              evaluate_subscripts entry.type entry.value path = INR err /\
+              read_popped entry.type path entry.popped = SOME v`
+  >- (goalStack.print_tac "PROBE" >> cheat) >>
+  `!path entry err. p = MemoryPlace id path /\
+     lookup_scopes id tend.scopes = SOME entry /\
+     evaluate_subscripts entry.type entry.value path = INR err ==>
+     read_popped entry.type path entry.popped = NONE` by
+    (rpt strip_tac >> Cases_on `read_popped entry.type path entry.popped` >>
+     fs[] >> metis_tac[]) >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by
     fs[target_post_def] >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
@@ -118,7 +124,7 @@ Resume pop_nested_local_live_case[normal]:
      fs[expr_sim_inv_def]) >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
   qpat_x_assum `target_root _ = _` kall_tac >>
-  qpat_x_assum `!s path t entry err. _` kall_tac >>
+  qpat_x_assum `!path entry err. _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
   qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
@@ -137,7 +143,7 @@ Resume pop_nested_local_live_case[normal]:
   suspend "nonempty"
 QED
 
-Resume pop_nested_local_live_case[empty]:
+Resume pop_nested_local_sim[empty]:
   qpat_x_assum `vs = []` SUBST_ALL_TAC >>
   `mload (w2n (b + n2w k)) t = 0w` by simp[] >>
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by fs[listTheory.ALL_DISTINCT] >>
@@ -157,7 +163,7 @@ Resume pop_nested_local_live_case[empty]:
   simp[expr_exit_def, exit_result_def]
 QED
 
-Resume pop_nested_local_live_case[nonempty]:
+Resume pop_nested_local_sim[nonempty]:
   `well_formed_type_value (ArrayTV etv (Dynamic n'))` by
     metis_tac[vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
   `LENGTH vs < dimword (:256)` by
@@ -236,31 +242,5 @@ Resume pop_nested_local_live_case[nonempty]:
   disch_then (qspec_then `[]` mp_tac) >> simp[]
 QED
 
-Finalise pop_nested_local_live_case
+Finalise pop_nested_local_sim
 
-(* By whether some evaluation of the target leaves its place reading a
-   popped snapshot (pop_nested_local_popped_case) or none does. *)
-Theorem pop_nested_local_sim:
-  !ctx func cenv cx env ann bt ty es id.
-    pop_target_frag ctx func cenv cx env bt es /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = NameTarget id ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
-Proof
-  rpt strip_tac >>
-  Cases_on `?s path t entry err v.
-              eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
-              lookup_scopes id t.scopes = SOME entry /\
-              evaluate_subscripts entry.type entry.value path = INR err /\
-              read_popped entry.type path entry.popped = SOME v`
-  >- (fs[] >> metis_tac[pop_nested_local_popped_case]) >>
-  `!s path t entry err.
-     eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
-     lookup_scopes id t.scopes = SOME entry /\
-     evaluate_subscripts entry.type entry.value path = INR err ==>
-     read_popped entry.type path entry.popped = NONE` by
-    (rpt strip_tac >>
-     Cases_on `read_popped entry.type path entry.popped` >> fs[] >>
-     metis_tac[]) >>
-  metis_tac[pop_nested_local_live_case]
-QED
