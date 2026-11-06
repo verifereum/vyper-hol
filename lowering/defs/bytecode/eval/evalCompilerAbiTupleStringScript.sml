@@ -21,10 +21,12 @@ val tup_string_arg_program =
   memoryStoreWitnessLib.program fixture_root "tup_string_arg"
 val () = print "C7_2_CHECKER_ACCEPT deployment runtime\n"
 
+val tup_string_arg_supported_eval = EQT_ELIM
+  (EVAL ``supported_program ^tup_string_arg_program``)
 Theorem tup_string_arg_supported:
   supported_program ^tup_string_arg_program
 Proof
-  EVAL_TAC
+  ACCEPT_TAC tup_string_arg_supported_eval
 QED
 
 val tup_string_arg_term = memoryStoreWitnessLib.compile_term tup_string_arg_program

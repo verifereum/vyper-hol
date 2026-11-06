@@ -17,7 +17,7 @@ Ancestors
   exprSimSource
   exprSimHypsDefs
   list finite_map vyperInterpreter vyperState
-  vyperPlaceResultTyping vyperScopePreservation vyperLookup
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperScopePreservation vyperLookup
   vyperTypeInvariants vyperPlaceInvariants vyperTypeEvalSoundness
   vyperTypeExprSoundness vyperTypeSystem vyperTypeCallGraph vyperTypeValues
   vyperTypeCallStackSoundness vyperTypeEnvPreservation vyperTypeStatePreservation
