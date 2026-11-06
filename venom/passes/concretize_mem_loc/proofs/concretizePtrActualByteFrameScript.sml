@@ -119,3 +119,31 @@ Proof
     (first_x_assum irule >> simp[] >> metis_tac[LESS_TRANS]) >>
   metis_tac[]
 QED
+
+Theorem ptr_chrono_history_initial_memory:
+  !vs C h endpoint. ptr_chrono_history vs C h endpoint ==>
+  (HD h).po_state.vs_memory = vs.vs_memory
+Proof
+  ho_match_mp_tac ptr_chrono_history_strongind >> conj_tac
+  >- (rpt strip_tac >> drule enters_block_memory >>
+      simp[ptr_observe_def]) >>
+  rpt strip_tac >> drule ptr_chrono_history_end >> strip_tac >>
+  Cases_on `h` >> gvs[]
+QED
+
+Theorem ptr_chrono_history_no_actual_write_byte:
+  ptr_chrono_history vs C h endpoint /\
+  (!k. SUC k < LENGTH h ==> x NOTIN range_bytes
+    (step_writes (EL k h).po_inst (EL k h).po_state
+      (EL (SUC k) h).po_state)) ==>
+  read_byte x endpoint.po_state.vs_memory = read_byte x vs.vs_memory
+Proof
+  strip_tac >> drule ptr_chrono_history_end >> strip_tac >>
+  drule ptr_chrono_history_initial_memory >> strip_tac >>
+  `0 < LENGTH h /\ EL (LENGTH h-1) h = endpoint /\ EL 0 h = HD h` by
+    (Cases_on `h` >> gvs[LAST_EL]) >>
+  `read_byte x (EL (LENGTH h-1) h).po_state.vs_memory =
+   read_byte x (EL 0 h).po_state.vs_memory` suffices_by simp[] >>
+  irule ptr_chrono_history_actual_interval_byte_frame >>
+  simp[] >> metis_tac[]
+QED
