@@ -153,19 +153,21 @@ Theorem storage_body_store_stage:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var dv;value] []) /\
   lookup_var dv s = SOME (n2w (b+32*k)) /\ eval_operand value s = SOME w /\
   ptr_covers G tn dv s 32 /\ b+32*k < dimword(:256) /\
-  copy_prefix loc a b n sbase k s /\ k < n /\
-  w = copy_runtime_word loc sbase (a+n2w k) /\
-  (!i j. i < k /\ j < 32 /\ b+32*i+j IN tn.t_mem ==>
-    j IN key_taint keys (a+n2w i)) /\
-  op_taint tn value SUBSET key_taint keys (a+n2w k) ==>
+  (!j. j IN op_taint tn value ==> j < 32) ==>
   ?t H tm.
     gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
     storage_body_frame {} G tn s H tm t /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = SUC s.vs_inst_idx /\
     ~t.vs_halted /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    copy_prefix loc a b n sbase (k+1) t /\
-    (!i j. i < k+1 /\ j < 32 /\ b+32*i+j IN tm.t_mem ==>
-      j IN key_taint keys (a+n2w i)) /\
+    (!loc a n sbase keys.
+      copy_prefix loc a b n sbase k s /\ k < n /\
+      w = copy_runtime_word loc sbase (a+n2w k) /\
+      (!i j. i < k /\ j < 32 /\ b+32*i+j IN tn.t_mem ==>
+        j IN key_taint keys (a+n2w i)) /\
+      op_taint tn value SUBSET key_taint keys (a+n2w k) ==>
+      copy_prefix loc a b n sbase (k+1) t /\
+      (!i j. i < k+1 /\ j < 32 /\ b+32*i+j IN tm.t_mem ==>
+        j IN key_taint keys (a+n2w i))) /\
     mem_agree_outside {i | b+32*k <= i /\ i < b+32*k+32}
       t.vs_memory s.vs_memory /\
     (!i. i < b+32*k \/ b+32*k+32 <= i ==>
@@ -188,17 +190,12 @@ Proof
   conj_tac >- simp[mstore_def] >> conj_tac >- simp[] >>
   conj_tac >- simp[mstore_def] >>
   conj_tac >- simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
-  `copy_prefix loc a b n sbase (k+1)
-      ((mstore (b+32*k) w s) with vs_inst_idx := SUC s.vs_inst_idx) /\
-    (!i j. i < k+1 /\ j < 32 /\ b+32*i+j IN tm.t_mem ==>
-      j IN key_taint keys (a+n2w i))` by
-    (mp_tac (Q.INST [`sm` |-> `mstore (b+32*k) w s`, `tnm` |-> `tm`]
-      storage_body_store_prefix) >> simp[Abbr `tm`] >> strip_tac >> simp[]) >>
-  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >-
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     mp_tac (Q.INST [`sm` |-> `mstore (b+32*k) w s`, `tnm` |-> `tm`]
+       storage_body_store_prefix) >> simp[Abbr `tm`] >> strip_tac >> simp[]) >>
   conj_tac >- (qspecl_then [`s`, `b+32*k`, `w`] mp_tac
     typedCopyPtrTheory.mstore_memory_frame >> simp[]) >>
-  `!j. j IN op_taint tn value ==> j < 32` by
-    (gvs[SUBSET_DEF, key_taint_def] >> metis_tac[]) >>
   rpt strip_tac >>
   mp_tac (Q.INST [`dst` |-> `dv`, `a` |-> `n2w (b+32*k)`]
     mstore_raw_outside_taint) >> simp[Abbr `tm`]
