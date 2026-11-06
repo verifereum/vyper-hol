@@ -5,6 +5,7 @@ Ancestors
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
+  dfgAnalysisProps dfgDefs allocaRemapSSA
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -1092,4 +1093,24 @@ Proof
      simp[collect_phis_length_bound]) >>
   `phi_block_ready (liveness_analyze fn) bb` by metis_tac[ready_phi_block] >>
   gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem regional_phi_output_normalize:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs ==>
+  normalize_operand (dfg_build_function fn) [] (Var v) = Var v
+Proof
+  strip_tac >>
+  `MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI` by
+    metis_tac[collect_phis_mem] >>
+  `MEM phi (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  drule_all dfg_build_function_defs_complete >> strip_tac >>
+  rename1 `dfg_get_def (dfg_build_function fn) v = SOME found` >>
+  `found = phi` by
+    (drule dfg_build_function_correct >> strip_tac >>
+     `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+     metis_tac[ssa_unique_output]) >>
+  gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
 QED
