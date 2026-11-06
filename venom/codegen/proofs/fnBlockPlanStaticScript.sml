@@ -42,6 +42,41 @@ Definition block_plan_state_def:
         (non_param_insts bb) ps2 = SOME (pre_ops, ps)
 End
 
+Theorem regional_actual_phi_cut:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps_l h promised p k ps.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops,ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps_l /\ collect_phis bb.bb_instructions <> [] /\
+    ~bb_is_halting bb /\ p = LENGTH (collect_phis bb.bb_instructions) /\
+    p <= k /\ k <= LENGTH bb.bb_instructions /\
+    block_plan_state lv dfg cfg fn bb
+      (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) k ps ==>
+    ?mid tail_ops.
+      regional_selected_phi_inv lv dfg sb bb p mid /\
+      generate_block_insts_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+        0 (LENGTH bb.bb_instructions) p (k-p) (DROP p bb.bb_instructions) mid =
+        SOME (tail_ops,ps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all regional_phi_no_params >> strip_tac >>
+  qpat_x_assum `block_plan_state _ _ _ _ _ _ _ _` mp_tac >>
+  simp[block_plan_state_def] >> strip_tac >>
+  `p <= LENGTH bb.bb_instructions` by simp[] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _`
+    mp_tac >>
+  `k = p + (k-p)` by simp[] >> pop_assum SUBST1_TAC >>
+  simp[regional_block_prefix_cut, PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
+  qexistsl [`mid`, `post`] >> simp[] >>
+  gvs[] >> irule regional_lineage_selected_phi_prefix >>
+  rpt (first_assum $ irule_at Any) >> simp[]
+QED
+
 (* Used at each instruction of the block body's induction, for the
    planner-only premises of the step it takes there.  next_live and
    next_is_term are the lookahead generate_block_insts_plan passes for
