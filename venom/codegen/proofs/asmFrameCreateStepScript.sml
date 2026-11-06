@@ -274,6 +274,91 @@ Proof
   rw[asm_frame_rel_def, asm_evm_rel_def] >> gvs[] >> metis_tac[]
 QED
 
+Theorem asm_create_ready_finish_no_failure[local]:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  LENGTH c.stack < stack_limit /\ n <= c.gasUsed /\
+  (if abort then abort_unuse n else do
+     access_address address; ensure_storage_in_domain address;
+     if b3 then abort_create_exists sender
+     else proceed_create sender address value code n
+   od) s = (INR e,t) ==> F
+Proof
+  strip_tac >> Cases_on `abort`
+  >- (drule_all asm_abort_unuse_state >> gvs[]) >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  simp[access_address_def, ensure_storage_in_domain_def,
+       domain_check_def, set_domain_def, bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `(if b3 then _ else _) v` >>
+  `v.contexts = (c,rb)::rest` by simp[Abbr `v`] >>
+  Cases_on `b3` >> simp[]
+  >- fs[vfmConstantsTheory.stack_limit_def,
+          abort_create_exists_def, update_accounts_def, get_rollback_def,
+          push_stack_def, inc_pc_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def,
+          return_def, assert_def] >>
+  strip_tac >>
+  `v.contexts <> []` by simp[] >>
+  drule_all vfmStepLengthTheory.proceed_create_returns_inl >> simp[]
+QED
+
+Theorem asm_create_charged_failure[local]:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ LENGTH c.stack < stack_limit /\
+  (do consume_gas n; assert_not_static; set_return_data [];
+      depth <- get_num_contexts;
+      if b1 \/ b2 \/ depth > 1024 then abort_unuse n else do
+        access_address address; ensure_storage_in_domain address;
+        if b3 then abort_create_exists sender
+        else proceed_create sender address value code n
+      od
+   od) s = (INR e,t) ==> e = SOME OutOfGas
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
+  Cases_on `c.gasUsed + n <= c.msgParams.gasLimit` >>
+  simp[consume_gas_def, assert_not_static_def, get_static_def,
+       set_return_data_def, get_num_contexts_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `(if _ then _ else _) v` >>
+  strip_tac >>
+  `v.contexts = (c with <|gasUsed := c.gasUsed + n; returnData := []|>,rb)::rest /\
+   v.msdomain = Collect d` by simp[Abbr `v`] >>
+  `F` suffices_by simp[] >>
+  irule (PURE_REWRITE_RULE[ignore_bind_def] asm_create_ready_finish_no_failure) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> fs[vfmConstantsTheory.stack_limit_def]
+QED
+
+Theorem asm_create_raw_failure:
+  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  step_create two s = (INR e,t) ==> e = SOME OutOfGas
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 5 disch_tac >>
+  `LENGTH c.stack <= stack_limit` by gvs[wf_state_def, wf_context_def] >>
+  simp[step_create_def, pop_stack_def, memory_expansion_info_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `consume_gas charge _` >>
+  qmatch_goalsub_abbrev_tac `expand_memory expansion _` >>
+  simp[Once consume_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def,
+       assert_def, return_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `if paid then _ else _` >>
+  Cases_on `paid` >> simp[] >>
+  simp[expand_memory_def, read_memory_def, get_callee_def, get_accounts_def,
+       get_gas_left_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `if size_ok then _ else _` >>
+  Cases_on `size_ok` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `consume_gas gas prepared` >>
+  strip_tac >>
+  drule_at (Pat `_ = (INR _,_)`)
+    (SRULE[ignore_bind_def, bind_def] asm_create_charged_failure) >>
+  simp[Abbr `prepared`] >>
+  Cases_on `two` >> fs[vfmConstantsTheory.stack_limit_def]
+QED
+
 Theorem asm_frame_create_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
