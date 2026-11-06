@@ -6707,6 +6707,43 @@ QED
      variable, so both sides read ra. *)
 (* The old all-name support obstructions do not themselves obstruct the
    alias-only availability candidate: each distinguished name is its root. *)
+Theorem alias_diamond_edge_alias_premises:
+  codegen_ready_fn alias_diamond_fn /\
+  lookup_block "right" alias_diamond_fn.fn_blocks =
+    SOME (EL 3 alias_diamond_fn.fn_blocks) /\
+  generate_block_plan (liveness_analyze alias_diamond_fn)
+    (dfg_build_function alias_diamond_fn) (cfg_analyze alias_diamond_fn)
+    alias_diamond_fn (EL 3 alias_diamond_fn.fn_blocks) (SND alias_diamond_h) =
+    SOME alias_diamond_r /\
+  MEM "join" (cfg_succs_of (cfg_analyze alias_diamond_fn) "right") /\
+  plan_holds (SND alias_diamond_r) (Var "v") /\
+  normalize_operand (dfg_build_function alias_diamond_fn) [] (Var "v") <> Var "v"
+Proof
+  simp[alias_diamond_ready, GSYM alias_diamond_plan_def,
+       alias_diamond_plans, alias_diamond_branch_states, plan_holds_def] >>
+  EVAL_TAC
+QED
+
+Theorem alias_diamond_right_alias_available:
+  alias_path_available alias_diamond_fn "right"
+    (LENGTH (EL 3 alias_diamond_fn.fn_blocks).bb_instructions) "v"
+Proof
+  rewrite_tac[alias_path_available_def] >> rpt strip_tac >>
+  disj2_tac >> qexistsl_tac [`EL 3 alias_diamond_fn.fn_blocks`, `0`] >>
+  EVAL_TAC
+QED
+
+Theorem alias_diamond_join_alias_unavailable:
+  ~alias_path_available alias_diamond_fn "join" 0 "v"
+Proof
+  simp[alias_path_available_def] >>
+  qexists_tac `["entry"; "header"; "left"; "join"]` >>
+  EVAL_TAC >> simp[SF DNF_ss] >> EVAL_TAC >>
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  `k = 0 \/ k = 1 \/ k = 2` by decide_tac >>
+  gvs[]
+QED
+
 Theorem alias_support_obstruction_names_reflexive:
   normalize_operand (dfg_build_function alias_retired_fn) [] (Var "b") = Var "b" /\
   normalize_operand (dfg_build_function alias_halting_cut_fn) [] (Var "dead") = Var "dead" /\
