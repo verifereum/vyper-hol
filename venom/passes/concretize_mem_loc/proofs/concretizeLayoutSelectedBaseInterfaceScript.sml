@@ -115,21 +115,21 @@ QED
 
 Theorem layout_base_corridor_assign:
   layout_base_witness D lo vs0 C C' q0 es qs qend q n i s j t (INR a) /\
-  s.vs_inst_idx < a.ltp_end /\ step_inst_base i s = OK post ==>
+  a.ltp_remaining = SUC remaining /\ step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
     layout_base_success D lo vs0 C C' q0 es qs qend n (INR a) post tpost
 Proof
   simp[layout_base_witness_def] >> strip_tac >>
   drule_all layout_corridor_assign >> strip_tac >> gvs[] >>
   simp[layout_base_success_def] >>
-  qexists `INR (a with ltp_pending := T)` >>
+  qexists `INR (a with <|ltp_pending := T; ltp_remaining := remaining|>)` >>
   simp[layout_base_pending_def, layout_phase_origin_def] >>
   fs[layout_corridor_entry_def]
 QED
 
 Theorem layout_base_corridor_revert:
   layout_base_witness D lo vs0 C C' q0 es qs qend q n i s j t (INR a) /\
-  a.ltp_end = s.vs_inst_idx /\ step_inst_base i s = Abort k post ==>
+  a.ltp_remaining = 0 /\ step_inst_base i s = Abort k post ==>
   ?tpost. step_inst_base j t = Abort k tpost /\
     dead_result_rel D (Abort k post) (Abort k tpost)
 Proof

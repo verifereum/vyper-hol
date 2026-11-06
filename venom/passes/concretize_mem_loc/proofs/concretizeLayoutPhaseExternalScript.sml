@@ -66,12 +66,13 @@ Proof
     simp[step_inst_non_invoke] >>
   `post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section` by
     metis_tac[step_inst_ok_code_data] >>
-  drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
-    layout_ordinary_success_phase >>
-  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
-  disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
-  simp[resolved_out_def, ETA_AX] >>
-  disch_then (qspec_then `tpost` mp_tac) >> gvs[] >>
-  metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp,
-    venomInstPropsTheory.step_preserves_params]
+  `?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_target_taint = step_taint inst t tpost g.lop_target_taint /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q
+      (INL g) (INL k) (OK post) (OK tpost)` by
+    (irule layout_ordinary_success_phase >>
+     simp[resolved_out_def, ETA_AX] >>
+     metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp,
+       venomInstPropsTheory.step_preserves_params]) >>
+  qexistsl_tac [`k`, `tpost`] >> simp[]
 QED

@@ -1,6 +1,6 @@
 Theory concretizeLayoutPhaseOrigin
 Ancestors concretizeLayoutLocalReturnCopy frameTerminalCallOrigins
-  framePhaseCertificates frameTerminalCorridor concretizeLayoutSupplement
+  framePhaseCertificates frameRankedTerminalCorridor concretizeLayoutSupplement
   concretizeLayoutReaderContext frameJointTrace frameJointTransition
   frameResolvedTrace frameActivationLifetime frameRelocationLocal
   frameRelocationTaintOrder frameRelocationGuardedValues frameActivationLookup
@@ -24,7 +24,7 @@ End
 
 Datatype:
   layout_terminal_phase = <| ltp_origin : layout_block_origin;
-    ltp_pending : bool; ltp_end : num |>
+    ltp_pending : bool; ltp_remaining : num |>
 End
 
 Definition layout_phase_normalize_def:
@@ -84,7 +84,7 @@ Definition layout_terminal_entry_def:
   layout_terminal_entry C g s t <=>
     terminal_call_prefix C g.ltp_origin.lbo_source g.ltp_origin.lbo_entry
       (layout_phase_normalize g.ltp_pending s) /\
-    terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_end
+    ranked_terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_remaining
       (layout_phase_normalize g.ltp_pending s)
       (layout_phase_normalize g.ltp_pending t) /\
     revert_forward_at g.ltp_origin.lbo_source
@@ -181,7 +181,7 @@ Theorem layout_terminal_ready:
   ~g.ltp_pending ==>
   (layout_terminal_entry C g s t <=>
     terminal_call_prefix C g.ltp_origin.lbo_source g.ltp_origin.lbo_entry s /\
-    terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_end s t /\
+    ranked_terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_remaining s t /\
     revert_forward_at g.ltp_origin.lbo_source s.vs_inst_idx)
 Proof
   simp[layout_terminal_entry_def]
@@ -192,7 +192,7 @@ Theorem layout_terminal_pending:
   (layout_terminal_entry C g s t <=>
     terminal_call_prefix C g.ltp_origin.lbo_source g.ltp_origin.lbo_entry
       (s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_end
+    ranked_terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_remaining
       (s with vs_inst_idx := SUC s.vs_inst_idx)
       (t with vs_inst_idx := SUC t.vs_inst_idx) /\
     revert_forward_at g.ltp_origin.lbo_source (SUC s.vs_inst_idx))
@@ -252,7 +252,7 @@ Theorem layout_terminal_pending_outcome:
   g.ltp_pending /\ layout_phase_origin h = g.ltp_origin /\
   terminal_call_prefix C g.ltp_origin.lbo_source g.ltp_origin.lbo_entry
     (layout_phase_normalize T s) /\
-  terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_end
+  ranked_terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target g.ltp_remaining
     (layout_phase_normalize T s) (layout_phase_normalize T t) /\
   revert_forward_at g.ltp_origin.lbo_source (layout_phase_normalize T s).vs_inst_idx ==>
   layout_phase_ok_abort D lo vs0 C C' q0 es qs q h (INR g) (OK s) (OK t)

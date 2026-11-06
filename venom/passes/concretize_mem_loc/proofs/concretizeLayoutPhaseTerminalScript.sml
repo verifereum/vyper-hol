@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseTerminal
-Ancestors concretizeLayoutPhaseOrigin frameTerminalCorridor
+Ancestors concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
 
 Theorem layout_terminal_phase_abort:
   layout_terminal_entry C g s t /\
@@ -11,7 +11,7 @@ Theorem layout_terminal_phase_abort:
       (Abort a post) (Abort a post')
 Proof
   simp[layout_terminal_entry_def, layout_phase_ok_abort_def] >>
-  rpt strip_tac >> drule_all terminal_entry_abort >> simp[]
+  rpt strip_tac >> drule_all ranked_terminal_corridor_abort >> simp[]
 QED
 
 Theorem layout_terminal_phase_abort_ready:
