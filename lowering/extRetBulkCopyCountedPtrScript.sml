@@ -19,6 +19,8 @@ Theorem compile_copy_memory_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (if n = 0 then s.vs_memory else
       (mcopy (w2n b) (w2n a) n s).vs_memory) /\
     tnf.t_mem = (if n = 0 then tn.t_mem else
@@ -57,6 +59,8 @@ Theorem compile_copy_memory_dynamic_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) (w2n n) s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
       {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem} /\
@@ -84,6 +88,8 @@ Theorem compile_copy_sarray_bulk_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (if n = 0 then s.vs_memory else
       (mcopy (w2n b) (w2n a) n s).vs_memory) /\
     tnf.t_mem = (if n = 0 then tn.t_mem else
@@ -243,6 +249,8 @@ Theorem emit_bulk_binop_counted_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -295,6 +303,8 @@ Theorem emit_iszero_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (bool_to_word (a = 0w)) /\
     op_taint tnf (Var out) = {} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -389,6 +399,8 @@ Theorem emit_mstore_clean_ambient_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (mstore (w2n a) w s).vs_memory /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
@@ -439,6 +451,8 @@ Theorem emit_mstore_clean_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (mstore (w2n a) w s).vs_memory /\
     tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
@@ -466,6 +480,8 @@ Theorem emit_bulk_capacity_check_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sd.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -523,6 +539,8 @@ Theorem emit_bulk_offset_ambient_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (n2w (w2n a+off)) /\
     ptr_covers Gf tnf out sf n /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
@@ -594,6 +612,8 @@ Theorem emit_bulk_offset_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (n2w (w2n a+off)) /\
     ptr_covers Gf tnf out sf n /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>

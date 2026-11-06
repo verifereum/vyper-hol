@@ -177,6 +177,8 @@ Theorem abi_bytes_lastptr_ambient_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (n2w (w2n a+off)) /\
     ptr_covers Gf tnf out sf n /\
+    sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
@@ -249,6 +251,8 @@ Theorem abi_bytes_lastptr_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (n2w (w2n a+off)) /\
     ptr_covers Gf tnf out sf n /\
+    sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>

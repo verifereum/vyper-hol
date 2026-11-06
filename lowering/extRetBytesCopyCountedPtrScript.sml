@@ -49,6 +49,8 @@ Theorem emit_copy_len_binop_ambient_counted_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
@@ -80,7 +82,8 @@ Proof
      simp[mk_inst_def, is_terminator_def] >>
      conj_tac >-
        (gvs[] >> pure_once_rewrite_tac[step_inst_base_def] >>
-        simp[mk_inst_def, exec_pure2_def, Abbr `t`]) >>
+        simp_tac (srw_ss()) [mk_inst_def] >>
+        simp[exec_pure2_def, Abbr `t`]) >>
      conj_tac >- (qexistsl_tac [`sa`, `sb`] >> simp[mk_inst_def]) >>
      irule (SRULE [mk_inst_def] ptr_inst_ok_copy_len_binop) >> metis_tac[]) >>
   `tnf.t_imm = tn.t_imm` by
@@ -107,6 +110,8 @@ Theorem emit_copy_len_binop_counted_ptr:
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -134,6 +139,8 @@ Theorem emit_mload_clean_ambient_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (mload (w2n a) s) /\ op_taint tnf (Var out) = {} /\
     op_prov Gf (Var out) = NONE /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
@@ -195,6 +202,8 @@ Theorem emit_mload_clean_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var out sf = SOME (mload (w2n a) s) /\ op_taint tnf (Var out) = {} /\
     op_prov Gf (Var out) = NONE /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -221,6 +230,8 @@ Theorem compile_bytestring_copy_len_counted_ptr:
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     eval_operand count_op sf = SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
     op_taint tnf count_op = {} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -308,6 +319,8 @@ Theorem emit_mcopy_ambient_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) (w2n n) s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
       {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem} /\
@@ -361,6 +374,8 @@ Theorem emit_mcopy_counted_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
     sf.vs_memory = (mcopy (w2n b) (w2n a) (w2n n) s).vs_memory /\
     tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
       {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem} /\
