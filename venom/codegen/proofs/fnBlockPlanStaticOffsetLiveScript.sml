@@ -571,7 +571,7 @@ Proof
   irule non_phi_after_collect_phis >> simp[]
 QED
 
-Theorem collect_phis_index[local]:
+Theorem collect_phis_index:
   !instrs j. j < LENGTH (collect_phis instrs) ==>
     EL j (collect_phis instrs) = EL j instrs /\
     (EL j instrs).inst_opcode = PHI

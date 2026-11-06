@@ -2,6 +2,7 @@ Theory fnBlockPlanStaticRegion
 Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
+  fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -347,4 +348,97 @@ Proof
   qmatch_asmsub_abbrev_tac `popmany_plan items ps1` >>
   drule inventory_popmany >> disch_then (qspec_then `items` mp_tac) >>
   gvs[EVERY_MEM] >> metis_tac[pairTheory.SND]
+QED
+
+Theorem regional_no_use_dead_range:
+  !n fn bb i v.
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    i + n <= LENGTH bb.bb_instructions /\
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (i + n)) /\
+    (!j. i <= j /\ j < i + n ==>
+      ~MEM v (inst_uses (EL j bb.bb_instructions))) ==>
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
+    (first_x_assum irule >> fs[arithmeticTheory.ADD_CLAUSES] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  drule live_vars_at_transfer >> simp[] >>
+  disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `~MEM v (inst_uses (EL i bb.bb_instructions))` by
+    (first_x_assum irule >> decide_tac) >>
+  simp[livenessDefsTheory.liveness_transfer_def, live_update_mem]
+QED
+
+Theorem regional_phi_later_uses[local]:
+  !phis i j v. phi_uses_disjoint phis /\
+    i < j /\ j < LENGTH phis /\ MEM v (inst_uses (EL i phis)) ==>
+    ~MEM v (inst_uses (EL j phis))
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> Cases_on `j` >>
+  gvs[phi_uses_disjoint_def, EVERY_MEM] >> metis_tac[EL_MEM]
+QED
+
+Theorem regional_ready_phi_source_dead:
+  !fn bb i v.
+    codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    i < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (i + 1))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `phi_block_ready (liveness_analyze fn) bb` by
+    (irule ready_phi_block >> simp[] >> metis_tac[lookup_block_mem]) >>
+  `MEM v (inst_uses (EL i (collect_phis bb.bb_instructions)))` by
+    metis_tac[collect_phis_index] >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (collect_phis bb.bb_instructions)))` by
+    (gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  irule regional_no_use_dead_range >> simp[] >>
+  reverse conj_tac >- metis_tac[ready_reachable_preorder] >>
+  qexists_tac `LENGTH (collect_phis bb.bb_instructions) - (i + 1)` >>
+  `i + 1 <= LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  simp[] >> reverse conj_tac >- metis_tac[collect_phis_length_bound] >>
+  rpt strip_tac >>
+  `j < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `i < j` by decide_tac >>
+  gvs[phi_block_ready_def] >>
+  metis_tac[regional_phi_later_uses, collect_phis_index]
+QED
+
+Theorem regional_ready_phi_physical_transfer:
+  codegen_ready_fn fn /\ fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  inst = EL i bb.bb_instructions /\ MEM src (inst_uses inst) /\
+  nl = live_vars_at (liveness_analyze fn) bb.bb_label (i + 1) /\
+  generate_phi_plan inst nl F ps = (ops, qs) /\
+  inst.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ALL_DISTINCT ps.ps_stack /\ ~MEM (Var out) ps.ps_stack /\
+  Var out NOTIN FDOM ps.ps_spilled /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  EVERY (\op. op = Var src \/ ?v. op = Var v /\ MEM v live_support) ps.ps_stack /\
+  (MEM out nl ==> MEM out live_support) ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v live_support) qs.ps_stack /\
+  ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled) /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!x. MEM x qs.ps_stack <=>
+    (MEM x ps.ps_stack /\ x <> Var src) \/ (x = Var out /\ MEM out nl))
+Proof
+  strip_tac >>
+  `~MEM src nl` by metis_tac[regional_ready_phi_source_dead] >>
+  drule_all inventory_phi_mem >> strip_tac >>
+  drule_all inventory_phi_distinct >> strip_tac >>
+  drule_all inventory_phi_disjoint >> strip_tac >>
+  drule_all inventory_phi_spilled >> strip_tac >>
+  simp[] >> gvs[EVERY_MEM] >> metis_tac[]
 QED
