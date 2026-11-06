@@ -560,7 +560,7 @@ Definition extract_asm_result_def:
            let mem = asm_expand_memory (retOff + retSize) s.as_memory in
            let new_memory =
              TAKE retOff mem ++ ret_bytes ++
-             DROP (retOff + retSize) mem in
+             DROP (retOff + LENGTH ret_bytes) mem in
            let s' = s with <|
              as_returndata := returndata;
              as_accounts := accounts;
