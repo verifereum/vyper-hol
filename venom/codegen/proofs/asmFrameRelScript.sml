@@ -21,16 +21,12 @@ Ancestors
   codegenEntryRel asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   frameOutcome callTrace vfmExecution vfmExecutionProp
 
-(* asm_encoding_wf, data only at the end, and no opcodes beyond the two
-   message calls that start another frame or end this one by destruction. *)
+(* Well-formed instruction encodings, with data confined to the suffix. *)
 Definition asm_frame_prog_ok_def:
   asm_frame_prog_ok prog <=>
     asm_encoding_wf prog /\
     (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
-         !j. j <= i ==> ~is_data_inst (EL j prog)) /\
-    (!i name. i < LENGTH prog /\ EL i prog = AsmOp name ==>
-       name <> "DELEGATECALL" /\ name <> "CREATE" /\ name <> "CREATE2" /\
-       name <> "SELFDESTRUCT")
+         !j. j <= i ==> ~is_data_inst (EL j prog))
 End
 
 (* es is the frame es0 part way through: the same depth, saved rollback,
