@@ -1372,3 +1372,15 @@ Proof
   qexistsl [`ops`, `qs`] >> conj_tac >>
   irule native_regular_bottom_frame >> simp[]
 QED
+
+Theorem popmany_plan_appended_singleton:
+  !x ps. popmany_plan [x] (ps with ps_stack := ps.ps_stack ++ [x]) =
+    ([SOPop 1], ps)
+Proof
+  rpt gen_tac >>
+  `stack_get_depth x (ps.ps_stack ++ [x]) = SOME 0` by
+    simp[stack_get_depth_def, REVERSE_APPEND, stack_find_def] >>
+  mp_tac (Q.INST [`ps` |-> `ps with ps_stack := ps.ps_stack ++ [x]`,
+                  `v` |-> `x`] popmany_plan_top_singleton) >>
+  simp[stack_pop_def, TAKE_APPEND]
+QED
