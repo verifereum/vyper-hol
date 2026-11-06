@@ -152,7 +152,14 @@ roots = ["lowering/msgGasOriginPostScript.sml",
          "venom/codegen/proofs/genFrameSimScript.sml",
          "venom/compiler/o1PassLiftScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
-         "tests/vyperPlaceSanityTestScript.sml"]
+         "tests/vyperPlaceSanityTestScript.sml",
+         "venom/passes/memmerging/proofs/mmBlockSimProofsScript.sml",
+         "venom/passes/memmerging/proofs/mmSupplyWfProofsScript.sml",
+         "venom/passes/memmerging/proofs/mmSupplySsaProofsScript.sml",
+         "venom/passes/shared/proofs/remainingOracleSimScript.sml",
+         "venom/passes/shared/proofs/remainingOracleTransportScript.sml",
+         "venom/passes/shared/proofs/remainingOracleUpdatesScript.sml",
+         "lowering/placeTypingE2EPropsScript.sml"]
 
 [[executable]]
 name = "bytecode_parity_native"

@@ -2,7 +2,6 @@
  * Memmerging — Well-formedness Preservation (Proofs)
  *
  * All proof infrastructure for bb_well_formed / wf_function preservation.
- * Re-exported by mmWfScript.sml.
  *)
 
 Theory mmWfProofs

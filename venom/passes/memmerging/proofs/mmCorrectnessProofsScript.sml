@@ -3,7 +3,6 @@
  *
  * Definitions (invariants, fresh sets, block wf predicates) and
  * proof infrastructure for the memmerging correctness argument.
- * Re-exported by mmCorrectnessScript.sml.
  *)
 
 Theory mmCorrectnessProofs
