@@ -1536,3 +1536,58 @@ Proof
     metis_tac[]) >>
  metis_tac[]
 QED
+
+Theorem analyzed_join_actual_phi_prefix_schedule:
+ !fn entry pred pb succ sb dfg ps0 ops ps m core spillbase insts k bl halt pops qs.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn)
+   pred (LENGTH pb.bb_instructions)))) ps /\
+ lineage_core m core ps /\ EVERY is_var_operand core /\
+ residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+ k = LENGTH (collect_phis sb.bb_instructions) /\ k <= LENGTH insts /\
+ TAKE k insts = collect_phis sb.bb_instructions /\
+ (k < LENGTH insts \/ bl = k) /\
+ generate_block_insts_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+   halt 0 bl 0 k insts ps = SOME (pops,qs) ==>
+ ?s steps. s 0 = ps /\ s k = qs /\
+ MAP FST steps = collect_phis sb.bb_instructions /\ k = LENGTH steps /\
+ (!j. j < k ==> FST (SND (EL j steps)) =
+    live_vars_at (liveness_analyze fn) succ (SUC j)) /\
+ (!j. j < k ==> SND (SND (EL j steps)) = halt) /\
+ (!j. j < k ==> s (SUC j) = release_dead_spills (FST (SND (EL j steps)))
+   (SND (generate_phi_plan (FST (EL j steps)) (FST (SND (EL j steps)))
+     (SND (SND (EL j steps))) (s j))))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `EVERY (\inst. inst.inst_opcode = PHI) (TAKE k insts)` by
+   (simp[EVERY_MEM] >> metis_tac[collect_phis_mem]) >>
+ drule_all actual_phi_prefix_trace >> strip_tac >>
+ `!j. j < k ==> s (SUC j) = SND (generate_phi_plan
+   (EL j (collect_phis sb.bb_instructions))
+   (live_vars_at (liveness_analyze fn) succ (SUC j)) halt (s j))` by
+   (gen_tac >> disch_tac >>
+    qpat_x_assum `!j. j < k ==> _` drule >>
+    `EL j (collect_phis sb.bb_instructions) = EL j insts` by
+      (qpat_x_assum `TAKE k insts = _` (mp_tac o Q.AP_TERM `EL j`) >> simp[EL_TAKE]) >>
+    Cases_on `DROP (SUC j) insts = []` >> simp[GSYM arithmeticTheory.ADD1] >>
+    `SUC j = k /\ bl = k` by
+      (fs[DROP_EQ_NIL] >> decide_tac) >> simp[]) >>
+ `!j. j < k ==> s (SUC j) = release_dead_spills
+   (live_vars_at (liveness_analyze fn) succ (SUC j))
+   (SND (generate_phi_plan (EL j (collect_phis sb.bb_instructions))
+     (live_vars_at (liveness_analyze fn) succ (SUC j)) halt (s j)))` by
+   (mp_tac (SPEC_ALL analyzed_join_raw_phi_trace_release) >>
+    (impl_tac >- simp[]) >> simp[]) >>
+ qexists_tac `s` >>
+ qexists_tac `GENLIST (\j. (EL j (collect_phis sb.bb_instructions),
+   live_vars_at (liveness_analyze fn) succ (SUC j), halt)) k` >>
+ simp[EL_GENLIST, MAP_GENLIST, combinTheory.o_DEF] >>
+ irule GENLIST_EL >> simp[]
+QED
