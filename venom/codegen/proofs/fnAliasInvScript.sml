@@ -3084,6 +3084,90 @@ Proof
   gvs[LIST_ELEM_COUNT_THM] >> decide_tac
 QED
 
+Theorem alias_count_lupdate_decreases:
+  !xs n a b. n < LENGTH xs /\ EL n xs = a /\ a <> b ==>
+    LIST_ELEM_COUNT a (LUPDATE b n xs) < LIST_ELEM_COUNT a xs
+Proof
+  Induct >- simp[] >> Cases_on `n`
+  >- (rpt gen_tac >> simp[LUPDATE_def, LIST_ELEM_COUNT_THM]) >>
+  rpt gen_tac >> simp[LUPDATE_def, LIST_ELEM_COUNT_THM] >> strip_tac >>
+  first_x_assum drule >> disch_then drule >>
+  disch_then (qspec_then `b` mp_tac) >> simp[] >>
+  Cases_on `a = h` >> simp[LIST_ELEM_COUNT_THM]
+QED
+
+Theorem alias_phi_dead_selected_mass_decreases:
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  stack_peek d ps.ps_stack = Var a /\
+  ~MEM a live /\ a <> HD inst.inst_outputs ==>
+  alias_var_mass a (SND (generate_phi_plan inst live halting ps)) < alias_var_mass a ps
+Proof
+  strip_tac >>
+  `d < LENGTH ps.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >> drule planWfTheory.stack_find_bound >> simp[]) >>
+  `alias_var_mass a
+    (ps with ps_stack := stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack) <
+    alias_var_mass a ps` by
+    (qspecl_then [`ps.ps_stack`, `LENGTH ps.ps_stack - 1 - d`,
+       `Var a`, `Var (HD inst.inst_outputs)`] mp_tac alias_count_lupdate_decreases >>
+     gvs[alias_var_mass_def, stack_poke_def, stack_peek_def]) >>
+  simp[generate_phi_plan_def, operand_to_string_def] >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[] >>
+      metis_tac[alias_var_mass_popmany, pairTheory.SND, arithmeticTheory.LESS_EQ_LESS_TRANS]) >>
+  simp[]
+QED
+
+(* Unlike alias_phi_singleton_consumed, this one-name boundary needs no
+   singleton filter over the entire input set and permits unrelated spills. *)
+Theorem alias_phi_dead_selected_consumed:
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  stack_peek d ps.ps_stack = Var a /\
+  ~MEM a live /\ a <> HD inst.inst_outputs /\ alias_var_mass a ps <= 1 ==>
+  ~plan_holds (SND (generate_phi_plan inst live halting ps)) (Var a)
+Proof
+  strip_tac >> drule_all alias_phi_dead_selected_mass_decreases >>
+  disch_then (qspec_then `halting` mp_tac) >>
+  gvs[GSYM alias_var_mass_positive]
+QED
+
+(* C1.32 premise-production audit (conditional boundary, not a producer).
+   At a PHI-prefix cut, let a denote the variable in the selected slot.
+   1. alias_lineage_join_phi_prefix_total_slots supplies SOME d, and
+      alias_phi_depth_selected supplies membership in the filtered operands.
+      It does NOT identify this slot with the historical predecessor's
+      selected input: residual prefix operands may also match.  That extra
+      identification remains an obligation when a is fixed in advance.
+   2. Deadness ~MEM a live is a branch condition of generate_phi_plan, not
+      a consequence of historical edge membership.  The live branch uses
+      do_dup and retains the source.  At a root-writing PHI it still needs
+      a liveness/root-availability argument or a later repair argument.
+   3. For an actual historical selected source, output difference follows
+      from alias_ready_selected_source_not_phi_output and the singleton
+      outputs in alias_ready_phi_single_output.  For a nonreflexive demand
+      with normalize(a)=Var r and output r, it follows from a<>r directly.
+      Neither fact identifies the slot in item 1.
+   4. No current lineage result supplies alias_var_mass a cut <= 1.
+      alias_lineage_join_historical_coverage and the prefix-slots theorem
+      are lower bounds only.  join_reached_def constrains a suffix, not
+      the residual prefix; alias_lineage_join_selected_spill_support permits
+      selected sources in spills.  alias_phi_prefix_singleton_mass itself
+      requires a starting budget and fresh outputs.  An earlier live PHI
+      retains its source (generate_phi_plan_def); it supplies no uniqueness.
+
+   Symbolic residual case: a stack prefix u ++ [Var a] followed by a
+   selected top [Var a], with arbitrary spill map sp.  Poking the selected
+   top to Var r (a<>r) leaves u ++ [Var a; Var r] and the SAME sp.  If the
+   output is kept, the residual mass is count(Var a,u)+1 plus the spill
+   indicator.  The suffix condition alone cannot exclude this shape.
+   This is not a claim that the shape is reachable from lineage.
+
+   Even complete deletion at this cut is not endpoint deletion: later
+   alias_phi_prefix_upper_support allows reintroduction as an output,
+   and regular planning may emit an input.  The unresolved producer is
+   lineage plus endpoint demand implies deletion of ALL residual copies
+   or executed repair, across the remaining planner/execution suffix.
+   The strict-decrease theorem above does not supply that implication. *)
 Theorem alias_phi_mass_bound:
   !inst live halting ps x.
   alias_var_mass x (SND (generate_phi_plan inst live halting ps)) <=
