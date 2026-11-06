@@ -1271,7 +1271,7 @@ Proof
   gvs[DISJOINT_ALT]
 QED
 
-Theorem contiguous_top_depth_floor[local]:
+Theorem contiguous_top_depth_floor:
   !requests core.
     requests <> [] /\
     EVERY IS_SOME (MAP (\v. stack_get_depth v core) requests) /\

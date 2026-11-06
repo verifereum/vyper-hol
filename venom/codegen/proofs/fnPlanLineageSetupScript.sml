@@ -1702,3 +1702,144 @@ Proof
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `MAP (\e. e - 1) t` >> simp[]
 QED
+
+Theorem sorted_distinct_depths[local]:
+  !xs (f:'a -> num).
+    sorting$SORTED (\x y. f x <= f y) xs /\ ALL_DISTINCT xs /\
+    (!x y. MEM x xs /\ MEM y xs /\ f x = f y ==> x = y) ==>
+    sorting$SORTED ($<) (MAP f xs)
+Proof
+  Induct >> rpt gen_tac >>
+  `transitive (\x y. (f:'a -> num) x <= f y)` by
+    (simp[relationTheory.transitive_def] >> decide_tac) >>
+  `transitive ($< : num -> num -> bool)` by
+    (simp[relationTheory.transitive_def] >> decide_tac) >>
+  simp[sortingTheory.SORTED_EQ, MEM_MAP] >> rpt strip_tac
+  >- (gvs[] >> `f h <> f y'` by metis_tac[] >> res_tac >> decide_tac) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem popmany_sorted_depths[local]:
+  !requests stk.
+    ALL_DISTINCT requests /\
+    EVERY (\x. IS_SOME (stack_get_depth x stk)) requests ==>
+    sorting$SORTED ($<)
+      (MAP (\x. THE (stack_get_depth x stk))
+        (QSORT (\a b. case (stack_get_depth a stk, stack_get_depth b stk) of
+           (SOME da,SOME db) => da <= db | _ => T) requests))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `f = \x. THE (stack_get_depth x stk)` >>
+  `QSORT (\a b. case (stack_get_depth a stk, stack_get_depth b stk) of
+     (SOME da,SOME db) => da <= db | _ => T) requests =
+   QSORT (\a b. f a <= f b) requests` by
+    (irule fnPlanLineageSortTheory.qsort_relation_on >> rpt strip_tac >>
+     `IS_SOME (stack_get_depth x stk) /\ IS_SOME (stack_get_depth y stk)` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     simp[Abbr `f`] >>
+     Cases_on `stack_get_depth x stk` >>
+     Cases_on `stack_get_depth y stk` >> gvs[]) >>
+  simp[] >> irule sorted_distinct_depths >>
+  reverse conj_tac
+  >- (conj_tac
+      >- metis_tac[sortingTheory.QSORT_PERM, sortingTheory.ALL_DISTINCT_PERM] >>
+      irule sortingTheory.QSORT_SORTED >>
+      simp[relationTheory.transitive_def, relationTheory.total_def] >> decide_tac) >>
+  rpt gen_tac >> simp[sortingTheory.QSORT_MEM] >> strip_tac >>
+  `IS_SOME (stack_get_depth x stk) /\ IS_SOME (stack_get_depth y stk)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `stack_get_depth x stk` >> Cases_on `stack_get_depth y stk` >>
+  gvs[Abbr `f`] >> metis_tac[stack_get_depth_props]
+QED
+
+Theorem popmany_individual_incore_bottom_frame:
+  !requests ps prefix ops qs.
+    ALL_DISTINCT requests /\
+    EVERY (\x. IS_SOME (stack_get_depth x ps.ps_stack)) requests /\
+    popmany_individual requests ps = (ops,qs) ==>
+    popmany_individual requests (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!x. MEM x requests ==>
+    stack_get_depth x (prefix ++ ps.ps_stack) = stack_get_depth x ps.ps_stack` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     `IS_SOME (stack_get_depth x ps.ps_stack)` by metis_tac[] >>
+     Cases_on `stack_get_depth x ps.ps_stack` >> gvs[] >>
+     metis_tac[fnPlanLineageSuffixTheory.stack_get_depth_suffix_hit]) >>
+  `QSORT (\a b. case (stack_get_depth a (prefix ++ ps.ps_stack),
+      stack_get_depth b (prefix ++ ps.ps_stack)) of
+      (SOME da,SOME db) => da <= db | _ => T) requests =
+   QSORT (\a b. case (stack_get_depth a ps.ps_stack,
+      stack_get_depth b ps.ps_stack) of
+      (SOME da,SOME db) => da <= db | _ => T) requests` by
+    (irule fnPlanLineageSortTheory.qsort_relation_on >> simp[]) >>
+  `(\(acc,s). lineage_delete_step (acc,s)) = lineage_delete_step` by
+    (simp[FUN_EQ_THM] >> Cases >> simp[]) >>
+  gvs[popmany_individual_def, GSYM lineage_delete_step_def, SF ETA_ss] >>
+  irule lineage_ordered_delete_fold_frame >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `MAP (\x. THE (stack_get_depth x ps.ps_stack))
+    (QSORT (\a b. case (stack_get_depth a ps.ps_stack,
+      stack_get_depth b ps.ps_stack) of
+      (SOME da,SOME db) => da <= db | _ => T) requests)` >>
+  conj_tac >- (irule popmany_sorted_depths >> simp[]) >>
+  simp[LIST_REL_EL_EQN, EL_MAP, SF ETA_ss] >> rpt strip_tac >>
+  rename1 `i < LENGTH requests` >>
+  qmatch_goalsub_abbrev_tac `stack_get_depth item _` >>
+  `MEM item requests` by
+    (qmatch_asmsub_abbrev_tac `FOLDL _ _ sorted` >>
+     `MEM item sorted` by
+       (simp[Abbr `item`, Abbr `sorted`] >>
+        metis_tac[MEM_EL, sortingTheory.LENGTH_QSORT]) >>
+     gvs[Abbr `sorted`, sortingTheory.QSORT_MEM]) >>
+  `IS_SOME (stack_get_depth item ps.ps_stack)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `stack_get_depth item ps.ps_stack` >> gvs[]
+QED
+
+Theorem popmany_plan_incore_bottom_frame:
+  !requests ps prefix ops qs.
+    ALL_DISTINCT requests /\
+    EVERY (\x. IS_SOME (stack_get_depth x ps.ps_stack)) requests /\
+    popmany_plan requests ps = (ops,qs) ==>
+    popmany_plan requests (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Cases >- simp[popmany_plan_def] >> rpt gen_tac >> strip_tac >>
+  `MAP (\x. stack_get_depth x (prefix ++ ps.ps_stack)) (h::t) =
+   MAP (\x. stack_get_depth x ps.ps_stack) (h::t)` by
+    (irule MAP_CONG >> simp[] >> rpt strip_tac >>
+     `IS_SOME (stack_get_depth x ps.ps_stack)` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     Cases_on `stack_get_depth x ps.ps_stack` >> gvs[] >>
+     metis_tac[fnPlanLineageSuffixTheory.stack_get_depth_suffix_hit]) >>
+  `EVERY IS_SOME (MAP (\x. stack_get_depth x ps.ps_stack) (h::t))` by
+    simp[EVERY_MAP] >>
+  gvs[popmany_plan_def, LET_THM] >>
+  Cases_on `is_contiguous_top (MAP THE (MAP (\x. stack_get_depth x ps.ps_stack) (h::t)))`
+  >- (gvs[] >>
+      `LENGTH (h::t) < LENGTH ps.ps_stack` by
+        (irule contiguous_top_depth_floor >> simp[]) >>
+      namedCases_on `do_swap (LENGTH (h::t)) ps` ["swaps ps1"] >>
+      drule_all do_swap_bottom_frame >> strip_tac >>
+      `LENGTH ps1.ps_stack = LENGTH ps.ps_stack` by
+        (drule do_swap_stack_result >> simp[]) >>
+      gvs[] >> simp[stack_pop_bottom_extension]) >>
+  gvs[] >> irule popmany_individual_incore_bottom_frame >> simp[]
+QED
+
+(* Output membership shields deletion even if older copies occur in prefix. *)
+Theorem popmany_plan_output_suffix_bottom_frame:
+  !requests outs core ps prefix ops qs.
+    ALL_DISTINCT requests /\ EVERY (\x. MEM x outs) requests /\
+    ps.ps_stack = core ++ outs /\ popmany_plan requests ps = (ops,qs) ==>
+    popmany_plan requests (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >> irule popmany_plan_incore_bottom_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  `MEM x (core ++ outs)` by (simp[] >> metis_tac[]) >>
+  metis_tac[stack_get_depth_is_some]
+QED
