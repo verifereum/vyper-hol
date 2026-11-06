@@ -527,3 +527,325 @@ Proof
     temporal_pressure_header_calls |> SRULE [listTheory.EVERY_DEF],
     temporal_header_sixteen_back, temporal_body_sixteen, temporal_latch_sixteen]
 QED
+
+(* A genuine skipped-use return: S does not execute any use of x, b or ti.
+   The entry and latch remain JMP predecessors of H. *)
+Definition bypass_pressure_fn_def:
+  bypass_pressure_fn n = mk_raw_function "bypass_pressure"
+    [<| bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 ASSIGN [Lit 1w] ["seed"];
+         mk_inst 1 JMP [Label "H"] []] |>;
+     <| bb_label := "H"; bb_instructions :=
+        [mk_inst 2 PHI [Label "entry"; Var "seed"; Label "latch"; Var "back"] ["x"];
+         mk_inst 3 JNZ [Lit 1w; Label "D"; Label "exit"] []] |>;
+     <| bb_label := "D"; bb_instructions :=
+        MAPi (\i v. mk_inst (100+i) ASSIGN [Lit 1w] [v]) (TAKE n cycle_deep_names) ++
+        [mk_inst 4 ADD [Lit 2w; Lit 3w] ["b"];
+         mk_inst 15 ASSIGN [Lit 1w] ["carry"];
+         mk_inst 5 JNZ [Lit 1w; Label "U"; Label "S"] []] |>;
+     <| bb_label := "U"; bb_instructions :=
+        [mk_inst 6 ISZERO [Var "x"] ["phi_out"];
+         mk_inst 7 ISZERO [Var "b"] ["out"];
+         mk_inst 8 ASSIGN [Var "phi_out"] ["unused_phi"];
+         mk_inst 9 ASSIGN [Var "out"] ["unused_out"]] ++
+        MAPi (\i v. mk_inst (200+i) ASSIGN [Var v] [STRCAT "u" v])
+          (TAKE n cycle_deep_names) ++
+        [mk_inst 10 JMP [Label "latch"] []] |>;
+     <| bb_label := "S"; bb_instructions :=
+        [mk_inst 11 JMP [Label "latch"] []] |>;
+     <| bb_label := "latch"; bb_instructions :=
+        [mk_inst 12 ASSIGN [Var "carry"] ["back"];
+         mk_inst 13 JMP [Label "H"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 14 STOP [] []] |>]
+End
+
+Theorem bypass_pressure_ready:
+  EVERY (\n. codegen_ready_fn (bypass_pressure_fn n) /\
+    EVERY (\bb. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb.bb_instructions) (bypass_pressure_fn n).fn_blocks)
+    [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  BETA_TAC >>
+  conj_tac >- suspend "one" >>
+  conj_tac >- suspend "sixteen" >> suspend "seventeen"
+QED
+Resume bypass_pressure_ready[one]:
+  EVAL_TAC >> simp[]
+QED
+Resume bypass_pressure_ready[sixteen]:
+  EVAL_TAC >> simp[]
+QED
+Resume bypass_pressure_ready[seventeen]:
+  EVAL_TAC >> simp[]
+QED
+Finalise bypass_pressure_ready
+
+Definition bypass_live_def:
+  bypass_live n = liveness_analyze (bypass_pressure_fn n)
+End
+Definition bypass_dfg_def:
+  bypass_dfg n = dfg_build_function (bypass_pressure_fn n)
+End
+Definition bypass_cfg_def:
+  bypass_cfg n = cfg_analyze (bypass_pressure_fn n)
+End
+val _ = app (fn n => app (fn d => computeLib.add_funs
+  [CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV
+    [``liveness_analyze``, ``dfg_build_function``, ``cfg_analyze``]))
+    (REWRITE_RULE [d] (CONV_RULE (RAND_CONV EVAL) (Q.SPEC n d)))])
+  [bypass_live_def, bypass_dfg_def, bypass_cfg_def]) [`1`, `16`, `17`];
+
+Definition bypass_call_def:
+  bypass_call n i ps = generate_block_plan
+    (bypass_live n) (bypass_dfg n) (bypass_cfg n) (bypass_pressure_fn n)
+    (EL i (bypass_pressure_fn n).fn_blocks) ps
+End
+Definition bypass_step_def:
+  bypass_step n i ps = SND (THE (bypass_call n i ps))
+End
+
+Theorem bypass_entry_calls:
+  EVERY (\n. bypass_call n 0 entry_probe_start =
+    SOME ([SOLabel "entry"; SOPush (Lit 1w); SOPushLabel "H"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "seed"])) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_entry_calls));
+
+Theorem bypass_header_calls:
+  EVERY (\n. bypass_call n 1 (bypass_step n 0 entry_probe_start) =
+    SOME ([SOLabel "H"; SOPoke 0 (Var "x"); SOPush (Lit 1w);
+      SOPushLabel "D"; SOEmit "JUMPI"; SOPushLabel "exit"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "x"])) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  rpt conj_tac >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL))) (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_header_calls)));
+
+Theorem bypass_define_one:
+  bypass_call 1 2 (bypass_step 1 1 (bypass_step 1 0 entry_probe_start)) =
+    SOME ([SOLabel "D"; SOPush (Lit 1w); SOSwap 1; SOPush (Lit 3w);
+      SOPush (Lit 2w); SOEmit "ADD"; SOSwap 1; SOPush (Lit 1w);
+      SOPush (Lit 1w); SOPushLabel "U"; SOEmit "JUMPI";
+      SOPushLabel "S"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "t0";Var "b";Var "x";Var "carry"])
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs [CONV_RULE (LAND_CONV (RAND_CONV EVAL)) bypass_define_one];
+
+Theorem bypass_skip_one:
+  bypass_call 1 4 (bypass_step 1 2
+    (bypass_step 1 1 (bypass_step 1 0 entry_probe_start))) =
+    SOME ([SOLabel "S"; SOSwap 3; SOPop 3; SOPushLabel "latch"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "carry"])
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs [CONV_RULE (LAND_CONV (RAND_CONV EVAL)) bypass_skip_one];
+
+Definition bypass_defined_def:
+  bypass_defined n = bypass_step n 2
+    (bypass_step n 1 (bypass_step n 0 entry_probe_start))
+End
+
+Theorem bypass_consume_one:
+  bypass_call 1 3 (bypass_defined 1) =
+    SOME ([SOLabel "U"; SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1; SOPop 1;
+      SOPushLabel "latch"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "carry"])
+Proof
+  EVAL_TAC
+QED
+
+val _ = computeLib.add_funs [CONV_RULE (LAND_CONV (RAND_CONV EVAL)) bypass_consume_one];
+
+Theorem bypass_latch_one:
+  bypass_call 1 5 (bypass_step 1 4 (bypass_defined 1)) =
+    SOME ([SOLabel "latch"; SOPushLabel "H"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "back"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem bypass_define_wide:
+  EVERY (\n. bypass_call n 2 (bypass_step n 1 (bypass_step n 0 entry_probe_start)) =
+    SOME ([SOLabel "D"] ++ FLAT (REPLICATE n [SOPush (Lit 1w); SOSwap 1]) ++
+      [SOPush (Lit 3w); SOPush (Lit 2w); SOEmit "ADD"; SOSwap 1;
+       SOPush (Lit 1w); SOPush (Lit 1w); SOPushLabel "U"; SOEmit "JUMPI";
+       SOPushLabel "S"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack :=
+        MAP Var (TAKE n cycle_deep_names) ++ [Var "b";Var "x";Var "carry"])) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL))) (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_define_wide)));
+
+Theorem bypass_skip_wide:
+  EVERY (\n. bypass_call n 4 (bypass_defined n) =
+    SOME ([SOLabel "S"] ++ FLAT (REPLICATE (n+2) [SOSwap 1; SOPop 1]) ++
+      [SOPushLabel "latch"; SOEmit "JUMP"],
+      entry_probe_start with ps_stack := [Var "carry"])) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL))) (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_skip_wide)));
+
+Theorem bypass_consume_wide:
+  EVERY (\n. bypass_call n 3 (bypass_defined n) =
+    SOME ([SOLabel "U"; SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1] ++
+      (if n = 17 then [SOPop 1; SOSwap 1; SOSpill 0] ++
+        REPLICATE 16 (SOPop 1) ++ [SORestore 0; SOPop 1]
+       else REPLICATE (n+1) (SOPop 1)) ++
+      [SOPushLabel "latch"; SOEmit "JUMP"],
+      entry_probe_start with <| ps_stack := [Var "carry"];
+        ps_alloc := if n = 17 then
+          <| sa_free_slots := [0]; sa_next_offset := 32; sa_spill_base := 0 |>
+          else entry_probe_start.ps_alloc |>)) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL))) (CONJUNCTS
+  (SRULE [listTheory.EVERY_DEF] bypass_consume_wide)));
+
+Theorem bypass_returns:
+  EVERY (\n. EVERY (\i.
+    bypass_call n 5 (bypass_step n i (bypass_defined n)) =
+      SOME ([SOLabel "latch"; SOPushLabel "H"; SOEmit "JUMP"],
+        (bypass_step n i (bypass_defined n)) with ps_stack := [Var "back"]) /\
+    bypass_call n 1 (entry_probe_start with <|
+      ps_stack := (bypass_step n 5 (bypass_step n i (bypass_defined n))).ps_stack;
+      ps_spilled := (bypass_step n 5 (bypass_step n i (bypass_defined n))).ps_spilled |>) =
+      bypass_call n 1 (bypass_step n 0 entry_probe_start)) [3;4]) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  BETA_TAC >>
+  conj_tac >- suspend "one" >>
+  conj_tac >- suspend "sixteen" >> suspend "seventeen"
+QED
+
+Resume bypass_returns[one]:
+  simp[bypass_step_def, bypass_consume_one,
+    bypass_skip_one |> SRULE [GSYM bypass_defined_def]] >>
+  conj_asm1_tac >- EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+Resume bypass_returns[sixteen]:
+  simp[bypass_step_def,
+    bypass_consume_wide |> SRULE [listTheory.EVERY_DEF],
+    bypass_skip_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_asm1_tac >- EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+Resume bypass_returns[seventeen]:
+  simp[bypass_step_def,
+    bypass_consume_wide |> SRULE [listTheory.EVERY_DEF],
+    bypass_skip_wide |> SRULE [listTheory.EVERY_DEF]] >>
+  conj_tac >- (conj_asm1_tac >- EVAL_TAC >> simp[] >> EVAL_TAC) >>
+  conj_asm1_tac >- EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+Finalise bypass_returns
+
+Definition bypass_use_live_def:
+  bypass_use_live n k = live_vars_at (bypass_live n) "U" k
+End
+val _ = app (fn n => app (fn k => computeLib.add_funs
+  [CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV [``live_vars_at``]))
+    (REWRITE_RULE [bypass_use_live_def, bypass_live_def]
+      (CONV_RULE (RAND_CONV EVAL)
+        (SPEC (numSyntax.term_of_int k) (Q.SPEC n bypass_use_live_def))))])
+  (List.tabulate (23, fn k => k))) [`16`, `17`];
+
+(* Expose a native instruction prefix, including the block-entry cleanup.
+   No input stack is manufactured: callers use the successful paths above. *)
+Definition bypass_prefix_def:
+  bypass_prefix n i 0 ps = SOME (clean_stack_plan
+    (bypass_live n) (bypass_cfg n) (bypass_pressure_fn n)
+    (EL i (bypass_pressure_fn n).fn_blocks) ps) /\
+  bypass_prefix n i (SUC k) ps =
+    case bypass_prefix n i k ps of NONE => NONE | SOME (ops,qs) =>
+      case generate_inst_plan
+        (bypass_live n) (bypass_dfg n) (bypass_cfg n) (bypass_pressure_fn n)
+        (EL k (EL i (bypass_pressure_fn n).fn_blocks).bb_instructions)
+        (live_vars_at (bypass_live n) (EL i (bypass_pressure_fn n).fn_blocks).bb_label (SUC k))
+        (bb_is_halting (EL i (bypass_pressure_fn n).fn_blocks))
+        (SUC k < LENGTH (EL i (bypass_pressure_fn n).fn_blocks).bb_instructions /\
+          is_terminator (EL (SUC k)
+            (EL i (bypass_pressure_fn n).fn_blocks).bb_instructions).inst_opcode)
+        (EL i (bypass_pressure_fn n).fn_blocks).bb_label qs of
+        NONE => NONE | SOME (chunk,rs) => SOME (ops ++ chunk,rs)
+End
+
+Theorem bypass_skip_prejmp:
+  EVERY (\n. bypass_prefix n 4 0 (bypass_defined n) =
+    SOME (if n = 1 then [SOSwap 3; SOPop 3]
+      else FLAT (REPLICATE (n+2) [SOSwap 1; SOPop 1]),
+      entry_probe_start with ps_stack := [Var "carry"])) [1;16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  BETA_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem bypass_consume_four_wide:
+  EVERY (\n. bypass_prefix n 3 4 (bypass_defined n) =
+    SOME ([SOSwap 1; SOEmit "ISZERO"; SOSwap 2; SOEmit "ISZERO";
+      SOSwap 2; SOPop 1; SOSwap 1; SOPop 1],
+      entry_probe_start with ps_stack :=
+        MAP Var (TAKE n cycle_deep_names) ++ [Var "carry"])) [16;17]
+Proof
+  pure_rewrite_tac [listTheory.EVERY_DEF, boolTheory.AND_CLAUSES] >>
+  BETA_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+val _ = computeLib.add_funs (map (CONV_RULE (LAND_CONV (RAND_CONV EVAL)))
+  (CONJUNCTS (SRULE [listTheory.EVERY_DEF] bypass_consume_four_wide)));
+
+(* Bounded result and first-event ledger (not a universal producer):
+   E0 entry, E1 H/PHI(seed->x), E2 D/ti definitions, E3 D/b,
+   E4 D/carry, E5 D/JNZ, E6 S/cleanup OR U/consumers,
+   E7 S-or-U/JMP(latch), E8 latch/carry->back, E9 latch/JMP(H),
+   E10 rebase from successful latch stack/spills, E11 H/PHI(back->x).
+
+   Checked whole-state table, all widths 1/16/17:
+     E5: stack = ti ++ [b;x;carry], spills empty, each name once.
+     E6 S after cleanup, before its successful JMP: [carry], spills empty.
+     E7 either path: [carry], spills empty.
+     E9: [back], spills empty. E11 finishes with [x], spills empty.
+   Thus this bypass really skips every tracked use, but it does NOT retain
+   a residual tracked resource: clean_stack_plan performs the reset at E6.
+   Width17 U additionally spills/restores carry; its allocator has free=[0],
+   next=32, unlike S's unchanged allocator. Reentry uses the actual E9 stack
+   and spill projections with the destination's fields, not the source alloc.
+   Whole stacks above give exact name counts (1 for listed names, 0 otherwise)
+   and empty spills, not merely suffix counts.
+
+   At a candidate first bad live-coverage event, coverage of its operands
+   must come from a strictly earlier stable phase; these computations only
+   supply that fact for this fixture. At a first bad unit-count definition,
+   predefinition output absence must precede that definition, not follow from
+   its proposed upper bound. The skipped path's absence is produced at E6
+   here; an arbitrary residual-only path still lacks a universal producer.
+   E11 selected back extinction can use E9's single occurrence and empty
+   spill, together with output x<>back and back dead after PHI, all earlier
+   than the result write. For a universal ordinary or PHI output freshness
+   argument, the first-event premise must likewise precede the write; using
+   the new output's unit bound there would be circular.
+
+   Still uncomputed: whole-function success, explicit E11 instruction-phase
+   and repeated D-prefix equations, and U's immediate pre-JMP phase at wide
+   widths. Its full native block SOME equation is checked, but a separate
+   recursive-prefix evaluation exceeds 2.5s even with prefix4 and liveness
+   query caches. This is an unfinished diagnostic, not NONE or falsehood.
+*)
