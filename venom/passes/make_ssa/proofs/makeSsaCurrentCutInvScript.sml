@@ -23,6 +23,7 @@ Ancestors
   makeSsaCurrentLockstepShape makeSsaCurrentPrefixRuntime
   makeSsaCurrentRetainedContext makeSsaCurrentPrefixPayload
   makeSsaCurrentEdgeTransport makeSsaCurrentPrefixEndpoints
+  makeSsaCurrentHistoryOwner venomInst venomWf venomExecProps list rich_list
 
 (* An inserted PHI for v at h that the cleanup collapsed to a copy of src. *)
 Definition current_collapsed_carrier_def:
@@ -1042,4 +1043,85 @@ Proof
   `EL n (collect_phis old.bb_instructions) = EL n old.bb_instructions` by metis_tac[] >>
   fs[makeSsaCurrentLastSiteTheory.current_phi_cut_clear_def,
     venomInstTheory.inst_defs_def] >> metis_tac[]
+QED
+
+Theorem current_cut_original_slots_cover[local]:
+  current_wf_phi_context s fn renamed s' A H events /\
+  fn_cfg_edge fn p h /\ lookup_block h fn.fn_blocks = SOME old /\
+  current_wf_original_phi_at fn A renamed h j r slots ==>
+  ALL_DISTINCT (MAP FST slots) /\ ?u. MEM (p,u) slots
+Proof
+  strip_tac >>
+  qpat_assum `current_wf_original_phi_at _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_original_phi_at_def] >> strip_tac >>
+  rpt (qpat_x_assum `_.inst_operands = current_phi_slots _` kall_tac) >>
+  gvs[] >>
+  `MEM old fn.fn_blocks /\ MEM (EL j old.bb_instructions) old.bb_instructions` by
+    metis_tac[lookup_block_MEM, MEM_EL] >>
+  qpat_x_assum `current_wf_phi_context _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_phi_context_def] >> strip_tac >>
+  fs[fn_phis_cover_preds_def, MEM_MAP, pairTheory.EXISTS_PROD] >>
+  metis_tac[lookup_block_label]
+QED
+
+Theorem current_cut_retained_original_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  current_wf_original_phi_at fn A renamed h j r slots /\
+  MEM z (EL r new.bb_instructions).inst_outputs /\ MEM (t,x,z) H ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\ ir_supply_covers_fn s fn /\
+   ir_supply_inst_ok s /\ fn_inst_wf fn` by fs[current_wf_phi_context_def] >>
+  `j < LENGTH old.bb_instructions /\
+   (EL j old.bb_instructions).inst_opcode = PHI` by
+    (gvs[current_wf_original_phi_at_def]) >>
+  `inst_wf (EL j old.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, lookup_block_MEM, EL_MEM] >>
+  `?v. (EL j old.bb_instructions).inst_outputs = [v]` by
+    (qpat_x_assum `inst_wf _` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  drule_all current_wf_original_phi_output_length >> strip_tac >>
+  `(EL r new.bb_instructions).inst_outputs = [z]` by
+    (gvs[LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  `0 < LENGTH (EL j old.bb_instructions).inst_outputs` by simp[] >>
+  drule_all current_wf_original_phi_output >> strip_tac >> gvs[] >>
+  rename1 `current_token_name H (CurrentOriginal h j 0) = SOME z` >>
+  `MEM (CurrentOriginal h j 0,v,z) H` by
+    (irule current_history_owned_name_member >> simp[] >> metis_tac[]) >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  `v = x` by metis_tac[current_carrier_history_name_owner] >> gvs[] >>
+  drule_all current_cut_original_slots_cover >> strip_tac >>
+  `simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions` by
+    metis_tac[current_wf_original_phi_retained] >>
+  simp[current_cut_semantic_endpoint_def] >> disj1_tac >>
+  qexistsl_tac [`j`, `r`, `slots`, `u`] >> simp[]
+QED
+
+Theorem current_cut_prefix_retained_original_endpoint:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn p h /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  lookup_block p fn.fn_blocks = SOME pred /\
+  current_wf_original_phi_at fn A renamed h j r slots /\
+  MEM z (EL r new.bb_instructions).inst_outputs /\
+  A h = current_block_annotations old pre /\
+  lookup_block h (simplify_current_phis_if enabled renamed) = SOME bb /\
+  phi_prefix_length bb.bb_instructions <= k /\
+  k <= LENGTH pre + LENGTH (collect_phis old.bb_instructions) /\
+  current_prefix_back
+    (TAKE (LENGTH pre + LENGTH (collect_phis old.bb_instructions) - k)
+      (DROP k bb.bb_instructions))
+    (current_cut_sg fn A renamed H events h (LENGTH (collect_phis old.bb_instructions)))
+    z x ==>
+  current_cut_semantic_endpoint fn A renamed H events p h old new pred z x
+Proof
+  strip_tac >>
+  drule_all (cj 1 current_cut_actual_suffix_owner) >>
+  strip_tac >>
+  irule current_cut_retained_original_endpoint >> metis_tac[]
 QED
