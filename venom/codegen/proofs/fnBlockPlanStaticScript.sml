@@ -1371,3 +1371,84 @@ Proof
      rpt (first_assum $ irule_at Any) >> gvs[]) >>
   gvs[] >> irule regional_replay_ret_block_empty >> metis_tac[]
 QED
+
+Theorem regional_computed_operands_marker_safe:
+  codegen_ready_fn fn /\ codegen_ready_inst inst ==>
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv (dfg_build_function fn) op at ==> at <> dead_stack_marker)
+    (compute_operands inst)
+Proof
+  strip_tac >>
+  `~MEM dead_stack_marker (compute_operands inst)` by
+    (gvs[codegen_ready_inst_def] >>
+     simp[compute_operands_def, LET_THM] >> rpt IF_CASES_TAC >>
+     gvs[asmIRTheory.get_non_label_operands_def, listTheory.MEM_FILTER] >>
+     Cases_on `inst.inst_operands` >> gvs[]) >>
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac
+  >- metis_tac[] >>
+  gvs[operand_equiv_def, dead_stack_marker_def, Once normalize_operand_def] >>
+  metis_tac[fnFrameStepsRevertForwardTheory.codegen_normalize_operand_not_dead_marker,
+    dead_stack_marker_def]
+QED
+
+Theorem regional_body_instruction_structure:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  LENGTH (get_params bb.bb_instructions) <= k /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions ==>
+  MEM inst (fn_insts fn) /\ inst_wf inst /\
+  ~is_param_opcode inst.inst_opcode /\ codegen_ready_inst inst
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+    metis_tac[lookup_block_MEM, listTheory.EL_MEM] >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+       listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  `MEM inst (DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions)` by
+    (simp[listTheory.MEM_EL] >>
+     qexists_tac `k - LENGTH (get_params bb.bb_instructions)` >>
+     simp[listTheory.EL_DROP] >> gvs[] >> decide_tac) >>
+  gvs[callLayoutDefsTheory.no_param_insts_def, listTheory.EVERY_MEM,
+      codegen_ready_fn_def, fn_inst_wf_def] >> metis_tac[]
+QED
+
+Theorem regional_body_lower_inv_jnz:
+  codegen_ready_fn fn /\ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  k < LENGTH bb.bb_instructions /\ inst = EL k bb.bb_instructions /\
+  codegen_ready_inst inst /\
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb k ps /\
+  inst.inst_opcode = JNZ /\
+  inst.inst_operands = [cond_op; Label if_nz; Label if_z] ==>
+  1 <= LENGTH (SND (emit_input_plan JNZ [cond_op] nl ps)).ps_stack /\
+  (is_var_operand cond_op ==>
+    IS_SOME (stack_get_depth cond_op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
+  cond_op <> dead_stack_marker /\
+  (!at. operand_equiv (dfg_build_function fn) cond_op at ==> at <> dead_stack_marker)
+Proof
+  strip_tac >>
+  `inst_wf inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def] >>
+     metis_tac[lookup_block_MEM, listTheory.EL_MEM]) >>
+  Cases_on `is_label_operand cond_op`
+  >- (Cases_on `cond_op` >>
+      gvs[is_label_operand_def, emit_input_plan_one, emit_one_input_def,
+          is_var_operand_def, stackModelTheory.stack_push_def, dead_stack_marker_def,
+          operand_equiv_def, normalize_operand_def, codegen_ready_inst_def]) >>
+  `compute_operands inst = [cond_op]` by
+    (Cases_on `cond_op` >>
+     gvs[compute_operands_def, asmIRTheory.get_non_label_operands_def,
+       listTheory.FILTER, is_label_operand_def]) >>
+  drule_all regional_body_lower_inv_input_capacity >>
+  disch_then (qspec_then `nl` mp_tac) >>
+  strip_tac >>
+  `is_var_operand cond_op ==>
+    IS_SOME (stack_get_depth cond_op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled cond_op)` by
+    (strip_tac >> irule regional_body_lower_inv_operand_lookup >>
+     rpt (first_assum $ irule_at Any) >> simp[]) >>
+  drule_all regional_computed_operands_marker_safe >>
+  gvs[listTheory.EVERY_DEF]
+QED
