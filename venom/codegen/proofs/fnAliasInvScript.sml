@@ -855,6 +855,48 @@ Proof
   metis_tac[alias_ssa_definition_position]
 QED
 
+Theorem alias_def_available_definition_suffix:
+  wf_function fn /\ ssa_form fn /\
+  lookup_block d fn.fn_blocks = SOME db /\ j < LENGTH db.bb_instructions /\
+  MEM v (inst_defs (EL j db.bb_instructions)) /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  def_available_at fn pb use_opt v /\
+  is_fn_path fn path /\ path <> [] /\
+  (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\ LAST path = p ==>
+  ?pre tail.
+    path = pre ++ d::tail /\ ~MEM d tail /\
+    is_fn_path fn (d::tail) /\ LAST (d::tail) = p /\
+    (!l bb k. MEM l tail /\ lookup_block l fn.fn_blocks = SOME bb /\
+      k < LENGTH bb.bb_instructions ==>
+      ~MEM v (inst_defs (EL k bb.bb_instructions))) /\
+    (d = p ==> case use_opt of NONE => T | SOME ui =>
+      ?k. j < k /\ k < LENGTH pb.bb_instructions /\
+          EL k pb.bb_instructions = ui)
+Proof
+  strip_tac >>
+  `pb.bb_label = p` by metis_tac[lookup_block_label] >>
+  qpat_x_assum `def_available_at _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [def_available_at_def]) >>
+  `lookup_block def_bb.bb_label fn.fn_blocks = SOME def_bb` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  `?di. di < LENGTH def_bb.bb_instructions /\
+    EL di def_bb.bb_instructions = def_inst` by metis_tac[MEM_EL] >>
+  `d = def_bb.bb_label /\ j = di` by
+    metis_tac[alias_ssa_definition_position, inst_defs_def] >>
+  `def_bb = db` by metis_tac[optionTheory.SOME_11] >>
+  `MEM d path` by metis_tac[fn_dominates_def] >>
+  drule_all alias_path_last_visit >> strip_tac >>
+  qexistsl_tac [`pre`, `tail`] >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `l <> d` by metis_tac[] >>
+      metis_tac[alias_definition_excludes_other_block]) >>
+  strip_tac >> `db = pb` by metis_tac[optionTheory.SOME_11] >>
+  Cases_on `use_opt` >> gvs[] >>
+  `i < LENGTH db.bb_instructions` by decide_tac >>
+  `i = di` by metis_tac[alias_ssa_definition_position] >>
+  metis_tac[]
+QED
+
 Theorem alias_phi_ready_postprefix_input:
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
