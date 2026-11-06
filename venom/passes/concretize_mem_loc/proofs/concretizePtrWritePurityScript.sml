@@ -44,3 +44,31 @@ Proof
   Cases_on `sizeop` >> gvs[op_prov_def] >>
   metis_tac[flookup_thm]
 QED
+
+Theorem ptr_mstore_value_not_pointer:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [a;v] ==>
+  !x. v = Var x ==> x NOTIN fn_pv P fn
+Proof
+  strip_tac >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (gvs[fn_ptr_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `fn_ptr_ok P fn` kall_tac >>
+  rpt strip_tac >>
+  gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+      mem_write_ops_def, mem_read_ops_def] >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >> strip_tac >> gvs[]
+QED
+
+Theorem ptr_mstore_value_no_provenance:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [a;v] /\
+  (!x. x IN FDOM TG ==> x IN fn_pv P fn) ==>
+  op_prov TG v = NONE
+Proof
+  strip_tac >>
+  `!x. v = Var x ==> x NOTIN fn_pv P fn` by
+    (gen_tac >> strip_tac >> irule ptr_mstore_value_not_pointer >> metis_tac[]) >>
+  Cases_on `v` >> gvs[op_prov_def] >> metis_tac[flookup_thm]
+QED
