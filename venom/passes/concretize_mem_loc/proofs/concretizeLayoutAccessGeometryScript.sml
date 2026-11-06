@@ -59,9 +59,8 @@ Theorem concretize_memory_access_geometry:
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
-  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
-  EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
@@ -88,7 +87,11 @@ Theorem concretize_memory_access_geometry:
        w2n offT = concretize_positions C' owner aid + (w2n off-b)))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all joint_trace_edge_at >> strip_tac >> gnvs[] >>
+  `LENGTH es = LENGTH qs` by
+    metis_tac[joint_trace_def, joint_chain_length] >>
+  `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
+    (drule joint_trace_prefix_reachable >> rewrite_tac[EVERY_EL] >>
+     disch_then (qspec_then `c` mp_tac) >> simp[]) >> gnvs[] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>

@@ -74,9 +74,8 @@ Theorem concretize_read_demand_geometry:
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
-  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
-  EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
