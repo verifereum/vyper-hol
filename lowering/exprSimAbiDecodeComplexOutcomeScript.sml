@@ -685,3 +685,103 @@ Theorem abi_decode_struct_constructor_rows_conditional:
 Proof
   strip_tac >> drule abi_decoder_struct_infos >> simp[]
 QED
+
+Theorem abi_decode_constructor_rows_pre:
+  abi_tuple_rows_schema ce env rows /\
+  EVERY (\(ei,ty,tv,asz,msz). abi_decode_owned_child_contract ce env ty tv) rows /\
+  SUM(MAP abi_tuple_row_mem_width rows) = type_memory_bytes ce ty /\
+  abi_decode_owned sites scratch d (type_memory_bytes ce ty) s /\
+  abi_decode_context_pre ctx func ce env ty tv limit_st next
+    (scratch UNION {a | d <= a /\ a < d+type_memory_bytes ce ty}) sites
+    st dst src base_op hi B bs p d s /\
+  p+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs ==>
+  abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
+    st dst src base_op hi B bs p d 0 0 rows s
+Proof
+  simp_tac bool_ss [abi_decode_context_pre_def,
+    exprSimAbiDecodeOwnedRowsTheory.abi_decode_owned_rows_pre_def] >>
+  rpt strip_tac >> simp[] >>
+  fs[pred_setTheory.IN_UNION] >> metis_tac[]
+QED
+
+Theorem abi_decode_tuple_owned_contract_rows:
+  abi_tuple_rows_schema ce env rows /\
+  tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
+  atv = TupleTV (MAP (\(ei,ty,tv,asz,msz). tv) rows) /\
+  type_to_abi_dec_info ce.ce_struct_fields ce (TupleT tys) =
+    DecComplex dyn (MAP abi_tuple_row_code rows) /\
+  SUM(MAP abi_tuple_row_mem_width rows) = type_memory_bytes ce (TupleT tys) /\
+  SUM(MAP abi_tuple_row_abi_width rows) <= SUM(MAP abi_tuple_row_mem_width rows) /\
+  EVERY (\(ei,ty,tv,asz,msz). abi_decode_owned_child_contract ce env ty tv) rows ==>
+  abi_decode_owned_child_contract ce env (TupleT tys) atv
+Proof
+  strip_tac >> simp_tac bool_ss [exprSimAbiDecodeOwnedContextTheory.abi_decode_owned_child_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  `assignable_type env (TupleT tys)` by fs[abi_decode_context_pre_def] >>
+  `hi <> Lit 0w /\ eval_operand src s = SOME(n2w pos) /\
+    eval_operand hi s = SOME(n2w(LENGTH bs)) /\ pos < dimword(:256) /\
+    LENGTH bs < dimword(:256) /\
+    SUM(MAP abi_tuple_row_abi_width rows) < dimword(:256) /\
+    abi_decoder_operand_live st.cs_next_var src /\
+    abi_decoder_operand_live st.cs_next_var hi /\
+    fresh_vars_wrt limit_st s /\ abi_decode_entry st s` by
+    (fs[abi_decode_context_pre_def, EVERY_DEF] >> decide_tac) >>
+  `FOLDR (\(_,asz,_) acc. asz+acc) 0 (MAP abi_tuple_row_code rows) =
+    SUM(MAP abi_tuple_row_abi_width rows)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> Induct_on `rows` >- simp[] >>
+     gen_tac >> PairCases_on `h` >>
+     asm_simp_tac (srw_ss()) [MAP, FOLDR, SUM,
+       abi_tuple_row_code_def, abi_tuple_row_abi_width_def]) >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_complex_phases, comp_ignore_bind_def, comp_bind_def] >>
+  Cases_on `abi_decode_complex_head_guard src hi
+    (SUM(MAP abi_tuple_row_abi_width rows)) st` >>
+  rename1 `abi_decode_complex_head_guard src hi _ st = (u,ready)` >>
+  Cases_on `u` >> asm_simp_tac bool_ss [] >> strip_tac >>
+  `pos+SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH bs ==>
+    abi_decode_owned_rows_pre ctx func ce env limit_st next scratch sites
+      st dst src base_op hi B bs pos d 0 0 rows s` by
+    (strip_tac >> irule abi_decode_constructor_rows_pre >>
+     asm_simp_tac bool_ss [] >> qexistsl_tac [`atv`,`TupleT tys`] >> simp[]) >>
+  qpat_x_assum `LET _ _ = ((),last)` mp_tac >>
+  qpat_assum `FOLDR _ _ _ = _` (fn th => pure_rewrite_tac [th]) >>
+  qpat_assum `abi_decode_complex_head_guard _ _ _ _ = _`
+    (fn th => pure_rewrite_tac [th, LET_THM, pairTheory.UNCURRY_DEF]) >>
+  BETA_TAC >> strip_tac >>
+  drule_all abi_decode_guarded_owned_rows_outcome >>
+  strip_tac
+  >- (simp_tac bool_ss [abi_decode_context_result_def] >> disj2_tac >>
+      metis_tac[abi_decode_assignable_tuple_short_head_reject])
+  >- suspend "tuple_accept"
+  >> suspend "tuple_reject"
+QED
+Resume abi_decode_tuple_owned_contract_rows[tuple_accept]:
+
+  `SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH(DROP pos bs) /\
+    LENGTH rows < dimword(:256)` by
+    (drule abi_decode_schema_row_count_bound >> simp[LENGTH_DROP] >> decide_tac) >>
+  `!v. abi_decode_source_accepts env (TupleT tys)
+    (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs pos) v <=>
+    ?vs. v = ArrayV (TupleV vs) /\ abi_tuple_rows_accept env (DROP pos bs) 0 rows vs` by
+    (gen_tac >> metis_tac[abi_decode_tuple_rows_view_accept]) >>
+  `abi_tuple_rows_accept env (DROP pos bs) 0 rows vs` by
+    metis_tac[abi_tuple_rows_values_accept] >>
+  `val_in_memory (TupleTV (MAP (\(ei,ty,tv,asz,msz). tv) rows))
+    (ArrayV (TupleV vs)) d t.vs_memory` by
+    metis_tac[abi_tuple_rows_tuple_memory] >>
+  simp_tac bool_ss [abi_decode_context_result_def] >> disj1_tac >>
+  qexistsl_tac [`t`,`ArrayV (TupleV vs)`] >> fs[] >>
+  conj_tac >- metis_tac[] >> metis_tac[]
+QED
+Resume abi_decode_tuple_owned_contract_rows[tuple_reject]:
+  `SUM(MAP abi_tuple_row_abi_width rows) <= LENGTH(DROP pos bs) /\
+    LENGTH rows < dimword(:256)` by
+    (drule abi_decode_schema_row_count_bound >> simp[LENGTH_DROP] >> decide_tac) >>
+  `!v. abi_decode_source_accepts env (TupleT tys)
+    (abi_decode_source_view (vyper_to_abi_type env (TupleT tys)) bs pos) v <=>
+    ?vs. v = ArrayV (TupleV vs) /\ abi_tuple_rows_accept env (DROP pos bs) 0 rows vs` by
+    (gen_tac >> metis_tac[abi_decode_tuple_rows_view_accept]) >>
+  simp_tac bool_ss [abi_decode_context_result_def] >> disj2_tac >>
+  qexists_tac `u` >> metis_tac[]
+QED
+Finalise abi_decode_tuple_owned_contract_rows
