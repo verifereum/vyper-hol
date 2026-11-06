@@ -553,7 +553,9 @@ Theorem generate_join_block_plan_phi_schedule:
         (bb_is_halting bb) 0 (LENGTH bb.bb_instructions)
         (LENGTH (collect_phis bb.bb_instructions)) rest ps_phi of
       NONE => NONE
-    | SOME (tail_ops, out) => SOME ([SOLabel lbl] ++ phi_ops ++ tail_ops, out)
+    | SOME (tail_ops, out) =>
+        if revert_block_spills bb (phi_ops ++ tail_ops) then NONE
+        else SOME ([SOLabel lbl] ++ phi_ops ++ tail_ops, out)
 Proof
   rpt strip_tac >>
   drule_all ready_phi_block_suffix >> strip_tac >> simp[] >>

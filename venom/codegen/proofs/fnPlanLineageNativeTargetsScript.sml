@@ -26,7 +26,7 @@ Proof
   disch_then (qspecl_then [`lbl`, `bb`, `n`] mp_tac) >>
   simp[] >> disch_then SUBST1_TAC >>
   simp[livenessDefsTheory.liveness_transfer_def,
-       livenessDefsTheory.live_update_def, listTheory.MEM_FILTER] >>
+       livenessProofsTheory.live_update_mem, livenessDefsTheory.MEM_ordered_inst_uses] >>
   metis_tac[DECIDE ``k < SUC n <=> k < n \/ k = n``]
 QED
 
@@ -98,31 +98,14 @@ Proof
   metis_tac[]
 QED
 
-(* Multiplicity checkpoint: ready_join_target_counts leaves exactly the
-   NONE-map base counts to bound.  analyzed_unrenamed_phi_partition describes
-   their membership (including PHI output kills), not their multiplicity.
-   analyzed_terminal_jmp_target_coverage already supplies availability from
-   predecessor live-out coverage, but one available resource does not bound
-   repeated residual list entries.  The remaining native obligation is
-
-     FLOOKUP om v = NONE ==> LIST_ELEM_COUNT v (live_vars_at ... succ 0) <= 1
-
-   or a corresponding lower bound on actual available resources.  No such
-   invariant is assumed here.  Ordinary ordered uses may repeat, as checked
-   by repeated_operand_liveness_not_distinct.  The readiness audit does not
-   supply the missing bound: codegen_ready_inst bounds the number of computed
-   operands, not their multiplicities; var_use_count_block counts instructions
-   containing Var v using MEM, not occurrences within an instruction.  Thus
-   single_use_form does not itself exclude repeated operands in one ordinary
-   instruction.  phi_block_ready excludes PHI inputs from post-prefix demand,
-   but places no distinctness constraint on the remaining ordinary-use list.
-   entry_boundary_resources supplies membership coverage and an UPPER resource
-   bound of one for each live name, not a multiplicity-sensitive LOWER bound.
-   Consequently these interfaces cannot yet discharge the residual obligation.
-   Repetition within a PHI class is instead handled by the selected-count bound.
-   This is an interface diagnosis, not a ready-function counterexample.
-   Global analyzed-list distinctness, full native capacity, and the frozen
-   theorem are not claimed.
+(* Multiplicity checkpoint: ready_join_target_counts leaves the NONE-map
+   analyzed live-list counts to bound.  The merged live_update deduplication
+   removes the former repeated-operand obstruction.  Its local preservation
+   theorem still requires a distinct incoming accumulator: a global analysis
+   invariant must cover initialization, successor gathering and iteration
+   before this consumer can conclude a unit count.  Membership partition and
+   convergence alone do not supply that invariant.  Analyzed-list distinctness
+   also does not imply physical stack uniqueness or establish frozen replay.
 *)
 
 Theorem ready_unrenamed_phi_partition:

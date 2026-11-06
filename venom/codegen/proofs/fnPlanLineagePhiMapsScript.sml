@@ -389,16 +389,6 @@ Proof
   simp[]
 QED
 
-(* Diagnostic for the proposed analyzed-list distinctness producer: a single
-   instruction may use the same input twice.  Single-use form counts using
-   instructions, not occurrences within one instruction. *)
-Theorem repeated_operand_liveness_not_distinct:
-  ~ALL_DISTINCT
-    (liveness_transfer [] (mk_inst 0 ADD [Var "x"; Var "x"] ["y"]) [])
-Proof
-  EVAL_TAC
-QED
-
 Theorem input_vars_fold_residual_count[local]:
   !live acc placed om mm v.
     (!i w. FLOOKUP mm i = SOME w ==> FLOOKUP om w = SOME i) /\

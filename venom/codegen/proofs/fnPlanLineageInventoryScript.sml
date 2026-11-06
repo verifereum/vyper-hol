@@ -4454,7 +4454,7 @@ Proof
   drule do_restore_inventory_count >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   rpt conj_tac
-  >- metis_tac[]
+  >- (gen_tac >> asm_rewrite_tac[])
   >- (rpt strip_tac >> gvs[SUBSET_DEF] >> metis_tac[])
   >> metis_tac[SUBSET_TRANS]
 QED

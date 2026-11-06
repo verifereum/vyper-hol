@@ -296,7 +296,7 @@ Proof
     metis_tac[liveness_block_transfer] >>
   Cases_on `MEM v (inst_uses (EL i bb.bb_instructions))`
   >- (irule instruction_use_demand >> simp[]) >>
-  gvs[liveness_transfer_def, live_update_def, MEM_FILTER, MEM_APPEND,
+  gvs[liveness_transfer_def, livenessProofsTheory.live_update_mem, MEM_ordered_inst_uses, MEM_FILTER, MEM_APPEND,
       inst_defs_def] >>
   `demand_available fn bb (SUC i) v \/
      MEM v (raw_phi_inputs bb.bb_instructions)` by
@@ -357,7 +357,7 @@ Proof
       irule demand_available_before_use >> simp[] >>
       first_x_assum irule >> gvs[inst_uses_def] >>
       metis_tac[MEM_operand_vars_eq_Var]) >>
-  gvs[liveness_transfer_def, live_update_def, MEM_FILTER, MEM_APPEND, inst_defs_def] >>
+  gvs[liveness_transfer_def, livenessProofsTheory.live_update_mem, MEM_ordered_inst_uses, MEM_FILTER, MEM_APPEND, inst_defs_def] >>
   `EVERY (demand_available fn bb (SUC i))
      (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st) bb.bb_label (SUC i))` by
     (first_x_assum irule >> simp[] >> decide_tac) >>
