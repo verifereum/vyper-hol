@@ -183,8 +183,9 @@ Proof
   fs[emitted_insts_def, DROP_APPEND]
 QED
 
-Theorem code_copy_one_counted:
-  immutable_copy_one F imm src dst off sa = ((),sb) /\
+(* Generalized from the singleton conversion: arbitrary unrolled runtime copy. *)
+Theorem code_copy_range_counted:
+  compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) /\
   copy_runtime_frame sa s sb t /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -193,7 +194,9 @@ Theorem code_copy_one_counted:
   gas_path_ptr D lo ctx fn PG G tn s 0 Gf tnf
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)))
 Proof
-  strip_tac >> drule code_copy_one_insts >> strip_tac >>
+  strip_tac >> drule code_copy_insts >> strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ADD; DLOAD; MSTORE]) (emitted_insts sa sb)` by
+    fs[emitted_insts_def, DROP_APPEND] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)` by
     (fs[EVERY_MEM] >> rpt strip_tac >>
