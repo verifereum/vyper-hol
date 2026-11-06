@@ -210,6 +210,7 @@ Proof
   `?nrc nrbs npvs.
      cenv.ce_func_info (nsid_to_string (NONE,fn)) = (nrc,nrbs,npvs)`
     by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  drule body_inv_module_pins >> strip_tac >>
   irule intcall_args_frame_setup >> simp[] >>
   qexistsl_tac [`args`,`cenv`,`mut`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
                 `ty`,`vv`] >>
