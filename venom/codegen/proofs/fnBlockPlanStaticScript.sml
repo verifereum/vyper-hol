@@ -826,3 +826,61 @@ Proof
   irule regional_actual_dfs_phi_body_upper >>
   rpt (first_assum $ irule_at Any) >> simp[]
 QED
+
+Theorem regional_actual_dfs_ret_step_empty:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr = SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\
+  MAX (LENGTH (get_params bb.bb_instructions))
+    (LENGTH (collect_phis bb.bb_instructions)) <= k /\ k < LENGTH bb.bb_instructions /\
+  block_plan_state lv dfg cfg fn bb ps_dfs k ps /\
+  EL k bb.bb_instructions = inst /\ inst.inst_opcode = RET /\
+  generate_inst_plan lv dfg cfg fn inst (live_vars_at lv bb.bb_label (k+1))
+    (bb_is_halting bb) next_term bb.bb_label ps = SOME (ops,ps') ==>
+  ps'.ps_stack = []
+Proof
+  strip_tac >>
+  `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
+  `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs` by metis_tac[dfs_block_state_lineage_state] >>
+  `regional_body_lower_inv lv dfg sb bb k ps` by
+    (irule regional_actual_lower_inv >> rpt (first_assum $ irule_at Any) >> simp[] >>
+     qexistsl [`ps_dfs.ps_cleanup_promised`,`ps_dfs.ps_cleanup_height`] >> gvs[]) >>
+  `EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label k)) ps.ps_stack` by
+    (irule regional_actual_dfs_body_upper >> rpt (first_assum $ irule_at Any) >> simp[]) >>
+  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by metis_tac[dfs_block_state_cfg_reachable] >>
+  `live_vars_at lv bb.bb_label (k+1) = []` by
+    (gvs[] >> irule regional_ret_next_live_empty >> metis_tac[]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (`wf_function fn` by gvs[codegen_ready_fn_def] >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `codegen_ready_inst inst /\ inst_wf inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, listTheory.EVERY_MEM] >>
+     metis_tac[lookup_block_MEM]) >>
+  `EVERY (\op. ?v. op = Var v /\ MEM op (compute_operands inst)) ps.ps_stack` by
+    (`EVERY (\op. ?v. op = Var v /\
+       (MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k)) \/
+        MEM op (compute_operands inst))) ps.ps_stack` by
+       (irule regional_body_upper_input_support >>
+        rpt (first_assum $ irule_at Any) >> gvs[] >> metis_tac[]) >>
+     gvs[arithmeticTheory.ADD1]) >>
+  `ALL_DISTINCT ps.ps_stack /\
+   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)` by
+    metis_tac[regional_body_upper_resources] >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (gvs[] >> metis_tac[regional_body_lower_inv_operands]) >>
+  `LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan RET (compute_operands inst) [] ps)).ps_stack` by
+    (gvs[] >> metis_tac[regional_body_lower_inv_input_capacity]) >>
+  `LENGTH (compute_operands inst) <= 16 /\ inst.inst_outputs = []` by
+    gvs[codegen_ready_inst_def, venomWfTheory.inst_wf_def] >>
+  irule (INST_TYPE [alpha |-> ``:cfg_analysis``] regional_ret_operand_support_empty) >>
+  rpt (first_assum $ irule_at Any) >> gvs[] >> metis_tac[]
+QED
