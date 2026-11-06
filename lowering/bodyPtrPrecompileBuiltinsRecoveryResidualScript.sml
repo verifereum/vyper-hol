@@ -3,7 +3,10 @@ Ancestors bodyPtrPrecompileBuiltinsRecoveryRun bodyPtrPrecompileBuiltinsRecovery
           bodyPtrPrecompileBuiltinsFramedContinuation bodyPtrPrecompileBuiltinsRecoveryValue
           bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsRunAllocation
           stmtSimDeclPath valueEncodingProps venomExecSemantics venomInst venomState
-          compileEnv emitHelper exprLoweringProps rich_list emitHelperProps
+          compileEnv emitHelper exprLoweringProps rich_list emitHelperProps fragGasSeqPtr fragGasPathPtr entrySinkExtraction
+          bodyPtrPrecompileBuiltinsPrefixFrames bodyPtrPrecompileBuiltinsBounds
+          exprSimPtrLiteralBuffer ghostPcTransportPtr venomCallOracleDefs extCallOracle
+          exprSimWordArgs wordArgsPtr loweringPosts exprSimProps bodyPtrDefs
 
 (* Transport through ALLOCA is purely ordinary memory transport, independent
    of the provenance assigned to the newly allocated variable. *)
@@ -213,3 +216,210 @@ Resume recovery_framed_input[pack]:
 QED
 
 Finalise recovery_framed_input
+
+(* Staging has no gas observations.  The counted endpoint uses the original
+   instruction cursor, while the ordinary runtime endpoint retains its cursor. *)
+Theorem staging_counted_prefix:
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) code /\
+  run_inst_seq code s = OK t /\
+  (!k. inst_seq_ptr D 0 ctx fn PG G tn code
+    (s with vs_inst_idx := k) Gf tnf) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
+    (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))
+Proof
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
+  `FILTER (\i. i.inst_opcode = GAS) code = []` by
+    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
+     gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i code ==> _ \/ _` drule >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `s.vs_inst_idx` assume_tac) >> gvs[] >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Theorem straightline_continuation_placement:
+  run_inst_seq pre s = OK t /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (pre ++ post) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  t.vs_halted = s.vs_halted /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX post (DROP (s.vs_inst_idx + LENGTH pre) bb.bb_instructions)
+Proof
+  strip_tac >> drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  simp[] >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  `DROP (LENGTH pre) (DROP s.vs_inst_idx bb.bb_instructions) = post ++ l` by
+    (asm_rewrite_tac[] >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, DROP_LENGTH_APPEND] >> REFL_TAC) >>
+  gvs[rich_listTheory.DROP_DROP_T] >> metis_tac[]
+QED
+
+Theorem staging_sequence_outcomes:
+  EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+    i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) code /\
+  run_inst_seq code s = OK t ==> t.vs_outcomes = s.vs_outcomes
+Proof
+  strip_tac >>
+  irule (BETA_RULE (ISPEC ``\u:venom_state. u.vs_outcomes`` run_inst_seq_preserves_field)) >>
+  qexists `code` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `EVERY _ code` mp_tac >> simp[listTheory.EVERY_MEM] >>
+  disch_then drule >> strip_tac >>
+  gvs[] >> gvs[step_inst_base_def] >>
+  gvs[exec_alloca_def, exec_pure2_def,
+      exec_read1_def, exec_write2_def, AllCaseEqs()] >>
+  gvs[update_var_def, mstore_def]
+QED
+
+Theorem precompile_frame_cursor:
+  (wb_frame cenv es sf s (t with vs_inst_idx := k) <=> wb_frame cenv es sf s t) /\
+  (wb_frame cenv es sf (s with vs_inst_idx := j) t <=> wb_frame cenv es sf s t) /\
+  (ghost_kept cenv es sf G tn (s with vs_inst_idx := j) G' tn' <=>
+   ghost_kept cenv es sf G tn s G' tn')
+Proof
+  simp[wb_frame_def, ghost_kept_def, locals_kept_def,
+       local_region_def, lookup_var_def]
+QED
+
+Theorem recovery_residual_success:
+  compile_ecrecover h v r q sf = (res,sb) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
+  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
+  eval_operand r s = SOME wr /\ eval_operand q s = SOME wq /\
+  EVERY (\x. op_taint tn x = {} /\ (!l. x <> Label l) /\
+    (!p. x = Var p ==> not_fresh_at sf p)) [h;v;r;q] /\
+  allocas_from 0 s /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (?co rest. s.vs_outcomes = co::rest /\ co.co_success) ==>
+  ?t G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
+    eval_operand res t = SOME (typed_val_to_w256 (BaseTV AddressT)
+      (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
+        NONE => 0w | SOME addr => addr))) /\
+    op_prov G' res = NONE /\ op_taint tn' res = {} /\
+    stmt_state_rel ctx fn cenv cx
+      (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
+    wb_frame cenv es sf s t /\
+    ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
+    ghost_kept cenv es sf G tn s G' tn'
+Proof
+  strip_tac >>
+  drule_all recovery_framed_input >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `isPREFIX (emitted_insts sf sz) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[listTheory.APPEND_ASSOC]) >>
+  drule_all staging_counted_prefix >> strip_tac >>
+  suspend "suffix"
+QED
+
+Resume recovery_residual_success[suffix]:
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sf sz)` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i _ ==> _ \/ _` drule >> strip_tac >>
+     gvs[is_terminator_def]) >>
+  `isPREFIX (emitted_insts sf sz ++ emitted_insts sz sb)
+    (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  drule_all straightline_continuation_placement >> strip_tac >>
+  drule_all staging_sequence_outcomes >> strip_tac >>
+  drule_all staging_prefix_nonmemory_frames >> strip_tac >>
+  drule recovery_request_result >> strip_tac >>
+  qabbrev_tac `u = t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sf sz)` >>
+  `eval_operand (Var src) u = SOME b /\ eval_operand (Var dst) u = SOME c` by
+    gvs[Abbr `u`, eval_operand_def, lookup_var_def] >>
+  `stmt_state_rel ctx fn cenv cx es u` by simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+  `ghost_inv d cenv cx es Gf tnf u` by
+    simp[Abbr `u`, SRULE [] (Q.INST [`gs` |-> `es.gas_obs`]
+      literal_ptr_ghost_inv_normalize)] >>
+  suspend "apply_suffix"
+QED
+
+Resume recovery_residual_success[apply_suffix]:
+  `ptr_covers Gf tnf src u (w2n (128w:bytes32)) /\ ptr_covers Gf tnf dst u 32 /\
+   allocas_from 0 u /\ ~u.vs_halted /\
+   lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sz sb) (DROP u.vs_inst_idx bb.bb_instructions) /\
+   tnf.t_stor SUBSET D.d_stor u.vs_call_ctx.cc_address
+     (u.vs_accounts u.vs_call_ctx.cc_address).storage /\
+   tnf.t_trans SUBSET D.d_trans u.vs_call_ctx.cc_address
+     (u.vs_transient u.vs_call_ctx.cc_address)` by
+    (simp[Abbr `u`, wordsTheory.dimword_def] >>
+     qpat_x_assum `isPREFIX (emitted_insts sz sb) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `mem_bytes_at (w2n b) 128 u.vs_memory =
+    word_to_bytes wh T ++ word_to_bytes wv T ++
+    word_to_bytes wr T ++ word_to_bytes wq T` by simp[Abbr `u`] >>
+  drule recovery_request_result >> strip_tac >>
+  `computed_precompile (venom_call_request u 1w 0w b 128w T)` by
+    (simp[computed_precompile_def] >> simp[venom_call_request_def]) >>
+  drule_all bodyPtrPrecompileBuiltinsContinuationFrameTheory.return_pointer_reservation_mono >>
+  strip_tac >>
+  Q.SUBGOAL_THEN `?co rest. u.vs_outcomes = co::rest /\ co.co_success` assume_tac
+  >- (qexistsl [`co`,`rest`] >> simp[Abbr `u`]) >>
+  `(!name lo len. local_region cenv es.scopes u name lo len ==>
+      regions_disjoint (w2n c) 32 lo len) /\
+   (!aid lo len. aid < sf.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (lo,len) ==>
+      regions_disjoint (w2n c) 32 lo len)` by
+    (conj_tac
+     >- (rpt strip_tac >>
+         `local_region cenv es.scopes t name lo len` by
+           gvs[Abbr `u`, local_region_def, lookup_var_def] >> metis_tac[]) >>
+     simp[Abbr `u`] >> first_assum ACCEPT_TAC) >>
+  `!i. w2n b <= i /\ i < w2n b + w2n (128w:bytes32) ==> i NOTIN tnf.t_mem` by
+    simp[wordsTheory.dimword_def] >>
+  drule_all computed_load_suffix_framed_path >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  suspend "finish"
+QED
+
+Resume recovery_residual_success[finish]:
+  `mem_word_at (w2n c) u.vs_memory = 0w` by simp[Abbr `u`] >>
+  `mem_word_at (w2n c)
+     (write_memory_with_expansion (w2n c)
+       (TAKE 32 (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
+         NONE => [] | SOME addr => PAD_LEFT 0w 32 (word_to_bytes addr T))) u).vs_memory =
+   typed_val_to_w256 (BaseTV AddressT)
+     (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
+        NONE => 0w | SOME addr => addr))` by
+    (irule recovery_output_write >> simp[] >>
+     Cases_on `vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq)` >> simp[]) >>
+  `wb_frame cenv es sf s u` by
+    simp[Abbr `u`, precompile_frame_cursor] >>
+  `sf.cs_next_var <= sf.cs_next_var /\ sf.cs_next_id <= sf.cs_next_id /\
+   MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
+  drule_all ghost_kept_wb_trans >> strip_tac >>
+  drule_all wb_frame_trans >> strip_tac >>
+  suspend "pack_success"
+QED
+
+Resume recovery_residual_success[pack_success]:
+  qpat_x_assum `G' = _` kall_tac >>
+  qpat_x_assum `tn' = _` kall_tac >>
+  qpat_x_assum `t' = _` kall_tac >>
+  qpat_x_assum `res = _` kall_tac >>
+  drule_all gas_path_ptr_then >> strip_tac >>
+  qexistsl [`t' with vs_inst_idx := u.vs_inst_idx + 4`,`G'`,`tn'`] >>
+  conj_tac >- (gvs[] >> first_assum ACCEPT_TAC) >>
+  simp[stmt_state_rel_inst_idx, precompile_frame_cursor,
+       SRULE [] (Q.INST [`gs` |-> `es.gas_obs`] literal_ptr_ghost_inv_normalize)] >>
+  gvs[Abbr `u`]
+QED
+
+Finalise recovery_residual_success
