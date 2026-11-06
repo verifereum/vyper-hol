@@ -42,10 +42,15 @@ Theorem ifexp_allocated_bytes_writer:
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn t 0 Gf tnf
       (OK (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
-    expr_post ctx fn ce cx result es sa sd s0 ee v (Var out) sf /\
-    ghost_inv d ce cx ee Gf tnf sf /\ ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
-    ptr_val_ok cx (expr_type result) v (Var out) Gf tnf sf /\
-    ptr_buf_ok ce result (Var out) Gf sf /\
+    expr_post ctx fn ce cx result es sa sd s0 ee v (Var out)
+      (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
+    ghost_inv d ce cx ee Gf tnf
+      (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
+    ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
+    ptr_val_ok cx (expr_type result) v (Var out) Gf tnf
+      (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
+    ptr_buf_ok ce result (Var out) Gf
+      (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
     (sf with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) = t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

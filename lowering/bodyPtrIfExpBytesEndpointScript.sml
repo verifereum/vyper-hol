@@ -3,6 +3,7 @@ Ancestors
   bodyPtrIfExpBytesSemantic bodyPtrIfExpBytesCallerFrame bodyPtrIfExpBytesPost
   bodyPtrIfExpBytesResources bodyPtrDefs exprSimProps loweringPosts compileEnv
   venomState finite_map words exprSimBufferStore exprSimDefs exprLoweringProps
+  ghostPcTransportPtr bodyPtrIfExpAllocSource stmtFragPtr
 
 Theorem ifexp_bytes_destination_expr_post:
   vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
@@ -67,4 +68,30 @@ Proof
   gvs[ptr_covers_def, ptr_val_ok_def, ptr_mem_ok_def, ptr_buf_ok_def,
       eval_operand_def] >> conj_tac >> rpt strip_tac >> gvs[] >>
   qexistsl_tac [`b`, `sz'`] >> simp[] >> decide_tac
+QED
+
+Theorem ifexp_expr_post_inst_idx[simp]:
+  expr_post ctx fn ce cx e es sa sb s0 ee v op (s with vs_inst_idx := k) <=>
+  expr_post ctx fn ce cx e es sa sb s0 ee v op s
+Proof
+  simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
+       expr_val_at_def, lookup_var_def, local_region_def]
+QED
+
+Theorem ifexp_pointer_post_inst_idx[simp]:
+  ptr_val_ok cx ty v op G tn (s with vs_inst_idx := k) <=>
+  ptr_val_ok cx ty v op G tn s
+Proof
+  simp[ptr_val_ok_def, ptr_mem_ok_def]
+QED
+
+Theorem ifexp_ghost_inv_inst_idx[simp]:
+  ghost_inv d ce cx ee G tn (s with vs_inst_idx := k) <=>
+  ghost_inv d ce cx ee G tn s
+Proof
+  mp_tac (Q.INST [`p` |-> `s.vs_prev_bb`, `l` |-> `s.vs_current_bb`,
+                   `i` |-> `k`, `cenv` |-> `ce`, `es` |-> `ee`] ghost_inv_jump_to) >>
+  `s with <|vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+             vs_inst_idx := k|> = s with vs_inst_idx := k` by
+    simp[venom_state_component_equality] >> simp[]
 QED
