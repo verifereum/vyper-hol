@@ -4464,6 +4464,51 @@ Proof
   fs[alias_var_budget_def, LIST_ELEM_COUNT_THM] >> metis_tac[]
 QED
 
+Theorem alias_wf_jmp_shape:
+  inst_wf inst /\ inst.inst_opcode = JMP ==>
+  inst.inst_outputs = [] /\ compute_operands inst = []
+Proof
+  strip_tac >> gvs[inst_wf_def] >>
+  simp[compute_operands_def, asmIRTheory.get_non_label_operands_def, get_label_def]
+QED
+
+Theorem alias_ready_jmp_shape:
+  codegen_ready_fn fn /\ lookup_block pred fn.fn_blocks = SOME pb /\
+  ~NULL pb.bb_instructions /\ (LAST pb.bb_instructions).inst_opcode = JMP ==>
+  (LAST pb.bb_instructions).inst_outputs = [] /\
+  compute_operands (LAST pb.bb_instructions) = []
+Proof
+  strip_tac >> irule alias_wf_jmp_shape >> simp[] >>
+  `MEM pb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `fn_inst_wf fn` by fs[codegen_ready_fn_def] >>
+  metis_tac[fn_inst_wf_def, LAST_MEM, NULL_EQ]
+QED
+
+Theorem alias_jmp_plan_var_mass:
+  inst.inst_opcode = JMP /\ inst.inst_outputs = [] /\ compute_operands inst = [] /\
+  (!targets. join_target_ops liveness fn lbl inst = SOME targets ==>
+     LENGTH targets <= LENGTH (SND (restore_spilled_plan targets ps)).ps_stack) /\
+  generate_regular_inst_plan liveness dfg cfg fn inst live is_halting next_term lbl ps = (ops,qs)
+  ==> alias_var_mass x qs <= alias_var_mass x ps
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, emit_input_plan_def,
+       stack_pop_def] >>
+  Cases_on `join_target_ops liveness fn lbl inst`
+  >- (simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[alias_var_mass_release_dead_spills, alias_var_mass_emit_ops, pairTheory.SND]) >>
+  simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `reorder_plan dfg x' ps1'` >> gvs[] >>
+  `alias_var_mass x ps1' = alias_var_mass x ps` by
+    metis_tac[alias_var_mass_restore_spilled, pairTheory.SND] >>
+  `alias_var_mass x ps2 <= alias_var_mass x ps1'` by
+    metis_tac[alias_var_mass_reorder_plan, pairTheory.SND] >>
+  metis_tac[alias_var_mass_release_dead_spills, alias_var_mass_emit_ops, pairTheory.SND,
+            arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem alias_regular_plan_var_mass:
   inst.inst_opcode <> JMP /\
   (!op. MEM op (compute_operands inst) /\ is_var_operand op ==> plan_holds ps op) /\
@@ -6821,9 +6866,11 @@ Proof
   >- (Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
       >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
+      >- (simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
       >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >> EVAL_TAC) >>
+      >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >>
+      simp[] >> CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC) >>
   Cases_on `b` >> Cases_on `phi` >> rpt conj_tac
   >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
   >- (CONV_TAC (RAND_CONV (RAND_CONV computeLib.EVAL_CONV)) >> EVAL_TAC)
@@ -6841,7 +6888,9 @@ Theorem alias_buried_four_inventory:
   (alias_buried_path F 4 F [4;3;1;0]).ps_stack =
     [Var "f2"; Var "f1"; Var "f0"; Var "buried"; Var "f3"; Var "z"]
 Proof
-  EVAL_TAC
+  rewrite_tac[Once alias_buried_path_def] >>
+  CONV_TAC (LHS_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+    (RAND_CONV computeLib.EVAL_CONV))))) >> EVAL_TAC
 QED
 
 Theorem alias_buried_backedge_state:
@@ -8499,10 +8548,18 @@ Theorem alias_diamond_join_alias_unavailable:
 Proof
   simp[alias_path_available_def] >>
   qexists_tac `["entry"; "header"; "left"; "join"]` >>
-  EVAL_TAC >> simp[SF DNF_ss] >> EVAL_TAC >>
-  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
-  `k = 0 \/ k = 1 \/ k = 2` by decide_tac >>
-  gvs[]
+  conj_tac
+  >- (simp[is_fn_path_def, fn_cfg_edge_def] >> rpt conj_tac
+      >- (qexists_tac `EL 0 alias_diamond_fn.fn_blocks` >> EVAL_TAC)
+      >- (qexists_tac `EL 1 alias_diamond_fn.fn_blocks` >> EVAL_TAC)
+      >- (qexists_tac `EL 2 alias_diamond_fn.fn_blocks` >> EVAL_TAC) >>
+      EVAL_TAC) >>
+  rpt gen_tac >> disch_tac >>
+  Cases_on `k < 3` >- (
+    `k = 0 \/ k = 1 \/ k = 2` by decide_tac >>
+    gvs[] >> pop_assum mp_tac >> EVAL_TAC >> rpt strip_tac >> gvs[] >>
+    EVAL_TAC >> CCONTR_TAC >> gvs[] >> EVAL_TAC) >>
+  simp[]
 QED
 
 (* A state-independent cut interface.  No planner coverage is assumed here. *)
