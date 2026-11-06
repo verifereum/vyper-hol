@@ -37,7 +37,7 @@ Proof
   mp_tac (Q.INST [`s` |-> `initial:venom_state`] abi_encoder_array_backedge_reach) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   `actual.vs_halted = initial.vs_halted` by simp[] >>
-  mp_tac abi_scratch_single_write >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
+  mp_tac (Q.INST [`sites` |-> `UNIV:num set`] abi_scratch_single_write) >> impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
 

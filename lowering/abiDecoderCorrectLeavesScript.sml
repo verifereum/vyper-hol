@@ -17,7 +17,7 @@ Theorem abi_decoder_scratch_free_effect:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decoder_budget first last b cap t` by
-    (mp_tac abi_decoder_budget_transport >> asm_simp_tac bool_ss []) >>
+    (mp_tac (Q.INST [`sites` |-> `UNIV:num set`] abi_decoder_budget_transport) >> asm_simp_tac bool_ss []) >>
   `abi_decode_footprint_frame [(d,sz);(b,cap)] s t` by
     (irule abi_decoder_frame_from_output >> simp[]) >>
   mp_tac (Q.INST [`outsz` |-> `sz:num`] abi_decoder_bulk_scratch_preservation) >>
