@@ -4,7 +4,7 @@ Ancestors bodyPtrEnvBuiltinsBlockHashRun bodyPtrEnvBuiltinsBlockHashFrame
   bodyPtrEnvBuiltinsEdges fragGasSeqPtr exprLoweringProps instIdxIndep
   ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState list fragExec
   bodyPtrDefs compileEnv builtinProps finite_map bodyPtrEnvBuiltinsScalar
-  ghostPcTransportPtr
+  ghostPcTransportPtr stmtSimAppendStorageCompose stateFrame
 
 Theorem checked_sequence_last_post[local]:
   !prefix s t G tn G' tn'.
@@ -98,4 +98,17 @@ Proof
         (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_call_ctx,z.vs_accounts,z.vs_transient)`) >>
       simp[]) >>
   irule ghost_kept_clean_suffix >> qexistsl_tac [`G`, `tn`] >> simp[]
+QED
+
+Theorem blockhash_checked_state_rel:
+  compile_blockhash arg sa = (op,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel ctx fn cenv cx es t
+Proof
+  strip_tac >> drule_all blockhash_raw_register_frame >> strip_tac >>
+  irule stmt_state_rel_reserved_frame >> qexistsl_tac [`s`, `sa`] >>
+  conj_tac >- metis_tac[] >> simp[] >>
+  qpat_x_assum `t = _` (mp_tac o Q.AP_TERM `state_frame`) >>
+  simp[state_frame_def]
 QED
