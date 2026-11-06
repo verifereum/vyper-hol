@@ -260,3 +260,66 @@ calls. Full Q must still establish indexed_halted/indexed_halt and all
 constructor/call/splice laws. The temporary scope probe was removed from
 the working tree into a local non-shipping stash after its checked evidence
 was recorded (TO_concretize_sim-20261105T171004Z_m14177_t001).
+
+## Scoped two-output driver checkpoint (supersedes unresolved one-Q strategy)
+
+New `frameScopedPhaseCertificates` and `frameScopedPhaseSimulation` keep Q for
+finite_step/finite_block and use U for finite_run. The mutual induction and
+run_blocks fuel bridge are checked. The duplication of the frozen induction
+skeleton was explicitly authorized; no existing shared theory was edited.
+
+`concretizeLayoutScopedPhase` now supplies a concrete candidate boundary:
+- Entry is layout_ordinary_entry on INL and layout_corridor_entry on INR.
+- PhiLink is layout_scoped_phi_link: layout_phase_begins of the **actual h**
+  at bb and the normalized phi state, target block equality, and ready h.
+  It makes no claim that an independently chosen index has this origin.
+- Q = layout_scoped_outcome D Ret Entry retains origin equality, Entry at
+  the endpoint and halted equality on paired OK. Non-OK results use U.
+- U = layout_scoped_run_outcome D Ret ignores its starting ghost. Halt and
+  Abort compare dead_result_rel D; IntRet uses Ret h ret s ret' t, retaining
+  the ending ghost for payload/caller restoration facts. OK/Error are false.
+  Ret is still an uninstantiated relation, not a proved RETURN producer.
+
+Checked layout_scoped_completed_not_corridor combines this exact PhiLink,
+Q h (INR k) (OK u) (OK v), and the actual completed source block to derive F.
+It uses layout_corridor_origin_exclusion, not a new TASK premise. The companion
+layout_scoped_completed_ordinary exposes an ordinary endpoint only. Shape,
+OK entry projection, non-OK/terminal/payload conversions, and actual generic
+scoped_phase_run_next/scoped_phase_run_exit certificates are checked. This
+repairs the specific unrelated-origin obstruction; it is not full integration.
+
+Exact remaining interfaces for coordinated frame/local ownership:
+
+1. **Initialization (frames.instantiate):** choose the concrete pre-PHI Run
+   predicate and build Run g fn fn' s t for the initial paired frames from the
+   existing input invariants. No exceptional intermediate Entry implies Run.
+2. **PHI preparation (frames.instantiate):** prove
+   scoped_phase_phi Run (\\g s. T) Entry BlockPair layout_scoped_phi_link.
+   Given actual lookup/eval_phis at Run g, this must produce h, bb', phi',
+   target lookup/eval, BlockPair, Entry h at normalized PHIs and the actual
+   link. New h may reset origin; there is no universal Q h d ==> Q g d.
+3. **Ordinary restoration (frames.instantiate):** prove
+   scoped_phase_block_return C C' Run Q layout_scoped_phi_link.
+   Both actual blocks, the link and Q h k OK OK are available. The checked
+   exclusion rules out exceptional k; recovering the full Run predicate from
+   the ordinary endpoint and completed block remains unproved.
+4. **Run next/exit:** for this Q/U candidate, the exact certificates are
+   layout_scoped_run_next_certificate and layout_scoped_run_exit_certificate.
+   They need no target recursive-run existence premise. No such certificate
+   has been claimed for run_halt: a halted OK must acquire final observation
+   dead_result_rel D through final-taint/reflection, not merely masked local
+   observation (observationexit owner).
+5. **Calls (frames.instantiate):** phase_push C C' (\\g s. T) Entry Run
+   InstPair PushRel is unchanged. The new obligations are
+   scoped_phase_pop (\\g s. T) Entry Q U PushRel and
+   scoped_phase_call_exit (\\g s. T) Entry Q U PushRel: callee U, rather than
+   Q, is consumed, and caller Q is produced. Instantiate Ret with ending
+   ghost, payload and state invariants sufficient for bindings and restoration;
+   the parametric return_conversion does not discharge that producer.
+6. **Local integration:** establish indexed_base/lookup/increment/splice/
+   halted/halt for full Q and Entry, including actual exceptional-copy entry
+   production. Old partial Q0 adapters do not automatically supply these.
+
+No final assembly has been attempted. Existing corridor/partial producers
+remain unchanged. No probe source ships. These are new helper theories, not
+additional assumptions on the frozen concretize_stage_sim statement.
