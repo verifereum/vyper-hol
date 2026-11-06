@@ -1,6 +1,6 @@
 Theory lowerDloadControlPosition
 Ancestors
-  o1ContractLowerDload lowerDloadSupplySegment lowerDloadDefs venomExecSemantics contextCodegenRel venomInst list rich_list
+  o1ContractLowerDload lowerDloadSupplySegment lowerDloadDefs venomExecSemantics contextCodegenRel venomInst list rich_list venomExecProps venomState
 
 (* Position inversion is lower_dload_insts_supply_position in the ancestor.
    Retain its offset witness rather than duplicating that theorem. *)
@@ -164,4 +164,37 @@ Proof
   drule_all lower_dload_insts_supply_position >> strip_tac >>
   qexistsl_tac [`bb'`,`bb`,`a1`,`qi`,`a2`,`pre`,`i`,`post`,`before`,`code`,`after`] >>
   simp[] >> metis_tac[]
+QED
+
+(* Sequential completion moves to the next segment, not inside the old one.
+   The append-forward interface already provides singleton advancement;
+   keep that fact here at its control-position use site. *)
+Theorem lower_dload_configured_segment_next:
+  lower_dload_insts_supply a pre = (p,a1) /\
+  lower_dload_inst_supply a1 i = (code,a2) /\
+  lower_dload_inst_supply a2 j = (next,a3) /\
+  lower_dload_insts_supply a3 post = (tail,b) /\
+  next <> [] /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+  bb.bb_instructions = pre ++ i::j::post /\
+  gb.bb_instructions = p ++ code ++ next ++ tail ==>
+  lower_dload_insts_supply a (pre ++ [i]) = (p ++ code,a2) /\
+  active_inst fn j (s with vs_inst_idx := SUC (LENGTH pre)) /\
+  active_inst gn (HD next)
+    (t with vs_inst_idx := LENGTH p + LENGTH code)
+Proof
+  strip_tac >>
+  conj_tac
+  >- (irule lower_dload_insts_supply_append_forward >>
+      goal_assum (drule_at Any) >> simp[lower_dload_insts_supply_def]) >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM gb gn.fn_blocks /\ gb.bb_label = t.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  conj_tac
+  >- (simp[active_inst_def] >> qexists_tac `bb` >>
+      simp[EL_APPEND2]) >>
+  simp[active_inst_def] >> qexists_tac `gb` >>
+  Cases_on `next` >> gvs[] >> simp[EL_APPEND2, EL_APPEND1]
 QED
