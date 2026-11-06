@@ -206,3 +206,45 @@ Proof
   rpt strip_tac >> imp_res_tac dfs_trace_labels_distinct >>
   metis_tac[]
 QED
+
+Theorem dfs_call_trace_embedding:
+  fn_entry_label fn = SOME entry /\
+  aux_trace lv dfg cfg fn [entry] [] ps0 root_result root_tr ==>
+  ((!wl visited ps.
+    dfs_aux_call lv dfg cfg fn ps0 wl visited ps ==>
+    ?result tr. aux_trace lv dfg cfg fn wl visited ps result tr /\
+      set tr SUBSET set root_tr) /\
+   (!ss sp succs visited pg.
+    dfs_succs_call lv dfg cfg fn ps0 ss sp succs visited pg ==>
+    ?result tr. succ_trace lv dfg cfg fn ss sp succs visited pg result tr /\
+      set tr SUBSET set root_tr))
+Proof
+  strip_tac >> ho_match_mp_tac dfs_aux_call_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[SUBSET_REFL])
+  >- (rpt strip_tac >> gvs[aux_trace_visited] >> metis_tac[])
+  >- (rpt strip_tac >> gvs[aux_trace_missing] >> metis_tac[])
+  >- (rpt strip_tac >> drule_all aux_trace_block >>
+      strip_tac >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >> drule_all aux_trace_block >>
+      strip_tac >> gvs[] >> imp_res_tac dfs_trace_erasure >>
+      gvs[] >> metis_tac[])
+  >- (rpt strip_tac >> gvs[succ_trace_cons] >>
+      metis_tac[SUBSET_DEF, MEM_APPEND])
+  >> rpt strip_tac >> gvs[succ_trace_cons] >>
+  imp_res_tac dfs_trace_erasure >> gvs[] >>
+  metis_tac[SUBSET_DEF, MEM_APPEND]
+QED
+
+Theorem dfs_block_state_trace_mem:
+  fn_entry_label fn = SOME entry /\
+  aux_trace lv dfg cfg fn [entry] [] ps0 root_result root_tr /\
+  dfs_block_state lv dfg cfg fn ps0 lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  MEM (lbl,ps) root_tr
+Proof
+  rpt strip_tac >> drule_all dfs_call_trace_embedding >> strip_tac >>
+  gvs[dfs_block_state_def] >>
+  first_x_assum drule >> strip_tac >>
+  drule_all aux_trace_block_mem >>
+  fs[SUBSET_DEF]
+QED
