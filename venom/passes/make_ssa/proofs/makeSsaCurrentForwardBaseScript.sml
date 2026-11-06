@@ -304,7 +304,8 @@ Proof
   gvs[exec_ext_call_def, AllCaseEqs()] >>
   `LENGTH inst'.inst_outputs = 1` by fs[current_last_output_slots_def] >>
   Cases_on `inst'.inst_outputs` >> gvs[] >>
-  metis_tac[current_exec_update_last_slots]
+  (* FIRST_PROVE gives each goal its own timed step. *)
+  FIRST_PROVE [metis_tac[current_exec_update_last_slots]]
 QED
 
 Theorem current_exec_create_pair_forward:
