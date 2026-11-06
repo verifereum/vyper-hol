@@ -113,6 +113,7 @@ QED
 
 Theorem eval_expr_builtin_action:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) ==>
   bind (eval_expr cx (Builtin ann bt args)) (read_result cx) =
   bind (eval_exprs cx args)
@@ -824,6 +825,7 @@ QED
 
 Theorem word_builtin_marked_admissible:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_admissible (bind (eval_expr cx (Builtin ann bt args)) (read_result cx))
     expr_res_ok es /\
@@ -843,6 +845,7 @@ QED
 
 Theorem word_builtin_exempt_cert:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (eval_exprs cx args) (return ()))
