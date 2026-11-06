@@ -276,3 +276,157 @@ Proof
   rev_drule gas_path_ptr_then >> disch_then drule >>
   simp[Abbr `u`, jump_to_def]
 QED
+
+Theorem for_entry_checked_path_ptr:
+  lookup_block ee.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    [mk_inst i ASSIGN [op1] [cv];
+     mk_inst (i+1) SUB [op2;op1] [rv];
+     mk_inst (i+2) cmp [op1;op2] [g1];
+     mk_inst (i+3) ISZERO [Var g1] [z1];
+     mk_inst (i+4) ASSERT [Var z1] [];
+     mk_inst (i+5) GT [Var rv;Lit (n2w bound)] [g2];
+     mk_inst (i+6) ISZERO [Var g2] [z2];
+     mk_inst (i+7) ASSERT [Var z2] [];
+     mk_inst (i+8) ADD [op1;Var rv] [ev];
+     mk_inst (i+9) JMP [Label lbl] []] /\
+  MEM cmp [SGT;GT] /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  eval_operand op1 ee = SOME a /\ eval_operand op2 ee = SOME b /\
+  op_taint tn op1 = {} /\ op_taint tn op2 = {} /\
+  op_prov G op1 = NONE /\ op_prov G op2 = NONE /\
+  ALL_DISTINCT [cv;rv;g1;z1;g2;z2;ev] /\
+  (!x. op1 = Var x \/ op2 = Var x ==> ~MEM x [cv;rv;g1;z1;g2;z2;ev]) ==>
+  (((if cmp = SGT then word_gt a b else w2n a > w2n b) \/
+     w2n (b-a) > w2n (n2w bound : bytes32)) ==>
+     ?Gf tf u. gas_path_ptr D 0 ctx fn PG G tn ee 0 Gf tf
+       (Abort Revert_abort u)) /\
+  (~(if cmp = SGT then word_gt a b else w2n a > w2n b) /\
+   ~(w2n (b-a) > w2n (n2w bound : bytes32)) ==>
+   ?vs. lookup_var cv (ee with vs_vars := vs) = SOME a /\
+     lookup_var ev (ee with vs_vars := vs) = SOME (a+(b-a)) /\
+     (!x. ~MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
+       lookup_var x (ee with vs_vars := vs) = lookup_var x ee) /\
+     gas_path_ptr D 0 ctx fn PG G tn ee 0
+       (DRESTRICT G (COMPL {cv;rv;g1;z1;g2;z2;ev}))
+       (tn with t_var := tn.t_var |++
+         [(cv,{});(rv,{});(g1,{});(z1,{});(g2,{});(z2,{});(ev,{})])
+       (OK (jump_to lbl (ee with vs_vars := vs))))
+Proof
+  strip_tac >>
+  qabbrev_tac `bad1 = if cmp = SGT then word_gt a b else w2n a > w2n b` >>
+  qabbrev_tac `bad2 = (w2n (b-a) > w2n (n2w bound : bytes32))` >>
+  qabbrev_tac `s1 = update_var cv a ee` >>
+  qabbrev_tac `s2 = update_var rv (b-a) s1` >>
+  qabbrev_tac `s3 = update_var g1 (bool_to_word bad1) s2` >>
+  qabbrev_tac `s4 = update_var z1 (bool_to_word (bool_to_word bad1 = 0w)) s3` >>
+  qabbrev_tac `G4 = DRESTRICT G (COMPL {cv;rv;g1;z1})` >>
+  qabbrev_tac `t4 = tn with t_var := tn.t_var |++ [(cv,{});(rv,{});(g1,{});(z1,{})]` >>
+  `(bad1 ==> ?u. gas_path_ptr D 0 ctx fn PG G tn ee 0 G4 t4
+       (Abort Revert_abort u)) /\
+   (~bad1 ==> gas_path_ptr D 0 ctx fn PG G tn ee 0 G4 t4
+       (OK (s4 with vs_inst_idx := 5)))` by
+    (simp[Abbr `G4`, Abbr `t4`] >> irule for_checked_order_assert_ptr >>
+     simp[Abbr `bad1`, Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `s4`] >>
+     (conj_tac >- gvs[ALL_DISTINCT]) >>
+     qexistsl_tac [`a`,`b`,`cmp`,`i`,`op1`,`op2`] >>
+     simp[] >> gvs[ALL_DISTINCT] >> metis_tac[]) >>
+  Cases_on `bad1`
+  >- (simp[] >> metis_tac[]) >>
+  qpat_x_assum `~bad1 ==> _` mp_tac >> simp[] >> strip_tac >>
+  suspend "bound_prefix"
+QED
+
+Resume for_entry_checked_path_ptr[bound_prefix]:
+  qabbrev_tac `u4 = s4 with vs_inst_idx := 5` >>
+  qabbrev_tac `s5 = update_var g2 (bool_to_word bad2) u4` >>
+  qabbrev_tac `s6 = update_var z2 (bool_to_word (bool_to_word bad2 = 0w)) s5` >>
+  qabbrev_tac `G6 = DRESTRICT G4 (COMPL {g2;z2})` >>
+  qabbrev_tac `t6 = t4 with t_var := t4.t_var |++ [(g2,{});(z2,{})]` >>
+  `~u4.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
+  `gas_path_ptr D 0 ctx fn PG G4 t4 u4 0 G6 t6
+      (OK (s6 with vs_inst_idx := u4.vs_inst_idx + 2))` by
+    (simp[Abbr `G6`, Abbr `t6`] >>
+     irule for_checked_gt_zero_prefix_ptr >>
+     simp[Abbr `s5`, Abbr `s6`, Abbr `bad2`, Abbr `u4`] >>
+     qexistsl_tac [`b-a`,`n2w bound`,`bb`,`i+5`,`Var rv`,`Lit (n2w bound)`] >>
+     simp[Abbr `G4`, Abbr `t4`, Abbr `s4`, Abbr `s3`, Abbr `s2`,
+       Abbr `s1`, update_var_def, eval_operand_def, lookup_var_def,
+       for_checked_operand_taint_update, for_checked_operand_prov_removed,
+       FUPDATE_LIST_THM] >> gvs[ALL_DISTINCT, FLOOKUP_UPDATE, op_taint_def]) >>
+  suspend "second_assert"
+QED
+
+Resume for_entry_checked_path_ptr[second_assert]:
+  `gas_path_ptr D 0 ctx fn PG G tn ee 0 G6 t6
+     (OK (s6 with vs_inst_idx := 7))` by
+    (rev_drule gas_path_ptr_then >> disch_then drule >>
+     simp[Abbr `u4`]) >>
+  `op_taint t6 (Var z2) = {}` by
+    simp[Abbr `t6`, FUPDATE_LIST_THM, for_checked_operand_taint_update] >>
+  `eval_operand (Var z2) (s6 with vs_inst_idx := 7) =
+     SOME (bool_to_word (bool_to_word bad2 = 0w))` by
+    simp[Abbr `s6`, instIdxIndepTheory.eval_op_inst_idx,
+         eval_operand_def, lookup_var_update_var, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `lookup_block (s6 with vs_inst_idx := 7).vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb (s6 with vs_inst_idx := 7).vs_inst_idx =
+     SOME (mk_inst (i+7) ASSERT [Var z2] [])` by
+    simp[Abbr `s6`, Abbr `s5`, Abbr `u4`, Abbr `s4`, Abbr `s3`,
+         Abbr `s2`, Abbr `s1`, update_var_def, get_instruction_def] >>
+  drule_all for_checked_assert_prefix_ptr >>
+  simp[bool_to_word_def] >> strip_tac >>
+  (conj_tac >- metis_tac[]) >> strip_tac >>
+  qpat_x_assum `~bad2 ==> _` mp_tac >> simp[] >> strip_tac >>
+  suspend "add_jump"
+QED
+
+Resume for_entry_checked_path_ptr[add_jump]:
+  qabbrev_tac `u6 = s6 with vs_inst_idx := 8` >>
+  `~u6.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
+  `!x w s. MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
+     eval_operand op1 (update_var x w s) = eval_operand op1 s` by
+    (rpt strip_tac >> irule for_checked_eval_operand_overwrite >> metis_tac[]) >>
+  `eval_operand op1 u6 = SOME a /\
+   eval_operand (Var rv) u6 = SOME (b-a)` by
+    (simp[Abbr `u6`, Abbr `s6`, Abbr `s5`, Abbr `u4`, Abbr `s4`,
+       Abbr `s3`, Abbr `s2`, Abbr `s1`, instIdxIndepTheory.eval_op_inst_idx] >>
+     gvs[ALL_DISTINCT, eval_operand_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE]) >>
+  `op_taint t6 op1 = {} /\ op_prov G6 op1 = NONE /\
+   op_taint t6 (Var rv) = {} /\ op_prov G6 (Var rv) = NONE` by
+    (simp[Abbr `G6`, Abbr `G4`, Abbr `t6`, Abbr `t4`, FUPDATE_LIST_THM,
+       for_checked_operand_taint_update, for_checked_operand_prov_restrict,
+       for_checked_operand_prov_removed] >>
+     gvs[ALL_DISTINCT] >> metis_tac[]) >>
+  `gas_path_ptr D 0 ctx fn PG G6 t6 u6 0
+     (DRESTRICT G6 (COMPL {ev})) (t6 with t_var := t6.t_var |+ (ev,{}))
+     (OK (jump_to lbl (update_var ev (a+(b-a)) u6)))` by
+    (irule for_checked_add_jump_ptr >> simp[] >>
+     qexistsl_tac [`bb`,`i+8`,`i+9`,`op1`,`Var rv`] >> simp[] >>
+     simp[Abbr `u6`, Abbr `s6`, Abbr `s5`, Abbr `u4`, Abbr `s4`,
+       Abbr `s3`, Abbr `s2`, Abbr `s1`, update_var_def, get_instruction_def]) >>
+  suspend "finish"
+QED
+
+Resume for_entry_checked_path_ptr[finish]:
+  `DRESTRICT G6 (COMPL {ev}) =
+     DRESTRICT G (COMPL {cv;rv;g1;z1;g2;z2;ev})` by
+    (simp[Abbr `G6`, Abbr `G4`, DRESTRICT_DRESTRICT] >>
+     AP_TERM_TAC >> simp[EXTENSION] >> metis_tac[]) >>
+  `t6 with t_var := t6.t_var |+ (ev,{}) =
+     tn with t_var := tn.t_var |++
+       [(cv,{});(rv,{});(g1,{});(z1,{});(g2,{});(z2,{});(ev,{})]` by
+    simp[Abbr `t6`, Abbr `t4`, FUPDATE_LIST_THM] >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ G tn ee _ G6 t6 (OK u6)`
+    (mp_then Any mp_tac gas_path_ptr_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  `jump_to lbl (ee with vs_vars := (update_var ev (a+(b-a)) u6).vs_vars) =
+     jump_to lbl (update_var ev (a+(b-a)) u6)` by
+    simp[Abbr `u6`, Abbr `s6`, Abbr `s5`, Abbr `u4`, Abbr `s4`,
+      Abbr `s3`, Abbr `s2`, Abbr `s1`, update_var_def, jump_to_def] >>
+  qexists_tac `(update_var ev (a+(b-a)) u6).vs_vars` >> simp[] >>
+  simp[Abbr `u6`, Abbr `s6`, Abbr `s5`, Abbr `u4`, Abbr `s4`,
+      Abbr `s3`, Abbr `s2`, Abbr `s1`, update_var_def, lookup_var_def,
+      FLOOKUP_UPDATE] >> gvs[ALL_DISTINCT]
+QED
+Finalise for_entry_checked_path_ptr
