@@ -185,6 +185,29 @@ Proof
   simp[asm_consume_create_outcome_def, take_outcome_create, outcome_of_fields]
 QED
 
+Theorem asm_create_code_pop_selectors:
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Code address /\
+  handle_exception ex s = (INL (),t) ==>
+  ?p. t.contexts = (p,prb)::rest /\
+    p.msgParams = parent.msgParams /\ p.memory = parent.memory /\
+    p.pc = SUC parent.pc /\
+    p.stack = (if ex = NONE then w2w address else 0w)::parent.stack /\
+    p.returnData = (if ex = SOME Reverted then child.returnData else []) /\
+    p.logs = parent.logs ++ (if ex = NONE then child.logs else []) /\
+    t.rollback = (if ex = NONE then s.rollback else crb)
+Proof
+  strip_tac >> Cases_on `ex` >> Cases_on `x = Reverted` >>
+  gvs[handle_exception_def, bind_def, ignore_bind_def,
+      get_gas_left_def, get_current_context_def, return_def,
+      consume_gas_def, set_return_data_def, set_current_context_def,
+      get_num_contexts_def, get_return_data_def, get_output_to_def,
+      reraise_def, assert_def, fail_def, inc_pc_def, push_stack_def,
+      pop_and_incorporate_context_def, pop_context_def,
+      set_rollback_def, unuse_gas_def, push_logs_def, update_gas_refund_def,
+      AllCaseEqs()]
+QED
+
 (* This view includes exceptions raised while depositing returned code. *)
 Theorem asm_create_run_final_view:
   wf_state s /\ (?d. s.msdomain = Collect d) /\
@@ -216,6 +239,39 @@ Proof
   Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
   Cases_on `s'.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
   metis_tac[]
+QED
+
+Theorem asm_create_run_code_continuation:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Code address /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) ==>
+  ?ex u c p. u.contexts = (c,crb)::(parent,prb)::rest /\
+    c.msgParams = child.msgParams /\ handle_exception ex u = (INL (),t) /\
+    t.contexts = (p,prb)::rest /\
+    p.msgParams = parent.msgParams /\ p.memory = parent.memory /\
+    p.pc = SUC parent.pc /\
+    p.stack = (if ex = NONE then w2w address else 0w)::parent.stack /\
+    p.returnData = (if ex = SOME Reverted then c.returnData else []) /\
+    p.logs = parent.logs ++ (if ex = NONE then c.logs else []) /\
+    (ex <> NONE ==> t.rollback = crb)
+Proof
+  strip_tac >>
+  drule_at (Pat `run_call _ = _`) asm_create_run_final_view >>
+  simp[] >> strip_tac >>
+  `c.msgParams.outputTo = Code address` by simp[] >>
+  drule_at (Pat `handle_exception _ _ = _`) asm_create_code_pop_selectors >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`ex`,`u`,`c`,`p`] >> simp[]
+QED
+
+(* The frame relation excludes creation-initcode as the observed frame. *)
+Theorem asm_create_frame_output_boundary:
+  asm_frame_rel prog data es0 a es ==>
+  ?c rb rest. es0.contexts = (c,rb)::rest /\
+    (!address. c.msgParams.outputTo <> Code address)
+Proof
+  rw[asm_frame_rel_def, asm_evm_rel_def] >> gvs[] >> metis_tac[]
 QED
 
 Theorem asm_frame_create_step:
