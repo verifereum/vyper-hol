@@ -137,17 +137,16 @@ Theorem log_encode_immutable_sep_frame[local]:
   s.vs_alloca_next <= t.vs_alloca_next ==>
   immutable_alloca_sep func ce cx es t
 Proof
-  simp_tac bool_ss [immutable_alloca_sep_def] >> strip_tac >> strip_tac >>
+  rewrite_tac[immutable_alloca_sep_def] >> strip_tac >> strip_tac >>
+  qpat_x_assum `_.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
+  strip_tac >> conj_tac >> (
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `ce.ce_is_ctor ==> _` drule_all >> strip_tac >>
-  conj_tac >- decide_tac >> conj_tac
-  >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-      >- (first_x_assum drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-      rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME r` >>
-      `FLOOKUP t.vs_allocas inst.inst_id = SOME r` by metis_tac[] >>
-      gvs[] >> first_x_assum drule_all >> simp[]) >>
-  rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  first_x_assum drule >> simp[]
+  first_x_assum drule_all >> strip_tac >> rpt conj_tac
+  >- decide_tac
+  >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas aid`
+      >- (res_tac >> gvs[compileEnvTheory.regions_disjoint_def]) >>
+      metis_tac[optionTheory.SOME_11]) >>
+  metis_tac[])
 QED
 
 Theorem log_encode_allocate_metadata[local]:

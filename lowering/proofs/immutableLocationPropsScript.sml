@@ -58,6 +58,23 @@ Proof
   mp_tac (Q.SPECL [`[top]`, `tops`] compute_immutables_len_append) >> simp[]
 QED
 
+(* Two distinct immutables of one declaration list occupy disjoint
+   stretches of the sums compute_immutables_len takes. *)
+Theorem immutable_layout_disjoint:
+  !pre1 pre2 post1 post2 v1 v2 n1 n2 t1 t2 s1 s2 sft.
+    pre1 ++ VariableDecl v1 Immutable n1 t1 s1 :: post1 =
+    pre2 ++ VariableDecl v2 Immutable n2 t2 s2 :: post2 /\ n1 <> n2 ==>
+    regions_disjoint (compute_immutables_len sft pre1) (type_mem_bytes sft t1)
+      (compute_immutables_len sft pre2) (type_mem_bytes sft t2)
+Proof
+  simp[regions_disjoint_def] >>
+  Induct >> Cases_on `pre2` >> rw[] >>
+  ONCE_REWRITE_TAC [immutable_len_cons] >>
+  TRY (gvs[compute_immutables_len_def] >> NO_TAC) >>
+  first_x_assum drule_all >> disch_then (qspec_then `sft` mp_tac) >>
+  decide_tac
+QED
+
 Theorem immutable_locations_origin:
   !tops off vars key loc.
   FLOOKUP (add_immutable_locations sft tops off vars) key = SOME (ImmutableLoc loc) ==>

@@ -1036,7 +1036,7 @@ Proof
   gvs[set_external_package_target_def, package_external_fn_def] >>
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
-  simp[body_inv_def, build_compile_env_def] >>
+  simp[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[source_deployment_rel_def, get_module_code_def,
       initial_evaluation_context_def, get_tenv_def,
@@ -1416,9 +1416,31 @@ Proof
       drule body_inv_storage_var_types >> disch_then drule >>
       strip_tac >> rpt gen_tac >> strip_tac >>
       first_x_assum drule_all >> simp[])
-  >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any)) >>
+  >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any))
+  >- (rpt strip_tac >>
+      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
+        drule >> simp[])
+  >- (rpt strip_tac >>
+      gvs[env_consistent_def, env_context_consistent_def,
+          bare_global_assignable_complete_def, initial_evaluation_context_def])
+  >- (rpt strip_tac >> drule_all body_inv_bare_global_type >> simp[]) >>
   rpt strip_tac >>
-  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
-    drule >> simp[]
+  `src = NONE /\ cenv.ce_module_var_type (src,id1) = SOME ty1 /\
+   cenv.ce_module_var_type (src,id2) = SOME ty2` by
+    metis_tac[body_inv_bare_global_type] >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    (qpat_assum `source_typing_ok _ _ _` mp_tac >>
+     rw[source_typing_ok_def, check_contract_def] >>
+     drule contract_namespaces_ok_module_type_def_keys >> simp[]) >>
+  `get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
+   type_env tops` by
+    gvs[get_tenv_def, initial_evaluation_context_def,
+        source_deployment_rel_def, type_env_all_modules_def, type_env_def,
+        FUNION_FEMPTY_2] >>
+  `cenv_module_pins tops cenv /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
+    fs[body_inv_def] >>
+  gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
 QED
 

@@ -75,7 +75,26 @@ Definition expr_sim_inv_def:
        src = cenv.ce_module /\
        ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
              !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
-                  off + type_memory_size tv < dimword (:256))
+                  off + type_memory_size tv < dimword (:256)) /\
+    (* An assignable immutable exists only in the constructor, lowered
+       with the constructor's compile env; every immutable has its
+       declared type in ce_module_var_type, where compile_get_target_ptr
+       reads a place type; and distinct immutables' regions are disjoint,
+       as the section layout places them. *)
+    (!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+       (cenv.ce_is_ctor <=> cx.in_deploy)) /\
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+       cenv.ce_module_var_type (src,id) = SOME ty) /\
+    (!src id1 id2 ty1 ty2 off1 off2 tv1 tv2.
+       id1 <> id2 /\
+       FLOOKUP env.bare_globals (src,id1) = SOME ty1 /\
+       FLOOKUP env.bare_globals (src,id2) = SOME ty2 /\
+       FLOOKUP cenv.ce_module_vars (src,id1) = SOME (ImmutableLoc off1) /\
+       FLOOKUP cenv.ce_module_vars (src,id2) = SOME (ImmutableLoc off2) /\
+       evaluate_type (get_tenv cx) ty1 = SOME tv1 /\
+       evaluate_type (get_tenv cx) ty2 = SOME tv2 ==>
+       compileEnv$regions_disjoint off1 (type_memory_size tv1)
+         off2 (type_memory_size tv2))
 End
 
 Definition word_value_type_def:

@@ -22,6 +22,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
   compileEnv compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
+  structFieldsProps
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
   venomState
@@ -372,16 +373,6 @@ Proof
 QED
 
 (* ===== The compiler's env for an external function ===== *)
-
-Theorem type_mem_bytes_type_memory_bytes:
-  !cenv ty.
-    type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty =
-    type_memory_bytes cenv ty
-Proof
-  ho_match_mp_tac type_memory_bytes_ind >>
-  rw[type_mem_bytes_def, type_memory_bytes_def] >>
-  AP_TERM_TAC >> irule MAP_CONG >> simp[]
-QED
 
 Theorem allocate_args_lookup:
   !args sft off vars.

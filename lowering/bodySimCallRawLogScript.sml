@@ -541,7 +541,7 @@ Theorem raw_log_body_expr_ok:
   !cx v20 es v21.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_ok_intro >>
+  rpt gen_tac >> strip_tac >> irule body_expr_ok_intro >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   `expr_sim ctx func cenv cx ty (Call v20 RawLog es v21) es'` by
     (simp[expr_sim_def] >> rpt strip_tac >>

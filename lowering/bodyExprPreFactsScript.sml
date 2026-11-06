@@ -301,7 +301,8 @@ Theorem body_inv_same_frame:
     body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
-  fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
+  fs[body_inv_def, cenv_module_pins_def, same_frame_def,
+     compile_env_component_equality] >>
   metis_tac[]
 QED
 
