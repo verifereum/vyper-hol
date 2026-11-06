@@ -3,6 +3,7 @@ Ancestors
   exprPtrUnwrapCopyFrames exprPtrUnwrapFullFrames exprPtrUnwrapLoopInvariant
   exprPtrUnwrapFrames slotCopyExecution fragGasPathPtr fragGasSeqPtr
   bodyPtrDefs ptrDiscipline finite_map venomExecSemantics venomState
+  compileEnv copyExecution arithmetic
 
 (* Runtime companion to slot_copy_inv: projections at the same counted witness
    make downstream loop composition independent of semantic witness choices. *)
@@ -64,4 +65,27 @@ Theorem copy_external_ptr_covers:
 Proof
   strip_tac >> irule copy_ptr_covers_transport >>
   fs[slot_copy_ghost_inv_def, eval_operand_def]
+QED
+
+Theorem slot_copy_not_fresh_external:
+  not_fresh_at cs x ==> slot_copy_external cs (Var x)
+Proof
+  simp[not_fresh_at_def, slot_copy_external_def, slot_copy_var_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem slot_copy_semantic_frame:
+  slot_copy_runtime_frame cs d n r s /\ 32*n <= nb ==>
+  (!x. not_fresh_at cs x ==> lookup_var x s = lookup_var x r) /\
+  copy_static s = copy_static r /\ LENGTH r.vs_memory <= LENGTH s.vs_memory /\
+  (!off len. off+len <= w2n d \/ w2n d+nb <= off ==>
+    mem_bytes_at off len s.vs_memory = mem_bytes_at off len r.vs_memory)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `slot_copy_external cs (Var x)` by metis_tac[slot_copy_not_fresh_external] >>
+      fs[slot_copy_runtime_frame_def] >>
+      first_x_assum drule >> simp[eval_operand_def]) >>
+  fs[slot_copy_runtime_frame_def] >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
 QED
