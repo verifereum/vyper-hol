@@ -7,7 +7,7 @@ Ancestors
   e2eDeployDefs e2eDefs supportedStmtTraverse supportedExprTraverse
   vyperInterpreter vyperABI vyperCreate vyperState vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperTypeInvariants
-  vyperStorageLayoutSafety
+  vyperStorageLayoutSafety compileEnv
   vfmExecution frameOutcome list
 
 val _ = Parse.hide "body";
@@ -177,6 +177,7 @@ QED
 
 Theorem deploy_success_observables:
   deploy_result_rel tops runtime_bc tx es r es' (INL (am',rqs)) <=>
+  let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
   ?section lgs.
     immutables_section_rel tops (account_immutables am' tx.target) section /\
     frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -184,8 +185,14 @@ Theorem deploy_success_observables:
     (!a. a <> tx.target ==>
       lookup_account a es'.rollback.accounts = lookup_account a am'.accounts) /\
     (lookup_account tx.target es'.rollback.accounts) with code := [] =
-    (lookup_account tx.target am'.accounts) with code := [] /\
-    es'.rollback.tStorage = am'.tStorage /\
+    (lookup_account tx.target am'.accounts) with
+      <| code := [];
+         storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+    storage_agree
+      (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+      (lookup_account tx.target am'.accounts).storage
+      (lookup_account tx.target es'.rollback.accounts).storage /\
+    transient_agree cx am'.tStorage es'.rollback.tStorage /\
     logs_correspond (compiled_event_info tops) (type_env tops)
       tx.target am'.logs lgs
 Proof

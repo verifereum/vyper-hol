@@ -877,12 +877,35 @@ Proof
   first_x_assum drule >> simp[FLOOKUP_DEF] >> metis_tac[]
 QED
 
+(* The packaged external env reads the module's variables and the internal
+   functions' return types as build_compile_env does, as fn_allocs_ok_body
+   needs. *)
+Theorem external_package_alloc_env_agree:
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,fname,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  alloc_env_agree (build_compile_env tops Internal mut fname args ret fbody F)
+    cenv
+Proof
+  strip_tac >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  gvs[set_external_package_target_def, package_external_fn_def] >>
+  simp[alloc_env_agree_def] >>
+  rw[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
 Theorem external_body_support_bounds:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
   cenv.ce_struct_fields = make_struct_fields_map tops /\
   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+  alloc_env_agree (build_compile_env tops Internal mut name args ret ss F)
+    cenv /\
   env_context_consistent env cx /\
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
@@ -1107,6 +1130,34 @@ Proof
       initial_evaluation_context_def, get_module_code_def,
       type_env_all_modules_def, GSYM type_env_def] >>
   irule make_struct_fields_map_fields >> metis_tac[]
+QED
+
+(* The packaged external env's method ids are the selectors over the
+   source's type environment, as expr_sim_inv asks. *)
+Theorem external_package_method_id:
+  source_deployment_rel tops am tx /\
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  !fname tys.
+    cenv.ce_method_id fname tys =
+    w2n (calldata_method_id
+           (function_selector fname
+              (vyper_to_abi_types
+                 (get_tenv (initial_evaluation_context am.sources am.layouts
+                              tx NONE)) tys)))
+Proof
+  strip_tac >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  gvs[set_external_package_target_def, package_external_fn_def] >>
+  rw[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[source_deployment_rel_def, get_tenv_def,
+      initial_evaluation_context_def, get_module_code_def,
+      type_env_all_modules_def, GSYM type_env_def]
 QED
 
 Theorem external_package_global_maps:
@@ -1338,6 +1389,7 @@ Proof
    ~cenv.ce_raw_return ==> return_buffer_ok cenv` by
     (strip_tac >> drule external_selected_return_buffer_ok >>
      rpt (disch_then drule) >> simp[]) >>
+  drule_all external_package_alloc_env_agree >> strip_tac >>
   drule_all external_body_support_bounds >> strip_tac >>
   qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
   reverse conj_tac
@@ -1351,6 +1403,7 @@ Proof
   >- (rpt strip_tac >> drule_all external_source_no_flags >>
       disch_then (qspecl_then [`ls`, `fid`] mp_tac) >> simp[])
   >- gvs[dec_cenv_agrees_def]
+  >- (drule_all external_package_method_id >> simp[])
   >- gvs[dec_cenv_agrees_def]
   >- (rpt strip_tac >>
       `FLOOKUP cenv.ce_struct_fields name = SOME fields` by simp[] >>

@@ -471,6 +471,8 @@ Proof
    simp[eval_op_jump, eval_ops_jump,
         exec_ext_call_jump, exec_delegatecall_jump, exec_create_jump] >>
    EVERY_CASE_TAC >>
-   simp(jmp_rw @ [venom_state_component_equality]))
+   simp(jmp_rw @ [venom_state_component_equality]) >>
+   (* SSTORE/TSTORE: the non-static branch is a plain write *)
+   irule exec_write2_jump >> simp jmp_rw)
 QED
 

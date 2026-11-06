@@ -258,12 +258,6 @@ Proof
   Induct >> simp[] >> Cases >> simp[update_var_def]
 QED
 
-Triviality bind_outputs_prev_bb:
-  bind_outputs outs vals s = SOME s' ==> s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  rw[bind_outputs_def, AllCaseEqs()] >> simp[foldl_update_var_prev_bb]
-QED
-
 (* step_inst OK preserves vs_prev_bb for non-terminators (including INVOKE) *)
 Theorem step_inst_preserves_prev_bb:
   !fuel ctx inst s s'.
@@ -322,15 +316,6 @@ Theorem step_inst_IntRet_not_INVOKE:
   step_inst_base inst s = IntRet vals v ==> inst.inst_opcode <> INVOKE
 Proof
   ACCEPT_TAC step_inst_base_IntRet_not_INVOKE
-QED
-
-(* extract_venom_result preserves vs_halted *)
-Triviality extract_venom_result_preserves_halted:
-  extract_venom_result s ov ro rs rr = SOME (out, s') ==>
-  s'.vs_halted = s.vs_halted
-Proof
-  simp[extract_venom_result_def, AllCaseEqs()] >> rw[] >> gvs[] >>
-  pairarg_tac >> gvs[]
 QED
 
 Triviality is_terminator_not_invoke[local]:
@@ -1494,13 +1479,6 @@ QED
    Every non-terminator opcode without outputs preserves vs_vars.
    ========================================================================== *)
 
-(* Helper: update_var adds output to FDOM and preserves existing *)
-Triviality update_var_fdom[local]:
-  !x v s. FDOM (update_var x v s).vs_vars = x INSERT FDOM s.vs_vars
-Proof
-  simp[update_var_def, finite_mapTheory.FDOM_FUPDATE]
-QED
-
 (* Helper: FOLDL update_var adds all outputs *)
 Triviality foldl_update_var_fdom[local]:
   !kvs s.
@@ -1975,7 +1953,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_two_blocks_proof:
+Theorem run_blocks_two_blocks:
   ∀ fuel ctx fn bb_A ss ss_mid result.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
     run_block fuel ctx bb_A ss = OK ss_mid ∧
@@ -1987,7 +1965,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_halt_proof:
+Theorem run_blocks_halt:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
     run_block fuel ctx bb ss = OK ss' ∧
@@ -1998,7 +1976,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_abort_proof:
+Theorem run_blocks_abort:
   ∀ fuel ctx fn bb ss a ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
     run_block fuel ctx bb ss = Abort a ss'
@@ -2099,16 +2077,6 @@ Proof
   Cases_on `op` >> simp[eval_operand_def] >>
   fs[execution_equiv_def] >>
   metis_tac[]
-QED
-
-Triviality update_var_execution_equiv[local]:
-  !vars x v s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (update_var x v s1) (update_var x v s2)
-Proof
-  rw[execution_equiv_def, update_var_def] >>
-  rw[lookup_var_def, FLOOKUP_UPDATE] >>
-  fs[lookup_var_def]
 QED
 
 Triviality update_var_state_equiv[local]:

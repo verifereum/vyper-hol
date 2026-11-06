@@ -3902,7 +3902,7 @@ Proof
     (\v inst.
        [copy_elision_inst bp (dfg_build_function fn) v inst]) fn` >>
   qabbrev_tac `uc = \v. count_var_uses v fn1` >>
-  qabbrev_tac `P = \s:venom_state. T` >>
+  qabbrev_tac `P = \s:venom_state. ~s.vs_call_ctx.cc_static` >>
   mp_tac (Q.SPECL [`P`, `state_equiv {}`, `execution_equiv {}`,
     `load_store_elim_block aliases bp uc`, `fn1`]
     block_sim_function_with_pred) >>
@@ -3910,6 +3910,8 @@ Proof
   disch_then irule >>
   (* Solve easy conjuncts: P s, state_equiv_refl, vs_inst_idx *)
   simp[Abbr `P`, state_equiv_refl] >>
+  (* The frame stays non-static *)
+  conj_tac >- (rpt strip_tac >> imp_res_tac mce_run_block_ok_call_ctx >> gvs[]) >>
   (* Label preservation *)
   conj_tac >- (
     gen_tac >> simp[load_store_elim_block_def, LET_THM] >>
@@ -5440,6 +5442,7 @@ Triviality lse_pointwise_hyps[local]:
             (load_store_elim_block aliases bp uc bb).bb_instructions❲i❳.
             inst_opcode)) /\
     (!s_i s_i'.
+       ~s_i.vs_call_ctx.cc_static /\
        lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i = OK s_i' ==>
@@ -5447,6 +5450,7 @@ Triviality lse_pointwise_hyps[local]:
          (load_store_elim_block aliases bp uc bb).bb_instructions❲
            s_i.vs_inst_idx❳ s_i = OK s_i') /\
     (!s_i s_i'.
+       ~s_i.vs_call_ctx.cc_static /\
        lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i = OK s_i' ==>
@@ -5454,6 +5458,7 @@ Triviality lse_pointwise_hyps[local]:
        lf_sound (lf_at aliases bp uc bb.bb_instructions (SUC s_i.vs_inst_idx))
          (s_i' with vs_inst_idx := SUC s_i.vs_inst_idx)) /\
     (!s_i.
+       ~s_i.vs_call_ctx.cc_static /\
        lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        (!s'. step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i <> OK s') /\
@@ -5496,6 +5501,7 @@ Finalise lse_pointwise_hyps
 
 Theorem lse_run_block_eq[local]:
   !aliases bp uc bb fuel ctx s.
+    ~s.vs_call_ctx.cc_static /\
     bb_well_formed bb /\ wf_alias_sets aliases /\
     (!inst sp. MEM inst bb.bb_instructions /\
        (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
@@ -5520,10 +5526,15 @@ Proof
       `0 < LENGTH bb.bb_instructions` by decide_tac >>
       `lf_at aliases bp uc bb.bb_instructions st.vs_inst_idx = FEMPTY` by
         simp[Abbr `st`, lf_at_phi_prefix_empty] >>
+      `~st.vs_call_ctx.cc_static` by
+        (drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+         disch_then (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx``) >>
+         simp[Abbr `st`]) >>
       drule_all lse_pointwise_hyps >> strip_tac >>
       qspecl_then [`LENGTH bb.bb_instructions - st.vs_inst_idx`, `fuel`, `ctx`,
         `bb`, `load_store_elim_block aliases bp uc bb`, `st`,
-        `\x. lf_sound (lf_at aliases bp uc bb.bb_instructions x.vs_inst_idx) x`]
+        `\x. ~x.vs_call_ctx.cc_static /\
+             lf_sound (lf_at aliases bp uc bb.bb_instructions x.vs_inst_idx) x`]
         mp_tac exec_block_pointwise_inv >>
       simp[lse_length] >>
       (impl_tac >- (rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>

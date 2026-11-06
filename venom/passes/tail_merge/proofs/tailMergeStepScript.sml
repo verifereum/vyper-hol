@@ -1524,7 +1524,6 @@ fun prove_output_ext_call bridge_thm cr opc =
 fun prove_output_gas cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\

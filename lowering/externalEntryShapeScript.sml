@@ -2285,6 +2285,22 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem compile_abi_encode_args_labels:
+  !cfn cenv es s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_abi_encode_args cfn cenv es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_encode_args cfn cenv es s)))
+Proof
+  Induct_on `es`
+  >- simp[compile_abi_encode_args_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_abi_encode_args_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       TRY IF_CASES_TAC >>
+       simp[comp_return_labels, compile_materialize_vv_labels, unwrap_value_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem compile_concat_labels:
   !cfn cenv es data_ptr infos offset_op s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -3045,6 +3061,15 @@ Proof
        compile_raw_create_labels]
 QED
 
+Theorem compile_raw_revert_labels:
+  !ptr s P. cs_extends s (SND (compile_raw_revert ptr s)) /\
+    EVERY P (added_labels s (SND (compile_raw_revert ptr s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinSystemTheory.compile_raw_revert_def] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels, emit_inst_labels]
+QED
+
 Theorem compile_call_labels:
   !cfn cenv ret_ty ty target args default_ret s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -3057,7 +3082,43 @@ Proof
   >- (irule compile_extcall_labels >> simp[])
   >- (irule compile_send_labels >> simp[])
   >- (irule compile_raw_call_target_labels >> simp[])
-  >- (irule compile_raw_call_calldata_labels >> simp[]) >>
+  >- (irule compile_raw_call_calldata_labels >> simp[])
+  >~ [`RawLog`]
+  >- (once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
+      Cases_on `args` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      Cases_on `t` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      reverse (Cases_on `t'`) >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      ho_match_mp_tac application_labels >>
+      simp[compile_multi_exprs_labels] >> rpt gen_tac >>
+      Cases_on `expr_type h' = BaseT (BytesT (Fixed 32))` >> simp[] >>
+      rpt (FIRST [CHANGED_TAC (simp[emit_inst_labels, emit_op_labels,
+                    emit_void_labels, compile_alloc_buffer_labels,
+                    lower_value_labels, cs_extends_refl]),
+                  ho_match_mp_tac application_labels, gen_tac]) >>
+      simp[added_labels_def, DROP_LENGTH_TOO_LONG])
+  >~ [`RawRevert`]
+  >- (once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
+      Cases_on `args` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
+      rpt gen_tac >> ho_match_mp_tac application_labels >>
+      simp[compile_raw_revert_labels, cs_extends_refl, added_labels_def,
+           DROP_LENGTH_TOO_LONG]) >>
   once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
   ho_match_mp_tac application_labels >>
   simp[emit_inst_labels, compile_create_call_labels, as_stack_val_labels,
@@ -3263,7 +3324,8 @@ Proof
   disch_tac >> once_rewrite_tac[compile_type_builtin_dispatch_body_def] >> simp[LET_THM] >>
   rpt IF_CASES_TAC >>
   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
-       simp[lower_value_labels, compile_multi_exprs_labels, compile_alloc_buffer_labels,
+       simp[lower_value_labels, compile_multi_exprs_labels,
+            compile_abi_encode_args_labels, compile_alloc_buffer_labels,
             compile_store_abi_tuple_labels, emit_void_labels, unwrap_value_labels]) >>
   irule as_ptr_val_labels >> simp[lower_abi_encode_labels]
 QED
