@@ -6,6 +6,7 @@ Ancestors
   stmtSimDeclMem exprOpenCopies loweringHalt context stmtLowering
   compileEnv exprLoweringProps emitHelperProps loweringSlice
   placeMemoryCopyEffect venomState words loweringPosts stmtFragPtr fragExec
+  exprOpenPrimitives venomInst
 Libs monadsyntax
 
 Theorem annassign_relayout_effect_path[local]:
@@ -141,7 +142,14 @@ Resume annassign_relayout_store_post_path[direct]:
   `compile_store_memory cenv op (Var p) dty sty sb = ((),sf)` by
     gvs[compile_assign_value_def] >>
   drule annassign_relayout_effect_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`, `s`, `id`, `sz`, `w`, `inst`, `v`, `stv`, `dtv`, `sc`, `rest`, `a`, `sw`] mp_tac) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (PtrVar _ _)`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ dty = SOME _`)) >>
+  disch_then (drule_at (Pat `_.inst_outputs = [p]`)) >>
+  disch_then (drule_at (Pat `_.scopes = _ :: _`)) >>
+  disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
+  disch_then (qspec_then `a` mp_tac) >>
   simp[] >> disch_then drule >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> simp[] >>
@@ -200,8 +208,15 @@ Resume annassign_relayout_store_post_path[staged]:
   `!x. Var q = Var x ==> not_fresh_at ss x` by simp[] >>
   `eval_operand (Var q) u = SOME uw` by simp[eval_operand_def] >>
   `compile_store_memory cenv (Var q) (Var p) dty sty ss = ((),sf)` by metis_tac[] >>
-  drule annassign_relayout_effect_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`, `u`, `id`, `sz`, `w`, `inst`, `v`, `stv`, `dtv`, `sc`, `rest`, `a`, `uw`] mp_tac) >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) annassign_relayout_effect_path >>
+  disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ ss = _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (PtrVar _ _)`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ dty = SOME _`)) >>
+  disch_then (drule_at (Pat `_.inst_outputs = [p]`)) >>
+  disch_then (drule_at (Pat `_.scopes = _ :: _`)) >>
+  disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
+  disch_then (qspec_then `a` mp_tac) >>
   simp[] >> disch_then drule >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   `gas_marked_path F ctx func s (0 + 0) (OK t)` by
@@ -218,3 +233,27 @@ Resume annassign_relayout_store_post_path[staged]:
 QED
 
 Finalise annassign_relayout_store_post_path
+
+Theorem compile_assign_memory_relayout_open:
+  !cenv dst src dty sty info bytes loc sa sf.
+    compile_assign_value cenv dst LocMemory src F loc dty sty info bytes sa = ((),sf) /\
+    (loc = NONE \/ loc = SOME LocMemory) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa ==>
+    ~block_is_terminated sf
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `loc = SOME LocMemory`
+  >- (gvs[] >>
+      Cases_on `compile_alloc_buffer (type_memory_bytes cenv sty) sa` >>
+      rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
+      Cases_on `compile_copy_memory buf.buf_operand src (type_memory_bytes cenv sty) sm` >>
+      rename1 `compile_copy_memory _ _ _ sm = (u,ss)` >> Cases_on `u` >>
+      gvs[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      `~block_is_terminated sm` by metis_tac[exprOpenPrimitivesTheory.compile_alloc_buffer_open] >>
+      `~block_is_terminated ss` by
+        (Cases_on `type_memory_bytes cenv sty` >>
+         gvs[compile_copy_memory_def, comp_return_def] >>
+         drule emit_void_terminated >> simp[is_terminator_def]) >>
+      (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) compile_store_memory_open >> simp[])) >>
+  gvs[compile_assign_value_def] >> irule compile_store_memory_open >>
+  qexistsl_tac [`cenv`, `dst`, `dty`, `()`, `sa`, `src`, `sty`] >> simp[]
+QED
