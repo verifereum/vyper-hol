@@ -12,6 +12,7 @@ Ancestors
   pred_set finite_map list rich_list arithmetic words alist
   mmCopyEquiv mmCopy mmScan passSharedField
   dfgAnalysisProps dfgDefs passSimulationDefs passSimulationProps
+  venomExecProofs
 
 (* ===== Structural helpers for wf preservation ===== *)
 
@@ -399,30 +400,6 @@ Proof
   `EL n (MAP f l) = EL n' (MAP f l)` by gvs[EL_MAP] >>
   `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP] >>
   gvs[]
-QED
-
-(* fn_insts_blocks ID map = FLAT of per-block ID maps *)
-Theorem fn_insts_blocks_map_id[local]:
-  !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-        FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* fn_inst_ids_distinct: same inst_id implies same instruction *)
-Theorem fn_inst_ids_distinct_inj[local]:
-  !fn x y. fn_inst_ids_distinct fn /\ MEM x (fn_insts fn) /\
-            MEM y (fn_insts fn) /\ x.inst_id = y.inst_id ==> x = y
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))`
-    by fs[fn_inst_ids_distinct_def, GSYM fn_insts_blocks_map_id] >>
-  fs[fn_insts_def] >> gvs[MEM_EL] >>
-  `n < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) /\
-   n' < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
-  `EL n (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) =
-   EL n' (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by gvs[EL_MAP] >>
-  `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP] >> gvs[]
 QED
 
 (* ===== Scan invariant: all IDs in scan results trace to fn_insts ===== *)
@@ -814,36 +791,11 @@ QED
 
 (* ===== Key bridge: terminator ID not in scan results ===== *)
 
-(* fn_insts includes all block instructions *)
-Theorem fn_insts_mem_block[local]:
-  !fn bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  rpt strip_tac >>
-  simp[fn_insts_def] >>
-  `!bbs. MEM bb bbs ==> MEM inst (fn_insts_blocks bbs)` suffices_by metis_tac[] >>
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* Reverse direction: MEM in fn_insts implies MEM in some block *)
-Theorem fn_insts_mem_block_rev[local]:
-  !fn inst. MEM inst (fn_insts fn) ==>
-    ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
-Proof
-  rpt strip_tac >> gvs[fn_insts_def] >>
-  `!bbs. MEM inst (fn_insts_blocks bbs) ==>
-         ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions`
-    suffices_by metis_tac[] >>
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
 (* fn_inst_wf + MEM in fn_insts => inst_wf *)
 Theorem fn_inst_wf_mem[local]:
   !fn inst. fn_inst_wf fn /\ MEM inst (fn_insts fn) ==> inst_wf inst
 Proof
-  rpt strip_tac >> imp_res_tac fn_insts_mem_block_rev >>
+  rpt strip_tac >> imp_res_tac fn_insts_mem_block >>
   fs[fn_inst_wf_def] >> metis_tac[]
 QED
 
@@ -950,10 +902,10 @@ Proof
   `is_terminator (LAST bb.bb_instructions).inst_opcode` by fs[bb_well_formed_def] >>
   `~is_terminator MSTORE` by EVAL_TAC >>
   `MEM (LAST bb.bb_instructions) (fn_insts fn)` by (
-    irule fn_insts_mem_block >> fs[bb_well_formed_def] >>
+    irule MEM_fn_insts >> fs[bb_well_formed_def] >>
     metis_tac[MEM_LAST_NOT_NIL]) >>
   `(LAST bb.bb_instructions).inst_id = use_inst.inst_id` by gvs[] >>
-  metis_tac[fn_inst_ids_distinct_inj]
+  metis_tac[fn_insts_id_unique]
 QED
 
 (* ALL_DISTINCT (MAP f xs) implies f-injectivity on xs *)
@@ -997,9 +949,9 @@ Proof
   `MEM use_inst (dfg_get_uses (dfg_build_function fn) out_var)` by simp[] >>
   drule dfg_build_function_uses_sound >> strip_tac >>
   `MEM phi_inst (fn_insts fn)` by (
-    irule fn_insts_mem_block >> metis_tac[]) >>
+    irule MEM_fn_insts >> metis_tac[]) >>
   `phi_inst.inst_id = use_inst.inst_id` by gvs[] >>
-  `phi_inst = use_inst` by metis_tac[fn_inst_ids_distinct_inj] >>
+  `phi_inst = use_inst` by metis_tac[fn_insts_id_unique] >>
   gvs[]
 QED
 
@@ -1071,9 +1023,9 @@ Proof
   rpt strip_tac >>
   `is_terminator (LAST bb.bb_instructions).inst_opcode` by fs[bb_well_formed_def] >>
   `MEM (LAST bb.bb_instructions) (fn_insts fn)` by
-    (irule fn_insts_mem_block >> fs[bb_well_formed_def] >>
+    (irule MEM_fn_insts >> fs[bb_well_formed_def] >>
      metis_tac[MEM_LAST_NOT_NIL]) >>
-  `inst = LAST bb.bb_instructions` by metis_tac[fn_inst_ids_distinct_inj] >>
+  `inst = LAST bb.bb_instructions` by metis_tac[fn_insts_id_unique] >>
   gvs[] >>
   `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
   `MEM (LAST bb.bb_instructions) bb.bb_instructions`
@@ -1181,7 +1133,7 @@ Proof
   drule_all scan_block_ids_from_fn >> strip_tac
   >- metis_tac[term_unique_contradiction]
   >> (`inst = LAST bb.bb_instructions`
-        by metis_tac[fn_inst_ids_distinct_inj] >>
+        by metis_tac[fn_insts_id_unique] >>
       gvs[] >> imp_res_tac fn_inst_wf_terminator_no_outputs >> gvs[])
 QED
 
@@ -1385,7 +1337,7 @@ Proof
   `!i. MEM i bb.bb_instructions /\ i.inst_id = term.inst_id ==> i = term`
     by metis_tac[all_distinct_term_unique, Abbr `term`] >>
   `MEM term (fn_insts fn)`
-    by (irule fn_insts_mem_block >> metis_tac[MEM_LAST_NOT_NIL, Abbr `term`]) >>
+    by (irule MEM_fn_insts >> metis_tac[MEM_LAST_NOT_NIL, Abbr `term`]) >>
   (* Step 1: dload (MAP, preserves everything) *)
   qabbrev_tac `bb1 = transform_block_dload dfg bb` >>
   `LAST bb1.bb_instructions = term` by (
@@ -1673,7 +1625,7 @@ Proof
   `load_inst.inst_outputs <> []` by
     (Cases_on `load_inst.inst_outputs` >> fs[]) >>
   `MEM load_inst (fn_insts fn)` by metis_tac[] >>
-  `inst = phi_inst` by metis_tac[fn_inst_ids_distinct_inj] >>
+  `inst = phi_inst` by metis_tac[fn_insts_id_unique] >>
   pop_assum SUBST_ALL_TAC >>
   `load_inst = phi_inst` by (
     match_mp_tac ssa_unique_definer >> qexistsl_tac [`fn`, `v`] >>
@@ -2434,13 +2386,13 @@ Proof
   `!i. MEM i bb.bb_instructions /\ i.inst_id = term.inst_id ==> i = term`
     by metis_tac[all_distinct_term_unique, Abbr `term`] >>
   `MEM term (fn_insts fn)`
-    by (irule fn_insts_mem_block >> metis_tac[MEM_LAST_NOT_NIL, Abbr `term`]) >>
+    by (irule MEM_fn_insts >> metis_tac[MEM_LAST_NOT_NIL, Abbr `term`]) >>
   (* PHI facts for original bb *)
   `!phi_inst i. MEM phi_inst bb.bb_instructions /\ phi_inst.inst_opcode = PHI /\
      MEM i bb.bb_instructions /\ i.inst_id = phi_inst.inst_id ==> i = phi_inst`
     by metis_tac[all_distinct_map_inv] >>
   `!i. MEM i bb.bb_instructions /\ i.inst_opcode = PHI ==> MEM i (fn_insts fn)`
-    by (rpt strip_tac >> irule fn_insts_mem_block >> metis_tac[]) >>
+    by (rpt strip_tac >> irule MEM_fn_insts >> metis_tac[]) >>
   (* Step 1: dload (MAP, preserves ids and all PHI facts) *)
   qabbrev_tac `bb1 = transform_block_dload dfg bb` >>
   `bb_well_formed bb1` by
@@ -2466,7 +2418,7 @@ Proof
   `!phi_inst i. MEM phi_inst bb1.bb_instructions /\ phi_inst.inst_opcode = PHI /\
      MEM i bb1.bb_instructions /\ i.inst_id = phi_inst.inst_id ==> i = phi_inst`
     by metis_tac[all_distinct_map_inv] >>
-  (* mode_load_in_fn for bb1: dload passthrough + fn_insts_mem_block *)
+  (* mode_load_in_fn for bb1: dload passthrough + MEM_fn_insts *)
   `!m i. MEM i bb1.bb_instructions /\
          i.inst_opcode = mode_load_opcode m /\ i.inst_outputs <> [] ==>
          MEM i (fn_insts fn)` by (
@@ -2474,7 +2426,7 @@ Proof
     `MEM i bb.bb_instructions` by (
       simp[Abbr `bb1`, Abbr `dfg`] >>
       irule dload_mode_load_passthrough >> metis_tac[]) >>
-    irule fn_insts_mem_block >> metis_tac[]) >>
+    irule MEM_fn_insts >> metis_tac[]) >>
   (* Step 2: memzero via memzero_step_wf *)
   mp_tac (Q.SPECL [`fn`, `dfg`, `bb1`, `term`] memzero_step_wf) >>
   simp[LET_THM] >>

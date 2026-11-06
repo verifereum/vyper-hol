@@ -13,7 +13,8 @@ Ancestors
   assertElimDefs
   dfAnalyzeWidenDefs
   dfgAnalysisProps
-  dfgSoundStep
+  dfgSoundDefs
+  dfgSoundProofs
   execEquivParamProps
   finite_map
   indexedLists
@@ -29,6 +30,7 @@ Ancestors
   stateEquiv
   stateEquivProps
   valueRangeDefs
+  venomExecProofs
   venomExecProps
   venomExecSemantics
   venomInst
@@ -681,7 +683,7 @@ Proof
   `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[]) >>
   `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[rangeAnalysisProofsTheory.phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
   gvs[is_terminator_def]
@@ -1361,15 +1363,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-(* dfg_sound is preserved by state_equiv {} because state_equiv {} implies
-   vs_vars agreement (via lookup_var agreement with empty excluded set). *)
-Theorem dfg_sound_state_equiv:
-  !dfg s1 s2. state_equiv {} s1 s2 /\ dfg_sound dfg s1.vs_vars ==>
-               dfg_sound dfg s2.vs_vars
-Proof
-  rpt strip_tac >> imp_res_tac state_equiv_empty_vars_eq >> fs[]
-QED
-
 (* Re-derive original JNZ distinct-labels from HOL-simplified form.
    HOL simplifies (!bb cond tl fl. ... ==> tl <> fl) to
    (!bb cond fl. JNZ ==> ops=[...fl;fl] ==> ~MEM bb bbs).
@@ -1577,7 +1570,7 @@ Proof
       >- first_assum ACCEPT_TAC (* wf_function *)
       >- first_assum ACCEPT_TAC (* fn_inst_wf *)
       >- metis_tac[range_sound_state_equiv]
-      >- metis_tac[dfg_sound_state_equiv, state_equiv_empty_vars_eq]
+      >- (rpt strip_tac >> imp_res_tac state_equiv_empty_eq >> gvs[] >> metis_tac[])
       >> rpt strip_tac >>
          fs[state_equiv_def, execution_equiv_def, lookup_var_def])
   \\ disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac)

@@ -15,6 +15,7 @@ Ancestors
   allocaRemapSSA venomInst
   list rich_list sorting
   finite_map pred_set pair arithmetic
+  venomExecProofs
 
 (* ================================================================
    Section 1: No instruction depends on the terminator
@@ -415,25 +416,6 @@ Finalise schedule_terminator_last
 (* ================================================================
    Section 3: eda_topo_compatible for original blocks
    ================================================================ *)
-
-(* MEM in block implies MEM in fn_insts_blocks *)
-(* fn_inst_ids_distinct + same inst_id in two blocks ==> same block *)
-Triviality inst_in_unique_block:
-  !bbs bb1 bb2 id.
-    ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id)
-                                      bb.bb_instructions) bbs)) /\
-    MEM bb1 bbs /\ MEM bb2 bbs /\
-    MEM id (MAP (\i. i.inst_id) bb1.bb_instructions) /\
-    MEM id (MAP (\i. i.inst_id) bb2.bb_instructions) ==>
-    bb1 = bb2
-Proof
-  rpt strip_tac >>
-  qspecl_then [`bbs`,
-               `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-               `bb1`, `bb2`, `id`]
-    mp_tac all_distinct_flat_map_unique >>
-  simp[]
-QED
 
 (* ALL_DISTINCT of FLAT (MAP f l) implies ALL_DISTINCT of f x for MEM x l *)
 Triviality all_distinct_flat_map_el:

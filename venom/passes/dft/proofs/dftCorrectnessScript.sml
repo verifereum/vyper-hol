@@ -30,6 +30,7 @@ Ancestors
   passSharedFrame passSharedDefs relation
   dftCanonicalDep allocaRemapSSA dftContraHelpers
   pred_set pair
+  venomExecProofs
 Libs
   wordsLib BasicProvers dep_rewrite
 
@@ -2571,16 +2572,6 @@ Triviality all_distinct_flat_map_disjoint:
 Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[MAP, FLAT, ALL_DISTINCT_APPEND]
   >> metis_tac[MEM_FLAT, MEM_MAP]
-QED
-
-Triviality all_distinct_flat_map_unique[local]:
-  !ls f (a:'a) b (x:'b).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\ MEM x (f a) /\ MEM x (f b) ==>
-    a = b
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
 QED
 
 Triviality all_distinct_flat_map_filter[local]:

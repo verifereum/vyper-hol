@@ -639,13 +639,6 @@ Proof
 QED
 
 (* Index in PHI prefix has opcode PHI *)
-Triviality phi_prefix_length_el_phi[local]:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
 Triviality phi_prefix_length_lt_wf[local]:
   !bb. bb_well_formed bb ==>
        phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions

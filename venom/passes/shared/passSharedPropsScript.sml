@@ -476,13 +476,6 @@ Proof
       simp[phi_prefix_length_def]))
 QED
 
-Triviality phi_prefix_length_el_phi:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
 (* In the PHI prefix, all instructions are PHI, hence not NOP *)
 Triviality phi_prefix_no_nop:
   !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode <> NOP

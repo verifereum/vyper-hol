@@ -26,6 +26,7 @@ Ancestors
   venomInst
   venomWf
   venomInstProps
+  venomExecProofs
   venomExecProps
   execEquivParamProps
   rangeAnalysisDefs
@@ -35,7 +36,8 @@ Ancestors
   dfAnalyzeWidenDefs
   dfgDefs
   dfgAnalysisProps
-  dfgSoundStep
+  dfgSoundDefs
+  dfgSoundProofs
   worklistDefs
   list
   finite_map
@@ -211,25 +213,6 @@ Triviality oe_phi_identity[local]:
     overflow_elim_inst_v dfg v inst = inst
 Proof
   simp[overflow_elim_inst_v_def]
-QED
-
-Triviality phi_prefix_length_el_phi[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
-Triviality dfg_prefix_sound_phi_prefix[local]:
-  !dfg bb env idx.
-    idx <= phi_prefix_length bb.bb_instructions ==>
-    dfg_prefix_sound dfg bb env idx
-Proof
-  rw[dfg_prefix_sound_def] >>
-  `k < phi_prefix_length bb.bb_instructions` by decide_tac >>
-  `(EL k bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[phi_prefix_length_el_phi] >>
-  gvs[dfg_tracked_opcode_def]
 QED
 
 (* exec_block passes non-OK step results through directly *)
@@ -662,7 +645,7 @@ Proof
         rpt strip_tac >>
         `k < phi_prefix_length bb.bb_instructions` by fs[] >>
         `(EL k bb.bb_instructions).inst_opcode = PHI` by
-          metis_tac[phi_prefix_length_el_phi] >>
+          metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
         gvs[dfg_tracked_opcode_def]]) >>
     simp[Abbr`bt`])
   >- (

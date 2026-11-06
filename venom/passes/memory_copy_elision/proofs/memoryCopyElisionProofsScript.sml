@@ -20,7 +20,7 @@ Ancestors
   basePtrDefs basePtrProps basePtrProofs
   venomWf venomInst venomInstProps venomEffects venomExecSemantics venomExecProps
   venomState venomMemDefs venomMemProps
-  dfgAnalysisProps dfgCorrectnessProof dfgSoundStep dfgDefs dfAnalyzeDefs
+  dfgAnalysisProps dfgCorrectnessProof dfgDefs dfAnalyzeDefs
   dfIterateProps dfIterateProofs
   memAliasDefs memAliasProofs memLocDefs
   cfgDefs cfgHelpers cfgAnalysisProps
@@ -4158,13 +4158,6 @@ QED
 
 (* --- eval_phis entry-sound helpers for stage1_correct --- *)
 
-Triviality mce_phi_prefix_length_el_phi[local]:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
 Triviality mce_phi_prefix_length_lt_wf[local]:
   !bb. bb_well_formed bb ==>
        phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
@@ -4178,7 +4171,7 @@ Proof
   `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> gvs[]) >>
   `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[mce_phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `is_terminator (LAST bb.bb_instructions).inst_opcode` by gvs[bb_well_formed_def] >>
   gvs[LAST_EL, is_terminator_def]
 QED
@@ -4364,7 +4357,7 @@ Proof
        (qspecl_then [`s`, `fn`, `bb`, `result`, `ce_ctx`, `bp`, `dfg`, `s0`] mp_tac) >>
      simp[] >> decide_tac) >>
   `(EL k bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[mce_phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `SUC k <= LENGTH bb.bb_instructions` by
     metis_tac[venomExecProofsTheory.phi_prefix_length_le, arithmeticTheory.LESS_EQ_TRANS] >>
   `df_at NONE result bb.bb_label (SUC k) =
@@ -4399,7 +4392,7 @@ Proof
        (qspecl_then [`s`, `fn`, `bb`, `result`, `ce_ctx`, `bp`, `dfg`] mp_tac) >>
      simp[] >> decide_tac) >>
   `(EL k bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[mce_phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `SUC k <= LENGTH bb.bb_instructions` by
     metis_tac[venomExecProofsTheory.phi_prefix_length_le, arithmeticTheory.LESS_EQ_TRANS] >>
   `df_at NONE result bb.bb_label (SUC k) =
@@ -4438,7 +4431,7 @@ Proof
        (qspecl_then [`s`, `fn`, `bb`, `result`, `ce_ctx`, `bp`, `dfg`, `s0`, `s_phi`] mp_tac) >>
      simp[] >> decide_tac) >>
   `(EL k bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[mce_phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `SUC k <= LENGTH bb.bb_instructions` by
     metis_tac[venomExecProofsTheory.phi_prefix_length_le, arithmeticTheory.LESS_EQ_TRANS] >>
   `df_at NONE result bb.bb_label (SUC k) =
@@ -4505,7 +4498,7 @@ Proof
     (SOME (s.vs_current_bb, SOME FEMPTY)) fn` >>
   `k < phi_prefix_length bb.bb_instructions` by decide_tac >>
   `(EL k bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[mce_phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `SUC k <= LENGTH bb.bb_instructions` by
     metis_tac[venomExecProofsTheory.phi_prefix_length_le, arithmeticTheory.LESS_EQ_TRANS] >>
   `df_at NONE dfan bb.bb_label (SUC k) =
@@ -6091,15 +6084,6 @@ Proof
   simp[] >> strip_tac >> gvs[mk_nop_inst_def]
 QED
 
-Triviality phi_prefix_length_el_phi[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >>
-  rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
 Triviality phi_prefix_length_eq_by_el_phi[local]:
   !insts1 insts2.
     LENGTH insts1 = LENGTH insts2 /\
@@ -6152,7 +6136,7 @@ Proof
     (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
        simp[venomExecProofsTheory.phi_prefix_length_le] >> decide_tac) >>
   `(EL i bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   irule lse_phi_identity >> simp[]
 QED
 
@@ -6480,7 +6464,7 @@ Proof
   `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> gvs[]) >>
   `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   `is_terminator (LAST bb.bb_instructions).inst_opcode` by gvs[bb_well_formed_def] >>
   gvs[LAST_EL, is_terminator_def]
 QED
@@ -6495,7 +6479,7 @@ Proof
   `i < LENGTH insts` by
     (`phi_prefix_length insts <= LENGTH insts` by
        simp[venomExecProofsTheory.phi_prefix_length_le] >> decide_tac) >>
-  `(EL i insts).inst_opcode = PHI` by metis_tac[phi_prefix_length_el_phi] >>
+  `(EL i insts).inst_opcode = PHI` by metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   simp[] >>
   `lf_at aliases bp uc insts i = FEMPTY` by simp[] >>
   simp[load_store_step_def, LET_THM, is_load_fact_opcode_def,

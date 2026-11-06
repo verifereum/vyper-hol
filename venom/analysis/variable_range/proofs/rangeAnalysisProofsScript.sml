@@ -9,7 +9,7 @@ Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
   venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
   dfAnalyzeWidenProofs cfgAnalysisProps
-  dfgAnalysisProps dfgCorrectnessProof cfgHelpers
+  dfgAnalysisProps dfgCorrectnessProof dfgSoundDefs cfgHelpers
 
 (* ===== rs_write helper ===== *)
 
@@ -1048,13 +1048,6 @@ Proof
   gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem phi_prefix_length_el_phi:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
 Theorem range_sound_phi_prefix_on_s:
   !fn bb s k.
     wf_function fn /\
@@ -1684,40 +1677,6 @@ QED
 
 Finalise range_analyze_invariant
 
-(* Bridge: exec_pure2 success extracts operand values and output *)
-Triviality exec_pure2_output[local]:
-  ∀f inst s r.
-    exec_pure2 f inst s = OK r ⇒
-    ∃v1 v2 op1 op2 out.
-      inst.inst_operands = [op1; op2] ∧
-      inst.inst_outputs = [out] ∧
-      eval_operand op1 s = SOME v1 ∧
-      eval_operand op2 s = SOME v2 ∧
-      FLOOKUP r.vs_vars out = SOME (f v1 v2) ∧
-      (∀x. x ≠ out ⇒ FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure2_def] >>
-  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Triviality exec_pure1_output[local]:
-  ∀f inst s r.
-    exec_pure1 f inst s = OK r ⇒
-    ∃v1 op1 out.
-      inst.inst_operands = [op1] ∧
-      inst.inst_outputs = [out] ∧
-      eval_operand op1 s = SOME v1 ∧
-      FLOOKUP r.vs_vars out = SOME (f v1) ∧
-      (∀x. x ≠ out ⇒ FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure1_def] >>
-  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
 (* operand_range is sound for any successfully-evaluated operand *)
 Triviality operand_range_sound[local]:
   ∀rs s op w.
@@ -2090,75 +2049,6 @@ Proof
       >> (irule range_join_opt_some_sound_right >> simp[range_sound_def]))
   >> first_x_assum irule >> metis_tac[]
 QED
-
-(* ===== DFG Semantic Soundness — per-opcode predicates ===== *)
-
-(* Each predicate captures what the DFG tells us about variable values
-   in the runtime environment. These are small enough for fs[]/simp[].
-   The monolithic dfg_sound_def caused rewriter timeouts. *)
-
-Definition dfg_assign_sound_def:
-  dfg_assign_sound dfg env =
-    !v inst u. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var u] /\
-      v IN FDOM env ==>
-      FLOOKUP env v = FLOOKUP env u
-End
-
-Definition dfg_iszero_sound_def:
-  dfg_iszero_sound dfg env =
-    !v inst tv. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = ISZERO /\ inst.inst_operands = [Var tv] ==>
-      !w. FLOOKUP env v = SOME w ==>
-        (w <> 0w ==> FLOOKUP env tv = SOME 0w) /\
-        (w = 0w ==> !w'. FLOOKUP env tv = SOME w' ==> w' <> 0w)
-End
-
-Definition dfg_eq_sound_def:
-  dfg_eq_sound dfg env =
-    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = EQ /\ inst.inst_operands = [lhs; rhs] ==>
-      !w. FLOOKUP env v = SOME w ==> w <> 0w ==>
-        (!u. lhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
-        (!u. rhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
-        (!u wu wl. lhs = Var u /\ rhs = Lit wl /\
-                    FLOOKUP env u = SOME wu ==> wu = wl) /\
-        (!u wu wl. rhs = Var u /\ lhs = Lit wl /\
-                    FLOOKUP env u = SOME wu ==> wu = wl) /\
-        (!u1 u2 w1 w2. lhs = Var u1 /\ rhs = Var u2 /\
-           FLOOKUP env u1 = SOME w1 /\ FLOOKUP env u2 = SOME w2 ==>
-           w1 = w2)
-End
-
-Definition dfg_compare_sound_def:
-  dfg_compare_sound dfg env =
-    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
-      (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
-       inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
-      inst.inst_operands = [lhs; rhs] ==>
-      !w. FLOOKUP env v = SOME w ==>
-        (!u wl wu. lhs = Var u /\ rhs = Lit wl /\
-          FLOOKUP env u = SOME wu ==>
-          ((w <> 0w) =
-            (if inst.inst_opcode = LT then w2n wu < w2n wl
-             else if inst.inst_opcode = GT then w2n wu > w2n wl
-             else if inst.inst_opcode = SLT then w2i wu < w2i wl
-             else w2i wu > w2i wl))) /\
-        (!u wl wu. rhs = Var u /\ lhs = Lit wl /\
-          FLOOKUP env u = SOME wu ==>
-          ((w <> 0w) =
-            (if inst.inst_opcode = LT then w2n wl < w2n wu
-             else if inst.inst_opcode = GT then w2n wl > w2n wu
-             else if inst.inst_opcode = SLT then w2i wl < w2i wu
-             else w2i wl > w2i wu)))
-End
-
-(* Combined predicate for convenience *)
-Definition dfg_sound_def:
-  dfg_sound dfg env =
-    (dfg_assign_sound dfg env /\ dfg_iszero_sound dfg env /\
-     dfg_eq_sound dfg env /\ dfg_compare_sound dfg env)
-End
 
 (* ===== range_apply_condition_sound ===== *)
 

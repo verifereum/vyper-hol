@@ -394,22 +394,6 @@ Proof
   disch_then (qspecl_then [`n`, `n'`] mp_tac) >> simp[EL_MAP]
 QED
 
-(* Under SSA, no instruction can use a variable it also defines.
-   Proof: def_dominates_uses gives a definer that strictly precedes
-   the user within the same block, but both have x in outputs,
-   contradicting ALL_DISTINCT on the global output list. *)
-Triviality all_distinct_flat_map_unique[local]:
-  !ls f (i1:'a) (i2:'a) (x:'b).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM i1 ls /\ MEM x (f i1) /\
-    MEM i2 ls /\ MEM x (f i2) ==>
-    i1 = i2
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
-QED
-
 Triviality mem_fn_insts[local]:
   !bbs bb i. MEM bb bbs /\ MEM i bb.bb_instructions ==>
     MEM i (fn_insts_blocks bbs)

@@ -1143,14 +1143,6 @@ Proof
   simp[]
 QED
 
-Triviality phi_prefix_length_el_phi_sccp[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >> rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
-  Cases_on `i` >> gvs[phi_prefix_length_def]
-QED
-
 Triviality sccp_analysis_block_phi_prefix_length[local]:
   !f bb.
     phi_prefix_length
@@ -1176,7 +1168,7 @@ Proof
     (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
        metis_tac[phi_prefix_length_le] >> decide_tac) >>
   `((EL i bb.bb_instructions).inst_opcode = PHI)` by
-    metis_tac[phi_prefix_length_el_phi_sccp] >>
+    metis_tac[phi_prefix_length_el_phi] >>
   `EL i (analysis_block_transform sccp_bottom (sccp_df_analyze f)
       (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
     sccp_inst (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label i).sl_vals
@@ -1225,7 +1217,7 @@ Proof
   `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by metis_tac[MEM_EL] >>
   `~MEM x (EL idx bb.bb_instructions).inst_outputs` by (
     CCONTR_TAC >> fs[is_phi_output_of_block_def] >>
-    metis_tac[phi_prefix_length_el_phi_sccp]) >>
+    metis_tac[phi_prefix_length_el_phi]) >>
   `df_at sccp_bottom (sccp_df_analyze f) bb.bb_label (SUC idx) =
    sccp_transfer_inst f (EL idx bb.bb_instructions)
      (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx)` by
@@ -1863,7 +1855,7 @@ Proof
             metis_tac[LAST_EL] >>
           `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
             (Cases_on `bb.bb_instructions` >> fs[]) >>
-          metis_tac[phi_prefix_length_el_phi_sccp]) >>
+          metis_tac[phi_prefix_length_el_phi]) >>
         decide_tac) >>
       `!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
              SOME (CL_Const c) /\
