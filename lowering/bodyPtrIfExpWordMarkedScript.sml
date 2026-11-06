@@ -1,6 +1,7 @@
 Theory bodyPtrIfExpWordMarked
 Ancestors
   bodyPtrIfExpWordUnwrap bodyPtrIfExpWordTyping bodyPtrIfExpSource
+  bodyPtrIfExpConditionalSource
   bodyPtrDefs gasSummaryComposePtr fragGasSeqPtr exprSimUnwrap
   exprOperandVar exprSimSource exprLoweringProps
   vyperEvalExprPreservesScopesDom vyperStatePreservation vyperInterpreter
@@ -89,3 +90,28 @@ Proof
   irule gas_marked_exec_ptr_bind_exception >> goal_assum (drule_at Any)
 QED
 
+
+Theorem ifexp_marked_conditional_source:
+  gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx e) (es,s0,G0,tn0)
+    marks (INL raw) ee G tn (OK s) /\
+  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
+  read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := []) ==>
+  ?tv. (!tail. conditional_result cx raw (ee with gas_obs := tail) =
+          (INL tv,ee with gas_obs := tail)) /\
+       read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := [])
+Proof
+  strip_tac >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL raw,ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_ptr_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  Cases_on `conditional_result cx raw (ee with gas_obs := [])` >>
+  rename1 `_ = (res,st)` >>
+  `expr_vv_res_ok res` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def] >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
+     simp[bind_def]) >>
+  drule_all ifexp_conditional_source_success >> simp[]
+QED
