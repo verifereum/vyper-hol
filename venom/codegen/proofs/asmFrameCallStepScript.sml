@@ -372,6 +372,14 @@ Definition asm_call_prepare_def:
   od
 End
 
+(* Preparation depends only on the operand layout and charge, not on
+   whether the child inherits the message identities. *)
+Theorem asm_call_prepare_delegate:
+  asm_call_prepare DelegateCall = asm_call_prepare StaticCall
+Proof
+  simp[asm_call_prepare_def, call_has_value_def, static_gas_def]
+QED
+
 Definition asm_call_finish_def:
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) =
     if (lookup_account sender accounts).balance < value
@@ -846,6 +854,43 @@ Resume asm_call_prepare_success_view[project]:
 QED
 
 Finalise asm_call_prepare_success_view
+
+Theorem asm_message_prepare_success_view:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  let vo = if call_has_value op then 1 else 0 in
+  let args = TAKE (6 + vo) c.stack in
+  6 + vo <= LENGTH c.stack /\
+  sender = c.msgParams.callee /\ accounts = s.rollback.accounts /\
+  address = w2w (EL 1 args) /\
+  value = (if 0 < vo then w2n (EL 2 args) else 0) /\
+  ao = w2n (EL (2 + vo) args) /\ az = w2n (EL (3 + vo) args) /\
+  ro = w2n (EL (4 + vo) args) /\ rs = w2n (EL (5 + vo) args) /\
+  ?charge acc d'.
+    stipend <= charge /\ c.gasUsed + charge <= c.msgParams.gasLimit /\
+    u = s with <| contexts :=
+      (c with <| stack := DROP (6 + vo) c.stack;
+                  gasUsed := c.gasUsed + charge;
+                  memory := buffer_extend
+                    (MAX (buffer_length c.memory)
+                      (let range = max_expansion_range (ao,az) (ro,rs) in
+                       if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
+                     - buffer_length c.memory) c.memory |>,rb)::rest;
+      rollback := s.rollback with accesses := acc;
+      msdomain := Collect d' |>
+Proof
+  strip_tac
+  >- (irule asm_call_prepare_success_view >> simp[] >> metis_tac[])
+  >- (irule asm_call_prepare_success_view >> simp[] >> metis_tac[]) >>
+  gvs[asm_call_prepare_delegate] >>
+  drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
+  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+  asm_simp_tac (srw_ss()) [call_has_value_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  qexistsl_tac [`charge`,`acc`,`d'`] >> simp[]
+QED
 
 Theorem asm_call_prepare_contexts_wf:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
@@ -5628,6 +5673,29 @@ Proof
   qexistsl_tac [`ex`,`u`,`c`,`rb`,`c'`] >> simp[]
 QED
 
+Theorem asm_call_returned_message_adoption:
+  (rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall) /\
+  t.contexts = (c,rb)::rest /\
+  out = outcome_of rq.cr_kind t (LENGTH logs) (LENGTH pending) /\
+  ((rq.cr_static \/ ~out.co_success) ==>
+    t.rollback.accounts = accounts /\ t.rollback.tStorage = ts /\
+    c.logs = logs /\ t.rollback.toDelete = pending) /\
+  ((~rq.cr_static /\ out.co_success) ==>
+    (?added. c.logs = logs ++ added) /\
+    (?added. t.rollback.toDelete = added ++ pending)) ==>
+  adopt_outcome rq out (accounts,ts,logs) =
+    (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+  adopt_outcome_deletions rq out pending = t.rollback.toDelete
+Proof
+  strip_tac >>
+  (Cases_on `rq.cr_static \/ ~out.co_success`
+   >- gvs[adopt_outcome_def, adopt_outcome_deletions_def]) >>
+  `~rq.cr_static /\ out.co_success` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[adopt_outcome_def, adopt_outcome_deletions_def, outcome_of_def,
+      TAKE_LENGTH_APPEND, DROP_APPEND]
+QED
+
 Theorem asm_call_returned_outcome_adoption:
   rq.cr_kind = MessageCall /\ t.contexts = (c,rb)::rest /\
   out = outcome_of MessageCall t (LENGTH logs) (LENGTH pending) /\
@@ -5641,12 +5709,8 @@ Theorem asm_call_returned_outcome_adoption:
     (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
   adopt_outcome_deletions rq out pending = t.rollback.toDelete
 Proof
-  strip_tac >> Cases_on `rq.cr_static \/ ~out.co_success`
-  >- (gvs[adopt_outcome_def, adopt_outcome_deletions_def]) >>
-  `~rq.cr_static /\ out.co_success` by metis_tac[] >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[adopt_outcome_def, adopt_outcome_deletions_def, outcome_of_def,
-      TAKE_LENGTH_APPEND, DROP_APPEND]
+  strip_tac >> irule asm_call_returned_message_adoption >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem asm_call_memory_pop_jumpDest:
@@ -6544,25 +6608,26 @@ Proof
   gvs[]
 QED
 
-Theorem asm_call_run_memory_adoption:
+Theorem asm_call_run_message_adoption:
   wf_state s /\ (?d. s.msdomain = Collect d) /\
   s.contexts = (child,crb)::(parent,prb)::rest /\
   child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
-  rq.cr_kind = MessageCall /\ (rq.cr_static ==> child.msgParams.static) /\
+  (rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall) /\
+  (rq.cr_static ==> child.msgParams.static) /\
   crb.accounts = accounts /\ crb.tStorage = ts /\ crb.toDelete = pending /\
   s.rollback.toDelete = pending /\
   (rq.cr_static ==> s.rollback.accounts = accounts /\ s.rollback.tStorage = ts) /\
   run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) /\
   t.contexts = (c,prb)::rest /\
-  out = outcome_of MessageCall t (LENGTH parent.logs) (LENGTH pending) ==>
+  out = outcome_of rq.cr_kind t (LENGTH parent.logs) (LENGTH pending) ==>
   adopt_outcome rq out (accounts,ts,parent.logs) =
     (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
   adopt_outcome_deletions rq out pending = t.rollback.toDelete
 Proof
-  strip_tac >>
+  strip_tac >> (
   drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
   simp[] >> strip_tac >>
-  irule asm_call_returned_outcome_adoption >>
+  irule asm_call_returned_message_adoption >>
   simp[] >> reverse conj_tac
   >- (disch_tac >> Cases_on `rq.cr_static`
       >- (`child.msgParams.static /\ crb.accounts = s.rollback.accounts /\
@@ -6578,11 +6643,31 @@ Proof
   conj_tac
   >- (drule_at (Pat `run_call _ = _`) asm_call_run_memory_success_logs >>
       simp[]) >>
-  drule_at (Pat `run_call _ = _`) asm_call_run_pending_suffix >> simp[]
+  drule_at (Pat `run_call _ = _`) asm_call_run_pending_suffix >> simp[])
 QED
 
-Theorem asm_proceed_call_enter_effects:
-  s.contexts = (parent,prb)::rest /\ (op = Call \/ op = StaticCall) /\
+Theorem asm_call_run_memory_adoption:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
+  rq.cr_kind = MessageCall /\ (rq.cr_static ==> child.msgParams.static) /\
+  crb.accounts = accounts /\ crb.tStorage = ts /\ crb.toDelete = pending /\
+  s.rollback.toDelete = pending /\
+  (rq.cr_static ==> s.rollback.accounts = accounts /\ s.rollback.tStorage = ts) /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) /\
+  t.contexts = (c,prb)::rest /\
+  out = outcome_of MessageCall t (LENGTH parent.logs) (LENGTH pending) ==>
+  adopt_outcome rq out (accounts,ts,parent.logs) =
+    (t.rollback.accounts,t.rollback.tStorage,c.logs) /\
+  adopt_outcome_deletions rq out pending = t.rollback.toDelete
+Proof
+  strip_tac >> irule asm_call_run_message_adoption >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem asm_proceed_message_enter_effects:
+  s.contexts = (parent,prb)::rest /\
+  (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
   ~parent.msgParams.static /\
   proceed_call op sender address value ao az code stipend (Memory mr) s = (INL (),t) ==>
   ?child crb. t.contexts = (child,crb)::(parent,prb)::rest /\
@@ -6606,6 +6691,21 @@ Proof
   gvs[update_accounts_def, get_current_context_def, return_def] >>
   strip_tac >>
   gvs[vfmContextTheory.initial_context_def, vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem asm_proceed_call_enter_effects:
+  s.contexts = (parent,prb)::rest /\ (op = Call \/ op = StaticCall) /\
+  ~parent.msgParams.static /\
+  proceed_call op sender address value ao az code stipend (Memory mr) s = (INL (),t) ==>
+  ?child crb. t.contexts = (child,crb)::(parent,prb)::rest /\
+    child.msgParams.outputTo = Memory mr /\ child.logs = [] /\
+    child.msgParams.static = (op = StaticCall) /\ crb = s.rollback /\
+    t.rollback.toDelete = s.rollback.toDelete /\
+    (op = StaticCall /\ value = 0 ==>
+      t.rollback.accounts = s.rollback.accounts /\
+      t.rollback.tStorage = s.rollback.tStorage)
+Proof
+  strip_tac >> irule asm_proceed_message_enter_effects >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_call_prepared_enter_view:
