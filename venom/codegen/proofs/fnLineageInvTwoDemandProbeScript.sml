@@ -646,3 +646,29 @@ Proof
   qexistsl_tac [`NONE`,`F`] >>
   gvs[splice_loop_e_exact]
 QED
+
+Theorem splice_two_b_inputs:
+  input_vars_from "H"
+    (THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_instructions
+    (live_vars_at (liveness_analyze splice_two_fn) "B" 0) =
+    live_vars_at (liveness_analyze splice_two_fn) "H" 22
+Proof
+  rewrite_tac[splice_two_h_end_live] >> EVAL_TAC
+QED
+
+Theorem splice_two_b_cleanup:
+  !q. q.ps_cleanup_height = NONE /\ ~q.ps_cleanup_promised ==>
+  clean_stack_plan (liveness_analyze splice_two_fn) (cfg_analyze splice_two_fn)
+    splice_two_fn (THE (lookup_block "B" splice_two_fn.fn_blocks)) q = ([],q)
+Proof
+  rpt strip_tac >>
+  `cfg_preds_of (cfg_analyze splice_two_fn) "B" = ["H"]` by EVAL_TAC >>
+  `(THE (lookup_block "B" splice_two_fn.fn_blocks)).bb_label = "B"` by EVAL_TAC >>
+  `LENGTH (THE (lookup_block "H" splice_two_fn.fn_blocks)).bb_instructions = 22` by EVAL_TAC >>
+  simp[clean_stack_plan_def, cleanup_elision_safe_without_height, splice_two_schedule] >>
+  once_rewrite_tac[cj 5 splice_two_schedule] >>
+  simp[splice_two_b_inputs] >>
+  `!xs:string list. FILTER (\v. ~MEM v xs) xs = []` by
+    simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
+  simp[stackPlanOpsTheory.popmany_plan_def]
+QED
