@@ -503,7 +503,15 @@ QED
    from k on has no spill or restore: its REVERT ends bb and its
    RETURNDATACOPY is in bb, so generate_block_plan would have rejected the
    replay (revert_block_spills) had the instruction ops, of which these
-   are a suffix, held one.  OPEN: a dead OFFSET
+   are a suffix, held one.  JMP target inventory (pending_inventory_wf):
+   the target stack is input_vars_from of the target's live-in set, which
+   holds each variable once once live_update dedupes uses (first
+   occurrence; ALL_DISTINCT live ==> ALL_DISTINCT (live_update defs uses
+   live)).  Without that, a target like [x; x; y15..y0] needs one slot
+   more than the 17-slot stack, and reorder_one's do_swap reads past the
+   stack's end.  With distinct targets, all on the stack or spilled, the
+   JMP plan restores every spilled target first, and the reorder keeps
+   the stack's length, so no swap reaches past the stack.  OPEN: a dead OFFSET
    output is pushed and never popped (generate_offset_plan), which leaves
    a slot at RET; this conjunct needs that excluded.  The
    marker clauses hold since no instruction has the marker as an operand,
