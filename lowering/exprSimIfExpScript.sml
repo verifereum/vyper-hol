@@ -1499,6 +1499,31 @@ Proof
   irule ifexp_abi_members_bound >> simp[]
 QED
 
+Theorem ifexp_concat_lowered_fits[local]:
+  !ty n args.
+    well_typed_builtin_app ty (Concat n) (MAP expr_type args) ==>
+    is_bytestring_type ty /\
+    is_bytestring_type
+      (concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))) /\
+    arg_type_fits
+      (concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))) ty
+Proof
+  rpt gen_tac >> simp[vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+  strip_tac >>
+  `!ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
+        MAP bytelike_type_bound ts = MAP concat_payload_capacity ts` by
+    (Induct >> simp[] >> rpt strip_tac >>
+     gvs[vyperTypeSystemTheory.bytelike_type_bound_def, concat_payload_capacity_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     simp[vyperASTTheory.bound_length_def, concat_payload_capacity_def]) >>
+  `MAP bytelike_type_bound (MAP expr_type args) =
+   MAP concat_payload_capacity (MAP expr_type args)` by
+    (first_x_assum irule >> fs[EVERY_MEM]) >>
+  fs[MAP_MAP_o] >>
+  gvs[concat_buffer_type_def, is_bytestring_type_def,
+      vyperTypeSystemTheory.arg_type_fits_def]
+QED
+
 Theorem ifexp_lowered_type_compatible:
   !ce e env.
   well_typed_expr env e /\
@@ -1530,6 +1555,8 @@ Proof
     (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
      rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
   `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
+  TRY (disj2_tac >> disj1_tac >> irule ifexp_concat_lowered_fits >>
+       goal_assum drule >> NO_TAC) >>
   qmatch_goalsub_abbrev_tac `abi_size_bound ce.ce_struct_fields enc_ty` >>
   `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by
     (simp[Abbr `enc_ty`] >> IF_CASES_TAC >-
