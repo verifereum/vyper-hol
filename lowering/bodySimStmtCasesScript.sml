@@ -1326,7 +1326,7 @@ Proof
 QED
 
 (* Both lowering entry points check that the target supports MCOPY. *)
-Theorem body_inv_mcopy[local]:
+Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
   rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
@@ -1344,7 +1344,7 @@ QED
    through a pointer at its own type, and if in memory, with a size below
    2 ** 64 (locals_alloc_ok), so a bytestring copy's 64 bytes of rounding
    fit below 2 ** 256. *)
-Theorem tuple_target_local_ptr[local]:
+Theorem tuple_target_local_ptr:
   !cenv cx env es id ty tv.
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     FLOOKUP env.var_types id = SOME ty /\ 0 < type_memory_bytes cenv ty /\
@@ -1375,7 +1375,7 @@ QED
 
 (* After the source is read, a local of a tuple target holds a value of its
    own type: a word as stored, otherwise at the type its pointer has. *)
-Theorem tuple_target_local_lays_out[local]:
+Theorem tuple_target_local_lays_out:
   !cenv cx env es1 id ty tv v entry.
     expr_sim_inv cenv cx env es1 /\ FLOOKUP env.var_types id = SOME ty /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
@@ -1396,7 +1396,7 @@ QED
 
 (* The buffer a tuple assignment stages a memory view's value in fits
    below 2 ** 256: alloc_limits_stmt bounds it by 2 ** 64. *)
-Theorem tuple_staging_bound[local]:
+Theorem tuple_staging_bound:
   !cenv cx env es g e tys tvs.
     expr_sim_inv cenv cx env es /\
     stmt_exprs_ok cenv (Assign (TupleTarget g) e) /\
@@ -1493,7 +1493,7 @@ QED
 (* The locals a tuple is assigned to take memory: their types are the
    tuple's element types, which are assignable, so they take a storage slot
    (assignable_type_slot_size_pos). *)
-Theorem assign_tuple_locals_bytes_pos[local]:
+Theorem assign_tuple_locals_bytes_pos:
   !cenv cx env es ret_ty ids e env'.
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty
