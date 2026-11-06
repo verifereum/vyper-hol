@@ -44,7 +44,7 @@ Theorem reason_memory_encoder_path_ptr:
   ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = cc.cs_current_bb /\
   s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
-  fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv cc /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= cc.cs_next_var /\ sa.cs_next_id <= cc.cs_next_id /\
   sb.cs_next_id <= cc.cs_next_id /\ not_fresh_at cc src ==>

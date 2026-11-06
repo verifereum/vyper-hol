@@ -102,7 +102,7 @@ Theorem reason_encoder_prefix_path_ptr:
     fn_has_code cc c4 func /\ ~ctx_has_dalloca ctx /\
     s.vs_current_bb = cc.cs_current_bb /\
     s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
-    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    local_ptrs_reserved cenv cc /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     fn_inst_ids_distinct func /\ 32 <= n /\ n < dimword (:256) /\
@@ -128,7 +128,7 @@ Theorem reason_encoder_prefix_path_ptr:
       FLOOKUP t.vs_allocas c3.cs_next_id = SOME (b2,m) /\
       b2 + m < dimword (:256) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
-      fresh_vars_wrt c4 t /\ local_ptrs_reserved cenv c4 /\
+      local_ptrs_reserved cenv c4 /\
       eval_operand op t = SOME ow /\
       ptr_covers G4 tn4 out2 t m /\
       ptr_covers G4 tn4 out t n /\ ptr_covers G4 tn4 x t (n - 32) /\
@@ -176,7 +176,7 @@ Resume reason_encoder_prefix_path_ptr[endpoint]:
      `b + n < _`, `b2 + m < _`,
      `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`, `z.vs_current_bb = _`,
      `eval_operand tuple.buf_operand z = _`, `FLOOKUP z.vs_allocas _ = _`,
-     `expr_post _ _ _ _ _ _ _ _ _ _ _ _ z`, `fresh_vars_wrt c4 z`,
+     `expr_post _ _ _ _ _ _ _ _ _ _ _ _ z`,
      `local_ptrs_reserved cenv c4`, `eval_operand op z = _`,
      `ptr_covers G3 tn4 out2 z m`, `ptr_covers G3 tn4 out z n`,
      `ptr_covers G3 tn4 x z _`,
@@ -187,7 +187,7 @@ Resume reason_encoder_prefix_path_ptr[endpoint]:
      `!p. not_fresh_at cc p ==> _`,
      `op_prov G3 op = _`, `op_taint tn4 op = _`] >>
   POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-  gvs[fresh_vars_wrt_def]
+  gvs[]
 QED
 
 Resume reason_encoder_prefix_path_ptr[block]:

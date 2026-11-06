@@ -107,14 +107,14 @@ Theorem reason_encoder_alloc_buffer_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd buf n.
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
-    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
     fn_inst_ids_distinct func /\ n < dimword (:256) /\
     sa.cs_next_var <= cc.cs_next_var ==>
     ?t w. run_inst_seq (emitted_insts cc cd) s = OK t /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
       step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString cc.cs_next_var)]) s = OK t /\
-      fresh_vars_wrt cd t /\ local_ptrs_reserved cenv cd /\
+      local_ptrs_reserved cenv cd /\
       eval_operand op t = eval_operand op s /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas cc.cs_next_id = SOME (w2n w,n) /\
@@ -142,7 +142,6 @@ Proof
     (drule compile_alloc_buffer_insts >> strip_tac >>
      gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
          run_inst_seq_def, AllCaseEqs()]) >>
-  `fresh_vars_wrt cd t` by suspend "fresh" >>
   `local_ptrs_reserved cenv cd` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `cc` >>
      drule compile_alloc_buffer_parts >> simp[]) >>
@@ -150,15 +149,7 @@ Proof
 QED
 
 Resume reason_encoder_alloc_buffer_post[operand]:
-  `?ow. eval_operand op s = SOME ow` by
-    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  Cases_on `op` >> gvs[eval_operand_def] >>
-  rename1 `lookup_var x s = SOME ow` >>
-  `not_fresh_at cc x` by
-    (simp[not_fresh_at_def] >> rpt strip_tac >>
-     gvs[fresh_vars_wrt_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
-     metis_tac[]) >>
-  metis_tac[]
+  Cases_on `op` >> gvs[eval_operand_def] >> metis_tac[]
 QED
 
 Resume reason_encoder_alloc_buffer_post[locals]:
@@ -168,14 +159,6 @@ Resume reason_encoder_alloc_buffer_post[locals]:
       qexistsl_tac [`cc`, `es'.scopes`, `t`] >> simp[]) >>
   strip_tac >> irule local_region_frame_fwd >>
   qexistsl_tac [`s`, `cc`, `es'.scopes`] >> simp[]
-QED
-
-Resume reason_encoder_alloc_buffer_post[fresh]:
-  drule compile_alloc_buffer_parts >> strip_tac >>
-  qpat_x_assum `step_inst_base _ s = OK t` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
-  gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  gvs[fresh_vars_wrt_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Finalise reason_encoder_alloc_buffer_post
@@ -241,7 +224,7 @@ Theorem reason_encoder_alloc_buffer_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd buf n tv ow PG G tn.
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
-    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
     fn_inst_ids_distinct func /\ n < dimword (:256) /\
     sa.cs_next_var <= cc.cs_next_var /\ sb.cs_next_id <= cc.cs_next_id /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -255,7 +238,7 @@ Theorem reason_encoder_alloc_buffer_resources:
       step_inst_base i s = OK t /\
       G1 = step_prov PG G i t /\ tn1 = step_taint i s t tn /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
-      fresh_vars_wrt cd t /\ local_ptrs_reserved cenv cd /\
+      local_ptrs_reserved cenv cd /\
       eval_operand op t = SOME ow /\
       eval_operand (Var out) t = SOME (n2w b) /\
       FLOOKUP t.vs_allocas cc.cs_next_id = SOME (b,n) /\
@@ -269,7 +252,7 @@ Theorem reason_encoder_alloc_buffer_resources:
         ~(b <= j /\ j < b+n)) /\
       (!m. mem_agree_outside tn1.t_mem t.vs_memory m ==>
         val_in_memory tv v (w2n ow) m) /\
-      (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn1 p t k) /\
+      (!p k. p <> out /\ ptr_covers G tn p s k ==> ptr_covers G1 tn1 p t k) /\
       MEM i (fn_insts func) /\ not_local_ptr cenv es'.scopes out /\
       (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 t) /\
       (!p. p <> out ==> FLOOKUP G1 p = FLOOKUP G p /\
@@ -328,10 +311,6 @@ QED
 
 Resume reason_encoder_alloc_buffer_resources[oldptr]:
   rpt strip_tac >> irule alloca_step_old_ptr_covers >>
-  `lookup_var (STRING #"%" (toString cc.cs_next_var)) s = NONE` by
-    gvs[fresh_vars_wrt_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
-  conj_tac
-  >- (strip_tac >> gvs[ptr_covers_def]) >>
   simp[] >> qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >> simp[]
 QED
 
@@ -416,7 +395,7 @@ Theorem reason_encoder_selector_resources:
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
-    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     fn_inst_ids_distinct func /\ 32 <= n /\ n < dimword (:256) /\
@@ -438,11 +417,11 @@ Theorem reason_encoder_selector_resources:
       step_inst_base (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t = OK u /\
       tn2 = step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t u tn1 /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
-      fresh_vars_wrt c2 u /\ local_ptrs_reserved cenv c2 /\
+      local_ptrs_reserved cenv c2 /\
       eval_operand op u = SOME ow /\
       step_prov PG G1 (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) u = G1 /\
       ptr_covers G1 tn2 out u n /\
-      (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn2 p u k) /\
+      (!p k. p <> out /\ ptr_covers G tn p s k ==> ptr_covers G1 tn2 p u k) /\
       (!m. mem_agree_outside tn2.t_mem u.vs_memory m ==>
         val_in_memory tv v (w2n ow) m) /\
       (!p. p <> out ==> FLOOKUP G1 p = FLOOKUP G p /\
@@ -454,11 +433,14 @@ Proof
   `w2n (n2w b : bytes32) = b` by simp[] >>
   `lookup_var out t = SOME (n2w b)` by gvs[eval_operand_def] >>
   `eval_operand buf.buf_operand t = SOME (n2w b)` by simp[] >>
-  `run_inst_seq (emitted_insts c1 c2) t = OK (mstore b 0x08c379a0w t) /\
-   fresh_vars_wrt c2 (mstore b 0x08c379a0w t)` by
-    (drule_at (Pat `emit_void _ _ _ = _`) emit_void_MSTORE_correct >>
-     disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
-     simp[eval_operand_def]) >>
+  `run_inst_seq (emitted_insts c1 c2) t = OK (mstore b 0x08c379a0w t)` by
+    (drule emitted_insts_emit_void >> strip_tac >>
+     `step_inst_base (mk_inst c1.cs_next_id MSTORE
+        [Var out; Lit 0x08c379a0w] []) t = OK (mstore b 0x08c379a0w t)` by
+       (qpat_assum `w2n (n2w b : bytes32) = b`
+          (fn th => once_rewrite_tac[GSYM th]) >>
+        irule step_MSTORE >> simp[eval_operand_def]) >>
+     simp[run_inst_seq_def]) >>
   `expr_post ctx func cenv cx e es sa sb s0 es' v op (mstore b 0x08c379a0w t) /\
    (!m. mem_agree_outside
      (step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
@@ -540,7 +522,6 @@ Theorem reason_encoder_add_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd src result a d.
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv cc /\ sa.cs_next_var <= cc.cs_next_var /\
-    fresh_vars_wrt cc s /\
     emit_op ADD [src; Lit d] cc = (result,cd) /\
     eval_operand src s = SOME a /\
     (!z. op = Var z ==> not_fresh_at cc z) ==>
@@ -548,7 +529,7 @@ Theorem reason_encoder_add_post:
       t = update_var x (a + d) s /\
       step_inst_base (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s = OK t /\
       run_inst_seq (emitted_insts cc cd) s = OK t /\
-      eval_operand result t = SOME (a + d) /\ fresh_vars_wrt cd t /\
+      eval_operand result t = SOME (a + d) /\
       local_ptrs_reserved cenv cd /\
       eval_operand op t = eval_operand op s /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
@@ -575,11 +556,6 @@ Proof
   `run_inst_seq (emitted_insts cc cd) s = OK (update_var x (a + d) s)` by
     simp[run_inst_seq_def] >>
   `eval_operand (Lit d) s = SOME d` by simp[eval_operand_def] >>
-  drule_all emit_op_ADD_correct >> strip_tac >>
-  `ss' = update_var x (a + d) s` by
-    (qpat_x_assum `run_inst_seq _ _ = OK (update_var _ _ _)` mp_tac >>
-     simp[]) >>
-  qpat_x_assum `ss' = _` SUBST_ALL_TAC >>
   `eval_operand op (update_var x (a + d) s) = eval_operand op s` by
     (Cases_on `op` >> simp[eval_operand_def, update_var_def, lookup_var_def,
       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
@@ -590,14 +566,14 @@ Proof
     (irule reason_encoder_fresh_update_post >> simp[] >>
      qexists_tac `cc` >> simp[]) >>
   qexistsl_tac [`update_var x (a + d) s`, `x`] >>
-  simp[copy_len_binop_ghost_frame] >> suspend "ghost"
+  simp[copy_len_binop_ghost_frame, eval_operand_def, lookup_var_def,
+       update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> suspend "ghost"
 QED
 
 Resume reason_encoder_add_post[ghost]:
-  rpt gen_tac >> rpt conj_tac
-  >- simp[update_var_def] >>
+  rpt gen_tac >> rpt conj_tac >>
   rpt strip_tac >> `p <> x` by metis_tac[] >>
-  gvs[ptr_covers_def, copy_len_binop_ghost_frame,
+  gvs[ptr_covers_def, SRULE [update_var_def] copy_len_binop_ghost_frame,
       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
@@ -632,7 +608,7 @@ Theorem reason_encoder_prefix_post:
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
     emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
     compile_alloc_buffer m c3 = (tuple,c4) /\ fn_has_code c3 c4 func /\
-    fresh_vars_wrt cc s /\ local_ptrs_reserved cenv cc /\
+    local_ptrs_reserved cenv cc /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     fn_inst_ids_distinct func /\ 32 <= n /\ n < dimword (:256) /\
@@ -665,7 +641,7 @@ Theorem reason_encoder_prefix_post:
       FLOOKUP z.vs_allocas c3.cs_next_id = SOME (b2,m) /\
       b2 + m < dimword (:256) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
-      fresh_vars_wrt c4 z /\ local_ptrs_reserved cenv c4 /\
+      local_ptrs_reserved cenv c4 /\
       eval_operand op z = SOME ow /\
       G2 = step_prov PG G1 (mk_inst c2.cs_next_id ADD [buf.buf_operand; Lit 32w] [x]) r /\
       tn3 = step_taint (mk_inst c2.cs_next_id ADD [buf.buf_operand; Lit 32w] [x]) u r tn2 /\
@@ -722,8 +698,16 @@ Resume reason_encoder_prefix_post[allocate]:
   `ptr_covers G2 tn3 x t' (n - 32)` by suspend "payload" >>
   `!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
      ptr_covers G2 tn3 p t' k` by suspend "oldptr" >>
-  drule_all reason_encoder_alloc_buffer_resources >>
+  `!p. op = Var p ==> not_fresh_at c3 p` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  qpat_assum `compile_alloc_buffer m c3 = _`
+    (mp_then Any mp_tac (REWRITE_RULE [GSYM AND_IMP_INTRO]
+      reason_encoder_alloc_buffer_resources)) >>
+  rpt (disch_then drule) >>
   disch_then (qspecl_then [`PG`, `G2`] strip_assume_tac) >>
+  `out <> out' /\ x <> out' /\
+   (!p. not_fresh_at cc p ==> p <> out')` by suspend "distinct" >>
   `ptr_covers G1' tn1' out t'' n /\
    ptr_covers G1' tn1' x t'' (n - 32) /\
    (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
@@ -740,6 +724,16 @@ Resume reason_encoder_prefix_post[allocate]:
   qpat_x_assum `u = mstore _ _ _` SUBST_ALL_TAC >>
   qpat_x_assum `i = mk_inst _ _ _ _` SUBST_ALL_TAC >>
   simp[Abbr `G2`, Abbr `tn3`, Abbr `ai`]
+QED
+
+Resume reason_encoder_prefix_post[distinct]:
+  qpat_assum `compile_alloc_buffer n cc = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  qpat_assum `compile_alloc_buffer m c3 = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]
 QED
 
 Resume reason_encoder_prefix_post[out_fresh]:
@@ -772,6 +766,10 @@ Resume reason_encoder_prefix_post[oldptr]:
   rpt strip_tac >>
   `not_fresh_at c2 p` by
     (gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `p <> out` by
+    (qpat_assum `compile_alloc_buffer n cc = _`
+       (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+     gvs[not_fresh_at_def] >> metis_tac[]) >>
   `ptr_covers G1 tn2 p u k` by metis_tac[] >>
   simp[Abbr `G2`, Abbr `tn3`] >>
   qpat_x_assum `!PG G tn. _` (qspecl_then [`PG`, `G1`, `tn2`] mp_tac) >>
@@ -790,11 +788,6 @@ Resume reason_encoder_prefix_post[addresses]:
   qpat_assum `compile_alloc_buffer m c3 = _`
     (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
   `out' = STRING #"%" (toString c3.cs_next_var)` by gvs[] >>
-  `lookup_var out' t' = NONE` by
-    (qpat_x_assum `fresh_vars_wrt c3 t'` mp_tac >>
-     simp[fresh_vars_wrt_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
-     disch_then (qspec_then `c3.cs_next_var` mp_tac) >> simp[]) >>
-  `out <> out' /\ x <> out'` by metis_tac[eval_operand_def, optionTheory.NOT_SOME_NONE] >>
   `!operand. (!p. operand = Var p ==> p <> out') ==>
      eval_operand operand t'' = eval_operand operand t'` by
     (rpt strip_tac >> irule alloca_step_operand_preserved >>
