@@ -1125,3 +1125,56 @@ Theorem regional_fresh_exemption_transfer:
 Proof
   simp[pred_setTheory.IN_UNION] >> metis_tac[]
 QED
+
+Theorem regional_phi_owned_subtraction:
+  generate_phi_plan phi nl F ps = (ops,qs) /\ phi.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ generated_plan_state_wf_marked sb ps /\
+  ~MEM (Var out) ps.ps_stack ==>
+  !op. (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) <=>
+    ((MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\ op <> Var src) \/
+    (op = Var out /\ MEM out nl)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker) ps.ps_stack) /\
+   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)` by
+    gvs[generated_plan_state_wf_marked_def] >>
+  `MEM (Var src) ps.ps_stack` by
+    (qpat_x_assum `stack_peek _ _ = _` (mp_tac o SYM) >>
+     simp[stack_peek_def] >> strip_tac >> irule EL_MEM >> decide_tac) >>
+  `Var src NOTIN FDOM ps.ps_spilled` by
+    (gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  drule_all inventory_marked_phi_mem >> strip_tac >>
+  drule_all inventory_marked_phi_spilled >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem regional_phi_freshness_step:
+  generate_phi_plan phi nl F ps = (ops,qs) /\ phi.inst_outputs = [out] /\
+  stack_get_phi_depth (FILTER is_var_operand phi.inst_operands) ps.ps_stack = SOME d /\
+  d < LENGTH ps.ps_stack /\ stack_peek d ps.ps_stack = Var src /\
+  ~MEM src nl /\ generated_plan_state_wf_marked sb ps /\
+  ~MEM (Var out) ps.ps_stack /\
+  (!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src) /\
+  (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    ~MEM op (phi.inst_operands ++ remaining_ops) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v future_outputs) /\
+  ~MEM out future_outputs /\ normalize_operand dfg [] (Var out) = Var out ==>
+  !op v. (MEM op qs.ps_stack \/ op IN FDOM qs.ps_spilled) /\
+    ~MEM op remaining_ops /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v future_outputs
+Proof
+  strip_tac >> drule_all regional_phi_owned_subtraction >> disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  (Cases_on `op = Var out` >- gvs[] >>
+  `(MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\ op <> Var src` by
+    metis_tac[] >>
+  (Cases_on `MEM op phi.inst_operands`
+   >- (Cases_on `op` >> gvs[] >> metis_tac[normalize_operand_def]) >>
+   qpat_x_assum `!op v. _ ==> ~MEM v future_outputs` irule >>
+   qexists_tac `op` >> simp[]))
+QED
