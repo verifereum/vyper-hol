@@ -67,3 +67,22 @@ Proof
       first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
   disj2_tac >> metis_tac[]
 QED
+
+(* A checked administrative suffix may change the target and its ghost,
+   but performs no source read and leaves source exceptions untouched. *)
+Theorem for_outcome_zero_suffix_ptr:
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0) Q R /\
+  (!res ee G tn t. Q res ee G tn t ==>
+    ?gf tf u. gas_path_ptr D 0 ctx func PG G tn t 0 gf tf (OK u) /\
+      Q' res ee gf tf u) ==>
+  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0) Q' R
+Proof
+  rewrite_tac[gas_outcome_ptr_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_ptr_at_marked]
+      >- (first_x_assum drule >> strip_tac >>
+          drule_all for_exec_zero_suffix_ptr >> strip_tac >>
+          goal_assum (drule_at Any) >> simp[]) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
