@@ -103,8 +103,19 @@ QED
    a nonempty no-SUB suffix ending non-ASSERT. No contract below is implied
    merely by an opcode observation or by a clean fragment in isolation.
 
-   Reachable non-Pop ASSERT families still lacking whole-helper contracts:
-   A. Conversion, exprLowering 1615-1868:
+   Additional accepted whole-helper contracts (E0114-E0117):
+   - compile_int_clamp: pop_compile_int_clamp_boundary in IntClampBoundary;
+     load_bytestring_as_word: pop_load_bytestring_as_word_boundary in
+     BytesWordBoundary (SAR/SHR only); compile_type_convert:
+     pop_compile_type_convert_boundary in ConversionBoundary (all constructors).
+   - SmallMathBoundary: pop_compile_addmod_boundary,
+     pop_compile_mulmod_boundary, pop_compile_neg_boundary,
+     pop_compile_builtin_abs_boundary, pop_compile_select_boundary.
+     These names refer to bodyPtrPop-prefixed theories. They are unconditional
+     producer contracts, not compiler-wide containment or recursion results.
+
+   Reachable non-Pop ASSERT coverage (remaining gaps explicitly noted):
+   A. Conversion, exprLowering 1615-1868 (local helpers now certified):
       compile_int_clamp (1635; ASSERT 1645/1652) is NOT compile_clamp.
       compile_type_convert branches at 1677/1683/1690,1712/1719,
       1736/1743,1755/1762,1775/1786,1809/1823,1849/1863.
@@ -114,9 +125,10 @@ QED
       be SAR or SHR (not arbitrary). compile_type_builtin_dispatch_body
       Convert -> mk_convert_op -> compile_type_convert, and optional
       compile_bytestring_widen_copy -> context copy. Fixed finite cases,
-      no compiler callback inside compile_type_convert. Missing contracts
-      for int clamp, bytestring preamble and conversion; source validity
-      may eliminate cases but must not be assumed from result typing alone.
+      no compiler callback inside compile_type_convert. Local int clamp,
+      bytestring preamble and conversion contracts are now certified above.
+      Widen-copy and dispatcher integration remain gaps; source validity
+      must not be assumed from result typing alone.
    B. Small builtins reached by supported_builtin_form:
       builtinMath compile_addmod (70, ASSERT72) / compile_mulmod (79,81):
       bare ASSERT input, immediately followed ADDMOD/MULMOD. Need whole
@@ -124,6 +136,8 @@ QED
       exprLowering compile_neg (1886,1890): SGT/ASSERT/SUB [Lit0;v].
       builtinSimple compile_builtin_abs (114,122): SUB then
       SLT/EQ/AND/ISZERO/ASSERT, followed compile_select.
+      These four helpers and select are certified by SmallMathBoundary;
+      the rest of family B below remains unproved.
       builtinMisc compile_as_wei_value_int (222,240): MUL/Div/EQ/ISZERO/
       OR, optional signed AND, ASSERT; supported form requires unsigned
       operand. Decimal helper (246,251) is source-excluded by that form.
