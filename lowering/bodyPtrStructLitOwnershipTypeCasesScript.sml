@@ -2,8 +2,8 @@ Theory bodyPtrStructLitOwnershipTypeCases
 Ancestors bodyPtrStructLitOwnershipConvert bodyPtrStructLitOwnershipBytesPrefix
   bodyPtrStructLitOwnershipScalar bodyPtrStructLitOwnershipInterfaces
   bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
-  loweringShapeDefs loweringShapeRules exprLowering context compileEnv
-  builtinSimple exprCallBounds list pair
+  loweringShapeDefs loweringShapeRules loweringShapeProps exprLowering context compileEnv
+  builtinSimple exprCallBounds compilerFirstEmission list pair
 
 Theorem compile_builtin_empty_complex_alloc_run:
   !nbytes bs st v st'.
@@ -72,3 +72,72 @@ Proof
     drule compile_bytestring_widen_copy_alloc_run] >> simp[]
 QED
 
+
+Theorem alloc_run_type_builtin_extract32:
+  (!e t. MEM e args ==>
+    shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+      (cfn ce t e) (\v s. value_shape_ok s v) /\
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+      (cfn ce t e) (\v s. T)) /\
+  2 <= LENGTH args ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_type_builtin_dispatch_body cfn ce vt ty Extract32 rt args) (\v s. T)
+Proof
+  strip_tac >>
+  GEN_REWRITE_TAC (RATOR_CONV o RAND_CONV) empty_rewrites [GSYM ETA_AX] >>
+  simp[compile_type_builtin_dispatch_body_def, GSYM comp_bind_def] >>
+  simp[SF ETA_ss] >> irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_lower_value_frame >>
+      qexistsl [`internal`, `\s. T`] >> simp[shape_stable_def] >>
+      first_x_assum irule >> Cases_on `args` >> gvs[]) >>
+  gen_tac >> simp[Once state_pair_let_bind, SF ETA_ss] >>
+  irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_bytestring_src_frame >>
+      qexists `\s. cenv_shape_ok s ce` >> simp[cenv_shape_ok_stable]) >>
+  qx_gen_tac `lds` >> PairCases_on `lds` >> simp[] >>
+  irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_lower_value_frame >>
+      qexistsl [`internal`, `\s. T`] >> simp[shape_stable_def] >>
+      first_x_assum irule >> simp[MEM_EL] >> qexists `1` >> simp[]) >>
+  gen_tac >> simp[] >> irule alloc_run_conseq >>
+  qexistsl [`fresh_outputs`, `\v s. fresh_outputs s`] >>
+  simp[shape_state_def, shape_base_fresh_outputs] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac >- simp[alloc_run_compile_extract32_load] >>
+  gen_tac >> simp[alloc_run_def, oneline as_stack_val_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  mp_tac (Q.INST [`val_op` |-> `v`, `ty` |-> `rt`]
+    alloc_run_compile_clamp_basetype) >> simp[alloc_run_def] >>
+  disch_then drule >> simp[]
+QED
+
+Theorem alloc_run_type_builtin_nonabi:
+  (tb = Empty \/ tb = MaxValue \/ tb = MinValue \/ tb = Epsilon \/
+   tb = Convert \/ tb = Extract32) /\
+  type_builtin_arity tb <= LENGTH args /\
+  (!e t. MEM e args ==>
+    shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+      (cfn ce t e) (\v s. value_shape_ok s v) /\
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+      (cfn ce t e) (\v s. T)) ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_type_builtin_dispatch_body cfn ce vt ty tb rt args) (\v s. T)
+Proof
+  strip_tac >> gvs[]
+  >- (irule alloc_run_type_builtin_constants >> simp[])
+  >- (irule alloc_run_type_builtin_constants >> simp[])
+  >- (irule alloc_run_type_builtin_constants >> simp[])
+  >- (irule alloc_run_type_builtin_constants >> simp[])
+  >- (irule alloc_run_type_builtin_convert >>
+      `MEM (HD args) args` by (Cases_on `args` >> gvs[type_builtin_arity_def]) >>
+      first_x_assum (qspecl_then [`HD args`, `expr_type (HD args)`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  irule alloc_run_type_builtin_extract32 >> simp[] >>
+  gvs[type_builtin_arity_def] >> qexists `internal` >> simp[]
+QED
