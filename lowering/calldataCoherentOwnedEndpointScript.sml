@@ -3,7 +3,8 @@ Theory calldataCoherentOwnedEndpoint
 Ancestors
   calldataSourceMemberFold calldataFiniteEndpoints calldataOwnedLoopClosure
   decoderEndpointComposition calldataArrayCompileBoundary abiDecoderCoherence
-  calldataMemberResourceFrame allocaFrontierBound exprLowering
+  calldataMemberResourceFrame allocaFrontierBound exprLowering abiDecoderValidArrayEntry
+  vyperABI abiDecoderOffset abiDecoderEmpty abiDecoderGuard
   valueEncoding list rich_list arithmetic abiDecoderValidFixed abiDecoderMemberInfos
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderMembers abiEncoder compileEnv
   valueEncodingTyping valueEncodingProps abiStaticDynarrayLayout vyperTyping abiDecoderFixedMemory abiDecoderValidContract abiDecoderTypedContract
@@ -270,3 +271,74 @@ Resume calldata_fixed_child_contract[value]:
   asm_simp_tac bool_ss []
 QED
 Finalise calldata_fixed_child_contract
+
+(* Instantiate the recursive child once at the actual loop setup endpoint. *)
+Theorem calldata_array_child_success[local]:
+  calldata_member_child_contract ce env sf ctx fn site limit_st ty tv /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
+  fn_has_code ready last fn /\
+  (ready.cs_blocks = last.cs_blocks \/
+    !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  last.cs_next_var <= limit_st.cs_next_var /\
+  (oid < ready.cs_next_id \/ last.cs_next_id <= oid) /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  base_addr <= d+32+j*type_memory_size tv /\
+  d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+  d+32+j*type_memory_size tv+type_memory_size tv < dimword (:256) /\
+  abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
+    (Lit 0w) sb d b reserve_cap next limit_st head entry /\
+  alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
+  calldata_member_own fn ready.cs_next_id last.cs_next_id entry /\
+  FLOOKUP entry.vs_allocas oid = SOME (base_addr,cap) /\
+  ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
+  entry.vs_inst_idx = LENGTH ready.cs_current_insts ==>
+  ?child scratch.
+    calldata_member_success ctx fn site limit_st ready last
+      (d+32+j*type_memory_size tv) (type_memory_size tv) tv (EL j vs)
+      entry child scratch
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `abi_decoder_valid_array_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (pure_ss ++ boolSimps.LET_ss)
+      [abi_decoder_valid_array_entry_def]) >>
+  qpat_assum `type_memory_bytes ce ty = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  drule_all calldata_member_child_contract_apply >> simp[]
+QED
+
+Theorem calldata_zero_array_translation[local]:
+  vyper_to_abi_type env ty = Array (SOME 0) aty ==>
+  ?elem. ty = ArrayT elem (Fixed 0)
+Proof
+  Cases_on `ty` >> simp[Once vyper_to_abi_type_def]
+  >- (Cases_on `b` >> simp[vyper_base_to_abi_type_def] >>
+      rename1 `BytesT bound` >> Cases_on `bound` >> simp[vyper_base_to_abi_type_def])
+  >- (rename1 `ArrayT elem bound` >> Cases_on `bound` >> simp[])
+  >> Cases_on `FLOOKUP env p` >> simp[] >> Cases_on `x` >> simp[]
+QED
+
+Theorem calldata_dynamic_array_child_admissible[local]:
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    di av (ArrayV (DynArrayV vs)) /\
+  is_abi_dynamic ce.ce_struct_fields ty /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) ready = ((),st1) ==>
+  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) \/
+  (type_to_abi_dec_info sf ce ty = DecComplex T [] /\ ready = st1 /\
+   EVERY (value_has_type tv) vs)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem` >> simp[] >>
+  gvs[] >> drule calldata_zero_array_translation >> strip_tac >>
+  gvs[is_abi_dynamic_def] >>
+  rename1 `is_abi_dynamic ce.ce_struct_fields ety` >>
+  `type_to_abi_dec_info sf ce (ArrayT ety (Fixed 0)) = DecComplex T []` by
+    simp[abi_decoder_empty_dynamic_translation] >>
+  `ready = st1` by
+    gvs[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def,
+      abi_decode_le_guard_def, comp_return_def] >>
+  fs[abi_decoder_metadata_def, value_has_type_def, all_have_type_EVERY]
+QED

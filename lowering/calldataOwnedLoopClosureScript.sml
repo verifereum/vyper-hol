@@ -193,7 +193,9 @@ Theorem calldata_owned_loop_from_header:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
     (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
-  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  ((!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) \/
+   (type_to_abi_dec_info sf ce ty = DecComplex T [] /\ ready = st1 /\
+    EVERY (value_has_type tv) vs)) /\
   EVERY (val_wf tv) vs /\ LENGTH vs < dimword (:256) /\ p < dimword (:256) /\
   d+(32+maxn*type_memory_size tv) < dimword (:256) /\
   (d+(32+maxn*type_memory_size tv) <= p \/ p+32 <= d) /\

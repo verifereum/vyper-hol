@@ -1,7 +1,7 @@
 (* Actual source-valid setup endpoints for owned array iteration. *)
 Theory calldataOwnedSuccessorEndpoint
 Ancestors
-  calldataStaticSetupEndpoint abiDecoderExecution abiDecoderLoopRegisters abiEncoderChildSuffix valueEncodingProofs successfulSequenceEndpoint calldataValidOwnedChild calldataValidOwnedStep
+  abiDecoderFrame abiEncoder calldataEmptyArrayChild calldataStaticSetupEndpoint abiDecoderExecution abiDecoderLoopRegisters abiEncoderChildSuffix valueEncodingProofs successfulSequenceEndpoint calldataValidOwnedChild calldataValidOwnedStep
   calldataDynOwned calldataDynStep abiDecoderArraySetupInputs instIdxIndep
   abiDecoderValidArrayEntry abiDecoderContract abiDecoderCoherence abiDecoderDynamic
   abiDecoderOffset abiDecoderReentry abiDecoderTypedContract abiValidMember
@@ -646,7 +646,9 @@ Theorem calldata_owned_header_successor_endpoint:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
     (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
-  (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  ((!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) \/
+   (type_to_abi_dec_info sf ce ty = DecComplex T [] /\ ready = st1 /\
+    EVERY (value_has_type tv) vs)) /\
   EVERY (val_wf tv) vs /\ j < LENGTH vs /\ LENGTH vs < dimword (:256) /\
   p < dimword (:256) /\ p+32 <= u.vs_alloca_next /\
   d+(32+maxn*type_memory_size tv) < dimword (:256) /\
@@ -720,6 +722,44 @@ Proof
   qpat_assum `lookup_block hdr fn.fn_blocks = SOME _` mp_tac >>
   qpat_assum `u.vs_current_bb = hdr` (fn th => rewrite_tac [GSYM th]) >>
   disch_tac >>
+  suspend "boundary"
+QED
+Resume calldata_owned_header_successor_endpoint[boundary]:
+  `?entry child new.
+    entry.vs_memory = u.vs_memory /\ entry.vs_call_ctx = u.vs_call_ctx /\
+    entry.vs_data_section = u.vs_data_section /\ entry.vs_allocas = u.vs_allocas /\
+    entry.vs_alloca_next = u.vs_alloca_next /\
+    (!op. abi_decoder_operand_live next op ==> eval_operand op entry = eval_operand op u) /\
+    eval_operand (FST ops) entry = SOME (n2w j) /\
+    ~child.vs_halted /\ child.vs_current_bb = st1.cs_current_bb /\
+    child.vs_inst_idx = LENGTH st1.cs_current_insts /\
+    val_wf tv (EL j vs) /\
+    val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) child.vs_memory /\
+    fresh_vars_wrt limit_st child /\
+    child.vs_call_ctx = entry.vs_call_ctx /\ child.vs_data_section = entry.vs_data_section /\
+    alloca_inv child /\ alloca_frontier_inv ctx fn site child /\
+    Own ready.cs_next_id st1.cs_next_id child /\
+    entry.vs_alloca_next <= child.vs_alloca_next /\
+    (!id q k. FLOOKUP entry.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP child.vs_allocas id = SOME (q,k)) /\
+    (!id. id < ready.cs_next_id \/ st1.cs_next_id <= id ==>
+      FLOOKUP child.vs_allocas id = FLOOKUP entry.vs_allocas id) /\
+    (!op. abi_decoder_operand_live ready.cs_next_var op ==>
+      eval_operand op child = eval_operand op entry) /\
+    abi_decode_footprint_frame
+      ((d+32+j*type_memory_size tv,type_memory_size tv)::new) entry child /\
+    (!q k. MEM (q,k) new ==> ?id. ready.cs_next_id <= id /\ id < st1.cs_next_id /\
+      FLOOKUP child.vs_allocas id = SOME (q,k)) /\
+    Safe u entry /\ Pull u entry /\ Safe entry child /\ Pull entry child` by
+    suspend "selection" >>
+  suspend "covered_backedge"
+QED
+Resume calldata_owned_header_successor_endpoint[selection]:
+  Cases_on `!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem`
+  >- suspend "ordinary" >>
+  suspend "empty"
+QED
+Resume calldata_owned_header_successor_endpoint[ordinary]:
   drule_all calldata_valid_header_child_endpoint >>
   disch_then (qspec_then `ctx` (qx_choose_then `head` (qx_choose_then `entry`
     (map_every assume_tac o CONJUNCTS)))) >>
@@ -748,16 +788,104 @@ Resume calldata_owned_header_successor_endpoint[child_input]:
   (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >>
   disch_then (qx_choose_then `child` (qx_choose_then `new`
     (map_every assume_tac o CONJUNCTS))) >>
-  suspend "backedge"
-QED
-Resume calldata_owned_header_successor_endpoint[backedge]:
   `eval_operand (FST ops) entry = SOME (n2w j)` by
     (qpat_assum `abi_decoder_valid_array_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [abi_decoder_valid_array_entry_def, LET_THM] >>
      strip_tac >> asm_rewrite_tac[]) >>
+  `Safe u entry /\ Pull u entry` by
+    (qpat_assum `!fuel r. run_from fuel ctx fn entry = r /\ _ ==> _` mp_tac >>
+     qpat_assum `(!fuel. mem_safe_run fuel ctx fn entry) ==> _` mp_tac >>
+     qpat_assum `Abbrev (Safe = _)` mp_tac >>
+     qpat_assum `Abbrev (Pull = _)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[markerTheory.Abbrev_def]) >>
+  qexistsl_tac [`entry`, `child`, `new`] >> asm_rewrite_tac[]
+QED
+Resume calldata_owned_header_successor_endpoint[empty]:
+  `type_to_abi_dec_info sf ce ty = DecComplex T [] /\ ready = st1 /\
+   EVERY (value_has_type tv) vs` by metis_tac[] >>
+  drule_all calldata_valid_header_prepare_pullback >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `abi_decoder_coherent ce env sf ty tv` by fs[abi_decoder_coherent_array_iff] >>
+  `value_has_type tv (EL j vs)` by fs[EVERY_EL] >>
+  drule_all calldata_empty_dynamic_child_value >> strip_tac >>
+  `~dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` by
+    simp[dec_info_needs_offset_def] >>
+  `abi_decoder_operand_live st0.cs_next_var src /\
+   abi_decoder_operand_live st0.cs_next_var dst` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `eval_operand src head = SOME (n2w sb) /\
+   eval_operand dst head = SOME (n2w d)` by fs[abi_decoder_ranges_def] >>
+  `FLOOKUP head.vs_allocas iid = SOME (p,32) /\ alloca_inv head` by
+    (asm_rewrite_tac[] >> metis_tac[cj 1 calldata_alloca_invariants_fields]) >>
+  `head.vs_current_bb = st0.cs_current_bb /\
+   head.vs_inst_idx = LENGTH st0.cs_current_insts` by simp[] >>
+  drule_all calldata_offset_free_array_setup_endpoint >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `entry.vs_current_bb = ready.cs_current_bb` >>
+  suspend "empty_fields"
+QED
+Resume calldata_owned_header_successor_endpoint[empty_fields]:
+  asm_x "child" kall_tac >>
+  `entry.vs_memory = u.vs_memory /\ entry.vs_allocas = u.vs_allocas /\
+   entry.vs_alloca_next = u.vs_alloca_next /\
+   entry.vs_call_ctx = u.vs_call_ctx /\ entry.vs_data_section = u.vs_data_section` by
+    asm_rewrite_tac[] >>
+  `alloca_inv entry /\ alloca_frontier_inv ctx fn site entry` by
+    (mp_tac (Q.INST [`s` |-> `u`, `t` |-> `entry`]
+       (SPEC_ALL calldata_alloca_invariants_fields)) >> asm_rewrite_tac[]) >>
+  `!op. abi_decoder_operand_live next op ==>
+    eval_operand op entry = eval_operand op u` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `Safe u entry /\ Pull u entry` by suspend "empty_transfers" >>
+  `?child. child = entry` by simp[] >> rename1 `child = entry` >>
+  `?new. new = ([]:(num#num) list)` by simp[] >> rename1 `new = []` >>
+  `~child.vs_halted /\ child.vs_current_bb = st1.cs_current_bb /\
+   child.vs_inst_idx = LENGTH st1.cs_current_insts /\
+   val_wf tv (EL j vs) /\
+   val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) child.vs_memory /\
+   fresh_vars_wrt limit_st child /\
+   child.vs_call_ctx = entry.vs_call_ctx /\ child.vs_data_section = entry.vs_data_section /\
+   alloca_inv child /\ alloca_frontier_inv ctx fn site child /\
+   Own ready.cs_next_id st1.cs_next_id child /\
+   entry.vs_alloca_next <= child.vs_alloca_next /\
+   (!id q k. FLOOKUP entry.vs_allocas id = SOME (q,k) ==>
+     FLOOKUP child.vs_allocas id = SOME (q,k)) /\
+   (!id. id < ready.cs_next_id \/ st1.cs_next_id <= id ==>
+     FLOOKUP child.vs_allocas id = FLOOKUP entry.vs_allocas id) /\
+   (!op. abi_decoder_operand_live ready.cs_next_var op ==>
+     eval_operand op child = eval_operand op entry) /\
+   abi_decode_footprint_frame
+     ((d+32+j*type_memory_size tv,type_memory_size tv)::new) entry child /\
+   (!q k. MEM (q,k) new ==> ?id. ready.cs_next_id <= id /\ id < st1.cs_next_id /\
+     FLOOKUP child.vs_allocas id = SOME (q,k)) /\ Safe entry child /\ Pull entry child` by
+    (simp[Abbr `Own`, Abbr `Safe`, Abbr `Pull`,
+      abi_decode_footprint_frame_refl] >>
+     conj_tac >- (rpt gen_tac >> strip_tac >> fs[]) >>
+     gen_tac >> strip_tac >> qexists_tac `fuel` >> simp[]) >>
+  qpat_x_assum `child = entry` kall_tac >>
+  qpat_x_assum `new = []` kall_tac >>
+  qexistsl_tac [`entry`, `child`, `new`] >> asm_rewrite_tac[]
+QED
+Resume calldata_owned_header_successor_endpoint[empty_transfers]:
+  simp_tac bool_ss [Abbr `Safe`, Abbr `Pull`] >> conj_tac
+  >- (qpat_assum `!fuel r. run_from fuel ctx fn entry = r /\ _ ==> _` mp_tac >>
+      qpat_assum `!fuel r. run_from fuel ctx fn head = r /\ _ ==> _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> ntac 2 strip_tac >> rpt strip_tac >>
+      qpat_x_assum `!fuel r. run_from fuel ctx fn entry = r /\ _ ==> _`
+        (qspecl_then [`fuel`, `run_from fuel ctx fn entry`] mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac >>
+      qpat_x_assum `!fuel r. run_from fuel ctx fn head = r /\ _ ==> _` drule >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  qpat_assum `(!fuel. mem_safe_run fuel ctx fn entry) ==> _` mp_tac >>
+  qpat_assum `(!fuel. mem_safe_run fuel ctx fn head) ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+Resume calldata_owned_header_successor_endpoint[covered_backedge]:
+  asm_x "child" kall_tac >>
+  rename1 `~child.vs_halted` >>
   `!op. abi_decoder_operand_live next op ==>
     eval_operand op child = eval_operand op u` by
-    (qpat_assum `!op. abi_decoder_operand_live next op ==> eval_operand op entry = _` mp_tac >>
+    (qpat_assum `!op. abi_decoder_operand_live next op ==> eval_operand op _ = eval_operand op u` mp_tac >>
      qpat_assum `!op. abi_decoder_operand_live ready.cs_next_var op ==> eval_operand op child = _` mp_tac >>
      qpat_assum `!op. abi_decoder_operand_live next op ==> abi_decoder_operand_live ready.cs_next_var op` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
@@ -796,12 +924,6 @@ Resume calldata_owned_header_successor_endpoint[edges]:
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `Safe child v` by suspend "back_safe" >>
   `Pull child v` by suspend "back_pull" >>
-  `Safe u entry /\ Pull u entry` by
-    (qpat_assum `!fuel r. run_from fuel ctx fn entry = r /\ _ ==> _` mp_tac >>
-     qpat_assum `(!fuel. mem_safe_run fuel ctx fn entry) ==> _` mp_tac >>
-     qpat_assum `Abbrev (Safe = _)` mp_tac >>
-     qpat_assum `Abbrev (Pull = _)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> simp[markerTheory.Abbrev_def]) >>
   suspend "assemble"
 QED
 Resume calldata_owned_header_successor_endpoint[back_safe]:
