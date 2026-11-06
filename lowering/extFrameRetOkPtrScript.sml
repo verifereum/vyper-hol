@@ -29,7 +29,7 @@ Ancestors
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
   extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr extRetRawFramePtr
-  extRetSignatureFramePtr extRetLoweredBytesFramePtr
+  extRetSignatureFramePtr extRetLoweredBytesFramePtr extRetSingletonFramePtr returnMetadataPtr
 
 val _ = Parse.hide "body";
 
@@ -100,5 +100,44 @@ Proof
       goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >>
       metis_tac[]) >>
+  drule_all external_frame_runtime_flags >> strip_tac >>
+  Cases_on `?n. ret = BaseT (BytesT (Dynamic n))`
+  >- (gvs[] >>
+      drule_all source_external_return_contract >> strip_tac >>
+      drule source_typing_distinct_type_keys >> strip_tac >>
+      irule external_return_singleton_bytes_frame_stmt_frag_ptr >> simp[] >>
+      conj_tac
+      >- (drule typed_dynamic_bytes_return_source >> strip_tac >>
+          irule typed_lowered_value_bytestring >> simp[] >>
+          qexists_tac `env'` >> simp[] >>
+          rpt strip_tac >> irule external_frame_signature_return_map >>
+          goal_assum (drule_at Any) >>
+          goal_assum (drule_at Any) >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `?n. ret = BaseT (StringT n)`
+  >- (gvs[] >>
+      drule_all source_external_return_contract >> strip_tac >>
+      drule source_typing_distinct_type_keys >> strip_tac >>
+      irule external_return_singleton_string_frame_stmt_frag_ptr >> simp[] >>
+      conj_tac
+      >- (drule typed_string_return_source >> strip_tac >>
+          irule typed_lowered_value_bytestring >> simp[is_bytestring_type_def] >>
+          qexists_tac `env'` >> simp[] >>
+          rpt strip_tac >> irule external_frame_signature_return_map >>
+          goal_assum (drule_at Any) >>
+          goal_assum (drule_at Any) >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
   cheat
 QED
