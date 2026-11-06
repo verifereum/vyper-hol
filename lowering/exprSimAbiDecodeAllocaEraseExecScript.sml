@@ -324,3 +324,194 @@ Proof
   eq_tac >> strip_tac >> gvs[] >>
   qexists_tac `x1 with vs_vars := x1.vs_vars |+ (out,x0)` >> simp[]
 QED
+
+Theorem abi_decode_clean_logs_update[simp]:
+  (abi_decode_clean_allocas func s) with vs_logs := logs =
+  abi_decode_clean_allocas func (s with vs_logs := logs)
+Proof
+  simp[abi_decode_clean_allocas_def]
+QED
+
+Theorem abi_decode_clean_jump[simp]:
+  jump_to lbl (abi_decode_clean_allocas func s) =
+  abi_decode_clean_allocas func (jump_to lbl s)
+Proof
+  simp[jump_to_def, abi_decode_clean_allocas_def]
+QED
+
+Theorem abi_decode_clean_fmp_update[simp]:
+  (abi_decode_clean_allocas func s) with vs_fmp := v =
+  abi_decode_clean_allocas func (s with vs_fmp := v)
+Proof
+  simp[abi_decode_clean_allocas_def]
+QED
+
+Theorem abi_decode_clean_dispatch_fields[simp]:
+  (abi_decode_clean_allocas func s).vs_call_ctx = s.vs_call_ctx /\
+  (abi_decode_clean_allocas func s).vs_tx_ctx = s.vs_tx_ctx /\
+  (abi_decode_clean_allocas func s).vs_block_ctx = s.vs_block_ctx /\
+  (abi_decode_clean_allocas func s).vs_accounts = s.vs_accounts /\
+  (abi_decode_clean_allocas func s).vs_code = s.vs_code /\
+  (abi_decode_clean_allocas func s).vs_data_section = s.vs_data_section /\
+  (abi_decode_clean_allocas func s).vs_params = s.vs_params /\
+  (abi_decode_clean_allocas func s).vs_fmp = s.vs_fmp /\
+  (abi_decode_clean_allocas func s).vs_initial_fmp = s.vs_initial_fmp /\
+  (abi_decode_clean_allocas func s).vs_return_pc_token = s.vs_return_pc_token /\
+  (abi_decode_clean_allocas func s).vs_logs = s.vs_logs /\
+  (abi_decode_clean_allocas func s).vs_returndata = s.vs_returndata
+Proof
+  simp[abi_decode_clean_allocas_def]
+QED
+
+Theorem abi_decode_clean_read0_iff:
+  (!s. f (abi_decode_clean_allocas func s) = f s) ==>
+  (exec_read0 f inst (abi_decode_clean_allocas func s) = OK u <=>
+   ?t. exec_read0 f inst s = OK t /\ u = abi_decode_clean_allocas func t)
+Proof
+  metis_tac[abi_decode_clean_exec_read0, abi_decode_clean_exec_read0_reflect]
+QED
+
+Theorem abi_decode_clean_read1_iff:
+  (!v s. f v (abi_decode_clean_allocas func s) = f v s) ==>
+  (exec_read1 f inst (abi_decode_clean_allocas func s) = OK u <=>
+   ?t. exec_read1 f inst s = OK t /\ u = abi_decode_clean_allocas func t)
+Proof
+  metis_tac[abi_decode_clean_exec_read1, abi_decode_clean_exec_read1_reflect]
+QED
+
+Theorem abi_decode_clean_write2_iff:
+  (!a b s. f a b (abi_decode_clean_allocas func s) =
+           abi_decode_clean_allocas func (f a b s)) ==>
+  (exec_write2 f inst (abi_decode_clean_allocas func s) = OK u <=>
+   ?t. exec_write2 f inst s = OK t /\ u = abi_decode_clean_allocas func t)
+Proof
+  metis_tac[abi_decode_clean_exec_write2, abi_decode_clean_exec_write2_reflect]
+QED
+
+(* Successful base-step transport is an image relation, not injectivity. *)
+Theorem abi_decode_clean_step_base_OK:
+  (inst.inst_opcode = ALLOCA ==> inst.inst_id IN abi_decode_alloca_ids func) ==>
+  (step_inst_base inst (abi_decode_clean_allocas func s) = OK u <=>
+   ?t. step_inst_base inst s = OK t /\ u = abi_decode_clean_allocas func t)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode`
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure3, abi_decode_clean_exec_pure3_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure3, abi_decode_clean_exec_pure3_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure1, abi_decode_clean_exec_pure1_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure1, abi_decode_clean_exec_pure1_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect])
+  >- (simp[step_inst_base_opcode_eqs] >> irule abi_decode_clean_read1_iff >> simp[mload_def, abi_decode_clean_allocas_def])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_write2_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_write2_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_mcopy])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- (simp[step_inst_base_opcode_eqs] >> irule abi_decode_clean_read1_iff >> simp[sload_def, contract_storage_def, abi_decode_clean_allocas_def])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_write2_iff] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs] >> irule abi_decode_clean_read1_iff >> simp[tload_def, contract_transient_def, abi_decode_clean_allocas_def])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_write2_iff] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs] >> irule abi_decode_clean_read1_iff >> simp[mload_def, abi_decode_clean_allocas_def])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_istore])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+  >- simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+  >- simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+  >- simp[step_inst_base_opcode_eqs]
+  >- simp[step_inst_base_opcode_eqs]
+  >- simp[step_inst_base_opcode_eqs]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[])
+  >- (fs[] >> simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_exec_alloca, abi_decode_clean_exec_alloca_reflect])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[] )
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_write_memory])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- (simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_gas, abi_decode_clean_exec_gas_reflect])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_write_memory])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_write_memory])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_write_memory])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read0_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_exec_ext_call_iff] >> eq_tac >> strip_tac >> gvs[] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_exec_ext_call_iff] >> eq_tac >> strip_tac >> gvs[] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_exec_delegatecall_iff] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_exec_create_iff] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs(), abi_decode_clean_exec_create_iff] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> eq_tac >> strip_tac >> gvs[] >> metis_tac[])
+  >- simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+  >- simp[step_inst_base_opcode_eqs]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[])
+  >- simp[step_inst_base_opcode_eqs, abi_decode_clean_read1_iff]
+  >- (simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[abi_decode_clean_write_memory])
+  >> simp[step_inst_base_opcode_eqs] >> metis_tac[abi_decode_clean_exec_pure2, abi_decode_clean_exec_pure2_reflect]
+QED
+
+Theorem abi_decode_clean_step_base:
+  (inst.inst_opcode = ALLOCA ==> inst.inst_id IN abi_decode_alloca_ids func) /\
+  step_inst_base inst s = OK t ==>
+  step_inst_base inst (abi_decode_clean_allocas func s) =
+    OK (abi_decode_clean_allocas func t)
+Proof
+  metis_tac[abi_decode_clean_step_base_OK]
+QED
+
+Theorem abi_decode_clean_step_base_reflect:
+  (inst.inst_opcode = ALLOCA ==> inst.inst_id IN abi_decode_alloca_ids func) /\
+  step_inst_base inst (abi_decode_clean_allocas func s) = OK u ==>
+  ?t. step_inst_base inst s = OK t /\ u = abi_decode_clean_allocas func t
+Proof
+  metis_tac[abi_decode_clean_step_base_OK]
+QED
