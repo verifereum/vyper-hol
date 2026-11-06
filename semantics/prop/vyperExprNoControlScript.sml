@@ -800,7 +800,8 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,
-       take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
+       take_call_outcome_def, take_delegate_outcome_def,
+       adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
 QED
