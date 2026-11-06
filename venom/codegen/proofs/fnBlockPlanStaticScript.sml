@@ -609,3 +609,65 @@ Theorem block_plan_state_static:
 Proof
   cheat
 QED
+
+Theorem regional_actual_dfs_phi_upper_cut:
+  lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\ cfg = cfg_analyze fn /\
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+    SOME (fn_ops,ps_end) /\
+  EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+    inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  dfs_block_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs /\ MEM ret_inst bb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  collect_phis bb.bb_instructions <> [] /\ p = LENGTH (collect_phis bb.bb_instructions) /\
+  p <= k /\ k < LENGTH bb.bb_instructions /\
+  block_plan_state lv dfg cfg fn bb ps_dfs k ps ==>
+  ?mid tail_ops. regional_body_lower_inv lv dfg sb bb p mid /\
+    EVERY (\op. ?v. op = Var v /\ MEM v (live_vars_at lv bb.bb_label p)) mid.ps_stack /\
+    generate_block_insts_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb) 0
+      (LENGTH bb.bb_instructions) p (k-p) (DROP p bb.bb_instructions) mid = SOME (tail_ops,ps)
+Proof
+  strip_tac >>
+  `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+    bb.bb_label ps_dfs` by metis_tac[dfs_block_state_lineage_state] >>
+  `regional_selected_phi_inv lv dfg sb bb 0 ps_dfs` by
+    (drule_all regional_lineage_selected_phi_inv >> simp[]) >>
+  `fn_reachable fn bb.bb_label` by
+    (gvs[] >> drule_all dfs_block_state_cfg_reachable >>
+     `wf_function fn` by gvs[codegen_ready_fn_def] >>
+     metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze]) >>
+  `~bb_is_halting bb` by metis_tac[ready_block_ret_not_halting] >>
+  `fn_entry_label fn <> SOME bb.bb_label` by
+    (drule regional_entry_structure >> strip_tac >> strip_tac >> gvs[] >>
+     metis_tac[]) >>
+  drule_all regional_phi_no_params >> strip_tac >>
+  drule_all regional_phi_preparation_identity >>
+  disch_then (qspecl_then [`lv`,`ps_dfs`] strip_assume_tac) >>
+  `EVERY (\op. ?v. op = Var v /\
+    (regional_phi_remaining_source bb 0 v \/ MEM v (live_vars_at lv bb.bb_label 0)))
+      ps_dfs.ps_stack` by
+    (`cfg_path cfg bb.bb_label bb.bb_label` by simp[cfg_path_def] >>
+     `?pred pred_bb. lookup_block pred fn.fn_blocks = SOME pred_bb /\
+       fn_reachable fn pred /\ MEM bb.bb_label (cfg_succs_of cfg pred) /\
+       EVERY (\op. ?v. op = Var v /\ MEM v
+         (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)))
+         ps_dfs.ps_stack` by
+       (irule regional_dfs_nonentry_cleanup_upper >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     drule_all regional_edge_input_upper >> simp[]) >>
+  qpat_x_assum `block_plan_state _ _ _ _ _ _ _ _` mp_tac >>
+  simp[block_plan_state_def] >> strip_tac >> fs[] >>
+  `k = p + (k-p)` by simp[] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  pop_assum SUBST1_TAC >> simp[regional_block_prefix_cut, PULL_EXISTS] >>
+  rpt gen_tac >> strip_tac >> qexistsl [`mid`,`post`] >> simp[] >>
+  gvs[] >> conj_tac
+  >- (irule regional_selected_phi_exit_lower_inv >>
+      irule (INST_TYPE [alpha |-> ``:cfg_analysis``] regional_selected_phi_inv_block_prefix) >> simp[] >>
+      rename1 `regional_selected_phi_inv _ _ _ _ 0 initial` >>
+      qexistsl [`cfg_analyze fn`,`pre`,`initial`] >> simp[]) >>
+  irule (INST_TYPE [alpha |-> ``:cfg_analysis``] regional_selected_phi_upper_complete) >> simp[] >>
+  rename1 `regional_selected_phi_inv _ _ _ _ 0 initial` >>
+  qexistsl [`cfg_analyze fn`,`pre`,`initial`,`sb`] >> simp[]
+QED
