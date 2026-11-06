@@ -6993,6 +6993,63 @@ Proof
   fs[wordsTheory.dimword_def] >> decide_tac
 QED
 
+Theorem place_store_word_representation:
+  type_widens_to (get_tenv cx) sty dty /\ is_word_type dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  expr_val_rel cx sty v src s ==>
+  eval_operand src s = SOME (typed_val_to_w256 dtv v)
+Proof
+  strip_tac >> drule_all compileEnvTheory.type_widens_to_word >> strip_tac >>
+  gvs[expr_val_rel_def]
+QED
+
+Theorem place_store_word_live_copy:
+  is_word_type dty /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type dtv v /\ encode_value dtv v = SOME writes /\
+  i < type_slot_size dtv ==>
+  i < 1 /\
+  EL b (word_to_bytes
+    (lookup_storage (n2w (w2n k+i)) (apply_writes k writes st)) T) =
+  EL b (word_to_bytes (typed_val_to_w256 dtv v) T)
+Proof
+  strip_tac >>
+  drule_all stmtSimAssignStorageTheory.encode_value_word_typed >> strip_tac >>
+  `type_slot_size dtv = 1` by
+    (Cases_on `dty` >>
+     gvs[is_word_type_def, evaluate_type_def, vyperValueTheory.type_slot_size_def,
+         AllCaseEqs()]) >>
+  gvs[] >>
+  `lookup_storage k (apply_writes k [(0,typed_val_to_w256 dtv v)] st) =
+    typed_val_to_w256 dtv v` by
+    (irule place_store_apply_writes_header >> simp[]) >>
+  simp[wordsTheory.n2w_w2n]
+QED
+
+Theorem place_store_bytestring_representation:
+  type_widens_to tenv sty dty /\
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ val_in_memory stv v off mem ==>
+  ?src_cap dst_cap.
+    ((stv = BaseTV (BytesT (Dynamic src_cap)) /\
+      dtv = BaseTV (BytesT (Dynamic dst_cap))) \/
+     (stv = BaseTV (StringT src_cap) /\ dtv = BaseTV (StringT dst_cap))) /\
+    src_cap <= dst_cap /\ val_in_memory dtv v off mem /\
+    (case v of BytesV bs => LENGTH bs <= src_cap
+     | StringV str => LENGTH str <= src_cap | _ => F) /\
+    type_memory_size stv = 32 * (1 + word_size src_cap)
+Proof
+  strip_tac >>
+  Cases_on `sty` >> fs[is_bytestring_type_def] >>
+  rename1 `BaseT bs` >> Cases_on `bs` >> fs[is_bytestring_type_def] >>
+  Cases_on `dty` >> fs[is_bytestring_type_def] >>
+  rename1 `BaseT bd` >> Cases_on `bd` >> fs[is_bytestring_type_def] >>
+  gvs[type_widens_to_def, arg_type_fits_def, evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, valueEncodingTheory.type_memory_size_def,
+      valueEncodingTheory.val_in_memory_def, is_bytestring_type_def]
+QED
+
 Theorem place_store_destination_alloc_bound:
   expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
@@ -7050,7 +7107,8 @@ Theorem place_store_value_storage_run:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
-    type_alloc_ok cenv dty /\
+    (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
+     type_alloc_ok cenv dty) /\
     stmt_state_rel ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
