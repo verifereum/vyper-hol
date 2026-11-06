@@ -1,6 +1,6 @@
 Theory concretizePtrMixedAllocationPrefix
 Ancestors
-  concretizePtrMixedAllocationTransport concretizePtrPairedPrefix
+  concretizePtrMixedAllocationTransport concretizePtrAllocationTransport concretizePtrPairedPrefix
   concretizePtrPairedFields concretizePtrSharedFields venomState
   unitLabelMapIdentity venomExecProofs concretizePtrLedgerAlignment concretizePtrDeletedGaps
   concretizePtrStagePlacements concretizePtrAllocationSize
@@ -8,6 +8,7 @@ Ancestors
   concretizePtrSourceOwnership concretizePtrActivationChronology concretizePtrOpaqueRetpc
   concretizePtrStructuralTranscript concretizePtrChronologicalHistory
   concretizePtrStructuralTrace concretizePtrDeletedGapHistory removeUnusedSsaProofs
+  concretizePtrEventEmbedding codegenRel
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape
   o1PassContract stackPlanGen ptrDiscipline unitMemInv venomWf cfgWf
@@ -334,3 +335,121 @@ Resume ptr_paired_prefix_alloca_success[cursor_order]:
   drule_all ptr_positioned_block_nop_iff >> simp[]
 QED
 Finalise ptr_paired_prefix_alloca_success
+
+Theorem ptr_paired_prefix_alloca_immediate:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode = ALLOCA /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
+  ptr_chrono_step C' at zt ==>
+  ?s' b B TG'.
+    step_inst 0 C a.po_inst a.po_state = OK s' /\
+    b.po_fn = a.po_fn /\ b.po_stack = a.po_stack /\ b.po_params = a.po_params /\
+    b.po_state = (s' with vs_inst_idx := SUC a.po_state.vs_inst_idx) /\
+    ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT TG' saved /\
+    TG' = ptr_tagged_step (HD tokens) PT TG a.po_inst s' /\
+    B = ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births /\
+    (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP B owner = SOME site) /\
+    ptr_mixed_vars B positions TG' b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
+    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry B PT TG' saved entries
+      (H ++ [(tokens,registry,B,PT,TG',saved,entries)]) calls ws
+Proof
+  strip_tac >> drule_all ptr_paired_prefix_alloca_success >>
+  disch_then (qx_choose_then `s'` (qx_choose_then `b`
+    (qx_choose_then `B` (qx_choose_then `TG'` strip_assume_tac)))) >>
+  qexistsl_tac [`s'`,`b`,`B`,`TG'`] >>
+  simp[] >> suspend "certificate"
+QED
+Resume ptr_paired_prefix_alloca_immediate[certificate]:
+  drule_all ptr_paired_prefix_alloca_inputs >> strip_tac >>
+  `zt.po_fn = at.po_fn /\ zt.po_stack = at.po_stack /\
+   zt.po_state.vs_params = at.po_state.vs_params /\
+   s'.vs_params = a.po_state.vs_params` by suspend "fields" >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  gvs[] >>
+  rewrite_tac[ptr_paired_prefix_def] >> rpt conj_tac
+  >- suspend "transcript"
+  >- fs[ptr_paired_prefix_def]
+  >- (irule ptr_paired_samples_pair >>
+      fs[ptr_paired_prefix_def, ptr_paired_sample_def])
+  >- suspend "alignment"
+  >- (irule ptr_paired_callers_retained >>
+      fs[ptr_paired_prefix_def, ptr_paired_samples_def] >> metis_tac[])
+  >> suspend "writes"
+QED
+Resume ptr_paired_prefix_alloca_immediate[fields]:
+  `at.po_inst.inst_opcode = ASSIGN` by
+    simp[concretize_inst_with_positions_def, passSharedDefsTheory.mk_assign_inst_def] >>
+  `zt.po_fn = at.po_fn /\ zt.po_stack = at.po_stack /\
+   zt.po_state.vs_params = at.po_state.vs_params` by
+     (qpat_x_assum `ptr_chrono_step C' at zt` mp_tac >>
+      once_rewrite_tac[ptr_chrono_step_cases] >>
+      simp[ptr_observe_def, ptr_observation_component_equality] >>
+      strip_tac >> gvs[is_terminator_def]
+      >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+          simp[step_inst_non_invoke] >>
+          pure_once_rewrite_tac[step_inst_base_def] >> pure_asm_rewrite_tac[] >>
+          pure_rewrite_tac[venomInstTheory.opcode_case_def] >>
+          simp[AllCaseEqs(), update_var_def] >> strip_tac >> gvs[]) >>
+      qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+      simp[step_inst_non_invoke] >>
+      pure_once_rewrite_tac[step_inst_base_def] >> pure_asm_rewrite_tac[] >>
+      pure_rewrite_tac[venomInstTheory.opcode_case_def] >> simp[AllCaseEqs()]) >>
+  simp[] >>
+  qpat_x_assum `step_inst 0 C a.po_inst a.po_state = OK s'` mp_tac >>
+  qpat_x_assum `a.po_inst.inst_opcode = ALLOCA` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+  simp[step_inst_non_invoke] >>
+  pure_once_rewrite_tac[step_inst_base_def] >> pure_asm_rewrite_tac[] >>
+  pure_rewrite_tac[venomInstTheory.opcode_case_def] >>
+  simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >> gvs[update_var_def]
+QED
+Resume ptr_paired_prefix_alloca_immediate[transcript]:
+  drule (cj 3 ptr_structural_transcript_rules) >>
+  disch_then drule >> disch_then drule >>
+  simp[ptr_activation_tokens_def, ptr_activation_registry_def,
+       concretize_positions_inst_id]
+QED
+Resume ptr_paired_prefix_alloca_immediate[alignment]:
+  `ptr_paired_params positions b zt
+    (tokens,registry,ptr_birth_overlay (HD tokens) s'.vs_allocas births,PT,
+     ptr_tagged_step (HD tokens) PT TG (LAST h).po_inst s',saved,entries)` by
+    (qpat_x_assum `ptr_paired_params _ _ _ _` mp_tac >>
+     simp[ptr_paired_params_def] >> strip_tac
+     >- simp[] >>
+     disj2_tac >> irule ptr_args_transport_birth_extension >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  irule ptr_paired_alignment_pair >> fs[ptr_paired_prefix_def]
+QED
+Resume ptr_paired_prefix_alloca_immediate[writes]:
+  `EVERY (\n. SUC n < LENGTH h) done` by
+    (qpat_x_assum `ptr_event_embedding _ _ _` mp_tac >>
+     simp[ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
+     gen_tac >> strip_tac >>
+     qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
+     simp[EL_APPEND_EQN] >> decide_tac) >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM listTheory.APPEND_NIL))) >>
+  irule ptr_paired_writes_pair >>
+  simp[step_writes_def, source_memory_write_ranges_def, fixed_source_write_range_def,
+       range_bytes_def] >> fs[ptr_paired_prefix_def, ptr_paired_samples_def]
+QED
+Finalise ptr_paired_prefix_alloca_immediate
