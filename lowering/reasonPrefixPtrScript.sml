@@ -115,7 +115,10 @@ Theorem reason_encoder_prefix_path_ptr:
     (!p. op = Var p ==> not_fresh_at cc p) /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
       val_in_memory tv v (w2n ow) mem) ==>
-    ?t out x out2 b2 G4 tn4.
+    ?t out x out2 b2 G4 tn4 b.
+      eval_operand buf.buf_operand t = SOME (n2w b) /\
+      eval_operand payload t = SOME (n2w b + 32w) /\
+      b + n < dimword (:256) /\
       buf.buf_operand = Var out /\ payload = Var x /\
       tuple.buf_operand = Var out2 /\
       gas_path_ptr D 0 ctx func PG G tn s 0 G4 tn4 (OK t) /\
@@ -149,10 +152,14 @@ Proof
     (qpat_x_assum `run_inst_seq (emitted_insts c2 c3) _ = _` mp_tac >>
      simp[run_inst_seq_def, AllCaseEqs()]) >>
   qexistsl_tac [`z with vs_inst_idx := LENGTH c4.cs_current_insts`,
-    `out`, `x`, `out2`, `b2`, `G3`, `tn4`] >>
+    `out`, `x`, `out2`, `b2`, `G3`, `tn4`, `b`] >>
+  conj_tac >- (qpat_x_assum `eval_operand buf.buf_operand z = _` mp_tac >>
+               simp[eval_operand_def, lookup_var_def]) >>
+  conj_tac >- (qpat_x_assum `eval_operand payload z = _` mp_tac >>
+               simp[eval_operand_def, lookup_var_def]) >>
   asm_rewrite_tac[] >> rpt conj_tac
-  >- suspend "path"
-  >- suspend "block" >>
+  >~ [`gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`] >- suspend "path"
+  >~ [`_.vs_current_bb = _`] >- suspend "block" >>
   gs[fresh_vars_wrt_def]
 QED
 

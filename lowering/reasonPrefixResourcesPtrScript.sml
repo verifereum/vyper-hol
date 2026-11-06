@@ -646,6 +646,9 @@ Theorem reason_encoder_prefix_post:
       r = update_var x (n2w b + 32w) u /\
       run_inst_seq (emitted_insts c2 c3) u = OK r /\
       tuple.buf_operand = Var out2 /\
+      eval_operand buf.buf_operand z = SOME (n2w b) /\
+      eval_operand payload z = SOME (n2w b + 32w) /\
+      b + n < dimword (:256) /\
       step_inst_base (mk_inst c3.cs_next_id ALLOCA [Lit (n2w m)] [out2]) r = OK z /\
       eval_operand tuple.buf_operand z = SOME (n2w b2) /\
       FLOOKUP z.vs_allocas c3.cs_next_id = SOME (b2,m) /\
@@ -709,6 +712,8 @@ Resume reason_encoder_prefix_post[allocate]:
    ptr_covers G1' tn1' x t'' (n - 32) /\
    (!p k. not_fresh_at cc p /\ ptr_covers G tn p s k ==>
      ptr_covers G1' tn1' p t'' k)` by metis_tac[] >>
+  `eval_operand (Var out) t'' = SOME (n2w b) /\
+   eval_operand (Var x) t'' = SOME (n2w b + 32w)` by suspend "addresses" >>
   qexistsl_tac [`t''`, `out'`, `b'`, `G2`, `tn3`, `G1'`, `tn1'`] >>
   pure_asm_rewrite_tac[] >>
   qpat_x_assum `t' = update_var _ _ _` SUBST_ALL_TAC >>
@@ -750,6 +755,30 @@ Resume reason_encoder_prefix_post[oldptr]:
   `ptr_covers G1 tn2 p u k` by metis_tac[] >>
   simp[Abbr `G2`, Abbr `tn3`] >>
   qpat_x_assum `!PG G tn. _` (qspecl_then [`PG`, `G1`, `tn2`] mp_tac) >>
+  simp[]
+QED
+
+Resume reason_encoder_prefix_post[addresses]:
+  `out <> x` by metis_tac[] >>
+  `eval_operand (Var out) t' = SOME (n2w b)` by
+    (qpat_x_assum `t' = update_var _ _ _` SUBST1_TAC >>
+     simp[eval_operand_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     qpat_x_assum `eval_operand buf.buf_operand u = _` mp_tac >>
+     simp[eval_operand_def, lookup_var_def]) >>
+  `eval_operand (Var x) t' = SOME (n2w b + 32w)` by metis_tac[] >>
+  qpat_assum `compile_alloc_buffer m c3 = _`
+    (mp_then Any strip_assume_tac compile_alloc_buffer_parts) >>
+  `out' = STRING #"%" (toString c3.cs_next_var)` by gvs[] >>
+  `lookup_var out' t' = NONE` by
+    (qpat_x_assum `fresh_vars_wrt c3 t'` mp_tac >>
+     simp[fresh_vars_wrt_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+     disch_then (qspec_then `c3.cs_next_var` mp_tac) >> simp[]) >>
+  `out <> out' /\ x <> out'` by metis_tac[eval_operand_def, optionTheory.NOT_SOME_NONE] >>
+  `!operand. (!p. operand = Var p ==> p <> out') ==>
+     eval_operand operand t'' = eval_operand operand t'` by
+    (rpt strip_tac >> irule alloca_step_operand_preserved >>
+     qexistsl_tac [`c3.cs_next_id`, `m`, `out'`] >> gvs[]) >>
   simp[]
 QED
 
