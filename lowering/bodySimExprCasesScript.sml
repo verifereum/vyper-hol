@@ -105,8 +105,28 @@ Proof
   irule compile_struct_lit_case >> simp[] >> metis_tac[body_exprs_ok_case]
 QED
 
+(* A subscript whose base value the lowering lays out differently from the
+   base's type: an internal call whose callee's return type the call's type
+   widens.  compile_subscript reads the base at offsets taken from the base's
+   type (place_type), so for a tuple base this reads the wrong field until the
+   subscript readers use the lowered layout. *)
+Theorem body_subscript_widened_call_base:
+  !cx v8 e1 e2.
+    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
+    body_expr_ok cx e1 ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
+      post_value_type cenv e1 <> expr_type e1 ==>
+      expr_sim ctx func cenv cx ty (Subscript v8 e1 e2) es /\
+      expr_vv_sim ctx func cenv cx ty (Subscript v8 e1 e2) es
+Proof
+  cheat
+QED
+
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
-   cheated there for compile_expr_sim too. *)
+   cheated there for compile_expr_sim too; a widened internal-call base is
+   body_subscript_widened_call_base. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
@@ -114,6 +134,9 @@ Theorem body_subscript_case:
     body_expr_ok cx (Subscript v8 e1 e2)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
+  >- (rw[expr_sim_case_def, expr_vv_case_def] >>
+      metis_tac[body_subscript_widened_call_base]) >>
   `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
     (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
      >- metis_tac[body_expr_ok_case]

@@ -1197,7 +1197,10 @@ Proof
        vyperASTTheory.expr_type_def, is_bytestring_type_def,
        vyperTypeSystemTheory.well_typed_expr_def,
        vyperTypeSystemTheory.type_builtin_result_ok_def] >>
-  rpt strip_tac >> gvs[is_bytestring_type_def, compile_store_memory_def]
+  rpt strip_tac >> gvs[is_bytestring_type_def, compile_store_memory_def] >>
+  gvs[vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+  rpt (qpat_x_assum `(_ = BaseT _ /\ _) \/ _` strip_assume_tac) >>
+  gvs[is_bytestring_type_def]
 QED
 
 Theorem aggregate_store_body_rebased_slice_sim:
