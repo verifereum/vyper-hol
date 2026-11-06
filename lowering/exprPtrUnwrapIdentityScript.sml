@@ -1,7 +1,7 @@
 (* No-instruction forcing boundaries. *)
 Theory exprPtrUnwrapIdentity
 Ancestors
-  bodyPtrDefs gasSummaryComposePtr exprSimUnwrap exprSimMemorySource
+  bodyPtrDefs gasSummaryComposePtr exprSimUnwrap exprSimUnwrapProps exprSimMemorySource valueCopyBytes
   exprLowering emitHelper compileEnv vyperState fragGasPathPtr gasSummary loweringPosts
 
 Theorem unwrap_stack_marked_read_ptr:
@@ -31,7 +31,7 @@ Proof
   >- (simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
       conj_tac >- metis_tac[read_result_gas_obs] >>
       irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
-  gvs[vv_post_def, vv_holds_def, vv_at_def, expr_post_def] >>
+  gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, expr_post_def] >>
   first_assum ACCEPT_TAC
 QED
 
@@ -58,15 +58,15 @@ Theorem unwrap_memory_marked_read_ptr:
 Proof
   strip_tac >>
   gvs[unwrap_value_def, comp_return_def, ptr_vv_ok_def] >>
-  qexistsl [`v`, `G`, `tn`, `s`] >> simp[] >>
-  conj_tac
-  >- (simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
-      conj_tac >- metis_tac[read_result_gas_obs] >>
-      irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
-  gvs[vv_post_def, vv_holds_def, vv_at_def, expr_post_def,
-      ptr_val_ok_def] >>
-  conj_tac
-  >- (simp[expr_val_rel_def] >> metis_tac[]) >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  simp[expr_val_at_def] >> metis_tac[]
+  `~is_word_type (expr_type e)` by
+    (strip_tac >>
+     `post_value_type cenv e = expr_type e` by simp[] >>
+     fs[vv_post_def, vv_holds_def] >> metis_tac[is_bytestring_word_type]) >>
+  `expr_post ctx func cenv cx e es sa sb s0 ee v p.ptr_operand s` by
+    (irule expr_post_of_vv_post_memory >> simp[] >> qexists `t` >>
+     simp[] >> metis_tac[vv_post_read_result]) >>
+  qexistsl [`v`, `G`, `tn`, `s`] >> simp[ptr_val_ok_def] >>
+  simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
+  conj_tac >- metis_tac[read_result_gas_obs] >>
+  irule (cj 1 gas_path_ptr_rules) >> simp[]
 QED
