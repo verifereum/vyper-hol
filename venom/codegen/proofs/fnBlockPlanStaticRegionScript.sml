@@ -1178,3 +1178,81 @@ Proof
    qpat_x_assum `!op v. _ ==> ~MEM v future_outputs` irule >>
    qexists_tac `op` >> simp[]))
 QED
+
+(* Lower ownership and freshness at an indexed PHI boundary.  This does not
+   assert physical upper support, nor distinctness of the whole stack. *)
+Definition regional_selected_phi_inv_def:
+  regional_selected_phi_inv lv dfg sb bb i ps <=>
+    generated_plan_state_wf_marked sb ps /\
+    (!phi. MEM phi (DROP i (collect_phis bb.bb_instructions)) ==>
+      ?src. MEM (Var src) phi.inst_operands /\ MEM (Var src) ps.ps_stack /\
+        (!v. MEM (Var v) phi.inst_operands /\
+          (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src)) /\
+    (!v. MEM v (live_vars_at lv bb.bb_label i) /\
+      ~MEM (Var v) (FLAT (MAP (\phi. phi.inst_operands)
+        (DROP i (collect_phis bb.bb_instructions)))) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+      ~MEM op (FLAT (MAP (\phi. phi.inst_operands)
+        (DROP i (collect_phis bb.bb_instructions)))) /\
+      (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+      ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) (DROP i bb.bb_instructions))))
+End
+
+Theorem regional_lineage_selected_phi_inv:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps ==>
+    regional_selected_phi_inv lv dfg sb bb 0 ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_static >> strip_tac >>
+  pure_rewrite_tac[regional_selected_phi_inv_def, DROP_0] >>
+  conj_tac >- simp[] >>
+  conj_tac >-
+    (rpt strip_tac >> drule_all regional_lineage_phi_depth >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem regional_lineage_phi_output_absent:
+  !lv dfg cfg ch growth sb ctr fn fn_ops ps_end bb ps phi out.
+    lv = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn sb ctr =
+      SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
+      bb.bb_label ps /\ MEM phi (collect_phis bb.bb_instructions) /\
+    MEM out phi.inst_outputs ==>
+    ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_static >> strip_tac >> gvs[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
+  `fn_reachable fn bb.bb_label` by
+    (drule lineage_state_dfs_fields >> strip_tac >>
+     drule_all dfs_block_state_cfg_reachable >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
+  `~MEM (Var out) (FLAT (MAP (\p. p.inst_operands)
+    (collect_phis bb.bb_instructions)))` by
+    (strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+     rename1 `MEM usephi (collect_phis _)` >>
+     `~MEM out (inst_uses usephi)` by
+       metis_tac[regional_phi_output_not_phi_source] >>
+     gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `MEM out (FLAT (MAP (\p. p.inst_outputs) bb.bb_instructions))` by
+    (simp[MEM_FLAT, MEM_MAP] >>
+     qexists_tac `phi.inst_outputs` >> simp[] >>
+     qexists_tac `phi` >> metis_tac[collect_phis_mem]) >>
+  metis_tac[]
+QED
