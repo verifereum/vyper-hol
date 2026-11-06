@@ -410,3 +410,181 @@ Proof
   goal_assum (drule_at Any) >>
   gvs[well_typed_expr_def] >> metis_tac[]
 QED
+
+Theorem target_subscript_raw_out_not_label[local]:
+  compile_raw_call_outbuf mx sa = ((out_val,out_ptr),sb) ==>
+  !l. out_val <> Label l
+Proof
+  simp[builtinSystemTheory.compile_raw_call_outbuf_def, LET_THM, comp_bind_def,
+       comp_return_def] >>
+  IF_CASES_TAC >> simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem target_subscript_raw_finish_not_label[local]:
+  (!l. out_val <> Label l) /\
+  compile_raw_call_finish addr data len gas value ct mx rof out_val out_ptr sa =
+    (op,sb) ==> !l. op <> Label l
+Proof
+  Cases_on `ct` >> Cases_on `rof` >> Cases_on `mx > 0` >>
+  simp[builtinSystemTheory.compile_raw_call_finish_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label, emit_op_safe_operand, safe_operand_def]
+QED
+
+Theorem target_subscript_call_not_label[local]:
+  compile_call f cenv rt ty target args default_ret sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `target`
+  >~ [`IntCall fid`] >- metis_tac[compile_internal_call_not_label]
+  >~ [`RawCallTarget`] >- suspend "raw"
+  >~ [`RawCallCalldataTarget`] >- suspend "raw_calldata" >>
+  simp[compile_call_def, LET_THM] >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[vv_operand_def]
+  >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
+    >- suspend "external"
+  >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
+    >- (qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+        qmatch_goalsub_abbrev_tac `as_stack_val rt res` >>
+        Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+        strip_tac >> gvs[vv_operand_def] >>
+        metis_tac[compile_create_call_safe_operand, safe_operand_def]) >>
+  Cases_on `args` >> gvs[vv_operand_def] >>
+  rename1 `list_CASE tail _ _` >> Cases_on `tail` >> gvs[vv_operand_def] >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[vv_operand_def]) >> simp[vv_operand_def]
+QED
+
+Resume target_subscript_call_not_label[raw]:
+  Cases_on `args` >-
+    (simp[compile_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def]) >>
+  Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), vv_operand_def, mk_ptr_def] >>
+  metis_tac[target_subscript_raw_finish_not_label, target_subscript_raw_out_not_label]
+QED
+
+Resume target_subscript_call_not_label[raw_calldata]:
+  Cases_on `args` >-
+    (simp[compile_call_def, LET_THM] >> strip_tac >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def]) >>
+  Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), vv_operand_def, mk_ptr_def] >>
+  metis_tac[target_subscript_raw_finish_not_label, target_subscript_raw_out_not_label]
+QED
+
+Resume target_subscript_call_not_label[external]:
+  PairCases_on `p` >> Cases_on `args` >>
+  gvs[compile_call_def, LET_THM, vv_operand_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), vv_operand_def, mk_ptr_def] >>
+  metis_tac[compile_external_call_not_label]
+QED
+
+Finalise target_subscript_call_not_label
+
+Theorem target_subscript_named_modular_not_label[local]:
+  (!ce rt at a bt b mt m s vv s'.
+    compile_addmod_names ce rt at a bt b mt m s = (vv,s') ==>
+    !l. vv_operand vv <> Label l) /\
+  (!ce rt at a bt b mt m s vv s'.
+    compile_mulmod_names ce rt at a bt b mt m s = (vv,s') ==>
+    !l. vv_operand vv <> Label l) /\
+  (!ce rt at a bt b s vv s'.
+    compile_powmod256_names ce rt at a bt b s = (vv,s') ==>
+    !l. vv_operand vv <> Label l)
+Proof
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  `word_result_ok s' vv` by metis_tac[word_compile_named_modular] >>
+  gvs[compile_addmod_names_def, compile_mulmod_names_def,
+      compile_powmod256_names_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[target_subscript_stack_result_not_label]
+QED
+
+Theorem target_subscript_builtin_body_classify[local]:
+  compile_expr_body f g h cenv ty (Builtin ann bi args) sa = (vv,sb) ==>
+  g cenv ann ty bi args sa = (vv,sb) \/ (!l. vv_operand vv <> Label l)
+Proof
+  Cases_on `bi = AddMod` >- (gvs[] >> suspend "add") >>
+  Cases_on `bi = MulMod` >- (gvs[] >> suspend "mul") >>
+  Cases_on `bi = PowMod256` >- (gvs[] >> suspend "pow") >>
+  Cases_on `bi` >> gvs[] >>
+  simp[compile_expr_body_def, expr_type_def,
+       word_list_result_elim, word_expr_result_elim]
+QED
+
+Resume target_subscript_builtin_body_classify[add]:
+  Cases_on `args` >- simp[compile_expr_body_def, expr_type_def] >>
+  rename1 `a::rest` >> Cases_on `a` >> simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `rest` >> simp[] >> rename1 `Name _ _::b::rest` >>
+  Cases_on `b` >> simp[] >> Cases_on `rest` >> simp[] >>
+  rename1 `Name _ _::Name _ _::m::rest` >> Cases_on `m` >> simp[] >>
+  Cases_on `rest` >> simp[] >> metis_tac[target_subscript_named_modular_not_label]
+QED
+Resume target_subscript_builtin_body_classify[mul]:
+  Cases_on `args` >- simp[compile_expr_body_def, expr_type_def] >>
+  rename1 `a::rest` >> Cases_on `a` >> simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `rest` >> simp[] >> rename1 `Name _ _::b::rest` >>
+  Cases_on `b` >> simp[] >> Cases_on `rest` >> simp[] >>
+  rename1 `Name _ _::Name _ _::m::rest` >> Cases_on `m` >> simp[] >>
+  Cases_on `rest` >> simp[] >> metis_tac[target_subscript_named_modular_not_label]
+QED
+Resume target_subscript_builtin_body_classify[pow]:
+  Cases_on `args` >- simp[compile_expr_body_def, expr_type_def] >>
+  rename1 `a::rest` >> Cases_on `a` >> simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `rest` >> simp[] >> rename1 `Name _ _::b::rest` >>
+  Cases_on `b` >> simp[] >> Cases_on `rest` >> simp[]
+  >- metis_tac[target_subscript_named_modular_not_label] >>
+  simp[word_expr_result_elim, word_list_result_elim]
+QED
+Finalise target_subscript_builtin_body_classify
+
+Theorem target_subscript_expr_body_not_label:
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+    ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  (!ann bi args s vv s'. well_typed_expr env (Builtin ann bi args) /\
+    g cenv ann ty bi args s = (vv,s') ==> !l. vv_operand vv <> Label l) /\
+  (!ann tb rt args s vv s'. well_typed_expr env (TypeBuiltin ann tb rt args) /\
+    h cenv ann ty tb rt args s = (vv,s') ==> !l. vv_operand vv <> Label l) /\
+  compile_expr_body f g h cenv ty e sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `e` >> strip_tac
+  >~ [`Builtin ann bi args`] >-
+    (drule target_subscript_builtin_body_classify >> metis_tac[])
+  >~ [`Call ann target args dflt`] >-
+    (gvs[compile_expr_body_def, expr_type_def, LET_THM] >>
+     metis_tac[target_subscript_call_not_label]) >>
+  gvs[compile_expr_body_def, expr_type_def, LET_THM]
+  >~ [`compile_name_vv _ _ _ _ = _`] >-
+    (rename1 `compile_name_vv cenv ann id sa = _` >>
+     gvs[well_typed_expr_def] >>
+     `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by metis_tac[] >>
+     gvs[compile_name_vv_def, comp_return_def, vv_operand_def, mk_ptr_def])
+  >~ [`compile_literal_vv _ _ _ = _`] >- metis_tac[target_subscript_literal_not_label]
+  >~ [`compile_subscript _ _ _ _ _ _ _ = _`] >- metis_tac[compile_subscript_not_label]
+  >~ [`compile_attribute _ _ _ _ _ _ _ = _`] >-
+    metis_tac[compile_attribute_safe_operand, safe_operand_def]
+  >~ [`FLOOKUP cenv.ce_module_vars nsid`] >-
+    (Cases_on `FLOOKUP cenv.ce_module_vars nsid` >> gvs[]
+     >- (rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def]) >>
+     rename1 `SOME loc` >> Cases_on `loc` >> gvs[vv_operand_def, mk_ptr_def] >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def])
+  >~ [`well_typed_expr env (IfExp _ _ _ _)`] >-
+    (rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs(), vv_operand_def, mk_ptr_def])
+  >~ [`well_typed_expr env (StructLit _ _ _)`] >-
+    (rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def, base_ptr_def] >>
+     metis_tac[alloc_buffer_not_label])
+  >~ [`well_typed_expr env (Pop _ _)`] >-
+    (rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def, mk_ptr_def] >>
+     metis_tac[cj 3 subscript_pop_not_label]) >>
+  simp[vv_operand_def] >> metis_tac[]
+QED
