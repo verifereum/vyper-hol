@@ -1455,3 +1455,137 @@ Proof
   Cases_on `halting` >> simp[] >> strip_tac >>
   gvs[release_dead_spills_stack_update, release_dead_spills_stack, APPEND_ASSOC]
 QED
+
+(* Exact copies of planWf's local stack_swap_get_depth_deep and
+   stack_pop_get_depth boundaries and their local dependencies. *)
+Theorem stack_find_lupdate[local]:
+  !xs p d i v.
+    stack_find p xs = SOME d /\ i < d /\ i < LENGTH xs /\ ~p v ==>
+    stack_find p (LUPDATE v i xs) = SOME d
+Proof
+  Induct >> simp[stack_find_def, LUPDATE_def] >>
+  rpt gen_tac >>
+  Cases_on `p h` >> simp[stack_find_def]
+  >- (rpt strip_tac >> gvs[]) >>
+  Cases_on `stack_find p xs` >> simp[] >>
+  rename1 `stack_find p xs = SOME d1` >>
+  rpt strip_tac >>
+  Cases_on `i` >> simp[LUPDATE_def, stack_find_def] >>
+  first_x_assum (qspecl_then [`p`, `d1`, `n`, `v`] mp_tac) >> simp[]
+QED
+
+Theorem reverse_lupdate[local]:
+  !xs (v:'a) i. i < LENGTH xs ==>
+    REVERSE (LUPDATE v i xs) =
+    LUPDATE v (LENGTH xs - 1 - i) (REVERSE xs)
+Proof
+  Induct >> simp[LUPDATE_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> simp[LUPDATE_def, REVERSE_DEF, SNOC_APPEND]
+  >- (`LENGTH (REVERSE xs) <= LENGTH xs` by simp[] >>
+      simp[LUPDATE_APPEND2, LENGTH_REVERSE, LUPDATE_def]) >>
+  rename1 `SUC n < SUC (LENGTH xs)` >>
+  `n < LENGTH xs` by simp[] >>
+  first_x_assum (qspecl_then [`v`, `n`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[REVERSE_DEF, SNOC_APPEND] >>
+  `LENGTH xs - 1 - n < LENGTH (REVERSE xs)` by simp[] >>
+  simp[LUPDATE_APPEND1] >>
+  `LENGTH xs - SUC n = LENGTH xs - 1 - n` by simp[] >> simp[]
+QED
+
+Theorem stack_find_no_earlier_match[local]:
+  !xs p d. stack_find p xs = SOME d ==>
+    !i. i < d ==> i < LENGTH xs ==> ~p (EL i xs)
+Proof
+  Induct >> simp[stack_find_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `p h` >> gvs[] >>
+  Cases_on `stack_find p xs` >> gvs[] >>
+  rename1 `stack_find p xs = SOME d1` >>
+  rpt strip_tac >> Cases_on `i` >> gvs[EL] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem lupdate_commutes[local]:
+  !i j (a:'a) b xs.
+    i <> j ==>
+    LUPDATE a i (LUPDATE b j xs) = LUPDATE b j (LUPDATE a i xs)
+Proof
+  Induct_on `xs` >> simp[LUPDATE_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `i` >> Cases_on `j` >> gvs[LUPDATE_def]
+QED
+
+Theorem reverse_stack_swap[local]:
+  !cand stk. cand < LENGTH stk /\ 0 < LENGTH stk ==>
+    REVERSE (stack_swap cand stk) =
+    LUPDATE (EL cand (REVERSE stk)) 0
+      (LUPDATE (EL 0 (REVERSE stk)) cand (REVERSE stk))
+Proof
+  rpt strip_tac >> simp[stack_swap_def, LET_THM] >>
+  `LENGTH stk - 1 < LENGTH stk` by simp[] >>
+  `LENGTH stk - 1 - cand < LENGTH stk` by simp[] >>
+  simp[reverse_lupdate, LENGTH_LUPDATE] >>
+  `EL (LENGTH stk - 1) stk = EL 0 (REVERSE stk)` by
+    simp[Once EL_REVERSE, arithmeticTheory.PRE_SUB1] >>
+  `EL (LENGTH stk - 1 - cand) stk = EL cand (REVERSE stk)` by
+    (`LENGTH stk - 1 - cand = PRE (LENGTH stk - cand)` by simp[] >>
+     pop_assum SUBST1_TAC >> simp[Once EL_REVERSE]) >>
+  `LENGTH stk - (cand + 1) = LENGTH stk - 1 - cand` by simp[] >>
+  `HD (REVERSE stk) = EL 0 (REVERSE stk)` by simp[EL] >>
+  ntac 4 (pop_assum (fn th => CONV_TAC (DEPTH_CONV (REWR_CONV th)))) >>
+  Cases_on `cand = 0` >> simp[] >> simp[Once lupdate_commutes]
+QED
+
+Theorem stack_swap_get_depth_deep:
+  !cand stk op d.
+    stack_get_depth op stk = SOME d /\
+    cand < d /\ cand < LENGTH stk ==>
+    stack_get_depth op (stack_swap cand stk) = SOME d
+Proof
+  rpt strip_tac >> imp_res_tac planWfTheory.stack_get_depth_bound >>
+  `0 < LENGTH stk` by simp[] >>
+  simp[stack_get_depth_def, reverse_stack_swap] >>
+  fs[stack_get_depth_def] >>
+  `~((\x. x = op) (EL 0 (REVERSE stk)))` by
+    (drule stack_find_no_earlier_match >>
+     disch_then (qspec_then `0` mp_tac) >> simp[LENGTH_REVERSE]) >>
+  `~((\x. x = op) (EL cand (REVERSE stk)))` by
+    (drule stack_find_no_earlier_match >>
+     disch_then (qspec_then `cand` mp_tac) >> simp[LENGTH_REVERSE]) >>
+  `stack_find (\x. x = op)
+     (LUPDATE (EL 0 (REVERSE stk)) cand (REVERSE stk)) = SOME d` by
+    (irule stack_find_lupdate >> simp[LENGTH_REVERSE]) >>
+  `HD (REVERSE stk) = EL 0 (REVERSE stk)` by simp[EL] >>
+  pop_assum (fn th => fs[GSYM th]) >>
+  irule stack_find_lupdate >> simp[LENGTH_LUPDATE, LENGTH_REVERSE]
+QED
+
+Theorem stack_pop_get_depth:
+  !stk op d.
+    stack_get_depth op stk = SOME d /\ d > 0 ==>
+    stack_get_depth op (stack_pop 1 stk) = SOME (d - 1)
+Proof
+  rpt strip_tac >> imp_res_tac planWfTheory.stack_get_depth_bound >>
+  simp[stack_get_depth_def, stack_pop_def] >>
+  `stk <> []` by (Cases_on `stk` >> fs[]) >>
+  `TAKE (LENGTH stk - 1) stk = FRONT stk` by simp[GSYM FRONT_BY_TAKE] >>
+  `REVERSE (FRONT stk) = TL (REVERSE stk)` by simp[GSYM REVERSE_TL] >>
+  simp[] >> fs[stack_get_depth_def] >>
+  `REVERSE stk <> []` by simp[REVERSE_EQ_NIL] >>
+  Cases_on `REVERSE stk` >> gvs[] >> simp[stack_find_def] >>
+  Cases_on `h = op` >- gvs[stack_find_def] >>
+  fs[stack_find_def] >>
+  Cases_on `stack_find (\x. x = op) (REVERSE (FRONT stk))` >> gvs[]
+QED
+
+Theorem stack_swap_pop_deeper_query:
+  !cand stk op d.
+    stack_get_depth op stk = SOME d /\ cand < d /\ cand < LENGTH stk ==>
+    stack_get_depth op (stack_pop 1 (stack_swap cand stk)) = SOME (d - 1)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all stack_swap_get_depth_deep >> strip_tac >>
+  irule stack_pop_get_depth >> simp[]
+QED
