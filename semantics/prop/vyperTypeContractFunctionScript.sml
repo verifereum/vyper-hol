@@ -36,7 +36,8 @@ Definition static_maps_transfer_env_def:
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==>
        FLOOKUP env2.bare_global_assignable k = SOME ty) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
-            FLOOKUP env1.bare_global_assignable k = NONE ==>
+            FLOOKUP env1.bare_global_assignable k = NONE /\
+            FLOOKUP env1.bare_globals k = NONE ==>
        FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
        FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
@@ -55,7 +56,7 @@ Theorem well_typed_defaults_static_maps_transfer[local]:
   (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
   (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
   (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
-  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
+  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
   (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
   (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
   (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>

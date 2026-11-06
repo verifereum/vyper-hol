@@ -663,6 +663,9 @@ Theorem callable_body_typing_from_env_consistent:
     env_body.flag_members = env.flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     type_stmts env_body ret fn_body = SOME env_after /\
+    (lookup_function NONE fn Internal ts <> NONE ==>
+     IS_SOME (type_stmts (env_body with bare_global_assignable := FEMPTY)
+                ret fn_body)) /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
     stmts_no_control_escape fn_body /\
     well_typed_exprs (defaults_env env_body) dflts /\
