@@ -159,9 +159,26 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation i08_immut_read_in_ctor))) >> EVAL_TAC
 QED
 
+val i09_immut_widen_bytes = memoryStoreWitnessLib.evaluate fixture_root "i09_immut_widen_bytes"
+val i09_immut_widen_bytes_supported_eval = EQT_ELIM
+  (EVAL ``supported_program ^(rand (#term i09_immut_widen_bytes))``)
+Theorem i09_immut_widen_bytes_supported:
+  supported_program ^(rand (#term i09_immut_widen_bytes))
+Proof
+  ACCEPT_TAC i09_immut_widen_bytes_supported_eval
+QED
+
+Theorem i09_immut_widen_bytes_matches_python_oracle:
+  ^(#term i09_immut_widen_bytes) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "i09_immut_widen_bytes")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation i09_immut_widen_bytes))) >> EVAL_TAC
+QED
+
 val _ = List.app (fn (name, th) => let
   val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
         List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("Unclosed immutable parity fixture: " ^ name)
   end) (DB.thms "evalCompilerImmutables");
+
