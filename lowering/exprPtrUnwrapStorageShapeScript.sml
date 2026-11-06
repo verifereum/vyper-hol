@@ -38,9 +38,9 @@ Proof
   drule as_ptr_val_result >> strip_tac >> gvs[mk_ptr_def]
 QED
 
-Theorem compile_storage_lowered_value_type:
+Theorem compile_nonmemory_lowered_value_type:
   compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
-  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+  p.ptr_location <> LocMemory ==>
   lowered_value_type cenv e = expr_type e
 Proof
   Cases_on `e` >> simp[lowered_value_type_def]
@@ -55,4 +55,13 @@ Proof
   simp[lowered_value_type_def] >>
   simp[Once compile_expr_component_eq] >> rpt strip_tac >>
   drule compile_intcall_located_memory >> simp[]
+QED
+
+Theorem compile_storage_lowered_value_type:
+  compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+  lowered_value_type cenv e = expr_type e
+Proof
+  strip_tac >> irule compile_nonmemory_lowered_value_type >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[]
 QED
