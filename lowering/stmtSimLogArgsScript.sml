@@ -38,7 +38,7 @@ Proof
   rpt strip_tac >> irule expr_val_rel_footprint_agree >>
   simp[] >> qexists_tac `s` >> simp[] >>
   sym_tac >> irule log_local_footprint_kept >>
-  qexistsl [`b`, `cenv`, `es`, `n`, `sz`] >> simp[]
+  qexistsl [`b`, `cenv`, `ee`, `es`, `n`, `sz`] >> simp[]
 QED
 
 (* Wherever a value of type ty sits in a live local, it is apart from the
@@ -85,7 +85,7 @@ Proof
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       strip_tac >> sym_tac >> first_x_assum irule >> simp[])
   >- (gvs[] >> irule log_local_footprint_kept >>
-      qexistsl [`b`, `cenv`, `es`, `n`, `sz`] >>
+      qexistsl [`b`, `cenv`, `ee`, `es`, `n`, `sz`] >>
       gvs[wb_frame_def] >> rpt strip_tac >>
       qpat_x_assum `log_arg_clear _ _ _ _`
         (mp_tac o REWRITE_RULE [log_arg_clear_def]) >>
