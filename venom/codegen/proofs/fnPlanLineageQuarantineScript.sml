@@ -182,3 +182,98 @@ Proof
   goal_assum (drule_at Any) >> simp[stackModelTheory.stack_pop_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem emit_one_input_stack_support:
+  !opc nl op ps ops qs x.
+    emit_one_input opc nl op ps = (ops,qs) /\ MEM x qs.ps_stack ==>
+    x = op \/ MEM x ps.ps_stack
+Proof
+  rpt gen_tac >> simp[emit_one_input_def] >> pairarg_tac >> simp[] >>
+  `!a. MEM a ps1.ps_stack ==> a = op \/ MEM a ps.ps_stack` by
+    (Cases_on `is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)` >>
+     gvs[] >> metis_tac[do_restore_stack_support]) >>
+  Cases_on `op`
+  >- (simp[stackModelTheory.stack_push_def] >> strip_tac >> gvs[] >> metis_tac[]) 
+  >- (rename1 `Var name` >> Cases_on `MEM name nl` >> simp[] >>
+      Cases_on `stack_get_depth (Var name) ps1.ps_stack` >> simp[] >>
+      rpt strip_tac >> gvs[] >>
+      drule stackModelTheory.stack_get_depth_props >> strip_tac >>
+      drule doSwapSimTheory.do_dup_stack_exact >> strip_tac >>
+      pairarg_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `opc = INVOKE` >> simp[stackModelTheory.stack_push_def] >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem emit_input_plan_stack_support:
+  !opc operands nl ps ops qs x.
+    emit_input_plan opc operands nl ps = (ops,qs) /\ MEM x qs.ps_stack ==>
+    MEM x operands \/ MEM x ps.ps_stack
+Proof
+  gen_tac >> Induct
+  >- (simp[emit_input_plan_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> simp[emit_input_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> disch_then drule >>
+  metis_tac[emit_one_input_stack_support]
+QED
+
+Theorem popmany_plan_stack_support:
+  !items ps ops qs x.
+    popmany_plan items ps = (ops,qs) /\ MEM x qs.ps_stack ==>
+    MEM x ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule popmany_plan_resource_nonincrease >>
+  disch_then (qspec_then `x` mp_tac) >>
+  `qs.ps_spilled = ps.ps_spilled` by
+    (qspecl_then [`items`, `ps`] mp_tac popmany_plan_spilled_unchanged >> simp[]) >>
+  simp[] >> strip_tac >>
+  gvs[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem regular_post_emit_tail_stack_support:
+  !outputs nl halt dfg inst term ps ps8 ps9 qs x.
+    ps8 = (if outputs <> [] /\ (~halt \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps)
+      else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v nl) outputs <> []
+      then SND (optimistic_swap_plan dfg inst nl term ps8) else ps8) /\
+    qs = release_dead_spills nl ps9 /\ MEM x qs.ps_stack ==>
+    MEM x ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM x ps9.ps_stack` by gvs[release_dead_spills_stack] >>
+  `MEM x ps8.ps_stack` by
+    (Cases_on `outputs <> [] /\ FILTER (\v. MEM v nl) outputs <> []` >> gvs[] >>
+     metis_tac[SRULE [pred_setTheory.EXTENSION] optimistic_swap_plan_slots]) >>
+  Cases_on `outputs <> [] /\ (~halt \/ LENGTH outputs > 1)` >> gvs[] >>
+  Cases_on `popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps` >>
+  gvs[] >> metis_tac[popmany_plan_stack_support]
+QED
+
+Theorem native_regular_stack_support:
+  !lv dfg cfg fn inst nl halt term lbl ps ops qs v.
+    join_target_ops lv fn lbl inst = NONE /\
+    LENGTH (compute_operands inst) <= 16 /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps = (ops,qs) /\
+    MEM (Var v) qs.ps_stack ==>
+    MEM (Var v) ps.ps_stack \/ MEM (Var v) (compute_operands inst) \/
+    MEM v inst.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `MEM (Var v) ps7.ps_stack` by
+    metis_tac[regular_post_emit_tail_stack_support] >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
+  disch_then (strip_assume_tac o SRULE [parameter_push_fold]) >>
+  `MEM (Var v) ps4.ps_stack \/ MEM v inst.inst_outputs` by
+    (gvs[stackModelTheory.stack_pop_def, listTheory.MEM_MAP] >>
+     metis_tac[rich_listTheory.MEM_TAKE]) >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `MEM (Var v) selected \/ MEM (Var v) ps1.ps_stack \/ MEM v inst.inst_outputs` by
+    (Cases_on `MEM v inst.inst_outputs` >- simp[] >> gvs[] >>
+     drule_at (Pos (el 2)) reorder_plan_stack_support >>
+     disch_then (qspec_then `Var v` mp_tac) >> simp[]) >>
+  metis_tac[emit_input_plan_stack_support, sortingTheory.PERM_MEM_EQ]
+QED

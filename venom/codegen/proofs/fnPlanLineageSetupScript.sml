@@ -756,9 +756,9 @@ Proof
 QED
 
 (* Shared decomposition of the actual non-JMP planner, including its tail. *)
-Theorem native_regular_stages[local]:
+Theorem native_regular_stages:
   !liveness dfg cfg fn inst nl halting term lbl ps ops qs.
-    inst.inst_opcode <> JMP /\
+    (inst.inst_opcode <> JMP \/ join_target_ops liveness fn lbl inst = NONE) /\
     generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
     ?selected iops ps1 rops ps4 topic eops ps7 ps8 ps9.
       PERM (compute_operands inst) selected /\
@@ -776,46 +776,73 @@ Theorem native_regular_stages[local]:
       qs = release_dead_spills nl ps9
 Proof
   rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = JMP` >> gvs[] >>
   namedCases_on `emit_input_plan inst.inst_opcode (compute_operands inst) nl ps` ["iops ps1"] >>
-  qabbrev_tac `swapped = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
-    [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
-     EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]` >>
-  qabbrev_tac `choice =
-    if is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) then
-      if reorder_cost (FST (reorder_plan dfg (compute_operands inst) ps1)) <
-         reorder_cost (FST (reorder_plan dfg swapped ps1))
-      then reorder_plan dfg (compute_operands inst) ps1 else reorder_plan dfg swapped ps1
-    else reorder_plan dfg (compute_operands inst) ps1` >>
-  namedCases_on `choice` ["rops ps4"] >>
-  `?selected. PERM (compute_operands inst) selected /\
-    reorder_plan dfg selected ps1 = (rops,ps4)` by
-    (Cases_on `is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst)`
-     >- (Cases_on `reorder_cost (FST (reorder_plan dfg (compute_operands inst) ps1)) <
-           reorder_cost (FST (reorder_plan dfg swapped ps1))`
-         >- (qexists_tac `compute_operands inst` >> gvs[markerTheory.Abbrev_def]) >>
-         qexists_tac `swapped` >> gvs[markerTheory.Abbrev_def] >>
-         irule genericInputReadyTheory.last_two_reorder_perm >> simp[]) >>
-     qexists_tac `compute_operands inst` >> gvs[markerTheory.Abbrev_def]) >>
-  qexistsl_tac [`selected`, `iops`, `ps1`, `rops`, `ps4`] >> simp[] >>
-  qpat_x_assum `Abbrev ((rops,ps4) = _)`
-    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [generate_regular_inst_plan_def, LET_THM,
-    pairTheory.pair_CASE_def, pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND,
-    pairTheory.PAIR, arithmeticTheory.GREATER_EQ] >>
-  asm_simp_tac bool_ss [] >>
-  qpat_x_assum `(if is_commutative _ /\ _ then _ else _) = _`
-    (fn th => pure_rewrite_tac [th, pairTheory.FST, pairTheory.SND]) >>
-  Cases_on `inst.inst_outputs = []` >> asm_simp_tac bool_ss [] >>
-  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic emitted` >>
-  qpat_x_assum `Abbrev (topic = _)` kall_tac >>
-  namedCases_on `generate_emit_ops inst topic emitted` ["eops ps7"] >>
-  simp_tac bool_ss [pairTheory.FST, pairTheory.SND] >>
-  Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
-  Cases_on `FILTER (\v. MEM v nl) inst.inst_outputs = []` >>
-  simp[Abbr `emitted`] >> rpt strip_tac >> gvs[] >>
-  qexistsl_tac [`topic`, `eops`] >> simp[]
+  (Cases_on `is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst)`
+  >- (Cases_on `reorder_cost (FST (reorder_plan dfg (compute_operands inst) ps1)) <
+       reorder_cost (FST (reorder_plan dfg
+         (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+          [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+           EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) ps1))`
+      >- (namedCases_on `reorder_plan dfg (compute_operands inst) ps1` ["rops ps4"] >>
+          qexistsl_tac [`compute_operands inst`, `iops`, `ps1`, `rops`, `ps4`] >>
+          simp[] >> (qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      asm_simp_tac bool_ss [generate_regular_inst_plan_def, LET_THM,
+        pairTheory.pair_CASE_def, pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND,
+        pairTheory.PAIR, arithmeticTheory.GREATER_EQ] >>
+      Cases_on `inst.inst_outputs = []` >> asm_simp_tac bool_ss [] >>
+      qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic emitted` >>
+      qpat_x_assum `Abbrev (topic = _)` kall_tac >>
+      namedCases_on `generate_emit_ops inst topic emitted` ["eops ps7"] >>
+      simp_tac bool_ss [pairTheory.FST, pairTheory.SND] >>
+      Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
+      Cases_on `FILTER (\v. MEM v nl) inst.inst_outputs = []` >>
+      simp[Abbr `emitted`] >> rpt strip_tac >> gvs[] >>
+      qexistsl_tac [`topic`, `eops`] >> simp[])) >>
+      namedCases_on `reorder_plan dfg
+        (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+         [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+          EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) ps1` ["rops ps4"] >>
+      `PERM (compute_operands inst)
+        (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+         [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+          EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])` by
+        (irule genericInputReadyTheory.last_two_reorder_perm >> gvs[]) >>
+      qexistsl_tac [`TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+         [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+          EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]`,
+        `iops`, `ps1`, `rops`, `ps4`] >>
+      simp[] >>
+      (qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      asm_simp_tac bool_ss [generate_regular_inst_plan_def, LET_THM,
+        pairTheory.pair_CASE_def, pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND,
+        pairTheory.PAIR, arithmeticTheory.GREATER_EQ] >>
+      Cases_on `inst.inst_outputs = []` >> asm_simp_tac bool_ss [] >>
+      qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic emitted` >>
+      qpat_x_assum `Abbrev (topic = _)` kall_tac >>
+      namedCases_on `generate_emit_ops inst topic emitted` ["eops ps7"] >>
+      simp_tac bool_ss [pairTheory.FST, pairTheory.SND] >>
+      Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
+      Cases_on `FILTER (\v. MEM v nl) inst.inst_outputs = []` >>
+      simp[Abbr `emitted`] >> rpt strip_tac >> gvs[] >>
+      qexistsl_tac [`topic`, `eops`] >> simp[])) >>
+  namedCases_on `reorder_plan dfg (compute_operands inst) ps1` ["rops ps4"] >>
+  qexistsl_tac [`compute_operands inst`, `iops`, `ps1`, `rops`, `ps4`] >>
+  simp[] >> (qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      asm_simp_tac bool_ss [generate_regular_inst_plan_def, LET_THM,
+        pairTheory.pair_CASE_def, pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND,
+        pairTheory.PAIR, arithmeticTheory.GREATER_EQ] >>
+      Cases_on `inst.inst_outputs = []` >> asm_simp_tac bool_ss [] >>
+      qmatch_goalsub_abbrev_tac `generate_emit_ops inst topic emitted` >>
+      qpat_x_assum `Abbrev (topic = _)` kall_tac >>
+      namedCases_on `generate_emit_ops inst topic emitted` ["eops ps7"] >>
+      simp_tac bool_ss [pairTheory.FST, pairTheory.SND] >>
+      Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
+      Cases_on `FILTER (\v. MEM v nl) inst.inst_outputs = []` >>
+      simp[Abbr `emitted`] >> rpt strip_tac >> gvs[] >>
+      qexistsl_tac [`topic`, `eops`] >> simp[]))
 QED
+
 
 Theorem native_regular_live_lower:
   !liveness dfg cfg fn inst nl halting term lbl ps ops qs.
@@ -827,7 +854,8 @@ Theorem native_regular_live_lower:
     ==> !v. MEM v nl ==> MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
   `!v. MEM v nl ==>
     MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack ++ MAP Var inst.inst_outputs) \/
     Var v IN FDOM ps4.ps_spilled` by
@@ -890,7 +918,8 @@ Theorem native_regular_live_inventory:
       residual_budget_wf spillbase [] (qs with ps_stack := rest)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
   `!v. MEM (Var v) (compute_operands inst) ==>
     MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
   qabbrev_tac `consumed = ps4 with ps_stack :=
@@ -970,7 +999,8 @@ Theorem native_regular_variable_origins:
       MEM (Var v) (compute_operands inst) \/ MEM v inst.inst_outputs
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
   `!v. MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack) \/
     Var v IN FDOM ps4.ps_spilled ==>
     MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/
@@ -1046,7 +1076,8 @@ Theorem native_regular_core_resource:
       residual_budget_wf spillbase [] (qs with ps_stack := rest)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qabbrev_tac `consumed = ps4 with ps_stack :=
     stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` >>
   `consumed = ps4 with ps_stack :=
@@ -1130,7 +1161,8 @@ Theorem native_regular_next_live_upper:
         (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
   drule sortingTheory.PERM_LENGTH >> strip_tac >>
   `!v. MEM v nl ==>
     LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) +
@@ -1182,7 +1214,8 @@ Theorem native_regular_last_use_extinction:
     ==> ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
   drule sortingTheory.PERM_LENGTH >> strip_tac >>
   `LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) = 0 /\
     Var v NOTIN FDOM ps4.ps_spilled` by
