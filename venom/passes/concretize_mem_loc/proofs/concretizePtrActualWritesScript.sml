@@ -1,6 +1,7 @@
 Theory concretizePtrActualWrites
 Ancestors ptrDiscipline memLocDefs codegenRel concretizeMemLocDefs
-  concretizePtrChronologicalHistory concretizePtrLifetime list rich_list
+  concretizePtrChronologicalHistory concretizePtrLifetime concretizePtrOwnerDemand
+  list rich_list
 
 Theorem ptr_exact_size_step_writes:
   inst_write_size inst = SOME n ==>
@@ -107,3 +108,68 @@ Proof
      qexistsl [`ctx`,`endpoint`,`vs0`] >> simp[]) >>
   qexists `w` >> simp[]
 QED
+
+Theorem ptr_stage_owner_actual_interval_no_kill:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  ptr_chrono_history vs C h endpoint /\ i <= j /\ j < LENGTH h /\
+  (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
+  (ptr_owner_view d (EL i h)).cf_fn = fn /\
+  FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+  b <= byte /\ byte < b + sz /\
+  (!k. i <= k /\ k < j ==>
+    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
+    byte NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
+                                         (EL (SUC k) h).po_state)) /\
+  o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
+  wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
+  ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) ==>
+  !k. i <= k /\ k < j ==>
+  ~ptr_ml_can_kill (Allocation aid)
+    (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn)
+    (\a. if context_alloca_size fn (imported_mems_used observed.cu_context fn) a = 0 then NONE
+         else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a))
+    (ptr_owner_view d (EL k h)).cf_inst
+Proof
+  strip_tac >>
+  `!k. i <= k /\ k < j ==>
+    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
+    (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
+      MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
+      ~(off <= byte /\ byte < off + len))` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!k. _ /\ _ ==> ~in_revert_forward _ _ /\ _`
+       (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
+     rpt strip_tac >> drule ptr_exact_size_step_writes >>
+     disch_then (qspecl_then [`(EL k h).po_state`,
+                               `(EL (SUC k) h).po_state`] assume_tac) >>
+     gvs[range_bytes_def] >> metis_tac[]) >>
+  match_mp_tac ptr_stage_owner_interval_no_kill >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!k. _ /\ _ ==> ~in_revert_forward _ _ /\ !n off len. _`
+    (qspec_then `k` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+(* Integration boundary:
+   ptr_chrono_fresh_last_actual_index supplies the byte-exclusion conjunct
+   above for i = SUC k and j = PRE (LENGTH h).  The no-revert conjunct still
+   comes from the source history's EVERY no-revert premise.  No requested
+   CALL output byte is inferred to have been written.
+
+   The remaining owner premises are independent: the selected owner's depth
+   must be present at every index from i through j, its view at i must be fn,
+   and that view must retain the allocation (b,sz) containing the byte.  A
+   retained birth record alone does not supply these continuity facts.  This
+   boundary neither identifies a retained birth with that owner nor supplies
+   paired target-byte agreement or actual-aware protected livesets. *)
