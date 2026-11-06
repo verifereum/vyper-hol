@@ -18,6 +18,7 @@ Theorem compile_storage_copy_framed_path_ptr:
   sbase.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn sbase 0 G' tn' (OK t) /\
+    LENGTH sbase.vs_memory <= LENGTH t.vs_memory /\
     copy_prefix loc a b n sbase n t /\ ptr_covers G' tn' root t (32*n) /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     tn'.t_mem = (tn.t_mem DIFF {x | b <= x /\ x < b+32*n}) UNION

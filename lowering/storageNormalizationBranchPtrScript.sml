@@ -4,7 +4,7 @@ Ancestors
   storageSingleWordPtr storageNormalizationCopyPtr exprSimStorageCopy
   fragGasPathPtr bodyPtrDefs compileEnv exprLoweringProps context
   ptrDiscipline ptrSafeRun venomState finite_map pred_set words
-  emitHelper
+  emitHelper storageNormalizationOwnershipPtr
 
 Theorem compile_storage_normalization_branch_path_ptr:
   (loc = LocStorage \/ loc = LocTransient) /\
@@ -25,6 +25,7 @@ Theorem compile_storage_normalization_branch_path_ptr:
     gas_path_ptr D 0 ctx fn PG G tn sbase 0 G' tn' (OK t) /\
     copy_prefix loc a b n sbase n t /\ ptr_covers G' tn' root t (32*n) /\
     copy_static t = copy_static sbase /\
+    LENGTH sbase.vs_memory <= LENGTH t.vs_memory /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     tn'.t_mem = (tn.t_mem DIFF {x | b <= x /\ x < b+32*n}) UNION
       {b+32*i+r | i < n /\ r < 32 /\
@@ -39,7 +40,19 @@ Theorem compile_storage_normalization_branch_path_ptr:
     (!off len. off+len <= b \/ b+32*n <= off ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len sbase.vs_memory) /\
     (!x. ~(b <= x /\ x < b+32*n) ==>
-      (x IN tn'.t_mem <=> x IN tn.t_mem))
+      (x IN tn'.t_mem <=> x IN tn.t_mem)) /\
+    (!cenv cx es inst.
+      stmt_state_rel ctx fn cenv cx es sbase /\ local_ptrs_reserved cenv sa /\
+      MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+      FLOOKUP sbase.vs_allocas inst.inst_id = SOME (b,32*n) /\
+      (!name lb len. local_region cenv es.scopes sbase name lb len ==>
+        regions_disjoint b (32*n) lb len) ==>
+      stmt_state_rel ctx fn cenv cx es t /\ t.vs_allocas = sbase.vs_allocas /\
+      (!tr ty tv w. storage_holds cx tr ty tv w es sbase ==>
+        storage_holds cx tr ty tv w es t) /\
+      (!aid off len. aid <> inst.inst_id /\
+        FLOOKUP sbase.vs_allocas aid = SOME (off,len) ==>
+        mem_bytes_at off len t.vs_memory = mem_bytes_at off len sbase.vs_memory))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `n = 1` >- suspend "singleton" >>
@@ -55,7 +68,7 @@ Proof
   qexistsl_tac [`G'`, `tn'`, `t`] >>
   simp_tac (srw_ss()) [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM] >>
   rule_assum_tac (SIMP_RULE (srw_ss()) [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, suspend "ownership_loop"]
 QED
 
 Resume compile_storage_normalization_branch_path_ptr[singleton]:
@@ -74,7 +87,7 @@ Resume compile_storage_normalization_branch_path_ptr[singleton]:
       qexistsl_tac [`G'`, `tn'`, `t`] >>
       simp_tac (srw_ss()) [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM] >>
       rule_assum_tac (SIMP_RULE (srw_ss()) [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, suspend "ownership_single"]) >>
   gvs[] >>
   `not_fresh_at sa root` by metis_tac[] >>
   drule_all (SRULE [] (Q.INST [`tr` |-> `T`] compile_storage_single_word_path_ptr)) >>
@@ -82,7 +95,21 @@ Resume compile_storage_normalization_branch_path_ptr[singleton]:
   qexistsl_tac [`G'`, `tn'`, `t`] >>
       simp_tac (srw_ss()) [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM] >>
       rule_assum_tac (SIMP_RULE (srw_ss()) [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC
+      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, suspend "ownership_single"]
+QED
+
+Resume compile_storage_normalization_branch_path_ptr[ownership_loop]:
+  rpt gen_tac >> strip_tac >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase` by metis_tac[] >>
+  drule_all (SRULE [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
+    normalization_copy_ownership_frame) >> simp[]
+QED
+
+Resume compile_storage_normalization_branch_path_ptr[ownership_single]:
+  markerLib.RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase` by metis_tac[] >>
+  drule_all (SRULE [arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
+    normalization_copy_ownership_frame) >> simp[]
 QED
 
 Finalise compile_storage_normalization_branch_path_ptr

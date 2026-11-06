@@ -4,10 +4,11 @@
 Theory storageCopyInvariantPtr
 Ancestors
   storageCopyBodyPtr exprSimStorageCopy bodyPtrDefs ptrDiscipline ptrSafeRun
-  venomState memLocDefs finite_map pred_set words
+  venomState memLocDefs finite_map pred_set words immutableMemoryFrame
 
 Definition storage_copy_inv_ptr_def:
   storage_copy_inv_ptr loc src root cv scratch a b n sbase Gbase tnbase k G tn s <=>
+    LENGTH sbase.vs_memory <= LENGTH s.vs_memory /\
     copy_prefix loc a b n sbase k s /\
     eval_operand src s = SOME a /\ lookup_var root s = SOME (n2w b) /\
     ptr_covers G tn root s (32*n) /\ lookup_var cv s = SOME (n2w k) /\
@@ -127,6 +128,9 @@ Proof
   `copy_prefix loc a b n sbase (k+1)
      (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s)` by
     (irule copy_prefix_extend >> simp[]) >>
+  conj_tac
+  >- (simp[update_var_def, immutable_mstore_capacity, arithmeticTheory.MAX_DEF] >>
+      IF_CASES_TAC >> decide_tac) >>
   conj_tac >- simp[copy_prefix_update_var] >>
   Cases_on `src` >>
   simp[eval_operand_def, lookup_var_def, update_var_def, mstore_def,

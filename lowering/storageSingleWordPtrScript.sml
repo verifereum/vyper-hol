@@ -5,6 +5,7 @@ Ancestors
   exprSimStorageCopy fragGasPathPtr bodyPtrDefs compileEnv fragExec
   exprLoweringProps
   ptrDiscipline ptrSafeRun venomState finite_map pred_set words arithmetic
+  immutableMemoryFrame
 
 Theorem storage_single_word_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ value <> root /\
@@ -104,6 +105,7 @@ Theorem storage_single_word_resources_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     copy_prefix (if tr then LocTransient else LocStorage) a b 1 s 1 t /\
     ptr_covers G' tn' root t 32 /\ copy_static t = copy_static s /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     tn'.t_mem = (tn.t_mem DIFF {x | b <= x /\ x < b+32}) UNION
       {b+r | r < 32 /\ (a,r) IN (if tr then tn.t_trans else tn.t_stor)} /\
@@ -115,6 +117,9 @@ Theorem storage_single_word_resources_ptr:
 Proof
   strip_tac >> drule_all storage_single_word_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (simp[immutable_mstore_capacity, update_var_def, arithmeticTheory.MAX_DEF] >>
+     IF_CASES_TAC >> decide_tac) >>
   qexistsl_tac [`G'`, `tn'`, `t`] >> asm_rewrite_tac[] >>
   gvs[] >> simp[storage_single_word_copy_prefix] >>
   simp[copy_static_def, mstore_def, write_memory_with_expansion_def,
@@ -168,6 +173,7 @@ Theorem compile_storage_single_word_path_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     copy_prefix (if tr then LocTransient else LocStorage) a b 1 s 1 t /\
     ptr_covers G' tn' root t 32 /\ copy_static t = copy_static s /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     tn'.t_mem = (tn.t_mem DIFF {x | b <= x /\ x < b+32}) UNION
       {b+r | r < 32 /\ (a,r) IN (if tr then tn.t_trans else tn.t_stor)} /\
