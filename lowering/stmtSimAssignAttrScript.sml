@@ -530,6 +530,7 @@ Theorem add_unwrap_post[local]:
   !func cenv cx e es sa sm sn su s0 es1 tv vv r v op dst bw off s.
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     ci_mono sa sm /\
+    post_value_type cenv e = expr_type e /\
     vv_post ctx func cenv cx e es sa sn s0 es1 tv vv r /\
     eval_operand dst r = SOME (bw + n2w off) /\
     expr_post ctx func cenv cx e es1 (sa with cs_next_var := sn.cs_next_var)
@@ -677,6 +678,8 @@ Proof
       value_result_typed_def] >>
   irule store_lays_out_typed >> simp[] >>
   qexistsl_tac [`expr_type e`, `get_tenv cx`] >> simp[]
+      `post_value_type cenv e = expr_type e` by
+        simp[post_value_type_word] >>
 QED
 
 (* The MSTORE of x.f = e, from the state e's unwrap leaves: the field's

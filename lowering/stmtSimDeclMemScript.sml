@@ -760,6 +760,7 @@ Theorem annassign_memory_store_post_path[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv vtyp sty
    sc rest a loc info bytes.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
     cs_extends sa sb /\ local_ptrs_reserved cenv sa /\
     ~is_word_type vtyp /\
@@ -800,10 +801,10 @@ Proof
   drule_then (drule_then assume_tac) compile_lower_value_var >>
   qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
-    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >>
-     gvs[is_bytestring_word_type]) >>
+    metis_tac[is_bytestring_word_type] >>
   `?sw. eval_operand op s = SOME sw /\
         val_in_memory etv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -850,6 +851,7 @@ QED
 Theorem emit_void_nonterminator_open:
   !opc args sa sb.
     emit_void opc args sa = ((),sb) /\ ~is_terminator opc ==>
+    post_value_type cenv e = expr_type e /\
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
@@ -1076,6 +1078,12 @@ Proof
     (\res ee t. ?v. res = INL v /\
       expr_post ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
+  `post_value_type c e = expr_type e` by
+    (qpat_x_assum `lowered_value_type cenv e = expr_type e \/ _`
+       strip_assume_tac
+     >- (irule post_value_type_lowered >>
+         metis_tac[declare_local_memory_types]) >>
+     simp[post_value_type_bytestring]) >>
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
     (\res ee r. expr_exit res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>

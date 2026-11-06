@@ -852,6 +852,7 @@ QED
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
     vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
+    post_value_type cenv obj = TupleT tys /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -863,9 +864,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?v. read_result cx btv es1 = (INL v, es1)` by
     (gvs[vv_post_def] >>
-     qspecl_then [`cenv`, `cx`, `TupleT tys`, `btv`, `bvv`, `es1`, `s`,
-                  `TupleTV tvs`, `w`] mp_tac base_vv_holds_loc >>
-     simp[is_word_type_def] >> metis_tac[]) >>
+     `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
+     drule_all base_vv_holds_loc >> simp[is_word_type_def] >>
+     metis_tac[]) >>
   `value_has_type (TupleTV tvs) v` by metis_tac[] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
@@ -876,6 +877,7 @@ QED
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = TupleT tys /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
@@ -1184,11 +1186,15 @@ QED
 Theorem compile_subscript_tuple_sim:
   !nocalls ctx func cenv cx ann obj idx tys.
     expr_vv_case nocalls ctx func cenv cx obj /\ expr_type obj = TupleT tys /\
-    place_type cenv obj = ValPT (TupleT tys) ==>
+    place_type cenv obj = ValPT (TupleT tys) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> fs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+     metis_tac[exprSimHypsTheory.post_value_type_no_calls]) >>
   drule_all tuple_pre_base >> strip_tac >> gvs[] >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
     (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>

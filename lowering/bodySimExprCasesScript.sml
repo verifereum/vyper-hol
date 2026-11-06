@@ -24,7 +24,7 @@
 
 Theory bodySimExprCases
 Ancestors
-  bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
+  bodySimIfExpWidened
   bodySimBopInLiteralWord bodySimBopHeld
   bodySimConvertWidened
   exprSimSource
@@ -86,7 +86,9 @@ Theorem body_ifexp_case:
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. (e = e2 \/ e = e3) ==>
-    int_calls_expr e = [] \/ same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+    (int_calls_expr e = [] \/
+     same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    post_value_type cenv e = expr_type e`
   >- (irule compile_ifexp_case >> simp[] >> metis_tac[body_expr_ok_case]) >>
   rw[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[body_ifexp_widened_call_arm]
@@ -99,11 +101,8 @@ Theorem body_structlit_case:
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  Cases_on `!e. MEM e (MAP SND kes) ==>
-              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
-  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
-  rw[expr_sim_case_def, expr_vv_case_def] >>
-  metis_tac[body_struct_lit_widened_call_elem]
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  irule compile_struct_lit_case >> simp[] >> metis_tac[body_exprs_ok_case]
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
@@ -173,11 +172,8 @@ Proof
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  Cases_on `!e. MEM e es ==>
-              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
-  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case]) >>
-  rw[expr_sim_case_def, expr_vv_case_def] >>
-  metis_tac[body_make_array_widened_call_elem]
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  irule compile_make_array_case >> simp[] >> metis_tac[body_exprs_ok_case]
 QED
 
 (* ecadd and ecmul: exprSimECArith's compile_ecadd_call_case and

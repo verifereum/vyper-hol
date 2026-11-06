@@ -106,7 +106,8 @@ Theorem compile_subscript_case:
     (!kt vt. place_type cenv obj = MapPT kt vt ==>
              expr_map_case nocalls ctx func cenv cx obj) /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >> Cases_on `place_type cenv obj`

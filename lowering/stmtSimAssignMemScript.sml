@@ -329,6 +329,7 @@ Theorem local_memory_assign_path:
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    post_value_type cenv e = expr_type e /\
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
@@ -429,6 +430,8 @@ Proof
      qpat_x_assum `!gs v es1 entry. _` drule >>
      disch_then (qspec_then `entry` mp_tac) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      `post_value_type cenv e = expr_type e` by
+        (irule post_value_type_lowered >> simp[]) >>
   simp[expr_post_def] >> strip_tac >>
   `?sw. eval_operand op s = SOME sw /\ val_in_memory tyv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -570,6 +573,7 @@ Theorem assign_local_memory_widen_code_parts:
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
         (case vtyp of ArrayT elem_ty (Dynamic _) =>
+    post_value_type cenv e = expr_type e /\
            SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
                  type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf) /\
@@ -671,6 +675,8 @@ Resume local_memory_assign_widen_run[staged]:
       `not_fresh_at sn x` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
       `x <> tmp` by metis_tac[] >> simp[]) >>
+      `post_value_type cenv e = expr_type e` by
+        metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
   metis_tac[]
 QED
 

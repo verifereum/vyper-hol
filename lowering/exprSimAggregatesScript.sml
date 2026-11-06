@@ -186,7 +186,8 @@ Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   rw[expr_vv_case_def, expr_vv_sim_def] >>
@@ -279,7 +280,8 @@ Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt gen_tac >> Cases_on `topt`
@@ -470,10 +472,13 @@ Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (StructLit ann nsid fields) = expr_type (StructLit ann nsid fields)` by simp[] >>
   metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
 QED
 
@@ -481,12 +486,15 @@ Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e \/
+       acyclic_struct_metadata cenv.ce_struct_fields) ==>
     expr_sim_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args) /\
     expr_vv_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (Builtin ann (MakeArray topt bnd) args) = expr_type (Builtin ann (MakeArray topt bnd) args)` by simp[] >>
   metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
 QED
 
