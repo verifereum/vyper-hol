@@ -15,7 +15,7 @@ Theory exprSimBopInLiteralWord
 Ancestors
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasFresh varsExt exprSimUnopCompose exprSimWordArgs loweringPosts valueEncoding
-  exprSimBopTyped exprBopSimProps
+  exprSimBopTyped exprBopSimDefs exprBopSimProps
   exprSimUnopProps freshWrites emitHelperProps exprLoweringProps
   venomExecSemantics venomState words valueEncodingProofs vyperStorage
   exprSimSource
@@ -216,6 +216,7 @@ Proof
   strip_tac >>
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
    ~precompile_builtin (MakeArray (SOME et) n) /\
+   MakeArray (SOME et) n <> Bop In /\ MakeArray (SOME et) n <> Bop NotIn /\
    builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
     simp[precompile_builtin_def, builtin_args_length_ok_def] >>
   drule_all eval_expr_builtin_action >>
@@ -258,24 +259,18 @@ Theorem literal_membership_action_prefix:
     [e1; Builtin a (MakeArray (SOME et) n) elems])) (read_result cx) =
   bind (bind (eval_expr cx e1) (read_result cx))
     (\v. bind (eval_exprs cx elems)
-      (\vs ee. (builtin_result cx ee.accounts ann (Bop bop)
-        [expr_type e1; a] [v; ArrayV (make_array_value tv n vs)], ee)))
+      (\vs ee. (bop_result cx ann bop
+        [expr_type e1; a] v (ArrayV (make_array_value tv n vs)) ee, ee)))
 Proof
   strip_tac >>
-  `Bop bop <> Len /\ Bop bop <> Env MsgGas /\
-   ~precompile_builtin (Bop bop) /\
-   builtin_args_length_ok (Bop bop) 2` by
-    simp[precompile_builtin_def, builtin_args_length_ok_def] >>
-  `eval_exprs cx [] = vyperState$return []` by
-    simp[FUN_EQ_THM, eval_exprs_nil, vyperStateTheory.return_def] >>
-  simp[Once eval_expr_builtin_action] >>
-  simp[expr_type_def, eval_exprs_cons_action,
-       vyperStateTheory.bind_assoc, vyperStateTheory.bind_return] >>
+  CONV_TAC (LHS_CONV (REWR_CONV
+    (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_bop_bind))) >>
+  simp[expr_type_def, vyperStateTheory.bind_assoc] >>
   AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> ABS_TAC >>
   drule_all literal_make_array_value_continuation >>
   disch_then (qspecl_then [
-    `\v' ee. (builtin_result cx ee.accounts ann (Bop bop)
-      [expr_type e1; a] [v; v'], ee)`, `a`] mp_tac) >> simp[]
+    `\v' ee. (bop_result cx ann bop
+      [expr_type e1; a] v1 v' ee, ee)`, `a`] mp_tac) >> simp[]
 QED
 
 Theorem literal_membership_action:
@@ -303,7 +298,7 @@ Proof
   rename1 `eval_exprs cx elems st = (INL vs, st')` >>
   drule eval_exprs_length >> disch_tac >>
   `compatible_bound n (LENGTH vs)` by metis_tac[] >>
-  simp[builtin_result_def, evaluate_builtin_def, literal_membership_result]
+  simp[bop_result_def, evaluate_membership_array, literal_array_membership]
 QED
 Theorem literal_body_evaluate_types:
   expr_body_pre cenv cx env
