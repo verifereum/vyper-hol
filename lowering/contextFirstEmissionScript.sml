@@ -273,10 +273,19 @@ fun context_fe_leaf g =
         [first_emission_return, first_emission_fresh,
          cj 1 first_emission_counters, cj 2 first_emission_counters]),
     ho_match_mp_tac first_emission_strong >>
-      MATCH_ACCEPT_TAC first_emission_store_bytestring]) g;
+      FIRST (map MATCH_ACCEPT_TAC
+        [first_emission_store_bytestring, first_emission_word_copy_loop,
+         first_emission_ptr_load, first_emission_ptr_store])]) g;
+Theorem cs_appends_context_word_loop[local]:
+  cs_appends (compile_word_copy_loop src dst nw ll sl ctor)
+Proof
+  simp[cs_appends_def] >> metis_tac[first_emission_word_copy_loop]
+QED
+
 fun context_tail_append_tac g =
   (FIRST [FIRST_PROVE [simp_tac (srw_ss())
-      (cs_appends_context_typed_copy :: context_copy_appends :: context_append_simps)],
+      (cs_appends_context_word_loop :: cs_appends_context_typed_copy ::
+       context_copy_appends :: context_append_simps)],
     ho_match_mp_tac cs_appends_bind >> conj_tac
       >- context_tail_append_tac >> rpt gen_tac >> context_tail_append_tac,
     ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >> context_tail_append_tac,
@@ -419,3 +428,87 @@ Resume first_emission_context_typed_copy[dispatch]:
 QED
 
 Finalise first_emission_context_typed_copy
+
+Theorem first_emission_dynarray_to_storage:
+  !a x b. compile_dynarray_to_storage src dst nw msz transient a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==>
+      ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rewrite_tac[compile_dynarray_to_storage_def] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pos (el 2)) (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  context_ext_tac
+QED
+
+Theorem first_emission_load_storage:
+  !a x b. compile_load_storage slot prim nw nbytes a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  simp_tac bool_ss [compile_load_storage_def, compile_alloc_buffer_def,
+    compile_storage_to_memory_def, LET_THM] >> context_fe_tac
+QED
+
+Theorem first_emission_load_transient:
+  !a x b. compile_load_transient slot prim nw nbytes a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  simp_tac bool_ss [compile_load_transient_def, compile_alloc_buffer_def,
+    compile_transient_to_memory_def, LET_THM] >> context_fe_tac
+QED
+
+Theorem first_emission_load_immutable:
+  !a x b. compile_load_immutable off prim nw nbytes ctor a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  simp_tac bool_ss [compile_load_immutable_def, compile_alloc_buffer_def,
+    compile_code_to_memory_def, LET_THM] >> context_fe_tac
+QED
+
+Theorem first_emission_store_memory:
+  !a x b. compile_store_memory ce src dst dt st a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rewrite_tac[compile_store_memory_def] >> Cases_on `is_word_type dt`
+  >- (asm_simp_tac bool_ss [] >> context_fe_tac) >>
+  Cases_on `is_bytestring_type dt`
+  >- (asm_simp_tac bool_ss [] >> context_fe_tac) >>
+  Cases_on `dt = st` >> asm_simp_tac bool_ss []
+  >- MATCH_ACCEPT_TAC first_emission_copy_memory >>
+  MATCH_ACCEPT_TAC (cj 1 first_emission_context_typed_copy)
+QED
+
+Theorem first_emission_load_calldata:
+  !a x b. compile_load_calldata off prim nw nbytes a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  simp_tac bool_ss [compile_load_calldata_def, compile_alloc_buffer_def,
+    LET_THM] >> context_fe_tac
+QED
