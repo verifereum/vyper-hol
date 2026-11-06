@@ -172,21 +172,6 @@ Proof
         gvs[account_already_created_def]) >> simp[]
 QED
 
-Theorem step_creation_growth_head:
-  wf_state s /\ step s = (r,t) /\
-  LENGTH s.contexts < LENGTH t.contexts /\
-  account_already_created (lookup_account a s.rollback.accounts) ==>
-  (FST (HD t.contexts)).msgParams.outputTo <> Code a
-Proof
-  strip_tac >> `s.contexts <> []` by gvs[wf_state_def] >>
-  drule_all step_grow_dispatch >> strip_tac
-  >- (drule_all step_call_reaches_proceed_call >> strip_tac >>
-      drule_all call_prefix_contexts >> strip_tac >>
-      drule_all proceed_call_memory_output >> simp[]) >>
-  drule_all step_create_growth_effects >> strip_tac >>
-  gvs[] >> metis_tac[]
-QED
-
 Theorem step_creation_code_prefix:
   0 < d /\ d <= LENGTH s.contexts /\ wf_state s /\
   step s = (INL x,t) /\ d <= LENGTH t.contexts /\
@@ -218,7 +203,9 @@ Proof
   `LENGTH s.contexts < LENGTH t.contexts` by decide_tac >>
   `LENGTH t.contexts > LENGTH s.contexts` by simp[] >>
   ` (FST (HD t.contexts)).msgParams.outputTo <> Code a` by
-    (irule step_creation_growth_head >> metis_tac[]) >>
+    (mp_tac (Q.INST [`B` |-> `s.rollback`, `r` |-> `INL x`]
+       step_growth_code_provenance) >>
+     simp[] >> metis_tac[]) >>
   drule_all step_push_structure >> strip_tac >>
   Cases_on `d = 1`
   >- (gvs[] >> Cases_on `s.contexts` >> gvs[] >>
