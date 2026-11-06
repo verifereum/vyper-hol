@@ -45,7 +45,7 @@ Theorem abi_encoder_shared_members_static_request:
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     target ((ei,az,mz,F)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap)
     (d,sz) (first,last,b,cap) r /\
   compile_abi_encode_child dst elem_src ei F ho dp p = (len,ce) /\
   fn_has_code p ce func /\
@@ -54,8 +54,8 @@ Theorem abi_encoder_shared_members_static_request:
       phi_prefix_length bb.bb_instructions = 0) /\
   ce.cs_next_id <= last /\ ce.cs_next_var <= limit_st.cs_next_var ==>
   abi_encoder_spine_child_input func limit_st
-    (abi_sites_encoder_spine_shared_pre sites (ty,av,sb+so,mz,d+ho) (first,last,b,cap,limit_st))
-    (abi_sites_encoder_spine_shared_post sites (ctx,func) (ty,av,sb+so,mz,d+ho)
+    (abi_sites_encoder_spine_shared_pre sites (ty,av,sb+so,child_cap,d+ho) (first,last,b,cap,limit_st))
+    (abi_sites_encoder_spine_shared_post sites (ctx,func) (ty,av,sb+so,child_cap,d+ho)
       (first,last,b,cap,limit_st))
     (ei,F,dst,elem_src,ho,dp,p,ce,len) r
 Proof
@@ -131,7 +131,7 @@ Theorem abi_encoder_shared_members_dynamic_request:
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     target ((ei,az,mz,T)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap)
     (d,sz) (first,last,b,cap) r /\
   compile_abi_encode_child dst elem_src ei T ho dp p = (len,ce) /\
   abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
@@ -142,9 +142,9 @@ Theorem abi_encoder_shared_members_dynamic_request:
   ce.cs_next_id <= last /\ ce.cs_next_var <= limit_st.cs_next_var /\
   off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) ==>
   abi_encoder_spine_child_input func limit_st
-    (abi_sites_encoder_shared_member_dynamic_pre sites (ty,av,sb+so,mz,d+off) (first,last,b,cap,limit_st)
+    (abi_sites_encoder_shared_member_dynamic_pre sites (ty,av,sb+so,child_cap,d+off) (first,last,b,cap,limit_st)
       (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
-    (abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (ty,av,sb+so,mz,d+off)
+    (abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (ty,av,sb+so,child_cap,d+off)
       (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
     (ei,T,dst,elem_src,ho,dp,p,ce,len) r
 Proof

@@ -1,6 +1,6 @@
 Theory abiEncoderSharedLeaves
 Ancestors
-  abiEncoderSharedContract abiEncoderSequence abiScratchLeafEffect abiScratchEncoderContract
+  abiEncoderWindow abiEncoderSharedContract abiEncoderSequence abiScratchLeafEffect abiScratchEncoderContract
   abiEncoderExtendSim abiDecoderContract abiEncoderRegisteredEffect abiDecoderFrame venomMemDefs
   venomState venomExecSemantics instIdxIndep valueEncoding list arithmetic abiEncoderLeafGlobals
   abiEncoderOpenInput abiEncoderInput abiEncoderReentryLeaves abiEncoderLeafCode
@@ -67,25 +67,25 @@ Proof
 QED
 
 (* Shared leaf contracts use one concrete execution endpoint and its opcode certificate. *)
-Theorem abi_encoder_open_word_typed:
-  abi_encoder_open_input AbiPrimWord at av sb cap mem ==>
+Theorem abi_encoder_window_word_typed:
+  abi_encoder_window_input AbiPrimWord at av sb cap mem ==>
   abi_encoder_input AbiPrimWord at av sb cap mem
 Proof
-  simp[Once abi_encoder_open_input_cases, abi_encoder_input_word_iff]
+  simp[Once abi_encoder_window_input_cases, abi_encoder_input_word_iff]
 QED
 
-Theorem abi_encoder_open_copy_typed:
-  abi_encoder_open_input (AbiCopy sz) at av sb cap mem ==>
+Theorem abi_encoder_window_copy_typed:
+  abi_encoder_window_input (AbiCopy sz) at av sb cap mem ==>
   abi_encoder_input (AbiCopy sz) at av sb cap mem
 Proof
-  simp[Once abi_encoder_open_input_cases, abi_encoder_input_copy_iff]
+  simp[Once abi_encoder_window_input_cases, abi_encoder_input_copy_iff]
 QED
 
-Theorem abi_encoder_open_bytes_typed:
-  abi_encoder_open_input (AbiBytestring maxlen) at av sb cap mem ==>
+Theorem abi_encoder_window_bytes_typed:
+  abi_encoder_window_input (AbiBytestring maxlen) at av sb cap mem ==>
   abi_encoder_input (AbiBytestring maxlen) at av sb cap mem
 Proof
-  simp[Once abi_encoder_open_input_cases, abi_encoder_input_bytes_iff] >>
+  simp[Once abi_encoder_window_input_cases, abi_encoder_input_bytes_iff] >>
   metis_tac[]
 QED
 
@@ -96,7 +96,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-  drule abi_encoder_open_word_typed >> strip_tac >>
+  drule abi_encoder_window_word_typed >> strip_tac >>
   `sb < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
   drule_all abi_encoder_word_input_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts start end_st) initial = OK raw` >>
@@ -118,7 +118,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-  drule abi_encoder_open_copy_typed >> strip_tac >>
+  drule abi_encoder_window_copy_typed >> strip_tac >>
   `LENGTH (enc at av) = sz` by
     (qpat_assum `abi_encoder_input _ _ _ _ _ _`
       (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [abi_encoder_input_copy_iff]) >>
@@ -144,7 +144,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-  drule abi_encoder_open_bytes_typed >> strip_tac >>
+  drule abi_encoder_window_bytes_typed >> strip_tac >>
   `sb < dimword (:256)` by decide_tac >>
   `sb + source_cap <= d \/ d + LENGTH (enc at av) <= sb` by
     (qpat_assum `abi_encoder_input _ _ _ _ _ _`
@@ -178,7 +178,7 @@ Proof
   qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
   `enc at av = []` by
-    (fs[abi_encoder_open_complex_iff, abi_encoder_tuple_type_def,
+    (fs[abi_encoder_window_complex_iff, abi_encoder_tuple_type_def,
        abi_encoder_member_span_def, enc_def, LET_THM, REV_DEF]) >>
   `abi_scratch_effect first last end_st.cs_next_id end_st.cs_next_id end_st.cs_next_var
     limit_st d (LENGTH (enc at av)) b cap initial initial` by

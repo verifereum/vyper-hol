@@ -1,7 +1,7 @@
 (* A single endpoint for the shared recursive encoder derivation. *)
 Theory abiEncoderSharedContract
 Ancestors
-  abiEncoderOpenInput abiEncoderOpenInputFrame abiEncoderExtendSim
+  abiEncoderWindow abiEncoderOpenInput abiEncoderOpenInputFrame abiEncoderExtendSim
   abiEncoderRegisteredEffect abiEncoderPrimitiveEffect abiScratchEncoderContract
   abiDecoderAllocation abiDecoderFootprint abiDecoderContract abiDecoderLoop
   abiDecoderReentry abiEncoderInput abiEncoder compileEnv fragExec
@@ -9,7 +9,7 @@ Ancestors
 
 Definition abi_sites_encoder_shared_input_def:
   abi_sites_encoder_shared_input sites (ei,at,av) (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s <=>
-    abi_encoder_open_input ei at av sb source_cap s.vs_memory /\
+    abi_encoder_window_input ei at av sb source_cap s.vs_memory /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     LENGTH (enc at av) <= output_size /\
@@ -25,7 +25,7 @@ Overload abi_encoder_shared_input = “abi_sites_encoder_shared_input UNIV”
 
 Theorem abi_encoder_shared_input_def:
   abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s <=>
-    abi_encoder_open_input ei at av sb source_cap s.vs_memory /\
+    abi_encoder_window_input ei at av sb source_cap s.vs_memory /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
     LENGTH (enc at av) <= output_size /\

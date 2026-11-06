@@ -2,7 +2,7 @@
 Theory abiEncoderEnvelopeAdapter
 Ancestors
   abiEncoderSharedContract abiEncoderCorrect abiScratchEffect abiDecoderEffect
-  abiDecoderFootprint abiDecoderAllocation abiEncoderOpenInput
+  abiDecoderFootprint abiDecoderAllocation abiEncoderOpenInput abiEncoderWindow
   abiScratchEncoderContract abiScratchFootprint abiDecoderFrame
   valueEncoding venomState finite_map pred_set list arithmetic
 
@@ -31,6 +31,7 @@ Theorem abi_encoder_pre_shared:
 Proof
   simp_tac bool_ss [abi_encoder_pre_def, abi_encoder_shared_input_def] >>
   strip_tac >> drule abi_encoder_input_open >> strip_tac >>
+  drule abi_encoder_open_input_window >> strip_tac >>
   asm_simp_tac (srw_ss()) [venomMemDefsTheory.regions_disjoint_def] >>
   rpt conj_tac >> metis_tac[abi_encoder_envelope_disjoint, LESS_EQ_REFL]
 QED

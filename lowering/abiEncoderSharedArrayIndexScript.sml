@@ -148,16 +148,3 @@ Proof
   asm_simp_tac bool_ss [abi_encoder_open_array_length]
 QED
 
-Theorem abi_encoder_shared_array_index_selected_input:
-  abi_encoder_shared_array_index (ctx,func) (ei,asz,msz,active,ty,avs)
-    (owner_st,limit_st,src,dst,ip,dp,count_op) (site,slot,cursor_site,cursor_slot)
-    (first,last,hi,b,cap) (sb,source_cap,d,sz) label j origin s /\
-  j < LENGTH avs /\ LENGTH (enc ty (EL j avs)) <= sz /\
-  eval_operand child_src s = SOME (n2w (sb+32+j*msz)) /\
-  abi_decoder_operand_live owner_st.cs_next_var child_src ==>
-  abi_encoder_shared_input (ei,ty,EL j avs) (owner_st,child_src,dst)
-    (sb+32+j*msz,msz) (d,sz) (first,last,b,cap) s
-Proof
-  simp_tac bool_ss [abi_encoder_shared_array_index_def] >> strip_tac >>
-  drule_all abi_encoder_shared_array_selected_input >> simp[]
-QED

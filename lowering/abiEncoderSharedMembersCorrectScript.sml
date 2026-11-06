@@ -2,7 +2,7 @@
 Theory abiEncoderSharedMembersCorrect
 Ancestors
   abiEncoderSharedMembersInterpret abiEncoderSharedMembersIndex abiEncoderSharedMembersInput
-  abiEncoderSharedContract abiEncoderOpenInput abiEncoderTuple abiEncoderMembersDefs
+  abiEncoderSharedContract abiEncoderWindow abiEncoderOpenInput abiEncoderTuple abiEncoderMembersDefs
   abiEncoderMemberSpine abiScratchEffect abiEncoderRegisteredEffect abiEncoderExtendSim
   abiEncoderInput abiEncoderBufferFrame abiDecoderFootprint abiEncoderZeroFrame
   abiEncoderOpenInputFrame abiEncoderArrayFrame
@@ -19,9 +19,9 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-  qpat_assum `abi_encoder_open_input (AbiComplex infos) at _ _ _ _`
+  qpat_assum `abi_encoder_window_input (AbiComplex infos) at _ _ _ _`
     (qx_choose_then `layout` (qx_choose_then `values` strip_assume_tac) o
-      REWRITE_RULE [abi_encoder_open_complex_iff]) >>
+      REWRITE_RULE [abi_encoder_window_complex_iff]) >>
   `layout = tys` by
     (irule abi_encoder_tuple_type_unique >> qexists_tac `at` >> asm_simp_tac bool_ss []) >>
   gvs[Excl "enc_def"] >> rename1 `abi_encoder_tuple_type at tys` >>
@@ -30,18 +30,14 @@ Proof
      first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
      Cases_on `EL n infos` >> rename1 `EL n infos = (child, fields)` >>
      PairCases_on `fields` >>
-     metis_tac[abi_encoder_open_input_valid]) >>
+     metis_tac[abi_encoder_window_input_valid]) >>
   `enc at (ListV avs) = enc (Tuple tys) (ListV avs)` by
     (gvs[abi_encoder_tuple_type_def] >> simp[Once enc_def, LET_THM]) >>
-  `abi_encoder_open_input (AbiComplex infos) (Tuple tys) (ListV avs)
-    sb (abi_encoder_member_span infos) initial.vs_memory` by
-    (simp[abi_encoder_open_complex_iff, abi_encoder_tuple_type_def] >> metis_tac[]) >>
-  `abi_footprint_disjoint sb (abi_encoder_member_span infos)
-    (abi_decoder_child_scratch (abi_sites_decoder_ids sites first last) b cap initial)` by
-    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`,`source_cap`] >> simp[]) >>
-  `regions_disjoint (sb,abi_encoder_member_span infos) (d,output_size)` by
-    (gvs[abi_encoder_zero_aware_separation] >> decide_tac) >>
-  asm_simp_tac bool_ss [abi_sites_encoder_shared_members_pre_def, ADD_CLAUSES] >> decide_tac
+  `abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
+    sb source_cap initial.vs_memory` by
+    (simp[abi_encoder_window_complex_iff, abi_encoder_tuple_type_def] >> metis_tac[]) >>
+  asm_simp_tac bool_ss [abi_sites_encoder_shared_members_pre_def, ADD_CLAUSES, SUB_0, ZERO_LESS_EQ] >>
+  qexists_tac `source_cap` >> asm_simp_tac bool_ss []
 QED
 
 Theorem abi_encoder_shared_members_initial_inv:

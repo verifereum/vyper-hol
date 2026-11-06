@@ -3,7 +3,7 @@ Ancestors
   abiEncoderProps abiEncoderAdmissible abiEncoderInput vyperABI contractABI compileEnv
   valueEncoding valueEncodingProps valueEncodingTyping vyperValue vyperTyping vyperMisc words
   list abiEncoderSourceProducer abiEncoderSharedRecursive abiEncoderEntry abiEncoderExitPhi
-  abiEncoderSharedContract abiEncoderResourceAdapter abiDecoderReentry
+  abiEncoderSharedContract abiEncoderWindow abiEncoderResourceAdapter abiDecoderReentry
 
 (* Representation boundary for relational encoding plans. *)
 Theorem abi_enc_plan_static_leaf:
@@ -54,6 +54,7 @@ Proof
   rpt strip_tac >>
   `val_in_memory tv v (w2n sw) s.vs_memory` by fs[enc_pre_def] >>
   drule_all abi_encoder_source_window >> strip_tac >>
+  imp_res_tac abi_encoder_open_input_window >>
   qexistsl_tac [`ct`,`rv`] >> asm_rewrite_tac[] >>
   simp_tac bool_ss [abi_encoder_shared_input_def] >>
   `abi_decoder_operand_live st.cs_next_var src /\

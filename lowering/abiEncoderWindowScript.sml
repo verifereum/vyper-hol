@@ -241,6 +241,48 @@ Proof
   qexists_tac `mem` >> simp[]
 QED
 
+Theorem abi_encoder_window_input_suffix_mem_agree:
+  abi_encoder_window_input ei at av (sb+so) (rc-so) mem /\
+  mem_bytes_at sb rc mem = mem_bytes_at sb rc mem' ==>
+  abi_encoder_window_input ei at av (sb+so) (rc-so) mem'
+Proof
+  strip_tac >> Cases_on `so <= rc`
+  >- (drule abi_encoder_window_input_mem_agree >> disch_then irule >>
+      drule abi_encoder_window_slice >>
+      disch_then (qspecl_then [`so`,`rc-so`] mp_tac) >> simp[])
+  >> `rc - so = 0` by decide_tac >> fs[] >>
+  drule abi_encoder_window_input_empty_memory >> simp[]
+QED
+
+Theorem abi_encoder_window_complex_cons:
+  abi_encoder_window_input (AbiComplex ((ei,abi_sz,mem_sz,dyn)::infos))
+    (Tuple (ty::tys)) (ListV (av::avs)) sb cap mem ==>
+  abi_sz = abi_member_head_size ty /\ dyn = is_dynamic ty /\
+  (?child_cap. child_cap <= mem_sz /\ child_cap <= cap /\
+    abi_encoder_window_input ei ty av sb child_cap mem) /\
+  (infos <> [] ==> mem_sz <= cap) /\
+  abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
+    (sb+mem_sz) (cap-mem_sz) mem
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_encoder_window_input _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [abi_encoder_window_complex_iff, abi_encoder_tuple_type_def]) >>
+  `abi_encoder_window_input (AbiComplex infos) (Tuple tys) (ListV avs)
+    (sb+mem_sz) (cap-mem_sz) mem` by
+    (simp[abi_encoder_window_complex_iff, abi_encoder_tuple_type_def] >>
+     rpt strip_tac >> first_x_assum (qspec_then `SUC i` mp_tac) >>
+     simp_tac (srw_ss()) [abi_encoder_member_span_def, ADD_ASSOC] >>
+     strip_tac >> simp[] >> qexists_tac `child_cap` >> simp[]) >>
+  `infos <> [] ==> mem_sz <= cap` by
+    (strip_tac >> Cases_on `infos` >- fs[] >> rename1 `h::rest` >>
+     PairCases_on `h` >> first_x_assum (qspec_then `1` mp_tac) >>
+     simp[abi_encoder_member_span_def] >> strip_tac >> decide_tac) >>
+  first_x_assum (qspec_then `0` mp_tac) >>
+  simp[abi_encoder_member_span_def] >> strip_tac >>
+  asm_rewrite_tac [] >> qexists_tac `child_cap` >> asm_rewrite_tac []
+QED
+
 Theorem abi_encoder_window_singleton_bytes:
   (ct = Bytes NONE \/ ct = String) /\ has_type ct (BytesV bs) /\
   LENGTH bs <= maxlen /\ 32 + LENGTH bs <= mem_sz /\

@@ -16,10 +16,12 @@ Theorem abi_encoder_shared_members_prepare_raw_transport:
     src dst sb so ho d hl sz b cap initial /\
   prepared.cs_next_var <= limit_st.cs_next_var /\
   abi_encoder_member_phase_raw st prepared initial ready ==>
+  ?child_cap.
   abi_sites_encoder_shared_members_inv sites ((ei,az,mz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dp site slot first last lo prepared limit_st
     src dst sb so ho d hl sz b cap ready /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (prepared,elem_src,dst) (sb+so,mz) (d,sz)
+  child_cap <= mz /\
+  abi_sites_encoder_shared_input sites (ei,ty,av) (prepared,elem_src,dst) (sb+so,child_cap) (d,sz)
     (first,last,b,cap) ready /\
   abi_decoder_address_frame st.cs_next_var initial ready
 Proof
@@ -40,9 +42,8 @@ Proof
     (irule abi_encoder_shared_members_pre_address >>
      qexistsl_tac [`initial`,`st`] >> asm_rewrite_tac []) >>
   drule_all abi_encoder_cursor_address >> strip_tac >>
-  `abi_sites_encoder_shared_input sites (ei,ty,av) (prepared,elem_src,dst) (sb+so,mz) (d,sz)
-    (first,last,b,cap) ready` by
-    (drule_all abi_encoder_shared_members_child_buffer >> simp[]) >>
+  drule_all abi_encoder_shared_members_child_buffer >> strip_tac >>
+  qexists_tac `child_cap` >>
   drule_all abi_scratch_address >>
   disch_then (qspecl_then [`abi_sites_decoder_ids sites first last`, `[]`] strip_assume_tac) >>
   `abi_encoder_tuple_prefix hl pre pvs d ready.vs_memory` by
@@ -73,10 +74,12 @@ Theorem abi_encoder_shared_members_index_prepare:
   abi_encoder_spine_cons_layout func limit_st last (dst,src,dp)
     (ei,az,mz,dyn,infos) (st,so,ho) (out,en) (elem_src,p,len,ce) /\
   hi <= last /\ abi_encoder_member_phase_raw st p s r ==>
+  ?child_cap.
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     target ((ei,az,mz,dyn)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,mz) (d,sz) (first,last,b,cap) r
+  child_cap <= mz /\
+  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap) (d,sz) (first,last,b,cap) r
 Proof
   PairCases_on `target` >>
   simp_tac bool_ss [abi_sites_encoder_shared_members_index_def, abi_encoder_spine_cons_layout_def] >>
@@ -105,5 +108,5 @@ Proof
   `abi_encoder_extend_sim ctx func initial r` by
     (irule abi_encoder_extend_sim_trans >> qexists_tac `s` >> asm_rewrite_tac []) >>
   `alloca_inv initial ==> alloca_inv r` by metis_tac[] >>
-  asm_rewrite_tac [] >> decide_tac
+  qexists_tac `child_cap` >> asm_rewrite_tac [] >> decide_tac
 QED

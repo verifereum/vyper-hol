@@ -1,6 +1,6 @@
 Theory abiEncoderSharedArrayInitFrame
 Ancestors
-  abiEncoderSharedContract abiEncoderOpenInput abiEncoderOpenInputFrame abiEncoderArrayFrame
+  abiEncoderWindow abiEncoderSharedContract abiEncoderOpenInput abiEncoderOpenInputFrame abiEncoderArrayFrame
   abiEncoderArrayBodyCode abiEncoderInput abiDecoderFootprint abiDecoderContract
   abiDecoderReentry abiCanonicalWindows abiDecodeRanges abiCanonicalHeadSize
   abiEncoderSharedMembersCorrect abiEncoderArrayPrefix abiEncoderTuple abiEncoderMemory
@@ -12,58 +12,22 @@ Ancestors
   emitHelperProps venomInst venomExecSemantics instIdxIndep valueEncodingProps abiScratchSubset
   pred_set
 
-(* Open array windows: no aggregate has_type/cardinality restriction is introduced. *)
-Theorem abi_encoder_open_array_iff:
-  abi_encoder_open_input (AbiDynArray ei asz msz active) at av sb source_cap mem <=>
-  ?ty avs. at = Array NONE ty /\ av = ListV avs /\ valid_length NONE avs /\
-    asz = abi_member_head_size ty /\ active = is_dynamic ty /\
-    32+LENGTH avs*msz <= source_cap /\ mem_word_at sb mem = n2w (LENGTH avs) /\
-    (!i. i < LENGTH avs ==>
-      abi_encoder_open_input ei ty (EL i avs) (sb+32+i*msz) msz mem)
-Proof
-  simp[Once abi_encoder_open_input_cases] >> metis_tac[]
-QED
-
 Theorem abi_encoder_shared_array_input_facts:
   abi_sites_encoder_shared_input sites (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
     (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s ==>
   valid_length NONE avs /\ LENGTH avs < dimword (:256) /\
   asz = abi_member_head_size ty /\ active = is_dynamic ty /\
-  32+LENGTH avs*msz <= source_cap /\
+  32 <= source_cap /\
   mem_word_at sb s.vs_memory = n2w (LENGTH avs) /\
   (!i. i < LENGTH avs ==>
-    abi_encoder_open_input ei ty (EL i avs) (sb+32+i*msz) msz s.vs_memory) /\
+    ?child_cap. child_cap <= msz /\ 32+i*msz+child_cap <= source_cap /\
+      abi_encoder_window_input ei ty (EL i avs) (sb+32+i*msz) child_cap s.vs_memory) /\
   LIST_REL abi_encoder_structural_valid (REPLICATE (LENGTH avs) ty) avs
 Proof
-  simp_tac bool_ss [abi_sites_encoder_shared_input_def, abi_encoder_open_array_iff] >>
+  simp_tac bool_ss [abi_sites_encoder_shared_input_def, abi_encoder_window_array_iff] >>
   strip_tac >> gvs[Excl "enc_def"] >>
   asm_simp_tac (srw_ss()) [valid_length_def, LIST_REL_EL_EQN, EL_REPLICATE] >>
-  metis_tac[abi_encoder_open_input_valid]
-QED
-
-Theorem abi_encoder_shared_array_selected_input:
-  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
-    (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s /\
-  j < LENGTH avs /\ LENGTH (enc ty (EL j avs)) <= output_size /\
-  eval_operand child_src s = SOME (n2w (sb+32+j*msz)) /\
-  abi_decoder_operand_live st.cs_next_var child_src ==>
-  abi_encoder_shared_input (ei,ty,EL j avs) (st,child_src,dst)
-    (sb+32+j*msz,msz) (d,output_size) (first,last,b,cap) s
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_encoder_shared_array_input_facts >> strip_tac >>
-  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
-  `sb+32+j*msz+msz <= sb+source_cap` by
-    (`SUC j*msz <= LENGTH avs*msz` by simp[] >>
-     pop_assum mp_tac >> pure_rewrite_tac[MULT_CLAUSES] >>
-     simp_tac bool_ss [MULT_COMM] >> decide_tac) >>
-  `regions_disjoint (sb+32+j*msz,msz) (d,output_size)` by
-    (gvs[abi_encoder_zero_aware_separation] >> decide_tac) >>
-  `abi_footprint_disjoint (sb+32+j*msz) msz
-    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
-    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`sb`,`source_cap`] >> simp[] >> decide_tac) >>
-  asm_simp_tac bool_ss [abi_encoder_shared_input_def] >> decide_tac
+  metis_tac[abi_encoder_window_input_valid]
 QED
 
 Theorem abi_encoder_open_array_length:
@@ -253,9 +217,9 @@ Proof
   `abi_decode_footprint_frame [(d,32)] initial ready` by fs[abi_decode_frame_footprint] >>
   `mem_bytes_at sb source_cap initial.vs_memory = mem_bytes_at sb source_cap ready.vs_memory` by
     (drule_all abi_decode_footprint_frame_slice >> simp[]) >>
-  `abi_encoder_open_input (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
+  `abi_encoder_window_input (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
     sb source_cap ready.vs_memory` by
-    (drule_all abi_encoder_open_input_mem_agree >> simp[]) >>
+    (drule_all abi_encoder_window_input_mem_agree >> simp[]) >>
   `st.cs_next_var <= final.cs_next_var` by
     (drule (Q.INST [`opc` |-> `MLOAD`] abi_decode_array_header_shape) >>
      simp[abi_decode_source_opcode_def]) >>

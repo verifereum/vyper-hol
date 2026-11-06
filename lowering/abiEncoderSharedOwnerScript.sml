@@ -1,6 +1,6 @@
 Theory abiEncoderSharedOwner
 Ancestors
-  abiEncoderSharedContract abiEncoderOpenInputFrame abiEncoderZeroFrame abiScratchEffect
+  abiEncoderWindow abiEncoderSharedContract abiEncoderOpenInputFrame abiEncoderZeroFrame abiScratchEffect
   abiScratchFootprint abiScratchEncoderContract abiDecoderFrame abiDecoderFootprint
   abiDecoderAllocation abiDecoderReentry compileEnv venomState venomMemDefs valueEncoding words
   list arithmetic abiEncoderArrayHeaderMemory abiEncoderMembersDefs
@@ -22,8 +22,8 @@ Proof
     (drule_all abi_scratch_effect_frame >> simp[]) >>
   `mem_bytes_at sb source_cap initial.vs_memory = mem_bytes_at sb source_cap actual.vs_memory` by
     (drule_all abi_encoder_footprint_frame_zero_slice >> simp[]) >>
-  `abi_encoder_open_input ei at av sb source_cap actual.vs_memory` by
-    (drule_all abi_encoder_open_input_mem_agree >> simp[]) >>
+  `abi_encoder_window_input ei at av sb source_cap actual.vs_memory` by
+    (drule_all abi_encoder_window_input_mem_agree >> simp[]) >>
   `abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst` by
     (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   `eval_operand src actual = SOME (n2w sb) /\ eval_operand dst actual = SOME (n2w d)` by

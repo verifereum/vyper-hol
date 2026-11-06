@@ -11,12 +11,12 @@ Definition abi_sites_encoder_shared_members_entry_def:
   abi_sites_encoder_shared_members_entry sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz) target
     (ei,az,mz,dyn,infos) (st,so,ho) x s (elem_src,p,len,ce) r y <=>
-  ?ty tys av avs pre pvs.
+  ?ty tys av avs pre pvs child_cap.
     x = (ty::tys,av::avs,pre,pvs) /\
     abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
       (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
       target ((ei,az,mz,dyn)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-    abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+    abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap)
       (d,sz) (first,last,b,cap) r /\
     compile_abi_encode_child dst elem_src ei dyn ho dp p = (len,ce) /\
     fn_has_code p ce func /\
@@ -27,9 +27,9 @@ Definition abi_sites_encoder_shared_members_entry_def:
     ce.cs_next_var <= limit_st.cs_next_var /\
     (if dyn then ?ops prepared.
        abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
-       y = (T,(ty,av,sb+so,mz,d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))),
+       y = (T,(ty,av,sb+so,child_cap,d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))),
          (FST ops,FST (SND ops),dp,d+ho,hl+LENGTH (FLAT (abi_tuple_tails pre pvs)),slot,site))
-     else y = (F,(ty,av,sb+so,mz,d+ho),(dst,dst,dp,d+ho,0,slot,site)))
+     else y = (F,(ty,av,sb+so,child_cap,d+ho),(dst,dst,dp,d+ho,0,slot,site)))
 End
 
 Overload abi_encoder_shared_members_entry = “abi_sites_encoder_shared_members_entry UNIV”
@@ -38,12 +38,12 @@ Theorem abi_encoder_shared_members_entry_def:
   abi_encoder_shared_members_entry (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz) target
     (ei,az,mz,dyn,infos) (st,so,ho) x s (elem_src,p,len,ce) r y <=>
-  ?ty tys av avs pre pvs.
+  ?ty tys av avs pre pvs child_cap.
     x = (ty::tys,av::avs,pre,pvs) /\
     abi_encoder_shared_members_index (ctx,func) (origin,initial)
       (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
       target ((ei,az,mz,dyn)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-    abi_encoder_shared_input (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+    abi_encoder_shared_input (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap)
       (d,sz) (first,last,b,cap) r /\
     compile_abi_encode_child dst elem_src ei dyn ho dp p = (len,ce) /\
     fn_has_code p ce func /\
@@ -54,9 +54,9 @@ Theorem abi_encoder_shared_members_entry_def:
     ce.cs_next_var <= limit_st.cs_next_var /\
     (if dyn then ?ops prepared.
        abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
-       y = (T,(ty,av,sb+so,mz,d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))),
+       y = (T,(ty,av,sb+so,child_cap,d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))),
          (FST ops,FST (SND ops),dp,d+ho,hl+LENGTH (FLAT (abi_tuple_tails pre pvs)),slot,site))
-     else y = (F,(ty,av,sb+so,mz,d+ho),(dst,dst,dp,d+ho,0,slot,site)))
+     else y = (F,(ty,av,sb+so,child_cap,d+ho),(dst,dst,dp,d+ho,0,slot,site)))
 Proof
   rewrite_tac[abi_sites_encoder_shared_members_entry_def]
 QED
@@ -77,6 +77,7 @@ Proof
   disch_then (qx_choose_then `avs` mp_tac) >>
   disch_then (qx_choose_then `pre` mp_tac) >>
   disch_then (qx_choose_then `pvs` mp_tac) >>
+  disch_then (qx_choose_then `child_cap` mp_tac) >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   Cases_on `dyn`
   >- (qpat_x_assum `if _ then _ else _` mp_tac >>
@@ -107,7 +108,7 @@ Theorem abi_encoder_shared_members_entry_exit:
     target infos (ce,so+mz,ho+az) x' u
 Proof
   simp_tac bool_ss [abi_sites_encoder_shared_members_entry_def, PULL_EXISTS] >>
-  map_every qx_gen_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`] >>
+  map_every qx_gen_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`,`child_cap`] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   Cases_on `dyn`
   >- (qpat_x_assum `if _ then _ else _` mp_tac >>
@@ -175,12 +176,12 @@ Proof
   Cases_on `dyn`
   >- (Cases_on `abi_encode_child_prefix dst ho dp p` >>
       rename1 `abi_encode_child_prefix dst ho dp p = (ops,prepared)` >>
-      qexists_tac `(T,(ty,av,sb+so,mz,d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))),
+      qexists_tac `(T,(ty,av,sb+so,child_cap,d+(hl+LENGTH (FLAT (abi_tuple_tails pre pvs)))),
         (FST ops,FST (SND ops),dp,d+ho,hl+LENGTH (FLAT (abi_tuple_tails pre pvs)),slot,site))` >>
-      qexistsl_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`] >>
+      qexistsl_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`,`child_cap`] >>
       asm_rewrite_tac [] >> qexistsl_tac [`ops`,`prepared`] >> asm_rewrite_tac []) >>
-  qexists_tac `(F,(ty,av,sb+so,mz,d+ho),(dst,dst,dp,d+ho,0,slot,site))` >>
-  qexistsl_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`] >> asm_rewrite_tac []
+  qexists_tac `(F,(ty,av,sb+so,child_cap,d+ho),(dst,dst,dp,d+ho,0,slot,site))` >>
+  qexistsl_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`,`child_cap`] >> asm_rewrite_tac []
 QED
 
 Theorem abi_encoder_shared_members_empty_post:

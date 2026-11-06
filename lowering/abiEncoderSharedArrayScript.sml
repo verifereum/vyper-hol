@@ -1,7 +1,7 @@
 (* Closed shared array constructor, derived from the shared execution spine. *)
 Theory abiEncoderSharedArray
 Ancestors
-  abiEncoderSharedArrayOuter abiEncoderSharedArrayInitFrame abiEncoderSharedContract
+  abiEncoderWindow abiEncoderSharedArrayOuter abiEncoderSharedArrayInitFrame abiEncoderSharedContract
   abiEncoderOpenInput abiEncoderInput abiDecoderReentry abiDecoderContract
   compileEnv valueEncoding contractABI venomState words list
 
@@ -13,9 +13,9 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
     (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-  qpat_x_assum `abi_encoder_open_input _ _ _ _ _ _`
+  qpat_x_assum `abi_encoder_window_input _ _ _ _ _ _`
     (qx_choose_then `ty` (qx_choose_then `avs` strip_assume_tac) o
-      REWRITE_RULE [abi_encoder_open_array_iff]) >>
+      REWRITE_RULE [abi_encoder_window_array_iff]) >>
   qpat_x_assum `at = Array NONE ty` SUBST_ALL_TAC >>
   qpat_x_assum `av = ListV avs` SUBST_ALL_TAC >>
   drule_all abi_encoder_shared_array_outer >>

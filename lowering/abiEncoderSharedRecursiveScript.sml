@@ -5,7 +5,7 @@ Ancestors
   abiEncoderMemberPhaseEffect abiScratchAddress abiEncoderAddressReach emitHelperProps
   emitHelper venomInst abiEncoderSharedArrayParent abiEncoderSharedContract
   abiEncoderComplexDynamic abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderMemberCode
-  abiEncoderOpenInput abiEncoderInput abiEncoderMembersDefs abiScratchEffect
+  abiEncoderWindow abiEncoderOpenInput abiEncoderInput abiEncoderMembersDefs abiScratchEffect
   abiScratchEncoderContract abiEncoderRegisteredEffect abiEncoderExtendSim abiDecoderContract
   abiDecodeRanges abiDecoderAllocation abiDecoderReentry compileEnv valueEncoding contractABI
   venomState words list arithmetic pred_set abiEncoderSharedLeaves abiEncoderSharedArray
@@ -17,8 +17,8 @@ Theorem abi_encoder_shared_complex_head_length:
   SUM (MAP (\(_,asz,_,_). asz) infos) = head_lengths tys 0
 Proof
   simp_tac bool_ss [abi_sites_encoder_shared_members_pre_def] >> strip_tac >>
-  qpat_x_assum `abi_encoder_open_input _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [abi_encoder_open_complex_iff]) >>
+  qpat_x_assum `abi_encoder_window_input _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_complex_iff]) >>
   gvs[abi_encoder_tuple_type_def] >> rename1 `head_lengths tys 0` >>
   `MAP (\(_,asz,_,_). asz) infos = MAP abi_member_head_size tys` by
     (irule (cj 1 abi_encoder_members_metadata) >> asm_simp_tac bool_ss [] >>
@@ -103,8 +103,8 @@ Proof
   drule abi_encoder_structural_list_layout >> disch_tac >>
   qpat_x_assum `abi_sites_encoder_shared_members_pre sites _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_encoder_shared_members_pre_def]) >>
-  disch_then (qx_choose_then `layout` (qx_choose_then `values` strip_assume_tac) o
-    REWRITE_RULE [abi_encoder_open_complex_iff]) >>
+  disch_then (qx_choose_then `rc` (qx_choose_then `layout` (qx_choose_then `values` strip_assume_tac) o
+    REWRITE_RULE [abi_encoder_window_complex_iff] o CONJUNCT1)) >>
   gvs[abi_encoder_tuple_type_def] >> rename1 `head_lengths tys 0` >>
   `MAP (\(_,_,_,dyn). dyn) infos = MAP is_dynamic tys` by
     (irule (cj 2 abi_encoder_members_metadata) >> asm_simp_tac bool_ss [] >>
@@ -158,7 +158,7 @@ Proof
   `?tys avs. av = ListV avs /\ abi_encoder_tuple_type at tys` by
     (qpat_x_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
        (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-     simp_tac bool_ss [abi_encoder_open_complex_iff] >> metis_tac[]) >>
+     simp_tac bool_ss [abi_encoder_window_complex_iff] >> metis_tac[]) >>
   qpat_x_assum `av = ListV avs` SUBST_ALL_TAC >>
   drule_all abi_encoder_shared_members_root_pre >> strip_tac >>
   qpat_x_assum `enc at (ListV avs) = _`
@@ -278,7 +278,7 @@ Proof
   `?tys avs. av = ListV avs /\ abi_encoder_tuple_type at tys` by
     (qpat_x_assum `abi_sites_encoder_shared_input sites _ _ _ _ _ _`
        (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_sites_encoder_shared_input_def]) >>
-     simp_tac bool_ss [abi_encoder_open_complex_iff] >> metis_tac[]) >>
+     simp_tac bool_ss [abi_encoder_window_complex_iff] >> metis_tac[]) >>
   qpat_x_assum `av = ListV avs` SUBST_ALL_TAC >>
   drule_all abi_encoder_shared_members_root_pre >> strip_tac >>
   qpat_x_assum `enc at (ListV avs) = _`

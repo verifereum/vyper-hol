@@ -158,11 +158,11 @@ Theorem abi_encoder_shared_members_static_endpoint:
   abi_sites_encoder_shared_members_inv sites ((ei,abi_sz,mem_sz,F)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (st,elem_src,dst) (sb+so,mem_sz)
+  abi_sites_encoder_shared_input sites (ei,ty,av) (st,elem_src,dst) (sb+so,child_cap)
     (d,output_size) (first,last,b,cap) initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   abi_encoder_spine_child_output
-    (abi_sites_encoder_spine_shared_post sites (ctx,func) (ty,av,sb+so,mem_sz,d+ho)
+    (abi_sites_encoder_spine_shared_post sites (ctx,func) (ty,av,sb+so,child_cap,d+ho)
       (first,last,b,cap,limit_st))
     (ei,F,dst,elem_src,ho,dyn_ptr,st,end_st,out) initial actual ==>
   abi_sites_encoder_shared_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
@@ -228,7 +228,7 @@ Theorem abi_encoder_shared_members_static_exit:
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     target ((ei,az,mz,F)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap)
     (d,sz) (first,last,b,cap) r /\
   compile_abi_encode_child dst elem_src ei F ho dp p = (len,ce) /\
   fn_has_code p ce func /\
@@ -238,7 +238,7 @@ Theorem abi_encoder_shared_members_static_exit:
   ce.cs_next_id <= last /\ ce.cs_next_id <= hi /\ hi <= last /\
   ce.cs_next_var <= limit_st.cs_next_var /\
   abi_encoder_spine_child_output
-    (abi_sites_encoder_spine_shared_post sites (ctx,func) (ty,av,sb+so,mz,d+ho)
+    (abi_sites_encoder_spine_shared_post sites (ctx,func) (ty,av,sb+so,child_cap,d+ho)
       (first,last,b,cap,limit_st))
     (ei,F,dst,elem_src,ho,dp,p,ce,len) r u ==>
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
@@ -279,12 +279,12 @@ Theorem abi_encoder_shared_members_dynamic_endpoint:
   abi_sites_encoder_shared_members_inv sites ((ei,abi_sz,mem_sz,T)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap initial /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (st,elem_src,dst) (sb+so,mem_sz)
+  abi_sites_encoder_shared_input sites (ei,ty,av) (st,elem_src,dst) (sb+so,child_cap)
     (d,output_size) (first,last,b,cap) initial /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
   abi_encoder_spine_child_output
-    (abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (ty,av,sb+so,mem_sz,d+off)
+    (abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (ty,av,sb+so,child_cap,d+off)
       (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dyn_ptr,d+ho,off,slot,site))
     (ei,T,dst,elem_src,ho,dyn_ptr,st,end_st,out) initial actual ==>
   abi_sites_encoder_shared_members_inv sites infos tys avs (pre++[ty]) (pvs++[av]) active dyn_ptr site slot
@@ -335,7 +335,7 @@ Theorem abi_encoder_shared_members_dynamic_exit:
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)
     (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
     target ((ei,az,mz,T)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
-  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+  abi_sites_encoder_shared_input sites (ei,ty,av) (p,elem_src,dst) (sb+so,child_cap)
     (d,sz) (first,last,b,cap) r /\
   compile_abi_encode_child dst elem_src ei T ho dp p = (len,ce) /\
   abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
@@ -347,7 +347,7 @@ Theorem abi_encoder_shared_members_dynamic_exit:
   ce.cs_next_var <= limit_st.cs_next_var /\
   off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
   abi_encoder_spine_child_output
-    (abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (ty,av,sb+so,mz,d+off)
+    (abi_sites_encoder_shared_member_dynamic_post sites (ctx,func) (ty,av,sb+so,child_cap,d+off)
       (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
     (ei,T,dst,elem_src,ho,dp,p,ce,len) r u ==>
   abi_sites_encoder_shared_members_index sites (ctx,func) (origin,initial)

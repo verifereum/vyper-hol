@@ -1,6 +1,6 @@
 Theory abiEncoderSharedArrayRound
 Ancestors
-  abiEncoderArrayRound abiEncoderSharedArrayEntry abiEncoderExtendSim abiEncoderVarTransport
+  abiEncoderWindow abiEncoderArrayRound abiEncoderSharedArrayEntry abiEncoderExtendSim abiEncoderVarTransport
   abiDecoderVarExtend execEquivParamDefs abiEncoderRegisteredEffect abiDecoderExecution
   abiDecoderArrayBackedge abiDecoderFootprint abiDecoderAllocation abiDecoderLoop
   abiDecoderContract abiDecoderReentry exprLoweringProps venomState venomExecSemantics
@@ -121,8 +121,8 @@ Proof
     (fs[abi_footprint_disjoint_def] >> metis_tac[]) >>
   `mem_bytes_at sb source_cap s.vs_memory = mem_bytes_at sb source_cap t.vs_memory` by
     (drule_all abi_decode_footprint_frame_slice >> simp[]) >>
-  `abi_encoder_open_input ei at av sb source_cap t.vs_memory` by
-    (drule_all abi_encoder_open_input_mem_agree >> simp[]) >>
+  `abi_encoder_window_input ei at av sb source_cap t.vs_memory` by
+    (drule_all abi_encoder_window_input_mem_agree >> simp[]) >>
   simp[abi_encoder_shared_input_def] >> gvs[abi_decoder_child_scratch_def]
 QED
 
