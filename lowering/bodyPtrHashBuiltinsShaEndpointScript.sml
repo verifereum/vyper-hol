@@ -2,6 +2,7 @@
 Theory bodyPtrHashBuiltinsShaEndpoint
 Ancestors bodyPtrHashBuiltinsShaPrefix bodyPtrHashBuiltinsGhostFrame
   ghostPcTransportPtr exprSimProps ptrDiscipline venomState venomInst
+  bodyPtrHashBuiltinsGhostCompose
   words arithmetic finite_map pred_set compileEnv exprLoweringProps freshWrites bodyPtrDefs
 
 Theorem hash_bytes_prepare_endpoint:
@@ -99,13 +100,7 @@ Proof
     (simp[local_region_def] >>
      qpat_x_assum `local_ptrs_reserved cenv sa` mp_tac >>
      simp[local_ptrs_reserved_def] >> metis_tac[]) >>
-  gvs[ghost_kept_def] >> conj_tac
-  >- (rpt strip_tac >>
-      `aid < sm.cs_next_id` by decide_tac >>
-      `FLOOKUP a.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
-      qpat_assum `!aid off sz i. FLOOKUP _ aid = _ /\ _ ==> i IN tn1.t_mem` drule_all >> strip_tac >>
-      qpat_assum `!aid off sz i. FLOOKUP _ aid = _ /\ _ ==> i IN tn.t_mem` drule_all >> simp[]) >>
-  rpt strip_tac >>
-  qpat_assum `!n b sz i. local_region _ _ _ n b sz /\ _ ==> i IN tn1.t_mem` drule_all >> strip_tac >>
-  qpat_assum `!n b sz i. local_region _ _ _ n b sz /\ _ ==> i IN tn.t_mem` drule_all >> simp[]
+  irule hash_ghost_kept_compose >>
+  first_assum (irule_at (Pat `ghost_kept _ _ sa _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `ghost_kept _ _ sm _ _ _ _ _`)) >> simp[]
 QED

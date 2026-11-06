@@ -53,7 +53,8 @@ Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
     ghost_inv d cenv cx ee G tn s /\
     ptr_val_ok cx (expr_type e) v x G tn s /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G s) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    local_ptrs_rel func cenv es.scopes s0 ==>
     ?marks. gas_summary_ptr_at (cx_dead cx) (ctx,func) PG marks
       (\es'. ((case builtin_result cx es'.accounts ann bt [expr_type e] [v] of
                  INL w => INL (Value w) | INR exc => INR exc), es'))
@@ -75,6 +76,8 @@ Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rewrite_tac[expr_vv_sim_ptr_def] >> rpt strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s0` by fs[exprLoweringPropsTheory.stmt_state_rel_def,
+      compileEnvTheory.state_rel_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule expr_body_pre_builtin_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
