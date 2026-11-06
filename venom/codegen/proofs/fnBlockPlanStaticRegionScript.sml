@@ -3439,3 +3439,29 @@ Proof
     `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`] mp_tac) >>
   simp[] >> strip_tac >> gvs[]
 QED
+
+(* Both cuts retain the original tail, hence the same lookahead. *)
+Theorem regional_block_prefix_cut:
+  !a insts lv dfg cfg fn lbl halt np bl i b ps ops qs.
+    a <= LENGTH insts ==>
+    (generate_block_insts_prefix lv dfg cfg fn lbl halt np bl i (a+b)
+       insts ps = SOME (ops,qs) <=>
+     ?pre mid post.
+       generate_block_insts_prefix lv dfg cfg fn lbl halt np bl i a
+         insts ps = SOME (pre,mid) /\
+       generate_block_insts_prefix lv dfg cfg fn lbl halt np bl (i+a) b
+         (DROP a insts) mid = SOME (post,qs) /\
+       ops = pre ++ post)
+Proof
+  Induct_on `a`
+  >- simp[generate_block_insts_prefix_def] >>
+  gen_tac >> Cases_on `insts` >- simp[] >>
+  first_x_assum (qspec_then `t` mp_tac) >>
+  disch_tac >> rpt gen_tac >> disch_tac >>
+  fs[LENGTH] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES] >>
+  simp[generate_block_insts_prefix_def, LET_THM, AllCaseEqs(), PULL_EXISTS] >>
+  simp[arithmeticTheory.ADD1] >>
+  eq_tac >> strip_tac >> gvs[arithmeticTheory.ADD1] >>
+  rpt (first_assum $ irule_at Any) >> simp[arithmeticTheory.ADD1]
+QED
