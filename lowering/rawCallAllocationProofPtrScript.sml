@@ -449,6 +449,7 @@ Theorem raw_call_outbuf_positive_stage:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (((cap+31) DIV 32)*32+32) /\
     ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
       dst < dimword(:256) /\ dst+cap < dimword(:256) /\
@@ -533,6 +534,7 @@ Theorem raw_call_outbuf_zero_stage:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u 0 /\ u.vs_memory = s.vs_memory /\
+    (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
       dst < dimword(:256) /\ dst+0 < dimword(:256) /\
@@ -576,6 +578,7 @@ Theorem raw_call_outbuf_stage:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
     ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
       dst < dimword(:256) /\ dst+cap < dimword(:256) /\
@@ -634,6 +637,7 @@ Theorem raw_call_outbuf_ready_stage:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
     ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     op_prov H data_op = SOME (region_base,sz) /\
     (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
     (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
@@ -717,6 +721,7 @@ Theorem raw_call_outbuf_ready_outcome:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
       ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
       ptr_covers H un dx u cap /\ u.vs_memory = t.vs_memory /\
+      (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP t.vs_allocas aid) /\
       eval_operand data t = SOME (n2w b) /\
       op_prov G data_op = SOME (base,sz) /\ op_prov H data_op = SOME (base,sz) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
@@ -763,6 +768,7 @@ Resume raw_call_outbuf_ready_outcome[normal]:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
     ptr_covers H un dx u cap /\ u.vs_memory = t.vs_memory /\
+      (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP t.vs_allocas aid) /\
     op_prov H data_op = SOME (base',sz) /\
     (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
     (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
