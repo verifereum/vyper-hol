@@ -84,18 +84,20 @@ Theorem method_id_mask_compile_counted:
   emit_op SHL [Lit 224w; sel] sm = (op,sb) /\
   op_taint tn hash = {} /\ eval_operand hash s = SOME w /\
   ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
-  ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ghost_kept cenv es0 sf G0 tn0 s0 G tn /\ local_ptrs_reserved cenv sf /\
+  (!x. not_fresh_at sf x ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) result op G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
+    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sf G0 tn0 s0 G' tn'
 Proof
   strip_tac >> drule_all method_id_mask_compile_code >> strip_tac >>
+  `~not_fresh_at sf x /\ ~not_fresh_at sf y` by metis_tac[] >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
@@ -103,7 +105,7 @@ Proof
      qexists_tac `l` >> simp[]) >>
   `?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) result op G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sa G0 tn0 s0 G' tn'` by
+    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sf G0 tn0 s0 G' tn'` by
     (drule_at (Pat `_ = [_;_]`) method_id_mask_seq_certificate >>
      disch_then drule_all >>
      disch_then (qspecl_then [`result`, `s.vs_inst_idx`] mp_tac) >>
