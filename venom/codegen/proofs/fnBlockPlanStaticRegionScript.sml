@@ -1778,3 +1778,34 @@ Proof
     regional_selected_phi_inv_block_prefix) >> simp[] >>
   qexistsl [`cfg_analyze fn`, `ops`, `ps2`] >> simp[]
 QED
+
+Theorem regional_selected_phi_exit_wf:
+  !lv dfg sb bb ps.
+    regional_selected_phi_inv lv dfg sb bb
+      (LENGTH (collect_phis bb.bb_instructions)) ps ==>
+    generated_plan_state_wf_marked sb ps
+Proof
+  simp[regional_selected_phi_inv_def]
+QED
+
+Theorem regional_selected_phi_exit_coverage:
+  !lv dfg sb bb ps v.
+    regional_selected_phi_inv lv dfg sb bb
+      (LENGTH (collect_phis bb.bb_instructions)) ps /\
+    MEM v (live_vars_at lv bb.bb_label (LENGTH (collect_phis bb.bb_instructions))) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
+Proof
+  simp[regional_selected_phi_inv_def] >> metis_tac[]
+QED
+
+Theorem regional_selected_phi_exit_freshness:
+  !lv dfg sb bb ps op v.
+    regional_selected_phi_inv lv dfg sb bb
+      (LENGTH (collect_phis bb.bb_instructions)) ps /\
+    (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs)
+      (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)))
+Proof
+  simp[regional_selected_phi_inv_def] >> metis_tac[]
+QED
