@@ -5,7 +5,7 @@ Ancestors
   bodyPtrBytestringBuiltinsUintGhost exprSimUint2Str
   fragGasPathPtr fragGasSeqPtr typedCopyPtr ptrDiscipline ptrSafeRun
   venomInst venomState venomExecSemantics finite_map words list rich_list
-  codegenRel contextCodegenRel
+  codegenRel contextCodegenRel bodyPtrDefs
 
 Theorem uint_pointer_binop_ghost:
   (opc = ADD \/ opc = SUB) ==>
@@ -104,4 +104,18 @@ Proof
   gvs[Abbr `g`, Abbr `t`, Abbr `mid`, update_var_def,
       GSYM word_add_n2w, GSYM n2w_sub] >>
   metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem u2s_address_covers:
+  i <= n /\ n+32 <= sz /\ b+sz < dimword(:256) ==>
+  ptr_covers (G |+ (u2s_var a 7,(b,sz)) |+ (u2s_var a 8,(b,sz)))
+    (tn with t_var := tn.t_var |+ (u2s_var a 7,{}) |+ (u2s_var a 8,{}))
+    (u2s_var a 8)
+    (update_var (u2s_var a 8) (n2w (b+n-i))
+      (update_var (u2s_var a 7) (n2w (b+n)) s) with vs_inst_idx := 4) 32
+Proof
+  strip_tac >>
+  simp[ptr_covers_def, op_taint_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE, w2n_n2w] >>
+  `b+n-i < dimword(:256)` by decide_tac >> simp[] >> decide_tac
 QED
