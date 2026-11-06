@@ -1,8 +1,9 @@
 (* Allocation ownership and robust input transport at dynamic tuple entry. *)
 Theory logTupleEntryPtr
 Ancestors
-  logCursorAllocPtr logAllocFramePtr logMembersInvariantPtr
+  logCursorAllocPtr logAllocFramePtr logMembersInvariantPtr logDataAllocPtr
   stmtSimLogTrace fragGasSeqPtr ASCIInumbers string instIdxIndep codegenRel
+  abiDecoderReentry appendStorageGhostPtr
   stmtSimLogEncodeLayout abiEncoderComplexDynamic abiEncoderInput
   allocationPtr loweringHalt bodyPtrDefs abiBuiltinAllocation emitHelperProps exprLoweringProps
   context compileEnv venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
@@ -129,4 +130,123 @@ Proof
   qpat_x_assum `!tt. _` (qspec_then `tn` mp_tac) >>
   simp[GSYM (markerTheory.Abbrev_def)] >>
   strip_tac >> gvs[op_taint_def, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem log_cursor_prefix_fresh:
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand;Lit w] sm = ((),sb) /\
+  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  sm.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t ==>
+  fresh_vars_wrt limit_st t
+Proof
+  strip_tac >> `32 < dimword(:256)` by simp[dimword_def] >>
+  drule_all log_buffer_seq_ptr >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  gvs[run_inst_seq_def, AllCaseEqs()] >>
+  qpat_x_assum `step_inst_base _ t' = OK t` mp_tac >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+       eval_operand_def, AllCaseEqs()] >>
+  strip_tac >> gvs[fresh_vars_wrt_def, mstore_def]
+QED
+
+Theorem log_tuple_cursor_entry:
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand;Lit (n2w hl)] sm = ((),final) /\
+  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  sm.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  ~ctx_has_dalloca ctx /\
+  srcid <> sa.cs_next_id /\ dstid <> sa.cs_next_id /\
+  FLOOKUP s.vs_allocas srcid = SOME (sb,srcCap) /\
+  FLOOKUP s.vs_allocas dstid = SOME (d,cap) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME (n2w sb) /\ lookup_var dst s = SOME (n2w d) /\
+  ptr_covers G tn src s srcCap /\ ptr_covers G tn dst s cap /\
+  sb+srcCap < dimword(:256) /\ d+cap < dimword(:256) /\
+  (sb+srcCap <= d \/ d+cap <= sb) /\
+  EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei) infos /\
+  (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
+    abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs) sb
+      (abi_encoder_member_span infos) q) /\
+  abi_encoder_member_span infos <= srcCap /\
+  LENGTH (enc (Tuple tys) (ListV avs)) <= cap /\
+  hl = SUM (MAP (\(_,asz,_,_). asz) infos) ==>
+  ?t p H tm dp.
+    run_inst_seq (emitted_insts sa sm ++ emitted_insts sm final) s = OK t /\
+    inst_seq_ptr D 0 ctx func PG G tn
+      (emitted_insts sa sm ++ emitted_insts sm final) s H tm /\
+    buf.buf_operand = Var dp /\ buf.buf_size = 32 /\
+    fresh_vars_wrt limit_st t /\ inst_extends sa sm /\ inst_extends sm final /\
+    not_fresh_at final src /\ not_fresh_at final dst /\ not_fresh_at final dp /\
+    log_members_layout infos tys avs [] [] sb 0 0 d hl cap t.vs_memory /\
+    (!q. mem_agree_outside tm.t_mem t.vs_memory q ==>
+      abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs) sb
+        (abi_encoder_member_span infos) q) /\
+    lookup_var src t = SOME (n2w sb) /\ lookup_var dst t = SOME (n2w d) /\
+    lookup_var dp t = SOME (n2w p) /\ mload p t = n2w hl /\
+    ptr_covers H tm src t srcCap /\ ptr_covers H tm dst t cap /\
+    ptr_covers H tm dp t 32 /\ p+32 < dimword(:256) /\
+    (sb+abi_encoder_member_span infos <= d \/ d+cap <= sb) /\
+    (sb+abi_encoder_member_span infos <= p \/ p+32 <= sb) /\
+    (d+cap <= p \/ p+32 <= d) /\
+    (!i. p <= i /\ i < p+32 ==> i NOTIN tm.t_mem) /\
+    mem_agree_outside {i | p <= i /\ i < p+32} t.vs_memory s.vs_memory /\
+    (!i. ~(p <= i /\ i < p+32) ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all log_cursor_allocate_init_seq_ptr >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `fresh_vars_wrt limit_st t` by (irule log_cursor_prefix_fresh >> metis_tac[]) >>
+  drule_all log_cursor_prefix_frames >> strip_tac >>
+  `(p+32 <= sb \/ sb+srcCap <= p) /\ (p+32 <= d \/ d+cap <= p)` by
+    metis_tac[log_cursor_registered_buffers_separate] >>
+  `!x. not_fresh_at sa x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >>
+     `x <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[not_fresh_at_def, LESS_EQ_REFL] >>
+     `abi_decoder_operand_live sa.cs_next_var (Var x)` by
+       (simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+        metis_tac[not_fresh_at_def]) >>
+     first_x_assum (qspec_then `Var x` mp_tac) >>
+     simp[eval_operand_def] >> metis_tac[]) >>
+  `ptr_covers Gf tm src t srcCap /\ ptr_covers Gf tm dst t cap` by
+    (conj_tac >> irule ptr_covers_old_transport >>
+     qexistsl_tac [`G`,`s`,`sa`,`tn`] >> asm_simp_tac bool_ss [] >>
+     rpt strip_tac >> metis_tac[]) >>
+  `log_members_layout infos tys avs [] [] sb 0 0 d hl cap t.vs_memory /\
+   (!q. mem_agree_outside tm.t_mem t.vs_memory q ==>
+      abi_encoder_input (AbiComplex infos) (Tuple tys) (ListV avs) sb
+        (abi_encoder_member_span infos) q)` by
+    (asm_rewrite_tac[] >> irule log_tuple_layout_entry >>
+     asm_simp_tac bool_ss [] >> qexistsl_tac [`tn.t_mem`,`s.vs_memory`, `{i | p <= i /\ i < p+32}`] >>
+     asm_simp_tac bool_ss [] >> rpt strip_tac >>
+     fs[IN_GSPEC_IFF] >>
+     `~(p <= i /\ i < p+32)` by decide_tac >> metis_tac[]) >>
+  `not_fresh_at final src /\ not_fresh_at final dst /\ not_fresh_at final out` by
+    (drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     `sa.cs_next_var < final.cs_next_var` by decide_tac >>
+     conj_tac >- (fs[not_fresh_at_def] >> rpt strip_tac >>
+       first_x_assum irule >> decide_tac) >>
+     conj_tac >- (fs[not_fresh_at_def] >> rpt strip_tac >>
+       first_x_assum irule >> decide_tac) >>
+     `out = STRING #"%" (toString sa.cs_next_var)` by
+       (qpat_x_assum `buf.buf_operand = Var out` mp_tac >>
+        asm_simp_tac bool_ss [operand_11]) >>
+     asm_rewrite_tac[] >> rewrite_tac[not_fresh_at_def] >>
+     simp[ASCIInumbersTheory.toString_11] >> decide_tac) >>
+  qexistsl_tac [`t`,`p`,`Gf`,`tm`,`out`] >>
+  asm_simp_tac bool_ss [] >> rpt conj_tac >> decide_tac
 QED
