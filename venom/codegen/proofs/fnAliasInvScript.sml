@@ -8638,6 +8638,28 @@ Proof
   simp[alias_root_phi_static, alias_root_phi_plans, alias_root_phi_lineage_loop] >> EVAL_TAC
 QED
 
+(* Historical selected-input membership does not exclude a PHI root write.
+   This witness does not refute the endpoint invariant: the header consumes a. *)
+Theorem alias_root_phi_selected_root_obstruction:
+  codegen_ready_fn alias_root_phi_fn /\
+  cfg_reachable_of (cfg_analyze alias_root_phi_fn) "body" /\
+  MEM "header" (cfg_succs_of (cfg_analyze alias_root_phi_fn) "body") /\
+  lookup_block "body" alias_root_phi_fn.fn_blocks =
+    SOME (EL 2 alias_root_phi_fn.fn_blocks) /\
+  lookup_block "header" alias_root_phi_fn.fn_blocks =
+    SOME (EL 1 alias_root_phi_fn.fn_blocks) /\
+  MEM "a" (input_vars_from "body" (EL 1 alias_root_phi_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_root_phi_fn) "header" 0)) /\
+  normalize_operand (dfg_build_function alias_root_phi_fn) [] (Var "a") = Var "r" /\
+  MEM (HD (EL 1 alias_root_phi_fn.fn_blocks).bb_instructions)
+    (collect_phis (EL 1 alias_root_phi_fn.fn_blocks).bb_instructions) /\
+  MEM "r" (inst_defs (HD (EL 1 alias_root_phi_fn.fn_blocks).bb_instructions)) /\
+  IS_SOME (alias_root_phi_plan 1 (SND alias_root_phi_b)) /\
+  ~plan_holds (SND (THE (alias_root_phi_plan 1 (SND alias_root_phi_b)))) (Var "a")
+Proof
+  simp[alias_root_phi_static] >> EVAL_TAC
+QED
+
 Theorem alias_support_obstruction_names_reflexive:
   normalize_operand (dfg_build_function alias_retired_fn) [] (Var "b") = Var "b" /\
   normalize_operand (dfg_build_function alias_halting_cut_fn) [] (Var "dead") = Var "dead" /\
