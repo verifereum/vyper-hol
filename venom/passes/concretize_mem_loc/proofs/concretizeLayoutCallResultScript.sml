@@ -245,7 +245,7 @@ Proof
     range_bytes_def] >> metis_tac[]
 QED
 
-Theorem layout_return_bind_fields[local]:
+Theorem layout_return_bind_fields:
   ret.iret_adopt_fmp = NONE /\
   bind_outputs outs ret.iret_values
     (adopt_return_fmp ret (merge_callee_state caller callee)) = SOME post ==>
