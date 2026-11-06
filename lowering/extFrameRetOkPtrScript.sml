@@ -20,7 +20,7 @@ Ancestors
   extRetStaticFrameConsumerPtr extRetStaticCapacityPtr extRetStaticBoundedConsumerPtr
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
-  extRetAbiArrayStaticBodyPtr
+  extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr
 
 val _ = Parse.hide "body";
 
