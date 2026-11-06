@@ -82,3 +82,51 @@ Resume storage_copy_load_pair_path_ptr[finish]:
 QED
 
 Finalise storage_copy_load_pair_path_ptr
+
+Theorem storage_copy_increment_path_ptr:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [Var cv; Lit 1w] [nv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME
+    (mk_inst (id+1) ASSIGN [Var nv] [cv]) /\
+  lookup_var cv s = SOME (n2w k) /\
+  op_prov G (Var cv) = NONE /\ op_taint tn (Var cv) = {} ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv}))
+    (tn with t_var := (tn.t_var |+ (nv,{})) |+ (cv,{}))
+    (OK (update_var cv (n2w (k+1)) (update_var nv (n2w (k+1)) s)
+      with vs_inst_idx := s.vs_inst_idx+2))
+Proof
+  strip_tac >>
+  qabbrev_tac `u = update_var nv (n2w (k+1)) s` >>
+  qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `G1 = DRESTRICT G (COMPL {nv})` >>
+  qabbrev_tac `tn1 = tn with t_var := tn.t_var |+ (nv,{})` >>
+  `step_prov PG G (mk_inst id ADD [Var cv; Lit 1w] [nv]) u = G1` by
+    (simp[Abbr `G1`, step_prov_def, set_prov_def, out_prov_def,
+          first_prov_def, op_prov_def, mk_inst_def] >> gvs[op_prov_def]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK s1)` by
+    (simp[Abbr `s1`, Abbr `u`, Abbr `tn1`] >>
+     mp_tac (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`,
+                    `left` |-> `Var cv`, `right` |-> `Lit 1w`, `out` |-> `nv`,
+                    `a` |-> `n2w k`, `b` |-> `1w`] storage_copy_arith_path_ptr) >>
+     simp[eval_operand_def, GSYM word_add_n2w] >>
+     gvs[op_taint_def, GSYM word_add_n2w]) >>
+  suspend "assign"
+QED
+
+Resume storage_copy_increment_path_ptr[assign]:
+  `gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0
+    (DRESTRICT G1 (COMPL {cv})) (tn1 with t_var := tn1.t_var |+ (cv,{}))
+    (OK (update_var cv (n2w (k+1)) s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
+    (irule storage_copy_counter_assign_path_ptr >>
+     simp[Abbr `s1`, Abbr `u`, Abbr `G1`, Abbr `tn1`,
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
+          op_prov_def, op_taint_def] >>
+     qexistsl_tac [`id+1`, `nv`] >> simp[]) >>
+  drule_all gas_path_ptr_then >>
+  simp[Abbr `G1`, Abbr `tn1`, Abbr `s1`, Abbr `u`, update_var_def,
+       arithmeticTheory.ADD1]
+QED
+
+Finalise storage_copy_increment_path_ptr
