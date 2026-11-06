@@ -248,3 +248,68 @@ Proof
      qexistsl_tac [`ei`, `ej`] >> simp[]) >>
   drule_all gas_path_ptr_then >> simp[]
 QED
+
+(* Static declaration interface used by the public array entry. *)
+Theorem for_array_declared_entry_safe_ptr:
+  local_ptrs_reserved bc sa /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
+  bc.ce_imm_alloca = cenv.ce_imm_alloca /\ lookup_scopes id scopes = NONE /\
+  FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var bp) arrsz) /\ name <> id /\
+  (!scs. not_local_ptr cenv scs idx) /\ idx <> p /\ idx <> bp /\
+  (!x. not_fresh_at st x ==> x <> p /\ x <> idx) /\
+  (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at st x) ==>
+  not_local_ptr cenv scopes p /\ bp <> p /\ not_local_ptr cenv scopes idx /\
+  (!q. cenv.ce_return_buf <> SOME (PtrVar (Var p) q)) /\
+  (!q. cenv.ce_return_buf <> SOME (PtrVar (Var idx) q))
+Proof
+  strip_tac >>
+  `!nm z. FLOOKUP bc.ce_vars nm = SOME (PtrVar (Var p) z) ==> nm = id` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `cenv.ce_imm_alloca <> SOME (Var p)` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[not_local_ptr_def] >> rpt strip_tac >>
+      `name' <> id` by (strip_tac >> gvs[]) >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >> simp[] >> metis_tac[]
+QED
+
+Theorem for_array_code_initialize_ptr:
+  array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride (Var bp)
+    p sz ainst idx dv ov ep nv cond exit bod incr
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  ainst = mk_inst aid ALLOCA [Lit (n2w sz)] [p] /\ sz < dimword (:256) /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME
+    <|bb_label := lbl; bb_instructions := pre ++ [ainst; mk_inst j JMP [Label entry] []]|> /\
+  s.vs_inst_idx = LENGTH pre /\
+  lookup_block entry func.fn_blocks = SOME
+    <|bb_label := entry; bb_instructions :=
+      [mk_inst ei ASSIGN [Lit 0w] [idx]; mk_inst ej JMP [Label cond] []]|> /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_scopes name es.scopes = SOME snapshot /\ lookup_scopes id es.scopes = NONE /\
+  name <> id /\ FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var bp) arrsz) /\
+  lookup_var bp s = SOME arr_base /\
+  ptr_covers G tn bp s (LENGTH vs * type_memory_size tv) /\ ret_pc_ok cenv st s /\
+  (!x. not_fresh_at st x ==> x <> p /\ x <> idx) /\
+  (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at st x) ==>
+  ?dst t gf tf.
+    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+      cond st s G tn d name snapshot 0 es gf tf t /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK t)
+Proof
+  strip_tac >>
+  `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    fs[array_for_code_def, compile_env_component_equality] >>
+  `local_ptrs_reserved bc sa /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
+    (!scs. not_local_ptr cenv scs idx) /\ idx <> p /\ idx <> bp` by
+    (fs[array_for_code_def, listTheory.ALL_DISTINCT] >> metis_tac[]) >>
+  drule_all for_array_declared_entry_safe_ptr >> strip_tac >>
+  `fn_inst_ids_distinct func /\ MEM ainst (fn_insts func)` by fs[array_for_code_def] >>
+  qpat_x_assum `ainst = _` SUBST_ALL_TAC >>
+  drule_all for_array_entry_initialize_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
+QED
