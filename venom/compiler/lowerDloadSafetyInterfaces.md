@@ -1224,3 +1224,162 @@ operand definedness; `ld_vars_operand_scalar` supplies scalar agreement.
 The unproved consumer must connect these to the synchronized head and shape
 membership, including retpc exclusion only on FRONT. No unconditional return
 producer or exhaustive terminating S theorem is certified by this checkpoint.
+
+## 2026-11-06: nested INVOKE interface audit (C1.3.2.7.2.1)
+
+This is an interface checkpoint, NOT an implementation of `ld_return_invoke_S`.
+The exact closure remains ReturnPackageLib lines 126-134. No shared quotation
+was changed. The existing conditional induction theory builds unchanged.
+
+### Correlated push signature
+
+Expand the caller Point only to choose its witnesses `stk, PG, G, tn, inst,
+s, t0, A, frames, N, X, p, h`. First prove singleton alignment for INVOKE,
+so `ti=inst`, `h=0`, `t=t0`, and `frames=f::fs` with `f.lf_src=s` and
+`f.lf_tgt=t`. Use the ACTUAL target premises of the closure:
+
+```
+decode_invoke inst = SOME (nm,ops)
+lookup_function nm C'.ctx_functions = SOME calleeT
+eval_operands ops t = SOME argsT
+setup_callee calleeT argsT t = SOME ct
+run_blocks fuel C' calleeT ct = IntRet rt u
+```
+
+Required push result (existential correlated witnesses, not independent
+source/target setups): source `callee,argsS,csC`, frame `fc`, and the saved
+source stack head
+
+```
+cf = <|cf_fn:=fn; cf_inst:=inst; cf_state:=s;
+       cf_params:=PG; cf_prov:=G; cf_tvar:=tn.t_var|>
+lookup_function nm C.ctx_functions = SOME callee
+eval_operands ops s = SOME argsS
+setup_callee callee argsS s = SOME csC
+calleeT = FST (lower_dload_function_supply (Sigma nm) callee)
+Ambient lo C C' vs0 Sigma names callee calleeT
+Entry C' calleeT
+  (Point lo P C C' vs0 (cf::stk) callee calleeT csC
+     (f::fs) fc A Sigma names) ct
+```
+
+Here Ambient is covered ambient; Point/Entry/Terminal/Stable mean exactly
+the existing library quotations. The new frame has a fresh serial (e.g. N),
+empty H/E, Q=`MAP (op_prov f.lf_H) ops`, supply `Sigma nm`, and function callee.
+Its source/target states before PHIs are csC/ct. The Entry capability produces
+the actual post-PHI head when given successful eval_phis and Guard. The
+saved frame f must be the SAME witness used for later restoration. `fc` is
+the stable serial anchor, not a claimed active frame before PHIs.
+
+### Exact nested-R consumption
+
+The closure premise is the *single actual nested run's* R instance, not a
+universal successful-run theorem. Specialize its universal environment with
+
+```
+lo,P,C,C',vs0,(cf::stk),callee,calleeT,csC,(f::fs),fc,A,Sigma,names
+```
+
+and use `ctx=C'`, the push Ambient and Entry above, and `fnT=calleeT`.
+The conclusion is precisely
+
+```
+Terminal lo P C C' vs0 (cf::stk) callee csC
+  (f::fs) fc A Sigma names rt u
+```
+
+This follows by beta reduction of R (ReturnPackageLib 107-118); there is no
+additional simulation theorem to prove here. `ld_probe_run_return` already
+exports the universal-run consumer, and `ld_probe_terminal_invoke` and
+`ld_invoke_from_return` already extract actual source invocation success.
+No near-duplicate projection was added. Crucially, these consumers do NOT
+produce the Entry premise.
+
+### Correlated pop signature
+
+Consume the above Terminal with its existential witnesses `sf,rs,cs',Ar,fr,
+tnr,rinst,se,te,PG',G',Nr`, the original caller witnesses, and the actual
+bind equation for target output q. Source fuel is sf, never target fuel.
+For every j satisfying `Guard C' j bb (q with vs_inst_idx:=SUC t.vs_inst_idx)`,
+produce
+
+```
+Point lo P C C' vs0 stk fn fn' caller_cs fs f0 A0 Sigma names bb
+  (q with vs_inst_idx:=SUC t.vs_inst_idx)
+```
+
+with source output obtained from
+`bind_outputs inst.inst_outputs rs.iret_values
+ (adopt_return_fmp rs (merge_callee_state s cs'))`.
+The restored source stack is stk; the source ghost var map is
+`DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))`, but memory/storage/
+transient/immutable taint is from tnr, NOT old caller tn. The restored
+allocation map is `DRESTRICT Ar (ld_slots Ar (f::fs))`; the callee is dropped,
+then f is replaced by a frame with resumed states, restricted H/tv and
+unchanged serial/fn/Q/supply/E. Source `frame_reachable_ret` requires the
+original saved head cf, actual source RET witnesses, output bind, and active
+successor. Guard is needed to establish that successor. Point's return
+continuation starts at the ORIGINAL caller_cs, not csC.
+
+### Checked producer matrix / remaining semantic gaps
+
+| Field | Checked boundary | Missing producer in the concrete packages |
+|---|---|---|
+| Target decode/setup/run/bind | exact closure premises; `ld_invoke_success` in SafetyRunInduction | none on target; singleton alignment still needs application |
+| Source callee lookup and image | covered Ambient function lookup clause | invert target lookup using source INVOKE shape/lookup obligations; do not infer supply coverage from image equality |
+| Source argument values | `ld_vars_arguments`, `ld_arguments_erasure`, `ld_vars_operand_defined` | discharge INVOKE retpc/untainted argument conditions and construct source eval_operands; Q values need wordrel, not raw equality |
+| Call source reachability | ptrDiscipline `frame_reachable_call` (483-494) | paired setup and enters_block/active source witnesses |
+| Selected Q permission | `ld_arguments_permission`, `ld_ownership_push_saved` | callee name identification, ptr_use_ok and caller ld_vars |
+| Fresh frame maps/vars/intervals | setup clears allocas/vars, inherits frontier; `ld_setup_callee_frontier` | full ld_sync push; no existing theorem exports it |
+| PHI Entry | `ld_entry_effect`, `ld_entry_active_envelope`, `ld_return_cont_entry` | apply to correlated setup plus Guard; assemble callee Point and Stable |
+| Order/charge/global | `ld_frontiers_empty_push`, `ld_slots_empty_push`, global bounds/separation | fresh serial, callee-first order and charge bound for full pushed stack |
+| Nested return | R quotation; `ld_probe_run_return`, `ld_invoke_from_return` | only push Entry is missing before consumption |
+| Source return reachability | ptrDiscipline `frame_reachable_ret` (495-508) | instantiate with actual saved cf and guarded active caller successor |
+| Caller continuation | `ld_return_cont_next`; `ld_invoke_from_return` | preserve original continuation and fn shape, using actual source invocation step |
+| Surviving map | `ld_maps_restrict`, `ld_erase_restrict_compose`, `ld_slots_pop_domain`, `ld_slots_restrict` | show all saved H/Q identities lie in surviving set, and assemble restored ld_maps/ld_vars |
+| Returned memory and nonghost | Terminal's `ld_memory`, `ld_nonghost`; `ld_memory_restrict` | merge/bind transport with current tnr and caller local vars; no full restoration theorem found |
+| Restored ownership | `ld_ownership_pop` | only fn/Q equalities; theorem proves no memory/map/interval facts |
+| Restored frontier | `lower_dload_merge_allocation_memory`, `lower_dload_merge_credit` | full global/interval/charge clauses for popped frames |
+| Stable saved-map agreement | new `ld_saved_map_restrict_trans` plus slot inclusion | see next paragraph; not arbitrary restriction correctness |
+
+External `OracleCall*`/`ExternalCallEffects` leaves handle oracle CALL effects,
+not internal INVOKE's fresh frame, nested R, or caller restoration. Simulation
+`o1LowerDloadSourceEntry` gives nonhalting setup and active entry; paired
+allocation theory gives merge allocation equations. Neither exports the
+Point/Stable push or pop above. Existing `ld_saved_calls_push/return` certify
+saved source executions, not paired ld_sync restoration.
+
+### Saved-map composition audit
+
+Search found `ld_erase_restrict_compose` (erased variable maps),
+`ld_slots_map_extend` (slot inclusion), and `ld_stable_head_extend`
+(no push/pop); none is the general saved-map transitivity/restriction fact.
+`lowerDloadReturnInvokeInterfaceTheory.ld_saved_map_restrict_trans` proves it
+once for arbitrary finite maps and independent saved/keep sets. Empty sets
+are permitted; no FDOM equality is silently assumed.
+
+For the intended application set
+`S0 = FDOM A0 INTER ld_slots A0 fs` and
+`S1 = ld_slots A (f::fs)` at push. Caller Stable gives A=A0 on S0.
+The non-NONE lookup implied by S0's slot definition gives S0 subset FDOM A;
+saved-map agreement therefore carries S0 into `ld_slots A fs`, hence S1.
+Callee Terminal Stable gives Ar=A on S1 intersect FDOM A; every S1 slot is
+in FDOM A by its definition. Thus S0 remains a slot of Ar on fs, and is in
+`keep=ld_slots Ar (f::fs)`. Apply the new generic lemma on S0 with A1=A,
+A2=Ar and that keep. This proves the final Stable A0 agreement. These subset
+and FDOM obligations matter: set inclusion cannot be inferred from numeric
+address equality or from restriction alone. Full restored Stable still needs
+its independent global, order, supply, Q ownership and saved H/Q clauses.
+
+### Suggested shallow implementation split (for strategist review only)
+
+1. Correlated internal-call setup/PHI Entry: source lookup/arguments, fresh
+   frame and stack/global/Stable assembly with actual target setup.
+2. Correlated return merge/bind/pop Point: Terminal witnesses, current taint,
+   surviving allocation identities and original caller continuation.
+3. Exact `ld_return_invoke_S` assembly using those two boundaries and the
+   single nested R premise. No new semantic definitions are needed.
+
+This checkpoint validates signatures and map composition only. It leaves
+both semantic producers and final INVOKE closure unresolved; their risk
+must not be lowered solely because this audit builds.
