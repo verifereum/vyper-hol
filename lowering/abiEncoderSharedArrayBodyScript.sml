@@ -221,8 +221,8 @@ Proof
   `abi_sites_encoder_shared_input sites (ei,ty,EL j avs)
      (addressed,SND (FST coords),FST (SND coords)) (sb+32+j*msz,child_cap)
      (d+32,sz-32) (first,last,b,cap) address_ready` by
-    (irule abi_encoder_shared_array_body_child_input >>
-     goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >> decide_tac) >>
+    (irule abi_encoder_shared_array_body_child_input >> simp_tac bool_ss [PULL_EXISTS] >>
+     qexistsl_tac [`T`,`asz`,`d`,`dst`,`source_cap`,`src`,`st`,`sz`] >> asm_simp_tac bool_ss [] >> decide_tac) >>
   `cursor_site IN sites /\ first <= cursor_site /\ cursor_site < last /\ cursor_slot < dimword (:256)` by
     (drule_all abi_encoder_cursor_bounds >> simp[]) >>
   `eval_operand dp address_ready = SOME (n2w cursor_slot) /\
@@ -586,8 +586,8 @@ Proof
   `abi_sites_encoder_shared_input sites (ei,ty,EL j avs)
      (addressed,SND (FST coords),SND (SND coords)) (sb+32+j*msz,child_cap)
      (d+32+j*asz,LENGTH (enc ty (EL j avs))) (first,last,b,cap) address_ready` by
-    (irule abi_encoder_shared_array_body_child_input >>
-     goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >>
+    (irule abi_encoder_shared_array_body_child_input >> simp_tac bool_ss [PULL_EXISTS] >>
+     qexistsl_tac [`F`,`asz`,`d`,`dst`,`source_cap`,`src`,`st`,`sz`] >> asm_simp_tac bool_ss [] >>
      qpat_x_assum `asz = _` SUBST_ALL_TAC >>
      full_simp_tac bool_ss [] >> decide_tac) >>
   qpat_assum `abi_encoder_static_leaf ei` (fn th =>
