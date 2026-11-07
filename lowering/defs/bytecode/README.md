@@ -29,7 +29,7 @@ only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
 Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports four upstream fixes that the HOL lowering follows:
+revision. It backports five upstream fixes that the HOL lowering follows:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -44,12 +44,13 @@ revision. It backports four upstream fixes that the HOL lowering follows:
 - vyperlang/vyper#5336: DFT keeps aborting instructions (an `assert`, an
   internal call) in their order, scheduling each after the previous run of
   aborting instructions.
+- vyperlang/vyper#5349: an instruction with no outputs and no effects (an
+  `assert`) stays a scheduling root even when a later abort depends on it,
+  so nothing is hoisted above it.
 
-A last, local hunk (not upstream) makes Python's DFT schedule as the HOL
-pass does where it deliberately departs from #5336, each marked `not
-upstream` in the patch: an instruction with no outputs and no effects (an
-`assert`) stays a scheduling root even when a later abort depends on it, so
-nothing is hoisted above it; and `create`/`create2` count as aborts.
+A last, local hunk (marked `not upstream` in the patch) makes Python's DFT
+schedule as the HOL pass does where it deliberately departs from upstream:
+`create`/`create2` count as aborts.
 
 Only fixtures with external calls that take arguments, the signed `Bytes`
 conversions `bys32_to_i8` and `bys16_to_dec`, and five fixtures whose code
