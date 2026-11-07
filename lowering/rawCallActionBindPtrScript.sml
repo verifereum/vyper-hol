@@ -420,3 +420,241 @@ Resume raw_call_prepared_prefix_sim_ptr[post]:
 QED
 
 Finalise raw_call_prepared_prefix_sim_ptr
+
+Theorem raw_call_zero_reverting_action_outcome:
+  body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) expr_vv_res_ok es /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len_op,sl) /\ emit_op ADD [data; Lit 32w] sl = (data_op,sm) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws sm = ((vo,go,ig),s5) /\
+  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas_op,s6) /\
+  compile_raw_call_outbuf 0 s6 = ((ov,op),s7) /\
+  compile_raw_call_finish addr data_op len_op gas_op (case vo of SOME v => v | NONE => Lit 0w)
+    (if flags.rcf_is_static then StaticCall else RegularCall) 0 T ov op s7 = (result,sb) /\
+  fn_has_code sa s6 func /\ fn_has_code s6 s7 func /\ fn_has_code s7 sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  flags.rcf_max_outsize = 0 /\ flags.rcf_revert_on_failure ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
+    (\res ee H un t. ?v em tm J jn u K kn.
+      res = INL (Value v) /\ ptr_val_ok cx NoneT v result H un t /\
+      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >> simp[] >> strip_tac >>
+  `gas_admissible (eval_exprs cx (a::d::kws))
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es` by
+    (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
+  drule_all raw_call_prepared_prefix_sim_ptr >> disch_then (qspec_then `PG` assume_tac) >>
+  rewrite_tac[raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[])
+  >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_error_values >> simp[ignore_bind_def]) >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >> conj_tac
+  >- suspend "normal" >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[exprSimWordArgsTheory.wb_args_exit_def,
+    oneline exprSimDefsTheory.expr_exit_def, AllCaseEqs()]
+QED
+
+Resume raw_call_zero_reverting_action_outcome[normal]:
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all raw_call_source_continuation >>
+  disch_then (qspecl_then [`cx`, `bs`] assume_tac) >> gvs[] >>
+  `type_memory_bytes cenv (lowered_value_type cenv
+      (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) = 0` by
+    simp[vyperTypeSystemTheory.raw_call_return_type_def,
+      exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def,
+      compileEnvTheory.type_memory_bytes_def] >>
+  `?gw. eval_operand gas_op t = SOME gw` by metis_tac[] >>
+  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
+    rawCallAllocatedFinishPtrTheory.raw_call_allocated_zero_reverting_outcome >>
+  disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `type_memory_bytes _ _ = _`)) >>
+  disch_then (qspecl_then [`n2w amount`, `env`, `PG`] mp_tac) >>
+  impl_tac >- (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+  strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+QED
+
+Finalise raw_call_zero_reverting_action_outcome
+
+Theorem raw_call_bytes_action_outcome:
+  body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) expr_vv_res_ok es /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len_op,sl) /\ emit_op ADD [data; Lit 32w] sl = (data_op,sm) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws sm = ((vo,go,ig),s5) /\
+  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas_op,s6) /\
+  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
+  compile_raw_call_finish addr data_op len_op gas_op (case vo of SOME v => v | NONE => Lit 0w)
+    (if flags.rcf_is_static then StaticCall else RegularCall)
+    flags.rcf_max_outsize T ov op s7 = (result,sb) /\
+  fn_has_code sa s6 func /\ fn_has_code s6 s7 func /\ fn_has_code s7 sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  0 < flags.rcf_max_outsize /\ flags.rcf_revert_on_failure ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
+    (\res ee H un t. ?v em tm J jn u K kn.
+      res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result H un t /\
+      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >> simp[] >> strip_tac >>
+  `gas_admissible (eval_exprs cx (a::d::kws))
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es` by
+    (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
+  drule_all raw_call_prepared_prefix_sim_ptr >> disch_then (qspec_then `PG` assume_tac) >>
+  rewrite_tac[raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[])
+  >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_error_values >> simp[ignore_bind_def]) >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >> conj_tac
+  >- suspend "normal" >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[exprSimWordArgsTheory.wb_args_exit_def,
+    oneline exprSimDefsTheory.expr_exit_def, AllCaseEqs()]
+QED
+
+Resume raw_call_bytes_action_outcome[normal]:
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all raw_call_source_continuation >>
+  disch_then (qspecl_then [`cx`, `bs`] assume_tac) >> gvs[] >>
+  drule_all raw_call_prefix_result_capacity >> strip_tac >>
+  `?gw. eval_operand gas_op t = SOME gw` by metis_tac[] >>
+  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
+    rawCallAllocatedFinishPtrTheory.raw_call_allocated_positive_reverting_outcome >>
+  disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
+  disch_then (qspecl_then [`n2w amount`, `env`,
+    `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `PG`] mp_tac) >>
+  impl_tac >- (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+  strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+QED
+
+Finalise raw_call_bytes_action_outcome
+
+Theorem raw_call_tuple_action_outcome:
+  body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) expr_vv_res_ok es /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len_op,sl) /\ emit_op ADD [data; Lit 32w] sl = (data_op,sm) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws sm = ((vo,go,ig),s5) /\
+  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas_op,s6) /\
+  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
+  compile_raw_call_finish addr data_op len_op gas_op (case vo of SOME v => v | NONE => Lit 0w)
+    (if flags.rcf_is_static then StaticCall else RegularCall)
+    flags.rcf_max_outsize F ov op s7 = (result,sb) /\
+  fn_has_code sa s6 func /\ fn_has_code s6 s7 func /\ fn_has_code s7 sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  0 < flags.rcf_max_outsize /\ ~flags.rcf_revert_on_failure ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
+    (\res ee H un t. ?v em tm J jn u K kn.
+      res = INL (Value v) /\
+      ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result H un t /\
+      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
+      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >> simp[] >> strip_tac >>
+  `gas_admissible (eval_exprs cx (a::d::kws))
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es` by
+    (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
+  drule_all raw_call_prepared_prefix_sim_ptr >> disch_then (qspec_then `PG` assume_tac) >>
+  rewrite_tac[raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[])
+  >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_error_values >> simp[ignore_bind_def]) >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >> conj_tac
+  >- suspend "normal" >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[exprSimWordArgsTheory.wb_args_exit_def,
+    oneline exprSimDefsTheory.expr_exit_def, AllCaseEqs()]
+QED
+
+Resume raw_call_tuple_action_outcome[normal]:
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all raw_call_source_continuation >>
+  disch_then (qspecl_then [`cx`, `bs`] assume_tac) >> gvs[] >>
+  drule_all raw_call_prefix_result_capacity >> strip_tac >>
+  `?gw. eval_operand gas_op t = SOME gw` by metis_tac[] >>
+  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
+    (Q.INST [`be` |-> `Call (BaseT (BytesT (Dynamic flags.rcf_max_outsize)))
+      (RawCallTarget flags) [] NONE`]
+      rawCallAllocatedFinishPtrTheory.raw_call_allocated_positive_nonreverting_outcome) >>
+  disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
+  disch_then (qspecl_then [`n2w amount`, `env`,
+    `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `PG`] mp_tac) >>
+  impl_tac
+  >- (simp[wordsTheory.w2n_n2w, rawCallResultLayoutPtrTheory.raw_call_bytes_type_capacity] >> decide_tac) >>
+  strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+QED
+
+Finalise raw_call_tuple_action_outcome
