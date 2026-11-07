@@ -173,3 +173,66 @@ Proof
   gvs[intcall_vv_provenance_def, immutable_holds_def] >>
   metis_tac[]
 QED
+
+Theorem intcall_held_source_outcomes:
+  (vv_holds ce cx ty raw vv (es with <|outcomes := os; gas_obs := gs|>) s <=>
+   vv_holds ce cx ty raw vv es s) /\
+  (vv_at ce cx ty sa sb (es with <|outcomes := os; gas_obs := gs|>) raw vv s <=>
+   vv_at ce cx ty sa sb es raw vv s) /\
+  (vv_storage_live cx vv (es with <|outcomes := os; gas_obs := gs|>) s <=>
+   vv_storage_live cx vv es s)
+Proof
+  Cases_on `vv` >>
+  simp[vv_holds_def, vv_at_def, expr_val_at_def,
+       read_result_outcomes_iff, immutable_holds_def, storage_holds_outcomes,
+       vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem intcall_held_endpoint:
+  vv_holds ce cx ty raw vv es s /\ vv_at ce cx ty sa sm es raw vv s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  vv_storage_live cx vv es s /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
+  stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_holds ce cx ty raw vv es t /\ vv_at ce cx ty sa sn es raw vv t /\
+  intcall_vv_provenance ce cx ty sa sn es raw vv t /\
+  vv_storage_live cx vv es t
+Proof
+  strip_tac >>
+  `!n b sz. local_region ce es.scopes t n b sz <=>
+             local_region ce es.scopes s n b sz` by
+    (rpt gen_tac >> irule local_region_wb_frame >> metis_tac[]) >>
+  conj_tac >- (irule intcall_held_holds_frame >> metis_tac[]) >>
+  conj_tac >- (irule held_vv_at_alloc_frame >> gvs[wb_frame_def] >> metis_tac[]) >>
+  conj_tac >- (irule intcall_vv_provenance_frame >> metis_tac[]) >>
+  Cases_on `vv` >> gvs[vv_operand_def]
+QED
+
+Theorem intcall_held_endpoint_outcomes:
+  vv_holds ce cx ty raw vv es s /\ vv_at ce cx ty sa sm es raw vv s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  vv_storage_live cx vv es s /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
+  stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_holds ce cx ty raw vv (es with <|outcomes := os; gas_obs := gs|>) t /\
+  vv_at ce cx ty sa sn (es with <|outcomes := os; gas_obs := gs|>) raw vv t /\
+  intcall_vv_provenance ce cx ty sa sn
+    (es with <|outcomes := os; gas_obs := gs|>) raw vv t /\
+  vv_storage_live cx vv (es with <|outcomes := os; gas_obs := gs|>) t
+Proof
+  simp[intcall_held_source_outcomes] >> metis_tac[intcall_held_endpoint]
+QED
