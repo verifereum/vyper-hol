@@ -11,6 +11,9 @@ Theory o1ContractLowerDloadTaint
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
   lowerDloadDefs venomPassSchedule list calleeTransport lowerDloadRequestObservation
+  lowerDloadTerminalObservation lowerDloadRecursiveInterface lowerDloadReachableFloor
+  lowerDloadNormalData lowerDloadReachableDiscipline unitShapeDefs pred_set
+  contextCodegenRel venomInst lowerDloadSourceInterface
 
 (* Agreement of the complete step_taint adoption guard; request streams
    themselves may differ, only their change indicators must agree. *)
@@ -644,6 +647,118 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!t tt Rt. _` drule >> strip_tac >>
   drule_all final_taint_transport >> simp[]
+QED
+
+(* Reuse the authoritative candidate quotation from the selector's premise. *)
+val ld_final_candidate = fst (dest_conj (fst (dest_imp
+  (concl lowerDloadRecursiveInterfaceTheory.ld_recursive_combined_halt_anchor))));
+
+Theorem ld_candidate_final_observation:
+  dead_wf D /\ taint_within D CS vs0 /\ ptr_discipline lo CS vs0 /\
+  o1_ctx_shape CS /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_final_candidate) /\
+  j.inst_opcode <> INVOKE /\ step_inst fuel CT j t = Halt th ==>
+  (step_taint j t th un).t_stor SUBSET D.d_stor th.vs_call_ctx.cc_address
+    (th.vs_accounts th.vs_call_ctx.cc_address).storage /\
+  (step_taint j t th un).t_trans SUBSET D.d_trans th.vs_call_ctx.cc_address
+    (th.vs_transient th.vs_call_ctx.cc_address) /\
+  (step_taint j t th un).t_imm SUBSET D.d_imm th.vs_immutables /\
+  ret_taint un j t SUBSET D.d_ret th.vs_returndata
+Proof
+  strip_tac >> drule_all ld_recursive_combined_halt_anchor >>
+  qpat_x_assum `(^ld_final_candidate)` kall_tac >>
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `!q. q < LENGTH astk ==> _` kall_tac >>
+  qpat_x_assum `code = [i]` SUBST_ALL_TAC >>
+  fs[] >>
+  `opaque_use_ok fn` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def, fn_shape_ok_def]) >>
+  `MEM i (fn_insts fn)` by
+    (qpat_assum `active_inst fn i s` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) i.inst_operands ==> MEM v (fn_ir_vars fn)` by
+    metis_tac[ld_original_operand_support] >>
+  gvs[] >>
+  drule ld_normal_halt_observation >>
+  disch_then drule >>
+  disch_then drule >>
+  disch_then (qspecl_then [`th`, `fuel`, `P`, `CT`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> simp[] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> suspend "dead_masks"
+QED
+
+Resume ld_candidate_final_observation[dead_masks]:
+  `sn.t_stor SUBSET D.d_stor sh.vs_call_ctx.cc_address
+     (sh.vs_accounts sh.vs_call_ctx.cc_address).storage /\
+   sn.t_trans SUBSET D.d_trans sh.vs_call_ctx.cc_address
+     (sh.vs_transient sh.vs_call_ctx.cc_address) /\
+   sn.t_imm SUBSET D.d_imm sh.vs_immutables /\
+   Rs SUBSET D.d_ret sh.vs_returndata` by
+    (qpat_assum `taint_within D CS vs0` mp_tac >>
+     qpat_assum `final_taint vs0 CS sh sn Rs` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[taint_within_def] >> metis_tac[]) >>
+  irule final_taint_transport >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`CS`, `Rs`, `sh`, `sn`, `vs0`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qpat_assum `!q. q < LENGTH sh.vs_returndata /\ _ ==> _` mp_tac >>
+      qpat_assum `Rs SUBSET _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> rw[SUBSET_DEF] >> metis_tac[])
+  >- (qpat_assum `!q. q IN FDOM sh.vs_immutables ==> _` mp_tac >>
+      qpat_assum `FDOM sh.vs_immutables = _` mp_tac >>
+      qpat_assum `sn.t_imm SUBSET _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      rw[imms_agree_except_def, word_agree_except_def, SUBSET_DEF] >> metis_tac[])
+  >- (qpat_assum `storage_agree_except sn.t_stor _ _` mp_tac >>
+      qpat_assum `sn.t_stor SUBSET _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      rw[storage_agree_except_def, word_agree_except_def, key_taint_def, SUBSET_DEF] >> metis_tac[]) >>
+  qpat_assum `storage_agree_except sn.t_trans _ _` mp_tac >>
+  qpat_assum `sn.t_trans SUBSET _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rw[storage_agree_except_def, word_agree_except_def, key_taint_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Finalise ld_candidate_final_observation
+
+Theorem ld_reachable_final_observation:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions ==>
+  !t_h un R.
+    final_taint vs0 CT t_h un R ==>
+    un.t_stor SUBSET D.d_stor t_h.vs_call_ctx.cc_address
+      (t_h.vs_accounts t_h.vs_call_ctx.cc_address).storage /\
+    un.t_trans SUBSET D.d_trans t_h.vs_call_ctx.cc_address
+      (t_h.vs_transient t_h.vs_call_ctx.cc_address) /\
+    un.t_imm SUBSET D.d_imm t_h.vs_immutables /\
+    R SUBSET D.d_ret t_h.vs_returndata
+Proof
+  strip_tac >>
+  `ptr_discipline vs0.vs_alloca_next CS vs0` by
+    metis_tac[ld_o1_src_inv_frontier_discipline] >>
+  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
+    (qpat_assum `ptr_discipline _ CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  `taint_within D CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_src_inv_def]) >>
+  rpt gen_tac >> simp[final_taint_def] >> strip_tac >>
+  mp_tac (Q.INST [`lo` |-> `vs0.vs_alloca_next`] ld_recursive_combined_coverage) >>
+  (impl_tac >- (rpt conj_tac >> simp[])) >>
+  disch_then (qspecl_then [`stk`, `PG`, `G`, `T0`, `fn`, `inst`, `s`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> disch_tac >>
+  qpat_x_assum `un = _` SUBST_ALL_TAC >>
+  qpat_x_assum `R = _` SUBST_ALL_TAC >>
+  irule ld_candidate_final_observation >>
+  rpt conj_tac >> goal_assum (drule_at Any) >>
+  qexistsl [`P`, `fuel`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* The output's taint reaches only the dead bytes D. *)
