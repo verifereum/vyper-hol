@@ -60,3 +60,46 @@ Proof
     mp_tac lookup_function_distinct_mem >>
   simp[mk_internal_function_metadata]
 QED
+
+Theorem lower_vyper_deploy_unit_internal_lookup:
+  !tops rpolicy bytes unit exts ints fb ctor mut nr rr name args dflts ret stmts.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit /\
+    classify_functions tops = (exts,ints,fb,SOME ctor) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret stmts) tops ==>
+    ?fbs.
+      lookup_function
+        (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) T)
+        unit.cu_context.ctx_functions =
+      SOME (mk_internal_function
+        (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) T)
+        fbs
+        (FST (SND (source_internal_fn_descriptor tops T
+          (mut,nr,rr,name,args,dflts,ret,stmts))))
+        (SND (SND (source_internal_fn_descriptor tops T
+          (mut,nr,rr,name,args,dflts,ret,stmts))))) /\
+      fbs <> [] /\ (HD fbs).bb_label =
+        internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) T
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (mut,nr,rr,name,args,dflts,ret,stmts) ints` by
+    metis_tac[MEM_classify_internal, pairTheory.FST, pairTheory.SND] >>
+  gvs[lower_vyper_deploy_unit_def, bool_case_eq] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `MEM (source_internal_fn_descriptor tops T
+          (mut,nr,rr,name,args,dflts,ret,stmts))
+       (internal_fn_descriptors
+          (MAP (set_internal_package_target rpolicy.rpol_target o
+                package_internal_fn tops F (assign_nkeys tops 0) T
+                  (compute_immutables_len
+                    (get_struct_fields (make_struct_fields_map tops)) tops)) ints))`
+    by (simp[GSYM MAP_MAP_o,
+            internal_fn_descriptors_set_internal_package_target,
+            internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP] >>
+        qexists_tac `(mut,nr,rr,name,args,dflts,ret,stmts)` >> simp[]) >>
+  Cases_on `source_internal_fn_descriptor tops T
+              (mut,nr,rr,name,args,dflts,ret,stmts)` >>
+  rename1 `_ = (lbl, rest)` >> PairCases_on `rest` >>
+  `lbl = internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) T`
+    by metis_tac[source_internal_fn_descriptor_label, pairTheory.FST] >>
+  gvs[] >> drule_all deploy_internal_package_lookup >> simp[]
+QED
