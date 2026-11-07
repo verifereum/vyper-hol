@@ -43,39 +43,6 @@ Proof
   strip_tac >> decide_tac
 QED
 
-(* The popped element stays in place past the new length: the snapshot a
-   nested pop records sits in memory after the header write. *)
-Theorem pop_path_snapshot_in:
-  mutable_place_path tv path /\ value_has_type tv a /\
-  well_formed_type_value tv /\ val_wf tv a /\
-  val_in_memory tv a locbase s.vs_memory /\
-  mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic n)) /\
-  evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
-  type_memory_size tv <= sz ==>
-  snapshot_in tv locbase sz
-    (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
-    (mstore (locbase + k) (n2w (LENGTH vs - 1)) s).vs_memory
-Proof
-  strip_tac >>
-  drule_all pop_path_result_bounds >> strip_tac >>
-  drule_all pop_path_elem_in_memory >> strip_tac >>
-  `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV vs))` by
-    (drule mem_path_offset_sound >> strip_tac >>
-     drule_all evaluate_subscripts_type >> simp[]) >>
-  `LENGTH vs - 1 < n` by
-    (gvs[value_has_type_def] >> Cases_on `vs` >> gvs[]) >>
-  `mem_path_offset tv (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]) =
-     SOME (k + (32 + (LENGTH vs - 1) * type_memory_size etv), etv)` by
-    (irule mem_path_offset_snoc >> simp[mem_step_offset_def]) >>
-  `k + (32 + (LENGTH vs - 1) * type_memory_size etv) + type_memory_size etv <=
-     type_memory_size tv` by metis_tac[mem_path_offset_sound] >>
-  `locbase + (k + (32 + (LENGTH vs - 1) * type_memory_size etv)) =
-   locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv` by decide_tac >>
-  rw[snapshot_in_def] >>
-  qexistsl_tac [`k + (32 + (LENGTH vs - 1) * type_memory_size etv)`, `etv`] >>
-  fs[] >> decide_tac
-QED
-
 (* A memory value in a live local's region, including a recorded popped
    element, supplies both value and location parts of the post. *)
 Theorem local_memory_vv_post:
@@ -140,6 +107,42 @@ Proof
        LENGTH vs * type_memory_size etv` by
        (Cases_on `LENGTH vs` >> gvs[MULT_CLAUSES]) >> decide_tac) >>
   gvs[type_memory_size_def] >> decide_tac
+QED
+
+(* The popped element stays in place past the new length: the snapshot a
+   nested pop records sits in memory after the header write. *)
+Theorem pop_path_snapshot_in:
+  mutable_place_path tv path /\ value_has_type tv a /\
+  well_formed_type_value tv /\ val_wf tv a /\
+  val_in_memory tv a locbase s.vs_memory /\
+  mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+  evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
+  type_memory_size tv <= sz ==>
+  snapshot_in tv locbase sz
+    (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+    (mstore (locbase + k) (n2w (LENGTH vs - 1)) s).vs_memory
+Proof
+  strip_tac >>
+  drule_all pop_path_result_bounds >> strip_tac >>
+  drule_all pop_path_elem_in_memory >> strip_tac >>
+  `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV vs))` by
+    (drule mem_path_offset_sound >> strip_tac >>
+     drule_all evaluate_subscripts_type >> simp[]) >>
+  `LENGTH vs - 1 < n` by
+    (gvs[value_has_type_def] >> Cases_on `vs` >> gvs[]) >>
+  `mem_path_offset tv (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]) =
+     SOME (k + (32 + (LENGTH vs - 1) * type_memory_size etv), etv)` by
+    (irule mem_path_offset_snoc >> simp[mem_step_offset_def]) >>
+  `k + (32 + (LENGTH vs - 1) * type_memory_size etv) + type_memory_size etv <=
+     type_memory_size tv` by metis_tac[mem_path_offset_sound] >>
+  `locbase + (k + (32 + (LENGTH vs - 1) * type_memory_size etv)) =
+   locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv` by decide_tac >>
+  rw[snapshot_in_def] >>
+  `k + locbase = locbase + k` by decide_tac >>
+  pop_assum (fn th => rewrite_tac[th]) >>
+  `k + (locbase + (type_memory_size etv * (LENGTH vs - 1) + 32)) =
+     locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv` by decide_tac >>
+  pop_assum (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC
 QED
 
 (* Reuse the general local-store immutable frame and the existing state
