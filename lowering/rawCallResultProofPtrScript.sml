@@ -381,10 +381,10 @@ Proof
 QED
 
 Theorem raw_call_length_binop_step_ghost:
-  (opc = LT \/ opc = XOR \/ opc = MUL) /\
-  (opc = MUL ==> op_taint tn left = {} /\ op_taint tn right = {}) ==>
-  step_taint (mk_inst iid opc [left;right] [out]) s (update_var out w s) tn =
-    tn with t_var := tn.t_var |+ (out,{}) /\
+  (opc = LT \/ opc = XOR \/ opc = MUL) ==>
+  ((opc = MUL ==> op_taint tn left = {} /\ op_taint tn right = {}) ==>
+   step_taint (mk_inst iid opc [left;right] [out]) s (update_var out w s) tn =
+     tn with t_var := tn.t_var |+ (out,{})) /\
   step_prov PG G (mk_inst iid opc [left;right] [out]) (update_var out w s) =
     DRESTRICT G (COMPL {out})
 Proof
@@ -459,7 +459,8 @@ Proof
     (irule raw_call_length_binop_path_ptr >> goal_assum (drule_at Any) >>
      simp[] >> conj_tac >- metis_tac[] >> qexists_tac `f` >> simp[]) >>
   qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[] >>
-  fs[raw_call_length_binop_step_ghost, arithmeticTheory.ADD1]
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[raw_call_length_binop_step_ghost, arithmeticTheory.ADD1]
 QED
 
 Theorem raw_call_emit_length_binop_stage:
