@@ -198,3 +198,106 @@ Proof
     generate_block_insts_plan_relational_replay) >>
   disch_then drule_all >> simp[]
 QED
+
+Definition lineage_block_setup_def:
+  lineage_block_setup lv cfg fn bb ps =
+    (case (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+           else ([],ps)) of (param_ops,ps1) =>
+     case (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+           then clean_stack_plan lv cfg fn bb ps1 else ([],ps1)) of
+       (clean_ops,ps2) => (param_ops ++ clean_ops,ps2))
+End
+
+Theorem lineage_block_setup_decompose:
+  !lv dfg cfg fn bb ps setup ps0.
+    lineage_block_setup lv cfg fn bb ps = (setup,ps0) ==>
+    generate_block_plan lv dfg cfg fn bb ps =
+      case generate_block_insts_plan lv dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps0 of
+      NONE => NONE
+    | SOME (inst_ops,ps') =>
+        if revert_block_spills bb inst_ops then NONE
+        else SOME (SOLabel bb.bb_label :: setup ++ inst_ops,ps')
+Proof
+  rpt gen_tac >>
+  simp[lineage_block_setup_def, generate_block_plan_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[APPEND_ASSOC]
+QED
+
+Theorem lineage_block_replay:
+  !lv dfg cfg fn bb p q setup p0 q0 R ops p'.
+    lineage_block_setup lv cfg fn bb p = (setup,p0) /\
+    lineage_block_setup lv cfg fn bb q = (setup,q0) /\
+    lineage_schedule_replay_ready lv dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) R /\
+    R 0 (non_param_insts bb) p0 q0 /\
+    generate_block_plan lv dfg cfg fn bb p = SOME (ops,p') ==>
+    ?q'. generate_block_plan lv dfg cfg fn bb q = SOME (ops,q') /\
+      p'.ps_alloc = q'.ps_alloc /\ p'.ps_spilled = q'.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lineage_block_setup_decompose >>
+  disch_then (qspecl_then [`dfg`] assume_tac) >>
+  qpat_x_assum `lineage_block_setup lv cfg fn bb p = _`
+    (mp_then Any (qspec_then `dfg` assume_tac)
+      lineage_block_setup_decompose) >>
+  gvs[AllCaseEqs()] >>
+  drule_all lineage_schedule_replay >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem lineage_block_replay_cleanup_witness:
+  !lv dfg cfg fn bb p q R ops p'.
+    lineage_schedule_replay_ready lv dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) R /\
+    (?h promised setup p0 q0.
+      lineage_block_setup lv cfg fn bb p = (setup,p0) /\
+      lineage_block_setup lv cfg fn bb
+        (q with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+        (setup,q0) /\ R 0 (non_param_insts bb) p0 q0) /\
+    generate_block_plan lv dfg cfg fn bb p = SOME (ops,p') ==>
+    ?h promised q'.
+      generate_block_plan lv dfg cfg fn bb
+        (q with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+        SOME (ops,q') /\
+      p'.ps_alloc = q'.ps_alloc /\ p'.ps_spilled = q'.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_block_replay >> metis_tac[]
+QED
+
+Theorem lineage_block_setup_nonentry_core_replay:
+  !lv cfg fn bb p q m n core.
+    bb <> HD fn.fn_blocks /\
+    p.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    q.ps_stack = REPLICATE n dead_stack_marker ++ core /\
+    p.ps_alloc = q.ps_alloc /\ p.ps_spilled = q.ps_spilled ==>
+    ?h promised setup p0 q0 m' n' core'.
+      lineage_block_setup lv cfg fn bb p = (setup,p0) /\
+      lineage_block_setup lv cfg fn bb
+        (q with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+        (setup,q0) /\
+      p0.ps_stack = REPLICATE m' dead_stack_marker ++ core' /\
+      q0.ps_stack = REPLICATE n' dead_stack_marker ++ core' /\
+      p0.ps_alloc = q0.ps_alloc /\ p0.ps_spilled = q0.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1`
+  >- (drule_all fnPlanLineageInventoryTheory.clean_stack_plan_arbitrary_core_replay >>
+      disch_then (qspecl_then [`lv`, `cfg`, `fn`, `bb`] strip_assume_tac) >>
+      qexistsl_tac [`NONE`, `choice`, `ops`,
+        `p with <|ps_stack := REPLICATE m' dead_stack_marker ++ core';
+                  ps_alloc := al; ps_cleanup_promised := pref|>`,
+        `q with <|ps_stack := REPLICATE n' dead_stack_marker ++ core';
+                  ps_alloc := al; ps_cleanup_height := NONE;
+                  ps_cleanup_promised := pcand|>`, `m'`, `n'`, `core'`] >>
+      simp[lineage_block_setup_def]) >>
+  qexistsl_tac [`NONE`, `F`, `[]`, `p`,
+    `q with <|ps_cleanup_height := NONE; ps_cleanup_promised := F|>`,
+    `m`, `n`, `core`] >>
+  simp[lineage_block_setup_def]
+QED
