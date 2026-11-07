@@ -16,6 +16,110 @@ Ancestors
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
 
+Theorem pop_immutable_place_live[local]:
+  !cx es src id path imms tv a vs updated.
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables src imms) id = SOME (tv,a) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
+    assign_subscripts tv a path (Replace (ArrayV (DynArrayV (FRONT vs)))) =
+      INL updated ==>
+    pop_place cx (ImmutablePlace src id path) es =
+      (INL (Value (LAST vs)),
+       es with immutables :=
+         (cx.txn.target,
+          set_source_immutables src
+            (get_source_immutables src imms |+ (id,(tv,updated))) imms) ::
+         ADELKEY cx.txn.target es.immutables)
+Proof
+  rpt strip_tac >>
+  `pop_element (ArrayV (DynArrayV vs)) =
+    INL (ArrayV (DynArrayV (FRONT vs)))` by
+    simp[vyperValueOperationTheory.pop_element_def] >>
+  drule_all vyperLookupTheory.assign_subscripts_pop_replace >> strip_tac >>
+  simp[pop_place_def, get_immutables_def, get_address_immutables_def,
+       set_immutable_def, set_address_immutables_def,
+       bind_def, ignore_bind_def, return_def, lift_option_type_def, lift_sum_def,
+       vyperValueOperationTheory.popped_value_def] >>
+  simp[evaluation_state_component_equality]
+QED
+
+(* Updating one source immutable needs new bytes only for that root. *)
+Theorem immutables_rel_ctor_update[local]:
+  !cenv addr src es s t imms id tv updated off es'.
+    immutables_rel cenv addr src T es s /\
+    ALOOKUP es.immutables addr = SOME imms /\
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    es'.immutables =
+      (addr,set_source_immutables src
+        (get_source_immutables src imms |+ (id,(tv,updated))) imms) ::
+      ADELKEY addr es.immutables /\
+    immutable_value_admissible tv updated /\
+    val_in_memory tv updated off t.vs_memory /\
+    immutable_value_bytes_rel tv updated
+      (mem_bytes_at off (type_memory_size tv) t.vs_memory) /\
+    (!name tv0 v off0.
+      name <> id /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off0) /\
+      FLOOKUP (get_source_immutables src imms) name = SOME (tv0,v) ==>
+      mem_bytes_at off0 (type_memory_size tv0) t.vs_memory =
+      mem_bytes_at off0 (type_memory_size tv0) s.vs_memory) ==>
+    immutables_rel cenv addr src T es' t
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[immutables_rel_def, get_source_immutables_def, set_source_immutables_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `name = id` >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  `mem_bytes_at byte_offset (type_memory_size tv') t.vs_memory =
+    mem_bytes_at byte_offset (type_memory_size tv') s.vs_memory` by
+    (first_x_assum drule_all >> simp[]) >>
+  qpat_x_assum `!name tv' v byte_offset. _ ==> _ /\ _ /\ _`
+    drule_all >> strip_tac >>
+  simp[] >> irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  conj_tac
+  >- metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
+  qexistsl [`type_memory_size tv'`, `s.vs_memory`] >> simp[]
+QED
+
+Theorem immutable_store_other_bytes[local]:
+  !cenv cx env es imms src id off tv a k word s.
+    expr_sim_inv cenv cx env es /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (get_source_immutables src imms) id = SOME (tv,a) /\
+    k + 32 <= type_memory_size tv ==>
+    !name tv0 v off0.
+      name <> id /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off0) /\
+      FLOOKUP (get_source_immutables src imms) name = SOME (tv0,v) ==>
+      mem_bytes_at off0 (type_memory_size tv0)
+        (mstore (off+k) word s).vs_memory =
+      mem_bytes_at off0 (type_memory_size tv0) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `regions_disjoint off (type_memory_size tv) off0 (type_memory_size tv0)` by
+    (gvs[exprSimHypsDefsTheory.expr_sim_inv_def,
+         exprSimHypsDefsTheory.bare_globals_layout_def,
+         env_consistent_def, env_immutables_consistent_def] >>
+     qpat_assum `!src id off. _ ==> ?ty. _`
+       (qspecl_then [`src`, `id`, `off`] mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (qx_choose_then `ty1` assume_tac) >>
+     qpat_assum `!src id off. _ ==> ?ty. _`
+       (qspecl_then [`src`, `name`, `off0`] mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (qx_choose_then `ty2` assume_tac) >>
+     `evaluate_type (get_tenv cx) ty1 = SOME tv` by
+       (qpat_assum `!src id ty tv v. _ /\ _ ==> _`
+          irule >> goal_assum (drule_at Any) >> simp[]) >>
+     `evaluate_type (get_tenv cx) ty2 = SOME tv0` by
+       (qpat_assum `!src id ty tv v. _ /\ _ ==> _`
+          irule >> goal_assum (drule_at Any) >> simp[]) >>
+     first_x_assum irule >>
+     qexistsl [`id`, `name`, `src`, `ty1`, `ty2`] >> simp[]) >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  gvs[regions_disjoint_def] >> decide_tac
+QED
+
 (* Pop on a member of an immutable in the constructor, which Python's
    checker accepts for a complex immutable (local.py skips the
    modification count when var_info is None), with pure indices.  The
