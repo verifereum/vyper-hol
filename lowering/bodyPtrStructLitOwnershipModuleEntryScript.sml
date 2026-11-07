@@ -173,3 +173,112 @@ Ancestors bodyPtrStructLitOwnershipModuleParams loweringShapeProps
    Unit transport still must discharge selected tuple premises and allocation
    mode. None of these ownership obligations proves runtime ALLOCA dominance.
 *)
+
+(* Generator-to-unit premise matrix (consumer audit, 2026-11-07).
+   This supersedes the PROPOSED / missing-generator status in the historical
+   audits above, not their distinction between ownership and dominance.
+   Checked contracts now exist in OwnershipRuntime and OwnershipDeploy:
+   alloc_run_generate_runtime_linear and alloc_run_generate_deploy. Entry,
+   body, list, dispatch, constructor and exit composition are no longer gaps.
+
+   Exact selected arguments (compileVyper lower_vyper_*_unit_def):
+   Write (exts,ints,fb,ctor)=classify_functions tops, nk=assign_nkeys tops 0,
+   target=rpolicy.rpol_target, and ilen=compute_immutables_len
+     (get_struct_fields (make_struct_fields_map tops)) tops.
+   Runtime supplies build_selectors (type_env tops) exts;
+     MAP (set_external_package_target target o package_external_fn tops F nk) exts;
+     MAP (set_internal_package_target target o package_internal_fn tops F nk F 0) ints;
+     set_fallback_package_target target (package_fallback_fn tops F nk fb).
+   It passes rpolicy, 0, 0, [], build_dense_entry_info selectors external_fns,
+   and entry "__entry" to run_lowering. lowering_policy_ok_def supplies Linear.
+   Deploy supplies IS_SOME ctor, actual runtime bytes (generator size LENGTH
+   bytes), ilen, packaged ctor args, data_size=0, and entry "__deploy".
+   Its internal list is MAP (set_internal_package_target target o
+   package_internal_fn tops F nk T ilen) ints when ctor is SOME, else [].
+   Its remaining arguments are projections of set_constructor_package_target
+   target (package_constructor tops F nk cf) when ctor=SOME cf. For NONE they
+   are the default tuple (ARB,[],F,F,0,F,[],NoneT) with target installed.
+   ARB needs no cenv properties: Deploy's antecedent is guarded by has_ctor.
+
+   Premise                         Existing source / residual bridge
+   R selector fn_ prefixes         build_selectors_fn_labels (exported).
+   R external_fn_shape_ok          package_external_fn_shape_ok (exported),
+                                   supported_program_runtime_bodies_shape_ok.
+   R fallback_shape_ok             package_fallback_fn_shape_ok (exported),
+                                   same supported-program implication; NONE=T.
+   R internal_fn_shape_ok          package_internal_fn_shape_ok (exported),
+                                   specialized to runtime F/0 exactly as needed.
+   R external/fallback mode        build_compile_env_def explicitly sets
+                                   ce_alloca_locals=T (line 660), independent
+                                   of visibility. Packaging's raw-return,
+                                   ret-ABI, nonreentrant and target updates
+                                   leave this field unchanged. Missing exported
+                                   package-mode projection/list/option bridge;
+                                   no shape predicate implies this mode.
+   R/D internal labels             package_internal_fn_def uses
+                                   internal_fn_label ... is_ctor;
+                                   internal_fn_label_prefix and
+                                   internal_label_ok_def establish the prefix.
+                                   internal_descriptors_ok is exported, but
+                                   needs name distinctness for its OTHER
+                                   conjunct. No distinctness is necessary for
+                                   ownership. Missing direct package-label
+                                   bridge to the joined tuple EVERY premise.
+   D internal shape (T/ilen)       Existing package_internal_fn_shape_ok is
+                                   ONLY F/0. build_compile_env_static is
+                                   exported; package_internal_fn_def and
+                                   cenv_static_ok_def show ctor/raw-return,
+                                   nonreentrant and target updates preserve it.
+                                   Body exclusion is exported by
+                                   structlit_classified_function_body for ints.
+                                   Missing ctor-parametric package-shape bridge
+                                   (do not duplicate the runtime-only theorem).
+   D ctor static / return pc       build_compile_env_static and
+                                   build_compile_env_deploy_no_internal_return
+                                   are exported. package_constructor_def only
+                                   updates ctor/raw-return/nonreentrant;
+                                   set_constructor_package_target only target.
+                                   Missing packaged ctor projections bridge.
+   D ctor mode                     Same explicit build_compile_env_def setter;
+                                   preserved by all ctor package updates.
+   D ctor body exclusion           structlit_classify_constructor_source and
+                                   structlit_classified_function_body exported
+                                   by OwnershipSources (also defaults=[]).
+   D absent constructor            No constructor or internal-list premises in
+                                   alloc_run_generate_deploy; selected list=[].
+
+   Exact remaining bridge shapes (audit specifications, NOT declarations):
+   * For arbitrary src, package_external_fn / SOME package_fallback_fn has
+     ce_alloca_locals, including arbitrary set_*_package_target target.
+   * For arbitrary ctor_mode,ilen,src, package_internal_fn has internal_label_ok
+     of its label. With supported_program tops and MEM src ints of the classified
+     list it also has internal_fn_shape_ok, including arbitrary target update.
+   * supported_program tops and ctor=SOME cf in classify_functions tops imply
+     the target-installed package_constructor projections satisfy
+     cenv_static_ok ce /\ ce.ce_return_pc=NONE /\ ce.ce_alloca_locals /\
+     ~supported_stmts_expr_exists expr_shape_root body.
+   EVERY_MAP/EVERY_MEM then join these with the existing runtime shape facts;
+   option cases handle fallback and absent ctor. No default-body recursion:
+   OwnershipSources proves classified supported defaults=[] already.
+
+   Final consumer boundary (belongs to units, NOT discharged by this audit):
+   shape_state_initial_compile_state plus the generator alloc_run contract,
+   initial_compile_state_alloc_writers_unique and alloc_run_def must give
+   alloc_writers_unique st1 for the identical pair ((),st1) evaluated by
+   run_lowering_def / run_deploy_lowering_def. extract_context_with_internals
+   entry packaged_internals st1 = SOME (ctx,data), lookup_function name
+   ctx.ctx_functions = SOME func, and that uniqueness are precisely the three
+   antecedents of extract_context_with_internals_alloc_writers_unique. It
+   concludes: for i,j in fn_insts func, i opcode ALLOCA, x in i outputs and
+   x in j outputs imply i=j. Deploy additionally installs immutable reservation;
+   install_immutable_reservation_functions preserves ctx_functions exactly,
+   and appending runtime data affects no instruction. lowering_context_ok is
+   checked after extraction; it is not an allocation-ownership certificate.
+
+   Dependency boundary: package projections/generalized internal shape ->
+   selected EVERY/option premises -> generator contract at initial state ->
+   final compiler-state uniqueness -> extraction and selected lookup transfer.
+   Only the first two arrows are missing generator-premise bridges. The last
+   three are unit-runner obligations. None proves that execution crosses an
+   ALLOCA, or that a child endpoint covers the declared aggregate layout.
+*)
