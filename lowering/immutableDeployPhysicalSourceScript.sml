@@ -4,6 +4,7 @@ Ancestors
   exprSimHyps exprSimSource exprSimIfExpCompat exprSafeOperand
   assignRelayoutCaller memoryLocalRhsProps valueTypingMemoryProps loweringPosts
   exprSimHypsDefs vyperTypeInvariants exprLowering vyperInterpreter
+  valueCopyBytes vyperTypeArgFits
 Libs monadsyntax
 
 Theorem immutable_rhs_physical_typed:
@@ -92,4 +93,43 @@ Proof
         env_context_consistent_def]) >>
   drule_all ifexp_lowered_type_classify >>
   metis_tac[post_value_type_not_int_call]
+QED
+
+Theorem immutable_rhs_physical_post_widens:
+  expr_body_pre ce cx env e es ==>
+  type_widens_to (get_tenv cx) (lowered_value_type ce e) (post_value_type ce e)
+Proof
+  strip_tac >>
+  `type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e)` by
+    (irule immutable_rhs_physical_widens >> qexistsl_tac [`env`,`es`] >> simp[]) >>
+  Cases_on `e` >> simp[post_value_type_def] >>
+  rename1 `Call ty tgt args drv` >> Cases_on `tgt` >>
+  simp[post_value_type_def] >>
+  gvs[vyperASTTheory.expr_type_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem immutable_rhs_physical_memory:
+  expr_body_pre ce cx env e es /\
+  (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
+  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv /\
+  ~is_word_type (lowered_value_type ce e) ==>
+  ?ptv w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
+    value_has_type ptv v /\ eval_operand op s = SOME w /\
+    val_in_memory stv v (w2n w) s.vs_memory /\
+    val_footprint stv v = val_footprint ptv v
+Proof
+  strip_tac >>
+  drule_all immutable_rhs_physical_typed >> strip_tac >> gvs[] >>
+  `type_widens_to (get_tenv cx) (lowered_value_type ce e) (post_value_type ce e)` by
+    metis_tac[immutable_rhs_physical_post_widens] >>
+  drule_all type_widens_to_value_has_type >> strip_tac >>
+  drule immutable_rhs_post_physical_classify >> strip_tac
+  >- (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `~is_word_type (post_value_type ce e)` by metis_tac[is_bytestring_word_type] >>
+  `?w. eval_operand op s = SOME w /\ val_in_memory tu v (w2n w) s.vs_memory` by
+    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  qexistsl_tac [`tu`,`w`] >> simp[] >> conj_tac
+  >- metis_tac[bytestring_val_in_memory_transfer] >>
+  metis_tac[bytestring_val_footprint_eq]
 QED
