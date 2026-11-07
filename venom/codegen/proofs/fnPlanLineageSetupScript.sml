@@ -1,6 +1,6 @@
 Theory fnPlanLineageSetup
 Ancestors
-  fnPlanLineageDemand fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState reorderSim list rich_list venomWf venomInst callLayoutDefs
+  fnPlanLineageSuffix fnPlanLineageDemand fnPlanLineageInventory stackPlanGen stackModel stackPlanTypes venomState reorderSim list rich_list venomWf venomInst callLayoutDefs
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory fnPlanLineageReplayTheory doSwapSimTheory planSpillBoundsTheory cleanOpsSimTheory
 
@@ -1236,8 +1236,36 @@ Proof
   gvs[GSYM LIST_ELEM_COUNT_MEM]
 QED
 
-(* Arbitrary bottom-prefix replay needs absence only for the queried name;
-   the observable suffix need not be distinct. *)
+(* Only LAST live is looked up. Either prefix exclusion or a suffix hit
+   shields that observation; the suffix need not be distinct. The exact
+   do_swap_bottom_frame handles deep spill/allocator effects as well. *)
+Theorem optimistic_swap_plan_shielded_bottom_frame:
+  !dfg inst live term ps prefix ops qs.
+    (live = [] \/ ~MEM (Var (LAST live)) prefix \/
+      MEM (Var (LAST live)) ps.ps_stack) /\
+    optimistic_swap_plan dfg inst live term ps = (ops,qs) ==>
+    optimistic_swap_plan dfg inst live term
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `live = []` >- gvs[optimistic_swap_plan_def] >>
+  `stack_get_depth (Var (LAST live)) (prefix ++ ps.ps_stack) =
+   stack_get_depth (Var (LAST live)) ps.ps_stack` by
+    (Cases_on `~MEM (Var (LAST live)) prefix`
+     >- metis_tac[stack_get_depth_bottom_excluded] >>
+     `IS_SOME (stack_get_depth (Var (LAST live)) ps.ps_stack)` by
+       gvs[stack_get_depth_is_some] >>
+     Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
+     metis_tac[stack_get_depth_suffix_hit]) >>
+  gvs[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
+  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_props] >>
+  drule_all do_swap_bottom_frame >> simp[]
+QED
+
+(* Legacy prefix-exclusion interface is a projection of observation shielding. *)
 Theorem optimistic_swap_plan_bottom_frame:
   !dfg inst live term ps prefix ops qs.
     EVERY (\v. ~MEM (Var v) prefix) live /\
@@ -1246,18 +1274,39 @@ Theorem optimistic_swap_plan_bottom_frame:
       (ps with ps_stack := prefix ++ ps.ps_stack) =
       (ops,qs with ps_stack := prefix ++ qs.ps_stack)
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `live = []` >- gvs[optimistic_swap_plan_def] >>
-  `~MEM (Var (LAST live)) prefix` by
-    (gvs[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]) >>
-  `stack_get_depth (Var (LAST live)) (prefix ++ ps.ps_stack) =
-   stack_get_depth (Var (LAST live)) ps.ps_stack` by
-    metis_tac[stack_get_depth_bottom_excluded] >>
-  gvs[optimistic_swap_plan_def, LET_THM] >>
-  rpt IF_CASES_TAC >> gvs[] >>
-  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> gvs[] >>
-  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_props] >>
-  drule_all do_swap_bottom_frame >> simp[]
+  rpt strip_tac >> irule optimistic_swap_plan_shielded_bottom_frame >>
+  goal_assum (drule_at Any) >>
+  Cases_on `live = []` >> gvs[EVERY_MEM] >>
+  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
+QED
+
+Theorem optimistic_swap_plan_suffix_hit_frame:
+  !dfg inst live term ps prefix ops qs.
+    (live = [] \/ MEM (Var (LAST live)) ps.ps_stack) /\
+    optimistic_swap_plan dfg inst live term ps = (ops,qs) ==>
+    optimistic_swap_plan dfg inst live term
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt strip_tac >> irule optimistic_swap_plan_shielded_bottom_frame >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+(* E0381's native common-suffix coverage implies this EVERY premise by
+   EVERY_MEM when live is the post-PHI live list and ps.ps_stack is the
+   shared suffix. It does NOT establish coverage after preparation/pop. *)
+Theorem optimistic_swap_plan_demand_covered_frame:
+  !dfg inst live term ps prefix ops qs.
+    EVERY (\v. MEM (Var v) ps.ps_stack) live /\
+    optimistic_swap_plan dfg inst live term ps = (ops,qs) ==>
+    optimistic_swap_plan dfg inst live term
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt strip_tac >> irule optimistic_swap_plan_suffix_hit_frame >>
+  goal_assum (drule_at Any) >>
+  Cases_on `live = []` >> gvs[EVERY_MEM] >>
+  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
 QED
 
 Theorem popmany_plan_bottom_frame:
