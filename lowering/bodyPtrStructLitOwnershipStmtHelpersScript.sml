@@ -308,9 +308,9 @@ QED
 
 Theorem alloc_run_compile_reason_message:
   !ce e. alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
-      (compile_expr ce (expr_type e) e) (\v s. T) ==>
+      (compile_expr ce (expr_type e) e) (\v s. fresh_outputs s) ==>
     alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
-      (compile_reason_message ce e) (\v s. T)
+      (compile_reason_message ce e) (\v s. fresh_outputs s)
 Proof
   recInduct compile_reason_message_ind >> rpt strip_tac >>
   simp[Once compile_reason_message_def] >>
