@@ -338,7 +338,7 @@ Proof
   Cases_on `bop = Eq \/ bop = NotEq`
   >- (gvs[bop_result_def, evaluate_builtin_def] >>
       Cases_on `v1` >> Cases_on `v2` >>
-      simp[evaluate_binop_def, binop_negate_def, expr_res_ok_def]) >>
+      FIRST_PROVE [simp[evaluate_binop_def, binop_negate_def, expr_res_ok_def]]) >>
   `bop_result cx ty bop [ty; t2] v1 v2 es =
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -391,7 +391,7 @@ Proof
   Cases_on `q2.value` >>
   simp[replace_memory_entry_def, evaluate_subscripts_def,
        assign_subscripts_def, return_def, raise_def] >>
-  rename1 `StructV fields` >> Cases_on `ALOOKUP fields fld` >>
+  rename1 `q2.value = StructV fields` >> Cases_on `ALOOKUP fields fld` >>
   simp[replace_memory_entry_def, evaluate_subscripts_def,
        assign_subscripts_def, return_def, raise_def]
 QED
@@ -547,7 +547,7 @@ Proof
   `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v = INL actual` by
-    (irule bop_result_augassign_success >> goal_assum (drule_at Any) >> simp[]) >>
+    metis_tac[bop_result_augassign_success] >>
   Cases_on `write_place cx (MemoryPlace id []) actual ee` >>
   rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
