@@ -44,8 +44,10 @@ Proof
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def,
-       bind_outputs_def] >>
+  simp[mk_inst_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  simp_tac std_ss [instruction_accfupds, instruction_accessors] >>
+  ASM_SIMP_TAC std_ss [exec_pure2_def, eval_operand_def, bind_outputs_def] >>
   `eval_operand ptr_op
      (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w) s) =
      SOME (n2w b)` by
@@ -235,21 +237,23 @@ QED
 
 Theorem comparison_source_result[local]:
   (bop = Eq \/ bop = NotEq) /\
-  ((?xs ys cap. v1 = BytesV xs /\ v2 = BytesV ys /\
-      evaluate_type (get_tenv cx) ty2 = SOME (BaseTV (BytesT (Dynamic cap))) /\
-      d1 = word_of_bytes T (0w:bytes32) (Keccak_256_w64 xs) /\
-      d2 = word_of_bytes T (0w:bytes32) (Keccak_256_w64 ys)) \/
-   (?xs ys. v1 = StringV xs /\ v2 = StringV ys /\
-      d1 = word_of_bytes T (0w:bytes32)
-        (Keccak_256_w64 (MAP (n2w o ORD) xs)) /\
-      d2 = word_of_bytes T (0w:bytes32)
-        (Keccak_256_w64 (MAP (n2w o ORD) ys)))) ==>
-  bop_result cx ann bop [ty1; ty2] v1 v2 es =
+  (?cap. ty = BaseT (BytesT (Dynamic cap)) \/ ty = BaseT (StringT cap)) /\
+  evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v1 /\ value_has_type tv v2 /\
+  ((?bs. v1 = BytesV bs /\ d1 = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) \/
+   (?str. v1 = StringV str /\ d1 = word_of_bytes T (0w:bytes32)
+       (Keccak_256_w64 (MAP (n2w o ORD) str)))) /\
+  ((?bs. v2 = BytesV bs /\ d2 = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) \/
+   (?str. v2 = StringV str /\ d2 = word_of_bytes T (0w:bytes32)
+       (Keccak_256_w64 (MAP (n2w o ORD) str)))) ==>
+  !ss. bop_result cx ann bop [ty; ty] v1 v2 ss =
     INL (BoolV (if bop = Eq then d1 = d2 else d1 <> d2))
 Proof
-  strip_tac >> gvs[exprBopSimDefsTheory.bop_result_def, evaluate_builtin_def,
-    vyperValueOperationTheory.evaluate_binop_def,
-    vyperValueOperationTheory.binop_negate_def, comparison_digest_eq] >>
+  strip_tac >> gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
+  gvs[exprBopSimDefsTheory.bop_result_def, evaluate_builtin_def,
+      vyperValueOperationTheory.evaluate_binop_def,
+      vyperValueOperationTheory.binop_negate_def, comparison_digest_eq,
+      vyperValueTheory.evaluate_type_def] >>
   simp[vyperMiscTheory.n2w_o_ORD_eq]
 QED
 
@@ -372,6 +376,31 @@ Proof
        loweringPostsTheory.expr_val_rel_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def, valueEncodingTheory.typed_val_to_w256_def] >>
   rpt strip_tac >> simp[]
+QED
+
+Theorem comparison_terminal_summary[local]:
+  (!ss. bop_result cx (BaseT BoolT) bop [ty;ty] v1 v2 ss = INL bv) /\
+  ee.gas_obs = [] /\
+  gas_marked_path F ctx func t 0 (OK z) /\
+  expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+    es sa sb s0 ee bv op z /\
+  z.vs_current_bb = sh.cs_current_bb /\
+  z.vs_inst_idx = LENGTH sh.cs_current_insts + LENGTH (emitted_insts sh sb) ==>
+  ?marks. gas_summary_at F (ctx,func) marks
+    (\ss. (bop_result cx (BaseT BoolT) bop [ty;ty] v1 v2 ss,ss)) (ee,t)
+    (\res ee z. ?v. res = INL v /\
+      expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+        es sa sb s0 ee v op z /\
+      z.vs_current_bb = sh.cs_current_bb /\
+      z.vs_inst_idx = LENGTH sh.cs_current_insts + LENGTH (emitted_insts sh sb))
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qexists_tac `[]` >>
+  simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def] >>
+  qexistsl_tac [`INL bv`, `ee`, `OK z`] >> simp[]
 QED
 
 Theorem comparison_compile_cut[local]:
@@ -565,7 +594,8 @@ Proof
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] exprBopSimPropsTheory.eval_expr_bop_bind] >>
   Cases_on `bytestring_literal_hash e1`
-  >- (gvs[] >>
+  >- (gnvs[] >>
+      qpat_x_assum `?p sm. lower_value _ _ _ e1 sa = _ /\ _` strip_assume_tac >>
       `fn_has_code sa sm func /\ fn_has_code sm sh1 func` by
         (imp_res_tac (cj 2 compile_expr_grows) >>
          imp_res_tac comparison_hash_shape >>
@@ -602,124 +632,257 @@ Proof
       `local_ptrs_reserved cenv sm` by
         (imp_res_tac (cj 2 compile_expr_grows) >>
          metis_tac[local_ptrs_reserved_next_var]) >>
-      `?cap. expr_type e1 = BaseT (BytesT (Dynamic cap)) \/
-             expr_type e1 = BaseT (StringT cap)` by
-        (Cases_on `expr_type e1` >> gvs[is_bytestring_type_def] >>
-         rename1 `is_bytestring_type (BaseT bt)` >> Cases_on `bt` >>
-         gvs[is_bytestring_type_def] >> Cases_on `b` >>
-         gvs[is_bytestring_type_def])
-      >- (gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-          Cases_on `v` >> gvs[value_has_type_def] >>
-          `evaluate_type (get_tenv cx) (expr_type e1) =
-             SOME (BaseTV (BytesT (Dynamic cap)))` by simp[vyperValueTheory.evaluate_type_def] >>
-          drule_all comparison_hash_dynamic >> strip_tac >>
-          qexists_tac `t'` >> simp[] >>
-          Cases_on `bytestring_literal_hash e2`
-          >- (gvs[] >>
-              `fn_has_code sh1 sm' func /\ fn_has_code sm' sh2 func` by
-                (imp_res_tac (cj 2 compile_expr_grows) >>
-                 imp_res_tac comparison_hash_shape >>
-                 metis_tac[fn_has_code_mid, cs_extends_refl]) >>
-              irule expr_sim_suffix >>
-              qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
-              qpat_assum `lower_value _ _ _ e2 _ = _` (irule_at Any) >>
-              simp[] >>
-              (conj_tac >- (irule expr_body_pre_gas_admissible >>
-                 qexistsl_tac [`cenv`, `env`] >> simp[])) >>
-              rpt gen_tac >> strip_tac >>
-              `expr_body_pre cenv cx env e2 (ee with gas_obs := gs')` by
-                simp[expr_body_pre_gas_obs] >>
-              drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
-              `?tv. evaluate_type env.type_defs (expr_type e2) = SOME tv /\
-                    value_has_type tv v` by
-                (qpat_x_assum `!v'. INL v = _ ==> _` (qspec_then `v` mp_tac) >>
-                 simp[expr_result_typed_def, expr_runtime_typed_def,
-                      value_result_typed_def]) >>
-              gvs[vyperValueTheory.evaluate_type_def] >>
-              Cases_on `v` >> gvs[value_has_type_def] >>
-              `!x. p' = Var x ==> not_fresh_at sm' x` by
-                (qpat_assum `lower_value _ _ _ e2 _ = _`
-                   (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >>
-                 simp[]) >>
-              `local_ptrs_reserved cenv sm'` by
-                (imp_res_tac (cj 2 compile_expr_grows) >>
-                 metis_tac[local_ptrs_reserved_next_var]) >>
-              `evaluate_type (get_tenv cx) (expr_type e2) =
-                 SOME (BaseTV (BytesT (Dynamic cap)))` by
-                simp[vyperValueTheory.evaluate_type_def] >>
-              drule_all comparison_hash_dynamic >> strip_tac >>
-              rename1 `eval_operand h2 u = SOME _` >>
-              `!x. h1 = Var x ==> not_fresh_at sh1 x` by
-                metis_tac[comparison_hash_shape] >>
-              `!x. h1 = Var x ==> not_fresh_at sm' x` by
-                (imp_res_tac (cj 2 compile_expr_grows) >>
-                 gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-              `eval_operand h1 u = SOME (word_of_bytes T 0w (Keccak_256_w64 l))` by
-                (`?x. h1 = Var x` by
-                   (qpat_x_assum `compile_bytestring_hash p sm = _` mp_tac >>
-                    simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
-                         comp_ignore_bind_def, comp_return_def, fresh_id_def,
-                         fresh_var_def, emit_def] >> metis_tac[]) >>
-                 gvs[eval_operand_def] >>
-                 qpat_x_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
-                 simp[loweringPostsTheory.expr_post_def] >> strip_tac >>
-                 first_x_assum irule >> simp[]) >>
-              drule_all (comparison_digest_counted |> SPEC_ALL |>
-                Q.INST [`bop` |-> `Eq`] |> SIMP_RULE (srw_ss()) []) >> strip_tac >>
-              rename1 `eval_operand op z = SOME _` >>
-              `gas_marked_path F ctx func t'' 0 (OK z)` by
-                metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
-              `!ss. bop_result cx (BaseT BoolT) Eq
-                 [BaseT (BytesT (Dynamic cap)); BaseT (BytesT (Dynamic cap))]
-                 (BytesV l) (BytesV l') ss =
-                 INL (BoolV (word_of_bytes T (0w:bytes32) (Keccak_256_w64 l) =
-                             word_of_bytes T (0w:bytes32) (Keccak_256_w64 l')))` by
-                (gen_tac >> irule (comparison_source_result |> SPEC_ALL |>
-                   Q.INST [`bop` |-> `Eq`] |> SIMP_RULE (srw_ss()) []) >> simp[] >>
-                 metis_tac[]) >>
-              qexists_tac `[]` >>
-              simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def] >>
-              qexistsl_tac [`INL (BoolV (word_of_bytes T (0w:bytes32) (Keccak_256_w64 l) =
-                                        word_of_bytes T (0w:bytes32) (Keccak_256_w64 l')))`,
-                            `ee'`, `OK z`] >> simp[] >>
-              `wb_frame cenv es sa s0 t'` by
-                (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
-                 qexistsl_tac [`sm`, `t`] >>
-                 imp_res_tac (cj 2 compile_expr_grows) >>
-                 simp[] >> metis_tac[exprSimWordArgsTheory.expr_post_frame]) >>
-              `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
-                (qpat_assum `monad_bind _ _ (es with gas_obs := gs) = _`
-                   (mp_then Any mp_tac (REWRITE_RULE [ETA_AX]
-                      exprBopSimPropsTheory.bop_value_scopes_dom)) >> simp[]) >>
-              `wb_frame cenv es sa s0 t''` by
-                (irule exprSimWordArgsTheory.wb_frame_trans >>
-                 goal_assum (drule_at Any) >>
-                 reverse conj_tac
-                 >- (goal_assum (drule_at Any)) >>
-                 qexistsl_tac [`ee`, `sh1`, `t'`] >>
-                 simp[] >> imp_res_tac (cj 2 compile_expr_grows) >>
-                 imp_res_tac comparison_hash_shape >>
-                 metis_tac[exprSimWordArgsTheory.expr_post_frame,
-                           arithmeticTheory.LESS_EQ_TRANS]) >>
-              `wb_frame cenv es sa s0 z` by
-                (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
-                 qexistsl_tac [`sm'`, `t''`] >>
-                 imp_res_tac (cj 2 compile_expr_grows) >>
-                 imp_res_tac comparison_hash_shape >>
-                 simp[] >> rpt strip_tac >>
-                 `not_fresh_at sh2 z'` by
-                   (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sm'` >> simp[]) >>
-                 metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-              simp[loweringPostsTheory.expr_post_def,
-                   exprSimWordArgsTheory.stmt_state_rel_gas_obs, expr_type_def] >>
-              qpat_x_assum `wb_frame cenv es sa s0 z` mp_tac >>
-              simp[loweringPostsTheory.wb_frame_def,
-                   loweringPostsTheory.expr_val_at_def,
-                   loweringPostsTheory.expr_val_rel_def, is_word_type_def] >>
-              simp[vyperValueTheory.evaluate_type_def,
-                   valueEncodingTheory.typed_val_to_w256_def] >>
-              rpt strip_tac >> simp[]) >>
-          FAIL_TAC "second literal probe") >>
-      FAIL_TAC "string hash probe") >>
-  FAIL_TAC "literal probe"
+      Q.SUBGOAL_THEN
+        `?cap. expr_type e1 = BaseT (BytesT (Dynamic cap)) \/
+               expr_type e1 = BaseT (StringT cap)` assume_tac
+      >- (Cases_on `expr_type e1` >> gvs[is_bytestring_type_def] >>
+          rename1 `is_bytestring_type (BaseT bt)` >> Cases_on `bt` >>
+          gvs[is_bytestring_type_def] >> Cases_on `b` >>
+          gvs[is_bytestring_type_def]) >>
+      drule comparison_hash_typed >>
+      disch_then (qspecl_then [`env.type_defs`, `sh1`, `h1`] mp_tac) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >>
+      disch_then (qx_choose_then `d1` (qx_choose_then `t'`
+        (map_every assume_tac o CONJUNCTS))) >>
+      `wb_frame cenv es sa s0 t'` by
+        (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+         qexistsl_tac [`sm`, `t`] >>
+         imp_res_tac (cj 2 compile_expr_grows) >>
+         simp[] >> metis_tac[exprSimWordArgsTheory.expr_post_frame]) >>
+      `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+        (qpat_assum `monad_bind _ _ (es with gas_obs := gs) = _`
+           (mp_then Any mp_tac (REWRITE_RULE [ETA_AX]
+              exprBopSimPropsTheory.bop_value_scopes_dom)) >> simp[]) >>
+      qexists_tac `t'` >> simp[] >>
+      Cases_on `bytestring_literal_hash e2`
+      >- (gnvs[] >>
+          qpat_x_assum `?p sm. lower_value _ _ _ e2 sh1 = _ /\ _` strip_assume_tac >>
+          `fn_has_code sh1 sm' func /\ fn_has_code sm' sh2 func` by
+            (imp_res_tac (cj 2 compile_expr_grows) >>
+             imp_res_tac comparison_hash_shape >>
+             metis_tac[fn_has_code_mid, cs_extends_refl]) >>
+          irule expr_sim_suffix >>
+          qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
+          qpat_assum `lower_value _ _ _ e2 _ = _` (irule_at Any) >>
+          simp[] >>
+          (conj_tac >- (irule expr_body_pre_gas_admissible >>
+             qexistsl_tac [`cenv`, `env`] >> simp[])) >>
+          map_every qx_gen_tac [`gs2`, `v2`, `ee2`, `t2`] >> strip_tac >>
+          `expr_body_pre cenv cx env e2 (ee with gas_obs := gs2)` by
+            simp[expr_body_pre_gas_obs] >>
+          drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
+          `?tv. evaluate_type env.type_defs (expr_type e2) = SOME tv /\
+                value_has_type tv v2` by
+            (qpat_x_assum `!v'. INL v2 = _ ==> _` (qspec_then `v2` mp_tac) >>
+             simp[expr_result_typed_def, expr_runtime_typed_def,
+                  value_result_typed_def]) >>
+          `!x. p' = Var x ==> not_fresh_at sm' x` by
+            (qpat_assum `lower_value _ _ _ e2 _ = _`
+               (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >> simp[]) >>
+          `local_ptrs_reserved cenv sm'` by
+            (imp_res_tac (cj 2 compile_expr_grows) >>
+             metis_tac[local_ptrs_reserved_next_var]) >>
+          drule comparison_hash_typed >>
+          disch_then (qspecl_then [`env.type_defs`, `sh2`, `h2`] mp_tac) >>
+          (impl_tac >- (simp[] >> metis_tac[])) >>
+          disch_then (qx_choose_then `d2` (qx_choose_then `u`
+            (map_every assume_tac o CONJUNCTS))) >>
+          `!x. h1 = Var x ==> not_fresh_at sh1 x` by
+            metis_tac[comparison_hash_shape] >>
+          `!x. h1 = Var x ==> not_fresh_at sm' x` by
+            (imp_res_tac (cj 2 compile_expr_grows) >>
+             metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+          `eval_operand h1 u = SOME d1` by
+            (`?x. h1 = Var x` by
+               (qpat_x_assum `compile_bytestring_hash p sm = _` mp_tac >>
+                simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
+                     comp_ignore_bind_def, comp_return_def, fresh_id_def,
+                     fresh_var_def, emit_def] >> metis_tac[]) >>
+             gnvs[eval_operand_def] >>
+             qpat_x_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+             simp[loweringPostsTheory.expr_post_def] >> strip_tac >>
+             first_x_assum irule >> simp[]) >>
+          `wb_frame cenv es sa s0 t2` by
+            (irule exprSimWordArgsTheory.wb_frame_trans >>
+             goal_assum (drule_at Any) >>
+             reverse conj_tac >- (goal_assum (drule_at Any)) >>
+             qexistsl_tac [`ee`, `sh1`, `t'`] >>
+             simp[] >> imp_res_tac (cj 2 compile_expr_grows) >>
+             imp_res_tac comparison_hash_shape >>
+             metis_tac[exprSimWordArgsTheory.expr_post_frame,
+                       arithmeticTheory.LESS_EQ_TRANS]) >>
+          `wb_frame cenv es sa s0 u` by
+            (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+             qexistsl_tac [`sm'`, `t2`] >>
+             imp_res_tac (cj 2 compile_expr_grows) >>
+             simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+          `sa.cs_next_var <= sh2.cs_next_var` by
+            metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+          drule_all comparison_finish_post >>
+          disch_then (qspecl_then [`e2`, `e1`] strip_assume_tac) >>
+          `!ss. bop_result cx (BaseT BoolT) bop
+             [expr_type e1; expr_type e1] v v2 ss =
+             INL (BoolV (if bop = Eq then d1 = d2 else d1 <> d2))` by
+            (irule comparison_source_result >> simp[] >>
+             qexistsl_tac [`env.type_defs`, `tv`] >> simp[] >>
+             metis_tac[optionTheory.SOME_11]) >>
+          `gas_marked_path F ctx func t2 0 (OK z)` by
+            metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
+          irule comparison_terminal_summary >>
+          goal_assum (drule_at Any) >> simp[] >>
+          qexists_tac `z` >> simp[]) >>
+      gnvs[] >>
+      drule comparison_hash_literal >>
+      disch_then (qspec_then `cx`
+        (qx_choose_then `v2` (map_every assume_tac o CONJUNCTS))) >>
+      `expr_body_pre cenv cx env e2 ee` by simp[] >>
+      `bind (eval_expr cx e2) (read_result cx) ee = (INL v2,ee)` by simp[] >>
+      `expr_result_typed env e2 (Value v2)` by
+        (drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[]) >>
+      `value_has_type tv v2` by
+        (gnvs[expr_result_typed_def, expr_runtime_typed_def,
+              value_result_typed_def] >> metis_tac[optionTheory.SOME_11]) >>
+      `eval_operand (Lit x) t' = SOME x` by simp[eval_operand_def] >>
+      drule_all comparison_finish_post >>
+      disch_then (qspecl_then [`e2`, `e1`] strip_assume_tac) >>
+      `!ss. bop_result cx (BaseT BoolT) bop
+         [expr_type e1; expr_type e1] v v2 ss =
+         INL (BoolV (if bop = Eq then d1 = x else d1 <> x))` by
+        (irule comparison_source_result >> simp[] >>
+         qexistsl_tac [`env.type_defs`, `tv`] >> simp[]) >>
+      `bind (bind (eval_expr cx e2) (read_result cx))
+         (\v2 ss. (bop_result cx (BaseT BoolT) bop
+           [expr_type e1;expr_type e1] v v2 ss,ss)) =
+       (\ss. (bop_result cx (BaseT BoolT) bop
+           [expr_type e1;expr_type e1] v v2 ss,ss))` by
+        simp[FUN_EQ_THM, vyperStateTheory.bind_def] >>
+      qpat_x_assum `bind (bind _ _) _ = _` (fn th => pure_once_rewrite_tac[th]) >>
+      rewrite_tac[gas_outcome_def] >>
+      irule_at Any OR_INTRO_THM1 >>
+      irule comparison_terminal_summary >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexists_tac `z` >> simp[]) >>
+  gnvs[] >>
+  drule comparison_hash_literal >>
+  disch_then (qspec_then `cx`
+    (qx_choose_then `v1` (map_every assume_tac o CONJUNCTS))) >>
+  `bind (eval_expr cx e1) (read_result cx) es = (INL v1,es)` by simp[] >>
+  `expr_sim_inv cenv cx env es /\ expr_result_typed env e1 (Value v1)` by
+    (drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[]) >>
+  `expr_sim_case nocalls ctx func cenv cx e2 /\
+   expr_vv_case nocalls ctx func cenv cx e2` by
+    (drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
+     qpat_x_assum `(?s tv t s1 v t1. _) ==> _` irule >> metis_tac[]) >>
+  `expr_body_pre cenv cx env e2 es` by simp[] >>
+  `expr_sim ctx func cenv cx (expr_type e1) e2 es` by
+    (qpat_x_assum `expr_sim_case _ _ _ _ _ e2`
+       (mp_tac o REWRITE_RULE [expr_sim_case_def]) >>
+     disch_then irule >>
+     (conj_tac >- gvs[int_calls_expr_def]) >>
+     qexists_tac `env` >> simp[]) >>
+  `?tv. evaluate_type env.type_defs (expr_type e1) = SOME tv /\
+        value_has_type tv v1` by
+    gnvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
+  Q.SUBGOAL_THEN
+    `?cap. expr_type e1 = BaseT (BytesT (Dynamic cap)) \/
+           expr_type e1 = BaseT (StringT cap)` assume_tac
+  >- (Cases_on `expr_type e1` >> gvs[is_bytestring_type_def] >>
+      rename1 `is_bytestring_type (BaseT bt)` >> Cases_on `bt` >>
+      gvs[is_bytestring_type_def] >> Cases_on `b` >> gvs[is_bytestring_type_def]) >>
+  `bind (bind (eval_expr cx e1) (read_result cx))
+     (\v1. bind (bind (eval_expr cx e2) (read_result cx))
+       (\v2 ss. (bop_result cx (BaseT BoolT) bop
+         [expr_type e1;expr_type e1] v1 v2 ss,ss))) =
+   bind (bind (eval_expr cx e2) (read_result cx))
+       (\v2 ss. (bop_result cx (BaseT BoolT) bop
+         [expr_type e1;expr_type e1] v1 v2 ss,ss))` by
+    simp[FUN_EQ_THM, vyperStateTheory.bind_def] >>
+  qpat_x_assum `bind (bind _ _) _ = _` (fn th => pure_once_rewrite_tac[th]) >>
+  Cases_on `bytestring_literal_hash e2`
+  >- (gnvs[] >>
+      qpat_x_assum `?p sm. lower_value _ _ _ e2 sa = _ /\ _` strip_assume_tac >>
+      `fn_has_code sa sm func /\ fn_has_code sm sh2 func` by
+        (imp_res_tac (cj 2 compile_expr_grows) >>
+         imp_res_tac comparison_hash_shape >>
+         metis_tac[fn_has_code_mid, cs_extends_refl]) >>
+      irule expr_sim_suffix >>
+      qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
+      qpat_assum `lower_value _ _ _ e2 _ = _` (irule_at Any) >>
+      simp[] >>
+      (conj_tac >- (irule expr_body_pre_gas_admissible >>
+         qexistsl_tac [`cenv`, `env`] >> simp[])) >>
+      map_every qx_gen_tac [`gs2`, `v2`, `ee2`, `t2`] >> strip_tac >>
+      `expr_body_pre cenv cx env e2 (es with gas_obs := gs2)` by
+        simp[expr_body_pre_gas_obs] >>
+      drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
+      `value_has_type tv v2` by
+        (qpat_x_assum `!v'. INL v2 = _ ==> _` (qspec_then `v2` mp_tac) >>
+         simp[expr_result_typed_def, expr_runtime_typed_def,
+              value_result_typed_def] >> metis_tac[optionTheory.SOME_11]) >>
+      `!x. p = Var x ==> not_fresh_at sm x` by
+        (qpat_assum `lower_value _ _ _ e2 _ = _`
+           (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >> simp[]) >>
+      `local_ptrs_reserved cenv sm` by
+        (imp_res_tac (cj 2 compile_expr_grows) >>
+         metis_tac[local_ptrs_reserved_next_var]) >>
+      drule comparison_hash_typed >>
+      disch_then (qspecl_then [`env.type_defs`, `sh2`, `h2`] mp_tac) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >>
+      disch_then (qx_choose_then `d2` (qx_choose_then `u`
+        (map_every assume_tac o CONJUNCTS))) >>
+      `eval_operand (Lit x) u = SOME x` by simp[eval_operand_def] >>
+      `wb_frame cenv es sa s0 u` by
+        (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+         qexistsl_tac [`sm`, `t2`] >>
+         imp_res_tac (cj 2 compile_expr_grows) >> simp[] >>
+         metis_tac[exprSimWordArgsTheory.expr_post_frame]) >>
+      drule_all comparison_finish_post >>
+      disch_then (qspecl_then [`e2`, `e1`] strip_assume_tac) >>
+      `!ss. bop_result cx (BaseT BoolT) bop
+         [expr_type e1;expr_type e1] v1 v2 ss =
+         INL (BoolV (if bop = Eq then x = d2 else x <> d2))` by
+        (irule comparison_source_result >> simp[] >>
+         qexistsl_tac [`env.type_defs`, `tv`] >> simp[]) >>
+      `gas_marked_path F ctx func t2 0 (OK z)` by
+        metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
+      qpat_assum `sb.cs_current_bb = _` (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `sb.cs_current_insts = _` (fn th => pure_rewrite_tac[th, LENGTH_APPEND]) >>
+      irule comparison_terminal_summary >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexists_tac `z` >> simp[]) >>
+  gnvs[] >>
+  qpat_assum `bytestring_literal_hash e2 = SOME x'`
+    (mp_then Any mp_tac comparison_hash_literal) >>
+  disch_then (qspec_then `cx`
+    (qx_choose_then `v2` (map_every assume_tac o CONJUNCTS))) >>
+  `expr_body_pre cenv cx env e2 es` by simp[] >>
+  `bind (eval_expr cx e2) (read_result cx) es = (INL v2,es)` by simp[] >>
+  `expr_result_typed env e2 (Value v2)` by
+    (drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[]) >>
+  `value_has_type tv v2` by
+    (gnvs[expr_result_typed_def, expr_runtime_typed_def,
+          value_result_typed_def] >> metis_tac[optionTheory.SOME_11]) >>
+  `eval_operand (Lit x) s0 = SOME x /\ eval_operand (Lit x') s0 = SOME x'` by
+    simp[eval_operand_def] >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by simp[] >>
+  `wb_frame cenv es sa s0 s0` by simp[exprSimWordArgsTheory.wb_frame_refl] >>
+  `?z. gas_marked_path F ctx func s0 0 (OK z) /\
+    expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+      es sa sb s0 (es with gas_obs := [])
+      (BoolV (if bop = Eq then x = x' else x <> x')) op z /\
+    ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (irule comparison_finish_post >> simp[] >>
+     qexistsl_tac [`Lit x`, `Lit x'`, `sa`] >> simp[]) >>
+  `!ss. bop_result cx (BaseT BoolT) bop
+     [expr_type e1;expr_type e1] v1 v2 ss =
+     INL (BoolV (if bop = Eq then x = x' else x <> x'))` by
+    (irule comparison_source_result >> simp[] >>
+     qexistsl_tac [`env.type_defs`, `tv`] >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def] >>
+  qexistsl_tac [`INL (BoolV (if bop = Eq then x = x' else x <> x'))`,
+                `es`, `OK z`] >>
+  simp[vyperStateTheory.bind_def]
 QED
