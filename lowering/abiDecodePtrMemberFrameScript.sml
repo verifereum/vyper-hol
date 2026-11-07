@@ -267,3 +267,43 @@ Proof
   conj_tac >- simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
   rpt strip_tac >> simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint]
 QED
+
+(* Interface consumer: two disjoint writes retain initialized members and
+   transport the original robust local observations through both steps. *)
+Theorem abi_decode_ptr_two_writes:
+  abi_decode_ptr_write_frame tn s tn1 t off1 k1 /\
+  abi_decode_ptr_write_frame tn1 t tn2 u off2 k2 /\
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!name b n. local_region cenv es.scopes s name b n ==>
+    b+n <= off1 \/ off1+k1 <= b) /\
+  (!name b n. local_region cenv es.scopes t name b n ==>
+    b+n <= off2 \/ off2+k2 <= b) /\
+  (cenv.ce_is_ctor ==> !name tv v b.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc b) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint b (type_memory_size tv) off1 k1 /\
+    regions_disjoint b (type_memory_size tv) off2 k2) /\
+  abi_decode_ptr_window G tn1 t p a n /\
+  abi_decode_ptr_window G tn2 u q b m /\
+  (w2n a+n <= off2 \/ off2+k2 <= w2n a) ==>
+  stmt_state_rel ctx fn cenv cx es u /\ ghost_inv d cenv cx es G tn2 u /\
+  abi_decode_ptr_window G tn2 u p a n /\ abi_decode_ptr_window G tn2 u q b m
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `stmt_state_rel ctx fn cenv cx es t /\ ghost_inv d cenv cx es G tn1 t` by
+    (irule abi_decode_ptr_write_preserves >>
+     conj_tac >- (qexists_tac `sa` >> simp[]) >>
+     qexistsl_tac [`k1`, `off1`, `s`, `tn`] >> fs[ADD_COMM] >> metis_tac[]) >>
+  `stmt_state_rel ctx fn cenv cx es u /\ ghost_inv d cenv cx es G tn2 u` by
+    (irule abi_decode_ptr_write_preserves >>
+     conj_tac >- (qexists_tac `sa` >> simp[]) >>
+     qexistsl_tac [`k2`, `off2`, `t`, `tn1`] >> fs[ADD_COMM] >> metis_tac[]) >>
+  simp[] >> irule abi_decode_ptr_window_frame >>
+  qexistsl_tac [`G`, `t`, `tn1`] >>
+  fs[abi_decode_ptr_write_frame_def, op_taint_def] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
