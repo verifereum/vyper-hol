@@ -115,7 +115,7 @@ Theorem ptr_paired_invoke_entry:
     ptr_args_transport births positions (MAP (op_prov TG) ops)
       (REPLICATE (LENGTH args) {}) args argst /\
     setup_callee f args a.po_state = SOME cs /\ enters_block f cs cs' /\
-    active_inst f i cs' /\ ptr_core_shared cs' ct' /\
+    active_inst f i cs' /\ ptr_history_content (a.po_taint with t_var := FEMPTY) cs' ct' /\
     ptr_mixed_vars births positions FEMPTY entry_taint f g cs' ct' /\
     ptr_args_transport births positions (MAP (op_prov TG) ops)
       (REPLICATE (LENGTH args) {}) cs'.vs_params ct'.vs_params /\

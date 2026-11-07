@@ -146,7 +146,7 @@ Theorem ptr_paired_jump_entry:
     ptr_paired_cursor lp b bt /\
     ptr_mixed_vars births positions (entry_prov a.po_fn s_jump TG)
       b.po_taint a.po_fn at.po_fn s_entry t_entry /\
-    ptr_core_shared s_entry t_entry
+    ptr_history_content b.po_taint s_entry t_entry
 Proof
   strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
   `at.po_inst = a.po_inst` by
@@ -202,7 +202,7 @@ Theorem ptr_paired_jnz_entry:
     ptr_paired_cursor lp b bt /\
     ptr_mixed_vars births positions (entry_prov a.po_fn s_jump TG)
       b.po_taint a.po_fn at.po_fn s_entry t_entry /\
-    ptr_core_shared s_entry t_entry
+    ptr_history_content b.po_taint s_entry t_entry
 Proof
   strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
   `at.po_inst = a.po_inst` by
@@ -296,7 +296,7 @@ Theorem ptr_paired_djmp_entry:
     ptr_paired_cursor lp b bt /\
     ptr_mixed_vars births positions (entry_prov a.po_fn s_jump TG)
       b.po_taint a.po_fn at.po_fn s_entry t_entry /\
-    ptr_core_shared s_entry t_entry
+    ptr_history_content b.po_taint s_entry t_entry
 Proof
   strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
   `at.po_inst = a.po_inst` by
