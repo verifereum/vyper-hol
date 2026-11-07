@@ -168,3 +168,120 @@ Statement / packaging interfaces and induction:
 * Actual consumer bodyPtrPopEntryInterface:8 projects SAME func lookup from stmt_state_rel. fn_has_code relates arbitrary fragment suffix/prefix to blocks in that func, not compiler reachability of sa. The final universal exclusion theorem must quantify every function and block in the selected unit context; apply membership then window/sublist algebra. No source occurrence of the queried nested Pop is available or needed for exclusion. No proof of that universal raw-context bridge exists yet.
 
 Evidence: TO_pop-20261106T070927Z_m4190_t001 through m4212_t001. Diagnostic only: producer scope can now be de-risked without opcode children, while dispatchers/expression/statements/packaging still require actual composition and universal source-support transport.
+
+## Statement interface validation (2026-11-07)
+
+Expression preservation is now checked in bodyPtrPopMutualBoundary, not merely
+hypothesized. Statement preservation and actual raw-context packaging are still open.
+
+### Exact intended contracts (no extra typing/environment agreement)
+
+```sml
+supported_stmt tops bindings s /\ pop_comp_boundary sa /\
+compile_stmt ce lc ty s sa = (r,sb) ==> pop_comp_boundary sb
+
+supported_stmts tops bindings ss /\ pop_comp_boundary sa /\
+compile_stmts ce lc ty ss sa = (r,sb) ==> pop_comp_boundary sb
+```
+
+Quantify all ce, lc, ty, sa, r, sb, and retain arbitrary bindings. The actual
+`supported_function_body` (supportedProgram:30) supplies supported_stmts with
+`args ++ supported_stmts_bindings T ss ++ supported_stmts_bindings F ss`.
+Its nonmain-type and internal-call exclusions are not needed for these proposed
+stronger compiler-boundary contracts. No support predicate is changed.
+
+### Checked recursion interface
+
+`pop_statement_boundary_induction` in bodyPtrPopStatementBoundary is proved by
+the actual compile_stmt_ind. It exposes all statements via one constructor case
+step, If's two same-context lists, For's arbitrary body environment and InLoop
+labels, and a separate list-cons step with arbitrary declaration environment.
+The generated cons IH is guarded by `~block_is_terminated cs`; the checked
+interface retains this guard rather than postulating an unproved fresh state.
+The compiler induction order is statement predicate first, list predicate second,
+each with four arguments (ce,lc,ty,source). The state is universally quantified
+*inside* these predicates. recInduct on an unannotated polymorphic test did not
+align; ho_match_mp_tac with compile_env and type annotations does.
+Range IH contains a let-bound is_signed equality; array IH contains arr_ty,
+is_dynamic, count, arr_elem_ty equalities. The checked interface eliminates these
+incidental values. For bodies still quantify arbitrary ce' and loop labels.
+AnnAssign's declare_stmt_local changes the environment for both head and tail.
+Support uses fixed syntactic bindings, not cenv, so no support-environment frame
+is required for that tail.
+
+### Constructor-complete reachable inventory
+
+| Supported constructor | Expression/recursive obligations | Whole producers still missing |
+|---|---|---|
+| Pass | none | comp_return (existing) |
+| Break, Continue | any lc; InLoop JMP, NoLoop INVALID fallback | existing emit_inst boundary |
+| Expr e | supported_expr e | actual expression boundary, discard |
+| AnnAssign id vtyp e | supported_expr e; declared place/copy guards | emit_local_alloca, compile_assign_value, declare_local/declare_stmt_local for list |
+| Assign (BaseTarget bt) e | supported_expr e; supported_target OR supported_target_info = SOME (ValPT t) plus copy guard | supported target ptr traversal, compile_store_at_loc, compile_assign_value |
+| Assign (TupleTarget ts) e | supported_expr e; EVERY flat supported_target | compile_tuple_load_all/store_all/unpack (two-pass) |
+| AugAssign target_ty bt op e | supported_expr e; supported_target OR supported_aug_target | target traversal, dispatch loads/stores; compile_binop already universally checked |
+| Append target e | supported_pure_expr e; target necessarily TopLevelNameTarget | compile_dynarray_append; typed store staging already available |
+| If c yes no | pure c; supported lists yes/no | emit_jmp_if_not_terminated; rest fresh labels/new_block/JNZ/JMP existing |
+| Assert c reason | pure c; Bare/Unreachable/Reason only | compile_reason_message, compile_revert_with_reason |
+| Raise reason | Bare/Unreachable/Reason only | same reason producers; bare REVERT/INVALID existing |
+| Log id es | pure es, event field layout | compile_log_eval_all, compile_log_topic_ops, compile_log_store_data; ABI encoder already checked |
+| Return NONE | none; arbitrary environment return PC/ctor exit/nonreentrant | compile_nonreentrant_unlock (and existing opcode boundaries) |
+| Return (SOME e) | supported_expr e | internal return, from_env wrapper, external return; typed normalization already checked |
+| For Range a b | literal IntL endpoints OR pure a/b; supported loop list | declare_local, emit_local_alloca, compile_range_bound_checks, emit_jmp_if_not_terminated |
+| For Array e | e exactly Name (ArrayT elem (Fixed m)) name, hence pure; supported loop list | same allocation/jmp helpers, compile_iter_elem_copy; dynamic ASSERT branch unreachable even with arbitrary cenv because arr_ty is expr_type e |
+
+All actual stmt constructors are covered. AssertCustomError/RaiseCustomError are
+rejected by support. Supported_target permits only name/top, one-level top
+subscript with supported_expr key, or top attribute. supported_target_info
+recurses through arbitrary nested target bases and requires supported_expr on
+*every* subscript key before returning SOME; therefore every such callback key
+is in pop_compile_domain by pop_domain_supported. This implication needs its own
+checked projection/traversal proof before use; the table is not that proof.
+Reason literals are pure regardless of annotation (supported_pure_expr literal
+is T); compile_reason_message has a special typed-string shortcut and otherwise
+calls compile_expr. Array iterator Name is likewise unconditionally pure.
+
+### Proposed producer signatures, after duplicate search
+
+For every expression-free producer `p` below the exact common contract is
+`pop_comp_boundary sa /\ p sa = (r,sb) ==> pop_comp_boundary sb`, with **all**
+listed arguments arbitrary. These are proposed obligations, not theorems:
+
+- `declare_local ce id ty`, `declare_stmt_local ce s`, `emit_local_alloca ce id`,
+  `emit_jmp_if_not_terminated label`.
+- `compile_store_at_loc imm dst val lo`;
+  `compile_assign_value ce dst loc val prim src_lo dst_ty src_ty da_info mem_size`.
+- `compile_load_tuple_elements ce src tys offset`;
+  `compile_internal_return ce val rpc count ret_ty src_ty elem_types ret_buf`;
+  `compile_internal_return_from_env ce ty src_ty val rpc`;
+  `compile_external_return val prim raw enc_info max_size nr key transient view`;
+  `compile_nonreentrant_unlock key transient view`.
+- `compile_revert_with_reason ce vv msg_ty mem_size`;
+  `compile_log_topic_ops topics`; `compile_log_store_data ce data buf offset`.
+- `compile_tuple_load_all ce src tys offset`;
+  `compile_iter_elem_copy ce elem dst size loc slot_addressed target_ty elem_ty`.
+- `compile_dynarray_append ce target val ws elem_size elem_ty src_ty cap prim load_op store_op`
+  needs `load_op <> ASSERT /\ store_op <> ASSERT` in the raw signature, or a
+  location-indexed wrapper using load_opc_for/store_opc_for loc. Its checked
+  definition (exprLowering:1099) has load; LT; ASSERT, then ADD/MUL/ADD, typed
+  copy or store, then ADD/store. The LT/ASSERT pair needs a whole guard
+  boundary. No new definition is needed. Do not assert preservation for
+  arbitrary raw ASSERT load/store opcodes.
+- `compile_range_bound_checks start end rounds bound signed`: whole guard,
+  both SGT/GT; ISZERO; ASSERT triples. Do not use unconditional ASSERT boundary.
+
+Expression-containing producer contracts retain explicit support:
+`EVERY (supported_pure_expr tops) es` for compile_log_eval_all;
+`supported_string_reason tops e` for compile_reason_message;
+`EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt | _ => F) ts`
+for tuple store/unpack, and a target-info/target support disjunction for target
+pointer compilation. They may be generalized to callback-local preservation only
+if the actual producer accepts a callback (tuple unpack/log helpers use actual
+compile_expr, not an open callback).
+
+Existing matches: pop_compile_supported_boundary, pop_compile_mutual_boundary,
+pop_lower_value_boundary + pop_unwrap_value_boundary, pop_compile_binop_boundary,
+pop_compile_store_memory_boundary, pop_compile_store_memory_typed_boundary,
+pop_abi_encode_boundary_mutual and pop_comp_boundary_new_block. Searches found
+no universal statement producer/target_ptr/append/return contracts. Concrete
+pop_global_assignment_boundary/pop_global_return_boundary are not substitutes.
