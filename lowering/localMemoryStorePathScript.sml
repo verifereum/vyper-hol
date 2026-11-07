@@ -4,7 +4,7 @@ Theory localMemoryStorePath
 Ancestors
   stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts
   list rich_list finite_map pred_set fragExec localPtrsProps loweringSlice
-  stmtSimDeclStore stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
+  stmtSimDeclStore stmtSimDecl stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
@@ -178,8 +178,11 @@ Theorem alloc_copy_memory_framed_path:
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?s2 w. lookup_var p s2 = SOME w /\
+      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
       stmt_state_rel ctx func cenv cx es s2 /\
       val_in_memory tv v (w2n w) s2.vs_memory /\
+      (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+         mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
       (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s2.vs_allocas aid = SOME entry) /\
@@ -211,7 +214,12 @@ Proof
   `gas_marked_path F ctx func s0 0
      (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
     (drule_all gas_marked_path_then >> simp[]) >>
+  `!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+     mem_bytes_at ad len (mcopy (w2n w) (w2n sw) sz s1).vs_memory =
+     mem_bytes_at ad len s0.vs_memory` by
+    (rpt strip_tac >> simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint]) >>
   qexistsl_tac [`mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx`, `w`] >>
   simp[stmt_state_rel_inst_idx] >>
-  fs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  gvs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
+  first_assum ACCEPT_TAC
 QED

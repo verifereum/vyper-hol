@@ -27,7 +27,7 @@ Theory stmtSimDeclMem
 Ancestors
   stmtSimProps
   exprSimProps
-  stmtSimDefs
+  stmtSimDefs localMemoryStorePath
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
@@ -343,51 +343,6 @@ Proof
      write_memory_with_expansion_def, LET_THM]
 QED
 
-Theorem alloc_copy_memory_owned_path[local]:
-  !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
-    emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
-    emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
-    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
-    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
-    src <> Var p /\ eval_operand src s0 = SOME sw /\
-    val_in_memory tv v (w2n sw) s0.vs_memory /\ val_wf tv v /\
-    val_footprint tv v <= sz /\
-    fn_has_code sa sm func /\ fn_has_code sm sb func /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?s2 w. lookup_var p s2 = SOME w /\
-      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
-      stmt_state_rel ctx func cenv cx es s2 /\
-      val_in_memory tv v (w2n w) s2.vs_memory /\
-      (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
-         mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
-      (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
-      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
-                   FLOOKUP s2.vs_allocas aid = SOME entry) /\
-      ~s2.vs_halted /\ s2.vs_current_bb = sb.cs_current_bb /\
-      s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s0 0 (OK s2)
-Proof
-  rpt strip_tac >> drule_all annassign_alloca_operand_framed_path >>
-  disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
-  `eval_operand src s1 = SOME sw` by simp[] >>
-  `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
-  qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
-  `inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-   inst.inst_id = sa.cs_next_id` by
-    simp[Abbr `inst`, mk_inst_def] >>
-  `FLOOKUP s1.vs_allocas inst.inst_id = SOME (w2n w, sz)` by simp[] >>
-  drule_all mcopy_alloca_framed_path >>
-  disch_then (qx_choose_then `s2` strip_assume_tac) >>
-  `gas_marked_path F ctx func s0 (0 + 0) (OK s2)` by
-    (irule gas_marked_path_then >> goal_assum (drule_at Any) >> simp[]) >>
-  `!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
-     mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory` by
-    (rpt strip_tac >> simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint]) >>
-  qexistsl_tac [`s2`, `w`] >> gs[] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
-QED
 
 Theorem alloc_copy_memory_owned_run:
   !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
@@ -745,7 +700,7 @@ Proof
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_memory_owned_path >>
+      drule_all alloc_copy_memory_framed_path >>
       disch_then
         (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       `lookup_var p u = SOME w /\
