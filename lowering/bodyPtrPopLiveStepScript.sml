@@ -85,16 +85,18 @@ Theorem pop_fields_selected_index:
   struct_has_type fts fields /\ ALOOKUP fields fld = SOME child /\
   mem_field_offset fts fld = SOME (k,ct) ==>
   ?j. j < LENGTH fts /\ ct = SND (EL j fts) /\ child = SND (EL j fields) /\
-      k = SUM (MAP (type_memory_size o SND) (TAKE j fts))
+      fld = FST (EL j fields) /\
+      k = SUM (MAP (type_memory_size o SND) (TAKE j fts)) /\
+      (!new. AFUPDKEY fld (K new) fields = LUPDATE (fld,new) j fields)
 Proof
   Induct_on `fts` >> simp[mem_field_offset_def] >>
   PairCases >> Cases_on `fields` >> simp[value_has_type_def] >>
   PairCases_on `h` >>
   simp[value_has_type_def, mem_field_offset_def] >> rpt strip_tac >>
   Cases_on `h0 = fld` >> gvs[AllCaseEqs()]
-  >- (qexists_tac `0` >> simp[]) >>
+  >- (qexists_tac `0` >> simp[alistTheory.AFUPDKEY_def, LUPDATE_def]) >>
   PairCases_on `z` >> gvs[] >> first_x_assum drule_all >>
-  strip_tac >> qexists_tac `SUC j` >> simp[]
+  strip_tac >> qexists_tac `SUC j` >> simp[alistTheory.AFUPDKEY_def, LUPDATE_def]
 QED
 
 Theorem pop_fields_support_extract:
@@ -394,20 +396,6 @@ Proof
   Cases_on `j' = j` >> gvs[]
 QED
 
-Theorem pop_AFUPDKEY_index:
-  !fields j new. ALL_DISTINCT (MAP FST fields) /\ j < LENGTH fields ==>
-  AFUPDKEY (FST (EL j fields)) (K new) fields =
-    LUPDATE (FST (EL j fields),new) j fields
-Proof
-  Induct_on `fields` >> simp[] >> PairCases >> Cases_on `j` >>
-  simp[alistTheory.AFUPDKEY_def, LUPDATE_def] >> rpt strip_tac >>
-  `h0 <> FST (EL n fields)` by
-    (strip_tac >> gvs[] >>
-     qpat_x_assum `~MEM _ _` mp_tac >> simp[MEM_MAP] >>
-     qexists_tac `EL n fields` >> simp[EL_MEM]) >>
-  simp[alistTheory.AFUPDKEY_def] >> first_x_assum irule >> simp[]
-QED
-
 Theorem pop_step_replace_typed:
   !rt root sb k ct new updated.
   well_formed_type_value rt /\ value_has_type rt root /\
@@ -430,4 +418,119 @@ Proof
   drule mem_field_offset_sound >> strip_tac >>
   irule assign_subscripts_preserves_type >> simp[] >>
   qexistsl_tac [`root`, `Replace new`, `[AttrSubscript s]`] >> simp[leaf_type_def]
+QED
+
+Theorem pop_attr_step_support_replace:
+  !rt root addr supp fld child k ct cs new ns updated.
+  pop_live_support rt root addr supp /\
+  evaluate_subscripts rt root [AttrSubscript fld] = INL child /\
+  mem_step_offset rt (AttrSubscript fld) = SOME (k,ct) /\
+  pop_live_support ct child (addr+k) cs /\
+  assign_subscripts rt root [AttrSubscript fld] (Replace new) = INL updated /\
+  pop_live_support ct new (addr+k) ns ==>
+  pop_live_support rt updated addr ((supp DIFF cs) UNION ns)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_formed_type_value rt /\ value_has_type rt root` by
+    metis_tac[pop_live_support_typed] >>
+  `value_has_type ct new` by metis_tac[pop_live_support_typed] >>
+  `value_has_type rt updated` by metis_tac[pop_step_replace_typed] >>
+  Cases_on `rt` >> gvs[mem_step_offset_def] >>
+  qpat_x_assum `pop_live_support (StructTV _) _ _ _` mp_tac >>
+  simp[Once pop_live_support_cases] >> strip_tac >> gvs[] >>
+  gvs[evaluate_subscripts_def, assign_subscripts_def, AllCaseEqs(), value_has_type_def] >>
+  drule_all pop_fields_selected_index >> strip_tac >> gvs[] >>
+  `cs = supp' j` by
+    (irule pop_live_support_unique >> goal_assum (drule_at Any) >>
+     first_x_assum irule >> simp[]) >> gvs[] >>
+  irule pop_fields_support_rebuild >>
+  goal_assum (drule_at Any) >> simp[value_has_type_def] >>
+  qexistsl_tac [`fields`, `new`] >> simp[] >>
+  `LENGTH fields = LENGTH l` by
+    metis_tac[struct_has_type_map_fst, LENGTH_MAP] >>
+  simp[EL_LUPDATE] >> rpt strip_tac >> Cases_on `i = j` >> simp[]
+QED
+
+Theorem pop_dynamic_update_support:
+  well_formed_type_value (ArrayTV tv (Dynamic n)) /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV (LUPDATE new j vs))) /\
+  j < LENGTH vs /\
+  (!i. i < LENGTH vs ==> pop_live_support tv (EL i vs)
+    (addr+32+i*type_memory_size tv) (supp i)) /\
+  pop_live_support tv (EL j vs) (addr+32+j*type_memory_size tv) cs /\
+  pop_live_support tv new (addr+32+j*type_memory_size tv) ns ==>
+  pop_live_support (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV (LUPDATE new j vs))) addr
+    ((({x | addr <= x /\ x < addr+32} UNION BIGUNION {supp i | i < LENGTH vs}) DIFF cs) UNION ns)
+Proof
+  strip_tac >> `cs = supp j` by
+    (irule pop_live_support_unique >> goal_assum (drule_at Any) >>
+     first_x_assum irule >> simp[]) >> gvs[] >>
+  irule pop_dynamic_support_rebuild >> simp[] >>
+  qexists_tac `new` >> simp[EL_LUPDATE]
+QED
+
+Theorem pop_sparse_update_support:
+  well_formed_type_value (ArrayTV tv (Fixed n)) /\
+  value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV kvs')) /\
+  kvs' = (if new = default_value tv then ADELKEY j kvs else insert_sarray j new kvs) /\
+  j < n /\
+  (!i. i < n ==> pop_live_support tv
+    (case ALOOKUP kvs i of NONE => default_value tv | SOME v => v)
+    (addr+i*type_memory_size tv) (supp i)) /\
+  pop_live_support tv (case ALOOKUP kvs j of NONE => default_value tv | SOME v => v)
+    (addr+j*type_memory_size tv) cs /\
+  pop_live_support tv new (addr+j*type_memory_size tv) ns ==>
+  pop_live_support (ArrayTV tv (Fixed n)) (ArrayV (SArrayV kvs')) addr
+    ((BIGUNION {supp i | i < n} DIFF cs) UNION ns)
+Proof
+  strip_tac >> `cs = supp j` by
+    (irule pop_live_support_unique >> goal_assum (drule_at Any) >>
+     first_x_assum irule >> simp[]) >> gvs[] >>
+  irule pop_sparse_support_rebuild >> simp[] >>
+  qexistsl_tac [`kvs`, `new`] >> simp[pop_sparse_update_lookup] >>
+  rpt strip_tac >> Cases_on `i = j` >> simp[] >>
+  Cases_on `new = default_value tv` >> simp[]
+QED
+
+Theorem pop_value_step_support_replace:
+  !rt root addr supp key child k ct cs new ns updated.
+  pop_live_support rt root addr supp /\
+  evaluate_subscripts rt root [ValueSubscript key] = INL child /\
+  mem_step_offset rt (ValueSubscript key) = SOME (k,ct) /\
+  pop_live_support ct child (addr+k) cs /\
+  assign_subscripts rt root [ValueSubscript key] (Replace new) = INL updated /\
+  pop_live_support ct new (addr+k) ns ==>
+  pop_live_support rt updated addr ((supp DIFF cs) UNION ns)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_formed_type_value rt /\ value_has_type rt root` by
+    metis_tac[pop_live_support_typed] >>
+  `value_has_type ct new` by metis_tac[pop_live_support_typed] >>
+  `value_has_type rt updated` by metis_tac[pop_step_replace_typed] >>
+  Cases_on `key` >> Cases_on `rt` >> gvs[mem_step_offset_def, AllCaseEqs()] >>
+  qpat_x_assum `pop_live_support _ root _ _` mp_tac >>
+  simp[Once pop_live_support_cases] >> strip_tac >> gvs[] >>
+  gvs[evaluate_subscripts_def, assign_subscripts_def, array_index_def,
+    AllCaseEqs(), listTheory.oEL_THM]
+  >- gvs[array_set_index_def] 
+  >- (gvs[mem_step_offset_def, array_set_index_def, pop_replace_index_list] >>
+      irule pop_dynamic_update_support >> simp[] >>
+      FULL_SIMP_TAC bool_ss [AC ADD_ASSOC ADD_COMM] >> metis_tac[]) >>
+  gvs[mem_step_offset_def, array_set_index_def] >>
+  irule pop_sparse_update_support >> simp[] >>
+  qexistsl_tac [`Num i`, `kvs`, `new`] >> simp[]
+QED
+
+Theorem pop_step_support_replace:
+  !rt root addr supp sb child k ct cs new ns updated.
+  pop_live_support rt root addr supp /\
+  evaluate_subscripts rt root [sb] = INL child /\
+  mem_step_offset rt sb = SOME (k,ct) /\
+  pop_live_support ct child (addr+k) cs /\
+  assign_subscripts rt root [sb] (Replace new) = INL updated /\
+  pop_live_support ct new (addr+k) ns ==>
+  pop_live_support rt updated addr ((supp DIFF cs) UNION ns)
+Proof
+  rpt gen_tac >> Cases_on `sb` >>
+  metis_tac[pop_value_step_support_replace, pop_attr_step_support_replace]
 QED

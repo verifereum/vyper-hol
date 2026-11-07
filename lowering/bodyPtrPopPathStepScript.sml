@@ -438,7 +438,7 @@ Proof
   fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
-Theorem pop_replace_index_list[local]:
+Theorem pop_replace_index_list:
   !vs j (new:'a). j < LENGTH vs ==>
     TAKE j vs ++ [new] ++ DROP (SUC j) vs = LUPDATE new j vs
 Proof
