@@ -101,6 +101,74 @@ Definition keep_stable_def:
       Q s'
 End
 
+(* The snapshot is well formed only in the successful array-type branch. *)
+Theorem mem_iter_snapshot_wf[local]:
+  expr_type e = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) /\
+  vv_post ctx func cenv cx e es sa sb s0 es1 rv vv s1 /\
+  vv_location vv = SOME LocMemory /\
+  read_result cx rv es1 = (INL v, es1) ==>
+  val_wf (ArrayTV tv bd) v
+Proof
+  Cases_on `vv` >> simp[contextTheory.vv_location_def] >> strip_tac >>
+  gvs[vv_post_def, vv_at_def] >> metis_tac[]
+QED
+
+Theorem mem_iter_array_type_value[local]:
+  evaluate_type tenv et = SOME tv /\
+  evaluate_type tenv (ArrayT et bd) = SOME atv ==>
+  atv = ArrayTV tv bd
+Proof
+  simp[vyperValueTheory.evaluate_type_def] >>
+  strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem mem_iter_snapshot_shape[local]:
+  val_wf (ArrayTV tv bd) v /\
+  extract_elements (ArrayTV tv bd) v = SOME vs ==>
+  (!c. bd = Fixed c ==> ?kvs. v = ArrayV (SArrayV kvs)) /\
+  (!c. bd = Dynamic c ==> ?vs. v = ArrayV (DynArrayV vs))
+Proof
+  Cases_on `v` >>
+  simp[vyperValueOperationTheory.extract_elements_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  Cases_on `bd` >> simp[val_wf_def]
+QED
+
+Theorem mem_iter_snapshot_length[local]:
+  val_wf (ArrayTV tv bd) v /\
+  extract_elements (ArrayTV tv bd) v = SOME vs ==>
+  (!c. bd = Fixed c ==> LENGTH vs = c) /\
+  (!c. bd = Dynamic c ==> LENGTH vs <= c)
+Proof
+  Cases_on `v` >>
+  simp[vyperValueOperationTheory.extract_elements_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  simp[val_wf_def, vyperValueOperationTheory.array_elements_def] >>
+  Cases_on `bd` >> simp[] >> rpt strip_tac >> gvs[]
+QED
+
+(* A successful iterable read cannot reach the array type error in an
+   admissible source For execution. *)
+Theorem mem_iter_array_type_success[local]:
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  gas_admissible (eval_stmt cx (For id et (Array e) n stmts))
+    (stmt_res_ok lctx) es /\
+  eval_expr cx e (es with gas_obs := gs) = (INL rv, es1) /\
+  read_result cx rv es1 = (INL v, es1) ==>
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e))
+Proof
+  strip_tac >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >> simp[] >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def] >>
+  qexists_tac `gs` >>
+  simp[Once evaluate_def, lift_option_type_def, lift_option_def,
+       bind_def, return_def, raise_def, stmt_res_ok_def] >>
+  simp[Once evaluate_def, lift_option_type_def, lift_option_def,
+       bind_def, return_def, raise_def]
+QED
+
 (* The For case over a memory-valued iterable, fixed or dynamic.  The hook
    (the last premise) is asked of every end of the iterable's fragment: the
    pointer w lies inside an allocation (aid, b, z) made before the loop,
