@@ -249,15 +249,22 @@ Definition evaluate_type_builtin_def:
     evaluate_max_value typ ∧
   evaluate_type_builtin cx MinValue typ tys vs =
     evaluate_min_value typ ∧
-  evaluate_type_builtin cx Convert typ [from_ty] [v] =
-    evaluate_convert_from (get_tenv cx) from_ty v typ ∧
-  evaluate_type_builtin cx Epsilon typ tys [] =
-    (if typ = BaseT DecimalT then INL $ DecimalV 1
-     else INR (TypeError "Epsilon: not decimal")) ∧
-  evaluate_type_builtin cx Extract32 (BaseT bt) tys [BytesV bs; IntV i] =
-    evaluate_extract32 bs (Num i) bt ∧
-  evaluate_type_builtin cx (AbiDecode unwrap) typ tys [BytesV bs] =
-    (let tenv = get_tenv cx in
+  evaluate_type_builtin cx Convert typ tys vs =
+    (case (tys, vs) of
+       ([from_ty], [v]) => evaluate_convert_from (get_tenv cx) from_ty v typ
+     | _ => INR (TypeError "evaluate_type_builtin")) ∧
+  evaluate_type_builtin cx Epsilon typ tys vs =
+    (case vs of
+       [] => if typ = BaseT DecimalT then INL $ DecimalV 1
+             else INR (TypeError "Epsilon: not decimal")
+     | _ => INR (TypeError "evaluate_type_builtin")) ∧
+  evaluate_type_builtin cx Extract32 typ tys vs =
+    (case (typ, vs) of
+       (BaseT bt, [BytesV bs; IntV i]) => evaluate_extract32 bs (Num i) bt
+     | _ => INR (TypeError "evaluate_type_builtin")) ∧
+  evaluate_type_builtin cx (AbiDecode unwrap) typ tys vs =
+    (case vs of
+       [BytesV bs] => (let tenv = get_tenv cx in
      if unwrap ∧ needs_external_call_wrap typ then
        case evaluate_abi_decode tenv (TupleT [typ]) bs of
          INL (ArrayV (TupleV [v])) => INL v
@@ -266,9 +273,8 @@ Definition evaluate_type_builtin_def:
      else
        case evaluate_abi_decode tenv typ bs of
          INL v => INL v
-       | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ (AbiDecode _) _ _ _ =
-    INR (TypeError "abi_decode args") ∧
+       | INR str => INR (RuntimeError str))
+     | _ => INR (TypeError "abi_decode args")) ∧
   evaluate_type_builtin cx (AbiEncode ensure method_id) typ tys vs =
     (let tenv = get_tenv cx in
      let unwrap = (¬ensure ∧ needs_external_call_wrap typ) in
@@ -281,9 +287,7 @@ Definition evaluate_type_builtin_def:
      case encoded of
        INL bs =>
          INL (BytesV (abi_encode_method_id_bytes method_id ++ bs))
-     | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ _ _ _ _ =
-    INR (TypeError "evaluate_type_builtin")
+     | INR str => INR (RuntimeError str))
 End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
@@ -587,6 +591,9 @@ Definition evaluate_builtin_def:
     | ECMul => evaluate_ecmul vs
     | _ => INR (TypeError "builtin")
 End
+
+val () = List.app cv_trans (TypeBase.accessors_of “:call_txn”);
+val () = List.app cv_trans (TypeBase.accessors_of “:evaluation_context”);
 
 val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
 
