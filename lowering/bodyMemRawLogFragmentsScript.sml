@@ -326,12 +326,13 @@ Proof
    sa.cs_next_var <= sk.cs_next_var /\ s0.vs_alloca_next <= t'.vs_alloca_next` by decide_tac >>
   qpat_assum `LENGTH ops = LENGTH topics`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+  simp[SF ETA_ss] >>
   irule (SRULE [SF ETA_ss] raw_log_fixed_allocated_mem) >>
   qpat_assum `expr_sim_mem _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_alloc_buffer _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  qexistsl_tac [`p`, `w`, `env`] >> simp[expr_type_def] >>
+  qexistsl_tac [`p`, `w`, `env`] >> fs[expr_type_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
