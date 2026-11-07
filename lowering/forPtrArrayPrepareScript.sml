@@ -340,6 +340,27 @@ Proof
     (mp_tac o Q.AP_TERM `\ce. ce.ce_imm_alloca`) >> simp[] >> metis_tac[]
 QED
 
+(* S1's counted-gas port added a gas-path conjunct to array_entry_ready;
+   the entry prefix has no GAS instruction, so it is a zero-gas path. *)
+Theorem array_entry_raw_gas[local]:
+  lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  s.vs_current_bb = sb0.cs_current_bb /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    sb0.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> GAS) sb0.cs_current_insts /\
+  run_inst_seq sb0.cs_current_insts s = OK t ==>
+  gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb0.cs_current_insts))
+Proof
+  strip_tac >>
+  `FILTER (\i. i.inst_opcode = GAS) sb0.cs_current_insts = []` by
+    fs[FILTER_EQ_NIL, EVERY_MEM] >>
+  qspecl_then [`sb0.cs_current_insts`, `s`, `t`, `ctx`, `func`, `bb`] mp_tac
+    fragGasSeqTheory.tuple_run_inst_seq_gas_path >>
+  simp[fragGasModeTheory.gas_marked_path_def]
+QED
+
 Theorem for_array_entry_raw_ready:
   array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
     idx saved_base arr_base k stride ov ep j3 j4 bb st /\
@@ -350,7 +371,17 @@ Proof
   pure_rewrite_tac[array_entry_inputs_def] >> rpt strip_tac >>
   drule_all array_for_body_entry_run >>
   disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >>
-  `t' = t` by metis_tac[exec_result_11] >> gvs[] >>
+  `t' = t` by metis_tac[exec_result_11] >>
+  `gas_marked_path F ctx func s 0
+     (OK (t with vs_inst_idx := LENGTH sb0.cs_current_insts))` by
+    (`EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb0)` by
+       (irule iter_memory_copy_no_gas >> goal_assum (drule_at Any)) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+        sb0.cs_current_insts /\
+      EVERY (\i. i.inst_opcode <> GAS) sb0.cs_current_insts` by
+       simp[mk_inst_def, is_terminator_def] >>
+     drule_all array_entry_raw_gas >> simp[]) >>
+  gvs[] >>
   `t.vs_current_bb = s.vs_current_bb /\ t.vs_allocas = s.vs_allocas /\
    t.vs_halted = s.vs_halted` by
     (qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = _` mp_tac >>
