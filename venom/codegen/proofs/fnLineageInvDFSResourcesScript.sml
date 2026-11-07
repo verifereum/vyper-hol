@@ -82,7 +82,10 @@ Proof
       `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1` by simp[] >>
       gvs[] >>
       drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
-        analyzed_parameter_entry_block_inventory >> simp[] >>
+        (REWRITE_RULE [GSYM stackPlanGenTheory.init_cleanup_plan_state_def]
+          (SRULE [stackPlanGenTheory.init_cleanup_plan_state_def]
+            (GEN_ALL (Q.INST [`promise` |-> `F`]
+              (SPEC_ALL analyzed_parameter_entry_block_inventory))))) >> simp[] >>
       disch_then (qspec_then `lbl''` mp_tac) >> simp[] >> strip_tac >>
       qexistsl_tac [`(HD fn.fn_blocks).bb_label`, `HD fn.fn_blocks`,
         `init_cleanup_plan_state ch growth base' ctr`, `block_ops`, `ps'`] >>

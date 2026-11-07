@@ -1,8 +1,8 @@
 Theory fnLineageInvBlock
-Ancestors fnLineageInvSetupSuffix fnLineageInvOrdinarySuffix fnLineageInvSupport fnPlanLineageSetup fnPlanLineageCallers fnPlanLineageDemandSupport fnPlanPrefix fnLineageInvEdgeFacts stackPlanGen list rich_list pred_set
+Ancestors fnPlanLineageDemand fnPlanLineageInventory stackPlanTypes stackPlanOps fnLineageInvSetupSuffix fnLineageInvOrdinarySuffix fnLineageInvSupport fnPlanLineageSetup fnPlanLineageCallers fnPlanLineageDemandSupport fnPlanPrefix fnLineageInvEdgeFacts stackPlanGen list rich_list pred_set
 
 Theorem analyzed_parameter_entry_block_inventory:
- !fn bb dfg ch growth base ctr ops qs next.
+ !fn bb dfg ch growth base ctr ops qs next promise.
  codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
  bb = HD fn.fn_blocks /\
  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
@@ -10,7 +10,7 @@ Theorem analyzed_parameter_entry_block_inventory:
  LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1 /\
  MEM next (cfg_succs_of (cfg_analyze fn) bb.bb_label) /\
  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
-   (init_cleanup_plan_state ch growth base ctr) = SOME (ops,qs)
+   ((init_cleanup_plan_state ch growth base ctr) with ps_cleanup_promised := promise) = SOME (ops,qs)
  ==>
  lineage_inventory
    (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label
@@ -51,12 +51,22 @@ Proof
  simp[generate_block_plan_def, AllCaseEqs()] >> strip_tac >>
  rename1 `init_cleanup_plan_state ch growth spillbase ctr` >>
  Cases_on `prepare_params_plan (liveness_analyze fn) fn
-   (init_cleanup_plan_state ch growth spillbase ctr)` >> gvs[AllCaseEqs()] >>
- drule_all native_parameter_lineage_inventory >>
- disch_then (qspecl_then [`ch`, `growth`, `spillbase`, `ctr`] mp_tac) >>
- asm_rewrite_tac[] >> simp[] >> disch_tac >>
+   ((init_cleanup_plan_state ch growth spillbase ctr) with ps_cleanup_promised := promise)` >> gvs[AllCaseEqs()] >>
+ drule_all ready_parameter_names_distinct >> strip_tac >>
+ drule_all post_parameter_demand_ready >> strip_tac >>
+ qspecl_then [`liveness_analyze fn`, `fn`,
+   `(init_cleanup_plan_state ch growth spillbase ctr) with ps_cleanup_promised := promise`]
+   mp_tac prepare_params_plan_inventory >>
+ asm_rewrite_tac[] >>
+ simp[init_cleanup_plan_state_def, init_plan_state_def] >> strip_tac >>
+ `lineage_inventory
+    (set (MAP Var (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))))) r` by
+   (simp[lineage_inventory_def] >> qexistsl_tac [`0`, `r.ps_stack`] >>
+    simp[lineage_core_def, EVERY_MEM] >>
+    gvs[EXTENSION, MEM_MAP] >> metis_tac[is_var_operand_def]) >>
  drule_all native_parameter_residual_budget >>
- disch_then (qspecl_then [`ch`, `growth`, `spillbase`, `ctr`, `[]`] mp_tac) >>
+ disch_then (qspecl_then [`ch`, `growth`, `spillbase`, `ctr`, `[]`, `promise`] mp_tac) >>
  asm_rewrite_tac[] >> simp[] >> disch_tac >>
  `?m core. lineage_core m core r /\
     residual_budget_wf spillbase [] (r with ps_stack := core)` by

@@ -257,16 +257,21 @@ Proof
 QED
 
 Theorem native_parameter_wf_marked:
-  !fn ch growth spill_base lbl_ctr.
+  !fn ch growth spill_base lbl_ctr promise.
     codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
     generated_plan_state_wf_marked spill_base
       (SND (prepare_params_plan (liveness_analyze fn) fn
-        (init_cleanup_plan_state ch growth spill_base lbl_ctr)))
+        ((init_cleanup_plan_state ch growth spill_base lbl_ctr)
+           with ps_cleanup_promised := promise)))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all ready_parameter_names_distinct >> strip_tac >>
   simp[prepare_params_plan_def] >> IF_CASES_TAC
-  >- simp[initial_cleanup_wf_marked] >>
+  >- simp[init_cleanup_plan_state_def, init_plan_state_def,
+       generated_plan_state_wf_marked_def,
+       planSpillBoundsTheory.plan_slots_bounded_def,
+       planSpillBoundsTheory.alloc_slots_bounded_def,
+       doSwapSimTheory.spill_alloc_layout_wf_def, init_spill_alloc_def] >>
   simp[parameter_push_fold] >>
   qmatch_goalsub_abbrev_tac `popmany_plan dead pushed` >>
   `generated_plan_state_wf_marked spill_base pushed` by
@@ -294,17 +299,25 @@ Proof
 QED
 
 Theorem native_parameter_residual_budget:
-  !fn ch growth spill_base lbl_ctr pending.
+  !fn ch growth spill_base lbl_ctr pending promise.
     codegen_ready_fn fn /\ fn.fn_blocks <> [] ==>
     residual_budget_wf spill_base pending
       (SND (prepare_params_plan (liveness_analyze fn) fn
-        (init_cleanup_plan_state ch growth spill_base lbl_ctr)))
+        ((init_cleanup_plan_state ch growth spill_base lbl_ctr)
+          with ps_cleanup_promised := promise)))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all native_parameter_inventory >> strip_tac >>
+  drule_all ready_parameter_names_distinct >> strip_tac >>
+  drule_all post_parameter_demand_ready >> strip_tac >>
+  qspecl_then [`liveness_analyze fn`, `fn`,
+    `(init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      with ps_cleanup_promised := promise`] mp_tac prepare_params_plan_inventory >>
+  simp[init_cleanup_plan_state_def, init_plan_state_def] >> strip_tac >>
   drule_all native_parameter_wf_marked >>
+  disch_then (qspecl_then [`ch`, `growth`, `spill_base`, `lbl_ctr`, `promise`] mp_tac) >>
   simp[generated_plan_state_wf_marked_def] >> strip_tac >>
-  irule reorderSimTheory.residual_budget_wf_canonical >> simp[]
+  irule reorderSimTheory.residual_budget_wf_canonical >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def]
 QED
 
 Theorem native_active_cleanup_resources:
