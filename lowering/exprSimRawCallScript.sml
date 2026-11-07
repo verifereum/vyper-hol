@@ -3323,8 +3323,8 @@ Resume raw_call_success_run_aged[view]:
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC[th]) >>
   qpat_x_assum `u with vs_vars := FEMPTY = _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
-  simp[raw_call_finish_view_def, drop_fresh_def, mstore_def,
-       venom_state_component_equality]
+  simp[venom_state_component_equality, drop_fresh_def] >>
+  strip_tac >> simp[raw_call_finish_view_def, mstore_def]
 QED
 
 Finalise raw_call_success_run_aged
