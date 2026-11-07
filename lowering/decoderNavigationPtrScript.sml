@@ -781,7 +781,9 @@ Proof
        qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
        simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
          comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
-       metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
+       strip_tac >> gvs[] >>
+       imp_res_tac inst_extends_emit_op >>
+       metis_tac[inst_extends_trans]) >>
      metis_tac[inst_extends_emit_op]) >>
   `emitted_insts sa sb = emitted_insts sa mid ++ emitted_insts mid sb` by
     (qspecl_then [`sa`,`mid`,`sb`] mp_tac emitted_insts_append >>

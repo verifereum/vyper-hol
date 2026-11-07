@@ -907,8 +907,15 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
            codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def,
            ptrDisciplineTheory.op_taint_def] >>
-         simp[step_inst_non_invoke, step_inst_base_def,
-           eval_operand_def, update_var_def]) >>
+         `step_inst (fuel + 1) ctx
+            <|inst_id := sa.cs_next_id; inst_opcode := ASSIGN;
+              inst_operands := [Lit 0w]; inst_outputs := [ctr]|> s =
+            OK (update_var ctr 0w s)` by
+           (POP_ASSUM_LIST (K all_tac) >>
+            simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def]) >>
+         `(update_var ctr 0w s).vs_requests = s.vs_requests` by
+           simp[update_var_def] >>
+         simp[]) >>
      simp[ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke,
        step_inst_base_def, eval_operand_def] >>
      simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,

@@ -129,3 +129,38 @@ Proof
     [exprSimTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def]))) >>
   decide_tac
 QED
+
+Theorem store_size_in_slot:
+  !tv v off bound.
+    val_wf tv v /\ off + type_memory_size tv <= bound ==>
+    off + val_store_size tv v <= bound
+Proof
+  rpt strip_tac >> drule exprSimTheory.val_store_size_le >> decide_tac
+QED
+
+Theorem tuple_child_store_size_contained:
+  !tvs vs i.
+    values_have_types tvs vs /\ i < LENGTH tvs ==>
+    SUM (MAP type_memory_size (TAKE i tvs)) +
+      val_store_size (EL i tvs) (EL i vs) <= SUM (MAP type_memory_size tvs)
+Proof
+  Induct >> Cases_on `vs` >> simp[vyperTypingTheory.value_has_type_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `i` >> gvs[]
+  >- (drule value_has_type_memory_wf >> strip_tac >>
+      drule exprSimTheory.val_store_size_le >> decide_tac) >>
+  first_x_assum drule_all >> decide_tac
+QED
+
+Theorem array_child_store_size_contained:
+  !tv v i cap prefix.
+    value_has_type tv v /\ i < cap ==>
+    prefix + i * type_memory_size tv + val_store_size tv v <=
+      prefix + cap * type_memory_size tv
+Proof
+  rpt strip_tac >> irule store_size_in_slot >>
+  reverse conj_tac >- metis_tac[value_has_type_memory_wf] >>
+  `SUC i * type_memory_size tv <= cap * type_memory_size tv` by
+    (irule LESS_MONO_MULT >> decide_tac) >>
+  qpat_x_assum `SUC i * _ <= _` mp_tac >>
+  pure_rewrite_tac[MULT_CLAUSES] >> decide_tac
+QED

@@ -393,8 +393,15 @@ Proof
   `?v. eval_operand out t = SOME v` by
     (qpat_assum `emit_op ADD _ mid = _`
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+     qpat_x_assum `run_inst_seq (emitted_insts mid ready) m = OK t` mp_tac >>
+     qpat_x_assum `eval_operand data m = SOME b` mp_tac >>
+     qpat_x_assum `eval_operand off m = SOME c` mp_tac >>
+     qpat_x_assum `emitted_insts mid ready = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `out = _` (fn th => rewrite_tac[th]) >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[run_inst_seq_def] >>
+     gvs[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `!D lower ctx' func.
     fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
     s.vs_current_bb = st.cs_current_bb /\
