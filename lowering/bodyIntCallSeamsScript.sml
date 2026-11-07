@@ -614,10 +614,51 @@ Proof
       val_footprint rtv v <= buf.buf_size /\
       (!id lb lsz. local_region cenv prev out id lb lsz ==>
         off + buf.buf_size <= lb \/ lb + lsz <= off))` by
-    (irule (Q.INST [`cty` |-> `ret`] (Q.SPEC `rc'` physical_source_return_dispatch)
-       |> SIMP_RULE (srw_ss()) [ASSUME ``ret <> NoneT``]) >>
-     cheat) >>
-  cheat
+    (qpat_assum `ret <> NoneT` (fn th =>
+       irule (Q.INST [`cty` |-> `ret`] (Q.SPEC `rc'` physical_source_return_dispatch)
+         |> SIMP_RULE (srw_ss()) [th])) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (qexists_tac `es1` >> first_assum ACCEPT_TAC) >>
+     goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
+     qexistsl_tac [`lbl`,`rbs`,`rc'`,`HD argv`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qpat_x_assum `0 < rc' \/ ret <> NoneT ==> _` mp_tac >>
+         qpat_assum `ret <> NoneT` (fn th => simp[NoAsms, th]) >>
+         POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+         goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+         goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+         metis_tac[])
+     >- (qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+     simp[]) >>
+  pop_assum strip_assume_tac >>
+  qexistsl_tac [`k`,`out`] >>
+  conj_tac >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC) >>
+  simp[NoAsms] >>
+  reverse conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  `off < dimword (:256)` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ out` mp_tac >>
+     simp[NoAsms, stmt_state_rel_def] >> strip_tac >>
+     drule alloca_room_next_lt >>
+     qpat_x_assum `alloca_inv out` mp_tac >>
+     rewrite_tac[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.alloca_next_valid_def] >> strip_tac >>
+     first_x_assum drule >> decide_tac) >>
+  qpat_assum `vv = LocatedValue ret _` (fn th => pure_rewrite_tac[th]) >>
+  irule widened_allocated_buffer_post >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (drule_all body_internal_decl_return_type >> simp[NoAsms]) >>
+  goal_assum (drule_at (Pat `eval_operand _ out = _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP out.vs_allocas _ = _`)) >>
+  goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  simp[NoAsms] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `off < dimword (:256)` (fn th => simp[NoAsms, th]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* The source facts an intcall_entry state carries. *)
