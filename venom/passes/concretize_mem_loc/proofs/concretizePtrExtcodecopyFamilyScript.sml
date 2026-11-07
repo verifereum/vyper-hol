@@ -8,7 +8,12 @@ Ancestors
   concretizePtrPrefixLedger ptrDiscipline codegenRel memLocDefs
   concretizePtrOpaqueRetpc concretizePtrReturnTransport
   concretizePtrValueTransport pointerConfinedDefs
-  venomExecSemantics venomState venomInst list words
+  concretizePtrPairedPrefix concretizePtrStructuralTranscript concretizePtrStructuralTrace
+  concretizePtrSourceOwnership concretizePtrChronologicalHistory
+  concretizePtrAllocationSize concretizePtrDeletedGapHistory concretizePtrTaggedSupport
+  concretizeStepStructure o1PassContract unitShapeDefs venomWf cfgWf
+  codegenRel contextCodegenRel unitLabelMapIdentity
+  venomExecSemantics venomState venomInst finite_map list words
 
 Theorem ptr_extcodecopy_account_code[local]:
   ptr_history_content tn s t ==>
@@ -152,6 +157,101 @@ Proof
   simp[write_memory_with_expansion_def, step_taint_def, set_var_taint_def,
        finite_mapTheory.DRESTRICT_UNIV]
 QED
+
+Theorem ptr_extcodecopy_prefix_execution[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  ~ctx_has_dalloca C /\
+  a.po_inst.inst_opcode = EXTCODECOPY /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?aop dop rop nop addr dst dt src sz bytes post.
+    a.po_inst.inst_operands = [aop;dop;rop;nop] /\
+    a.po_inst.inst_outputs = [] /\ at.po_inst = a.po_inst /\
+    eval_operand aop a.po_state = SOME addr /\
+    eval_operand aop at.po_state = SOME addr /\
+    eval_operand dop a.po_state = SOME dst /\
+    eval_operand dop at.po_state = SOME dt /\
+    eval_operand rop a.po_state = SOME src /\
+    eval_operand rop at.po_state = SOME src /\
+    eval_operand nop a.po_state = SOME sz /\
+    eval_operand nop at.po_state = SOME sz /\
+    LENGTH bytes = w2n sz /\ step_inst 0 C a.po_inst a.po_state = OK post /\
+    post = write_memory_with_expansion (w2n dst) bytes a.po_state /\
+    zt.po_state = (write_memory_with_expansion (w2n dt) bytes at.po_state
+      with vs_inst_idx := SUC at.po_state.vs_inst_idx) /\
+    zt.po_fn = at.po_fn /\ zt.po_stack = at.po_stack /\
+    active_inst zt.po_fn zt.po_inst zt.po_state /\
+    (!i. i < w2n sz ==>
+      read_byte (w2n dst+i) post.vs_memory =
+      read_byte (w2n dt+i) zt.po_state.vs_memory)
+Proof
+  strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> rpt strip_tac >>
+     fs[active_inst_def, fn_insts_MEM] >> metis_tac[MEM_EL]) >>
+  `inst_wf a.po_inst` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
+        EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
+  `?aop dop rop nop. a.po_inst.inst_operands = [aop;dop;rop;nop] /\
+    a.po_inst.inst_outputs = []` by
+    gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  `EVERY (ptr_nonopaque_operand a.po_fn) [aop;dop;rop;nop] /\
+   EVERY (\op. op_prov TG op = NONE /\ op_taint a.po_taint op = {}) [aop;rop;nop]`
+    by suspend "operands" >>
+  `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
+  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
+  strip_tac >> gvs[] >>
+  IF (qpat_assum `step_inst _ _ _ _ = OK _` (K all_tac)) all_tac
+    (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]) >>
+  `?addr dst dt src sz bytes post.
+    eval_operand aop a.po_state = SOME addr /\ eval_operand aop at.po_state = SOME addr /\
+    eval_operand dop a.po_state = SOME dst /\ eval_operand dop at.po_state = SOME dt /\
+    eval_operand rop a.po_state = SOME src /\ eval_operand rop at.po_state = SOME src /\
+    eval_operand nop a.po_state = SOME sz /\ eval_operand nop at.po_state = SOME sz /\
+    LENGTH bytes = w2n sz /\ step_inst 0 C a.po_inst a.po_state = OK post /\
+    post = write_memory_with_expansion (w2n dst) bytes a.po_state /\
+    s' = write_memory_with_expansion (w2n dt) bytes at.po_state /\
+    (!i. i < w2n sz ==> read_byte (w2n dst+i) post.vs_memory =
+      read_byte (w2n dt+i) s'.vs_memory)` by
+    (fs[ptr_paired_sample_def] >>
+     drule_at (Pos (el 3)) ptr_extcodecopy_mixed_execution >>
+     simp[] >> disch_then drule_all >> simp[]) >>
+  qexistsl_tac [`addr`,`dst`,`dt`,`src`,`sz`,`bytes`] >>
+  gvs[]
+QED
+
+Resume ptr_extcodecopy_prefix_execution[operands]:
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
+        EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
+    (rpt strip_tac >> irule ptr_source_tagged_var_support >>
+     rpt (goal_assum (drule_at Any))) >>
+  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  drule_all ptr_extcodecopy_scalar_discipline >> simp[]
+QED
+Finalise ptr_extcodecopy_prefix_execution
 
 Theorem ptr_paired_extcodecopy_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
