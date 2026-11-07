@@ -44,7 +44,7 @@ Proof
   qexistsl [`R`, `compiler_label`] >> simp[]
 QED
 
-Theorem abi_encode_new_block_bind[local]:
+Theorem abi_encode_new_block_bind:
   shape_stable R /\ compiler_label lbl /\
   (!u. shape_step F compiler_label R (k u) Q) ==>
   shape_step F compiler_label R (comp_bind (new_block lbl) k) Q
@@ -78,7 +78,7 @@ Proof
   simp[plain_operand_def, is_label_operand_def]
 QED
 
-Theorem abi_encode_jmp_bind[local]:
+Theorem abi_encode_jmp_bind:
   shape_stable R /\ compiler_label lbl /\
   (!u. shape_step F compiler_label R (k u) Q) ==>
   shape_step F compiler_label R (comp_bind (emit_inst JMP [Label lbl] []) k) Q
@@ -90,7 +90,7 @@ Proof
     label_or_plain_def, jump_label_ok_def, is_label_operand_def]
 QED
 
-Theorem abi_encode_jnz_bind[local]:
+Theorem abi_encode_jnz_bind:
   shape_stable R /\ compiler_label yes /\ compiler_label no /\ yes <> no /\
   (!s. R s ==> plain_operand s test) /\
   (!u. shape_step F compiler_label R (k u) Q) ==>
