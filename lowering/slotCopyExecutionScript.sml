@@ -217,8 +217,11 @@ Proof
   strip_tac >>
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
-  simp[slot_copy_cond_insts_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[slot_copy_cond_insts_def, mk_inst_def] >>
+  simp[run_inst_seq_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_pure2_def] >>
+  simp[Once step_inst_base_def] >>
   simp[slot_copy_cond_result_def, eval_operand_lit_local,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def] >>
@@ -430,11 +433,15 @@ Proof
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def] >>
+       mk_inst_def] >>
+  simp[Once step_inst_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_pure2_def, eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def,
-       eval_operand_def, lookup_var_def, update_var_def,
+       mk_inst_def] >>
+  simp[Once step_inst_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def,
        slot_copy_cond_result_def, jump_to_def, bool_to_word_def] >>
   Cases_on `i=n` >> simp[venomExecSemanticsTheory.bool_to_word_def]
@@ -625,8 +632,9 @@ Proof
     (Cases_on `bb.bb_instructions` >> simp[phi_prefix_length_def] >>
      Cases_on `h.inst_opcode = PHI` >> simp[] >>
      qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
-     simp[run_from_def, Once exec_block_def, get_instruction_def,
-          Once step_inst_def, step_inst_base_def] >> metis_tac[]) >>
+     simp[run_from_def, Once exec_block_def, get_instruction_def] >>
+     simp[Once step_inst_def] >> simp[step_inst_base_def] >>
+     metis_tac[]) >>
   drule_all run_blocks_run_from_no_phi >>
   `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
   simp[]
@@ -648,8 +656,8 @@ Proof
     `[mk_inst cs.cs_next_id ASSIGN [Lit 0w] [slot_copy_var cs 0]]`,
     `cs.cs_current_insts`, `slot_copy_cond cs`] >>
   simp[slot_copy_init_insts_def, mk_inst_def, is_terminator_def,
-       run_inst_seq_def, step_inst_base_def, eval_operand_def,
-       update_var_def, jump_to_def]
+       run_inst_seq_def] >>
+  simp[step_inst_base_def, eval_operand_def, update_var_def, jump_to_def]
 QED
 
 Theorem slot_copy_initial_invariant:
