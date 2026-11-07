@@ -759,7 +759,7 @@ Proof
 QED
 
 (* Shared decomposition of the actual non-JMP planner, including its tail. *)
-Theorem native_regular_stages[local]:
+Theorem native_regular_stages:
   !liveness dfg cfg fn inst nl halting term lbl ps ops qs.
     inst.inst_opcode <> JMP /\
     generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>

@@ -2,7 +2,7 @@ Theory fnLineageInvReplayBoundary
 Ancestors
   fnLineageInvActualReplay fnPlanLineageInventory reorderSim stackPlanGen
   stackPlanTypes stackPlanOps stackModel planWf foldlSim arithmetic list rich_list pred_set
-  fnPlanLineageReorder genericInputReady
+  fnPlanLineageReorder fnPlanLineageSetup genericInputReady
 
 Theorem available_inst_bottom_frame:
  !spill_base lv dfg cfg fn inst nl halt term lbl ps ops qs n core m.
@@ -355,3 +355,81 @@ Proof
   qpat_x_assum `qs = ps2 with ps_stack := _` kall_tac >>
   qexists_tac `stack_pop (LENGTH selected) cs2.ps_stack` >> gvs[]
 QED
+
+Theorem native_regular_stack_live_inventory:
+  !lv dfg cfg fn inst nl term lbl ps m core base ops qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
+    (!v. MEM (Var v) (compute_operands inst) \/
+      (MEM v nl /\ ~MEM v inst.inst_outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl F term lbl ps = (ops,qs) /\
+    set core SUBSET set (MAP Var (operand_vars (compute_operands inst) ++ nl)) /\
+    ALL_DISTINCT inst.inst_outputs /\
+    EVERY (\v. ~MEM (Var v) (compute_operands inst) /\ ~MEM (Var v) core /\
+      Var v NOTIN FDOM ps.ps_spilled) inst.inst_outputs ==>
+    lineage_inventory (set (MAP Var nl)) qs /\
+    ?rest. lineage_core m rest qs /\
+      residual_budget_wf base [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all native_regular_stages >> strip_tac >>
+  `!v. MEM (Var v) (compute_operands inst) ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+  qabbrev_tac `consumed = ps4 with ps_stack :=
+    stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` >>
+  `consumed = ps4 with ps_stack :=
+    stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` by simp[Abbr `consumed`] >>
+  drule_all emit_reorder_pop_marker_core_stack_live_upper >> strip_tac >>
+  `EVERY (\v. ~MEM (Var v) rest /\ Var v NOTIN FDOM consumed.ps_spilled)
+    inst.inst_outputs` by
+    (drule_all emit_reorder_pop_marker_core_fresh >> strip_tac >>
+     metis_tac[APPEND_11]) >>
+  qabbrev_tac `emitted = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+    consumed inst.inst_outputs` >>
+  `emitted = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+    consumed inst.inst_outputs` by simp[Abbr `emitted`] >>
+  drule_all output_push_marker_core >> strip_tac >>
+  `generate_emit_ops inst topic emitted = (eops,ps7)` by simp[Abbr `emitted`, Abbr `consumed`] >>
+  drule_all generate_emit_ops_core_resource >> strip_tac >>
+  suspend "tail"
+QED
+
+Resume native_regular_stack_live_inventory[tail]:
+  `!v. MEM v nl ==>
+    MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack ++ MAP Var inst.inst_outputs) \/
+    Var v IN FDOM ps4.ps_spilled` by
+    (qpat_assum `ps.ps_stack = _` (mp_then Any mp_tac emit_reorder_output_live_coverage) >>
+     disch_then drule >> disch_then drule >> disch_then drule >>
+     disch_then drule >> disch_then drule >> disch_then drule >>
+     disch_then drule >> simp[]) >>
+  drule generate_emit_ops_slots >> strip_tac >>
+  `ps7.ps_stack = REPLICATE m dead_stack_marker ++ (rest ++ MAP Var inst.inst_outputs)` by metis_tac[] >>
+  `stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack =
+    REPLICATE m dead_stack_marker ++ rest` by
+    (qpat_x_assum `consumed.ps_stack = _` mp_tac >> simp[Abbr `consumed`]) >>
+  `ps7.ps_spilled = ps4.ps_spilled` by simp[Abbr `consumed`] >>
+  `set (MAP Var nl) SUBSET set (rest ++ MAP Var inst.inst_outputs) UNION FDOM ps7.ps_spilled` by
+    (simp[SUBSET_DEF, MEM_MAP] >> rpt strip_tac >> rename1 `MEM v nl` >>
+     qpat_x_assum `!v. MEM v nl ==> MEM (Var v) (_ ++ _) \/ _`
+       (qspec_then `v` mp_tac) >>
+     simp[MEM_REPLICATE, dead_stack_marker_def, MEM_MAP] >> metis_tac[]) >>
+  qabbrev_tac `deleted = MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)` >>
+  `set (rest ++ MAP Var inst.inst_outputs) DIFF set deleted SUBSET set (MAP Var nl)` by
+    (simp[Abbr `deleted`, SUBSET_DEF, MEM_MAP, MEM_FILTER] >>
+     rpt strip_tac >>
+     qpat_x_assum `set rest SUBSET _` mp_tac >>
+     simp[SUBSET_DEF, MEM_MAP] >> metis_tac[]) >>
+  `deleted = if inst.inst_outputs <> [] /\ (~F \/ LENGTH inst.inst_outputs > 1)
+    then MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs) else []` by
+    (Cases_on `inst.inst_outputs` >> simp[Abbr `deleted`]) >>
+  `ps8 = if inst.inst_outputs <> [] /\ (~F \/ LENGTH inst.inst_outputs > 1)
+    then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) ps7)
+    else ps7` by
+    (qpat_x_assum `ps8 = _` mp_tac >> simp[Abbr `deleted`]) >>
+  drule_all regular_post_emit_tail_live_inventory >> simp[]
+QED
+
+Finalise native_regular_stack_live_inventory

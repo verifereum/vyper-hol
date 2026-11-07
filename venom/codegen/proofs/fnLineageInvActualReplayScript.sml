@@ -313,7 +313,13 @@ Resume generate_regular_plan_bottom_frame[reconstruction]:
   Cases_on `is_commutative inst.inst_opcode /\ 2 <= LENGTH operands` >>
   Cases_on `reorder_cost (FST (reorder_plan dfg operands ps1)) <
             reorder_cost (FST (reorder_plan dfg swapped ps1))` >>
-  gvs[markerTheory.Abbrev_def, generate_regular_inst_plan_def] >>
+  qpat_x_assum `Abbrev ((rops,ps4) = _)`
+    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  gvs[Abbr `swapped`] >>
+  qpat_x_assum `Abbrev (topic = _)`
+    (fn th => fs[generate_regular_inst_plan_def,
+      GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  gvs[Abbr `operands`, Abbr `prefix`, Abbr `consumed`, Abbr `pushed`] >>
   Cases_on `inst.inst_outputs = []` >>
   gvs[release_dead_spills_stack_update,
       fnPlanPrefixTheory.release_dead_spills_stack] >>
