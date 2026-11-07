@@ -26,8 +26,8 @@ Definition bop_operand_post_def:
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   ghost_inv d cenv cx ee H un t /\
-  ptr_val_ok cx (expr_type e) v op H un t /\
-  (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op H t) /\
+  ptr_val_ok cx (post_value_type cenv e) v op H un t /\
+  (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op H t) /\
   ghost_kept cenv es sa G tn s H un
 End
 
