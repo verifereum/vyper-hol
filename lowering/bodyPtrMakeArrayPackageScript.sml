@@ -8,6 +8,8 @@ Ancestors
   bodyPtrMakeArrayExternalInstall loweringPosts exprSimAlloc emitHelperProps
   finite_map bodyPtrMakeArrayConsInvariant allocationPtr compileEnv
   gasSummaryComposePtr exprLowering exprLoweringProps
+  exprSimAggregateEncoding exprSimAggregateSource vyperState argsTailPtr
+  calldataReconstruction
 
 Theorem literal_memory_ptr_posts:
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -70,7 +72,7 @@ QED
 
 Theorem literal_loop_vv_post:
   literal_loop_frame ctx func ce cx d root aid addr capacity
-    es sa s0 G0 tn0 ee sb G tn s cells off /\
+    es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ val_wf tv v /\
   val_footprint tv v <= capacity /\ addr < dimword(:256) /\
@@ -93,7 +95,7 @@ QED
 
 Theorem literal_loop_pointer_posts:
   literal_loop_frame ctx func ce cx d root aid addr capacity
-    es sa s0 G0 tn0 ee sb G tn s cells off /\
+    es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ val_wf tv v /\
   type_memory_size tv <= capacity /\ addr < dimword(:256) /\
@@ -190,4 +192,47 @@ Proof
   drule_all literal_empty_tuple_loop >> strip_tac >>
   simp[] >> qexists `addr` >> simp[] >>
   irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >> fs[]
+QED
+
+(* S1's action equation is local to exprSimAggregates. *)
+Theorem literal_tuple_action:
+  compatible_bound bnd (LENGTH args) ==>
+  eval_expr cx (Builtin ann (MakeArray NONE bnd) args) =
+  bind (eval_exprs cx args) (return o (\vs. Value (ArrayV (TupleV vs))))
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `eval_exprs cx args x` >>
+  drule_all aggregate_eval_make_tuple >>
+  disch_then (qspec_then `ann` mp_tac) >>
+  Cases_on `q` >> simp[bind_def, return_def]
+QED
+
+Theorem literal_tuple_endpoint_posts:
+  literal_loop_frame ctx func ce cx d root aid addr (type_memory_size_list tvs)
+    es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
+  expr_type e = TupleT tys /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (TupleTV tvs) /\
+  type_memory_bytes ce (lowered_value_type ce e) <= type_memory_size_list tvs /\
+  addr < dimword(:256) /\ LIST_REL value_has_type tvs vs /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> tuple_in_memory vs tvs addr m) ==>
+  vv_post ctx func ce cx e es sa sb s0 ee (Value (ArrayV (TupleV vs)))
+    (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
+  ptr_vv_ok cx (expr_type e) (Value (ArrayV (TupleV vs)))
+    (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) ee G tn s /\
+  ptr_buf_ok ce e (Var root) G s
+Proof
+  strip_tac >>
+  `tuple_in_memory vs tvs addr s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  drule_all calldata_tuple_values_typed_memory >> strip_tac >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+     val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) addr m` by
+    simp[val_in_memory_def] >>
+  conj_tac
+  >- (irule literal_loop_vv_post >> simp[is_word_type_def] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[val_footprint_le, type_memory_size_def]) >>
+  irule literal_loop_pointer_posts >> simp[is_word_type_def] >>
+  goal_assum (drule_at Any) >> simp[type_memory_size_def] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
