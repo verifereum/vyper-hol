@@ -135,3 +135,36 @@ Proof
   disch_then drule_all >> strip_tac >>
   gvs[] >> metis_tac[alloc_frame_trans, alloc_frame_def]
 QED
+
+Theorem alloc_run_fresh_vars_fresh:
+  !n. alloc_run fresh_outputs (fresh_vars n)
+    (\xs st. fresh_outputs st /\
+      EVERY (\x. not_fresh_at st x /\ ~alloc_owned st x) xs)
+Proof
+  Induct
+  >- simp[fresh_vars_def, comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  rw[alloc_run_def, fresh_vars_def, comp_bind_def, comp_return_def] >>
+  namedCases_on `fresh_var st` ["x s0"] >>
+  namedCases_on `fresh_vars n s0` ["xs s1"] >> gvs[] >>
+  mp_tac alloc_run_fresh_var_fresh >> simp[alloc_run_def] >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `alloc_run _ (fresh_vars n) _`
+    (mp_tac o SRULE [alloc_run_def]) >>
+  disch_then drule_all >> strip_tac >> gvs[] >>
+  metis_tac[alloc_frame_trans, alloc_frame_def]
+QED
+
+Theorem alloc_run_emit_multi_op_fresh:
+  opc <> ALLOCA ==>
+  alloc_run fresh_outputs (emit_multi_op opc ops n) (\v st. fresh_outputs st)
+Proof
+  strip_tac >> simp[emit_multi_op_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >>
+  qexists `\xs st. fresh_outputs st /\
+    EVERY (\x. not_fresh_at st x /\ ~alloc_owned st x) xs` >>
+  reverse conj_tac >- simp[alloc_run_fresh_vars_fresh] >>
+  qx_gen_tac `xs` >> simp[] >> irule alloc_run_bind >>
+  qexists `\u st. fresh_outputs st` >> reverse conj_tac
+  >- simp[alloc_run_emit_inst_fresh] >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
