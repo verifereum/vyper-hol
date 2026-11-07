@@ -693,6 +693,128 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
+(* Both layouts route ordinary and continue results to the increment
+   block without touching any snapshot data. Use the explicit endpoint. *)
+Theorem mem_body_to_increment_keep[local]:
+  stmt_lands (InLoop exit_lbl incr_lbl) sb res t /\
+  (res = INL () \/ res = INR ContinueException) /\ ~t.vs_halted /\
+  (res = INL () ==>
+    sj.cs_blocks = sb.cs_blocks /\ sj.cs_current_bb = sb.cs_current_bb /\
+    sj.cs_current_insts = sb.cs_current_insts ++
+      [mk_inst sb.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb sj func) /\
+  keep_stable Q caller b z /\ Q t ==>
+  gas_marked_path F ctx func t 0 (OK (if res = INL () then jump_to incr_lbl t else t)) /\
+  Q (if res = INL () then jump_to incr_lbl t else t)
+Proof
+  rpt gen_tac >> disch_tac >>
+  Cases_on `res = INL ()` >> gvs[]
+  >- (reverse conj_tac >- (drule_all for_keep_jump >> simp[]) >>
+      `t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts` by fs[stmt_lands_def] >>
+      simp[fragGasModeTheory.gas_marked_path_def] >>
+      irule stmtSimPropsTheory.emit_jump_zero_path >>
+      fs[] >> goal_assum (drule_at (Pat `fn_has_code _ _ _`)) >> simp[]) >>
+  simp[fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules]
+QED
+
+Theorem mem_increment_loop_keep[local]:
+  stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base
+    arr_base p dst sz ainst incr_lbl st k es s /\ k < LENGTH vs /\
+  lookup_block incr_lbl func.fn_blocks =
+    SOME <|bb_label := incr_lbl; bb_instructions :=
+      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+       mk_inst i2 ASSIGN [Var nv] [idx];
+       mk_inst i3 JMP [Label cond_lbl] []]|> /\
+  not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
+  p <> idx /\ p <> nv /\ (!l. saved_base <> Label l) /\
+  (!x. saved_base = Var x ==> x <> idx /\ x <> nv) /\
+  keep_stable Q caller b z /\ Q s /\
+  ~not_fresh_at caller idx /\ ~not_fresh_at caller nv /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) ==>
+  ?next. stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base
+    arr_base p dst sz ainst cond_lbl st (SUC k) es next /\
+    Q next /\ FLOOKUP next.vs_allocas aid = SOME (b,z) /\
+    (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x s) /\
+    next.vs_allocas = s.vs_allocas /\ gas_marked_path F ctx func s 0 (OK next)
+Proof
+  strip_tac >>
+  `?next. gas_marked_path F ctx func s 0 (OK next) /\ Q next /\
+    FLOOKUP next.vs_allocas aid = SOME (b,z) /\
+    next = jump_to cond_lbl
+      (update_var idx (n2w k + 1w) (update_var nv (n2w k + 1w) s))` by
+    (irule for_increment_keep >>
+     fs[stmtSimForArrayLoopTheory.array_loop_inv_def] >>
+     conj_tac >- (qexistsl_tac [`i1`, `i2`, `i3`] >> simp[]) >>
+     qexists_tac `caller` >> simp[]) >>
+  qexists_tac `next` >> simp[] >> gvs[] >>
+  reverse conj_tac
+  >- simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  fs[stmtSimForArrayLoopTheory.array_loop_inv_def] >>
+  `stmt_state_rel ctx func cenv cx es
+    (update_var idx (n2w k + 1w) (update_var nv (n2w k + 1w) s))` by
+    (irule stmt_state_rel_update_var >> simp[] >>
+     irule stmt_state_rel_update_var >> simp[]) >>
+  simp[stmt_state_rel_jump_to, jump_to_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, GSYM word_add_n2w, arithmeticTheory.ADD1] >>
+  conj_tac >- (Cases_on `saved_base` >>
+    gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, update_var_def]) >>
+  fs[lookup_var_def, ret_pc_ok_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  Cases_on `x = idx` >> Cases_on `x = nv` >> gvs[FLOOKUP_UPDATE]
+QED
+
+Theorem mem_body_continue_iteration_keep[local]:
+  stmt_lands (InLoop exit_lbl incr_lbl) sb res s /\
+  (res = INL () \/ res = INR ContinueException) /\
+  stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base
+    arr_base p dst sz ainst s.vs_current_bb st k es (s with vs_inst_idx := 0) /\
+  k < LENGTH vs /\ (!l. saved_base <> Label l) /\
+  (res = INL () ==>
+    sj.cs_blocks = sb.cs_blocks /\ sj.cs_current_bb = sb.cs_current_bb /\
+    sj.cs_current_insts = sb.cs_current_insts ++
+      [mk_inst sb.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb sj func) /\
+  lookup_block incr_lbl func.fn_blocks =
+    SOME <|bb_label := incr_lbl; bb_instructions :=
+      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+       mk_inst i2 ASSIGN [Var nv] [idx]; mk_inst i3 JMP [Label cond_lbl] []]|> /\
+  not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
+  p <> idx /\ p <> nv /\
+  (!x. saved_base = Var x ==> x <> idx /\ x <> nv) /\
+  keep_stable Q caller b z /\ Q s /\
+  ~not_fresh_at caller idx /\ ~not_fresh_at caller nv /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) ==>
+  ?next. stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base
+    arr_base p dst sz ainst cond_lbl st (SUC k) es next /\
+    Q next /\ FLOOKUP next.vs_allocas aid = SOME (b,z) /\
+    (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x s) /\
+    next.vs_allocas = s.vs_allocas /\ gas_marked_path F ctx func s 0 (OK next)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~s.vs_halted` by fs[stmtSimForArrayLoopTheory.array_loop_inv_def] >>
+  drule_all mem_body_to_increment_keep >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `Q dd` >>
+  qpat_x_assum `!ctx. gas_marked_path _ _ _ _ _ _ /\ _`
+    (qspec_then `ctx` strip_assume_tac) >>
+  `stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base
+    arr_base p dst sz ainst incr_lbl st k es dd` by
+    (Cases_on `res = INL ()` >>
+     gvs[Abbr `dd`, stmtSimForArrayLoopTheory.array_loop_inv_def,
+       stmt_lands_def, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
+       lookup_var_def, ret_pc_ok_def] >>
+     simp[jump_to_def, lookup_var_def] >>
+     Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def]) >>
+  `FLOOKUP dd.vs_allocas aid = SOME (b,z)` by
+    (simp[Abbr `dd`] >> Cases_on `res = INL ()` >> simp[jump_to_def]) >>
+  drule_all mem_increment_loop_keep >> strip_tac >>
+  qexists_tac `next` >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> simp[Abbr `dd`] >>
+      Cases_on `res = INL ()` >> simp[jump_to_def, lookup_var_def]) >>
+  conj_tac
+  >- (simp[Abbr `dd`] >> Cases_on `res = INL ()` >> simp[jump_to_def]) >>
+  drule_all fragGasModeTheory.gas_marked_path_then >> simp[]
+QED
+
 Theorem dynarray_loop_initialize_keep[local]:
   ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
   MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
