@@ -12,6 +12,7 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipRecursio
   bodyPtrStructLitOwnershipTyped bodyPtrStructLitOwnershipPrimitives
   bodyPtrStructLitOwnershipAbiEncode bodyPtrStructLitOwnershipPop
   bodyPtrStructLitEmitterFrame bodyPtrStructLitOwnershipScalar
+  bodyPtrStructLitOwnershipStmtLoops
 
 Theorem alloc_run_stmt_nonannassign_route:
   (!id vt e. s <> AnnAssign id vt e) /\
@@ -388,4 +389,84 @@ Proof
   qexists `\v s. fresh_outputs s` >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_binop,
     SRULE [SF ETA_ss] alloc_run_emit_void_fresh]
+QED
+
+Theorem alloc_run_stmt_loop_exit:
+  alloc_run fresh_outputs (compile_stmt ce lctx ty Break)
+    (\u s. fresh_outputs s) /\
+  alloc_run fresh_outputs (compile_stmt ce lctx ty Continue)
+    (\u s. fresh_outputs s)
+Proof
+  Cases_on `lctx` >>
+  simp[compile_stmt_def, comp_ignore_bind_def] >>
+  rpt conj_tac >>
+  TRY (irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
+    conj_tac >- simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+  simp[SF ETA_ss, alloc_run_emit_empty_fresh]
+QED
+
+Theorem alloc_run_stmt_annassign_initializer:
+  ~supported_expr_exists expr_shape_root e ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (do src_vv <- compile_expr ce (expr_type e) e;
+        val_op <- (if has_length_word vt /\ is_empty_value_expr e then return (Lit 0w)
+                   else unwrap_value ce src_vv);
+        (case FLOOKUP ce.ce_vars id of
+          SOME (MemLoc off _) =>
+            if has_length_word vt /\ is_empty_value_expr e then
+              emit_void MSTORE [Lit (n2w off); Lit 0w]
+            else compile_assign_value ce (Lit (n2w off)) LocMemory val_op
+              (is_word_type vt) (vv_location src_vv) vt (lowered_value_type ce e)
+              (case vt of ArrayT et (Dynamic _) =>
+                SOME ((type_memory_bytes ce et + 31) DIV 32, type_memory_bytes ce et)
+               | _ => NONE) (type_memory_bytes ce vt)
+        | SOME (PtrVar p _) =>
+            if has_length_word vt /\ is_empty_value_expr e then
+              emit_void MSTORE [p; Lit 0w]
+            else compile_assign_value ce p LocMemory val_op
+              (is_word_type vt) (vv_location src_vv) vt (lowered_value_type ce e)
+              (case vt of ArrayT et (Dynamic _) =>
+                SOME ((type_memory_bytes ce et + 31) DIV 32, type_memory_bytes ce et)
+               | _ => NONE) (type_memory_bytes ce vt)
+        | _ => emit_void INVALID []) od)
+    (\u s. fresh_outputs s)
+Proof
+  strip_tac >> irule alloc_run_bind >>
+  qexists `\vv s. shape_state s /\ cenv_shape_ok s ce /\ value_shape_ok s vv` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_struct_child_frame >>
+      qexistsl [`F`, `ce`, `\s. T`] >>
+      simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape]) >>
+  qx_gen_tac `vv` >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (IF_CASES_TAC
+      >- simp[comp_return_def, alloc_run_def, alloc_frame_refl, shape_state_def,
+           shape_base_fresh_outputs] >>
+      irule alloc_run_conseq >> irule_at Any alloc_run_unwrap_value_frame >>
+      qexists `\s. T` >> simp[shape_stable_def, shape_state_def,
+        shape_base_fresh_outputs]) >>
+  gen_tac >> simp[] >> Cases_on `FLOOKUP ce.ce_vars id` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
+  Cases_on `x` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >> IF_CASES_TAC >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+    SRULE [SF ETA_ss] alloc_run_compile_assign_value]
+QED
+
+Theorem alloc_run_stmt_annassign_route:
+  ce.ce_alloca_locals /\ ~supported_expr_exists expr_shape_root e ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (comp_bind (declare_stmt_local ce (AnnAssign id vt e))
+      (\env. compile_stmt env lctx ty (AnnAssign id vt e)))
+    (\u s. fresh_outputs s)
+Proof
+  strip_tac >> simp[declare_stmt_local_def, compile_stmt_def,
+    comp_ignore_bind_def, loop_comp_return_bind] >>
+  ho_match_mp_tac (SRULE [comp_ignore_bind_def, comp_bind_assoc,
+    loop_comp_return_bind] (Q.INST [`R` |-> `\s. T`]
+      alloc_run_declare_local_commit_then)) >>
+  simp[shape_stable_def] >>
+  rpt strip_tac >>
+  irule (SRULE [loop_comp_return_bind] alloc_run_stmt_annassign_initializer) >>
+  simp[]
 QED
