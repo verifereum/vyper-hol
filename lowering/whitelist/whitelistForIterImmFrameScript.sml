@@ -2,8 +2,8 @@
 Theory whitelistForIterImmFrame
 Ancestors
   vyperBareGlobalName vyperPlaceFrames vyperState vyperTypeSystem
-  stmtSimForArrayFrame vyperStatePreservation supportedExprs supportedExprForms
-  vyperTypeInvariants vyperInterpreter vyperAST list finite_map alist
+  stmtSimForArrayFrame vyperStatePreservation supportedExprs supportedExprForms supportedExprTraverse
+  vyperTypeInvariants vyperInterpreter vyperAST list rich_list finite_map alist
 
 Theorem lookup_immutable_set_other:
   (src',name') <> (src,name) /\
@@ -242,3 +242,140 @@ Resume supported_pure_immutable_mutual[typebuiltin]:
 QED
 
 Finalise supported_pure_immutable_mutual
+
+Theorem immutable_direct_pop_other:
+  (other_src,other_name) <> (src,name) /\
+  eval_expr cx (Pop ty (TopLevelNameTarget (other_src,other_name))) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac lookup_global_state >> gvs[] >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `p`
+  >- (drule vyperScopePreservationTheory.pop_storage_place_scopes_immutables >>
+      simp[lookup_immutable_def])
+  >- metis_tac[lookup_global_not_memory] >>
+  drule lookup_global_immutable_root >> strip_tac >> gvs[] >>
+  gvs[pop_place_def, bind_def, ignore_bind_def, get_immutables_def, get_address_immutables_def,
+      lift_option_type_def, lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+      return_def, raise_def, AllCaseEqs()] >>
+  irule lookup_immutable_set_other >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem supported_pure_exprs_immutable:
+  supported_pure_exprs tops exprs /\ eval_exprs cx exprs es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  metis_tac[supported_pure_immutable_mutual]
+QED
+
+Theorem supported_pure_expr_results_immutable:
+  !exprs tops cx es res es' src name.
+  EVERY (supported_pure_expr tops) exprs /\
+  eval_expr_results cx exprs es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Induct_on `exprs` >> simp[Once evaluate_def, return_def] >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac supported_pure_immutable_mutual >> metis_tac[]
+QED
+
+Theorem supported_effect_immutable_mutual:
+  (!tops e. supported_effect_expr tops e ==>
+    ~supported_expr_exists expr_internal_call_root e ==>
+    !cx es res es' src name.
+    expr_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) e /\
+    eval_expr cx e es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+    ~supported_expr_exists expr_internal_call_root e ==>
+    !cx es res es' src name.
+    expr_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) e /\
+    eval_expr cx e es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >> rpt conj_tac >>
+  simp[supported_effect_expr_def, supported_expr_exists_def,
+       expr_internal_call_root_def, expr_writes_ok_def] >> rpt strip_tac
+  >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
+    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+    imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+    imp_res_tac supported_pure_immutable_mutual >> gvs[] >> metis_tac[])
+  >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
+    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+    imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+  >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`]
+  >- suspend "external"
+  >~ [`eval_expr _ (Call _ (Send F) _ _) _ = _`] >- suspend "send2"
+  >~ [`eval_expr _ (Call _ (Send T) _ _) _ = _`] >- suspend "send3"
+  >> suspend "pop"
+QED
+
+Resume supported_effect_immutable_mutual[external]:
+  `!n. supported_pure_exprs tops (TAKE n args)` by
+    (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
+  `!n. supported_pure_exprs tops (DROP n args)` by
+    (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_DROP]) >>
+  `!n m. EVERY (supported_pure_expr tops) (TAKE n (DROP m args))` by
+    (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE, EVERY_DROP]) >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac eval_ext_call_preserves_non_accounts >>
+  imp_res_tac read_results_state >>
+  imp_res_tac supported_pure_exprs_immutable >>
+  imp_res_tac supported_pure_expr_results_immutable >>
+  gvs[lookup_immutable_def] >> metis_tac[]
+QED
+
+Resume supported_effect_immutable_mutual[send2]:
+  `supported_pure_exprs tops [a;v]` by simp[supported_pure_expr_def] >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+      assert_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac eval_send_preserves_non_accounts >>
+  imp_res_tac supported_pure_immutable_mutual >>
+  imp_res_tac read_result_state >> gvs[lookup_immutable_def] >> metis_tac[]
+QED
+
+Resume supported_effect_immutable_mutual[send3]:
+  `supported_pure_exprs tops [a;v;g]` by simp[supported_pure_expr_def] >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+      assert_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac eval_send_preserves_non_accounts >>
+  imp_res_tac supported_pure_immutable_mutual >>
+  imp_res_tac read_result_state >> gvs[lookup_immutable_def] >> metis_tac[]
+QED
+
+Resume supported_effect_immutable_mutual[pop]:
+  rename1 `eval_expr cx (Pop ty (TopLevelNameTarget nsid)) es = _` >>
+  PairCases_on `nsid` >>
+  irule immutable_direct_pop_other >> goal_assum (drule_at Any) >>
+  gvs[place_contains_def, place_access_def]
+QED
+
+Finalise supported_effect_immutable_mutual
+
+Theorem supported_expr_immutable:
+  supported_expr tops e /\ ~supported_expr_exists expr_internal_call_root e /\
+  expr_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) e /\
+  eval_expr cx e es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  simp[supported_expr_def] >>
+  metis_tac[supported_pure_immutable_mutual, supported_effect_immutable_mutual]
+QED
+
+Theorem supported_exprs_immutable:
+  !exprs tops cx es res es' src name.
+  EVERY (\e. supported_expr tops e /\
+    ~supported_expr_exists expr_internal_call_root e /\
+    expr_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) e) exprs /\
+  eval_exprs cx exprs es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Induct_on `exprs` >> simp[Once evaluate_def, return_def] >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> gvs[] >> metis_tac[supported_expr_immutable]
+QED
