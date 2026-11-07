@@ -1,6 +1,7 @@
 (* Actual allocation at the constructor's reserved-memory frontier. *)
 Theory ctorDeployMemoryRunMemEntryShiftedAlloc
 Ancestors
+  ctorDeployLoweringEntryRegisterRun
   ctorDeployMemoryRunMemEntryShiftedFrame
   ctorDeployMemoryRunMemEntryShiftedFrontier ctorDeployMemoryFrontier
   actualAllocExec allocaBudgetProps allocaFrontierBound venomExecSemantics venomState venomInst
@@ -10,19 +11,6 @@ Ancestors
   entryArgPtrs fragGasPathMem allocaHistory localPtrsProps
   ctorAbiActualArrayRun abiDecoderLoop compileEnv abiEncoderRegisteredEffect abiEncoderProps
   finite_map pred_set list rich_list arithmetic words
-
-Theorem actual_alloca_frontier_preserved_from:
-  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
-  MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
-  step_inst_base inst s = OK t /\ alloca_frontier_inv_from k ctx fn site s ==>
-  alloca_frontier_inv_from k ctx fn site' t
-Proof
-  strip_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  drule_all step_inst_base_alloca_budget >>
-  simp[alloca_frontier_inv_from_def] >> strip_tac >>
-  fs[alloca_frontier_inv_from_def] >> decide_tac
-QED
 
 Theorem actual_word_alloca_fresh_run_from:
   alloca_frontier_inv_from k ctx fn site s /\ MEM inst (fn_insts fn) /\
@@ -64,57 +52,6 @@ Proof
   gvs[FLOOKUP_DEF]
 QED
 
-Theorem ctor_alloc_buffer_run_from:
-  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
-  n < dimword (:256) /\ alloca_inv initial /\
-  alloca_frontier_inv_from k ctx func site initial /\ fn_inst_ids_distinct func /\
-  k + unit_alloca_budget ctx < dimword (:256) /\
-  FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?a. a = (update_var (STRING #"%" (toString st.cs_next_var))
-      (n2w initial.vs_alloca_next)
-      (initial with <| vs_allocas := initial.vs_allocas |+
-        (st.cs_next_id,(initial.vs_alloca_next,n));
-        vs_alloca_next := initial.vs_alloca_next+n |>))
-      with vs_inst_idx := LENGTH sa.cs_current_insts /\
-    alloca_inv a /\ alloca_frontier_inv_from k ctx func site a /\
-    initial.vs_alloca_next+n < dimword (:256) /\
-    ~a.vs_halted /\ a.vs_current_bb = sa.cs_current_bb /\
-    abi_decode_sim ctx func initial a
-Proof
-  strip_tac >>
-  `initial.vs_alloca_next+n < dimword (:256)` by
-    (irule ctor_alloc_buffer_credit_from >> metis_tac[]) >>
-  qabbrev_tac `raw = update_var (STRING #"%" (toString st.cs_next_var))
-    (n2w initial.vs_alloca_next)
-    (initial with <| vs_allocas := initial.vs_allocas |+
-      (st.cs_next_id,(initial.vs_alloca_next,n));
-      vs_alloca_next := initial.vs_alloca_next+n |>)` >>
-  `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-     [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) = OK raw` by
-    simp[exec_alloca_def, mk_inst_def, w2n_n2w, Abbr `raw`] >>
-  `alloca_inv raw` by metis_tac[alloca_inv_exec_alloca] >>
-  `alloca_frontier_inv_from k ctx func site raw` by
-    (irule actual_alloca_frontier_preserved_from >>
-     conj_tac >- metis_tac[ctor_actual_function_ids] >>
-     qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-       [STRING #"%" (toString st.cs_next_var)]`, `initial`, `site`] >>
-     drule_all entry_alloc_buffer_inst >>
-     fs[mk_inst_def, step_inst_base_def]) >>
-  `frag_exec ctx st sa (\u. u = initial)
-     (\u. u = raw with vs_inst_idx := LENGTH sa.cs_current_insts) (\r. F)` by
-    (irule compile_alloc_buffer_fresh_frag >> qexistsl [`buf`, `n`] >>
-     simp[Abbr `raw`]) >>
-  `alloca_frontier_inv_from k ctx func site
-    (raw with vs_inst_idx := LENGTH sa.cs_current_insts)` by
-    (irule alloca_frontier_inv_from_frame >> qexistsl [`raw`, `site`] >> simp[]) >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  simp[] >> strip_tac >>
-  simp[abi_decode_sim_def] >> metis_tac[]
-QED
-
 Theorem ctor_checked_alloc_buffer_run_from:
  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
  n < dimword (:256) /\ alloca_inv initial /\
@@ -136,7 +73,7 @@ Theorem ctor_checked_alloc_buffer_run_from:
    gas_path_mem ctx func initial 0 (OK a) /\
    a.vs_gas_readings = initial.vs_gas_readings /\ alloca_history func a
 Proof
- strip_tac >> drule_all ctor_alloc_buffer_run_from >> strip_tac >>
+ strip_tac >> drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_run >> strip_tac >>
  qexists `a` >> asm_rewrite_tac[] >>
  qmatch_goalsub_abbrev_tac `OK (raw with vs_inst_idx := _)` >>
  `raw = update_var (STRING #"%" (toString st.cs_next_var))
@@ -146,64 +83,6 @@ Proof
      vs_alloca_next := initial.vs_alloca_next+n |>)` by simp[Abbr `raw`] >>
  drule_all ctor_checked_alloc_buffer_edge >>
  disch_then (qspec_then `ctx` mp_tac) >> simp_tac (srw_ss()) []
-QED
-
-Theorem ctor_shifted_alloc_buffer_state_props[local]:
- compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
- n < dimword (:256) /\ initial.vs_alloca_next < dimword (:256) /\
- local_ptrs_rel func ce scopes initial /\ fresh_vars_wrt st initial /\
- (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
- a = (update_var (STRING #"%" (toString st.cs_next_var))
-     (n2w initial.vs_alloca_next)
-     (initial with <| vs_allocas := initial.vs_allocas |+
-       (st.cs_next_id,(initial.vs_alloca_next,n));
-       vs_alloca_next := initial.vs_alloca_next+n |>))
-     with vs_inst_idx := LENGTH sa.cs_current_insts ==>
- buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
- local_ptrs_rel func ce scopes a /\
- local_backed func (STRING #"%" (toString st.cs_next_var)) a initial.vs_alloca_next n /\
- fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
- (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
- (!name b sz. local_region ce scopes a name b sz ==>
-   compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
- (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
-   lookup_var x a = SOME w) /\
- abi_encoder_registered_effect (frag_ids st sa) [] initial a
-Proof
- strip_tac >>
- `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
-   (irule local_ptrs_rel_fresh_not_scope_ptr >>
-    qexistsl [`func`, `initial`, `st`] >> simp[GREATER_EQ]) >>
- `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =
-    OK (a with vs_inst_idx := initial.vs_inst_idx)` by
-   gvs[exec_alloca_def, mk_inst_def, update_var_def, w2n_n2w,
-       venom_state_component_equality] >>
- drule local_ptrs_rel_exec_alloca_fresh >> simp[mk_inst_def] >>
- disch_then (qspecl_then [`func`, `ce`, `scopes`] mp_tac) >>
- simp[local_ptrs_rel_inst_idx] >> strip_tac >>
- drule compile_alloc_buffer_parts >> strip_tac >> simp[] >>
- conj_tac
- >- (simp[local_backed_def] >> disj1_tac >>
-     qexists `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-       [STRING #"%" (toString st.cs_next_var)]` >>
-     drule_all entry_alloc_buffer_inst >> gvs[mk_inst_def]) >>
- conj_tac
- >- (fs[fresh_vars_wrt_def, update_var_def, GREATER_EQ] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
- conj_tac
- >- (simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
-     IF_CASES_TAC >> gvs[] >> first_x_assum irule >> decide_tac) >>
- conj_tac
- >- (rpt strip_tac >> qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
-     fs[local_region_def, lookup_var_def] >> metis_tac[]) >>
- conj_tac
- >- (rpt strip_tac >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     IF_CASES_TAC >> gvs[lookup_var_def]) >>
- simp[abi_encoder_registered_effect_def, frag_ids_def, GSPECIFICATION,
-      update_var_def, FLOOKUP_UPDATE] >>
- rpt strip_tac >> IF_CASES_TAC >> gvs[] >>
- `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >> gvs[]
 QED
 
 Theorem ctor_checked_alloc_buffer_actual_from:
@@ -244,7 +123,7 @@ Proof
  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
  drule_all ctor_checked_alloc_buffer_run_from >> strip_tac >>
  `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
- drule_all ctor_shifted_alloc_buffer_state_props >> strip_tac >>
+ drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_state_props >> strip_tac >>
  qexists `a` >> asm_rewrite_tac[] >>
  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED

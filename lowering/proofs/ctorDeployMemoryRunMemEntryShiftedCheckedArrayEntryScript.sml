@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedCheckedArrayEntry
 Ancestors
+  ctorDeployLoweringEntryAllocation
   ctorDeployMemoryRunMemEntryShiftedIndex ctorDeployMemoryRunMemEntryArraySteps
   ctorDeployMemoryRunMemEntryShiftedObservation ctorDeployMemoryRunMemEntryShiftedFrame
   ctorDeployMemoryFrontier ctorAbiActualAlloc ctorAbiActualFrame ctorAbiActualSites
@@ -44,7 +45,7 @@ Proof
    inst.inst_id IN ids` by simp[Abbr `inst`, mk_inst_def] >>
   drule_all ctor_actual_word_alloca_run_from >>
   disch_then (qspec_then `[]` strip_assume_tac) >>
-  `p < dimword (:256)` by (irule ctor_actual_index_slot_bound_from >> metis_tac[mk_inst_def]) >>
+  `p < dimword (:256)` by (irule ctorDeployLoweringEntryAllocationTheory.deploy_ctor_index_slot_bound >> metis_tac[mk_inst_def]) >>
   `p+32 <= t.vs_alloca_next` by
     (gvs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
   asm_rewrite_tac[] >>

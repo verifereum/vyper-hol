@@ -143,7 +143,7 @@ Theorem constructor_exit_zero_path_mem:
 Proof
   strip_tac >>
   `nr ==> ut` by simp[] >>
-  drule_all constructor_exit_code_mem >> strip_tac >>
+  drule_all ctorReturnFrameTheory.constructor_exit_code >> strip_tac >>
   drule optional_unlock_code >> simp[] >> strip_tac >>
   `body_cenv.ce_is_ctor /\
    (cap <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\

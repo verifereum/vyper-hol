@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryLanding
 Ancestors
+  ctorDeployLoweringEntryStateRel
  ctorDeployMemoryRunMemEntryProvenance ctorDeployMemoryRunMemEntryResources
  ctorDeployMemoryRunMemEntrySourceWorld ctorDeployMemoryRunMemEntryZeroImmutables
  ctorDeployMemoryRunMemEntryRegisterEnv ctorDeployLoweringFrame
@@ -7,25 +8,6 @@ Ancestors
  ctorDeployDefs e2eDeployDefs e2eDefs vyperContext vyperTypeContract finite_map list
  supportedProgram vyperTypeContractContext vyperInterpreter immutableLocationProps immutableRelation
  ctorDeployMemoryRunMemEntryTaskInputs ctorDeployLoweringEntrySourceFrame ctorRegisterArgs
-
-Theorem ctor_landing_module_lookup_frame[local]:
- !tops sft off key loc.
- ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
- FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME loc ==>
- FLOOKUP (add_immutable_locations sft tops off
-   (add_module_var_locations tops FEMPTY)) key = SOME loc
-Proof
- rpt gen_tac >> strip_tac >>
- `!vis name ty slot.
-    MEM (VariableDecl vis Immutable name ty slot) tops ==> (NONE,name) <> key` by
-   (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-    drule_then (qspecl_then
-      [`FEMPTY`, `VariableDecl vis Immutable name ty slot`, `name`] mp_tac)
-      add_module_var_locations_mem >>
-    simp[toplevel_vtype_keys_toplevel_def] >>
-    Cases_on `slot` >> simp[add_module_var_locations_def]) >>
- drule add_immutable_locations_lookup_unchanged >> simp[]
-QED
 
 Theorem ctor_landing_storage_layout:
  !tops am tx cenv cx.
@@ -55,9 +37,9 @@ Proof
     FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot))` by
    (rpt gen_tac >> conj_tac >> eq_tac >> strip_tac
     >- (drule add_immutable_locations_FLOOKUP >> simp[])
-    >- (irule ctor_landing_module_lookup_frame >> simp[])
+    >- (irule ctorDeployLoweringEntryStateRelTheory.deploy_ctor_module_lookup_immutable_frame >> simp[])
     >- (drule add_immutable_locations_FLOOKUP >> simp[])
-    >- (irule ctor_landing_module_lookup_frame >> simp[])) >>
+    >- (irule ctorDeployLoweringEntryStateRelTheory.deploy_ctor_module_lookup_immutable_frame >> simp[])) >>
  `!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops` by
    (gvs[source_deployment_rel_def, get_module_code_def] >> Cases >> simp[]) >>
  gvs[storage_vars_rel_def, transient_vars_rel_def] >>

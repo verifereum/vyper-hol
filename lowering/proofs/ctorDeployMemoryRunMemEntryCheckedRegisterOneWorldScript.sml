@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryCheckedRegisterOneWorld
 Ancestors
+  ctorDeployLoweringEntryRegisterRun
  ctorDeployMemoryRunMemEntryCheckedArgWorld
  ctorDeployMemoryRunMemEntryCheckedStep
  ctorDeployMemoryRunMemEntryShiftedRegistration
@@ -13,64 +14,6 @@ Ancestors
  ctorAbiActualFrame abiDecoderCounters ctorRegisterArgs ctorArgDecode
  moduleLowering abiEncoder compileVyper localPtrsProps entryArgPtrs fragGasPathMem
  words list rich_list finite_map pred_set arithmetic exprLowering compileEnv venomInst venomState
-
-Theorem ctor_world_alloc_buffer_state_props[local]:
- compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
- n < dimword (:256) /\ initial.vs_alloca_next < dimword (:256) /\
- local_ptrs_rel func ce scopes initial /\ fresh_vars_wrt st initial /\
- (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
- a = (update_var (STRING #"%" (toString st.cs_next_var))
-     (n2w initial.vs_alloca_next)
-     (initial with <| vs_allocas := initial.vs_allocas |+
-       (st.cs_next_id,(initial.vs_alloca_next,n));
-       vs_alloca_next := initial.vs_alloca_next+n |>))
-     with vs_inst_idx := LENGTH sa.cs_current_insts ==>
- buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
- local_ptrs_rel func ce scopes a /\
- local_backed func (STRING #"%" (toString st.cs_next_var)) a initial.vs_alloca_next n /\
- fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
- (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
- (!name b sz. local_region ce scopes a name b sz ==>
-   compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
- (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
-   lookup_var x a = SOME w) /\
- abi_encoder_registered_effect (frag_ids st sa) [] initial a
-Proof
- strip_tac >>
- `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
-   (irule local_ptrs_rel_fresh_not_scope_ptr >>
-    qexistsl [`func`, `initial`, `st`] >> simp[GREATER_EQ]) >>
- `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =
-    OK (a with vs_inst_idx := initial.vs_inst_idx)` by
-   gvs[exec_alloca_def, mk_inst_def, update_var_def, w2n_n2w,
-       venom_state_component_equality] >>
- drule local_ptrs_rel_exec_alloca_fresh >> simp[mk_inst_def] >>
- disch_then (qspecl_then [`func`, `ce`, `scopes`] mp_tac) >>
- simp[local_ptrs_rel_inst_idx] >> strip_tac >>
- drule compile_alloc_buffer_parts >> strip_tac >> simp[] >>
- conj_tac
- >- (simp[local_backed_def] >> disj1_tac >>
-     qexists `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-       [STRING #"%" (toString st.cs_next_var)]` >>
-     drule_all entry_alloc_buffer_inst >> gvs[mk_inst_def]) >>
- conj_tac
- >- (fs[fresh_vars_wrt_def, update_var_def, GREATER_EQ] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
- conj_tac
- >- (simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
-     IF_CASES_TAC >> gvs[] >> first_x_assum irule >> decide_tac) >>
- conj_tac
- >- (rpt strip_tac >> qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
-     fs[local_region_def, lookup_var_def] >> metis_tac[]) >>
- conj_tac
- >- (rpt strip_tac >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     IF_CASES_TAC >> gvs[lookup_var_def]) >>
- simp[abi_encoder_registered_effect_def, frag_ids_def, GSPECIFICATION,
-      update_var_def, FLOOKUP_UPDATE] >>
- rpt strip_tac >> IF_CASES_TAC >> gvs[] >>
- `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >> gvs[]
-QED
 
 Theorem ctor_checked_alloc_buffer_world_actual_from:
  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
@@ -112,7 +55,7 @@ Proof
  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
  drule_all ctor_checked_alloc_buffer_run_from >> strip_tac >>
  `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
- drule_all ctor_world_alloc_buffer_state_props >> strip_tac >>
+ drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_state_props >> strip_tac >>
  qexists `a` >> asm_rewrite_tac[] >>
  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED

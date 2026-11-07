@@ -40,37 +40,6 @@ Proof
   simp[storage_dead_def]
 QED
 
-(* A copy of ctorReturnFrame's local constructor_exit_code. *)
-Theorem constructor_exit_code_ptr[local]:
-  (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
-    st_exit = ((), st_epilogue) /\
-  (nr ==> ut) /\ st_exit.cs_current_insts = [] /\
-  compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
-  fn_has_code st_exit st_final func ==>
-  fn_has_code st_exit st_epilogue func /\
-  fn_has_code st_epilogue st_final func /\
-  ~block_is_terminated st_epilogue
-Proof
-  strip_tac >> drule optional_unlock_code >> simp[] >> strip_tac >>
-  `~block_is_terminated st_epilogue` by
-    (gvs[block_is_terminated_def] >> Cases_on `nr` >>
-     gvs[block_is_terminated_def, mk_inst_def, is_terminator_def]) >>
-  `cs_extends st_exit st_epilogue` by
-    (irule cs_extends_same_block >> Cases_on `nr` >> gvs[]) >>
-  `cs_extends st_epilogue st_final` by
-    (irule cs_extends_same_block >>
-     drule_all compile_constructor_epilogue_append >> strip_tac >>
-     simp[rich_listTheory.IS_PREFIX_APPEND] >>
-     qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
-     Cases_on `cap > 0` >>
-     simp[compile_constructor_epilogue_def, contextTheory.compile_alloc_buffer_def,
-          emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-          emit_def] >>
-     strip_tac >> gvs[]) >>
-  drule_all fn_has_code_split >> gvs[]
-QED
-
 (* The epilogue's ALLOCA: its site starts at or past lo, and the bytes it
    allocates afresh lie in it. *)
 Theorem epilogue_alloca_step[local]:
@@ -938,7 +907,7 @@ Proof
   drule_all constructor_exit_run >> strip_tac >>
   qexistsl_tac [`fuel`, `final`] >> simp[] >>
   `nr ==> ut` by simp[] >>
-  drule_all constructor_exit_code_ptr >> strip_tac >>
+  drule_all ctorReturnFrameTheory.constructor_exit_code >> strip_tac >>
   `body_cenv.ce_is_ctor /\
    (imm_len tops <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x))` by

@@ -165,44 +165,6 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok[local]:
-  !tops use_trans nkey_map target cf cenv args pay nr nkey trans fbody ret.
-    supported_program tops /\
-    SND (SND (SND (classify_functions tops))) = SOME cf /\
-    set_constructor_package_target target
-      (package_constructor tops use_trans nkey_map cf) =
-      (cenv,args,pay,nr,nkey,trans,fbody,ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root fbody
-Proof
-  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  gvs[package_constructor_def, set_constructor_package_target_def,
-      update_cenv_nonreentrant_def, ctor_prefix_env_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-
-Theorem package_internal_fn_ctor_shape_ok[local]:
-  !tops use_trans nkey_map imm target src.
-    supported_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-        (package_internal_fn tops use_trans nkey_map T imm src))
-Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
-       cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-
 Theorem ctor_prefix_lowering_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
@@ -226,7 +188,7 @@ Proof
   Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
   rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
   `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
+  drule_all ctorDeployShapeTheory.package_constructor_shape_ok >> strip_tac >> simp[] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))`
     by metis_tac[supported_names_internal_names_distinct,
@@ -236,7 +198,7 @@ Proof
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
-  irule package_internal_fn_ctor_shape_ok >> simp[]
+  irule ctorDeployShapeTheory.package_internal_fn_ctor_shape_ok >> simp[]
 QED
 
 Theorem ctor_prefix_entry_not_halted:

@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryComplex
 Ancestors
+  ctorDeployLoweringEntryMember
   ctorDeployMemoryRunMemEntryMembers ctorDeployMemoryRunMemEntryCompositeSetup
   ctorDeployMemoryRunMemEntryWord ctorAbiActualComplex ctorAbiActualObservations
   ctorAbiActualNarrow ctorAbiActualChildFrame ctorAbiActualLabelEmpty
@@ -55,18 +56,6 @@ Proof
        alloca_frontier_inv_def, remaining_alloca_budget_def, ctor_actual_scratch_def]
 QED
 
-Theorem ctor_checked_complex_head_bound[local]:
-  abi_decoder_members ce env sf tys tvs avs vs ==>
-  FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys) <=
-    LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs))
-Proof
-  strip_tac >> drule abi_decoder_members_relations >> strip_tac >>
-  drule abi_decoder_member_infos_layout >> strip_tac >>
-  `has_types (MAP (vyper_to_abi_type env) tys) avs` by fs[has_types_LIST_REL] >>
-  drule canonical_tuple_length >> strip_tac >>
-  gvs[Excl "enc_def"] >> decide_tac
-QED
-
 Theorem ctor_checked_complex_execute:
   LIST_REL (^C) tys tvs /\
   compile_abi_decode_to_buf dst src DLOAD hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
@@ -110,7 +99,7 @@ Proof
      Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def,
        not_fresh_at_def] >> metis_tac[]) >>
-  drule ctor_checked_complex_head_bound >> strip_tac >>
+  drule ctorDeployLoweringEntryMemberTheory.deploy_ctor_complex_head_bound >> strip_tac >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
     `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]
     ctor_checked_complex_guard_labels) >>

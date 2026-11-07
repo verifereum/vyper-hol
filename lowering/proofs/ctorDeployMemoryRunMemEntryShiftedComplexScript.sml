@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedComplex
 Ancestors
+  ctorDeployLoweringEntryMember
   ctorDeployMemoryRunMemEntryShiftedCheckedMembers ctorDeployMemoryRunMemEntryComplex
   ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier
   ctorDeployMemoryRunMemEntryCompositeSetup ctorDeployMemoryRunMemEntryWord
@@ -87,19 +88,6 @@ val Mk = ``\tys tvs.
  gas_path_mem ctx func initial 0 (OK actual) /\ actual.vs_gas_readings = initial.vs_gas_readings /\
  alloca_history func actual``;
 
-Theorem ctor_checked_members_run_from:
-  !tys tvs. LIST_REL (^Ck) tys tvs ==> (^Mk) tys tvs
-Proof
-  Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
-  simp_tac bool_ss [LIST_REL_def, ctor_checked_members_run_nil_from] >> strip_tac >>
-  rename1 `LIST_REL _ tys rest` >>
-  mp_tac (Q.INST [`ty` |-> `h`, `tv` |-> `h'`, `tvs` |-> `rest`]
-    ctor_checked_members_run_cons_from) >>
-  (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
-     first_x_assum irule >> BETA_TAC >> first_assum ACCEPT_TAC)) >>
-  simp_tac bool_ss []
-QED
-
 Theorem ctor_checked_complex_alloca_transport_from[local]:
   abi_decoder_address_frame next s t ==>
   (alloca_inv t = alloca_inv s) /\
@@ -109,18 +97,6 @@ Proof
   simp[abi_decoder_address_frame_def] >> strip_tac >>
   simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
        alloca_frontier_inv_from_def, remaining_alloca_budget_def, ctor_actual_scratch_def]
-QED
-
-Theorem ctor_checked_complex_head_bound[local]:
-  abi_decoder_members ce env sf tys tvs avs vs ==>
-  FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys) <=
-    LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs))
-Proof
-  strip_tac >> drule abi_decoder_members_relations >> strip_tac >>
-  drule abi_decoder_member_infos_layout >> strip_tac >>
-  `has_types (MAP (vyper_to_abi_type env) tys) avs` by fs[has_types_LIST_REL] >>
-  drule canonical_tuple_length >> strip_tac >>
-  gvs[Excl "enc_def"] >> decide_tac
 QED
 
 Theorem ctor_checked_complex_execute_from:
@@ -166,7 +142,7 @@ Proof
      Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def,
        not_fresh_at_def] >> metis_tac[]) >>
-  drule ctor_checked_complex_head_bound >> strip_tac >>
+  drule ctorDeployLoweringEntryMemberTheory.deploy_ctor_complex_head_bound >> strip_tac >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
     `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]
     ctor_checked_complex_guard_labels) >>
@@ -194,7 +170,7 @@ Proof
   `frag_ids middle final SUBSET ids` by
     (qpat_x_assum `LIST_REL _ _ _` kall_tac >>
      gvs[frag_ids_def, SUBSET_DEF, IN_COUNT, IN_DIFF] >> decide_tac) >>
-  drule ctor_checked_members_run_from >>
+  drule ctorDeployLoweringEntryMemberTheory.deploy_ctor_members_run >>
   disch_then (mp_tac o SIMP_RULE bool_ss [MAP, SUM, APPEND, ADD_CLAUSES] o
     Q.INST [`st` |-> `middle`, `initial` |-> `prepared:venom_state`,
       `pretys` |-> `[]`, `pretvs` |-> `[]`, `preavs` |-> `[]`, `prevs` |-> `[]`] o SPEC_ALL o BETA_RULE) >>
@@ -229,29 +205,6 @@ Proof
            eval_operand_def, GSYM not_fresh_at_def]) >> metis_tac[]) >>
   conj_tac >- metis_tac[abi_decode_sim_trans] >>
   metis_tac[gas_path_mem_then, ADD_0]
-QED
-
-Theorem ctor_checked_tuple_run_from:
-  LIST_REL (^Ck) tys tvs ==> (^Ck) (TupleT tys) (TupleTV tvs)
-Proof
-  strip_tac >> BETA_TAC >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_to_vyper env (TupleT tys) av = SOME v` by fs[abi_decoder_metadata_def] >>
-  drule abi_decoder_tuple_values >> strip_tac >>
-  qpat_x_assum `av = ListV _` SUBST_ALL_TAC >>
-  qpat_x_assum `v = ArrayV _` SUBST_ALL_TAC >>
-  drule_all abi_decoder_tuple_members >> strip_tac >>
-  `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
-    (simp[Once type_memory_bytes_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
-    (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
-  `vyper_to_abi_type env (TupleT tys) = Tuple (MAP (vyper_to_abi_type env) tys)` by
-    simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
-  mp_tac (Q.INST [`final` |-> `st'`,
-    `dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields) tys`] ctor_checked_complex_execute_from) >>
-  (impl_tac >- (NO_STRIP_FULL_SIMP_TAC bool_ss [vyper_to_abi_types_MAP] >>
-    first_assum ACCEPT_TAC)) >>
-  strip_tac >> qexists `actual` >> asm_simp_tac bool_ss [val_in_memory_tuple]
 QED
 
 val Cdesc = ``(\env sf. ^Ck) (env \\ nsid) (sf \\ nsid_to_string nsid)``;
@@ -295,31 +248,3 @@ Proof
   qexists `actual` >> asm_simp_tac bool_ss [val_in_memory_struct]
 QED
 
-Theorem ctor_checked_fixed_array_run_from:
- (^Ck) ty tv ==> (^Ck) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
-Proof
- strip_tac >> simp_tac bool_ss [] >> rpt gen_tac >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
- drule_all abi_decoder_fixed_array_values >> strip_tac >>
- gnvs[Once vyper_to_abi_type_def, canonical_array_tuple, Excl "enc_def"] >>
- qpat_assum `LENGTH vs = LENGTH avs`
-   (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th]) >> assume_tac th) >>
- `type_memory_bytes ce (ArrayT ty (Fixed (LENGTH vs))) =
-   LENGTH vs * type_memory_bytes ce ty` by simp[Once type_memory_bytes_def] >>
- qpat_assum `type_memory_bytes ce (ArrayT ty (Fixed (LENGTH vs))) = _`
-   (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
- `LIST_REL (^Ck) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)` by
-   (simp_tac bool_ss [LIST_REL_REPLICATE_same] >> BETA_TAC >>
-    strip_tac >> first_assum ACCEPT_TAC) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
-   (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
- qpat_x_assum `LIST_REL _ _ _` (assume_tac o BETA_RULE) >>
- drule_all (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
-   (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,
-     `tvs` |-> `REPLICATE (LENGTH vs) tv`] (BETA_RULE ctor_checked_complex_execute_from))) >>
- disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
- qexists `actual` >>
- qpat_x_assum `LENGTH vs = LENGTH avs` (fn th => rewrite_tac[GSYM th]) >>
- asm_simp_tac bool_ss [Once type_memory_bytes_def] >>
- irule abi_decoder_fixed_array_memory >> asm_simp_tac bool_ss []
-QED

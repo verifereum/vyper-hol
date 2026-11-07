@@ -1,6 +1,7 @@
 (* Actual constructor index slots above a reserved-memory frontier. *)
 Theory ctorDeployMemoryRunMemEntryShiftedIndex
 Ancestors
+  ctorDeployLoweringEntryAllocation ctorDeployLoweringEntryArrayFrame
   ctorDeployMemoryRunMemEntryShiftedAlloc ctorDeployMemoryRunMemEntryShiftedFrame
   ctorDeployMemoryFrontier ctorDeployMemoryRunMemEntryShiftedObservation
   ctorAbiActualAlloc ctorAbiActualArrayEntry ctorAbiActualFrame ctorAbiActualMemory
@@ -40,7 +41,7 @@ Proof
   >- (drule_all actual_word_alloca_fresh_run_from >> strip_tac >>
       `alloca_inv t` by (irule actual_alloca_slots_preserved >> metis_tac[]) >>
       `alloca_frontier_inv_from k ctx fn site t` by
-        (irule actual_alloca_frontier_preserved_from >> metis_tac[]) >>
+        (irule ctorDeployLoweringEntryAllocationTheory.deploy_ctor_alloca_frontier_preserved >> metis_tac[]) >>
       qexistsl [`t`, `s.vs_alloca_next`] >>
       simp[FLOOKUP_UPDATE] >>
       conj_tac
@@ -56,21 +57,10 @@ Proof
   disch_then (qspec_then `[]` strip_assume_tac) >>
   `alloca_inv t` by (irule actual_alloca_slots_preserved >> metis_tac[]) >>
   `alloca_frontier_inv_from k ctx fn site t` by
-    (irule actual_alloca_frontier_preserved_from >> metis_tac[]) >>
+    (irule ctorDeployLoweringEntryAllocationTheory.deploy_ctor_alloca_frontier_preserved >> metis_tac[]) >>
   qexistsl [`t`, `x0`] >> simp[] >>
   conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   irule abi_encoder_registered_update_var
-QED
-
-Theorem ctor_actual_index_slot_bound_from:
-  alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
-  k + unit_alloca_budget ctx < dimword (:256) /\
-  FLOOKUP s.vs_allocas id = SOME (p,32) ==>
-  p < dimword (:256)
-Proof
-  strip_tac >> drule_all alloca_frontier_inv_from_word_bound >> strip_tac >>
-  `p+32 <= s.vs_alloca_next` by
-    (gvs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >> decide_tac
 QED
 
 Theorem ctor_actual_index_sequence_from:
@@ -102,7 +92,7 @@ Proof
   drule_all ctor_actual_word_alloca_run_from >>
   disch_then (qspec_then `outs` strip_assume_tac) >>
   rename1 `step_inst_base inst s = OK allocated` >>
-  `p < dimword (:256)` by (irule ctor_actual_index_slot_bound_from >> metis_tac[mk_inst_def]) >>
+  `p < dimword (:256)` by (irule ctorDeployLoweringEntryAllocationTheory.deploy_ctor_index_slot_bound >> metis_tac[mk_inst_def]) >>
   `run_inst_seq (emitted_insts st st') s = OK (mstore p 0w allocated)` by
     (qpat_x_assum `step_inst_base inst s = OK allocated` mp_tac >>
      simp_tac bool_ss [Abbr `inst`] >> strip_tac >>
@@ -239,18 +229,6 @@ Proof
   goal_assum (drule_at Any) >> qexists `p` >> simp[]
 QED
 
-Theorem ctor_actual_array_allocation_state_from[local]:
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next ==>
-  (alloca_inv t <=> alloca_inv s) /\
-  (alloca_frontier_inv_from k ctx func site t <=> alloca_frontier_inv_from k ctx func site s) /\
-  (ctor_actual_scratch func ids D N t <=> ctor_actual_scratch func ids D N s)
-Proof
-  strip_tac >>
-  simp_tac bool_ss [alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-    alloca_frontier_inv_from_def, remaining_alloca_budget_def, ctor_actual_scratch_def] >>
-  asm_rewrite_tac[]
-QED
-
 Theorem ctor_actual_array_header_index_entry_from:
   abi_decode_array_header dst src DLOAD st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
@@ -285,7 +263,7 @@ Proof
   rename1 `abi_decode_sim ctx func initial header` >>
   `alloca_inv header /\ alloca_frontier_inv_from k ctx func site header /\
     ctor_actual_scratch func ids D N header /\ D+N <= header.vs_alloca_next` by
-    metis_tac[ctor_actual_array_allocation_state_from] >>
+    metis_tac[ctorDeployLoweringEntryArrayFrameTheory.deploy_ctor_array_allocation_state] >>
   `mload d header = n2w (LENGTH vs)` by fs[mem_word_at_eq_mload] >>
   `header_st.cs_next_var < limit_st.cs_next_var` by decide_tac >>
   drule_all ctor_actual_array_index_entry_from >>

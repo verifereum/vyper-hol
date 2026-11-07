@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedRegistration
 Ancestors
+  ctorDeployLoweringEntryAddress ctorDeployLoweringEntryDecoder
  ctorDeployMemoryRunMemEntryRegistration ctorDeployMemoryRunMemEntryShiftedRecursive
  ctorArgDecode ctorRegisterArgs
  ctorDeployMemoryRunMemEntryShiftedAlloc ctorDeployMemoryRunMemEntryShiftedFrame
@@ -75,7 +76,7 @@ Proof
  `ctor_actual_scratch func (frag_ids st st') 0 initial.vs_alloca_next initial` by
    (simp_tac bool_ss [ctor_actual_scratch_def, frag_ids_def, GSPECIFICATION] >>
     rpt strip_tac >> res_tac >> gvs[]) >>
- drule (BETA_RULE ctor_checked_coherent_run_from) >>
+ drule (BETA_RULE ctorDeployLoweringEntryDecoderTheory.deploy_ctor_coherent_run) >>
  disch_then (drule_at Any) >>
  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
  disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
@@ -211,7 +212,7 @@ Proof
     metis_tac[LESS_EQ_TRANS]) >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_blocks = middle.cs_blocks` by asm_rewrite_tac[] >>
- drule_all ctor_checked_arg_decoder_code_phase >>
+ drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
  `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
    (asm_rewrite_tac[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
@@ -303,7 +304,7 @@ Proof
  `st.cs_blocks = middle.cs_blocks` by simp[] >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_next_id <= middle.cs_next_id` by simp[] >>
- drule_all ctor_checked_arg_decoder_code_phase >>
+ drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
  drule ctor_checked_arg_add_reach >> simp_tac (srw_ss()) [eval_operand_def] >>
  disch_then drule_all >>
@@ -395,7 +396,7 @@ Proof
    (imp_res_tac ctor_checked_arg_emit_shape >> simp[] >> decide_tac) >>
  `cs_extends st m2 /\ cs_extends st middle` by metis_tac[cs_extends_trans] >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
- drule_all ctor_checked_arg_decoder_code_phase >>
+ drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
  `fn_has_code st m1 func /\ fn_has_code m1 m2 func /\ fn_has_code m2 middle func` by
    metis_tac[fn_has_code_split, cs_extends_trans] >>

@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryArrayFiniteWorld
 Ancestors
+  ctorDeployLoweringEntryAllocation
   ctorDeployMemoryRunMemEntryShiftedArrayClosure ctorDeployMemoryRunMemEntrySequenceWorld
   ctorDeployMemoryRunMemEntryArrayEntryWorld ctorDeployMemoryRunMemEntryCheckedComplexWorld
   ctorDeployMemoryRunMemEntryCompositeEdges
@@ -337,7 +338,7 @@ Proof
   qpat_assum `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>
   `slot < dimword (:256)` by
-    (drule_all ctor_actual_index_slot_bound_from >> simp[]) >>
+    (drule_all ctorDeployLoweringEntryAllocationTheory.deploy_ctor_index_slot_bound >> simp[]) >>
   drule_all ctor_actual_sites_scratch >> strip_tac >>
   `venomMemDefs$regions_disjoint (d,outsz) (slot,32)` by
     (irule ctor_actual_region_contained >> qexistsl [`D`, `N`] >> simp[]) >>

@@ -35,25 +35,3 @@ val Ck = ``\ty tv.
  gas_path_mem ctx func initial 0 (OK actual) /\ actual.vs_gas_readings = initial.vs_gas_readings /\
  alloca_history func actual``;
 
-Theorem ctor_checked_coherent_run_from:
- !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^Ck) ty tv
-Proof
- qabbrev_tac `P = \ce env sf. (^Ck)` >>
- `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
-   simp[Abbr `P`] >>
- ho_match_mp_tac abi_decoder_coherent_ind >>
- conj_tac
- >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-     MATCH_ACCEPT_TAC (BETA_RULE ctor_checked_base_run_from)) >>
- conj_tac
- >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-     MATCH_ACCEPT_TAC (BETA_RULE ctor_checked_flag_run_from)) >>
- conj_tac
- >- (rpt gen_tac >> strip_tac >> FULL_SIMP_TAC bool_ss [Abbr `P`] >>
-     match_mp_tac (BETA_RULE ctor_checked_array_run_from) >> first_assum ACCEPT_TAC) >>
- conj_tac
- >- (rpt gen_tac >> strip_tac >> FULL_SIMP_TAC bool_ss [Abbr `P`] >>
-     match_mp_tac (BETA_RULE ctor_checked_tuple_run_from) >> first_assum ACCEPT_TAC) >>
- rpt gen_tac >> strip_tac >> FULL_SIMP_TAC bool_ss [Abbr `P`] >>
- match_mp_tac (BETA_RULE ctor_checked_struct_run_from) >> asm_rewrite_tac[]
-QED

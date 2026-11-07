@@ -282,37 +282,6 @@ Proof
   gvs[]
 QED
 
-(* The memory twins' copy of ctorReturnFrame's local constructor_exit_code. *)
-Theorem constructor_exit_code_mem:
-  (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
-    st_exit = ((), st_epilogue) /\
-  (nr ==> ut) /\ st_exit.cs_current_insts = [] /\
-  compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
-  fn_has_code st_exit st_final func ==>
-  fn_has_code st_exit st_epilogue func /\
-  fn_has_code st_epilogue st_final func /\
-  ~block_is_terminated st_epilogue
-Proof
-  strip_tac >> drule optional_unlock_code >> simp[] >> strip_tac >>
-  `~block_is_terminated st_epilogue` by
-    (gvs[block_is_terminated_def] >> Cases_on `nr` >>
-     gvs[block_is_terminated_def, mk_inst_def, is_terminator_def]) >>
-  `cs_extends st_exit st_epilogue` by
-    (irule cs_extends_same_block >> Cases_on `nr` >> gvs[]) >>
-  `cs_extends st_epilogue st_final` by
-    (irule cs_extends_same_block >>
-     drule_all compile_constructor_epilogue_append >> strip_tac >>
-     simp[rich_listTheory.IS_PREFIX_APPEND] >>
-     qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
-     Cases_on `cap > 0` >>
-     simp[compile_constructor_epilogue_def, contextTheory.compile_alloc_buffer_def,
-          emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
-          emitHelperTheory.emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-     strip_tac >> gvs[]) >>
-  drule_all fn_has_code_split >> gvs[]
-QED
-
 (* The epilogue's instructions sit at the run's position in its block. *)
 Theorem constructor_epilogue_block_prefix[local]:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
@@ -353,7 +322,7 @@ Theorem constructor_exit_run_mem[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `nr ==> ut` by simp[] >>
-  drule_all constructor_exit_code_mem >> strip_tac >>
+  drule_all ctorReturnFrameTheory.constructor_exit_code >> strip_tac >>
   qabbrev_tac `es1 = if nr then
     es with tStorage := (cx.txn.target =+
       update_storage (n2w nkey) 0w (es.tStorage cx.txn.target)) es.tStorage
