@@ -5,6 +5,7 @@ Ancestors
   exprSimLiteralBuffer exprLoweringProps loweringSlice immutableMemoryFrame
   compileEnv venomState list finite_map loweringPosts emitHelperProps words
   bodyPtrBytestringBuiltinsExternalSlice venomExecSemantics venomInst
+  exprSimProps varsExt
 
 Theorem allocated_bytes_write_state_rel:
   stmt_state_rel ctx fn cenv cx es s /\
@@ -135,3 +136,46 @@ Proof
   irule allocated_bytes_write_locals_kept >> simp[] >>
   qexists_tac `N` >> simp[] >> first_assum ACCEPT_TAC
 QED
+
+Theorem calldata_size_bounds_semantic:
+  emit_op CALLDATASIZE [] sa = (limit,sm) /\
+  compile_assert_slice_bounds start (Lit (n2w n)) limit sm = ((),sb) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fresh_vars_wrt sa s /\
+  eval_operand start s = SOME (n2w a) /\
+  a < dimword (:256) /\ n < dimword (:256) /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata ==>
+  ?v q. run_inst_seq (emitted_insts sa sm) s = OK v /\
+    run_inst_seq (emitted_insts sm sb) v = OK q /\
+    q = s with vs_vars := q.vs_vars /\ vars_ext s q /\
+    stmt_state_rel ctx fn cenv cx es q /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op q = SOME w)
+Proof
+  strip_tac >> drule_all calldata_size_runtime >> strip_tac >>
+  `eval_operand start u = SOME (n2w a)` by
+    (qpat_assum `!op w. _` (qspec_then `start` mp_tac) >> simp[]) >>
+  `eval_operand (Lit (n2w n)) u = SOME (n2w n)` by simp[eval_operand_def] >>
+  drule_all slice_bounds_natural_runtime >> strip_tac >>
+  `run_inst_seq (emitted_insts sm sb) u = OK p` by fs[] >>
+  `p = s with vs_vars := p.vs_vars` by
+    (qpat_x_assum `p = u with vs_vars := _` mp_tac >> simp[update_var_def]) >>
+  `!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op w. eval_operand op u = SOME w ==> _` irule >>
+     qpat_x_assum `!op w. eval_operand op s = SOME w ==> _` irule >> simp[]) >>
+  suspend "frame"
+QED
+
+Resume calldata_size_bounds_semantic[frame]:
+  `vars_ext s p` by
+    (simp[vars_ext_def] >> simp[SUBMAP_FLOOKUP_EQN] >>
+     rpt strip_tac >>
+     qpat_x_assum `!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w`
+       (qspecl_then [`Var x`,`y`] mp_tac) >>
+     simp_tac std_ss [eval_operand_def, lookup_var_def] >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
+  `stmt_state_rel ctx fn cenv cx es p` by
+    (irule stmt_state_rel_vars_ext >> qexists_tac `s` >> simp[]) >>
+  qexistsl_tac [`u`,`p`] >> simp[] >> first_assum ACCEPT_TAC
+QED
+Finalise calldata_size_bounds_semantic
