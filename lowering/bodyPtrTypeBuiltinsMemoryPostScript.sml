@@ -84,3 +84,14 @@ Proof
        venomStateTheory.eval_operand_def] >> rpt strip_tac >>
   gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem memory_post_inst_idx:
+  expr_post ctx fn cenv cx e es sa sb s0 es1 v op
+    (s with vs_inst_idx := pc) <=>
+  expr_post ctx fn cenv cx e es sa sb s0 es1 v op s
+Proof
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       local_region_def, locals_kept_def]
+QED
