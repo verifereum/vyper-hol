@@ -207,6 +207,31 @@ Proof
   ASM_SET_TAC[]
 QED
 
+Theorem physical_live_native_live_assign_from_consumed:
+  !liveness dfg cfg fn lbl a y nl term ps.
+    MEM y nl /\
+    physical_live (FILTER (\v. v <> y) nl)
+      ((SND (reorder_plan dfg [Var a]
+        (SND (emit_one_input ASSIGN nl (Var a) ps)))) with ps_stack :=
+        stack_pop 1 (SND (reorder_plan dfg [Var a]
+          (SND (emit_one_input ASSIGN nl (Var a) ps)))).ps_stack) ==>
+    physical_live nl
+      (assign_region_step liveness dfg cfg fn lbl a y nl term ps)
+Proof
+  rpt strip_tac >>
+  drule_at (Pat `physical_live _ _`) physical_live_push_fresh >>
+  disch_then (qspec_then `y` mp_tac) >> simp[MEM_FILTER] >> strip_tac >>
+  `set (MAP Var (y::FILTER (\v. v <> y) nl)) = set (MAP Var nl)` by
+    (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  `physical_live nl (SND (lineage_regular_prepare dfg (canonical_assign a y) nl ps))` by
+    gvs[physical_live_def, native_assign_prepare_state, stack_push_def, SNOC_APPEND] >>
+  simp[assign_region_step_postprocess, canonical_assign_observe_def,
+    canonical_assign_def, mk_inst_def, popmany_plan_def] >>
+  irule physical_live_release_dead_spills >>
+  simp[physical_live_def] >> irule optimistic_swap_plan_lineage_inventory >>
+  gvs[physical_live_def, canonical_assign_def, mk_inst_def]
+QED
+
 Theorem physical_live_native_live_lastuse_assign:
   !liveness dfg cfg fn lbl a y nl term ps.
     ~MEM a nl /\ MEM y nl /\
@@ -228,15 +253,69 @@ Proof
      conj_tac
      >- (drule_all physical_live_emit_dead_source_available >> strip_tac >> simp[]) >>
      simp[physical_live_emit_dead_source]) >>
-  drule_at (Pat `physical_live _ _`) physical_live_push_fresh >>
-  disch_then (qspec_then `y` mp_tac) >> simp[MEM_FILTER] >> strip_tac >>
-  `set (MAP Var (y::FILTER (\v. v <> y) nl)) = set (MAP Var nl)` by
-    (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
-  `physical_live nl (SND (lineage_regular_prepare dfg (canonical_assign a y) nl ps))` by
-    gvs[physical_live_def, native_assign_prepare_state, stack_push_def, SNOC_APPEND] >>
-  simp[assign_region_step_postprocess, canonical_assign_observe_def,
-    canonical_assign_def, mk_inst_def, popmany_plan_def] >>
+  irule physical_live_native_live_assign_from_consumed >> simp[]
+QED
+
+Theorem reorder_plan_dup_singleton:
+  !dfg a ps d.
+    stack_peek d ps.ps_stack = Var a ==>
+    reorder_plan dfg [Var a] (SND (do_dup d ps)) =
+      ([], SND (do_dup d ps))
+Proof
+  rpt strip_tac >> irule reorder_plan_singleton_top >>
+  simp[do_dup_def] >> Cases_on `d <= 15` >> simp[stack_dup_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[stack_dup_def]
+QED
+
+Theorem physical_live_consume_live_source:
+  !dfg a nl live ps.
+    MEM a nl /\ MEM a live /\ physical_live live ps ==>
+    physical_live live
+      ((SND (reorder_plan dfg [Var a]
+        (SND (emit_one_input ASSIGN nl (Var a) ps)))) with ps_stack :=
+        stack_pop 1 (SND (reorder_plan dfg [Var a]
+          (SND (emit_one_input ASSIGN nl (Var a) ps)))).ps_stack)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `rs = SND (do_restore (Var a) ps)` >>
+  `physical_live live rs` by
+    (gvs[physical_live_def] >> simp[Abbr `rs`, do_restore_lineage_inventory]) >>
+  `MEM (Var a) rs.ps_stack` by
+    (Cases_on `FLOOKUP ps.ps_spilled (Var a)` >>
+     gvs[Abbr `rs`, do_restore_def, stack_push_def, SNOC_APPEND] >>
+     gvs[physical_live_explicit, FLOOKUP_DEF] >>
+     `MEM (Var a) (MAP Var live)` by simp[MEM_MAP] >> ASM_SET_TAC[]) >>
+  `IS_SOME (stack_get_depth (Var a) rs.ps_stack)` by
+    simp[stack_get_depth_is_some] >>
+  Cases_on `stack_get_depth (Var a) rs.ps_stack` >> gvs[] >>
+  `stack_peek x rs.ps_stack = Var a` by
+    metis_tac[stack_get_depth_props] >>
+  `SND (emit_one_input ASSIGN nl (Var a) ps) = SND (do_dup x rs)` by
+    (Cases_on `FLOOKUP ps.ps_spilled (Var a)` >>
+     gvs[emit_one_input_def, is_var_operand_def, Abbr `rs`, do_restore_def] >>
+     rpt (pairarg_tac >> gvs[])) >>
+  simp[reorder_plan_dup_singleton] >>
+  gvs[physical_live_def] >> irule do_dup_consume_lineage_inventory >> simp[]
+QED
+
+Theorem physical_live_native_dead_output_live_source_assign:
+  !liveness dfg cfg fn lbl a y nl term ps.
+    a <> y /\ MEM a nl /\ ~MEM y nl /\ physical_live nl ps ==>
+    physical_live nl
+      (assign_region_step liveness dfg cfg fn lbl a y nl term ps)
+Proof
+  rpt strip_tac >> simp[native_dead_assign_state] >>
   irule physical_live_release_dead_spills >>
-  simp[physical_live_def] >> irule optimistic_swap_plan_lineage_inventory >>
-  gvs[physical_live_def, canonical_assign_def, mk_inst_def]
+  irule physical_live_consume_live_source >> simp[] >> metis_tac[]
+QED
+
+Theorem physical_live_native_live_output_live_source_assign:
+  !liveness dfg cfg fn lbl a y nl term ps.
+    a <> y /\ MEM a nl /\ MEM y nl /\
+    physical_live (FILTER (\v. v <> y) nl) ps ==>
+    physical_live nl
+      (assign_region_step liveness dfg cfg fn lbl a y nl term ps)
+Proof
+  rpt strip_tac >> irule physical_live_native_live_assign_from_consumed >> simp[] >>
+  irule physical_live_consume_live_source >> simp[MEM_FILTER] >> metis_tac[]
 QED

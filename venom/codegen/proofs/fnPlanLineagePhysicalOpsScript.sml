@@ -212,3 +212,19 @@ Proof
   strip_tac >> qexistsl [`m`, `rest`] >> simp[] >>
   gvs[EVERY_MEM] >> metis_tac[]
 QED
+
+(* Transient duplication is not a distinct-core state.  Consumption of its
+   new top copy recovers the original exact inventory, even for deep DUP. *)
+Theorem do_dup_consume_lineage_inventory:
+  !S ps d.
+    lineage_inventory S ps ==>
+    lineage_inventory S
+      ((SND (do_dup d ps)) with ps_stack :=
+        stack_pop 1 (SND (do_dup d ps)).ps_stack)
+Proof
+  rpt strip_tac >> Cases_on `d <= 15` >>
+  simp[do_dup_def] >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[lineage_inventory_def, lineage_core_def, stack_dup_def, SNOC_APPEND,
+    stack_pop_def, rich_listTheory.TAKE_APPEND, rich_listTheory.TAKE_TAKE,
+    TAKE_LENGTH_TOO_LONG] >> metis_tac[]
+QED

@@ -131,3 +131,21 @@ state identity reuses it. No duplicate implementation proof was retained.
 `physical_live_push_fresh` and `optimistic_swap_plan_lineage_inventory` are
 exported general boundaries. Arbitrary persistent spills remain allowed.
 Evidence: TO_lineage_after_fix-20261106T221649Z_m12946_t001.
+
+## Still-live source transient consumption checked (2026-11-07)
+
+`do_dup_consume_lineage_inventory` recovers the original inventory after
+popping the newly appended duplicate, including deep DUP and arbitrary
+persistent spills. `reorder_plan_dup_singleton` establishes that singleton
+reorder is identity on that new top occurrence. The intermediate duplicated
+stack is never claimed to have a distinct core.
+
+`physical_live_consume_live_source` composes restoration, duplication,
+identity reorder and immediate consumption. The two native end-to-end
+corollaries cover dead output and fresh live output with `MEM a nl` and
+`a <> y`, exactly as requested. Fresh-output push, optimistic inventory and
+release are factored once in `physical_live_native_live_assign_from_consumed`,
+now also used by the existing last-use live-output theorem.
+No new imported external copies or admissions. This is local conservation,
+not optimistic-query shielding or the frozen block replay theorem.
+Evidence: TO_lineage_after_fix-20261106T221649Z_m12981_t001.
