@@ -6,6 +6,7 @@ Ancestors
   extRetBytesCopyCountedPtr extRetBulkCopyCountedPtr fragGasSeqPtr fragGasPathPtr
   bodyPtrDefs venomExecSemantics venomState abiDecoderIndexInit
   valueEncodingProps abiStaticAggregateProps arithmetic pred_set
+  extRetRobustSourceChildrenPtr representationCleanPtr abiDecoderBulk
 
 Definition source_array_static_prefix_def:
   source_array_static_prefix dst src =
@@ -373,4 +374,68 @@ Proof
      simp[mload_def]) >>
   simp[eval_operand_def] >>
   simp[mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem source_array_static_prefix_robust_counted_ptr:
+  source_array_static_prefix (Var dst) (Var src) sa = ((Var ip,Var cv),sp) /\
+  fn_has_code sa sp fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s scap /\ 32 <= scap /\
+  lookup_var dst s = SOME b /\ ptr_covers G tn dst s dcap /\ 32 <= dcap /\
+  FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas sa.cs_next_id =
+    SOME (addr,32) /\ addr+32 < dimword(:256) /\
+  (w2n a+scap <= addr \/ addr+32 <= w2n a) /\
+  (w2n b+dcap <= addr \/ addr+32 <= w2n b) /\
+  (w2n a+scap <= w2n b \/ w2n b+dcap <= w2n a) /\
+  type_memory_size (ArrayTV tv (Dynamic maxn)) <= scap /\
+  value_has_type (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) /\
+  LENGTH avs = LENGTH vs /\
+  (!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) (w2n a) mem') ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sp.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sp.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var ip sf = SOME (n2w addr) /\ ptr_covers Gf tnf ip sf 32 /\
+    mload addr sf = 0w /\
+    (!i. addr <= i /\ i < addr+32 ==> i NOTIN tnf.t_mem) /\
+    lookup_var cv sf = SOME (n2w (LENGTH avs)) /\
+    op_taint tnf (Var cv) = {} /\ op_prov Gf (Var cv) = NONE /\
+    lookup_var src sf = SOME a /\ ptr_covers Gf tnf src sf scap /\
+    lookup_var dst sf = SOME b /\ ptr_covers Gf tnf dst sf dcap /\
+    mem_bytes_at (w2n b) 32 sf.vs_memory = word_to_bytes (n2w (LENGTH avs):bytes32) T /\
+    (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem) /\
+    sf.vs_allocas = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas /\
+    sf.vs_alloca_next = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_alloca_next /\
+    sf.vs_fmp = (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_fmp /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!i. ~(addr <= i /\ i < addr+32) /\ ~(w2n b <= i /\ i < w2n b+32) ==>
+      mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
+      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) (w2n a) mem')
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
+    mem_word_at (w2n a) mem' = n2w (LENGTH vs)` by
+    (drule robust_dynamic_source_length >> simp[]) >>
+  `!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem` by
+    (drule robust_mem_word_at_clean >> simp[]) >>
+  `mload (w2n a) s = n2w (LENGTH avs)` by
+    (simp[GSYM mem_word_at_eq_mload] >>
+     first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  drule_all source_array_static_prefix_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
+  conj_tac >- simp[abiEncoderMemoryTheory.abi_encoder_word_window] >>
+  rpt strip_tac >> irule robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
+  conj_tac >- (drule valueTypingMemoryPropsTheory.value_has_type_memory_wf >> simp[]) >>
+  qexistsl_tac [`s.vs_memory`, `sf.vs_memory`, `tn.t_mem`, `tnf.t_mem`,
+    `{i | addr <= i /\ i < addr+32} UNION {i | w2n b <= i /\ i < w2n b+32}`] >>
+  simp[loweringPostsTheory.val_footprint_def] >> rpt strip_tac >> decide_tac
 QED
