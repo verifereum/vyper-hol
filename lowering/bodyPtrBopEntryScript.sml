@@ -70,3 +70,39 @@ Proof
   simp[fn_has_code_def, same_blocks_def] >> strip_tac >>
   gvs[IS_PREFIX_APPEND] >> simp[DROP_APPEND]
 QED
+
+(* Rebase an already established child entry across a target-only prefix.
+   The source state, source action and admissibility obligation are unchanged. *)
+Theorem bop_operand_entry_transport:
+  bop_operand_entry d ctx func cenv cx e es ca cz op s G tn /\
+  cs_extends ca cb /\ cs_extends cb cz /\
+  ca.cs_next_var <= cb.cs_next_var /\
+  stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es H un t /\
+  ~t.vs_halted /\ t.vs_current_bb = cb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH cb.cs_current_insts ==>
+  bop_operand_entry d ctx func cenv cx e es cb cz op t H un
+Proof
+  simp[bop_operand_entry_def] >> strip_tac >> simp[] >> rpt conj_tac
+  >- metis_tac[fn_has_code_mid, cs_extends_refl]
+  >- metis_tac[local_ptrs_reserved_next_var]
+  >- metis_tac[not_fresh_at_mono] >>
+  metis_tac[not_fresh_at_mono]
+QED
+
+Theorem bop_operand_saved_scalar:
+  bop_operand_post d ctx func cenv cx e es ca cb op s G tn v ee t H un /\
+  eval_operand h s = SOME digest /\ op_prov G h = NONE /\ op_taint tn h = {} /\
+  (!z. h = Var z ==> not_fresh_at ca z) /\ (!l. h <> Label l) /\
+  ca.cs_next_var <= cb.cs_next_var ==>
+  eval_operand h t = SOME digest /\ op_prov H h = NONE /\ op_taint un h = {} /\
+  (!z. h = Var z ==> not_fresh_at cb z) /\ (!l. h <> Label l)
+Proof
+  simp[bop_operand_post_def] >> strip_tac >>
+  `eval_operand h t = SOME digest` by
+    (irule eval_operand_frame >> conj_tac >- simp[] >>
+     qexistsl_tac [`ca`, `s`] >> simp[] >>
+     metis_tac[loweringPostsTheory.expr_post_def]) >>
+  Cases_on `h` >> gvs[ptrDisciplineTheory.op_prov_def,
+    ptrDisciplineTheory.op_taint_def, ghost_kept_def] >>
+  metis_tac[not_fresh_at_mono]
+QED

@@ -1,6 +1,7 @@
 Theory bodyPtrBopHashSuffix
 Ancestors
   bodyPtrBopHashFrame bodyPtrBopHashCompile bodyPtrBopHashSequence
+  bodyPtrHashBuiltinsGhostFrame
   exprSimHash exprLoweringProps venomExecSemantics venomInst
   venomState finite_map exprLowering emitHelper compileEnv emitHelperProps
   rich_list fragExec codegenRel instIdxIndep fragGasPathPtr arithmetic ptrDiscipline
@@ -273,4 +274,63 @@ Proof
   qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn _ _ _ _ _` mp_tac >>
   qpat_x_assum `gas_path_ptr _ _ _ _ _ G' tn' _ _ _ _ _` mp_tac >>
   simp[arithmeticTheory.ADD_ASSOC]
+QED
+
+(* The hash endpoint carries the complete ghost invariant, not just the
+   memory-taint projection. Cursor transport is done only after framing. *)
+Theorem bop_hash_compile_endpoint:
+  compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
+  fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sc /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  expr_val_at cenv cx ty sa sb es v (Var p) s /\
+  ptr_val_ok cx ty v (Var p) G tn s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  lookup_var p s = SOME w /\
+  ((?bs. v = BytesV bs /\ LENGTH bs < dimword(:256) /\
+       tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
+   (?str. v = StringV str /\ LENGTH str < dimword(:256))) /\
+  run_inst_seq (emitted_insts sc sd) s = OK t ==>
+  ?H un.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H un
+      (OK (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
+    ghost_inv d cenv cx es H un (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
+    stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
+    ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
+    local_ptrs_reserved cenv sd /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sd x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sd x) /\
+    ghost_kept cenv es sc G tn s H un /\
+    op_prov H op = NONE /\ op_taint un op = {} /\
+    un.t_imm = tn.t_imm /\ un.t_mem = tn.t_mem /\
+    un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\
+    (!x. not_fresh_at sc x ==>
+      lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ FLOOKUP un.t_var x = FLOOKUP tn.t_var x)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bop_hash_compile_ptr_full >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  drule_all bop_hash_compile_readonly >> strip_tac >>
+  drule_all bop_hash_compile_run_frame >> strip_tac >>
+  drule bop_hash_compile_layout >> strip_tac >>
+  `ghost_inv d cenv cx es G' tn' t` by
+    (irule hash_readonly_ghost_inv >>
+     qexistsl_tac [`G`, `s`, `sc`, `tn`] >> simp[op_taint_def]) >>
+  `stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sd.cs_current_insts)` by
+    (irule bop_hash_compile_state_rel >> metis_tac[]) >>
+  `local_ptrs_reserved cenv sd` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sc` >> simp[]) >>
+  `ghost_kept cenv es sc G tn s G' tn'` by
+    (irule hash_ghost_kept_frame >> simp[op_taint_def]) >>
+  `!x. not_fresh_at sc x ==> not_fresh_at sd x` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `LENGTH sd.cs_current_insts = s.vs_inst_idx + 3` by simp[] >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[hash_ghost_inv_inst_idx] >>
+  qpat_x_assum `(t with vs_vars := _) = s` mp_tac >>
+  simp[venom_state_component_equality] >> metis_tac[]
 QED
