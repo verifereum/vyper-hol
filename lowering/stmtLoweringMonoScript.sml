@@ -282,7 +282,8 @@ val range_ci_step =
                 ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
                 ci_mono_stmt_rws
       val close = FIRST (map MATCH_ACCEPT_TAC
-        (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
+        (ci_mono_emit_op :: ci_mono_emit_void :: ci_mono_emit_inst ::
+         List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
   in
     FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
            MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,
