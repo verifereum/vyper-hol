@@ -1106,3 +1106,90 @@ Proof
      gvs[] >> metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]) >>
   metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]
 QED
+
+Theorem native_inst_prefix_phi_member:
+  !lv dfg cfg fn label halt n len xs ps k qs.
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps k qs ==>
+    !v. MEM (Var v) ps.ps_stack /\
+      (!i. i < k ==> (EL i xs).inst_opcode = PHI /\
+        ~MEM (Var v) (EL i xs).inst_operands /\
+        v <> HD (EL i xs).inst_outputs) ==>
+      MEM (Var v) qs.ps_stack
+Proof
+  ho_match_mp_tac native_inst_prefix_ind >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `k < LENGTH xs` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k xs` by metis_tac[listTheory.HD_DROP, listTheory.HD] >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ mid = SOME (ops,final)` >>
+  `MEM (Var v) mid.ps_stack` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     `i < SUC k` by decide_tac >> metis_tac[]) >>
+  qpat_x_assum `!i. i < SUC k ==> _` (qspec_then `k` mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[stackPlanGenTheory.generate_inst_plan_def,
+      stackPlanGenTheory.is_pre_codegen_opcode_def] >>
+  drule_at (Pat `generate_phi_plan _ _ _ _ = _`)
+    fnPlanLineagePhiResourcesTheory.generate_phi_plan_other_elem_mem >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
+
+(* The real unexecuted tail remains in xs, so worker liveness arguments do
+   not change when selecting a prefix. Initial candidates are local inputs. *)
+Theorem ready_native_phi_prefix_candidate:
+  !lv dfg cfg fn label halt n len xs ps k qs bb visited tail j v db di.
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps k qs /\
+    xs = collect_phis bb.bb_instructions ++ tail /\
+    phi_block_ready lv bb /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+    ~MEM bb.bb_label visited /\ EVERY inst_wf bb.bb_instructions /\
+    MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM db.bb_label visited /\ MEM v di.inst_outputs /\
+    k <= j /\ j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+    MEM (Var v) ps.ps_stack ==>
+    MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >> drule native_inst_prefix_phi_member >>
+  disch_then (qspec_then `v` irule) >> simp[] >>
+  qx_gen_tac `i` >> strip_tac >>
+  `i < j /\ i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `EL i xs = EL i (collect_phis bb.bb_instructions)` by
+    simp[rich_listTheory.EL_APPEND1] >>
+  `MEM (EL i (collect_phis bb.bb_instructions)) bb.bb_instructions /\
+   (EL i (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
+    metis_tac[livenessProofsTheory.collect_phis_mem, listTheory.EL_MEM] >>
+  `inst_wf (EL i (collect_phis bb.bb_instructions))` by
+    metis_tac[listTheory.EVERY_MEM] >>
+  `~MEM (Var v) (EL i (collect_phis bb.bb_instructions)).inst_operands` by
+    metis_tac[fnPlanLineageLivenessTheory.ready_phi_later_operand_isolated] >>
+  `v <> HD (EL i (collect_phis bb.bb_instructions)).inst_outputs` by
+    (`(EL i (collect_phis bb.bb_instructions)).inst_outputs <> []` by
+       (fs[venomWfTheory.inst_wf_def] >>
+        Cases_on `(EL i (collect_phis bb.bb_instructions)).inst_outputs` >> gvs[]) >>
+     drule_all visited_definition_fresh_block_head_output >> simp[]) >>
+  gvs[]
+QED
+
+Theorem ready_native_phi_prefix_selection:
+  !lv dfg cfg fn label halt n len xs ps k qs bb visited tail j v db di.
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps k qs /\
+    xs = collect_phis bb.bb_instructions ++ tail /\
+    phi_block_ready lv bb /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+    ~MEM bb.bb_label visited /\ EVERY inst_wf bb.bb_instructions /\
+    MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM db.bb_label visited /\ MEM v di.inst_outputs /\
+    k <= j /\ j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+    MEM (Var v) ps.ps_stack ==>
+    ?d w.
+      stack_get_phi_depth
+        (FILTER is_var_operand (EL j (collect_phis bb.bb_instructions)).inst_operands)
+        qs.ps_stack = SOME d /\
+      stack_peek d qs.ps_stack = Var w /\
+      MEM (Var w) (EL j (collect_phis bb.bb_instructions)).inst_operands
+Proof
+  rpt strip_tac >> drule_all ready_native_phi_prefix_candidate >> strip_tac >>
+  irule fnPlanLineagePhiInventoryTheory.phi_selection_from_present_operand >>
+  qexists_tac `v` >> simp[]
+QED
