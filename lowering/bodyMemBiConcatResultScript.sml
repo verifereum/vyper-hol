@@ -1,6 +1,7 @@
 (* The source continuation after concat's operand-list evaluation. *)
 Theory bodyMemBiConcatResult
 Ancestors
+  protectedAllocationFrame bodyMemBiConcatPost
   bodyMemBiConcatArgs bodyMemBiConcatPrefix bodyMemBiConcatFragments
   bodyMemBiECRecoverCompose exprSimConcatResult gasSummary gasOutcome
   fragGasMode fragGasPathMem exprSimMemDefs vyperState vyperValueOperation
