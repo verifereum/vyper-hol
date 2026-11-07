@@ -76,7 +76,7 @@ val mixed_allocation_success_schema = ``
     B = ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births /\
     (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP B owner = SOME site) /\
     ptr_mixed_vars B positions TG' b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
-    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt
+    ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt
 ``;
 
 (* Candidate integration interface ONLY; not a proved theorem. Old H entries
@@ -107,7 +107,7 @@ val mixed_allocation_immediate_prefix_schema = ``
     B = ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births /\
     (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP B owner = SOME site) /\
     ptr_mixed_vars B positions TG' b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
-    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
     ptr_paired_prefix R lp positions lo vs C C'
       (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
       tokens registry B PT TG' saved entries
