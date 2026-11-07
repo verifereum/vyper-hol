@@ -28,6 +28,7 @@
 Theory exprSimPopImmutableTarget
 Ancestors
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
+  abiEncoderMemory immutableValue immutableEncoding
   exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
   exprOperandVar exprSimWordArgs exprBopSimProps
@@ -2389,6 +2390,130 @@ Proof
   simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
        get_place_def, return_def] >>
   metis_tac[]
+QED
+
+Theorem immutable_value_bytes_rel_at:
+  !tv v bytes.
+    immutable_value_bytes_rel tv v bytes <=>
+    LENGTH bytes = type_memory_size tv /\
+    !i. i < type_memory_size tv /\ EL i (immutable_value_mask tv v) ==>
+        EL i bytes = EL i (encode_immutable_value tv v)
+Proof
+  rpt gen_tac >>
+  simp[immutableValueTheory.immutable_value_bytes_rel_def, listTheory.EVERY_EL] >>
+  Cases_on `LENGTH bytes = type_memory_size tv` >> simp[] >>
+  simp[listTheory.EL_ZIP, boolTheory.AND_IMP_INTRO]
+QED
+
+Theorem immutable_prefix_agreement[local]:
+  !n bs bytes.
+    LENGTH bs <= n /\ LENGTH bytes = n /\ TAKE (LENGTH bs) bytes = bs ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_mask_fit n (REPLICATE (LENGTH bs) T),
+            ZIP (bytes, immutable_fit n bs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[listTheory.EVERY_EL, listTheory.EL_ZIP, immutable_mask_fit_def,
+       immutable_fit_def] >> rpt strip_tac >>
+  gvs[listTheory.EL_TAKE, listTheory.EL_APPEND_EQN, rich_listTheory.EL_REPLICATE] >>
+  metis_tac[listTheory.EL_TAKE]
+QED
+
+Theorem immutable_memory_prefix_agreement[local]:
+  !cap bs off mem.
+    LENGTH bs <= cap /\ mem_bytes_at off (LENGTH bs) mem = bs ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_mask_fit cap (REPLICATE (LENGTH bs) T),
+            ZIP (mem_bytes_at off cap mem, immutable_fit cap bs)))
+Proof
+  rpt gen_tac >> strip_tac >> irule immutable_prefix_agreement >> simp[] >>
+  `cap = LENGTH bs + (cap - LENGTH bs)` by decide_tac >>
+  qpat_x_assum `cap = _` (fn th => once_rewrite_tac[th]) >>
+  simp[Once abi_encoder_mem_split, rich_listTheory.TAKE_LENGTH_APPEND]
+QED
+
+Theorem immutable_payload_memory_bytes[local]:
+  !cap bs off mem.
+    32 + LENGTH bs <= cap /\ mem_word_at off mem = n2w (LENGTH bs) /\
+    mem_bytes_at (off + 32) (LENGTH bs) mem = bs ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_mask_fit cap (REPLICATE (32 + LENGTH bs) T),
+            ZIP (mem_bytes_at off cap mem,
+                 immutable_fit cap (word_to_bytes (n2w (LENGTH bs):bytes32) T ++ bs))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all abi_encoder_bytes_source_prefix >> strip_tac >>
+  qspecl_then [`cap`, `word_to_bytes (n2w (LENGTH bs):bytes32) T ++ bs`,
+               `off`, `mem`] mp_tac immutable_memory_prefix_agreement >>
+  gvs[byteTheory.LENGTH_word_to_bytes, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem immutable_base_memory_bytes:
+  !bt v base mem.
+    immutable_value_admissible (BaseTV bt) v /\
+    val_in_memory (BaseTV bt) v base mem ==>
+    immutable_value_bytes_rel (BaseTV bt) v
+      (mem_bytes_at base (type_memory_size (BaseTV bt)) mem)
+Proof
+  Cases_on `bt` >> Cases_on `v` >>
+  gvs[immutable_value_admissible_def, AllCaseEqs()] >>
+  gvs[valueEncodingTheory.val_in_memory_def, immutable_value_bytes_rel_def,
+      immutable_value_mask_def, encode_immutable_value_def,
+      immutable_word_bytes_def, valueEncodingTheory.type_memory_size_def] >>
+  all_tac
+  >~ [`STRLEN text`]
+  >- (rpt strip_tac >>
+      mp_tac (Q.SPECL [`32 * word_size n + 32`, `MAP (n2w o ORD) text`,
+                      `base'`, `mem`] immutable_payload_memory_bytes) >>
+      simp[] >> mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >>
+      decide_tac) >>
+  all_tac
+  >~ [`BytesT bound`]
+  >- (Cases_on `bound` >>
+      gvs[valueEncodingTheory.type_memory_size_def] >>
+      rpt strip_tac
+      >- gvs[immutable_mask_fit_def, immutable_fit_def,
+             abi_encoder_word_window, byteTheory.LENGTH_word_to_bytes,
+             listTheory.TAKE_LENGTH_TOO_LONG, rich_listTheory.TAKE_APPEND,
+             immutable_mask_same_bytes] >>
+      irule (SRULE [arithmeticTheory.ADD_COMM] immutable_payload_memory_bytes) >> simp[] >>
+      mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >> decide_tac) >>
+  gvs[valueEncodingTheory.val_in_memory_def, immutable_value_bytes_rel_def,
+      immutable_value_mask_def, encode_immutable_value_def,
+      valueEncodingTheory.type_memory_size_def, immutable_mask_fit_def, immutable_fit_def,
+      immutable_word_bytes_def, valueEncodingTheory.typed_val_to_w256_def,
+      abi_encoder_word_window, rich_listTheory.TAKE_APPEND,
+      byteTheory.LENGTH_word_to_bytes, immutable_mask_same_bytes,
+      listTheory.TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem immutable_flag_memory_bytes:
+  !n v base mem.
+    immutable_value_admissible (FlagTV n) v /\
+    val_in_memory (FlagTV n) v base mem ==>
+    immutable_value_bytes_rel (FlagTV n) v
+      (mem_bytes_at base (type_memory_size (FlagTV n)) mem)
+Proof
+  Cases_on `v` >>
+  gvs[immutable_value_admissible_def, valueEncodingTheory.val_in_memory_def,
+      immutable_value_bytes_rel_def, immutable_value_mask_def,
+      encode_immutable_value_def, immutable_word_bytes_def,
+      valueEncodingTheory.type_memory_size_def, abi_encoder_word_window,
+      immutable_mask_fit_def, immutable_fit_def, rich_listTheory.TAKE_APPEND,
+      byteTheory.LENGTH_word_to_bytes, listTheory.TAKE_LENGTH_TOO_LONG,
+      immutable_mask_same_bytes, valueEncodingTheory.typed_val_to_w256_def]
+QED
+
+Theorem immutable_none_memory_bytes:
+  !v base mem.
+    immutable_value_admissible NoneTV v /\
+    val_in_memory NoneTV v base mem ==>
+    immutable_value_bytes_rel NoneTV v
+      (mem_bytes_at base (type_memory_size NoneTV) mem)
+Proof
+  simp[immutable_value_bytes_rel_def, immutable_value_mask_def,
+       valueEncodingTheory.type_memory_size_def, encode_immutable_value_def,
+       valueEncodingTheory.mem_bytes_at_def]
 QED
 
 (* RESIDUAL, FALSE as stated until ImmutablePlace reads get a popped
