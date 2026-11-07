@@ -13949,6 +13949,154 @@ Proof
   drule_all alias_occ_resident_bound >> simp[]
 QED
 
+Definition alias_occ_reduce_events_def:
+  (alias_occ_reduce_events 0 target_ops target_op f target_len ps = []) /\
+  (alias_occ_reduce_events (SUC fuel) target_ops target_op f target_len ps =
+    if f + 1 < target_len then [] else
+    case stack_get_unfixed_depth target_op f target_len ps.ps_stack of
+      NONE => []
+    | SOME dist => if dist <= 16 then [] else
+      case select_spill_candidate ps.ps_stack target_ops dist target_len of
+        NONE => []
+      | SOME cand =>
+        AliasOccPrimitive (AliasOccSpillAt cand) ::
+        alias_occ_reduce_events fuel target_ops target_op f target_len
+          (SND (do_spill_at cand ps)))
+End
+
+Theorem alias_occ_reduce_align:
+  !fuel ps s. alias_occ_align s ps ==>
+    alias_occ_align
+      (alias_occ_events_shadow
+        (alias_occ_reduce_events fuel target_ops target_op f target_len ps) s)
+      (SND (reduce_depth_plan fuel target_ops target_op f target_len ps))
+Proof
+  Induct >> simp[alias_occ_reduce_events_def, reduce_depth_plan_def,
+                alias_occ_events_shadow_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f + 1 < target_len` >> simp[alias_occ_events_shadow_def] >>
+  Cases_on `stack_get_unfixed_depth target_op f target_len ps.ps_stack` >>
+  simp[alias_occ_events_shadow_def] >>
+  rename1 `SOME dist` >> Cases_on `dist <= 16` >> simp[alias_occ_events_shadow_def] >>
+  Cases_on `select_spill_candidate ps.ps_stack target_ops dist target_len` >>
+  simp[alias_occ_events_shadow_def] >>
+  rename1 `SOME cand` >>
+  simp[alias_occ_events_shadow_def, alias_occ_event_shadow_def,
+       alias_occ_command_shadow_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `alias_occ_align (alias_occ_spill_at_inventory cand s) ps'` by
+    (drule alias_occ_spill_at_align >> disch_then (qspec_then `cand` mp_tac) >> simp[]) >>
+  first_x_assum (qspec_then `ps'` mp_tac) >> simp[]
+QED
+
+Theorem alias_occ_primitive_events:
+  !cmds s. alias_occ_events_shadow (MAP AliasOccPrimitive cmds) s =
+    alias_occ_commands_shadow cmds s
+Proof
+  Induct >> simp[alias_occ_events_shadow_def, alias_occ_commands_shadow_def,
+                alias_occ_event_shadow_def]
+QED
+
+Definition alias_occ_optimistic_commands_def:
+  alias_occ_optimistic_commands dfg inst live terminator ps =
+    if terminator then [] else
+    if inst.inst_outputs = [] then [] else
+    if live = [] then [] else
+    if operand_equiv dfg (Var (LAST inst.inst_outputs)) (Var (LAST live)) then [] else
+    case stack_get_depth (Var (LAST live)) ps.ps_stack of
+      NONE => [] | SOME dist => [AliasOccSwap dist]
+End
+
+Theorem alias_occ_optimistic_real:
+  alias_occ_commands_real (alias_occ_optimistic_commands dfg inst live terminator ps) ps =
+    SND (optimistic_swap_plan dfg inst live terminator ps)
+Proof
+  simp[alias_occ_optimistic_commands_def, optimistic_swap_plan_def] >>
+  Cases_on `terminator` >> simp[alias_occ_commands_real_def] >>
+  Cases_on `inst.inst_outputs = []` >> simp[alias_occ_commands_real_def] >>
+  Cases_on `live = []` >> simp[alias_occ_commands_real_def] >>
+  Cases_on `operand_equiv dfg (Var (LAST inst.inst_outputs)) (Var (LAST live))` >>
+  simp[alias_occ_commands_real_def] >>
+  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >>
+  simp[alias_occ_commands_real_def, alias_occ_command_real_def]
+QED
+
+Theorem alias_occ_optimistic_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow
+      (MAP AliasOccPrimitive (alias_occ_optimistic_commands dfg inst live terminator ps)) s)
+    (SND (optimistic_swap_plan dfg inst live terminator ps))
+Proof
+  simp[alias_occ_primitive_events, GSYM alias_occ_optimistic_real,
+       alias_occ_commands_align]
+QED
+
+Definition alias_occ_fold_events_def:
+  (alias_occ_fold_events step trace [] ps = []) /\
+  (alias_occ_fold_events step trace (item::items) ps =
+    trace item ps ++ alias_occ_fold_events step trace items (SND (step item ps)))
+End
+
+Theorem alias_occ_fold_events_align:
+  !items (step : 'a -> plan_state -> stack_op list # plan_state) trace body acc ps s.
+    (!acc item ps. SND (body (acc,ps) item) = SND (step item ps)) /\
+    (!item ps s. alias_occ_align s ps ==>
+      alias_occ_align (alias_occ_events_shadow (trace item ps) s) (SND (step item ps))) /\
+    alias_occ_align s ps ==>
+    alias_occ_align (alias_occ_events_shadow (alias_occ_fold_events step trace items ps) s)
+      (SND (FOLDL body (acc,ps) items))
+Proof
+  Induct >> simp[alias_occ_fold_events_def, alias_occ_events_shadow_def,
+                alias_occ_events_append] >> rpt strip_tac >>
+  Cases_on `body' (acc,ps) h` >>
+  `r = SND (step' h ps)` by
+    (qpat_x_assum `!acc item ps. _` (qspecl_then [`acc`,`h`,`ps`] mp_tac) >> simp[]) >>
+  gvs[] >> first_x_assum irule >> simp[]
+QED
+
+Definition alias_occ_pop_commands_def:
+  alias_occ_pop_commands v ps =
+    case stack_get_depth v ps.ps_stack of
+      NONE => []
+    | SOME dist => (if dist = 0 then [] else [AliasOccSwap dist]) ++ [AliasOccPop 1]
+End
+
+Theorem alias_occ_pop_commands_real:
+  alias_occ_commands_real (alias_occ_pop_commands v ps) ps =
+    SND (pop_foldl_body (ops,ps) v)
+Proof
+  Cases_on `stack_get_depth v ps.ps_stack` >>
+  simp[alias_occ_pop_commands_def, pop_foldl_body_def, alias_occ_commands_real_def] >>
+  rename1 `SOME dist` >> Cases_on `dist = 0` >>
+  simp[alias_occ_commands_real_def, alias_occ_command_real_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Definition alias_occ_popmany_individual_events_def:
+  alias_occ_popmany_individual_events to_pop ps =
+    alias_occ_fold_events (\v ps. pop_foldl_body ([],ps) v)
+      (\v ps. MAP AliasOccPrimitive (alias_occ_pop_commands v ps))
+      (QSORT (\a b.
+        case (stack_get_depth a ps.ps_stack, stack_get_depth b ps.ps_stack) of
+          (SOME da,SOME db) => da <= db | _ => T) to_pop) ps
+End
+
+Theorem alias_occ_popmany_individual_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_popmany_individual_events to_pop ps) s)
+    (SND (popmany_individual to_pop ps))
+Proof
+  simp[alias_occ_popmany_individual_events_def, popmany_individual_def] >> strip_tac >>
+  irule alias_occ_fold_events_align >> simp[alias_occ_primitive_events] >>
+  simp[GSYM alias_occ_pop_commands_real, alias_occ_commands_align] >>
+  rpt gen_tac >> rewrite_tac[alias_occ_pop_commands_real] >>
+  simp[pop_foldl_body_def] >>
+  Cases_on `stack_get_depth item ps'.ps_stack` >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
