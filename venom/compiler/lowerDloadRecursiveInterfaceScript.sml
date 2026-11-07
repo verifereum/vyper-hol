@@ -5692,3 +5692,371 @@ Proof
      REWR_CONV (GSYM DISJ_ASSOC))) >>
   disch_then ACCEPT_TAC
 QED
+
+(* Membership travels with the projected execution stack, independently of
+   the relational witnesses retained by the combined candidate. *)
+val ld_recursive_member_candidate = ``\vs0 CT stk un gn j t.
+  MEM gn CT.ctx_functions /\
+  (!f i st tv. MEM (f,i,st,tv) stk ==> MEM f CT.ctx_functions) /\
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t``;
+
+val ld_recursive_member_fixed_goals =
+  let
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (clauses,_) = dest_imp body
+  in map (ld_fix_combined_environment o
+    subst [p |-> ld_recursive_member_candidate]) (strip_conj clauses) end;
+val [ld_recursive_member_entry_goal,ld_recursive_member_next_goal,
+     ld_recursive_member_block_goal,ld_recursive_member_call_goal,
+     ld_recursive_member_return_goal] = ld_recursive_member_fixed_goals;
+
+fun ld_head_beta_conv tm =
+  (BETA_CONV ORELSEC RATOR_CONV ld_head_beta_conv) tm;
+
+Theorem ld_recursive_member_entry_clause[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_entry_goal
+Proof
+  strip_tac >> mp_tac ld_recursive_combined_entry_clause >>
+  (impl_tac >- asm_rewrite_tac[]) >> disch_tac >> rpt gen_tac >> strip_tac >>
+  ntac 7 (CONV_TAC ld_head_beta_conv) >>
+  conj_tac >- metis_tac[lookup_function_MEM] >>
+  conj_tac >- simp[] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+val ld_member_beta_conv = EVERY_CONV (List.tabulate (7, K ld_head_beta_conv));
+
+Theorem ld_recursive_member_block_clause[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_block_goal
+Proof
+  strip_tac >> mp_tac ld_recursive_combined_block_clause >>
+  (impl_tac >- asm_rewrite_tac[]) >> disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
+    (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
+  CONV_TAC ld_member_beta_conv >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  first_x_assum irule >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`fuel`, `inst`, `s`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_recursive_member_call_clause[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_call_goal
+Proof
+  strip_tac >> mp_tac ld_recursive_combined_call_clause >>
+  (impl_tac >- asm_rewrite_tac[]) >> disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
+    (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
+  CONV_TAC ld_member_beta_conv >>
+  conj_tac >- (irule lookup_function_MEM >> goal_assum (drule_at Any)) >>
+  conj_tac >- (
+    qpat_x_assum `(^ld_recursive_combined_candidate) _ _ _ _ _ _ _` kall_tac >>
+    qpat_x_assum `!stk tn caller inv s nm ops callee args cs s1 inst. _` kall_tac >>
+    simp_tac (srw_ss()) [MEM] >> metis_tac[]) >>
+  qpat_x_assum `!stk tn caller inv s nm ops callee args cs s1 inst. _`
+    (drule_at (Pat `(^ld_recursive_combined_candidate) _ _ _ _ _ _ _`)) >>
+  disch_then irule >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`args`, `cs`, `nm`, `ops`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_stage_member_distinct_labels[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  o1_ctx_shape CS /\ MEM gn CT.ctx_functions ==>
+  ALL_DISTINCT (MAP (\b. b.bb_label) gn.fn_blocks)
+Proof
+  strip_tac >>
+  `?fn a b. MEM fn CS.ctx_functions /\
+    lower_dload_function_supply a fn = (gn,b)` by
+    (qpat_assum `ctx_pass_stage _ _ _ _ _` mp_tac >>
+     qpat_assum `MEM gn CT.ctx_functions` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rw[o1PassContractTheory.ctx_pass_stage_def, LIST_REL_EL_EQN, MEM_EL] >>
+     first_x_assum (qspec_then `n` mp_tac) >>
+     (impl_tac >- fs[]) >> strip_tac >>
+     gvs[o1PassContractTheory.fn_pass_step_def, AllCaseEqs()] >> metis_tac[]) >>
+  `ALL_DISTINCT (fn_labels fn)` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `MEM fn CS.ctx_functions` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       o1PassContractTheory.o1_fn_shape_def, wf_function_def] >> metis_tac[]) >>
+  drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >>
+  fs[fn_labels_def]
+QED
+
+Theorem ld_restriction_reassociate[local]:
+  ((b /\ r) /\ s) /\ a <=> ((b /\ s) /\ a) /\ r
+Proof
+  metis_tac[]
+QED
+
+fun ld_under_exists_conv 0 c = c
+  | ld_under_exists_conv n c = QUANT_CONV (ld_under_exists_conv (n-1) c);
+
+(* Completion opcode selection preserves the whole completed body. *)
+val (ld_recursive_combined_opcode_choice,ld_recursive_combined_nonmacro_complete) =
+  let
+    val (args,body) = strip_abs ld_recursive_combined_complete
+    val [current,saved,normal] = strip_conj body
+    val (ws,b) = strip_exists normal
+    val i = hd (filter (fn v => fst(dest_var v) = "i") ws)
+    fun wrap r = list_mk_abs(args,list_mk_conj [current,saved,
+      list_mk_exists(ws,mk_conj(b,r))])
+  in (wrap ``^i.inst_opcode = DLOADBYTES \/ ^i.inst_opcode = DLOAD \/
+          (^i.inst_opcode <> DLOADBYTES /\ ^i.inst_opcode <> DLOAD)``,
+      wrap ``^i.inst_opcode <> DLOADBYTES /\ ^i.inst_opcode <> DLOAD``) end;
+
+Theorem ld_recursive_combined_opcode_choice_intro[local]:
+  (^ld_recursive_combined_complete) vs0 CT stk un gn j t ==>
+  (^ld_recursive_combined_opcode_choice) vs0 CT stk un gn j t
+Proof
+  BETA_TAC >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+  disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `i.inst_opcode = DLOADBYTES` >> simp[]
+QED
+
+Theorem ld_opcode_distribute[local]:
+  b /\ (p \/ q \/ r) <=> (b /\ p) \/ (b /\ q) \/ (b /\ r)
+Proof
+  metis_tac[]
+QED
+
+Theorem ld_completion_reassociate[local]:
+  (((b /\ s) /\ a) /\ c) /\ r <=> ((b /\ (r /\ c)) /\ s) /\ a
+Proof
+  metis_tac[]
+QED
+
+fun ld_opcode_exists_or_conv 0 = REWR_CONV ld_opcode_distribute
+  | ld_opcode_exists_or_conv n =
+      QUANT_CONV (ld_opcode_exists_or_conv (n-1)) THENC
+      HO_REWR_CONV EXISTS_OR_THM THENC
+      RAND_CONV (HO_REWR_CONV EXISTS_OR_THM);
+
+Theorem ld_recursive_combined_opcode_split[local]:
+  (^ld_recursive_combined_complete) vs0 CT stk un gn j t ==>
+  (^ld_recursive_combined_bytes_complete) vs0 CT stk un gn j t \/
+  (^ld_recursive_combined_load_complete) vs0 CT stk un gn j t \/
+  (^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t
+Proof
+  disch_then (mp_tac o MATCH_MP ld_recursive_combined_opcode_choice_intro) >>
+  BETA_TAC >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV
+    (ld_opcode_exists_or_conv ld_combined_phase_binders)))) >>
+  CONV_TAC (LAND_CONV
+    (RAND_CONV (REWR_CONV LEFT_AND_OVER_OR THENC
+      RAND_CONV (REWR_CONV LEFT_AND_OVER_OR)) THENC
+     REWR_CONV LEFT_AND_OVER_OR THENC
+     RAND_CONV (REWR_CONV LEFT_AND_OVER_OR))) >>
+  CONV_TAC (LAND_CONV (LAND_CONV (RAND_CONV (RAND_CONV
+    (ld_under_exists_conv ld_combined_phase_binders
+      (REWR_CONV ld_completion_reassociate)))))) >>
+  CONV_TAC (LAND_CONV (RAND_CONV (LAND_CONV (RAND_CONV (RAND_CONV
+    (ld_under_exists_conv ld_combined_phase_binders
+      (REWR_CONV ld_completion_reassociate))))))) >>
+  disch_then ACCEPT_TAC
+QED
+
+val ld_recursive_combined_singleton_choice =
+  let
+    val (args,body) = strip_abs ld_recursive_combined_complete
+    val [current,saved,normal] = strip_conj body
+    val (ws,bc) = strip_exists normal
+    val b = fst(dest_conj bc)
+    val (base_saved,anchor) = dest_conj b
+    val (base,slice) = dest_conj base_saved
+    fun restrict tm =
+      let val (_,body) = strip_abs tm
+          val (_,nb) = strip_exists (last (strip_conj body))
+          val (br,_) = dest_conj (fst(dest_conj nb))
+      in snd(dest_conj br) end
+    val rs = map restrict [ld_recursive_combined_ordinary_zero,
+      ld_recursive_combined_external_zero,ld_recursive_combined_alloca_zero]
+  in list_mk_abs(args,list_mk_conj [current,saved,
+    list_mk_exists(ws,mk_conj(b,list_mk_disj rs))]) end;
+
+Theorem ld_recursive_combined_singleton_choice_intro[local]:
+  o1_ctx_shape CS /\ fmp_free_ctx CS /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z ==>
+  ((^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t ==>
+   (^ld_recursive_combined_singleton_choice) vs0 CT stk un gn j t)
+Proof
+  strip_tac >> BETA_TAC >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+  disch_tac >> conj_tac
+  >- (pop_assum (ACCEPT_TAC o CONJUNCT1 o CONJUNCT1)) >>
+  pop_assum strip_assume_tac >>
+  `code = [i]` by
+    (qpat_x_assum `lower_dload_inst_supply a1 i = _` mp_tac >>
+     simp[lower_dload_inst_supply_def]) >>
+  `n = 0` by gvs[] >>
+  `j = i` by gvs[] >>
+  `opaque_use_ok fn` by
+    (qpat_assum `o1_ctx_shape CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+       o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+  `MEM i (fn_insts fn)` by
+    (qpat_assum `active_inst fn i s` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `fn_ptr_ok P fn` by
+    (first_x_assum irule >> simp[]) >>
+  `no_raw_fmp_ops fn` by
+    (qpat_assum `fmp_free_ctx CS` mp_tac >>
+     qpat_assum `CS.ctx_functions = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >> metis_tac[]) >>
+  `i.inst_opcode <> MEMTOP /\ i.inst_opcode <> FMP_PARAM /\
+   i.inst_opcode <> GETFMP /\ i.inst_opcode <> SETFMP` by
+    (qpat_assum `fn_ptr_ok P fn` mp_tac >>
+     qpat_assum `MEM i (fn_insts fn)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[fn_ptr_ok_def] >> metis_tac[]) >>
+  `i.inst_opcode <> DALLOCA` by
+    (qpat_assum `no_raw_fmp_ops fn` mp_tac >>
+     qpat_assum `MEM i (fn_insts fn)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[no_raw_fmp_ops_def, EVERY_MEM] >>
+     metis_tac[is_raw_fmp_opcode_def]) >>
+  `i.inst_opcode <> PHI` by
+    (qpat_assum `step_inst fuel CT j t = OK z` mp_tac >>
+     qpat_assum `j = i` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> gvs[venomExecSemanticsTheory.step_inst_def,
+       venomExecSemanticsTheory.step_inst_base_def]) >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`n = 0`, `opaque_use_ok fn`, `j = i`, `~is_terminator j.inst_opcode`,
+     `j.inst_opcode <> INVOKE`, `i.inst_opcode <> DLOAD`,
+     `i.inst_opcode <> DLOADBYTES`, `i.inst_opcode <> MEMTOP`,
+     `i.inst_opcode <> FMP_PARAM`, `i.inst_opcode <> GETFMP`,
+     `i.inst_opcode <> SETFMP`, `i.inst_opcode <> DALLOCA`, `i.inst_opcode <> PHI`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+  Cases_on `i.inst_opcode` >> gvs[is_terminator_def]
+QED
+
+Theorem ld_singleton_reassociate[local]:
+  ((b /\ s) /\ a) /\ r <=> ((b /\ r) /\ s) /\ a
+Proof
+  metis_tac[]
+QED
+
+Theorem ld_recursive_combined_singleton_split[local]:
+  o1_ctx_shape CS /\ fmp_free_ctx CS /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z ==>
+  ((^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t ==>
+   (^ld_recursive_combined_ordinary_zero) vs0 CT stk un gn j t \/
+   (^ld_recursive_combined_external_zero) vs0 CT stk un gn j t \/
+   (^ld_recursive_combined_alloca_zero) vs0 CT stk un gn j t)
+Proof
+  disch_then (fn env =>
+    disch_then (mp_tac o MATCH_MP
+      (MATCH_MP ld_recursive_combined_singleton_choice_intro env))) >>
+  BETA_TAC >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV
+    (ld_opcode_exists_or_conv ld_combined_phase_binders)))) >>
+  CONV_TAC (LAND_CONV
+    (RAND_CONV (REWR_CONV LEFT_AND_OVER_OR THENC
+      RAND_CONV (REWR_CONV LEFT_AND_OVER_OR)) THENC
+     REWR_CONV LEFT_AND_OVER_OR THENC
+     RAND_CONV (REWR_CONV LEFT_AND_OVER_OR))) >>
+  CONV_TAC (LAND_CONV (LAND_CONV (RAND_CONV (RAND_CONV
+    (ld_under_exists_conv ld_combined_phase_binders
+      (REWR_CONV ld_singleton_reassociate)))))) >>
+  CONV_TAC (LAND_CONV (RAND_CONV (LAND_CONV (RAND_CONV (RAND_CONV
+    (ld_under_exists_conv ld_combined_phase_binders
+      (REWR_CONV ld_singleton_reassociate))))))) >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV
+    (ld_under_exists_conv ld_combined_phase_binders
+      (REWR_CONV ld_singleton_reassociate))))))) >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem ld_recursive_member_next_clause[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_next_goal
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
+    (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
+  CONV_TAC ld_member_beta_conv >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  drule ld_recursive_combined_phase_split >>
+  disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
+  >- (irule ld_recursive_combined_prefix_next >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
+  >- suspend "complete" >>
+  qpat_x_assum `(^ld_recursive_combined_exceptional) _ _ _ _ _ _ _`
+    (strip_assume_tac o BETA_RULE) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all ld_stage_member_distinct_labels >> disch_then ACCEPT_TAC) >>
+  irule ld_recursive_combined_exceptional_next >>
+  goal_assum (drule_at Any) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `fuel` >> first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`gb`, `copypos`, `endpos`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume ld_recursive_member_next_clause[complete]:
+  `ptr_discipline lo CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     qpat_assum `o1_run_state_ok vs0` mp_tac >>
+     qpat_assum `lo = vs0.vs_alloca_next` SUBST1_TAC >>
+     metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline]) >>
+  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
+    (qpat_assum `ptr_discipline lo CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  `mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
+  drule ld_recursive_combined_opcode_split >>
+  disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
+  >- (irule ld_recursive_combined_bytes_next >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
+  >- (irule ld_recursive_combined_load_next >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  suspend "nonmacro"
+QED
+Resume ld_recursive_member_next_clause[nonmacro]:
+  `fmp_free_ctx CS` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
+  drule_all ld_recursive_combined_singleton_split >>
+  disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
+  >- (irule ld_recursive_combined_ordinary_next >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
+  >- (irule ld_recursive_combined_external_next >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  irule ld_recursive_combined_alloca_next >>
+  rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC
+QED
+Finalise ld_recursive_member_next_clause
