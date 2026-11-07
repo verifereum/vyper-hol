@@ -333,7 +333,7 @@ Proof
        exprSimPropsTheory.locals_kept_mem, mem_path_offset_def, evaluate_subscripts_def]
 QED
 
-Theorem imm_place_at_value_type[local]:
+Theorem imm_place_at_value_type:
   !cenv cx env es src id path itv iv k tv v.
     expr_sim_inv cenv cx env es /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
@@ -463,7 +463,7 @@ Proof
   qexistsl [`path`, `iv`] >> simp[]
 QED
 
-Theorem imm_readable_dynarray_length[local]:
+Theorem imm_readable_dynarray_length:
   !ctx func cenv cx env es s src id itv iv off path k etv n vs.
     cenv.ce_is_ctor /\ src = cenv.ce_module /\
     expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
@@ -3014,7 +3014,7 @@ QED
 
 (* The writable-place interface supplies the mutable path; the immutable
    representation supplies root well-formedness, including sparse arrays. *)
-Theorem imm_place_pop_memory:
+Theorem imm_place_pop_memory_root:
   !ctx func cenv cx env es s src id path w ann etv n vs.
     cenv.ce_is_ctor /\ expr_sim_inv cenv cx env es /\
     stmt_state_rel ctx func cenv cx es s /\
@@ -3024,7 +3024,9 @@ Theorem imm_place_pop_memory:
     evaluate_type (get_tenv cx) ann = SOME etv /\
     read_place cx (ImmutablePlace src id path) es =
       (INL (ArrayV (DynArrayV vs)),es) ==>
-    ?off itv iv k.
+    ?imms off itv iv k.
+      ALOOKUP es.immutables cx.txn.target = SOME imms /\
+      FLOOKUP (get_source_immutables src imms) id = SOME (itv,iv) /\
       w = n2w (off + k) /\
       FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
       off + type_memory_size itv < dimword (:256) /\
@@ -3065,7 +3067,7 @@ Proof
      first_x_assum drule_all >> simp[]) >>
   `val_wf itv iv` by
     metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
-  qexistsl [`itv`, `iv`, `k`] >> simp[] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
   conj_tac
   >- metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   conj_tac
@@ -3075,6 +3077,36 @@ Proof
   drule_all exprSimPopNestedLocalMemoryTheory.pop_path_elem_in_memory >>
   simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM,
                     arithmeticTheory.MULT_COMM]
+QED
+
+Theorem imm_place_pop_memory:
+  !ctx func cenv cx env es s src id path w ann etv n vs.
+    cenv.ce_is_ctor /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel ctx func cenv cx es s /\
+    imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w
+      (ArrayT ann (Dynamic n)) /\
+    writable_place_result cx es (PlaceR (ImmutablePlace src id path)) /\
+    evaluate_type (get_tenv cx) ann = SOME etv /\
+    read_place cx (ImmutablePlace src id path) es =
+      (INL (ArrayV (DynArrayV vs)),es) ==>
+    ?off itv iv k.
+      w = n2w (off + k) /\
+      FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+      off + type_memory_size itv < dimword (:256) /\
+      mem_path_offset itv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+      evaluate_subscripts itv iv path = INL (ArrayV (DynArrayV vs)) /\
+      mutable_place_path itv path /\ value_has_type itv iv /\
+      well_formed_type_value itv /\ val_wf itv iv /\
+      val_in_memory itv iv off s.vs_memory /\
+      type_memory_bytes cenv ann = type_memory_size etv /\
+      k + 32 <= type_memory_size itv /\
+      (vs <> [] ==>
+        val_in_memory etv (LAST vs)
+          (off + k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+          (mstore (off + k) (n2w (LENGTH vs - 1)) s).vs_memory)
+Proof
+  rpt strip_tac >> drule_all imm_place_pop_memory_root >>
+  strip_tac >> qexistsl [`off`, `itv`, `iv`, `k`] >> simp[]
 QED
 
 Theorem immutable_default_path_pop_empty:

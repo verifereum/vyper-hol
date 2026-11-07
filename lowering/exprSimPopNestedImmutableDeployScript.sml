@@ -6,8 +6,10 @@
 Theory exprSimPopNestedImmutableDeploy
 Ancestors
   exprSimPopNestedBase exprSimPopImmutableTarget
-  exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary
-  loweringPosts bodySim
+  exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary gasOutcome
+  popTargetPre allocLimits supportedExprTraverse exprSimHypsDefs supportedProgram
+  loweringPosts bodySim stmtSimProps fragGasMode fragGasPath
+  exprSimPopNestedLocalSource exprSimPopNestedLocalPath
   list rich_list arithmetic words fragExec exprSimDefs exprSimProps exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
@@ -16,6 +18,83 @@ Ancestors
   exprLoweringProps compileEnv finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
+
+Theorem immutable_pop_read[local]:
+  !cenv cx env es id path w ann n.
+    expr_sim_inv cenv cx env es /\
+    imm_place_at cenv cx es
+      (PlaceR (ImmutablePlace cenv.ce_module id path)) w (ArrayT ann (Dynamic n)) ==>
+    ?imms itv iv off k etv vs.
+      ALOOKUP es.immutables cx.txn.target = SOME imms /\
+      FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (itv,iv) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+      off + type_memory_size itv < dimword (:256) /\ w = n2w (off+k) /\
+      mem_path_offset itv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+      evaluate_subscripts itv iv path = INL (ArrayV (DynArrayV vs)) /\
+      evaluate_type (get_tenv cx) ann = SOME etv /\
+      value_has_type (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+      read_place cx (ImmutablePlace cenv.ce_module id path) es =
+        (INL (ArrayV (DynArrayV vs)),es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[imm_place_at_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  drule_all imm_place_at_value_type >> strip_tac >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  simp[read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, return_def, lift_sum_def, lift_option_type_def]
+QED
+
+Theorem immutable_pop_bounds[local]:
+  !tv a path k etv n vs.
+    value_has_type tv a /\ well_formed_type_value tv /\
+    mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) ==>
+    LENGTH vs < dimword (:256) /\
+    (vs <> [] ==>
+      value_has_type etv (LAST vs) /\
+      k + 32 + (LENGTH vs-1) * type_memory_size etv + type_memory_size etv <=
+        type_memory_size tv)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+   well_formed_type_value (ArrayTV etv (Dynamic n))` by
+    metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+      vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
+  gvs[vyperTypingTheory.value_has_type_def,
+      vyperTypingTheory.well_formed_type_value_def,
+      valueEncodingTheory.type_memory_size_def] >>
+  strip_tac >> conj_tac
+  >- (gvs[vyperTypingTheory.all_have_type_EVERY, EVERY_MEM] >>
+      metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]) >>
+  `type_memory_size etv * (LENGTH vs - 1) + type_memory_size etv =
+     LENGTH vs * type_memory_size etv` by
+    (Cases_on `vs` >> gvs[arithmeticTheory.MULT_CLAUSES]) >>
+  `LENGTH vs * type_memory_size etv <= n * type_memory_size etv` by
+    simp[] >> decide_tac
+QED
+
+Theorem immutable_pop_empty[local]:
+  read_place cx (ImmutablePlace src id path) es =
+    (INL (ArrayV (DynArrayV [])),es) ==>
+  pop_place cx (ImmutablePlace src id path) es =
+    (INR (Error (RuntimeError "pop empty")),es)
+Proof
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  simp[read_place_def, pop_place_def, get_immutables_def,
+       get_address_immutables_def, bind_def, return_def, raise_def,
+       lift_sum_def, lift_option_type_def, ignore_bind_def] >>
+  rename1 `get_source_immutables src imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+  simp[return_def, raise_def] >>
+  PairCases_on `x` >>
+  Cases_on `evaluate_subscripts x0 x1 path` >>
+  simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  simp[vyperValueOperationTheory.popped_value_def, raise_def]
+QED
 
 Theorem pop_immutable_place_live[local]:
   !cx es src id path imms tv a vs updated.
@@ -385,6 +464,10 @@ Proof
        step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[Ntimes run_inst_seq_def 4,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
   simp[run_inst_seq_def,
        step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
@@ -412,6 +495,10 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   pure_rewrite_tac[DROP_LENGTH_APPEND, APPEND] >>
   simp[Once run_inst_seq_def, mk_inst_def,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[Ntimes run_inst_seq_def 4,
        step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
@@ -513,6 +600,169 @@ QED
      gas_exempt_cert_error_place on the error branch).
    imm_target_walk is stated over eval_base_place; Pop evaluates with
    eval_target_place. *)
+Theorem nested_pop_immutable_suffix_sim[local]:
+  expr_sim_inv cenv cx env es /\ cenv.ce_is_ctor /\ es.gas_obs = [] /\
+  stmt_state_rel ctx func cenv cx es0 s0 /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  writable_place_result cx es (PlaceR (ImmutablePlace cenv.ce_module id path)) /\
+  imm_target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (ImmutablePlace cenv.ce_module id path)) (ArrayT ann (Dynamic n))
+    (hdr,SOME LocCode,pt) t /\
+  compile_dynarray_pop hdr 32 (type_memory_bytes cenv ann) T cenv.ce_imm_alloca
+    LocCode sm = (q,r) /\
+  local_ptrs_reserved cenv sa /\ ci_mono sa sm /\ fn_has_code sm r func /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (pop_place cx (ImmutablePlace cenv.ce_module id path)) (es,t)
+    (\res fin u. ?v. res = INL v /\
+      vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
+        (LocatedValue ann (mk_ptr q LocCode)) u /\
+      u.vs_current_bb = r.cs_current_bb /\
+      u.vs_inst_idx = LENGTH r.cs_current_insts)
+    (\res fin rr. expr_exit res rr)
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t /\
+   ?w. eval_operand hdr t = SOME w /\
+     imm_place_at cenv cx es
+       (PlaceR (ImmutablePlace cenv.ce_module id path)) w (ArrayT ann (Dynamic n))` by
+    gvs[imm_target_post_def] >>
+  drule_all immutable_pop_read >> strip_tac >>
+  drule_all imm_place_pop_memory_root >> strip_tac >> gvs[] >>
+  drule_all immutable_pop_bounds >> strip_tac >>
+  `!region. cenv.ce_imm_alloca = SOME region ==>
+      eval_operand region t = SOME 0w` by
+    fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def] >>
+  `mload (off+k) t = n2w (LENGTH vs)` by
+    (simp[mload_def, GSYM valueEncodingTheory.mem_word_at_def] >>
+     drule_at (Pat `FLOOKUP cenv.ce_module_vars _ = _`)
+       imm_readable_dynarray_length >>
+     simp[] >> disch_then irule >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  `off+k < dimword (:256)` by decide_tac >>
+  Cases_on `vs = []`
+  >- (gvs[] >>
+      `mload (w2n (n2w (k+off):bytes32)) t = 0w` by
+        simp[arithmeticTheory.ADD_COMM] >>
+      drule_all immutable_pop_run_empty >> strip_tac >>
+      drule_all immutable_pop_abort_path >> strip_tac >>
+      drule_all immutable_pop_empty >> strip_tac >>
+      `!tail. pop_place cx (ImmutablePlace cenv.ce_module id path)
+          (es with gas_obs := tail) =
+          (INR (Error (RuntimeError "pop empty")),es with gas_obs := tail)` by
+        (gen_tac >> irule immutable_pop_empty >>
+         simp[read_place_def, get_immutables_def, get_address_immutables_def,
+              bind_def, return_def, lift_sum_def, lift_option_type_def]) >>
+      qpat_x_assum `!ctx. ?j. _` (qspec_then `ctx` strip_assume_tac) >>
+      simp[gas_summary_at_def, gas_marked_exec_def] >>
+      qexistsl [`INR (Error (RuntimeError "pop empty"))`, `es`,
+        `Abort Revert_abort (t' with vs_inst_idx := j)`] >>
+      simp[expr_exit_def, exit_result_def]) >>
+  `!x. hdr = Var x ==> not_fresh_at sm x` by fs[imm_target_post_def] >>
+  `!region. cenv.ce_imm_alloca = SOME region ==>
+      eval_operand region t = SOME 0w /\
+      (!x. region = Var x ==> not_fresh_at sm x)` by
+    (fs[local_ptrs_reserved_def, ci_mono_def] >>
+     rpt strip_tac >> gvs[not_fresh_at_def]) >>
+  `mload (w2n (n2w (k+off):bytes32)) t <> 0w` by
+    (simp[arithmeticTheory.ADD_COMM] >> Cases_on `vs` >> gvs[]) >>
+  drule_all immutable_pop_run >> strip_tac >>
+  drule_all immutable_pop_gas_path >> strip_tac >>
+  drule_all assign_subscripts_replace_readback >>
+  disch_then (qspec_then `ArrayV (DynArrayV (FRONT vs))` strip_assume_tac) >>
+  drule_all pop_immutable_place_live >> strip_tac >>
+  drule_all immutable_pop_stmt_state_rel >> strip_tac >>
+  `n2w (LENGTH vs) - 1w = (n2w (LENGTH vs-1):bytes32)` by
+    (Cases_on `vs` >> gvs[arithmeticTheory.ADD1, wordsTheory.n2w_sub]) >>
+  `mload (k+off) t = n2w (LENGTH vs)` by
+    (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> asm_rewrite_tac[]) >>
+  `u.vs_memory = (mstore (off+k) (n2w (LENGTH vs-1)) t).vs_memory` by
+    (qpat_x_assum `u.vs_memory = _` mp_tac >>
+     simp[arithmeticTheory.ADD_COMM]) >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func cenv cx fin stored` >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >>
+     qpat_x_assum `ci_mono sa sm` mp_tac >> simp[ci_mono_def]) >>
+  `stmt_state_rel ctx func cenv cx fin u` by
+    (irule immutable_suffix_stmt_frame >>
+     qexistsl [`stored`, `sm`] >>
+     simp[Abbr `stored`, mstore_def, write_memory_with_expansion_def,
+          lookup_var_def] >>
+     qpat_x_assum `u = _` mp_tac >>
+     simp[venom_state_component_equality, mstore_def,
+          write_memory_with_expansion_def]) >>
+  `wb_frame cenv es sm t stored` by
+    (drule_all immutable_store_wb_frame >>
+     disch_then (qspecl_then [`n2w (LENGTH vs-1)`, `sm`] mp_tac) >>
+     simp[Abbr `stored`]) >>
+  `u.vs_allocas = t.vs_allocas` by
+    (qpat_x_assum `u = _` mp_tac >> simp[venom_state_component_equality]) >>
+  `wb_frame cenv es sm t u` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >> qexistsl [`sm`, `stored`] >>
+     simp[Abbr `stored`, mstore_def, write_memory_with_expansion_def,
+          lookup_var_def]) >>
+  `wb_frame cenv es0 sa s0 t` by
+    (qpat_x_assum `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac std_ss [imm_target_post_def, wb_frame_def] >>
+     metis_tac[]) >>
+  `wb_frame cenv es0 sa s0 u` by
+    (`sa.cs_next_var <= sm.cs_next_var /\
+      sa.cs_next_id <= sm.cs_next_id` by
+       (qpat_x_assum `ci_mono sa sm` mp_tac >> simp[ci_mono_def]) >>
+     drule_all exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
+  `val_in_memory etv (LAST vs)
+      (off + (k+32+(LENGTH vs-1)*type_memory_size etv)) u.vs_memory` by
+    (`(mstore (k+off) (n2w (LENGTH vs-1)) t).vs_memory = stored.vs_memory` by
+       simp[NoAsms, Abbr `stored`, arithmeticTheory.ADD_COMM] >>
+     `k + (off + (type_memory_size etv * (LENGTH vs-1) + 32)) =
+      off + (k+32+(LENGTH vs-1)*type_memory_size etv)` by
+       (simp[NoAsms, arithmeticTheory.MULT_COMM] >> decide_tac) >>
+     metis_tac[]) >>
+  `eval_operand q u = SOME
+      (n2w (off + (k+32+(LENGTH vs-1)*type_memory_size etv)))` by
+    (qpat_x_assum `eval_operand q u = _` mp_tac >>
+     qpat_assum `mload (k+off) t = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `n2w (LENGTH vs) - 1w = _` (fn th => rewrite_tac[th]) >>
+     `w2n (n2w (k+off):bytes32) = k+off` by simp[] >>
+     pop_assum (fn th => rewrite_tac[th]) >>
+     qpat_assum `mload (k+off) t = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `n2w (LENGTH vs) - 1w = _` (fn th => rewrite_tac[th]) >>
+     pure_rewrite_tac[wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >>
+     `k+off+32+(LENGTH vs-1)*type_memory_size etv =
+      off+(k+32+(LENGTH vs-1)*type_memory_size etv)` by decide_tac >>
+     pop_assum (fn th => rewrite_tac[th])) >>
+  `?imms'. ALOOKUP fin.immutables cx.txn.target = SOME imms' /\
+      FLOOKUP (get_source_immutables cenv.ce_module imms') id =
+        SOME (itv,updated)` by
+    simp[Abbr `fin`, alistTheory.ALOOKUP_def, finite_mapTheory.FLOOKUP_UPDATE,
+         vyperTypeInitialStateTheory.get_source_immutables_set_same] >>
+  `value_has_type etv (LAST vs) /\
+   (k+32+(LENGTH vs-1)*type_memory_size etv) + type_memory_size etv <=
+     type_memory_size itv` by metis_tac[] >>
+  `read_result cx (Value (LAST vs)) fin = (INL (LAST vs),fin)` by
+    simp[read_result_def, return_def] >>
+  `vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin
+      (Value (LAST vs)) (LocatedValue ann (mk_ptr q LocCode)) u` by
+    (drule_all (SRULE [expr_type_def]
+       (Q.INST [`e` |-> `Pop ann bt`] immutable_ctor_pointer_post)) >> simp[]) >>
+  `!tail. pop_place cx (ImmutablePlace cenv.ce_module id path)
+      (es with gas_obs := tail) =
+      (INL (Value (LAST vs)),fin with gas_obs := tail)` by
+    (gen_tac >>
+     mp_tac (Q.INST [`es` |-> `es with gas_obs := tail`,
+       `src` |-> `cenv.ce_module`, `tv` |-> `itv`, `a` |-> `iv`]
+       (SPEC_ALL pop_immutable_place_live)) >>
+     simp[Abbr `fin`]) >>
+  simp[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl [`INL (Value (LAST vs))`, `fin`,
+    `OK (u with vs_inst_idx := LENGTH r.cs_current_insts)`] >>
+  `fin with gas_obs := [] = fin` by
+    (simp[Abbr `fin`, evaluation_state_component_equality]) >>
+  simp[]
+QED
+
 Theorem pop_nested_immutable_deploy_pure_sim:
   !ctx func cenv cx env ann bt ty es src id nocalls.
     cx.in_deploy /\ cenv.ce_is_ctor /\
@@ -527,8 +777,102 @@ Theorem pop_nested_immutable_deploy_pure_sim:
           find_var_decl_by_name id ts = NONE) ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env (Pop ann bt)` by
+    fs[expr_body_pre_def] >>
+  `?n. type_place_target env bt = SOME (Type (ArrayT ann (Dynamic n)))` by
+    fs[well_typed_expr_def] >>
+  pop_assum strip_assume_tac >>
+  `target_indices_pre cenv cx env bt` by
+    (irule target_indices_pre_of_body >>
+     fs[expr_body_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
+        int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
+        expr_abi_decode_target_root_def, expr_evm_run_root_def,
+        call_operands_effect_root_def]) >>
+  rewrite_tac[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
+  PairCases_on `q` >>
+  qmatch_asmsub_rename_tac `compile_get_target_ptr _ _ _ _ = ((hdr,loc,pt),sm)` >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  rewrite_tac[nested_pop_compile_eq] >> asm_rewrite_tac[] >>
+  simp_tac std_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac
+    `compile_dynarray_pop hdr ws esz T cenv.ce_imm_alloca lc sm` >>
+  Cases_on
+    `compile_dynarray_pop hdr ws esz T cenv.ce_imm_alloca lc sm` >>
+  simp[] >> strip_tac >> gvs[] >>
+  `ci_mono sa sm` by
+    metis_tac[stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr, pairTheory.SND] >>
+  `ci_mono sm r` by metis_tac[ci_mono_compile_dynarray_pop, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm r func` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
+    metis_tac[nested_pop_target_admissible] >>
+  drule_all imm_target_walk_place >>
+  `eval_expr cx (Pop ann bt) = vyperState$bind (eval_target_place cx bt) (pop_place cx)` by
+    simp[FUN_EQ_THM, Once evaluate_def, vyperStateTheory.bind_def] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  rewrite_tac[gas_outcome_def] >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists `marks`
+  >- (disj1_tac >> suspend "summary") >>
+  disj2_tac >> rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_place)
 QED
+
+Resume pop_nested_immutable_deploy_pure_sim[summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+  simp[gas_summary_at_def] >>
+  disch_then (qx_choosel_then [`tres`, `tend`, `tr0`] strip_assume_tac) >>
+  gvs[]
+  >- suspend "normal" >>
+  Cases_on `tres` >> gvs[expr_exit_def] >>
+  rename1 `expr_exit (INR exc) tr0` >>
+  qexistsl_tac [`INR exc`, `tend`, `tr0`] >> simp[] >>
+  conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  metis_tac[expr_exit_INR_type]
+QED
+
+Resume pop_nested_immutable_deploy_pure_sim[normal]:
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >>
+     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
+  `eval_target_place cx bt
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL p,es with gas_obs := [])` by
+    (fs[gas_marked_exec_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_body_pre cenv cx env (Pop ann bt)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all pop_target_source_facts >> strip_tac >>
+  `?iid path. p = ImmutablePlace cenv.ce_module iid path` by
+    (fs[imm_target_post_def] >> Cases_on `p` >> gvs[imm_place_at_def]) >>
+  pop_assum strip_assume_tac >> gvs[] >>
+  `lc = LocCode` by
+    (fs[imm_target_post_def] >> Cases_on `lc` >> gvs[imm_place_at_def]) >>
+  `loc = SOME LocCode /\ pt = SOME (ValPT (ArrayT ann (Dynamic n)))` by
+    (qpat_x_assum `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac std_ss [imm_target_post_def] >> metis_tac[]) >>
+  gvs[Abbr `lc`, Abbr `ws`, Abbr `esz`, word_scale_def,
+      elem_size_in_location_def, is_slot_addressed_def] >>
+  mp_tac (Q.INST [`es0` |-> `es`, `es` |-> `es with gas_obs := []`,
+    `id` |-> `iid`, `pt` |-> `SOME (ValPT (ArrayT ann (Dynamic n)))`]
+    nested_pop_immutable_suffix_sim) >>
+  impl_tac >- simp[] >>
+  rewrite_tac[gas_summary_at_def] >>
+  disch_then (qx_choosel_then [`pres`, `pend`, `pr`]
+    (CONJUNCTS_THEN assume_tac)) >>
+  qexistsl_tac [`pres`, `pend`, `pr`] >>
+  conj_tac
+  >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+       |> REWRITE_RULE [APPEND_NIL]) >>
+      qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
+        (irule_at Any) >> asm_rewrite_tac[]) >>
+  gvs[]
+QED
+
+Finalise pop_nested_immutable_deploy_pure_sim
 
 (* By the indices: pure ones by pop_nested_immutable_deploy_pure_sim; one
    that pops or calls is exprSimPopImmutableTarget's residual
