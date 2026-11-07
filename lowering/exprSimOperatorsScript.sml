@@ -368,7 +368,8 @@ Proof
       first_x_assum (qspec_then `v2` mp_tac) >> simp[] >> strip_tac >>
       qpat_x_assum `expr_type e1 = _ \/ _` strip_assume_tac >>
       gvs[vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
-      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
+      Cases_on `v1` >> gvs[value_has_type_def] >>
+      Cases_on `v2` >> gvs[value_has_type_def] >>
       irule compile_compare_bytes_sim >> fs[value_has_type_def])
   >~ [`compile_binop`]
   >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
