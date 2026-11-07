@@ -67,7 +67,8 @@ Theorem memory_word_unwrap_ptr_continuation:
     s1.vs_current_bb = sb.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!r sz. r <> out /\ ptr_covers G tn r s sz ==>
-      ptr_covers G1 tn1 r s1 sz)
+      ptr_covers G1 tn1 r s1 sz) /\
+    (!x. x <> out ==> lookup_var x s1 = lookup_var x s)
 Proof
   strip_tac >> drule_all vv_post_memory_word_read >> strip_tac >>
   `ptr_mem_ok cx ty v p.ptr_operand G tn s /\
@@ -91,5 +92,5 @@ Proof
   disch_then (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
   impl_tac >- metis_tac[] >>
-  strip_tac >> gvs[update_var_def]
+  strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED

@@ -253,7 +253,8 @@ Theorem nonmemory_word_read_continuation:
   s1.vs_current_bb = sb.cs_current_bb /\
   s1.vs_inst_idx = LENGTH sb.cs_current_insts /\
   (!r sz. r <> out /\ ptr_covers G tn r s sz ==>
-    ptr_covers G1 tn1 r s1 sz)
+    ptr_covers G1 tn1 r s1 sz) /\
+  (!x. x <> out ==> lookup_var x s1 = lookup_var x s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `sb.cs_current_bb = sm.cs_current_bb /\
@@ -281,7 +282,7 @@ Proof
      ptr_covers G1 tn1 r s1 sz)` by
     (irule nonmemory_read_frame >> metis_tac[]) >>
   simp[] >> qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
-  simp[update_var_def]
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem runtime_code_word_unwrap_continuation:
@@ -309,7 +310,8 @@ Theorem runtime_code_word_unwrap_continuation:
     s1.vs_current_bb = sb.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!r sz. r <> out /\ ptr_covers G tn r s sz ==>
-      ptr_covers G1 tn1 r s1 sz)
+      ptr_covers G1 tn1 r s1 sz) /\
+    (!x. x <> out ==> lookup_var x s1 = lookup_var x s)
 Proof
   strip_tac >> drule_all vv_post_runtime_code_word_read >> strip_tac >>
   qmatch_asmsub_abbrev_tac `w = typed_val_to_w256 tvt v` >>
@@ -357,7 +359,8 @@ Theorem storage_word_unwrap_continuation:
     s1.vs_current_bb = sb.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!r sz. r <> out /\ ptr_covers G tn r s sz ==>
-      ptr_covers G1 tn1 r s1 sz)
+      ptr_covers G1 tn1 r s1 sz) /\
+    (!x. x <> out ==> lookup_var x s1 = lookup_var x s)
 Proof
   strip_tac >> drule_all vv_post_storage_word_read >> strip_tac >>
   `type_slot_size tvt = 1` by metis_tac[word_type_slot_size] >>
@@ -376,8 +379,8 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `step_inst_base (mk_inst sm.cs_next_id opc [p.ptr_operand] [out]) s =
     OK (update_var out w s)` by
-    (Cases_on `tr` >> simp[Abbr `opc`, Abbr `w`, step_inst_base_def,
-                           mk_inst_def, exec_read1_def] >> gvs[]) >>
+    (Cases_on `tr` >> gvs[Abbr `opc`, Abbr `w`] >>
+     simp[Once step_inst_base_def, mk_inst_def, exec_read1_def]) >>
   qexistsl [`v`,
     `step_prov PG G (mk_inst sm.cs_next_id opc [p.ptr_operand] [out])
       (update_var out w s)`,
