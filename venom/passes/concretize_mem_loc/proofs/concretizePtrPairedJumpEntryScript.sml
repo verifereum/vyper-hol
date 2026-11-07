@@ -3,7 +3,7 @@ Ancestors
   concretizePtrPairedEntry concretizePtrPairedPrefix concretizePtrPairedPrefixProbe
   concretizePtrPairedFields concretizePtrMixedPhi concretizePtrOpaqueRetpc
   concretizePtrSharedFields concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrChronologicalHistory
-  concretizePtrTaggedSupport concretizePtrParamSupport
+  concretizePtrTaggedSupport concretizePtrParamSupport concretizePtrRequestHistory
   concretizePtrDeletedGapHistory concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology frameCfgBoundary
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
@@ -50,6 +50,101 @@ Proof
     (fs[fn_ptr_ok_def] >> metis_tac[]) >>
   fs[MEM] >> gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
       mem_write_ops_def, mem_read_ops_def] >> metis_tac[])
+QED
+
+Theorem ptr_history_mixed_eval_phis[local]:
+  !insts s t t'.
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
+  s.vs_prev_bb = t.vs_prev_bb /\ retpc_shape_ok f /\
+  EVERY (\i. MEM i (fn_insts f) /\ inst_wf i) insts /\
+  eval_phis t insts = OK t' ==>
+  ?s'. eval_phis s insts = OK s' /\
+    ptr_mixed_vars births positions (phis_prov s.vs_prev_bb TG insts)
+      (tn with t_var := phis_taint s.vs_prev_bb tn insts) f g s' t' /\
+    ptr_history_content tn s' t'
+Proof
+  Induct
+  >- (simp[eval_phis_def, phis_prov_def, phis_taint_def] >>
+      rpt strip_tac >> gvs[] >> qexists_tac `s` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode <> PHI`
+  >- (gvs[eval_phis_def, phis_prov_def, phis_taint_def] >>
+      qexists_tac `s` >> simp[]) >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ptr_history_content_labels] >>
+  `OPTREL (\(out,sv) (out',tv). out = out' /\
+      if retpc_var f out then
+        sv = s.vs_return_pc_token /\ tv = t.vs_return_pc_token
+      else ptr_value_transport births positions (phi_prov s.vs_prev_bb TG h)
+        (phi_taint s.vs_prev_bb tn h) sv tv)
+    (eval_one_phi s h) (eval_one_phi t h)` by
+    (irule ptr_mixed_eval_one_phi >> gvs[] >> metis_tac[]) >>
+  gvs[eval_phis_def, AllCaseEqs()] >>
+  gvs[optionTheory.OPTREL_def] >> PairCases_on `x0` >> gvs[] >>
+  rename1 `eval_one_phi s h = SOME (out,sv)` >>
+  `h.inst_outputs = [out]` by gvs[eval_one_phi_def, AllCaseEqs()] >>
+  first_x_assum (qspecl_then [`s`,`t`,`s''`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `u` strip_assume_tac) >>
+  qexists_tac `update_var out sv u` >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- simp[] >>
+  simp[phis_prov_def, phis_taint_def] >>
+  irule ptr_mixed_vars_update >>
+  rpt (goal_assum (drule_at Any)) >>
+  reverse (rpt conj_tac)
+  >- metis_tac[]
+  >- (imp_res_tac eval_phis_only_updates_vs_vars >>
+      qpat_x_assum `u = _` SUBST1_TAC >>
+      qpat_x_assum `s'' = _` SUBST1_TAC >>
+      Cases_on `retpc_var f out` >> gvs[]) 
+  >- (Cases_on `phi_prov t.vs_prev_bb TG h` >>
+      gvs[set_prov_def, set_var_taint_def, FLOOKUP_UPDATE,
+          FLOOKUP_DRESTRICT, op_taint_def] >>
+      Cases_on `retpc_var f out` >> gvs[]) >>
+  rpt strip_tac >>
+  Cases_on `phi_prov t.vs_prev_bb TG h` >>
+  simp[set_prov_def, set_var_taint_def, FLOOKUP_UPDATE,
+       FLOOKUP_DRESTRICT, op_taint_def] >>
+  qpat_x_assum `ptr_mixed_vars births positions TG tn f g s t` kall_tac >>
+  drule_all ptr_mixed_vars_lookup >> simp[op_taint_def]
+QED
+
+Theorem ptr_history_mixed_enters_block[local]:
+  g.fn_blocks = (concretize_function_with_positions p f).fn_blocks /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  MEM bb f.fn_blocks /\ bb_well_formed bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  s.vs_current_bb = t.vs_current_bb /\ s.vs_prev_bb = t.vs_prev_bb /\
+  retpc_shape_ok f /\ ptr_mixed_vars births positions TG tn f g s t /\
+  ptr_history_content tn s t /\ enters_block g t t' ==>
+  ?s'. enters_block f s s' /\
+    ptr_mixed_vars births positions (phis_prov s.vs_prev_bb TG bb.bb_instructions)
+      (tn with t_var := phis_taint s.vs_prev_bb tn bb.bb_instructions) f g s' t' /\
+    ptr_history_content tn s' t' /\ s'.vs_current_bb = t'.vs_current_bb /\
+    s'.vs_prev_bb = t'.vs_prev_bb
+Proof
+  rpt strip_tac >>
+  `lookup_block t.vs_current_bb g.fn_blocks = SOME
+    (clear_nops_block (block_map_transform (concretize_inst_with_positions p) bb))` by
+    (qpat_x_assum `g.fn_blocks = _` SUBST1_TAC >>
+     simp[concretize_positions_blocks, lookup_block_map,
+          concretize_positions_block_label] >> metis_tac[]) >>
+  qpat_x_assum `enters_block g t t'` mp_tac >>
+  simp[enters_block_def] >> strip_tac >> gvs[] >>
+  `eval_phis t bb.bb_instructions = OK s_phi` by
+    metis_tac[ptr_positions_block_eval_phis] >>
+  `EVERY (\i. MEM i (fn_insts f) /\ inst_wf i) bb.bb_instructions` by
+    (fs[EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
+  drule_all ptr_history_mixed_eval_phis >> strip_tac >>
+  qexists_tac `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
+  conj_tac >- (simp[enters_block_def] >> metis_tac[]) >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  `s'.vs_current_bb = s.vs_current_bb /\
+   s_phi.vs_current_bb = t.vs_current_bb /\
+   s'.vs_prev_bb = s.vs_prev_bb /\ s_phi.vs_prev_bb = t.vs_prev_bb` by
+    (qpat_x_assum `s' = _` SUBST1_TAC >>
+     qpat_x_assum `s_phi = _` SUBST1_TAC >> simp[]) >>
+  gvs[ptr_mixed_vars_def, ptr_opaque_env_def, lookup_var_def] >>
+  metis_tac[]
 QED
 
 Theorem ptr_paired_selected_jump_entry[local]:
