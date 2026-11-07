@@ -298,9 +298,9 @@ QED
 
 Theorem alloc_run_stmt_assign_tuple:
   ~supported_expr_exists expr_shape_root e /\
-  (!bt. MEM bt bts ==> ~supported_target_exists expr_shape_root bt) ==>
+  ~supported_assignments_exists expr_shape_root bts ==>
   alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
-    (compile_stmt ce lctx ty (Assign (TupleTarget (MAP BaseTarget bts)) e))
+    (compile_stmt ce lctx ty (Assign (TupleTarget bts) e))
     (\u s. shape_state s /\ cenv_shape_ok s ce)
 Proof
   strip_tac >> simp[compile_stmt_def] >> irule alloc_run_bind >>
@@ -317,7 +317,8 @@ Proof
   gen_tac >> simp[] >> irule alloc_run_conseq >>
   irule_at Any alloc_run_compile_tuple_unpack_frame >>
   qexistsl [`F`, `\s. T`] >>
-  simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape]
+  simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape] >>
+  metis_tac[assignments_exclude_base_target]
 QED
 
 Theorem alloc_run_stmt_assign_base:
