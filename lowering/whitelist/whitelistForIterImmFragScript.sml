@@ -4,7 +4,7 @@ Ancestors
   whitelistForIterImmLoop whitelistForIterDynFrag stmtSimForArrayFrag
   loweringPosts stmtLowering stmtSimProps context emitHelper compileEnv exprLoweringProps
   localPtrsProps emitHelperProps fragExec venomInst list finite_map arithmetic
-  allocationPtr stmtSimForArrayLoop stmtSimDeclCompose words
+  allocationPtr stmtSimForArrayLoop stmtSimDeclCompose words fragGasMode
 Libs
   monadsyntax
 
@@ -204,4 +204,85 @@ Proof
   asm_rewrite_tac [] >>
   asm_simp_tac (srw_ss()) [mk_inst_def] >>
   decide_tac
+QED
+
+(* Keep the pre-load return-PC contract while using the post-load compiler
+   state to frame the length register introduced by that load. *)
+Theorem immutable_initial_frame_rebase:
+  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz ainst
+    cond st1 k es cc /\
+  array_caller_frame st1 s0 cc /\ ret_pc_ok cenv st s0 /\
+  st.cs_next_var <= st1.cs_next_var ==>
+  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz ainst
+    cond st k es cc
+Proof
+  strip_tac >>
+  `ret_pc_ok cenv st cc` by
+    (fs[ret_pc_ok_def, array_caller_frame_def] >> rpt strip_tac >>
+     `not_fresh_at st1 x` by
+       (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  fs[array_loop_inv_def] >> asm_rewrite_tac []
+QED
+
+(* The length operand is a caller register only after the optional load.
+   Preserve that intermediate caller frame for the counted-loop consumer. *)
+Theorem immutable_initialize_post_load:
+  (if dyn then
+     compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca (Lit (n2w off))
+   else return (Lit (n2w cap))) sa = (lvo,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (dyn ==>
+    immutable_holds cenv cx (ArrayT et (Dynamic cap)) (Value (ArrayV av))
+      (n2w off) es s /\
+    evaluate_type (get_tenv cx) et = SOME tv /\
+    value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+    LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av) /\
+  (~dyn ==> LENGTH vs = cap) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ret_pc_ok cenv sa s /\ sa.cs_next_var <= sb.cs_next_var /\
+  ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
+  MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
+  ainst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) /\
+  lookup_block sb.cs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      sb.cs_current_insts ++ [ainst; mk_inst j JMP [Label entry] []]|> /\
+  lookup_block entry func.fn_blocks =
+    SOME <|bb_label := entry; bb_instructions :=
+      [mk_inst e1 ASSIGN [Lit 0w] [idx]] ++
+      (if dyn then
+        [mk_inst e2 GT [lvo; Lit (n2w cap)] [g];
+         mk_inst e3 ISZERO [Var g] [vld];
+         mk_inst e4 ASSERT [Var vld] []] else []) ++
+      [mk_inst e5 JMP [Label cond_lbl] []]|> /\
+  P es /\ lookup_scopes id es.scopes = NONE /\
+  LENGTH vs <= cap /\ cap < dimword (:256) /\
+  ALL_DISTINCT [p; idx; g; vld] /\
+  not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes idx /\
+  not_local_ptr cenv es.scopes g /\ not_local_ptr cenv es.scopes vld /\
+  (!x. lvo = Var x ==> ~MEM x [p; idx; g; vld]) /\
+  (!x. not_fresh_at sb x ==> ~MEM x [p; idx; g; vld]) ==>
+  ?u dst cc.
+    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst sz ainst cond_lbl sa 0 es cc /\
+    eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
+    eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\
+    array_caller_frame sa s u /\ array_caller_frame sb u cc /\
+    gas_marked_path F ctx func s 0 (OK cc)
+Proof
+  strip_tac >> drule_all immutable_optional_length_boundary >> strip_tac >>
+  `ret_pc_ok cenv sb u` by
+    (fs[ret_pc_ok_def, not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `lookup_block u.vs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      sb.cs_current_insts ++ [ainst; mk_inst j JMP [Label entry] []]|>` by simp[] >>
+  drule_all immutable_allocate_initialize >>
+  disch_then (qspec_then `off` strip_assume_tac) >>
+  `array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst sz ainst cond_lbl sa 0 es cc` by
+    (irule immutable_initial_frame_rebase >> goal_assum (drule_at Any) >>
+     asm_rewrite_tac []) >>
+  qexistsl_tac [`u`, `dst`, `cc`] >> asm_rewrite_tac [] >>
+  drule_all gas_marked_path_then >> simp[]
 QED
