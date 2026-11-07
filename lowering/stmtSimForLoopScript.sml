@@ -354,26 +354,6 @@ Proof
   simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 
-(* Older allocations are disjoint from the counter allocation. *)
-Theorem for_counter_store_older_alloca[local]:
-  !ctx func cenv cx es s counter base size cutoff aid off len value.
-  stmt_state_rel ctx func cenv cx es s /\
-  FLOOKUP s.vs_allocas counter = SOME (base, size) /\
-  cutoff <= counter /\ 32 <= size /\
-  FLOOKUP s.vs_allocas aid = SOME (off, len) /\ aid < cutoff ==>
-  mem_bytes_at off len (mstore base value s).vs_memory =
-  mem_bytes_at off len s.vs_memory
-Proof
-  rpt gen_tac >> strip_tac >> irule mstore_mem_bytes_at_disjoint >>
-  `allocas_non_overlapping s` by
-    fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
-  `aid <> counter` by decide_tac >>
-  fs[venomMemDefsTheory.allocas_non_overlapping_def] >>
-  rename1 `FLOOKUP s.vs_allocas counter = SOME (b, z)` >>
-  first_x_assum (qspecl_then [`aid`, `counter`, `off`, `len`, `b`, `z`] mp_tac) >>
-  simp[] >> decide_tac
-QED
-
 Theorem for_counter_entry_frame[local]:
   !ctx func cenv bc cx es s t id entry p dv w sz counter sa value.
   stmt_state_rel ctx func cenv cx es s /\
@@ -725,7 +705,9 @@ Theorem for_incr_finish[local]:
       lookup_var cv t = SOME (c + 1w) /\ lookup_var ev t = SOME e /\
       lookup_var p t = SOME w /\
       (!x v. not_fresh_at st x /\ lookup_var x old = SOME v ==> lookup_var x t = SOME v) /\
-      (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)
+      (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+      (!c0 e0 sa s0. alloca_frame c0 e0 sa s0 cenv ee s ==>
+         alloca_frame c0 e0 sa s0 cenv ee t)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_incr_zero_path >> strip_tac >>
   qexists_tac `jump_to cond_lbl (update_var cv (c + 1w) (update_var nv (c + 1w) s))` >>
@@ -733,6 +715,13 @@ Proof
      (update_var cv (c + 1w) (update_var nv (c + 1w) s))` by
     (irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[]) >>
+  `!c0 e0 sa s0. alloca_frame c0 e0 sa s0 cenv ee s ==>
+     alloca_frame c0 e0 sa s0 cenv ee
+       (jump_to cond_lbl (update_var cv (c + 1w) (update_var nv (c + 1w) s)))` by
+    (rpt strip_tac >> irule alloca_frame_same_state >>
+     qexists_tac `update_var cv (c + 1w) (update_var nv (c + 1w) s)` >>
+     simp[jump_to_def] >> irule alloca_frame_update_var >> simp[] >>
+     irule alloca_frame_update_var >> simp[]) >>
   simp[stmt_state_rel_jump_to] >>
   simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[] >> metis_tac[lookup_var_def]
@@ -803,6 +792,10 @@ Theorem for_round_prepare[local]:
     lookup_var cv s2 = SOME (i2w (n1 + &k)) /\
     lookup_var ev s2 = SOME (i2w n2) /\ lookup_var p s2 = SOME w /\
     s2.vs_allocas = cc.vs_allocas /\
+    (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv esk frame_start cc bc
+        (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
+          value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>) s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts)
       (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
         value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>,s2)
@@ -838,6 +831,10 @@ Proof
     evaluation_state_component_equality, combinTheory.o_DEF]) >>
   (conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[])) >>
   simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!frame_start. _ ==> alloca_frame _ _ _ _ _ _ _`
+        (qspec_then `frame_start` mp_tac) >> simp[alloca_frame_def]) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [stmt_frag_def, stmt_framed_frag_def]) >>
   disch_then (qspecl_then [`sb0`, `sb1`, `s2`,
@@ -870,7 +867,11 @@ Theorem for_body_finish[local]:
     (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP u.vs_allocas a = SOME b) /\
     (broke ==> u.vs_current_bb = exit_lbl) /\
     (~broke ==> u.vs_current_bb = cond_lbl /\ lookup_var cv u = SOME (c + 1w) /\
-      lookup_var ev u = SOME e /\ lookup_var p u = SOME w)
+      lookup_var ev u = SOME e /\ lookup_var p u = SOME w) /\
+    (!c0 e0 sa s0. alloca_frame c0 e0 sa s0 bc entry s2 /\
+       sa.cs_next_id <= sb0.cs_next_id /\
+       (!a b. FLOOKUP s0.vs_allocas a = SOME b ==> FLOOKUP s2.vs_allocas a = SOME b) ==>
+       alloca_frame c0 e0 sa s0 cenv (ee with scopes := rest) u)
 Proof
   strip_tac >>
   `cenv_top_ext cenv bc entry.scopes` by
@@ -880,6 +881,18 @@ Proof
     by simp[] >>
   drule_all for_body_post_pop >> strip_tac >> gvs[] >>
   fs[for_code_def, stmt_post_def] >>
+  `cenv_top_ext cenv cenv'' ee.scopes` by
+    (irule cenv_top_ext_trans >> qexistsl_tac [`bc`, `entry.scopes`] >>
+     gvs[preserves_scopes_dom_def]) >>
+  `!c0 e0 sa s0. alloca_frame c0 e0 sa s0 bc entry s2 /\
+     sa.cs_next_id <= sb0.cs_next_id /\
+     (!a b. FLOOKUP s0.vs_allocas a = SOME b ==> FLOOKUP s2.vs_allocas a = SOME b) ==>
+     alloca_frame c0 e0 sa s0 cenv (ee with scopes := rest) t` by
+    (rpt strip_tac >> irule alloca_frame_pop >>
+     conj_tac >- (qexists_tac `sc` >> simp[]) >>
+     qexists_tac `cenv''` >> simp[] >>
+     irule alloca_frame_trans >>
+     qexistsl_tac [`bc`, `entry`, `s2`, `sb0`] >> simp[]) >>
   `(!x z. not_fresh_at st x /\ lookup_var x old = SOME z ==> lookup_var x t = SOME z) /\
    lookup_var cv t = SOME c /\ lookup_var ev t = SOME e /\ lookup_var p t = SOME w /\
    (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` by
@@ -910,7 +923,12 @@ Proof
   qexists_tac `t'` >> simp[] >>
   qpat_x_assum `gas_marked_path F ctx func t 0 (OK land)` mp_tac >>
   disch_then (mp_then Any mp_tac gas_marked_path_then) >>
-  disch_then drule >> simp[]
+  disch_then drule >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!c0 e0 sa s0. alloca_frame _ _ _ _ _ _ land ==> _` irule >>
+  irule alloca_frame_same_state >> qexists_tac `t` >>
+  `land.vs_vars = t.vs_vars /\ land.vs_memory = t.vs_memory` by
+    (Cases_on `res = INL ()` >> simp[Abbr `land`, jump_to_def]) >>
+  simp[] >> first_x_assum irule >> simp[]
 QED
 
 (* One iteration of a range loop, from the condition block with the counter
@@ -963,7 +981,10 @@ Theorem for_iteration_alloca[local]:
          (~broke ==> t.vs_current_bb = cond_lbl /\
                      lookup_var cv t = SOME (i2w (n1 + &(k + 1))) /\
                      lookup_var ev t = SOME (i2w n2) /\
-                     lookup_var p t = SOME w))
+                     lookup_var p t = SOME w) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+            frame_start.cs_next_id <= sb0.cs_next_id ==>
+            alloca_frame cenv esk frame_start cc cenv ee t))
       (\res ee r. ?ex. res = INR ex /\
          !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
@@ -1095,7 +1116,9 @@ Theorem for_iteration:
       (\res ee r. ?ex. res = INR ex /\
          !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
+  rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >>
+  disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
+  disch_then irule >> simp[] >> rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem gas_outcome_exec_conseq[local]:
