@@ -1887,3 +1887,30 @@ Proof
     fs[venomInstTheory.fn_labels_def]) >>
   fs[]
 QED
+
+(* Successors of cfg_dfs_pre labels are in cfg_dfs_pre.
+   Follows from dfs_pre_walk_closure + dfs_pre_walk_visited_eq. *)
+Theorem cfg_dfs_pre_succs_closed:
+  !fn lbl.
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+    EVERY (\t. MEM t (cfg_analyze fn).cfg_dfs_pre)
+          (cfg_succs_of (cfg_analyze fn) lbl)
+Proof
+  rw[cfg_analyze_def, cfg_succs_of_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `entry_block fn` >> gvs[] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  qabbrev_tac `succs = build_succs fn.fn_blocks` >>
+  qabbrev_tac `entry = x.bb_label` >>
+  `MEM lbl (SND (dfs_pre_walk succs [] entry))` by gvs[] >>
+  `MEM t (FST (dfs_pre_walk succs [] entry))` by
+    metis_tac[cj 1 dfs_pre_walk_closure] >>
+  `set _0 = set pre` by (
+    `set (FST (dfs_pre_walk succs [] entry)) =
+     set [] UNION set (SND (dfs_pre_walk succs [] entry))` by
+      metis_tac[cj 1 dfs_pre_walk_visited_eq] >>
+    gvs[]) >>
+  `MEM t _0` by gvs[] >>
+  metis_tac[]
+QED

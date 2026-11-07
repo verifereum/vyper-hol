@@ -4,6 +4,9 @@ open HolKernel boolLib bossLib cv_transLib cv_repLib cv_miscLib cv_computeLib
      wordsLib intLib
      vyperTestRunnerTheory jsonToVyperTheory
 
+(* Translation evaluates constants with EVAL. *)
+local open vyperConstEvalLib in end
+
 structure Decode = JsonTraceDecodeFn (
   structure B = JsonImportHol
   structure AST = jsonASTLib

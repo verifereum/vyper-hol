@@ -13,10 +13,12 @@ val () = holbuild_extra_deps ["../tests/fixtures/check_contract"]
 (* Branch checks for guarded call dispatch; fixture checks below also exercise
    these paths through the contract checker. Deliberately conflicting metadata
    checks that syntax shortcuts and self/pop keep their original priority. *)
-val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], []) :
+val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], [], [], []) :
   int # num option # (string # num) list # string list #
   (string # type) list # ((num option # string) # type) list #
-  (((num option # string) # (num option # string)) list)``;
+  (((num option # string) # (num option # string)) list) #
+  ((num option # string) # literal) list #
+  (num # (string # num) list) list``;
 val call_arg = ``Literal (BaseT BoolT) (BoolL T)``;
 (* An interface constructor yields its address as a stack value. *)
 val iface_result = ``Builtin (BaseT AddressT) (Acc Address) [^call_arg]``;
@@ -42,10 +44,12 @@ fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
 val override_call_ctx =
   ``(0, SOME 0, [], [], [], [],
-      [((SOME 0, "compute"), (NONE, "compute"))]) :
+      [((SOME 0, "compute"), (NONE, "compute"))], [], []) :
     int # num option # (string # num) list # string list #
     (string # type) list # ((num option # string) # type) list #
-    (((num option # string) # (num option # string)) list)``;
+    (((num option # string) # (num option # string)) list) #
+    ((num option # string) # literal) list #
+    (num # (string # num) list) list``;
 val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   "abstract call links to concrete override"
   (call_attr self_name ``"compute"`` ``NONE : string option``)
@@ -209,7 +213,8 @@ QED
 fun tuple_return_fn decs aliases bound =
   ``JTL_FunctionDef "compute" ^decs ^aliases [] []
       (JFuncType [] (JT_Tuple [JT_String ^bound; JT_Integer 256 F]))
-      (JTA_Tuple [JTA_String ^bound; JTA_Integer 256 F])
+      (JTA_Tuple [JTA_String (JE_Int (&^bound) (JT_Integer 256 F));
+        JTA_Integer 256 F])
       [JS_Return (SOME (JE_Tuple [JE_Str 1 "x";
         JE_Int 1 (JT_Integer 256 F)]))]``;
 val tuple_abstract = tuple_return_fn ``["abstract"]`` ``[] : string list`` ``10``;
@@ -260,20 +265,20 @@ val _ = assert_translation "different declarations with identical default spelli
 val expression_default =
   ``JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add
       (JE_Int 1 (JT_Integer 256 F)) (JT_Integer 256 F)``;
-val folded_default_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
-  ``JE_Folded ^expression_default (JE_Int 2 (JT_Integer 256 F))``;
+val expression_default_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
+  expression_default;
 val expression_default_override = default_u256_fn ``["override"]`` ``["base"]``
   expression_default;
 val literal_default_override = default_u256_fn ``["override"]`` ``["base"]``
   ``JE_Int 2 (JT_Integer 256 F)``;
-val _ = assert_translation "folding metadata preserves original default structure"
+val _ = assert_translation "same default expression"
   true (abstract_link_ast
     ``[^import_base; ^initialize_base; ^expression_default_override]``
-    ``[^folded_default_abstract]``);
+    ``[^expression_default_abstract]``);
 val _ = assert_translation "equal default values with different syntax"
   false (abstract_link_ast
     ``[^import_base; ^initialize_base; ^literal_default_override]``
-    ``[^folded_default_abstract]``);
+    ``[^expression_default_abstract]``);
 
 Theorem abstract_override_resolution_is_transitive:
   resolve_override_aux 3
@@ -552,46 +557,3 @@ val _ =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
-
-(* Module-constant raw_log topics arrive as a Name with a folded List.
-   Decode the same List representation as literal topics, retaining both
-   elements and their type. Integer/boolean Name folding must still work. *)
-fun decode_folded_name folded = let
-  val ast = JSONDecode.decodeString jsonASTLib.annotated_ast
-    ("{\"ast\":{\"body\":[{\"ast_type\":\"FunctionDef\",\"name\":\"test\",\"decorator_list\":[]," ^
-     "\"args\":{\"ast_type\":\"arguments\",\"args\":[]},\"func_type\":{\"argument_types\":[],\"return_type\":null}," ^
-     "\"body\":[{\"ast_type\":\"Expr\",\"value\":{\"ast_type\":\"Name\",\"id\":\"TOPICS\",\"folded_value\":" ^
-     folded ^ "}}]}]}}")
-  val folded_head = prim_mk_const {Thy = "jsonAST", Name = "JE_Folded"}
-in
-  case find_terms (fn tm => let val (head, args) = strip_comb tm in
-    aconv head folded_head andalso length args = 2 end) ast of
-    [name] => name
-  | _ => raise Fail "expected one folded Name"
-end;
-val topic_json = "{\"ast_type\":\"Int\",\"value\":";
-val topics_ty_json = "{\"typeclass\":\"dynamic_array\",\"value_type\":{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false},\"length\":4}";
-val folded_topics_name = decode_folded_name
-  ("{\"ast_type\":\"List\",\"elements\":[" ^ topic_json ^ "1}," ^ topic_json ^
-   "2}],\"type\":" ^ topics_ty_json ^ "}");
-val folded_topics_value = List.last (#2 (strip_comb folded_topics_name));
-val () = if aconv folded_topics_value
-  ``JE_List [JE_Int 1 JT_None; JE_Int 2 JT_None]
-     (JT_DynArray (JT_Integer 256 F) 4)``
-  then () else raise Fail "folded topics lost List elements or type";
-Theorem folded_topics_translate_test:
-  translate_expr (0,NONE,[],[],[],[],[]) ^folded_topics_name =
-    Builtin (ArrayT (BaseT (UintT 256)) (Dynamic 4))
-      (MakeArray (SOME (BaseT (UintT 256))) (Dynamic 4))
-      [Literal NoneT (IntL 1); Literal NoneT (IntL 2)]
-Proof
-  EVAL_TAC
-QED
-val folded_int_name = decode_folded_name "{\"ast_type\":\"Int\",\"value\":3}";
-val folded_bool_name = decode_folded_name "{\"ast_type\":\"NameConstant\",\"value\":true}";
-val () = if aconv (List.last (#2 (strip_comb folded_int_name))) ``JE_Int 3 JT_None``
-  andalso aconv (List.last (#2 (strip_comb folded_bool_name))) ``JE_Bool T``
-  then () else raise Fail "integer/boolean Name folding regressed";
-val () = if List.all (fn tag => tag = "DISK_THM")
-  (#1 (Tag.dest_tag (Thm.tag folded_topics_translate_test)))
-  then () else raise Fail "folded topics translation test has oracle dependencies";

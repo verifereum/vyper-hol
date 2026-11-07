@@ -135,9 +135,9 @@ Release instructions, including the prebuilt holbuild archive artefact, are in [
 
 ### Frontend CV translation and benchmark
 
-`jsonToVyperCVLib.eval` returns an unconditional translation equality or fails.
 The test importer keeps `EVAL`, which was faster on all measured fixtures.
-The opt-in benchmark checks exact RHS parity and defined-input conditions:
+The frontend is total, so `cv_eval` returns an unconditional translation
+equality for every annotated AST. The opt-in benchmark checks exact RHS parity:
 
 ```bash
 holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBenchmarkTheory
@@ -184,9 +184,10 @@ diagnostic CV input/result encodings.
 
 Native execution is a trusted regression check, not a kernel proof.
 `vyperJsonReplayLib.replay_file` provides kernel-checked replay. The CV frontend
-retains defined-input preconditions; the native executable does not discharge
-them for each input. CI builds the frontend, emitter, and kernel replay smoke
-theories; native MLton compilation is an explicit local step.
+translation has no preconditions, so the native executable runs the same
+translation for every input the JSON decoder accepts. CI builds the frontend,
+emitter, and kernel replay smoke theories; native MLton compilation is an
+explicit local step.
 
 ### Running the Vyper test suite
 
@@ -218,8 +219,8 @@ metadata disabled and decimals enabled by fixture pragmas. These profiles can
 evolve independently. At this pin NONE runs the O1 Venom passes but disables
 assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
 target the pin supports), whereas the HOL EVM semantics executes Osaka.
-Metadata need not match for behavioral replay. Bytecode parity is opt-in and
-is not implied by a passing semantics replay.
+Metadata need not match for behavioral replay. Bytecode parity (checked by
+`lowering/defs/bytecode/native/`) is not implied by a passing semantics replay.
 
 Use Python 3.11.17 in an isolated environment, then run from this repository:
 

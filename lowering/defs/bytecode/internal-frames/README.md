@@ -183,5 +183,4 @@ those exclusions.
   establish current byte equality.
 * p02/p47 had MATCH proofs, rather than residuals attributed to the closed
   #549, until the v0.5.0b1 pin changed their bytes.
-* Validation is focused: neither a full-project build nor
-  `evalCompilerBytecodeParityTheory` was run.
+* Validation is focused: no full-project build was run.

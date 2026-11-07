@@ -7,12 +7,7 @@
  *   assert_elim_preserves_ssa_form — assert elimination preserves SSA form
  *   assert_elim_preserves_wf_function — assert elimination preserves well-formedness
  *
- * Helper (local):
- *   assert_elim_inst_outputs — assert_elim_inst keeps the outputs or drops them all
- *
- * The other structural lemmas on assert_elim_inst (_cases, _id, _terminator,
- * _not_terminator, _phi, _not_phi) and aftw_singleton_eq_fmt_mapi are in
- * assertElimProofs.
+ * The proofs are in assertElimProofs.
  *)
 
 Theory assertElimCorrectness
@@ -64,33 +59,14 @@ Theorem assert_elim_function_correct:
       (run_function fuel ctx fn s)
       (run_function fuel ctx (assert_elim_function fn) s)
 Proof
-  rpt strip_tac >>
-  `fn.fn_blocks <> []` by fs[wf_function_def, fn_has_entry_def] >>
-  `fn_entry_label (assert_elim_function fn) = fn_entry_label fn` by
-    (pop_assum mp_tac >> ntac 12 (pop_assum kall_tac) >>
-     simp[fn_entry_label_def, entry_block_def, assert_elim_function_def,
-          clear_nops_function_def, analysis_function_transform_widen_def,
-          function_map_transform_def, clear_nops_block_def,
-          analysis_block_transform_widen_def, LET_THM,
-          listTheory.NULL_EQ, rich_listTheory.MAP_HD, listTheory.MAP_EQ_NIL]) >>
-  once_rewrite_tac[run_function_def] >> simp[] >>
-  `s with vs_current_bb := s.vs_current_bb = s` by
-    simp[venomStateTheory.venom_state_component_equality] >>
-  pop_assum (fn th => rewrite_tac[th]) >>
-  irule assert_elim_function_correct_proof >>
-  metis_tac[]
-QED
-
-(* ===== Derived structural properties ===== *)
-
-Theorem assert_elim_inst_outputs[local]:
-  !v inst. (assert_elim_inst v inst).inst_outputs = inst.inst_outputs \/
-           (assert_elim_inst v inst).inst_outputs = []
-Proof
-  rpt gen_tac >>
-  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
-                        assert_elim_inst_cases) >>
-  simp[mk_nop_inst_def]
+  rpt strip_tac >> REWRITE_TAC [assert_elim_function_def, LET_THM] >> BETA_TAC >>
+  irule clear_nops_run_function_sim >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC)
+  >~ [`wf_function _`] >- metis_tac[assert_elim_analysis_transform_wf_ssa]
+  >~ [`fn_entry_label _ = fn_entry_label _`]
+  >- simp[fmt_preserves_entry_label, analysis_function_transform_widen_def,
+          analysis_block_transform_widen_def] >>
+  irule assert_elim_function_correct_proof >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* ===== Obligations ===== *)
@@ -99,28 +75,16 @@ QED
 Theorem assert_elim_preserves_ssa_form:
   ∀fn. wf_function fn ∧ ssa_form fn ⇒ ssa_form (assert_elim_function fn)
 Proof
-  rpt strip_tac >>
-  simp[assert_elim_function_def] >>
+  rpt strip_tac >> simp[assert_elim_function_def] >>
   irule clear_nops_function_preserves_ssa >>
-  ONCE_REWRITE_TAC[aftw_singleton_eq_fmt_mapi] >>
-  mp_tac (Q.SPECL
-    [`\bb idx inst. assert_elim_inst (df_widen_at NONE (range_analyze fn) bb.bb_label idx) inst`,
-     `fn`] mapi_transform_preserves_ssa_bb) >>
-  simp[assert_elim_inst_id, assert_elim_inst_outputs]
+  metis_tac[assert_elim_analysis_transform_wf_ssa]
 QED
 
 (* A well-formed function remains well-formed after assert elimination. *)
 Theorem assert_elim_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (assert_elim_function fn)
 Proof
-  rpt strip_tac >>
-  simp[assert_elim_function_def] >>
+  rpt strip_tac >> simp[assert_elim_function_def] >>
   irule clear_nops_function_preserves_wf >>
-  ONCE_REWRITE_TAC[aftw_singleton_eq_fmt_mapi] >>
-  mp_tac (Q.SPECL
-    [`\bb idx inst. assert_elim_inst (df_widen_at NONE (range_analyze fn) bb.bb_label idx) inst`,
-     `fn`] mapi_transform_preserves_wf_bb) >>
-  simp[assert_elim_inst_id, assert_elim_inst_terminator,
-       assert_elim_inst_not_terminator, assert_elim_inst_phi,
-       assert_elim_inst_not_phi]
+  metis_tac[assert_elim_analysis_transform_wf_ssa]
 QED

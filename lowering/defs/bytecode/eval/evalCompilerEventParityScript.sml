@@ -1,7 +1,0 @@
-Theory evalCompilerEventParity
-Ancestors
-  evalCompilerEventBytes20 evalCompilerEventStorageBytes20
-  evalCompilerEventWidenDynarray evalCompilerEventWidenNestedString
-  evalCompilerEventWidenTuple evalCompilerEventWidenFixedDynamic
-  evalCompilerEventForwardStruct vyperEventForwardStruct
-  vyperEventRegression vyperImportedEventRegression vyperEventArgumentLifetime

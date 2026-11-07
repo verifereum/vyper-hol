@@ -63,6 +63,7 @@ val mk_bool = boolSyntax.mk_bool
 val fromMLstring = stringSyntax.fromMLstring
 fun natural value = numSyntax.mk_numeral (Arbnum.fromLargeInt (IntInf.toLarge value))
 fun integer value = intSyntax.term_of_int (Arbint.fromLargeInt (IntInf.toLarge value))
+fun dest_integer tm = IntInf.fromLarge (Arbint.toLargeInt (intSyntax.int_of_term tm))
 val strip_comb = HolKernel.strip_comb
 val aconv = Term.aconv
 val dest_list = listSyntax.dest_list
@@ -71,5 +72,6 @@ fun is_string_or_natural tm =
   type_of tm = string_ty orelse
   type_of tm = type_of (numSyntax.term_of_int 0)
 val mk_record = TypeBase.mk_record
+fun replace_subterm (from, to) = Term.subst [from |-> to]
 
 end
