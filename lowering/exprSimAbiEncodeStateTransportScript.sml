@@ -3,6 +3,7 @@ Ancestors
   exprSimAbiEncodeCallerFrame exprSimAbiEncodeFramedSuffix abiEncoderRegisteredEffect
   exprSimAbiEncodeChargeTransfer exprSimAbiEncodeExecFrame localPtrsProps loweringSlice
   compileEnv exprLoweringProps venomState finite_map pred_set list arithmetic
+  abiEncoderWindowContract abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderReentry
 
 Theorem abi_encode_caller_local_reads:
   local_ptrs_rel func cenv scopes initial /\
@@ -234,4 +235,73 @@ Proof
   PairCases_on `x` >>
   `FLOOKUP actual.vs_allocas inst.inst_id = SOME(x0,x1)` by metis_tac[] >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem abi_encode_caller_phase_allocations:
+  abi_builtin_encode_setup_frame next site outsz p w initial prepared /\
+  window_strong_result ctx observer ready body_end len at av d prepared body_state /\
+  actual.vs_allocas = body_state.vs_allocas /\
+  actual.vs_alloca_next = body_state.vs_alloca_next ==>
+  (!i r. FLOOKUP initial.vs_allocas i = SOME r ==>
+    FLOOKUP actual.vs_allocas i = SOME r) /\
+  window_alloca_growth initial actual /\
+  (!i. i <> site /\ i NOTIN window_alloca_sites observer (frag_ids ready body_end) ==>
+    FLOOKUP actual.vs_allocas i = FLOOKUP initial.vs_allocas i)
+Proof
+  strip_tac >>
+  `(!i r. FLOOKUP prepared.vs_allocas i = SOME r ==>
+      FLOOKUP actual.vs_allocas i = SOME r) /\
+   (!i. i NOTIN window_alloca_sites observer (frag_ids ready body_end) ==>
+      FLOOKUP actual.vs_allocas i = FLOOKUP prepared.vs_allocas i) /\
+   window_alloca_growth prepared actual` by
+    (drule window_strong_result_effect >>
+     simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >>
+     drule window_strong_result_growth >>
+     simp[window_alloca_growth_def] >> strip_tac >> simp[]) >>
+  qpat_x_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [abi_builtin_encode_setup_frame_def] >> strip_tac >>
+  Cases_on `FLOOKUP initial.vs_allocas site = NONE`
+  >- (gvs[abi_builtin_allocate_state_def, FLOOKUP_UPDATE, window_alloca_growth_def] >>
+      conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          qpat_x_assum `!j r. _ = SOME r ==> _ = SOME r`
+            (qspecl_then [`i`, `r`] mp_tac) >>
+          Cases_on `site = i` >> gvs[]) >>
+      rpt gen_tac >> strip_tac >> Cases_on `site = i`
+      >- (`FLOOKUP body_state.vs_allocas i = SOME(initial.vs_alloca_next,outsz)` by
+            (qpat_x_assum `!j r. _ = SOME r ==> _ = SOME r`
+              (qspecl_then [`i`, `(initial.vs_alloca_next,outsz)`] mp_tac) >> simp[]) >>
+          gvs[]) >>
+      qpat_x_assum `!j b sz. _` (qspecl_then [`i`, `b`, `sz`] mp_tac) >>
+      simp[] >> decide_tac) >>
+  gvs[abi_builtin_allocate_state_def, window_alloca_growth_def] >>
+  qpat_x_assum `!i b sz. _` ACCEPT_TAC
+QED
+
+Theorem abi_encode_caller_phase_registers:
+  abi_builtin_encode_setup_frame next site outsz p w initial prepared /\
+  window_strong_result ctx observer ready body_end len at av d prepared body_state /\
+  (!op v. abi_decoder_operand_live body_end.cs_next_var op /\
+    eval_operand op body_state = SOME v ==> eval_operand op actual = SOME v) /\
+  next <= ready.cs_next_var /\ next <= body_end.cs_next_var ==>
+  !x v. abi_decoder_operand_live next (Var x) /\ lookup_var x initial = SOME v ==>
+    lookup_var x actual = SOME v
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `eval_operand (Var x) prepared = SOME v` by
+    (qpat_x_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_builtin_encode_setup_frame_def] >> strip_tac >>
+     qpat_x_assum `!op v. _` irule >> simp[eval_operand_def]) >>
+  `not_fresh_at ready x` by
+    (fs[not_fresh_at_def, abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `lookup_var x body_state = SOME v` by
+    (drule window_strong_result_public >>
+     simp_tac bool_ss [abi_encoder_window_result_def] >> strip_tac >>
+     qpat_x_assum `!x v. _` irule >> gvs[eval_operand_def]) >>
+  `abi_decoder_operand_live body_end.cs_next_var (Var x)` by
+    (irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `!op v. _` (qspec_then `Var x` mp_tac) >>
+  simp[eval_operand_def]
 QED
