@@ -5,7 +5,164 @@
 Theory concretizePtrUniversalExtension
 Ancestors
   concretizePtrAffineFamily concretizePtrComparisonFamily concretizePtrIloadFamily concretizePtrByteStoreFamily concretizePtrBufferCopyFamily concretizePtrExtcodecopyFamily concretizePtrStorageWriteFamily concretizePtrHashLogFamily concretizePtrCallFamily concretizePtrCreateFamily
-  concretizePtrStorageReadProducer
+  concretizePtrStorageReadProducer concretizePtrPairedJump
+  concretizePtrOperationalOpcodes concretizePtrPairedPrefix
+  concretizePtrStructuralTranscript concretizePtrStructuralTrace
+  concretizePtrChronologicalHistory ptrDiscipline unitShapeDefs venomWf
+  pointerConfinedDefs venomInst list o1PassContract unitLabelMapIdentity
+  concretizeStepStructure venomExecSemantics concretizePtrDeletedGapHistory
+  contextCodegenRel concretizePtrPairedJumpEntry
+
+Theorem current_retpc_parse[local]:
+  retpc_shape_ok = frameRel$retpc_shape_ok
+Proof
+  simp[]
+QED
+
+Theorem ptr_paired_universal_jump_extension[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    EVERY bb_well_formed f.fn_blocks /\ ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `MEM a.po_fn C.ctx_functions` by
+    (drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >>
+     simp[ptr_observation_reachable_def] >> strip_tac >>
+     drule ptr_frame_context_membership >> simp[]) >>
+  `MEM at.po_fn C'.ctx_functions` by
+    (drule ptr_structural_trace_target >> strip_tac >>
+     drule ptr_chrono_history_reachable >>
+     simp[ptr_observation_reachable_def] >> strip_tac >>
+     drule ptr_frame_context_membership >> simp[]) >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
+        EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `unitShapeDefs$retpc_shape_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def,
+        EVERY_MEM] >> metis_tac[]) >>
+  `at.po_inst = a.po_inst` by
+    (fs[MEM] >> gvs[concretize_positions_unchanged]) >>
+  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality] >>
+  strip_tac >> gvs[is_terminator_def, MEM]
+  >>~- ([`step_inst _ _ _ _ = IntRet _ _`],
+    qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()])
+  >~ [`a.po_inst.inst_opcode = JMP`] >- suspend "jmp"
+  >~ [`a.po_inst.inst_opcode = JNZ`] >- suspend "jnz"
+  >> suspend "djmp"
+QED
+
+Resume ptr_paired_universal_jump_extension[jmp]:
+  `fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
+   EVERY bb_well_formed a.po_fn.fn_blocks /\
+   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
+   (!i. MEM i (fn_insts a.po_fn) /\ i.inst_opcode = ALLOCA ==>
+     IS_SOME (FLOOKUP (lp a.po_fn) (Allocation i.inst_id)))` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `zt = ptr_observe at.po_stack at.po_params
+    (entry_prov at.po_fn s' at.po_prov)
+    (entry_taint_vars at.po_fn s' at.po_taint) at.po_fn zt.po_inst zt.po_state` by
+    simp[ptr_observation_component_equality, ptr_observe_def] >>
+  drule ptr_paired_jump_prefix_normalize >>
+  simp[is_terminator_def] >>
+  disch_then (qspecl_then [`s'`, `zt.po_state`, `zt.po_inst`, `fuel`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `zt = ptr_observe _ _ _ _ _ _ _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qexistsl_tac [`[b] ++ delta`, `ptr_gap_scan bb (LENGTH delta) b`,
+    `tokens`, `registry`, `ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births`,
+    `PT`, `entry_prov a.po_fn s_jump TG`, `saved`, `entries`,
+    `[(tokens,registry,ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births,
+       PT,entry_prov a.po_fn s_jump TG,saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  gvs[APPEND_ASSOC, ptr_gap_scan_fields, ptr_observe_def,
+      ptr_observation_component_equality]
+QED
+Resume ptr_paired_universal_jump_extension[jnz]:
+  `?cond yes no. a.po_inst.inst_operands = [cond; Label yes; Label no]` by
+    (`active_inst a.po_fn a.po_inst a.po_state` by
+       (drule ptr_structural_trace_source >> strip_tac >>
+        drule ptr_chrono_history_reachable >>
+        simp[ptr_observation_reachable_def] >> strip_tac >>
+        qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[Once frame_reachable_cases] >> rpt strip_tac >> gvs[]) >>
+     `MEM a.po_inst (fn_insts a.po_fn)` by
+       (fs[active_inst_def, fn_insts_MEM] >> metis_tac[MEM_EL]) >>
+     `inst_wf a.po_inst` by (fs[EVERY_MEM] >> metis_tac[]) >>
+     gvs[inst_wf_def] >> metis_tac[]) >>
+  `opaque_use_ok a.po_fn` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `MEM a.po_inst.inst_opcode [JNZ; DJMP] /\ MEM cond a.po_inst.inst_operands` by simp[] >>
+  drule_all ptr_owned_jnz_scalar >> strip_tac >>
+  `fn_inst_wf a.po_fn /\ EVERY bb_well_formed a.po_fn.fn_blocks /\
+   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
+   (!i. MEM i (fn_insts a.po_fn) /\ i.inst_opcode = ALLOCA ==>
+     IS_SOME (FLOOKUP (lp a.po_fn) (Allocation i.inst_id)))` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `zt = ptr_observe at.po_stack at.po_params
+    (entry_prov at.po_fn s' at.po_prov)
+    (entry_taint_vars at.po_fn s' at.po_taint) at.po_fn zt.po_inst zt.po_state` by
+    simp[ptr_observation_component_equality, ptr_observe_def] >>
+  drule ptr_paired_jnz_prefix_normalize >> simp[is_terminator_def] >>
+  disch_then (qspecl_then [`s'`, `zt.po_state`, `zt.po_inst`, `fuel`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `zt = ptr_observe _ _ _ _ _ _ _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qexistsl_tac [`[b] ++ delta`, `ptr_gap_scan bb (LENGTH delta) b`,
+    `tokens`, `registry`, `ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births`,
+    `PT`, `entry_prov a.po_fn s_jump TG`, `saved`, `entries`,
+    `[(tokens,registry,ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births,
+       PT,entry_prov a.po_fn s_jump TG,saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+Resume ptr_paired_universal_jump_extension[djmp]:
+  `fn_inst_wf a.po_fn /\ opaque_use_ok a.po_fn /\
+   EVERY bb_well_formed a.po_fn.fn_blocks /\
+   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
+   (!i. MEM i (fn_insts a.po_fn) /\ i.inst_opcode = ALLOCA ==>
+     IS_SOME (FLOOKUP (lp a.po_fn) (Allocation i.inst_id)))` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `zt = ptr_observe at.po_stack at.po_params
+    (entry_prov at.po_fn s' at.po_prov)
+    (entry_taint_vars at.po_fn s' at.po_taint) at.po_fn zt.po_inst zt.po_state` by
+    simp[ptr_observation_component_equality, ptr_observe_def] >>
+  drule ptr_paired_djmp_prefix_normalize >> simp[is_terminator_def] >>
+  disch_then (qspecl_then [`s'`, `zt.po_state`, `zt.po_inst`, `fuel`] mp_tac) >>
+  disch_then (qspec_then `P` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `zt = ptr_observe _ _ _ _ _ _ _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qexistsl_tac [`[b] ++ delta`, `ptr_gap_scan bb (LENGTH delta) b`,
+    `tokens`, `registry`, `ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births`,
+    `PT`, `entry_prov a.po_fn s_jump TG`, `saved`, `entries`,
+    `[(tokens,registry,ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births,
+       PT,entry_prov a.po_fn s_jump TG,saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+Finalise ptr_paired_universal_jump_extension
 
 Theorem ptr_paired_universal_extension:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
