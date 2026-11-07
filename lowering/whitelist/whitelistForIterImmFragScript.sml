@@ -4,6 +4,7 @@ Ancestors
   whitelistForIterImmLoop whitelistForIterDynFrag stmtSimForArrayFrag
   loweringPosts stmtLowering stmtSimProps context emitHelper compileEnv exprLoweringProps
   localPtrsProps emitHelperProps fragExec venomInst list finite_map arithmetic
+  allocationPtr stmtSimForArrayLoop words
 Libs
   monadsyntax
 
@@ -116,4 +117,17 @@ Proof
   `!x. not_fresh_at sa x ==> not_fresh_at sb0 x` by
     (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
   fs[ret_pc_ok_def, MEM] >> metis_tac[]
+QED
+
+(* The counted invariant retains the allocation site, not an explicit address
+   bound.  Its state relation recovers that bound at every body entry. *)
+Theorem immutable_entry_allocation_bound:
+  array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+    p dst sz ainst bod st k es s /\
+  ainst = mk_inst aid ALLOCA [Lit (n2w sz)] [p] /\
+  MEM ainst (fn_insts func) /\ sz < dimword (:256) ==>
+  w2n dst + sz < dimword (:256)
+Proof
+  strip_tac >> gvs[array_loop_inv_def, mk_inst_def] >>
+  drule_all (SRULE [mk_inst_def] stmt_state_rel_alloca_site_bound) >> simp[]
 QED
