@@ -1107,7 +1107,12 @@ Proof
   `ee with <|scopes := scs; gas_obs := []|> =
    (ee with gas_obs := []) with scopes := scs`
     by simp[evaluation_state_component_equality] >>
-  metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
+  qpat_x_assum `ee with <|scopes := scs; gas_obs := []|> =
+                (ee with scopes := scs) with gas_obs := []`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  RULE_ASSUM_TAC (REWRITE_RULE [exprSimWordArgsTheory.stmt_state_rel_gas_obs,
+                                alloca_frame_gas_obs]) >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* x: T = e for a type T that is not a word type, where e is not the
