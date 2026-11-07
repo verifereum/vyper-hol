@@ -1319,12 +1319,6 @@ Theorem immutable_loop_body_run[local]:
   ALL_DISTINCT [cv;mv;sv;vv;dm;dv;av;nv] /\
   (!x. MEM x [cv;mv;sv;vv;dm;dv;av;nv] ==>
        src <> Var x /\ dst <> Var x /\ region <> Var x) ==>
-  let off = n2w (32*i) : bytes32;
-      value = mload (w2n (a+off)) q;
-      p = update_var av (b+off)
-        (update_var dv (b+off) (update_var dm off
-          (update_var vv value (update_var sv (a+off) (update_var mv off q)))))
-  in
   run_inst_seq
     [mk_inst id MUL [Var cv; Lit 32w] [mv];
      mk_inst (id+1) ADD [src; Var mv] [sv];
@@ -1336,7 +1330,11 @@ Theorem immutable_loop_body_run[local]:
      mk_inst (id+7) ADD [Var cv; Lit 1w] [nv];
      mk_inst (id+8) ASSIGN [Var nv] [cv]] q =
   OK (update_var cv (n2w (SUC i)) (update_var nv (n2w (SUC i))
-        (istore (w2n (b+off)) value p)))
+        (istore (w2n (b+n2w (32*i))) (mload (w2n (a+n2w (32*i))) q)
+          (update_var av (b+n2w (32*i))
+            (update_var dv (b+n2w (32*i)) (update_var dm (n2w (32*i))
+              (update_var vv (mload (w2n (a+n2w (32*i))) q)
+                (update_var sv (a+n2w (32*i)) (update_var mv (n2w (32*i)) q)))))))))
 Proof
   strip_tac >>
   `cv <> mv /\ mv <> sv /\ src <> Var mv` by
@@ -1382,16 +1380,15 @@ Theorem immutable_loop_body_frame[local]:
   immutable_loop_frame sa sb s a b i q /\
   (!x. MEM x [cv;mv;sv;vv;dm;dv;av;nv] ==> not_fresh_at sb x) /\
   (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dm;dv;av;nv]) ==>
-  let off = n2w (32*i) : bytes32;
-      value = mload (w2n (a+off)) q;
-      p = update_var av (b+off)
-        (update_var dv (b+off) (update_var dm off
-          (update_var vv value (update_var sv (a+off) (update_var mv off q)))))
-  in immutable_loop_frame sa sb s a b (SUC i)
+  immutable_loop_frame sa sb s a b (SUC i)
     (update_var cv (n2w (SUC i)) (update_var nv (n2w (SUC i))
-      (istore (w2n (b+off)) value p)))
+      (istore (w2n (b+n2w (32*i))) (mload (w2n (a+n2w (32*i))) q)
+        (update_var av (b+n2w (32*i))
+          (update_var dv (b+n2w (32*i)) (update_var dm (n2w (32*i))
+            (update_var vv (mload (w2n (a+n2w (32*i))) q)
+              (update_var sv (a+n2w (32*i)) (update_var mv (n2w (32*i)) q)))))))))
 Proof
-  strip_tac >> simp_tac bool_ss [LET_THM] >>
+  strip_tac >>
   ntac 2 (irule immutable_loop_frame_write >>
     conj_tac >- metis_tac[listTheory.MEM] >>
     conj_tac >- metis_tac[listTheory.MEM]) >>
@@ -1438,11 +1435,11 @@ Proof
        src <> Var x /\ dst <> Var x /\ region <> Var x` by metis_tac[] >>
   drule_all immutable_loop_body_run >>
   disch_then (qspec_then `id` mp_tac) >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  strip_tac >>
   qmatch_asmsub_abbrev_tac `run_inst_seq code q = OK result` >>
   `immutable_loop_frame sa sb s a b (SUC i) result` by
     (simp_tac bool_ss [Abbr `result`] >>
-     irule (SIMP_RULE bool_ss [LET_THM] immutable_loop_body_frame) >>
+     irule immutable_loop_body_frame >>
      metis_tac[]) >>
   drule tuple_run_inst_seq_gas_path >>
   disch_then drule >> disch_then drule >>
