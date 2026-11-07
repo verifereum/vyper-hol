@@ -7,7 +7,9 @@ Ancestors
   fragGasPathMem fragGasPath gasOutcome fragGasMode vyperInterpreter vyperState
   vyperValue venomState loweringPosts exprSimProps exprSimHash
   exprBopSimProps bodyMemBiKeccakBounds vyperTyping
-  vyperEvalExprPreservesScopesDom
+  vyperEvalExprPreservesScopesDom venomExecSemantics venomInst
+  emitHelperProps valueEncoding fragExecMem instMemFrontier venomMemDefs
+  fragGasSeqMem allocaHistoryFragment rich_list
 Libs
   pairLib
 
@@ -268,8 +270,95 @@ Resume held_digest_operand_outcome[runtime_normal]:
   `!z. not_fresh_at sa z ==> not_fresh_at sm z` by
     (fs[ci_mono_def, not_fresh_at_def] >> decide_tac) >>
   fs[expr_post_def, locals_kept_def] >>
-  asm_rewrite_tac[] >>
-  FAIL_TAC "frame"
+  asm_rewrite_tac[]
 QED
 
 Finalise held_digest_operand_outcome
+
+Theorem held_compare_run_nofresh:
+  (if bop = Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
+  eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (bool_to_word (if bop = Eq then w1 = w2 else w1 <> w2)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
+Proof
+  Cases_on `bop = Eq` >>
+  simp[emit_op_def, fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[emitted_insts_def, DROP_APPEND, run_inst_seq_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, exec_pure1_def,
+       bind_outputs_def] >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def, bool_to_word_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem held_compare_shape:
+  (if bop = Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
+  same_blocks sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
+  LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
+    LENGTH (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  Cases_on `bop = Eq` >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[same_blocks_def, emitted_insts_def, DROP_APPEND, mk_inst_def,
+       is_terminator_def] >>
+  irule run_inst_seq_mem_ok_every >>
+  simp[below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other]
+QED
+
+Theorem held_compare_counted_nofresh:
+  (if bop = Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
+  eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+    eval_operand op t = SOME (bool_to_word (if bop = Eq then w1 = w2 else w1 <> w2)) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all held_compare_run_nofresh >> strip_tac >>
+  drule held_compare_shape >> disch_then (qspec_then `s` strip_assume_tac) >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    (conj_tac
+     >- (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+         qpat_x_assum `LENGTH sb.cs_current_insts = _` kall_tac >>
+         simp[DROP_APPEND, emitted_insts_def] >> metis_tac[]) >>
+     decide_tac) >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    fs[EVERY_MEM] >>
+  drule_all alloca_history_run_inst_seq >> simp[] >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[venom_state_component_equality, stmt_state_rel_inst_idx,
+      eval_operand_def, lookup_var_def]
+QED
