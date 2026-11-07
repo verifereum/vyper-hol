@@ -3,7 +3,7 @@ Theory rawCallArgumentMemory
 Ancestors
   rawCallSuffixMemory bodyMemRawCallBounds exprSimRawCall exprSimMemDefs
   bodyMemoryPreds gasOutcome exprSimDefs exprSimProps loweringPosts exprLoweringProps
-  compileEnv venomState vyperInterpreter vyperState bodyArgsMemory
+  compileEnv venomState vyperInterpreter vyperState bodyArgsMemory exprSimWordArgs
 
 Theorem raw_call_mem_value_bind:
   expr_sim_mem ctx func cenv cx ty e es /\
@@ -111,4 +111,35 @@ Proof
   drule_all lower_typed_args_sim_mem >> strip_tac >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> qexists_tac `xs` >> simp[]
+QED
+
+Theorem raw_call_kwargs_mem_bind:
+  EVERY (\k. k = EKValue \/ k = EKGas) ks /\ LENGTH args = LENGTH ks /\
+  typed_args_ready_mem ctx func cenv cx (K (BaseT (UintT 256))) Inv args /\ Inv es /\
+  (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) /\
+  wb_args_shape cenv (K (BaseT (UintT 256))) args /\
+  compile_ext_call_kwargs compile_expr cenv NoneT ks args sa = ((vo,go,d),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!exc ee r. wb_args_exit (INR exc) r ==> R (INR exc) ee r) /\
+  (!gs vs ee t xs.
+    eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\
+    typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
+    vo = ext_call_kwarg EKValue ks xs /\ go = ext_call_kwarg EKGas ks xs /\ d = NONE /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
+    gas_outcome T (cx_tops cx) (ctx,func) (k vs) (ee,t) Q R) ==>
+  gas_outcome T (cx_tops cx) (ctx,func) (bind (eval_exprs cx args) k) (es,s0) Q R
+Proof
+  strip_tac >> drule_all raw_call_kwargs_sim_mem >>
+  disch_then (mp_tac o MATCH_MP raw_call_outcome_normal) >> disch_tac >>
+  irule raw_call_values_outcome_bind >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (rpt gen_tac >> Cases_on `rr` >> simp[wb_args_exit_def] >>
+      metis_tac[wb_args_exit_def]) >>
+  conj_tac >- (simp[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED

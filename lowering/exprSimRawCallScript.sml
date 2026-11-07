@@ -518,7 +518,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem raw_call_values_outcome_bind[local]:
+Theorem raw_call_values_outcome_bind:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value list evaluation_result) (es,s0) P E /\
   (!rr ee r. E rr ee r ==> ?exc. rr = INR exc /\ R (INR exc) ee r) /\
@@ -772,7 +772,7 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >> gvs[]
 QED
 
-Theorem raw_call_kwargs_types[local]:
+Theorem raw_call_kwargs_types:
   raw_call_kws_ok flags es ==>
   EVERY (\k. k = EKValue \/ k = EKGas) flags.rcf_kws /\
   EVERY (\e. expr_type e = BaseT (UintT 256)) es
@@ -853,7 +853,7 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem raw_call_pre_flags[local]:
+Theorem raw_call_pre_flags:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
   ~flags.rcf_is_delegate /\
   flags.rcf_max_outsize < dimword (:256) /\
@@ -1333,7 +1333,7 @@ Proof
   disch_then (qspecl_then [`b+32`, `LENGTH bs`] mp_tac) >> simp[]
 QED
 
-Theorem raw_call_kwargs_payload[local]:
+Theorem raw_call_kwargs_payload:
   expr_sim_inv cenv cx env es /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data s /\
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
@@ -1797,7 +1797,7 @@ Proof
   simp[]
 QED
 
-Theorem raw_call_optional_gas_run[local]:
+Theorem raw_call_optional_gas_run:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
   (!g. go = SOME g ==> ?w. eval_operand g s = SOME w) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
@@ -2189,7 +2189,7 @@ QED
 Finalise raw_call_prefix_sim
 *)
 
-Theorem raw_call_data_slice_placement[local]:
+Theorem raw_call_data_slice_placement:
   expr_post ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD /\
   expr_type d = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
