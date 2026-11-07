@@ -1250,6 +1250,14 @@ Proof
   Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
 QED
 
+Theorem storage_fold_memory[local]:
+  !l s f g tr.
+    (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
+    s.vs_memory
+Proof
+  Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
+QED
+
 Theorem storage_copy_bulk_run[local]:
   !ctx func cenv cx es' tr src k n sa sb u s b.
     compile_word_copy_loop src (Lit k) n LocMemory
@@ -1270,6 +1278,7 @@ Theorem storage_copy_bulk_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s.vs_memory /\
       !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                ?fuel'. run_from fuel' ctx func s = r
 Proof
@@ -1295,6 +1304,11 @@ Proof
   `(if (if tr then LocTransient else LocStorage) = LocStorage
      then sstore else tstore) = (if tr then tstore else sstore)` by
     (Cases_on `tr` >> simp[]) >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_x_assum `norm = _`
+       (mp_tac o AP_TERM ``\t:venom_state. t.vs_memory``) >>
+     simp[Abbr `norm`, storage_fold_memory]) >>
+  simp[] >>
   qpat_x_assum `norm = _`
     (mp_tac o AP_TERM ``\t:venom_state. t.vs_allocas``) >>
   simp[Abbr `norm`, storage_copy_backend_fold] >>
@@ -1318,6 +1332,7 @@ Theorem storage_copy_one_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s.vs_memory /\
       !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                ?fuel'. run_from fuel' ctx func s = r
 Proof
@@ -1414,6 +1429,7 @@ Theorem storage_copy_suffix_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s.vs_memory /\
       !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                ?fuel'. run_from fuel' ctx func s = r
 Proof
@@ -1599,7 +1615,13 @@ Theorem storage_copy_success_run[local]:
       (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
              lookup_var x t = SOME u) /\
       (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
-                  FLOOKUP t.vs_allocas aid = SOME ent)
+                  FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s1.vs_memory /\
+      (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+        aid < sa.cs_next_id /\
+        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) ==>
+        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_lower_value_var >> simp[] >> disch_tac >>
@@ -1717,5 +1739,11 @@ Proof
   qexistsl_tac [`INL ()`, `ee'`, `OK t'`] >>
   conj_tac >- fs[write_storage_slot_gas_obs] >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  disj1_tac >> irule assign_storage_copy_suffix_open >> metis_tac[]
+  disj1_tac >> conj_tac
+  >- (irule assign_storage_copy_suffix_open >> metis_tac[]) >>
+  irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[] >>
+  drule eval_read_preserves_scopes_dom >>
+  simp[Abbr `ee'`, set_storage_def] >> metis_tac[]
 QED
