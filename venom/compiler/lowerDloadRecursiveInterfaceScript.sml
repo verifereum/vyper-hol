@@ -5631,3 +5631,58 @@ Proof
   BETA_TAC >> simp_tac (srw_ss()) [] >> disch_tac >>
   BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* Phase selection keeps the complete normal witness body opaque until the
+   numeric bound is isolated. No saved certificate is reconstructed. *)
+val (ld_recursive_combined_phase_choice,ld_recursive_combined_complete,
+     ld_recursive_combined_exceptional,ld_combined_phase_binders) =
+  let
+    val (args,body) = strip_abs ld_recursive_combined_candidate
+    val [current,saved,alternatives] = strip_conj body
+    val (normal,exceptional) = dest_disj alternatives
+    val (ws,b) = strip_exists normal
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) ws)
+    val n = named "n" and code = named "code"
+    fun normal_with r = list_mk_abs(args,list_mk_conj [current,saved,
+      mk_disj(list_mk_exists(ws,mk_conj(b,r)),exceptional)])
+  in
+    (normal_with ``SUC ^n < LENGTH ^code \/ SUC ^n = LENGTH ^code``,
+     list_mk_abs(args,list_mk_conj [current,saved,
+       list_mk_exists(ws,mk_conj(b,``SUC ^n = LENGTH ^code``))]),
+     list_mk_abs(args,list_mk_conj [current,saved,exceptional]),length ws)
+  end;
+
+Theorem ld_recursive_combined_phase_choice_intro[local]:
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t ==>
+  (^ld_recursive_combined_phase_choice) vs0 CT stk un gn j t
+Proof
+  BETA_TAC >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
+  ho_match_mp_tac MONO_OR >> conj_tac
+  >- (rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      pop_assum strip_assume_tac >>
+      `n < LENGTH code` by metis_tac[LENGTH_NIL, arithmeticTheory.NOT_ZERO_LT_ZERO] >>
+      decide_tac) >> simp[]
+QED
+
+(* Push only the newly introduced disjunction through the known binder
+   spine. In particular this conversion never descends into saved data. *)
+fun ld_phase_exists_or_conv 0 = REWR_CONV LEFT_AND_OVER_OR
+  | ld_phase_exists_or_conv n =
+      QUANT_CONV (ld_phase_exists_or_conv (n-1)) THENC
+      HO_REWR_CONV EXISTS_OR_THM;
+
+Theorem ld_recursive_combined_phase_split[local]:
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t ==>
+  (^ld_recursive_combined_inside) vs0 CT stk un gn j t \/
+  (^ld_recursive_combined_complete) vs0 CT stk un gn j t \/
+  (^ld_recursive_combined_exceptional) vs0 CT stk un gn j t
+Proof
+  disch_then (mp_tac o MATCH_MP ld_recursive_combined_phase_choice_intro) >>
+  BETA_TAC >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (LAND_CONV
+    (ld_phase_exists_or_conv ld_combined_phase_binders))))) >>
+  pure_rewrite_tac [LEFT_AND_OVER_OR, DISJ_ASSOC] >> simp[]
+QED
