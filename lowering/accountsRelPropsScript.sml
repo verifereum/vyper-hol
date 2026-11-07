@@ -403,7 +403,7 @@ Proof
          disch_then (qspecl_then [`type_slot_size tv`, `bs`] mp_tac) >>
          decide_tac) >>
       metis_tac[]) >>
-  `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+  `!i. i < n ==>
        (dead_bytes st' (bs + (i * type_slot_size tv + 1)) tv j b <=>
         dead_bytes st (bs + (i * type_slot_size tv + 1)) tv j b)` by
     (rpt strip_tac >> first_x_assum irule >> simp[] >>
@@ -507,12 +507,10 @@ Proof
   gvs[]
 QED
 
-(* A dead byte of a DynArray in the slots of an element below its length is
-   that element's. *)
+(* A dead byte of a DynArray within a capacity element is that element's. *)
 Theorem dyn_array_elem_dead:
   !st bs tv n i x c.
     dead_bytes st bs (ArrayTV tv (Dynamic n)) x c /\ i < n /\
-    i < w2n (lookup_storage (n2w bs) st) /\
     bs + 1 + i * type_slot_size tv <= x /\
     x < bs + 1 + i * type_slot_size tv + type_slot_size tv ==>
     dead_bytes st (bs + 1 + i * type_slot_size tv) tv x c
@@ -520,13 +518,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
   simp[Once dead_bytes_def] >> strip_tac >> rename1 `i2 < n` >>
-  Cases_on `i2 < w2n (lookup_storage (n2w bs) st)` >>
-  fs[arithmeticTheory.RIGHT_ADD_DISTRIB]
-  >- (drule (cj 1 dead_bytes_range) >> strip_tac >>
-      `i2 = i` by
-        (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
-           element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
-      gvs[]) >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
   `i2 = i` by
     (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
        element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
@@ -606,11 +598,8 @@ Proof
       PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac)
   >~ [`dead_bytes _ _ (ArrayTV _ (Dynamic _))`]
   >- (rename1 `dead_bytes _ bs (ArrayTV tv (Dynamic n)) j b` >>
-      drule dead_bytes_head_eq >>
-      impl_tac >- simp[vyperValueTheory.type_slot_size_def] >>
-      disch_then (fn th => ONCE_REWRITE_TAC [dead_bytes_def] >>
-                           REWRITE_TAC [th]) >>
-      `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+      ONCE_REWRITE_TAC [dead_bytes_def] >>
+      `!i. i < n ==>
            (dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
             dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b)`
         suffices_by metis_tac[] >>
@@ -897,20 +886,7 @@ Proof
   >- metis_tac[dyn_bytes_dead_update_zero]
   >- metis_tac[dyn_bytes_dead_update_zero]
   >- (qexists_tac `i` >> simp[])
-  >- (qexists_tac `i` >> simp[] >>
-      rename1 `lookup_storage (n2w start) st` >>
-      Cases_on `k = n2w start`
-      >- (gvs[lookup_storage_def, update_storage_def,
-              combinTheory.APPLY_UPDATE_THM] >>
-          qpat_x_assum `if _ then _ else _` mp_tac >>
-          IF_CASES_TAC >> simp[] >> strip_tac >>
-          drule (cj 1 dead_bytes_range) >>
-          simp[arithmeticTheory.LEFT_ADD_DISTRIB,
-               arithmeticTheory.RIGHT_ADD_DISTRIB]) >>
-      qpat_x_assum `if _ then _ else _` mp_tac >>
-      IF_CASES_TAC >> strip_tac >>
-      gvs[lookup_storage_def, update_storage_def,
-          combinTheory.APPLY_UPDATE_THM])
+  >- (qexists_tac `i` >> simp[])
   >> metis_tac[]
 QED
 
