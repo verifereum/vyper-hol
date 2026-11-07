@@ -268,6 +268,7 @@ Proof
           get_address_immutables_def, get_source_immutables_def,
           lift_option_def, lift_option_type_def, lift_sum_def,
           bind_def, return_def, raise_def, evaluate_subscripts_def,
+          read_memory_path_def, read_popped_def,
           vyperTypeExprSoundnessTheory.no_type_error_result_def])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
@@ -290,6 +291,7 @@ Proof
           get_address_immutables_def, get_source_immutables_def,
           lift_option_def, lift_option_type_def, lift_sum_def,
           bind_def, return_def, raise_def, evaluate_subscripts_def,
+          read_memory_path_def, read_popped_def,
           vyperTypeExprSoundnessTheory.no_type_error_result_def])
   >- (`find_var_decl_by_name fn ts =
          SOME (StorageVarDecl T typ,fn)` by
@@ -449,6 +451,7 @@ Proof
           get_address_immutables_def, get_source_immutables_def,
           lift_option_def, lift_option_type_def, lift_sum_def,
           bind_def, return_def, raise_def, evaluate_subscripts_def,
+          read_memory_path_def, read_popped_def,
           vyperTypeExprSoundnessTheory.no_type_error_result_def])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
@@ -471,6 +474,7 @@ Proof
           get_address_immutables_def, get_source_immutables_def,
           lift_option_def, lift_option_type_def, lift_sum_def,
           bind_def, return_def, raise_def, evaluate_subscripts_def,
+          read_memory_path_def, read_popped_def,
           vyperTypeExprSoundnessTheory.no_type_error_result_def])
   >- (`find_var_decl_by_name fn ts =
          SOME (StorageVarDecl T typ,fn)` by

@@ -321,7 +321,7 @@ QED
 Theorem set_storage_preserves_state_well_typed:
   state_well_typed st ==> state_well_typed (set_storage cx st is_trans storage')
 Proof
-  rw[state_well_typed_def]
+  Cases_on `is_trans` >> rw[state_well_typed_def, set_storage_def]
 QED
 
 Theorem set_storage_preserves_accounts_well_typed:
@@ -437,12 +437,51 @@ Proof
   gvs[state_well_typed_def] >>
   conj_tac
   >- (
-    `imms_well_typed imms` by (
-      fs[EVERY_MEM, FORALL_PROD] >> first_x_assum irule >>
-      imp_res_tac alistTheory.ALOOKUP_MEM >> goal_assum drule) >>
-    irule imms_well_typed_set_source_immutables_update >> simp[]) >>
-  gvs[EVERY_MEM, FORALL_PROD, alistTheory.ADELKEY_def, MEM_FILTER] >>
-  rpt strip_tac >> first_x_assum irule >> goal_assum drule
+    conj_tac
+    >- (
+      `imms_well_typed imms` by (
+        fs[EVERY_MEM, FORALL_PROD] >> first_x_assum irule >>
+        imp_res_tac alistTheory.ALOOKUP_MEM >> goal_assum drule) >>
+      irule imms_well_typed_set_source_immutables_update >> simp[]) >>
+    gvs[EVERY_MEM, FORALL_PROD, alistTheory.ADELKEY_def, MEM_FILTER] >>
+    rpt strip_tac >> first_x_assum irule >> goal_assum drule) >>
+  gvs[immutable_popped_well_typed_def, alistTheory.ALOOKUP_ADELKEY,
+      get_source_immutables_def, set_source_immutables_def, FLOOKUP_UPDATE,
+      AllCaseEqs()] >>
+  rpt strip_tac >> gvs[popped_history_typed_def, alistTheory.ALOOKUP_ADELKEY,
+                         FLOOKUP_UPDATE, AllCaseEqs()] >>
+  Cases_on `src = src'` >> gvs[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem set_immutable_popped_preserves_state_well_typed:
+  state_well_typed st /\
+  (!mods tv v. ALOOKUP st.immutables cx.txn.target = SOME mods /\
+     FLOOKUP (get_source_immutables src mods) id = SOME (tv,v) ==>
+     popped_history_typed tv history) /\
+  set_immutable_popped cx src id history st = (res,st') ==>
+  state_well_typed st'
+Proof
+  simp[set_immutable_popped_eq, state_well_typed_def] >>
+  rpt strip_tac >>
+  gvs[immutable_popped_well_typed_def, alistTheory.ALOOKUP_ADELKEY,
+      AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem set_immutable_popped_preserves_runtime_consistent:
+  runtime_consistent env cx st /\
+  (!mods tv v. ALOOKUP st.immutables cx.txn.target = SOME mods /\
+     FLOOKUP (get_source_immutables src mods) id = SOME (tv,v) ==>
+     popped_history_typed tv history) /\
+  set_immutable_popped cx src id history st = (res,st') ==>
+  runtime_consistent env cx st'
+Proof
+  rpt strip_tac >>
+  `state_well_typed st'` by
+    (irule set_immutable_popped_preserves_state_well_typed >>
+     goal_assum (drule_at Any) >> gvs[runtime_consistent_def]) >>
+  gvs[set_immutable_popped_eq, runtime_consistent_def, env_consistent_def,
+      env_scopes_consistent_def, env_immutables_consistent_def] >>
+  metis_tac[]
 QED
 
 Definition LIST_REL3_def:

@@ -87,7 +87,7 @@ Proof
 QED
 
 Theorem constant_result_selection[local]:
-  constant_result_shape pv /\
+  st.immutable_popped = [] /\ constant_result_shape pv /\
   eval_result_typed (env,cx,st) pv (Type ty) /\
   read_result cx pv st = (INL v,st) /\
   env.type_defs = get_tenv cx /\
@@ -118,18 +118,21 @@ Proof
   `well_formed_type_value etv` by
     metis_tac[evaluate_type_well_formed_type_value] >>
   gvs[place_type_value_def, read_result_def, read_place_def,
+      read_memory_path_def, read_popped_def,
       bind_def, lift_option_type_def, lift_sum_def, return_def,
       AllCaseEqs()] >>
   gvs[get_immutables_def, get_address_immutables_def, bind_def,
       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
-  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def,
+      read_popped_def, AllCaseEqs()] >>
   conj_tac
   >- (drule vyperPlaceResultTypingTheory.subscripts_type_append >>
       disch_then (qspec_then `[sb]` mp_tac) >> simp[subscripts_type_def]) >>
   drule_all evaluate_subscripts_append >> simp[]
 QED
 
-Theorem constant_immutable_read_inv:
+Theorem constant_immutable_read_empty_history_inv:
+  st.immutable_popped = [] /\
   read_result cx (PlaceR (ImmutablePlace src id path)) st = (INL v,st') ==>
   st' = st /\
   ?imms tv root.
@@ -139,9 +142,11 @@ Theorem constant_immutable_read_inv:
 Proof
   simp[read_result_def, read_place_def, get_immutables_def,
        get_address_immutables_def, bind_def, lift_option_type_def,
-       lift_sum_def, return_def, raise_def] >>
+       lift_sum_def, return_def, raise_def, read_memory_path_def,
+       read_popped_def] >>
   strip_tac >>
-  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def,
+      read_popped_def, AllCaseEqs()] >>
   PairCases_on `tva` >> gvs[]
 QED
 
@@ -164,8 +169,8 @@ Proof
       constant_length_def, AllCaseEqs()]
 QED
 
-Theorem constant_result_selection_inv:
-  constant_result_shape pv /\
+Theorem constant_result_selection_empty_history_inv:
+  st.immutable_popped = [] /\ constant_result_shape pv /\
   eval_result_typed (env,cx,st) pv (Type ty) /\
   evaluate_type env.type_defs ty = SOME tv /\
   env.type_defs = get_tenv cx /\
@@ -184,11 +189,13 @@ Proof
       bind_def, ignore_bind_def, lift_sum_def, return_def,
       sum_CASE_rator, AllCaseEqs()] >>
   gvs[place_type_value_def, read_result_def, read_place_def,
+      read_memory_path_def, read_popped_def,
       bind_def, lift_option_type_def, lift_sum_def, return_def,
       AllCaseEqs()] >>
   gvs[get_immutables_def, get_address_immutables_def, bind_def,
       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
-  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def,
+      read_popped_def, AllCaseEqs()] >>
   drule_all evaluate_subscripts_append >>
   disch_then (qspec_then `[sb]` mp_tac) >> simp[]
 QED
@@ -251,7 +258,8 @@ Proof
        get_tenv_def, get_immutables_def, get_address_immutables_def,
        bind_def, return_def, lift_option_type_def, initial_state_def,
        eval_result_typed_def, runtime_place_typed_def, place_type_value_def,
-       read_result_def, read_place_def, lift_sum_def, subscripts_type_def,
+       read_result_def, read_place_def, read_memory_path_def,
+       read_popped_def, lift_sum_def, subscripts_type_def,
        evaluate_subscripts_def, value_runtime_typed_def, artifact_env_def,
        constant_result_shape_def] >>
   metis_tac[evaluate_type_well_formed_type_value]
@@ -651,6 +659,7 @@ Proof
     drule_all constant_subscript_selected_typed >> strip_tac >>
     `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
       simp[artifact_env_def] >>
+    `(initial_state am sc).immutable_popped = []` by simp[initial_state_def] >>
     drule_all constant_result_selection >> strip_tac >>
     qexists `out` >>
     simp[Once evaluate_def, bind_def, expr_type_def, value_runtime_typed_def] >>
@@ -670,6 +679,7 @@ Proof
     drule_all constant_attribute_selected_typed >> strip_tac >>
     `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
       simp[artifact_env_def, get_tenv_def] >>
+    `(initial_state am sc).immutable_popped = []` by simp[initial_state_def] >>
     drule_all constant_result_selection >> strip_tac >>
     qexists `out` >>
     simp[Once evaluate_def, bind_def, expr_type_def, value_runtime_typed_def] >>
@@ -923,7 +933,8 @@ Resume constant_eval_expr_fold_agreement[name]:
         bind_def, lift_option_type_def, return_def, raise_def,
         option_CASE_rator, AllCaseEqs()] >>
     simp[constant_result_shape_def] >> rpt strip_tac >>
-    drule constant_immutable_read_inv >> strip_tac >>
+    `(initial_state am sc).immutable_popped = []` by simp[initial_state_def] >>
+    drule_all constant_immutable_read_empty_history_inv >> strip_tac >>
     gvs[initial_state_def, evaluate_subscripts_def,
         constant_machine_immutables_def, constant_value_def]
 QED
@@ -971,7 +982,8 @@ Resume constant_eval_expr_fold_agreement[attribute]:
     `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
       simp[artifact_env_def, get_tenv_def] >>
     simp[] >> rpt strip_tac >>
-    drule_all constant_result_selection_inv >> strip_tac >>
+    `(initial_state am sc).immutable_popped = []` by simp[initial_state_def] >>
+    drule_all constant_result_selection_empty_history_inv >> strip_tac >>
     gvs[constant_value_def] >> Cases_on `v` >>
     gvs[evaluate_subscripts_def, vyperValueOperationTheory.evaluate_attribute_def,
         AllCaseEqs()]
@@ -997,7 +1009,8 @@ Resume constant_eval_expr_fold_agreement[subscript]:
        (expr_type e1) = SOME tv` by gvs[eval_result_typed_def] >>
     `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
       simp[artifact_env_def, get_tenv_def] >>
-    rpt strip_tac >> drule_all constant_result_selection_inv >> strip_tac >>
+    `(initial_state am sc).immutable_popped = []` by simp[initial_state_def] >>
+    rpt strip_tac >> drule_all constant_result_selection_empty_history_inv >> strip_tac >>
     gvs[constant_value_def, evaluate_subscripts_def, get_tenv_def, AllCaseEqs()]
 QED
 

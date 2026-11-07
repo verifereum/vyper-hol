@@ -37,6 +37,31 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+Theorem place_immutable_ancestor_pop_read:
+  !cx.
+  FST ((do
+      base <- extend_place cx
+        (PlaceR (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)]))
+        (ValueSubscript (IntV 1));
+      popped <- pop_place cx
+        (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)]);
+      index <- select_result cx (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+        popped (ValueSubscript (IntV 0));
+      iv <- read_result cx index;
+      selected <- extend_place cx base (ValueSubscript iv);
+      read_result cx selected
+    od) (empty_state with immutables :=
+      [(cx.txn.target, [(NONE, FEMPTY |+ ("a",
+        (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2))
+           (Dynamic 2)) (Dynamic 2),
+         ArrayV (DynArrayV [ArrayV (DynArrayV
+           [ArrayV (DynArrayV [IntV 1; IntV 2]);
+            ArrayV (DynArrayV [IntV 0; IntV 5])])]))))])])) = INL (IntV 0)
+Proof
+  rpt (CHANGED_TAC (EVAL_TAC >>
+    simp[FLOOKUP_UPDATE, FLOOKUP_EMPTY, subscript_type_def, return_def]))
+QED
+
 Theorem place_pop_then_delayed_read:
   !cx.
   let entry = <|assignable := T;

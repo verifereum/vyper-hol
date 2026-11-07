@@ -184,8 +184,8 @@ QED
 Theorem transfer_value_scopes:
   !f t a st res st'. transfer_value f t a st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, type_check_def, assert_def, update_accounts_def] >>
-  gvs[AllCaseEqs(), raise_def]
+  rpt strip_tac >> drule transfer_value_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem lookup_flag_mem_scopes:
@@ -381,6 +381,24 @@ Proof
   metis_tac[write_place_scopes_dom]
 QED
 
+Theorem pop_immutable_place_scopes:
+  !cx src id path st res st'.
+    pop_place cx (ImmutablePlace src id path) st = (res,st') ==>
+    st'.scopes = st.scopes
+Proof
+  rpt gen_tac >> qabbrev_tac `P = \s. s.scopes = st.scopes` >>
+  `!s r s'. pop_place cx (ImmutablePlace src id path) s = (r,s') ==>
+    P s ==> P s'` suffices_by (simp[Abbr `P`] >> metis_tac[]) >>
+  simp[pop_place_def, ignore_bind_def] >>
+  rpt (simp[pairTheory.FORALL_PROD] >> rpt gen_tac >> BETA_TAC >> strip_tac >> strip_tac >>
+       dxrule (SRULE [GSYM AND_IMP_INTRO] bind_preserves) >>
+       disch_then (qspec_then `P` match_mp_tac) >> conj_tac
+       >- (simp[Abbr `P`] >>
+           metis_tac[get_immutables_state, lift_option_type_state,
+                     lift_sum_state, set_immutable_scopes]) >> simp[]) >>
+  simp[Abbr `P`, return_def]
+QED
+
 Theorem pop_place_scopes_dom:
   pop_place cx p st = (res,st') ==>
   MAP FDOM st.scopes = MAP FDOM st'.scopes
@@ -397,12 +415,7 @@ Proof
       imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >> gvs[] >>
       pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
       drule find_containing_scope_map_fdom >> simp[]) >>
-  simp[pop_place_def, bind_def, get_immutables_def,
-       get_address_immutables_def, lift_option_type_def, lift_sum_def,
-       return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-           get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
-  metis_tac[set_immutable_scopes]
+  metis_tac[pop_immutable_place_scopes]
 QED
 
 Theorem new_variable_scope_property:
@@ -488,10 +501,8 @@ Theorem acquire_nonreentrant_lock_scopes:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
     st'.scopes = st.scopes
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+  rpt strip_tac >> drule acquire_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem release_nonreentrant_lock_scopes:
@@ -499,8 +510,6 @@ Theorem release_nonreentrant_lock_scopes:
     release_nonreentrant_lock addr slot st = (res, st') ⇒
     st'.scopes = st.scopes
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+  rpt strip_tac >> drule release_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED

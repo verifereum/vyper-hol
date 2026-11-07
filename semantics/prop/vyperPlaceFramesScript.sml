@@ -44,9 +44,9 @@ Proof
   rpt strip_tac >> qexists `st'.scopes` >> gvs[]
 QED
 
-Theorem write_immutable_place_frame:
+Theorem write_immutable_place_state_frame:
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
-  ?imms. st' = st with immutables := imms
+  ?imms history. st' = st with <|immutables := imms; immutable_popped := history|>
 Proof
   simp[write_place_def, bind_def, get_immutables_def,
        get_address_immutables_def, lift_option_type_def, lift_sum_def,
@@ -54,7 +54,8 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >>
        gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
            lift_sum_def, set_scopes_def, return_def, raise_def]) >>
-  rpt strip_tac >> qexists `st'.immutables` >> gvs[evaluation_state_component_equality]
+  rpt strip_tac >> qexistsl_tac [`st'.immutables`, `st'.immutable_popped`] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem write_place_logs:
@@ -65,7 +66,7 @@ Proof
       Cases_on `cx.txn.is_static` >> Cases_on `encode_value t v` >> simp[] >>
       rpt strip_tac >> gvs[])
   >- (strip_tac >> drule write_memory_place_frame >> strip_tac >> gvs[]) >>
-  strip_tac >> drule write_immutable_place_frame >> strip_tac >> gvs[]
+  strip_tac >> drule write_immutable_place_state_frame >> strip_tac >> gvs[]
 QED
 
 Theorem write_memory_place_immutables:
@@ -79,7 +80,7 @@ Theorem write_immutable_place_scopes:
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
   st'.scopes = st.scopes
 Proof
-  strip_tac >> drule write_immutable_place_frame >> strip_tac >> gvs[]
+  strip_tac >> drule write_immutable_place_state_frame >> strip_tac >> gvs[]
 QED
 
 Theorem write_memory_place_storage:
@@ -94,7 +95,7 @@ Theorem write_immutable_place_storage:
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
   !b. get_storage cx st' b = get_storage cx st b
 Proof
-  rpt strip_tac >> drule write_immutable_place_frame >> strip_tac >>
+  rpt strip_tac >> drule write_immutable_place_state_frame >> strip_tac >>
   Cases_on `b` >> gvs[get_storage_def]
 QED
 

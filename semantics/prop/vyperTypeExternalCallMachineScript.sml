@@ -289,9 +289,12 @@ Theorem release_action_success_machine_well_typed:
   machine_well_typed (abstract_machine_from_state srcs exps layouts st')
 Proof
   strip_tac >>
-  drule release_action_preserves_machine_components >> strip_tac >>
+  `st' = st with tStorage := st'.tStorage` by
+    (Cases_on `nr /\ ~is_view` >> gvs[return_def] >>
+     Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+     drule release_nonreentrant_lock_residual_frame >> simp[]) >>
   irule abstract_machine_from_state_well_typed >>
-  gvs[state_well_typed_def]
+  gvs[evaluation_state_component_equality, state_well_typed_def]
 QED
 
 (* ===== Failure rollback ===== *)

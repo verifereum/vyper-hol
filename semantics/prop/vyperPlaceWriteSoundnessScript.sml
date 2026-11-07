@@ -128,7 +128,7 @@ Proof
   >- (gvs[write_place_def] >>
       drule_all write_storage_slot_preserves_accounts_well_typed >> simp[])
   >- (drule write_memory_place_frame >> strip_tac >> gvs[]) >>
-  drule write_immutable_place_frame >> strip_tac >> gvs[]
+  drule write_immutable_place_state_frame >> strip_tac >> gvs[]
 QED
 
 Theorem write_storage_place_no_type_error:

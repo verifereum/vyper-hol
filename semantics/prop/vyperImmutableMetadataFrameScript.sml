@@ -124,11 +124,13 @@ Proof
       irule immutable_metadata_frame_eq >> simp[]) >>
   simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def,
        lift_sum_def, vyperMiscTheory.option_CASE_rator,
-       vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+       vyperMiscTheory.sum_CASE_rator, return_def, raise_def, UNCURRY, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac get_immutables_state >> gvs[] >>
-  PairCases_on `tva` >> gvs[] >>
-  drule_all set_immutable_existing_metadata_frame >> simp[]
+  PairCases_on `tva` >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  drule_all set_immutable_existing_metadata_frame >>
+  simp[immutable_metadata_frame_def] >> metis_tac[]
 QED
 
 Theorem metadata_eval_frame[local]:

@@ -133,14 +133,7 @@ Proof
   Cases_on `p`
   >- metis_tac[vyperScopePreservationTheory.pop_storage_place_scopes_immutables]
   >- simp[] >>
-  simp[pop_place_def, bind_def, ignore_bind_def,
-       get_immutables_def, get_address_immutables_def,
-       get_accounts_def, lift_option_type_def, lift_sum_def,
-       return_def, raise_def] >>
-  rpt strip_tac >>
-  gvs[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
-      AllCaseEqs(), return_def, raise_def] >>
-  metis_tac[set_immutable_scopes]
+  metis_tac[pop_immutable_place_scopes]
 QED
 
 Theorem pop_place_scope_effect:

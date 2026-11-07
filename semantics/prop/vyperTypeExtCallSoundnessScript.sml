@@ -297,8 +297,10 @@ Proof
   Cases_on `transfer_value fromAddr toAddr amount st` >>
   rename1 `transfer_value fromAddr toAddr amount st = (res,st')` >>
   gvs[runtime_consistent_def] >>
-  `st'.scopes = st.scopes` by metis_tac[transfer_value_scopes] >>
-  `st'.immutables = st.immutables` by metis_tac[transfer_value_immutables] >>
+  `st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
+   st'.immutable_popped = st.immutable_popped` by
+    (drule transfer_value_residual_frame >>
+     simp[evaluation_state_component_equality]) >>
   gvs[env_consistent_def, env_scopes_consistent_def,
       env_immutables_consistent_def, state_well_typed_def] >>
   rpt conj_tac >- metis_tac[] >- metis_tac[] >- metis_tac[] >>
@@ -1063,11 +1065,9 @@ Proof
   `accounts_well_typed st'.accounts` by (
     irule eval_create_accounts_well_typed >>
     metis_tac[runtime_consistent_def]) >>
-  drule eval_create_preserves_scopes_immutables >> strip_tac >>
-  `runtime_consistent env cx st'` by (
-    gvs[runtime_consistent_def, state_well_typed_def, env_consistent_def,
-        env_scopes_consistent_def, env_immutables_consistent_def] >>
-    rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+  drule eval_create_residual_frame >> strip_tac >>
+  `runtime_consistent env cx st'` by
+    (irule runtime_consistent_call_frame >> metis_tac[]) >>
   (* the returned value is either the created address or a zero address *)
   `case res of
      | INL tv => expr_result_typed env

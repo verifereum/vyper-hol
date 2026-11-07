@@ -30,10 +30,34 @@ Definition imms_well_typed_def:
       value_has_type tv v /\ well_formed_type_value tv
 End
 
+(* Historical values use declared paths, independent of current array lengths. *)
+Definition popped_history_typed_def:
+  popped_history_typed tv history <=>
+    !path v. MEM (path,v) history ==>
+      ?ptv. subscripts_type tv path = SOME ptv /\
+            well_formed_type_value ptv /\ value_has_type ptv v
+End
+
+Definition immutable_popped_well_typed_def:
+  immutable_popped_well_typed imms histories <=>
+    !addr src id history mods tv v.
+      ALOOKUP histories (addr,src,id) = SOME history /\
+      ALOOKUP imms addr = SOME mods /\
+      FLOOKUP (get_source_immutables src mods) id = SOME (tv,v) ==>
+      popped_history_typed tv history
+End
+
+Theorem immutable_popped_well_typed_nil[simp]:
+  immutable_popped_well_typed imms []
+Proof
+  simp[immutable_popped_well_typed_def]
+QED
+
 Definition state_well_typed_def:
   state_well_typed st <=>
     EVERY scope_well_typed st.scopes /\
-    EVERY (\(addr, mods). imms_well_typed mods) st.immutables
+    EVERY (\(addr, mods). imms_well_typed mods) st.immutables /\
+    immutable_popped_well_typed st.immutables st.immutable_popped
 End
 
 (* ===== Global consistency predicates ===== *)

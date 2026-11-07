@@ -819,6 +819,17 @@ Proof
   simp[get_tenv_def] >> metis_tac[]
 QED
 
+Theorem send_call_value_residual_frame:
+  send_call_value mut cx st = (res,st') ==>
+  st' = st with accounts := st'.accounts
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     assert_def, return_def, raise_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  drule transfer_value_residual_frame >>
+  simp[evaluation_state_component_equality]
+QED
+
 Theorem send_call_value_preserves_tv[local]:
   send_call_value mut cx st = (res,st') ==>
   preserves_tv cx st st'
@@ -1232,16 +1243,6 @@ Proof
   metis_tac[vyperTypeExtCallSoundnessTheory.transfer_value_no_type_error]
 QED
 
-Theorem send_call_value_preserves_scopes_c53[local]:
-  send_call_value mut cx st = (res,st') ==>
-  st'.scopes = st.scopes
-Proof
-  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
-     assert_def, return_def, raise_def] >>
-  gvs[AllCaseEqs()] >>
-  imp_res_tac transfer_value_scopes >> gvs[]
-QED
-
 Theorem send_call_value_accounts_well_typed_c53:
   accounts_well_typed st.accounts /\
   send_call_value mut cx st = (res,st') ==>
@@ -1256,6 +1257,25 @@ Proof
   gvs[]
 QED
 
+Theorem call_lock_action_residual_frame:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
+   else return ()) st = (res,st') ==>
+  st' = st with tStorage := st'.tStorage
+Proof
+  rw[] >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
+  drule acquire_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
+QED
+
 Theorem call_lock_action_preserves_accounts_c53:
   (if nr then
      case cx.nonreentrant_slot of
@@ -1268,13 +1288,8 @@ Theorem call_lock_action_preserves_accounts_c53:
    else return ()) st = (res,st') ==>
   st'.accounts = st.accounts
 Proof
-  rw[] >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
-  qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def, return_def, raise_def,
-     assert_def, check_def] >>
-  gvs[AllCaseEqs(), return_def, raise_def]
+  strip_tac >> drule call_lock_action_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem call_lock_send_prefix_body_state_ready_c53:
@@ -1298,11 +1313,10 @@ Theorem call_lock_send_prefix_body_state_ready_c53:
 Proof
   rw[bind_def, ignore_bind_def] >> gvs[AllCaseEqs()] >>
   TRY (Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def]) >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >>
-  imp_res_tac acquire_nonreentrant_lock_immutables >>
-  imp_res_tac send_call_value_preserves_scopes_c53 >>
-  imp_res_tac send_call_value_preserves_immutables >>
-  gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
+  imp_res_tac acquire_nonreentrant_lock_residual_frame >>
+  imp_res_tac send_call_value_residual_frame >>
+  gvs[evaluation_state_component_equality, initial_state_def,
+      state_well_typed_def, machine_well_typed_def]
 QED
 
 Theorem call_lock_action_no_control_c53:
@@ -1444,20 +1458,6 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
-Theorem call_lock_action_preserves_scopes_c53[local]:
-  (if nr then
-     case cx.nonreentrant_slot of
-       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot ((mut = View \/ mut = Pure) \/ cx.txn.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static cx od
-   else return ()) st = (res,st') ==>
-  st'.scopes = st.scopes
-Proof
-  rw[] >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >>
-  gvs[return_def, raise_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
-QED
-
 Theorem call_lock_action_frame_c53:
   (if nr then
      case cx.nonreentrant_slot of
@@ -1466,9 +1466,8 @@ Theorem call_lock_action_frame_c53:
    else return ()) st = (res,rt) ==>
   rt.scopes = st.scopes /\ rt.immutables = st.immutables /\ rt.accounts = st.accounts
 Proof
-  strip_tac >> drule call_lock_action_preserves_scopes_c53 >>
-  drule call_lock_action_preserves_immutables >>
-  drule call_lock_action_preserves_accounts_c53 >> simp[]
+  strip_tac >> drule call_lock_action_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem checked_external_locked_body_sound:
@@ -1498,8 +1497,10 @@ Proof
   qmatch_goalsub_abbrev_tac `ignore_bind lock _ st` >>
   simp[bind_def, ignore_bind_def] >>
   Cases_on `lock st` >> Cases_on `q` >> simp[] >> strip_tac >>
-  `r.scopes = st.scopes /\ r.immutables = st.immutables /\ r.accounts = st.accounts` by
-    (unabbrev_all_tac >> drule call_lock_action_frame_c53 >> simp[])
+  `r.scopes = st.scopes /\ r.immutables = st.immutables /\
+   r.immutable_popped = st.immutable_popped /\ r.accounts = st.accounts` by
+    (unabbrev_all_tac >> drule call_lock_action_residual_frame >>
+     simp[evaluation_state_component_equality])
   >- (`body_entry_ready art cx scope r` by gvs[body_entry_ready_def, state_well_typed_def] >>
       `eval_stmts cx body r = (res,rt)` by fs[] >>
       drule_all checked_explicit_external_current_body_sound >> simp[])
@@ -1520,12 +1521,12 @@ Theorem send_call_value_state_sound_c53:
   state_well_typed rt /\ accounts_well_typed rt.accounts /\
   rt.immutables = st.immutables /\ no_type_error_result res
 Proof
-  strip_tac >> drule send_call_value_preserves_scopes_c53 >>
-  drule send_call_value_preserves_immutables >>
+  strip_tac >> drule send_call_value_residual_frame >>
   drule_all send_call_value_accounts_well_typed_c53 >>
   mp_tac (Q.INST [`st` |-> `st`, `mut` |-> `mut`, `cx` |-> `cx`]
     send_call_value_no_type_error_c53) >>
-  gvs[state_well_typed_def, vyperTypeExprSoundnessTheory.no_type_error_eval_def]
+  gvs[evaluation_state_component_equality, state_well_typed_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def]
 QED
 
 Theorem checked_external_defaults_body_sound:
@@ -2624,7 +2625,10 @@ Theorem getter_context_equiv_read_place[local]:
   getter_context_equiv cx1 cx2 ==>
   read_place cx1 p = read_place cx2 p
 Proof
-  strip_tac >> Cases_on `p` >>
+  strip_tac >>
+  `get_immutable_popped cx1 = get_immutable_popped cx2` by
+    gvs[getter_context_equiv_def, FUN_EQ_THM, get_immutable_popped_def] >>
+  Cases_on `p` >>
   simp[read_place_def, getter_context_equiv_read_storage_slot] >>
   drule getter_context_equiv_get_immutables >>
   disch_then (fn th => rewrite_tac[th])

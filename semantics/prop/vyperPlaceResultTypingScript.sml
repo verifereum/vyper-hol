@@ -1340,7 +1340,7 @@ Proof
   gvs[read_place_def, bind_def, lift_option_type_def, lift_sum_def,
       vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
   drule_all get_immutables_success_typed >> strip_tac >>
-  drule_at (Pat `evaluate_subscripts _ _ _ = _`) evaluate_subscripts_typed_error >>
+  drule_at (Pat `read_memory_path _ _ = _`) read_memory_path_typed_error >>
   simp[] >> metis_tac[]
 QED
 
@@ -1354,11 +1354,10 @@ Proof
       metis_tac[read_storage_slot_success_type])
   >- simp[] >>
   rw[runtime_place_typed_immutable, read_place_def, bind_def,
-     lift_option_type_def, lift_sum_def, return_def, raise_def,
+     lift_option_type_def, lift_sum_def, return_def, raise_def, read_memory_path_def,
      vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
   gvs[return_def] >> drule_all get_immutables_success_typed >> strip_tac >>
-  irule evaluate_subscripts_type >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
+  metis_tac[evaluate_subscripts_type, read_popped_type, get_immutables_popped_typed]
 QED
 
 Theorem read_place_live_typed:

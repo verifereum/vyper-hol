@@ -1954,6 +1954,7 @@ Definition initial_state_def:
   initial_state (am: abstract_machine) scs : evaluation_state =
   <| accounts := am.accounts
    ; immutables := am.immutables
+   ; immutable_popped := []
    ; logs := am.logs
    ; scopes := scs
    ; tStorage := am.tStorage

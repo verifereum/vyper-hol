@@ -415,6 +415,38 @@ Proof
   metis_tac[subscripts_type_well_formed]
 QED
 
+(* The two successful pop branches share the same typed installation step. *)
+val immutable_pop_install_tac =
+  `popped_history_typed root (record_pop path arr popped prior)` by
+    (irule record_pop_history_typed_at_path >>
+     goal_assum (drule_at Any) >> simp[] >> gvs[well_formed_type_value_def]) >>
+  Cases_on `set_immutable cx src id root updated st` >>
+  rename1 `set_immutable cx src id root updated st = (sr,mid)` >>
+  `sr = INL ()` by metis_tac[set_immutable_success_from_get] >> gvs[] >>
+  `state_well_typed mid` by
+    (irule set_immutable_preserves_state_well_typed >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `vyperImmutableMetadataFrame$immutable_metadata_frame st mid` by
+    (irule vyperImmutableMetadataFrameTheory.set_immutable_existing_metadata_frame >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  `mid.scopes = st.scopes` by metis_tac[vyperScopePreservationTheory.set_immutable_scopes] >>
+  `mid.accounts = st.accounts` by
+    (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+     gvs[set_immutable_def, get_address_immutables_def, set_address_immutables_def,
+         bind_def, lift_option_type_def, return_def, raise_def]) >>
+  `runtime_consistent env cx mid` by
+    (gvs[runtime_consistent_def, env_consistent_def] >>
+     conj_tac >- (gvs[env_scopes_consistent_def] >> metis_tac[]) >>
+     irule env_immutables_consistent_metadata_frame >> goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> gvs[no_type_error_result_def] >>
+  irule set_immutable_popped_preserves_runtime_consistent >>
+  qexistsl_tac [`record_pop path arr popped prior`, `id`, `INL ()`, `src`, `mid`] >>
+  simp[set_immutable_popped_eq] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[set_immutable_def, get_address_immutables_def, set_address_immutables_def,
+      bind_def, lift_option_type_def, return_def, raise_def,
+      alistTheory.ALOOKUP_ADELKEY, FLOOKUP_UPDATE];
+
 Theorem pop_immutable_place_sound:
   runtime_consistent env cx st /\
   runtime_place_typed cx st (ImmutablePlace src id path) (ArrayTV etv (Dynamic n)) /\
@@ -429,42 +461,72 @@ Proof
   simp[NoAsms, runtime_place_typed_immutable] >> strip_tac >>
   rename1 `FLOOKUP imms id = SOME (root,a)` >>
   drule_all get_immutables_success_typed >> strip_tac >>
+  drule_all get_immutables_popped_typed >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `popped_history_typed root history` >>
+  qabbrev_tac `entry = <|assignable := T; type := root; value := a; popped := history|>` >>
+  `entry.type = root /\ entry.value = a /\ entry.popped = history` by simp[Abbr `entry`] >>
+  reverse (Cases_on `read_memory_path entry path`)
+  >- (`!msg. y <> TypeError msg` by
+        (irule read_memory_path_typed_error >> goal_assum (drule_at Any) >> simp[]) >>
+      gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
+          return_def, raise_def, no_type_error_result_def, Abbr `entry`, Abbr `history`]) >>
+  rename1 `read_memory_path entry path = INL arr` >>
+  `value_has_type (ArrayTV etv (Dynamic n)) arr` by
+    (irule read_memory_path_type >> goal_assum (drule_at Any) >> simp[]) >>
+  reverse (Cases_on `popped_value arr`)
+  >- (`!msg. y <> TypeError msg` by
+        (Cases_on `arr` >> gvs[value_has_type_def] >>
+         Cases_on `a'` >> gvs[value_has_type_def, popped_value_def, AllCaseEqs()]) >>
+      gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
+          return_def, raise_def, no_type_error_result_def, Abbr `entry`, Abbr `history`]) >>
+  rename1 `popped_value arr = INL popped` >>
+  `value_has_type etv popped` by metis_tac[popped_value_well_typed] >>
+  reverse (Cases_on `pop_element arr`)
+  >- (`!msg. y <> TypeError msg` by metis_tac[pop_element_no_type_error] >>
+      gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
+          return_def, raise_def, no_type_error_result_def, Abbr `entry`, Abbr `history`]) >>
+  rename1 `pop_element arr = INL shortened` >>
+  `value_has_type (ArrayTV etv (Dynamic n)) shortened` by
+    metis_tac[pop_element_preserves_type] >>
   Cases_on `evaluate_subscripts root a path`
-  >- (rename1 `evaluate_subscripts root a path = INL arr` >>
-      `value_has_type (ArrayTV etv (Dynamic n)) arr` by
-        metis_tac[evaluate_subscripts_type] >>
-      Cases_on `arr` >> gvs[value_has_type_def] >>
-      Cases_on `a'` >> gvs[value_has_type_def] >>
-      Cases_on `l = []`
-      >- (gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
-              popped_value_def, return_def, raise_def, no_type_error_result_def]) >>
-      `assign_subscripts root a path PopOp =
-       assign_subscripts root a path (Replace (ArrayV (DynArrayV (FRONT l))))` by
-        (irule assign_subscripts_pop_replace >>
-         qexists_tac `ArrayV (DynArrayV l)` >> simp[pop_element_def]) >>
-      `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV (FRONT l)))` by
-        (irule pop_element_preserves_type >>
-         qexists_tac `ArrayV (DynArrayV l)` >> simp[pop_element_def, value_has_type_def]) >>
-      Cases_on `write_place cx (ImmutablePlace src id path)
-         (ArrayV (DynArrayV (FRONT l))) st` >>
-      rename1 `write_place _ _ _ _ = (wr,mid)` >>
-      `runtime_consistent env cx mid /\ no_type_error_result wr` by
-        (irule write_place_sound >> goal_assum (drule_at Any) >>
-         simp[] >> metis_tac[]) >>
-      `value_has_type etv (LAST l)` by
-        (gvs[all_have_type_EVERY] >> metis_tac[EVERY_MEM, rich_listTheory.MEM_LAST_NOT_NIL]) >>
+  >- (reverse (Cases_on `assign_subscripts root a path (Replace shortened)`)
+      >- (`!msg. y <> TypeError msg` by
+            (gvs[runtime_place_writable_def] >>
+             metis_tac[assign_subscripts_replace_no_type_error]) >>
+          gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
+              return_def, raise_def, no_type_error_result_def, Abbr `entry`, Abbr `history`]) >>
+      rename1 `assign_subscripts root a path (Replace shortened) = INL updated` >>
+      `value_has_type root updated` by
+        (irule assign_subscripts_replace_type_metadata >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      rename1 `popped_history_typed root prior` >>
       qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
-      Cases_on `wr` >>
-      gvs[pop_place_def, write_place_def, bind_def, ignore_bind_def,
-          lift_option_type_def, lift_sum_def, popped_value_def,
-          return_def, raise_def, no_type_error_result_def] >>
-      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[AllCaseEqs(), no_type_error_result_def]) >>
-  rename1 `evaluate_subscripts root a path = INR err` >>
-  `!msg. err <> TypeError msg` by metis_tac[evaluate_subscripts_typed_error] >>
-  gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
-      return_def, raise_def, no_type_error_result_def]
+      simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+           return_def, raise_def, Abbr `entry`, Abbr `prior`] >>
+      suspend "install_live") >>
+  Cases_on `replace_popped root path shortened history`
+  >- (`!msg. y <> TypeError msg` by metis_tac[evaluate_subscripts_typed_error] >>
+      gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,
+          return_def, raise_def, no_type_error_result_def, Abbr `entry`, Abbr `history`]) >>
+  rename1 `replace_popped root path shortened history = SOME prior` >>
+  `popped_history_typed root prior` by metis_tac[replace_popped_history_typed] >>
+  qabbrev_tac `updated = a` >>
+  `value_has_type root updated` by simp[Abbr `updated`] >>
+  qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def, Abbr `entry`, Abbr `history`] >>
+  suspend "install_retained"
 QED
+
+Resume pop_immutable_place_sound[install_live]:
+  qmatch_goalsub_abbrev_tac `record_pop path arr popped prior` >>
+  `popped_history_typed root prior` by simp[Abbr `prior`] >>
+  immutable_pop_install_tac
+QED
+Resume pop_immutable_place_sound[install_retained]:
+  immutable_pop_install_tac
+QED
+Finalise pop_immutable_place_sound
 
 Theorem pop_place_sound:
   runtime_consistent env cx st /\

@@ -130,6 +130,8 @@ val () = cv_auto_trans empty_immutables_def;
 Datatype:
   evaluation_state = <|
     immutables: (address, module_immutables) alist
+  ; immutable_popped: (address # num option # identifier,
+      (subscript list # value) list) alist
   ; logs: log list
   ; scopes: scope list
   ; accounts: evm_accounts
@@ -145,6 +147,7 @@ Definition empty_state_def:
   empty_state : evaluation_state = <|
     accounts := empty_accounts;
     immutables := [];
+    immutable_popped := [];
     logs := [];
     scopes := [];
     tStorage := empty_transient_storage;
@@ -626,16 +629,54 @@ val () = set_global_def
             prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
+(* Retained immutable locations belong to the current evaluation, not to the
+   deployed contract's persistent immutable values. *)
+Definition get_immutable_popped_def:
+  get_immutable_popped cx src id st =
+    return (case ALOOKUP st.immutable_popped (cx.txn.target,src,id) of
+            NONE => [] | SOME history => history) st
+End
+
+val () = cv_auto_trans get_immutable_popped_def;
+
+Theorem get_immutable_popped_eq[simp]:
+  get_immutable_popped cx src id st =
+    (INL (case ALOOKUP st.immutable_popped (cx.txn.target,src,id) of
+          NONE => [] | SOME history => history), st)
+Proof
+  simp[get_immutable_popped_def, return_def]
+QED
+
+Definition set_immutable_popped_def:
+  set_immutable_popped cx src id history st =
+    return () (st with immutable_popped :=
+      (((cx.txn.target,src,id),history) ::
+        ADELKEY (cx.txn.target,src,id) st.immutable_popped))
+End
+
+val () = cv_auto_trans set_immutable_popped_def;
+
+Theorem set_immutable_popped_eq[simp]:
+  set_immutable_popped cx src id history st =
+    (INL (), st with immutable_popped :=
+      (((cx.txn.target,src,id),history) ::
+        ADELKEY (cx.txn.target,src,id) st.immutable_popped))
+Proof
+  simp[set_immutable_popped_def, return_def]
+QED
+
 Definition set_immutable_def:
   set_immutable cx src_id_opt n tv v = do
     imms <- get_address_immutables cx;
-    let imm = get_source_immutables src_id_opt imms in
-    set_address_immutables cx $ set_source_immutables src_id_opt (imm |+ (n, (tv, v))) imms
+    imm <<- get_source_immutables src_id_opt imms;
+    u <- set_address_immutables cx
+      (set_source_immutables src_id_opt (imm |+ (n, (tv, v))) imms);
+    set_immutable_popped cx src_id_opt n []
   od
 End
 
 val () = set_immutable_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
+  |> SRULE [bind_def, ignore_bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
 Definition set_scopes_def:
@@ -1000,7 +1041,10 @@ Definition read_place_def:
   read_place cx (ImmutablePlace src id path) = do
     imms <- get_immutables cx src;
     tva <- lift_option_type (FLOOKUP imms id) "read_place immutable";
-    lift_sum (evaluate_subscripts (FST tva) (SND tva) path)
+    history <- get_immutable_popped cx src id;
+    lift_sum (read_memory_path
+      <|assignable := T; type := FST tva; value := SND tva;
+        popped := history|> path)
   od
 End
 
@@ -1292,15 +1336,27 @@ Definition pop_place_def:
     set_scopes (pre ++ (env |+ (id,entry with <|value := updated; popped := history|>))::rest);
     return (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])))
   od /\
-  (* The source compiler rejects immutable mutation after initialization. Keep
-     the existing value semantics for this checker-accepted extension. *)
   pop_place cx (ImmutablePlace src id path) = do
     imms <- get_immutables cx src;
     tva <- lift_option_type (FLOOKUP imms id) "pop_place immutable";
-    arr <- lift_sum (evaluate_subscripts (FST tva) (SND tva) path);
+    history <- get_immutable_popped cx src id;
+    arr <- lift_sum (read_memory_path
+      <|assignable := T; type := FST tva; value := SND tva;
+        popped := history|> path);
     popped <- lift_sum (popped_value arr);
-    updated <- lift_sum (assign_subscripts (FST tva) (SND tva) path PopOp);
+    shortened <- lift_sum (pop_element arr);
+    (updated,prior_history) <- lift_sum
+      (case evaluate_subscripts (FST tva) (SND tva) path of
+       | INL _ =>
+           (case assign_subscripts (FST tva) (SND tva) path (Replace shortened) of
+            | INL updated => INL (updated,history)
+            | INR err => INR err)
+       | INR err =>
+           (case replace_popped (FST tva) path shortened history of
+            | SOME history' => INL (SND tva,history')
+            | NONE => INR err));
     set_immutable cx src id (FST tva) updated;
+    set_immutable_popped cx src id (record_pop path arr popped prior_history);
     return (Value popped)
   od /\
   pop_place cx _ = raise (Error (TypeError "pop_place"))

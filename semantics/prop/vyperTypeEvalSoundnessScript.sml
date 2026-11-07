@@ -996,6 +996,7 @@ Theorem intcall_pushed_body_preconditions[local]:
     scope_well_typed call_env /\
     lock_st.scopes = dflt_st.scopes /\
     lock_st.immutables = dflt_st.immutables /\
+    lock_st.immutable_popped = dflt_st.immutable_popped /\
     lock_st.accounts = dflt_st.accounts ==>
     env_consistent env_body pushed_cx (lock_st with scopes := [call_env]) /\
     state_well_typed (lock_st with scopes := [call_env]) /\
@@ -1006,26 +1007,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem acquire_nonreentrant_lock_accounts[local]:
-  !addr slot is_view st res st'.
-    acquire_nonreentrant_lock addr slot is_view st = (res, st') ==>
-    st'.accounts = st.accounts
-Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
-QED
-Theorem release_nonreentrant_lock_accounts[local]:
-  !addr slot st res st'.
-    release_nonreentrant_lock addr slot st = (res, st') ==>
-    st'.accounts = st.accounts
-Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
-QED
 
 Theorem intcall_unlock_state_preserves_frame[local]:
   !cx nr is_view st res st'.
@@ -1036,16 +1017,15 @@ Theorem intcall_unlock_state_preserves_frame[local]:
      else return ()) st = (res,st') ==>
     st'.scopes = st.scopes /\
     st'.immutables = st.immutables /\
+    st'.immutable_popped = st.immutable_popped /\
     st'.accounts = st.accounts
 Proof
   rpt strip_tac >>
   Cases_on `nr` >> gvs[return_def] >>
   Cases_on `is_view` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
-  imp_res_tac release_nonreentrant_lock_scopes >>
-  imp_res_tac release_nonreentrant_lock_immutables >>
-  imp_res_tac release_nonreentrant_lock_accounts >>
-  gvs[]
+  drule release_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem intcall_cleanup_after_pop_preserves_frame[local]:
@@ -1059,6 +1039,7 @@ Theorem intcall_cleanup_after_pop_preserves_frame[local]:
      od) st = (res,st') ==>
     st'.scopes = prev /\
     st'.immutables = st.immutables /\
+    st'.immutable_popped = st.immutable_popped /\
     st'.accounts = st.accounts
 Proof
   rpt strip_tac >>
@@ -1081,6 +1062,7 @@ Theorem intcall_lock_state_preserves_frame[local]:
      else return ()) st = (INL (),lock_st) ==>
     lock_st.scopes = st.scopes /\
     lock_st.immutables = st.immutables /\
+    lock_st.immutable_popped = st.immutable_popped /\
     lock_st.accounts = st.accounts
 Proof
   rpt strip_tac >>
@@ -1088,10 +1070,8 @@ Proof
   Cases_on `cx.nonreentrant_slot` >>
   gvs[raise_def, ignore_bind_def, bind_def, return_def, COND_RATOR,
       AllCaseEqs()] >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >>
-  imp_res_tac acquire_nonreentrant_lock_immutables >>
-  imp_res_tac acquire_nonreentrant_lock_accounts >>
-  gvs[]
+  drule acquire_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem intcall_pushed_body_preconditions_from_lock[local]:
@@ -1780,7 +1760,7 @@ Proof
   simp[live_memory_result_def] >> rpt strip_tac >>
   qexistsl_tac [`[]`, `entry.popped`] >>
   simp[memory_history_region_def, memory_path_covered_def,
-       vyperPlaceInvariantsTheory.popped_history_typed_def] >> metis_tac[]
+       vyperTypeInvariantsTheory.popped_history_typed_def] >> metis_tac[]
 QED
 
 Theorem typed_scope_transition_scopes[local]:
@@ -5523,6 +5503,7 @@ Theorem intcall_cleanup_frame_restore_sound[local]:
     accounts_well_typed st_bdy.accounts /\
     fin_st.scopes = args_st.scopes /\
     fin_st.immutables = st_bdy.immutables /\
+    fin_st.immutable_popped = st_bdy.immutable_popped /\
     fin_st.accounts = st_bdy.accounts ==>
     state_well_typed fin_st /\ env_consistent env cx fin_st /\
     accounts_well_typed fin_st.accounts

@@ -53,6 +53,23 @@ Proof
             imms_well_typed_get_source_immutables]
 QED
 
+Theorem get_immutables_popped_typed:
+  state_well_typed st /\ get_immutables cx src st = (INL imms,st') /\
+  FLOOKUP imms id = SOME (tv,v) ==>
+  popped_history_typed tv
+    (case ALOOKUP st.immutable_popped (cx.txn.target,src,id) of
+     | NONE => [] | SOME history => history)
+Proof
+  rw[get_immutables_def, get_address_immutables_def, bind_def,
+     lift_option_type_def, option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  gvs[] >>
+  Cases_on `ALOOKUP s''.immutable_popped (cx.txn.target,src,id)`
+  >- simp[popped_history_typed_def] >> simp[] >>
+  gvs[state_well_typed_def, immutable_popped_well_typed_def] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem lookup_scopes_well_typed_type:
   !scopes id entry. EVERY scope_well_typed scopes /\
     lookup_scopes id scopes = SOME entry ==> well_formed_type_value entry.type

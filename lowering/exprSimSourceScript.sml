@@ -94,28 +94,6 @@ Proof
   simp[replace_popped_def] >> rw[AllCaseEqs()] >> gvs[] >> res_tac
 QED
 
-Theorem replace_popped_history_typed[local]:
-  !h tv path ptv v h'.
-    popped_history_typed tv h /\ well_formed_type_value tv /\
-    subscripts_type tv path = SOME ptv /\ value_has_type ptv v /\
-    replace_popped tv path v h = SOME h' ==>
-    popped_history_typed tv h'
-Proof
-  Induct >> simp[replace_popped_def] >>
-  qx_gen_tac `head` >> PairCases_on `head` >> rpt gen_tac >>
-  simp[popped_history_typed_cons] >> rpt strip_tac >>
-  gvs[Once replace_popped_def, AllCaseEqs()] >>
-  simp[popped_history_typed_cons]
-  >- (irule vyperPlaceStatePreservationTheory.assign_subscripts_replace_type_metadata >>
-      goal_assum (drule_at Any) >> simp[] >>
-      qpat_x_assum `IS_PREFIX path head0` mp_tac >>
-      simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
-      gvs[rich_listTheory.DROP_LENGTH_APPEND] >>
-      metis_tac[subscripts_type_append]) >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[]
-QED
-
 Theorem entry_pop_step_event_valid[local]:
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
   popped_history_typed entry.type entry.popped /\
@@ -173,7 +151,8 @@ Proof
   `value_has_type (ArrayTV etv (Dynamic n)) shortened` by
     metis_tac[vyperAssignPreservesTypeTheory.pop_element_preserves_type] >>
   `popped_history_typed entry.type history` by
-    (irule replace_popped_history_typed >> goal_assum (drule_at Any) >>
+    (irule vyperPlaceStatePreservationTheory.replace_popped_history_typed >>
+     goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   `MAP FST history = MAP FST entry.popped` by metis_tac[replace_popped_keys] >>
   conj_tac

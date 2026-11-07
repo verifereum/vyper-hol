@@ -222,14 +222,45 @@ Proof
   rw[update_transient_def, return_def] >> gvs[]
 QED
 
-Theorem transfer_value_immutables:
-  !f t a st res st'.
-    transfer_value f t a st = (res, st') ==> st'.immutables = st.immutables
+Theorem transfer_value_residual_frame:
+  transfer_value fromAddr toAddr amount st = (res,st') ==>
+  st' = st with accounts := st'.accounts
 Proof
   rw[transfer_value_def, bind_def, get_accounts_def, return_def,
      check_def, raise_def, update_accounts_def, ignore_bind_def,
      assert_def] >>
-  gvs[AllCaseEqs(), return_def, raise_def]
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  simp[evaluation_state_component_equality, evaluation_state_accfupds]
+QED
+
+Theorem acquire_nonreentrant_lock_residual_frame:
+  acquire_nonreentrant_lock addr slot is_view st = (res,st') ==>
+  st' = st with tStorage := st'.tStorage
+Proof
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  simp[evaluation_state_component_equality, evaluation_state_accfupds]
+QED
+
+Theorem release_nonreentrant_lock_residual_frame:
+  release_nonreentrant_lock addr slot st = (res,st') ==>
+  st' = st with tStorage := st'.tStorage
+Proof
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  simp[evaluation_state_component_equality, evaluation_state_accfupds]
+QED
+
+Theorem transfer_value_immutables:
+  !f t a st res st'.
+    transfer_value f t a st = (res, st') ==> st'.immutables = st.immutables
+Proof
+  rpt strip_tac >> drule transfer_value_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem push_log_immutables:
@@ -262,10 +293,8 @@ Theorem acquire_nonreentrant_lock_immutables:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+  rpt strip_tac >> drule acquire_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem release_nonreentrant_lock_immutables:
@@ -273,10 +302,8 @@ Theorem release_nonreentrant_lock_immutables:
     release_nonreentrant_lock addr slot st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+  rpt strip_tac >> drule release_nonreentrant_lock_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem lift_sum_runtime_state:

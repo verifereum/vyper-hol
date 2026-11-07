@@ -207,7 +207,7 @@ Proof
           vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
           raise_def, return_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def] >>
-     drule evaluate_subscripts_error_shape >>
+     drule read_memory_path_error_shape >>
      strip_tac >> gvs[e2eDefsTheory.unspecified_behaviour_exempt_def]
 QED
 

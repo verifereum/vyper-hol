@@ -444,8 +444,8 @@ Proof
     (drule_all send_call_value_state_sound_c53 >> simp[initial_state_def]) >>
   `body_st.scopes = [scope] /\ body_st.immutables = am_c.immutables /\
    state_well_typed body_st /\ accounts_well_typed body_st.accounts` by
-    (drule call_lock_action_frame_c53 >>
-     gvs[state_well_typed_def]) >>
+    (drule call_lock_action_residual_frame >>
+     gvs[evaluation_state_component_equality, state_well_typed_def]) >>
   `env_immutables_consistent (artifact_env deploy_art mods NONE) cx
      (initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by
     (irule checked_deployment_constants_establish_initial_env_immutables_consistent >>

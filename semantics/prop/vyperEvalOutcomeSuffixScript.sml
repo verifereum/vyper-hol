@@ -213,9 +213,16 @@ fun OUTCOMES_FACT_TAC index (g as (_,w)) =
       val facts = List.map snd (List.filter (fn (k,_) => k = key) index)
   in FIRST (List.map MATCH_ACCEPT_TAC facts) g end;
 
+Theorem outcomes_frame_immutable_popped[simp]:
+  outcomes_frame (get_immutable_popped cx src id) /\
+  outcomes_frame (set_immutable_popped cx src id history)
+Proof
+  simp[outcomes_frame_def, get_immutable_popped_eq, set_immutable_popped_eq]
+QED
+
 val assign_outcomes_frame_facts =
   List.concat (List.map (CONJUNCTS o SPEC_ALL)
-    [outcomes_frame_reads, outcomes_frame_primitives,
+    [outcomes_frame_reads, outcomes_frame_primitives, outcomes_frame_immutable_popped,
      outcomes_frame_resolve_array,
      outcomes_frame_return, outcomes_frame_raise]);
 
@@ -474,7 +481,7 @@ Proof
       gvs[write_storage_place_eq, AllCaseEqs()] >>
       Cases_on `tr` >> simp[get_storage_def, set_storage_def])
   >- (drule write_memory_place_frame >> strip_tac >> gvs[]) >>
-  drule write_immutable_place_frame >> strip_tac >> gvs[]
+  drule write_immutable_place_state_frame >> strip_tac >> gvs[]
 QED
 
 Theorem outcomes_frame_get_place[local]:

@@ -13,7 +13,7 @@ Ancestors
   arithmetic byte combin integer list option pair rich_list words
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
-  vyperContext vyperState vyperEvmBoundary vyperCreate
+  vyperContext vyperState vyperEvmBoundary vyperCreate vyperCallOutcome
 Libs
   wordsLib monadsyntax
 
@@ -53,6 +53,58 @@ Proof
   Cases_on `s` >> simp[evaluation_state_accfupds]
 QED
 
+Theorem create_oracle_result_residual_frame:
+  create_oracle_result salt value code rof st = (res,st') ==>
+  st' = st with <| accounts := st'.accounts; tStorage := st'.tStorage;
+                  logs := st'.logs; outcomes := st'.outcomes;
+                  requests := st'.requests; pending_deletions := st'.pending_deletions |>
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >>
+  rw[adopt_call_outcome_equation, create_outcome_request_def,
+     evaluation_state_accfupds] >>
+  gvs[AllCaseEqs(), evaluation_state_component_equality,
+      evaluation_state_accfupds]
+QED
+
+Theorem create_tail_residual_frame:
+  (case run_create_evm a b c d e f h g of
+   | NONE => do
+       x <- update_accounts (K (create_rollback_accounts a e));
+       create_soft_failure rof "create failed"
+     od
+   | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
+       do x <- update_accounts (K accounts');
+          x <- update_transient (K tStorage');
+          x <- update_pending_deletions (K pending');
+          case code_opt of
+          | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
+          | NONE => if rof then raise (Error (RevertData revertData))
+                    else return (Value (AddressV 0w))
+       od) s = (res, st') ==>
+  st' = s with <| accounts := st'.accounts; tStorage := st'.tStorage;
+                 logs := st'.logs; outcomes := st'.outcomes;
+                 requests := st'.requests; pending_deletions := st'.pending_deletions |>
+Proof
+  Cases_on `run_create_evm a b c d e f h g`
+  >- (Cases_on `rof` >>
+      gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+          create_soft_failure_def, return_def, raise_def] >>
+      rpt strip_tac >>
+      gvs[evaluation_state_component_equality, evaluation_state_accfupds]) >>
+  gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def,
+      create_soft_failure_def, return_def, raise_def, AllCaseEqs(),
+      evaluation_state_accfupds] >>
+  PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
+  gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def,
+      create_soft_failure_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[evaluation_state_component_equality, evaluation_state_accfupds]
+QED
+
 (* KEY LEMMA: the EVM-backed tail of eval_create only updates accounts,
    transient storage, pending deletions, and logs — never scopes or immutables.
    Stated with the accessor monads already unfolded, so it matches eval_create's body
@@ -74,20 +126,8 @@ Theorem create_tail_preserves_scopes:
        od) s = (res, st') ==>
   st'.scopes = s.scopes /\ st'.immutables = s.immutables
 Proof
-  Cases_on `run_create_evm a b c d e f h g`
-  >- (Cases_on `rof` >>
-      gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-          create_soft_failure_def, return_def, raise_def] >>
-      rpt strip_tac >> gvs[evaluation_state_accfupds]) >>
-  gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
-      return_def, raise_def, AllCaseEqs(), evaluation_state_accfupds] >>
-  PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
-  gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
-      return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[evaluation_state_accounts_tStorage_acc,
-                       evaluation_state_accfupds]
+  strip_tac >> drule create_tail_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 (* Every creation path leaves the old log sequence as a prefix. *)
@@ -267,7 +307,8 @@ in
     qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
     create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) oracle finish;
   val create_frame_tac =
-    create_result_tac create_tail_preserves_scopes create_oracle_result_frame (create_state_finish frame_ss);
+    create_result_tac create_tail_residual_frame create_oracle_result_residual_frame
+      (create_state_finish (frame_ss ++ rewrites [evaluation_state_component_equality, combinTheory.K_THM]));
   val create_logs_tac =
     create_result_tac create_tail_log_extends create_oracle_result_frame (create_state_finish log_ss);
   fun create_outcome_tac tail = create_result_tac tail create_oracle_result_no_type_error create_error_finish;
@@ -290,9 +331,11 @@ Proof
   create_logs_tac
 QED
 
-Theorem eval_create_preserves_scopes_immutables:
+Theorem eval_create_residual_frame:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+  st' = st with <| accounts := st'.accounts; tStorage := st'.tStorage;
+                  logs := st'.logs; outcomes := st'.outcomes;
+                  requests := st'.requests; pending_deletions := st'.pending_deletions |>
 Proof
   strip_tac >>
   Cases_on `dest_create_args kind has_salt vs`
@@ -303,6 +346,14 @@ Proof
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
   Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   create_frame_tac
+QED
+
+Theorem eval_create_preserves_scopes_immutables:
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >> drule eval_create_residual_frame >>
+  simp[evaluation_state_component_equality]
 QED
 
 (* KEY LEMMA for the type-soundness consumer.

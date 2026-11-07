@@ -5,7 +5,7 @@ Ancestors
   arithmetic words vyperState vyperTyping vyperStorageBackend
   vyperStorageLayoutSafety vyperStorageWritePreservation
   vyperStoragePlaceRegion vyperStorageRegionWrite vyperStoragePlaceProvenance
-  vyperPlaceTyping vyperPlaceFrames vyperTypeStoragePreservation
+  vyperPlaceTyping vyperPlaceFrames vyperTypeStoragePreservation vyperStatePreservation
 Libs
   wordsLib
 
@@ -197,16 +197,34 @@ Proof
   simp[return_def] >> rpt strip_tac >> gvs[get_storage_scopes]
 QED
 
+Theorem set_immutable_storage[local]:
+  set_immutable cx src id tv v st = (res,st') ==>
+  !tr. get_storage cx st' tr = get_storage cx st tr
+Proof
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  simp[set_immutable_def, bind_def, get_address_immutables_def,
+       set_address_immutables_def, lift_option_type_def,
+       return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> Cases_on `tr` >> simp[get_storage_def]
+QED
+
 Theorem pop_immutable_place_storage:
   pop_place cx (ImmutablePlace src id path) st = (res,st') ==>
   !tr. get_storage cx st' tr = get_storage cx st tr
 Proof
-  simp[pop_place_def, bind_def, get_immutables_def,
-       get_address_immutables_def, lift_option_type_def, lift_sum_def,
-       set_immutable_def, set_address_immutables_def, return_def, raise_def,
-       ignore_bind_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  rpt strip_tac >> Cases_on `tr` >> gvs[get_storage_def]
+  rpt gen_tac >> qabbrev_tac `P = \s. !tr. get_storage cx s tr = get_storage cx st tr` >>
+  `!s r s'. pop_place cx (ImmutablePlace src id path) s = (r,s') ==>
+    P s ==> P s'` suffices_by (simp[Abbr `P`] >> metis_tac[]) >>
+  simp[pop_place_def, ignore_bind_def] >>
+  rpt (simp[pairTheory.FORALL_PROD] >> rpt gen_tac >> BETA_TAC >> strip_tac >> strip_tac >>
+       dxrule (SRULE [GSYM AND_IMP_INTRO] bind_preserves) >>
+       disch_then (qspec_then `P` match_mp_tac) >> conj_tac
+       >- (simp[Abbr `P`, get_storage_def] >>
+           metis_tac[get_immutables_state, lift_option_type_state,
+                     lift_sum_state, set_immutable_storage]) >> simp[]) >>
+  simp[Abbr `P`, bind_def, return_def] >>
+  rpt strip_tac >> Cases_on `tr` >> gvs[get_storage_def] >>
+  metis_tac[get_storage_def]
 QED
 
 Theorem append_place_preserves_contract_storage:

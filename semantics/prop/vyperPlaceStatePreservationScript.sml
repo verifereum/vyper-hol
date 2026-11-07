@@ -325,6 +325,42 @@ Proof
   metis_tac[]
 QED
 
+Theorem read_memory_path_type:
+  well_formed_type_value entry.type /\ value_has_type entry.type entry.value /\
+  popped_history_typed entry.type entry.popped /\
+  subscripts_type entry.type path = SOME ptv /\
+  read_memory_path entry path = INL v ==> value_has_type ptv v
+Proof
+  rw[read_memory_path_def, AllCaseEqs()]
+  >- (drule_all evaluate_subscripts_type >> simp[]) >>
+  drule_all read_popped_type >> simp[]
+QED
+
+Theorem replace_popped_history_typed:
+  !history tv path ptv replacement history'.
+  popped_history_typed tv history /\
+  subscripts_type tv path = SOME ptv /\ value_has_type ptv replacement /\
+  replace_popped tv path replacement history = SOME history' ==>
+  popped_history_typed tv history'
+Proof
+  Induct >> simp[replace_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[popped_history_typed_cons, replace_popped_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+  >- (
+    `path = h0 ++ DROP (LENGTH h0) path` by
+      (gvs[IS_PREFIX_APPEND] >> simp[DROP_LENGTH_APPEND]) >>
+    `subscripts_type ptv' (DROP (LENGTH h0) path) = SOME ptv` by
+      (qpat_x_assum `subscripts_type tv path = SOME ptv` mp_tac >>
+       once_asm_rewrite_tac[] >> simp[subscripts_type_append, DROP_LENGTH_APPEND]) >>
+    simp[popped_history_typed_cons] >>
+    irule assign_subscripts_replace_type_metadata >>
+    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  simp[popped_history_typed_cons] >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `ptv'` >> simp[]
+QED
+
 val () = List.app (fn (name,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
   in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms

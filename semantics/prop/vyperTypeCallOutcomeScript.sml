@@ -24,7 +24,8 @@ Theorem runtime_consistent_call_frame:
   runtime_consistent env cx st'
 Proof
   rpt strip_tac >>
-  `st'.scopes = st.scopes /\ st'.immutables = st.immutables` by
+  `st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
+   st'.immutable_popped = st.immutable_popped` by
     (qpat_x_assum `st' = _` mp_tac >>
      simp[evaluation_state_component_equality]) >>
   gvs[runtime_consistent_def, state_well_typed_def, env_consistent_def,
