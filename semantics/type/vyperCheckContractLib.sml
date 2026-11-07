@@ -48,6 +48,7 @@ val checker_defs =
    function_live_def,
    live_artifact_def,
    exports_ok_def,
+   vyperABIEntriesTheory.abi_deployed_signatures_def,
    finite_mapTheory.DRESTRICT_FEMPTY,
    finite_mapTheory.DRESTRICT_FUPDATE,
    IN_function_live,

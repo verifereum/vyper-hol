@@ -97,6 +97,16 @@ Rules added this way must be trusted kernel theorems. A local extension is
 preferable to changing the shared compset for contract-specific definitions;
 the shared compset should contain only dependencies of the general checker.
 
+## Deployed interface
+
+`check_contract` checks selector uniqueness separately for each source module.
+For a loaded contract, `exports_ok` also requires distinct four-byte selectors
+across the main module's external entries and the library entries named in the
+exports map. Both checks include every default-argument prefix and public
+variable/hashmap getter. Unexported library entries do not enter the combined
+interface. `check_contract_single_module_exports_ok` proves that a successfully
+checked single module with no exports already satisfies this additional check.
+
 ## Constant initializers
 
 `check_contract` evaluates every constant initializer, through
