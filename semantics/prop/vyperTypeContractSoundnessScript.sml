@@ -972,12 +972,13 @@ Theorem call_external_function_deploy_normal_success_lookup_transport:
       (get_source_immutables src
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
-  rw[] >>
+  strip_tac >>
   `preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) st_body` by
-    metis_tac[call_body_prefix_lock_preserves_tv,
-              call_body_prefix_preserves_tv, return_def, bind_def] >>
+    (drule call_body_prefix_preserves_tv >> simp[]) >>
   `st_unlocked.immutables = st_body.immutables` by
-    (Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+    (Cases_on `nr /\ ~(mut = View \/ mut = Pure)` >>
+     gvs[return_def] >>
+     Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
      imp_res_tac release_nonreentrant_lock_immutables) >>
   metis_tac[preserves_tv_unlock_abstract_machine_immutables_lookup]
 QED
