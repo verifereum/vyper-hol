@@ -13,7 +13,8 @@ Ancestors
   concretizePtrStructuralTrace concretizePtrDeletedGapHistory
   concretizePtrChronologicalHistory concretizePtrAllocationSize
   concretizePtrSourceOwnership concretizePtrParamSupport
-  o1PassContract unitShapeDefs
+  o1PassContract unitShapeDefs venomExecSemantics concretizeStepStructure
+  concretizePtrRequestHistory concretizePtrValueTransport
 
 Theorem ptr_hash_log_nonrevert[local]:
   active_inst fn inst s /\ ALL_DISTINCT (fn_labels fn) /\
@@ -337,6 +338,73 @@ Proof
   qexistsl_tac [`ops`,`x`,`y`] >> simp[] >>
   irule ptr_paired_hash_log_payload >>
   rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
+Theorem ptr_sha3_execution[local]:
+  inst.inst_opcode = SHA3 /\ inst.inst_operands = [addr;szop] /\
+  inst.inst_outputs = [out] /\
+  eval_operand addr s = SOME x /\ eval_operand addr t = SOME y /\
+  eval_operand szop s = SOME n /\ eval_operand szop t = SOME n /\
+  TAKE (w2n n) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n n) 0w) =
+  TAKE (w2n n) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n n) 0w) ==>
+  ?v. step_inst 0 C inst s = OK (update_var out v s) /\
+      step_inst fuel Ct inst t = OK (update_var out v t)
+Proof
+  strip_tac >>
+  simp[step_inst_non_invoke] >>
+  pure_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[] >> simp[Once opcode_case_def] >> metis_tac[]
+QED
+
+Theorem ptr_log_execution[local]:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
+  REVERSE rest = addr::szop::topicops /\ LENGTH rest = w2n tc+2 /\
+  s.vs_call_ctx = t.vs_call_ctx /\
+  eval_operand addr s = SOME x /\ eval_operand addr t = SOME y /\
+  eval_operand szop s = SOME n /\ eval_operand szop t = SOME n /\
+  eval_operands topicops s = SOME vals /\ eval_operands topicops t = SOME vals /\
+  TAKE (w2n n) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n n) 0w) =
+  TAKE (w2n n) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n n) 0w) /\
+  step_inst fuel Ct inst t = OK t' ==>
+  ?ev. step_inst 0 C inst s = OK (s with vs_logs := s.vs_logs ++ [ev]) /\
+       t' = t with vs_logs := t.vs_logs ++ [ev]
+Proof
+  strip_tac >>
+  `IS_SOME (eval_operands inst.inst_operands t)` by
+    (simp[eval_operands_IS_SOME_EVERY, eval_operand_def] >>
+     `EVERY (\op. IS_SOME (eval_operand op t)) topicops` by
+       metis_tac[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_DEF] >>
+     rewrite_tac[EVERY_MEM] >> qx_gen_tac `op` >> strip_tac >> BETA_TAC >>
+     `MEM op (addr::szop::topicops)` by metis_tac[MEM_REVERSE] >>
+     fs[MEM, EVERY_MEM] >> metis_tac[optionTheory.IS_SOME_DEF]) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  simp[step_inst_non_invoke, step_inst_base_def] >> metis_tac[]
+QED
+
+Theorem ptr_sha3_successor_relations[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
+  inst.inst_opcode = SHA3 /\ inst.inst_operands = [addr;szop] /\
+  inst.inst_outputs = [out] /\ ~retpc_var f out ==>
+  ptr_mixed_vars births positions
+    (step_prov PT TG inst (update_var out v s))
+    (step_taint inst s (update_var out v s) tn)
+    f g (update_var out v s) (update_var out v t) /\
+  ptr_history_content (step_taint inst s (update_var out v s) tn)
+    (update_var out v s) (update_var out v t)
+Proof
+  strip_tac >> conj_tac
+  >- (drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
+      simp[step_prov_def, out_prov_def, set_prov_def,
+           step_taint_def, set_var_taint_def, out_taint_def,
+           FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_def] >>
+      Cases_on `eval_operand addr s` >> simp[] >>
+      rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def] >>
+      gvs[FLOOKUP_UPDATE, word_agree_except_def]) >>
+  simp[] >> irule ptr_history_content_masks >>
+  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+  qexists_tac `tn` >> simp[]
 QED
 
 Theorem ptr_paired_hash_log_prefix_normalize:
