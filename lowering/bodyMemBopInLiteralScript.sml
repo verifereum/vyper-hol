@@ -303,5 +303,12 @@ Theorem body_bop_in_literal_mem_case:
     body_expr_mem_ok cx
       (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  (conj_asm1_tac
+   >- (irule literal_expr_sim_mem >> metis_tac[])) >>
+  `ty = BaseT BoolT` by metis_tac[literal_body_typing] >>
+  irule body_expr_vv_sim_mem_stack_word >>
+  simp[vyperASTTheory.expr_type_def, is_word_type_def, exprSimOperatorsTheory.compile_bop_stack] >>
+  metis_tac[exprLoweringPropsTheory.eval_expr_builtin_value]
 QED
