@@ -1,6 +1,7 @@
 Theory bodyPtrBytestringBuiltinsUintCase
 Ancestors
   bodyPtrBytestringBuiltinsUnary bodyPtrBytestringBuiltinsUintCompile
+  bodyPtrBytestringBuiltinsEval exprSimWordArgs vyperTyping words integer vyperState valueEncoding vyperValue arithmetic loweringSlice
   bodyPtrPreds exprPtrUnwrap exprSimHypsDefs exprSimUint2Str
   exprLowering exprBopLowering exprSimSource compileEnv fragExec vyperAST vyperContext list
 
@@ -51,4 +52,31 @@ Proof
   Cases_on `compile_uint2str x n N sm` >> gvs[as_ptr_val_def] >>
   mp_tac (Q.INST [`op` |-> `x`, `sz` |-> `N`] uint2str_suffix_appends) >>
   simp[cs_appends_def] >> metis_tac[]
+QED
+
+Theorem uint2str_operand_endpoint:
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT k) /\
+  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  ?a. v = IntV (&a) /\ a < dimword(:256) /\
+    eval_operand op t = SOME (n2w a) /\ expr_sim_inv cenv cx env ee
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all operand_eval_evidence_semantics >> strip_tac >>
+  `?i. v = IntV i /\ 0 <= i /\ Num i < 2 ** k /\
+       k <= 256 /\ 0 < k /\ k MOD 8 = 0` by
+    (fs[is_word_type_def, evaluate_type_def] >> Cases_on `v` >>
+     gvs[is_word_type_def, evaluate_type_def, value_has_type_def]) >>
+  gvs[] >> qexists_tac `Num i` >> simp[] >>
+  conj_tac
+  >- (rewrite_tac[dimword_def] >>
+      irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** k` >>
+      simp[EXP_BASE_LE_MONO]) >>
+  `~(i < 0)` by intLib.ARITH_TAC >>
+  drule expr_post_word_operand >>
+  simp[is_word_type_def, evaluate_type_def, word_value_def, val_to_w256_def,
+    integer_wordTheory.i2w_def]
 QED
