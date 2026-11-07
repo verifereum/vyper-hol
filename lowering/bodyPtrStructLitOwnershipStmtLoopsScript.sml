@@ -582,3 +582,87 @@ Resume alloc_run_stmt_loop_counter[assign]:
     is_terminator_def, is_label_operand_def, operand_case_not_label]
 QED
 Finalise alloc_run_stmt_loop_counter
+
+Theorem alloc_run_stmt_loop_test:
+  shape_stable R /\ compiler_label cond /\ compiler_label exit /\
+  compiler_label body_lbl /\ exit <> body_lbl ==>
+  alloc_run (\s. shape_state s /\ R s /\
+      plain_operand s (Var ctr) /\ plain_operand s limit)
+    (do emit_inst JMP [Label cond] []; new_block cond;
+        done_op <- emit_op EQ [Var ctr;limit];
+        emit_inst JNZ [done_op;Label exit;Label body_lbl] [];
+        new_block body_lbl od)
+    (\u s. shape_state s /\ R s)
+Proof
+  strip_tac >> simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\
+    (R s /\ plain_operand s (Var ctr) /\ plain_operand s limit)` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_jmp_frame >>
+      qexists `\s. R s /\ plain_operand s (Var ctr) /\ plain_operand s limit` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[Var ctr;limit]` shape_stable_plain_operands)]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\
+    (R s /\ plain_operand s (Var ctr) /\ plain_operand s limit)` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_new_block_frame >>
+      qexists `\s. R s /\ plain_operand s (Var ctr) /\ plain_operand s limit` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[Var ctr;limit]` shape_stable_plain_operands)]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ R s /\ plain_operand s v` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_shape_frame >>
+      irule_at Any loop_shape_op >>
+      qexistsl [`R`, `\s. plain_operand s (Var ctr) /\ plain_operand s limit`] >>
+      simp[SRULE [] (Q.SPEC `[Var ctr;limit]` shape_stable_plain_operands),
+        SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+      rpt strip_tac >> irule (cj 2 loop_extra_data_inst_ok) >>
+      simp[] >> qexists `s` >> simp[]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ R s` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_jnz_frame >>
+      qexists `R` >> simp[plain_operand_def]) >>
+  gen_tac >> simp[] >> irule alloc_run_conseq >>
+  irule_at Any alloc_run_new_block_frame >> qexists `R` >> simp[]
+QED
+
+Theorem structlit_range_store_shape:
+  shape_step F compiler_label
+    (\s. cenv_shape_ok s ce /\ plain_operand s (Var ctr))
+    (case FLOOKUP ce.ce_vars id of
+       SOME (MemLoc off _) => emit_void MSTORE [Lit (n2w off);Var ctr]
+     | SOME (PtrVar ptr_op _) => emit_void MSTORE [ptr_op;Var ctr]
+     | _ => emit_void INVALID []) (\u s. T)
+Proof
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[]
+  >- (irule shape_step_conseq >> irule_at Any loop_shape_void >>
+      qexists `\s. T` >> simp[shape_stable_def, lowered_inst_ok_def,
+        mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+        inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+        label_positions_ok_def, is_terminator_def]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  irule shape_step_conseq >> irule_at Any loop_shape_void >>
+  qexists `\s. cenv_shape_ok s ce /\ plain_operand s (Var ctr)` >>
+  simp[shape_stable_conj, cenv_shape_ok_stable,
+    SRULE [] (Q.SPEC `[Var ctr]` shape_stable_plain_operands),
+    lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+    inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+    label_positions_ok_def, is_terminator_def, plain_operand_def,
+    is_label_operand_def, operand_case_not_label] >>
+  rw[cenv_shape_ok_def] >>
+  first_x_assum (drule_at Any) >> simp[loc_shape_ok_def, plain_operand_def] >>
+  strip_tac >> simp[is_label_operand_def] >> Cases_on `o'` >>
+  gvs[plain_operand_def, is_label_operand_def, operand_case_not_label]
+QED
+
+Theorem alloc_run_stmt_range_store:
+  alloc_run fresh_outputs
+    (case FLOOKUP ce.ce_vars id of
+       SOME (MemLoc off _) => emit_void MSTORE [Lit (n2w off);Var ctr]
+     | SOME (PtrVar ptr_op _) => emit_void MSTORE [ptr_op;Var ctr]
+     | _ => emit_void INVALID []) (\u s. fresh_outputs s)
+Proof
+  Cases_on `FLOOKUP ce.ce_vars id` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
+  rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh]
+QED
