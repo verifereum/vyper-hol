@@ -2,7 +2,7 @@
 Theory annassignRelayoutFrag
 Ancestors
   annassignRelayoutCompose annassignRelayoutSource annassignRelayoutCode
-  bodyDeclCopyMemory stmtSimDeclMem stmtSimDecl stmtSimDeclCompose
+  loweringSlice stmtSimDeclMem stmtSimDecl stmtSimDeclCompose
   stmtSimDeclPath stmtSimDeclSource stmtSimProps exprSimProps exprOperandVar
   exprLoweringProps stmtLoweringMono emitHelperProps fragExec
   stmtSimDefs exprSimDefs loweringPosts exprLowering stmtLowering compileEnv
@@ -38,13 +38,37 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule stmt_env_annassign >> strip_tac >>
   drule_all declare_local_ptr >> strip_tac >>
-  drule_all declare_local_memory_types_mem >> strip_tac >>
-  drule_all annassign_copy_parts_mem >>
-  disch_then (qx_choosel_then [`sA`, `sV`, `sB`, `vv`, `op`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) _)` >>
+  `c.ce_struct_fields = cenv.ce_struct_fields /\
+   c.ce_func_return_type = cenv.ce_func_return_type` by
+    (qpat_x_assum `c with <|ce_vars := _; ce_var_type := _;
+      ce_dynarray_capacity := _|> = cenv` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
+   (!e. lowered_value_type c e = lowered_value_type cenv e)` by
+    (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
+     simp[oneline lowered_value_type_def]) >>
+  `?sA sV sB vv op.
+     emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((),sA) /\
+     compile_expr c (expr_type e) e sA = (vv,sV) /\
+     unwrap_value c vv sV = (op,sB) /\
+     lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
+     compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
+       (lowered_value_type cenv e)
+       (case vtyp of ArrayT et (Dynamic _) =>
+          SOME ((type_memory_bytes c et + 31) DIV 32, type_memory_bytes c et)
+        | _ => NONE) (type_memory_bytes c vtyp) sB = ((),sf)` by
+    (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+     simp[Once compile_stmt_def, emit_local_alloca_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     imp_res_tac emit_inst_unit >>
+     gvs[lower_value_def, comp_bind_def] >> metis_tac[]) >>
   `fn_has_code st sf func` by gvs[fn_has_code_def, emitted_blocks_def] >>
   `ci_mono sA sB` by metis_tac[cj 2 compile_expr_grows, ci_mono_def] >>
   `ci_mono sB sf` by metis_tac[cj 1 ci_mono_stmt_helpers, pairTheory.SND] >>
   `cs_extends sA sf` by metis_tac[ci_mono_def, cs_extends_trans] >>
+  unabbrev_all_tac >>
   drule_all annassign_alloca_code >> strip_tac >>
   `fn_has_code sA sB func /\ fn_has_code sB sf func` by
     metis_tac[fn_has_code_split, ci_mono_def] >>
@@ -118,12 +142,16 @@ Proof
   disch_then (qx_choosel_then [`st`, `sA`, `sV`, `sB`, `vv`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id typ sa = (c,st)` >>
   qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
-  drule_all declare_local_memory_types_mem >> strip_tac >>
-  `c.ce_struct_fields = cenv.ce_struct_fields` by
+  `c.ce_struct_fields = cenv.ce_struct_fields /\
+   c.ce_func_return_type = cenv.ce_func_return_type` by
     (drule_all declare_local_ptr >> strip_tac >>
      qpat_x_assum `c with <|ce_vars := _; ce_var_type := _;
        ce_dynarray_capacity := _|> = cenv` mp_tac >>
      simp[compile_env_component_equality]) >>
+  `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
+   (!e. lowered_value_type c e = lowered_value_type cenv e)` by
+    (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
+     simp[oneline lowered_value_type_def]) >>
   `stmt_state_rel ctx func c cx es s0` by
     (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
