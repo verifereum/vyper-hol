@@ -8,7 +8,7 @@ runs:
 
     - uses: ./.github/actions/setup-holbuild
       with:
-        holbuild-ref: v0.13.4
+        holbuild-ref: v0.13.13
 
     - name: Report selected holbuild version
       shell: bash
