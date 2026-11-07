@@ -46,7 +46,7 @@ Ancestors
   stmtSimDefs gasOutcome gasSummary supportedStmts vyperTypeSystem vyperState
   vyperInterpreter valueEncoding valueEncodingProps valueEncodingProofs
   stmtLowering exprLowering venomState exprSimPopImmutableTarget
-  compileEnv exprLoweringProps list finite_map arithmetic words
+  compileEnv exprLoweringProps list finite_map arithmetic words bodySimAugPlaceMemory
 
 (* A statement fragment as stmt_frag says, that also keeps Q: started in a
    state where Q holds, it ends where Q holds.  stmt_frag_keep (K T) is
@@ -362,6 +362,133 @@ Proof
   irule attribute_type_fold_separation >> simp[] >>
   qexistsl_tac [`env.type_defs`, `FLOOKUP env.var_types root`, `endpoint`] >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem assign_subscripts_divergent_attrs[local]:
+  !xs ws tv v tail ao v'.
+    ~isPREFIX xs ws /\ ~isPREFIX ws xs /\
+    assign_subscripts tv v (MAP AttrSubscript ws ++ tail) ao = INL v' ==>
+    evaluate_subscripts tv v' (MAP AttrSubscript xs) =
+    evaluate_subscripts tv v (MAP AttrSubscript xs)
+Proof
+  Induct >> simp[] >> Cases_on `ws` >> simp[] >>
+  rpt gen_tac >> strip_tac >> Cases_on `v` >>
+  gvs[assign_subscripts_def, AllCaseEqs()] >>
+  Cases_on `h = h'`
+  >- (gvs[evaluate_subscripts_def, alistTheory.AFUPDKEY_ALOOKUP] >>
+      first_x_assum (qspec_then `t` mp_tac) >> simp[] >>
+      disch_then drule >> simp[] >> disch_then (fn th => rewrite_tac[th])) >>
+  `h' <> h` by metis_tac[] >>
+  simp[evaluate_subscripts_def, alistTheory.AFUPDKEY_ALOOKUP] >>
+  Cases_on `ALOOKUP l h'` >> simp[]
+QED
+
+Theorem replace_memory_entry_divergent_attrs[local]:
+  !xs ws entry tail v entry'.
+    ~isPREFIX xs ws /\ ~isPREFIX ws xs /\
+    replace_memory_entry entry (MAP AttrSubscript ws ++ tail) v = INL entry' ==>
+    entry'.type = entry.type /\
+    evaluate_subscripts entry'.type entry'.value (MAP AttrSubscript xs) =
+    evaluate_subscripts entry.type entry.value (MAP AttrSubscript xs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[replace_memory_entry_def, AllCaseEqs()] >>
+  simp[] >> metis_tac[assign_subscripts_divergent_attrs]
+QED
+
+Theorem write_place_divergent_attrs[local]:
+  !cx root xs ws tail v es res es'.
+    ~isPREFIX xs ws /\ ~isPREFIX ws xs /\
+    write_place cx (MemoryPlace root (MAP AttrSubscript ws ++ tail)) v es = (res,es') ==>
+    LENGTH es'.scopes = LENGTH es.scopes /\
+    MAP (\sc. OPTION_MAP
+      (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+      (FLOOKUP sc root)) es'.scopes =
+    MAP (\sc. OPTION_MAP
+      (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+      (FLOOKUP sc root)) es.scopes
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `find_containing_scope root es.scopes`
+  >- gvs[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
+         return_def, raise_def] >>
+  rename1 `find_containing_scope root es.scopes = SOME found` >>
+  PairCases_on `found` >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
+  rename1 `FLOOKUP local root = SOME entry` >>
+  Cases_on `replace_memory_entry entry (MAP AttrSubscript ws ++ tail) v` >>
+  gvs[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
+      ignore_bind_def, lift_sum_def, type_check_def, assert_def,
+      set_scopes_def, return_def, raise_def, AllCaseEqs(), FLOOKUP_UPDATE] >>
+  drule_all replace_memory_entry_divergent_attrs >> simp[]
+QED
+
+Theorem eval_base_place_attribute_prefix[local]:
+  !target cx es root path es' pending xs.
+    eval_base_place cx target es = (INL (PlaceR (MemoryPlace root path)),es') /\
+    place_access target pending = (NameTarget root,xs) ==>
+    ?tail. path ++ MAP AttrSubscript pending = MAP AttrSubscript xs ++ tail
+Proof
+  ho_match_mp_tac targetPlaceSimCasesBaseTheory.base_assignment_target_induct >>
+  rpt conj_tac
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs(),
+          place_access_def])
+  >- (rpt strip_tac >>
+      gvs[place_access_def])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+      drule bodySimAugPlaceMemoryTheory.aug_place_extend_memory_inversion >>
+      strip_tac >> gvs[place_access_def] >>
+      first_x_assum drule >> disch_then (qspec_then `[]` mp_tac) >>
+      simp[] >> strip_tac >> simp[APPEND_ASSOC] >> metis_tac[APPEND_ASSOC]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  drule bodySimAugPlaceMemoryTheory.aug_place_extend_memory_inversion >>
+  strip_tac >> gvs[place_access_def] >>
+  first_x_assum drule >> disch_then (qspec_then `s::pending` mp_tac) >>
+  simp[APPEND_ASSOC]
+QED
+
+Theorem eval_target_place_attribute_prefix[local]:
+  !target cx es root path es'.
+    eval_target_place cx target es = (INL (MemoryPlace root path),es') ==>
+    ?xs tail. place_access target [] = (NameTarget root,xs) /\
+              path = MAP AttrSubscript xs ++ tail
+Proof
+  rpt strip_tac >>
+  drule eval_target_place_memory_root >> strip_tac >>
+  Cases_on `place_access target []` >> gvs[] >>
+  gvs[Once evaluate_def, bind_def, get_place_def, return_def,
+      raise_def, AllCaseEqs()] >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  drule eval_base_place_attribute_prefix >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[]
+QED
+
+Theorem typed_memory_write_attribute_projection[local]:
+  !env e et bd p root xs envw w vt cx es path mid v res es'.
+    well_typed_expr env e /\ expr_type e = ArrayT et bd /\
+    expr_place e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+    type_place_target envw w = SOME vt /\
+    envw.type_defs = env.type_defs /\
+    FLOOKUP envw.var_types root = FLOOKUP env.var_types root /\
+    ~place_contains w p /\
+    eval_target_place cx w es = (INL (MemoryPlace root path),mid) /\
+    write_place cx (MemoryPlace root path) v mid = (res,es') ==>
+    LENGTH es'.scopes = LENGTH mid.scopes /\
+    MAP (\sc. OPTION_MAP
+      (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+      (FLOOKUP sc root)) es'.scopes =
+    MAP (\sc. OPTION_MAP
+      (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+      (FLOOKUP sc root)) mid.scopes
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule eval_target_place_attribute_prefix >> strip_tac >>
+  drule_all typed_place_write_separation >> strip_tac >>
+  gvs[] >> drule_all write_place_divergent_attrs >> simp[]
 QED
 
 Theorem typed_stmts_place_frame:
