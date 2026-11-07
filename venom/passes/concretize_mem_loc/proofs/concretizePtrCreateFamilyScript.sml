@@ -7,6 +7,7 @@ Ancestors
   concretizePtrMloadRecovery concretizePtrPairedPrefix concretizePtrChronologicalHistory
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrDeletedGapHistory
   regularMemorySim o1PassContract unitShapeDefs contextCodegenRel memLocDefs
+  pointerConfinedDefs venomInst
   concretizePtrTaintContent ptrDiscipline venomState venomCallOracleDefs
   concretizePtrOpaqueRetpc concretizePtrSharedFields extCallOracle venomExecSemantics list words pred_set
 
@@ -124,6 +125,46 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem ptr_create_family_mixed_execution[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t /\
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  inst.inst_outputs = [out] /\ ~retpc_var f out /\
+  exec_create inst t value ot sz salt = OK z ==>
+  ?u. exec_create inst s value off sz salt = OK u /\
+      ptr_history_content tn u z /\
+      ptr_mixed_vars births positions (step_prov PT TG inst u)
+        (step_taint inst s u tn) f g u z
+Proof
+  strip_tac >>
+  `venom_create_request s value off sz salt = venom_create_request t value ot sz salt` by
+    (irule ptr_create_family_request >> metis_tac[]) >>
+  qpat_x_assum `exec_create _ _ _ _ _ _ = OK _` mp_tac >>
+  simp[exec_create_def, AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
+  strip_tac >> gvs[Excl "consume_create_outcome_eq"] >>
+  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) s` >>
+  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) t` >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  `q = q' /\ ptr_history_content tn r r'` by
+    (drule_all ptr_create_family_completion >> simp[]) >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  simp[ptr_history_content_update_var] >>
+  `ptr_mixed_vars births positions TG tn f g r r'` by
+    (irule ptr_mixed_vars_fields >>
+     rpt (goal_assum (drule_at Any)) >>
+     qpat_x_assum `consume_create_outcome _ s = _` mp_tac >>
+     qpat_x_assum `consume_create_outcome _ t = _` mp_tac >>
+     simp[consume_create_outcome_eq] >> rpt strip_tac >> gvs[]) >>
+  drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
+  fs[MEM] >>
+  simp[step_prov_def, out_prov_def, set_prov_def,
+       step_taint_def, set_var_taint_def, out_taint_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE,
+       op_taint_def, concretizePtrValueTransportTheory.ptr_value_transport_def] >>
+  rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
+QED
+
 Theorem ptr_create_family_delegate_execution[local]:
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
@@ -221,6 +262,152 @@ Proof
   conj_tac >- (qexists_tac `n` >> simp[]) >>
   goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
+Theorem ptr_create_family_scalar_provenance[local]:
+  ptr_use_ok P pv inst /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
+  ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;off;sz]) \/
+   (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [vop;off;sz;salt])) ==>
+  op_prov TG vop = NONE /\ op_prov TG sz = NONE /\
+  (inst.inst_opcode = CREATE2 ==> op_prov TG salt = NONE)
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) (vop::sz::(if inst.inst_opcode = CREATE2 then [salt] else [])) ==>
+     v NOTIN pv` by
+    (rpt strip_tac >>
+     fs[ptr_use_ok_def, is_pointer_preserving_op_def,
+        mem_write_ops_def, mem_read_ops_def] >>
+     qpat_x_assum `!v. _ ==> _ /\ _` (qspec_then `v` mp_tac) >>
+     gvs[] >> rpt strip_tac >> gvs[] >>
+     fs[AllCaseEqs()] >> gvs[]) >>
+  rpt conj_tac >> rpt strip_tac >>
+  Cases_on `vop` >> Cases_on `sz` >> Cases_on `salt` >>
+  gvs[op_prov_def] >> metis_tac[optionTheory.option_CASES]
+QED
+
+Theorem ptr_create_family_operand_transport[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\
+  EVERY (ptr_nonopaque_operand f) inst.inst_operands /\
+  taint_ok f tn inst s /\ ptr_use_ok P pv inst /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
+  ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;off;sz]) \/
+   (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [vop;off;sz;salt])) /\
+  eval_operand vop t = SOME v /\ eval_operand off t = SOME y /\
+  eval_operand sz t = SOME n ==>
+  ?x. eval_operand vop s = SOME v /\ eval_operand off s = SOME x /\
+      eval_operand sz s = SOME n /\
+      ptr_lookup_transport births positions (op_prov TG off) {} (SOME x) (SOME y) /\
+      (inst.inst_opcode = CREATE2 ==> eval_operand salt s = eval_operand salt t)
+Proof
+  strip_tac >>
+  `op_prov TG vop = NONE /\ op_prov TG sz = NONE /\
+   (inst.inst_opcode = CREATE2 ==> op_prov TG salt = NONE)` by
+    (irule ptr_create_family_scalar_provenance >> metis_tac[]) >>
+  `MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by simp[] >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
+    (drule_all ptr_create_family_taint >> strip_tac >> simp[]) >>
+  `!op. MEM op inst.inst_operands ==>
+    ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
+      (eval_operand op s) (eval_operand op t)` by
+    (rpt strip_tac >> irule ptr_mixed_vars_eval >>
+     simp[] >> qexistsl_tac [`f`,`g`] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  `ptr_lookup_transport births positions NONE {} (eval_operand vop s) (SOME v) /\
+   ptr_lookup_transport births positions NONE {} (eval_operand sz s) (SOME n) /\
+   ptr_lookup_transport births positions (op_prov TG off) {}
+     (eval_operand off s) (SOME y)` by
+    (gvs[] >> metis_tac[]) >>
+  Cases_on `eval_operand vop s` >> Cases_on `eval_operand sz s` >>
+  Cases_on `eval_operand off s` >>
+  gvs[concretizePtrValueTransportTheory.ptr_lookup_transport_def,
+      concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty] >>
+  qpat_x_assum `!op. _ ==> (case eval_operand op s of NONE => _ | SOME a => _)`
+    (qspec_then `salt` mp_tac) >>
+  Cases_on `eval_operand salt s` >> Cases_on `eval_operand salt t` >>
+  gvs[concretizePtrValueTransportTheory.ptr_lookup_transport_def,
+      concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty]
+QED
+
+Theorem ptr_create_family_endpoint_execution[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  MEM a.po_inst.inst_opcode [CREATE; CREATE2] /\
+  ptr_use_ok P pv a.po_inst /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
+  EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands /\
+  a.po_inst.inst_outputs = [out] /\ ~retpc_var a.po_fn out /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  step_inst fuel C' a.po_inst at.po_state = OK t' ==>
+  ?s'. step_inst 0 C a.po_inst a.po_state = OK s' /\
+    ptr_history_content a.po_taint s' t' /\
+    ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
+      (step_taint a.po_inst a.po_state s' a.po_taint)
+      a.po_fn at.po_fn s' t'
+Proof
+  strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
+    (irule ptr_create_family_endpoint_taint >> rpt (goal_assum (drule_at Any))) >>
+  `MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by fs[MEM] >>
+  `a.po_taint.t_stor = {} /\ a.po_taint.t_trans = {}` by
+    (drule_all ptr_create_family_taint >> simp[]) >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+      a.po_state at.po_state /\
+   ptr_history_content a.po_taint a.po_state at.po_state /\
+   a.po_state.vs_labels = at.po_state.vs_labels` by
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
+  `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  gvs[MEM] >>
+  simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >> PURE_REWRITE_TAC[opcode_case_def] >>
+  simp[AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  `?saltop.
+    (a.po_inst.inst_opcode = CREATE /\
+     a.po_inst.inst_operands = [val_op;off_op;sz_op]) \/
+    (a.po_inst.inst_opcode = CREATE2 /\
+     a.po_inst.inst_operands = [val_op;off_op;sz_op;saltop])` by metis_tac[] >> gs[] >>
+  `?x. eval_operand val_op a.po_state = SOME value /\
+       eval_operand off_op a.po_state = SOME x /\
+       eval_operand sz_op a.po_state = SOME sz /\
+       ptr_lookup_transport births positions (op_prov TG off_op) {}
+         (SOME x) (SOME offset) /\
+       (a.po_inst.inst_opcode = CREATE2 ==>
+         eval_operand saltop a.po_state = eval_operand saltop at.po_state)` by
+    (irule ptr_create_family_operand_transport >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     conj_tac >- (qexistsl_tac [`P`,`pv`] >> simp[]) >>
+     qexistsl_tac [`a.po_fn`,`at.po_fn`,`a.po_taint`] >> simp[]) >>
+  `read_memory (w2n x) (w2n sz) a.po_state =
+   read_memory (w2n offset) (w2n sz) at.po_state` by
+    (irule ptr_create_family_input_bytes >>
+     simp[] >> conj_tac
+     >- gvs[source_memory_read_ranges_def, mem_read_ops_def,
+            memory_range_of_operands_def, eval_operands_def] >>
+     goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     rpt (goal_assum (drule_at Any)) >>
+     qexists_tac `<|iao_ofst := off_op; iao_size := SOME sz_op;
+                    iao_max_size := SOME sz_op|>` >>
+     gvs[mem_read_ops_def, concretizeMemLocDefsTheory.inst_read_op_def, source_memory_read_ranges_def,
+         eval_operands_def]) >>
+  gvs[eval_operands_def] >>
+  irule (INST_TYPE [alpha |-> ``:num``] ptr_create_family_mixed_execution) >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  qexistsl_tac [`offset`,`at.po_state`] >> simp[]
 QED
 
 Theorem ptr_paired_create_prefix_normalize:
