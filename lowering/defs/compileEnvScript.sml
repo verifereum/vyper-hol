@@ -1032,13 +1032,12 @@ End
 
 (* ===== Storage Relation up to Dead Bytes ===== *)
 (* The source writes a bytestring as its length and the slots its bytes use
-   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering copies
-   the value's whole storage block from its memory buffer
-   (compile_memory_to_storage, Python's _store_memory_to_storage), so the
-   bytes past the length, up to the capacity, hold whatever the buffer held
-   there.  DynArray capacity elements remain related even after a shrink:
+   (encode_dyn_bytes_slots), zero-padding the last one.  Bytestring padding
+   need not agree with the memory buffer's unused bytes.
+   DynArray capacity elements remain related even after a shrink:
    a previously captured child pointer may still read their headers or
-   values.  Sparse storage copies preserve those inactive slots.  The relation on
+   values.  This relation requires sparse storage copies that preserve
+   those inactive slots.  The relation on
    the running contract's storage and transient storage therefore only
    compares the bytes that are not dead.
 
