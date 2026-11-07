@@ -148,3 +148,97 @@ Theorem successful_join_edges_common_cells:
 Proof
   metis_tac[successful_join_edges_common_cells_projection]
 QED
+
+Theorem successful_join_edge_selected_phi_present:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 =
+    SOME (ops,ps) /\
+  j < LENGTH (collect_phis bb.bb_instructions) /\
+  FIND (\(l,w). l = pred)
+    (phi_pairs (EL j (collect_phis bb.bb_instructions)).inst_operands) =
+    SOME (pred,v) ==>
+  MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+  MEM (Var v) ps.ps_stack
+Proof
+  strip_tac >>
+  `MEM v (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))` by
+    (irule reachable_phi_incoming_activated >>
+     goal_assum (drule_at Any) >> simp[] >> qexists_tac `j` >> simp[]) >>
+  `?prefix. ps.ps_stack = prefix ++ MAP Var
+    (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))` by
+    (irule generate_block_plan_join_edge_suffix >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac
+  >- (drule venomExecPropsTheory.FIND_MEM >>
+      metis_tac[cfgNormBaseTheory.phi_pairs_mem_var]) >>
+  simp[listTheory.MEM_MAP]
+QED
+
+Theorem successful_join_edge_phi_candidate:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 =
+    SOME (ops,ps) /\
+  j < LENGTH (collect_phis bb.bb_instructions) ==>
+  ?v. MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+      MEM (Var v) ps.ps_stack
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `wf_function fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `MEM (EL j (collect_phis bb.bb_instructions)) bb.bb_instructions /\
+   (EL j (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
+    metis_tac[listTheory.EL_MEM, collect_phis_mem] >>
+  `phi_edge_uses_wf fn bb (EL j (collect_phis bb.bb_instructions))` by
+    (gvs[def_dominates_uses_def] >>
+     first_x_assum (qspecl_then [`bb`, `EL j (collect_phis bb.bb_instructions)`] mp_tac) >> simp[]) >>
+  `fn_cfg_edge fn pred bb.bb_label` by metis_tac[fn_cfg_edge_cfg_analyze] >>
+  `?v. MEM (pred,v) (phi_pairs (EL j (collect_phis bb.bb_instructions)).inst_operands)` by
+    (gvs[phi_edge_uses_wf_def] >> metis_tac[pairTheory.PAIR]) >>
+  `FIND (\(l,w). l = pred)
+    (phi_pairs (EL j (collect_phis bb.bb_instructions)).inst_operands) = SOME (pred,v)` by
+    (gvs[phi_edge_uses_wf_def] >>
+     drule_all (Q.ISPEC `FST : string # string -> string` distinct_key_FIND_member) >>
+     simp[pairTheory.LAMBDA_PROD]) >>
+  qexists_tac `v` >> irule successful_join_edge_selected_phi_present >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem successful_join_edge_phi_candidate_origin:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 =
+    SOME (ops,ps) /\
+  j < LENGTH (collect_phis bb.bb_instructions) /\
+  (!v. MEM (Var v) ps.ps_stack ==>
+    ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+            MEM v di.inst_outputs /\ MEM db.bb_label visited) ==>
+  ?v db di.
+    MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+    MEM (Var v) ps.ps_stack /\ MEM db fn.fn_blocks /\
+    MEM di db.bb_instructions /\ MEM v di.inst_outputs /\
+    MEM db.bb_label visited
+Proof
+  strip_tac >>
+  `?v. MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+       MEM (Var v) ps.ps_stack` by
+    (irule successful_join_edge_phi_candidate >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
