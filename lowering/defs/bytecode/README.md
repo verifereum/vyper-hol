@@ -61,13 +61,11 @@ oracle. It is a fast regression check, not a kernel-checked proof; its README
 says what a `PASS` trusts. This is finite fixture evidence, not a universal
 compiler-equivalence theorem.
 
-No build root reaches five regression theories: the range-folding and
-allocation-budget checks and the three event regressions. Build them with:
+No build root reaches two regression theories, the range-folding and
+allocation-budget checks. Build them with:
 
 ```sh
-holbuild build evalCompilerRangeTheory evalCompilerAllocationBudgetTheory \
-  vyperImportedEventRegressionTheory vyperEventArgumentLifetimeTheory \
-  vyperEventForwardStructTheory
+holbuild build evalCompilerRangeTheory evalCompilerAllocationBudgetTheory
 ```
 
 ## Supported-subset boundary

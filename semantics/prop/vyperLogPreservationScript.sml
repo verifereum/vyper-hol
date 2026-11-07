@@ -132,8 +132,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs(), log_extends_def] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac read_result_state >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
+  imp_res_tac array_iterator_results_state >> gvs[] >>
   first_x_assum drule >> simp[] >> strip_tac >>
   qpat_x_assum `log_extends _ _` mp_tac >>
   simp[log_extends_def]
@@ -242,43 +241,55 @@ Proof
 QED
 
 Theorem case_eval_for_cons_logs[local]:
-  (!s0 x s1 s2 broke s3.
-     push_scope_with_var nm tyv v s0 = (INL x,s1) /\
+  (!s0 v s1 s2 x s3 s4 broke s5.
+     read_result cx r s0 = (INL v,s1) /\
+     push_scope_with_var nm tyv v s2 = (INL x,s3) /\
      finally (try (do eval_stmts cx body; return F od)
-                    handle_loop_exception) pop_scope s2 = (INL broke,s3) /\
+                    handle_loop_exception) pop_scope s4 = (INL broke,s5) /\
      ~broke ==>
      !st res st'. eval_for cx tyv nm body vs st = (res,st') ==>
        log_extends st st') /\
-  (!s0 x s1. push_scope_with_var nm tyv v s0 = (INL x,s1) ==>
+  (!s0 v s1 s2 x s3.
+     read_result cx r s0 = (INL v,s1) /\
+     push_scope_with_var nm tyv v s2 = (INL x,s3) ==>
      !st res st'. eval_stmts cx body st = (res,st') ==>
        log_extends st st') ==>
-  !st res st'. eval_for cx tyv nm body (v::vs) st = (res,st') ==>
+  !st res st'. eval_for cx tyv nm body (r::vs) st = (res,st') ==>
     log_extends st st'
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac push_scope_with_var_log_extends >>
-  `!sb rb sb'. eval_stmts cx body sb = (rb,sb') ==>
-               log_extends sb sb'` by
-    (rpt strip_tac >>
-     qpat_x_assum `!s0 s1. push_scope_with_var _ _ _ s0 = _ ==> _`
-       (qspecl_then [`st`, `s''`] mp_tac) >>
-     simp[] >> strip_tac >>
-     first_x_assum drule >> simp[]) >>
-  `log_extends s'' s'³'` by
-    (drule finally_try_body_log_extends >>
-     disch_then drule >> simp[]) >>
-  `log_extends st s'³'` by
-    (irule log_extends_trans >> qexists_tac `s''` >> simp[]) >>
-  Cases_on `broke` >> gvs[vyperStateTheory.return_def] >>
-  qpat_x_assum `!s0 s1 s2 s3. _`
-    (qspecl_then [`st`, `s''`, `s''`, `s'³'`] mp_tac) >>
-  simp[vyperStateTheory.ignore_bind_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  irule log_extends_trans >> qexists_tac `s'³'` >> simp[]
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def] >>
+  Cases_on `read_result cx r st` >> Cases_on `q` >> simp[]
+  >- (
+    rename1 `read_result cx r st = (INL v, s1)` >>
+    `s1 = st` by metis_tac[read_result_state] >>
+    qpat_x_assum `s1 = st` SUBST_ALL_TAC >>
+    Cases_on `push_scope_with_var nm tyv v st` >> Cases_on `q` >> simp[]
+    >- (
+      rename1 `push_scope_with_var nm tyv v st = (INL x, s2)` >>
+      `log_extends st s2` by metis_tac[push_scope_with_var_log_extends] >>
+      `!sb rb sb'. eval_stmts cx body sb = (rb,sb') ==> log_extends sb sb'` by
+        (rpt strip_tac >>
+         qpat_x_assum `!s0 v s1 s2 x s3. _ ==> !st res st'. eval_stmts _ _ _ = _ ==> _`
+           (qspecl_then [`st`, `v`, `st`, `st`, `x`, `s2`] mp_tac) >>
+         simp[] >> disch_then drule >> simp[]) >>
+      qmatch_goalsub_abbrev_tac `finally lb pop_scope s2` >>
+      Cases_on `finally lb pop_scope s2` >> rename1 `_ = (fres, s3)` >>
+      qunabbrev_tac `lb` >>
+      `log_extends s2 s3` by (drule finally_try_body_log_extends >> simp[]) >>
+      `log_extends st s3` by metis_tac[log_extends_trans] >>
+      Cases_on `fres` >> simp[] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+      rename1 `INL broke` >> Cases_on `broke` >>
+      simp[vyperStateTheory.return_def] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+      strip_tac >>
+      qpat_x_assum `!s0 v s1 s2 x s3 s4 broke s5. _`
+        (qspecl_then [`st`, `v`, `st`, `st`, `x`, `s2`, `s2`, `F`, `s3`] mp_tac) >>
+      simp[vyperStateTheory.ignore_bind_def] >> disch_then drule >> strip_tac >>
+      irule log_extends_trans >> qexists_tac `s3` >> simp[]) >>
+    strip_tac >> gvs[] >> metis_tac[push_scope_with_var_log_extends]) >>
+  strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[log_extends_refl]
 QED
 
 Theorem update_accounts_logs[local]:

@@ -32,6 +32,7 @@ Ancestors
   vyperExtCallCpsEquivalenceTest
   vyperExtCallModesTest
   vyperFixedBytesConvertTest
+  vyperForStorageReadsTest
   vyperInStaticArrayTest
   vyperInvertTest
   vyperLoadTimingTest

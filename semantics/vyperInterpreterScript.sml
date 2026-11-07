@@ -1402,6 +1402,79 @@ val () = unlock_if_nr_def
 (* Unfolded by simp, so proofs about evaluate_def see the lock code inline. *)
 val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
 
+(* A storage or transient array is iterated in place, as the compiler does:
+   its length is read once at loop entry, and each element is a location
+   read at the start of its own iteration. Other iterables are copied. *)
+Definition array_iterator_results_def:
+  array_iterator_results cx arr_typ res =
+    case res of
+    | PlaceR (StoragePlace tr slot (ArrayTV etv bd)) => do
+        len <- result_array_length cx res;
+        check (compatible_bound bd len) "For storage array length";
+        first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+        return (GENLIST (λi. PlaceR (StoragePlace tr
+                  (first + n2w (i * type_slot_size etv)) etv)) len)
+      od
+    | _ => do
+        v <- read_result cx res;
+        arr_tv <- lift_option_type (evaluate_type (get_tenv cx) arr_typ)
+                    "For array type";
+        vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+        return (MAP Value vs)
+      od
+End
+
+val () = array_iterator_results_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            eval_result_CASE_rator, place_CASE_rator, type_value_CASE_rator,
+            bound_CASE_rator]
+  |> cv_auto_trans;
+
+Theorem array_iterator_results_storage:
+  array_iterator_results cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd))) =
+  do
+    len <- result_array_length cx (PlaceR (StoragePlace tr slot (ArrayTV etv bd)));
+    check (compatible_bound bd len) "For storage array length";
+    first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+    return (GENLIST (λi. PlaceR (StoragePlace tr
+              (first + n2w (i * type_slot_size etv)) etv)) len)
+  od
+Proof
+  simp[array_iterator_results_def]
+QED
+
+Theorem array_iterator_results_copy:
+  (!tr slot etv bd. res <> PlaceR (StoragePlace tr slot (ArrayTV etv bd))) ==>
+  array_iterator_results cx ty res =
+  do
+    v <- read_result cx res;
+    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "For array type";
+    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+    return (MAP Value vs)
+  od
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv`)) >>
+  simp[array_iterator_results_def]
+QED
+
+(* Building the iteration list reads but never writes. *)
+Theorem array_iterator_results_state:
+  array_iterator_results cx ty res st = (r,st') ==> st' = st
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> imp_res_tac read_result_state >> gvs[]
+QED
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -1556,10 +1629,7 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- read_result cx tv;
-    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
-    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
-    return vs
+    array_iterator_results cx (expr_type e) tv
   od ∧
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
@@ -1568,15 +1638,16 @@ Definition evaluate_def:
     v2 <- read_result cx tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
-    return $ GENLIST (λn. IntV (n1 + &n)) n2
+    return $ GENLIST (λn. Value (IntV (n1 + &n))) n2
   od ∧
   eval_for cx tyv nm body [] = return () ∧
-  eval_for cx tyv nm body (v::vs) = do
+  eval_for cx tyv nm body (r::rs) = do
+    v <- read_result cx r;
     push_scope_with_var nm tyv v;
     broke <- finally
       (try (do eval_stmts cx body; return F od) handle_loop_exception)
       pop_scope ;
-    if broke then return () else eval_for cx tyv nm body vs
+    if broke then return () else eval_for cx tyv nm body rs
   od ∧
   eval_expr cx (Name _ id) = do
     sc <- get_scopes;
@@ -1932,6 +2003,29 @@ Proof
   Induct >> rw[evaluate_def, return_def, bind_def] >>
   gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
   goal_assum drule
+QED
+
+(* An iteration reads its element before binding the loop variable. *)
+Theorem eval_for_cons_read:
+  read_result cx r st = (INL v,st') ==>
+  eval_for cx tyv nm body (r::rs) st =
+  do
+    push_scope_with_var nm tyv v;
+    broke <- finally
+      (try (do eval_stmts cx body; return F od) handle_loop_exception)
+      pop_scope ;
+    if broke then return () else eval_for cx tyv nm body rs
+  od st
+Proof
+  strip_tac >> imp_res_tac read_result_state >> gvs[] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def]
+QED
+
+Theorem eval_for_cons_read_error:
+  read_result cx r st = (INR e,st') ==>
+  eval_for cx tyv nm body (r::rs) st = (INR e,st')
+Proof
+  simp[Once evaluate_def, bind_def]
 QED
 
 (* Semantics of initial state of a contract after deployment *)
