@@ -553,7 +553,8 @@ Proof
     (fs[expr_post_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP t.vs_allocas aid = SOME b` by fs[expr_post_def] >>
-  metis_tac[stmt_post_entry_frame]
+  irule stmt_post_entry_frame >> qexistsl_tac [`em`, `t`, `sm`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem gas_marked_exec_observation:

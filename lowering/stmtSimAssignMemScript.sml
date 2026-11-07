@@ -1013,6 +1013,7 @@ Theorem local_header_store_path:
         (!x. lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
+        t.vs_memory = (mstore (w2n w) wd s).vs_memory /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt strip_tac >>
@@ -1123,6 +1124,39 @@ Proof
      simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
      qexistsl_tac [`get_tenv cx`, `vtyp`] >> simp[]) >>
   gvs[] >> drule_all local_header_store_path >> strip_tac >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `32 <= sz` by decide_tac >>
+  `local_region cenv es.scopes s0 id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv es s0` by (irule alloca_frame_same >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
+  `!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x s0 = SOME u` by
+    simp[] >>
+  `!n q z'. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z') ==>
+     lookup_var q t = lookup_var q s0` by metis_tac[] >>
+  `!ad len. ad + len <= w2n w \/ w2n w + 32 <= ad ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s0.vs_memory` by
+    (rpt strip_tac >>
+     qpat_assum `t.vs_memory = _` (fn th => REWRITE_TAC [th]) >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  `es.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `MAP FDOM (es with <|scopes := pre ++
+      (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
+      gas_obs := []|>).scopes = MAP FDOM es.scopes` by
+    simp[pred_setTheory.ABSORPTION_RWT] >>
+  `alloca_frame cenv es sa s0 cenv (es with <|scopes := pre ++
+      (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
+      gas_obs := []|>) t` by
+    (mp_tac (Q.INST [`c` |-> `cenv`, `es1` |-> `es`, `s` |-> `s0`,
+       `b` |-> `w2n (w:bytes32)`, `z` |-> `sz`, `n0` |-> `32`,
+       `ee` |-> `es with <|scopes := pre ++
+          (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
+          gas_obs := []|>`] alloca_frame_local_store) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INL ()`,
@@ -1136,5 +1170,6 @@ Proof
   qpat_x_assum `stmt_state_rel _ _ _ _ (es with scopes := _) t` mp_tac >>
   disch_then (mp_tac o Q.INST
     [`gs` |-> `[]`, `readings` |-> `t.vs_gas_readings`, `k` |-> `t.vs_inst_idx`]
-    o MATCH_MP msg_gas_state_frame) >> simp[stmt_state_rel_inst_idx]
+    o MATCH_MP msg_gas_state_frame) >> simp[stmt_state_rel_inst_idx] >>
+  strip_tac >> first_assum ACCEPT_TAC
 QED

@@ -1236,7 +1236,10 @@ Resume compile_assert_reason_frag_general[true]:
       simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
       drule_all gas_path_then >> simp[]) >>
   disj1_tac >> simp[] >> irule assert_success_post >>
-  simp[] >> qexistsl_tac [`e`, `es`, `op`, `s1`] >> simp[]
+  simp[] >> conj_tac
+  >- (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
+      drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  qexistsl_tac [`e`, `op`, `s1`] >> simp[]
 QED
 Resume compile_assert_reason_frag_general[false]:
   gvs[] >>

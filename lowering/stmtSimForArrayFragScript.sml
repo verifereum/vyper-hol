@@ -574,6 +574,10 @@ Proof
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
      strip_tac >> asm_rewrite_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv' sa sb (es with gas_obs := gs) s0 =
+   stmt_post ctx func cx lctx cenv cenv' sa sb es s0` by
+    simp[FUN_EQ_THM, stmt_post_def, alloca_frame_def] >>
+  pop_assum SUBST1_TAC >>
   first_x_assum drule_all >>
   disch_then (mp_then Any mp_tac array_outcome_start_gas_obs) >> simp[]
 QED
@@ -907,6 +911,10 @@ Theorem stmt_frag_start_gas_obs[local]:
   !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
 Proof
   rw[stmt_frag_def, stmt_framed_frag_def] >>
+  `stmt_post ctx func cx lctx cenv cenv' sa sb (es with gas_obs := gs) s0 =
+   stmt_post ctx func cx lctx cenv cenv' sa sb es s0` by
+    simp[FUN_EQ_THM, stmt_post_def, alloca_frame_def] >>
+  pop_assum SUBST1_TAC >>
   irule gas_outcome_start_gas_obs >> first_x_assum irule >> simp[] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
   simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
