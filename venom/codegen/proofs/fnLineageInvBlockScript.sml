@@ -131,3 +131,75 @@ Proof
  qexistsl_tac [`cfg_analyze fn`, `dfg`, `0`, `inst_ops`, `0`, `ps`] >>
  simp[EVERY_CONJ] >> metis_tac[]
 QED
+
+Theorem analyzed_join_outgoing_block_inventory:
+ !fn entry pred pb succ sb next dfg ps0 pops ps m core base ops qs.
+ codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+ fn_reachable fn succ /\ succ <> entry /\ sb <> HD fn.fn_blocks /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\
+ cfg_succs_of (cfg_analyze fn) pred = [succ] /\
+ 1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+ cfg_reachable_of (cfg_analyze fn) pred /\
+ MEM next (cfg_succs_of (cfg_analyze fn) succ) /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (pops,ps) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) pred
+   (LENGTH pb.bb_instructions)))) ps /\
+ lineage_core m core ps /\ EVERY is_var_operand core /\
+ residual_budget_wf base [] (ps with ps_stack := core) /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb ps = SOME (ops,qs)
+ ==>
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) sb.bb_label
+   (LENGTH sb.bb_instructions)))) qs /\
+ (?n tail. lineage_core n tail qs /\ EVERY is_var_operand tail /\
+   residual_budget_wf base [] (qs with ps_stack := tail))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `sb.bb_label = succ` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+ `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+ drule_all nonentry_block_no_params >> strip_tac >>
+ drule_all ready_outgoing_terminal_shape >> strip_tac >>
+ `MEM sb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+ `bb_well_formed sb` by metis_tac[codegen_ready_fn_def, venomWfTheory.wf_function_def] >>
+ `EVERY (\inst. ~is_param_opcode inst.inst_opcode) sb.bb_instructions` by
+   (qpat_x_assum `non_param_insts sb = _` mp_tac >>
+    simp[non_param_insts_def, FILTER_EQ_ID, EVERY_MEM]) >>
+ `LENGTH (collect_phis sb.bb_instructions) <= LENGTH sb.bb_instructions /\
+  TAKE (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions = collect_phis sb.bb_instructions` by
+   (qspec_then `sb.bb_instructions` strip_assume_tac fnPlanLineageLivenessTheory.collect_phis_prefix >>
+    conj_tac
+    >- (qpat_assum `sb.bb_instructions = _ ++ _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+    qpat_assum `sb.bb_instructions = _ ++ _`
+      (mp_tac o Q.AP_TERM `TAKE (LENGTH (collect_phis sb.bb_instructions))`) >>
+    simp[TAKE_LENGTH_APPEND]) >>
+ qpat_x_assum `generate_block_plan _ _ _ _ sb _ = _` mp_tac >>
+ simp[generate_block_plan_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+ qsuff_tac `LENGTH (collect_phis sb.bb_instructions) < LENGTH sb.bb_instructions \/
+  LENGTH sb.bb_instructions = LENGTH (collect_phis sb.bb_instructions)`
+ >- (disch_tac >>
+     drule_all (SRULE [] (GEN_ALL (Q.INST
+       [`k` |-> `LENGTH (collect_phis sb.bb_instructions)`]
+       (SPEC_ALL analyzed_join_actual_phi_residual_inventory)))) >> strip_tac >>
+     `EVERY (\inst. inst.inst_opcode <> PHI)
+       (DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions)` by
+       (qpat_x_assum `bb_well_formed sb` mp_tac >>
+        simp[venomWfTheory.bb_well_formed_def] >> strip_tac >>
+        qpat_x_assum `!i j. _` mp_tac >>
+        qspec_tac (`sb.bb_instructions`, `insts`) >>
+        Induct >> simp[livenessDefsTheory.collect_phis_def] >>
+        rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
+        >- (simp[] >> first_x_assum irule >> rpt strip_tac >>
+            qpat_x_assum `!i j. _` (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+        `EVERY (\inst. inst.inst_opcode <> PHI) (h::insts)` by
+          (simp[EVERY_EL] >> rpt strip_tac >>
+           qpat_x_assum `!i j. _` (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+        metis_tac[EVERY_DROP]) >>
+     irule (INST_TYPE [alpha |-> ``:cfg_analysis``] analyzed_outgoing_exact_suffix_inventory) >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexistsl_tac [`cfg_analyze fn`, `dfg`, `LENGTH (collect_phis sb.bb_instructions)`,
+       `post`, `0`, `qs'`] >>
+     simp[EVERY_CONJ] >> rpt conj_tac
+     >- (simp[EVERY_MEM] >> metis_tac[livenessProofsTheory.collect_phis_mem])
+     >- metis_tac[EVERY_DROP] >>
+     simp[EVERY_MEM] >> metis_tac[livenessProofsTheory.collect_phis_mem]) >> decide_tac
+QED
