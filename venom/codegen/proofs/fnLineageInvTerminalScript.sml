@@ -34,66 +34,58 @@ Proof
 QED
 
 Theorem full_inventory_swap_preservation:
-  !base targets ps d ops qs.
-    lineage_inventory (set targets) ps /\ ps.ps_spilled = FEMPTY /\
+  !base ps m core d ops qs.
+    lineage_core m core ps /\ ALL_DISTINCT core /\
     plan_slots_bounded base ps /\
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-    d < LENGTH targets /\ ALL_DISTINCT targets /\
-    do_swap d ps = (ops,qs) ==>
-    lineage_inventory (set targets) qs /\ qs.ps_spilled = FEMPTY /\
-    plan_slots_bounded base qs /\
+    d < LENGTH core /\ do_swap d ps = (ops,qs) ==>
+    lineage_core m (stack_swap d core) qs /\
+    ALL_DISTINCT (stack_swap d core) /\ set (stack_swap d core) = set core /\
+    qs.ps_spilled = ps.ps_spilled /\ plan_slots_bounded base qs /\
     spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
 Proof
-  rpt gen_tac >> strip_tac >>
-  fs[lineage_inventory_def, lineage_core_def] >>
-  `LENGTH core = LENGTH targets` by metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET] >>
+  rpt gen_tac >> strip_tac >> fs[lineage_core_def] >>
   `d < LENGTH ps.ps_stack` by simp[] >>
   drule_all planSpillBoundsTheory.do_swap_slots_bounded >> strip_tac >>
   drule_all doSwapSimTheory.do_swap_multiplicity_layout >> strip_tac >>
-  `qs = SND (do_swap d ps)` by simp[] >>
-  `d < LENGTH core` by simp[] >>
   drule_all do_swap_core >> strip_tac >>
-  `qs.ps_stack = REPLICATE m dead_stack_marker ++ stack_swap d core` by metis_tac[] >>
-  qpat_x_assum `qs = SND _` kall_tac >>
-  qpat_x_assum `(SND _).ps_stack = _` kall_tac >>
-  simp[] >>
-  qexistsl_tac [`m`, `stack_swap d core`] >>
-  gvs[EVERY_MEM] >> metis_tac[]
+  gvs[lineage_core_def]
 QED
 
 Theorem full_inventory_reorder_one_preservation:
-  !base targets dfg ps idx op ops qs.
-    ALL_DISTINCT targets /\ lineage_inventory (set targets) ps /\
-    ps.ps_spilled = FEMPTY /\ plan_slots_bounded base ps /\
+  !base targets dfg ps m core idx op ops qs.
+    ALL_DISTINCT targets /\ lineage_core m core ps /\
+    ALL_DISTINCT core /\ EVERY is_var_operand core /\ set core = set targets /\
+    DISJOINT (set targets) (FDOM ps.ps_spilled) /\ plan_slots_bounded base ps /\
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
     idx < LENGTH targets /\ MEM op targets /\
     reorder_one dfg targets idx op ps = (ops,qs) ==>
-    lineage_inventory (set targets) qs /\ qs.ps_spilled = FEMPTY /\
-    plan_slots_bounded base qs /\
+    (?tail. lineage_core m tail qs /\ ALL_DISTINCT tail /\
+      EVERY is_var_operand tail /\ set tail = set targets) /\
+    qs.ps_spilled = ps.ps_spilled /\ plan_slots_bounded base qs /\
     spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
   `!x. MEM x ps.ps_stack /\ is_var_operand x ==> MEM x targets` by
-    (drule lineage_inventory_stack_subset >>
-     simp[SUBSET_DEF] >> rpt strip_tac >>
-     first_x_assum drule >>
-     Cases_on `x = dead_stack_marker` >>
-     gvs[dead_stack_marker_def, stackPlanTypesTheory.is_var_operand_def]) >>
+    (rpt strip_tac >> Cases_on `x = dead_stack_marker`
+     >- gvs[dead_stack_marker_def, stackPlanTypesTheory.is_var_operand_def] >>
+     gvs[lineage_core_def, MEM_APPEND, MEM_REPLICATE]) >>
   `!fuel f n. reduce_depth_plan fuel targets op f n ps = ([],ps)` by
     metis_tac[full_support_reduce_depth_plan_identity] >>
   Cases_on `stack_get_unfixed_depth op (LENGTH targets - 1 - idx)
                 (LENGTH targets) ps.ps_stack`
-  >- gvs[reorder_one_def, FLOOKUP_EMPTY] >>
+  >- (`op NOTIN FDOM ps.ps_spilled` by ASM_SET_TAC[] >>
+      `FLOOKUP ps.ps_spilled op = NONE` by simp[FLOOKUP_DEF] >>
+      gvs[reorder_one_def] >> qexists_tac `core` >> simp[]) >>
   rename1 `stack_get_unfixed_depth op _ _ _ = SOME d` >>
   fs[] >>
   qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
   simp[reorder_one_def] >> disch_tac >>
   Cases_on `d = LENGTH targets - 1 - idx`
-  >- gvs[] >>
-  `lineage_inventory (set targets) ps` by simp[] >>
+  >- (gvs[] >> qexists_tac `core` >> simp[]) >>
   drule stack_get_unfixed_depth_bound >> strip_tac >>
   drule stack_get_unfixed_depth_peek >> strip_tac >>
-  fs[lineage_inventory_def, lineage_core_def] >>
+  fs[lineage_core_def] >>
   `LENGTH core = LENGTH targets` by metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET] >>
   `LENGTH targets - 1 - idx < LENGTH core` by decide_tac >>
   `is_var_operand op` by (fs[EVERY_MEM] >> metis_tac[MEMBER_NOT_EMPTY]) >>
@@ -120,8 +112,8 @@ Resume full_inventory_reorder_one_preservation[exchange]:
     simp[stack_peek_def, EL_APPEND2] >>
   qspecl_then [`core`, `d`, `LENGTH targets - (idx + 1)`] mp_tac
     stack_poke_exchange_structural_wf >> simp[] >> strip_tac >>
-  qexistsl_tac [`m`, `stack_poke (LENGTH targets - (idx + 1))
-    (stack_peek d core) (stack_poke d (stack_peek (LENGTH targets - (idx + 1)) core) core)`] >>
+  qexists_tac `stack_poke (LENGTH targets - (idx + 1))
+    (stack_peek d core) (stack_poke d (stack_peek (LENGTH targets - (idx + 1)) core) core)` >>
   `LENGTH (stack_poke d (stack_peek (LENGTH targets - (idx + 1)) core) core) = LENGTH core` by
     simp[stack_poke_def] >>
   simp[stack_poke_bottom_extension] >>
@@ -130,34 +122,39 @@ Resume full_inventory_reorder_one_preservation[exchange]:
 QED
 
 Resume full_inventory_reorder_one_preservation[swaps]:
-  `lineage_inventory (set targets) ps` by
-    (simp[lineage_inventory_def, lineage_core_def] >>
-     qexistsl_tac [`m`, `core`] >> simp[]) >>
-  pure_rewrite_tac[GSYM lineage_core_def, GSYM lineage_inventory_def] >>
+  pure_rewrite_tac[GSYM lineage_core_def] >>
   fs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   `d < LENGTH targets` by simp[] >>
   `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by simp[] >>
+  `lineage_core m core ps /\ d < LENGTH core` by simp[lineage_core_def] >>
   drule_all full_inventory_swap_preservation >> strip_tac >>
   qpat_x_assum `do_swap d ps = _` kall_tac >>
-  irule full_inventory_swap_preservation >> simp[] >>
-  qexistsl_tac [`LENGTH targets - (idx + 1)`, `swap2_ops`, `ps3`] >> simp[]
+  `LENGTH targets - (idx + 1) < LENGTH (stack_swap d core)` by
+    simp[stack_swap_def] >>
+  `spill_alloc_layout_wf ps3.ps_alloc ps3.ps_spilled` by metis_tac[] >>
+  drule_all full_inventory_swap_preservation >> strip_tac >>
+  simp[] >>
+  qexists_tac `stack_swap (LENGTH targets - (idx + 1)) (stack_swap d core)` >>
+  simp[] >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
 Finalise full_inventory_reorder_one_preservation
 
 Theorem full_inventory_reorder_fold_preservation[local]:
-  !pairs base targets dfg acc ps.
-    ALL_DISTINCT targets /\ lineage_inventory (set targets) ps /\
-    ps.ps_spilled = FEMPTY /\ plan_slots_bounded base ps /\
+  !pairs base targets dfg acc ps m core.
+    ALL_DISTINCT targets /\ lineage_core m core ps /\
+    ALL_DISTINCT core /\ EVERY is_var_operand core /\ set core = set targets /\
+    DISJOINT (set targets) (FDOM ps.ps_spilled) /\ plan_slots_bounded base ps /\
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
     EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets) pairs ==>
-    lineage_inventory (set targets)
+    (?tail. lineage_core m tail
       (SND (FOLDL (\(ops,st) (idx,op).
         (\(step_ops,st'). (ops ++ step_ops,st'))
           (reorder_one dfg targets idx op st)) (acc,ps) pairs)) /\
+      ALL_DISTINCT tail /\ EVERY is_var_operand tail /\ set tail = set targets) /\
     (SND (FOLDL (\(ops,st) (idx,op).
         (\(step_ops,st'). (ops ++ step_ops,st'))
-          (reorder_one dfg targets idx op st)) (acc,ps) pairs)).ps_spilled = FEMPTY /\
+          (reorder_one dfg targets idx op st)) (acc,ps) pairs)).ps_spilled = ps.ps_spilled /\
     plan_slots_bounded base
       (SND (FOLDL (\(ops,st) (idx,op).
         (\(step_ops,st'). (ops ++ step_ops,st'))
@@ -171,7 +168,7 @@ Theorem full_inventory_reorder_fold_preservation[local]:
           (reorder_one dfg targets idx op st)) (acc,ps) pairs)).ps_spilled
 Proof
   Induct
-  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  >- (simp[] >> rpt strip_tac >> qexists_tac `core` >> simp[]) >>
   gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `reorder_one dfg targets h0 h1 ps` >>
   drule_all full_inventory_reorder_one_preservation >> strip_tac >>
@@ -179,17 +176,20 @@ Proof
     (fn th => pure_rewrite_tac[th, pairTheory.pair_case_thm]) >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   rule_assum_tac (CONV_RULE (DEPTH_CONV PairRules.PBETA_CONV)) >>
-  first_x_assum irule >> simp[]
+  qpat_assum `r.ps_spilled = ps.ps_spilled` (fn th => rewrite_tac[GSYM th]) >>
+  first_x_assum irule >> simp[] >> qexists_tac `tail` >> simp[]
 QED
 
 Theorem full_inventory_reorder_plan_preservation:
-  !base targets dfg ps ops qs.
-    ALL_DISTINCT targets /\ lineage_inventory (set targets) ps /\
-    ps.ps_spilled = FEMPTY /\ plan_slots_bounded base ps /\
+  !base targets dfg ps m core ops qs.
+    ALL_DISTINCT targets /\ lineage_core m core ps /\
+    ALL_DISTINCT core /\ EVERY is_var_operand core /\ set core = set targets /\
+    DISJOINT (set targets) (FDOM ps.ps_spilled) /\ plan_slots_bounded base ps /\
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
     reorder_plan dfg targets ps = (ops,qs) ==>
-    lineage_inventory (set targets) qs /\ qs.ps_spilled = FEMPTY /\
-    plan_slots_bounded base qs /\
+    (?tail. lineage_core m tail qs /\ ALL_DISTINCT tail /\
+      EVERY is_var_operand tail /\ set tail = set targets) /\
+    qs.ps_spilled = ps.ps_spilled /\ plan_slots_bounded base qs /\
     spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
@@ -237,7 +237,11 @@ Proof
   drule restore_spilled_plan_lineage_inventory >>
   disch_then (qspec_then `targets` mp_tac) >> simp[] >> strip_tac >>
   drule_all restore_spilled_plan_resources >> strip_tac >>
-  drule_all full_inventory_reorder_plan_preservation >> simp[]
+  qpat_x_assum `lineage_inventory _ rs` mp_tac >>
+  simp[lineage_inventory_def] >> strip_tac >>
+  `DISJOINT (set targets) (FDOM rs.ps_spilled)` by simp[] >>
+  drule_all full_inventory_reorder_plan_preservation >> strip_tac >>
+  simp[lineage_inventory_def] >> qexistsl_tac [`m`, `tail`] >> simp[]
 QED
 
 Theorem full_inventory_restore_reorder_budget:
