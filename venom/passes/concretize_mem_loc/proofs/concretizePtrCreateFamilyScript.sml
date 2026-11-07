@@ -10,6 +10,8 @@ Ancestors
   concretizePtrSourceOwnership concretizePtrTaggedSupport concretizePtrReturnTransport
   concretizePtrActivationChronology concretizePtrHistoricalWriteClassification
   concretizePtrExactWriteTransport concretizePtrBufferCopyContent
+  concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrBytes concretizePtrPairedFields
+  concretizePtrComparisonTransport
   venomMemProps regularCallEmitSim
   concretizeStepStructure concretizeStepShape concretizeStepRetpc concretizeStageShape
   concretizePtrOperationalOpcodes concretizePtrDeletedGaps concretizePtrExecutedCoverage
@@ -898,6 +900,246 @@ Proof
   simp[read_byte_write_memory_with_expansion, LENGTH_TAKE_EQ, EL_TAKE,
        MIN_DEF] >> gvs[MIN_DEF]
 QED
+
+Theorem ptr_create_family_delegate_chrono_operands[local]:
+  a.po_inst.inst_opcode = DELEGATECALL /\ ptr_chrono_step C a z ==>
+  ?gas_op addr_op ao_op az_op ro_op rz_op gas addr ao az ro rz post.
+    a.po_inst.inst_operands = [gas_op;addr_op;ao_op;az_op;ro_op;rz_op] /\
+    eval_operand gas_op a.po_state = SOME gas /\
+    eval_operand addr_op a.po_state = SOME addr /\
+    eval_operand ao_op a.po_state = SOME ao /\
+    eval_operand az_op a.po_state = SOME az /\
+    eval_operand ro_op a.po_state = SOME ro /\
+    eval_operand rz_op a.po_state = SOME rz /\
+    exec_delegatecall a.po_inst a.po_state gas addr ao az ro rz = OK post /\
+    z.po_state = post with vs_inst_idx := SUC a.po_state.vs_inst_idx
+Proof
+  strip_tac >> qpat_x_assum `ptr_chrono_step _ _ _` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
+  strip_tac >> gvs[] >>
+  IF (qpat_assum `step_inst _ _ _ _ = OK _` (K all_tac)) all_tac
+    (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+     simp[step_inst_non_invoke] >> strip_tac >>
+     drule step_inst_base_intret_opcodes >> simp[]) >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >> PURE_REWRITE_TAC[opcode_case_def] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rpt (goal_assum (drule_at Any))
+QED
+
+Theorem ptr_create_family_delegate_chrono_written_byte[local]:
+  a.po_inst.inst_opcode = DELEGATECALL /\ ptr_chrono_step C a z /\
+  a.po_inst.inst_operands = [gas_op;addr_op;ao_op;az_op;ro_op;rz_op] /\
+  eval_operand ro_op a.po_state = SOME ro /\
+  eval_operand rz_op a.po_state = SOME rz /\
+  j < MIN (w2n rz) (LENGTH z.po_state.vs_returndata) ==>
+  read_byte (w2n ro+j) z.po_state.vs_memory = EL j z.po_state.vs_returndata
+Proof
+  strip_tac >> drule_all ptr_create_family_delegate_chrono_operands >>
+  strip_tac >> gvs[] >>
+  drule ptr_create_family_delegate_written_byte >>
+  disch_then (qspec_then `j` mp_tac) >> simp[ADD_COMM]
+QED
+
+Theorem ptr_create_family_delegate_write_certificate[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  a.po_inst.inst_opcode = DELEGATECALL /\ at.po_inst = a.po_inst /\
+  ptr_chrono_step C a z /\ ptr_chrono_step C' at zt /\
+  z.po_state.vs_returndata = zt.po_state.vs_returndata /\
+  range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
+  ?rho. ptr_paired_write lo positions C C' (h ++ [z]) (ht ++ [zt])
+    (done ++ [LENGTH h - 1])
+    (H ++ [(tokens,registry,births,PT,TG',saved,entries)])
+    (LENGTH h - 1,LENGTH ht - 1,rho)
+Proof
+  strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `~in_revert_forward a.po_fn a.po_state` by
+    (`ALL_DISTINCT (fn_labels a.po_fn)` by
+       (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+     qpat_x_assum `active_inst a.po_fn a.po_inst a.po_state` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb` by
+       (irule venomExecProofsTheory.MEM_lookup_block >> fs[fn_labels_def]) >>
+     `get_instruction bb a.po_state.vs_inst_idx = SOME a.po_inst` by
+       simp[get_instruction_def] >>
+     simp[in_revert_forward_def] >> strip_tac >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]) >>
+  `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+   taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
+  `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
+        EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
+    (rpt strip_tac >> irule ptr_source_tagged_var_support >>
+     rpt (goal_assum (drule_at Any))) >>
+  `opaque_use_ok a.po_fn /\ MEM a.po_inst (fn_insts a.po_fn)` by
+    (conj_tac
+     >- (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+     fs[active_inst_def, fn_insts_MEM] >> metis_tac[MEM_EL]) >>
+  `ptr_use_ok P (fn_pv P a.po_fn) a.po_inst` by
+    (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> simp[]) >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+    a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
+  qpat_assum `ptr_chrono_step C' at zt`
+    (mp_then (Pat `ptr_chrono_step _ _ _`) mp_tac
+      ptr_create_family_delegate_chrono_operands) >>
+  simp[] >> strip_tac >>
+  rename1 `a.po_inst.inst_operands = [gas_op;addr_op;ao_op;az_op;ro_op;rz_op]` >>
+  `?x r. eval_operand gas_op a.po_state = SOME gas /\
+    eval_operand addr_op a.po_state = SOME addr /\
+    eval_operand ao_op a.po_state = SOME x /\ eval_operand az_op a.po_state = SOME az /\
+    eval_operand ro_op a.po_state = SOME r /\ eval_operand rz_op a.po_state = SOME rz /\
+    ptr_lookup_transport births positions (op_prov TG ao_op) {} (SOME x) (SOME ao) /\
+    ptr_lookup_transport births positions (op_prov TG ro_op) {} (SOME r) (SOME ro)` by
+    (irule ptr_create_family_delegate_operand_transport >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `!j. j < MIN (w2n rz) (LENGTH z.po_state.vs_returndata) ==>
+    read_byte (w2n r+j) z.po_state.vs_memory =
+    read_byte (w2n ro+j) zt.po_state.vs_memory` by
+    (rpt strip_tac >>
+     `read_byte (w2n r+j) z.po_state.vs_memory = EL j z.po_state.vs_returndata` by
+       (irule ptr_create_family_delegate_chrono_written_byte >>
+        rpt (goal_assum (drule_at Any)) >> simp[]) >>
+     `read_byte (w2n ro+j) zt.po_state.vs_memory = EL j zt.po_state.vs_returndata` by
+       (qpat_assum `exec_delegatecall _ at.po_state _ _ _ _ _ _ = OK post`
+          (mp_then Any mp_tac ptr_create_family_delegate_written_byte) >>
+        disch_then (qspec_then `j` mp_tac) >>
+        gvs[]) >> simp[]) >>
+  suspend "classify"
+QED
+Resume ptr_create_family_delegate_write_certificate[classify]:
+  `0 < LENGTH h` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_end >> strip_tac >> Cases_on `h` >> gvs[]) >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  `SUC (LENGTH h - 1) = LENGTH h /\ SUC (LENGTH done) = LENGTH ht /\
+   LENGTH ht - 1 = LENGTH done` by decide_tac >>
+  `EL (LENGTH done) ht = at` by
+    (qpat_x_assum `LAST ht = at` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
+  qpat_assum `ptr_structural_transcript R vs C C' h a ht at done tokens registry births PT TG saved entries H`
+    (mp_tac o MATCH_MP ptr_structural_transcript_endpoint) >> strip_tac >>
+  `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (`H <> []` by (Cases_on `H` >> gvs[]) >>
+     qpat_x_assum `LAST H = _` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  `EL (LENGTH h - 1) h = a` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_end >> strip_tac >>
+     qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  `0 < w2n rz` by
+    (qpat_x_assum `range_bytes _ <> {}` mp_tac >>
+     simp[step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+          range_bytes_def, pred_setTheory.EXTENSION, MIN_DEF] >>
+     rpt strip_tac >> gvs[] >> decide_tac) >>
+  qabbrev_tac `ops = <|iao_ofst := ro_op; iao_size := NONE; iao_max_size := SOME rz_op|>` >>
+  `(op_prov TG ops.iao_ofst = NONE /\
+    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\ w2n r + w2n rz <= lo) \/
+   (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
+    FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
+    FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n r /\
+    w2n r + w2n rz <= db+sb /\ pb+sb < dimword(:256))` by
+    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification)) >>
+     simp[Abbr `ops`, mem_write_ops_def, codegenRelTheory.source_memory_write_ranges_def] >>
+     conj_tac >- (Cases_on `rz = 0w` >> gvs[]) >>
+     conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[])
+  >- suspend "fixed" >>
+  suspend "owned"
+QED
+Resume ptr_create_family_delegate_write_certificate[fixed]:
+  fs[Abbr `ops`] >>
+  `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
+  `ro = r` by
+    (gvs[ptr_lookup_transport_def, ptr_value_transport_def] >>
+     gvs[word_agree_except_bits, fcpTheory.CART_EQ]) >>
+  qexists_tac `\x:num. x` >>
+  simp[ptr_paired_write_def, EL_APPEND_EQN] >>
+  reverse conj_tac
+  >- (simp[ptr_paired_write_owner_def, step_writes_def,
+        codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
+      rpt strip_tac >> disj1_tac >> fs[MIN_DEF] >> decide_tac) >>
+  simp[ptr_ledger_write_pair_def, is_terminator_def, ptr_bytes_agree_def,
+       step_writes_def, codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
+  rpt strip_tac >>
+  rename1 `read_byte b z.po_state.vs_memory = _` >>
+  `b = w2n r + (b-w2n r) /\
+   b-w2n r < w2n rz /\ b-w2n r < LENGTH z.po_state.vs_returndata` by
+    (fs[MIN_DEF] >> decide_tac) >>
+  qpat_x_assum `!j. j < w2n rz /\ _ ==> _` (qspec_then `b-w2n r` mp_tac) >>
+  simp[ADD_COMM]
+QED
+Resume ptr_create_family_delegate_write_certificate[owned]:
+  fs[Abbr `ops`] >>
+  `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
+  `MEM token tokens` by
+    (drule_all ptr_source_ownership_live_prov >> simp[]) >>
+  `FLOOKUP births (token,bid) = SOME (db,sb)` by
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[ptr_ledger_erases_def] >> strip_tac >>
+     first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
+  `ro = r - n2w db + n2w pb` by
+    gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
+  `w2n ro = pb + (w2n r - db)` by
+    (irule ptr_closed_relocation_value >> simp[] >> qexists_tac `sb` >> simp[] >> decide_tac) >>
+  qpat_x_assum `ro = r - n2w db + n2w pb` kall_tac >>
+  qexists_tac `\b:num. pb + (b-db)` >>
+  simp[ptr_paired_write_def, EL_APPEND_EQN] >>
+  reverse conj_tac
+  >- (simp[ptr_paired_write_owner_def, step_writes_def,
+        codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
+      rpt strip_tac >> disj2_tac >>
+      rename1 `b < w2n r + _` >>
+      qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`b-db`] >> simp[] >>
+      fs[MIN_DEF] >> decide_tac) >>
+  simp[ptr_ledger_write_pair_def, is_terminator_def] >>
+  conj_tac
+  >- (simp[step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+        range_bytes_def] >> rpt strip_tac >> decide_tac) >>
+  simp[ptr_bytes_agree_def, step_writes_def,
+       codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
+  rpt strip_tac >> rename1 `read_byte b z.po_state.vs_memory = _` >>
+  `b = w2n r + (b-w2n r) /\ b-w2n r < w2n rz /\
+   b-w2n r < LENGTH z.po_state.vs_returndata /\
+   pb + (b-db) = w2n ro + (b-w2n r)` by
+    (fs[MIN_DEF] >> decide_tac) >>
+  qpat_x_assum `!j. j < w2n rz /\ _ ==> _` (qspec_then `b-w2n r` mp_tac) >>
+  simp[ADD_COMM]
+QED
+Finalise ptr_create_family_delegate_write_certificate
 
 Theorem ptr_paired_create_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
