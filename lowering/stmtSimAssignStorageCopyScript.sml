@@ -1,21 +1,11 @@
-(*
- * self.x = e for a storage or transient variable x of a non-word type.
- *
- * The lowering evaluates e into a memory buffer and copies the buffer's
- * words over x's whole storage region (compile_assign_value's bulk branch:
- * compile_memory_to_storage, or one MLOAD and SSTORE for a one-word value);
- * an empty bytestring value is stored as a zero length word.  The source
- * writes x's encoding (encode_value).  The storages agree afterwards up to
- * the bytes the new value leaves dead (storageCopyLive).
- *
- * Main theorem:
- *   compile_assign_storage_copy_stmt_frag — self.x = e for a storage or
- *     transient x of a non-word, non-DynArray type and e of that type,
- *     every outcome
- *)
+(* Assignments to ABI-static storage or transient aggregates copy every
+   encoded slot from memory. Source-static encoding coverage justifies
+   that dense copy under the capacity-wide storage agreement mask.
+   Dynamic types use the general place-store proof. *)
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  abiTypeBoundProps vyperABI vyperStorageCoverage
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
   stmtSimProps stmtSimForced
   exprSimProps
@@ -249,7 +239,7 @@ Proof
 QED
 
 (* A typed source value always has a successful storage write. *)
-Theorem typed_storage_copy_write[local]:
+Theorem typed_storage_copy_write:
   !cx tr slot tvt v es.
     value_has_type tvt v /\ ~cx.txn.is_static ==>
     ?writes.
@@ -286,7 +276,7 @@ Proof
        comp_return_def, compile_store_at_loc_def]
 QED
 
-Theorem storage_copy_no_dyn_info[local]:
+Theorem storage_copy_no_dyn_info:
   (!elem n. typ <> ArrayT elem (Dynamic n)) ==>
   (case typ of ArrayT elem (Dynamic n) => SOME (f elem) | _ => NONE) = NONE
 Proof
@@ -296,7 +286,7 @@ QED
 
 (* Expose the RHS prefix independently of the later assignment dispatch.
    In particular this interface remains valid when RHS evaluation fails. *)
-Theorem assign_storage_copy_code_parts[local]:
+Theorem assign_storage_copy_code_parts:
   !cenv lctx ty nsid e sa sf c tr slot vtyp.
     stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
       sa = (c, sf) /\
@@ -337,7 +327,7 @@ QED
 
 (* Once source layout compatibility is known, only the size dispatch
    remains. No dynamic-array path or normalization can be selected. *)
-Theorem assign_storage_copy_suffix[local]:
+Theorem assign_storage_copy_suffix:
   !cenv dst src tr loc typ src_ty mem_size.
     ~is_word_type typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
@@ -374,7 +364,7 @@ Proof
   simp[new_block_def, block_is_terminated_def] >> strip_tac >> gvs[]
 QED
 
-Theorem assign_storage_copy_suffix_open[local]:
+Theorem assign_storage_copy_suffix_open:
   !cenv dst src tr loc typ src_ty mem_size sa sb.
     compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
       src F loc typ src_ty NONE mem_size sa = ((),sb) /\
@@ -406,7 +396,7 @@ Proof
   fs[dyn_bytes_dead_def] >> decide_tac
 QED
 
-Theorem storage_copy_word_address[local]:
+Theorem storage_copy_word_address:
   !w:bytes32 i len.
     w2n w + len < dimword (:256) /\ 32 * i < len ==>
     w2n (w + n2w i * 32w) = w2n w + 32 * i
@@ -687,7 +677,7 @@ Proof
   qexists_tac `v` >> simp[]
 QED
 
-Theorem storage_copy_backend_fold[local]:
+Theorem storage_copy_backend_fold:
   !is k ws s tr.
     FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is =
     if tr then
@@ -1159,6 +1149,7 @@ Theorem storage_copy_state_region[local]:
                        (w2n k') (type_slot_size tv')) /\
     well_formed_type_value tv /\ value_has_type tv v /\
     val_in_memory tv v off mem /\ encode_value tv v = SOME writes /\
+    (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
     (!i. i < type_slot_size tv /\
          (?b. b < 32 /\
               ~dead_bytes (apply_writes k writes (get_storage cx es tr))
@@ -1172,6 +1163,9 @@ Theorem storage_copy_state_region[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_then (qspec_then `tr` assume_tac) storage_copy_initial_agree >>
+  `!i b. i < type_slot_size tv /\ b < 32 /\
+     ~dead_bytes (apply_writes k writes (get_storage cx es tr))
+       (w2n k) tv (w2n k + i) b ==> MEM i (MAP FST writes)` by simp[] >>
   drule_all storage_agree_copy_region >> strip_tac >>
   `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq] >>
@@ -1222,7 +1216,7 @@ Proof
        pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
-Theorem storage_copy_normalized_state[local]:
+Theorem storage_copy_normalized_state:
   !ctx func cenv cx es s t sa.
     stmt_state_rel ctx func cenv cx es
       (t with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
@@ -1440,10 +1434,12 @@ Proof
   drule_all storage_copy_bulk_run >> simp[]
 QED
 
-Theorem storage_copy_post_region[local]:
+Theorem storage_copy_post_region:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv tr mid id slot es'.
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
     post_value_type cenv e = expr_type e /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ value_has_type tv v /\
     declared_storage_region cx mid id [] = SOME (tr,n2w slot,tv) /\
@@ -1464,6 +1460,10 @@ Proof
   `IS_SOME (encode_value tv v)` by metis_tac[value_has_type_equiv] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   rename1 `encode_value tv v = SOME writes` >>
+  `~vyper_is_dynamic (get_tenv cx) (expr_type e)` by
+    (drule_all abi_props_vyper_typed >> simp[]) >>
+  `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)` by
+    (rpt strip_tac >> drule_all encode_value_live_written >> simp[]) >>
   `stmt_state_rel ctx func cenv cx es1 s /\
    expr_val_rel cx (expr_type e) v op s` by fs[expr_post_def] >>
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
@@ -1571,6 +1571,8 @@ Theorem storage_copy_success_run[local]:
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s1 /\
     ~s1.vs_halted /\ s1.vs_current_bb = sm.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ value_has_type tv v /\
     lowered_value_type cenv e = expr_type e /\
@@ -1624,12 +1626,8 @@ Proof
 QED
 
 
-(* self.x = e for a storage or transient variable x whose declared type typ
-   is not held in one word and is not a DynArray, with e of type typ.  The
-   premises on x's region are what storage_layout_safe gives: it fits the
-   slot space and is apart from every other declared region.  An empty(t)
-   right-hand side has t = typ, as type_builtin_result_ok requires; the
-   lowering stores only a zero length word for it. *)
+(* Assignment to a non-word ABI-static storage or transient variable.
+   The region fits the slot space and is apart from other declared regions. *)
 Theorem compile_assign_storage_copy_stmt_frag:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt.
@@ -1640,6 +1638,8 @@ Theorem compile_assign_storage_copy_stmt_frag:
     ~is_word_type typ /\
     (!elem n. typ <> ArrayT elem (Dynamic n)) /\
     (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    ~is_abi_dynamic cenv.ce_struct_fields typ /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     0 < type_slot_size tvt /\
     type_memory_bytes cenv typ = type_memory_size tvt /\

@@ -25,7 +25,8 @@ Theorem body_assign_toplevel_copy_mem:
     supported_variable_decl tops nsid =
       SOME (Private, mut, ty, SOME slot) /\
     (mut = Storage \/ mut = Transient) /\
-    ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+    ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+    (!elem n. ty <> ArrayT elem (Dynamic n)) /\
     0 < type_memory_bytes cenv ty /\ expr_type e = ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
@@ -56,6 +57,8 @@ Proof
     metis_tac[topcopy_not_bytestring, topcopy_no_length_word] >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es` by
     metis_tac[topcopy_rhs_memory] >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_sim_inv_def] >>
   irule compile_assign_storage_copy_stmt_frag_mem >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> metis_tac[topcopy_rhs_value_typed, pairTheory.PAIR_EQ]

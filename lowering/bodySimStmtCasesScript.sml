@@ -1187,11 +1187,8 @@ Proof
   simp[exprLoweringTheory.lowered_value_type_def]
 QED
 
-(* An assignment to a private storage or transient variable of a type that
-   is not a word, not a DynArray and not empty, from a value of exactly that
-   type: stmtSimAssignStorageCopy's compile_assign_storage_copy_stmt_frag.
-   The region separation it asks for comes from storage_layout_safe in
-   expr_sim_inv. *)
+(* An assignment to a private ABI-static storage or transient aggregate.
+   Region separation comes from storage_layout_safe in expr_sim_inv. *)
 Theorem body_assign_toplevel_copy[local]:
   !cx nsid e tops ctx func cenv env env' ret_ty lctx RetQ es res es' mut ty
    slot.
@@ -1201,7 +1198,8 @@ Theorem body_assign_toplevel_copy[local]:
        occurs_abi_decode_target target tops) /\
     supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
     (mut = Storage \/ mut = Transient) /\
-    ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+    ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+    (!elem n. ty <> ArrayT elem (Dynamic n)) /\
     0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
     supported_expr tops e /\
     expr_sim_inv cenv cx env es /\
@@ -1242,6 +1240,8 @@ Proof
      simp[supported_declaration_header_def]) >>
   `lowered_value_type cenv e = expr_type e` by
     (drule_all storage_rhs_lowered_type >> simp[]) >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_sim_inv_def] >>
   irule compile_assign_storage_copy_stmt_frag >> asm_rewrite_tac[] >>
   qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
   asm_rewrite_tac[] >>
@@ -1330,7 +1330,8 @@ Theorem body_assign_other:
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
-        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+        (!elem n. ty <> ArrayT elem (Dynamic n)) /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
@@ -1417,7 +1418,8 @@ Proof
               supported_variable_decl tops nsid =
                 SOME (Private, mut, ty, SOME slot) /\
               (mut = Storage \/ mut = Transient) /\
-              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+              (!elem n. ty <> ArrayT elem (Dynamic n)) /\
               0 < type_memory_bytes cenv ty /\ expr_type e = ty`
   >- (gvs[] >> irule body_assign_toplevel_copy >> metis_tac[]) >>
   Cases_on `?id fld sid fty.
@@ -2385,7 +2387,8 @@ Proof
   `!ty. expr_sim ctx func cenv cx ty e es /\
         expr_vv_sim ctx func cenv cx ty e es` by
     (gen_tac >>
-     qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+     qpat_x_assum `body_expr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then irule >> conj_tac
      >- (qexists_tac `tops` >> simp[]) >>
      qexists_tac `env` >> simp[]) >>
@@ -2428,7 +2431,8 @@ Proof
      irule stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim ctx func cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+    (qpat_x_assum `body_expr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`,
                               `expr_type e`, `es`] mp_tac) >>
      simp[]) >>
