@@ -82,3 +82,37 @@ Proof
     MEM v (EL i bb.bb_instructions).inst_outputs` by metis_tac[] >>
   metis_tac[MEM_APPEND, MEM]
 QED
+
+(* Compile-time support is independent of physical counts and allocator state. *)
+Definition chronological_support_def:
+  chronological_support fn visited ps <=>
+    !v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited
+End
+
+Theorem chronological_support_mono:
+  !fn visited visited' ps.
+    chronological_support fn visited ps /\ set visited SUBSET set visited' ==>
+    chronological_support fn visited' ps
+Proof
+  rw[chronological_support_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem chronological_support_physical_cong:
+  !fn visited ps qs.
+    ps.ps_stack = qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
+    (chronological_support fn visited ps <=> chronological_support fn visited qs)
+Proof
+  simp[chronological_support_def]
+QED
+
+Theorem chronological_support_saved_reset:
+  !fn visited visited' saved current.
+    chronological_support fn visited saved /\ set visited SUBSET set visited' ==>
+    chronological_support fn visited'
+      (current with <|ps_stack := saved.ps_stack; ps_spilled := saved.ps_spilled|>)
+Proof
+  rpt strip_tac >> drule_all chronological_support_mono >>
+  simp[chronological_support_def]
+QED
