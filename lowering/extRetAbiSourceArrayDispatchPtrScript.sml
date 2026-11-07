@@ -7,6 +7,7 @@ Ancestors
   bodyPtrDefs venomExecSemantics venomState abiDecoderIndexInit
   valueEncodingProps abiStaticAggregateProps arithmetic pred_set
   extRetRobustSourceChildrenPtr representationCleanPtr abiDecoderBulk
+  abiEncoderArrayContext abiEncoderArrayPhases abiEncoderArrayCode abiDecoderReentry loweringShapeDefs
 
 Definition source_array_static_prefix_def:
   source_array_static_prefix dst src =
@@ -439,3 +440,218 @@ Proof
     `{i | addr <= i /\ i < addr+32} UNION {i | w2n b <= i /\ i < w2n b+32}`] >>
   simp[loweringPostsTheory.val_footprint_def] >> rpt strip_tac >> decide_tac
 QED
+
+Theorem source_array_static_phase_aliases:
+  source_array_static_prefix dst src = abi_encode_array_prefix src dst /\
+  source_array_static_suffix parent encoded = abi_encode_array_finish parent encoded
+Proof
+  simp[source_array_static_prefix_init, abi_encode_array_prefix_def,
+       source_array_static_suffix_def, abi_encode_array_finish_def]
+QED
+
+Theorem source_array_static_dispatch_code:
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiDynArray ei asz msz F) sa = (out,se) /\
+  fn_has_code sa se fn ==>
+  ?ip cv ev sp sl.
+    source_array_static_prefix (Var dst) (Var src) sa = ((Var ip,Var cv),sp) /\
+    compile_abi_encode_dyn_static_loop (Var dst) (Var src) ei asz msz (Var cv) sp = (Var ev,sl) /\
+    source_array_static_suffix (Var ip) (Var ev) sl = (out,se) /\
+    fn_has_code sa sp fn /\ fn_has_code sp sl fn /\ fn_has_code sl se fn /\
+    sp.cs_next_id = sa.cs_next_id+4 /\ sp.cs_next_var = sa.cs_next_var+2 /\
+    sp.cs_next_var <= sl.cs_next_var /\ not_fresh_at sl ev /\
+    not_fresh_at sp ip /\ not_fresh_at sp cv /\ not_fresh_at sl ip /\
+    (!p. not_fresh_at sa p ==> not_fresh_at sp p /\ not_fresh_at sl p)
+Proof
+  strip_tac >> drule_all abi_encode_array_context >> simp[] >> strip_tac >>
+  `source_array_static_prefix (Var dst) (Var src) sa = (ops,loop_st) /\
+   source_array_static_suffix (FST ops) size_op loop_end = (out,se)` by
+    metis_tac[source_array_static_phase_aliases] >>
+  drule source_array_static_prefix_frontier >> strip_tac >>
+  `?ev. size_op = Var ev` by
+    (drule abi_encode_array_static_loop_trace >> strip_tac >>
+     qpat_x_assum `abi_encode_array_static_exit _ _ _ = _` mp_tac >>
+     simp[abi_encode_array_static_exit_def, comp_bind_def] >>
+     ntac 2 (pairarg_tac >> simp[]) >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+          fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  gvs[] >>
+  qexistsl_tac [`STRING #"%" (toString sa.cs_next_var)`,
+    `STRING #"%" (toString (sa.cs_next_var+1))`, `ev`, `loop_end`] >>
+  simp[] >> conj_tac >- metis_tac[pairTheory.PAIR] >>
+  conj_tac >-
+    gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+  simp[not_fresh_at_def] >> rpt strip_tac >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.NOT_LESS,
+            ASCIInumbersTheory.toString_inj]
+QED
+
+Theorem compile_abi_encode_source_dyn_static_counted_ptr:
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiDynArray ei asz msz F) sa = (out,se) /\
+  fn_has_code sa se fn /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s scap /\ 32 <= scap /\
+  lookup_var dst s = SOME b /\ ptr_covers G tn dst s dcap /\
+  evaluate_type env (ArrayT t (Dynamic maxn)) = SOME (ArrayTV tv (Dynamic maxn)) /\
+  value_has_type (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi env (ArrayT t (Dynamic maxn)) (ArrayV (DynArrayV vs)) = SOME (contractABI$ListV avs) /\
+  ct = vyper_to_abi_type env t /\ ~is_dynamic ct /\
+  has_type (Array NONE ct) (contractABI$ListV avs) /\
+  asz = abi_member_head_size ct /\ static_length ct = asz /\
+  type_memory_size tv = asz /\ msz = type_memory_size tv /\
+  type_memory_size (ArrayTV tv (Dynamic maxn)) <= scap /\ LENGTH avs = LENGTH vs /\
+  (!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) (w2n a) mem') /\
+  ((ei = AbiPrimWord /\ asz = 32) \/ ei = AbiCopy asz) /\
+  LENGTH (enc (Array NONE ct) (contractABI$ListV avs)) <= dcap /\
+  32+LENGTH avs*asz <= dcap /\ LENGTH avs < dimword(:256) /\
+  w2n a+scap < dimword(:256) /\ w2n b+dcap < dimword(:256) /\
+  FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas sa.cs_next_id = SOME (parent,32) /\
+  FLOOKUP (abi_builtin_allocate_state (sa.cs_next_id+4) 32
+    (abi_builtin_allocate_state sa.cs_next_id 32 s)).vs_allocas (sa.cs_next_id+4) = SOME (index,32) /\
+  parent+32 < dimword(:256) /\ index+32 < dimword(:256) /\
+  (w2n a+scap <= w2n b \/ w2n b+dcap <= w2n a) /\
+  (w2n a+scap <= parent \/ parent+32 <= w2n a) /\
+  (w2n b+dcap <= parent \/ parent+32 <= w2n b) /\
+  (w2n a+scap <= index \/ index+32 <= w2n a) /\
+  (w2n b+dcap <= index \/ index+32 <= w2n b) /\
+  (parent+32 <= index \/ index+32 <= parent) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = se.cs_current_bb /\ sf.vs_inst_idx = LENGTH se.cs_current_insts /\ ~sf.vs_halted /\
+    eval_operand out sf = SOME (n2w (32+LENGTH avs*asz)) /\ op_taint tnf out = {} /\
+    mem_bytes_at (w2n b) (32+LENGTH avs*asz) sf.vs_memory = enc (Array NONE ct) (contractABI$ListV avs) /\
+    (!i. w2n b <= i /\ i < w2n b+32+LENGTH avs*asz ==> i NOTIN tnf.t_mem) /\
+    lookup_var src sf = SOME a /\ ptr_covers Gf tnf src sf scap /\
+    lookup_var dst sf = SOME b /\ ptr_covers Gf tnf dst sf dcap /\
+    (!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
+      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) (w2n a) mem') /\
+    (!site region. FLOOKUP s.vs_allocas site = SOME region ==> FLOOKUP sf.vs_allocas site = SOME region) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!i. ~(w2n b <= i /\ i < w2n b+dcap) /\
+         ~(parent <= i /\ i < parent+32) /\ ~(index <= i /\ i < index+32) ==>
+      mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all source_array_static_dispatch_code >> strip_tac >>
+  `32 <= dcap` by decide_tac >>
+  drule_all source_array_static_prefix_robust_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK s1)` >>
+  `FLOOKUP (abi_builtin_allocate_state sp.cs_next_id 32 s1).vs_allocas sp.cs_next_id = SOME (index,32)` by
+    (drule_all abiBuiltinAllocationTheory.abi_builtin_allocate_state_transport >>
+     disch_then (qspecl_then [`sa.cs_next_id+4`,`32`] strip_assume_tac) >> simp[]) >>
+  `DISJOINT {i | w2n (n2w parent:bytes32) <= i /\ i < w2n (n2w parent:bytes32)+32}
+    ({i | w2n b <= i /\ i < w2n b+dcap} UNION {i | index <= i /\ i < index+32})` by
+    (simp[w2n_n2w, DISJOINT_DEF, EXTENSION] >> decide_tac) >>
+  `not_fresh_at sp src /\ not_fresh_at sp dst /\
+   LENGTH (word_to_bytes (n2w (LENGTH avs):bytes32) T) = 32 /\
+   (!i. w2n (n2w parent:bytes32) <= i /\ i < w2n (n2w parent:bytes32)+32 ==> i NOTIN tn1.t_mem)` by
+    (simp[w2n_n2w] >> metis_tac[]) >>
+  drule_all compile_abi_encode_source_dyn_static_loop_parent_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0 G2 tn2 (OK s2)` >>
+  `lookup_var ev s2 = SOME (n2w (32+LENGTH avs*asz))` by
+    (qpat_x_assum `eval_operand (Var ev) s2 = _` mp_tac >>
+     simp[eval_operand_def]) >>
+  drule_all source_array_static_suffix_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  suspend "finish"
+QED
+
+Resume compile_abi_encode_source_dyn_static_counted_ptr[finish]:
+  rename1 `gas_path_ptr D 0 ctx fn PG G2 tn2 s2 0 G3 tn3 (OK s3)` >>
+  qexistsl_tac [`G3`,`tn3`,`s3`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`G1`,`s1`,`tn1`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`G2`,`s2`,`tn2`] >> simp[]) >>
+  `w2n (n2w parent:bytes32) = parent` by simp[w2n_n2w] >>
+  `mload (w2n (n2w parent:bytes32)) s2 = 0w` by asm_rewrite_tac[] >>
+  `mem_bytes_at (w2n b) (32+LENGTH avs*asz) s3.vs_memory =
+     enc (Array NONE ct) (contractABI$ListV avs)` by
+    (`mem_bytes_at (w2n b) (32+LENGTH avs*asz) s3.vs_memory =
+      mem_bytes_at (w2n b) (32+LENGTH avs*asz) s2.vs_memory` by
+       (qpat_x_assum `s3.vs_memory = _` (fn th => rewrite_tac[th]) >>
+        irule mstore_mem_bytes_at_disjoint >>
+        qpat_x_assum `w2n (n2w parent:bytes32) = parent` (fn th => rewrite_tac[th]) >>
+        decide_tac) >>
+     `enc (Array NONE ct) (contractABI$ListV avs) =
+        word_to_bytes (n2w (LENGTH avs):bytes32) T ++ FLAT (MAP (enc ct) avs)` by
+       (qpat_x_assum `is_static ct` mp_tac >> rpt (pop_assum kall_tac) >>
+        metis_tac[static_dynarray_encoding]) >>
+     pop_assum mp_tac >>
+     qpat_x_assum `mem_bytes_at _ _ s2.vs_memory = _` mp_tac >>
+     qpat_x_assum `mem_bytes_at _ _ s3.vs_memory = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  `ptr_covers G3 tn3 src s3 scap /\ ptr_covers G3 tn3 dst s3 dcap` by
+    (qpat_x_assum `!p. not_fresh_at sa p ==> not_fresh_at sp p /\ _` mp_tac >>
+     qpat_x_assum `!p. not_fresh_at sl p ==> _` mp_tac >>
+     qpat_x_assum `ptr_covers G2 tn2 src s2 scap` mp_tac >>
+     qpat_x_assum `ptr_covers G2 tn2 dst s2 dcap` mp_tac >>
+     qpat_x_assum `s3.vs_allocas = s2.vs_allocas` mp_tac >>
+     qpat_x_assum `not_fresh_at sa src` mp_tac >>
+     qpat_x_assum `not_fresh_at sa dst` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[ptr_covers_def] >> metis_tac[]) >>
+  `!i. ~(parent <= i /\ i < parent+32) ==>
+    mem_bytes_at i 1 s3.vs_memory = mem_bytes_at i 1 s2.vs_memory /\
+    (i IN tn3.t_mem <=> i IN tn2.t_mem)` by
+    (gen_tac >> disch_tac >> conj_tac >-
+       (qpat_x_assum `s3.vs_memory = _` (fn th => rewrite_tac[th]) >>
+        irule mstore_mem_bytes_at_disjoint >>
+        qpat_x_assum `w2n (n2w parent:bytes32) = parent` (fn th => rewrite_tac[th]) >>
+        decide_tac) >>
+     simp[]) >>
+  suspend "frames"
+QED
+
+Resume compile_abi_encode_source_dyn_static_counted_ptr[frames]:
+  `!p. not_fresh_at sa p ==>
+    lookup_var p s3 = lookup_var p s /\ FLOOKUP G3 p = FLOOKUP G p /\
+    op_taint tn3 (Var p) = op_taint tn (Var p)` by
+    (qpat_x_assum `!p. not_fresh_at sa p ==> not_fresh_at sp p /\ _` mp_tac >>
+     qpat_x_assum `!p. not_fresh_at sa p ==> lookup_var p s1 = _ /\ _` mp_tac >>
+     qpat_x_assum `!p. not_fresh_at sp p ==> lookup_var p s2 = _ /\ _` mp_tac >>
+     qpat_x_assum `!p. not_fresh_at sl p ==> lookup_var p s3 = _ /\ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  `lookup_var src s3 = SOME a /\ lookup_var dst s3 = SOME b` by
+    (qpat_assum `!p. not_fresh_at sa p ==> lookup_var p s3 = _ /\ _` mp_tac >>
+     qpat_x_assum `not_fresh_at sa src` mp_tac >>
+     qpat_x_assum `not_fresh_at sa dst` mp_tac >>
+     qpat_x_assum `lookup_var src s = _` mp_tac >>
+     qpat_x_assum `lookup_var dst s = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  `!mem'. mem_agree_outside tn3.t_mem s3.vs_memory mem' ==>
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) (w2n a) mem'` by
+    (rpt strip_tac >> irule robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
+     conj_tac >- (drule valueTypingMemoryPropsTheory.value_has_type_memory_wf >> simp[]) >>
+     qexistsl_tac [`s2.vs_memory`, `s3.vs_memory`, `tn2.t_mem`, `tn3.t_mem`,
+       `{i | parent <= i /\ i < parent+32}`] >>
+     simp[loweringPostsTheory.val_footprint_def] >> rpt strip_tac >> decide_tac) >>
+  `!site region. FLOOKUP s.vs_allocas site = SOME region ==>
+    FLOOKUP s3.vs_allocas site = SOME region` by
+    (qpat_x_assum `s3.vs_allocas = s2.vs_allocas` mp_tac >>
+     qpat_x_assum `!site region. FLOOKUP s1.vs_allocas site = _ ==> _` mp_tac >>
+     qpat_x_assum `s1.vs_allocas = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     simp[] >> first_x_assum irule >>
+     gvs[abiBuiltinAllocationTheory.abi_builtin_allocate_state_def] >>
+     IF_CASES_TAC >> gvs[] >>
+     Cases_on `site = sa.cs_next_id` >> gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[] >>
+  qpat_x_assum `32 <= dcap` mp_tac >>
+  qpat_x_assum `mem_agree_outside _ s2.vs_memory s1.vs_memory` mp_tac >>
+  qpat_x_assum `!i. ~(parent <= i /\ i < parent+32) /\ _ ==> mem_bytes_at i 1 s1.vs_memory = _ /\ _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[mem_agree_outside_def] >>
+  rpt strip_tac >>
+  `~(w2n b <= i /\ i < w2n b+32)` by decide_tac >>
+  metis_tac[]
+QED
+
+Finalise compile_abi_encode_source_dyn_static_counted_ptr
