@@ -4,6 +4,8 @@ Ancestors
   valueEncoding valueEncodingTyping vyperTypeSystem venomState
   exprSimAlloc fragGasSeq fragGasMode context emitHelperProps venomExecSemantics
   compileEnv emitHelper fragExec exprLoweringProps venomInst gasCount fragGasPath
+  exprSimUnwrap exprSimAggregateChildren exprLowering loweringPosts vyperState
+  valueCopyBytes vyperAST
 
 Theorem typed_copy_semantic_frame:
   typed_copy_state_frame sa b sz s t /\
@@ -144,4 +146,70 @@ Proof
   gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
       local_region_def] >>
   conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem unwrap_value_physical_path:
+  (post_value_type ce e <> expr_type e ==>
+    ((?t op. vv = StackValue t op) \/
+     (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory /\
+       ~is_word_type t))) /\
+  unwrap_value ce vv sm = (op,sb) /\
+  local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+    ~is_word_type (post_value_type ce e) ==>
+    type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64) /\
+  read_result cx tv ee = (INL v,ee) /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> dxrule_all vv_post_materialise >> strip_tac >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[] >> drule_all (SRULE [] unwrap_value_path) >>
+      simp[gas_marked_path_def]) >>
+  first_x_assum (drule_at Any) >> strip_tac >>
+  gvs[unwrap_value_def, comp_return_def] >>
+  qexists_tac `s` >>
+  simp[gas_marked_path_def, cj 1 gas_path_rules] >>
+  gvs[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def,
+      expr_val_at_def, expr_val_own_def, expr_val_rel_def,
+      read_result_def, return_def]
+  >- (first_assum MATCH_ACCEPT_TAC)
+  >- (first_assum MATCH_ACCEPT_TAC) >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[is_bytestring_word_type] >>
+  simp[] >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem compile_changed_physical_unwrap_shape:
+  compile_expr ce ty e sc = (vv,sa) /\
+  post_value_type ce e <> expr_type e /\
+  ~is_word_type (post_value_type ce e) ==>
+  (?t op. vv = StackValue t op) \/
+  (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory /\
+    ~is_word_type t)
+Proof
+  strip_tac >> Cases_on `e` >> gvs[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+  gvs[post_value_type_def, expr_type_def] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once compile_expr_raw_def, compile_expr_body_def, expr_type_def,
+       compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt IF_CASES_TAC >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `return_buf` >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[contextTheory.base_ptr_def, oneline lowered_value_type_def] >>
+  qpat_x_assum `(if _ then _ else _) <> _` mp_tac >>
+  IF_CASES_TAC >> gvs[]
 QED
