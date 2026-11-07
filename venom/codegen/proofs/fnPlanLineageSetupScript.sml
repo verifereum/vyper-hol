@@ -2032,3 +2032,45 @@ Proof
   `MEM x (core ++ outs)` by (simp[] >> metis_tac[]) >>
   metis_tac[stack_get_depth_is_some]
 QED
+
+(* A positive-distance swap always emits code, including bulk swaps. *)
+Theorem do_swap_positive_code[local]:
+  !d ps. 0 < d ==> FST (do_swap d ps) <> []
+Proof
+  rpt gen_tac >> disch_tac >>
+  Cases_on `d <= 16` >- simp[do_swap_def] >>
+  simp[do_swap_def] >> pairarg_tac >> simp[]
+QED
+
+(* Spills cannot shield a prefix-only optimistic lookup: this operation
+   observes only the stack. This is an abstract obstruction, not native
+   reachability evidence or a counterexample to lineage_state_block_plan. *)
+Theorem optimistic_swap_plan_missing_suffix_code:
+  !dfg inst live term ps prefix.
+    ~term /\ inst.inst_outputs <> [] /\ live <> [] /\
+    ~operand_equiv dfg (Var (LAST inst.inst_outputs)) (Var (LAST live)) /\
+    ps.ps_stack <> [] /\ ~MEM (Var (LAST live)) ps.ps_stack ==>
+    ((FST (optimistic_swap_plan dfg inst live term
+        (ps with ps_stack := prefix ++ ps.ps_stack)) =
+      FST (optimistic_swap_plan dfg inst live term ps)) <=>
+     ~MEM (Var (LAST live)) prefix)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stack_get_depth (Var (LAST live)) ps.ps_stack = NONE` by
+    (Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >>
+     gvs[GSYM stack_get_depth_is_some]) >>
+  `stack_get_depth (Var (LAST live)) (prefix ++ ps.ps_stack) =
+   OPTION_MAP (\d. LENGTH ps.ps_stack + d)
+     (stack_get_depth (Var (LAST live)) prefix)` by
+    (simp[stack_get_depth_def, REVERSE_APPEND] >>
+     `EVERY (\x. ~(x = Var (LAST live))) (REVERSE ps.ps_stack)` by
+       gvs[EVERY_MEM, MEM_REVERSE] >>
+     qspecl_then [`REVERSE ps.ps_stack`, `REVERSE prefix`,
+       `\x. x = Var (LAST live)`] mp_tac stack_find_append_miss >>
+     simp[EVERY_MEM, MEM_REVERSE]) >>
+  simp[optimistic_swap_plan_def] >>
+  Cases_on `stack_get_depth (Var (LAST live)) prefix` >>
+  gvs[GSYM stack_get_depth_is_some] >>
+  `0 < LENGTH ps.ps_stack + x` by (Cases_on `ps.ps_stack` >> gvs[]) >>
+  simp[do_swap_positive_code]
+QED
