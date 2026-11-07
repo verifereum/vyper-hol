@@ -10,7 +10,7 @@ Ancestors
   venomMemDefs abiEncoderOpenInput abiEncoderWindow abiBuiltinEncodeAllocate context
   abiEncoderWindowLookup abiEncoderWindowSequence exprSimAbiEncodeExecFrame
   venomInstProofs1 venomExecSemantics intCallCallee moduleLoweringProps fragExec
-  exprSimAbiEncodeSemantic stmtSimLogExecFields
+  exprSimAbiEncodeSemantic stmtSimLogExecFields exprSimAbiEncodeMemoryLength
 
 Theorem abi_encode_leaf_sequence_context:
   run_inst_seq code s = OK t /\
@@ -53,6 +53,10 @@ Proof
        drule >> strip_tac >> gvs[is_terminator_def]) >>
   drule_all abi_encode_leaf_sequence_fmp >> strip_tac >>
   drule_all abi_encode_leaf_sequence_semantic >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (irule abi_encode_leaf_sequence_memory_length >>
+     qexists_tac `emitted_insts st final` >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all abi_encode_leaf_sequence_context >>
   simp[abi_encode_exec_frame_def, pending_alloca_size_def]
 QED
@@ -218,6 +222,10 @@ Proof
   `abi_encode_semantic_obs t = abi_encode_semantic_obs s` by
     (irule abi_encode_semantic_sequence >> goal_assum (drule_at Any) >>
      gvs[EVERY_MEM, log_encode_safe_opcode_def] >> metis_tac[]) >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (irule abi_encode_leaf_sequence_memory_length >>
+     qexists_tac `emitted_insts st final` >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all abi_encode_leaf_sequence_context >> simp[abi_encode_exec_frame_def]
 QED
 

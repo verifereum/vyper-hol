@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeFramedLeaves
 Ancestors
-  exprSimAbiEncodeExecFrame abiEncoderWindowLeaves abiEncoderWindowBytes
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeMemoryLength abiEncoderWindowLeaves abiEncoderWindowBytes
   venomInstProofs1 rich_list abiEncoderWindowSequence abiEncoderRounding abiEncoderBytes
   abiEncoderWindowContract abiEncoderLeaves abiEncoderWrites
   abiEncoderReentryLeaves moduleLoweringProps abiEncoderMemory
@@ -138,8 +138,9 @@ Proof
      simp[window_alloca_sites_subset]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   reverse conj_tac
-  >- simp[abi_encode_exec_frame_def, pending_alloca_size_def,
-       update_var_def, mstore_def, write_memory_with_expansion_def] >>
+  >- (simp[abi_encode_exec_frame_def, pending_alloca_size_def,
+       update_var_def, mstore_def, write_memory_with_expansion_def,
+       LENGTH_TAKE, LENGTH_DROP] >> IF_CASES_TAC >> simp[] >> decide_tac) >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, abi_encoder_extend_sim_sim] >>
   mp_tac (Q.INST [`d` |-> `d`, `w` |-> `mload sb s`,
@@ -245,7 +246,9 @@ Proof
     (irule window_seq_extend_sim >> simp[] >> qexists_tac `st` >> simp[]) >>
   qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   (reverse conj_tac
-   >- simp[abi_encode_exec_frame_def, pending_alloca_size_def]) >>
+   >- (simp[abi_encode_exec_frame_def, pending_alloca_size_def] >>
+        metis_tac[abi_encode_mcopy_memory_length, abi_encode_mstore_memory_length,
+                  arithmeticTheory.LESS_EQ_TRANS])) >>
   `alloca_inv actual` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func actual` by
     (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>

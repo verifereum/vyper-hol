@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowSequence abiEncoderWindowContract exprSimAbiEncodeExecFrame
   exprSimAbiEncodeFramedLeaves emitHelperProps emitHelper compileEnv fragExec
   venomState venomExecSemantics venomMemDefs venomInst words finite_map list
-  exprLoweringProps abiEncoderWindowLookup
+  exprLoweringProps abiEncoderWindowLookup exprSimAbiEncodeMemoryLength
 
 Theorem abi_encode_framed_contract_strong:
   abi_encode_framed_contract ei ==> window_strong_contract ei
@@ -27,6 +27,8 @@ Theorem abi_encode_framed_cursor_store_phase_observed:
     ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts)
 Proof
   strip_tac >> drule_all window_cursor_store_phase_observed >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH (mstore b w s).vs_memory` by
+    simp[abi_encode_mstore_memory_length] >>
   simp[abi_encode_exec_frame_def, pending_alloca_size_def,
     mstore_def, write_memory_with_expansion_def]
 QED
@@ -50,7 +52,10 @@ Proof
     (`run_inst_seq (emitted_insts st en) s = OK t` by
        gvs[window_pure_seq_def, window_seq_def] >>
      drule_all abi_encode_leaf_sequence_semantic >> strip_tac >>
-     drule_all abi_encode_leaf_sequence_fmp >>
+     drule_all abi_encode_leaf_sequence_fmp >> strip_tac >>
+     `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+       (irule abi_encode_leaf_sequence_memory_length >>
+        qexists_tac `emitted_insts st en` >> fs[EVERY_MEM] >> metis_tac[]) >>
      gvs[window_pure_seq_def, abi_encode_exec_frame_def, pending_alloca_size_def]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at en) i.inst_outputs)
     (emitted_insts st en)` by

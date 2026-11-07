@@ -1,7 +1,7 @@
 Theory exprSimAbiEncodeExecFrame
 Ancestors
   abiEncoderWindowContract exprLoweringProps intCallCallee venomState venomExecSemantics
-  exprSimAbiEncodeSemantic
+  exprSimAbiEncodeSemantic exprSimAbiEncodeMemoryLength list
 
 Definition abi_encode_exec_frame_def:
   abi_encode_exec_frame fn s t <=>
@@ -9,7 +9,8 @@ Definition abi_encode_exec_frame_def:
       s.vs_alloca_next + pending_alloca_size fn s /\
     t.vs_fmp = s.vs_fmp /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\
-    abi_encode_semantic_obs t = abi_encode_semantic_obs s
+    abi_encode_semantic_obs t = abi_encode_semantic_obs s /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 End
 
 Definition abi_encode_framed_contract_def:
@@ -45,7 +46,8 @@ Theorem abi_encode_exec_frame_mcopy[simp]:
   abi_encode_exec_frame fn s (mcopy d sb n s)
 Proof
   simp[abi_encode_exec_frame_def, pending_alloca_size_def,
-       mcopy_def, write_memory_with_expansion_def, abi_encode_semantic_obs_def]
+       mcopy_def, write_memory_with_expansion_def, abi_encode_semantic_obs_def,
+       LENGTH_TAKE, LENGTH_DROP] >> rpt gen_tac >> IF_CASES_TAC >> simp[] >> decide_tac
 QED
 
 Theorem abi_encode_exec_frame_semantic:
@@ -61,4 +63,11 @@ Theorem abi_encode_exec_frame_bridge_updates:
   abi_encode_exec_frame func s (t with vs_prev_bb := prev)
 Proof
   simp[abi_encode_exec_frame_def, pending_alloca_size_def]
+QED
+
+Theorem abi_encode_exec_frame_memory_length:
+  abi_encode_exec_frame fn s t ==>
+  LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  simp[abi_encode_exec_frame_def]
 QED
