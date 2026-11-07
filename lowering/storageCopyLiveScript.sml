@@ -86,35 +86,6 @@ Proof
        n2w_11, LESS_MOD]
 QED
 
-Theorem copy_zero_writes_lookup[local]:
-  !is k st x.
-    lookup_storage x (apply_writes k (MAP (\i. (i, 0w)) is) st) =
-    if MEM x (MAP (\i. n2w (w2n k + i)) is) then 0w
-    else lookup_storage x st
-Proof
-  Induct >> simp[apply_writes_def] >>
-  rpt gen_tac >>
-  simp[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM] >>
-  metis_tac[]
-QED
-
-Theorem copy_zero_interval[local]:
-  !k n st j.
-    j < n ==>
-    lookup_storage (n2w (w2n k + j))
-      (apply_writes k (GENLIST (\i. (i, 0w)) n) st) = 0w
-Proof
-  rpt strip_tac >>
-  `GENLIST (\i. (i, 0w : bytes32)) n =
-   MAP (\i. (i, 0w)) (COUNT_LIST n)` by
-    simp[COUNT_LIST_GENLIST, MAP_GENLIST, combinTheory.o_DEF] >>
-  pop_assum SUBST1_TAC >> simp[copy_zero_writes_lookup] >>
-  `MEM (n2w (w2n k + j) : bytes32)
-       (MAP (\i. n2w (w2n k + i)) (COUNT_LIST n))` by
-    (simp[MEM_MAP] >> qexists_tac `j` >> simp[MEM_COUNT_LIST]) >>
-  fs[ADD_COMM]
-QED
-
 Theorem copy_selected_writes[local]:
   !pre child post k st d s x.
     w2n k + d <= x /\ x < w2n k + d + s /\
@@ -868,44 +839,6 @@ Resume copy_fixed_written_select[present]:
 QED
 Finalise copy_fixed_written_select
 
-Theorem copy_sparse_absent_storage[local]:
-  !sparse tv n writes i k st x.
-    sparse_has_type tv n sparse /\ encode_static_array tv 0 sparse = SOME writes /\
-    ALOOKUP sparse i = NONE /\ i < n /\
-    w2n k+n*type_slot_size tv <= dimword (:256) /\
-    w2n k+i*type_slot_size tv <= x /\
-    x < w2n k+i*type_slot_size tv+type_slot_size tv ==>
-    lookup_storage (n2w x)
-      (apply_writes k (GENLIST (\j. (j,0w)) (n*type_slot_size tv) ++ writes) st) = 0w
-Proof
-  rpt strip_tac >> qabbrev_tac `s = type_slot_size tv` >>
-  `0 < s` by decide_tac >>
-  `(i+1)*s <= n*s` by simp[LE_MULT_RCANCEL] >>
-  `x-w2n k < n*s /\ x = w2n k+(x-w2n k)` by
-    (pop_assum (mp_tac o PURE_REWRITE_RULE [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES]) >>
-     decide_tac) >>
-  rewrite_tac[apply_writes_append] >>
-  `lookup_storage (n2w x)
-    (apply_writes k writes
-      (apply_writes k (GENLIST (\j. (j,0w)) (n*s)) st)) =
-   lookup_storage (n2w x)
-      (apply_writes k (GENLIST (\j. (j,0w)) (n*s)) st)` by
-    (irule copy_writes_frame >> qexistsl_tac [`w2n k+i*s`, `s`] >>
-     simp[] >> rpt strip_tac >> rename1 `MEM j (MAP FST writes)` >>
-     drule_all (cj 3 encode_writes_bounded) >> strip_tac
-     >- (gvs[Abbr `s`] >> decide_tac) >>
-     drule_all copy_sparse_write_key >> strip_tac >>
-     rename1 `MEM h (MAP FST sparse)` >>
-     spose_not_then strip_assume_tac >>
-     `j DIV s = h` by
-       (irule DIV_UNIQUE >> qexists_tac `r` >> simp[Abbr `s`]) >>
-     `j DIV s = i` by
-       (irule DIV_UNIQUE >> qexists_tac `j-i*s` >> decide_tac) >>
-     gvs[alistTheory.ALOOKUP_NONE]) >>
-  pop_assum SUBST1_TAC >>
-  qpat_x_assum `x = _` SUBST1_TAC >> irule copy_zero_interval >> simp[]
-QED
-
 Theorem copy_static_live_index[local]:
   !st base tv n j b.
     j < n*type_slot_size tv /\
@@ -1076,8 +1009,15 @@ Resume encode_value_memory_live[base]:
       (conj_tac >- asm_rewrite_tac[]) >>
       qexists_tac `max` >> qexists_tac `BaseTV b` >> qexists_tac `v` >>
       asm_rewrite_tac[]) >>
-  Cases_on `b` >> gvs[] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[]) >>
+  Cases_on `b` >> gvs[]
+  >>~- ([`BytesT bd`], Cases_on `bd` >> gvs[] >>
+    rpt strip_tac >>
+    qpat_x_assum `encode_value _ _ = _` mp_tac >>
+    simp[Once encode_value_def, AllCaseEqs()] >> strip_tac >>
+    gvs[type_slot_size_def] >>
+    `mem_word_at off mem = slot` by metis_tac[copy_primitive_memory_word] >>
+    simp[apply_writes_def, lookup_storage_def, update_storage_def,
+         combinTheory.APPLY_UPDATE_THM]) >>
   rpt strip_tac >>
   qpat_x_assum `encode_value _ _ = _` mp_tac >>
   simp[Once encode_value_def, AllCaseEqs()] >> strip_tac >>
@@ -1089,9 +1029,11 @@ Resume encode_value_memory_live[base]:
 QED
 Resume encode_value_memory_live[tuple]:
   rpt strip_tac >> Cases_on `v` >>
-  TRY (rename1 `ArrayV av` >> Cases_on `av`) >>
   qpat_x_assum `value_has_type _ _` mp_tac >>
   simp[Once value_has_type_def] >> strip_tac >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  qpat_x_assum `value_has_type _ _` mp_tac >>
+  simp[Once value_has_type_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `val_in_memory _ _ _ _` mp_tac >>
   simp[Once val_in_memory_def] >> strip_tac >>
   qpat_x_assum `encode_value _ _ = _` mp_tac >>
@@ -1123,7 +1065,7 @@ QED
 Resume encode_value_memory_live[struct]:
   rpt strip_tac >> Cases_on `v` >>
   qpat_x_assum `value_has_type _ _` mp_tac >>
-  simp[Once value_has_type_def] >> strip_tac >>
+  simp[Once value_has_type_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `val_in_memory _ _ _ _` mp_tac >>
   simp[Once val_in_memory_def] >> strip_tac >>
   qpat_x_assum `encode_value _ _ = _` mp_tac >>
@@ -1163,47 +1105,21 @@ Resume encode_value_memory_live[array]:
 QED
 Resume encode_value_memory_live[fixed]:
   rpt strip_tac >> Cases_on `v` >>
-  TRY (rename1 `ArrayV av` >> Cases_on `av`) >>
   qpat_x_assum `value_has_type _ _` mp_tac >>
   simp[Once value_has_type_def] >> strip_tac >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  qpat_x_assum `value_has_type _ _` mp_tac >>
+  simp[Once value_has_type_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `val_in_memory _ _ _ _` mp_tac >>
   simp[Once val_in_memory_def] >> strip_tac >>
   qpat_x_assum `encode_value _ _ = _` mp_tac >>
   simp[Once encode_value_def, AllCaseEqs()] >> strip_tac >>
   `j < n*type_slot_size t` by fs[type_slot_size_def] >>
   drule_all copy_static_live_index >> strip_tac >>
-  Cases_on `ALOOKUP l i` >- suspend "absent" >> suspend "present"
-QED
-Resume encode_value_memory_live[absent]:
-  qpat_x_assum `!y. type_value_size y < _ ==> _` kall_tac >>
-  `w2n k+n*type_slot_size t <= dimword (:256)` by fs[type_slot_size_def] >>
-  `!x. w2n k+i*type_slot_size t <= x /\
-        x < w2n k+i*type_slot_size t+type_slot_size t ==>
-        lookup_storage (n2w x) (apply_writes k writes st) = 0w` by
-    (rpt strip_tac >> qpat_x_assum `_ = writes` (SUBST1_TAC o SYM) >>
-     irule copy_sparse_absent_storage >> asm_rewrite_tac[] >>
-     qexistsl_tac [`i`, `l`] >> asm_rewrite_tac[]) >>
-  `val_in_memory t (default_value t) (off+32*(i*type_slot_size t)) mem` by
-    (`off+32*(i*type_slot_size t) = off+i*type_memory_size t` by
-      simp_tac std_ss [type_memory_size_slots, MULT_ASSOC, MULT_COMM] >>
-     asm_rewrite_tac[] >> first_x_assum irule >> asm_rewrite_tac[]) >>
-  `mem_word_at (off+32*(i*type_slot_size t)+32*r) mem = 0w` by
-    (irule (cj 1 copy_default_zero_word) >>
-     qexistsl_tac [`b`, `w2n k+i*type_slot_size t`, `apply_writes k writes st`, `t`] >>
-     asm_rewrite_tac[] >> conj_tac
-     >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-     `w2n k+i*type_slot_size t+r = w2n k+j` by decide_tac >>
-     metis_tac[ADD_ASSOC]) >>
-  `off+32*(i*type_slot_size t)+32*r = 32*j+off` by decide_tac >>
-  `lookup_storage (n2w (j+w2n k)) (apply_writes k writes st) = 0w` by
-    (first_x_assum irule >> decide_tac) >> metis_tac[]
-QED
-Resume encode_value_memory_live[present]:
-  `MEM (i,x) l` by metis_tac[alistTheory.ALOOKUP_MEM] >>
-  drule_all copy_sparse_select >> strip_tac >>
-  `writes = (GENLIST (\j. (j,0w)) (n*type_slot_size t) ++ pre) ++
-      MAP (\(j,w). (j+i*type_slot_size t,w)) child ++ post` by
-    metis_tac[APPEND_ASSOC, ADD_CLAUSES] >>
+  `well_formed_type_value t` by fs[well_formed_type_value_def] >>
+  `MEM (i*type_slot_size t+r) (MAP FST writes)` by metis_tac[] >>
+  qpat_x_assum `_ ++ nonzeros = writes` (assume_tac o SYM) >>
+  drule_all copy_fixed_written_select >> strip_tac >>
   `w2n k+n*type_slot_size t <= dimword (:256)` by fs[type_slot_size_def] >>
   `i*type_slot_size t <= j /\ j < i*type_slot_size t+type_slot_size t` by decide_tac >>
   `i*type_slot_size t+type_slot_size t <= n*type_slot_size t` by
@@ -1211,13 +1127,13 @@ Resume encode_value_memory_live[present]:
      pop_assum (mp_tac o PURE_REWRITE_RULE [RIGHT_ADD_DISTRIB, MULT_CLAUSES]) >>
      decide_tac) >>
   `!h. MEM h (MAP FST post) ==>
-       i*type_slot_size t+type_slot_size t <= h /\ h < n*type_slot_size t` by
+       h < n*type_slot_size t /\
+       (h < i*type_slot_size t \/ i*type_slot_size t+type_slot_size t <= h)` by
     (rpt strip_tac >> first_x_assum drule >> simp[LEFT_ADD_DISTRIB]) >>
-  drule_all copy_selected_storage >> strip_tac >>
-  `well_formed_type_value t` by fs[well_formed_type_value_def] >>
+  drule_all copy_selected_storage_outside >> strip_tac >>
   `type_value_size t < type_value_size (ArrayTV t (Fixed n))` by simp[] >>
   qpat_x_assum `!y. type_value_size y < _ ==> _` drule >>
-  disch_then (qspecl_then [`x`, `off+32*(i*type_slot_size t)`, `mem`,
+  disch_then (qspecl_then [`v`, `off+32*(i*type_slot_size t)`, `mem`,
     `n2w (w2n k+i*type_slot_size t)`, `child`, `st0`, `r`, `b`] mp_tac) >>
   `w2n k+i*type_slot_size t < dimword (:256)` by decide_tac >>
   `w2n k+i*type_slot_size t+r = w2n k+j` by decide_tac >>
@@ -1232,9 +1148,11 @@ Resume encode_value_memory_live[present]:
 QED
 Resume encode_value_memory_live[dynamic]:
   rpt strip_tac >> Cases_on `v` >>
-  TRY (rename1 `ArrayV av` >> Cases_on `av`) >>
   qpat_x_assum `value_has_type _ _` mp_tac >>
   simp[Once value_has_type_def] >> strip_tac >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  qpat_x_assum `value_has_type _ _` mp_tac >>
+  simp[Once value_has_type_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `val_in_memory _ _ _ _` mp_tac >>
   simp[Once val_in_memory_def] >> strip_tac >>
   qpat_x_assum `encode_value _ _ = _` mp_tac >>
@@ -1252,11 +1170,11 @@ Resume encode_value_memory_live[dynamic]:
     (qpat_x_assum `j < type_slot_size _` mp_tac >>
      pure_rewrite_tac[type_slot_size_def] >> decide_tac) >>
   drule_all copy_dyn_live_index >> strip_tac >>
-  `i < LENGTH l` by
-    (qpat_x_assum `i < w2n _` mp_tac >>
-     asm_rewrite_tac[n2w_w2n, w2n_n2w] >>
-     `LENGTH l MOD dimword (:256) <= LENGTH l` by
-       (irule MOD_LESS_EQ >> simp[]) >> decide_tac) >>
+  `MEM (1+i*type_slot_size t+r) (MAP FST slots)` by
+    (qpat_x_assum `MEM j (MAP FST writes)` mp_tac >>
+     qpat_x_assum `_::slots = writes` (SUBST1_TAC o SYM) >>
+     simp[MAP, MEM]) >>
+  `i < LENGTH l` by (drule_all copy_dyn_written_index >> simp[]) >>
   drule_all copy_dyn_select >> strip_tac >>
   suspend "dynamic_child"
 QED
@@ -1444,6 +1362,9 @@ Proof
       `ws (w2n q-w2n k) = mem_word_at (off+32*(w2n q-w2n k)) mem` by
         (qpat_x_assum `!i. _ ==> ws i = _` irule >>
          reverse conj_tac >- asm_rewrite_tac[] >> qexists_tac `b` >> simp[]) >>
+      `MEM (w2n q-w2n k) (MAP FST writes)` by
+        (qpat_x_assum `!i b. _ ==> MEM i _` irule >>
+         reverse conj_tac >- simp[] >> qexists_tac `b` >> simp[]) >>
       asm_rewrite_tac[] >>
       drule encode_value_memory_live >>
       disch_then drule >> disch_then drule >> disch_then drule >>
