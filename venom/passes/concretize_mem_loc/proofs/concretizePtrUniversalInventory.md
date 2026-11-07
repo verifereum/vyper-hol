@@ -2320,3 +2320,41 @@ Combined with the in-place SELFBALANCE and DLOAD extensions, this completes
 per-opcode immediate/normalized production for N13. This supersedes the
 preceding partial checkpoint, not the remaining obligations of other dispatch
 families, universal HistoryCoverage, or final raw-observation packaging.
+
+## Current-taint content compatibility audit (2026-11-07)
+
+Scope: candidate `ptr_taint_content` only; no migration of paired samples,
+no universal prefix coverage or frozen-target counterexample is certified.
+The local storage algebra is now checked in concretizePtrTaintContentTheory.
+
+| Boundary | Frozen source | Verdict / required consumer |
+| --- | --- | --- |
+| ISTORE execution | venomExecSemanticsScript.sml:88-92, 979-989 | `istore off v s` writes **memory** via mstore and additionally updates the immutable finite map. `istore_memory` already exports its memory projection. The map is bookkeeping, not an alternate read source. |
+| ISTORE masks | ptrDisciplineScript.sml:289-313, 381-420 | `written_taint` includes ISTORE, so `mem_taint` replaces actual written bytes with operand taint. Independently `imm_taint` replaces the immutable key mask. Both are updated, not only t_imm. |
+| ILOAD execution/output | venomExecSemanticsScript.sml:982, 1209-1214; ptrDisciplineScript.sml:332-344 | Execution uses mload; output mask is `mem_word_taint tn.t_mem offset`. These agree at the same abstraction level. There is **no discovered frozen mask mismatch**. No implication from immutable key mask to memory mask is needed or justified. |
+| Immutable bookkeeping agreement | ptr_taint_content_def, immutable conjunct | Does not imply ILOAD transport by itself. ILOAD must use the same retrospective **memory** agreement supplier as MLOAD. Map agreement cannot be substituted even after an ISTORE: later MSTORE/MCOPY can change memory without changing the map. |
+| Internal setup | venomExecSemanticsScript.sml:1488-1502; ptrDisciplineScript.sml:483-494 | Setup leaves accounts/transient/immutables and cc_address unchanged. Call rule saves only caller t_var in cf_tvar; callee receives current tn with t_var cleared, retaining all four content masks. Entry PHIs affect only t_var. No content mask reset or independent callee content snapshot. |
+| Internal return | venomExecSemanticsScript.sml:1468-1482; ptrDisciplineScript.sml:495-508 | merge adopts **callee current** accounts/transient/memory/immutables plus requests/outcomes/effects; caller call context is retained. Return carries callee current tn content masks; restores restricted saved caller t_var, not saved content masks. Candidate merge needs same-contract address equality across caller/callee; it is not a theorem for arbitrary unrelated state pairs. FMP adoption changes no content mask but may need the existing return/FMP interface. |
+| CALL/STATICCALL requests | venomCallOracleDefsScript.sml:11-22,28-44 | Request embeds full `cr_accounts := s.vs_accounts` and `cr_tStorage := s.vs_transient`, alongside input memory bytes. Exact keys/operands and equal input bytes do not imply equal requests after masked stores. Candidate control still demands exact vs_requests and so is NOT universally closed at this boundary. |
+| CREATE requests | venomCallOracleDefsScript.sml:76-98 | Same full accounts/transient snapshots. taint_ok requires t_stor=t_trans={} for CREATE/CREATE2, which can recover exact stores using the local read boundary plus word equality; that recovery must be proved by the future consumer. No automatic waiver of snapshot equality. |
+| Outcome selection/recording | extCallOracleScript.sml:106-137 | Non-computed requests consume the next common outcome without comparison of the account snapshot; computed-precompile selection depends on request kind/target/data. `record_request` appends the full request for non-computed calls. Thus equal outcomes may be available while exact request-history agreement still fails. A new history relation requires strategist authorization. |
+| Outcome adoption | extCallOracleScript.sml:130-148; ptrDisciplineScript.sml:393-420 | Nonstatic successful MessageCall adopts common outcome accounts/transient, clearing t_stor/t_trans for CALL when request/outcome change. Static/failed calls keep previous stores/masks; computed precompiles do not record requests. CREATE-kind adoption also occurs on failure in adopt_outcome, but taint_ok already forces empty storage masks. Never infer equal recorded past requests from equal adopted current stores. |
+| DELEGATECALL | venomExecSemanticsScript.sml:408-422,456-488; ptrDisciplineScript.sml:582-584 | Real EVM execution sees accounts/transient through rollback state; both storage masks must be empty by taint_ok. Compatibility needs exact recovery, equal calldata and execution-state context correspondence, not arbitrary masked-data transport. |
+
+Checked local evidence:
+`ptr_immutable_bookkeeping_not_memory_probe` in
+concretizePtrContentCompatibilityProbeTheory proves that ISTORE(0,1), then
+MSTORE(0,2), leaves immutable lookup 0 equal to 1 while mload 0 returns 2.
+It uses existing `mload_mstore_same` plus direct record/map reduction.
+This demonstrates the bookkeeping/memory distinction, NOT a bad executable
+ILOAD mask and NOT a counterexample to the TASK theorem. No existing
+reachable invariant equating t_imm and t_mem was found or used; such equality
+would in fact be the wrong requirement across ordinary memory writes.
+
+Migration verdict: SSTORE/TSTORE local algebra is ready for the separate
+step-level probe. ILOAD must remain on the memory ledger path; immutable
+map agreement is auxiliary. Internal call/return content preservation must
+use same-contract context equality and current callee masks. Exact external
+request history is a real unresolved candidate-interface obstruction even
+if common outcomes reset current storage. Do not weaken ptr_core_shared or
+rewrite paired samples until the strategist resolves that history boundary.
