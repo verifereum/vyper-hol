@@ -666,3 +666,221 @@ Proof
   rename1 `SOME loc` >> Cases_on `loc` >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh]
 QED
+
+Theorem alloc_run_stmt_range_after_labels:
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+    (compile_stmts ce (InLoop exit incr) ty stmts) (\u s. T) /\
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_stmts ce (InLoop exit incr) ty stmts) (\u s. T) /\
+  compiler_label entry /\ compiler_label cond /\ compiler_label body_lbl /\
+  compiler_label incr /\ compiler_label exit /\ exit <> body_lbl ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce /\
+      plain_operand s start_op /\ plain_operand s end_op)
+    (do ctr <- (do emit_inst JMP [Label entry] []; new_block entry;
+                   ctr <- fresh_var; emit_inst ASSIGN [start_op] [ctr]; return ctr od);
+        limit <- (do rounds <-
+          (case (e1,e2) of
+             (Literal _ (IntL n1),Literal _ (IntL n2)) =>
+               comp_return (Lit (i2w n2 - i2w n1))
+           | _ => emit_op SUB [end_op;start_op]);
+          (case (e1,e2) of
+             (Literal _ (IntL _),Literal _ (IntL _)) => comp_return ()
+           | _ => compile_range_bound_checks start_op end_op rounds bound signed);
+          emit_op ADD [start_op;rounds] od);
+        (do emit_inst JMP [Label cond] []; new_block cond;
+            done_op <- emit_op EQ [Var ctr;limit];
+            emit_inst JNZ [done_op;Label exit;Label body_lbl] [];
+            new_block body_lbl od);
+        (case FLOOKUP ce.ce_vars id of
+           SOME (MemLoc off _) => emit_void MSTORE [Lit (n2w off);Var ctr]
+         | SOME (PtrVar ptr_op _) => emit_void MSTORE [ptr_op;Var ctr]
+         | _ => emit_void INVALID []);
+        compile_stmts ce (InLoop exit incr) ty stmts;
+        emit_jmp_if_not_terminated incr;
+        new_block incr; next <- emit_op ADD [Var ctr;Lit 1w];
+        emit_inst ASSIGN [next] [ctr]; emit_inst JMP [Label cond] [];
+        new_block exit; return () od) (\u s. T)
+Proof
+  strip_tac >> irule alloc_run_bind >>
+  qexists `\ctr s. shape_state s /\
+    (cenv_shape_ok s ce /\ plain_operand s start_op /\ plain_operand s end_op) /\
+    plain_operand s (Var ctr) /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_stmt_loop_counter >>
+      qexists `\s. cenv_shape_ok s ce /\ plain_operand s start_op /\ plain_operand s end_op` >>
+      simp[shape_stable_conj, cenv_shape_ok_stable,
+        SRULE [] (Q.SPEC `[start_op;end_op]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `ctr` >> simp[] >> suspend "trip"
+QED
+
+Resume alloc_run_stmt_range_after_labels[trip]:
+  irule alloc_run_bind >>
+  qexists `\v s. (shape_state s /\ (cenv_shape_ok s ce /\ plain_operand s (Var ctr)) /\
+      plain_operand s v) /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_frame_reserved >>
+      irule_at Any (SRULE [] alloc_run_stmt_range_trip_count) >>
+      qexistsl [`ctr`, `\s. cenv_shape_ok s ce /\ plain_operand s (Var ctr)`] >>
+      simp[shape_stable_conj, cenv_shape_ok_stable,
+        SRULE [] (Q.SPEC `[Var ctr]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `limit` >> simp[] >> suspend "test"
+QED
+
+Resume alloc_run_stmt_range_after_labels[test]:
+  simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\u s. (shape_state s /\ cenv_shape_ok s ce /\ plain_operand s (Var ctr)) /\
+    not_fresh_at s ctr /\ ~alloc_owned s ctr` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_frame_reserved >>
+      irule_at Any (SRULE [comp_ignore_bind_def] alloc_run_stmt_loop_test) >>
+      qexistsl [`ctr`, `\s. cenv_shape_ok s ce /\ plain_operand s (Var ctr)`] >>
+      simp[shape_stable_conj, cenv_shape_ok_stable,
+        SRULE [] (Q.SPEC `[Var ctr]` shape_stable_plain_operands)]) >>
+  gen_tac >> simp[] >> suspend "store"
+QED
+Resume alloc_run_stmt_range_after_labels[store]:
+  irule alloc_run_bind >>
+  qexists `\u s. (shape_state s /\ cenv_shape_ok s ce) /\
+    not_fresh_at s ctr /\ ~alloc_owned s ctr` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_frame_reserved >>
+      irule_at Any alloc_run_fresh_shape_frame >>
+      irule_at Any (SRULE [] structlit_range_store_shape) >>
+      qexistsl [`ctr`, `\s. cenv_shape_ok s ce`] >>
+      simp[cenv_shape_ok_stable, SF ETA_ss,
+        SRULE [SF ETA_ss] alloc_run_stmt_range_store]) >>
+  gen_tac >> simp[] >>
+  irule alloc_run_conseq >>
+  irule_at Any (SRULE [comp_ignore_bind_def] alloc_run_stmt_loop_body_tail) >>
+  simp[] >> qexistsl [`internal`, `ce`] >> simp[]
+QED
+Finalise alloc_run_stmt_range_after_labels
+
+Theorem alloc_run_stmt_range_labels:
+  shape_stable R /\
+  (!entry cond body_lbl incr exit.
+    compiler_label entry /\ compiler_label cond /\ compiler_label body_lbl /\
+    compiler_label incr /\ compiler_label exit /\ exit <> body_lbl ==>
+    alloc_run (\s. shape_state s /\ R s)
+      (f entry cond body_lbl incr exit) (\u s. T)) ==>
+  alloc_run (\s. shape_state s /\ R s)
+    (do entry <- fresh_label "for_entry";
+        cond <- fresh_label "for_cond";
+        body_lbl <- fresh_label "for_body";
+        incr <- fresh_label "for_incr";
+        exit <- fresh_label "for_exit";
+        f entry cond body_lbl incr exit od) (\u s. T)
+Proof
+  strip_tac >> irule alloc_run_bind >>
+  qexists `\l s. shape_state s /\ R s /\ compiler_label l` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_label_frame >>
+      qexists `R` >> simp[]) >>
+  qx_gen_tac `entry` >> simp[] >> irule alloc_run_bind >>
+  qexists `\l s. shape_state s /\ (R s /\ compiler_label entry) /\ compiler_label l` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_label_frame >>
+      qexists `\s. R s /\ compiler_label entry` >>
+      simp[shape_stable_def] >> metis_tac[shape_stable_def]) >>
+  qx_gen_tac `cond` >> simp[] >> irule alloc_run_bind >>
+  qexists `\l s. shape_state s /\ (R s /\ compiler_label entry /\ compiler_label cond) /\
+    compiler_label l /\ label_sfx "for_body" l` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_label_frame >>
+      qexists `\s. R s /\ compiler_label entry /\ compiler_label cond` >>
+      simp[shape_stable_def] >> metis_tac[shape_stable_def]) >>
+  qx_gen_tac `body_lbl` >> simp[] >> suspend "last_labels"
+QED
+
+Resume alloc_run_stmt_range_labels[last_labels]:
+  irule alloc_run_bind >>
+  qexists `\l s. shape_state s /\ (R s /\ compiler_label entry /\ compiler_label cond /\
+    compiler_label body_lbl /\ label_sfx "for_body" body_lbl) /\ compiler_label l` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_label_frame >>
+      qexists `\s. R s /\ compiler_label entry /\ compiler_label cond /\
+        compiler_label body_lbl /\ label_sfx "for_body" body_lbl` >> simp[shape_stable_def] >> metis_tac[shape_stable_def]) >>
+  qx_gen_tac `incr` >> simp[] >> irule alloc_run_bind >>
+  qexists `\l s. shape_state s /\ (R s /\ compiler_label entry /\ compiler_label cond /\
+    compiler_label body_lbl /\ label_sfx "for_body" body_lbl /\ compiler_label incr) /\
+    compiler_label l /\ label_sfx "for_exit" l` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_label_frame >>
+      qexists `\s. R s /\ compiler_label entry /\ compiler_label cond /\
+        compiler_label body_lbl /\ label_sfx "for_body" body_lbl /\ compiler_label incr` >>
+      simp[shape_stable_def] >> metis_tac[shape_stable_def]) >>
+  qx_gen_tac `exit` >> fs[alloc_run_def] >> rpt strip_tac >>
+  `exit <> body_lbl` by
+    (irule label_sfx_distinct >> qexistsl [`"for_exit"`, `"for_body"`] >> simp[]) >>
+  first_x_assum (drule_at (Pat `f _ _ _ _ _ _ = _`)) >> simp[]
+QED
+Finalise alloc_run_stmt_range_labels
+
+Theorem alloc_run_declare_local_commit_then:
+  ce.ce_alloca_locals /\ shape_stable R /\
+  (!env. env.ce_alloca_locals /\ env.ce_return_pc = ce.ce_return_pc ==>
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s env /\ R s) (k env) Q) ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce /\ R s)
+    (do env <- declare_local ce id fty; emit_local_alloca env id; k env od) Q
+Proof
+  strip_tac >>
+  `alloc_run (\s. shape_state s /\ cenv_shape_ok s ce /\ R s)
+    (comp_bind (do env <- declare_local ce id fty;
+                   emit_local_alloca env id; return env od) k) Q` suffices_by
+    simp[comp_ignore_bind_def, comp_bind_assoc, loop_comp_return_bind] >>
+  irule alloc_run_bind >>
+  qexists `\env s. shape_state s /\ cenv_shape_ok s env /\
+    env.ce_return_pc = ce.ce_return_pc /\ env.ce_alloca_locals /\ R s` >>
+  reverse conj_tac >- simp[alloc_run_declare_local_commit] >>
+  gen_tac >> fs[alloc_run_def] >> rpt strip_tac >>
+  first_x_assum (drule_at (Pat `k _ _ = _`)) >> simp[]
+QED
+
+Theorem alloc_run_compile_stmt_range:
+  ce.ce_alloca_locals /\
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+    (compile_expr ce fty start_e) (\v s. value_shape_ok s v) /\
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_expr ce fty start_e) (\v s. T) /\
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+    (compile_expr ce fty end_e) (\v s. value_shape_ok s v) /\
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_expr ce fty end_e) (\v s. T) /\
+  (!env exit incr. env.ce_alloca_locals /\ env.ce_return_pc = ce.ce_return_pc /\
+    compiler_label exit /\ compiler_label incr ==>
+    shape_step internal compiler_label (\s. cenv_shape_ok s env)
+      (compile_stmts env (InLoop exit incr) ty stmts) (\u s. T) /\
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s env)
+      (compile_stmts env (InLoop exit incr) ty stmts) (\u s. T)) ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_stmt ce lc ty (For id fty (Range start_e end_e) bound stmts)) (\u s. T)
+Proof
+  strip_tac >> simp[Once compile_stmt_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >>
+  qexists `\op s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s op` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_lower_value_frame >>
+      qexistsl [`internal`, `\s. T`] >> simp[shape_stable_def]) >>
+  qx_gen_tac `start_op` >> simp[] >> irule alloc_run_bind >>
+  qexists `\op s. shape_state s /\ cenv_shape_ok s ce /\
+    plain_operand s start_op /\ plain_operand s op` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_lower_value_frame >>
+      qexistsl [`internal`, `\s. plain_operand s start_op`] >>
+      simp[SRULE [] (Q.SPEC `[start_op]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `end_op` >> simp[] >> suspend "commit"
+QED
+
+Resume alloc_run_compile_stmt_range[commit]:
+  ho_match_mp_tac (SRULE [comp_ignore_bind_def] alloc_run_declare_local_commit_then) >>
+  simp[shape_stable_conj,
+    SRULE [] (Q.SPEC `[start_op;end_op]` shape_stable_plain_operands)] >>
+  qx_gen_tac `env` >> strip_tac >> suspend "labels"
+QED
+
+Resume alloc_run_compile_stmt_range[labels]:
+  ho_match_mp_tac alloc_run_stmt_range_labels >>
+  simp[shape_stable_conj, cenv_shape_ok_stable,
+    SRULE [] (Q.SPEC `[start_op;end_op]` shape_stable_plain_operands)] >>
+  rpt gen_tac >> strip_tac >>
+  irule (SRULE [comp_ignore_bind_def, comp_bind_assoc, loop_comp_return_bind]
+    alloc_run_stmt_range_after_labels) >> simp[] >>
+  qexists `internal` >>
+  first_x_assum (drule_at (Pat `_.ce_alloca_locals`)) >> simp[]
+QED
+Finalise alloc_run_compile_stmt_range
+Finalise alloc_run_compile_stmt_range
