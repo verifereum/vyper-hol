@@ -79,7 +79,13 @@ Theorem vsr_step_inst_invalid:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
-  simp[step_inst_base_def, lift_result_def, halt_state_def, set_returndata_def] >>
+  qpat_assum `inst.inst_opcode = INVALID` (fn eq =>
+    let
+      val (_, th) = valOf (List.find
+        (fn (key, _) => aconv key (rhs (concl eq)))
+        vsr_call_opcode_rewrites)
+    in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end) >>
+  simp[lift_result_def, halt_state_def, set_returndata_def] >>
   vsr_terminal_tac ()
 QED
 
@@ -168,7 +174,13 @@ Theorem vsr_step_inst_alloca:
     inst.inst_opcode = ALLOCA ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rpt strip_tac >>
+  qpat_assum `inst.inst_opcode = ALLOCA` (fn eq =>
+    let
+      val (_, th) = valOf (List.find
+        (fn (key, _) => aconv key (rhs (concl eq)))
+        vsr_call_opcode_rewrites)
+    in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end) >> gvs[] >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
   vsr_irule vsr_exec_alloca >> simp[]
 QED
