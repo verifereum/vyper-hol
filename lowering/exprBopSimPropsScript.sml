@@ -15,6 +15,53 @@ Ancestors
 Libs
   pairLib
 
+Theorem comparison_digest_run:
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
+  eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (bool_to_word (if bop = vyperAST$Eq then w1 = w2 else w1 <> w2)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
+Proof
+  Cases_on `bop = vyperAST$Eq` >>
+  simp[emit_op_def, fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[emitted_insts_def, DROP_APPEND, run_inst_seq_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, exec_pure1_def,
+       bind_outputs_def] >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def, bool_to_word_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem comparison_digest_shape:
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
+  same_blocks sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
+    LENGTH (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+  ci_mono sa sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
+  EVERY (\i. i.inst_opcode = EQ \/ i.inst_opcode = ISZERO)
+    (emitted_insts sa sb)
+Proof
+  Cases_on `bop = vyperAST$Eq` >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[same_blocks_def, emitted_insts_def, DROP_APPEND, mk_inst_def,
+       is_terminator_def, ci_mono_def, cs_extends_def, IS_PREFIX_APPEND,
+       not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+QED
+
 
 Theorem eval_expr_bop_cases:
   !cx ann bop e1 e2 es res es'.

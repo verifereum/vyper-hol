@@ -30,15 +30,8 @@ Theorem held_lower_value_compare:
    if bop = vyperAST$Eq then emit_op EQ [h1;h2] s2
    else let (q,sm) = emit_op EQ [h1;h2] s2 in emit_op ISZERO [q] sm)
 Proof
-  strip_tac >>
-  simp[Once lower_value_def, comp_bind_def, compile_expr_bop] >>
-  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
-       compile_builtin_dispatch_body_def, lower_value_child_call] >>
-  Cases_on `bytestring_literal_hash e1` >>
-  Cases_on `bytestring_literal_hash e2` >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
-  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> gvs[]
+  strip_tac >> gvs[] >>
+  simp[lower_value_bytestring_compare]
 QED
 
 Theorem held_digest_operand_compiler:
@@ -60,19 +53,6 @@ Proof
       metis_tac[compiler_ci_mono_reserved]) >>
   simp[] >> strip_tac >> gvs[] >>
   simp[ci_mono_def, cs_extends_refl]
-QED
-
-Theorem held_compare_tail_compiler:
-  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
-   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
-  ci_mono sa sb
-Proof
-  Cases_on `bop = vyperAST$Eq` >> simp[]
-  >- metis_tac[ci_mono_emit_op, pairTheory.SND] >>
-  pairarg_tac >> strip_tac >> gvs[] >>
-  `ci_mono sa sm` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
-  `ci_mono sm sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
-  fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem held_digest_runtime_cut:
@@ -114,7 +94,7 @@ Theorem held_compare_cuts:
 Proof
   strip_tac >>
   drule_all held_digest_operand_compiler >> strip_tac >>
-  drule_all held_compare_tail_compiler >> strip_tac >>
+  drule_all comparison_digest_shape >> strip_tac >>
   `ci_mono sa s1 /\ (!z. h1 = Var z ==> not_fresh_at s1 z) /\
    local_ptrs_reserved cenv s1` by
     metis_tac[held_digest_operand_compiler] >>
@@ -264,28 +244,6 @@ QED
 
 Finalise held_digest_operand_outcome
 
-Theorem held_compare_run_nofresh:
-  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
-   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
-  eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME (bool_to_word (if bop = vyperAST$Eq then w1 = w2 else w1 <> w2)) /\
-    (t with vs_vars := s.vs_vars) = s /\
-    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
-Proof
-  Cases_on `bop = vyperAST$Eq` >>
-  simp[emit_op_def, fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
-  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
-    by decide_tac >>
-  simp[emitted_insts_def, DROP_APPEND, run_inst_seq_def,
-       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, exec_pure1_def,
-       bind_outputs_def] >>
-  simp[eval_operand_def, lookup_var_update_var, update_var_def, bool_to_word_def] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
-                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
 Theorem held_compare_shape:
   (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
@@ -297,15 +255,11 @@ Theorem held_compare_shape:
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
-  Cases_on `bop = vyperAST$Eq` >>
-  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def,
-       emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
-    by decide_tac >>
-  simp[same_blocks_def, emitted_insts_def, DROP_APPEND, mk_inst_def,
-       is_terminator_def] >>
+  strip_tac >> drule comparison_digest_shape >> strip_tac >>
+  asm_rewrite_tac[] >>
   irule run_inst_seq_mem_ok_every >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
   simp[below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other]
 QED
 
@@ -328,7 +282,7 @@ Theorem held_compare_counted_nofresh:
     t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all held_compare_run_nofresh >> strip_tac >>
+  drule_all comparison_digest_run >> strip_tac >>
   drule held_compare_shape >> disch_then (qspec_then `s` strip_assume_tac) >>
   `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
       DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
