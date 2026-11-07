@@ -8,6 +8,7 @@ Ancestors concretizeLayoutCallEntryAnnotations concretizeLayoutCallSetupMemory
   frameJointTransition frameJointTrace concretizeStepStructure venomWf venomInstProofs1
   frameRelocationLocal concretizeLayoutSupplement concretizeLayoutParameterSegments
   venomExecProofs o1PassContract contextCodegenRel venomInst finite_map list arithmetic
+  frameControlAgreement concretizeLayoutCanonicalDriver
 
 Theorem layout_selected_call_scoped_run:
   !D lo vs0 C C' q0 es qs q g a n stk PG G tn callerfn callinst caller
@@ -37,7 +38,12 @@ Theorem layout_selected_call_scoped_run:
     h.lop_ids = EL (SUC n) (lifetime_annotations 0 [0] es) /\
     layout_phase_canonical es h /\ ~h.lop_pending /\ layout_ordinary_trace vs0 C q0 es qs q h cs /\
     layout_ordinary_state D lo C' q0 es qs h cs ct /\
-    layout_scoped_run D lo vs0 C C' q0 es qs q g callee target cs ct
+    layout_scoped_run D lo vs0 C C' q0 es qs q g callee target cs ct /\
+    h.lop_config = EL (SUC n) (q0::qs) /\ h.lop_anns = anns' /\
+    control_agree cs ct /\ enters_block callee cs cs /\ enters_block target ct ct /\
+    (!ass. anns' = EL (SUC n) ass ==>
+      layout_canonical_run D lo vs0 C C' q0 es qs ass q
+        (EL (SUC n) (q0::qs)) (SUC n) callee cs target ct)
 Proof
   rpt gen_tac >> strip_tac >>
   fs[layout_ordinary_entry_def, layout_ordinary_trace_def,
@@ -123,8 +129,20 @@ Proof
     layout_ordinary_state D lo C' q0 es qs h cs tc` by
     (simp[Abbr `h`, layout_ordinary_trace_def, layout_ordinary_state_def] >>
      fs[joint_trace_def] >> drule joint_chain_length >> simp[]) >>
-  qexists `h` >> simp[Abbr `h`, layout_phase_canonical_def] >>
-  irule layout_scoped_run_intro >> goal_assum (drule_at Any) >> simp[]
+  `!ass. (MAP (resolved_op rv) ops,FEMPTY)::(rp,rv)::anns =
+      EL (SUC a.lop_cursor) ass ==>
+    layout_canonical_run D lo vs0 C C' q0 es qs ass q
+      (EL (SUC a.lop_cursor) (q0::qs)) (SUC a.lop_cursor) callee cs
+      (concretize_function_with_positions positions callee) tc` by
+    (rpt strip_tac >> irule layout_canonical_run_intro >>
+     qexistsl [`h`, `cs`, `tc`] >>
+     simp[Abbr `h`, layout_driver_indexed_def, layout_phase_canonical_def,
+       control_agree_def]) >>
+  qexists `h` >> simp[Abbr `h`, layout_phase_canonical_def, control_agree_def] >>
+  conj_tac
+  >- (irule layout_scoped_run_intro >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `!ass. _ ==> layout_canonical_run _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[] >> asm_rewrite_tac[]
 QED
 
 val _ = export_theory();
