@@ -10,7 +10,7 @@ Ancestors
   exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer
   bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
   exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
-  venomMemProofs list
+  venomMemProofs list loweringPosts
 
 Theorem covered_clean_memory_result:
   evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv value /\
@@ -297,3 +297,22 @@ Resume compile_slice_calldata_shared_success[protected]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise compile_slice_calldata_shared_success
+
+Theorem calldata_bytes_result_posts:
+  evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  val_wf (BaseTV (BytesT (Dynamic bound))) (BytesV bytes) /\
+  type_memory_size (BaseTV (BytesT (Dynamic bound))) <= N /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= N /\
+  ptr_covers G tn p s N /\ eval_operand (Var p) s = SOME w /\
+  val_in_memory (BaseTV (BytesT (Dynamic bound))) (BytesV bytes) (w2n w) s.vs_memory /\
+  (!i. w2n w <= i /\ i < w2n w + 32 + LENGTH bytes ==> i NOTIN tn.t_mem) ==>
+  ptr_mem_ok cx ty (BytesV bytes) (Var p) G tn s /\
+  ptr_buf_ok cenv e (Var p) G s /\
+  ptr_vv_ok cx ty (Value (BytesV bytes))
+    (LocatedValue ty <|ptr_operand := Var p; ptr_location := LocMemory|>) es G tn s
+Proof
+  strip_tac >> irule covered_clean_memory_result >>
+  qexistsl_tac [`N`,`BaseTV (BytesT (Dynamic bound))`,`w`] >>
+  simp[val_footprint_def] >>
+  drule exprSimPropsTheory.val_store_size_le >> decide_tac
+QED
