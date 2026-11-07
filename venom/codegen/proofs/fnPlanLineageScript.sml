@@ -107,7 +107,11 @@ End
    prefix, and that prefix's length depends on the path, while the
    path-local promise in ps_cleanup_promised comes from the DFS path.  No
    field the frame invariant reads (ps_stack, ps_spilled, ps_alloc) is
-   chosen freely. *)
+   chosen freely.
+
+   The step requires lbl's code to leave succ's DFS spill map, so a lineage
+   state is succ's DFS state with only ps_stack swapped: ps_spilled is
+   pinned to the DFS run and only ps_stack is path dependent. *)
 Inductive lineage_state:
 [~entry:]
   fn_entry_label fn = SOME lbl ==>
@@ -122,7 +126,8 @@ Inductive lineage_state:
     (ps with <| ps_cleanup_height := ch; ps_cleanup_promised := promised |>) =
     SOME (block_ops, ps_after) /\
   MEM succ (cfg_succs_of cfg lbl) /\
-  dfs_block_state liveness dfg cfg fn ps0 succ ps_succ ==>
+  dfs_block_state liveness dfg cfg fn ps0 succ ps_succ /\
+  ps_after.ps_spilled = ps_succ.ps_spilled ==>
   lineage_state liveness dfg cfg fn ps0 succ
     (ps_succ with <| ps_stack := ps_after.ps_stack;
                      ps_spilled := ps_after.ps_spilled |>)
@@ -186,6 +191,7 @@ Proof
       pop_assum SUBST1_TAC >>
       irule lineage_state_step >>
       conj_tac >- simp[Abbr `target`] >>
+      conj_tac >- simp[] >>
       qexistsl_tac [`pb`, `ops`, `before.ps_cleanup_height`, `pred`,
         `before.ps_cleanup_promised`, `before`, `before`, `after`] >> simp[])
   >- (irule dfs_aux_call_sibling >> goal_assum (drule_at Any) >> simp[]) >>
@@ -741,6 +747,7 @@ Definition lineage_entry_def:
         SOME (block_ops, ps_after) /\
       MEM succ (cfg_succs_of cfg pred) /\
       dfs_block_state liveness dfg cfg fn ps0 succ ps_succ /\
+      ps_after.ps_spilled = ps_succ.ps_spilled /\
       ps = ps_succ with <| ps_stack := ps_after.ps_stack;
                            ps_spilled := ps_after.ps_spilled |>
 End
@@ -808,7 +815,8 @@ Theorem lineage_state_block_plan:
       generate_block_plan liveness dfg cfg fn bb
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
         SOME (block_ops, ps_after) /\
-      ps_after.ps_alloc = ps_dfs_after.ps_alloc
+      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled
 Proof
   cheat
 QED

@@ -30,13 +30,29 @@ Theorem lineage_state_block_plan:
       generate_block_plan liveness dfg cfg fn bb
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
         SOME (block_ops, ps_after) /\
-      ps_after.ps_alloc = ps_dfs_after.ps_alloc
+      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled
 ```
 
 The definitions it uses (`dfs_aux_call`, `dfs_succs_call`, `dfs_block_state`,
 `lineage_state`) are in the same file and are frozen too.
 
 **Do not modify this statement or those definitions.** Prove it as-is, or produce a counterexample.
+
+**Owner change, 2026-11-07 (statement and definition, now frozen in this form).**
+- `lineage_state_step` and `lineage_entry_def` gained the premise
+  `ps_after.ps_spilled = ps_succ.ps_spilled`: a lineage state is succ's DFS state with
+  only `ps_stack` swapped, so `ps_spilled` is the DFS spill map by construction. Only
+  the stack is path dependent now.
+- The conclusion above gained `ps_after.ps_spilled = ps_dfs_after.ps_spilled`. With the
+  input spill maps equal, this is the spill half of the same replay: `clean_stack_plan`'s
+  branches (elide / pop+mark / popmany) never write `ps_spilled`, deep `do_swap`/`do_dup`
+  change only `ps_alloc`, and `release_dead_spills` is a function of (map, next-live).
+- Diagnostics built on the old rule (fixture/probe theories that call
+  `lineage_state_step` with a spill map other than the successor's DFS map, e.g. the
+  Selective/NativeOrigin/Resource probes) are obsolete: delete them rather than repair
+  them, and add no new fixture, probe or EVAL diagnostic. The resource-offset fixture
+  line in STATE is retired; plan the proof itself on the new definition.
 
 (*
  ************************************************************
