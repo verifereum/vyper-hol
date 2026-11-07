@@ -2358,8 +2358,8 @@ Proof
      qpat_assum `ec_source_tail _ _ _ _ _ es2 = _` (fn th => rewrite_tac[th]) >>
      rewrite_tac[pairTheory.PAIR_EQ] >> metis_tac[]) >>
   `wb_frame cenv es es2 sa s0 u` by
-    (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `s1`,
-                            `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+    (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`,
+                            `s1`, `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      metis_tac[exprSimWordArgsTheory.expr_post_frame]) >>
   `gas_marked_exec F (ctx,func)
