@@ -3,6 +3,7 @@ Ancestors
   lowerDloadOracleSelection lowerDloadExternalInputs lowerDloadExternalBackward
   lowerDloadReachableDiscipline lowerDloadNormalData lowerDloadResidualNonmemory
   venomCallOracleDefs venomExecSemantics venomState venomWf ptrDiscipline list extCallOracle
+  oracleExecProps lowerDloadRevertSuffix
 
 Theorem ld_consume_call_request_growth:
   rq.cr_kind = rq'.cr_kind /\ rq.cr_value = rq'.cr_value /\
@@ -112,3 +113,31 @@ Resume ld_normal_call_request_backward[consume_growth]:
 QED
 
 Finalise ld_normal_call_request_backward
+
+Theorem ld_request_growth_external:
+  i.inst_opcode <> INVOKE /\ step_inst fuel C i s = OK s' /\
+  LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
+  MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `s'.vs_requests = s.vs_requests` by
+    (fs[MEM] >> drule_all step_inst_noninvoke_oracle >> simp[]) >>
+  gvs[]
+QED
+
+Theorem ld_revert_interval_requests:
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME gb /\
+  revert_forward_pair gb copypos endpos /\
+  copypos <= t.vs_inst_idx /\ t.vs_inst_idx <= endpos /\
+  get_instruction gb t.vs_inst_idx = SOME j /\
+  step_inst fuel CT j t = OK z ==>
+  z.vs_requests = t.vs_requests
+Proof
+  strip_tac >> Cases_on `copypos = t.vs_inst_idx`
+  >- (gvs[] >> drule_all ld_revert_pair_suffix_enter >>
+      simp[next_inst_def]) >>
+  `copypos < t.vs_inst_idx` by decide_tac >>
+  drule_all ld_revert_pair_suffix_step >>
+  disch_then (qspecl_then [`ARB`, `z`, `fuel`, `CT`] mp_tac) >>
+  simp[next_inst_def]
+QED
