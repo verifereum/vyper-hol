@@ -73,3 +73,61 @@ Proof
  simp[] >> conj_tac >- metis_tac[] >>
  simp[EVERY_CONJ] >> metis_tac[EVERY_DROP]
 QED
+
+Theorem analyzed_singleton_outgoing_block_inventory:
+ !fn pred succ pb sb next ps base dfg ops qs.
+ codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+ lookup_block pred fn.fn_blocks = SOME pb /\
+ lookup_block succ fn.fn_blocks = SOME sb /\ sb <> HD fn.fn_blocks /\
+ MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+ cfg_preds_of (cfg_analyze fn) succ = [pred] /\
+ MEM next (cfg_succs_of (cfg_analyze fn) succ) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) pred
+   (LENGTH pb.bb_instructions)))) ps /\
+ generated_plan_state_wf_marked base ps /\
+ generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb ps = SOME (ops,qs)
+ ==>
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) sb.bb_label
+   (LENGTH sb.bb_instructions)))) qs /\
+ (?m core. lineage_core m core qs /\ EVERY is_var_operand core /\
+   residual_budget_wf base [] (qs with ps_stack := core))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `sb.bb_label = succ` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+ `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+ drule_all nonentry_block_no_params >> strip_tac >>
+ drule_all ready_outgoing_terminal_shape >> strip_tac >>
+ `MEM sb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+ `bb_well_formed sb` by metis_tac[codegen_ready_fn_def, venomWfTheory.wf_function_def] >>
+ `collect_phis sb.bb_instructions = []` by
+   (irule ready_small_preds_no_phis >> qexistsl_tac [`fn`, `succ`] >> simp[]) >>
+ `EVERY (\inst. inst.inst_opcode <> PHI) sb.bb_instructions` by
+   (simp[EVERY_MEM, MEM_EL] >> rpt strip_tac >> gvs[] >>
+    drule_all block_phi_mem_collect >> simp[]) >>
+ `EVERY (\inst. ~is_param_opcode inst.inst_opcode) sb.bb_instructions` by
+   (qpat_x_assum `non_param_insts sb = _` mp_tac >>
+    simp[non_param_insts_def, FILTER_EQ_ID, EVERY_MEM]) >>
+ qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+ simp[generate_block_plan_def] >> pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >>
+ Cases_on `1 < LENGTH (cfg_succs_of (cfg_analyze fn) pred)`
+ >- (`EVERY (\inst. inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode)
+        sb.bb_instructions` by simp[EVERY_CONJ] >>
+     gvs[] >>
+     drule_all fnLineageInvSetupSuffixTheory.analyzed_active_singleton_suffix_replay >>
+     disch_then (qspec_then `0` mp_tac) >>
+     `0 < LENGTH sb.bb_instructions` by (Cases_on `sb.bb_instructions` >> gvs[]) >>
+     simp[] >> strip_tac >> simp[] >> metis_tac[]) >>
+ `cfg_succs_of (cfg_analyze fn) pred = [succ]` by
+   (Cases_on `cfg_succs_of (cfg_analyze fn) pred` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+ drule_all fnLineageInvSingletonSetupTheory.analyzed_singleton_setup_identity >>
+ strip_tac >> gvs[] >>
+ `fn_reachable fn sb.bb_label` by
+   metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze,
+     codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze,
+     venomExecProofsTheory.fn_reachable_step, codegen_ready_fn_def, MEM] >>
+ irule (INST_TYPE [alpha |-> ``:cfg_analysis``] analyzed_outgoing_exact_suffix_inventory) >>
+ simp[] >> conj_tac >- metis_tac[] >>
+ qexistsl_tac [`cfg_analyze fn`, `dfg`, `0`, `inst_ops`, `0`, `ps`] >>
+ simp[EVERY_CONJ] >> metis_tac[]
+QED
