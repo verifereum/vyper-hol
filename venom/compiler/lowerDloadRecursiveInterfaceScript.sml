@@ -874,7 +874,7 @@ Proof
   gen_tac >>
   qspec_then `\E astk gstk savedkeys ta. P ta` mp_tac
     ld_recursive_witness_prefix_next >>
-  BETA_TAC >> simp[]
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> disch_then ACCEPT_TAC
 QED
 
 Theorem ld_recursive_prefix_next:
@@ -978,7 +978,22 @@ Theorem ld_revert_entry_supply_collision_probe[local]:
     (FST (lower_dload_block_supply
       (a with irs_used_vars := ["formal_var_0"; "loaded"]) bb)) 7 8
 Proof
-  CONV_TAC EVAL >> simp[] >> CONV_TAC EVAL >> simp[]
+  simp_tac bool_ss [LET_THM] >>
+  conj_tac
+  >- (CONV_TAC EVAL >> conj_tac
+      >- (rpt strip_tac >>
+          `F` by (qpat_x_assum `3 < k` mp_tac >>
+                  qpat_x_assum `k < 4` mp_tac >> decide_tac)) >>
+      simp_tac (srw_ss()) [] >>
+      CONV_TAC EVAL) >>
+  conj_tac
+  >- (CONV_TAC EVAL >>
+      simp_tac (srw_ss()) [] >> CONV_TAC EVAL) >>
+  CONV_TAC EVAL >> conj_tac
+  >- (rpt strip_tac >>
+      `F` by (qpat_x_assum `7 < k` mp_tac >>
+              qpat_x_assum `k < 8` mp_tac >> decide_tac)) >>
+  simp_tac (srw_ss()) [] >> CONV_TAC EVAL
 QED
 
 (* EXCEPTIONAL ENTRY AUDIT (not a theorem or an assumed closure).
@@ -1259,6 +1274,7 @@ Proof
      disch_then (fn th => rpt strip_tac >> drule_all th >> simp[])) >>
   `MEM i (fn_insts fn)` by
     (qpat_x_assum `active_inst fn i s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
      simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
      metis_tac[EL_MEM]) >>
   `!v. MEM (Var v) i.inst_operands ==> v IN V` by
@@ -1326,7 +1342,14 @@ Proof
   >- (qexistsl_tac [`cpre`, `cpost`, `gpre`, `gpost`, `observed`, `out`] >>
       asm_rewrite_tac []) >>
   simp[GSYM APPEND_ASSOC] >>
-  metis_tac[]
+  conj_tac
+  >- (qpat_x_assum `lookup_block s.vs_current_bb _ = SOME bb` mp_tac >>
+      asm_rewrite_tac []) >>
+  conj_tac
+  >- (qpat_x_assum `lookup_block t.vs_current_bb _ = SOME gb` mp_tac >>
+      asm_rewrite_tac []) >>
+  qpat_x_assum `!s'. step_inst fuel CS i s = OK s' ==> _` drule >>
+  asm_rewrite_tac []
 QED
 
 Resume ld_recursive_ordinary_next_witness[revert_successor]:
@@ -1480,6 +1503,7 @@ Proof
           AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   `MEM i (fn_insts fn)` by
     (qpat_x_assum `active_inst fn i s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
      simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
      metis_tac[EL_MEM]) >>
   `i.inst_id NOTIN keys` by (asm_rewrite_tac [] >> simp[MEM_MAP] >> metis_tac[]) >>
@@ -2961,7 +2985,9 @@ Proof
   qpat_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac ld_configured_load_next_backward) >>
   disch_then (drule_at (Pat `ld_target_prefix _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (fn th =>
+    qpat_assum `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`
+      (mp_then (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`) mp_tac th)) >>
   disch_then (drule_at (Pat `lower_dload_block_supply _ _ = _`)) >>
   disch_then (drule_at (Pat `lower_dload_insts_supply _ pre = _`)) >>
   disch_then (drule_at (Pat `lower_dload_inst_supply a1 i = _`)) >>
@@ -4603,3 +4629,278 @@ Proof
      venomMemDefsTheory.alloca_next_valid_def,
      adopt_return_fmp_allocas, merge_callee_state_def]
 QED
+
+val ld_return_normal_prefix =
+  let
+    val (vars,body) = strip_forall ld_proposed_combined_return_restore
+    val (pre,result) = dest_imp body
+    val normalized = rhs (concl ((REWRITE_CONV [LET_THM] THENC DEPTH_CONV BETA_CONV) result))
+    val (floors,clauses) = strip_exists normalized
+    val prefix = list_mk_conj (List.take (strip_conj clauses,4))
+  in list_mk_forall(vars,mk_imp(pre,list_mk_exists(floors,prefix))) end;
+
+Theorem ld_recursive_return_normal_prefix:
+  ^ld_return_normal_prefix
+Proof
+  rpt gen_tac >> disch_tac >>
+  first_assum (assume_tac o MATCH_MP ld_recursive_return_restored_validity) >>
+  qpat_x_assum `_ /\ _` mp_tac >> BETA_TAC >> strip_tac >>
+  TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
+  qpat_x_assum `astk = sf::astail` SUBST_ALL_TAC >>
+  qpat_x_assum `gstk = tf::gtail` SUBST_ALL_TAC >>
+  Cases_on `savedkeys` >- gvs[] >>
+  rename1 `LENGTH (sk::sktail) = LENGTH (sf::astail)` >>
+  qmatch_goalsub_abbrev_tac `DRESTRICT E owners` >>
+  `owners SUBSET live` by
+    (unabbrev_all_tac >> drule ld_normal_return_owner_subset >> simp[]) >>
+  qpat_assum `!q. q < LENGTH (sf::astail) ==> ld_saved_embedded _ _ _ _ _ _ _ /\ _`
+    (qspec_then `0` mp_tac) >>
+  simp_tac (srw_ss()) [LENGTH, prim_recTheory.LESS_0, EL, DROP, HD, TL] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!st. adopt_return_fmp ret st = st` by simp[adopt_return_fmp_def] >>
+  qpat_assum `!st. adopt_return_fmp ret st = st`
+    (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
+  `?floor. lo <= floor /\ allocas_from floor t' /\ floor <= t'.vs_alloca_next /\
+    (!owner bs bt sz.
+      ld_live astail sf.lf_local sf.lf_params
+        (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,(bs,sz)) /\
+      ld_site_entry E owner bs bt sz ==>
+      bt+sz <= floor \/ ?j. j NOTIN sk /\ FLOOKUP t'.vs_allocas j = SOME(bt,sz))` by
+    (drule_all (BETA_RULE ld_saved_geometry_head_consume) >>
+     disch_then (qspecl_then [`COMPL (set sf.lf_inst.inst_outputs)`, `ret`] mp_tac) >>
+     simp[adopt_return_fmp_def]) >>
+  qexists_tac `floor` >> conj_tac >- fs[Abbr `owners`] >>
+  reverse conj_tac
+  >- (reverse conj_tac >- first_assum ACCEPT_TAC >>
+      pure_rewrite_tac [TL] >>
+      drule (BETA_RULE ld_saved_geometry_return_tail) >>
+      disch_then (qspecl_then [`owners`, `sf.lf_local`, `sf.lf_params`,
+        `DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))`] mp_tac) >>
+      simp[Abbr `owners`] >> metis_tac[]) >>
+  suspend "normal_data"
+QED
+
+Resume ld_recursive_return_normal_prefix[normal_data]:
+  qpat_x_assum `?sk' stn. _`
+    (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  `wf_function sf.lf_fn` by
+    (qpat_x_assum `o1_ctx_shape CS` mp_tac >>
+     simp[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!e. _ ==> o1_fn_shape CS e`
+       (qspec_then `sf.lf_fn` mp_tac) >>
+     simp[o1PassContractTheory.o1_fn_shape_def]) >>
+  `active_inst sf.lf_fn sf.lf_inst sf.lf_state` by
+    (irule lowerDloadProvenanceSupportTheory.ld_annotated_active_inst >> goal_assum (drule_at Any)) >>
+  `?next. active_inst sf.lf_fn next
+    (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx)` by
+    (irule o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_successor >>
+     conj_tac >- asm_rewrite_tac [] >>
+     qexistsl [`sf.lf_inst`, `ret`, `s`] >>
+     simp[adopt_return_fmp_def]) >>
+  qpat_x_assum `!inst'. active_inst sf.lf_fn inst' _ ==> _` drule >> strip_tac >>
+  match_mp_tac ld_normal_data_assemble >>
+  conj_asm1_tac >- suspend "frame_data" >>
+  suspend "normal_clauses"
+QED
+
+Resume ld_recursive_return_normal_prefix[frame_data]:
+  qpat_assum `tf.lf_inst = sf.lf_inst` (fn th => rewrite_tac [th]) >>
+  `ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> strip_tac >>
+     drule lowerDloadCoverageInvariantTheory.ld_frame_data_shared >> simp[]) >>
+  `supports <> []` by
+    (qpat_x_assum `LENGTH supports = LENGTH (sf::astail)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `supports` >> simp[]) >>
+  `EL 0 supports = set (fn_ir_vars sf.lf_fn)` by
+    (qpat_x_assum `HD supports = _` mp_tac >>
+     qpat_x_assum `supports <> []` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `supports` >> simp[]) >>
+  irule lowerDloadReturnRestoreTheory.ld_return_frame_data >>
+  simp[GSYM MEMBER_NOT_EMPTY, Abbr `owners`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (goal_assum (drule_at Any) >> NO_TAC)
+  >- (qexists_tac `astail` >> REFL_TAC)
+  >- (qexistsl_tac [`s`, `t`, `ret.iret_values`] >>
+      asm_rewrite_tac [] >> conj_tac
+      >- (qpat_x_assum `bind_outputs tf.lf_inst.inst_outputs _ _ = SOME t'` mp_tac >>
+          asm_rewrite_tac []) >>
+      qpat_x_assum `ld_shared_state tn un s t` mp_tac >>
+      asm_rewrite_tac [])
+  >- (qpat_x_assum `ld_saved_embedded _ E sk _ _ sf tf` mp_tac >>
+      asm_rewrite_tac [] >> strip_tac >>
+      goal_assum (drule_at Any)) >>
+  qpat_x_assum `ld_owned_vars _ E (DRESTRICT _ _) _ _ _ s' t'` mp_tac >>
+  qpat_x_assum `EL 0 supports = _` mp_tac >>
+  qpat_x_assum `tf.lf_inst = sf.lf_inst` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> simp[]
+QED
+
+Resume ld_recursive_return_normal_prefix[normal_clauses]:
+  drule ld_normal_data_geometry >> strip_tac >>
+  drule ld_normal_data_masks >> strip_tac >>
+  drule ld_normal_data_memory >> strip_tac >>
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes (DRESTRICT E owners) owners a b)
+    tn.t_mem un.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t')` by
+    (irule lowerDloadCallMemoryTheory.ld_call_return_memory >>
+     goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
+     qexistsl [`ret`, `ret`] >> simp[adopt_return_fmp_def] >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     asm_rewrite_tac [] >>
+     qpat_x_assum `ld_byte_rel _ tn.t_mem ua.t_mem _ _` mp_tac >>
+     asm_rewrite_tac []) >>
+  simp_tac (srw_ss()) [] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Abbr `owners`, lowerDloadOwnershipTheory.ld_live_def,
+        lowerDloadOwnershipTheory.ld_selected_def] >> metis_tac[]) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`owner`, `bx`, `tx`, `sx`] >> strip_tac >>
+      `owner IN live` by metis_tac[SUBSET_DEF] >>
+      `ld_site_entry E owner bx tx sx` by
+        fs[lowerDloadLifetimeTheory.ld_site_entry_restrict] >>
+      qpat_x_assum `!owner bs bt sz. _ ==> _ /\ _ /\ _ < _ /\ _ < _`
+        drule_all >> simp[]) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`owner`, `other`, `bx`, `tx`, `sx`, `cx`, `dx`, `ex`] >>
+      strip_tac >>
+      `owner IN live /\ other IN live` by metis_tac[SUBSET_DEF] >>
+      `ld_site_entry E owner bx tx sx /\ ld_site_entry E other cx dx ex` by
+        fs[lowerDloadLifetimeTheory.ld_site_entry_restrict] >>
+      qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `ld_saved_embedded _ E sk _ _ sf tf`
+    (mp_then (Pat `ld_saved_embedded _ _ _ _ _ _ _`) mp_tac
+      lowerDloadTargetGeometryTheory.ld_return_geometry) >>
+  disch_then assume_tac >>
+  `bind_outputs sf.lf_inst.inst_outputs ret.iret_values
+     (adopt_return_fmp ret (merge_callee_state sf.lf_state s)) = SOME s'` by
+    simp[adopt_return_fmp_def] >>
+  qpat_x_assum `!t_end t' suspended' sret s_end s'' ret n lo gstk. _` (fn th =>
+    qpat_assum `bind_outputs _ _ (adopt_return_fmp ret _) = SOME s'`
+      (mp_then (Pat `bind_outputs sf.lf_inst.inst_outputs _ _ = SOME _`) mp_tac th)) >>
+  disch_then assume_tac >>
+  `bind_outputs tf.lf_inst.inst_outputs ret.iret_values
+     (adopt_return_fmp ret (merge_callee_state tf.lf_state t)) = SOME t'` by
+    (qpat_x_assum `bind_outputs _ _ (merge_callee_state tf.lf_state t) = SOME t'` mp_tac >>
+     simp[adopt_return_fmp_def]) >>
+  qpat_x_assum `!t_end t' suspended' ret' n lo gstk. _` (fn th =>
+    qpat_assum `bind_outputs _ _ (adopt_return_fmp ret _) = SOME t'`
+      (mp_then (Pat `bind_outputs _ _ _ = SOME _`) mp_tac th)) >>
+  disch_then (qspecl_then [`TL suspended`, `ta.vs_alloca_next`, `lo`, `gtail`] mp_tac) >>
+  (impl_tac >- (pure_rewrite_tac [DROP_1] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac [] >>
+     qpat_assum `!q. q < LENGTH (sf::astail) ==> ?f. lo <= f /\ _`
+       (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
+     strip_tac >> conj_tac >- metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+     Cases_on `suspended` >> simp[])) >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `ld_alloc_account sk _ _ s' t'` mp_tac >>
+      Cases_on `suspended` >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (map_every qx_gen_tac [`owner`, `bx`, `sx`] >> disch_tac >> conj_tac
+      >- (simp[Abbr `owners`] >> metis_tac[]) >>
+      `ld_live (sf::astail) L AP AG (owner,bx,sx)` by
+        (qpat_x_assum `ld_live astail _ _ _ (owner,bx,sx)` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[lowerDloadOwnershipTheory.ld_live_def,
+              lowerDloadOwnershipTheory.ld_selected_def,
+              finite_mapTheory.FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+      qpat_x_assum `!owner bs sz. ld_live (sf::astail) _ _ _ _ ==> _` drule >> simp[]) >>
+  `LIST_REL (\f g. ?V keys d A. ld_saved_embedded V E keys d A f g)
+     astail gtail` by
+    (simp[LIST_REL_EL_EQN] >> conj_tac >- fs[] >>
+     qx_gen_tac `q` >> strip_tac >>
+     qpat_assum `!q. q < LENGTH (sf::astail) ==> ld_saved_embedded _ _ _ _ _ _ _ /\ _`
+       (qspec_then `SUC q` mp_tac) >> simp_tac (srw_ss()) [] >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >> goal_assum (drule_at Any)) >>
+  `LIST_REL (\f g. ?V keys d A. ld_saved_embedded V (DRESTRICT E owners) keys d A f g)
+     astail gtail` by
+    (irule lowerDloadReturnRestoreTheory.ld_return_stack_table >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`COMPL (set sf.lf_inst.inst_outputs)`, `sf`] >>
+     simp[Abbr `owners`]) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`owner`, `bx`, `tx`, `sx`] >> strip_tac >>
+      `owner IN live` by metis_tac[SUBSET_DEF] >>
+      `ld_site_entry E owner bx tx sx` by
+        fs[lowerDloadLifetimeTheory.ld_site_entry_restrict] >>
+      qpat_assum `!owner bs bt sz. _ ==> _ /\ _ /\ _ < _ /\ _ < _`
+        drule_all >> strip_tac >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `ld_frame_data _ _ (DRESTRICT E owners) _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [lowerDloadCoverageInvariantTheory.ld_frame_data_def]) >>
+      `?bx' sx'. ld_live astail sf.lf_local sf.lf_params
+         (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,bx',sx')` by
+        (qpat_x_assum `owner IN owners` mp_tac >>
+         simp[Abbr `owners`]) >>
+      `?tx'. ld_site_entry (DRESTRICT E owners) owner bx' tx' sx'` by
+        (irule lowerDloadReturnRestoreTheory.ld_live_source_entry >>
+         goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >> metis_tac[]) >>
+      `bx' = bx /\ sx' = sx` by
+        (fs[lowerDloadLifetimeTheory.ld_site_entry_def] >> metis_tac[]) >>
+      qpat_x_assum `bx' = bx` SUBST_ALL_TAC >>
+      qpat_x_assum `sx' = sx` SUBST_ALL_TAC >>
+      conj_tac
+      >- (qpat_assum `ld_annotated_reachable vs0 CS astail k _ _ _ _ _ next _`
+            (mp_then (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+              lowerDloadOwnershipTheory.ld_annotated_live_endpoint) >>
+          disch_then drule >> simp[]) >>
+      irule lowerDloadTargetGeometryTheory.ld_paired_live_endpoints >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`owner`, `bx`, `tx`, `sx`] >> strip_tac >>
+      `?bx' sx'. ld_live astail sf.lf_local sf.lf_params
+         (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,bx',sx')` by
+        (qpat_x_assum `owner IN owners` mp_tac >> simp[Abbr `owners`]) >>
+      `ld_site_entry E owner bx tx sx` by
+        fs[lowerDloadLifetimeTheory.ld_site_entry_restrict] >>
+      `bx'=bx /\ sx'=sx` by
+        (qpat_assum `ld_frame_data _ _ (DRESTRICT E owners) _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [lowerDloadCoverageInvariantTheory.ld_frame_data_def]) >>
+         drule_all lowerDloadReturnRestoreTheory.ld_live_source_entry >> strip_tac >>
+         fs[lowerDloadLifetimeTheory.ld_site_entry_def] >> metis_tac[]) >>
+      qpat_x_assum `bx' = bx` SUBST_ALL_TAC >>
+      qpat_x_assum `sx' = sx` SUBST_ALL_TAC >>
+      qpat_x_assum `!owner bs bt sz. ld_live astail _ _ _ _ /\ _ ==> _` drule_all >> simp[]) >>
+  conj_tac
+  >- (simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_DRESTRICT] >>
+      rpt strip_tac >> Cases_on `MEM v sf.lf_inst.inst_outputs` >> simp[] >>
+      qpat_x_assum `!v. (case FLOOKUP sf.lf_tvar v of NONE => _ | SOME m => _) SUBSET _`
+        (qspec_then `v` ACCEPT_TAC)) >>
+  conj_tac
+  >- (simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_DRESTRICT] >>
+      rpt strip_tac >> Cases_on `MEM v sf.lf_inst.inst_outputs` >> simp[] >>
+      qpat_x_assum `!v. (case FLOOKUP tf.lf_tvar v of NONE => _ | SOME m => _) SUBSET _`
+        (qspec_then `v` ACCEPT_TAC)) >>
+  conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
+  conj_tac
+  >- (irule lowerDloadReturnRestoreTheory.ld_return_parameter_envelope >>
+      conj_tac >- (qexistsl [`astail`, `COMPL (set sf.lf_inst.inst_outputs)`] >>
+                    simp[Abbr `owners`]) >>
+      goal_assum (drule_at Any) >>
+      conj_tac
+      >- (qexistsl [`s`, `sf.lf_inst.inst_outputs`, `ret.iret_values`] >>
+          qpat_assum `bind_outputs _ _ (adopt_return_fmp ret _) = SOME s'` mp_tac >>
+          simp[adopt_return_fmp_def]) >>
+      qexistsl [`t`, `tf.lf_inst.inst_outputs`, `ret.iret_values`] >>
+      qpat_assum `bind_outputs _ _ (adopt_return_fmp ret _) = SOME t'` mp_tac >>
+      simp[adopt_return_fmp_def]) >>
+  drule ld_normal_data_companions >> strip_tac >>
+  irule lowerDloadReturnRestoreTheory.ld_return_global_companions >>
+  qexistsl [`sf.lf_state`, `tf.lf_state`, `s`, `t`,
+            `sf.lf_inst.inst_outputs`, `tf.lf_inst.inst_outputs`,
+            `ret.iret_values`, `ret.iret_values`] >>
+  asm_rewrite_tac [] >>
+  drule_all lowerDloadReturnRestoreTheory.ld_annotated_return_call_ctx >> simp[]
+QED
+
+Finalise ld_recursive_return_normal_prefix
