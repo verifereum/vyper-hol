@@ -9,7 +9,7 @@ Ancestors
 
 (* The existing store interface omits concrete allocation metadata. Retain
    its exact state here, so no recursive consumer must unfold MSTORE. *)
-Theorem scratch_store_state_counted_ptr[local]:
+Theorem scratch_store_state_counted_ptr:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb fn /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
