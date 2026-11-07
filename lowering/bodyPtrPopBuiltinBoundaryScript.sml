@@ -1,5 +1,5 @@
 Theory bodyPtrPopBuiltinBoundary
-Ancestors bodyPtrPopCompileDomain bodyPtrPopMathIntegration
+Ancestors bodyPtrPopCompileDomain bodyPtrPopMathIntegration bodyPtrPopSliceIntegration
   bodyPtrPopMaterialization bodyPtrPopArithmeticBoundary bodyPtrPopAllocationBoundary
   bodyPtrPopScalarAccessorBoundary bodyPtrPopMiscGuardBoundary
   bodyPtrPopPrecompileBoundary bodyPtrPopAggregateBoundary
@@ -271,3 +271,102 @@ Proof
   gvs[as_stack_val_def] >> drule_all pop_compile_binop_boundary >> simp[]
 QED
 
+
+Theorem pop_supported_builtin_bounded_arity:
+  (!opt bd. bi <> MakeArray opt bd) /\ supported_builtin_form tops rt bi args ==>
+  LENGTH args <= 4
+Proof
+  strip_tac >> Cases_on `args` >- simp[] >> rename1 `a::rest` >>
+  Cases_on `rest` >- simp[] >> rename1 `a::b::rest` >>
+  Cases_on `rest` >- simp[] >> rename1 `a::b::c::rest` >>
+  Cases_on `rest` >- simp[] >> rename1 `a::b::c::d::rest` >>
+  Cases_on `rest` >- simp[] >>
+  Cases_on `bi` >> gvs[supported_builtin_form_def]
+QED
+
+Theorem pop_builtin_unary_dispatch_boundary:
+  supported_builtin_form tops rt bi [a] /\
+  (!aty s v t. pop_comp_boundary s /\ cfn cenv aty a s = (v,t) ==>
+    pop_comp_boundary t) /\ pop_comp_boundary sa /\
+  compile_builtin_dispatch_body cfn cenv rt ty bi [a] sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  strip_tac >> Cases_on `bi` >> gvs[supported_builtin_form_def]
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _ _ = _`]
+  >- (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+        pop_make_array_dispatch_boundary >> disch_then irule >> simp[] >>
+      first_assum ACCEPT_TAC)
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (CalldataSlice _) _ _ = _`]
+  >- (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+        pop_slice_dispatch_boundary >> disch_then irule >> simp[] >>
+      rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  FIRST [drule_all pop_not_dispatch_boundary,
+         drule_all pop_acc_dispatch_boundary,
+         drule_all pop_uint2str_dispatch_boundary,
+         drule_all pop_wei_dispatch_boundary,
+         (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+            pop_single_math_dispatch_boundary >> disch_then irule >> simp[] >>
+          first_assum ACCEPT_TAC),
+         (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+            pop_hash_dispatch_boundary >> disch_then irule >> simp[] >>
+          first_assum ACCEPT_TAC)] >> simp[]
+QED
+
+Theorem pop_builtin_dispatch_boundary:
+  supported_builtin_form tops rt bi args /\
+  (!a aty s v t. MEM a args /\ pop_comp_boundary s /\
+    cfn cenv aty a s = (v,t) ==> pop_comp_boundary t) /\
+  pop_comp_boundary sa /\
+  compile_builtin_dispatch_body cfn cenv rt ty bi args sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  strip_tac >> Cases_on `?opt bd. bi = MakeArray opt bd`
+  >- (gvs[] >> drule_all pop_make_array_dispatch_boundary >> simp[]) >>
+  `!opt bd. bi <> MakeArray opt bd` by metis_tac[] >>
+  drule_all pop_supported_builtin_bounded_arity >> strip_tac >>
+  Cases_on `args`
+  >- (Cases_on `bi` >> gvs[supported_builtin_form_def] >>
+      drule_all pop_env_dispatch_boundary >> simp[]) >>
+  rename1 `a::rest` >> Cases_on `rest`
+  >- (gvs[] >> drule_all pop_builtin_unary_dispatch_boundary >> simp[]) >>
+  rename1 `a::b::rest` >> Cases_on `rest`
+  >- (Cases_on `bi` >> gvs[supported_builtin_form_def] >>
+      FIRST [(drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+                pop_bop_dispatch_boundary >> disch_then irule >> simp[] >>
+              conj_tac >- first_assum ACCEPT_TAC >>
+              qexistsl [`supported_integer_literal a`, `supported_nonnegative_literal b`] >> simp[]),
+             (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+                pop_powmod_dispatch_boundary >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC),
+             (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+                pop_ecadd_dispatch_boundary >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC),
+             (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+                pop_ecmul_dispatch_boundary >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC)] >> simp[]) >>
+  rename1 `a::b::c::rest` >> Cases_on `rest`
+  >- (Cases_on `bi` >> gvs[supported_builtin_form_def] >>
+      drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+        pop_triple_math_dispatch_boundary >> disch_then irule >> simp[] >>
+      first_assum ACCEPT_TAC) >>
+  rename1 `a::b::c::d::rest` >> Cases_on `rest` >> gvs[] >>
+  Cases_on `bi` >> gvs[supported_builtin_form_def] >>
+  drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+    pop_ecrecover_dispatch_boundary >> disch_then irule >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem pop_builtin_open_boundary:
+  !cfn.
+  (!cenv ty e sa r sb. pop_compile_domain tops e /\ pop_comp_boundary sa /\
+    cfn cenv ty e sa = (r,sb) ==> pop_comp_boundary sb) ==>
+  !cenv rt ty bi args sa r sb.
+  supported_builtin_form tops rt bi args /\
+  EVERY (supported_pure_expr tops) args /\ pop_comp_boundary sa /\
+  compile_builtin_dispatch_body cfn cenv rt ty bi args sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  rpt strip_tac >>
+  drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
+    pop_builtin_dispatch_boundary >> disch_then irule >> simp[] >>
+  reverse conj_tac >- (qexists `tops` >> simp[]) >>
+  rpt strip_tac >> drule_all pop_domain_pure_argument >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
