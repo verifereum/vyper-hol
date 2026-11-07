@@ -2,7 +2,8 @@
 
 Theory exprSimBopBytestring
 Ancestors
-  exprSimHashBoundary bytestringHashProps
+  exprSimHashBoundary bytestringHashProps gasSummary fragGasMode fragGasPath
+  gasOutcome gasSummaryCompose gasExemptCert
   emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomInst venomState
   valueEncoding ASCIInumbers words vyperTypeBytesCrypto venomMemProps
   exprSimUnopCompose
@@ -232,8 +233,9 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
   simp[mk_inst_def] >>
-  ASM_SIMP_TAC std_ss [Once step_inst_base_def, instruction_accfupds,
-       instruction_accessors, exec_pure2_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  simp_tac (srw_ss()) [instruction_accfupds, instruction_accessors] >>
+  ASM_SIMP_TAC std_ss [exec_pure2_def] >>
   simp[Once run_inst_seq_def] >>
   ASM_SIMP_TAC std_ss [Once step_inst_base_def, instruction_accfupds,
        instruction_accessors, exec_pure1_def,
@@ -331,6 +333,108 @@ Proof
   Cases_on `bytestring_literal_hash e2` >> gvs[] >>
   RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> metis_tac[]
 QED
+
+Theorem gas_summary_at_zero_prefix[local]:
+  gas_marked_path memory ctx func t 0 (OK t') /\
+  gas_summary_at memory (ctx,func) marks source (ee,t') Q R ==>
+  gas_summary_at memory (ctx,func) marks source (ee,t) Q R
+Proof
+  strip_tac >>
+  `t'.vs_gas_readings = t.vs_gas_readings` by
+    (drule gas_marked_path_ok_suffix >> simp[]) >>
+  gvs[gas_summary_at_def, gas_marked_exec_def] >>
+  metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem comparison_operand_outcome_suffix[local]:
+  expr_sim ctx func cenv cx ty e es /\
+  lower_value compile_expr cenv ty e sa = (op, sm) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!gs v ee t.
+     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+       (INL v, ee) /\ ee.gas_obs = [] /\
+     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
+     t.vs_current_bb = sm.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+     ?u. gas_marked_path F ctx func t 0 (OK u) /\
+       gas_outcome F (cx_tops cx) (ctx,func) (k v) (ee,u) Q R) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`sa`,`sm`,`op`,`s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      gvs[]
+      >- suspend "normal"
+      >> suspend "exit") >>
+  suspend "exempt"
+QED
+
+Resume comparison_operand_outcome_suffix[normal]:
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `!gs v ee t. _`
+    (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `v`,
+                  `es_end with gas_obs := []`, `t`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `gas_marked_exec F (ctx,func)
+     (bind (eval_expr cx e) (read_result cx))
+     (es,s0) marks (INL v) es_end (OK u)` by
+    (gvs[gas_marked_exec_def] >>
+     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rename1 `gas_summary_at F _ right _ _ _ _` >>
+      qexists_tac `marks ++ right` >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`res`,`es_end'`,`r`] >> simp[] >>
+      irule gas_marked_exec_bind_normal >>
+      qexistsl_tac [`es_end`,`u`,`v`] >> gvs[]) >>
+  rename1 `gas_exempt_cert _ _ _ _ _ right _ _` >>
+  qexists_tac `marks ++ right` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  irule gas_exempt_cert_bind_value >>
+  goal_assum (drule_at Any) >> BETA_TAC >>
+  gvs[ignore_bind_def]
+QED
+
+Resume comparison_operand_outcome_suffix[exit]:
+  Cases_on `res` >> gvs[] >>
+  rename1 `expr_exit (INR exc) r` >>
+  qexists_tac `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
+  irule gas_marked_exec_bind_exception >> simp[]
+QED
+
+Resume comparison_operand_outcome_suffix[exempt]:
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  irule gas_exempt_cert_error_value >>
+  first_assum ACCEPT_TAC
+QED
+Finalise comparison_operand_outcome_suffix
 
 Theorem compile_bop_bytestring_eqne_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
@@ -449,7 +553,16 @@ Proof
           `evaluate_type (get_tenv cx) (expr_type e1) =
              SOME (BaseTV (BytesT (Dynamic cap)))` by simp[vyperValueTheory.evaluate_type_def] >>
           drule_all comparison_hash_dynamic >> strip_tac >>
-          FAIL_TAC "dynamic hash probe") >>
+          irule_at Any gas_summary_at_zero_prefix >>
+          qpat_assum `gas_marked_path F ctx func t 0 (OK t')` (irule_at Any) >>
+          Cases_on `bytestring_literal_hash e2`
+          >- (gvs[] >>
+              `fn_has_code sh1 sm' func /\ fn_has_code sm' sh2 func` by
+                (imp_res_tac (cj 2 compile_expr_grows) >>
+                 imp_res_tac comparison_hash_shape >>
+                 metis_tac[fn_has_code_mid, cs_extends_refl]) >>
+              FAIL_TAC "second operand needs outcome continuation") >>
+          FAIL_TAC "second literal probe") >>
       FAIL_TAC "string hash probe") >>
   FAIL_TAC "literal probe"
 QED
