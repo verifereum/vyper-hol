@@ -4,7 +4,7 @@ Ancestors
   builtinBytes emitHelperProps freshWrites fragExec exprLoweringProps
   compileEnv emitHelper context venomInst venomState venomExecSemantics
   venomMemDefs words arithmetic list finite_map loweringPosts valueEncodingProps
-  exprSimLiteralBuffer exprSimHash stmtSimLogArgs stmtSimReturn
+  exprSimLiteralBuffer exprSimHash stmtSimLogArgs stmtSimReturn exprSimTypedAlloc
 
 Theorem slice_bytestring_src_shape:
   compile_bytestring_src src sa = ((len,data),sb) ==>

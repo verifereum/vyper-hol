@@ -66,7 +66,7 @@ Proof
   `~is_word_type (BaseT bt)` by
     (fs[compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
   `w2n p + val_footprint (BaseTV bt) v < dimword (:256)` by
-    (irule stmtSimReturnTheory.expr_val_at_bound >>
+    (irule exprSimTypedAllocTheory.expr_val_at_bound >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `w2n p + 32 + LENGTH bs < dimword (:256)` by decide_tac >>
   drule_all slice_capture_index_frame >> simp[Excl "LENGTH_MAP"] >> strip_tac >>
