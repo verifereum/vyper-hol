@@ -98,3 +98,32 @@ Proof
      drule residual_budget_wf_empty_inventory >> simp[] >> strip_tac >> ASM_SET_TAC[]) >>
  gvs[EVERY_FLAT, EVERY_MAP, combinTheory.o_DEF]
 QED
+
+Theorem analyzed_outgoing_exact_suffix_inventory:
+ !fn bb succ dfg cfg spillbase p j ps ops qs.
+ codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+ fn_reachable fn bb.bb_label /\
+ MEM succ (cfg_succs_of (cfg_analyze fn) bb.bb_label) /\
+ j+p <= LENGTH bb.bb_instructions /\
+ EVERY (\inst. inst.inst_opcode = PHI \/ is_param_opcode inst.inst_opcode)
+   (TAKE (j+p) bb.bb_instructions) /\
+ EVERY (\inst. inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode)
+   (DROP (j+p) bb.bb_instructions) /\
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (j+p)))) ps /\
+ (?m core. lineage_core m core ps /\ residual_budget_wf spillbase [] (ps with ps_stack := core)) /\
+ generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label F p
+   (LENGTH bb.bb_instructions) j (DROP (j+p) bb.bb_instructions) ps = SOME (ops,qs)
+ ==>
+ lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)))) qs /\
+ ?n tail. lineage_core n tail qs /\ EVERY is_var_operand tail /\
+   residual_budget_wf spillbase [] (qs with ps_stack := tail)
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all fnLineageInvEdgeFactsTheory.ready_outgoing_terminal_shape >> strip_tac >>
+ `j+p < LENGTH bb.bb_instructions` by
+   (Cases_on `j+p = LENGTH bb.bb_instructions` >-
+     (gvs[EVERY_MEM] >> metis_tac[LAST_MEM]) >> decide_tac) >>
+ `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+ mp_tac (Q.INST [`r` |-> `0`] (SPEC_ALL analyzed_exact_suffix_replay)) >>
+ (impl_tac >- (simp[] >> metis_tac[])) >> simp[] >> metis_tac[]
+QED
