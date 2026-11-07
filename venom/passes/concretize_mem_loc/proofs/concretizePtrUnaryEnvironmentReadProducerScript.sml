@@ -1,7 +1,7 @@
 Theory concretizePtrUnaryEnvironmentReadProducer
-Ancestors concretizePtrReturnTransport concretizePtrTaggedSupport concretizePtrValueTransport
+Ancestors concretizePtrRequestHistory concretizePtrReturnTransport concretizePtrTaggedSupport concretizePtrValueTransport
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
-  concretizePtrStructuralDispatch concretizePtrEnvironmentReadProducer
+  concretizePtrEnvironmentReadProducer
   concretizePtrOpaqueRetpc concretizePtrSourceOwnership
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape concretizePtrOperationalOpcodes
@@ -42,24 +42,31 @@ Proof
 QED
 
 Theorem ptr_unary_environment_execution[local]:
-  ptr_core_shared s t /\
+  ptr_history_content tn s t /\
   MEM inst.inst_opcode [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD; DLOAD] /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
   inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
       t' = update_var out v t
 Proof
-  strip_tac >> fs[MEM] >>
+  strip_tac >>
+  drule ptr_history_content_block_ctx >> strip_tac >>
+  drule ptr_history_content_tx_ctx >> strip_tac >>
+  drule ptr_history_content_call_ctx >> strip_tac >>
+  drule ptr_history_content_data_section >> strip_tac >>
+  drule ptr_environment_account_observations >> strip_tac >>
+  fs[MEM] >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >>
   simp[exec_read1_def, AllCaseEqs()] >> strip_tac >>
-  gvs[eval_operands_def, AllCaseEqs(), ptr_core_shared_def, ptr_shared_fields_def] >>
-  metis_tac[]
+  gvs[eval_operands_def, AllCaseEqs(), vfmStateTheory.lookup_account_def] >>
+  qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `value` >> simp[Abbr `value`, vfmStateTheory.account_empty_def]
 QED
 
 Theorem ptr_mixed_unary_environment_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
   EVERY (\op. ptr_nonopaque_operand f op /\ op_prov TG op = NONE /\
               op_taint tn op = {}) inst.inst_operands /\
   MEM inst.inst_opcode [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD; DLOAD] /\
@@ -73,7 +80,7 @@ Theorem ptr_mixed_unary_environment_execution[local]:
       f g (update_var out v s) t'
 Proof
   strip_tac >>
-  `s.vs_labels = t.vs_labels` by fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ptr_history_content_labels] >>
   `eval_operands inst.inst_operands s = eval_operands inst.inst_operands t` by
     (drule_all ptr_mixed_scalar_operands_equal >> simp[]) >>
   drule_all ptr_unary_environment_execution >>
@@ -186,7 +193,9 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >>
+          irule ptr_history_content_masks >> qexists_tac `a.po_taint` >>
+          fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>
