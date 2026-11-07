@@ -85,3 +85,25 @@ Proof
   mp_tac (Q.SPECL [`w2n d`, `w`, `s`] LENGTH_mstore_eq) >>
   simp[mstore_def]
 QED
+
+Theorem ifexp_single_copy_frame:
+  (!x. not_fresh_at cs x ==> x <> tmp) /\
+  t = (mstore b w (update_var tmp w (u with vs_inst_idx := j))) with vs_inst_idx := k ==>
+  copy_static t = copy_static u /\
+  (!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u) /\
+  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+  (!off len. off+len <= b \/ b+32 <= off ==>
+    mem_bytes_at off len t.vs_memory = mem_bytes_at off len u.vs_memory)
+Proof
+  strip_tac >> gvs[] >>
+  conj_tac
+  >- simp[exprSimStorageCopyTheory.copy_static_def, mstore_def, update_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[lookup_var_def, mstore_def, update_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[lookup_var_def]) >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`b`, `w`, `u`] LENGTH_mstore_eq) >> simp[mstore_def, update_var_def]) >>
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`off`, `len`, `b`, `w`, `u`] mstore_mem_bytes_at_disjoint) >>
+  simp[mstore_def, update_var_def]
+QED

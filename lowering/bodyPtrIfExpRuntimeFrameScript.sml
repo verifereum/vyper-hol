@@ -1,5 +1,5 @@
 Theory bodyPtrIfExpRuntimeFrame
-Ancestors immutableCopyExecution abiDecodeStaticProps
+Ancestors immutableCopyExecution abiDecodeStaticProps venomMemProps
   exprSimCopy exprSimStorageCopy valueEncodingProps venomState words arithmetic
   compileEnv finite_map bodyPtrIfExpAllocSource exprLoweringProps loweringHalt
 
@@ -38,6 +38,15 @@ Proof
   strip_tac >> fs[lookup_var_def]
 QED
 
+Theorem ifexp_runtime_frame_static:
+  copy_runtime_frame ca q cb (t with vs_inst_idx := q.vs_inst_idx) ==>
+  copy_static t = copy_static q /\
+  (!x. not_fresh_at ca x ==> lookup_var x t = lookup_var x q)
+Proof
+  simp[copy_runtime_frame_def, copy_static_def, lookup_var_def] >>
+  strip_tac >> simp[]
+QED
+
 Theorem ifexp_runtime_allocation_frame:
   stmt_state_rel ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sb /\
@@ -74,4 +83,14 @@ Proof
        mem_bytes_at b len (u with vs_inst_idx := SUC s.vs_inst_idx).vs_memory` by
         (irule ifexp_runtime_transfers_exterior >> simp[]) >> gvs[]) >>
   gvs[]
+QED
+
+Theorem ifexp_runtime_transfers_length:
+  !n off s. LENGTH s.vs_memory <=
+    LENGTH (immutable_transfers F F a d n off s).vs_memory
+Proof
+  Induct >- simp[immutable_transfers_def] >> rpt gen_tac >>
+  simp[Once immutable_transfers_def] >>
+  first_x_assum (qspecl_then [`off+32`, `immutable_word_transfer F F a d off s`] mp_tac) >>
+  simp[immutable_word_transfer_fields, LENGTH_mstore_eq]
 QED

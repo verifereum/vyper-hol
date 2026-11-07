@@ -1,6 +1,10 @@
 Theory bodyPtrIfExpStorageMaterialize
 Ancestors bodyPtrIfExpStorageCaller bodyPtrIfExpStorageSource
   bodyPtrIfExpStorageCompiler bodyPtrIfExpStorageExit bodyPtrIfExpStorageSingle pred_set
+  bodyPtrIfExpActiveCopyPost bodyPtrIfExpAllocSource exprSimStorageCopy
+  loweringPosts compileEnv venomState finite_map valueEncodingProps
+  valueEncodingTyping bodyPtrIfExpBytesInputs bodyPtrIfExpStorageInvariant slotCopyExecution
+  copyExecution exprLoweringProps exprSimCopy loweringHalt
 
 Theorem ifexp_ensure_memory_storage_loop:
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
@@ -40,7 +44,8 @@ Theorem ifexp_ensure_memory_storage_loop:
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
     t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t)
 Proof
   strip_tac >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_storage_arm_source >>
@@ -68,11 +73,47 @@ Proof
   drule ifexp_copy_ptr_exit >> simp[] >>
   disch_then (qspecl_then [`v`, `tvt`, `get_storage cx ee (pp.ptr_location = LocTransient)`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  suspend "semantic"
+QED
+
+Resume ifexp_ensure_memory_storage_loop[semantic]:
+  markerLib.RESUME_TAC >>
+  drule_all ifexp_arm_annotation_typed >> strip_tac >>
+  `val_wf tvt v /\ val_footprint tvt v <= 32*n` by
+    (gvs[] >> metis_tac[value_has_type_val_wf, exprSimPropsTheory.val_footprint_le]) >>
+  drule ifexp_copy_ptr_ordinary_frame >> strip_tac >>
+  `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u` by
+    (rpt strip_tac >>
+     qpat_x_assum `ifexp_copy_ptr_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[ifexp_copy_ptr_inv_def, slot_copy_inv_def] >> strip_tac >>
+     qpat_x_assum `!op. slot_copy_external cs op ==> _`
+       (qspec_then `Var x` mp_tac) >>
+     simp[ifexp_copy_not_fresh_external, eval_operand_def, lookup_var_def]) >>
+  `eval_operand (Var out) u = SOME d` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     qpat_x_assum `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u`
+       (qspec_then `out` mp_tac) >> gvs[eval_operand_def, lookup_var_def]) >>
+  `val_in_memory tvt v (w2n d) t.vs_memory` by
+    (qpat_x_assum `!m. mem_agree_outside tn'.t_mem _ m ==> _`
+      (qspec_then `t.vs_memory` mp_tac) >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  suspend "post"
+QED
+
+Resume ifexp_ensure_memory_storage_loop[post]:
+  markerLib.RESUME_TAC >>
+  `~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t` by
+    (strip_tac >> irule ifexp_allocated_copy_post >> simp[] >>
+     qexistsl_tac [`buf`, `cs`, `out`, `raw`, `s`, `sb`, `32*n`, `u`, `LocatedValue tag pp`] >>
+     gvs[copy_static_def, slot_copy_final_def] >>
+     rule_assum_tac (SIMP_RULE (srw_ss()) []) >> simp[] >> first_assum ACCEPT_TAC) >>
   qexists_tac `d` >> qexists_tac `t` >> simp[] >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >>
   simp[copyExecutionTheory.slot_copy_final_def] >>
-  gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]
+  gvs[] >> rule_assum_tac (SIMP_RULE (srw_ss()) [slot_copy_final_def]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Finalise ifexp_ensure_memory_storage_loop
 
 (* Both compiler branches finish at the end of the current instruction list. *)
 Theorem ifexp_ensure_memory_storage:
@@ -114,7 +155,8 @@ Theorem ifexp_ensure_memory_storage:
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
     t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `n = 1`

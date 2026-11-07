@@ -2,6 +2,8 @@ Theory bodyPtrIfExpStorageSingle
 Ancestors bodyPtrIfExpMaterializeSingle bodyPtrIfExpStorageSupplier
   bodyPtrIfExpStorageAllocation bodyPtrIfExpStorageSource pred_set
   context compileEnv emitHelper fragExec loweringHalt bodyPtrIfExpStorageAllocationFrame
+  bodyPtrIfExpSingleCopyPost bodyPtrIfExpActiveCopyPost bodyPtrIfExpAllocSource exprSimStorageCopy valueEncodingTyping
+  bodyPtrIfExpBytesInputs loweringPosts venomState finite_map valueEncodingProps
 
 (* One-slot representations need not be word types.  Use source decoding
    and translated taint, exactly as for the nonsingleton loop. *)
@@ -99,7 +101,8 @@ Theorem ifexp_ensure_memory_storage_single:
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
     t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_storage_arm_source >>
@@ -239,6 +242,50 @@ Resume ifexp_ensure_memory_storage_single[ordinary]:
   drule_at (Pat `t = (mstore _ _ _) with vs_inst_idx := _`)
     ifexp_storage_single_allocation_frame >>
   disch_then drule_all >> strip_tac >>
+  suspend "semantic"
+QED
+
+Resume ifexp_ensure_memory_storage_single[semantic]:
+  markerLib.RESUME_TAC >>
+  drule_all ifexp_arm_annotation_typed >> strip_tac >>
+  `val_wf tvt v /\ val_footprint tvt v <= 32` by
+    (metis_tac[value_has_type_val_wf, exprSimPropsTheory.val_footprint_le,
+       optionTheory.SOME_11]) >>
+  `val_in_memory tvt v (w2n d) u'.vs_memory` by
+    (qpat_x_assum `!m. mem_agree_outside tn2.t_mem _ m ==> _`
+       (qspec_then `u'.vs_memory` mp_tac) >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  `!x. not_fresh_at cs x ==> x <> out'` by
+    (qpat_x_assum `out' = _` SUBST1_TAC >> simp[not_fresh_at_def]) >>
+  drule_at (Pat `t = (mstore _ _ _) with vs_inst_idx := _`)
+    (Q.INST [`cs` |-> `cs`] ifexp_single_copy_frame) >>
+  disch_then drule_all >> strip_tac >>
+  `cs.cs_next_id <= sd.cs_next_id` by
+    (qpat_x_assum `(do loaded <- emit_op _ _; _ od) cs = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[]) >>
+  suspend "expr_post"
+QED
+
+Resume ifexp_ensure_memory_storage_single[expr_post]:
+  markerLib.RESUME_TAC >>
+  `tv = tvt` by metis_tac[optionTheory.SOME_11] >>
+  `!x. not_fresh_at cs x ==> x <> out'` by
+    (qpat_x_assum `out' = _` SUBST1_TAC >> simp[not_fresh_at_def]) >>
+  `~is_word_type (expr_type e) ==>
+    expr_post ctx fn ce cx e es sa sd s0 ee v dst
+      (u' with vs_inst_idx := LENGTH sd.cs_current_insts)` by
+    (strip_tac >> irule ifexp_single_allocated_copy_post >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`buf`, `cs`, `d`, `LENGTH cs.cs_current_insts`,
+       `LENGTH sd.cs_current_insts`, `out`, `raw`, `s`, `sb`, `out'`, `tvt`,
+       `u`, `LocatedValue tag pp`, `w`] >>
+     qpat_x_assum `eval_operand (Var out) (u' with vs_inst_idx := _) = SOME d` mp_tac >>
+     qpat_x_assum `val_in_memory tvt v (w2n d) u'.vs_memory` mp_tac >>
+     simp[not_fresh_at_def]) >>
   qexistsl_tac [`d`, `u' with vs_inst_idx := LENGTH sd.cs_current_insts`, `G2`, `tn2`] >>
   simp[NoAsms] >>
   conj_tac >- (pure_rewrite_tac[venomStateTheory.eval_operand_def] >> first_assum ACCEPT_TAC) >>
@@ -254,7 +301,9 @@ Resume ifexp_ensure_memory_storage_single[ordinary]:
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `!name pos len. local_region _ _ _ _ _ _ ==> _` drule_all >> decide_tac) >>
   rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> asm_rewrite_tac [] >>
+  qpat_x_assum `~is_word_type _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[]
 QED
 
 Finalise ifexp_ensure_memory_storage_single

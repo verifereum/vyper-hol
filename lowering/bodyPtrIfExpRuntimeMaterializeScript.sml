@@ -2,6 +2,8 @@ Theory bodyPtrIfExpRuntimeMaterialize
 Ancestors bodyPtrIfExpRuntimeSource bodyPtrIfExpRuntimeAllocated
   bodyPtrIfExpRuntimeContent context compileEnv fragExec loweringHalt
   immutableCopyExecution exprSimCopy exprLoweringProps pred_set
+  bodyPtrIfExpActiveCopyPost bodyPtrIfExpRuntimeFrame exprSimStorageCopy
+  loweringPosts compileEnv venomState finite_map
 
 Theorem ifexp_ensure_memory_runtime_parts[local]:
   compile_ensure_in_memory src LocCode capacity n F imm sb = (dst,sd) /\
@@ -55,7 +57,8 @@ Theorem ifexp_ensure_memory_runtime:
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
     (!m. mem_agree_outside tt.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
     ptr_covers H tt out t (type_memory_bytes ce (expr_type e)) /\
-    ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa G0 tn0 s0 H tt
+    ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa G0 tn0 s0 H tt /\
+    (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t)
 Proof
   strip_tac >> drule_all ifexp_runtime_arm_source >> strip_tac >>
   `compile_ensure_in_memory pp.ptr_operand LocCode
@@ -78,6 +81,44 @@ Resume ifexp_ensure_memory_runtime[content]:
     (qpat_x_assum `tt.t_mem = _` (fn th => rewrite_tac[th]) >>
      simp[IN_DIFF, GSPECIFICATION] >> metis_tac[]) >>
   drule_all ifexp_runtime_copy_robust >> strip_tac >>
+  suspend "semantic"
+QED
+
+Resume ifexp_ensure_memory_runtime[semantic]:
+  drule_all copy_runtime_contents >> strip_tac >>
+  drule_all ifexp_runtime_frame_static >> strip_tac >>
+  `LENGTH q.vs_memory <= LENGTH t.vs_memory` by
+    (qpat_x_assum `t.vs_memory = (immutable_transfers _ _ _ _ _ _ _).vs_memory`
+       (fn th => rewrite_tac[th]) >> irule ifexp_runtime_transfers_length) >>
+  `cs.cs_next_id <= sd.cs_next_id` by
+    (`ci_mono cs sd` by
+       (mp_tac ci_mono_compile_imm_copy_to_memory >> metis_tac[pairTheory.SND]) >>
+     fs[ci_mono_def, cs_extends_def]) >>
+  `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u` by
+    (rpt strip_tac >> qpat_x_assum `!x. not_fresh_at cs x ==> _` drule >>
+     simp[lookup_var_def]) >>
+  suspend "post"
+QED
+
+Resume ifexp_ensure_memory_runtime[post]:
+  `~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t` by
+    (strip_tac >> irule ifexp_allocated_copy_post >>
+     simp[] >>
+     qexistsl_tac [`buf`, `cs`, `d`, `out`, `raw`, `s`, `sb`, `32*n`, `u`,
+       `LocatedValue tag pp`] >>
+     simp[copy_static_def, eval_operand_def, lookup_var_def] >>
+     conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         mp_tac (Q.SPECL [`n`, `0`, `q`] ifexp_runtime_transfers_exterior) >>
+         simp[] >> disch_then (qspecl_then [`b`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
+     conj_tac
+     >- (mp_tac (Q.SPECL [`n`, `0`, `q`] ifexp_runtime_transfers_length) >> simp[]) >>
+     conj_tac
+     >- (drule compile_alloc_buffer_parts >> strip_tac >>
+         qpat_x_assum `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u`
+           (qspec_then `out` mp_tac) >>
+         gvs[lookup_var_def]) >>
+     qpat_x_assum `val_in_memory ty v (w2n d) t.vs_memory` mp_tac >> simp[]) >>
   qexistsl_tac [`out`, `d`, `ty`, `t`, `H`, `tt`] >>
   simp[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
