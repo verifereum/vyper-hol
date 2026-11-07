@@ -2942,6 +2942,24 @@ Proof
   metis_tac[immutable_memory_bytes_inverse]
 QED
 
+(* A default dynamic array cannot supply a nonempty pop, even through a path. *)
+Theorem immutable_default_dynamic_pop_empty:
+  !tv cap path vs.
+    evaluate_subscripts (ArrayTV tv (Dynamic cap))
+      (default_value (ArrayTV tv (Dynamic cap))) path =
+        INL (ArrayV (DynArrayV vs)) ==> vs = []
+Proof
+  rpt gen_tac >> Cases_on `path`
+  >- simp[vyperValueTheory.default_value_def, evaluate_subscripts_def] >>
+  Cases_on `h` >> simp[vyperValueTheory.default_value_def]
+  >- (rename1 `ValueSubscript idx` >> Cases_on `idx` >>
+      simp[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+           listTheory.oEL_def] >> Cases_on `0 <= i` >> simp[]) >>
+  simp[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
+       listTheory.oEL_def] >>
+  Cases_on `0 <= i` >> simp[]
+QED
+
 (* RESIDUAL, FALSE as stated until ImmutablePlace reads get a popped
    history as MemoryPlace's have (the semantics ledger item shared with
    the array piece's ancestor-pop residual): a nested pop on an immutable
