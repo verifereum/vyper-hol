@@ -119,3 +119,96 @@ Proof
       first_assum ACCEPT_TAC) >>
   disj2_tac >> disj1_tac >> qexistsl_tac [`n`,`b`,`sz`] >> simp[]
 QED
+
+Theorem memory_readonly_expr_post:
+  expr_post ctx fn cenv cx e es sa sm s0 es1 v x s /\
+  stmt_state_rel ctx fn cenv cx es1 t /\
+  eval_operand x s = SOME p /\ eval_operand op t = SOME p /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+  sm.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var /\
+  local_ptrs_reserved cenv sm /\
+  (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) ==>
+  expr_post ctx fn cenv cx e es sa sb s0 es1 v op t
+Proof
+  strip_tac >>
+  `local_ptrs_rel fn cenv es1.scopes s` by
+    gvs[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+  `expr_val_at cenv cx (expr_type e) sa sb es1 v op t` by
+    (irule memory_readonly_val_at >> goal_assum (drule_at Any) >>
+     gvs[expr_post_def] >> metis_tac[]) >>
+  `expr_val_rel cx (expr_type e) v op t` by
+    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  gvs[expr_post_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x'` by
+        (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      metis_tac[]) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+QED
+
+Theorem memory_expr_post_compose:
+  expr_post ctx fn cenv cx e1 es sa sm s0 es1 v1 x s1 /\
+  expr_post ctx fn cenv cx e es1 sm sb s1 es1 v op t /\
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
+  expr_post ctx fn cenv cx e es sa sb s0 es1 v op t
+Proof
+  strip_tac >>
+  `wb_frame cenv es sa s0 s1` by
+    (gvs[expr_post_def, wb_frame_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es1 sm s1 t` by
+    (gvs[expr_post_def, wb_frame_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all exprSimWordArgsTheory.wb_frame_trans >> strip_tac >>
+  gvs[expr_post_def, wb_frame_def] >>
+  reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+  irule exprSimPropsTheory.expr_val_at_start_mono >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem memory_covered_ptr_val:
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  lookup_var src s = SOME w /\ ptr_covers G tn src s sz /\
+  val_store_size tv v <= sz /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) ==>
+  ptr_val_ok cx ty v (Var src) G tn s
+Proof
+  simp[ptr_val_ok_def, ptr_mem_ok_def, ptr_covers_def,
+       venomStateTheory.eval_operand_def] >> rpt strip_tac >>
+  gvs[] >> goal_assum (drule_at Any) >> simp[] >> decide_tac
+QED
+
+Theorem memory_widen_destination_post:
+  compile_bytestring_widen_copy d x k sm = (op,sb) /\
+  0 < k /\ k <= d /\ d < dimword(:256) /\
+  fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
+  expr_post ctx fn cenv cx e es sa sm s0 es1 v x s /\
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sm /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
+  is_bytestring_type (expr_type e) /\ is_bytestring_type dst /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tv2 /\ value_has_type tv v /\
+  val_wf tv v /\ val_in_memory tv v (w2n p) s.vs_memory /\
+  val_footprint tv v <= k /\ convert_result cx (expr_type e) dst v = INL v' ==>
+  ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
+    expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e])
+      es sa sb s0 es1 v' op t
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx fn cenv cx es1 s` by gvs[expr_post_def] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  drule_all widen_copy_actual_post >> strip_tac >>
+  `expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e])
+     es1 sm sb s es1 v' op t` by
+    (irule memory_conversion_expr_post >>
+     simp[vyperASTTheory.expr_type_def] >>
+     qexistsl_tac [`e`,`tv`,`v`] >> simp[]) >>
+  qexists_tac `t` >> simp[] >> irule memory_expr_post_compose >>
+  simp[SF SFY_ss]
+QED
