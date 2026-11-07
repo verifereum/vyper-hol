@@ -770,3 +770,83 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[supported_pure_immutable_mutual]
 QED
+
+Theorem immutable_target_type_extend_local:
+  type_place_target (extend_local env id ty assignable) (TopLevelNameTarget (src,name)) =
+  type_place_target env (TopLevelNameTarget (src,name))
+Proof
+  simp[well_typed_expr_def, extend_local_def]
+QED
+
+Theorem immutable_target_type_stmt:
+  type_stmt env ret_ty stmt = SOME env' ==>
+  type_place_target env' (TopLevelNameTarget (src,name)) =
+  type_place_target env (TopLevelNameTarget (src,name))
+Proof
+  strip_tac >> drule vyperTypeEnvExtensionTheory.type_stmt_preserve_nonlocal_fields >>
+  strip_tac >> simp[well_typed_expr_def]
+QED
+
+Theorem immutable_target_type_stmts:
+  type_stmts env ret_ty stmts = SOME env' ==>
+  type_place_target env' (TopLevelNameTarget (src,name)) =
+  type_place_target env (TopLevelNameTarget (src,name))
+Proof
+  strip_tac >> drule vyperTypeEnvExtensionTheory.type_stmts_preserve_nonlocal_fields >>
+  strip_tac >> simp[well_typed_expr_def]
+QED
+
+Theorem finally_pop_immutable_frame:
+  (!s r t. action s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+  finally action pop_scope es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >>
+  gvs[finally_def, ignore_bind_def, bind_def, pop_scope_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >>
+  gvs[lookup_immutable_def]
+QED
+
+Theorem loop_action_immutable_frame:
+  !cx body src name es res es'.
+  (!s r t. eval_stmts cx body s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+  try (do eval_stmts cx body; return F od) handle_loop_exception es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[try_def, ignore_bind_def, bind_def, return_def, AllCaseEqs(),
+      handle_loop_exception_def, raise_def] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  Cases_on `e = ContinueException` >> Cases_on `e = BreakException` >>
+  gvs[return_def, raise_def]
+QED
+
+Theorem eval_for_immutable_frame:
+  !vs cx tyv id stmts src name es res es'.
+  (!s r t. eval_stmts cx stmts s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+  eval_for cx tyv id stmts vs es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Induct_on `vs` >> simp[Once evaluate_def, return_def] >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `finally action pop_scope` >>
+  `!s r t. action s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name` by
+    (rpt gen_tac >> simp[Abbr `action`] >> strip_tac >>
+     irule loop_action_immutable_frame >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `ignore_bind _ _ es = _` mp_tac >>
+  simp[push_scope_with_var_def, ignore_bind_def, bind_def, return_def,
+       AllCaseEqs()] >> strip_tac >>
+  imp_res_tac finally_pop_immutable_frame >>
+  gvs[AllCaseEqs(), return_def] >>
+  `!f. lookup_immutable cx (es with scopes updated_by f) src name =
+     lookup_immutable cx es src name` by simp[lookup_immutable_def] >>
+  gvs[] >>~- ([`(if broke then _ else _) _ = _`],
+    Cases_on `broke` >> gvs[return_def] >>
+    first_x_assum drule_all >> simp[]) >>
+  gvs[raise_def]
+QED
