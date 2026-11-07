@@ -145,3 +145,9 @@ holbuild -j4 build loweringMemEntryReachTheory
 
 - The `calldataDynOwnedTheory` blocker is fixed by the owner: `calldata_owned_header_step[ownership_frame]` (lowering/calldataDynOwnedScript.sml:2593) timed out in `SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace`; it now uses `SIMP_RULE (pure_ss ++ boolSimps.BOOL_ss) [LET_THM]` like `calldata_owned_counter_update`. `holbuild -j2 build calldataDynOwnedTheory` built it on the fleet: `remote vyper-hol:calldataDynOwnedTheory: done`, `holbuild finished in 1.387s`, exit 0.
 - Resume the retained helper-closure audit and the main proof from there.
+
+## Scope of repairs (owner note, 2026-11-07 20:30 UTC)
+
+- Every theory added on this branch relative to the s3 tip (`git diff --name-only --diff-filter=A origin/bot/opus/seq-692-s3-mem-safety...HEAD -- lowering/`, e.g. `calldataFiniteEndpointsScript.sml`) is this task's helper: you may repair or restate it freely, including step-timeout repairs such as the `fs[EVERY_MEM]` at `calldataFiniteEndpointsScript.sml:94` (`calldata_valid_bytes_owned_endpoint[sequence]`). Rewrite with the specific EVERY fact instead of full-context `fs[EVERY_MEM]`.
+- In the existing theories this branch already modifies (`actualRegistrationCode`, `calldataDynOwned`, `entryCompileIntervals`, `entryRejectCode`, `entrySourcePackages`, `helperBoundLabels`, `intCallCallee`), proof-text repairs for step timeouts are allowed; their theorem statements stay as they are.
+- Still forbidden: changing tactic timeouts, new admissions, and edits to any other existing theory.
