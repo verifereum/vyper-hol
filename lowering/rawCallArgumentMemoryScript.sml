@@ -21,7 +21,7 @@ Theorem raw_call_mem_value_bind:
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted ==>
     gas_outcome T (cx_tops cx) (ctx,func) (k v) (ee,t) Q R) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
@@ -29,6 +29,7 @@ Proof
   strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_mem_def] >> disch_then drule_all >> strip_tac >>
+  drule raw_call_outcome_normal >> strip_tac >>
   irule raw_call_value_outcome_bind >> goal_assum (drule_at Any) >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> Cases_on `rr` >> gvs[expr_exit_def] >> metis_tac[]) >>

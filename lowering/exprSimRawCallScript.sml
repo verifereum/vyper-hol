@@ -608,7 +608,7 @@ Proof
   fs[ignore_bind_def] >> goal_assum (drule_at Any)
 QED
 
-Theorem raw_call_outcome_normal[local]:
+Theorem raw_call_outcome_normal:
   gas_outcome memory tops (ctx,func) a (es,s0) P E ==>
   gas_outcome memory tops (ctx,func) a (es,s0)
     (\res ee t. P res ee t /\ ~t.vs_halted) E
@@ -836,7 +836,7 @@ Proof
   strip_tac >> simp[Once evaluate_def, bind_def]
 QED
 
-Theorem raw_call_pre_operands[local]:
+Theorem raw_call_pre_operands:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
   ?a d kws n. args = a::d::kws /\
     expr_type a = BaseT AddressT /\
@@ -866,7 +866,7 @@ Proof
   strip_tac >> gvs[supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
-Theorem expr_body_pre_raw_call_arg[local]:
+Theorem expr_body_pre_raw_call_arg:
   !cenv cx env ann flags args dflt e es es'.
     expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
     MEM e args /\ expr_sim_inv cenv cx env es' ==>
