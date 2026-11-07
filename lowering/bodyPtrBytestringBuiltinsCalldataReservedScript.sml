@@ -3,6 +3,7 @@ Ancestors
   bodyPtrBytestringBuiltinsExternalSlice exprSimWordBuiltins exprLoweringProps
   venomState venomExecSemantics emitHelper compileEnv context fragExec
   words list rich_list venomInst emitHelperProps
+  stmtSimAppendStorageCompose stateFrame
 
 (* Unlike global runtime freshness, reservation of the named start operand
    is guaranteed by lower_value_word_shape. Unrelated frontier variables
@@ -33,4 +34,18 @@ Proof
     (irule external_size_step >> simp[]) >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var] >>
   irule eval_operand_update_not_fresh >> qexists_tac `sa` >> simp[]
+QED
+
+Theorem stmt_state_rel_reserved_vars_update:
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  t = s with vs_vars := t.vs_vars /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+    lookup_var x t = SOME w) ==>
+  stmt_state_rel ctx fn cenv cx es t
+Proof
+  strip_tac >>
+  `state_frame t = state_frame s` by
+    (qpat_x_assum `t = _` SUBST1_TAC >> simp[state_frame_def]) >>
+  irule stmt_state_rel_reserved_frame >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
