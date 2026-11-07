@@ -491,6 +491,65 @@ Proof
   gvs[] >> drule_all write_place_divergent_attrs >> simp[]
 QED
 
+Theorem scope_projection_observe[local]:
+  !s t root f.
+    MAP (\sc. FLOOKUP sc root) t.scopes = MAP (\sc. FLOOKUP sc root) s.scopes ==>
+    MAP (\sc. f (FLOOKUP sc root)) t.scopes =
+    MAP (\sc. f (FLOOKUP sc root)) s.scopes
+Proof
+  rpt strip_tac >>
+  simp[GSYM combinTheory.o_DEF, GSYM MAP_MAP_o]
+QED
+
+Theorem type_stmt_reference_transport[local]:
+  !env ret_ty stmt next ref root.
+    type_stmt env ret_ty stmt = SOME next /\
+    env.type_defs = ref.type_defs /\
+    FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
+    root IN FDOM ref.var_types ==>
+    next.type_defs = ref.type_defs /\
+    FLOOKUP next.var_types root = FLOOKUP ref.var_types root /\
+    root IN FDOM next.var_types
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule vyperTypeEnvExtensionTheory.type_stmt_preserve_nonlocal_fields >>
+  strip_tac >> gvs[] >>
+  Cases_on `FLOOKUP ref.var_types root`
+  >- gvs[FLOOKUP_DEF] >>
+  drule vyperTypeEnvExtensionTheory.type_stmt_var_types_preserve >>
+  disch_then drule >> simp[] >> gvs[FLOOKUP_DEF]
+QED
+
+Theorem typed_target_write_attribute_projection[local]:
+  !ref e et bd p root xs env w vt tops bindings cx v es res es'.
+    well_typed_expr ref e /\ expr_type e = ArrayT et bd /\
+    expr_place e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+    env.type_defs = ref.type_defs /\
+    FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
+    type_place_target env w = SOME vt /\ ~place_contains w p /\
+    (supported_target tops bindings w \/
+      (?pt. supported_target_info tops bindings w = SOME pt)) /\
+    ~supported_target_exists expr_internal_call_root w /\
+    (do dest <- eval_target_place cx w; write_place cx dest v od) es = (res,es') ==>
+    MAP (\sc. OPTION_MAP
+      (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+      (FLOOKUP sc root)) es'.scopes =
+    MAP (\sc. OPTION_MAP
+      (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+      (FLOOKUP sc root)) es.scopes /\
+    LENGTH es'.scopes = LENGTH es.scopes
+Proof
+  rpt gen_tac >> strip_tac >>
+  (gvs[bind_def, AllCaseEqs(), raise_def] >>
+   imp_res_tac supported_any_target_place_scopes >> gvs[] >>
+   rename1 `write_place cx dest v mid = (res,es')` >>
+   Cases_on `?path. dest = MemoryPlace root path`
+   >- (gvs[] >> drule_all typed_memory_write_attribute_projection >> simp[]) >>
+   `!r path. dest = MemoryPlace r path ==> r <> root` by metis_tac[] >>
+   drule_all write_guarded_place_projection >> strip_tac >> simp[] >>
+   irule scope_projection_observe >> simp[])
+QED
+
 Theorem typed_stmts_place_frame:
   supported_stmts tops bindings stmts /\
   type_stmts env ret_ty stmts = SOME env' /\
