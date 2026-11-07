@@ -840,7 +840,7 @@ Proof
   qexists_tac `u` >> simp[] >>
   irule exprSimWordArgsTheory.wb_frame_trans >>
   goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
+  reverse conj_tac >- (qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
   goal_assum (drule_at Any)
 QED
 
