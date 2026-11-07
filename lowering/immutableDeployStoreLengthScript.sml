@@ -10,8 +10,8 @@ Theorem immutable_store_step_memory_length[local]:
 Proof
   simp[listTheory.MEM] >> strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
-  simp[step_inst_base_def, exec_pure2_def, exec_read1_def,
-       AllCaseEqs()] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def, istore_def,
     LENGTH_mstore_eq]
 QED
