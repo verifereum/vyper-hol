@@ -502,7 +502,7 @@ Proof
   reverse conj_tac >- metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   qexists_tac `LENGTH (collect_phis bb.bb_instructions) - (i + 1)` >>
   `i + 1 <= LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
-  simp[] >> reverse conj_tac >- metis_tac[collect_phis_length_bound] >>
+  simp[] >> reverse conj_tac >- metis_tac[current_collect_phis_length] >>
   rpt strip_tac >>
   `j < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
   `i < j` by decide_tac >>
@@ -921,7 +921,7 @@ Proof
   qx_gen_tac `p` >> strip_tac >> simp[inst_defs_def] >>
   irule ready_output_other_location >> simp[] >>
   qexistsl_tac [`bb`, `fn`, `k`] >> simp[] >>
-  mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac
+  mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac
 QED
 
 Theorem regional_phi_output_exit_live:
@@ -940,7 +940,7 @@ Proof
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
     metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
-  qexists_tac `LENGTH bb.bb_instructions` >> simp[collect_phis_length_bound] >>
+  qexists_tac `LENGTH bb.bb_instructions` >> simp[current_collect_phis_length] >>
   metis_tac[regional_phi_output_no_suffix_def]
 QED
 
@@ -991,7 +991,7 @@ Proof
   irule ready_output_other_location >> simp[] >>
   qexistsl_tac [`db`, `fn`, `k`] >> simp[] >>
   `k < LENGTH db.bb_instructions` by
-    (mp_tac (Q.SPEC `db.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `db.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   metis_tac[lookup_block_MEM, lookup_block_label]
 QED
 
@@ -1041,7 +1041,7 @@ Proof
   qexistsl_tac [`fb`, `first`] >> gvs[Once is_fn_path_def] >>
   qx_gen_tac `p` >> disch_tac >>
   irule regional_phi_other_block_no_defs >> simp[] >>
-  (conj_tac >- (mp_tac (Q.SPEC `fb.bb_instructions` collect_phis_length_bound) >> decide_tac)) >>
+  (conj_tac >- (mp_tac (Q.SPEC `fb.bb_instructions` current_collect_phis_length) >> decide_tac)) >>
   qexistsl_tac [`db`, `fn`, `first`, `phi`] >> simp[]
 QED
 
@@ -1115,7 +1115,7 @@ Proof
     (irule regional_phi_output_dominated_boundary_live >> simp[] >>
      (conj_tac >- (qexists_tac `defphi` >> simp[])) >>
      qexistsl_tac [`LENGTH pb.bb_instructions`, `pb`] >>
-     simp[collect_phis_length_bound]) >>
+     simp[current_collect_phis_length]) >>
   `phi_block_ready (liveness_analyze fn) bb` by metis_tac[ready_phi_block] >>
   gvs[phi_block_ready_def, EVERY_MEM] >> metis_tac[]
 QED
@@ -1485,7 +1485,7 @@ Proof
        metis_tac[regional_phi_output_not_phi_source] >>
      gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
   `i < LENGTH bb.bb_instructions` by
-    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `MEM out (FLAT (MAP (\p. p.inst_outputs) (DROP i bb.bb_instructions)))` by
     (simp[MEM_FLAT, MEM_MAP] >>
      qexists_tac `(EL i bb.bb_instructions).inst_outputs` >> simp[] >>
@@ -1521,7 +1521,7 @@ Proof
   Cases_on `v = out` >- metis_tac[] >>
   `~MEM v (inst_defs (EL i bb.bb_instructions))` by simp[inst_defs_def] >>
   `i < LENGTH bb.bb_instructions` by
-    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
     (irule (SRULE [LET_THM] live_vars_at_propagate) >> simp[arithmeticTheory.ADD1] >>
      metis_tac[fn_reachable_in_cfg_dfs_pre, codegen_ready_fn_def]) >>
@@ -1702,7 +1702,7 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- (rpt strip_tac >> irule regional_selected_phi_next_coverage >> metis_tac[]) >>
   `i < LENGTH bb.bb_instructions` by
-    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `~MEM out (FLAT (MAP (\p. p.inst_outputs) (DROP (i+1) bb.bb_instructions)))` by
     metis_tac[regional_indexed_output_not_later] >>
   `normalize_operand dfg [] (Var out) = Var out` by
@@ -1735,7 +1735,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
   `i < LENGTH bb.bb_instructions` by
-    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `DROP i bb.bb_instructions = EL i bb.bb_instructions :: DROP (i+1) bb.bb_instructions` by
     metis_tac[DROP_CONS_EL, arithmeticTheory.ADD1] >>
   `(EL i bb.bb_instructions).inst_opcode = PHI` by
@@ -4322,7 +4322,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
   `i < LENGTH bb.bb_instructions` by
-    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `DROP i bb.bb_instructions = EL i bb.bb_instructions :: DROP (i+1) bb.bb_instructions` by
     metis_tac[DROP_CONS_EL, arithmeticTheory.ADD1] >>
   `(EL i bb.bb_instructions).inst_opcode = PHI` by
@@ -4426,7 +4426,7 @@ Proof
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
     metis_tac[fn_reachable_in_cfg_dfs_pre] >>
   `SUC i <= LENGTH bb.bb_instructions` by
-    (mp_tac (Q.SPEC `bb.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `bb.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   drule live_vars_at_transfer >> simp[] >>
   disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >>
   simp[livenessDefsTheory.liveness_transfer_def, arithmeticTheory.ADD1] >>

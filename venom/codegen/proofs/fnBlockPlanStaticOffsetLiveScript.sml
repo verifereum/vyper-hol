@@ -112,14 +112,6 @@ Proof
        SUBSET_DEF, GSYM live_vars_at_def, GSYM liveness_analyze_def]
 QED
 
-(* Copy of makeSsaCurrentDemandDominance$current_collect_phis_length, kept until it moves below make_ssa. *)
-Theorem collect_phis_length_bound:
-  !instrs. LENGTH (collect_phis instrs) <= LENGTH instrs
-Proof
-  Induct >> simp[collect_phis_def] >> rpt strip_tac >>
-  IF_CASES_TAC >> simp[]
-QED
-
 Theorem phi_ready_postprefix_edge:
   !fn lbl bb pred v.
     wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
@@ -135,7 +127,7 @@ Proof
   rpt strip_tac >> irule input_vars_from_non_phi >> reverse conj_tac
   >- (drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
       qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
-      simp[collect_phis_length_bound]) >>
+      simp[current_collect_phis_length]) >>
   gvs[phi_block_ready_def, EVERY_MEM, inst_uses_def] >>
   metis_tac[phi_pairs_mem_operand_vars]
 QED
@@ -459,11 +451,11 @@ Proof
      qx_gen_tac `p` >> disch_tac >>
      qpat_x_assum `!lbl' bb p. _` irule >> simp[] >>
      `LENGTH (collect_phis sb.bb_instructions) <= LENGTH sb.bb_instructions` by
-       simp[collect_phis_length_bound] >>
+       simp[current_collect_phis_length] >>
      conj_tac >- decide_tac >> qexists_tac `succ` >> simp[]) >>
   irule ready_live_range >> simp[] >>
   qexists_tac `LENGTH bb.bb_instructions` >>
-  simp[collect_phis_length_bound] >> metis_tac[]
+  simp[current_collect_phis_length] >> metis_tac[]
 QED
 
 Theorem ready_output_suffix_live:
@@ -540,19 +532,10 @@ Proof
      qexistsl_tac [`fb`, `first`] >>
      gvs[Once is_fn_path_def] >> qx_gen_tac `p` >> disch_tac >>
      irule ready_output_other_block_no_defs >> simp[] >>
-     (conj_tac >- (mp_tac (Q.SPEC `fb.bb_instructions` collect_phis_length_bound) >> decide_tac)) >>
+     (conj_tac >- (mp_tac (Q.SPEC `fb.bb_instructions` current_collect_phis_length) >> decide_tac)) >>
      qexistsl_tac [`db`, `fn`, `k`, `first`] >> simp[]) >>
   irule ready_output_suffix_live >> simp[] >>
   qexists_tac `LENGTH db.bb_instructions` >> simp[]
-QED
-
-(* Copy of makeSsaCurrentWfSsa$current_wf_nonphi_after_collect, kept until it moves below make_ssa. *)
-Theorem non_phi_after_collect_phis[local]:
-  !instrs j. j < LENGTH instrs /\ (EL j instrs).inst_opcode <> PHI ==>
-    LENGTH (collect_phis instrs) <= j
-Proof
-  Induct >- simp[] >> rpt gen_tac >> Cases_on `j` >>
-  simp[collect_phis_def] >> Cases_on `h.inst_opcode = PHI` >> simp[]
 QED
 
 Theorem ready_ordinary_use_available[local]:
@@ -594,7 +577,7 @@ Proof
      irule fn_reachable_in_cfg_dfs_pre >> simp[]) >>
   irule ready_output_dominated_live >> simp[] >>
   qexistsl_tac [`j`, `ub`] >> simp[] >>
-  irule non_phi_after_collect_phis >> simp[]
+  irule current_wf_nonphi_after_collect >> simp[]
 QED
 
 Theorem collect_phis_index:
@@ -649,7 +632,7 @@ Theorem ready_output_not_phi_def[local]:
 Proof
   rpt gen_tac >> strip_tac >> simp[inst_defs_def] >> disch_tac >>
   `p < LENGTH ub.bb_instructions` by
-    (mp_tac (Q.SPEC `ub.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `ub.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `db = ub /\ k = p` by
     (irule ready_output_location_unique >> metis_tac[]) >>
   gvs[] >> metis_tac[collect_phis_index]
@@ -674,7 +657,7 @@ Proof
   `lookup_block ub.bb_label fn.fn_blocks = SOME ub` by
     (irule MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def]) >>
   `j < LENGTH ub.bb_instructions` by
-    (mp_tac (Q.SPEC `ub.bb_instructions` collect_phis_length_bound) >> decide_tac) >>
+    (mp_tac (Q.SPEC `ub.bb_instructions` current_collect_phis_length) >> decide_tac) >>
   `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label j)` by
     (drule live_vars_at_uses >> simp[] >> disch_then irule >>
      simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
@@ -741,7 +724,7 @@ Proof
     (irule input_vars_from_predecessor_exit >> simp[] >> metis_tac[]) >>
   irule ready_output_dominated_live >> simp[] >>
   qexistsl_tac [`LENGTH pb.bb_instructions`, `pb`] >>
-  simp[collect_phis_length_bound] >> metis_tac[]
+  simp[current_collect_phis_length] >> metis_tac[]
 QED
 
 Theorem ready_offset_output_live:
