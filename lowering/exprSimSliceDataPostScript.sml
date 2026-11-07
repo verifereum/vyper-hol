@@ -25,6 +25,8 @@ Proof
  strip_tac >> drule_all slice_data_success_run >> strip_tac >>
  qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
  gen_tac >> rewrite_tac[exprSimVVFrameTheory.vv_post_inst_idx] >>
+ `post_value_type cenv e = expr_type e` by
+   (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
@@ -35,10 +37,8 @@ Proof
  irule vv_post_allocated_memory_intro >>
  `LENGTH (TAKE n (DROP a bs)) = n` by
    (simp[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
- conj_tac >- simp[is_word_type_def] >>
- conj_tac >- simp[mk_ptr_def] >>
- reverse conj_tac
- >- (conj_tac >> first_assum ACCEPT_TAC) >>
+ rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+ TRY (simp[is_word_type_def, mk_ptr_def] >> NO_TAC) >>
  qexistsl_tac [`aid`, `w2n p`, `sz`,
                `BaseTV (BytesT (Dynamic bound))`, `p`] >>
  simp[mk_ptr_def, val_footprint_def] >>
@@ -78,6 +78,8 @@ Proof
  (impl_tac >- simp[]) >> strip_tac >>
  qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
  gen_tac >> rewrite_tac[exprSimVVFrameTheory.vv_post_inst_idx] >>
+ `post_value_type cenv e = expr_type e` by
+   (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
@@ -88,10 +90,8 @@ Proof
  irule vv_post_allocated_memory_intro >>
  `LENGTH (TAKE n (DROP a text)) = n` by
    (simp[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
- conj_tac >- simp[is_word_type_def] >>
- conj_tac >- simp[mk_ptr_def] >>
- reverse conj_tac
- >- (conj_tac >> first_assum ACCEPT_TAC) >>
+ rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+ TRY (simp[is_word_type_def, mk_ptr_def] >> NO_TAC) >>
  qexistsl_tac [`aid`, `w2n p`, `sz`, `BaseTV (StringT bound)`, `p`] >>
  simp[mk_ptr_def, val_footprint_def] >>
  conj_tac
