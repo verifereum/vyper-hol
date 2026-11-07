@@ -1,7 +1,6 @@
 Theory concretizePtrBumpProducer
-Ancestors concretizePtrInitialFmpProducer concretizePtrStorageReadProducer
+Ancestors concretizePtrRequestHistory
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
-  concretizePtrStructuralDispatch concretizePtrEnvironmentReadProducer
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape concretizePtrOperationalOpcodes opcodeClass
   concretizePtrOrdinaryNext concretizePtrPairedPrefix concretizePtrPairedFields
@@ -80,7 +79,7 @@ Proof
 QED
 
 Theorem ptr_mixed_bump_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
   EVERY (\op. ptr_nonopaque_operand f op /\ op_prov TG op = NONE /\
               op_taint tn op = {}) inst.inst_operands /\
   inst.inst_opcode = BUMP /\
@@ -95,7 +94,7 @@ Theorem ptr_mixed_bump_execution[local]:
       f g (update_var n (word_add b sz) (update_var p b s)) t'
 Proof
   strip_tac >>
-  `s.vs_labels = t.vs_labels` by fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ptr_history_content_labels] >>
   `eval_operands inst.inst_operands s = eval_operands inst.inst_operands t` by
     (drule_all ptr_mixed_scalar_operands_equal >> simp[]) >>
   drule_all ptr_bump_execution >> disch_then (qspec_then `C` strip_assume_tac) >>
@@ -201,7 +200,10 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >> irule ptr_history_content_masks >>
+          qexists_tac `a.po_taint` >>
+          simp[step_taint_def, set_var_taint_def, store_taint_def,
+               adopt_reset_def, imm_taint_def, update_var_def]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>

@@ -1,8 +1,7 @@
 Theory concretizePtrInitialFmpProducer
-Ancestors concretizePtrRetpcProducer concretizePtrReturnTransport
+Ancestors concretizePtrRequestHistory concretizePtrReturnTransport
   concretizePtrTaggedSupport concretizePtrSourceOwnership concretizePtrValueTransport
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
-  concretizePtrStructuralDispatch concretizePtrEnvironmentReadProducer
   concretizePtrOpaqueRetpc concretizeStepStructure concretizeStepShape
   concretizeStepCallChecks concretizeStepRetpc concretizeStageShape
   concretizePtrOperationalOpcodes opcodeClass concretizePtrOrdinaryNext
@@ -16,7 +15,7 @@ Ancestors concretizePtrRetpcProducer concretizePtrReturnTransport
   finite_map list pred_set
 
 Theorem ptr_initial_fmp_execution[local]:
-  ptr_core_shared s t /\ inst.inst_opcode = INITIAL_FMP /\
+  s.vs_initial_fmp = t.vs_initial_fmp /\ inst.inst_opcode = INITIAL_FMP /\
   step_inst fuel Ct inst t = OK t' ==>
   ?out. inst.inst_operands = [] /\ inst.inst_outputs = [out] /\
     step_inst 0 C inst s = OK (update_var out s.vs_initial_fmp s) /\
@@ -26,7 +25,7 @@ Proof
   simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >>
   simp[AllCaseEqs()] >> strip_tac >>
-  gvs[ptr_core_shared_def, ptr_shared_fields_def] >> metis_tac[]
+  gvs[] >> metis_tac[]
 QED
 
 Theorem ptr_mixed_initial_fmp_update[local]:
@@ -108,7 +107,10 @@ Proof
   `?out. a.po_inst.inst_operands = [] /\ a.po_inst.inst_outputs = [out] /\
     step_inst 0 C a.po_inst a.po_state = OK (update_var out a.po_state.vs_initial_fmp a.po_state) /\
     s' = update_var out a.po_state.vs_initial_fmp at.po_state` by
-    (`ptr_core_shared a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
+    (`a.po_state.vs_initial_fmp = at.po_state.vs_initial_fmp` by
+       (fs[ptr_paired_sample_def] >> drule ptr_history_content_control >>
+        simp[concretizePtrTaintContentTheory.ptr_taint_control_def,
+             ptr_core_shared_def, ptr_shared_fields_def]) >>
      drule_all ptr_initial_fmp_execution >> disch_then (qspec_then `C` mp_tac) >> simp[]) >>
   `~retpc_var a.po_fn out` by
     (irule noncopy_output_not_retpc >>
@@ -140,7 +142,10 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >> irule ptr_history_content_masks >>
+          qexists_tac `a.po_taint` >>
+          simp[step_taint_def, set_var_taint_def, store_taint_def,
+               adopt_reset_def, imm_taint_def, update_var_def]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>

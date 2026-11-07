@@ -1,5 +1,5 @@
 Theory concretizePtrAssertionProducer
-Ancestors concretizePtrScalarCoreProducer concretizePtrReturnTransport
+Ancestors concretizePtrRequestHistory concretizePtrReturnTransport
   concretizePtrValueTransport concretizePtrTaggedSupport concretizePtrOpaqueRetpc
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
   concretizePtrOrdinaryNext concretizePtrPairedPrefix concretizePtrPairedFields
@@ -121,7 +121,7 @@ Proof
       eval_operands a.po_inst.inst_operands at.po_state` by
        (fs[ptr_paired_sample_def] >>
         `a.po_state.vs_labels = at.po_state.vs_labels` by
-          fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+          metis_tac[ptr_history_content_labels] >>
         drule_all ptr_mixed_scalar_operands_equal >> simp[]) >>
      `MEM a.po_inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE]` by simp[] >>
      drule_all ptr_assertion_execution >> simp[]) >>
@@ -147,7 +147,9 @@ Proof
           step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,
           DRESTRICT_UNIV] >>
      reverse conj_tac
-     >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+     >- (fs[ptr_paired_sample_def] >> irule ptr_history_content_masks >>
+         qexists_tac `a.po_taint` >>
+         fs[MEM, adopt_reset_def, store_taint_def, imm_taint_def]) >>
      irule ptr_mixed_vars_fields >> fs[ptr_paired_sample_def] >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
   `ptr_paired_params positions z zt
