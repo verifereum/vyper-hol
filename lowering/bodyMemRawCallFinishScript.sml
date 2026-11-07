@@ -1,7 +1,7 @@
 (* Memory checks for raw_call result handling. *)
 Theory bodyMemRawCallFinish
 Ancestors
-  bodyMemRawCallBounds rawCallResultFrame rawCallCountedRun exprSimRawCall builtinSimple emitHelper context
+  bodyMemRawCallBounds rawCallResultFrame rawCallCountedRun rawCallRevertPathMemory exprSimRawCall builtinSimple emitHelper context
   exprLoweringProps fragExecMem instMemFrontier memSafeRun compileEnv
   venomState venomExecSemantics venomInst finite_map rich_list list
 Libs
