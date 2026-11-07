@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
   fnBlockPlanStaticDfsTrace fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
-  fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
+  planWfMarked fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
   removeUnusedSsaProofs venomInst cfgNormSupplyProofs cfgNormBase
   fnFrameBoundaryEntryParams stackModel genBlockSim fnLineageStatic fnBlockPlanStaticFacts
@@ -330,41 +330,6 @@ Proof
   strip_tac >> gvs[release_dead_spills_stack]
 QED
 
-Theorem dfs_call_reachable_mutual[local]:
-  (!wl visited pg.
-    dfs_aux_call lv dfg (cfg_analyze fn) fn ps0 wl visited pg ==>
-    codegen_ready_fn fn ==> EVERY (fn_reachable fn) wl) /\
-  (!ss sp succs visited pg.
-    dfs_succs_call lv dfg (cfg_analyze fn) fn ps0 ss sp succs visited pg ==>
-    codegen_ready_fn fn ==> EVERY (fn_reachable fn) succs)
-Proof
-  ho_match_mp_tac dfs_aux_call_ind >> rpt conj_tac
-  >- (simp[venomWfTheory.fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL])
-  >- simp[]
-  >- simp[]
-  >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      gvs[EVERY_MEM] >> rpt strip_tac >>
-      `wf_function fn` by fs[codegen_ready_fn_def] >>
-      `fn_cfg_edge fn lbl e` by metis_tac[fn_cfg_edge_cfg_analyze] >>
-      gvs[venomWfTheory.fn_reachable_def] >>
-      metis_tac[relationTheory.RTC_RULES_RIGHT1])
-  >- simp[]
-  >- simp[]
-  >> simp[]
-QED
-
-Theorem dfs_block_state_cfg_reachable:
-  codegen_ready_fn fn /\
-  dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl ps ==>
-  cfg_reachable_of (cfg_analyze fn) lbl
-Proof
-  strip_tac >>
-  `wf_function fn` by fs[codegen_ready_fn_def] >>
-  `fn_reachable fn lbl` suffices_by metis_tac[fn_reachable_cfg_analyze] >>
-  qpat_x_assum `dfs_block_state _ _ _ _ _ _ _` mp_tac >>
-  simp[dfs_block_state_def] >> rpt strip_tac >>
-  drule (cj 1 dfs_call_reachable_mutual) >> simp[]
-QED
 
 (* At a join, every predecessor's DFS code leaves no spills: its JMP plan
    restores every target. *)

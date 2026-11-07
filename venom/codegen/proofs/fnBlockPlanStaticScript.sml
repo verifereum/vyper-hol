@@ -18,7 +18,7 @@
 
 Theory fnBlockPlanStatic
 Ancestors
-  fnLineageStatic fnPlanPrefix fnPlanLineage reorderSim contextCodegenRel
+  planWfMarked fnLineageStatic fnPlanPrefix fnPlanLineage reorderSim contextCodegenRel
   stackPlanGen stackPlanOps stackPlanTypes venomExecSemantics venomWf
   livenessDefs dfgDefs cfgDefs fnBlockPlanStaticRetRegion fnBlockPlanStaticInventory
   fnBlockPlanStaticPromises fnBlockPlanStaticRegion fnBlockPlanStaticBodyPrefix
