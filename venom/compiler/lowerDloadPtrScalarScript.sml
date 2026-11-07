@@ -5,7 +5,7 @@ Ancestors
   ptrDiscipline unitShapeDefs codegenRel memLocDefs pointerConfinedDefs
   finite_map list pred_set
 
-Theorem scalar_operand_no_prov[local]:
+Theorem scalar_operand_no_prov:
   MEM i.inst_opcode [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD;
     SLT; SGT; ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
