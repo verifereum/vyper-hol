@@ -42,7 +42,7 @@ of h/H appends to match HistoryCoverage's extension conclusion.
 | N10 CALLDATACOPY/CODECOPY/DLOADBYTES/RETURNDATACOPY | Local content facts only; complete family prefix supplier missing, including returndata OOB success guard |
 | N11 EXTCODECOPY | Complete prefix supplier missing; account-code payload and shared fields needed |
 | N12 SLOAD/SSTORE/TLOAD/TSTORE | Complete prefix supplier missing; storage/transient observation, taint and static-frame guard needed |
-| N13 environment reads | ptr_paired_prefix_environment_read covers exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE. Remaining SELFBALANCE/BALANCE/BLOCKHASH/GAS/CODESIZE/EXTCODESIZE/EXTCODEHASH/BLOBHASH/BLOBBASEFEE/CALLDATALOAD/DLOAD lack a complete supplier |
+| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. Remaining SELFBALANCE/BALANCE/BLOCKHASH/GAS/EXTCODESIZE/EXTCODEHASH/BLOBHASH/CALLDATALOAD/DLOAD lack a complete supplier |
 | N14 SHA3/LOG | Complete supplier missing; read payload/hash/topics/static guard required |
 | N15 CALL/STATICCALL | Content boundaries only; no complete prefix supplier; full request bytes and shared-state equality not free consequences of masked equality |
 | N16 DELEGATECALL/CREATE/CREATE2 | Complete prefix supplier missing; cannot rename CALL content facts |

@@ -1,5 +1,5 @@
 Theory concretizePtrEnvironmentReadProducer
-Ancestors concretizePtrParamProducer concretizePtrAssignProducer concretizePtrValueTransport
+Ancestors concretizePtrOperationalOpcodes concretizePtrPairedPrefixProbe concretizePtrParamProducer concretizePtrAssignProducer concretizePtrValueTransport
   concretizePtrOrdinaryNext concretizePtrOpaqueRetpc concretizePtrPairedNextAttach
   concretizePtrPairedPrefix concretizePtrPairedFields concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrSourceOwnership concretizePtrChronologicalHistory
@@ -16,7 +16,7 @@ Theorem ptr_environment_read_execution[local]:
   ptr_core_shared s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE] /\
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] /\
   inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
       t' = update_var out v t
@@ -35,7 +35,7 @@ Theorem ptr_mixed_environment_read_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE] /\
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] /\
   inst.inst_outputs = [out] /\ ~retpc_var f out /\
   step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
@@ -73,7 +73,7 @@ Theorem ptr_paired_prefix_environment_read:
   max_live_eom C' = SOME eom /\
   MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE] /\ ptr_chrono_step C' at zt ==>
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] /\ ptr_chrono_step C' at zt ==>
   ?z TG'.
     TG' = step_prov PT TG a.po_inst z.po_state /\
     ptr_paired_prefix R lp positions lo vs C C'
@@ -134,7 +134,7 @@ Proof
     (fs[ptr_paired_sample_def] >>
      `MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
        COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-       CALLDATASIZE; RETURNDATASIZE]` by simp[] >>
+       CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE]` by simp[] >>
      drule_all ptr_mixed_environment_read_execution >>
      disch_then (qspecl_then [`PT`,`C`] mp_tac) >> simp[]) >>
   `?i. active_inst a.po_fn i
@@ -179,3 +179,59 @@ Resume ptr_paired_prefix_environment_read[shape]:
      wf_function_def, fn_inst_wf_def, EVERY_MEM, fn_insts_MEM] >> metis_tac[]
 QED
 Finalise ptr_paired_prefix_environment_read
+
+Theorem ptr_paired_environment_read_prefix_normalize:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\
+  MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
+    COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_prefix_environment_read >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
