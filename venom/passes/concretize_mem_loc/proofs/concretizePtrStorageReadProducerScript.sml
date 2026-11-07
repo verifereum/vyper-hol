@@ -1,7 +1,7 @@
 Theory concretizePtrStorageReadProducer
 Ancestors concretizePtrReturnTransport concretizePtrTaggedSupport concretizePtrValueTransport
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
-  concretizePtrStructuralDispatch concretizePtrEnvironmentReadProducer
+  concretizePtrRequestHistory concretizePtrTaintContent
   concretizePtrOpaqueRetpc concretizePtrSourceOwnership
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape concretizePtrOperationalOpcodes opcodeClass
@@ -42,48 +42,60 @@ Proof
 QED
 
 Theorem ptr_storage_read_execution[local]:
-  ptr_core_shared s t /\ MEM inst.inst_opcode [SLOAD; TLOAD] /\
+  ptr_history_content tn s t /\ MEM inst.inst_opcode [SLOAD; TLOAD] /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
   inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
-  ?v. step_inst 0 C inst s = OK (update_var out v s) /\
-      t' = update_var out v t
+  ?sv tv. step_inst 0 C inst s = OK (update_var out sv s) /\
+      t' = update_var out tv t /\
+      word_agree_except
+        (op_taint (step_taint inst s (update_var out sv s) tn) (Var out)) sv tv
 Proof
   strip_tac >> fs[MEM] >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >>
   simp[exec_read1_def, AllCaseEqs()] >> strip_tac >>
-  gvs[eval_operands_def, AllCaseEqs(), ptr_core_shared_def, ptr_shared_fields_def,
-      sload_def, tload_def, contract_storage_def, contract_transient_def] >>
-  metis_tac[]
+  gvs[eval_operands_def, AllCaseEqs()] >>
+  drule ptr_history_content_current >>
+  strip_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, Once opcode_case_def,
+       exec_read1_def, eval_operands_def] >>
+  simp[step_taint_def, set_var_taint_def, op_taint_def, FLOOKUP_UPDATE,
+       out_taint_def]
+  >- (qexistsl_tac [`sload key s`, `sload key t`] >> simp[] >>
+      drule ptr_taint_content_sload >>
+      disch_then (qspec_then `key` mp_tac) >> simp[sload_def, contract_storage_def]) >>
+  qexistsl_tac [`tload key s`, `tload key t`] >> simp[] >>
+  drule ptr_taint_content_tload >>
+  disch_then (qspec_then `key` mp_tac) >> simp[tload_def, contract_transient_def]
 QED
 
 Theorem ptr_mixed_storage_read_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
   EVERY (\op. ptr_nonopaque_operand f op /\ op_prov TG op = NONE /\
               op_taint tn op = {}) inst.inst_operands /\
   MEM inst.inst_opcode [SLOAD; TLOAD] /\
   inst.inst_outputs = [out] /\ ~retpc_var f out /\
   step_inst fuel Ct inst t = OK t' ==>
-  ?v. step_inst 0 C inst s = OK (update_var out v s) /\
-    t' = update_var out v t /\
+  ?sv tv. step_inst 0 C inst s = OK (update_var out sv s) /\
+    t' = update_var out tv t /\
     ptr_mixed_vars births positions
-      (step_prov PT TG inst (update_var out v s))
-      (step_taint inst s (update_var out v s) tn)
-      f g (update_var out v s) t'
+      (step_prov PT TG inst (update_var out sv s))
+      (step_taint inst s (update_var out sv s) tn)
+      f g (update_var out sv s) t'
 Proof
   strip_tac >>
-  `s.vs_labels = t.vs_labels` by fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ptr_history_content_labels] >>
   `eval_operands inst.inst_operands s = eval_operands inst.inst_operands t` by
     (drule_all ptr_mixed_scalar_operands_equal >> simp[]) >>
   drule_all ptr_storage_read_execution >>
   disch_then (qspec_then `C` strip_assume_tac) >>
-  qexists_tac `v` >> simp[] >> gvs[] >>
+  qexistsl_tac [`sv`, `tv`] >> simp[] >> gvs[] >>
   drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
   fs[MEM] >>
   simp[step_prov_def, out_prov_def, set_prov_def,
        step_taint_def, set_var_taint_def,
-       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_refl] >>
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_def] >>
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, EVERY_MEM] >>
   gvs[FLOOKUP_UPDATE]
 QED
@@ -155,8 +167,8 @@ Proof
     (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
      simp[step_inst_non_invoke] >> strip_tac >>
      drule step_inst_base_intret_opcodes >> fs[MEM]) >>
-  `?v. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
-     s' = update_var out v at.po_state /\
+  `?v tv. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
+     s' = update_var out tv at.po_state /\
      ptr_mixed_vars births positions
        (step_prov PT TG a.po_inst (update_var out v a.po_state))
        (step_taint a.po_inst a.po_state (update_var out v a.po_state) a.po_taint)
@@ -164,7 +176,7 @@ Proof
     (fs[ptr_paired_sample_def] >>
      `MEM a.po_inst.inst_opcode [SLOAD; TLOAD]` by simp[] >>
      drule_all ptr_mixed_storage_read_execution >>
-     disch_then (qspecl_then [`PT`,`C`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`PT`,`C`] mp_tac) >> metis_tac[]) >>
   `?i. active_inst a.po_fn i
      ((update_var out v a.po_state) with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
     (`EVERY bb_well_formed a.po_fn.fn_blocks` by
@@ -185,7 +197,11 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >>
+          irule ptr_history_content_masks >>
+          goal_assum (drule_at Any) >>
+          fs[MEM] >>
+          simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>
