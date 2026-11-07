@@ -239,11 +239,14 @@ Termination
   \\ rw[list_size_SUM_MAP, MAP_MAP_o, ETA_AX,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
-  \\ qmatch_goalsub_abbrev_tac `TAKE n es`
-  \\ qspecl_then [`es`, `n`] mp_tac list_size_take_bound
-  \\ pure_rewrite_tac [list_size_SUM_MAP]
-  \\ simp[Abbr `n`]
-  \\ strip_tac \\ decide_tac
+  >- (qspecl_then [`es`, `2`] mp_tac list_size_take_bound
+      \\ pure_rewrite_tac[list_size_SUM_MAP] \\ decide_tac)
+  >- (qspecl_then [`es`, `4`] mp_tac list_size_take_bound
+      \\ pure_rewrite_tac[list_size_SUM_MAP] \\ decide_tac)
+  >- (qspecl_then [`es`, `3`] mp_tac list_size_take_bound
+      \\ pure_rewrite_tac[list_size_SUM_MAP] \\ decide_tac)
+  \\ qspecl_then [`es`, `1`] mp_tac list_size_take_bound
+  \\ pure_rewrite_tac[list_size_SUM_MAP] \\ decide_tac
 End
 
 val eval_expr_cps_pre_def = eval_expr_cps_def
@@ -1973,16 +1976,16 @@ Proof
   \\ simp[fromtvk_def]
 QED
 
-val constants_env_pre_def = constants_env_def
+val constants_env_trace_pre_def = constants_env_trace_def
   |> SRULE [bind_def, eval_expr_eq_cont_cps]
-  |> cv_auto_trans_pre "constants_env_pre";
+  |> cv_auto_trans_pre "constants_env_trace_pre";
 
-Theorem constants_env_pre[cv_pre]:
-  ∀v0 v1 v2 v3 v acc. constants_env_pre v0 v1 v2 v3 v acc
+Theorem constants_env_trace_pre[cv_pre]:
+  !cx am addr src ts acc. constants_env_trace_pre cx am addr src ts acc
 Proof
-  ho_match_mp_tac constants_env_ind
+  ho_match_mp_tac constants_env_trace_ind
   \\ rw[]
-  \\ rw[Once constants_env_pre_def]
+  \\ rw[Once constants_env_trace_pre_def]
   \\ gs[bind_def, eval_expr_eq_cont_cps]
   \\ rw[cont_pre_IS_SOME_cont]
   \\ qmatch_goalsub_rename_tac`eval_expr_cps ec ee es DoneK`
@@ -1992,6 +1995,8 @@ Proof
   \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
+
+val () = cv_auto_trans constants_env_def;
 
 Definition fromvalsk_def:
   fromvalsk x =
@@ -2032,10 +2037,22 @@ Proof
   rw[Once OWHILE_THM]
 QED
 
+val evaluate_module_constants_trace_pre_def =
+  cv_auto_trans_pre "evaluate_module_constants_trace_pre"
+    evaluate_module_constants_trace_def;
+
+Theorem evaluate_module_constants_trace_pre[cv_pre]:
+  !cx am addr mods. evaluate_module_constants_trace_pre cx am addr mods
+Proof
+  ho_match_mp_tac evaluate_module_constants_trace_ind
+  \\ rw[]
+  \\ rw[Once evaluate_module_constants_trace_pre_def]
+QED
+
 val () = cv_auto_trans evaluate_all_constants_def;
 
-val () = call_external_function_def
-     |> SRULE [eval_external_defaults_run, eval_exprs_eq_cont_cps,
+val () = call_external_function_trace_def
+     |> SRULE [lock_if_nr_def, unlock_if_nr_def, eval_external_defaults_run, eval_exprs_eq_cont_cps,
                eval_stmts_eq_cont_cps, set_scopes_def,
                vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
                vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -2043,6 +2060,7 @@ val () = call_external_function_def
                get_transient_storage_def, update_transient_def]
      |> cv_auto_trans;
 
+val () = cv_auto_trans call_external_function_def;
 val () = cv_auto_trans call_external_def;
 val () = cv_auto_trans clear_machine_logs_def;
 val () = cv_auto_trans call_external_transaction_def;

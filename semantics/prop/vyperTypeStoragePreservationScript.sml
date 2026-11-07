@@ -118,6 +118,15 @@ Proof
   goal_assum (drule_at Any) >> Cases >> simp[get_storage_def]
 QED
 
+Theorem contract_storage_well_formed_storage_trace[simp]:
+  contract_storage_well_formed cx (st with storage_trace := observations) <=>
+  contract_storage_well_formed cx st
+Proof
+  eq_tac >> strip_tac >>
+  irule contract_storage_well_formed_backends_frame >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 (* A typed zero-width encoding cannot change either storage backend. *)
 Theorem zero_slot_write_storage_frame:
   value_has_type tv v /\

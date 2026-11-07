@@ -22,7 +22,7 @@ Theorem entry_body_failure_requests:
   call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body NoneT =
     (INR (Error (RuntimeError msg)), am, st.requests)
 Proof
-  simp[call_external_function_def, bind_arguments_def,
+  simp[call_external_function_def, call_external_function_trace_def, bind_arguments_def,
        send_call_value_def, return_def, bind_def, ignore_bind_def,
        set_scopes_def, initial_state_def]
 QED
@@ -36,7 +36,7 @@ Theorem entry_body_success_requests:
     (INL NoneV, abstract_machine_from_state am.sources am.exports am.layouts st,
      st.requests)
 Proof
-  simp[call_external_function_def, bind_arguments_def,
+  simp[call_external_function_def, call_external_function_trace_def, bind_arguments_def,
        send_call_value_def, return_def, bind_def, ignore_bind_def,
        set_scopes_def, initial_state_def]
 QED
@@ -50,7 +50,7 @@ Theorem entry_return_cast_failure_requests:
   call_external_function orc gobs am cx F Nonpayable [] [] [] [] [] body ret =
     (INR (Error (TypeError "ext cast ret")), am, st.requests)
 Proof
-  simp[call_external_function_def, bind_arguments_def,
+  simp[call_external_function_def, call_external_function_trace_def, bind_arguments_def,
        send_call_value_def, return_def, bind_def, ignore_bind_def,
        set_scopes_def, initial_state_def]
 QED

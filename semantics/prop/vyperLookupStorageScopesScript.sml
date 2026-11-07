@@ -94,7 +94,7 @@ Theorem lookup_global_scopes_fst:
     FST (lookup_global cx mid id st)
 Proof
   rpt gen_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, ignore_bind_def] >>
   Cases_on `get_module_code cx mid` >> simp[return_def, raise_def] >>
   rename1 `SOME modcode` >>
@@ -119,7 +119,7 @@ Proof
     rename1 `SOME tv` >>
     Cases_on `tv` >>
     simp[bind_def, return_def, raise_def, read_storage_slot_scopes,
-         fst_case_pair_sumE, fst_case_fst]
+         record_storage_event_def, fst_case_pair_sumE, fst_case_fst]
   ) >>
   Cases_on `lookup_var_slot_from_layout cx b mid found1` >>
   simp[return_def, raise_def]
@@ -132,19 +132,24 @@ Theorem lookup_global_with_scopes:
       (res, st') => (res, st' with scopes := s)
 Proof
   rpt gen_tac >>
-  Cases_on `lookup_global cx mid id (st with scopes := s)` >>
-  rename1 `lookup_global cx mid id (st with scopes := s) =
-    (framed_res, framed_st)` >>
-  Cases_on `lookup_global cx mid id st` >>
-  rename1 `lookup_global cx mid id st = (original_res, original_st)` >>
-  simp[] >>
-  `framed_st = st with scopes := s` by
-    metis_tac[lookup_global_state] >>
-  `original_st = st` by metis_tac[lookup_global_state] >>
-  `framed_res = original_res` by (
-    qspecl_then [`cx`, `mid`, `id`, `st`, `s`] mp_tac
-      lookup_global_scopes_fst >> simp[]) >>
-  simp[]
+  simp[lookup_global_def, ignore_bind_def, bind_def, lift_option_type_def,
+       return_def, raise_def] >>
+  Cases_on `get_module_code cx mid` >> simp[return_def, raise_def] >>
+  rename1 `SOME modcode` >>
+  Cases_on `find_var_decl_by_name id modcode` >> simp[]
+  >- (simp[bind_def, get_immutables_scopes] >>
+      Cases_on `get_immutables cx mid st` >>
+      `r = st` by
+        (qspec_then `cx` (qspec_then `mid` (qspec_then `st` mp_tac))
+           get_immutables_state >> simp[]) >>
+      gvs[] >> Cases_on `q` >> simp[return_def, raise_def] >>
+      Cases_on `FLOOKUP x id` >> simp[return_def, raise_def]) >>
+  rename1 `SOME found` >> PairCases_on `found` >>
+  Cases_on `found0` >> simp[bind_def] >>
+  Cases_on `lookup_var_slot_from_layout cx b mid found1` >>
+  simp[return_def, raise_def, record_storage_event_def] >>
+  Cases_on `evaluate_type (get_tenv cx) t` >>
+  simp[bind_def, return_def, raise_def, record_storage_event_def]
 QED
 
 (* --- Exported cross-domain independence theorems --- *)

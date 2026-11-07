@@ -372,14 +372,15 @@ Theorem set_global_preserves_accounts_well_typed:
   set_global cx src n v st = (res, st') /\ accounts_well_typed st.accounts ==>
   accounts_well_typed st'.accounts
 Proof
-  rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
+  rw[set_global_def, ignore_bind_def, record_storage_event_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
   Cases_on `find_var_decl_by_name n x` >> gvs[return_def, raise_def] >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
   Cases_on `lookup_var_slot_from_layout cx b src x'1` >> gvs[return_def, raise_def] >>
   Cases_on `evaluate_type (get_tenv cx) t` >> gvs[return_def, raise_def] >>
-  drule_all write_storage_slot_preserves_accounts_well_typed >> simp[]
+  gvs[record_storage_event_def, return_def] >>
+  drule write_storage_slot_preserves_accounts_well_typed >> simp[]
 QED
 
 Theorem write_storage_slot_preserves_env_consistent:
@@ -671,7 +672,7 @@ Theorem lookup_global_HashMapVarDecl_returns_HashMapRef:
   lookup_var_slot_from_layout cx is_t src id = SOME slot ==>
   lookup_global cx src n st = (INL (HashMapRef is_t (n2w slot) kt vt), st)
 Proof
-  rw[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+  rw[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def, raise_def,
      var_decl_info_CASE_rator, prod_CASE_rator, option_CASE_rator,
      type_value_CASE_rator, AllCaseEqs(), LET_THM] >>
   gvs[]

@@ -113,7 +113,7 @@ Theorem tuple_target_toplevel_place:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tv ==>
     eval_target_place cx (TopLevelNameTarget (src, id)) es =
-      (INL (StoragePlace tr (n2w slot) tv), es)
+      (INL (StoragePlace tr (n2w slot) tv), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
@@ -129,7 +129,7 @@ Theorem tuple_target_field_place:
     evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
     struct_field_slot fs fld = SOME (off, tv) ==>
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-      es = (INL (StoragePlace tr (n2w slot + n2w off) tv), es)
+      es = (INL (StoragePlace tr (n2w slot + n2w off) tv), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>

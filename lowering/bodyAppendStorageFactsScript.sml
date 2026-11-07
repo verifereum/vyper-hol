@@ -76,7 +76,7 @@ Theorem append_storage_target_eval:
   lookup_var_slot_from_layout cx tr src key = SOME slot /\
   evaluate_type (get_tenv cx) ty = SOME tv ==>
   eval_target_place cx (TopLevelNameTarget (src,id)) es =
-    (INL (StoragePlace tr (n2w slot) tv),es)
+    (INL (StoragePlace tr (n2w slot) tv), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   strip_tac >>
   simp[Once evaluate_def] >> simp[Once evaluate_def] >>
@@ -133,7 +133,7 @@ Theorem body_append_runtime_metadata:
     lookup_var_slot_from_layout cx tr src key = SOME slot /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     eval_target_place cx (TopLevelNameTarget (src,id)) es =
-      (INL (StoragePlace tr (n2w slot) tv),es)
+      (INL (StoragePlace tr (n2w slot) tv), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   strip_tac >>
   drule supported_append_storage_decl >> strip_tac >>
@@ -193,7 +193,7 @@ Theorem body_append_target_bounds:
     lookup_var_slot_from_layout cx tr src key = SOME slot /\
     evaluate_type (get_tenv cx) (ArrayT elem (Dynamic n)) = SOME tv /\
     eval_target_place cx (TopLevelNameTarget (src,id)) es =
-      (INL (StoragePlace tr (n2w slot) tv),es)
+      (INL (StoragePlace tr (n2w slot) tv), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   strip_tac >> drule append_typing_target >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>

@@ -475,7 +475,10 @@ Theorem eval_expr_toplevel_storage:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) ==>
-    es' = es /\ ?tv. res = INL tv /\ read_result cx tv es = (INL v, es)
+    es' = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
+    res = INL (PlaceR (StoragePlace tr (n2w slot) tvt)) /\
+    read_result cx (PlaceR (StoragePlace tr (n2w slot) tvt)) es = (INL v, es) /\
+    read_result cx (PlaceR (StoragePlace tr (n2w slot) tvt)) es' = (INL v, es')
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>

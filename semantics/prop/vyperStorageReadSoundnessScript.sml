@@ -54,15 +54,17 @@ QED
 Theorem current_storage_read_result_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,tv) ==>
-  ?ref v. lookup_global cx mid n st = (INL ref,st) /\
+  ?ref v observations. lookup_global cx mid n st =
+          (INL ref,st with storage_trace := observations) /\
           read_result cx ref st = (INL v,st) /\
           value_has_type tv v
 Proof
   rpt strip_tac >>
   drule_all current_storage_read_typed >> strip_tac >>
   drule storage_var_info_components >> strip_tac >>
-  qexistsl [`PlaceR (StoragePlace b (n2w off) tv)`, `v`] >>
-  simp[lookup_global_def, read_result_def, read_place_def, bind_def,
+  qexistsl [`PlaceR (StoragePlace b (n2w off) tv)`, `v`,
+            `st.storage_trace ++ [StorageRoot b off tv]`] >>
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, read_result_def, read_place_def, bind_def,
        lift_option_type_def, return_def, raise_def, var_decl_info_CASE_rator]
 QED
 

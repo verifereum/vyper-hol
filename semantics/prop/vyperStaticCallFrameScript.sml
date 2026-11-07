@@ -3,6 +3,44 @@ Theory vyperStaticCallFrame
 Ancestors
   vyperInterpreter vfmContext vfmExecution vfmStaticCalls vfmDecreasesGas vfmRunCall
 
+Theorem extract_call_result_failure_frame:
+  extract_call_result accounts transient outcome =
+    SOME (F,ret,accounts',transient',logs') ==>
+  accounts' = accounts /\ transient' = transient /\ logs' = []
+Proof
+  Cases_on `outcome` >>
+  simp[extract_call_result_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem run_ext_call_failure_frame:
+  run_ext_call caller callee data value_opt gas accounts transient txp =
+    SOME (F,ret,accounts',transient',logs') ==>
+  accounts' = accounts /\ transient' = transient /\ logs' = []
+Proof
+  simp[run_ext_call_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[extract_call_result_failure_frame]
+QED
+
+Theorem run_delegate_call_failure_frame:
+  run_delegate_call cx target data gas accounts transient =
+    SOME (F,ret,accounts',transient',logs') ==>
+  accounts' = accounts /\ transient' = transient /\ logs' = []
+Proof
+  simp[run_delegate_call_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[extract_call_result_failure_frame]
+QED
+
+Theorem run_raw_call_failure_frame:
+  run_raw_call cx flags target data amount gas accounts transient =
+    SOME (F,ret,accounts',transient',logs') ==>
+  accounts' = accounts /\ transient' = transient /\ logs' = []
+Proof
+  simp[run_raw_call_def] >>
+  Cases_on `flags.rcf_is_delegate` >> simp[] >>
+  metis_tac[run_delegate_call_failure_frame, run_ext_call_failure_frame]
+QED
+
 Theorem evm_transfer_zero[simp]:
   vfmExecution$transfer_value caller callee 0 accounts = accounts
 Proof
@@ -91,4 +129,13 @@ Proof
     by simp[Abbr `es`, static_call_setup] >>
   gvs[] >>
   metis_tac[extract_precompile_call_result, extract_static_call_result]
+QED
+
+Theorem run_raw_call_static_frame:
+  flags.rcf_is_static /\ ~flags.rcf_is_delegate /\
+  run_raw_call cx flags addr data amount gas accounts transient =
+    SOME (ok,ret,accounts',transient',logs') ==>
+  accounts' = accounts /\ transient' = transient /\ logs' = []
+Proof
+  simp[run_raw_call_def] >> metis_tac[run_ext_call_static_frame]
 QED

@@ -150,6 +150,22 @@ Proof
   simp[accounts_rel_def, update_var_def, jump_to_def]
 QED
 
+(* Ghost observations do not participate in the physical simulation. *)
+Theorem state_rel_storage_trace[simp]:
+  state_rel func cenv cx (es with storage_trace := observations) s <=>
+  state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def]
+QED
+
+Theorem accounts_rel_storage_trace[simp]:
+  accounts_rel cx (es with storage_trace := observations) s <=>
+  accounts_rel cx es s
+Proof
+  simp[accounts_rel_def]
+QED
+
 (* ===== Writes of the running contract's storage ===== *)
 
 (* The source sets the storage of cx.txn.target to stor, and Venom that of

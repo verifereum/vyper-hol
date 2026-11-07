@@ -86,10 +86,10 @@ Proof
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-      gvs[] >> metis_tac[])
+      gvs[evaluation_state_component_equality] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+      imp_res_tac select_result_state >> gvs[evaluation_state_component_equality] >> metis_tac[])
   >- (rpt gen_tac >> strip_tac >>
       Cases_on `builtin_args_length_ok bt (LENGTH es)`
       >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
@@ -174,12 +174,12 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `eval_base_place cx (AttributeTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-      imp_res_tac extend_place_state >> gvs[] >> metis_tac[])
+      imp_res_tac extend_place_state >> gvs[evaluation_state_component_equality] >> metis_tac[])
   >- (rpt strip_tac >>
       qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-      gvs[] >> metis_tac[])
+      gvs[evaluation_state_component_equality] >> metis_tac[])
   >- (rpt strip_tac >>
   qpat_x_assum `eval_target_place cx _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>

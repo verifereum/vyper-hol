@@ -400,6 +400,22 @@ Definition stmt_state_rel_def:
       sz = w2n n
 End
 
+Theorem stmt_state_rel_storage_trace[simp]:
+  stmt_state_rel ctx func cenv cx (es with storage_trace := observations) s <=>
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, accountsRelPropsTheory.state_rel_storage_trace,
+       immutable_alloca_sep_def]
+QED
+
+Theorem stmt_state_rel_erasure:
+  erase_storage_trace es1 = erase_storage_trace es2 ==>
+  (stmt_state_rel ctx func cenv cx es1 s <=>
+   stmt_state_rel ctx func cenv cx es2 s)
+Proof
+  metis_tac[stmt_state_rel_storage_trace, erase_storage_trace_def]
+QED
+
 Theorem alloca_room_fields:
   !func ss ss' ctx.
     alloca_room ctx func ss /\

@@ -298,7 +298,8 @@ Theorem fst_lookup_global_set_storage:
     FST (lookup_global cx mid m st)
 Proof
   rpt gen_tac >> strip_tac >>
-  SIMP_TAC (srw_ss()) [vyperStateTheory.lookup_global_def,
+  SIMP_TAC (srw_ss()) [vyperStateTheory.lookup_global_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.record_storage_event_def,
        vyperStateTheory.bind_def,
        vyperStateTheory.lift_option_type_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -338,7 +339,8 @@ Resume fst_lookup_global_set_storage[storage]:
   Cases_on `evaluate_type (get_tenv cx) t` >>
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
   rename1 `SOME tv'` >>
-  Cases_on `b = b'` >> gvs[]
+  Cases_on `b = b'` >>
+  gvs[vyperStateTheory.record_storage_event_def, vyperStateTheory.return_def]
 QED
 
 Finalise fst_lookup_global_set_storage
@@ -409,12 +411,14 @@ Theorem update_toplevel_name_eq_write:
   ∀cx st mid n v b off tv.
     storage_var_info cx mid n = SOME (b, off, tv) ⇒
     update_toplevel_name cx st mid n v =
-    SND (write_storage_slot cx b (n2w off) tv v st)
+    SND (write_storage_slot cx b (n2w off) tv v
+      (st with storage_trace := st.storage_trace ++ [StorageRoot b off tv]))
 Proof
   rpt strip_tac >>
   gvs[storage_var_info_def, AllCaseEqs()] >>
   simp[update_toplevel_name_def,
-       Once vyperStateTheory.set_global_def,
+       Once vyperStateTheory.set_global_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.record_storage_event_def,
        vyperStateTheory.bind_def,
        vyperStateTheory.lift_option_type_def,
        vyperStateTheory.return_def,
@@ -457,6 +461,10 @@ Proof
     first_x_assum irule >> simp[storage_type_of_def]) >>
   qpat_x_assum `storage_var_info cx mid1 n1 = _`
     (fn th => simp[MATCH_MP update_toplevel_name_eq_write th]) >>
+  qmatch_goalsub_abbrev_tac `write_storage_slot cx b1 (n2w off1) tv1 v s0` >>
+  `lookup_toplevel_name cx s0 mid2 n2 = lookup_toplevel_name cx st mid2 n2`
+    by simp[Abbr `s0`] >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
   irule lookup_toplevel_name_after_write >> simp[Excl "w2n_n2w"] >>
   strip_tac >> irule ranges_disjoint_n2w_w2n_l >>
   first_assum ACCEPT_TAC
@@ -504,7 +512,8 @@ Proof
   rpt strip_tac >>
   gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs()] >>
   simp[lookup_toplevel_name_def,
-       vyperStateTheory.lookup_global_def,
+       vyperStateTheory.lookup_global_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.record_storage_event_def,
        vyperStateTheory.bind_def,
        vyperStateTheory.lift_option_type_def,
        vyperStateTheory.return_def]
@@ -622,6 +631,15 @@ Proof
   gvs[hashmap_ref_storable_def, AllCaseEqs()]
 QED
 
+Theorem read_hashmap_storage_trace[simp]:
+  read_hashmap cx (st with storage_trace := observations) ref kv =
+    read_hashmap cx st ref kv
+Proof
+  Cases_on `ref` >> simp[read_hashmap_def] >>
+  rename1 `HashMapRef b slot kt vt` >>
+  Cases_on `vt` >> simp[read_hashmap_def, get_storage_storage_trace]
+QED
+
 (* ----- Static var write preserves hashmap read (per-key) ----- *)
 
 (* NEW: This is the "reverse direction" that didn't exist before.
@@ -653,6 +671,11 @@ Proof
   (* Reduce update_toplevel_name to write_storage_slot *)
   drule update_toplevel_name_eq_write >>
   disch_then (fn th => simp[th]) >>
+  qmatch_goalsub_abbrev_tac `write_storage_slot cx b_v (n2w off_v) tv_v v s0` >>
+  `read_hashmap cx s0 (HashMapRef b_h bslot kt (Type t)) kv =
+   read_hashmap cx st (HashMapRef b_h bslot kt (Type t)) kv`
+    by simp[Abbr `s0`] >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
   (* Apply read_hashmap_after_write_storage *)
   irule read_hashmap_after_write_storage >> simp[Excl "w2n_n2w"] >>
   strip_tac >>

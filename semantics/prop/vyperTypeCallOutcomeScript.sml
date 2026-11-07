@@ -38,10 +38,13 @@ Theorem take_call_outcome_runtime_consistent:
   runtime_consistent env cx st'
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>
-  irule runtime_consistent_call_frame >> conj_tac
-  >- gvs[evaluation_state_component_equality, runtime_consistent_def] >>
-  qexists_tac `st` >> simp[] >>
-  gvs[evaluation_state_component_equality]
+  `st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
+   st'.accounts = st.accounts` by
+    (qpat_x_assum `st' = _` mp_tac >>
+     simp[evaluation_state_component_equality]) >>
+  gvs[runtime_consistent_def, state_well_typed_def, env_consistent_def,
+      env_scopes_consistent_def, env_immutables_consistent_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem take_adopt_call_outcome_runtime_consistent:
@@ -54,9 +57,11 @@ Proof
   `accounts_runtime_well_typed st.accounts` by
     gvs[runtime_consistent_def, accounts_runtime_well_typed_accounts_well_typed] >>
   drule_all take_adopt_call_outcome_typed >> strip_tac >>
-  irule runtime_consistent_call_frame >> conj_tac
-  >- gvs[accounts_runtime_well_typed_accounts_well_typed] >>
-  qexists_tac `st` >> simp[]
+  gvs[evaluation_state_component_equality, runtime_consistent_def,
+      state_well_typed_def, env_consistent_def, env_scopes_consistent_def,
+      env_immutables_consistent_def,
+      accounts_runtime_well_typed_accounts_well_typed] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Q is the actual expression postcondition; all new failures satisfy Q only

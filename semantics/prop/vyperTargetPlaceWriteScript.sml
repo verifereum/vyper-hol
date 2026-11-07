@@ -31,7 +31,7 @@ Theorem lookup_global_writable:
   lookup_global cx src id st = (res,st') ==>
   (case res of INL pv => writable_place_result cx st' pv | INR _ => T)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def, return_def,
@@ -105,9 +105,9 @@ Theorem extend_mapping_place_writable:
   extend_place cx (HashMapRef tr slot kt vt) sb st = (INL pv,st') ==>
   writable_place_result cx st' pv
 Proof
-  Cases_on `sb` >> simp[extend_place_def, raise_def] >>
+  Cases_on `sb` >> simp[extend_place_def, ignore_bind_def, record_storage_event_def, raise_def] >>
   Cases_on `vt` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def,
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def,
        raise_def, AllCaseEqs(), writable_place_result_def,
        runtime_place_writable_def] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, AllCaseEqs(), return_def, raise_def,
@@ -121,17 +121,18 @@ Theorem extend_place_writable:
   writable_place_result cx st' next
 Proof
   Cases_on `pv`
-  >- simp[extend_place_def, raise_def]
+  >- simp[extend_place_def, ignore_bind_def, record_storage_event_def, raise_def]
   >- (Cases_on `vt` >> simp[eval_result_typed_def] >> rpt strip_tac >>
       `mutable_place_path tv [sb]` by
         (drule_all target_path_step_mutable >> simp[]) >>
       Cases_on `p`
-      >- (gvs[extend_place_def, bind_def, return_def, AllCaseEqs()] >>
+      >- (gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, return_def, AllCaseEqs()] >>
           drule extend_storage_place_writable >>
           simp[writable_place_result_def]) >>
-      `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
-      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+      gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def,
           lift_sum_def, AllCaseEqs(), writable_place_result_def] >>
+      imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
+      gvs[vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
       drule_all extend_memory_place_writable >> simp[]) >>
   metis_tac[extend_mapping_place_writable]
 QED

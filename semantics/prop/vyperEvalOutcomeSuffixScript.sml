@@ -94,6 +94,15 @@ Proof
   irule outcomes_frame_state_preserving >> metis_tac[read_results_state]
 QED
 
+Theorem outcomes_frame_trace_preserving[local]:
+  (!st res st'. f st = (res,st') ==>
+    st' = st with storage_trace := st'.storage_trace) ==> outcomes_frame f
+Proof
+  simp[outcomes_frame_def] >> rpt strip_tac >> Cases_on `f st` >>
+  first_x_assum drule >>
+  disch_then (mp_tac o Q.AP_TERM `\s. s.outcomes`) >> simp[]
+QED
+
 Theorem outcomes_frame_reads[simp]:
   outcomes_frame (read_result cx tv) /\
   outcomes_frame (select_result cx out_ty pv sb) /\
@@ -107,7 +116,7 @@ Theorem outcomes_frame_reads[simp]:
   outcomes_frame (lift_option y msg) /\
   outcomes_frame (lift_sum z) /\ outcomes_frame (lift_sum_runtime zr)
 Proof
-  rpt conj_tac >> irule outcomes_frame_state_preserving >>
+  rpt conj_tac >> irule outcomes_frame_trace_preserving >>
   rpt strip_tac >> FIRST [drule_all read_result_state,
     drule_all select_result_state, drule_all conditional_result_state,
     drule_all get_accounts_state,
@@ -149,8 +158,8 @@ Proof
     get_immutables_def, get_address_immutables_def,
     set_immutable_def, set_address_immutables_def,
     get_storage_backend_def, set_storage_backend_def, write_storage_slot_def,
-    set_global_def, transfer_value_def, get_accounts_def,
-    acquire_nonreentrant_lock_def, release_nonreentrant_lock_def,
+    set_global_def, ignore_bind_def, record_storage_event_def, transfer_value_def, get_accounts_def,
+    acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
     get_transient_storage_def, push_function_def, pop_function_def,
     bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
@@ -168,6 +177,7 @@ Proof
   rpt (BasicProvers.PURE_CASE_TAC >> asm_simp_tac (srw_ss()) [] >>
     gvs[get_storage_backend_eq, set_storage_backend_eq, set_storage_def,
         return_def, raise_def, AllCaseEqs()]) >>
+  gvs[record_storage_event_def, return_def] >>
   qmatch_goalsub_abbrev_tac `set_storage _ _ backend _` >>
   Cases_on `backend` >> simp[set_storage_def]
 QED
@@ -441,7 +451,10 @@ Theorem outcomes_frame_adopt:
   outcomes_frame (adopt_call_outcome rq co)
 Proof
   simp[outcomes_frame_def, adopt_call_outcome_def, extCallOracleTheory.adopt_outcome_def,
-       return_def] >> rpt gen_tac >> CASE_TAC >> simp[]
+       record_storage_backend_def, record_storage_event_def,
+       return_def] >> rpt gen_tac >>
+  Cases_on `co.co_success` >> Cases_on `rq.cr_static` >>
+  simp[] >> Cases_on `rq.cr_kind = MessageCall` >> simp[]
 QED
 
 Theorem outcomes_frame_places[local]:
@@ -449,8 +462,9 @@ Theorem outcomes_frame_places[local]:
   outcomes_frame (place_type_value cx p) /\
   outcomes_frame (extend_place cx pv sb)
 Proof
-  rpt conj_tac >> irule outcomes_frame_state_preserving >>
-  metis_tac[read_place_state, place_type_value_state, extend_place_state]
+  rpt conj_tac >> irule outcomes_frame_trace_preserving >>
+  rpt strip_tac >> FIRST [drule read_place_state,
+    drule place_type_value_state, drule extend_place_state] >> simp[]
 QED
 
 
@@ -488,6 +502,14 @@ Proof
   rpt ASSIGN_OUTCOMES_FRAME_STEP
 QED
 
+Theorem outcomes_frame_storage_observations[local]:
+  outcomes_frame (record_storage_event observation) /\
+  outcomes_frame record_storage_backend
+Proof
+  simp[outcomes_frame_def, record_storage_backend_def,
+       record_storage_event_def, return_def]
+QED
+
 (* Precompute the unconditional suffix facts. Using outcomes_suffix_frame
    as a conditional rewrite makes simp retry a frame proof for every compound
    monadic term, including recursive evaluators that can consume outcomes. *)
@@ -499,7 +521,7 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_return, outcomes_frame_raise,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
-       outcomes_frame_adopt,
+       outcomes_frame_adopt, outcomes_frame_storage_observations,
        outcomes_frame_places, outcomes_frame_write_place,
        outcomes_frame_get_place, outcomes_frame_append_place,
        outcomes_frame_pop_place]));

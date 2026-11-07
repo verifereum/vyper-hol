@@ -60,9 +60,10 @@ Theorem eval_assign_toplevel:
     evaluate_type (get_tenv cx) typ = SOME tvt ==>
     ?r es1.
       (do result <- eval_expr cx e; read_result cx result od) es = (r, es1) /\
-      (!ex. r = INR ex ==> res = INR ex /\ es' = es1 /\ no_control_exc ex) /\
+      (!ex. r = INR ex ==> res = INR ex /\ erase_storage_trace es' = erase_storage_trace es1 /\ no_control_exc ex) /\
       (!v. r = INL v ==>
-           write_storage_slot cx tr (n2w slot) tvt v es1 = (res, es'))
+           ?write_es. write_storage_slot cx tr (n2w slot) tvt v es1 = (res, write_es) /\
+             erase_storage_trace write_es = erase_storage_trace es')
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
