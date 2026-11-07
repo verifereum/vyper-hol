@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryTransport
 Ancestors
+ structFieldsProps
  ctorSourceInputs ctorDeployLoweringEntryQuantitativeInputs compileVyper
  compileEnv entryStateRel vyperContext vyperState valueEncoding finite_map list
  ctorDeployDefs e2eDeployDefs e2eEntry o1PassContract rich_list
