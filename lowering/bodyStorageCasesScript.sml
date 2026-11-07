@@ -25,7 +25,7 @@ Theorem supported_callable_body_contract:
   supported_program tops /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
-  defaults = [] /\ ?bindings. supported_stmts tops bindings stmts
+  supported_pure_exprs tops defaults /\ ?bindings. supported_stmts tops bindings stmts
 Proof
   strip_tac >>
   reverse (Cases_on `deploy`)
@@ -37,7 +37,7 @@ Proof
   >- (drule_all supported_program_declaration >>
       simp[supported_declaration_header_def, supported_declaration_body_def,
            supported_function_body_def, NULL_EQ] >> metis_tac[])
-  >- gvs[supported_stmt_def] >>
+  >- gvs[supported_stmt_def, supported_pure_expr_def] >>
   drule_all supported_program_declaration >>
   simp[supported_declaration_header_def, supported_declaration_body_def,
        supported_function_body_def, NULL_EQ] >> metis_tac[]
@@ -263,11 +263,13 @@ Theorem supported_callable_storage_syntax:
   supported_program tops /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
-  defaults = [] /\
+  ~supported_exprs_exists expr_evm_run_root defaults /\
+  EVERY (\c. FST c = NONE) (int_calls_exprs defaults) /\
   ~supported_stmts_expr_exists expr_evm_run_root stmts /\
   EVERY (\c. FST c = NONE) (int_calls_stmts stmts)
 Proof
   strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
+  drule supported_pure_exprs_storage_syntax >>
   drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]
 QED
 
@@ -3044,7 +3046,8 @@ Theorem body_intcall_guard_apply:
   (!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 call_env t3
       s4 rtv t4 s5 t5 s6 cxf t6.
     eval_expr_results cx es s0 = (INL results,t0) /\
-    finally (do set_scopes [FEMPTY]; eval_exprs (cx with stk updated_by CONS (NONE,fn)) [] od)
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (NONE,fn)) needed od)
       (set_scopes prev.scopes) s1 = (INL dflt_vs,t1) /\
     read_results cx results s2 = (INL vs,t2) /\
     lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
@@ -3060,10 +3063,13 @@ Theorem body_intcall_guard_apply:
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')) /\
   eval_expr_results cx es st = (INL results,args_st) /\
-  read_results cx results args_st = (INL vs,args_st) /\
-  bind_arguments (get_tenv cx) args vs = SOME call_env /\
+  finally (do set_scopes [FEMPTY];
+              eval_exprs (cx with stk updated_by CONS (NONE,fn)) needed od)
+    (set_scopes args_st.scopes) args_st = (INL dflt_vs,d_st) /\
+  read_results cx results d_st = (INL vs,d_st) /\
+  bind_arguments (get_tenv cx) args (vs ++ dflt_vs) = SOME call_env /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  lock_if_nr cx nr (is_view_mut mut) args_st = (INL (),lock_st) /\
+  lock_if_nr cx nr (is_view_mut mut) d_st = (INL (),lock_st) /\
   push_function (NONE,fn) call_env cx lock_st = (INL cxf,body_st) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
@@ -3072,12 +3078,63 @@ Theorem body_intcall_guard_apply:
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')
 Proof
-  strip_tac >> first_x_assum match_mp_tac >>
-  goal_assum $ drule_at Any >>
-  goal_assum $ drule_at Any >>
-  goal_assum $ drule_at Any >>
-  goal_assum $ drule_at Any >>
-  qexistsl_tac [`args_st`, `args_st`, `[]`, `args_st`, `args_st`, `args_st`,
-               `args_st`, `rtv`, `args_st`] >>
-  simp[eval_empty_defaults_finally, lift_option_type_def, return_def]
+  strip_tac >>
+  first_x_assum (qspecl_then [`st`, `results`, `args_st`, `args_st`, `args_st`,
+    `dflt_vs`, `d_st`, `d_st`, `vs`, `d_st`, `d_st`, `call_env`, `d_st`, `d_st`,
+    `rtv`, `d_st`, `d_st`, `lock_st`, `lock_st`, `cxf`, `body_st`] mp_tac) >>
+  simp[lift_option_type_def, return_def]
+QED
+
+(* The source call after its arguments and omitted defaults evaluated. *)
+Theorem supported_exprs_exists_DROP:
+  !es n. ~supported_exprs_exists p es ==> ~supported_exprs_exists p (DROP n es)
+Proof
+  Induct >> rw[supported_expr_exists_def] >>
+  Cases_on `n` >> simp[supported_expr_exists_def]
+QED
+
+Theorem int_calls_exprs_DROP_EVERY:
+  !es n. EVERY P (int_calls_exprs es) ==> EVERY P (int_calls_exprs (DROP n es))
+Proof
+  Induct >> rw[int_calls_expr_def] >>
+  Cases_on `n` >> gvs[int_calls_expr_def, EVERY_APPEND]
+QED
+
+Theorem eval_expr_intcall_defaults_step:
+  ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
+  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts /\
+  eval_expr_results cx es st = (args_res,args_st) ==>
+  eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) st =
+  case args_res of
+    INR e => (INR e,args_st)
+  | INL results =>
+    case finally (do set_scopes [FEMPTY];
+                     eval_exprs (cx with stk updated_by CONS (NONE,fn))
+                       (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts) od)
+           (set_scopes args_st.scopes) args_st of
+      (INR e,d_st) => (INR e,d_st)
+    | (INL dflt_vs,d_st) =>
+      (do vs <- read_results cx results;
+          call_env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+            "IntCall bind_arguments";
+          rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+          lock_if_nr cx nr (is_view_mut mut);
+          cxf <- push_function (NONE,fn) call_env cx;
+          rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+            (do pop_function args_st.scopes; unlock_if_nr cx nr (is_view_mut mut) od);
+          crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+          return (Value crv) od) d_st
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+       bind_apply, ignore_bind_apply, return_def, get_scopes_def] >>
+  Cases_on `args_res` >> simp[] >>
+  rename1 `finally _ _ args_st` >>
+  Cases_on `finally (do set_scopes [FEMPTY];
+                       eval_exprs (cx with stk updated_by CONS (NONE,fn))
+                         (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts) od)
+              (set_scopes args_st.scopes) args_st` >>
+  rename1 `_ = (d_res,d_st)` >> Cases_on `d_res` >>
+  gvs[bind_apply, ignore_bind_apply]
 QED

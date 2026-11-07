@@ -1,0 +1,39 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
+  "vyper_version": "0.5.0a4+9362e36b+commit.9362e36b",
+  "python_version": "3.11.11",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "d01_int_default_word.vy": "0369c951dd8c002aeafc11418c094c5fbaf34032dbfacc23e3fe53396057cace",
+    "d02_int_default_partial.vy": "0d085963c79d2dfbce6974cb58272cd6e14c0e0e3164d48b8c3c0fa6180bc9c5",
+    "d03_int_default_env.vy": "86cb64f7299594da6241cd7b61949bc61641f230d80e130486ce9373c8799cc0",
+    "d04_int_default_string.vy": "838bcecbba03fa4366ffb7cf6fbcd38ba8d13679d54cdf4c70ef110208270ccc",
+    "d05_int_default_nested.vy": "af4048981e6007ed31f67b85c2e250b71209c40aafcd689fb64963380b33eeee"
+  },
+  "outputs": {
+    "d01_int_default_word.hex": "6a8dc6bd6a23fe6124599ab701323e4056caae87961e8b576af5ff01babc6168",
+    "d01_int_default_word.json": "2b6abf0c9168d110e7af8d58e1b65f165df84a3a61ed7537a96ec9aa67581c37",
+    "d02_int_default_partial.hex": "fce4e0be2719015b0a08c4c21b77ff843ee96a67d8498e9171cc481dc2226f09",
+    "d02_int_default_partial.json": "d8334aa9168ddb129b5037a6ee3761df56442c0757f9b15d7e544576aacf09c8",
+    "d03_int_default_env.hex": "9d61e1338c7c39e2b9840f8eb252159c086d485b37f580c786cb8c05bd0968b1",
+    "d03_int_default_env.json": "16471f46e6e0252452a77cec393c4d4d6b5a92b78281b6d200c400a140cf0e9c",
+    "d04_int_default_string.hex": "5be04a2334afcd9977e3e2c0ab127e7c780490c0fe403df3fbb24adf9bc95294",
+    "d04_int_default_string.json": "7546a8309e651656fb5c0a93d7645641a707c936d3ed0014d18d76a4e188163f",
+    "d05_int_default_nested.hex": "87f7400c79ea9395046f6a62a6e678cc9ec236756618cf31e79d68f683d1086a",
+    "d05_int_default_nested.json": "eb7ca3eb83c713d140a939b79a4690bf397920614c86f6989a1b8cac348cd0c0"
+  }
+}

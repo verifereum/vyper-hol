@@ -21,6 +21,8 @@ Proof
     (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
   simp[package_internal_fn_def, set_internal_package_target_def,
     update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -66,6 +68,8 @@ Proof
   gvs[package_constructor_def, set_constructor_package_target_def,
     update_cenv_nonreentrant_def] >>
   simp[deploy_build_env_no_return_pc, cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 

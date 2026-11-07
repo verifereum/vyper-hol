@@ -340,7 +340,7 @@ Theorem compile_intcall_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> simp[compile_call_def] >>
-  ntac 4 (pairarg_tac >> simp[]) >>
+  ntac 5 (pairarg_tac >> simp[]) >>
   IF_CASES_TAC
   >- (BasicProvers.TOP_CASE_TAC
       >- (simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>

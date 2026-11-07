@@ -3,7 +3,9 @@ Ancestors
   gasShadowCompileOps gasShadowCompileConvert gasShadowCompileContext
   gasShadowCompileAbi gasShadowCompileCallSupport gasShadowCompileBuiltinCreate
   gasShadowCompileMembership gasShadowCompilePure
-  exprLowering gasShadow gasShadowState compileEnv list
+  exprLowering gasShadow gasShadowState gasShadowCenv compileEnv list
+
+val _ = augment_srw_ss [rewrites [gsc_shift_thms]]
 
 Theorem gas_shadow_compiles_lower_value:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
@@ -667,6 +669,11 @@ Proof
   `!es. gas_shadow_compiles (compile_multi_vvs f cenv es)
     (compile_multi_vvs g cenv (if sh then MAP gas_shadow_expr es else es))`
     by (irule gas_shadow_compiles_multi_vvs >> simp[]) >>
+  `!c es. gas_shadow_compiles (compile_multi_vvs f c es)
+    (compile_multi_vvs g c es)`
+    by (rpt gen_tac >>
+        irule (SIMP_RULE std_ss [] (Q.INST [`sh` |-> `F`] gas_shadow_compiles_multi_vvs)) >>
+        simp[]) >>
   qabbrev_tac `info = cenv.ce_func_info (nsid_to_string fid)` >>
   PairCases_on `info` >> fs[markerTheory.Abbrev_def] >>
   qpat_x_assum `_ = cenv.ce_func_info _` (assume_tac o SYM) >>
@@ -676,6 +683,63 @@ Proof
        GSYM comp_bind_def, GSYM comp_return_def, gasShadowCompileBaseTheory.comp_bind_uncurry] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   (match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   gen_tac >> BETA_TAC >>
+   simp[gasShadowCompileBaseTheory.comp_bind_uncurry] >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   gen_tac >> BETA_TAC >>
+   simp[gasShadowCompileBaseTheory.comp_bind_uncurry] >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- (Cases_on `info0 > 0` >> Cases_on `info1 > 0` >>
+       simp[SF ETA_ss, gas_shadow_compiles_return] >>
+       match_mp_tac gas_shadow_compiles_bind >>
+       simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return]) >>
+   qx_gen_tac `rbuf_opt` >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- simp[gas_shadow_compiles_stage_intcall_args] >>
+   qx_gen_tac `invoke_args` >> BETA_TAC >>
+   Cases_on `rbuf_opt` >> Cases_on `info0 > 0` >>
+   simp[GSYM comp_bind_def, GSYM comp_return_def, SF ETA_ss] >>
+   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+        >- simp[gas_shadow_compiles_emit_op, gasShadowCompileEmitTheory.gas_shadow_compiles_emit_multi_op,
+                gas_shadow_compiles_emit_void, gas_shadow_compiles_store_multi_results] >>
+        gen_tac >> BETA_TAC) >>
+   simp[gas_shadow_compiles_return])
+QED
+
+(* An internal call under the shadowed-defaults env: its omitted defaults
+   arrive shadowed and compile in the shadowed env without the callee's
+   own defaults. *)
+Theorem gas_shadow_compiles_call_int_gsc:
+  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
+    (g (gas_shadow_cenv cenv) ty (if sh then gas_shadow_expr e else e))) ==>
+  gas_shadow_compiles (compile_call f cenv ret_ty ty (IntCall fid) args fallback)
+    (compile_call g (gas_shadow_cenv cenv) ret_ty ty (IntCall fid)
+      (if sh then MAP gas_shadow_expr args else args)
+      (if sh then OPTION_MAP gas_shadow_expr fallback else fallback))
+Proof
+  strip_tac >>
+  `!es. gas_shadow_compiles (compile_multi_vvs f cenv es)
+    (compile_multi_vvs (\c. g (gas_shadow_cenv c)) cenv
+      (if sh then MAP gas_shadow_expr es else es))`
+    by (irule gas_shadow_compiles_multi_vvs >> simp[]) >>
+  `!c es. gas_shadow_compiles (compile_multi_vvs f c es)
+    (compile_multi_vvs (\c. g (gas_shadow_cenv c)) c (MAP gas_shadow_expr es))`
+    by (rpt gen_tac >>
+        irule (SIMP_RULE std_ss [] (Q.INST [`sh` |-> `T`] gas_shadow_compiles_multi_vvs)) >>
+        simp[]) >>
+  qabbrev_tac `info = cenv.ce_func_info (nsid_to_string fid)` >>
+  PairCases_on `info` >> fs[markerTheory.Abbrev_def] >>
+  qpat_x_assum `_ = cenv.ce_func_info _` (assume_tac o SYM) >>
+  Cases_on `sh` >> gvs[] >>
+  CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_call_def, MAP_MAP_o, combinTheory.o_DEF,
+       gas_shadow_cenv_omitted_defaults, gas_shadow_cenv_without_defaults,
+       GSYM comp_bind_def, GSYM comp_return_def, gasShadowCompileBaseTheory.comp_bind_uncurry] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   gen_tac >> BETA_TAC >>
+   simp[gasShadowCompileBaseTheory.comp_bind_uncurry] >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
    gen_tac >> BETA_TAC >>
    simp[gasShadowCompileBaseTheory.comp_bind_uncurry] >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac

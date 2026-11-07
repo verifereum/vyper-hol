@@ -1,7 +1,7 @@
 Theory gasShadowAllocLimits
 Ancestors
   gasShadowSourceMetadata gasShadowModuleDefs gasShadowCompileStmtBase
-  gasShadow allocLimits compileVyper list vyperAST
+  gasShadowCenv gasShadow allocLimits compileVyper list vyperAST
 
 Theorem gas_shadow_map_expr_type[simp]:
   !es. MAP expr_type (MAP gas_shadow_expr es) = MAP expr_type es
@@ -151,6 +151,79 @@ Theorem gas_shadow_stmt_valued_return:
 Proof
   ho_match_mp_tac stmt_valued_return_ind >>
   simp[gas_shadow_stmt_def, stmt_valued_return_def]
+QED
+
+(* The allocation limits read no default arguments. *)
+Theorem gas_shadow_cenv_alloc_basic[simp]:
+  (!c t. type_alloc_ok (gas_shadow_cenv c) t = type_alloc_ok c t) /\
+  (!c id es. log_alloc_ok (gas_shadow_cenv c) id es = log_alloc_ok c id es) /\
+  (!c tg es. ext_call_alloc_ok (gas_shadow_cenv c) tg es =
+             ext_call_alloc_ok c tg es)
+Proof
+  rpt conj_tac
+  >- simp[type_alloc_ok_def]
+  >- simp[log_alloc_ok_def] >>
+  ho_match_mp_tac ext_call_alloc_ok_ind >> simp[ext_call_alloc_ok_def]
+QED
+
+Theorem gas_shadow_cenv_target_store_place[simp]:
+  !bt. target_store_place (gas_shadow_cenv c) bt = target_store_place c bt
+Proof
+  `(!e:expr. T) /\
+   (!bt. target_store_place (gas_shadow_cenv c) bt = target_store_place c bt)`
+    suffices_by simp[] >>
+  ho_match_mp_tac expr_induction >> simp[target_store_place_def]
+QED
+
+Theorem gas_shadow_cenv_return_buffer_ok[simp]:
+  return_buffer_ok (gas_shadow_cenv c) = return_buffer_ok c
+Proof
+  simp[return_buffer_ok_def]
+QED
+
+Theorem gas_shadow_cenv_assign_alloc_ok[simp]:
+  assign_alloc_ok (gas_shadow_cenv c) bt e = assign_alloc_ok c bt e
+Proof
+  simp[assign_alloc_ok_def]
+QED
+
+Theorem gas_shadow_cenv_alloc_limits_expr[simp]:
+  (!c e. alloc_limits_expr (gas_shadow_cenv c) e = alloc_limits_expr c e) /\
+  (!c t. alloc_limits_target (gas_shadow_cenv c) t = alloc_limits_target c t) /\
+  (!c es. alloc_limits_exprs (gas_shadow_cenv c) es = alloc_limits_exprs c es) /\
+  (!c e. alloc_limits_opt (gas_shadow_cenv c) e = alloc_limits_opt c e) /\
+  (!c kes. alloc_limits_named_exprs (gas_shadow_cenv c) kes =
+           alloc_limits_named_exprs c kes)
+Proof
+  ho_match_mp_tac alloc_limits_expr_ind >> rw[alloc_limits_expr_def]
+QED
+
+Theorem gas_shadow_cenv_alloc_limits_assignment[simp]:
+  (!c g. alloc_limits_assignment (gas_shadow_cenv c) g =
+         alloc_limits_assignment c g) /\
+  (!c gs. alloc_limits_assignments (gas_shadow_cenv c) gs =
+          alloc_limits_assignments c gs)
+Proof
+  ho_match_mp_tac alloc_limits_assignment_ind >> rw[alloc_limits_assignment_def]
+QED
+
+Theorem gas_shadow_cenv_alloc_limits_reasons[simp]:
+  (!c it. alloc_limits_iterator (gas_shadow_cenv c) it =
+          alloc_limits_iterator c it) /\
+  (!c r. alloc_limits_assert (gas_shadow_cenv c) r = alloc_limits_assert c r) /\
+  (!c r. alloc_limits_raise (gas_shadow_cenv c) r = alloc_limits_raise c r)
+Proof
+  rpt conj_tac >> gen_tac >> Cases >>
+  simp[alloc_limits_iterator_def, alloc_limits_assert_def,
+       alloc_limits_raise_def]
+QED
+
+Theorem gas_shadow_cenv_alloc_limits_stmt[simp]:
+  (!c s. alloc_limits_stmt (gas_shadow_cenv c) s = alloc_limits_stmt c s) /\
+  (!c ss. alloc_limits_stmts (gas_shadow_cenv c) ss = alloc_limits_stmts c ss)
+Proof
+  ho_match_mp_tac alloc_limits_stmt_ind >> rw[alloc_limits_stmt_def] >>
+  BasicProvers.EVERY_CASE_TAC >> simp[]
 QED
 
 Theorem gas_shadow_fn_allocs_ok:

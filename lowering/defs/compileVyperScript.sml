@@ -493,6 +493,19 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Default argument expressions of the non-external functions, in
+   declaration order, so ALOOKUP finds the first declaration of a name, as
+   in build_func_param_types. *)
+Definition build_func_defaults_def:
+  build_func_defaults ([] : toplevel list) = ([] : (string # expr list) list) ∧
+  build_func_defaults (top :: rest) =
+    case top of
+      FunctionDecl vis _ _ _ fname _ dflts _ _ =>
+        if vis = External then build_func_defaults rest
+        else (fname, dflts) :: build_func_defaults rest
+    | _ => build_func_defaults rest
+End
+
 (* Declared return types of the non-external functions, the first
    declaration of a name winning, as in build_func_param_types. *)
 Definition build_func_return_type_def:
@@ -664,6 +677,7 @@ Definition build_compile_env_def:
        ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
+       ce_func_defaults := build_func_defaults tops;
        ce_func_return_type := build_func_return_type tops;
        ce_func_mutability := build_func_mutability tops;
        ce_func_ids := build_func_ids 0 tops;
@@ -710,6 +724,17 @@ Theorem build_compile_env_ce_func_param_types:
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_func_param_types =
     build_func_param_types tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_defaults:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_defaults =
+    build_func_defaults tops
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]

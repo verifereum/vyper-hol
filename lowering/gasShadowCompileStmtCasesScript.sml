@@ -1,7 +1,7 @@
 (* Constructor boundaries for the frozen statement compiler. *)
 Theory gasShadowCompileStmtCases
 Ancestors
-  gasShadowCompileStmtHelpers gasShadowCompileStmtOps gasShadowCompileStmtBase
+  gasShadowCompileStmtHelpers gasShadowCenv gasShadowCenvStmt gasShadowCompileStmtOps gasShadowCompileStmtBase
   gasShadowCompilePure gasShadowCompileConvert gasShadowCompileContext gasShadowCompileAbi gasShadowCompileArith gasShadowCompileCallSupport
   gasShadowCompileLiteral
   gasShadowCompileOps gasShadow gasShadowState stmtLowering compileEnv
@@ -9,14 +9,14 @@ Ancestors
 
 Theorem gas_shadow_stmt_pass:
   gas_shadow_compiles (compile_stmt cenv lctx ty Pass)
-    (compile_stmt cenv lctx ty (gas_shadow_stmt Pass))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt Pass))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def, gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_stmt_expr:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Expr e))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Expr e)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Expr e)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def, comp_ignore_bind_def,
        gas_shadow_compiles_bind, gas_shadow_compiles_return,
@@ -25,7 +25,7 @@ QED
 
 Theorem gas_shadow_stmt_annassign:
   gas_shadow_compiles (compile_stmt cenv lctx ty (AnnAssign id vtyp e))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (AnnAssign id vtyp e)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (AnnAssign id vtyp e)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def, comp_ignore_bind_def,
        gas_shadow_lowered_value_type] >>
@@ -46,7 +46,7 @@ QED
 
 Theorem gas_shadow_stmt_assign_base:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Assign (BaseTarget bt) e))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Assign (BaseTarget bt) e)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Assign (BaseTarget bt) e)))
 Proof
   simp[gas_shadow_stmt_def, gas_shadow_assignment_def, compile_stmt_def,
        gas_shadow_lowered_value_type] >>
@@ -63,7 +63,7 @@ QED
 
 Theorem gas_shadow_stmt_assign_tuple:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Assign (TupleTarget targets) e))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Assign (TupleTarget targets) e)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Assign (TupleTarget targets) e)))
 Proof
   simp[gas_shadow_stmt_def, gas_shadow_assignment_def, compile_stmt_def,
        gas_shadow_lowered_value_type] >>
@@ -75,7 +75,7 @@ QED
 
 Theorem gas_shadow_stmt_assert:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Assert e a))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Assert e a)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Assert e a)))
 Proof
   Cases_on `a` >>
   simp[gas_shadow_stmt_def, gas_shadow_assert_reason_def, compile_stmt_def,
@@ -90,7 +90,7 @@ QED
 
 Theorem gas_shadow_stmt_raise:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Raise r))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Raise r)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Raise r)))
 Proof
   Cases_on `r` >>
   simp[gas_shadow_stmt_def, gas_shadow_raise_reason_def, compile_stmt_def,
@@ -102,7 +102,7 @@ QED
 
 Theorem gas_shadow_stmt_log:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Log id args))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Log id args)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Log id args)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def] >>
   Cases_on `cenv.ce_event_info (nsid_to_string id)`
@@ -121,7 +121,7 @@ QED
 
 Theorem gas_shadow_stmt_augassign:
   gas_shadow_compiles (compile_stmt cenv lctx ty (AugAssign tty bt bop e))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (AugAssign tty bt bop e)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (AugAssign tty bt bop e)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -137,7 +137,7 @@ QED
 
 Theorem gas_shadow_stmt_break:
   gas_shadow_compiles (compile_stmt cenv lctx ty Break)
-    (compile_stmt cenv lctx ty (gas_shadow_stmt Break))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt Break))
 Proof
   Cases_on `lctx` >>
   simp[gas_shadow_stmt_def, compile_stmt_def, comp_ignore_bind_def,
@@ -147,7 +147,7 @@ QED
 
 Theorem gas_shadow_stmt_continue:
   gas_shadow_compiles (compile_stmt cenv lctx ty Continue)
-    (compile_stmt cenv lctx ty (gas_shadow_stmt Continue))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt Continue))
 Proof
   Cases_on `lctx` >>
   simp[gas_shadow_stmt_def, compile_stmt_def, comp_ignore_bind_def,
@@ -157,7 +157,7 @@ QED
 
 Theorem gas_shadow_stmt_return_none:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Return NONE))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Return NONE)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Return NONE)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def] >>
   Cases_on `cenv.ce_return_pc` >>
@@ -182,7 +182,7 @@ QED
 
 Theorem gas_shadow_stmt_return_some:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Return (SOME e)))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Return (SOME e))))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Return (SOME e))))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def, comp_ignore_bind_def,
        gas_shadow_lowered_value_type] >>
@@ -218,7 +218,7 @@ Finalise gas_shadow_stmt_return_some
 
 Theorem gas_shadow_stmt_append:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Append target e))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (Append target e)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (Append target e)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def, gas_shadow_compile_target_base,
        gas_shadow_lowered_value_type,
@@ -236,27 +236,29 @@ QED
 
 Theorem gas_shadow_stmts_cons:
   (!ce lc rt. gas_shadow_compiles (compile_stmt ce lc rt s)
-     (compile_stmt ce lc rt (gas_shadow_stmt s))) /\
+     (compile_stmt (gas_shadow_cenv ce) lc rt (gas_shadow_stmt s))) /\
   (!ce lc rt. gas_shadow_compiles (compile_stmts ce lc rt ss)
-     (compile_stmts ce lc rt (MAP gas_shadow_stmt ss))) ==>
+     (compile_stmts (gas_shadow_cenv ce) lc rt (MAP gas_shadow_stmt ss))) ==>
   gas_shadow_compiles (compile_stmts cenv lctx ty (s::ss))
-    (compile_stmts cenv lctx ty (MAP gas_shadow_stmt (s::ss)))
+    (compile_stmts (gas_shadow_cenv cenv) lctx ty (MAP gas_shadow_stmt (s::ss)))
 Proof
   strip_tac >> simp[compile_stmt_def] >>
   ho_match_mp_tac gas_shadow_compiles_get_terminated >> gen_tac >>
   Cases_on `b` >> simp[gas_shadow_compiles_return, comp_ignore_bind_def] >>
-  ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gas_shadow_compiles_declare_stmt_local] >> gen_tac >>
-  ho_match_mp_tac gas_shadow_compiles_bind >> simp[]
+  ho_match_mp_tac gas_shadow_compiles_bind_cenv >>
+  simp[gas_shadow_cenv_declare_stmt_local] >> conj_tac
+  >- (mp_tac gas_shadow_compiles_declare_stmt_local >>
+      simp[]) >>
+  gen_tac >> ho_match_mp_tac gas_shadow_compiles_bind >> simp[]
 QED
 
 Theorem gas_shadow_stmt_if:
   (!ce lc rt. gas_shadow_compiles (compile_stmts ce lc rt yes)
-     (compile_stmts ce lc rt (MAP gas_shadow_stmt yes))) /\
+     (compile_stmts (gas_shadow_cenv ce) lc rt (MAP gas_shadow_stmt yes))) /\
   (!ce lc rt. gas_shadow_compiles (compile_stmts ce lc rt no)
-     (compile_stmts ce lc rt (MAP gas_shadow_stmt no))) ==>
+     (compile_stmts (gas_shadow_cenv ce) lc rt (MAP gas_shadow_stmt no))) ==>
   gas_shadow_compiles (compile_stmt cenv lctx ty (If e yes no))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (If e yes no)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (If e yes no)))
 Proof
   strip_tac >> simp[gas_shadow_stmt_def, compile_stmt_def, comp_ignore_bind_def] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -277,12 +279,23 @@ QED
 
 Theorem gas_shadow_stmt_for_array:
   (!ce lc rt. gas_shadow_compiles (compile_stmts ce lc rt loop_body)
-     (compile_stmts ce lc rt (MAP gas_shadow_stmt loop_body))) ==>
+     (compile_stmts (gas_shadow_cenv ce) lc rt (MAP gas_shadow_stmt loop_body))) ==>
   gas_shadow_compiles (compile_stmt cenv lctx ty (For id fty (Array e) bound loop_body))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (For id fty (Array e) bound loop_body)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (For id fty (Array e) bound loop_body)))
 Proof
   strip_tac >> simp[gas_shadow_stmt_def, gas_shadow_iterator_def,
                     compile_stmt_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- (rpt IF_CASES_TAC >>
+           simp[gas_shadow_stmt_compile_expr, gas_shadow_compiles_return,
+                gas_shadow_compiles_ptr_load, gas_shadow_compiles_declare_local,
+                gas_shadow_compiles_emit_local_alloca, gas_shadow_compiles_fresh_label,
+                gas_shadow_compiles_fresh_var, gas_shadow_compiles_emit_inst,
+                gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void,
+                gas_shadow_compiles_new_block, gas_shadow_compiles_bind]) >> gen_tac) >>
+  ho_match_mp_tac gas_shadow_compiles_bind_cenv >>
+  simp[gas_shadow_cenv_declare_local, gas_shadow_compiles_declare_local] >>
+  gen_tac >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- (rpt IF_CASES_TAC >>
            simp[gas_shadow_stmt_compile_expr, gas_shadow_compiles_return,
@@ -305,12 +318,20 @@ QED
 
 Theorem gas_shadow_stmt_for_range:
   (!ce lc rt. gas_shadow_compiles (compile_stmts ce lc rt loop_body)
-     (compile_stmts ce lc rt (MAP gas_shadow_stmt loop_body))) ==>
+     (compile_stmts (gas_shadow_cenv ce) lc rt (MAP gas_shadow_stmt loop_body))) ==>
   gas_shadow_compiles (compile_stmt cenv lctx ty (For id fty (Range a z) bound loop_body))
-    (compile_stmt cenv lctx ty (gas_shadow_stmt (For id fty (Range a z) bound loop_body)))
+    (compile_stmt (gas_shadow_cenv cenv) lctx ty (gas_shadow_stmt (For id fty (Range a z) bound loop_body)))
 Proof
   strip_tac >> simp[gas_shadow_stmt_def, gas_shadow_iterator_def,
                     compile_stmt_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- simp[gas_shadow_stmt_lower_value, gas_shadow_compiles_declare_local,
+               gas_shadow_compiles_emit_local_alloca, gas_shadow_compiles_fresh_label,
+               gas_shadow_compiles_fresh_var, gas_shadow_compiles_emit_inst,
+               gas_shadow_compiles_new_block] >> gen_tac) >>
+  ho_match_mp_tac gas_shadow_compiles_bind_cenv >>
+  simp[gas_shadow_cenv_declare_local, gas_shadow_compiles_declare_local] >>
+  gen_tac >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_stmt_lower_value, gas_shadow_compiles_declare_local,
                gas_shadow_compiles_emit_local_alloca, gas_shadow_compiles_fresh_label,

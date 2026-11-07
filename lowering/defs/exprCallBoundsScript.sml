@@ -1,6 +1,10 @@
 (* Compiler-internal structural recursion boundary. The bound is derived from
-   the parent AST (or dispatcher argument list), never from external fuel.
-   Invalid callback inputs have an explicit INVALID result. *)
+   the parent AST (or dispatcher argument list) and the compile env's internal
+   call defaults, never from external fuel. An internal call that omits
+   arguments compiles its callee's defaults, which are not AST children; it
+   compiles them in an env without the callee's defaults, so the defaults'
+   total size decreases. Invalid callback inputs have an explicit INVALID
+   result. *)
 Theory exprCallBounds
 Ancestors
   emitHelper compileEnv context vyperAST list basicSize
@@ -11,15 +15,21 @@ Definition invalid_expr_call_def:
      (StackValue ty (Lit 0w), st'))
 End
 
+(* Total size of the internal-call defaults a compile env can append. *)
+Definition cenv_defaults_size_def:
+  cenv_defaults_size cenv = list_size (list_size expr_size o SND) cenv.ce_func_defaults
+End
+
 Definition expr_child_callback_def[simp]:
   expr_child_callback bound cfn cenv ty e st =
-    if expr_size e < bound then cfn cenv ty e st
+    if expr_size e + cenv_defaults_size cenv < bound then cfn cenv ty e st
     else invalid_expr_call (expr_type e) st
 End
 
 Theorem expr_child_callback_cong[defncong]:
   bound = bound' ∧
-  (∀cenv ty e st. expr_size e < bound' ⇒ f cenv ty e st = g cenv ty e st) ⇒
+  (∀cenv ty e st. expr_size e + cenv_defaults_size cenv < bound' ⇒
+     f cenv ty e st = g cenv ty e st) ⇒
   expr_child_callback bound f = expr_child_callback bound' g
 Proof
   rpt strip_tac >> gvs[FUN_EQ_THM, expr_child_callback_def] >> rw[] >> simp[]
@@ -27,13 +37,15 @@ QED
 
 Definition builtin_child_callback_def[simp]:
   builtin_child_callback bound dispatch cenv ret_ty ty bi args st =
-    if list_size expr_size args < bound then dispatch cenv ret_ty ty bi args st
+    if list_size expr_size args + cenv_defaults_size cenv < bound then
+      dispatch cenv ret_ty ty bi args st
     else invalid_expr_call ret_ty st
 End
 
 Theorem builtin_child_callback_cong[defncong]:
   bound = bound' ∧
-  (∀cenv ret_ty ty bi args st. list_size expr_size args < bound' ⇒
+  (∀cenv ret_ty ty bi args st.
+     list_size expr_size args + cenv_defaults_size cenv < bound' ⇒
      f cenv ret_ty ty bi args st = g cenv ret_ty ty bi args st) ⇒
   builtin_child_callback bound f = builtin_child_callback bound' g
 Proof
@@ -42,13 +54,15 @@ QED
 
 Definition type_child_callback_def[simp]:
   type_child_callback bound dispatch cenv vv_ty ty tb ret_ty args st =
-    if list_size expr_size args < bound then dispatch cenv vv_ty ty tb ret_ty args st
+    if list_size expr_size args + cenv_defaults_size cenv < bound then
+      dispatch cenv vv_ty ty tb ret_ty args st
     else invalid_expr_call vv_ty st
 End
 
 Theorem type_child_callback_cong[defncong]:
   bound = bound' ∧
-  (∀cenv vv_ty ty tb ret_ty args st. list_size expr_size args < bound' ⇒
+  (∀cenv vv_ty ty tb ret_ty args st.
+     list_size expr_size args + cenv_defaults_size cenv < bound' ⇒
      f cenv vv_ty ty tb ret_ty args st = g cenv vv_ty ty tb ret_ty args st) ⇒
   type_child_callback bound f = type_child_callback bound' g
 Proof
@@ -56,14 +70,14 @@ Proof
 QED
 
 Theorem expr_child_callback_valid:
-  expr_size e < bound ⇒
+  expr_size e + cenv_defaults_size cenv < bound ⇒
   expr_child_callback bound cfn cenv ty e st = cfn cenv ty e st
 Proof
   simp[expr_child_callback_def]
 QED
 
 Theorem expr_child_callback_invalid:
-  bound ≤ expr_size e ⇒
+  bound ≤ expr_size e + cenv_defaults_size cenv ⇒
   expr_child_callback bound cfn cenv ty e st = invalid_expr_call (expr_type e) st
 Proof
   simp[expr_child_callback_def]

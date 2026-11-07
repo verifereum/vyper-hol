@@ -26,9 +26,11 @@ End
 Definition raw_shape_free_program_def:
   raw_shape_free_program tops <=>
     !vis mut nr rr name args dflts ret body.
-      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
-      vis <> Deploy ==>
-      ~supported_stmts_expr_exists expr_raw_shape_root body
+      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops ==>
+      (vis <> Deploy ==>
+       ~supported_stmts_expr_exists expr_raw_shape_root body) /\
+      (vis <> External ==>
+       ~supported_exprs_exists expr_raw_shape_root dflts)
 End
 
 (* ===== Typing gives builtin arity ===== *)
@@ -171,18 +173,37 @@ Proof
   strip_tac >> drule ALL_DISTINCT_MAP_name_key >> simp[]
 QED
 
+Theorem check_contract_deploy_no_defaults[local]:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl Deploy mut nr rr name args dflts ret fbody) tls ==>
+  dflts = []
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def, function_header_ok_def, NULL_EQ]
+QED
+
 Theorem check_contract_runtime_bodies_shape_ok:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops ==>
   runtime_bodies_shape_ok tops
 Proof
-  rw[runtime_bodies_shape_ok_def, raw_shape_free_program_def] >>
-  first_x_assum drule_all >> strip_tac >>
+  simp[runtime_bodies_shape_ok_def, raw_shape_free_program_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `vis = Deploy`
+  >- (`dflts = []` by metis_tac[check_contract_deploy_no_defaults, MEM] >>
+      gvs[supported_expr_exists_def]) >>
   drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
   drule check_contract_runtime_function_body_MEM >> simp[] >>
   disch_then drule_all >>
   simp[check_function_body_def, IS_SOME_EXISTS] >> strip_tac >>
-  metis_tac[type_stmt_raw_shape]
+  metis_tac[type_stmt_raw_shape, well_typed_expr_raw_shape]
 QED
 
 (* S2 from the checker. *)
@@ -241,16 +262,26 @@ Proof
             supported_stmt_parts_exists_mono]
 QED
 
+Theorem raw_shape_root_shape_root[local]:
+  !e. expr_raw_shape_root e ==> expr_shape_root e
+Proof
+  simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
+QED
+
 Theorem supported_program_raw_shape_free_program:
   !tops. supported_program tops ==> raw_shape_free_program tops
 Proof
-  rw[raw_shape_free_program_def] >>
+  simp[raw_shape_free_program_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   drule supported_program_runtime_bodies_shape_ok >>
-  rw[runtime_bodies_shape_ok_def] >> strip_tac >>
-  first_x_assum drule_all >> simp[] >>
-  irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
-  first_x_assum (irule_at Any) >>
-  simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
+  simp[runtime_bodies_shape_ok_def] >> disch_then drule >> strip_tac >>
+  conj_tac >> rpt strip_tac
+  >- (`supported_stmts_expr_exists expr_shape_root body'` suffices_by gvs[] >>
+      irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+      first_x_assum (irule_at Any) >> simp[raw_shape_root_shape_root]) >>
+  `supported_exprs_exists expr_shape_root dflts` suffices_by gvs[] >>
+  irule (cj 3 supported_expr_exists_mono) >>
+  first_x_assum (irule_at Any) >> simp[raw_shape_root_shape_root]
 QED
 
 (* supported_program's distinct function names keep the internal ones

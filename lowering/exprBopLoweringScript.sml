@@ -51,7 +51,7 @@ Proof
 QED
 Theorem lower_value_child_call:
   !n f cenv ty e.
-    expr_size e < n ==>
+    expr_size e + cenv_defaults_size cenv < n ==>
     lower_value (expr_child_callback n f) cenv ty e = lower_value f cenv ty e
 Proof
   rw[FUN_EQ_THM, lower_value_def, comp_bind_def]

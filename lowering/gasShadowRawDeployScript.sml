@@ -29,8 +29,7 @@ Proof
   Cases_on `ctor_fn`
   >- (simp[set_constructor_package_target_def, ctor_named_init_def] >>
       IF_CASES_TAC >> simp[] >>
-      irule (SRULE [] (Q.INST [`ints` |-> `[]`, `stmts` |-> `[]`]
-        (SPEC_ALL gas_shadow_run_deploy_lowering)))) >>
+      irule gas_shadow_run_deploy_lowering_no_ctor) >>
   PairCases_on `x` >>
   simp[gas_shadow_fn_allocs_ok, gas_shadow_package_constructor,
        gas_shadow_set_constructor_package_target, ctor_named_init_def] >>

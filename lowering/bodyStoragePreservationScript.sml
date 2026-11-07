@@ -29,7 +29,8 @@ Ancestors
   vyperStatePreservation vyperTypeAssignContext vyperStoragePlaceProvenance
   vyperPlaceStoragePreservation vyperValue vyperMachineFrame
   vyperTypeContractStaticMaps supportedDecls supportedStmts supportedExprs
-  supportedTargets supportedStmtTraverse bodyStorageCases list
+  supportedTargets supportedStmtTraverse bodyStorageCases
+  bodyStorageIntcallDefaults list
 
 (* Proved by one mutual induction over evaluate_ind; each clause is
    discharged by its case lemma from bodyStorageCases. *)
@@ -700,7 +701,8 @@ QED
 
 Resume body_oracle_storage_mutual[intcall_start]:
   strip_tac >>
-  qpat_x_assum `!a b c d e f g h i j k l m n p q r s. _ ==> _` kall_tac >>
+  qpat_x_assum `!a b c d e f g h i j k l m n p q r s. _ ==> _`
+    (mk_asm "default_ih") >>
   qpat_x_assum `!a. _` (mk_asm "intcall_ih1") >>
   qpat_x_assum `!a. _` (mk_asm "intcall_ih2") >>
   rpt gen_tac >> strip_tac >> reverse conj_tac
@@ -710,11 +712,13 @@ Resume body_oracle_storage_mutual[intcall_start]:
       supported_expr_exists_def] >>
   Cases_on `MEM (NONE,fn) cx.stk`
   >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      asm_x "default_ih" kall_tac >>
       gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
           ignore_bind_apply] >>
       drule runtime_storage_consistent_storage >> simp[]) >>
   Cases_on `lookup_callable_function cx.in_deploy fn tops`
   >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      asm_x "default_ih" kall_tac >>
       gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
           return_def, raise_def, ignore_bind_apply, bind_apply] >>
       drule runtime_storage_consistent_storage >> simp[]) >>
@@ -723,10 +727,10 @@ Resume body_oracle_storage_mutual[intcall_start]:
   rename1 `lookup_callable_function cx.in_deploy fn tops =
              SOME (mut,nr,args,dflts,ret,ss)` >>
   drule_all supported_callable_storage_syntax >> strip_tac >> gvs[] >>
-  Cases_on `LENGTH es = LENGTH args`
-  >- suspend "intcall_live" >>
-  `~(LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es)` by decide_tac >>
+  Cases_on `LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts`
+  >- (pop_assum strip_assume_tac >> suspend "intcall_live") >>
   asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+  asm_x "default_ih" kall_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
        return_def, raise_def, ignore_bind_apply, bind_apply] >>
@@ -736,13 +740,13 @@ QED
 Resume body_oracle_storage_mutual[intcall_live]:
   asm_x "intcall_ih1" mp_tac >> simp[] >> disch_then assume_tac >>
   asm_x "intcall_ih2" mp_tac >> simp[] >> disch_then assume_tac >>
+  asm_x "default_ih" mp_tac >> simp[] >> disch_then (mk_asm "default_ih") >>
   rule_assum_tac (SRULE [type_check_def, assert_def, return_def,
-                        eval_empty_defaults_finally, get_scopes_def]) >>
-  drule_all eval_expr_intcall_empty_defaults >>
-  disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
-  simp_tac bool_ss [bind_def, ignore_bind_def] >>
+                        get_scopes_def]) >>
   Cases_on `eval_expr_results cx es st` >>
   rename1 `eval_expr_results cx es st = (args_res,args_st)` >>
+  drule_all eval_expr_intcall_defaults_step >>
+  disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
     (irule call_evaluation_safe_mono >>
      qexists_tac `(NONE,fn)::int_calls_exprs es` >> simp[]) >>
@@ -751,10 +755,9 @@ Resume body_oracle_storage_mutual[intcall_live]:
   `contract_storage_well_formed cx args_st` by
     (qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
      simp[]) >>
-  Cases_on `args_res` >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"]
+  Cases_on `args_res` >> pure_rewrite_tac [sumTheory.sum_case_def] >> BETA_TAC
   >- suspend "intcall_args_success" >>
-  rpt strip_tac >> gvs[]
+  strip_tac >> gvs[]
 QED
 
 Resume body_oracle_storage_mutual[intcall_args_success]:
@@ -774,9 +777,63 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
      qexists_tac `st` >> simp[] >>
      drule eval_expr_results_outcome_suffix >> simp[]) >>
   qpat_x_assum `!env0 s0 r0 s1. well_typed_exprs _ _ /\ _ ==> _` kall_tac >>
-  simp_tac bool_ss [get_scopes_def, return_def] >>
-  Cases_on `read_results cx actual_results args_st` >>
-  rename1 `read_results cx actual_results args_st = (read_res,read_st)` >>
+  Cases_on `finally (do set_scopes [FEMPTY];
+                       eval_exprs (cx with stk updated_by CONS (NONE,fn))
+                         (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts) od)
+              (set_scopes args_st.scopes) args_st` >>
+  rename1 `_ = (dflt_res,d_st)` >>
+  `d_st.scopes = args_st.scopes /\ runtime_storage_consistent env cx d_st /\
+   IS_SOME d_st.outcomes /\ oracle_storage_ok cx d_st /\
+   expr_results_typed (env,cx,d_st) es actual_results` by
+    (`env_consistent env cx args_st` by fs[runtime_consistent_def] >>
+     `IS_SOME (FLOOKUP env.fn_sigs (NONE,fn))` by simp[] >>
+     drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
+     strip_tac >>
+     `call_evaluation_safe (cx with stk updated_by CONS (NONE,fn))
+        (int_calls_exprs (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts))` by
+       (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_push_needed_defaults >>
+        metis_tac[]) >>
+     `runtime_storage_consistent (defaults_env env_body)
+        (cx with stk updated_by CONS (NONE,fn)) (args_st with scopes := [FEMPTY]) /\
+      functions_well_typed (cx with stk updated_by CONS (NONE,fn))` by
+       (irule vyperTypeEvalStoragePreservationTheory.intcall_defaults_runtime_storage_consistent >>
+        simp[] >> qexists_tac `env` >> simp[]) >>
+     `!r1 s1. eval_exprs (cx with stk updated_by CONS (NONE,fn))
+         (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts)
+         (args_st with scopes := [FEMPTY]) = (r1,s1) ==>
+       contract_storage_well_formed cx s1` by
+       (rpt strip_tac >>
+        qsuff_tac `contract_storage_well_formed
+          (cx with stk updated_by CONS (NONE,fn)) s1`
+        >- simp[vyperTypeEvalStoragePreservationTheory.contract_storage_well_formed_stk] >>
+        mp_tac (Q.INST [`st` |-> `args_st`, `f` |-> `CONS (NONE,fn)`,
+                        `scopes` |-> `[FEMPTY]`] body_oracle_storage_frame_entry) >>
+        impl_tac >- simp[] >> strip_tac >>
+        `oracle_storage_ok cx (args_st with scopes := [FEMPTY])` by
+          fs[oracle_storage_ok_payload] >>
+        asm_x "default_ih" irule >>
+        simp[supported_exprs_exists_DROP, int_calls_exprs_DROP_EVERY,
+             get_scopes_def, set_scopes_def, type_check_def, assert_def,
+             return_def] >>
+        conj_tac
+        >- (qexists_tac `tops` >> fs[vyperContextTheory.get_module_code_def]) >>
+        conj_tac >- (goal_assum (drule_at Any)) >>
+        qexistsl_tac [`defaults_env env_body`, `r1`,
+                      `args_st with scopes := [FEMPTY]`] >>
+        simp[vyperTypeEvalSoundnessTheory.well_typed_exprs_DROP]) >>
+     irule bodyStorageIntcallDefaultsTheory.intcall_defaults_oracle_storage >>
+     simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `runtime_consistent env cx d_st` by
+    metis_tac[runtime_storage_consistent_runtime] >>
+  `contract_storage_well_formed cx d_st` by
+    metis_tac[runtime_storage_consistent_storage] >>
+  reverse (Cases_on `dflt_res`) >- (simp[] >> strip_tac >> gvs[]) >>
+  simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def",
+       Excl "is_view_mut_def"] >>
+  rename1 `_ = (INL dflt_vs,d_st)` >>
+  simp_tac bool_ss [bind_def, ignore_bind_def] >>
+  Cases_on `read_results cx actual_results d_st` >>
+  rename1 `read_results cx actual_results d_st = (read_res,read_st)` >>
   drule read_results_state >> strip_tac >>
   gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
   Cases_on `read_res` >>
@@ -786,32 +843,32 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
 QED
 
 Resume body_oracle_storage_mutual[intcall_read_success]:
-  rename1 `read_results cx actual_results args_st = (INL vs,args_st)` >>
-  Cases_on `bind_arguments (get_tenv cx) args vs`
+  rename1 `read_results cx actual_results d_st = (INL vs,d_st)` >>
+  Cases_on `bind_arguments (get_tenv cx) args (vs ++ dflt_vs)`
   >- (simp[lift_option_type_def, raise_def] >> rpt strip_tac >> gvs[]) >>
-  rename1 `bind_arguments (get_tenv cx) args vs = SOME call_env` >>
-  `env_consistent env cx args_st` by fs[runtime_consistent_def] >>
+  rename1 `bind_arguments (get_tenv cx) args (vs ++ dflt_vs) = SOME call_env` >>
+  `env_consistent env cx d_st` by fs[runtime_consistent_def] >>
   `IS_SOME (FLOOKUP env.fn_sigs (NONE,fn))` by simp[] >>
   drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
   strip_tac >>
   (`scope_well_typed call_env` by
     metis_tac[vyperTypeBindArgumentsTheory.bind_arguments_scope_well_typed_from_success] >>
-  `env_scopes_consistent env_body cx (args_st with scopes := [call_env])` by
+  `env_scopes_consistent env_body cx (d_st with scopes := [call_env])` by
     (drule vyperTypeBindArgumentsTheory.bind_arguments_env_scopes_consistent >>
      disch_then irule >> simp[] >> metis_tac[]) >>
   asm_simp_tac std_ss [Once lift_option_type_def, return_def] >>
   asm_simp_tac std_ss [Once lift_option_type_def, return_def] >>
   simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
        Excl "lift_option_type_def", Excl "is_view_mut_def"] >>
-  Cases_on `lock_if_nr cx nr (is_view_mut mut) args_st` >>
-  rename1 `lock_if_nr cx nr (is_view_mut mut) args_st = (lock_res,lock_st)` >>
+  Cases_on `lock_if_nr cx nr (is_view_mut mut) d_st` >>
+  rename1 `lock_if_nr cx nr (is_view_mut mut) d_st = (lock_res,lock_st)` >>
   `storage_layout_safe cx` by metis_tac[runtime_storage_consistent_layout] >>
   drule_all body_intcall_lock_oracle_entry >> strip_tac >>
   rewrite_tac[GSYM is_view_mut_def] >> Cases_on `lock_res` >>
   asm_simp_tac (srw_ss()) [Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
        Excl "lift_option_type_def", Excl "is_view_mut_def"]
   >- suspend "intcall_lock_success" >>
-  rpt strip_tac >> gvs[])
+  rpt strip_tac >> gvs[ignore_bind_def])
 QED
 
 Resume body_oracle_storage_mutual[intcall_lock_success]:
@@ -821,7 +878,7 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
       simp[push_function_def, return_def] >>
    qpat_x_assum `!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
       (assume_tac o SIMP_RULE bool_ss [GSYM is_view_mut_def, GSYM lock_if_nr_def]) >>
-   drule body_intcall_guard_apply >> disch_then assume_tac >>
+   drule body_intcall_guard_apply >> disch_then (mk_asm "intcall_guard") >>
    drule_all body_intcall_runtime_frame >> strip_tac >>
    `call_evaluation_safe (cx with stk updated_by CONS (NONE,fn)) (int_calls_stmts ss)` by
      (drule call_evaluation_safe_push_body >> simp[] >>
@@ -839,11 +896,11 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
         (qpat_x_assum `get_module_code cx NONE = _` mp_tac >>
          simp[vyperContextTheory.get_module_code_def]) >>
       gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
-      qpat_x_assum `!vs st results lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
+      asm_x "intcall_guard" irule >>
       simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
       conj_tac
       >- (rpt (goal_assum (drule_at Any)) >>
-          simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"]) >>
+          simp[Excl "lock_if_nr_def", is_view_mut_def]) >>
       rpt (goal_assum (drule_at Any)) >> simp[]) >>
    suspend "intcall_return")
 QED

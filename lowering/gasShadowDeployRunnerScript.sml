@@ -2,7 +2,7 @@
 Theory gasShadowDeployRunner
 Ancestors
   gasShadowDeploy gasShadowUnitExtract gasShadowUnitGuards
-  gasShadowUnit gasShadowState gasShadowModuleDefs gasShadow
+  gasShadowUnit gasShadowState gasShadowModuleDefs gasShadowCenv gasShadow
   vyperCompiler moduleLowering compileEnv venomCompilerTypes list
 
 Theorem gas_shadow_deploy_final_state:
@@ -10,7 +10,8 @@ Theorem gas_shadow_deploy_final_state:
   gas_shadow_state
     (SND (compile_generate_deploy has bytes imm args size ints ce stmts pay nr key trans s))
     (SND (compile_generate_deploy has bytes imm args size
-      (MAP gas_shadow_internal_package ints) ce (MAP gas_shadow_stmt stmts) pay nr key trans s))
+      (MAP gas_shadow_internal_package ints) (gas_shadow_cenv ce)
+      (MAP gas_shadow_stmt stmts) pay nr key trans s))
 Proof
   rpt gen_tac >> irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def] gas_shadow_compile_generate_deploy)) >>
   simp[gas_shadow_state_refl]
@@ -21,7 +22,8 @@ Theorem gas_shadow_run_deploy_lowering:
   OPTREL gas_shadow_unit
     (run_deploy_lowering has rp bytes imm args size ints ce stmts pay nr key trans entry)
     (run_deploy_lowering has rp bytes imm args size
-      (MAP gas_shadow_internal_package ints) ce (MAP gas_shadow_stmt stmts) pay nr key trans entry)
+      (MAP gas_shadow_internal_package ints) (gas_shadow_cenv ce)
+      (MAP gas_shadow_stmt stmts) pay nr key trans entry)
 Proof
   rpt gen_tac >> simp[run_deploy_lowering_def] >>
   Cases_on `lowering_policy_ok rp` >> simp[] >>
@@ -50,4 +52,23 @@ Proof
   pop_assum (fn th => drule th) >> strip_tac >>
   gvs[] >> Cases_on `lowering_context_ok (install_immutable_reservation imm x'0)` >>
   simp[gas_shadow_unit_def] >> IF_CASES_TAC >> simp[gas_shadow_unit_def]
+QED
+
+(* Without a constructor the deploy code never reads its compile env. *)
+Theorem gas_shadow_run_deploy_lowering_no_ctor:
+  !rp bytes imm args dsz ce ce' pay nr key trans entry.
+  OPTREL gas_shadow_unit
+    (run_deploy_lowering F rp bytes imm args dsz [] ce [] pay nr key trans entry)
+    (run_deploy_lowering F rp bytes imm args dsz [] ce' [] pay nr key trans entry)
+Proof
+  rpt gen_tac >>
+  `run_deploy_lowering F rp bytes imm args dsz [] ce' [] pay nr key trans entry =
+   run_deploy_lowering F rp bytes imm args dsz [] (gas_shadow_cenv ce) []
+     pay nr key trans entry`
+    by simp[run_deploy_lowering_def, compile_generate_deploy_def] >>
+  pop_assum SUBST1_TAC >>
+  mp_tac (Q.SPECL [`F`, `rp`, `bytes`, `imm`, `args`, `dsz`, `[]`, `ce`, `[]`,
+                   `pay`, `nr`, `key`, `trans`, `entry`]
+            gas_shadow_run_deploy_lowering) >>
+  simp[]
 QED

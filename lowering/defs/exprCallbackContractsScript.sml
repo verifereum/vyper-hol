@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem expr_child_callback_agrees:
-  (∀e. MEM e es ⇒ expr_size e < bound) ⇒
+  (∀e. MEM e es ⇒ expr_size e + cenv_defaults_size cenv < bound) ⇒
   expr_callbacks_agree (expr_child_callback bound f) f cenv es
 Proof
   simp[expr_callbacks_agree_def, expr_child_callback_def]
@@ -147,12 +147,16 @@ Definition call_callback_children_def:
     (case default_ret of NONE => [] | SOME e => [e])
 End
 
+(* An internal call also compiles its callee's omitted defaults, in the env
+   without the callee's defaults. *)
 Theorem compile_intcall_callback_contract:
-  expr_callbacks_agree f g cenv args ⇒
+  expr_callbacks_agree f g cenv args ∧
+  expr_callbacks_agree f g (cenv_without_defaults cenv (nsid_to_string id))
+    (omitted_defaults cenv (nsid_to_string id) (LENGTH args)) ⇒
   compile_call f cenv ret_ty ty (IntCall id) args default_ret st =
   compile_call g cenv ret_ty ty (IntCall id) args default_ret st
 Proof
-  strip_tac >> drule compile_multi_vvs_callback_contract >>
+  strip_tac >> imp_res_tac compile_multi_vvs_callback_contract >>
   simp[compile_call_def]
 QED
 
@@ -377,12 +381,15 @@ Proof
 QED
 
 Theorem compile_call_callback_contract:
-  expr_callbacks_agree f g cenv (call_callback_children args default_ret) ⇒
+  expr_callbacks_agree f g cenv (call_callback_children args default_ret) ∧
+  (∀id. target = IntCall id ⇒
+     expr_callbacks_agree f g (cenv_without_defaults cenv (nsid_to_string id))
+       (omitted_defaults cenv (nsid_to_string id) (LENGTH args))) ⇒
   compile_call f cenv ret_ty ty target args default_ret st =
   compile_call g cenv ret_ty ty target args default_ret st
 Proof
   strip_tac >> Cases_on `target` >>
-  FIRST [irule compile_intcall_callback_contract >>
+  FIRST [irule compile_intcall_callback_contract >> gvs[] >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_send_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
@@ -424,14 +431,14 @@ Proof
 QED
 
 Theorem expr_list_child_callback_agrees:
-  expr_callbacks_agree (expr_child_callback (list_size expr_size args) f) f cenv args
+  expr_callbacks_agree (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) f cenv args
 Proof
   irule expr_child_callback_agrees >> simp[expr_list_member_bound]
 QED
 
 Theorem lower_value_list_child_call:
   MEM e args ⇒
-  lower_value (expr_child_callback (list_size expr_size args) f) cenv ty e =
+  lower_value (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv ty e =
   lower_value f cenv ty e
 Proof
   strip_tac >> irule lower_value_callback_contract >>
@@ -441,7 +448,7 @@ QED
 
 Theorem compile_acc_list_child_call:
   MEM e args ⇒
-  compile_acc (expr_child_callback (list_size expr_size args) f) cenv e item st =
+  compile_acc (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv e item st =
   compile_acc f cenv e item st
 Proof
   strip_tac >> irule compile_acc_callback_contract >>
@@ -450,7 +457,7 @@ Proof
 QED
 
 Theorem compile_multi_exprs_list_child_calls:
-  compile_multi_exprs (expr_child_callback (list_size expr_size args) f) cenv args =
+  compile_multi_exprs (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv args =
   compile_multi_exprs f cenv args
 Proof
   irule compile_multi_exprs_callback_contract >>
@@ -458,28 +465,28 @@ Proof
 QED
 
 Theorem compile_concat_list_child_calls:
-  compile_concat (expr_child_callback (list_size expr_size args) f) cenv args dp infos off =
+  compile_concat (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv args dp infos off =
   compile_concat f cenv args dp infos off
 Proof
   irule compile_concat_callback_contract >> irule expr_list_child_callback_agrees
 QED
 
 Theorem compile_make_tuple_list_child_calls:
-  compile_make_tuple (expr_child_callback (list_size expr_size args) f) cenv args buf off =
+  compile_make_tuple (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv args buf off =
   compile_make_tuple f cenv args buf off
 Proof
   irule compile_make_tuple_callback_contract >> irule expr_list_child_callback_agrees
 QED
 
 Theorem compile_make_array_list_child_calls:
-  compile_make_array (expr_child_callback (list_size expr_size args) f) cenv args elem_ty sz lw buf =
+  compile_make_array (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv args elem_ty sz lw buf =
   compile_make_array f cenv args elem_ty sz lw buf
 Proof
   irule compile_make_array_callback_contract >> irule expr_list_child_callback_agrees
 QED
 
 Theorem compile_subscript_child_calls:
-  compile_subscript (expr_child_callback (expr_size (Subscript ann base_e idx_e)) f)
+  compile_subscript (expr_child_callback (expr_size (Subscript ann base_e idx_e) + cenv_defaults_size cenv) f)
     cenv ret_ty ty base_e idx_e = compile_subscript f cenv ret_ty ty base_e idx_e
 Proof
   irule compile_subscript_callback_contract >> irule expr_child_callback_agrees >>
@@ -487,7 +494,7 @@ Proof
 QED
 
 Theorem compile_attribute_child_call:
-  compile_attribute (expr_child_callback (expr_size (Attribute ann base_e fld)) f)
+  compile_attribute (expr_child_callback (expr_size (Attribute ann base_e fld) + cenv_defaults_size cenv) f)
     cenv ret_ty ty base_e fld = compile_attribute f cenv ret_ty ty base_e fld
 Proof
   irule compile_attribute_callback_contract >> irule expr_child_callback_agrees >>
@@ -495,7 +502,7 @@ Proof
 QED
 
 Theorem compile_struct_lit_child_calls:
-  compile_struct_lit (expr_child_callback (expr_size (StructLit ann nsid fields)) f)
+  compile_struct_lit (expr_child_callback (expr_size (StructLit ann nsid fields) + cenv_defaults_size cenv) f)
     cenv ty fields buf off = compile_struct_lit f cenv ty fields buf off
 Proof
   irule compile_struct_lit_callback_contract >> irule expr_child_callback_agrees >>
@@ -503,12 +510,15 @@ Proof
 QED
 
 Theorem compile_call_child_calls:
-  compile_call (expr_child_callback (expr_size (Call ann target args default_ret)) f)
+  compile_call (expr_child_callback (expr_size (Call ann target args default_ret) + cenv_defaults_size cenv) f)
     cenv ret_ty ty target args default_ret st =
   compile_call f cenv ret_ty ty target args default_ret st
 Proof
-  irule compile_call_callback_contract >> irule expr_child_callback_agrees >>
-  simp[call_callback_child_bound]
+  irule compile_call_callback_contract >> rpt strip_tac
+  >- (irule expr_child_callback_agrees >> rpt strip_tac >>
+      drule omitted_default_bound >> simp[])
+  >> irule expr_child_callback_agrees >> rpt strip_tac >>
+  drule call_callback_child_bound >> simp[]
 QED
 
 Theorem expr_index_child_bound:
@@ -552,9 +562,9 @@ QED
    exploratory probe is exported.
 Theorem compile_expr_body_guard_transparent:
   ∀f b t cenv ty e st. compile_expr_body
-    (expr_child_callback (expr_size e) f)
-    (builtin_child_callback (expr_size e) b)
-    (type_child_callback (expr_size e) t) cenv ty e st =
+    (expr_child_callback (expr_size e + cenv_defaults_size cenv) f)
+    (builtin_child_callback (expr_size e + cenv_defaults_size cenv) b)
+    (type_child_callback (expr_size e + cenv_defaults_size cenv) t) cenv ty e st =
   compile_expr_body f b t cenv ty e st
 Proof
   rpt gen_tac >> Cases_on `e` >>
@@ -567,32 +577,32 @@ QED
 *)
 
 Theorem builtin_dispatch_child_handoff:
-  builtin_child_callback (expr_size (Builtin ann bi args)) b
+  builtin_child_callback (expr_size (Builtin ann bi args) + cenv_defaults_size cenv) b
     cenv ret_ty ty bi args st = b cenv ret_ty ty bi args st
 Proof
   simp[expr_size_def]
 QED
 
 Theorem type_dispatch_child_handoff:
-  type_child_callback (expr_size (TypeBuiltin ann tb ret_ty args)) t
+  type_child_callback (expr_size (TypeBuiltin ann tb ret_ty args) + cenv_defaults_size cenv) t
     cenv vv_ty ty tb ret_ty args st = t cenv vv_ty ty tb ret_ty args st
 Proof
   simp[expr_size_def]
 QED
 
 Theorem ifexp_lower_value_child_calls:
-  lower_value (expr_child_callback (expr_size (IfExp ann cond then_e else_e)) f)
+  lower_value (expr_child_callback (expr_size (IfExp ann cond then_e else_e) + cenv_defaults_size cenv) f)
     cenv cond_ty cond = lower_value f cenv cond_ty cond ∧
-  lower_value (expr_child_callback (expr_size (IfExp ann cond then_e else_e)) f)
+  lower_value (expr_child_callback (expr_size (IfExp ann cond then_e else_e) + cenv_defaults_size cenv) f)
     cenv ty then_e = lower_value f cenv ty then_e ∧
-  lower_value (expr_child_callback (expr_size (IfExp ann cond then_e else_e)) f)
+  lower_value (expr_child_callback (expr_size (IfExp ann cond then_e else_e) + cenv_defaults_size cenv) f)
     cenv ty else_e = lower_value f cenv ty else_e
 Proof
   simp[lower_value_def, FUN_EQ_THM, comp_bind_def, expr_size_def]
 QED
 
 Theorem compile_multi_vvs_call_children:
-  compile_multi_vvs (expr_child_callback (expr_size (Call ann target args default_ret)) f)
+  compile_multi_vvs (expr_child_callback (expr_size (Call ann target args default_ret) + cenv_defaults_size cenv) f)
     cenv args = compile_multi_vvs f cenv args
 Proof
   irule compile_multi_vvs_callback_contract >> irule expr_child_callback_agrees >>
@@ -601,7 +611,7 @@ QED
 
 Theorem compile_multi_exprs_nested_array_children:
   MEM (Builtin ann (MakeArray elem_ty bnd) elems) args ⇒
-  compile_multi_exprs (expr_child_callback (list_size expr_size args) f) cenv elems =
+  compile_multi_exprs (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f) cenv elems =
   compile_multi_exprs f cenv elems
 Proof
   strip_tac >> irule compile_multi_exprs_callback_contract >>
@@ -611,7 +621,7 @@ QED
 
 Theorem lower_value_extcode_child:
   MEM src_e args ∧ is_extcode src_e ⇒
-  lower_value (expr_child_callback (list_size expr_size args) f)
+  lower_value (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) f)
     cenv ty (extcode_addr_expr src_e) =
   lower_value f cenv ty (extcode_addr_expr src_e)
 Proof

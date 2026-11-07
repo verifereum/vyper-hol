@@ -70,7 +70,8 @@ Theorem log_mem_stmt_open[local]:
 Proof
   strip_tac >>
   Cases_on `SND (split_log_ops xs flags) = []`
-  >- (drule_all compile_log_empty_trace >> strip_tac >>
+  >- (mp_tac (Q.INST [`topics` |-> `ops`] compile_log_empty_trace) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
       qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[] >>
       metis_tac[log_mem_emit_open]) >>
   drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
@@ -335,7 +336,9 @@ Resume compile_log_ready_stmt_frag_mem[post]:
         simp[Abbr `E1`, Abbr `E2`, Abbr `ev`, wordsTheory.w2w_id,
              evaluation_state_component_equality, Excl "enc_def"] >>
       simp[Excl "enc_def"])
-  >- fs[lookup_var_def, Excl "enc_def"] >>
+  >- (qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                          lookup_var x u = SOME w` mp_tac >>
+      simp[lookup_var_def, Excl "enc_def"]) >>
   qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
                `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
     mp_tac return_buf_frame_frame >>

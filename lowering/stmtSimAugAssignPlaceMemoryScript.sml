@@ -125,8 +125,9 @@ Proof
   rpt gen_tac >> Cases_on `h`
   >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
       Cases_on `a` >>
-      simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
-      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+      (* FIRST makes holbuild time this per goal, not over all 81 cases *)
+      FIRST [simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
+             simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]]
       >~ [`array_set_index _ _ _ _ = INR _`]
       >- (gvs[vyperValueOperationTheory.array_set_index_def,
               vyperValueOperationTheory.array_index_def, AllCaseEqs(),

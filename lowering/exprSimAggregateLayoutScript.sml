@@ -204,7 +204,7 @@ QED
 Theorem struct_child_compile:
   !ann nsid fields ce buf sa.
     compile_struct_lit
-      (expr_child_callback (expr_size (StructLit ann nsid fields)) compile_expr)
+      (expr_child_callback (expr_size (StructLit ann nsid fields) + cenv_defaults_size ce) compile_expr)
       ce (StructT nsid) fields buf 0 sa =
     compile_struct_lit compile_expr ce (StructT nsid) fields buf 0 sa
 Proof
@@ -344,14 +344,14 @@ Proof
 QED
 
 Theorem tuple_child_compile:
-  compile_make_tuple (expr_child_callback (list_size expr_size args) compile_expr)
+  compile_make_tuple (expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr)
     ce args buf off sa = compile_make_tuple compile_expr ce args buf off sa
 Proof
   AP_THM_TAC >> MATCH_ACCEPT_TAC compile_make_tuple_list_child_calls
 QED
 
 Theorem array_child_compile:
-  compile_make_array (expr_child_callback (list_size expr_size args) compile_expr)
+  compile_make_array (expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr)
     ce args et sz lw buf sa = compile_make_array compile_expr ce args et sz lw buf sa
 Proof
   AP_THM_TAC >> MATCH_ACCEPT_TAC compile_make_array_list_child_calls
