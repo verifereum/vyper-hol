@@ -1933,7 +1933,7 @@ Proof
   gvs[venomInstTheory.is_terminator_def, venomInstTheory.is_ext_call_op_def]
 QED
 
-Theorem dynamic_writes_fresh_path_opcodes[local]:
+Theorem dynamic_writes_fresh_path_opcodes:
   dynamic_writes_fresh sa code ==>
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
              ~is_terminator i.inst_opcode /\ ~is_ext_call_op i.inst_opcode) code
@@ -2154,7 +2154,7 @@ Proof
       dynamic_straight_fresh_convert]
 QED
 
-Theorem dynamic_code_prefix[local]:
+Theorem dynamic_code_prefix:
   dynamic_straight_fresh m /\ m sa = (op,sb) /\ fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
