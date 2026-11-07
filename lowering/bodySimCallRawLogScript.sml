@@ -60,7 +60,7 @@ Proof
   simp[ignore_bind_def, bind_assoc]
 QED
 
-Theorem raw_log_outcome_bind_values[local]:
+Theorem raw_log_outcome_bind_values:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> (value list) evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -81,7 +81,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_value[local]:
+Theorem raw_log_outcome_bind_value:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -102,7 +102,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_unit[local]:
+Theorem raw_log_outcome_bind_unit:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> unit evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
