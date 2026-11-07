@@ -16,6 +16,7 @@ Ancestors
   ctorDeployLoweringDefs ctorDeployLoweringCode ctorDeployLoweringEntry
   ctorDeployLoweringFrame e2eDeployDefs
   ctorDeployMemoryRunPtrDefs ctorDeployMemoryRunPtrNoCtor fragExecPtr
+  ctorDeployMemoryRunPtrEntryGhost
   ctorDeployMemoryRunPtrPrefix ctorDeployMemoryRunPtrEntry
   ctorDeployMemoryRunPtrBody ctorDeployMemoryRunPtrFrameRet
   ctorDeployMemoryRunPtrFallthrough
@@ -55,7 +56,7 @@ Proof
   `nr' = nr /\ body' = body` by
     (drule_all deploy_ctor_entry_reaches_body >> strip_tac >> simp[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  drule_all deploy_ctor_entry_run_ptr >> strip_tac >>
+  drule_all deploy_ctor_entry_run_ptr_ghost >> strip_tac >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
     fs[deploy_state_rel_def] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
