@@ -436,8 +436,8 @@ Theorem memory_cast_counted_exit:
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
   convert_result cx tsrc dst v = INR ex ==>
-  ?r H th count.
-    gas_path_ptr D 0 ctx fn PG G tn s count H th r /\
+  ?r H th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th r /\
     expr_exit (INR ex : value + exception) r /\ ghost_kept cenv es sm G tn s H th
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

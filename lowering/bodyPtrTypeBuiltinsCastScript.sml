@@ -6,7 +6,7 @@ Ancestors
   compileEnv emitHelper emitHelperProps ASCIInumbers rich_list
   exprSimPtrLiteralBuffer ghostPcTransportPtr
   fragGasSeqPtr fragGasSeqAbort fragGasPathPtr instIdxIndep fragExec wordArgsPtr
-  venomExecSemantics venomState venomInst ptrDiscipline arithmetic
+  venomExecSemantics venomState venomInst ptrDiscipline arithmetic stmtAppendStoragePathPtr
 
 Theorem convert_cast_emitted_shape:
   compile_type_convert x (ConvBytestringCast n i) sa = (out,sb) ==>
@@ -179,8 +179,8 @@ Theorem cast_narrow_abort_path:
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> len /\ p <> a /\ p <> b) ==>
-  ?H th count j.
-    gas_path_ptr D 0 ctx fn PG G tn s count H th
+  ?H th j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s H th
 Proof
   strip_tac >> qpat_x_assum `code = _` SUBST_ALL_TAC >>
@@ -219,8 +219,12 @@ Proof
      [mk_inst (id+1) GT [Var len;Lit (n2w n)] [a];
       mk_inst (id+2) ISZERO [Var a] [b]; mk_inst (id+3) ASSERT [Var b] []]` by
     simp[mk_inst_def, is_terminator_def] >>
-  drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
-  qexistsl_tac [`H`,`th`,`n'`,`j`] >> conj_tac
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     [mk_inst (id+1) GT [Var len;Lit (n2w n)] [a];
+      mk_inst (id+2) ISZERO [Var a] [b]; mk_inst (id+3) ASSERT [Var b] []]` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_abort_zero_path_ptr >> strip_tac >>
+  qexistsl_tac [`H`,`th`,`j`] >> conj_tac
   >- (rev_drule gas_path_ptr_then >> disch_then drule >> simp[]) >>
   simp[ghost_kept_def] >> metis_tac[]
 QED
@@ -264,8 +268,8 @@ Theorem convert_cast_abort_path:
   ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) ==>
-  out = Var src /\ ?H th count j.
-    gas_path_ptr D 0 ctx fn PG G tn s count H th
+  out = Var src /\ ?H th j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s H th
 Proof
   strip_tac >> drule convert_cast_emitted_shape >> strip_tac >> simp[] >>
