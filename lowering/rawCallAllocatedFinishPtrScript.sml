@@ -82,6 +82,8 @@ Theorem raw_call_allocated_scalar_outcome:
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v u J jn.
       res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result H un t /\
+      expr_val_rel cx (BaseT BoolT) v result t /\
+      expr_val_at cenv cx (BaseT BoolT) sa sc ee v result t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
       ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es sa u t /\
@@ -128,7 +130,10 @@ Proof
   impl_tac >- (Cases_on `flags.rcf_is_static` >> simp[] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`v`, `u`, `H`, `un`] >> simp[]
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
+    compileEnvTheory.is_word_type_def, vyperValueTheory.evaluate_type_def,
+    valueEncodingTheory.typed_val_to_w256_def]
 QED
 
 Theorem raw_call_allocated_zero_reverting_outcome:
@@ -162,6 +167,8 @@ Theorem raw_call_allocated_zero_reverting_outcome:
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v u J jn.
       res = INL (Value v) /\ ptr_val_ok cx NoneT v result H un t /\ ptr_buf_ok cenv e result H t /\
+      expr_val_rel cx NoneT v result t /\
+      expr_val_at cenv cx NoneT sa sc ee v result t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
       ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es sa u t /\
@@ -209,7 +216,12 @@ Proof
   impl_tac >- (Cases_on `flags.rcf_is_static` >> simp[] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`v`, `u`, `H`, `un`] >> simp[]
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
+    vyperValueTheory.evaluate_type_def, compileEnvTheory.is_word_type_def,
+    venomStateTheory.eval_operand_def, valueEncodingTheory.val_wf_def,
+    valueEncodingTheory.val_in_memory_def, loweringPostsTheory.val_footprint_def,
+    valueEncodingTheory.type_memory_size_def]
 QED
 
 Theorem raw_call_allocated_positive_reverting_outcome:
@@ -298,7 +310,7 @@ Proof
     Cases_on `flags.rcf_is_static` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`v`, `u`, `H`, `un`] >> simp[]
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[]
 QED
 
 Theorem raw_call_allocated_positive_nonreverting_outcome:
@@ -390,5 +402,5 @@ Proof
     Cases_on `flags.rcf_is_static` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`v`, `u`, `H`, `un`] >> simp[]
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[]
 QED

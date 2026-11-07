@@ -106,6 +106,7 @@ Theorem raw_call_scalar_finish:
     regions_disjoint (w2n ro) 0 a len) /\
   is_word_type ty ==>
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+    eval_operand result t = SOME (val_to_w256 (BoolV outcome.co_success)) /\
     ptr_val_ok cx ty (BoolV outcome.co_success) result H un t /\
     (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
@@ -171,6 +172,7 @@ Theorem raw_call_zero_reverting_finish:
       (if outcome.co_success then OK t else Abort Revert_abort t) /\
     t.vs_returndata = outcome.co_returnData /\
     (if outcome.co_success then
+      result = Lit 0w /\
       ptr_val_ok cx NoneT NoneV result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
       ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
@@ -249,6 +251,11 @@ Theorem raw_call_positive_reverting_finish:
       (if outcome.co_success then OK t else Abort Revert_abort t) /\
     t.vs_returndata = outcome.co_returnData /\
     (if outcome.co_success then
+      result = Var src /\ lookup_var src t = SOME (n2w ob) /\
+      t.vs_allocas = s.vs_allocas /\
+      (!name a len. local_region cenv
+        (SND (adopt_call_outcome rq outcome es1)).scopes t name a len ==>
+        regions_disjoint ob capacity a len) /\
       ptr_val_ok cx ty (BytesV (TAKE n outcome.co_returnData)) result H un t /\
       ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
@@ -299,7 +306,13 @@ Proof
   Cases_on `outcome.co_success` >> gvs[] >>
   drule_all (rawCallFinishBridgePtrTheory.oracle_taken_suffix_frames |>
     Q.INST [`sa` |-> `protected`] |>
-    SIMP_RULE (srw_ss()) [exprLoweringPropsTheory.ci_mono_refl]) >> gvs[]
+    SIMP_RULE (srw_ss()) [exprLoweringPropsTheory.ci_mono_refl]) >> gvs[] >>
+  strip_tac >>
+  drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >> strip_tac >>
+  `!name a len. local_region cenv es.scopes s name a len <=>
+    local_region cenv (SND (adopt_call_outcome rq outcome es1)).scopes t' name a len` by
+    (irule wordArgsPtrTheory.wb_frame_local_regions >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem raw_call_positive_nonreverting_finish:
@@ -345,6 +358,12 @@ Theorem raw_call_positive_nonreverting_finish:
   type_memory_bytes cenv (lowered_value_type cenv e) <= 32+capacity ==>
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
     t.vs_returndata = outcome.co_returnData /\
+    (?b ai. eval_operand result t = SOME (n2w b) /\
+      FLOOKUP t.vs_allocas ai = SOME (b,32+capacity) /\
+      sa.cs_next_id <= ai /\ ai < sb.cs_next_id /\
+      (!name a len. local_region cenv
+        (SND (adopt_call_outcome rq outcome es1)).scopes t name a len ==>
+        regions_disjoint b (32+capacity) a len)) /\
     ptr_val_ok cx ty (ArrayV (TupleV [BoolV outcome.co_success;
       BytesV (TAKE n outcome.co_returnData)])) result H un t /\ ptr_buf_ok cenv e result H t /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
@@ -387,7 +406,10 @@ Proof
   qexistsl_tac [`H'`, `un'`, `t'`] >> simp[] >>
   drule_all (rawCallFinishBridgePtrTheory.oracle_taken_suffix_frames |>
     Q.INST [`sa` |-> `protected`] |>
-    SIMP_RULE (srw_ss()) [exprLoweringPropsTheory.ci_mono_refl]) >> gvs[]
+    SIMP_RULE (srw_ss()) [exprLoweringPropsTheory.ci_mono_refl]) >> gvs[] >>
+  strip_tac >> qexistsl_tac [`b`, `ai`] >>
+  fs[venomStateTheory.eval_operand_def, exprLoweringPropsTheory.ci_mono_def] >>
+  first_assum MATCH_ACCEPT_TAC
 QED
 
 (* Source normalization is supplied by raw_call_prepared_source_total before
@@ -437,6 +459,8 @@ Theorem raw_call_scalar_finish_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v. res = INL (Value v) /\
+      v = BoolV outcome.co_success /\
+      eval_operand result t = SOME (val_to_w256 v) /\
       ptr_val_ok cx ty v result H un t /\
       (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
@@ -499,6 +523,8 @@ Theorem raw_call_zero_reverting_finish_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v. res = INL (Value v) /\
+      v = NoneV /\
+      result = Lit 0w /\
       ptr_val_ok cx NoneT v result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
@@ -568,6 +594,11 @@ Theorem raw_call_positive_reverting_finish_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v. res = INL (Value v) /\
+      v = BytesV (TAKE n outcome.co_returnData) /\
+      result = Var src /\ lookup_var src t = SOME (n2w ob) /\
+      t.vs_allocas = s.vs_allocas /\
+      (!name a len. local_region cenv ee.scopes t name a len ==>
+        regions_disjoint ob capacity a len) /\
       ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
@@ -584,7 +615,8 @@ Proof
     `if outcome.co_success then OK t else Abort Revert_abort t`] >>
   Cases_on `outcome.co_success` >>
   gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
-    fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
+    fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def] >>
+  first_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem raw_call_positive_nonreverting_finish_outcome:
@@ -643,6 +675,12 @@ Theorem raw_call_positive_nonreverting_finish_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags target data amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v. res = INL (Value v) /\
+      v = ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE n outcome.co_returnData)]) /\
+      (?b ai. eval_operand result t = SOME (n2w b) /\
+        FLOOKUP t.vs_allocas ai = SOME (b,32+capacity) /\
+        sa.cs_next_id <= ai /\ ai < sb.cs_next_id /\
+        (!name a len. local_region cenv ee.scopes t name a len ==>
+          regions_disjoint b (32+capacity) a len)) /\
       ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
@@ -656,5 +694,6 @@ Proof
   qexistsl_tac [`INL (Value (ArrayV (TupleV [BoolV outcome.co_success;
     BytesV (TAKE n outcome.co_returnData)])))`,
     `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`, `OK t`] >>
-  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs]
+  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
+  qexistsl_tac [`b`, `ai`] >> simp[] >> first_assum MATCH_ACCEPT_TAC
 QED
