@@ -104,3 +104,72 @@ Ancestors bodyPtrStructLitOwnershipModuleParams loweringShapeProps
    Admission inventory: scoped grep of bodyPtrStructLit*Script.sml finds
    only bodyPtrStructLitScript.sml:21 (the frozen target proof); no helper
    cheat found. This comment is an audit, not module or unit certification. *)
+
+(* Runtime/deploy packaging audit (C1.modules.closure.remaining.integration.packaging).
+   This is a consumer inventory, NOT generator certification.
+
+   E0218 supplies alloc_run_compile_internal_function. Guarded supplies external
+   and fallback bodies. Their post fresh_outputs alone cannot feed the next
+   list element: join each with its existing shape theorem to retain shape_state.
+   cenv_static_ok_shape_ok converts static ce with ce_return_pc=NONE to runnable
+   ce. External/fallback ownership additionally needs ce_alloca_locals=T; this
+   is NOT part of external_fn_shape_ok or fallback_shape_ok. The unit consumer
+   must establish that mode from its actual environment builder.
+
+   Proposed list contracts, with tuple arities exactly moduleLowering:756-781:
+   EVERY (\(lbl,ce,args,min_cds,pay,nr,key,tr,view,stmts,rt).
+     external_fn_shape_ok (lbl,ce,args,min_cds,pay,nr,key,tr,view,stmts,rt) /\
+     ce.ce_alloca_locals) exts ==>
+   alloc_run shape_state (compile_external_fn_bodies exts)
+     (\u s. shape_state s /\ fresh_outputs s).
+   EVERY (\(lbl,ce,params,rb,nr,key,tr,view,ctor,ilen,stmts,rt).
+     internal_fn_shape_ok (lbl,ce,params,rb,nr,key,tr,view,ctor,ilen,stmts,rt) /\
+     internal_label_ok lbl) ints ==>
+   alloc_run shape_state (compile_internal_fn_bodies ints)
+     (\u s. shape_state s /\ fresh_outputs s).
+   The internal new_block boundary must install the exact current label:
+   alloc_run_new_block_frame retains shape but does not export that equality.
+   Internal labels come from the list premise, NEVER fresh_label.
+
+   Proposed runtime contract: EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels,
+   the external and internal list premises above, fallback_shape_ok fb, and
+   (for SOME (ce,pay,nr,key,tr,view,stmts,rt)) ce.ce_alloca_locals imply
+   alloc_run shape_state
+     (compile_generate_runtime sels exts ints fb Linear buckets metadata dense info)
+     (\u s. shape_state s /\ fresh_outputs s).
+   No claim is made for Sparse or Dense. Existing dispatch shape requires
+   jump_label_ok target/fallback labels and ~label_sfx "dispatch" fallback.
+   fresh_label "fallback" exports compiler_label and label_sfx "fallback";
+   label_sfx_distinct supplies the exclusion. A new ownership boundary for
+   Linear dispatch and a joined arbitrary-size entry-check boundary are needed;
+   alloc_run_payable_check covers only compile_entry_checks 4 pay.
+
+   Proposed deploy contract: if has_ctor then cenv_static_ok ce,
+   ce.ce_return_pc=NONE, ce.ce_alloca_locals=T, body exclusion, and the internal
+   list premise above; conclude alloc_run shape_state of the exact
+   compile_generate_deploy call with post shape_state /\ fresh_outputs.
+   If has_ctor=F no constructor/list premises are necessary (list is unused).
+   After immutable reservation, exact registration input is
+     ce with ce_imm_alloca := (if ilen>0 then SOME imm else NONE).
+   ConstructorRegistration exports shape_state, cenv_shape_ok ce',
+   ce'.ce_return_pc=ce.ce_return_pc, and unchanged ce_alloca_locals.
+   Preserve plain_operand imm by stable framing across registration/lock/body.
+   fresh_label "ctor_exit" exports compiler_label, hence jump_label_ok.
+   The runnable callback environment is ce' with ce_ctor_exit_label:=SOME lbl.
+   deploy_cenv_exit_shape in ctorGeneratorShape proves precisely its shape
+   from cenv_shape_ok ce', ce'.ce_return_pc=NONE, jump_label_ok lbl, but is
+   LOCAL: it is not an exported reusable rule. Need an owned boundary or a
+   direct cenv_shape_ok_def proof once at this constructor boundary. Freshness
+   alone cannot discharge it. BodyRun handles NoLoop NoneT and returns shape.
+
+   Finite remaining semantic boundaries: (1) function shape/ownership joins
+   and list composition, including exact internal block-label installation;
+   (2) Linear dispatch ownership/shape and arbitrary entry checks; (3) optional
+   immutable constructor entry plus framed DLOAD registration/exit-label install;
+   (4) constructor fallthrough JMP/new_block/unlock/epilogue ownership, preserving
+   imm only while required; (5) simple-deploy ownership; (6) runtime/deploy
+   assembly using those boundaries. ctorShapeProps already exports epilogue
+   shape with plain_operand imm and simple-deploy shape, not ownership.
+   Unit transport still must discharge selected tuple premises and allocation
+   mode. None of these ownership obligations proves runtime ALLOCA dominance.
+*)
