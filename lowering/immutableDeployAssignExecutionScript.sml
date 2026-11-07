@@ -7,7 +7,7 @@ Ancestors
   placeTypedCopyPath fragExec venomState stmtLowering valueEncoding
 
 Theorem immutable_store_one_insts[local]:
-  immutable_store_one (SOME region) src dst off sa = ((),sb) ==>
+  immutable_store_one imm src dst off sa = ((),sb) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) (emitted_insts sa sb)
 Proof
@@ -15,7 +15,14 @@ Proof
   imp_res_tac code_offset_insts >>
   imp_res_tac immutable_byte_offset_extends >>
   drule emitted_insts_emit_op >> strip_tac >>
-  drule compile_imm_store_word_result >> strip_tac >>
+  `?tail. sb.cs_current_insts = st1''.cs_current_insts ++ tail /\
+    EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) tail` by
+    (qpat_x_assum `compile_imm_store_word _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `imm` >>
+     simp[compile_imm_store_word_def, emitHelperTheory.emit_op_def,
+          emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[] >> simp[mk_inst_def]) >>
   pure_once_rewrite_tac[emitted_insts_def] >>
   qpat_x_assum `sb.cs_current_insts = _` (fn th => pure_rewrite_tac[th]) >>
   qpat_x_assum `st1''.cs_current_insts = _` (fn th => pure_rewrite_tac[th]) >>
@@ -28,7 +35,7 @@ QED
 
 Theorem immutable_store_words_insts:
   !n off sa sb.
-  compile_imm_store_words (SOME region) src dst n off sa = ((),sb) ==>
+  compile_imm_store_words imm src dst n off sa = ((),sb) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) (emitted_insts sa sb)
 Proof
