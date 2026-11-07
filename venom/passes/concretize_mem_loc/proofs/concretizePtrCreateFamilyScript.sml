@@ -196,6 +196,49 @@ Proof
   simp[exec_delegatecall_def, ptr_history_content_update_var]
 QED
 
+Theorem ptr_create_family_delegate_mixed_execution[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
+  inst.inst_opcode = DELEGATECALL /\ inst.inst_outputs = [out] /\ ~retpc_var f out /\
+  exec_delegatecall inst t gas addr at az rt rz = OK z ==>
+  ?u. exec_delegatecall inst s gas addr ao az ro rz = OK u /\
+      u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
+      ptr_mixed_vars births positions (step_prov PT TG inst u)
+        (step_taint inst s u tn) f g u z
+Proof
+  strip_tac >>
+  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
+    (irule ptr_create_family_current_stores >> metis_tac[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def] >>
+  `!target gas data code static.
+     make_venom_delegatecall_state s target gas data code static =
+     make_venom_delegatecall_state t target gas data code static` by
+    (rpt gen_tac >> irule ptr_create_family_delegate_state >> metis_tac[]) >>
+  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK _` mp_tac >>
+  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_all ptr_create_family_delegate_extract >>
+  disch_then (qspec_then `w2n ro` mp_tac) >> strip_tac >>
+  qexists_tac `update_var out output u` >>
+  simp[exec_delegatecall_def, ptr_history_content_update_var] >>
+  rename1 `extract_venom_result t _ _ _ _ = SOME (output, target)` >>
+  `ptr_mixed_vars births positions TG tn f g u target` by
+    (irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
+     qpat_x_assum `extract_venom_result s _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `extract_venom_result t _ _ _ _ = _` mp_tac >>
+     simp[extract_venom_result_def, AllCaseEqs()] >> rpt strip_tac >>
+     (Cases_on `result` >- gvs[venom_state_component_equality] >>
+      Cases_on `y` >> gvs[venom_state_component_equality])) >>
+  drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
+  simp[step_prov_def, out_prov_def, set_prov_def,
+       step_taint_def, set_var_taint_def, out_taint_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE,
+       op_taint_def, concretizePtrValueTransportTheory.ptr_value_transport_def] >>
+  rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
+QED
+
 Theorem ptr_create_family_taint[local]:
   taint_ok fn tn inst s /\ MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] ==>
   tn.t_stor = {} /\ tn.t_trans = {} /\
@@ -333,6 +376,132 @@ Proof
   Cases_on `eval_operand salt s` >> Cases_on `eval_operand salt t` >>
   gvs[concretizePtrValueTransportTheory.ptr_lookup_transport_def,
       concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty]
+QED
+
+Theorem ptr_create_family_delegate_scalar_provenance[local]:
+  ptr_use_ok P pv inst /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
+  inst.inst_opcode = DELEGATECALL /\
+  inst.inst_operands = [gas;addr;off;sz;ret;rsz] ==>
+  op_prov TG gas = NONE /\ op_prov TG addr = NONE /\
+  op_prov TG sz = NONE /\ op_prov TG rsz = NONE
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) [gas;addr;sz;rsz] ==> v NOTIN pv` by
+    (rpt strip_tac >>
+     fs[ptr_use_ok_def, is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def] >>
+     qpat_x_assum `!v. _ ==> _ /\ _` (qspec_then `v` mp_tac) >>
+     gvs[] >> rpt strip_tac >> gvs[] >> fs[AllCaseEqs()] >> gvs[]) >>
+  rpt conj_tac >>
+  map_every Cases_on [`gas`,`addr`,`sz`,`rsz`] >>
+  gvs[op_prov_def] >> metis_tac[optionTheory.option_CASES]
+QED
+
+Theorem ptr_create_family_delegate_operand_transport[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\
+  EVERY (ptr_nonopaque_operand f) inst.inst_operands /\
+  taint_ok f tn inst s /\ ptr_use_ok P pv inst /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
+  inst.inst_opcode = DELEGATECALL /\ inst.inst_operands = [gas;addr;off;sz;ret;rsz] /\
+  eval_operand gas t = SOME gv /\ eval_operand addr t = SOME av /\
+  eval_operand off t = SOME ov /\ eval_operand sz t = SOME zv /\
+  eval_operand ret t = SOME rv /\ eval_operand rsz t = SOME rzv ==>
+  ?x r. eval_operand gas s = SOME gv /\ eval_operand addr s = SOME av /\
+    eval_operand off s = SOME x /\ eval_operand sz s = SOME zv /\
+    eval_operand ret s = SOME r /\ eval_operand rsz s = SOME rzv /\
+    ptr_lookup_transport births positions (op_prov TG off) {} (SOME x) (SOME ov) /\
+    ptr_lookup_transport births positions (op_prov TG ret) {} (SOME r) (SOME rv)
+Proof
+  strip_tac >>
+  `op_prov TG gas = NONE /\ op_prov TG addr = NONE /\
+   op_prov TG sz = NONE /\ op_prov TG rsz = NONE` by
+    (irule ptr_create_family_delegate_scalar_provenance >> metis_tac[]) >>
+  `MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by simp[] >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
+    (drule_all ptr_create_family_taint >> strip_tac >> simp[]) >>
+  `!op. MEM op inst.inst_operands ==>
+    ptr_lookup_transport births positions (op_prov TG op) (op_taint tn op)
+      (eval_operand op s) (eval_operand op t)` by
+    (rpt strip_tac >> irule ptr_mixed_vars_eval >>
+     simp[] >> qexistsl_tac [`f`,`g`] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  `ptr_lookup_transport births positions NONE {} (eval_operand gas s) (SOME gv) /\
+   ptr_lookup_transport births positions NONE {} (eval_operand addr s) (SOME av) /\
+   ptr_lookup_transport births positions NONE {} (eval_operand sz s) (SOME zv) /\
+   ptr_lookup_transport births positions NONE {} (eval_operand rsz s) (SOME rzv) /\
+   ptr_lookup_transport births positions (op_prov TG off) {} (eval_operand off s) (SOME ov) /\
+   ptr_lookup_transport births positions (op_prov TG ret) {} (eval_operand ret s) (SOME rv)` by
+    (gvs[] >> metis_tac[]) >>
+  map_every Cases_on [`eval_operand gas s`,`eval_operand addr s`,`eval_operand sz s`,
+    `eval_operand rsz s`,`eval_operand off s`,`eval_operand ret s`] >>
+  gvs[concretizePtrValueTransportTheory.ptr_lookup_transport_def,
+      concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty]
+QED
+
+Theorem ptr_create_family_delegate_endpoint_execution[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = DELEGATECALL /\ ptr_use_ok P pv a.po_inst /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
+  EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands /\
+  a.po_inst.inst_outputs = [out] /\ ~retpc_var a.po_fn out /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  step_inst fuel C' a.po_inst at.po_state = OK t' ==>
+  ?s'. step_inst 0 C a.po_inst a.po_state = OK s' /\
+    s'.vs_returndata = t'.vs_returndata /\ ptr_history_content a.po_taint s' t' /\
+    ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
+      (step_taint a.po_inst a.po_state s' a.po_taint) a.po_fn at.po_fn s' t'
+Proof
+  strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
+    (irule ptr_create_family_endpoint_taint >> rpt (goal_assum (drule_at Any))) >>
+  `MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by simp[] >>
+  `a.po_taint.t_stor = {} /\ a.po_taint.t_trans = {}` by
+    (drule_all ptr_create_family_taint >> simp[]) >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+      a.po_state at.po_state /\
+   ptr_history_content a.po_taint a.po_state at.po_state /\
+   a.po_state.vs_labels = at.po_state.vs_labels` by
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >> PURE_REWRITE_TAC[opcode_case_def] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `?x r. eval_operand gas_op a.po_state = SOME gas /\
+    eval_operand addr_op a.po_state = SOME addr /\
+    eval_operand ao_op a.po_state = SOME x /\ eval_operand as_op a.po_state = SOME as_ /\
+    eval_operand ro_op a.po_state = SOME r /\ eval_operand rs_op a.po_state = SOME rs /\
+    ptr_lookup_transport births positions (op_prov TG ao_op) {} (SOME x) (SOME ao) /\
+    ptr_lookup_transport births positions (op_prov TG ro_op) {} (SOME r) (SOME ro)` by
+    (irule ptr_create_family_delegate_operand_transport >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `read_memory (w2n x) (w2n as_) a.po_state =
+   read_memory (w2n ao) (w2n as_) at.po_state` by
+    (irule ptr_create_family_input_bytes >>
+     simp[] >> conj_tac
+     >- gvs[source_memory_read_ranges_def, mem_read_ops_def,
+            memory_range_of_operands_def, eval_operands_def] >>
+     goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     rpt (goal_assum (drule_at Any)) >>
+     qexists_tac `<|iao_ofst := ao_op; iao_size := SOME as_op;
+                    iao_max_size := SOME as_op|>` >>
+     gvs[mem_read_ops_def, concretizeMemLocDefsTheory.inst_read_op_def,
+         source_memory_read_ranges_def, eval_operands_def]) >>
+  simp[] >>
+  irule (INST_TYPE [alpha |-> ``:num``, ``:'d`` |-> ``:256``,
+                    ``:'g`` |-> ``:256``]
+    ptr_create_family_delegate_mixed_execution) >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  qexistsl_tac [`ao`,`ro`,`at.po_state`] >> simp[]
 QED
 
 Theorem ptr_create_family_endpoint_execution[local]:
