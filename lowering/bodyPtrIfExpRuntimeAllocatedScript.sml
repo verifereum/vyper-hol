@@ -2,7 +2,7 @@ Theory bodyPtrIfExpRuntimeAllocated
 Ancestors bodyPtrIfExpStorageAllocation bodyPtrIfExpRuntimeCopy
   bodyPtrIfExpAllocSource loweringHalt exprLoweringProps ptrDiscipline
   compileEnv venomState venomInst finite_map words arithmetic fragGasPathPtr
-  slotCopyExecution exprSimCopy loweringPosts
+  slotCopyExecution exprSimCopy loweringPosts bodyPtrIfExpRuntimeFrame
 
 Theorem ifexp_runtime_allocated_execution:
   stmt_state_rel ctx fn ce cx es s0 /\
@@ -28,7 +28,22 @@ Theorem ifexp_runtime_allocated_execution:
     w2n d+32*n < dimword (:256) /\
     tt.t_mem = tr.t_mem DIFF {i | w2n d <= i /\ i < w2n d+32*n} /\
     ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa G0 tn0 s0 H tt /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 J tr (OK q)
+    gas_path_ptr D 0 ctx fn PG G tn s 0 J tr (OK q) /\
+    copy_runtime_frame cs q sd (t with vs_inst_idx := q.vs_inst_idx) /\
+    (?u. step_inst_base (mk_inst sb.cs_next_id ALLOCA
+          [Lit (n2w (32*n))] [out]) s = OK u /\
+         q = u with vs_inst_idx := SUC s.vs_inst_idx) /\
+    (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
+      off+sz <= w2n d \/ w2n d+32*n <= off) /\
+    (!name pos len. local_region ce es.scopes s0 name pos len ==>
+      pos+len <= w2n d \/ w2n d+32*n <= pos) /\
+    (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!b len. b+len <= w2n d \/ w2n d+32*n <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_transient = s.vs_transient
 Proof
   strip_tac >> drule_all ifexp_copy_allocation_start >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -67,9 +82,20 @@ Resume ifexp_runtime_allocated_execution[copy]:
 QED
 
 Resume ifexp_runtime_allocated_execution[finish]:
+  drule_all ifexp_runtime_allocation_frame >> strip_tac >>
   qexistsl_tac [`out`, `d`, `u with vs_inst_idx := SUC s.vs_inst_idx`,
     `G1`, `tn1`, `t`, `H`, `tt`] >>
-  simp[] >> drule_all gas_path_ptr_then >> simp[]
+  simp[] >> conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!aid off sz. _` drule_all >> decide_tac) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!name pos len. local_region _ _ _ _ _ _ ==> _` drule_all >>
+      decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!b len. _ ==> mem_bytes_at _ _ t.vs_memory = _`
+    (qspecl_then [`b`, `len`] mp_tac) >> simp[]
 QED
 
 Finalise ifexp_runtime_allocated_execution
