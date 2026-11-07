@@ -178,3 +178,40 @@ Resume ld_frame_reachable_allocas_floor[ret]:
 QED
 
 Finalise ld_frame_reachable_allocas_floor
+
+Theorem ld_access_ok_raise_floor:
+  access_ok l G fn i s /\ l <= L ==> access_ok L G fn i s
+Proof
+  rewrite_tac[access_ok_def] >> strip_tac >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  conj_tac >> rpt gen_tac >> disch_tac >>
+  first_x_assum irule >> fs[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS]
+QED
+
+Theorem ld_ptr_discipline_raise_floor:
+  ptr_discipline l C vs0 /\ l <= L /\ L <= vs0.vs_alloca_next /\
+  allocas_from L vs0 ==> ptr_discipline L C vs0
+Proof
+  simp[ptr_discipline_def] >> strip_tac >>
+  qexists_tac `P` >> simp[] >> rpt gen_tac >> strip_tac >>
+  drule_all ld_frame_reachable_allocas_floor >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  metis_tac[ld_access_ok_raise_floor]
+QED
+
+Theorem ld_o1_src_inv_frontier_discipline:
+  o1PassContract$o1_run_state_ok vs0 /\ o1PassContract$o1_src_inv D C vs0 ==>
+  ptr_discipline vs0.vs_alloca_next C vs0
+Proof
+  strip_tac >>
+  `allocas_from vs0.vs_alloca_next vs0` by
+    (gvs[o1PassContractTheory.o1_run_state_ok_def,
+         unitTransformDefsTheory.o1_initial_state_ok_def, allocas_from_def]) >>
+  qpat_x_assum `o1PassContract$o1_src_inv D C vs0` mp_tac >>
+  simp[o1PassContractTheory.o1_src_inv_def] >> strip_tac >>
+  drule ld_ptr_discipline_raise_floor >>
+  disch_then (qspec_then `vs0.vs_alloca_next` irule) >>
+  gvs[ptr_discipline_def]
+QED
