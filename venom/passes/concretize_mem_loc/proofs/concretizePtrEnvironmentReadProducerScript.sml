@@ -1,5 +1,5 @@
 Theory concretizePtrEnvironmentReadProducer
-Ancestors concretizePtrOperationalOpcodes concretizePtrPairedPrefixProbe concretizePtrParamProducer concretizePtrAssignProducer concretizePtrValueTransport
+Ancestors concretizePtrRequestHistory concretizePtrTaintContent concretizePtrOperationalOpcodes concretizePtrPairedPrefixProbe concretizePtrParamProducer concretizePtrAssignProducer concretizePtrValueTransport
   concretizePtrOrdinaryNext concretizePtrOpaqueRetpc concretizePtrPairedNextAttach
   concretizePtrPairedPrefix concretizePtrPairedFields concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrSourceOwnership concretizePtrChronologicalHistory
@@ -12,8 +12,26 @@ Ancestors concretizePtrOperationalOpcodes concretizePtrPairedPrefixProbe concret
   contextCodegenRel codegenRel frameViewFacts ptrDiscipline venomExecSemantics
   venomState venomInst finite_map words list rich_list arithmetic
 
+(* Shared by the nullary and unary account-reading producers. Storage is
+   deliberately absent: history content preserves only nonstorage fields. *)
+Theorem ptr_environment_account_observations:
+  ptr_history_content tn s t ==>
+  !a. (s.vs_accounts a).balance = (t.vs_accounts a).balance /\
+      (s.vs_accounts a).code = (t.vs_accounts a).code /\
+      (s.vs_accounts a).nonce = (t.vs_accounts a).nonce
+Proof
+  strip_tac >> gen_tac >>
+  drule ptr_history_content_current >>
+  strip_tac >> drule ptr_taint_content_account >>
+  disch_then (qspec_then `a` mp_tac) >>
+  simp[] >> strip_tac >>
+  first_assum (mp_tac o AP_TERM ``\a:account_state. a.balance``) >>
+  first_assum (mp_tac o AP_TERM ``\a:account_state. a.code``) >>
+  first_x_assum (mp_tac o AP_TERM ``\a:account_state. a.nonce``) >> simp[]
+QED
+
 Theorem ptr_environment_read_execution[local]:
-  ptr_core_shared s t /\
+  ptr_history_content tn s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
     CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] /\
@@ -22,17 +40,25 @@ Theorem ptr_environment_read_execution[local]:
       t' = update_var out v t
 Proof
   strip_tac >>
+  drule ptr_history_content_call_ctx >> strip_tac >>
+  drule ptr_history_content_tx_ctx >> strip_tac >>
+  drule ptr_history_content_block_ctx >> strip_tac >>
+  drule ptr_history_content_returndata >> strip_tac >>
+  drule ptr_history_content_code >> strip_tac >>
+  drule ptr_environment_account_observations >> strip_tac >>
   fs[MEM] >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_non_invoke] >>
   PURE_REWRITE_TAC [step_inst_base_def] >>
   ASM_REWRITE_TAC [] >>
   simp[exec_read0_def] >>
-  strip_tac >> gvs[ptr_core_shared_def, ptr_shared_fields_def] >> metis_tac[]
+  strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_var out value s` >>
+  qexists_tac `value` >> simp[Abbr `value`, vfmStateTheory.lookup_account_def]
 QED
 
 Theorem ptr_mixed_environment_read_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
     CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] /\
@@ -157,7 +183,10 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >>
+          irule ptr_history_content_masks >>
+          qexists_tac `a.po_taint` >>
+          fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>
@@ -236,8 +265,18 @@ Proof
   simp[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
 
+Theorem ptr_history_content_common_gas_readings[local]:
+  ptr_history_content tn s t ==>
+  ptr_history_content tn (s with vs_gas_readings := readings)
+    (t with vs_gas_readings := readings)
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def,
+       ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
+       contract_storage_def, contract_transient_def] >> strip_tac >> gvs[]
+QED
+
 Theorem ptr_gas_execution[local]:
-  ptr_core_shared s t /\ inst.inst_opcode = GAS /\
+  ptr_history_content tn s t /\ inst.inst_opcode = GAS /\
   inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
   ?v readings.
     step_inst 0 C inst s = OK (update_var out v (s with vs_gas_readings := readings)) /\
@@ -245,7 +284,8 @@ Theorem ptr_gas_execution[local]:
 Proof
   strip_tac >>
   `s.vs_gas_readings = t.vs_gas_readings` by
-    fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+    (drule ptr_history_content_control >>
+     simp[ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def]) >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[] >> simp[exec_gas_def] >>
@@ -264,7 +304,7 @@ Proof
 QED
 
 Theorem ptr_mixed_gas_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
   inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\ ~retpc_var f out /\
   step_inst fuel Ct inst t = OK t' ==>
   ?v readings.
@@ -386,7 +426,12 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >>
+          irule ptr_history_content_masks >>
+          qexists_tac `a.po_taint` >>
+          fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+          rewrite_tac[ptr_gas_update_var] >>
+          simp[] >> irule ptr_history_content_common_gas_readings >> simp[]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>
