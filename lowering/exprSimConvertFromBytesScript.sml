@@ -2386,7 +2386,7 @@ QED
 
 Finalise dynamic_scalar_fragment[local]
 
-Theorem dynamic_scalar_counted_fragment[local]:
+Theorem dynamic_scalar_counted_fragment:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
@@ -2557,7 +2557,7 @@ Proof
   rw[] >> gvs[exprBopLoweringTheory.as_stack_val_pair, unwrap_value_def, comp_return_def]
 QED
 
-Theorem dynamic_continuation_summary[local]:
+Theorem dynamic_continuation_summary:
   expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\

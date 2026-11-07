@@ -874,7 +874,7 @@ Proof
   qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]
 QED
 
-Theorem convert_cast_counted[local]:
+Theorem convert_cast_counted:
   !ctx func cenv cx es sa sb op x p L n i s.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -1611,7 +1611,7 @@ Proof
   qexistsl_tac [`s`, `sm`, `x`] >> simp[]
 QED
 
-Theorem convert_dynamic_counted_cont[local]:
+Theorem convert_dynamic_counted_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2 i n.
     ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
       expr_type e1 = BaseT (StringT i)) /\
@@ -1694,7 +1694,7 @@ Proof
   simp[] >> qexists_tac `x` >> simp[]
 QED
 
-Theorem convert_bytestring_counted_cont[local]:
+Theorem convert_bytestring_counted_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2.
     valid_conversion (expr_type e1) (expr_type e) /\
     is_bytestring_type (expr_type e) /\
@@ -1741,7 +1741,7 @@ Proof
   simp[] >> qexistsl_tac [`sm`, `x`] >> simp[]
 QED
 
-Theorem convert_bytestring_continuation_summary[local]:
+Theorem convert_bytestring_continuation_summary:
   valid_conversion (expr_type e1) (expr_type e) /\
   is_bytestring_type (expr_type e) /\
   is_bytestring_type (lowered_value_type cenv e1) /\
