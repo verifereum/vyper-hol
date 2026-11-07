@@ -10,6 +10,7 @@ Ancestors
   bodyPtrBopHashSuffix abiDecodePtrHead instSeqComposePtr assignTuplePtrLocalBytesCopy
   words arithmetic rich_list exprSimAccounts abiDecodePtrNormalized venomInst instIdxIndep
   abiDecodePtrContinuation assignTuplePtrCopyLen calldataWordLive abiDecoderReentry
+  exprPtrUnwrapEndpointFrames exprPtrUnwrapPostFrames
 
 Theorem abi_decode_clamp_scalar:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\ value IN A /\
@@ -635,3 +636,69 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`u`, `G'`, `tn'`] >> simp[]
 QED
+
+(* Consumer boundary: local and immutable separation are precisely the
+   existing generic frame contracts, not ABI canonicality assumptions. *)
+Theorem abi_decode_word_success_framed:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecPrimWord clamp) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  abi_decode_ptr_window G tn s src b h /\
+  lookup_var dst s = SOME d /\ ptr_covers G tn dst s 32 /\
+  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
+  p+32 <= h /\ w2n b+h < dimword(:256) /\
+  (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
+  run_inst_seq (emitted_insts sa sb) s = OK u /\
+  ghost_inv ret cenv cx es G tn s /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!name a k. local_region cenv es.scopes s name a k ==>
+    a+k <= w2n d \/ w2n d+32 <= a) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) (w2n d) 32) ==>
+  ?H tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
+    ghost_inv ret cenv cx es H tf u /\ stmt_state_rel ctx func cenv cx es u /\
+    abi_clamp_ok clamp (mload (w2n b+p) s) /\
+    mem_word_at (w2n d) u.vs_memory = mload (w2n b+p) s /\
+    abi_decode_ptr_window H tf u dst d 32 /\
+    abi_decode_ptr_window H tf u src b h
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decode_word_success_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf` >>
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `(u with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[venom_state_component_equality]) >>
+  `stor_taint_ok cx tf u` by
+    (irule copy_stor_taint_frame >> qexistsl [`s`, `tn`] >>
+     fs[ghost_inv_def]) >>
+  `ghost_inv ret cenv cx es H tf u` by
+    (irule unwrap_endpoint_ghost_inv >> (conj_tac >- simp[]) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     qexistsl [`func`, `32:num`, `sa`, `w2n d`] >>
+     `local_ptrs_rel func cenv es.scopes s` by
+       fs[stmt_state_rel_def, state_rel_def] >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     gvs[]) >>
+  suspend "stmt_frame"
+QED
+
+Resume abi_decode_word_success_framed[stmt_frame]:
+  `stmt_state_rel ctx func cenv cx es (u with vs_inst_idx := s.vs_inst_idx)` by
+    (irule exprSimBufferStoreTheory.buffer_store_state_frame >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+     qexistsl [`w2n d`, `32`, `sa`] >> simp[lookup_var_def] >>
+     metis_tac[lookup_var_def]) >>
+  qexistsl [`H`, `tf`] >> fs[stmt_state_rel_inst_idx]
+QED
+
+Finalise abi_decode_word_success_framed
