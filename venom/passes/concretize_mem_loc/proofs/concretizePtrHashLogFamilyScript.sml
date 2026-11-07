@@ -4,6 +4,9 @@
 Theory concretizePtrHashLogFamily
 Ancestors
   concretizePtrStorageReadProducer concretizePtrMloadRecovery
+  frameViewFacts opcodeClass codegenRel concretizePtrOrdinaryNext concretizePtrParamProducer
+  concretizePtrOperationalOpcodes concretizePtrPairedFields concretizePtrPairedPrefixProbe
+  concretizePtrDeletedGaps concretizePtrLedgerAlignment concretizePtrLedgerProbe
   regularMemorySim memSafeRun ptrDiscipline contextCodegenRel
   venomInst venomWf venomExecProofs unitLabelMapIdentity list
   pointerConfinedDefs memLocDefs finite_map pred_set
@@ -584,6 +587,120 @@ Resume ptr_paired_hash_log_execution[log]:
 QED
 Finalise ptr_paired_hash_log_execution
 
+Theorem ptr_paired_prefix_hash_log[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  MEM a.po_inst.inst_opcode [SHA3; LOG] /\
+  ptr_chrono_step C' at zt ==>
+  ?z TG'.
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
+Proof
+  strip_tac >>
+  drule_all ptr_paired_hash_log_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `a.po_inst.inst_opcode <> ALLOCA /\ a.po_inst.inst_opcode <> NOP /\
+   a.po_inst.inst_opcode <> INVOKE /\ ~is_terminator a.po_inst.inst_opcode` by
+    (fs[MEM] >> simp[is_terminator_def]) >>
+  `MEM a.po_fn C.ctx_functions` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> simp[]) >>
+  `!out. MEM out a.po_inst.inst_outputs ==> ~retpc_var a.po_fn out` by
+    (gen_tac >> disch_tac >> irule noncopy_output_not_retpc >>
+     conj_tac >- fs[EVERY_MEM] >>
+     qexists_tac `a.po_inst` >> fs[MEM]) >>
+  `at.po_inst = a.po_inst` by suspend "cursor" >>
+  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality] >>
+  strip_tac >> gvs[Excl "MEM"] >>
+  IF (qpat_assum `step_inst _ _ _ _ = OK _` (K all_tac)) all_tac
+    (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+     simp[step_inst_non_invoke] >> strip_tac >>
+     drule step_inst_base_intret_opcodes >> fs[MEM]) >>
+  `?post. step_inst 0 C a.po_inst a.po_state = OK post /\
+    ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
+      (step_taint a.po_inst a.po_state post a.po_taint)
+      a.po_fn at.po_fn post s' /\
+    ptr_history_content (step_taint a.po_inst a.po_state post a.po_taint) post s' /\
+    post.vs_allocas = a.po_state.vs_allocas /\
+    post.vs_current_bb = a.po_state.vs_current_bb /\
+    post.vs_inst_idx = a.po_state.vs_inst_idx /\
+    post.vs_params = a.po_state.vs_params /\
+    s'.vs_params = at.po_state.vs_params` by
+    (`MEM a.po_inst.inst_opcode [SHA3; LOG]` by simp[] >>
+     drule_all ptr_paired_hash_log_execution >> strip_tac >>
+     qexists_tac `post` >> simp[]) >>
+  suspend "attach"
+QED
+Resume ptr_paired_prefix_hash_log[cursor]:
+  qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
+  simp[ptr_paired_cursor_def] >> strip_tac >>
+  `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
+    (spose_not_then assume_tac >>
+     `a.po_state.vs_inst_idx < EL at.po_state.vs_inst_idx indices` by decide_tac >>
+     qpat_x_assum `!k. _ ==> _.inst_opcode = NOP`
+       (qspec_then `a.po_state.vs_inst_idx` mp_tac) >> simp[] >>
+     qpat_x_assum `a.po_inst = _` SUBST_ALL_TAC >> gvs[]) >>
+  drule ptr_ledger_alignment_cursor >> strip_tac >>
+  first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[] >>
+  strip_tac >> gvs[concretize_positions_unchanged]
+QED
+Resume ptr_paired_prefix_hash_log[attach]:
+  markerLib.RESUME_TAC >>
+  `EVERY bb_well_formed a.po_fn.fn_blocks` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  `?i. active_inst a.po_fn i (post with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
+    (irule ptr_ordinary_next_active >> metis_tac[]) >>
+  `post.vs_prev_bb = a.po_state.vs_prev_bb` by
+    metis_tac[step_inst_preserves_prev_bb] >>
+  `s'.vs_current_bb = at.po_state.vs_current_bb /\
+   s'.vs_inst_idx = at.po_state.vs_inst_idx /\
+   s'.vs_prev_bb = at.po_state.vs_prev_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+  qabbrev_tac `z = ptr_ledger_next a i post` >>
+  qexistsl_tac [`z`, `step_prov PT TG a.po_inst z.po_state`] >>
+  `ALL_DISTINCT (fn_labels at.po_fn)` by
+    (fs[ptr_paired_code_def] >> metis_tac[fn_labels_def, concretize_positions_labels]) >>
+  drule ptr_paired_stage_local_allocas >>
+  disch_then (qspecl_then [`o1_walk_view rpolicy 2`,`rpolicy`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `ptr_paired_sample positions z zt
+     (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
+    suspend "sample" >>
+  `ptr_paired_params positions z zt
+     (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
+    (fs[ptr_paired_params_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def]) >>
+  drule ptr_paired_prefix_ordinary_nonwrite >> disch_then irule >>
+  simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def, ptr_tagged_step_def] >>
+  simp[step_prov_def, out_prov_def, step_writes_def,
+       source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
+  qexistsl_tac [`0`, `post`] >> simp[]
+QED
+Resume ptr_paired_prefix_hash_log[sample]:
+  markerLib.RESUME_TAC >>
+  simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
+  gvs[step_prov_def, out_prov_def] >>
+  irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+Finalise ptr_paired_prefix_hash_log
+
 Theorem ptr_paired_hash_log_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -617,6 +734,23 @@ Theorem ptr_paired_hash_log_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_prefix_hash_log >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
 
