@@ -991,6 +991,16 @@ Proof
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
            LET_THM] >>
+      TRY (BasicProvers.FULL_CASE_TAC >>
+           gvs[check_def, assert_def, ignore_bind_def,
+               get_storage_backend_def, get_accounts_def,
+               get_transient_storage_def, bind_def, return_def, raise_def,
+               pairTheory.UNCURRY]) >>
+      TRY (BasicProvers.FULL_CASE_TAC >>
+           gvs[check_def, assert_def, ignore_bind_def,
+               get_storage_backend_def, get_accounts_def,
+               get_transient_storage_def, bind_def, return_def, raise_def,
+               pairTheory.UNCURRY]) >>
       rpt (BasicProvers.FULL_CASE_TAC >>
            gvs[check_def, assert_def, ignore_bind_def,
                get_storage_backend_def, get_accounts_def,
