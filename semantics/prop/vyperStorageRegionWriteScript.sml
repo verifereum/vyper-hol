@@ -160,14 +160,9 @@ QED
 Theorem dynamic_storage_region[local]:
   slots_in_range storage off (ArrayTV tv (Dynamic max)) <=>
   w2n (read_slot storage off) <= max /\
-  dyn_slots_in_range storage (off + 1) tv (w2n (read_slot storage off))
+  dyn_slots_in_range storage (off + 1) tv max
 Proof
-  pure_once_rewrite_tac [slots_in_range_def] >>
-  simp_tac bool_ss [LET_THM] >>
-  qabbrev_tac `len = w2n (read_slot storage off)` >>
-  Cases_on `len <= max` >> asm_simp_tac bool_ss [] >>
-  `MIN len max = len` by (simp[MIN_DEF] >> decide_tac) >>
-  asm_simp_tac bool_ss []
+  simp[Once slots_in_range_def]
 QED
 
 Theorem dynamic_dead_child_typed_write_reconstruct:
@@ -179,7 +174,9 @@ Theorem dynamic_dead_child_typed_write_reconstruct:
   w2n slot + type_slot_size leaf <=
     off + 1 + (i * type_slot_size tv + type_slot_size tv) /\
   value_has_type leaf v /\
-  write_storage_slot cx b slot leaf v st = (INL (),st') ==>
+  write_storage_slot cx b slot leaf v st = (INL (),st') /\
+  slots_in_range (get_storage cx st' b)
+    (off + 1 + i * type_slot_size tv) tv ==>
   slots_in_range (get_storage cx st' b) off (ArrayTV tv (Dynamic max))
 Proof
   rpt strip_tac >>
@@ -196,16 +193,14 @@ Proof
     (simp_tac bool_ss [ranges_disjoint_def] >> decide_tac) >>
   `read_slot (get_storage cx st' b) off = read_slot (get_storage cx st b) off` by
     (drule_all typed_write_storage_slot_preserves_disjoint_read_slot >> simp[]) >>
-  `slots_in_range (get_storage cx st b) (off + 1) (ArrayTV tv (Fixed len))` by
+  `slots_in_range (get_storage cx st b) (off + 1) (ArrayTV tv (Fixed max))` by
     (pure_once_rewrite_tac [slots_in_range_def] >>
      asm_simp_tac bool_ss [GSYM dynamic_static_storage_regions]) >>
-  `len * type_slot_size tv <= i * type_slot_size tv` by simp[LESS_MONO_MULT] >>
-  `slots_in_range (get_storage cx st' b) (off + 1) (ArrayTV tv (Fixed len))` by
-    (irule typed_write_storage_slot_preserves_disjoint_num_region >>
-     asm_simp_tac bool_ss [] >>
-     qexistsl_tac [`b`,`slot`,`st`,`leaf`,`v`] >>
-     asm_simp_tac bool_ss [] >>
-     simp_tac bool_ss [ranges_disjoint_def, type_slot_size_def] >> decide_tac) >>
+  `slots_in_range (get_storage cx st' b) (off + 1) (ArrayTV tv (Fixed max))` by
+    (irule fixed_array_typed_leaf_write_reconstruct >>
+     asm_simp_tac bool_ss [type_slot_size_def] >>
+     qexistsl_tac [`leaf`,`i`,`slot`,`st`,`v`] >>
+     asm_simp_tac bool_ss [type_slot_size_def, ADD_ASSOC]) >>
   full_simp_tac bool_ss
     [dynamic_storage_region, fixed_storage_region,
      dynamic_static_storage_regions, Abbr`len`]
@@ -296,23 +291,21 @@ Resume storage_subregion_typed_write_preserves_root[Dynamic]:
   `off + 1 + Num i * type_slot_size tv + type_slot_size tv <= dimword(:256)` by
     (qpat_assum `off + type_slot_size (ArrayTV tv (Dynamic n)) <= _` mp_tac >>
      simp_tac bool_ss [type_slot_size_def, ADD_ASSOC] >> strip_tac >> decide_tac) >>
+  qpat_assum `slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic n))`
+    (strip_assume_tac o SIMP_RULE bool_ss [dynamic_storage_region]) >>
+  `slots_in_range (get_storage cx st b) (off + 1 + Num i * type_slot_size tv) tv` by
+    (irule dyn_slots_in_range_index >> qexists_tac `n` >>
+     asm_simp_tac bool_ss []) >>
+  qpat_x_assum `!relative. storage_subregion tv path relative leaf ==> _`
+    (qspec_then `rest` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then
+    [`cx`,`b`,`off + 1 + Num i * type_slot_size tv`,`slot`,`v`,`st`,`st'`] mp_tac) >>
+  (impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac)) >> strip_tac >>
   Cases_on `Num i < w2n (read_slot (get_storage cx st b) off)`
-  >- (qpat_assum `slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic n))`
-        (strip_assume_tac o SIMP_RULE bool_ss [dynamic_storage_region]) >>
-      `slots_in_range (get_storage cx st b) (off + 1 + Num i * type_slot_size tv) tv` by
-        (irule dyn_slots_in_range_index >>
-         qexists_tac `w2n (read_slot (get_storage cx st b) off)` >>
-         asm_simp_tac bool_ss []) >>
-      qpat_x_assum `!relative. storage_subregion tv path relative leaf ==> _`
-        (qspec_then `rest` mp_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >>
-      disch_then (qspecl_then
-        [`cx`,`b`,`off + 1 + Num i * type_slot_size tv`,`slot`,`v`,`st`,`st'`] mp_tac) >>
-      (impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac)) >> strip_tac >>
-      irule dynamic_array_typed_leaf_write_reconstruct >> asm_simp_tac bool_ss [] >>
+  >- (irule dynamic_array_typed_leaf_write_reconstruct >> asm_simp_tac bool_ss [] >>
       qexistsl_tac [`leaf`,`Num i`,`slot`,`st`,`v`] >>
       asm_simp_tac bool_ss [] >> decide_tac) >>
-  POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   irule dynamic_dead_child_typed_write_reconstruct >> asm_simp_tac bool_ss [] >>
   qexistsl_tac [`Num i`,`leaf`,`slot`,`st`,`v`] >>
   asm_simp_tac bool_ss [] >> decide_tac
@@ -494,7 +487,7 @@ QED
 Theorem dynamic_child_storage_transport:
   off + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256) /\
   slots_in_range s off (ArrayTV tv (Dynamic n)) /\
-  (i < w2n (read_slot s off) ==>
+  (i < n ==>
      slots_in_range s' (off + 1 + i * type_slot_size tv) tv) /\
   (!a. a < dimword(:256) /\
        (a < off + 1 + i * type_slot_size tv \/
@@ -507,8 +500,7 @@ Proof
   `read_slot s' off = read_slot s off` by
     (first_x_assum irule >> decide_tac) >> simp[] >>
   irule static_prefix_storage_transport >> conj_tac
-  >- (`w2n (read_slot s off) * type_slot_size tv <= n * type_slot_size tv`
-        by metis_tac[LESS_MONO_MULT] >> decide_tac) >>
+  >- decide_tac >>
   qexistsl [`i`,`s`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -580,7 +572,7 @@ Resume storage_subregion_transport[Dynamic]:
     conj_tac >- first_assum ACCEPT_TAC >>
     pure_rewrite_tac [ADD_ASSOC] >>
     irule dyn_slots_in_range_index >>
-    qexists `w2n (read_slot s off)` >>
+    qexists `n` >>
     qpat_x_assum `slots_in_range s off (ArrayTV _ _)` mp_tac >>
     asm_simp_tac bool_ss [dynamic_storage_region, ADD_ASSOC]) >>
   first_assum ACCEPT_TAC
