@@ -95,6 +95,20 @@ Proof
   metis_tac[storage_agree_except_trans]
 QED
 
+(* Deleting the same accounts on both sides keeps them equal up to dead
+   bytes: a deleted account is empty on both. *)
+Theorem accounts_agree_except_process_deletions:
+  !ds a1 a2. accounts_agree_except D a1 a2 ==>
+    accounts_agree_except D (vfmExecution$process_deletions ds a1)
+      (vfmExecution$process_deletions ds a2)
+Proof
+  Induct >> simp[vfmExecutionTheory.process_deletions_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[accounts_agree_except_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rw[] >> simp[storage_agree_except_def, word_agree_except_def]
+QED
+
 Theorem transient_agree_except_trans:
   dead_wf D /\ transient_agree_except D t1 t2 /\
   transient_agree_except D t2 t3 ==>

@@ -4766,22 +4766,6 @@ Proof
       TAKE_APPEND1]
 QED
 
-Theorem log_opcode_dispatch[local]:
-  !n lo o2pc st.
-    n <= 4 ==>
-    asm_step lo o2pc (AsmOp ("LOG" ++ num_to_dec_string n)) st = asm_log n st
-Proof
-  rpt gen_tac >> strip_tac >>
-  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
-  gvs[] >>
-  simp[asm_step_def, asm_step_op_def,
-       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
-       asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
-       asm_step_copy_def, asm_step_context_def,
-       dup_table_def, swap_table_def, log_table_def] >>
-  EVAL_TAC
-QED
-
 Theorem log_emit_step_rel[local]:
   !lo o2pc prog ps vs st nl n off sz topics tail.
     venom_asm_rel lo ps vs st /\
@@ -4817,8 +4801,8 @@ Proof
   qexists_tac `st'` >> simp[] >> conj_tac
   >- (fs[asm_block_at_def] >>
       `st.as_pc < LENGTH prog` by decide_tac >>
-      drule log_opcode_dispatch >>
-      disch_then (qspecl_then [`lo`, `o2pc`, `st`] mp_tac) >>
+      drule asm_step_log >>
+      disch_then (mp_tac o SPEC_ALL) >>
       simp[asm_step_one]) >>
   drule venom_asm_rel_release_dead_spills >>
   disch_then (qspec_then `nl` mp_tac) >> simp[]
