@@ -8,7 +8,8 @@ Ancestors concretizeLayoutCanonicalDriver concretizeLayoutSelectedPairedResume
    This consumer also preserves the independent structural instruction ranks. *)
 Theorem layout_canonical_resume_paired:
   layout_paired_ordinary D lo vs0 C C' q0 es qs q positions
-    a.lop_config a.lop_cursor bb caller bb' caller' a /\
+    qa na bb caller bb' caller' a /\
+  a.lop_config = qa /\ a.lop_cursor = na /\
   layout_driver_indexed es ass a /\ layout_driver_indexed es ass b /\
   a.lop_config = JointConfig stk PG G caller_tn fn call caller oms om hs h /\
   a.lop_ids = birth::ids /\ a.lop_anns = (rp,rv)::anns /\
@@ -46,6 +47,8 @@ Theorem layout_canonical_resume_paired:
       bb' (post' with vs_inst_idx := SUC post'.vs_inst_idx) c
 Proof
   strip_tac >>
+  qpat_x_assum `a.lop_config = qa` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `a.lop_cursor = na` (SUBST_ALL_TAC o SYM) >>
   `a.lop_ids = EL a.lop_cursor (lifetime_annotations 0 [0] es) /\
    a.lop_anns = EL a.lop_cursor ass /\
    b.lop_ids = EL b.lop_cursor (lifetime_annotations 0 [0] es) /\
