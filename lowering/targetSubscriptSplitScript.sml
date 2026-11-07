@@ -5,7 +5,7 @@
  * TOP-LEVEL:
  *   target_subscript_main_case — a local root whose indices pop nothing,
  *                          or a storage root whose indices are all pure
- *   target_subscript_storage_effectful_case — RESIDUAL: a storage root
+ *   target_subscript_storage_effectful_case — a storage root
  *                          with an index that calls or pops
  *   target_subscript_local_pop_case — RESIDUAL: a local root with an index
  *                          that pops
@@ -13,7 +13,7 @@
 
 Theory targetSubscriptSplit
 Ancestors
-  targetPlaceLive targetSubscriptMemory targetSubscriptDecode targetSubscriptContinuation
+  targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptDecode targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource
@@ -1223,6 +1223,139 @@ Proof
   qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
+Theorem target_subscript_storage_base_continuation:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e) /\
+  target_root bt = TopLevelNameTarget nsid /\
+  type_place_target env bt = SOME bvt /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key)))
+    (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `expr_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := []) /\
+   expr_vv_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
+    (irule target_subscript_marked_index_sim >> goal_assum (drule_at Any) >>
+     qexistsl [`env`, `nocalls`] >> simp[] >> first_assum ACCEPT_TAC) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (mid with gas_obs := [])` by
+    (irule target_subscript_index_admissible >> goal_assum (drule_at Any) >> simp[]) >>
+  `!gs v ee. bind (eval_expr cx e) (read_result cx)
+    (mid with gas_obs := gs) = (INL v,ee) ==>
+    place_readable cx ee pv` by
+    (drule target_subscript_marked_base_source >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     rpt strip_tac >> irule target_subscript_storage_index_readable >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
+  `!l. FST rb <> Label l` by
+    (drule_all target_subscript_typed_base_not_label >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
+  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
+    (drule target_subscript_marked_base_domains >> simp[]) >>
+  `~t.vs_halted` by metis_tac[target_subscript_marked_base_nonhalted] >>
+  `gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (mid with gas_obs := [],t)
+    (\res ee u. ?key. res = INL key /\
+      target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
+      expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+      u.vs_current_bb = sn.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sn.cs_current_insts)
+    (\res ee r. expr_exit res r)` by
+    (irule target_index_outcome >> goal_assum (drule_at Any) >>
+     gvs[ci_mono_def] >> first_assum ACCEPT_TAC) >>
+  irule target_subscript_index_bind_outcome >>
+  qexists `\key ee u.
+    target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
+    expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+    u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
+  pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- (gvs[] >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> gvs[BETA_THM] >>
+  `bind (eval_expr cx e) (read_result cx)
+    (mid with gas_obs := gas_explicit right t.vs_gas_readings) =
+    (INL key, ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule target_subscript_marked_base_source >>
+  disch_then (qspec_then `gas_explicit right t.vs_gas_readings` assume_tac) >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `expr_sim_inv cenv cx env (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
+    (drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_sim_inv >> simp[]) >>
+  `expr_body_pre cenv cx env e (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
+    fs[target_pre_def, target_indices_pre_def] >>
+  drule_all target_subscript_index_source_diagnostic >> strip_tac >>
+  drule_all target_subscript_index_runtime_diagnostic >> strip_tac >>
+  `(!id path. pv = PlaceR (MemoryPlace id path) ==>
+     ?entry av. lookup_scopes id ee.scopes = SOME entry /\
+       evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
+   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+     storage_read_live cx tr (get_storage cx ee tr) slot tv /\
+     w2n slot + type_slot_size tv <= dimword(:256) /\
+     (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+       w2n (lookup_storage slot (get_storage cx ee tr)) <= cnt))` by
+    (conj_tac
+     >- (rpt strip_tac >> gvs[] >>
+         drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
+         simp[place_access_target_root]) >>
+     rpt gen_tac >> disch_tac >> gvs[] >>
+     drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_storage_ready >>
+     disch_then (qspec_then `ee` mp_tac) >>
+     fs[expr_sim_inv_def]) >>
+  `local_ptrs_reserved cenv sn` by
+    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
+  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom) >> simp[]) >>
+  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    target_subscript_typed_summary >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then irule >> simp[] >>
+  `?env'. expr_sim_inv cenv cx env' ee` by (qexists `env` >> fs[]) >>
+  `!x. ix = Var x ==> not_fresh_at sn x` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  `!x. FST op = Var x ==> not_fresh_at sb x` by
+    (drule target_subscript_suffix_var >> simp[]) >>
+  `~u.vs_halted` by (drule target_subscript_marked_nonhalted >> simp[]) >>
+  `well_formed_vtype (get_tenv cx) vt` by
+    (`well_formed_vtype (get_tenv cx) bvt` by
+       metis_tac[target_subscript_pre_result_well_formed] >>
+     metis_tac[target_subscript_vtype_well_formed]) >>
+  simp[vyperStorageBackendTheory.get_storage_def] >> conj_tac
+  >- (rpt gen_tac >> disch_tac >> Cases_on `tr` >>
+      gvs[vyperStorageBackendTheory.get_storage_def]) >>
+  reverse conj_tac >- metis_tac[] >>
+  irule lower_compile_expr_not_label >>
+  goal_assum (drule_at (Pat `lower_value`)) >>
+  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
+QED
+
 (* An element of an array or a mapping, when no index can shrink an array
    the place is already in: the base's fragment, the index's (lower_value),
    then, by the base's place type, the slot of the key
@@ -1300,17 +1433,10 @@ Proof
   qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-(* RESIDUAL (effectful storage indices): an index that calls or pops can
-   shrink an array the target already points into (outer[0][shrink()] = v,
-   or with the call in an index of the base), so the header the bounds
-   check reads can be dead.  Source and Venom read the same raw slot, but
-   stmt_state_rel relates only live storage (storage_dead).  Needs raw
-   agreement on slots made dead by a write; exprSimPopNestedStorageEffectful's
-   pop_nested_storage_effectful_sim has the same exposure.  The root is any
-   module name, so this also covers an immutable's member in the
-   constructor, which a call in an index can pop (es.immutables is
-   module-wide; a call restores only the scopes); target_pre excludes such
-   a root (immutable_root), so its pure case needs nothing. *)
+(* Effectful storage indices can shrink an ancestor after the base pointer
+   is captured.  Capacity-based provenance keeps that captured region valid;
+   the post-index source invariant supplies its storage readiness without a
+   storage-frame or purity restriction on the index. *)
 Theorem target_subscript_storage_effectful_case:
   !nocalls ctx func cenv cx bt e nsid.
     target_case nocalls ctx func cenv cx bt /\
@@ -1321,7 +1447,41 @@ Theorem target_subscript_storage_effectful_case:
     ~EVERY pure_expr (target_indices (SubscriptTarget bt e)) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[target_case_def, target_sim_def] >> rpt strip_tac >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    metis_tac[target_subscript_base_admissible] >>
+  `?bvt. type_place_target env bt = SOME bvt /\
+          subscript_vtype bvt (expr_type e) = SOME vt` by
+    fs[type_place_target_SubscriptTarget] >>
+  drule target_subscript_compile_decompose >> strip_tac >>
+  drule_all target_subscript_compile_intervals >> strip_tac >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\
+   fn_has_code sn sb func` by
+    (irule target_subscript_interval_code >> simp[]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+    (\res ee t. ?pv. res = INL pv /\
+      target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+      t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts)
+    (\res ee r. expr_exit res r)` by
+    (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
+     simp[target_case_def, target_sim_def] >>
+     disch_then (qspecl_then [`env`, `es`] mp_tac) >>
+     impl_tac >- fs[int_calls_expr_def] >>
+     disch_then irule >> simp[]) >>
+  irule target_subscript_bind_outcome >>
+  qexists `\pv ee t. target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+  reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[BETA_THM] >>
+  irule target_subscript_storage_base_continuation >> simp[] >>
+  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl [`env`, `ix`, `nocalls`, `nsid`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 (* RESIDUAL (a pop in a local target's index): the pop can pop an ancestor
