@@ -84,6 +84,31 @@ Proof
   Cases_on `v` >> gvs[op_prov_def] >> metis_tac[flookup_thm]
 QED
 
+Theorem ptr_byte_store_istore_step_content:
+  ptr_history_content tn s t /\
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [a;v] /\
+  eval_operand a s = SOME addr /\
+  word_agree_except (op_taint tn v) u ut ==>
+  ptr_history_content (step_taint inst s (istore (w2n addr) u s) tn)
+    (istore (w2n addr) u s) (istore (w2n addr) ut t)
+Proof
+  strip_tac >>
+  irule ptr_history_content_masks >>
+  qexists_tac `tn with t_imm := key_update tn.t_imm (w2n addr) (op_taint tn v)` >>
+  simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
+  irule ptr_byte_store_history_istore >> simp[]
+QED
+
+Theorem ptr_byte_store_mstore8_step_content:
+  ptr_history_content tn s t /\ inst.inst_opcode = MSTORE8 ==>
+  ptr_history_content (step_taint inst s (mstore8 off u s) tn)
+    (mstore8 off u s) (mstore8 offt v t)
+Proof
+  strip_tac >> irule ptr_history_content_masks >> qexists_tac `tn` >>
+  simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
+    ptr_byte_store_mstore8_history]
+QED
+
 Theorem ptr_paired_byte_store_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
