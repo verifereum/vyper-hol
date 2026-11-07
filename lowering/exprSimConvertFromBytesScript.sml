@@ -1728,7 +1728,7 @@ Resume dynamic_scalar_run_exact[string]:
   gvs[vyperValueTheory.evaluate_type_def]
 QED
 
-Finalise dynamic_scalar_run_exact[local]
+Finalise dynamic_scalar_run_exact
 
 Theorem dynamic_operand_packet[local]:
   is_bytestring_type src /\
