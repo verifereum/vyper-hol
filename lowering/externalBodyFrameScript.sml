@@ -1448,17 +1448,34 @@ Proof
         drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
   >- (rpt strip_tac >>
+      `cenv_module_pins tops cenv` by fs[body_inv_def] >>
+      `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+         NONE = SOME tops` by fs[body_inv_def] >>
+      `bare_globals_complete env_t.bare_globals
+         (initial_evaluation_context am.sources am.layouts tx NONE)` by
+        fs[env_context_consistent_def] >>
+      fs[cenv_module_pins_def] >>
+      drule add_immutable_locations_cases >> strip_tac
+      >- (drule add_module_var_locations_FLOOKUP >> simp[]) >>
+      gvs[bare_globals_complete_def] >> metis_tac[])
+  >- (rpt strip_tac >>
       gvs[env_consistent_def, env_context_consistent_def,
           bare_global_assignable_complete_def, initial_evaluation_context_def])
-  >- (rpt strip_tac >> drule_all body_inv_bare_global_type >> simp[]) >>
+  >- (rpt strip_tac >>
+      `FLOOKUP env_t.bare_globals (src,id) = SOME ty` by simp[] >>
+      drule_all body_inv_bare_global_type >> simp[]) >>
   rpt strip_tac >>
+  `FLOOKUP env_t.bare_globals (src,id1) = SOME ty1 /\
+   FLOOKUP env_t.bare_globals (src,id2) = SOME ty2` by simp[] >>
   `src = NONE /\ cenv.ce_module_var_type (src,id1) = SOME ty1 /\
    cenv.ce_module_var_type (src,id2) = SOME ty2` by
     metis_tac[body_inv_bare_global_type] >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
-    (qpat_assum `source_typing_ok _ _ _` mp_tac >>
-     rw[source_typing_ok_def, check_contract_def] >>
-     drule contract_namespaces_ok_module_type_def_keys >> simp[]) >>
+    (qpat_assum `check_contract F _ _ _ = SOME _` mp_tac >>
+     simp_tac std_ss [check_contract_def, LET_THM] >>
+     strip_tac >>
+     drule contract_namespaces_ok_module_type_def_keys >>
+     disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >> simp[]) >>
   `get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
    type_env tops` by
     gvs[get_tenv_def, initial_evaluation_context_def,

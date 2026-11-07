@@ -54,6 +54,20 @@ Proof
   rw[] >> metis_tac[]
 QED
 
+(* Where an entry of add_immutable_locations comes from. *)
+Theorem add_immutable_locations_cases:
+  !sft tops off vars k loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) k = SOME loc ==>
+    FLOOKUP vars k = SOME loc \/
+    ?vis name ty slot.
+      MEM (VariableDecl vis Immutable name ty slot) tops /\ k = (NONE, name)
+Proof
+  gen_tac >> Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >> simp[add_immutable_locations_def] >>
+  rpt (CASE_TAC >> simp[]) >> strip_tac >> first_x_assum drule >>
+  rw[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 (* A declaration's own name is untouched by the other declarations. *)
 Theorem add_module_var_locations_other:
   !tops vars name.

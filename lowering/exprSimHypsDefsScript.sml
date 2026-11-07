@@ -33,7 +33,8 @@ Definition popped_keys_indexed_def:
                        (MAP FST entry.popped)) scs
 End
 
-(* An assignable immutable exists only in the constructor, lowered
+(* Every immutable location belongs to a bare global. An assignable
+   immutable exists only in the constructor, lowered
    with the constructor's compile env; every immutable has its
    declared type in ce_module_var_type, where compile_get_target_ptr
    reads a place type; and distinct immutables' regions are disjoint,
@@ -42,6 +43,8 @@ Definition bare_globals_layout_def:
   bare_globals_layout is_ctor module_var_type
       (module_vars:nsid |-> var_location) cx
       (globals:nsid |-> type) (assignable:nsid |-> type) <=>
+    (!src id off. FLOOKUP module_vars (src,id) = SOME (ImmutableLoc off) ==>
+       ?ty. FLOOKUP globals (src,id) = SOME ty) /\
     (!src id ty. FLOOKUP assignable (src,id) = SOME ty ==>
        (is_ctor <=> cx.in_deploy)) /\
     (!src id ty. FLOOKUP globals (src,id) = SOME ty ==>

@@ -1495,6 +1495,9 @@ Proof
   qexists_tac `ins` >> asm_rewrite_tac []
 QED
 
+Theorem calldata_owned_interval_replace_let[local] =
+  GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)
+
 Theorem calldata_owned_counter_update:
   (!id q k. lo <= id /\ id < hi /\ FLOOKUP s.vs_allocas id = SOME (q,k) ==>
     k = 32 /\ q < dimword (:256) /\ q+32 <= s.vs_alloca_next /\
@@ -2584,10 +2587,8 @@ Resume calldata_owned_header_step[ownership_frame]:
   qpat_assum `Abbrev (Own = _)` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   pure_rewrite_tac[markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >> BETA_TAC >>
   ntac 8 disch_tac >>
-  match_mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
-                        `s` |-> `u`, `t` |-> `v`, `a` |-> `middle.cs_next_id`,
-                        `b` |-> `st1.cs_next_id`]
-                  calldata_owned_interval_replace) >>
+  ho_match_mp_tac calldata_owned_interval_replace_let >>
+  qexistsl_tac [`u`,`st1.cs_next_id`,`middle.cs_next_id`] >>
   asm_rewrite_tac[] >> decide_tac
 QED
 Resume calldata_owned_header_step[invariant_assembly]:
@@ -4075,6 +4076,7 @@ QED
 
 Finalise calldata_owned_header_initial_repeat
 
+Theorem calldata_owned_header_initial_repeat_simp[local] = SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat
 
 (* Composition from the owned header boundary, independently of register freshness. *)
 Theorem calldata_owned_after_initial_repeat[local]:
@@ -4401,11 +4403,6 @@ QED
 
 Finalise calldata_owned_after_initial_repeat
 
-(* calldata_owned_header_initial_repeat in irule form, made once here
-   rather than inside a proof step. *)
-val header_initial_repeat_rule =
-  IRULE_CANON (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat);
-
 Theorem calldata_nonbulk_owned_repeat:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
@@ -4584,7 +4581,7 @@ Proof
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
   >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  MATCH_MP_TAC header_initial_repeat_rule >>
+  irule calldata_owned_header_initial_repeat_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ = _`
@@ -5177,6 +5174,8 @@ Proof
   disj2_tac >> qexists_tac `u` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+Theorem calldata_owned_header_initial_repeat_observed_simp[local] = SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed
+
 Theorem calldata_owned_header_step_apply_observed[local]:
   Own = (\lo hi s. !id q k.
     lo <= id /\ id < hi /\ FLOOKUP s.vs_allocas id = SOME (q,k) ==>
@@ -5687,12 +5686,6 @@ QED
 
 Finalise calldata_owned_after_initial_repeat_observed
 
-(* calldata_owned_header_initial_repeat_observed in irule form, made
-   once here rather than inside a proof step. *)
-val header_initial_repeat_observed_rule =
-  IRULE_CANON
-    (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed);
-
 Theorem calldata_nonbulk_owned_repeat_observed:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
@@ -5871,7 +5864,7 @@ Proof
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
   >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  MATCH_MP_TAC header_initial_repeat_observed_rule >>
+  irule calldata_owned_header_initial_repeat_observed_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ = _`
