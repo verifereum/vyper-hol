@@ -437,6 +437,97 @@ Proof
   Cases_on `dst` >> gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
+Theorem aug_place_memory_store_frame[local]:
+  alloca_frame c0 es0 sa0 s0 cenv ee s /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type dty) /\
+  lookup_scopes id ee.scopes = SOME entry /\
+  evaluate_type (get_tenv cx) dty = SOME tv /\ is_word_type dty /\
+  (!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  write_place cx (MemoryPlace id path) v ee = (INL (),ff) ==>
+  alloca_frame c0 es0 sa0 s0 cenv ff
+    ((mstore (w2n w) wd s) with vs_inst_idx := ix)
+Proof
+  strip_tac >> gvs[place_ptr_rel_def] >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `local_region cenv ee.scopes s id (w2n b) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `local_ptrs_rel func cenv ee.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
+  `type_memory_size entry.type <= sz /\
+   w2n b + sz <= s.vs_alloca_next` by
+    (fs[local_ptrs_rel_def] >>
+     qpat_x_assum `!name ent p sz. _` drule >>
+     disch_then drule >> strip_tac >> gvs[]) >>
+  `type_memory_size tv = 32` by (drule_all word_tv_memory_size >> simp[]) >>
+  `w2n b + k < dimword (:256)` by decide_tac >>
+  `w2n (b + n2w k) = w2n b + k` by
+    (rewrite_tac[wordsTheory.word_add_def] >> simp[]) >>
+  `MAP FDOM ff.scopes = MAP FDOM ee.scopes` by
+    metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+  irule alloca_frame_region_write >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  simp[] >>
+  conj_tac >- simp[venomStateTheory.lookup_var_def, venomStateTheory.mstore_def] >>
+  rpt strip_tac >> simp[] >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem aug_place_memory_store_run[local]:
+  emit_void MSTORE [dst;op] sa = ((),sb) /\
+  eval_operand dst s = SOME w /\ expr_val_rel cx dty v op s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type dty) /\
+  is_word_type dty /\ evaluate_type (get_tenv cx) dty = SOME tv /\
+  value_has_type tv v /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  alloca_frame c0 es0 sa0 s0 cenv ee s /\
+  lookup_scopes id ee.scopes = SOME entry /\
+  (!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx ff t /\
+      alloca_frame c0 es0 sa0 s0 cenv ff t /\
+      (!x. lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 tv v) s` >>
+  `stmt_state_rel ctx func cenv cx ff u` by
+    (simp[Abbr `u`] >> irule place_store_word_memory_state >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     simp[]) >>
+  `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
+    (fs[expr_val_rel_def] >> metis_tac[]) >>
+  `gas_marked_path F ctx func s 0
+      (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+   (!x. lookup_var x u = lookup_var x s) /\
+   u.vs_allocas = s.vs_allocas /\ ~u.vs_halted /\
+   u.vs_current_bb = sb.cs_current_bb /\
+   SUC s.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (irule place_store_emit_run >> simp[] >>
+     qexistsl [`dst`, `LocMemory`, `op`, `sa`] >>
+     simp[Abbr `u`] >> goal_assum (drule_at Any) >> simp[]) >>
+  qexists `u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[stmt_state_rel_inst_idx, venomStateTheory.lookup_var_def] >>
+  simp[Abbr `u`] >> irule aug_place_memory_store_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem aug_place_binop_store_outcome:
   bop <> In /\ bop <> NotIn /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
