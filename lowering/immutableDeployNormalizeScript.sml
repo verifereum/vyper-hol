@@ -51,7 +51,7 @@ Theorem immutable_normalized_composite_path:
   type_memory_size dtv < dimword (:256) /\
   w2n sw + type_memory_size stv < dimword (:256) /\
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
-  (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
+  (!b sz. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,sz) ==>
      w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -107,7 +107,7 @@ Proof
          venomStateTheory.eval_operands_def,
          venomStateTheory.eval_operand_def, lookup_var_def, AllCaseEqs()] >>
      rpt strip_tac >>
-     qpat_x_assum `!aid b sz. _ /\ sa.cs_next_id <= aid ==> _` drule >> simp[]) >>
+     qpat_x_assum `!b sz. FLOOKUP s.vs_allocas sa.cs_next_id = _ ==> _` drule >> simp[]) >>
   qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
   qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
   `eval_operand src u = SOME sw /\ eval_operand dst u = SOME dw /\
