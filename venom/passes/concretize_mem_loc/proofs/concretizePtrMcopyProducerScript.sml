@@ -356,7 +356,9 @@ Proof
      once_rewrite_tac[ptr_chrono_step_cases] >>
      simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
      strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-     simp[step_inst_non_invoke, step_inst_base_def] >> strip_tac >> gvs[]) >>
+     simp[step_inst_non_invoke] >>
+     PURE_REWRITE_TAC[step_inst_base_def] >>
+     ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >> strip_tac >> gvs[]) >>
   `zt.po_fn = at.po_fn /\ zt.po_stack = at.po_stack /\
    zt.po_state = (mcopy (w2n dt) (w2n rt) (w2n n) at.po_state with
      vs_inst_idx := SUC at.po_state.vs_inst_idx) /\
@@ -365,7 +367,9 @@ Proof
      once_rewrite_tac[ptr_chrono_step_cases] >>
      simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
      strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-     simp[step_inst_non_invoke, step_inst_base_def] >> strip_tac >> gvs[]) >>
+     simp[step_inst_non_invoke] >>
+     PURE_REWRITE_TAC[step_inst_base_def] >>
+     ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >> strip_tac >> gvs[]) >>
   `ptr_paired_sample positions z zt (tokens,registry,births,PT,TG,saved,entries)` by
     suspend "sample" >>
   `ptr_paired_params positions z zt (tokens,registry,births,PT,TG,saved,entries)` by

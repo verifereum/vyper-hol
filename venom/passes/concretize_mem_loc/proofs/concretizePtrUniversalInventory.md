@@ -1570,25 +1570,25 @@ explicitly qualified as contract suppliers.
 | Root B | PairedRoot: `ptr_paired_root`, `ptr_paired_root_normalized` | Full root certificate and normalization checked. Actual root inversion, matching production function, wf/no-PHI/coverage premises must be supplied from stage. Not an arbitrary-target-history theorem. |
 | Source gap G | PairedPrefixProbe: `ptr_paired_prefix_gap_scan`, `ptr_paired_prefix_normalize` | Full six-field gap preservation checked; needs fn_inst_wf and current prefix. No opcode simulation missing for deleted NOPs. |
 | N1 ADD/SUB | OwnedAffinePrefix: `ptr_affine_prefix_aligned_next`, `ptr_affine_owned_prefix` | Ownership/unrestricted variable-transport prefix, not a full mixed six-field certificate. Historical samples/callers/writes assembly and mixed input adaptation still required. |
-| N2 scalar/masked arithmetic (entire original row) | AffineTransport and value/taint boundaries are conditional semantic ingredients | No full-prefix producer. Need exact success/selection and mask transport for each semantic family, not just result arithmetic. OFFSET stays in this row. |
+| N2 scalar/masked arithmetic | ScalarCoreProducer: `ptr_paired_prefix_scalar_core`, `ptr_paired_scalar_core_prefix_normalize` cover MUL, Div, SDIV, Mod, SMOD, Exp, ADDMOD, MULMOD, SLT, SGT, ISZERO, AND, OR, XOR, NOT, SIGNEXTEND, BYTE, OFFSET. ShiftProducer: `ptr_paired_prefix_shift`, `ptr_paired_shift_prefix_normalize` cover SHL/SHR/SAR. | Complete per-opcode immediate/normalized suppliers; all scalar restrictions and source success derived. Shifts allow masked data and derive untainted shift amount. Universal dispatch remains to be assembled. |
 | N3 EQ/LT/GT | ComparisonTransport: `ptr_comparison_eq_transport`, `ptr_comparison_lt_transport`, `ptr_comparison_gt_transport` | Conditional comparison values, with provenance/displacement and closed-end bounds. No full-prefix producer or universal derivation of its displacement premises. |
 | N4 ASSIGN | AssignProducer: `ptr_paired_prefix_assign` | Exact immediate mixed paired-prefix extension checked with the MLOAD antecedent/conclusion, replacing only the source opcode. Target success constructs source success, including opaque return-PC copies; PairedNextAttach retains the full certificate. Source ALLOCA preimage goes to N17, not this row. No universal dispatch claimed. |
-| N5 PARAM | ValueSelection selection boundaries; installed ptr_paired_params at endpoint | Actual PT/masks relation available; conditional selection still needs full mixed step/certificate assembly. |
+| N5 PARAM | ParamProducer: `ptr_paired_prefix_param` | Full immediate six-field certificate from actual target success; no supplied source success, value equality or postmixedness. Generic PairedPrefixProbe normalization still needs attachment and append reassociation to the HistoryCoverage interface. |
 | N6 INITIAL_FMP/BUMP/RETPC_PARAM | RetpcProducer: `ptr_paired_prefix_retpc_param` and `ptr_paired_retpc_param_prefix_normalize` retain distinct opaque return-PC tokens. InitialFmpProducer: `ptr_paired_prefix_initial_fmp` and `ptr_paired_initial_fmp_prefix_normalize` use shared initial-FMP equality and scalar mixed update. BumpProducer: `ptr_paired_prefix_bump` and `ptr_paired_bump_prefix_normalize` derive scalar/nonopaque/untainted operands from discipline and preserve both sequential outputs, including aliasing (next output wins). All derive source execution from actual target success. | N6 complete as a dispatch subset. No universal coverage claim. |
 | N7 MLOAD | MloadProducer: `ptr_paired_prefix_mload` | Exact full immediate extension, arbitrary target chrono successor, frozen stage premises including max_live_eom, no extra source-success or read agreement premise. TG'=step_prov; other ghost maps and ws unchanged. Normalize afterward by PairedPrefixProbe. |
 | N7 ILOAD | Conditional read/value interfaces only | Not covered by MLOAD theorem. Requires its own semantic read/taint mapping and certificate attachment. |
 | N8 MSTORE | MstoreProducer: `ptr_paired_prefix_mstore` | Exact full immediate extension from current prefix and stage premises, arbitrary target chrono successor. Adds one actual ledger record; normalizer then applies. No source-success premise. |
 | N8 MSTORE8/ISTORE | Existing byte-content/footprint boundaries only | Not covered by MSTORE's exact opcode hypothesis. Full mixed/write-ledger extension missing. |
-| N9 MCOPY | McopyContent masked content; HistoricalMcopyExclusion conditional exclusion | Need mixed-compatible source success/read recovery consumer plus actual write record/certificate extension. The historical consumer's stronger transport hypothesis is not supplied by mixed variables. |
+| N9 MCOPY | McopyProducer: `ptr_paired_prefix_mcopy` (321 ff.) | Full immediate six-field prefix, with ws++extra; extra=[] for empty source footprint and a singleton actual paired-write record otherwise. Mixed read recovery and actual target exclusion are discharged, not premises. Generic normalization and append reassociation still needed. Current rebase timeout repaired by selecting the MCOPY branch before simplification; statement unchanged. |
 | N10 buffer copies | BufferCopyContent: conditional payload and returndata-bound content | No full-prefix producer; successful operand evaluation, exact payload/shared fields and RETURNDATACOPY guard must be derived, not assumed. |
 | N11 EXTCODECOPY | Footprint/content ingredients | No full-prefix producer; account-code payload and complete shared-field preservation still consumers. |
 | N12 SLOAD/SSTORE/TLOAD/TSTORE | `ptr_paired_prefix_storage_read` and `ptr_paired_storage_read_prefix_normalize` (concretizePtrStorageReadProducer) supply exactly SLOAD/TLOAD from actual target success. Scalar key equality follows from discipline/mixed operands; shared accounts/transient/call context give equal read words. The output retains arbitrary source storage/transient taint via masked reflexivity. | SSTORE/TSTORE remain open, including successful static-frame write inversion. No universal HistoryCoverage claim. |
-| N13 environment/scalar outputs | `ptr_paired_prefix_environment_read` in concretizePtrEnvironmentReadProducer proves the full immediate-prefix producer for CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE and RETURNDATASIZE, using only actual target chronological success. | Remaining: GAS, SELFBALANCE, BALANCE, BLOCKHASH, CODESIZE, EXTCODESIZE, EXTCODEHASH, BLOBHASH, BLOBBASEFEE, CALLDATALOAD and DLOAD. No whole-row coverage; opaque environment facts are not unrestricted variable equality. |
+| N13 environment/scalar outputs | EnvironmentReadProducer: `ptr_paired_prefix_environment_read` / `ptr_paired_environment_read_prefix_normalize` cover CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE, SELFBALANCE. Its `ptr_paired_prefix_gas` / `ptr_paired_gas_prefix_normalize` cover GAS, consuming shared readings. UnaryEnvironmentReadProducer: `ptr_paired_prefix_unary_environment_read` / `ptr_paired_unary_environment_read_prefix_normalize` cover BLOCKHASH, BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH, CALLDATALOAD, DLOAD. | N13 complete per opcode, with full normalized certificates, no supplied source success/scalar input premises. Not universal HistoryCoverage. |
 | N14 SHA3/LOG | Owned/fixed read recovery plus conditional value/log ingredients | Need actual untainted payload and topics/static guard, exact effects and certificate assembly. No full producer. |
 | N15 CALL/STATICCALL | ExternalCallContent conditional content, exact footprint clipping, post-returndata and core boundaries | Need whole request agreement derived from discipline/read recovery and actual outcomes/shared poststate. No full producer; clipped actual footprint is already available, not a new exclusion gap. |
 | N16 DELEGATECALL/CREATE/CREATE2 | Existing request/footprint ingredients | No full producer. Distinct request/outcome/rollback semantics; cannot infer from CALL. |
 | N17 ALLOCA -> ASSIGN | MixedAllocationPrefix: `ptr_paired_prefix_alloca_success`, `ptr_paired_prefix_alloca_immediate` (E0441); StructuralDispatch: `ptr_paired_structural_prefix_normalize` | Mixed fresh/cached success, retained births and full immediate six-field certificate checked. Normalized extension checked under exactly the universal-schema antecedent plus the ALLOCA/RET disjunction. Static production bridges remain explicit; not universal coverage. |
-| N18 ASSERT/ASSERT_UNREACHABLE | Scalar/untainted restrictions from discipline are the intended suppliers | No full-prefix producer. Target continuing branch must force matching successful source condition. |
+| N18 ASSERT/ASSERT_UNREACHABLE | AssertionProducer: `ptr_paired_prefix_assertion`, `ptr_paired_assertion_prefix_normalize` | Full immediate and normalized certificates for both opcodes; actual target continuing success forces matching source success. Nonopacity, scalar provenance and empty input taint are derived internally. |
 | J/JMP | PairedJump: `ptr_paired_jump_prefix_normalize` | Full normalized six-field extension checked. Static wf/retpc/coverage, actual target block-event premises and non-DALLOCA must be supplied/inverted. No assumed source success. |
 | J/JNZ | PairedJump: `ptr_paired_jnz_prefix_normalize`; PairedJumpEntry: `ptr_owned_jnz_scalar` | Full normalized extension with explicit cond/yes/no syntax and scalar/nonopaque/empty-taint restrictions. Restriction supplier derives them from ownership+discipline+fn_ptr_ok+inst_wf+no-DALLOCA+opaque_use_ok; these must actually be matched in dispatch. Not unconditional coverage by itself. |
 | J/DJMP | PairedJump: `ptr_paired_djmp_prefix_normalize`; PairedJumpEntry: `ptr_paired_djmp_entry` and strengthened-in-place `ptr_owned_jnz_scalar` (JNZ/DJMP, any member operand) | Full normalized block certificate derives selector nonopacity, absent provenance, empty taint and exact equality from source ownership/discipline. Actual target success selects the same in-range EL label in the source; existing selected-jump PHI entry and block attachment reused. No supplied source success or selector-equality premise. Not universal coverage. |
@@ -1598,6 +1598,137 @@ explicitly qualified as contract suppliers.
 | X4 PHI | Atomic production entry/PHI transport in MixedPhi and PairedEntry | No successful ordinary PHI next step. Already accounted for at B/J/C; not a residual opcode requiring ordinary simulation. |
 | X5 NOP | Contract concretize_positions_nop; executed coverage/gap interfaces | Output NOP excluded via actual production preimage/coverage. Source-only deleted gaps handled by G. |
 | T RETURN/REVERT/STOP/SINK/SELFDESTRUCT/INVALID | No continuing chronological step for halt/abort/error; successful terminal access uses eventual endpoint static bound | Not an extension branch. A reachable active terminal observation still needs memory access bound/revert-forward exemption; cannot delete it from final stage proof. |
+
+### Integration audit: shared-storage obstruction (2026-11-07)
+
+This section and the corrected table above are the current inventory. Earlier
+progress notes, including the opening matrix's old N12 row, are historical where
+inconsistent. No producer was removed. N2, N6, N13 and N18 have complete
+per-opcode normalized suppliers; ASSIGN, PARAM, MLOAD, MSTORE and MCOPY have
+full immediate suppliers requiring generic normalization/append assembly.
+ADD/SUB, EQ/LT/GT, ILOAD, MSTORE8/ISTORE, buffer copies, EXTCODECOPY,
+SSTORE/TSTORE, SHA3/LOG, CALL/STATICCALL and DELEGATECALL/CREATE/CREATE2
+still lack full family certificates. This list is not a new proof queue: the
+shared-state interface below must be resolved before more dispatch work.
+
+ChronologicalHistory:29-72 has precisely four step constructors: next
+(nonterminator, non-INVOKE, OK plus next active cursor), block (terminator, OK,
+not halted, enters_block), call (actual INVOKE decode/lookup/eval/setup/entry),
+ret (IntRet, nonempty caller stack, merge/adopt/bind and resumed active cursor).
+Root is a history constructor, supplied by ContextRoot/PairedRoot, not a step.
+The N1--N18/J/C/R/X/T disjoint partition above covers these constructors.
+PHI is atomic at entry, not ordinary success. NOP gaps are source stuttering;
+retained target NOPs require preimage/coverage contradiction. Forbidden FMP,
+DALLOCA and DRET/RETFMP need actual source exclusion plus production preimage.
+Halt/Abort/Error endpoints do not require a continuing extension. They DO
+require observation safety: CurrentObservation's `ptr_paired_current_static_bound`
+already supplies the range bound under a normalized paired prefix, without
+source or target departure. T-row's former 'eventual endpoint' description is
+superseded by that theorem; unconditional coverage/raw packaging is still open.
+
+Exact integration contract: HistoryCoverage:17-30 universally requires, from
+current prefix + non-NOP + instruction correspondence + actual target step,
+`?delta z ... snapshots ... . delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+ ptr_paired_prefix ... (h++delta) z (ht++[zt]) zt
+ (done++[LENGTH h-1]) ... (H++snapshots) ... /\
+ z.po_inst.inst_opcode <> NOP /\
+ zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst`.
+No source-success or content equality premise is allowed. UniversalStepSchema
+is a typed specification, not its proof. Static stage bridges must choose one
+R/lp/positions outside induction; producers with additional syntax or event
+premises (notably JMP/JNZ/INVOKE) still require actual inversion and matching.
+
+#### Exact field mismatch, not a counterexample to the frozen theorem
+
+SharedFields:5-27 requires `s.vs_accounts=t.vs_accounts` AND
+`s.vs_transient=t.vs_transient` AND `s.vs_immutables=t.vs_immutables`, among
+other exact fields. OpaqueRetpc:111 only resets vs_return_pc_token when defining
+ptr_core_shared; it does not relax any of those three equalities.
+PairedPrefix:11-17 requires core sharing in EVERY paired sample, hence at each
+post-store endpoint, not merely at root or call boundaries.
+
+In contrast, OpaqueRetpc:255-263 permits for an ordinary variable x:
+`ptr_lookup_transport births positions (FLOOKUP TG x)
+ (op_taint tn (Var x)) (lookup_var x s) (lookup_var x t)`.
+ValueTransport:5-21 reduces the scalar case to `word_agree_except mask u v`,
+not u=v. ptrDiscipline:676-680 defines this as equality of bytes outside mask.
+An all-byte mask admits distinct words. taint_ok:566-585 explicitly permits
+SSTORE/TSTORE/ISTORE `[key;value]` with tainted value and empty key taint.
+ptr_discipline:625-635 supplies access_ok, taint_ok, allocas_from and conditional
+allocas_below_fmp, NOT empty value masks or exact data equality. No hypothesis
+in the frozen statement imposes `taint_within D`; even that separate definition
+only restricts taint to dead bytes, not to the empty set.
+
+The exact failed preservation goal is, for equal scalar key k and successful
+nonstatic stores of related data u,v:
+`(sstore k u s).vs_accounts = (sstore k v t).vs_accounts` (SSTORE), or
+`(tstore k u s).vs_transient = (tstore k v t).vs_transient` (TSTORE).
+venomState:269-292 writes u/v to the same key at cc_address; prestate exact
+accounts/transient equality does not make these equal when u<>v.
+ExecSemantics:655-665 first excludes a successful static write (defined operands
+in static context Abort); that inversion supplies ~cc_static, not u=v.
+This challenges the helper invariant, not the frozen static-memory theorem.
+No full concrete execution counterexample is asserted by this audit.
+
+#### Minimal proposed interface and consumers (not yet implemented)
+
+Keep exact environment/account NON-storage fields, but relate active-contract
+storage/transient words outside the CURRENT source `tn.t_stor` / `tn.t_trans`;
+include immutable content outside `tn.t_imm` before attempting ISTORE/ILOAD.
+For example the storage clause would use
+`storage_agree_except tn.t_stor (contract_storage s) (contract_storage t)`
+with equal cc_address, and corresponding transient clause. Frozen
+ptrDiscipline already defines storage_agree_except:791-794 and records
+store_taint/key_update:369-379, step_taint:408-420 and load masks:332-342.
+Its accounts_agree_except/transient_agree_except are dead-layout-indexed, not
+drop-in current-taint relations: do not silently substitute them. Other account
+addresses and non-storage account fields must remain controlled. Calls and
+rollback/return must identify which address the mask describes.
+
+First semantic validation boundary proposed to the strategist: paired SSTORE
+and TSTORE step preservation of this taint-indexed content relation, from mixed
+operands plus taint_ok and actual target success, deriving source success and
+post store_taint agreement. Test nonempty masks, static Abort exclusion and
+same-key overwrite/taint clearing. Then validate masked SLOAD/TLOAD: existing
+StorageReadProducer:44-58 deliberately produces an IDENTICAL result v using
+exact storage; under the repaired interface it must instead prove
+word_agree_except (key_taint tn.t_stor k) u v (and transient analogue).
+Merely weakening ptr_core_shared without repairing that consumer is unsound.
+
+Affected boundary/consumer map:
+* SharedFields/OpaqueRetpc and PairedPrefix samples/core projections: add a
+  taint-indexed relation without deleting existing exact lemmas. Historical
+  samples must use THEIR observation taint; never the endpoint's substituted tn.
+* Root reflexivity; gap/next attachment; MixedPhi; ALLOCA; ordinary producers;
+  PairedJump and entry; PairedCallSchema; ReturnProduction/ReturnPrefix and
+  saved-caller merge/adopt: preserve/rebase the new relation at actual taints.
+* StorageReadProducer equal-word proof; new storage writes; ILOAD/ISTORE:
+  masked content, with appropriate source key/immutable masks.
+* EnvironmentRead/UnaryEnvironmentRead: BALANCE, SELFBALANCE, EXTCODE* need
+  exact non-storage account projections; GAS needs its exact readings unchanged.
+* ExternalCallContent and future call/create/log producers: distinguish shared
+  oracle fields/requests/returndata from mutable content; CALL adopt_reset can
+  clear taint on successful shared outcome adoption, whereas DELEGATECALL and
+  CREATE* use taint_ok's empty storage/transient premises. These are obligations,
+  not a claim that weakening storage alone proves request/outcome equivalence.
+* ObservationInterface/CurrentObservation, Mload/McopyEndpoint and historical
+  exclusion use core projections (e.g. labels, returndata); retain these narrow
+  exact projections rather than expanding all mutable fields in consumers.
+* HistoryCoverage and UniversalStepSchema quantify the full paired prefix;
+  after migration they must consume the new certificate uniformly. Stage bridge
+  and final raw mem_inv packaging remain separate integration dependencies.
+
+Validation: UniversalStepSchema/HistoryCoverage holbuild passed at session
+start (TO_concretize_ptr-20261106T222901Z_m18387_t001). MCOPY rebase timeout
+at old line 359 was repaired in-place by selecting non-INVOKE, pure base
+rewrite, assumption opcode rewrite and single opcode_case reduction, leaving
+mcopy memory internals opaque (TO_concretize_ptr-20261106T222901Z_m18401_t001).
+The eight-target installed-producer check (ScalarCore, Shift, Param, Mcopy,
+Assertion, EnvironmentRead, UnaryEnvironmentRead, StorageRead) then passed
+(TO_concretize_ptr-20261106T222901Z_m18402_t001), with no CHEAT warning.
+No frozen contracts/definitions, producer statements, certificate definitions,
+or positions-rewrite facts were changed. The next action is scoped strategist
+review of this interface, not an assumed-equal-value storage wrapper.
 
 ### Historical structural priorities: ALLOCA and RET
 
