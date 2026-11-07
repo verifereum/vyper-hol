@@ -244,7 +244,8 @@ Theorem abi_encode_framed_phases_open:
     abi_encoder_registered_effect {} [(p,32)] body actual /\
     (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
       eval_operand op actual = SOME v) /\
-    abi_encode_exec_frame func initial actual
+    abi_encode_exec_frame func initial actual /\
+    LENGTH initial.vs_memory <= LENGTH actual.vs_memory
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_framed_setup_window >>
@@ -328,6 +329,8 @@ Resume abi_encode_framed_phases_open[observations]:
      conj_tac >- first_assum ACCEPT_TAC >>
      irule abi_encode_exec_frame_trans >> qexists `body_state` >>
      conj_tac >> first_assum ACCEPT_TAC) >>
+  `LENGTH initial.vs_memory <= LENGTH actual.vs_memory` by
+    (drule abi_encode_exec_frame_memory_length >> simp[]) >>
   qexistsl [`prepared`, `body_state`, `actual`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
