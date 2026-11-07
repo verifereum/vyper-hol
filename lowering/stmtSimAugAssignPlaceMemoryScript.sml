@@ -185,7 +185,8 @@ Theorem aug_place_bop_write_result_ok:
 Proof
   strip_tac >>
   Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs st` >>
-  gvs[expr_res_ok_def, stmt_res_ok_def]
+  gvs[expr_res_ok_def, stmt_res_ok_def] >>
+  gvs[exprBopSimDefsTheory.bop_result_def, AllCaseEqs()]
 QED
 
 
@@ -498,7 +499,7 @@ Proof
       case evaluate_binop
         (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
         ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
+       (irule bop_result_augassign >> metis_tac[]) >>
      simp[] >>
      qpat_x_assum `k ee = _` mp_tac >>
      simp[Abbr `k`, bind_def, lift_sum_def, return_def, raise_def] >>
@@ -1273,9 +1274,15 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
-     conj_tac >- metis_tac[word_value_not_bytes] >>
+     conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
+     conj_tac >-
+       (qpat_assum `word_value_type ty` mp_tac >>
+        qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
+        qpat_assum `value_has_type ptv v` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        metis_tac[word_value_type_typed, word_value_not_bytes]) >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>

@@ -1,6 +1,7 @@
 (* Physical ownership of the bytes read by a hash, independently of provenance. *)
 Theory bodyPtrHashBuiltinsInputWindow
 Ancestors
+  exprSimHashBoundary
   arithmetic exprSimHash
 
 Theorem hash_input_window_subwindow:

@@ -1,6 +1,6 @@
 (* Semantic endpoints use the very same deterministic runs as the pointer paths. *)
 Theory bodyPtrHashBuiltinsShaCase
-Ancestors bodyPtrHashBuiltinsShaFixedPaths bodyPtrHashBuiltinsShaBytes
+Ancestors exprSimHashBoundary bodyPtrHashBuiltinsShaFixedPaths bodyPtrHashBuiltinsShaBytes
   bodyPtrHashBuiltinsKeccakCase exprSimHash exprOperandVar exprSimVVFrame
   bodyPtrDefs compileEnv venomState list words exprSimWordArgs bodyPtrHashBuiltinsCases arithmetic bodyPtrHashBuiltinsInputWindow
 

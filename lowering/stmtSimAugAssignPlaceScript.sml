@@ -176,7 +176,7 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
      ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> metis_tac[]) >>
   simp[] >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)

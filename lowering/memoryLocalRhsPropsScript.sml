@@ -329,6 +329,9 @@ Theorem memory_rhs_read_lowered_typed:
     value_runtime_typed env (lowered_value_type cenv e) v
 Proof
   ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac
+  >~ [`Builtin _ (Concat _) _`]
+  >- (rpt strip_tac >> simp[lowered_value_type_def] >>
+      drule_all exprSimHypsTheory.concat_read_buffer_typed >> simp[])
   >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
       gvs[Once evaluate_def, bind_def, return_def, read_result_def,
           evaluate_literal_def] >>
@@ -347,9 +350,6 @@ Proof
            vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
       gvs[type_slot_size_def, compatible_bound_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
-  >- (rpt strip_tac >>
-      irule memory_rhs_read_lowered_typed_unwidened >> simp[] >>
-      goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
@@ -369,15 +369,15 @@ Proof
         metis_tac[abi_encode_lowered_well_typed] >>
       metis_tac[type_builtin_read_annotation_typed])
   >- (rpt gen_tac >> strip_tac >>
+      rename1 `expr_body_pre _ _ _ (Call ann (IntCall func_id) args drv) _` >>
       simp[lowered_value_type_def] >>
-      rename1 `Call ca (IntCall func_id) cargs cdflt` >>
       `expr_sim_inv cenv cx env es /\
-       well_typed_expr env (Call ca (IntCall func_id) cargs cdflt)` by
+       well_typed_expr env (Call ann (IntCall func_id) args drv)` by
         gvs[expr_body_pre_def] >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def,
            supported_effect_expr_def] >> strip_tac >>
-      Cases_on `cdflt` >> gvs[supported_effect_expr_def,
+      Cases_on `drv` >> gvs[supported_effect_expr_def,
                                  optionTheory.IS_SOME_EXISTS] >>
       PairCases_on `x` >>
       `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by

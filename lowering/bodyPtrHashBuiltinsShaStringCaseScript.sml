@@ -1,6 +1,6 @@
 (* SHA endpoints retain the source StringV and use only its encoded memory bytes. *)
 Theory bodyPtrHashBuiltinsShaStringCase
-Ancestors bodyPtrHashBuiltinsShaCase bodyPtrHashBuiltinsShaStringInput
+Ancestors exprSimHashBoundary bodyPtrHashBuiltinsShaCase bodyPtrHashBuiltinsShaStringInput
   bodyPtrHashBuiltinsShaBytes
   bodyPtrHashBuiltinsKeccakCase exprSimHash exprOperandVar exprSimVVFrame
   bodyPtrDefs compileEnv venomState list words exprSimWordArgs

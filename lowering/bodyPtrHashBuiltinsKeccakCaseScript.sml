@@ -1,6 +1,7 @@
 (* Typed semantic endpoints paired with the checked Keccak suffix paths. *)
 Theory bodyPtrHashBuiltinsKeccakCase
 Ancestors
+  exprSimHashBoundary
   bodyPtrHashBuiltinsUnary bodyPtrHashBuiltinsCases
   bodyPtrHashBuiltinsKeccakFixedFrame bodyPtrHashBuiltinsKeccakBytesFrame
   bodyPtrHashBuiltinsShaEndpoint exprSimHash exprSimVVFrame exprSimAlloc

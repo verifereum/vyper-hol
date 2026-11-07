@@ -1,6 +1,6 @@
 (* Shared dynamic hash input preparation, before the allocated SHA tail. *)
 Theory bodyPtrHashBuiltinsShaPrefix
-Ancestors bodyPtrHashBuiltinsKeccakBytesRun fragGasSeqPtr ptrDiscipline
+Ancestors exprSimHashBoundary bodyPtrHashBuiltinsKeccakBytesRun fragGasSeqPtr ptrDiscipline
   venomState venomInst venomExecSemantics words finite_map pred_set
   typedCopyPtr typedCopyLoopHeaderPtr exprSimHash list bodyPtrDefs valueEncodingProps
   emitHelper emitHelperProps compileEnv exprLoweringProps ASCIInumbers rich_list arithmetic

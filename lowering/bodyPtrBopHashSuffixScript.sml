@@ -1,5 +1,6 @@
 Theory bodyPtrBopHashSuffix
 Ancestors
+  exprSimHashBoundary
   bodyPtrBopHashFrame bodyPtrBopHashCompile bodyPtrBopHashSequence
   bodyPtrHashBuiltinsGhostFrame bodyPtrBopCompareCompile bodyPtrBopCompare
   exprPtrUnwrapCopyEdges bodyPtrBopOperandContract exprSimWordArgs
