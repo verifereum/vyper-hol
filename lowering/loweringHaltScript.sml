@@ -124,8 +124,10 @@ Theorem step_TSTORE:
       else OK (tstore v1 v2 s)
 Proof
   rpt strip_tac >>
+  rewrite_tac[mk_inst_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def, eval_operands_def]
+  simp_tac (srw_ss()) [] >>
+  simp[exec_write2_def, eval_operands_def]
 QED
 
 (* ===== Return bytes ===== *)
