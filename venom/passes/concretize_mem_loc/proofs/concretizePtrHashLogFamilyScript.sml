@@ -3,7 +3,84 @@
  *)
 Theory concretizePtrHashLogFamily
 Ancestors
-  concretizePtrStorageReadProducer
+  concretizePtrStorageReadProducer concretizePtrMloadRecovery
+  regularMemorySim memSafeRun ptrDiscipline contextCodegenRel
+  venomInst venomWf venomExecProofs unitLabelMapIdentity list
+  pointerConfinedDefs memLocDefs finite_map pred_set
+  concretizePtrReturnTransport concretizePtrOpaqueRetpc
+
+Theorem ptr_hash_log_nonrevert[local]:
+  active_inst fn inst s /\ ALL_DISTINCT (fn_labels fn) /\
+  MEM inst.inst_opcode [SHA3; LOG] ==>
+  ~in_revert_forward fn s /\ ~about_to_revert fn inst s
+Proof
+  strip_tac >> reverse conj_tac
+  >- (fs[MEM] >> simp[about_to_revert_def]) >>
+  qpat_x_assum `active_inst fn inst s` mp_tac >>
+  simp[active_inst_def] >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> fs[fn_labels_def]) >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    simp[get_instruction_def] >>
+  simp[in_revert_forward_def] >> strip_tac >>
+  drule_all revert_forward_at_opcode >> fs[MEM]
+QED
+
+Theorem ptr_hash_log_read_untainted[local]:
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [SHA3; LOG] /\
+  MEM (off,n) (source_memory_read_ranges inst s) ==>
+  (!op. MEM op inst.inst_operands ==> op_taint tn op = {}) /\
+  (!j. j < n ==> off+j NOTIN tn.t_mem)
+Proof
+  strip_tac >>
+  `~about_to_revert fn inst s` by (fs[MEM] >> simp[about_to_revert_def]) >>
+  conj_tac
+  >- (fs[MEM] >> gvs[taint_ok_def] >> metis_tac[]) >>
+  gen_tac >> strip_tac >>
+  fs[MEM] >> gvs[taint_ok_def] >>
+  qpat_x_assum `!off' len i. _`
+    (qspecl_then [`off`,`n`,`off+j`] mp_tac) >> simp[]
+QED
+
+Theorem ptr_paired_hash_log_payload[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  active_inst a.po_fn a.po_inst a.po_state /\
+  ALL_DISTINCT (fn_labels a.po_fn) /\
+  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
+  MEM a.po_inst.inst_opcode [SHA3; LOG] /\
+  mem_read_ops a.po_inst = SOME ops /\
+  inst_read_op a.po_inst = SOME ops.iao_ofst /\
+  MEM ops.iao_ofst a.po_inst.inst_operands /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+    (SOME x) (SOME y) ==>
+  TAKE n (DROP (w2n x) a.po_state.vs_memory ++ REPLICATE n 0w) =
+  TAKE n (DROP (w2n y) at.po_state.vs_memory ++ REPLICATE n 0w)
+Proof
+  strip_tac >>
+  `~in_revert_forward a.po_fn a.po_state` by
+    (drule_all ptr_hash_log_nonrevert >> simp[]) >>
+  `!j. j < n ==> w2n x+j NOTIN a.po_taint.t_mem` by
+    (drule_all ptr_hash_log_read_untainted >> simp[]) >>
+  `a.po_inst.inst_opcode <> ASSIGN` by fs[MEM] >>
+  drule ptr_paired_read_range_masked_bytes >>
+  simp[] >> strip_tac >>
+  simp[venom_returndata_read_byte] >> irule GENLIST_CONG >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
 
 Theorem ptr_paired_hash_log_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
