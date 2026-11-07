@@ -1960,3 +1960,109 @@ Resume selective_cases_trace_certificate[trace18TT]:
   qexists `[]` >> REFL_TAC
 QED
 Finalise selective_cases_trace_certificate
+
+(* These lists measure nonempty spill maps AFTER original instruction calls,
+   not transient spill/restore operations inside a call. *)
+Theorem selective_cases_spill_phase_table:
+  (n = 17 \/ n = 18) ==>
+  selective_case_spill_phases n r u (selective_case_entry n r u) = []
+Proof
+  disch_tac >> gvs[]
+  >- (Cases_on `r`
+      >- (Cases_on `u` >- suspend "a" >> suspend "b") >>
+      Cases_on `u` >- suspend "c" >> suspend "d") >>
+  Cases_on `r`
+  >- (Cases_on `u` >- suspend "e" >> suspend "f") >>
+  Cases_on `u` >- suspend "g" >> suspend "h"
+QED
+Resume selective_cases_spill_phase_table[a]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[b]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[c]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[d]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[e]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[f]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[g]:
+  EVAL_TAC
+QED
+Resume selective_cases_spill_phase_table[h]:
+  EVAL_TAC
+QED
+Finalise selective_cases_spill_phase_table
+
+(* This is an actual second circuit: the first edge consumes the lineage
+   reentry and its checked replay, not the native DFS source in its place. *)
+Theorem selective_cases_circuit_lineage:
+  (n = 17 \/ n = 18) ==>
+  lineage_state (selective_case_lv n r u) (selective_case_dg n r u)
+    (selective_case_cg n r u) (selective_fn n r u) entry_probe_start "back"
+    (selective_rebase (selective_case_back_base n r u)
+      (SND (THE (selective_case_run n r u 1 (selective_case_reentry n r u))))) /\
+  lineage_state (selective_case_lv n r u) (selective_case_dg n r u)
+    (selective_case_cg n r u) (selective_fn n r u) entry_probe_start "H"
+    (selective_rebase (selective_case_entry n r u)
+      (SND (THE (selective_case_run n r u 2
+        (selective_rebase (selective_case_back_base n r u)
+          (SND (THE (selective_case_run n r u 1 (selective_case_reentry n r u)))))))))
+Proof
+  disch_tac >> conj_asm1_tac
+  >- suspend "outward"
+  >> suspend "return"
+QED
+Resume selective_cases_circuit_lineage[outward]:
+  drule selective_cases_reentry_lineage >>
+  disch_then (qspecl_then [`u`, `r`] assume_tac) >>
+  drule selective_cases_header_dfs >>
+  disch_then (qspecl_then [`u`, `r`] assume_tac) >>
+  drule selective_cases_header_result >>
+  disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_reentry_replay >>
+  disch_then (qspecl_then [`u`, `r`] assume_tac) >>
+  drule selective_cases_shape >>
+  disch_then (qspecl_then [`u`, `r`]
+    (strip_assume_tac o PURE_REWRITE_RULE [selective_shape_def])) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [selective_case_run_def]) >>
+  asm_rewrite_tac[selective_case_run_def] >>
+  rewrite_tac[selective_rebase_def] >> irule lineage_state_step >>
+  conj_tac >- (irule selective_cases_back_dfs >> simp[]) >>
+  `selective_case_reentry n r u with
+    <|ps_cleanup_height := (selective_case_reentry n r u).ps_cleanup_height;
+      ps_cleanup_promised := (selective_case_reentry n r u).ps_cleanup_promised|> =
+    selective_case_reentry n r u` by simp[] >>
+  simp[] >> metis_tac[listTheory.MEM]
+QED
+Resume selective_cases_circuit_lineage[return]:
+  drule selective_cases_circuit_fixed >>
+  disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `lineage_state _ _ _ _ _ "back" _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac >>
+  drule selective_cases_back_dfs >>
+  disch_then (qspecl_then [`u`, `r`] assume_tac) >>
+  drule selective_cases_back_result >>
+  disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_shape >>
+  disch_then (qspecl_then [`u`, `r`]
+    (strip_assume_tac o PURE_REWRITE_RULE [selective_shape_def])) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [selective_case_run_def]) >>
+  rewrite_tac[selective_case_reentry_def, selective_rebase_def] >>
+  irule lineage_state_step >>
+  conj_tac >- (irule selective_cases_header_dfs >> simp[]) >>
+  `selective_case_back_base n r u with
+    <|ps_cleanup_height := (selective_case_back_base n r u).ps_cleanup_height;
+      ps_cleanup_promised := (selective_case_back_base n r u).ps_cleanup_promised|> =
+    selective_case_back_base n r u` by simp[] >>
+  metis_tac[listTheory.MEM]
+QED
+Finalise selective_cases_circuit_lineage
