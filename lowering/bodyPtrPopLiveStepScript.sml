@@ -1,6 +1,7 @@
 Theory bodyPtrPopLiveStep
 Ancestors bodyPtrPopLiveSupport bodyPtrPopPathStep pred_set list arithmetic
   vyperValueOperation loweringPosts valueEncodingProofs vyperTyping vyperState
+  vyperAssignPreservesType exprSimProps
 
 Theorem pop_indexed_support_extract:
   j < n /\
@@ -344,4 +345,89 @@ Proof
   qexists_tac `\i. if i = j then ns else supp i` >> simp[] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   Cases_on `j' = j` >> gvs[AC ADD_ASSOC ADD_COMM]
+QED
+
+Theorem pop_fields_support_siblings:
+  j < LENGTH fts /\
+  (!i. i < LENGTH fts ==> pop_live_support (SND (EL i fts)) (v i)
+    (addr+SUM (MAP (type_memory_size o SND) (TAKE i fts))) (supp i)) ==>
+  !i. i < LENGTH fts /\ i <> j ==> DISJOINT (supp i) (supp j)
+Proof
+  rpt strip_tac >>
+  `supp i SUBSET {x | addr+SUM (MAP (type_memory_size o SND) (TAKE i fts)) <= x /\
+    x < addr+SUM (MAP (type_memory_size o SND) (TAKE i fts))+type_memory_size (SND (EL i fts))}` by
+    metis_tac[pop_live_support_bounds] >>
+  `supp j SUBSET {x | addr+SUM (MAP (type_memory_size o SND) (TAKE j fts)) <= x /\
+    x < addr+SUM (MAP (type_memory_size o SND) (TAKE j fts))+type_memory_size (SND (EL j fts))}` by
+    metis_tac[pop_live_support_bounds] >>
+  drule_all pop_prefix_windows_apart >>
+  disch_then (qspec_then `type_memory_size o SND` mp_tac) >>
+  simp[SUBSET_DEF, DISJOINT_DEF, EXTENSION] >> rpt strip_tac >>
+  spose_not_then strip_assume_tac >> gvs[SUBSET_DEF] >>
+  first_x_assum drule >> strip_tac >> first_x_assum drule >> decide_tac
+QED
+
+Theorem pop_fields_support_rebuild:
+  !(fields : (string # value) list) fts fields' j addr supp new ns.
+  well_formed_type_value (StructTV fts) /\
+  value_has_type (StructTV fts) (StructV fields') /\ j < LENGTH fts /\
+  (!i. i < LENGTH fts ==> pop_live_support (SND (EL i fts)) (SND (EL i fields))
+    (addr+SUM (MAP (type_memory_size o SND) (TAKE i fts))) (supp i)) /\
+  (!i. i < LENGTH fts ==> SND (EL i fields') = if i = j then new else SND (EL i fields)) /\
+  pop_live_support (SND (EL j fts)) new
+    (addr+SUM (MAP (type_memory_size o SND) (TAKE j fts))) ns ==>
+  pop_live_support (StructTV fts) (StructV fields') addr
+    ((BIGUNION {supp i | i < LENGTH fts} DIFF supp j) UNION ns)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. i < LENGTH fts /\ i <> j ==> DISJOINT (supp i) (supp j)` by
+    (ho_match_mp_tac (BETA_RULE $ Q.INST
+       [`v` |-> `\i. SND (EL i (fields : (string # value) list))`]
+       (SPEC_ALL pop_fields_support_siblings)) >> simp[]) >>
+  `((BIGUNION {supp i | i < LENGTH fts}) DIFF supp j) UNION ns =
+    BIGUNION {(if i = j then ns else supp i) | i < LENGTH fts}` by
+    (irule (SRULE [] (Q.INST [`head` |-> `{}`]
+       (SPEC_ALL (INST_TYPE [alpha |-> ``:num``] pop_indexed_support_update)))) >> simp[]) >>
+  asm_rewrite_tac[] >> simp[Once pop_live_support_cases] >>
+  qexists_tac `\i. if i = j then ns else supp i` >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  Cases_on `j' = j` >> gvs[]
+QED
+
+Theorem pop_AFUPDKEY_index:
+  !fields j new. ALL_DISTINCT (MAP FST fields) /\ j < LENGTH fields ==>
+  AFUPDKEY (FST (EL j fields)) (K new) fields =
+    LUPDATE (FST (EL j fields),new) j fields
+Proof
+  Induct_on `fields` >> simp[] >> PairCases >> Cases_on `j` >>
+  simp[alistTheory.AFUPDKEY_def, LUPDATE_def] >> rpt strip_tac >>
+  `h0 <> FST (EL n fields)` by
+    (strip_tac >> gvs[] >>
+     qpat_x_assum `~MEM _ _` mp_tac >> simp[MEM_MAP] >>
+     qexists_tac `EL n fields` >> simp[EL_MEM]) >>
+  simp[alistTheory.AFUPDKEY_def] >> first_x_assum irule >> simp[]
+QED
+
+Theorem pop_step_replace_typed:
+  !rt root sb k ct new updated.
+  well_formed_type_value rt /\ value_has_type rt root /\
+  mem_step_offset rt sb = SOME (k,ct) /\ value_has_type ct new /\
+  assign_subscripts rt root [sb] (Replace new) = INL updated ==>
+  value_has_type rt updated
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `sb`
+  >- (rename1 `ValueSubscript key` >> Cases_on `key` >> Cases_on `rt` >>
+      gvs[mem_step_offset_def, AllCaseEqs()]
+      >- (Cases_on `root` >> gvs[value_has_type_def] >>
+          Cases_on `a` >> gvs[value_has_type_def, assign_subscripts_def,
+            array_set_index_def, AllCaseEqs()]) >>
+      Cases_on `b` >> gvs[mem_step_offset_def, AllCaseEqs()] >>
+      irule assign_subscripts_preserves_type >> simp[] >>
+      qexistsl_tac [`root`, `Replace new`, `[ValueSubscript (IntV i)]`] >>
+      simp[leaf_type_def]) >>
+  Cases_on `rt` >> gvs[mem_step_offset_def] >>
+  drule mem_field_offset_sound >> strip_tac >>
+  irule assign_subscripts_preserves_type >> simp[] >>
+  qexistsl_tac [`root`, `Replace new`, `[AttrSubscript s]`] >> simp[leaf_type_def]
 QED
