@@ -22,6 +22,13 @@ Proof
       qexists_tac `cenv` >> fs[optionTheory.IS_SOME_EXISTS])
   >- (simp[optionTheory.IS_SOME_EXISTS] >>
       irule bytestring_memory_bound_evaluates >>
+      conj_tac
+      >- (rw[concat_buffer_type_def] >> CASE_TAC >>
+          simp[compileEnvTheory.is_bytestring_type_def] >> CASE_TAC >>
+          simp[compileEnvTheory.is_bytestring_type_def]) >>
+      qexists_tac `cenv` >> fs[optionTheory.IS_SOME_EXISTS])
+  >- (simp[optionTheory.IS_SOME_EXISTS] >>
+      irule bytestring_memory_bound_evaluates >>
       simp[compileEnvTheory.is_bytestring_type_def] >>
       qexists_tac `cenv` >> fs[optionTheory.IS_SOME_EXISTS])
   >- (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
