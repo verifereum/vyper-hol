@@ -1,6 +1,6 @@
 (* Consumer-facing universal transfer probes.  No finite-fuel claim yet. *)
 Theory concretizeAnalysisBoundary
-Ancestors concretizeMemLocDefs basePtrProofs basePtrDefs list pred_set combin venomInst
+Ancestors concretizeMemLocDefs basePtrProofs basePtrConvergenceOrder basePtrDefs list pred_set combin venomInst
   venomExecSemantics venomState finite_map words
 
 Definition bp_bases_def:
@@ -10,15 +10,6 @@ End
 Definition bp_base_covers_def:
   bp_base_covers r s <=> !v. bp_bases r v SUBSET bp_bases s v
 End
-
-Theorem bp_normalize_base_set:
-  set (MAP ptr_base (bp_normalize ps)) = set (MAP ptr_base ps)
-Proof
-  simp[EXTENSION, MEM_MAP] >> gen_tac >> eq_tac
-  >- metis_tac[MEM_bp_normalize]
-  >> rpt strip_tac >> drule bp_normalize_covers >> strip_tac >>
-  gvs[ptr_base_def] >> metis_tac[ptr_base_def]
-QED
 
 Theorem bp_assign_base_transfer:
   inst_output inst = SOME out /\ inst.inst_opcode = ASSIGN /\

@@ -2,7 +2,7 @@ Theory concretizePtrDeletedGapHistory
 Ancestors concretizePtrDeletedGaps concretizePtrSourceOwnership concretizePtrLedgerAlignment
   concretizePtrActivationBirths concretizePtrActivationChronology
   concretizePtrChronologicalHistory contextCodegenRel ptrDiscipline
-  venomExecSemantics venomInst list arithmetic finite_map
+  venomExecSemantics venomInst venomInstProps list arithmetic finite_map
 
 Definition ptr_gap_next_def:
   ptr_gap_next bb a =
@@ -45,7 +45,7 @@ Proof
     (a.po_state with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
     (simp[active_inst_def] >> qexists_tac `bb` >> simp[]) >>
   `step_inst 0 C a.po_inst a.po_state = OK a.po_state` by
-    metis_tac[ptr_nop_step_identity] >>
+    metis_tac[step_nop_identity] >>
   `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
     simp[is_terminator_def] >>
   `ptr_tagged_chrono_step C token

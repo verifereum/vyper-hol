@@ -1,7 +1,7 @@
 Theory concretizePtrRuntimeOrigins
 Ancestors
   ptrDiscipline pointerConfinedDefs venomInst finite_map pred_set list
-  execEquivParamBase removeUnusedSsaProofs
+  execEquivParamBase removeUnusedSsaProofs runtimeProvenanceSources
 
 Definition ptr_site_supported_def:
   ptr_site_supported X G site <=>
@@ -18,15 +18,6 @@ Proof
        FLOOKUP_UPDATE] >> rpt strip_tac >>
   Cases_on `t` >> gvs[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
   gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
-Theorem ptr_site_first[local]:
-  !ops. first_prov G ops = SOME site ==>
-    ?v. MEM (Var v) ops /\ FLOOKUP G v = SOME site
-Proof
-  Induct >> simp[first_prov_def] >>
-  Cases_on `h` >> simp[op_prov_def] >>
-  Cases_on `FLOOKUP G s` >> simp[] >> metis_tac[]
 QED
 
 Theorem ptr_site_step:
@@ -48,7 +39,7 @@ Proof
       is_pointer_preserving_op inst.inst_opcode` by
     (gvs[out_prov_def, AllCaseEqs()] >>
      simp[is_pointer_preserving_op_def]) >>
-  drule ptr_site_first >> strip_tac >>
+  drule first_prov_source >> strip_tac >>
   gvs[ptr_site_supported_def] >> metis_tac[]
 QED
 

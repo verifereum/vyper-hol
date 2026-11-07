@@ -2,7 +2,7 @@ Theory concretizePtrBPOrigins
 Ancestors
   pointerClosure pointerConfinedDefs basePtrDefs basePtrProofs venomInst
   finite_map pred_set list passSharedDefs concretizeMemLocDefs
-  concretizeAnalysisScan
+  concretizeAnalysisScan basePtrConvergenceOrbit
 
 Definition ptr_bp_alloc_roots_def:
   ptr_bp_alloc_roots fn aid =
@@ -41,12 +41,6 @@ Proof
   rpt strip_tac >> Cases_on `v = out` >> gvs[] >> metis_tac[]
 QED
 
-Theorem ptr_bp_output_member[local]:
-  inst_output inst = SOME out ==> MEM out inst.inst_outputs
-Proof
-  simp[inst_output_def, AllCaseEqs()] >> rpt strip_tac >> simp[]
-QED
-
 Theorem ptr_bp_origin_root[local]:
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   inst_output inst = SOME out ==>
@@ -67,7 +61,7 @@ Proof
   rpt strip_tac >> irule pointer_derived_vars_closed >>
   simp[ptr_bp_alloc_roots_finite] >>
   goal_assum (drule_at Any) >>
-  metis_tac[ptr_bp_output_member]
+  metis_tac[inst_output_member]
 QED
 
 Theorem ptr_bp_origin_map[local]:

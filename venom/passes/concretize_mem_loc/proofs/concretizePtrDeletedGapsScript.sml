@@ -86,8 +86,3 @@ Proof
   metis_tac[ptr_ledger_alignment_tail]
 QED
 
-Theorem ptr_nop_step_identity:
-  inst.inst_opcode = NOP ==> step_inst fuel ctx inst s = OK s
-Proof
-  simp[step_inst_non_invoke, step_inst_base_def]
-QED

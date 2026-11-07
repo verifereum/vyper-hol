@@ -5,21 +5,9 @@ Ancestors concretizePtrComparisonTransport concretizePtrValueTransport pair conc
   concretizePtrAffineTransport concretizePtrSourceOwnership
   concretizePtrStagePlacements concretizePtrAllocationOwnership
   concretizePtrActivationChronology concretizePtrActivationBirths
-  concretizePtrChronologicalHistory concretizePtrPrefixLedger concretizePtrOwnerPath
+  concretizePtrChronologicalHistory concretizePtrPrefixLedger concretizePtrOwnerPath concretizePtrOwnerSeeds
   o1PassContract unitTransformDefs mem2varBlockSimHelpers ptrDiscipline venomExecSemantics venomState venomInst
   words arithmetic list rich_list finite_map pred_set
-
-Theorem ptr_owner_view_state[local]:
-  d <= LENGTH a.po_stack ==>
-  (ptr_owner_view d a).cf_state =
-    EL (LENGTH a.po_stack - d)
-      (a.po_state :: MAP (\f. f.cf_state) a.po_stack)
-Proof
-  strip_tac >> Cases_on `d = LENGTH a.po_stack`
-  >- simp[ptr_owner_view_def] >>
-  Cases_on `LENGTH a.po_stack - d` >- gvs[] >>
-  simp[ptr_owner_view_def, EL_MAP] >> AP_TERM_TAC >> decide_tac
-QED
 
 Theorem ptr_comparison_common_position[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -54,7 +42,7 @@ Proof
      drule_all ptr_stage_placements_live_owner >> metis_tac[]) >>
   drule_all ptr_stage_placements_live_owner >> strip_tac >>
   `iu = iv` by
-    (imp_res_tac ptr_owner_view_state >>
+    (imp_res_tac ptr_owner_view_index >>
      `LENGTH a.po_stack - d < LENGTH (a.po_state :: MAP (\f. f.cf_state) a.po_stack)` by simp[] >>
      `LENGTH a.po_stack - d' < LENGTH (a.po_state :: MAP (\f. f.cf_state) a.po_stack)` by simp[] >>
      `b <= b /\ b < b + sz` by decide_tac >>

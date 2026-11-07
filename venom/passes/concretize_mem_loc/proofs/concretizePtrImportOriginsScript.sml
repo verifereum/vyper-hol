@@ -3,7 +3,7 @@ Ancestors
   concretizePtrMetadataTransport staticLayoutAllocatorProofs
   concretizeMemLocDefs o1ScheduleDecomp o1PassContract venomPassDispatcher
   venomFnScheduleRunner venomWf venomInst fcgDefs fcgBridge list finite_map
-  mem2varProofs
+  mem2varProofs fmpAnalysisProps
 
 Theorem ptr_unique_mems_subset:
   !xs item. MEM item (unique_mems_used xs) ==> MEM item xs
@@ -106,13 +106,6 @@ Proof
   impl_tac >- (rpt strip_tac >> gvs[fn_pass_step_def]) >> simp[]
 QED
 
-Theorem ptr_lookup_name[local]:
-  lookup_function name fns = SOME fn ==> fn.fn_name = name
-Proof
-  Induct_on `fns` >> rw[lookup_function_def, FIND_thm] >>
-  gvs[lookup_function_def]
-QED
-
 Theorem ptr_stage_observed_callee:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
@@ -181,7 +174,7 @@ Proof
   completeInduct_on `n` >> rpt strip_tac >>
   drule_all ptr_stage_lookup_origin >> strip_tac >>
   `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `fn.fn_name = name` by metis_tac[ptr_lookup_name] >>
+  `fn.fn_name = name` by metis_tac[lookup_function_name] >>
   `fn.fn_eom = NONE` by
     (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
      disch_then drule >> simp[]) >>
@@ -321,7 +314,7 @@ Theorem ptr_stage_lookup_mems_canonical:
 Proof
   strip_tac >> drule_all ptr_stage_lookup_origin >> strip_tac >>
   `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `fn.fn_name = name` by metis_tac[ptr_lookup_name] >>
+  `fn.fn_name = name` by metis_tac[lookup_function_name] >>
   `fn.fn_eom = NONE` by
     (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
      disch_then drule >> simp[]) >>
