@@ -450,7 +450,11 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
            has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
-          irule body_annassign_memory >> metis_tac[]) >>
+          match_mp_tac (Q.SPECL
+            [`cx`, `id`, `typ`, `e`, `tops`, `bindings`, `ctx`, `func`,
+             `cenv`, `env`, `env'`, `ret_ty`, `lctx`, `RetQ`, `es`]
+            body_annassign_memory) >>
+          simp[] >> first_assum ACCEPT_TAC) >>
       irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED
