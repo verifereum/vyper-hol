@@ -4,6 +4,9 @@ Ancestors
   exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousContext
   exprLoweringProps compileEnv emitHelperProps abiEncoder builtinAbi
   list rich_list sorting venomInst fragExec exprSimAbiGasBridge
+  exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeExecFrame
+  exprSimAbiEncodeSemantic exprSimAbiEncodeMemoryLength
+  venomInstProofs1 venomExecSemantics intCallCallee stmtSimLogExecFields
 
 Definition abi_encode_straight_ops_def:
   abi_encode_straight_ops P m <=>
@@ -174,4 +177,62 @@ Proof
   simp_tac bool_ss [abi_encode_straight_ops_def] >>
   disch_then drule >> strip_tac >>
   gvs[frag_code_def, emitted_blocks_def, abi_encode_raw_opcode_def]
+QED
+
+Theorem abi_encode_raw_step_fmp:
+  abi_encode_raw_opcode inst.inst_opcode /\ step_inst_base inst s = OK t ==>
+  t.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
+  >- (irule abi_encode_setup_step_fmp >> qexists `inst` >> simp[]) >>
+  irule step_inst_base_preserves_fmp_ordinary >> qexists `inst` >>
+  fs[abi_encode_raw_opcode_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def] >>
+  rpt strip_tac >> gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
+QED
+
+Theorem abi_encode_raw_sequence_frame:
+  fn_has_code st en func /\
+  run_inst_seq (emitted_insts st en) s = OK t /\
+  EVERY (\i. abi_encode_raw_opcode i.inst_opcode) (emitted_insts st en) ==>
+  abi_encode_exec_frame func s t
+Proof
+  strip_tac >>
+  `EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE)
+    (emitted_insts st en)` by
+    (fs[EVERY_MEM] >> rpt strip_tac >-
+      (irule abi_encode_emitted_instruction_member >> goal_assum (drule_at Any) >> simp[]) >>
+     first_x_assum drule >> simp[abi_encode_raw_opcode_def] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st en)` by
+    (fs[EVERY_MEM, abi_encode_raw_opcode_def] >> metis_tac[is_terminator_def]) >>
+  drule_all run_inst_seq_static_charge >> strip_tac >>
+  `t.vs_fmp = s.vs_fmp` by
+    (irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_fmp` run_inst_seq_preserves_field)) >>
+     qexists `emitted_insts st en` >> simp[] >> rpt strip_tac >>
+     irule abi_encode_raw_step_fmp >> qexists `i` >> simp[] >> fs[EVERY_MEM]) >>
+  `abi_encode_semantic_obs t = abi_encode_semantic_obs s` by
+    (irule abi_encode_semantic_sequence >> goal_assum (drule_at Any) >>
+     gvs[EVERY_MEM, abi_encode_raw_opcode_def, log_encode_safe_opcode_def] >> metis_tac[]) >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (irule abi_encode_leaf_sequence_memory_length >>
+     qexists `emitted_insts st en` >> fs[EVERY_MEM, abi_encode_raw_opcode_def]) >>
+  drule_all abi_encode_leaf_sequence_context >> simp[abi_encode_exec_frame_def]
+QED
+
+Theorem abi_encode_no_block_body_frame:
+  compile_abi_encode_to_buf dst src ei st = (out,en) /\ st.cs_blocks = en.cs_blocks /\
+  fn_has_code st en func /\ run_inst_seq (emitted_insts st en) s = OK raw ==>
+  abi_encode_exec_frame func s raw
+Proof
+  strip_tac >> drule_all abi_encode_no_block_opcodes >>
+  simp_tac bool_ss [GSYM abi_encode_raw_opcode_def] >> strip_tac >>
+  drule_all abi_encode_raw_sequence_frame >> simp[]
+QED
+
+Theorem abi_encode_no_block_body_frame_normalized:
+  compile_abi_encode_to_buf dst src ei st = (out,en) /\ st.cs_blocks = en.cs_blocks /\
+  fn_has_code st en func /\ run_inst_seq (emitted_insts st en) s = OK raw ==>
+  abi_encode_exec_frame func s (raw with vs_inst_idx := LENGTH en.cs_current_insts)
+Proof
+  simp_tac bool_ss [abi_encode_exec_frame_inst_idx] >>
+  metis_tac[abi_encode_no_block_body_frame]
 QED
