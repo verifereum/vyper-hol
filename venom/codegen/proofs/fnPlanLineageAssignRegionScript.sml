@@ -1,6 +1,7 @@
 Theory fnPlanLineageAssignRegion
 Ancestors fnPlanLineageCanonicalAssign fnPlanLineageSetup venomInst stackPlanGen
-  list rich_list
+  list rich_list stackModel stackPlanOps stackPlanTypes fnPlanLineagePhiTemporal
+  fnPlanLineageInventory
 
 (* Backwards transfer and forward execution are intentionally separate.
    The latter never replaces an intermediate state by a canonical stack. *)
@@ -88,3 +89,59 @@ Proof
   Cases_on `y = LAST (assign_region_live rest exit)` >- simp[] >>
   simp[MEM_MAP, MEM_FILTER, LAST_MEM]
 QED
+
+(* A candidate physical boundary: all live values occur exactly once on the
+   stack, but their order is retained from native execution, not reset. *)
+Definition assign_region_physical_def:
+  assign_region_physical nl ps <=>
+    ALL_DISTINCT ps.ps_stack /\
+    (!op. MEM op ps.ps_stack <=> MEM op (MAP Var nl)) /\
+    ps.ps_spilled = FEMPTY
+End
+
+Theorem assign_region_physical_init:
+  !nl ps. ALL_DISTINCT nl /\ ps.ps_stack = MAP Var nl /\
+    ps.ps_spilled = FEMPTY ==> assign_region_physical nl ps
+Proof
+  rpt strip_tac >> simp[assign_region_physical_def] >>
+  irule ALL_DISTINCT_MAP_INJ >> simp[]
+QED
+
+(* A dead, last-use ASSIGN does not duplicate its input and skips optimistic
+   swap. This exposes the actual reorder rather than a canonical successor. *)
+Theorem assign_region_dead_prepare:
+  !dfg a y nl ps.
+    ~MEM a nl /\ FLOOKUP ps.ps_spilled (Var a) = NONE ==>
+    (SND (lineage_regular_prepare dfg (canonical_assign a y) nl ps)).ps_stack =
+      stack_pop 1 (SND (reorder_plan dfg [Var a] ps)).ps_stack ++ [Var y]
+Proof
+  rpt strip_tac >>
+  simp[lineage_regular_prepare_def, canonical_assign_def, mk_inst_def,
+    compute_operands_def, python_stack_operands_def, emit_input_plan_one,
+    emit_one_input_def, is_var_operand_def, stack_push_def] >>
+  Cases_on `reorder_plan dfg [Var a] ps` >> simp[] >>
+  simp[generate_emit_ops_def] >>
+  Cases_on `venom_to_evm_name ASSIGN` >> simp[]
+QED
+
+Theorem assign_region_dead_step_stack:
+  !liveness dfg cfg fn lbl a y nl term ps.
+    ~MEM a nl /\ ~MEM y nl /\
+    FLOOKUP ps.ps_spilled (Var a) = NONE ==>
+    (assign_region_step liveness dfg cfg fn lbl a y nl term ps).ps_stack =
+      stack_pop 1 (SND (reorder_plan dfg [Var a] ps)).ps_stack
+Proof
+  rpt strip_tac >> simp[assign_region_step_postprocess] >>
+  simp[release_dead_spills_stack] >>
+  drule_all assign_region_dead_prepare >> strip_tac >>
+  qabbrev_tac `qs = SND (lineage_regular_prepare dfg (canonical_assign a y) nl ps)` >>
+  `qs.ps_stack = stack_pop 1 (SND (reorder_plan dfg [Var a] ps)).ps_stack ++ [Var y]` by
+    simp[Abbr `qs`] >>
+  `stack_get_depth (Var y) qs.ps_stack = SOME 0` by
+    simp[stack_get_depth_def, REVERSE_APPEND, stack_find_def] >>
+  drule popmany_singleton_stack_projection >>
+  simp[canonical_assign_observe_def, Abbr `qs`] >>
+  simp[stack_swap_def, stack_pop_def, LUPDATE_SAME,
+    TAKE_APPEND, TAKE_LENGTH_TOO_LONG]
+QED
+
