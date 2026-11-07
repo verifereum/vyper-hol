@@ -171,6 +171,74 @@ QED
    subscript, which place_contains wouldn't see.
    typed_stmts_projection_frame is the case of an empty attribute path,
    where the whole root is kept. *)
+(* Typing an attribute extension requires typing its base. *)
+Theorem type_place_target_attribute_prefix[local]:
+  !attrs env tgt vt.
+    type_place_target env
+      (FOLDL (\t a. AttributeTarget t a) tgt attrs) = SOME vt ==>
+    ?base. type_place_target env tgt = SOME base
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem attribute_type_fold_none[local]:
+  !xs D. FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) NONE xs = NONE
+Proof
+  Induct >> simp[]
+QED
+
+Theorem attribute_type_fold_append[local]:
+  !xs ys D ot.
+    FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) ot (xs ++ ys) =
+    FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a))
+      (FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) ot xs) ys
+Proof
+  Induct >> simp[]
+QED
+
+Theorem attribute_type_fold_inert[local]:
+  !xs ys D ot t u.
+    FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) ot xs = SOME t /\
+    (!a. attribute_type D t a = NONE) /\
+    FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) ot (xs ++ ys) = SOME u ==>
+    ys = []
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ys` >> gvs[attribute_type_fold_append, attribute_type_fold_none]
+QED
+
+Theorem place_access_attribute_chain[local]:
+  !xs r ys.
+    (r = NameTarget root \/ (?n. r = TopLevelNameTarget n)) ==>
+    place_access (FOLDL (\t a. AttributeTarget t a) r xs) ys = (r,xs ++ ys)
+Proof
+  Induct_on `xs` using SNOC_INDUCT
+  >- (rpt strip_tac >> gvs[place_access_def]) >>
+  simp[FOLDL_SNOC, place_access_def, SNOC_APPEND] >>
+  rpt strip_tac >> first_x_assum (qspecl_then [`r`, `x::ys`] mp_tac) >>
+  simp[APPEND_ASSOC]
+QED
+
+Theorem place_access_chain_or_reset[local]:
+  !p. (!r xs. place_access p [] = (r,xs) ==>
+    (p = FOLDL (\t a. AttributeTarget t a) r xs /\
+     !ys. place_access p ys = (r,xs ++ ys)) \/
+    (!ys. place_access p ys = (r,xs)))
+Proof
+  ho_match_mp_tac targetPlaceSimCasesBaseTheory.base_assignment_target_induct >>
+  rpt conj_tac
+  >- simp[place_access_def]
+  >- simp[place_access_def]
+  >- (rpt strip_tac >> gvs[place_access_def]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `place_access p []` >>
+  first_x_assum (qspecl_then [`q`, `r'`] mp_tac) >> simp[] >>
+  strip_tac >> simp[place_access_def] >>
+  strip_tac >> gvs[GSYM SNOC_APPEND, FOLDL_SNOC]
+QED
+
 Theorem typed_stmts_place_frame:
   supported_stmts tops bindings stmts /\
   type_stmts env ret_ty stmts = SOME env' /\
