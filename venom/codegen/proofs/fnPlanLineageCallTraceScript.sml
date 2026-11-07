@@ -226,3 +226,77 @@ Theorem plan_succs_trace_event_unique:
 Proof
   metis_tac[plan_succs_trace_distinct_keys, distinct_event_keys_unique]
 QED
+
+Theorem plan_trace_physical_ancestry:
+  (!lv dfg cfg fn labels visited ps result events.
+    plan_aux_trace lv dfg cfg fn labels visited ps result events ==>
+    !pre lbl qs post. LENGTH labels <= 1 /\ events = pre ++ (lbl,qs)::post ==>
+      (MEM lbl labels /\ pre = [] /\ qs = ps) \/
+      ?pred before bb ops after.
+        MEM (pred,before) pre /\ lookup_block pred fn.fn_blocks = SOME bb /\
+        generate_block_plan lv dfg cfg fn bb before = SOME (ops,after) /\
+        MEM lbl (cfg_succs_of cfg pred) /\
+        qs.ps_stack = after.ps_stack /\ qs.ps_spilled = after.ps_spilled) /\
+  (!lv dfg cfg fn stack spilled labels visited ps result events.
+    plan_succs_trace lv dfg cfg fn stack spilled labels visited ps result events ==>
+    !pre lbl qs post. events = pre ++ (lbl,qs)::post ==>
+      (MEM lbl labels /\ qs.ps_stack = stack /\ qs.ps_spilled = spilled) \/
+      ?pred before bb ops after.
+        MEM (pred,before) pre /\ lookup_block pred fn.fn_blocks = SOME bb /\
+        generate_block_plan lv dfg cfg fn bb before = SOME (ops,after) /\
+        MEM lbl (cfg_succs_of cfg pred) /\
+        qs.ps_stack = after.ps_stack /\ qs.ps_spilled = after.ps_spilled)
+Proof
+  ho_match_mp_tac plan_aux_trace_strongind >> rpt conj_tac
+  >- (simp[])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      Cases_on `labels` >> gvs[Once plan_aux_trace_cases])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      Cases_on `labels` >> gvs[Once plan_aux_trace_cases] >>
+      Cases_on `pre` >> gvs[])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      Cases_on `labels` >> gvs[] >>
+      qpat_x_assum `plan_aux_trace _ _ _ _ [] _ _ _ _` mp_tac >>
+      simp[Once plan_aux_trace_cases] >> strip_tac >> gvs[] >>
+      Cases_on `pre` >> gvs[] >>
+      qpat_x_assum `!pre lbl qs post. _` (qspecl_then [`t`, `lbl'`, `qs`, `post`] mp_tac) >>
+      simp[] >> metis_tac[])
+  >- simp[]
+  >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `pre ++ [(lbl,qs)] ++ post = events ++ events'` by simp[] >>
+  pop_assum mp_tac >> simp_tac bool_ss [APPEND_EQ_APPEND_MID] >>
+  strip_tac >> gvs[]
+  >- (qpat_x_assum `!p x q s. pre ++ [(lbl,qs)] ++ l = _ ==> _`
+        (qspecl_then [`pre`, `lbl`, `qs`, `l`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `!pre lbl qs post. _` (qspecl_then [`l`, `lbl`, `qs`, `post`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem plan_aux_trace_singleton_physical_ancestry:
+  plan_aux_trace lv dfg cfg fn [root] visited ps result events /\
+  events = pre ++ (lbl,qs)::post ==>
+  (lbl = root /\ pre = [] /\ qs = ps) \/
+  ?pred before bb ops after.
+    MEM (pred,before) pre /\ lookup_block pred fn.fn_blocks = SOME bb /\
+    generate_block_plan lv dfg cfg fn bb before = SOME (ops,after) /\
+    MEM lbl (cfg_succs_of cfg pred) /\
+    qs.ps_stack = after.ps_stack /\ qs.ps_spilled = after.ps_spilled
+Proof
+  strip_tac >> drule (cj 1 plan_trace_physical_ancestry) >>
+  disch_then (qspecl_then [`pre`, `lbl`, `qs`, `post`] mp_tac) >> simp[]
+QED
+
+Theorem plan_succs_trace_physical_ancestry:
+  plan_succs_trace lv dfg cfg fn stack spilled labels visited ps result events /\
+  events = pre ++ (lbl,qs)::post ==>
+  (MEM lbl labels /\ qs.ps_stack = stack /\ qs.ps_spilled = spilled) \/
+  ?pred before bb ops after.
+    MEM (pred,before) pre /\ lookup_block pred fn.fn_blocks = SOME bb /\
+    generate_block_plan lv dfg cfg fn bb before = SOME (ops,after) /\
+    MEM lbl (cfg_succs_of cfg pred) /\
+    qs.ps_stack = after.ps_stack /\ qs.ps_spilled = after.ps_spilled
+Proof
+  strip_tac >> drule (cj 2 plan_trace_physical_ancestry) >>
+  disch_then (qspecl_then [`pre`, `lbl`, `qs`, `post`] mp_tac) >> simp[]
+QED
