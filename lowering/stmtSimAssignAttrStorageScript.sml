@@ -815,6 +815,7 @@ Theorem assign_attr_storage_word_suffix[local]:
   fn_has_code sm sn func /\ fn_has_code sn su func /\
   fn_has_code su sf func /\ fn_inst_ids_distinct func /\
   vv_post ctx func cenv cx e es sa sm s0 ee raw vv s /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ee.gas_obs = [] /\
   (!v. read_result cx raw ee = (INL v,ee) ==>
@@ -848,6 +849,19 @@ Proof
     (gvs[eval_operand_def] >> metis_tac[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `alloca_frame cenv es sa s0 cenv ee' u` by
+    (`ee'.scopes = ee.scopes` by
+       (drule vyperScopePreservationTheory.write_storage_slot_scopes >>
+        simp[]) >>
+     mp_tac (Q.INST [`es'` |-> `ee'`, `s` |-> `u`] alloca_frame_of_mem_frame) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC
+         >- fs[]
+         >- fs[lookup_var_def] >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
@@ -887,7 +901,9 @@ Proof
   simp[stmt_post_def,stmt_lands_def,cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
   Cases_on `tr` >>
-  gvs[sstore_def,tstore_def,lookup_var_def,LET_THM]
+  gvs[sstore_def,tstore_def,lookup_var_def,LET_THM] >>
+  irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
+  first_assum ACCEPT_TAC
 QED
 
 (* self.x.f = e for a storage or transient struct x the lowering holds by
@@ -971,6 +987,11 @@ Proof
      drule_all (SRULE [] (Q.INST [`fty` |-> `expr_type e`]
        assign_attr_storage_source_counted)) >>
      strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `eval_expr cx e (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP
+          vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >>
+     simp[]) >>
   drule_all (SRULE [] (Q.INST [`k` |-> `\raw. do
     p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
     v <- read_result cx raw; write_place cx p v od`]

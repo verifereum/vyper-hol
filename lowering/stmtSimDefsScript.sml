@@ -351,6 +351,36 @@ Proof
   fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
+(* A store inside one live local's region, keeping the registers and the
+   scopes' names, keeps the frame. *)
+Theorem alloca_frame_region_write:
+  alloca_frame c0 es sa s0 c ee t /\ local_region c ee.scopes t n0 b z /\
+  MAP FDOM ee1.scopes = MAP FDOM ee.scopes /\
+  (!q. lookup_var q u = lookup_var q t) /\
+  (!ad len. ad + len <= b \/ b + z <= ad ==>
+     mem_bytes_at ad len u.vs_memory = mem_bytes_at ad len t.vs_memory) ==>
+  alloca_frame c0 es sa s0 c ee1 u
+Proof
+  rewrite_tac[alloca_frame_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas _ = _ /\ _ ==> _`
+    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  Q.SUBGOAL_THEN `off + sz <= b \/ b + z <= off` assume_tac
+  >- (qpat_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
+      qexists_tac `n0` >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_x_assum `!ad len. _ ==> mem_bytes_at ad len u.vs_memory = _`
+        (qspecl_then [`off`, `sz`] mp_tac) >>
+      impl_tac >- decide_tac >>
+      disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
+  qexists_tac `n` >> fs[local_region_def] >>
+  `IS_SOME (lookup_scopes n ee.scopes)` by
+    metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
+  fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+QED
+
 (* A non-local register update cannot move a live local region. *)
 Theorem alloca_frame_update_var:
   alloca_frame c0 es sa s0 c ee t /\ not_local_ptr c ee.scopes q ==>

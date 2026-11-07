@@ -351,7 +351,10 @@ Theorem tuple_word_store_path[local]:
       (!x. lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+         alloca_frame c0 e0 sa0 s0 cenv (es with scopes := pre ++
+           (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t)
 Proof
   strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -365,6 +368,36 @@ Proof
    LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     gvs[emit_void_def, comp_bind_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `32 <= sz` by
+    (`type_memory_size entry.type <= sz` by
+       (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+     fs[stmtSimDeclStoreTheory.store_lays_out_def]) >>
+  `es.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by
+    (rewrite_tac[local_region_def] >> metis_tac[]) >>
+  `!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+     alloca_frame c0 e0 sa0 s0 cenv (es with scopes := pre ++
+       (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+       (mstore (w2n w) (typed_val_to_w256 tv v) s with
+          vs_inst_idx := SUC s.vs_inst_idx)` by
+    (`!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+        mem_bytes_at ad len (mstore (w2n w) (typed_val_to_w256 tv v) s with
+          vs_inst_idx := SUC s.vs_inst_idx).vs_memory = mem_bytes_at ad len s.vs_memory` by
+       (rpt strip_tac >> simp[] >>
+        irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+     `!q. lookup_var q (mstore (w2n w) (typed_val_to_w256 tv v) s with
+          vs_inst_idx := SUC s.vs_inst_idx) = lookup_var q s` by
+       simp[lookup_var_def, mstore_def, LET_THM] >>
+     `MAP FDOM (es with scopes := pre ++
+        (env |+ (id, entry with <|value := v; popped := []|>)) :: rest).scopes =
+      MAP FDOM es.scopes` by simp[pred_setTheory.ABSORPTION_RWT] >>
+     rpt gen_tac >> disch_then (fn th1 =>
+       qpat_assum `local_region cenv es.scopes s id (w2n w) sz` (fn th2 =>
+         irule (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+           alloca_frame_region_write) th1) th2))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists `mstore (w2n w) (typed_val_to_w256 tv v) s with
               vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx, lookup_var_def, mstore_def, LET_THM]
@@ -397,7 +430,9 @@ Theorem tuple_store_locals_path[local]:
         (!x. lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
-        gas_marked_path F ctx func s 0 (OK t)
+        gas_marked_path F ctx func s 0 (OK t) /\
+        (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+           alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >>
@@ -483,6 +518,8 @@ Resume tuple_store_locals_path[tail_apply]:
 QED
 
 Resume tuple_store_locals_path[compose]:
+  `!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+     alloca_frame c0 e0 sa0 s0 cenv es' t'` by metis_tac[] >>
   conj_tac >- simp[] >> qexists `t'` >> simp[] >>
   drule_all gas_marked_path_then >> simp[]
 QED
@@ -616,7 +653,7 @@ Theorem assign_tuple_locals_suffix[local]:
       elems s2 = ((), sf) /\
     sa.cs_next_var <= s1.cs_next_var /\
     fn_has_code s1 s2 func /\ fn_has_code s2 sf func /\
-    local_ptrs_reserved cenv sa ==>
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 ==>
     ?ee' t'.
       (!tail. assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids))
         v (ee with gas_obs := tail) = (INL (), ee' with gas_obs := tail)) /\
@@ -625,6 +662,11 @@ Theorem assign_tuple_locals_suffix[local]:
         (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `(do result <- _; _ od) _ = _`
+       (mp_tac o MATCH_MP eval_read_preserves_scopes_dom o
+        CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+     simp[]) >>
   Cases_on `assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids)) v ee` >>
   rename1 `_ = (res, ee')` >>
   `eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
@@ -694,7 +736,27 @@ Resume assign_tuple_locals_suffix[memory]:
      SOME (MAP (\(tv,v). typed_val_to_w256 tv v) (ZIP (tvs,vs)))` by
     (drule compile_load_tuple_elements_no_gas >> strip_tac >>
      gvs[Abbr `sl`, stmt_state_rel_inst_idx, instIdxIndepTheory.eval_ops_inst_idx]) >>
+  `alloca_frame cenv es sa s0 cenv ee sl` by
+    (`sl.vs_memory = sv.vs_memory /\ !x. lookup_var x sl = lookup_var x t` by
+       (qpat_x_assum `Abbrev (sl = _)` mp_tac >>
+        qpat_assum `t = _` SUBST1_TAC >>
+        simp[markerTheory.Abbrev_def, lookup_var_def]) >>
+     mp_tac (Q.INST [`es'` |-> `ee`, `s` |-> `sl`] alloca_frame_of_mem_frame) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC
+         >- fs[]
+         >- (rpt strip_tac >> metis_tac[]) >>
+         rpt strip_tac >>
+         qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas _ = _ /\ _ ==>
+                         mem_bytes_at _ _ sv.vs_memory = _`
+           (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+         (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+         fs[]) >>
+     disch_then ACCEPT_TAC) >>
   drule_all tuple_store_locals_path >> strip_tac >>
+  `alloca_frame cenv es sa s0 cenv ee' t'` by metis_tac[] >>
   qexistsl [`ee'`, `t'`] >> conj_tac
   >- (drule assign_tuple_locals_gas >> simp[]) >>
   conj_tac
