@@ -1944,7 +1944,7 @@ Proof
   simp[vv_post_def, stmt_state_rel_def, state_rel_def]
 QED
 
-Theorem ifexp_arm_bytestring_path[local]:
+Theorem ifexp_arm_bytestring_path:
   expr_type e = t /\ is_bytestring_type t /\
   ~is_word_type t /\ ~same_memory_layout ce arm_ty t /\
   compile_ifexp_arm ce t arm_ty vv sa = (op,sb) /\
@@ -2079,7 +2079,7 @@ Proof
   simp[conditional_result_def, raise_def]
 QED
 
-Theorem ifexp_arm_suffix_path[local]:
+Theorem ifexp_arm_suffix_path:
   post_value_type ce e = expr_type e /\
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
   (~is_word_type (expr_type e) ==>
