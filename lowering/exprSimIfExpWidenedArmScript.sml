@@ -5,14 +5,14 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimProps exprLowering compileEnv
   loweringPosts vyperAST vyperState context fragExec exprSimUnwrap
 
-Theorem punnable_reflexive[local]:
+Theorem punnable_reflexive:
   (!t. punnable ce t t) /\ (!ts. punnable_list ce ts ts)
 Proof
   ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
   simp[punnable_def]
 QED
 
-Theorem aggregate_widen_source[local]:
+Theorem aggregate_widen_source:
   type_widens_to tenv st dt /\ ~is_word_type dt /\ ~is_bytestring_type dt ==>
   ~is_word_type st /\ ~is_bytestring_type st
 Proof
