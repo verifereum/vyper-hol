@@ -717,7 +717,7 @@ Proof
           irule lookup_scopes_update_other >> strip_tac >> gvs[])
       >- simp[pop_name_entry_def]
       >- simp[pop_name_entry_def]
-      >- fs[]
+      >- (qpat_x_assum `snapshot_in _ _ _ _ _` mp_tac >> asm_rewrite_tac[])
       >- fs[]
       >- simp[evaluate_subscripts_def] >>
       simp[mem_path_offset_def]) >>
