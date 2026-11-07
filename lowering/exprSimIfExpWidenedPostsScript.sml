@@ -68,7 +68,7 @@ Theorem allocated_result_expr_post_frame:
     local_region ce ee.scopes s n lb len) /\
   (!n lb len. local_region ce es.scopes s0 n lb len ==>
     local_region ce ee.scopes s n lb len) /\
-  (!old off len. FLOOKUP s.vs_allocas old = SOME (off,len) /\
+  (!old off len. FLOOKUP s0.vs_allocas old = SOME (off,len) /\
     old < origin.cs_next_id ==> b + N <= off \/ off + len <= b) /\
   (!x. not_fresh_at origin x ==> lookup_var x q = lookup_var x s) /\
   (!old entry. FLOOKUP s.vs_allocas old = SOME entry ==>
