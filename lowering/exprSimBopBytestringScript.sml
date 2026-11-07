@@ -4,7 +4,7 @@ Theory exprSimBopBytestring
 Ancestors
   exprSimHashBoundary bytestringHashProps
   emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomInst venomState
-  valueEncoding ASCIInumbers words
+  valueEncoding ASCIInumbers words vyperTypeBytesCrypto venomMemProps
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps
@@ -74,13 +74,17 @@ Theorem comparison_hash_shape[local]:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb) /\
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
-  sa.cs_next_var <= sb.cs_next_var
+  sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id /\ cs_extends sa sb /\
+  (!x. op = Var x ==> not_fresh_at sb x)
 Proof
   simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
+       cs_extends_def, rich_listTheory.IS_PREFIX_APPEND, not_fresh_at_def,
+       toString_inj] >> rpt strip_tac >> gvs[toString_inj]
 QED
 
 Theorem comparison_hash_counted[local]:
@@ -176,6 +180,122 @@ Proof
        bytestring_literal_hash_def] >> strip_tac >> gvs[] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def,
        vyperValueOperationTheory.evaluate_literal_def]
+QED
+
+Theorem comparison_digest_eq[local]:
+  (word_of_bytes T (0w:bytes32) (Keccak_256_w64 xs) =
+   word_of_bytes T (0w:bytes32) (Keccak_256_w64 ys)) <=>
+  Keccak_256_w64 xs = Keccak_256_w64 ys
+Proof
+  eq_tac >- (strip_tac >>
+    irule (word_of_bytes_be_inj |> INST_TYPE [alpha |-> ``:256``]) >>
+    simp[LENGTH_Keccak_256_w64, dividesTheory.compute_divides]) >>
+  simp[]
+QED
+
+Theorem comparison_source_result[local]:
+  (bop = Eq \/ bop = NotEq) /\
+  ((?xs ys cap. v1 = BytesV xs /\ v2 = BytesV ys /\
+      evaluate_type (get_tenv cx) ty2 = SOME (BaseTV (BytesT (Dynamic cap))) /\
+      d1 = word_of_bytes T (0w:bytes32) (Keccak_256_w64 xs) /\
+      d2 = word_of_bytes T (0w:bytes32) (Keccak_256_w64 ys)) \/
+   (?xs ys. v1 = StringV xs /\ v2 = StringV ys /\
+      d1 = word_of_bytes T (0w:bytes32)
+        (Keccak_256_w64 (MAP (n2w o ORD) xs)) /\
+      d2 = word_of_bytes T (0w:bytes32)
+        (Keccak_256_w64 (MAP (n2w o ORD) ys)))) ==>
+  bop_result cx ann bop [ty1; ty2] v1 v2 es =
+    INL (BoolV (if bop = Eq then d1 = d2 else d1 <> d2))
+Proof
+  strip_tac >> gvs[exprBopSimDefsTheory.bop_result_def, evaluate_builtin_def,
+    vyperValueOperationTheory.evaluate_binop_def,
+    vyperValueOperationTheory.binop_negate_def, comparison_digest_eq] >>
+  simp[vyperMiscTheory.n2w_o_ORD_eq]
+QED
+
+Theorem comparison_digest_run[local]:
+  (bop = Eq \/ bop = NotEq) /\
+  (if bop = Eq then emit_op EQ [h1; h2] sa = (op, sb)
+   else ?q sq. emit_op EQ [h1; h2] sa = (q, sq) /\
+               emit_op ISZERO [q] sq = (op, sb)) /\
+  eval_operand h1 s = SOME d1 /\ eval_operand h2 s = SOME d2 ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME
+      (bool_to_word (if bop = Eq then d1 = d2 else d1 <> d2)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> gvs[] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def, emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[Once run_inst_seq_def] >>
+  simp[mk_inst_def] >>
+  ASM_SIMP_TAC std_ss [Once step_inst_base_def, exec_pure2_def] >>
+  simp[Once run_inst_seq_def] >>
+  ASM_SIMP_TAC std_ss [Once step_inst_base_def, exec_pure1_def,
+       eval_operand_def, lookup_var_update_var, toString_inj] >>
+  simp[run_inst_seq_def, bool_to_word_def, update_var_def, lookup_var_def,
+       eval_operand_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[not_fresh_at_def] >>
+  first_assum (qspec_then `sa.cs_next_var` assume_tac) >>
+  first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >> gvs[]
+QED
+
+Theorem comparison_digest_shape[local]:
+  (bop = Eq \/ bop = NotEq) /\
+  (if bop = Eq then emit_op EQ [h1; h2] sa = (op, sb)
+   else ?q sq. emit_op EQ [h1; h2] sa = (q, sq) /\
+               emit_op ISZERO [q] sq = (op, sb)) ==>
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  cs_extends sa sb /\ (!x. op = Var x ==> not_fresh_at sb x)
+Proof
+  strip_tac >> gvs[] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def, emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
+       cs_extends_def, rich_listTheory.IS_PREFIX_APPEND, not_fresh_at_def,
+       toString_inj]
+QED
+
+Theorem comparison_digest_counted[local]:
+  (bop = Eq \/ bop = NotEq) /\
+  (if bop = Eq then emit_op EQ [h1; h2] sa = (op, sb)
+   else ?q sq. emit_op EQ [h1; h2] sa = (q, sq) /\
+               emit_op ISZERO [q] sq = (op, sb)) /\
+  eval_operand h1 s = SOME d1 /\ eval_operand h2 s = SOME d2 /\
+  fn_has_code sa sb func /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    eval_operand op t = SOME
+      (val_to_w256 (BoolV (if bop = Eq then d1 = d2 else d1 <> d2))) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all comparison_digest_run >> strip_tac >>
+  drule_all comparison_digest_shape >> strip_tac >>
+  drule_all hash_run_path >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[eval_operand_def, lookup_var_def, stmt_state_rel_inst_idx,
+      val_to_w256_def, bool_to_word_def] >>
+  qpat_x_assum `_ with vs_vars := _ = _`
+    (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >>
+  Cases_on `d1 = d2` >> simp[bool_to_word_def]
 QED
 
 Theorem comparison_compile_cut[local]:
