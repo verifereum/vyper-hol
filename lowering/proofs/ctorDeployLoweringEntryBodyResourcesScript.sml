@@ -11,6 +11,7 @@ Ancestors
  ctorDeployLoweringEntryFmp immutableSectionRel immutableRelation exprLoweringProps
  ctorDeployLoweringFrame immutableLocationProps ctorDeployLoweringEntrySourceFrame
  vyperInterpreter vyperState deployEntryLayout e2eEntry asmDataSuffixProps
+ bodyStorageMetadata structFieldsProps vyperTypeContractContext vyperTypeContract
 
 Theorem deploy_ctor_entry_operand_frame:
  fresh_vars_wrt st initial /\ actual.vs_labels = initial.vs_labels /\
@@ -356,6 +357,7 @@ Proof
 QED
 
 Theorem deploy_ctor_section_alloca_sep:
+ immutable_decl_sep ce cx es.scopes ss.vs_vars ss.vs_allocas ss.vs_alloca_next /\
  immutable_section_layout ce tops /\ ce.ce_module = NONE /\
  immutables_section_rel tops
    (case ALOOKUP es.immutables cx.txn.target of NONE => [] | SOME imms => imms)
@@ -367,6 +369,7 @@ Theorem deploy_ctor_section_alloca_sep:
  immutable_alloca_sep func ce cx es ss
 Proof
  strip_tac >>
+ simp[immutable_alloca_sep_def] >>
  Cases_on `ALOOKUP es.immutables cx.txn.target`
  >- simp[immutable_alloca_sep_def] >>
  fs[optionTheory.option_case_def] >>
@@ -406,6 +409,44 @@ Proof
  fs[evaluation_state_component_equality]
 QED
 
+Theorem deploy_ctor_entry_declared_extent[local]:
+ !tops rp runtime_bc unit body cenv nr key ut imm lbl sa sb sj se sp sf func am tx.
+ deploy_ctor_code tops rp runtime_bc unit
+   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
+ deploy_typing_ok tops am tx ==>
+ !name ty tv off.
+ FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+ cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+ evaluate_type (get_tenv (deploy_evaluation_context tops am tx)) ty = SOME tv ==>
+ off + type_memory_size tv <= imm_len tops
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule deploy_ctor_entry_immutable_layout >> strip_tac >>
+ drule deploy_ctor_static_tables >> strip_tac >>
+ `contract_namespaces_ok T [(NONE,tops)]` by
+   (fs[deploy_typing_ok_def] >>
+    qpat_x_assum `check_contract T _ _ _ = _`
+      (mp_tac o MATCH_MP check_contract_namespaces_ok) >> simp[]) >>
+ `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+   fs[contract_namespaces_ok_def, contract_keys_def] >>
+ rpt gen_tac >> strip_tac >>
+ gvs[deploy_evaluation_context_def, initial_evaluation_context_def,
+    vyperContextTheory.get_tenv_def, deploy_ctor_singleton_type_env] >>
+ drule_all evaluated_type_mem_bytes >> strip_tac >>
+ qpat_x_assum `immutable_section_layout _ _` mp_tac >>
+ simp[immutable_section_layout_def] >>
+ disch_then drule >> strip_tac >>
+ `MEM (VariableDecl vis Immutable name ty' slot) tops` by
+   (gvs[] >> simp[]) >>
+ drule_all build_maps_variable >> strip_tac >>
+ gvs[] >>
+ pure_rewrite_tac [imm_len_def, GSYM listTheory.APPEND_ASSOC,
+   listTheory.APPEND] >>
+ irule (PURE_REWRITE_RULE [arithmeticTheory.ADD_CLAUSES]
+   (Q.INST [`off` |-> `0`] immutable_declaration_interval_bound))
+QED
+
 Theorem deploy_ctor_entry_immutable_resources:
  !tops rp runtime_bc unit body cenv nr key ut imm lbl sa sb sj se sp sf func
  am tx mut am_c es0 ss.
@@ -414,6 +455,7 @@ Theorem deploy_ctor_entry_immutable_resources:
  deploy_typing_ok tops am tx /\
  deploy_ctor_start tops am tx (mut,F,body,am_c,es0) /\
  imm_len tops <= ss.vs_alloca_next /\
+ (!aid b sz. FLOOKUP ss.vs_allocas aid = SOME (b,sz) ==> imm_len tops <= b) /\
  (!p. p < imm_len tops ==>
    mem_bytes_at p 1 ss.vs_memory = mem_bytes_at p 1 []) /\
  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -430,6 +472,12 @@ Proof
  drule_all deploy_ctor_start_zero_section >> strip_tac >>
  irule deploy_ctor_section_alloca_sep >>
  conj_tac >- asm_rewrite_tac[] >>
+ reverse conj_tac
+ >- (rewrite_tac[immutable_decl_sep_alt] >> rpt strip_tac >>
+     drule_all deploy_ctor_entry_declared_extent >>
+     strip_tac >>
+     rpt conj_tac >> rpt strip_tac >>
+     fs[regions_disjoint_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
  qexistsl [`imm_len tops`, `REPLICATE (imm_len tops) 0w`, `tops`] >>
  asm_rewrite_tac[] >>
  simp[deploy_evaluation_context_def, initial_evaluation_context_def]
@@ -517,7 +565,8 @@ Theorem deploy_ctor_entry_body_resources:
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
  rpt gen_tac >> strip_tac >>
- drule_all deploy_ctor_entry_registered_local_bounds >> strip_tac >>
+ drule_all deploy_ctor_entry_registered_map_bounds >>
+ disch_then (qspec_then `T` strip_assume_tac) >> fs[] >>
  `deploy_typing_ok tops am tx /\ supported_program tops` by fs[deploy_source_ok_def] >>
  `vs.vs_memory = []` by
    (fs[o1PassContractTheory.gas_variant_def, deploy_entry_state_def,
