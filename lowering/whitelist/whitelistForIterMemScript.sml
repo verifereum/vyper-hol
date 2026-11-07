@@ -1597,6 +1597,60 @@ Resume array_for_loop_counted_keep[round_post]:
 QED
 Finalise array_for_loop_counted_keep
 
+Theorem compile_for_mem_dynamic_stages[local]:
+  expr_type arr_e = ArrayT et (Dynamic c) /\
+  compile_expr cenv (ArrayT et (Dynamic c)) arr_e se = (vv,st) /\
+  vv_location vv = SOME LocMemory /\
+  compile_stmt cenv lctx ty (For id et (Array arr_e) n stmts) se = ((),st') ==>
+  ?lvo st1 bc entry cond bod incr exit idx offo toto epo sa sb0 sb1 sj.
+    emit_op MLOAD [vv_operand vv] st = (lvo,st1) /\
+    (do bc <- declare_local cenv id et;
+        emit_local_alloca bc id;
+        entry <- fresh_label "iter_entry";
+        cond <- fresh_label "iter_cond";
+        bod <- fresh_label "iter_body";
+        incr <- fresh_label "iter_incr";
+        exit <- fresh_label "iter_exit";
+        emit_inst JMP [Label entry] [];
+        new_block entry;
+        idx <- fresh_var;
+        emit_inst ASSIGN [Lit 0w] [idx];
+        (do invalid <- emit_op GT [lvo; Lit (n2w c)];
+            valid <- emit_op ISZERO [invalid];
+            emit_void ASSERT [valid] od);
+        emit_inst JMP [Label cond] [];
+        new_block cond;
+        done <- emit_op EQ [Var idx; lvo];
+        emit_inst JNZ [done; Label exit; Label bod] [];
+        new_block bod;
+        off <- emit_op MUL [Var idx;
+                   Lit (n2w (elem_size_in_location cenv LocMemory et))];
+        tot <- emit_op ADD [Lit 32w; off];
+        ep <- emit_op ADD [vv_operand vv; tot];
+        return (bc,entry,cond,bod,incr,exit,idx,off,tot,ep)
+     od) st1 = ((bc,entry,cond,bod,incr,exit,idx,offo,toto,epo),sa) /\
+    (case FLOOKUP bc.ce_vars id of
+       SOME (MemLoc dst _) => compile_iter_elem_copy cenv epo (Lit (n2w dst))
+           (elem_size_in_location cenv LocMemory et) LocMemory F et et
+     | SOME (PtrVar ptr_op _) => compile_iter_elem_copy cenv epo ptr_op
+           (elem_size_in_location cenv LocMemory et) LocMemory F et et
+     | _ => emit_void INVALID []) sa = ((),sb0) /\
+    compile_stmts bc (InLoop exit incr) ty stmts sb0 = ((),sb1) /\
+    emit_jmp_if_not_terminated incr sb1 = ((),sj) /\
+    (do new_block incr;
+        next <- emit_op ADD [Var idx; Lit 1w];
+        emit_inst ASSIGN [next] [idx]; emit_inst JMP [Label cond] [];
+        new_block exit; return () od) sj = ((),st')
+Proof
+  strip_tac >> qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_stmt_def, LET_THM, is_slot_addressed_def,
+       contextTheory.compile_ptr_load_def, word_scale_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[]
+QED
+
 Theorem dynarray_loop_initialize_keep[local]:
   ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
   MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
