@@ -56,6 +56,7 @@ Proof
 QED
 
 Theorem istore_transferred_taint:
+  !a v addr value s id tn.
   eval_operand a s = SOME addr /\ eval_operand v s = SOME value ==>
   (step_taint (mk_inst id ISTORE [a;v] []) s
     (istore (w2n addr) value s) tn).t_mem =
@@ -69,7 +70,7 @@ Theorem istore_transferred_taint:
   (step_taint (mk_inst id ISTORE [a;v] []) s
     (istore (w2n addr) value s) tn).t_trans = tn.t_trans
 Proof
-  strip_tac >>
+  rpt strip_tac >>
   simp[step_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
        written_taint_def, source_memory_write_ranges_def, range_bytes_def,
        fixed_source_write_range_def, mk_inst_def, istore_def, mstore_def,
@@ -107,14 +108,17 @@ Proof
   `step_inst_base (mk_inst id ISTORE [arg;v] []) s =
     OK (istore (w2n a) value s)` by
     simp[step_inst_base_def, mk_inst_def] >>
-  drule_all istore_transferred_taint >>
-  disch_then (qspecl_then [`tn`, `id`] strip_assume_tac) >>
+  qspecl_then [`arg`, `v`, `a`, `value`, `s`, `id`, `tn`] mp_tac
+    istore_transferred_taint >>
+  impl_tac >- simp[] >> strip_tac >>
   simp[run_inst_seq_def, inst_seq_ptr_def] >>
   conj_tac
-  >- (gen_tac >>
-      simp[step_inst_inst_idx_indep, exec_result_map_def] >>
-      pure_rewrite_tac[GSYM mk_inst_def] >> irule ptr_inst_ok_istore >>
-      fs[]) >>
+  >- (gen_tac >> conj_tac
+      >- (irule ptr_inst_ok_istore >> qexists_tac `a` >>
+          fs[instIdxIndepTheory.eval_op_inst_idx, allocas_from_def,
+             allocas_below_fmp_def]) >>
+      fs[step_inst_inst_idx_indep, exec_result_map_def, mk_inst_def,
+         is_terminator_def]) >>
   simp[step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,
        mk_inst_def, FLOOKUP_DRESTRICT, allocas_from_def,
        allocas_below_fmp_def, ptr_covers_def, istore_def, mstore_def,
