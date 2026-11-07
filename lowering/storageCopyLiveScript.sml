@@ -679,6 +679,24 @@ Proof
     [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES]) >> decide_tac
 QED
 
+(* Structural default blocks retain the identity of their array element. *)
+Theorem copy_default_block_key[local]:
+  !n start tv defaults sparse x.
+    (!r. MEM r (MAP FST defaults) ==> r < type_slot_size tv) /\
+    MEM x (MAP FST (FLAT (GENLIST (\h.
+      if MEM (start+h) (MAP FST sparse) then []
+      else MAP (\(r,w). (r+(start+h)*type_slot_size tv,w)) defaults) n))) ==>
+    ?h r. h < n /\ ~MEM (start+h) (MAP FST sparse) /\
+      MEM r (MAP FST defaults) /\ r < type_slot_size tv /\
+      x = (start+h)*type_slot_size tv+r
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[MEM_MAP, pairTheory.EXISTS_PROD, MEM_FLAT, MEM_GENLIST] >>
+  qpat_x_assum `MEM _ (if _ then _ else _)` mp_tac >>
+  IF_CASES_TAC >> simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
+  strip_tac >> metis_tac[ADD_COMM]
+QED
+
 Theorem copy_sparse_absent_storage[local]:
   !sparse tv n writes i k st x.
     sparse_has_type tv n sparse /\ encode_static_array tv 0 sparse = SOME writes /\
