@@ -785,7 +785,7 @@ Theorem slice_out_buf_counted_replay[local]:
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   32 <= N /\ N < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
   lookup_var root u0 = SOME a /\
@@ -794,7 +794,7 @@ Theorem slice_out_buf_counted_replay[local]:
     gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t0) /\
     ptr_covers H tm root t0 N /\ ptr_covers H tm data t0 (N - 32) /\
     t0.vs_current_bb = sb.cs_current_bb /\ t0.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t0.vs_halted /\ fresh_vars_wrt sb t0 /\
+    ~t0.vs_halted /\ (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t0) /\
     sa.cs_next_var <= sb.cs_next_var /\ 
     (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
       eval_operand op t0 = eval_operand op s /\ op_prov H op = op_prov G op /\
@@ -906,6 +906,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all slice_out_buf_counted_replay >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `fresh_vars_wrt s1 t0` by simp[] >>
   `!op w. eval_operand op s = SOME w ==> !x. op = Var x ==> not_fresh_at sa x` by
     (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand,
       arithmeticTheory.GREATER_EQ]) >>
@@ -1081,6 +1082,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all slice_out_buf_counted_replay >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `fresh_vars_wrt s1 t0` by simp[] >>
   `!op w. eval_operand op s = SOME w ==> !x. op = Var x ==> not_fresh_at sa x` by
     (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand,
       arithmeticTheory.GREATER_EQ]) >>
