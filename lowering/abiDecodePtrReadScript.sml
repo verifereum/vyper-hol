@@ -6,6 +6,7 @@ Ancestors
   abiEncoder abiDecodeStaticProps bodyPtrDefs emitHelperProps exprLoweringProps ptrDiscipline venomState
   venomExecSemantics venomInst words arithmetic finite_map emitHelper compileEnv fragGasPathPtr
   exprSimAccounts freshWrites fragExec stateFrame fragGasSeqPtr
+  abiDecodePtrEmit assignTuplePtrCopyLen
 
 Theorem abi_decode_ptr_relative_window:
   abi_decode_ptr_window G tn s src b h /\
@@ -116,6 +117,9 @@ Theorem abi_decode_ptr_relative_load:
   p+32 <= h /\ w2n b+h < dimword(:256) ==>
   ?out t G' tn'. v = Var out /\ not_fresh_at sc out /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sc) s G' tn' /\
+    run_inst_seq (emitted_insts sa sc) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
     lookup_var out t = SOME (mload (w2n b+p) s) /\
     op_prov G' v = NONE /\ op_taint tn' v = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
@@ -147,19 +151,83 @@ Proof
    (!i. w2n (b+n2w p) <= i /\ i < w2n (b+n2w p)+32 ==> i NOTIN tm.t_mem)` by
     gvs[abi_decode_ptr_window_def, ptr_covers_def] >>
   qpat_x_assum `addr = Var ap` SUBST_ALL_TAC >>
-  drule_all emit_mload_member_path_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `!out. ptr_inst_ok D 0 0 ctx func H tm
+    (mk_inst sb.cs_next_id MLOAD [Var ap] [out]) u` by
+    (gen_tac >> irule ptr_inst_ok_mload >> simp[]) >>
+  `!out. step_inst_base (mk_inst sb.cs_next_id MLOAD [Var ap] [out]) u =
+    OK (update_var out (mload (w2n (b+n2w p)) u) u)` by
+    simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def] >>
+  drule_all (emit_op_zero_path_ptr |> Q.INST [`opc` |-> `MLOAD`]
+    |> SRULE [is_terminator_def]) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG H tm u 0 Hf tmf (OK tf)` >>
+  suspend "load_finish"
+QED
+
+Resume abi_decode_ptr_relative_load[load_finish]:
   `gas_path_ptr D 0 ctx func PG G tn s 0 Hf tmf (OK tf)` by
     (drule_all gas_path_ptr_then >> simp[]) >>
-  `state_frame tf = state_frame (s with vs_inst_idx := tf.vs_inst_idx)` by
-    (fs[state_frame_def, venom_state_component_equality]) >>
-  qexistsl_tac [`out`, `tf`, `Hf`, `tmf`] >> asm_rewrite_tac[] >>
+  drule_all (emit_op_raw_checked_ptr |> Q.INST [`opc` |-> `MLOAD`]
+    |> SRULE [is_terminator_def]) >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  simp[] >> strip_tac >>
+  `run_inst_seq (emitted_insts sb sc) u =
+    OK (tf with vs_inst_idx := u.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG H tm (emitted_insts sb sc) u Hf tmf` by
+    (simp[Abbr `tf`, Abbr `Hf`, Abbr `tmf`] >>
+     simp[update_var_def, venom_state_component_equality]) >>
+  qpat_assum `emit_op MLOAD _ _ = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `tf.vs_inst_idx = LENGTH sc.cs_current_insts` by simp[Abbr `tf`] >>
+  suspend "load_compose"
+QED
+
+Resume abi_decode_ptr_relative_load[load_compose]:
+  qpat_assum `emit_op ADD _ _ = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sb sc)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+   sc.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb sc` by simp[] >>
+  drule_all emitted_insts_join_normalized_ptr >> strip_tac >>
+  qexistsl_tac [`tf`, `Hf`, `tmf`] >> asm_rewrite_tac[] >>
+  suspend "load_fields"
+QED
+
+Resume abi_decode_ptr_relative_load[load_fields]:
   `w2n (b+n2w p) = w2n b+p` by
     (irule w2n_add_n2w_lt >> decide_tac) >>
-  conj_tac >- fs[mload_def] >>
-  rpt strip_tac >>
+  `state_frame tf = state_frame (s with vs_inst_idx := tf.vs_inst_idx)` by
+    fs[Abbr `tf`, update_var_def, state_frame_def, venom_state_component_equality] >>
+  `not_fresh_at sc out` by gvs[not_fresh_at_def] >>
+  `op_taint tmf (Var out) = {} /\ tmf.t_mem = tm.t_mem /\
+   tmf.t_stor = tm.t_stor /\ tmf.t_trans = tm.t_trans` by
+    simp[Abbr `tmf`, mload_ghost_clean, eval_operand_def] >>
+  `op_prov Hf (Var out) = NONE /\ tmf.t_imm = tm.t_imm` by
+    simp[Abbr `Hf`, Abbr `tmf`, op_prov_def, step_prov_def, set_prov_def,
+         out_prov_def, mk_inst_def, FLOOKUP_DRESTRICT, step_taint_def, imm_taint_def] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `state_frame u = _`
+    (strip_assume_tac o SRULE [state_frame_def, venom_state_component_equality]) >>
+  `sc.cs_current_bb = sb.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `sb.cs_current_bb = sa.cs_current_bb` by metis_tac[] >>
+  simp[Abbr `tf`, update_var_def, lookup_var_def, FLOOKUP_UPDATE, mload_def] >>
+  qx_gen_tac `x` >> disch_tac >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _`
+    (qspec_then `x` mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac >>
   `not_fresh_at sb x` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  metis_tac[]
+  `x <> out` by gvs[not_fresh_at_def] >>
+  simp[Abbr `Hf`, Abbr `tmf`, step_prov_def, set_prov_def, out_prov_def,
+       step_taint_def, set_var_taint_def, op_taint_def, mk_inst_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  qpat_x_assum `lookup_var x u = _` mp_tac >>
+  qpat_x_assum `op_taint tm (Var x) = _` mp_tac >>
+  simp_tac (srw_ss()) [lookup_var_def, op_taint_def]
 QED
+
+Finalise abi_decode_ptr_relative_load
