@@ -42,6 +42,45 @@ Proof
     (qspecl_then [`off`,`n`,`off+j`] mp_tac) >> simp[]
 QED
 
+Theorem ptr_log_read_descriptor[local]:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
+  REVERSE rest = addr::szop::topics ==>
+  mem_write_ops inst = NONE /\
+  mem_read_ops inst = SOME <|iao_ofst := addr; iao_size := SOME szop;
+                            iao_max_size := SOME szop|>
+Proof
+  strip_tac >> simp[mem_write_ops_def, mem_read_ops_def] >>
+  Cases_on `topics` >> simp[]
+QED
+
+Theorem ptr_log_scalar_vars[local]:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
+  REVERSE rest = addr::szop::topics ==>
+  !v. MEM (Var v) (szop::topics) ==> v NOTIN fn_pv P fn
+Proof
+  strip_tac >>
+  drule_all ptr_log_read_descriptor >> strip_tac >>
+  gen_tac >> strip_tac >> spose_not_then assume_tac >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `MEM (Var v) inst.inst_operands` by
+    (simp[] >> metis_tac[MEM_REVERSE, MEM]) >>
+  `FILTER ($= (Var v)) inst.inst_operands = [Var v] /\ addr = Var v` by
+    (qpat_x_assum `ptr_use_ok P _ inst` mp_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def] >>
+     disch_then (qspec_then `v` mp_tac) >>
+     `MEM (Var v) rest` by (qpat_x_assum `MEM (Var v) inst.inst_operands` mp_tac >> simp[]) >> simp[]) >>
+  `REVERSE inst.inst_operands = Var v::szop::topics ++ [Lit tc]` by
+    simp[REVERSE_APPEND] >>
+  `FILTER ($= (Var v)) (REVERSE inst.inst_operands) = [Var v]` by
+    simp[FILTER_REVERSE] >>
+  qpat_x_assum `FILTER _ (REVERSE inst.inst_operands) = _` mp_tac >>
+  simp[FILTER_APPEND_DISTRIB] >>
+  Cases_on `szop = Var v` >> simp[] >>
+  fs[MEM, FILTER_EQ_NIL, EXISTS_MEM]
+QED
+
 Theorem ptr_paired_hash_log_payload[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
