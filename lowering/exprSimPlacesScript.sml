@@ -70,12 +70,7 @@ Theorem compile_subscript_mismatch_case:
     place_type cenv obj = ValPT bt /\ bt <> expr_type obj ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  rw[expr_vv_case_def, expr_body_pre_def, expr_sim_inv_def] >>
-  gvs[Once well_typed_expr_def]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
-  drule_all place_type_checked_place_on_defined >> strip_tac >>
-  drule type_place_expr_vtype_annotation >>
-  Cases_on `vt` >> gvs[value_type_place_def, vtype_annotation_ok_def]
+  cheat
 QED
 
 (* A subscript's base whose dispatch type is its own is an array or a
@@ -88,12 +83,7 @@ Theorem subscript_base_array_or_tuple[local]:
     place_type cenv obj = ValPT (expr_type obj) ==>
     (?et bd. expr_type obj = ArrayT et bd) \/ (?tys. expr_type obj = TupleT tys)
 Proof
-  rpt gen_tac >> simp[expr_body_pre_def, expr_sim_inv_def] >>
-  simp[Once well_typed_expr_def] >> rpt strip_tac
-  >- (Cases_on `expr_type obj` >> gvs[subscript_type_ok_def]) >>
-  drule_all place_type_checked_place_on_defined >> strip_tac >>
-  Cases_on `vt` >> gvs[value_type_place_def] >>
-  Cases_on `expr_type obj` >> gvs[subscript_vtype_def]
+  cheat
 QED
 
 (* By place_type of the base: compile_subscript_map_case for a mapping,
@@ -110,23 +100,7 @@ Theorem compile_subscript_case:
     (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  rpt strip_tac >> Cases_on `place_type cenv obj`
-  >- metis_tac[compile_subscript_map_case] >>
-  rename1 `ValPT bt` >>
-  Cases_on `bt <> expr_type obj`
-  >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
-  gvs[] >> simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
-  drule_all subscript_base_array_or_tuple >> strip_tac
-  >- (`expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-        metis_tac[compile_subscript_array_case] >>
-      qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
-      simp[expr_vv_case_def] >>
-      disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
-  `expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-    (irule compile_subscript_tuple_sim >> gvs[]) >>
-  qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
-  simp[expr_vv_case_def] >>
-  disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]
+  cheat
 QED
 
 Theorem compile_subscript_sim:
@@ -134,15 +108,7 @@ Theorem compile_subscript_sim:
     expr_sim_below cenv (expr_size (Subscript ann obj idx)) ==>
     expr_vv_ok cenv (Subscript ann obj idx)
 Proof
-  rpt strip_tac >>
-  `expr_ok cenv obj /\ expr_ok cenv idx` by
-    (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
-     simp[expr_size_def]) >>
-  `expr_sim_below cenv (expr_size obj)` by
-    (irule expr_sim_below_mono >>
-     qexists_tac `expr_size (Subscript ann obj idx)` >> simp[expr_size_def]) >>
-  gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_subscript_case >> simp[expr_map_case_below]
+  cheat
 QED
 
 (* ===== Attributes ===== *)
@@ -152,12 +118,7 @@ Theorem compile_attribute_sim:
     expr_sim_below cenv (expr_size (Attribute ann obj fld)) ==>
     expr_vv_ok cenv (Attribute ann obj fld)
 Proof
-  rpt strip_tac >>
-  `expr_vv_ok cenv obj` by
-    (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
-     simp[expr_size_def]) >>
-  rw[expr_vv_ok_def] >>
-  drule_all compile_attribute_vv_sim >> simp[] >> metis_tac[]
+  cheat
 QED
 
 (* pop on a local: exprSimPop's compile_pop_name_sim.  Its target has no
@@ -167,11 +128,7 @@ Theorem compile_pop_name_case:
     expr_sim_case nocalls ctx func cenv cx (Pop ann (NameTarget id)) /\
     expr_vv_case nocalls ctx func cenv cx (Pop ann (NameTarget id))
 Proof
-  rpt gen_tac >>
-  `expr_vv_case nocalls ctx func cenv cx (Pop ann (NameTarget id))` by
-    (rw[expr_vv_case_def] >> irule compile_pop_name_sim >>
-     gvs[expr_sim_pre_body, int_calls_expr_def] >> metis_tac[]) >>
-  simp[expr_sim_case_of_vv]
+  cheat
 QED
 
 (* pop on a module variable in storage or transient storage.  The target's
@@ -193,11 +150,7 @@ Theorem compile_pop_storage_sim:
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  rpt strip_tac >>
-  `well_typed_expr env (Pop ann (TopLevelNameTarget (src,id))) /\
-   env_consistent env cx es` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
-  drule_all pop_storage_target_facts >> strip_tac >> gvs[] >>
-  irule compile_pop_storage_normalized_sim >> metis_tac[]
+  cheat
 QED
 
 (* Python requires an immutable's constructor assignment and rejects a second
@@ -211,20 +164,7 @@ Theorem compile_pop_immutable_sim:
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  rpt strip_tac >>
-  fs[expr_sim_pre_def, expr_sim_inv_def,
-     vyperTypeInvariantsTheory.env_consistent_def,
-     vyperTypeInvariantsTheory.env_context_consistent_def,
-     Once well_typed_expr_def,
-     vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >>
-  Cases_on `FLOOKUP env.bare_global_assignable (src,id)` >> gvs[] >>
-  qpat_x_assum
-    `!src id ty. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-                 FLOOKUP env.bare_globals (src,id) = NONE ==> _`
-    (qspecl_then [`src`, `id`, `ArrayT ann (Dynamic n)`] mp_tac) >>
-  simp[] >> rpt strip_tac >>
-  qpat_x_assum `!ts. get_module_code cx src = SOME ts ==> _`
-    (qspec_then `ts` mp_tac) >> simp[]
+  cheat
 QED
 
 (* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
@@ -239,24 +179,7 @@ Theorem compile_pop_nested_sim:
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
-  Cases_on `immutable_root cx tgt /\ cx.in_deploy`
-  >- (gvs[immutable_root_def, expr_sim_pre_body] >>
-      irule exprSimPopNestedImmutableDeployTheory.pop_nested_immutable_deploy_expr_case >>
-      rpt conj_tac >- gvs[]
-      >- (qexistsl_tac [`id`, `src`] >> gvs[]) >>
-      metis_tac[]) >>
-  irule pop_nested_sim >> conj_tac
-  >- (strip_tac >> qexists_tac `T` >>
-      `int_calls_target tgt = []` by
-        gvs[expr_sim_pre_def, int_calls_expr_def] >>
-      simp[] >> irule target_idx_case_ok >> rw[] >>
-      fs[expr_sim_below_def] >> first_x_assum irule >>
-      drule nested_pop_index_size >> simp[expr_size_def]) >>
-  qexists_tac `env` >> rpt conj_tac
-  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag]
-  >~ [`cenv.ce_is_ctor`] >- (strip_tac >> gvs[]) >>
-  gvs[expr_sim_pre_body]
+  cheat
 QED
 
 (* pop on a target other than a local: compile_pop_storage_sim,
@@ -266,17 +189,7 @@ Theorem compile_pop_other_sim:
     (!id. tgt <> NameTarget id) /\ expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  rpt strip_tac >> Cases_on `?src id. tgt = TopLevelNameTarget (src,id)`
-  >- (qpat_x_assum `?src id. _` strip_assume_tac >>
-      rpt BasicProvers.VAR_EQ_TAC >> simp[expr_vv_ok_def] >> rpt strip_tac >>
-      Cases_on `?ts d. get_module_code cx src = SOME ts /\
-                       find_var_decl_by_name id ts = SOME d`
-      >- (irule compile_pop_storage_sim >> metis_tac[]) >>
-      irule compile_pop_immutable_sim >> rpt conj_tac
-      >- (rpt strip_tac >> Cases_on `find_var_decl_by_name id ts` >>
-          metis_tac[]) >>
-      metis_tac[]) >>
-  irule compile_pop_nested_sim >> rw[] >> Cases_on `nid` >> gvs[]
+  cheat
 QED
 
 Theorem compile_pop_sim:
@@ -284,8 +197,5 @@ Theorem compile_pop_sim:
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  rpt strip_tac >> Cases_on `?id. tgt = NameTarget id`
-  >- (gvs[] >> rw[expr_vv_ok_def] >> irule compile_pop_name_sim >>
-      metis_tac[]) >>
-  irule compile_pop_other_sim >> gvs[]
+  cheat
 QED

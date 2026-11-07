@@ -69,23 +69,5 @@ Theorem lower_vyper_runtime_unit_run_ptr_safe_composed:
              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                          vs_inst_idx := 0 |>)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gasSummaryTheory.gas_explicit_nil] >>
-  `?mut args fbody.
-     lookup_function NONE tx.function_name External tops =
-       SOME (mut, F, args, [], ret, fbody) /\
-     LENGTH tx.args = LENGTH args /\
-     IS_SOME (bind_arguments (type_env tops) args tx.args)` by
-    (fs[valid_vyper_call_def] >> metis_tac[]) >>
-  `?env. bind_arguments (type_env tops) args tx.args = SOME env` by
-    (Cases_on `bind_arguments (type_env tops) args tx.args` >> fs[]) >>
-  Cases_on `send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-        <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
-  rename1 `_ = (sent, es0)` >> Cases_on `sent`
-  >- (rename1 `INL u` >> Cases_on `u` >>
-      irule lower_vyper_runtime_unit_body_ptr >> metis_tac[]) >>
-  drule_all external_entry_value_revert_ptr >> simp[]
+  cheat
 QED

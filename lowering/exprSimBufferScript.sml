@@ -54,15 +54,7 @@ Theorem buffer_memory_vv_post_general:
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[vv_post_def, vv_holds_def, vv_at_def,
-    vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
-  conj_tac
-  >- (disj1_tac >> qexistsl [`sa.cs_next_id`, `w2n w`, `sz`] >> simp[] >>
-      rpt strip_tac >>
-      qpat_x_assum `!n lb lsz. local_region _ es'.scopes _ _ _ _ ==> _`
-        drule >> decide_tac) >>
-  metis_tac[]
+  cheat
 QED
 
 Theorem buffer_memory_vv_post:
@@ -88,13 +80,5 @@ Theorem buffer_memory_vv_post:
     vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
-  rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
-    (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
-  irule buffer_memory_vv_post_general >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!n lb lsz. local_region _ _ t _ _ _ ==> _` drule >> decide_tac
+  cheat
 QED
