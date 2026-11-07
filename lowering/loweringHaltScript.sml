@@ -147,7 +147,9 @@ Theorem return_bytes_prim_value:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `ret` >> gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v0` >> gvs[safe_cast_def, AllCaseEqs()] >>
+  qpat_x_assum `safe_cast _ _ = _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [safe_cast_def, AllCaseEqs()]) >>
+  gvs[] >>
   simp[return_bytes_def, enc_def, REV_DEF, typed_val_to_w256_def,
        val_to_w256_def]
   >~ [`PAD_LEFT`]
