@@ -1,6 +1,6 @@
 Theory concretizePtrSelectedOrigin
 Ancestors concretizePtrRuntimeGeneration concretizePtrActivationSupport
-  concretizePtrClosure concretizePtrFrameOrigins concretizePtrBPOrigins
+  concretizePtrClosure pointerClosure concretizePtrFrameOrigins concretizePtrBPOrigins
   concretizePtrRuntimeOrigins concretizeAnalysisScanCoverage
   ptrDiscipline pointerConfinedDefs venomWf venomInst list pred_set finite_map words
 

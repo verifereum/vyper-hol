@@ -2,7 +2,7 @@ Theory concretizeLayoutLocalShifts
 Ancestors concretizeLayoutLocalValues concretizeLayoutReaderContext
   frameRelocationLocal frameRelocationGuardedValues frameRelocationTaintOrder
   frameRelocationOpaque frameRelocationGhostCopy frameOriginUpdates
-  frameRelocationMemory frameRelocationEnvironment frameRelocationReachableSupport
+  frameRelocationMemory frameRelocationStoreValues frameRelocationEnvironment frameRelocationReachableSupport
   frameRelocationBinding frameJointDemand frameJointTrace frameJointTransition
   frameResolvedTrace frameJointTaint frameOriginReachable frameOriginHistory
   pointerConfinedDefs memLocDefs
@@ -72,26 +72,6 @@ Proof
   fs[local_rel_def, frameRelocationDemandTheory.demand_agree_def] >> metis_tac[]
 QED
 
-Theorem guarded_masked_operand:
-  local_rel (\u. F) (guarded_ptr Opaque L rv)
-    (guarded_bytes Opaque rv tn) R Obs s t /\
-  s.vs_labels = t.vs_labels /\
-  (!w. op = Var w ==> FLOOKUP rv w = NONE /\ ~Opaque w) /\
-  eval_operand op s = SOME x ==>
-  ?y. eval_operand op t = SOME y /\ word_agree_except (op_taint tn op) x y
-Proof
-  strip_tac >> Cases_on `op` >> gvs[eval_operand_def, op_taint_def]
-  >- simp[word_agree_except_def]
-  >- (`variable_domains s t` by metis_tac[local_rel_domains] >>
-      `?y. lookup_var s' t = SOME y` by
-        (fs[frameRelocationValuesTheory.variable_domains_def] >>
-         Cases_on `lookup_var s' t` >> metis_tac[]) >>
-      qexists_tac `y` >> simp[] >>
-      drule_all local_rel_bytes >>
-      simp[guarded_bytes_def, copy_bytes_def, op_taint_def]) >>
-  simp[word_agree_except_def]
-QED
-
 Theorem masked_pure2_execution[local]:
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R Obs s t /\
@@ -113,7 +93,8 @@ Proof
        post = update_var v (f k x) s` by
     (qpat_x_assum `exec_pure2 _ _ _ = _` mp_tac >>
      simp[exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all guarded_masked_operand >> strip_tac >>
+  `?y. eval_operand a t = SOME y /\ word_agree_except (op_taint tn a) x y` by
+    (irule guarded_masked_operand >> metis_tac[]) >>
   `eval_operand n t = SOME k` by metis_tac[] >>
   qexistsl_tac [`k`, `x`, `y`] >> simp[exec_pure2_def]
 QED
