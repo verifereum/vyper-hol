@@ -78,3 +78,37 @@ Proof
   Cases_on `op = Var (HD inst.inst_outputs)` >>
   gvs[rich_listTheory.LIST_ELEM_COUNT_DEF] >> decide_tac
 QED
+
+Theorem ready_phi_output_initial_target_count:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs ==>
+  LIST_ELEM_COUNT (Var v) (MAP Var (input_vars_from p bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))) = 0
+Proof
+  strip_tac >>
+  `native_phi_class p (collect_phis bb.bb_instructions) (Var v) = NONE` by
+    (irule fnPlanLineagePhiClassesTheory.reachable_native_phi_output_class_none >>
+     metis_tac[]) >>
+  `FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = NONE` by
+    gvs[fnPlanLineagePhiMapsTheory.native_phi_class_def] >>
+  drule_at (Pat `lookup_block _ _ = _`) ready_unrenamed_phi_partition >>
+  simp[] >> disch_then (qspecl_then [`v`, `p`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `~MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
+    (gvs[listTheory.EVERY_MEM, venomInstTheory.inst_defs_def] >> metis_tac[]) >>
+  simp[rich_listTheory.LIST_ELEM_COUNT_DEF, rich_listTheory.FILTER_MAP,
+       combinTheory.o_DEF] >>
+  pure_rewrite_tac[GSYM rich_listTheory.LIST_ELEM_COUNT_DEF] >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    (irule fnPlanLineagePhiClassesTheory.ready_block_phi_uses_disjoint >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  drule fnPlanLineagePhiMapsTheory.input_vars_from_residual_count >>
+  disch_then (qspecl_then [`v`, `p`] mp_tac) >> simp[] >>
+  disch_then (qspec_then `live_vars_at (liveness_analyze fn) lbl 0` mp_tac) >>
+  `FILTER (\x. x = v) (live_vars_at (liveness_analyze fn) lbl 0) = []` by
+    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[rich_listTheory.LIST_ELEM_COUNT_DEF, listTheory.FILTER_EQ_NIL]
+QED
