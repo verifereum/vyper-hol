@@ -5374,7 +5374,7 @@ Proof
   gvs[raw_call_value_def, ext_call_kwarg_not_mem]
 QED
 
-Theorem raw_call_prefix_source_ready[local]:
+Theorem raw_call_prefix_source_ready:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
   bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
@@ -5434,7 +5434,7 @@ Proof
   `MEM x xs` by metis_tac[raw_call_kwarg_mem] >> metis_tac[]
 QED
 
-Theorem raw_call_source_continuation[local]:
+Theorem raw_call_source_continuation:
   dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
   raw_call_value flags.rcf_kws kvs = SOME amount ==>
   (do
@@ -5451,7 +5451,7 @@ Proof
     assert_def, lift_option_type_def, dest_BytesV_def, return_def]
 QED
 
-Theorem raw_call_source_tail[local]:
+Theorem raw_call_source_tail:
   ~cx.txn.is_static /\ ~flags.rcf_is_delegate /\
   (flags.rcf_is_static ==> amount = 0) /\ IS_SOME es.outcomes /\
   outcomes_accounts_typed es.outcomes /\
