@@ -64,3 +64,59 @@ Proof
   qspec_then `dimword (:256)` mp_tac entry_none_tuple_cardinality_probe >>
   simp[]
 QED
+
+(* FROZEN-ORIGIN ADMISSIBILITY AUDIT (not a proposed theorem):
+
+   Branch        ABI typing obligations            Existing source facts / gap
+   Tuple         has_types ats avs and              evaluate_types + conversion
+                 LENGTH avs < dimword(:256)         align members; slot size <=
+                                                    dimword gives no strict
+                                                    cardinality producer.
+   Struct        same as Tuple, in env \\ nsid      field names and evaluation
+                                                    align; empty structs have
+                                                    zero slots. Same gap.
+   Fixed array   all members typed; length=n;       evaluate_type gives n>0,
+                 length < dimword(:256)            element slots>0, and
+                                                    n*slots < dimword, enough
+                                                    for n < dimword. Sparse
+                                                    missing cells need typed
+                                                    default_to_abi tv.
+   Dynamic       all members typed; actual         source value typing bounds
+   array         length < dimword(:256)            actual length by n, and
+                                                    1+n*slots < dimword with
+                                                    positive slots bounds n.
+   Default       has_type converted type           default_value_has_type_thm:
+                 (default_to_abi tv)                evaluate_type -> source
+                                                    default typing; cj 1 of
+                                                    vyper_to_abi_default_value
+                                                    supplies conversion, NOT
+                                                    target ABI typing. The
+                                                    same tuple/struct gap
+                                                    persists for defaults.
+
+   Frozen-premise producer map:
+   - e2eDefs.valid_vyper_call_def gives equal argument lengths, successful
+     binding, and selectorDispatch.calldata_encodes_def. The latter requires
+     conversion and equality with enc, but NO has_type or successful decoder
+     result. enc is total, not a checked partial encoding operation.
+   - entryArgumentCastFacts.bind_arguments_source_values gives evaluated
+     original input typing. entryArgumentAbiFacts records params_ok provenance.
+   - e2eDefs.source_typing_ok_def supplies check_contract, machine typing,
+     call_tx_well_typed and checked_contract_runtime_ready. call_tx_well_typed
+     bounds tx.calldata length and transaction fields, not aggregate argument
+     cardinalities. checked_contract_runtime_ready supplies deployment/export
+     and immutable readiness, not argument ABI typing.
+   - abi_decode_bytes_widths is a source guard only for the AbiDecode builtin
+     (vyperTypeSystem.type_builtin_result_ok_def), not external parameters.
+     supported_nested_type ensures positive fixed bytes at scalar leaves, but
+     a bridge through supported_struct_fields and env deletion is still needed.
+   - Even such a width bridge will not prove strict tuple/struct cardinality:
+     supported tuples can contain zero-slot empty structs. Positive slot bounds
+     alone also leave the equality boundary because tuple evaluation uses <=.
+
+   Exact missing producer: from frozen selected-call hypotheses, obtain strict
+   cardinality for each tuple/struct on the selected argument and on evaluated
+   defaults that sparse conversion may insert. No existing theorem with this
+   output was found in generated signatures or lowering/venom sources. A
+   general mutual forward-typing theorem remains unauthorized; replacing its
+   premise with assignable_type is not justified by this audit. *)
