@@ -12704,6 +12704,125 @@ Proof
   fs[APPEND_ASSOC, ALL_DISTINCT_APPEND, MEM_APPEND] >> metis_tac[]
 QED
 
+Theorem alias_occ_select_retains:
+  !indices fresh items i.
+    MEM i indices /\ i < LENGTH items ==>
+    MEM (EL i items) (FST (alias_occ_select site indices fresh items))
+Proof
+  Induct >> simp[alias_occ_select_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_occ_swap_desired_covers:
+  1 < dist /\ i <= dist ==>
+  MEM i ([dist] ++ GENLIST (\j. j+1) (dist-1) ++ [0])
+Proof
+  simp[MEM_GENLIST] >> rpt strip_tac >>
+  Cases_on `i = 0` >- simp[] >>
+  Cases_on `i = dist` >- simp[] >>
+  simp[] >> qexists_tac `i-1` >> simp[]
+QED
+
+Theorem alias_occ_swap_inventory_retains:
+  alias_occ_wf shadow ==>
+  alias_occ_residents shadow SUBSET
+    alias_occ_residents (alias_occ_swap_inventory dist shadow)
+Proof
+  strip_tac >> Cases_on `dist = 0`
+  >- simp[alias_occ_swap_inventory_def] >>
+  Cases_on `dist <= 16`
+  >- (
+    `ALL_DISTINCT shadow.alias_occs` by
+      (gvs[alias_occ_wf_def, alias_occ_ids_def, ALL_DISTINCT_APPEND] >>
+       metis_tac[ALL_DISTINCT_MAP]) >>
+    drule alias_occ_stack_swap_distinct >> strip_tac >>
+    simp[alias_occ_swap_inventory_def, pred_setTheory.SUBSET_DEF,
+         pairTheory.FORALL_PROD, alias_occ_residents_member] >>
+    gvs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  simp[alias_occ_swap_inventory_def, pred_setTheory.SUBSET_DEF,
+       pairTheory.FORALL_PROD, alias_occ_residents_member, MEM_APPEND] >>
+  map_every qx_gen_tac [`at`,`id`] >> strip_tac
+  >- (
+    `MEM (at,id)
+       (TAKE (LENGTH shadow.alias_occs - (dist+1)) shadow.alias_occs ++
+        top_n (dist+1) shadow.alias_occs)` by
+      (pure_rewrite_tac[top_n_stack_decomposition] >> simp[]) >>
+    gvs[MEM_APPEND] >> disj1_tac >>
+    qpat_x_assum `MEM _ (top_n _ _)` (mp_tac o REWRITE_RULE [MEM_EL]) >>
+    disch_then (qx_choose_then `i` strip_assume_tac) >>
+    `i <= dist` by (gvs[top_n_def, LENGTH_TAKE_EQ] >> gvs[AllCaseEqs()] >> decide_tac) >>
+    `MEM i ([dist] ++ GENLIST (\j. j+1) (dist-1) ++ [0])` by
+      (irule alias_occ_swap_desired_covers >> simp[]) >>
+    drule_all alias_occ_select_retains >> gvs[]) >>
+  simp[]
+QED
+
+Theorem alias_occ_swap_inventory_deleted:
+  alias_occ_wf shadow ==>
+  alias_occ_deleted shadow (alias_occ_swap_inventory dist shadow) = EMPTY
+Proof
+  strip_tac >> drule alias_occ_swap_inventory_retains >>
+  simp[alias_occ_deleted_def, pred_setTheory.EXTENSION,
+       pred_setTheory.IN_IMAGE, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem alias_occ_swap_inventory_origin:
+  alias_occ_wf shadow /\
+  (at,id) IN alias_occ_residents (alias_occ_swap_inventory dist shadow) ==>
+  (at,id) IN alias_occ_residents shadow \/
+  (shadow.alias_next <= id /\
+   id < (alias_occ_swap_inventory dist shadow).alias_next /\
+   ?source i. MEM (AliasOccReadLog dist source (AliasOccTotalRead i id at))
+     (alias_occ_swap_logs dist shadow))
+Proof
+  strip_tac >> Cases_on `dist = 0`
+  >- gvs[alias_occ_swap_inventory_def] >>
+  Cases_on `dist <= 16`
+  >- (
+    `ALL_DISTINCT shadow.alias_occs` by
+      (gvs[alias_occ_wf_def, alias_occ_ids_def, ALL_DISTINCT_APPEND] >>
+       metis_tac[ALL_DISTINCT_MAP]) >>
+    drule alias_occ_stack_swap_distinct >> strip_tac >>
+    gvs[alias_occ_swap_inventory_def, alias_occ_residents_member,
+        pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  gvs[alias_occ_swap_inventory_def, alias_occ_residents_member, MEM_APPEND]
+  >- metis_tac[rich_listTheory.MEM_TAKE]
+  >- (
+    drule alias_occ_select_origin >> strip_tac
+    >- (
+      disj1_tac >> disj1_tac >>
+      `MEM (EL i (top_n (dist+1) shadow.alias_occs))
+           (top_n (dist+1) shadow.alias_occs)` by simp[EL_MEM] >>
+      `MEM (EL i (top_n (dist+1) shadow.alias_occs))
+        (TAKE (LENGTH shadow.alias_occs - (dist+1)) shadow.alias_occs ++
+         top_n (dist+1) shadow.alias_occs)` by simp[MEM_APPEND] >>
+      pop_assum mp_tac >> pure_rewrite_tac[top_n_stack_decomposition] >> simp[]) >>
+    disj2_tac >> gvs[alias_occ_swap_logs_def] >> metis_tac[])
+QED
+
+Theorem alias_occ_from_spill_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_from_spill key shadow) (SND (do_restore key ps))
+Proof
+  strip_tac >> Cases_on `FLOOKUP shadow.alias_spill_ids key` >>
+  Cases_on `FLOOKUP ps.ps_spilled key` >>
+  gvs[alias_occ_align_def, finite_mapTheory.FLOOKUP_DEF] >>
+  simp[alias_occ_from_spill_def, do_restore_def, finite_mapTheory.FLOOKUP_DEF,
+       alias_occ_align_def, stack_push_def, MAP_SNOC]
+QED
+
+Theorem alias_occ_from_spill_next:
+  (alias_occ_from_spill key shadow).alias_next = shadow.alias_next
+Proof
+  Cases_on `FLOOKUP shadow.alias_spill_ids key` >> simp[alias_occ_from_spill_def]
+QED
+
+Theorem alias_occ_from_spill_deleted:
+  alias_occ_deleted shadow (alias_occ_from_spill key shadow) = EMPTY
+Proof
+  simp[alias_occ_deleted_def, alias_occ_from_spill_residents]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
