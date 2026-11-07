@@ -185,7 +185,9 @@ Proof
       lookup_var x sf = SOME v) /\
    (!x. not_fresh_at st x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
       op_taint tf (Var x) = op_taint tn0 (Var x))` by
-    (irule for_backedge_old_frame >> simp[] >> metis_tac[]) >>
+    (irule for_backedge_old_frame >> simp[] >>
+     qexistsl_tac [`G`, `cv`, `cond_lbl`, `nv`, `s`, `tn`, `i2w (n1 + &(k + 1))`] >>
+     simp[]) >>
   simp[] >>
   `lookup_var cv sf = SOME (i2w (n1 + &(SUC k))) /\
    FLOOKUP Gf cv = NONE /\ op_taint tf (Var cv) = {}` by
