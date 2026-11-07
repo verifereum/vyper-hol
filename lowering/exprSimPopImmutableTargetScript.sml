@@ -27,6 +27,7 @@
 
 Theory exprSimPopImmutableTarget
 Ancestors
+  exprSimPopNestedLocalMemory vyperTargetPlaceWrite
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
   abiEncoderMemory immutableValue immutableEncoding ctorDeployLoweringNoCtor
   ctorDeployDeadSectionRel
@@ -2987,4 +2988,69 @@ Theorem pop_nested_immutable_deploy_impure_index_case:
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
   cheat
+QED
+
+(* The writable-place interface supplies the mutable path; the immutable
+   representation supplies root well-formedness, including sparse arrays. *)
+Theorem imm_place_pop_memory:
+  !ctx func cenv cx env es s src id path w ann etv n vs.
+    cenv.ce_is_ctor /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel ctx func cenv cx es s /\
+    imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w
+      (ArrayT ann (Dynamic n)) /\
+    writable_place_result cx es (PlaceR (ImmutablePlace src id path)) /\
+    evaluate_type (get_tenv cx) ann = SOME etv /\
+    read_place cx (ImmutablePlace src id path) es =
+      (INL (ArrayV (DynArrayV vs)),es) ==>
+    ?off itv iv k.
+      w = n2w (off + k) /\
+      FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+      off + type_memory_size itv < dimword (:256) /\
+      mem_path_offset itv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+      evaluate_subscripts itv iv path = INL (ArrayV (DynArrayV vs)) /\
+      mutable_place_path itv path /\ value_has_type itv iv /\
+      well_formed_type_value itv /\ val_wf itv iv /\
+      val_in_memory itv iv off s.vs_memory /\
+      type_memory_bytes cenv ann = type_memory_size etv /\
+      k + 32 <= type_memory_size itv /\
+      (vs <> [] ==>
+        val_in_memory etv (LAST vs)
+          (off + k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+          (mstore (off + k) (n2w (LENGTH vs - 1)) s).vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[imm_place_at_def, vyperValueTheory.evaluate_type_def] >>
+  `v = ArrayV (DynArrayV vs)` by
+    (Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+     gvs[read_place_def, get_immutables_def, get_address_immutables_def,
+         vyperStateTheory.bind_def, vyperStateTheory.return_def,
+         vyperStateTheory.raise_def, vyperStateTheory.lift_sum_def,
+         vyperStateTheory.lift_option_type_def, AllCaseEqs()]) >>
+  gvs[] >>
+  `mutable_place_path itv path` by
+    (Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+     gvs[vyperTargetPlaceWriteTheory.writable_place_result_def,
+         vyperPlaceWriteSoundnessTheory.runtime_place_writable_def,
+         get_immutables_def, get_address_immutables_def,
+         vyperStateTheory.bind_def, vyperStateTheory.return_def,
+         vyperStateTheory.raise_def, AllCaseEqs()]) >>
+  `value_has_type itv iv /\ well_formed_type_value itv` by
+    (irule imm_place_at_value_type >> goal_assum (drule_at Any) >>
+     qexistsl [`cenv`, `env`, `0`, `[]`] >>
+     simp[mem_path_offset_def, evaluate_subscripts_def]) >>
+  `immutable_value_admissible itv iv /\ val_in_memory itv iv off s.vs_memory` by
+    (gvs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `val_wf itv iv` by
+    metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
+  qexistsl [`itv`, `iv`, `k`] >> simp[] >>
+  conj_tac
+  >- metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  conj_tac
+  >- (drule exprSimPropsTheory.mem_path_offset_sound >>
+      simp[valueEncodingTheory.type_memory_size_def]) >>
+  strip_tac >>
+  drule_all exprSimPopNestedLocalMemoryTheory.pop_path_elem_in_memory >>
+  simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM,
+                    arithmeticTheory.MULT_COMM]
 QED
