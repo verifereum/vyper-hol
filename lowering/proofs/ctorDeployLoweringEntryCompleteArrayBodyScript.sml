@@ -461,11 +461,11 @@ Proof
   `end_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   asm "child" assume_tac >>
   drule_all deploy_ctor_array_body_complete_at_index >>
-  disch_then (qx_choose_then `body_result` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  disch_then (qx_choose_then `body_state` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   asm_x "child" kall_tac >>
   `all_have_type tv vs` by metis_tac[abi_decoder_dynarray_values] >>
-  `lookup_block body_result.vs_current_bb func.fn_blocks = SOME bb /\
-   eval_operand (Var iv) body_result = SOME (n2w j)` by
+  `lookup_block body_state.vs_current_bb func.fn_blocks = SOME bb /\
+   eval_operand (Var iv) body_state = SOME (n2w j)` by
     (asm_simp_tac bool_ss [] >> metis_tac[]) >>
   drule_all deploy_ctor_array_backedge_complete_run >>
   disch_then (qx_choose_then `t` (MAP_EVERY assume_tac o CONJUNCTS)) >>
