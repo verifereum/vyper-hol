@@ -21,6 +21,11 @@ about half a second.
   and compares the bytes with its oracle file.
 - `bytecode_parity_native.mlb`, `compilerNativeMLtonMain.sml`: the MLton
   build of the runner.
+- `compilerNativeJson.sml`, `bytecode_parity_json.mlb`,
+  `compilerNativeJsonMLtonMain.sml`: the runner for programs given as
+  annotated-AST JSON (below).
+- `check_programs.sml`: runs `check_contract` on such programs, for
+  `tools/bytecode_fuzz.py`.
 
 ## Use
 
@@ -58,6 +63,56 @@ against 0.42 s for the Poly/ML one. It took 42 s and 1.7 GB to compile;
 Poly/ML takes 6 s. MLton's default inlining gives 0.45 s, and a higher
 threshold gains nothing more.
 
+## Programs from annotated-AST JSON
+
+`bytecode_parity_json.exe` compiles programs read at run time instead of
+compiled-in fixtures. Its input is a directory of `<name>.json` files, the
+`vyper -f annotated_ast,layout` exports the witness suites store, each with
+its `<name>.hex` oracle:
+
+```sh
+python3 tools/build_native_json_parity.py   # from the repository root
+lowering/defs/bytecode/native/bytecode_parity_json.exe lowering/defs/bytecode/memory-stores/oracle
+lowering/defs/bytecode/native/bytecode_parity_json.exe DIR NAME...   # some fixtures
+```
+
+Each fixture prints `PASS`, `FAIL` (the bytes differ, the compiler returned
+`NONE`, or it stopped), or `REJECT` (the frontend rejected the program, or
+it has more than one module). The exit status is non-zero unless every
+fixture passes. With `NATIVE_PARITY_DUMP=<dir>`, the native bytes of each
+compiled fixture are written to `<dir>/<name>.hex`; `<dir>` must not be `DIR`. Fixtures listed in
+`../pending-5127-port.md` fail until their port lands; to check only the
+fixtures in parity, pass the names in the suite's `parity-fixtures.txt`.
+
+`compilerNativeJson.sml` does natively what the witness theories do by
+`EVAL` in `vyperCheckContractFrontendLib.prepare_check_input` and
+`memoryStoreWitnessLib.program`. It doesn't run `check_contract`;
+`check_programs.sml` does that, by `EVAL`, under `holbuild run`. The steps:
+
+- decode the JSON with `JsonASTDecodeFn (JsonImportCV)`;
+- translate it with the cv-translated `translate_annotated_ast` that
+  `vyperTestEmitTheory` emits;
+- drop empty interface sources;
+- annotate storage slots and compile.
+
+The generator exports two entry points for this, next to `compile`. The
+first is `annotate_sources_slots`, applied to cv_typeLib's `to_` functions
+for the layout and the translated sources. The second is the cv
+constructors, so that the frontend's cv values can be rebuilt as the
+compiler's.
+
+The build uses `polyc`, not holbuild, because the emitted frontend lives in
+the hidden `tests/.emit/` directory, which holbuild doesn't scan.
+`bytecode_parity_json.mlb` lists the sources in order. Without
+`--no-holbuild`, the script first builds `compilerNativeEmitTheory` and
+`vyperTestEmitTheory`.
+
+`tools/bytecode_fuzz.py` uses this runner. It generates random programs,
+exports each one with the pinned compiler as the witness suites do, and
+compares the result. Programs that `check_programs.sml` rejects are counted
+as `checker-gap`, not as divergences. With `--minimize`, it also reduces
+each divergence to `<name>.min.vy`.
+
 ## What the generator exports
 
 It starts from `compile_vyper (K SOME) (o1_policy all_capabilities)` and the
@@ -74,6 +129,10 @@ Standard ML:
   form, its stored definition is used instead. Examples are numeral patterns
   such as `TAKE`'s `NUMERAL (BIT1 n)` and side conditions. Without this
   switch the function would be partial in ML.
+- **CV decoding.** The `to_` functions call `cv_fst` and `cv_snd`, which
+  aren't in `EVAL`'s compset, so their definitions are given explicitly. The
+  width-polymorphic `to_word` is rewritten into its callers as
+  `n2w (c2n v)`, so each `n2w` gets a concrete width.
 - **Patterns.** Patterns on `SUC` become a guard, because natives are
   arbitrary-precision integers.
 - **Strings.** HOL's `string` is `char list`; here it is the ML `string`
