@@ -395,3 +395,36 @@ QED
    and prove that bridge before the frozen theorem is authorized; adding A/B/C
    as resource fields of a reachability constructor would merely assume it.
 *)
+
+(* Entry and joins root single-predecessor regions, including cyclic CFGs.
+   P is label-parametric: no physical state or transfer is assumed here. *)
+Theorem ready_reachable_region_induction:
+  !fn entry P.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    P entry /\
+    (!lbl. fn_reachable fn lbl /\
+      1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==> P lbl) /\
+    (!pred lbl. fn_reachable fn pred /\
+      cfg_preds_of (cfg_analyze fn) lbl = [pred] /\ P pred ==> P lbl) ==>
+    !lbl. fn_reachable fn lbl ==> P lbl
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!src lbl. RTC (fn_cfg_edge fn) src lbl ==> src = entry ==> P lbl` suffices_by
+    (simp[fn_reachable_def] >> metis_tac[]) >>
+  ho_match_mp_tac relationTheory.RTC_STRONG_INDUCT_RIGHT1 >>
+  conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> gvs[] >>
+  `wf_function fn` by gvs[stackPlanGenTheory.codegen_ready_fn_def] >>
+  `fn_reachable fn lbl /\ fn_reachable fn lbl'` by
+    (simp[fn_reachable_def] >>
+     metis_tac[relationTheory.RTC_RULES_RIGHT1]) >>
+  `MEM lbl (cfg_preds_of (cfg_analyze fn) lbl')` by
+    metis_tac[codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze,
+              cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  Cases_on `1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl')`
+  >- metis_tac[] >>
+  `cfg_preds_of (cfg_analyze fn) lbl' = [lbl]` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) lbl'` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  metis_tac[]
+QED
