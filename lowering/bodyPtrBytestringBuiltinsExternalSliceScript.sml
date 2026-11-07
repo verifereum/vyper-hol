@@ -54,6 +54,25 @@ Proof
     DRESTRICT_UNIV]
 QED
 
+Theorem external_copy_ghost_memory:
+  (opc = CALLDATACOPY \/ opc = CODECOPY \/ opc = EXTCODECOPY) /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  (((opc = CALLDATACOPY \/ opc = CODECOPY) /\ LENGTH ops = 3) \/
+   (opc = EXTCODECOPY /\ LENGTH ops = 4)) ==>
+  (step_taint (mk_inst id opc ops []) s t tn).t_mem =
+    tn.t_mem DIFF range_bytes (source_memory_write_ranges (mk_inst id opc ops []) s)
+Proof
+  strip_tac >>
+  `new_site_bytes s t = {}` by
+    simp[new_site_bytes_def, FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  simp[step_taint_def, mem_taint_def, step_writes_def, mk_inst_def] >>
+  namedCases_on `ops` ["", "x xs"] >> gvs[] >>
+  namedCases_on `xs` ["", "y ys"] >> gvs[] >>
+  namedCases_on `ys` ["", "z zs"] >> gvs[] >>
+  namedCases_on `zs` ["", "w ws"] >> gvs[] >>
+  simp[written_taint_def, mk_inst_def]
+QED
+
 (* Replay boundary: the semantic copy equation is supplied by the S1 run;
    pointer checks and counted execution are established independently. *)
 Theorem emit_external_copy_counted:
@@ -75,6 +94,8 @@ Theorem emit_external_copy_counted:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tn' (OK t) /\
     tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    tn'.t_mem = tn.t_mem DIFF
+      range_bytes (source_memory_write_ranges (mk_inst sa.cs_next_id opc ops []) s) /\
     (!root cap. ptr_covers G tn root s cap ==> ptr_covers G tn' root t cap) /\
     (!x. lookup_var x t = lookup_var x s) /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -112,6 +133,11 @@ Proof
        (gvs[] >> simp[mk_inst_def, is_terminator_def]) >>
      drule_all gas_path_ptr_one_step >>
      disch_then (qspec_then `PG` mp_tac) >> simp[mk_inst_def]) >>
+  `tn'.t_mem = tn.t_mem DIFF
+     range_bytes (source_memory_write_ranges (mk_inst sa.cs_next_id opc ops []) s)` by
+    (simp_tac pure_ss [Abbr `tn'`] >> irule external_copy_ghost_memory >>
+     simp[Abbr `u`, write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
+     gvs[]) >>
   qexistsl_tac [`t`,`tn'`] >> simp[] >>
   simp[Abbr `t`, Abbr `u`, ptr_covers_def, op_taint_def, lookup_var_def,
     write_memory_with_expansion_def, write_memory_def, expand_memory_def]
@@ -369,7 +395,10 @@ Theorem external_copy_store_counted:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
     ptr_covers G tm root t N /\ mem_word_at (w2n b) t.vs_memory = n /\
     tm.t_var = tn.t_var /\ tm.t_stor = tn.t_stor /\
-    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = (tn.t_mem DIFF
+      range_bytes (source_memory_write_ranges (mk_inst sc.cs_next_id opc ops []) r))
+      DIFF {i | w2n b <= i /\ i < w2n b + 32}
 Proof
   ntac 2 strip_tac >> rpt gen_tac >> gvs[] >>
   qpat_assum `step_inst_base _ r = _`
@@ -422,7 +451,10 @@ Theorem external_copy_store_apply[local]:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
     ptr_covers G tm root t N /\ mem_word_at (w2n b) t.vs_memory = n /\
     tm.t_var = tn.t_var /\ tm.t_stor = tn.t_stor /\
-    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = (tn.t_mem DIFF
+      range_bytes (source_memory_write_ranges (mk_inst sc.cs_next_id opc ops []) r))
+      DIFF {i | w2n b <= i /\ i < w2n b + 32}
 Proof
   ntac 3 strip_tac >> rpt gen_tac >> gvs[] >>
   qpat_assum `step_inst_base _ r = _`
@@ -596,7 +628,9 @@ Theorem external_slice_fragment_counted_ok:
     ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n wn})
+      DIFF {i | w2n b <= i /\ i < w2n b + 32}
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `step_inst_base (mk_inst sa.cs_next_id sizeopc sizeops
@@ -633,6 +667,18 @@ Proof
      qpat_x_assum `(_ /\ _) \/ (?ad. _)` kall_tac >>
      qpat_x_assum `_ \/ _ \/ _` strip_assume_tac >> gvs[] >>
      irule external_copy_step >> simp[eval_operand_def] >> metis_tac[]) >>
+  `range_bytes (source_memory_write_ranges (mk_inst sd.cs_next_id copyopc copyops []) r) =
+     {i | w2n d <= i /\ i < w2n d + w2n wn}` by
+    (qpat_x_assum `r = _` kall_tac >>
+     `eval_operand start r = SOME wa /\ eval_operand len r = SOME wn` by metis_tac[] >>
+     qpat_x_assum `!op v. eval_operand op s = SOME v ==> _` kall_tac >>
+     qpat_x_assum `(_ /\ _) \/ (?ad. _)` strip_assume_tac >>
+     gvs[source_memory_write_ranges_def, sized_source_write_range_def,
+       range_bytes_def, mk_inst_def, eval_operand_def, lookup_var_def]) >>
+  suspend "copy_store"
+QED
+
+Resume external_slice_fragment_counted_ok[copy_store]:
   qpat_assum `emit_void copyopc copyops sd = _` (mp_then Any mp_tac external_copy_store_apply) >>
   disch_then drule >> disch_then drule_all >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
@@ -642,6 +688,8 @@ Proof
   rpt conj_tac >> simp[op_taint_def] >>
   qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >> simp[op_taint_def]
 QED
+
+Finalise external_slice_fragment_counted_ok
 
 Theorem compile_slice_extcode_counted_ok:
   compile_slice_extcode addr start len (Var root) (Var data) sa = (out,sb) /\
@@ -669,7 +717,9 @@ Theorem compile_slice_extcode_counted_ok:
     ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n wn})
+      DIFF {i | w2n b <= i /\ i < w2n b + 32}
 Proof
   strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
   `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
@@ -753,7 +803,9 @@ Theorem slice_out_buf_counted_replay[local]:
     lookup_var root t0 = SOME a /\ lookup_var data t0 = SOME (a + 32w) /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = tn.t_mem UNION new_site_bytes s u0 /\
+    w2n a + N < dimword (:256)
 Proof
   strip_tac >>
   `sa.cs_next_var <= sb.cs_next_var` by
@@ -764,7 +816,12 @@ Proof
   drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   gvs[] >> qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
-  rpt strip_tac >> simp[op_taint_def] >>
+  rpt strip_tac >> simp[op_taint_def]
+  >~ [`_.t_mem = _`]
+  >- (simp[step_taint_def, mem_taint_def, step_writes_def,
+        source_memory_write_ranges_def, written_taint_def, range_bytes_def, mk_inst_def] >>
+      simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+        pred_setTheory.EXTENSION, SF CONJ_ss]) >>
   first_x_assum drule >> simp[op_taint_def]
 QED
 
@@ -797,7 +854,9 @@ Theorem external_slice_two_source_counted_ok[local]:
     ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n wn})
+      DIFF {i | w2n b <= i /\ i < w2n b + 32}
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule external_slice_fragment_counted_ok >>
@@ -838,7 +897,11 @@ Theorem external_slice_alloc_counted_ok:
     ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u0)
+      DIFF {i | w2n (a + 32w) <= i /\ i < w2n (a + 32w) + w2n wn})
+      DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
+    w2n a + N < dimword (:256)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all slice_out_buf_counted_replay >>
@@ -897,7 +960,11 @@ Theorem compile_slice_calldata_counted_ok:
     ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u0)
+      DIFF {i | w2n (a + 32w) <= i /\ i < w2n (a + 32w) + w2n wn})
+      DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
+    w2n a + N < dimword (:256)
 Proof
   strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
   `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
@@ -953,7 +1020,11 @@ Theorem compile_slice_code_counted_ok:
     ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u0)
+      DIFF {i | w2n (a + 32w) <= i /\ i < w2n (a + 32w) + w2n wn})
+      DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
+    w2n a + N < dimword (:256)
 Proof
   strip_tac >> drule compile_slice_code_stages >> strip_tac >>
   `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
