@@ -1027,10 +1027,10 @@ Resume concat_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[] >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
+  disj2_tac >> simp[] >>
+  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
-  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
 Resume concat_args_sim[head_exempt]:

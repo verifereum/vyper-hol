@@ -348,7 +348,7 @@ Proof
   `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ftv bop fv v = INL actual` by
-    (irule bop_result_augassign_success >> goal_assum (drule_at Any) >> simp[]) >>
+    metis_tac[bop_result_augassign_success] >>
   Cases_on `write_place cx (MemoryPlace id [AttrSubscript fld]) actual ee` >>
   rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
@@ -1029,6 +1029,9 @@ Proof
 QED
 Resume augassign_attr_normal_summary[store]:
   gvs[] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  `word_value fv` by
+    (drule_all word_value_type_typed >> simp[]) >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
   drule_all augassign_attr_binop_ready >>
   disch_then (qspecl_then [`func`, `ee with gas_obs := []`, `ctx`] strip_assume_tac) >>
@@ -1079,8 +1082,7 @@ Resume augassign_attr_normal_summary[store]:
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+    (irule bop_result_augassign >> simp[word_value_not_bytes]) >>
   `evaluate_binop (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v = INL result` by
     (Cases_on `evaluate_binop (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -1098,12 +1100,14 @@ Resume augassign_attr_normal_summary[store]:
 QED
 Resume augassign_attr_normal_summary[operator_error]:
   gvs[] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  `word_value fv` by
+    (drule_all word_value_type_typed >> simp[]) >>
   `bop_result cx ty bop [ty;expr_type e] fv v ee =
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+    (irule bop_result_augassign >> simp[word_value_not_bytes]) >>
   Cases_on `evaluate_binop (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v` >- gvs[] >>
   gvs[] >>

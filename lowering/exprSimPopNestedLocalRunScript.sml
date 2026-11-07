@@ -1,5 +1,6 @@
 Theory exprSimPopNestedLocalRun
 Ancestors
+  exprSimHashBoundary
   exprSimPopNestedBase exprSimPop emitHelperProps emitHelper exprLowering
   exprLoweringProps compileEnv venomState venomExecSemantics venomInst
   exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary

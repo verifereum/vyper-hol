@@ -280,7 +280,7 @@ Proof
   simp[LET_THM] >> strip_tac >>
   BasicProvers.every_case_tac >>
   gvs[comp_bind_def, comp_return_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[])
+  FIRST_PROVE [rpt (pairarg_tac >> gvs[])]
 QED
 
 (* A function the runtime unit lowers (lower_vyper_runtime_unit_allocs_ok)

@@ -1,6 +1,7 @@
 (* Actual straight-line clamp execution, independent of simulation judgments. *)
 Theory exprSimExtract32Run
 Ancestors
+  exprSimHashBoundary
   exprSimExtract32Read exprSimExtract32Value convertScalarOutputs exprSimHash
   fragGasMode
   builtinBytes builtinProps arithmeticProps emitHelperProps emitHelper

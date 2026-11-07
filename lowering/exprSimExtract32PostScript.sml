@@ -1,6 +1,7 @@
 (* Post/frame boundaries for dynamic bytes and unsigned extract32 offsets. *)
 Theory exprSimExtract32Post
 Ancestors
+  exprSimHashBoundary
   exprSimExtract32Read exprSimExtract32Source exprSimHash exprSimWordArgs
   exprSimOperands exprSimOps exprOperandVar exprBopSimProps
   loweringPosts valueEncodingProofs valueEncoding exprLoweringProps builtinBytes
