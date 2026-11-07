@@ -3,6 +3,7 @@ Theory stmtSimLogStoreEncode
 Ancestors
   stmtSimLogStoreFresh stmtSimLogAllocate stmtSimLogEncodeFrame
   abiDecoderFrame abiBuiltinAllocation abiEncoderInput abiEncoderProps abiEncoderCounters
+  abiBuiltinEncodeReusedInput abiCallerAllocation
   localPtrsProps exprLoweringProps context compileEnv emitHelper emitHelperProps abiDecoderReentry
   venomExecSemantics venomState venomInst finite_map words list arithmetic
 
@@ -121,7 +122,9 @@ Theorem log_tuple_encoder_owned[local]:
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
-      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
+    (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule log_output_buffer_shape >> strip_tac >>
@@ -147,12 +150,32 @@ Proof
     (rpt strip_tac >> drule_all log_buffer_immutable_footprint >> simp[]) >>
   `sb+cap < dimword (:256)` by decide_tac >>
   qpat_x_assum `(?n. _) \/ (?infos. _)` strip_assume_tac
-  >- (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)
-        log_scalar_tuple_continue >>
-      disch_then irule >> gnvs[] >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`cap`,`outcap`,`sb`] >> simp[] >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (Q.SUBGOAL_THEN `?actual.
+        run_inst_seq (emitted_insts prepared end_st) initial = OK actual /\
+        inst_extends prepared end_st /\ fresh_vars_wrt limit_st actual /\
+        mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
+          enc (Tuple ats) (ListV avs) /\
+        eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+        abi_decode_footprint_frame [(db,outcap)] initial actual /\
+        stmt_state_rel ctx func ce cx es actual /\
+        (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
+          eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)`
+        (qx_choose_then `actual` strip_assume_tac)
+      >- (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)
+            log_scalar_tuple_continue >>
+          qpat_assum `ei = AbiCopy n`
+            (fn th => disch_then (irule o SRULE [Excl "enc_def", th])) >> gnvs[] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          qexistsl_tac [`cap`,`sb`] >> simp[]) >>
+      qexists_tac `actual` >> simp[Excl "enc_def"] >> rpt strip_tac >>
+      `alloca_inv initial` by fs[stmt_state_rel_def] >>
+      `aid <> st.cs_next_id` by decide_tac >>
+      `a+k <= db \/ db+outcap <= a` by
+        (drule_all abi_caller_allocation_separate >> simp[]) >>
+      irule abi_decode_footprint_frame_slice >>
+      goal_assum (drule_at Any) >> simp[abi_footprint_disjoint_def]) >>
   suspend "dynamic"
 QED
 
@@ -182,23 +205,41 @@ Resume log_tuple_encoder_owned[dynamic]:
      conj_tac >- (qexistsl_tac [`srccap`,`srcid`] >> simp[]) >>
      conj_tac >- (qexists_tac `prepared` >> simp[]) >>
      qexistsl_tac [`ctx`,`func`] >> simp[]) >>
-  drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`) log_scalar_tuple_continue >>
-  disch_then irule >>
+  Q.SUBGOAL_THEN `?actual.
+    run_inst_seq (emitted_insts prepared end_st) initial = OK actual /\
+    inst_extends prepared end_st /\ fresh_vars_wrt limit_st actual /\
+    mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
+      enc (Tuple ats) (ListV avs) /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+    abi_decode_footprint_frame [(db,outcap);(p,32)] initial actual /\
+    stmt_state_rel ctx func ce cx es actual /\
+    (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)`
+    (qx_choose_then `actual` strip_assume_tac)
+  >- (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`) log_scalar_tuple_continue >>
+  disch_then (irule o SRULE [Excl "enc_def"]) >>
   asm_simp_tac bool_ss [abi_enc_info_distinct, abi_enc_info_11] >>
-  conj_tac >- (qpat_x_assum `!name entry v sz. _` mp_tac >> asm_simp_tac bool_ss []) >>
-  conj_tac >- (qexists_tac `inst` >> simp[]) >>
-  qexistsl_tac [`cap`,`outcap`,`p`,`sb`] >>
-  asm_simp_tac bool_ss [optionTheory.SOME_11] >>
   conj_tac
-  >- (rpt strip_tac >>
-      irule log_two_footprints >>
+  >- (rpt strip_tac >> irule log_two_footprints >>
       conj_tac >> first_assum irule >> goal_assum (drule_at Any)) >>
+  conj_tac >- (qpat_x_assum `!name entry v sz. _` mp_tac >> simp[]) >>
+  conj_tac >- (qexists_tac `inst` >> simp[]) >>
   conj_tac
-  >- (qpat_x_assum `(FLOOKUP _ inst.inst_id = NONE /\ _) \/ _` mp_tac >>
-      asm_simp_tac bool_ss []) >>
-  rpt strip_tac >> irule log_two_footprints >>
-  conj_tac >> first_assum irule >> simp[] >>
-  qexistsl_tac [`name`,`v`] >> simp[]
+  >- (rpt strip_tac >> irule log_two_footprints >>
+      conj_tac >> first_assum irule >> simp[] >>
+      qexistsl_tac [`name`,`v`] >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `(FLOOKUP _ inst.inst_id = NONE /\ _) \/ _` mp_tac >> simp[]) >>
+  qexistsl_tac [`cap`,`sb`] >> simp[]) >>
+  qexists_tac `actual` >> simp[Excl "enc_def"] >> rpt strip_tac >>
+  `alloca_inv initial` by fs[stmt_state_rel_def] >>
+  `aid <> st.cs_next_id /\ aid <> inst.inst_id` by decide_tac >>
+  `a+k <= db \/ db+outcap <= a` by
+    (drule_all abi_caller_allocation_separate >> simp[]) >>
+  `p+32 <= a \/ a+k <= p` by
+    (drule_all abi_builtin_allocate_separate >> simp[]) >>
+  irule abi_decode_footprint_frame_slice >>
+  goal_assum (drule_at Any) >> simp[abi_footprint_disjoint_def]
 QED
 
 Finalise log_tuple_encoder_owned
@@ -229,7 +270,9 @@ Theorem log_allocated_tuple_encode_continue_bounded:
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
-    db < dimword (:256)
+    db < dimword (:256) /\
+    (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule log_output_buffer_shape >> strip_tac >>
@@ -254,7 +297,9 @@ Proof
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
-      eval_operand op allocated = SOME w ==> eval_operand op actual = SOME w)`
+      eval_operand op allocated = SOME w ==> eval_operand op actual = SOME w) /\
+    (!aid a k. aid < st.cs_next_id /\ FLOOKUP allocated.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k allocated.vs_memory)`
     (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS))
   >- (drule_at (Pat `compile_alloc_buffer _ _ = _`) log_tuple_encoder_owned >>
       disch_then irule >> asm_simp_tac bool_ss [] >>
@@ -269,10 +314,16 @@ Proof
     (first_x_assum irule >> simp[]) >>
   `db < dimword (:256)` by decide_tac >>
   qexistsl_tac [`actual`,`db`] >> asm_simp_tac bool_ss [] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live prepared.cs_next_var op` by
+        (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+      `eval_operand op allocated = SOME w` by metis_tac[] >>
+      first_x_assum drule_all >> simp[]) >>
   rpt strip_tac >>
-  `abi_decoder_operand_live prepared.cs_next_var op` by
-    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
-  `eval_operand op allocated = SOME w` by metis_tac[] >>
+  `FLOOKUP allocated.vs_allocas aid = SOME (a,k)` by
+    (drule_at (Pat `abi_builtin_allocation_frame _ _ _ _ _`)
+      abi_builtin_allocation_frame_outside >> simp[]) >>
   first_x_assum drule_all >> simp[]
 QED
 
@@ -301,7 +352,9 @@ Theorem log_allocated_tuple_encode_continue:
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
-      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
+    (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all log_allocated_tuple_encode_continue_bounded >>
