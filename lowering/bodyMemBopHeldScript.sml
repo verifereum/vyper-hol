@@ -9,7 +9,7 @@
    the source. *)
 Theory bodyMemBopHeld
 Ancestors
-  bodyMemoryPreds compileEnv bodyMemBopHeldFacts
+  bodyMemoryPreds compileEnv bodyMemBopHeldFacts bodyMemBopHeldHash
 
 Theorem body_bop_held_mem:
   !cx ty bop e1 e2.
