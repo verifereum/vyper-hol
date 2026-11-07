@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpStorageMaterialize
 Ancestors bodyPtrIfExpStorageCaller bodyPtrIfExpStorageSource
-  bodyPtrIfExpStorageCompiler bodyPtrIfExpStorageExit pred_set
+  bodyPtrIfExpStorageCompiler bodyPtrIfExpStorageExit bodyPtrIfExpStorageSingle pred_set
 
 Theorem ifexp_ensure_memory_storage_loop:
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
@@ -59,4 +59,44 @@ Proof
   qexists_tac `d` >> qexists_tac `t` >> simp[] >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >>
   simp[copyExecutionTheory.slot_copy_final_def]
+QED
+
+(* Both compiler branches finish at the end of the current instruction list. *)
+Theorem ifexp_ensure_memory_storage:
+  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
+  read_result cx raw ee = (INL v,ee) /\
+  stmt_state_rel ctx fn ce cx es s0 /\
+  vv_post ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
+  ptr_vv_ok cx (expr_type e) raw (LocatedValue tag pp) ee G tn s /\
+  (pp.ptr_location = LocStorage \/ pp.ptr_location = LocTransient) /\
+  n = (type_memory_bytes ce (expr_type e)+31) DIV 32 /\
+  compile_ensure_in_memory pp.ptr_operand pp.ptr_location
+    (type_memory_bytes ce (expr_type e)) n is_ctor imm sb = (dst,sd) /\
+  fn_has_code sb sd fn /\
+  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  type_memory_bytes ce (expr_type e) < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  fresh_vars_wrt sb s ==>
+  ?out d ty t G' tn'.
+    dst = Var out /\ eval_operand dst t = SOME d /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    t.vs_current_bb = sd.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
+    (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
+    ptr_covers G' tn' out t (type_memory_bytes ce (expr_type e)) /\
+    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `n = 1`
+  >- (qpat_x_assum `n = 1` SUBST_ALL_TAC >>
+      irule ifexp_ensure_memory_storage_single >> simp[] >> metis_tac[]) >>
+  `LENGTH sd.cs_current_insts = 0` by
+    (drule_all ifexp_ensure_memory_slot_loop_parts >> strip_tac >>
+     simp[copyExecutionTheory.slot_copy_final_def]) >>
+  simp[] >> irule ifexp_ensure_memory_storage_loop >> simp[] >> metis_tac[]
 QED
