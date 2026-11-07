@@ -95,3 +95,27 @@ Proof
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        local_region_def, locals_kept_def]
 QED
+
+Theorem memory_readonly_val_at:
+  expr_val_at cenv cx ty sa sm es v x s /\
+  eval_operand x s = SOME p /\ eval_operand op t = SOME p /\
+  t.vs_allocas = s.vs_allocas /\ sm.cs_next_id <= sb.cs_next_id /\
+  local_ptrs_rel fn cenv es.scopes s /\ local_ptrs_reserved cenv sm /\
+  (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) ==>
+  expr_val_at cenv cx ty sa sb es v op t
+Proof
+  strip_tac >>
+  `!n b sz. local_region cenv es.scopes t n b sz <=>
+            local_region cenv es.scopes s n b sz` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule exprSimPropsTheory.local_region_frame >>
+         conj_tac >- (qexists_tac `fn` >> simp[]) >>
+         qexistsl_tac [`sm`,`es.scopes`,`t`] >> simp[]) >>
+     strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl_tac [`s`,`sm`,`es.scopes`] >> simp[]) >>
+  gvs[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >> gvs[]
+  >- (disj1_tac >> qexistsl_tac [`aid`,`b`,`sz`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
+  disj2_tac >> disj1_tac >> qexistsl_tac [`n`,`b`,`sz`] >> simp[]
+QED
