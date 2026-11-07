@@ -118,22 +118,23 @@ Proof
 QED
 
 Theorem raw_call_finish_branch_guarded_mem[local]:
-  emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
+  (?cond ok_lbl fl sa sx x sf z sz rb sp sc se y sk sb success.
+  emit_inst JNZ [cond;Label ok_lbl;Label fl] [] sa = ((),sx) /\
   new_block fl sx = (x,sf) /\
   emit_op RETURNDATASIZE [] sf = (z,sz) /\
   compile_alloc_buffer 0 sz = (rb,sp) /\
   emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;z] sp = ((),sc) /\
   emit_inst REVERT [rb.buf_operand;z] [] sc = ((),se) /\
-  new_block ok se = (y,sk) /\ cs_extends sf se /\ cs_extends sk sb /\
+  new_block ok_lbl se = (y,sk) /\ cs_extends sf se /\ cs_extends sk sb /\
   eval_operand cond s = SOME (if success then 1w else 0w) /\
   LENGTH s.vs_returndata < dimword (:256) /\ fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (~success ==> !t. t.vs_returndata = s.vs_returndata ==>
     R (Abort Revert_abort t)) /\
-  (success ==> ?r. gas_path_mem ctx func (jump_to ok s) 0 r /\ P r) ==>
+  (success ==> ?r. gas_path_mem ctx func (jump_to ok_lbl s) 0 r /\ P r)) ==>
   ?r. gas_path_mem ctx func s 0 r /\
-    ((success /\ P r) \/ (~success /\ R r))
+    (P r \/ R r)
 Proof
   strip_tac >>
   `cs_extends sa sx /\ cs_extends sx sf /\ cs_extends se sk` by
@@ -144,7 +145,7 @@ Proof
     metis_tac[fn_has_code_split, fn_has_code_mid] >>
   qpat_assum `emit_inst JNZ _ _ _ = _`
     (mp_tac o MATCH_MP emitHelperPropsTheory.emit_inst_extends) >> strip_tac >>
-  `gas_path_mem ctx func s 0 (OK (jump_to (if success then ok else fl) s))` by
+  `gas_path_mem ctx func s 0 (OK (jump_to (if success then ok_lbl else fl) s))` by
     (irule assert_jnz_zero_path_mem >> simp[] >> metis_tac[]) >>
   Cases_on `success`
   >- (gvs[] >> qexists_tac `r` >> simp[] >>
@@ -162,3 +163,146 @@ Proof
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD]
 QED
 
+Theorem raw_call_success_suffix_counted_mem[local]:
+  (if 0 < n then
+     do z <- emit_op RETURNDATASIZE [];
+        cmp <- emit_op LT [z;Lit (n2w n)];
+        cap <- compile_select cmp z (Lit (n2w n));
+        emit_void MSTORE [ov;cap]; return ov od
+   else return (Lit 0w)) sa = (result,sb) /\
+  (0 < n ==> eval_operand ov s = SOME addr /\
+    (!x. ov = Var x ==> not_fresh_at sa x) /\
+    w2n addr + 32 <= s.vs_alloca_next) /\
+  n < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
+       eval_operand a s = SOME w ==> eval_operand a t = SOME w) /\
+    (if 0 < n then result = ov /\ eval_operand result t = SOME addr /\
+       raw_call_finish_view t = raw_call_finish_view
+         (mstore (w2n addr) (n2w (MIN (LENGTH s.vs_returndata) n)) s)
+     else result = Lit 0w /\ eval_operand result t = SOME 0w /\
+       raw_call_finish_view t = raw_call_finish_view s)
+Proof
+  strip_tac >> Cases_on `0 < n`
+  >- (gvs[] >> drule_all raw_call_success_counted_mem >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  gvs[comp_return_def] >> qexists_tac `s` >>
+  simp[gas_path_mem_rules, eval_operand_def]
+QED
+
+Theorem raw_call_revert_finish_path_mem:
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    (if stat then StaticCall else RegularCall) n T ov op sa = (result,sb) /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+  eval_operand ok s = SOME (if success then 1w else 0w) /\
+  n < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) /\
+  (0 < n ==> eval_operand ov s = SOME addr /\
+    (!x. ov = Var x ==> not_fresh_at sc x) /\
+    w2n addr + 32 <= s.vs_alloca_next) /\
+  fn_has_code sc sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  ?r. gas_path_mem ctx func s 0 r /\
+    ((?u. r = OK u /\ u.vs_current_bb = sb.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ success /\
+       (!a w. (!x. a = Var x ==> not_fresh_at sc x) /\
+          eval_operand a s = SOME w ==> eval_operand a u = SOME w) /\
+       (if 0 < n then result = ov /\ eval_operand result u = SOME addr /\
+          raw_call_finish_view u = raw_call_finish_view
+            (mstore (w2n addr) (n2w (MIN (LENGTH s.vs_returndata) n)) s)
+        else result = Lit 0w /\ eval_operand result u = SOME 0w /\
+          raw_call_finish_view u = raw_call_finish_view s)) \/
+     (?u. ~success /\ r = Abort Revert_abort u /\
+       u.vs_returndata = s.vs_returndata))
+Proof
+  strip_tac >> drule raw_call_finish_revert_compile >>
+  simp[arithmeticTheory.GREATER_DEF] >> strip_tac >>
+  rename1 `fresh_label "call_failed" ce = (fl,s2)` >>
+  rename1 `fresh_label "call_ok" s2 = (kl,s3)` >>
+  `ce = sc /\ success' = ok` by (Cases_on `stat` >> gvs[]) >> gvs[] >>
+  rename1 `fresh_label "call_failed" sc = (fl,s2)` >>
+  qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `(case _ of RegularCall => _ | DelegateCall => _ | StaticCall => _) = _` kall_tac >>
+  `ci_mono sc s3 /\ ci_mono s3 s10 /\ cs_extends s5 s9 /\ cs_extends s10 sb` by
+    suspend "metadata" >>
+  `cs_extends sc s3 /\ cs_extends s3 sb` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code s3 sb func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  `cs_extends s3 s10` by fs[ci_mono_def] >>
+  `fn_has_code s10 sb func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  `s.vs_current_bb = s3.cs_current_bb /\
+   s.vs_inst_idx = LENGTH s3.cs_current_insts` by
+    (imp_res_tac emitHelperPropsTheory.fresh_label_props >> simp[]) >>
+  suspend "branch"
+QED
+
+Resume raw_call_revert_finish_path_mem[metadata]:
+  `ci_mono sc s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
+   ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
+   ci_mono s7 s8 /\ ci_mono s8 s9 /\ ci_mono s9 s10` by
+    (rpt conj_tac >> metis_tac[ci_mono_fresh_label, ci_mono_emit_inst,
+      ci_mono_new_block, ci_mono_emit_op, ci_mono_compile_alloc_buffer,
+      ci_mono_emit_void, pairTheory.SND]) >>
+  `cs_extends s10 sb` by
+    (Cases_on `0 < n` >> fs[comp_return_def]
+     >- (drule raw_call_success_code >> strip_tac >>
+         irule cs_extends_same_block >>
+         fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+     gvs[] >> simp[cs_extends_refl]) >>
+  fs[ci_mono_def] >> rpt conj_tac >> metis_tac[cs_extends_trans]
+QED
+
+Resume raw_call_revert_finish_path_mem[branch]:
+  ho_match_mp_tac raw_call_finish_branch_guarded_mem >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst REVERT _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_void RETURNDATACOPY _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op RETURNDATASIZE _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  simp[] >> qexistsl_tac [`sb`,`success`] >> simp[] >> strip_tac >>
+  suspend "success"
+QED
+
+Resume raw_call_revert_finish_path_mem[success]:
+  `sc.cs_next_var <= s10.cs_next_var` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `?t. gas_path_mem ctx func (jump_to kl s) 0 (OK t) /\
+     t.vs_current_bb = sb.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     (!a w. (!x. a = Var x ==> not_fresh_at s10 x) /\
+        eval_operand a (jump_to kl s) = SOME w ==> eval_operand a t = SOME w) /\
+     (if 0 < n then result = ov /\ eval_operand result t = SOME addr /\
+        raw_call_finish_view t = raw_call_finish_view
+          (mstore (w2n addr) (n2w (MIN (LENGTH (jump_to kl s).vs_returndata) n)) (jump_to kl s))
+      else result = Lit 0w /\ eval_operand result t = SOME 0w /\
+        raw_call_finish_view t = raw_call_finish_view (jump_to kl s))` by
+    (irule raw_call_success_suffix_counted_mem >>
+     goal_assum (drule_at Any) >>
+     simp[jump_to_def] >>
+     gvs[new_block_def] >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sc` >> simp[]) >>
+  qexists_tac `OK t` >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      simp[jump_to_def] >> rpt strip_tac >>
+      irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `sc` >> simp[]) >>
+  `!p w. mstore p w (jump_to kl s) = jump_to kl (mstore p w s)` by
+    simp[mstore_def, jump_to_def, write_memory_with_expansion_def] >>
+  `(jump_to kl s).vs_returndata = s.vs_returndata` by simp[jump_to_def] >>
+  fs[raw_call_finish_view_control]
+QED
+
+Finalise raw_call_revert_finish_path_mem

@@ -95,6 +95,7 @@ Theorem raw_call_success_counted_mem:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     result = ov /\ eval_operand result t = SOME addr /\
     (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
@@ -119,7 +120,11 @@ Proof
     (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
   drule_all run_inst_seq_gas_path_mem >> strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (drule_all exec_block_run_inst_seq >>
+     disch_then (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]) >>
   qexists_tac `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)` >>
   simp[raw_call_finish_view_control, eval_operand_def, lookup_var_def] >>
-  metis_tac[listTheory.LENGTH_APPEND]
+  fs[same_blocks_def, listTheory.LENGTH_APPEND] >>
+  first_x_assum (qspec_then `ctx` mp_tac) >> simp[arithmeticTheory.ADD_COMM]
 QED
