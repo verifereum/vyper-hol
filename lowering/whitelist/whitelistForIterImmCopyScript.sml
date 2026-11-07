@@ -2,7 +2,7 @@
    constructor flag remains explicit: runtime uses DLOAD; constructors ILOAD. *)
 Theory whitelistForIterImmCopy
 Ancestors
-  stmtLowering context compileEnv exprSimTopLevelImmutable exprSimCopy
+  stmtLowering context compileEnv exprSimTopLevelImmutable exprSimCopy stmtSimForArray
   immutableCopyExecution vyperValue valueEncodingProps emitHelper venomInst venomExecSemantics
 Libs
   monadsyntax
@@ -341,4 +341,63 @@ Proof
   simp[vyperStateTheory.read_result_def] >>
   disch_then irule >> simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
   metis_tac[]
+QED
+
+Theorem immutable_iter_copy_declare_rel:
+  compile_iter_elem_copy cenv src (Var p) bytes LocCode F ty ty sa = ((),sb) /\
+  bytes = type_memory_size tv /\ 0 < bytes /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_outputs = [p] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+  bytes <= sz /\ w2n w + bytes < dimword (:256) /\
+  immutable_holds cenv cx ty (Value v) a es s /\
+  copy_old_operand sa src /\ eval_operand src s = SOME a /\
+  local_ptrs_reserved cenv sa /\
+  (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==> not_fresh_at sa q) ==>
+  ?z. copy_runtime_frame sa s sb z /\
+    stmt_state_rel ctx func cenv cx
+      (es with scopes :=
+        (sc |+ (id, <|assignable := assign; type := tv; value := v; popped := []|>)) :: rest) z /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es z /\
+    LENGTH s.vs_memory <= LENGTH z.vs_memory /\
+    (!off len. off + len <= w2n w \/ w2n w + bytes <= off ==>
+      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory)
+Proof
+  strip_tac >>
+  `copy_old_operand sa (Var p)` by simp[copy_old_operand_def] >>
+  `eval_operand (Var p) s = SOME w` by simp[venomStateTheory.eval_operand_def] >>
+  `(cenv.ce_is_ctor ==> regions_disjoint (w2n a) bytes (w2n w) bytes)` by
+    (strip_tac >> drule_all immutable_holds_alloca_disjoint >>
+     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `(!region. cenv.ce_is_ctor /\ cenv.ce_imm_alloca = SOME region ==>
+    eval_operand region s = SOME 0w /\ copy_old_operand sa region)` by
+    (rpt strip_tac
+     >- (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
+             compileEnvTheory.immutable_base_zero_def]) >>
+     Cases_on `region` >> simp[copy_old_operand_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base]) >>
+  drule_all immutable_iter_copy_typed_run_full >> strip_tac >>
+  `(!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s)` by
+    gvs[copy_runtime_frame_def] >>
+  `z.vs_data_section = s.vs_data_section` by
+    gvs[copy_runtime_frame_def, exprSimStorageCopyTheory.copy_static_def,
+        venomStateTheory.venom_state_component_equality] >>
+  gvs[] >>
+  qexists_tac `z` >> simp[] >> conj_tac
+  >- (irule array_iter_copy_declare_rel >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`inst`, `s`, `sa`, `w`] >> simp[] >>
+      metis_tac[arithmeticTheory.ADD_COMM]) >>
+  reverse conj_tac >- metis_tac[] >>
+  irule array_iter_copy_immutables >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`w2n w`, `type_memory_size tv`] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`ctx`, `func`, `inst`] >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
