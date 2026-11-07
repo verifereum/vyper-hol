@@ -192,6 +192,20 @@ Proof
   qexists_tac `i` >> simp[] >> fs[EVERY_MEM]
 QED
 
+Theorem abi_encode_setup_sequence_world:
+  run_inst_seq code s = OK t /\
+  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;MSTORE]) code ==>
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  t.vs_pending_deletions = s.vs_pending_deletions
+Proof
+  strip_tac >>
+  `log_encode_external t = log_encode_external s` by
+    (irule log_encode_run_external >> qexists `code` >> simp[] >>
+     fs[EVERY_MEM, log_encode_safe_opcode_def] >> metis_tac[]) >>
+  drule log_encode_external_fields >> simp[]
+QED
+
 Theorem abi_encode_emitted_instruction_member:
   fn_has_code st final func /\ MEM inst (emitted_insts st final) ==>
   MEM inst (fn_insts func)
@@ -264,13 +278,17 @@ Theorem abi_encode_framed_allocate_reach:
     actual.vs_current_bb = address_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH address_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
-    abi_encode_exec_frame func initial actual
+    abi_encode_exec_frame func initial actual /\
+    actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+    actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+    actual.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_allocate_shape >> strip_tac >>
   drule abi_encode_framed_allocate_opcodes >> strip_tac >>
   drule_all abi_builtin_encode_allocate_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st address_st) initial = OK encoded` >>
+  drule_all abi_encode_setup_sequence_world >> strip_tac >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   `~encoded.vs_halted` by fs[abi_builtin_allocation_frame_def] >>
@@ -292,13 +310,17 @@ Theorem abi_encode_framed_setup_none_reach:
     abi_builtin_allocation_frame st.cs_next_var st.cs_next_id (32+32*word_size maxlen) initial actual /\
     actual.vs_current_bb = ready.cs_current_bb /\ actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
-    abi_encode_exec_frame func initial actual
+    abi_encode_exec_frame func initial actual /\
+    actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+    actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+    actual.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_encode_framed_setup_none_opcodes >> strip_tac >>
   drule_all abi_builtin_encode_setup_none_execute >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK encoded` >>
+  drule_all abi_encode_setup_sequence_world >> strip_tac >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   `~encoded.vs_halted` by fs[abi_builtin_allocation_frame_def] >>
@@ -331,13 +353,17 @@ Theorem abi_encode_framed_method_reach:
       eval_operand op actual = SOME w) /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
-    abi_encode_exec_frame func initial actual
+    abi_encode_exec_frame func initial actual /\
+    actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+    actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+    actual.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_method_shape >> strip_tac >>
   drule abi_encode_framed_method_opcodes >> strip_tac >>
   drule_all abi_builtin_encode_method_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK encoded` >>
+  drule_all abi_encode_setup_sequence_world >> strip_tac >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   drule abi_builtin_encode_method_window >> strip_tac >>
@@ -361,7 +387,10 @@ Theorem abi_encode_framed_setup_some_reach:
     abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id (32+32*word_size (maxlen+4)) p 32 initial actual /\
     actual.vs_current_bb = ready.cs_current_bb /\ actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
-    abi_encode_exec_frame func initial actual
+    abi_encode_exec_frame func initial actual /\
+    actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+    actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+    actual.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_encode_method_setup_context >> strip_tac >>

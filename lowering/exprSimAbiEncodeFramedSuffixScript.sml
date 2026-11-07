@@ -39,7 +39,10 @@ Theorem abi_encode_framed_setup_window:
     actual.vs_current_bb = ready.cs_current_bb /\
     actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
-    abi_encode_exec_frame func initial actual
+    abi_encode_exec_frame func initial actual /\
+    actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+    actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+    actual.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   Cases_on `method_id` >> simp[] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -245,7 +248,10 @@ Theorem abi_encode_framed_phases_open:
     (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
       eval_operand op actual = SOME v) /\
     abi_encode_exec_frame func initial actual /\
-    LENGTH initial.vs_memory <= LENGTH actual.vs_memory
+    LENGTH initial.vs_memory <= LENGTH actual.vs_memory /\
+    prepared.vs_accounts = initial.vs_accounts /\ prepared.vs_transient = initial.vs_transient /\
+    prepared.vs_logs = initial.vs_logs /\ prepared.vs_requests = initial.vs_requests /\
+    prepared.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_framed_setup_window >>
