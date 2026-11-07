@@ -1,6 +1,8 @@
 Theory bodyImmutableAugAssignPaths
 Ancestors
-  bodyImmutableAugAssignFacts stmtSimAugAssignStorage stmtSimAugAssign
+  bodyImmutableAugAssignFacts bodyImmutableAugAssignStore bodySim exprSimHypsDefs
+  stmtSimAugAssignStorage stmtSimAugAssign exprOpenPrimitives stmtSimProps
+  venomInst vyperState vyperInterpreter stmtSimDeclPath
   stmtLowering exprLowering exprLoweringProps emitHelper emitHelperProps
   stmtSimDefs compileEnv loweringPosts exprSimMemoryPath fragGasMode
   venomState freshWrites finite_map localPtrsProps
@@ -62,4 +64,54 @@ Proof
   simp[emit_op_def,comp_bind_def,comp_ignore_bind_def,comp_return_def,
        fresh_var_def,fresh_id_def,emit_def] >> strip_tac >> gvs[] >>
   simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE,not_fresh_at_def,eval_operand_def]
+QED
+
+Theorem immutable_augassign_store_post_path:
+  emit_void MSTORE [Lit (n2w off); op] st = ((),sf) /\
+  fn_has_code st sf func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  body_inv tops ctx cenv cx /\ cx.in_deploy /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty /\
+  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ is_word_type ty /\
+  value_has_type tv w /\ off < dimword (:256) /\
+  eval_operand op s = SOME (typed_val_to_w256 tv w) /\
+  (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
+          lookup_var x s = SOME wd) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s.vs_allocas aid = SOME b) ==>
+  ?fin last. write_place cx (ImmutablePlace cenv.ce_module id []) w ee =
+      (INL (),fin) /\
+    gas_marked_path F ctx func s 0 (OK last) /\
+    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+Proof
+  strip_tac >>
+  drule_all immutable_augassign_entry >> strip_tac >> gvs[] >>
+  drule_all immutable_augassign_write_source >> strip_tac >>
+  `?fin. write_place cx (ImmutablePlace cenv.ce_module id []) w ee =
+     (INL (),fin)` by metis_tac[] >>
+  drule_all immutable_augassign_store >> strip_tac >>
+  `gas_marked_path F ctx func s 0
+    (OK (mstore off (typed_val_to_w256 tv w) s with
+           vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule emit_inst_zero_marked_path >> simp[] >>
+     qexistsl_tac [`[Lit (n2w off);op]`, `MSTORE`, `[]`, `st`, `sf`] >>
+     gvs[emit_void_def, emit_inst_def, is_terminator_def] >>
+     `off = w2n (n2w off : 256 word)` by simp[wordsTheory.w2n_n2w] >>
+     pop_assum (fn th => CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     irule step_MSTORE >> simp[eval_operand_def]) >>
+  `sf.cs_current_bb = st.cs_current_bb /\
+   LENGTH sf.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
+    gvs[emit_void_def, comp_bind_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `~block_is_terminated sf` by
+    (drule emit_void_terminated >> simp[is_terminator_def]) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
+       stmt_state_rel_inst_idx] >>
+  gvs[mstore_def, lookup_var_def]
 QED
