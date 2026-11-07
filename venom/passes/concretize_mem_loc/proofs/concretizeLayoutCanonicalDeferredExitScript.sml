@@ -2,6 +2,19 @@ Theory concretizeLayoutCanonicalDeferredExit
 Ancestors concretizeLayoutCanonicalCallExit concretizeLayoutCanonicalDeferred
   frameSelectedSimulation
 
+Theorem deferred_exit_step_match[local]:
+  ((?post. r = Halt post) \/ (?a post. r = Abort a post)) ==>
+  (selected_step_match C'
+     (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
+     q n w qe i s j t r <=>
+   selected_step_match C'
+     (layout_canonical_OS D lo vs0 C C' q0 es qs ass qend)
+     q n w qe i s j t r)
+Proof
+  strip_tac >> gvs[selected_step_match_def] >>
+  simp[layout_deferred_nonOK]
+QED
+
 (* Leaf of the canonical simulation contract: the call-exit certificate
    for the deferred OS, from layout_canonical_call_exit_certificate. *)
 Theorem layout_deferred_call_exit_certificate:
@@ -22,7 +35,13 @@ Theorem layout_deferred_call_exit_certificate:
     (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  cheat
+  strip_tac >>
+  drule_all layout_canonical_call_exit_certificate >>
+  disch_then (qspec_then `D` mp_tac) >>
+  rewrite_tac[selected_call_exit_certificate_def] >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  gvs[deferred_exit_step_match] >>
+  metis_tac[]
 QED
 
 val _ = export_theory();
