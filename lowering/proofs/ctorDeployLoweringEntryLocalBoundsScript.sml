@@ -31,6 +31,203 @@ Proof
   metis_tac[]
 QED
 
+Theorem deploy_ctor_register_one_actual_coordinated_map_bounds:
+ !q k ce env fargs avs atys encoded i name ty entry off data_size old
+  buf sa ce' st st' ctx func site initial keep_bound.
+ (keep_bound ==> !aid b sz. FLOOKUP initial.vs_allocas aid = SOME (b,sz) ==> q <= b) /\
+ i < LENGTH fargs /\ LENGTH avs = LENGTH fargs /\
+ EL i fargs = (name,ty) /\
+ atys = vyper_to_abi_types env (MAP SND fargs) /\ has_types atys avs /\
+ encoded = enc (Tuple atys) (ListV avs) /\
+ off = SUM (MAP abi_member_head_size (TAKE i atys)) /\
+ LENGTH encoded < dimword (:256) /\
+ mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
+ (data_size = 0 \/ LENGTH encoded <= data_size /\ data_size < dimword (:256)) /\
+ FLOOKUP ce.ce_vars name = SOME (MemLoc old (type_memory_bytes ce ty)) /\
+ lookup_scopes name [scope] = SOME entry /\
+ val_wf entry.type entry.value /\
+ type_memory_size entry.type <= type_memory_bytes ce ty /\
+ abi_decoder_coherent ce env ce.ce_struct_fields ty entry.type /\
+ abi_decoder_metadata ce env ty entry.type
+   (type_to_abi_dec_info ce.ce_struct_fields ce ty) (EL i avs) entry.value /\
+ type_memory_bytes ce ty < dimword (:256) /\
+ compile_alloc_buffer (type_memory_bytes ce ty) st = (buf,sa) /\
+ ce' = (ce with ce_vars := ce.ce_vars |+
+   (name,PtrVar buf.buf_operand (type_memory_bytes ce ty))) /\
+ compile_decode_args ce' [build_positional_arg ce (name,ty)] off
+   DLOAD (Lit (n2w data_size)) 0 sa = ((),st') /\
+ local_ptrs_rel func ce [scope] initial /\ fresh_vars_wrt st initial /\
+ fn_has_code st sa func /\ fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
+ (sa.cs_blocks = st'.cs_blocks \/
+   !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+ k + unit_alloca_budget ctx < dimword (:256) /\
+ (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+ q <= initial.vs_alloca_next /\
+ (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   inst.inst_operands = [Lit n] /\
+   FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
+ (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b) /\
+ (!id b sz. local_region ce [scope] initial id b sz ==> q <= b) ==>
+ ?actual.
+ (keep_bound ==> !aid b sz. FLOOKUP actual.vs_allocas aid = SOME (b,sz) ==> q <= b) /\
+ local_ptrs_rel func ce' [scope] actual /\
+ abi_encoder_registered_effect (frag_ids st st') [] initial actual /\
+ alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+ fresh_vars_wrt st' actual /\
+ (!aid. st'.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
+ actual.vs_data_section = initial.vs_data_section /\
+ actual.vs_call_ctx = initial.vs_call_ctx /\ actual.vs_labels = initial.vs_labels /\
+ (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
+   lookup_var x actual = SOME w) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
+ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+ abi_decode_sim ctx func initial actual /\
+ actual.vs_gas_readings = initial.vs_gas_readings /\ actual.vs_code = initial.vs_code /\
+ actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+ actual.vs_block_ctx = initial.vs_block_ctx /\
+ initial.vs_alloca_next <= actual.vs_alloca_next /\
+ (!p. p < initial.vs_alloca_next ==>
+   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
+ q <= actual.vs_alloca_next /\
+ (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   inst.inst_operands = [Lit n] /\
+   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
+ (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b) /\
+ (!id b sz. local_region ce' [scope] actual id b sz ==> q <= b)
+Proof
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule_all deploy_ctor_register_alloc_actual_complete >>
+ disch_then (qx_choose_then `a` (map_every assume_tac o CONJUNCTS)) >>
+ `a.vs_allocas = initial.vs_allocas |+
+   (st.cs_next_id,(initial.vs_alloca_next,type_memory_bytes ce ty))` by
+   (drule_all deploy_ctor_alloc_effect_update >> simp[]) >>
+ `!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   inst.inst_operands = [Lit n] /\
+   FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n` by
+   (drule deploy_ctor_register_alloc_literal_sizes >>
+    disch_then drule >> simp[] >> metis_tac[]) >>
+ `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b` by
+   (rpt gen_tac >> strip_tac >>
+    Cases_on `inst.inst_id = st.cs_next_id` >> gvs[FLOOKUP_UPDATE] >>
+    metis_tac[]) >>
+ `ce' = ce with ce_vars := ce.ce_vars |+
+   (name,PtrVar (Var (STRING #"%" (toString st.cs_next_var))) (type_memory_bytes ce ty))` by simp[] >>
+ `abi_decoder_coherent ce' env ce'.ce_struct_fields ty entry.type /\
+  abi_decoder_metadata ce' env ty entry.type
+    (type_to_abi_dec_info ce'.ce_struct_fields ce' ty) (EL i avs) entry.value` by simp[] >>
+ `compile_decode_args ce' [build_positional_arg ce' (name,ty)] off
+     DLOAD (Lit (n2w data_size)) 0 sa = ((),st')` by gnvs[] >>
+ `FLOOKUP ce'.ce_vars name = SOME (PtrVar
+   (Var (STRING #"%" (toString st.cs_next_var))) (type_memory_bytes ce' ty))` by simp[FLOOKUP_UPDATE] >>
+ `initial.vs_alloca_next + type_memory_bytes ce' ty <= a.vs_alloca_next` by simp[] >>
+ `mem_bytes_at 0 (LENGTH encoded) a.vs_data_section = encoded` by
+   (qpat_assum `a.vs_data_section = _` (fn th => pure_rewrite_tac[th]) >>
+    first_assum ACCEPT_TAC) >>
+ drule_all deploy_ctor_decode_constructor_arg_old_prefix_complete >>
+ disch_then (qx_choose_then `actual` (map_every assume_tac o CONJUNCTS)) >>
+ `keep_bound ==> !aid b sz. FLOOKUP actual.vs_allocas aid = SOME (b,sz) ==> q <= b` by
+   (strip_tac >>
+    `!aid b sz. FLOOKUP a.vs_allocas aid = SOME (b,sz) ==> q <= b` by
+      (rpt gen_tac >> simp[FLOOKUP_UPDATE] >> rw[] >> metis_tac[]) >>
+    `q <= a.vs_alloca_next` by simp[] >>
+    match_mp_tac deploy_ctor_actual_registered_alloca_lower_bound >>
+    qexistsl [`func`, `frag_ids sa st'`,
+      `[(initial.vs_alloca_next,type_memory_bytes ce' ty)]`, `a`] >>
+    asm_rewrite_tac[]) >>
+ `!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   inst.inst_operands = [Lit n] /\
+   FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n` by
+   (rpt gen_tac >> strip_tac >>
+    qpat_x_assum `!inst n b sz. _ /\ _ /\ _ /\
+      FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> _` drule_all >> simp[]) >>
+ `!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   inst.inst_operands = [Lit n] /\
+   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n` by
+   (rpt gen_tac >> strip_tac >>
+    irule deploy_ctor_generated_decode_args_literal_sizes >>
+    qpat_assum `compile_decode_args ce' [build_positional_arg ce (name,ty)] _ _ _ _ _ = _`
+      (irule_at Any) >>
+    qpat_assum `ctor_actual_scratch func (frag_ids sa st') 0 a.vs_alloca_next actual`
+      (irule_at Any) >>
+    qpat_assum `abi_encoder_registered_effect (frag_ids sa st') _ a actual`
+      (irule_at Any) >>
+    qexistsl [`inst`,`b`] >>
+    simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+ `q <= a.vs_alloca_next` by simp[] >>
+ `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b` by
+   (rpt gen_tac >> strip_tac >>
+    irule deploy_ctor_alloca_lower_bound_frame >>
+    qpat_assum `ctor_actual_scratch func (frag_ids sa st') 0 a.vs_alloca_next actual`
+      (irule_at Any) >>
+    qpat_assum `abi_encoder_registered_effect (frag_ids sa st') _ a actual`
+      (irule_at Any) >>
+    qexistsl [`sz`,`inst`] >>
+    simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+ `type_memory_bytes ce' ty = type_memory_bytes ce ty` by simp[] >>
+ drule compile_alloc_buffer_parts >> strip_tac >>
+ `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_var <= sa.cs_next_var` by decide_tac >>
+ `sa.cs_next_id <= st'.cs_next_id` by
+   (qpat_assum `compile_decode_args ce' [build_positional_arg ce' _] _ _ _ _ _ = _` mp_tac >>
+    metis_tac[ctor_decode_args_next_id, pairTheory.SND]) >>
+ suspend "local_bounds"
+QED
+
+Resume deploy_ctor_register_one_actual_coordinated_map_bounds[local_bounds]:
+ `!id b sz. local_region ce [scope] a id b sz ==> q <= b` by
+   (ho_match_mp_tac (Q.SPECL [`initial`,`st`,`func`] deploy_ctor_local_lower_bound_preserved) >> asm_rewrite_tac[]) >>
+ `!id b sz. local_region ce [scope] actual id b sz ==> q <= b` by
+   (ho_match_mp_tac (Q.SPECL [`a`,`sa`,`func`] deploy_ctor_local_lower_bound_preserved) >> asm_rewrite_tac[]) >>
+ `!id b sz. local_region ce' [scope] actual id b sz ==> q <= b` by
+   (ho_match_mp_tac deploy_ctor_local_lower_bound_bind >>
+    qexistsl [`ce`,`name`,`STRING #"%" (toString st.cs_next_var)`,
+      `type_memory_bytes ce ty`,`initial.vs_alloca_next`] >>
+    asm_rewrite_tac[] >> conj_tac >- metis_tac[] >> decide_tac) >>
+ suspend "finish"
+QED
+
+Resume deploy_ctor_register_one_actual_coordinated_map_bounds[finish]:
+ qexists `actual` >> asm_rewrite_tac[] >>
+ conj_tac >- (
+   irule ctor_scratch_decode_bind_ptr >>
+   conj_tac >- simp[] >>
+   qexistsl [`initial.vs_alloca_next`, `entry`, `frag_ids sa st'`, `a`, `sa`,
+     `n2w initial.vs_alloca_next : bytes32`] >>
+   asm_rewrite_tac[] >>
+   `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
+   simp[w2n_n2w] >> gnvs[]) >>
+ conj_tac >- (
+   irule ctor_registered_alloc_decode_effect >>
+   qexistsl [`a`, `st.cs_next_id`, `frag_ids st sa`, `initial.vs_alloca_next`,
+     `frag_ids sa st'`, `type_memory_bytes ce' ty`] >>
+   asm_rewrite_tac[] >> simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ conj_tac >- (
+   rpt strip_tac >>
+   `not_fresh_at sa x` by
+     (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+   metis_tac[]) >>
+ conj_tac >- metis_tac[abi_decode_sim_trans] >>
+ conj_tac >- decide_tac >>
+ reverse conj_tac >- decide_tac >>
+ `ctor_actual_scratch func (frag_ids sa st') 0 initial.vs_alloca_next actual` by
+   (irule ctor_actual_scratch_subregion >>
+    qexistsl [`0`, `a.vs_alloca_next`] >> simp[]) >>
+ rpt strip_tac >>
+ `mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 a.vs_memory` by
+   (irule deploy_ctor_actual_registered_memory_prefix >>
+    qexistsl [`func`, `frag_ids sa st'`, `[(initial.vs_alloca_next,type_memory_bytes ce' ty)]`,
+      `initial.vs_alloca_next`] >> simp[]) >>
+ simp[]
+QED
+Finalise deploy_ctor_register_one_actual_coordinated_map_bounds
+
 Theorem deploy_ctor_register_one_actual_coordinated_local_bounds:
  !q k ce env fargs avs atys encoded i name ty entry off data_size old
   buf sa ce' st st' ctx func site initial.
@@ -99,123 +296,11 @@ Theorem deploy_ctor_register_one_actual_coordinated_local_bounds:
    FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b) /\
  (!id b sz. local_region ce' [scope] actual id b sz ==> q <= b)
 Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- drule_all deploy_ctor_register_alloc_actual_complete >>
- disch_then (qx_choose_then `a` (map_every assume_tac o CONJUNCTS)) >>
- `a.vs_allocas = initial.vs_allocas |+
-   (st.cs_next_id,(initial.vs_alloca_next,type_memory_bytes ce ty))` by
-   (drule_all deploy_ctor_alloc_effect_update >> simp[]) >>
- `!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n` by
-   (drule deploy_ctor_register_alloc_literal_sizes >>
-    disch_then drule >> simp[] >> metis_tac[]) >>
- `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b` by
-   (rpt gen_tac >> strip_tac >>
-    Cases_on `inst.inst_id = st.cs_next_id` >> gvs[FLOOKUP_UPDATE] >>
-    metis_tac[]) >>
- `ce' = ce with ce_vars := ce.ce_vars |+
-   (name,PtrVar (Var (STRING #"%" (toString st.cs_next_var))) (type_memory_bytes ce ty))` by simp[] >>
- `abi_decoder_coherent ce' env ce'.ce_struct_fields ty entry.type /\
-  abi_decoder_metadata ce' env ty entry.type
-    (type_to_abi_dec_info ce'.ce_struct_fields ce' ty) (EL i avs) entry.value` by simp[] >>
- `compile_decode_args ce' [build_positional_arg ce' (name,ty)] off
-     DLOAD (Lit (n2w data_size)) 0 sa = ((),st')` by gnvs[] >>
- `FLOOKUP ce'.ce_vars name = SOME (PtrVar
-   (Var (STRING #"%" (toString st.cs_next_var))) (type_memory_bytes ce' ty))` by simp[FLOOKUP_UPDATE] >>
- `initial.vs_alloca_next + type_memory_bytes ce' ty <= a.vs_alloca_next` by simp[] >>
- `mem_bytes_at 0 (LENGTH encoded) a.vs_data_section = encoded` by
-   (qpat_assum `a.vs_data_section = _` (fn th => pure_rewrite_tac[th]) >>
-    first_assum ACCEPT_TAC) >>
- drule_all deploy_ctor_decode_constructor_arg_old_prefix_complete >>
- disch_then (qx_choose_then `actual` (map_every assume_tac o CONJUNCTS)) >>
- `!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n` by
-   (rpt gen_tac >> strip_tac >>
-    qpat_x_assum `!inst n b sz. _ /\ _ /\ _ /\
-      FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> _` drule_all >> simp[]) >>
- `!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n` by
-   (rpt gen_tac >> strip_tac >>
-    irule deploy_ctor_generated_decode_args_literal_sizes >>
-    qpat_assum `compile_decode_args ce' [build_positional_arg ce (name,ty)] _ _ _ _ _ = _`
-      (irule_at Any) >>
-    qpat_assum `ctor_actual_scratch func (frag_ids sa st') 0 a.vs_alloca_next actual`
-      (irule_at Any) >>
-    qpat_assum `abi_encoder_registered_effect (frag_ids sa st') _ a actual`
-      (irule_at Any) >>
-    qexistsl [`inst`,`b`] >>
-    simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
- `q <= a.vs_alloca_next` by simp[] >>
- `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b` by
-   (rpt gen_tac >> strip_tac >>
-    irule deploy_ctor_alloca_lower_bound_frame >>
-    qpat_assum `ctor_actual_scratch func (frag_ids sa st') 0 a.vs_alloca_next actual`
-      (irule_at Any) >>
-    qpat_assum `abi_encoder_registered_effect (frag_ids sa st') _ a actual`
-      (irule_at Any) >>
-    qexistsl [`sz`,`inst`] >>
-    simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
- `type_memory_bytes ce' ty = type_memory_bytes ce ty` by simp[] >>
- drule compile_alloc_buffer_parts >> strip_tac >>
- `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_var <= sa.cs_next_var` by decide_tac >>
- `sa.cs_next_id <= st'.cs_next_id` by
-   (qpat_assum `compile_decode_args ce' [build_positional_arg ce' _] _ _ _ _ _ = _` mp_tac >>
-    metis_tac[ctor_decode_args_next_id, pairTheory.SND]) >>
- suspend "local_bounds"
+ rpt gen_tac >>
+ MATCH_ACCEPT_TAC (deploy_ctor_register_one_actual_coordinated_map_bounds |>
+   SPEC_ALL |> Q.INST [`keep_bound` |-> `F`] |>
+   PURE_REWRITE_RULE [IMP_CLAUSES, AND_CLAUSES])
 QED
-
-Resume deploy_ctor_register_one_actual_coordinated_local_bounds[local_bounds]:
- `!id b sz. local_region ce [scope] a id b sz ==> q <= b` by
-   (ho_match_mp_tac (Q.SPECL [`initial`,`st`,`func`] deploy_ctor_local_lower_bound_preserved) >> asm_rewrite_tac[]) >>
- `!id b sz. local_region ce [scope] actual id b sz ==> q <= b` by
-   (ho_match_mp_tac (Q.SPECL [`a`,`sa`,`func`] deploy_ctor_local_lower_bound_preserved) >> asm_rewrite_tac[]) >>
- `!id b sz. local_region ce' [scope] actual id b sz ==> q <= b` by
-   (ho_match_mp_tac deploy_ctor_local_lower_bound_bind >>
-    qexistsl [`ce`,`name`,`STRING #"%" (toString st.cs_next_var)`,
-      `type_memory_bytes ce ty`,`initial.vs_alloca_next`] >>
-    asm_rewrite_tac[] >> conj_tac >- metis_tac[] >> decide_tac) >>
- suspend "finish"
-QED
-
-Resume deploy_ctor_register_one_actual_coordinated_local_bounds[finish]:
- qexists `actual` >> asm_rewrite_tac[] >>
- conj_tac >- (
-   irule ctor_scratch_decode_bind_ptr >>
-   conj_tac >- simp[] >>
-   qexistsl [`initial.vs_alloca_next`, `entry`, `frag_ids sa st'`, `a`, `sa`,
-     `n2w initial.vs_alloca_next : bytes32`] >>
-   asm_rewrite_tac[] >>
-   `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
-   simp[w2n_n2w] >> gnvs[]) >>
- conj_tac >- (
-   irule ctor_registered_alloc_decode_effect >>
-   qexistsl [`a`, `st.cs_next_id`, `frag_ids st sa`, `initial.vs_alloca_next`,
-     `frag_ids sa st'`, `type_memory_bytes ce' ty`] >>
-   asm_rewrite_tac[] >> simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
- conj_tac >- (
-   rpt strip_tac >>
-   `not_fresh_at sa x` by
-     (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-   metis_tac[]) >>
- conj_tac >- metis_tac[abi_decode_sim_trans] >>
- conj_tac >- decide_tac >>
- reverse conj_tac >- decide_tac >>
- `ctor_actual_scratch func (frag_ids sa st') 0 initial.vs_alloca_next actual` by
-   (irule ctor_actual_scratch_subregion >>
-    qexistsl [`0`, `a.vs_alloca_next`] >> simp[]) >>
- rpt strip_tac >>
- `mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 a.vs_memory` by
-   (irule deploy_ctor_actual_registered_memory_prefix >>
-    qexistsl [`func`, `frag_ids sa st'`, `[(initial.vs_alloca_next,type_memory_bytes ce' ty)]`,
-      `initial.vs_alloca_next`] >> simp[]) >>
- simp[]
-QED
-Finalise deploy_ctor_register_one_actual_coordinated_local_bounds
 
 Theorem deploy_ctor_register_suffix_actual_coordinated_local_bounds:
  !rest q k ce0 vars env fargs avs atys encoded scope i data_size st ce st' ctx func site initial.

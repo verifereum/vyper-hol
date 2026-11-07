@@ -1,6 +1,7 @@
 Theory ctorDeployLoweringEntryCompleteRegisterBoundary
 Ancestors
   ctorDeployLoweringEntryResourceBoundary ctorAbiActualSites ctorAbiActualFrame
+  abiEncoderRegisteredEffect
   venomMemDefs venomState venomInst finite_map pred_set list arithmetic
 
 Theorem deploy_ctor_actual_registered_memory_prefix:
@@ -19,4 +20,19 @@ Proof
   qpat_x_assum `ctor_actual_scratch _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [ctor_actual_scratch_def] >>
   disch_then drule_all >> simp[regions_disjoint_def] >> decide_tac
+QED
+
+Theorem deploy_ctor_actual_registered_alloca_lower_bound:
+  !func ids outs s t q.
+  abi_encoder_registered_effect (ctor_actual_sites func ids) outs s t /\
+  ctor_actual_scratch func ids 0 s.vs_alloca_next t /\
+  q <= s.vs_alloca_next /\
+  (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==> q <= b) ==>
+  !aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> q <= b
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `aid IN ctor_actual_sites func ids`
+  >- (drule_all ctor_actual_sites_scratch >>
+      simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  fs[abi_encoder_registered_effect_def] >> metis_tac[]
 QED
