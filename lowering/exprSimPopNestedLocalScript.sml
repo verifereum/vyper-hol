@@ -83,7 +83,8 @@ Resume pop_nested_local_sim[normal]:
               lookup_scopes id tend.scopes = SOME entry /\
               evaluate_subscripts entry.type entry.value path = INR err /\
               read_popped entry.type path entry.popped = SOME v`
-  >- (goalStack.print_tac "PROBE" >> cheat) >>
+  >- (pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      drule_all pop_nested_local_popped_case >> disch_then ACCEPT_TAC) >>
   `!path entry err. p = MemoryPlace id path /\
      lookup_scopes id tend.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INR err ==>
