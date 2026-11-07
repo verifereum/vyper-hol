@@ -28,3 +28,17 @@ Theorem typed_adapter_entry_label_probe[local]:
 Proof
   EVAL_TAC
 QED
+
+(* Removing an old ALLOCA from an observer does not preserve local backing. *)
+Theorem local_backed_observer_loss_probe[local]:
+  let s = (ARB:venom_state) with
+      vs_allocas := FEMPTY |+ (0, (0,32)) in
+  let fn = (ARB:ir_function) with fn_blocks :=
+      [<|bb_label := "entry";
+         bb_instructions := [mk_inst 0 ALLOCA [Lit 32w] ["p"]]|>] in
+  let observer = fn with fn_blocks := [] in
+  local_backed fn "p" s 0 32 /\
+  ~local_backed observer "p" s 0 32
+Proof
+  EVAL_TAC >> simp[]
+QED
