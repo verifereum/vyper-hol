@@ -265,7 +265,7 @@ Theorem entry_param_step:
     OK (entry_bind_pairs (entry_param_pairs s [inst]) s)
 Proof
   rw[entry_param_shape_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        entry_param_pairs_def, update_var_def]
 QED
 
