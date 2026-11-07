@@ -164,7 +164,14 @@ Resume inv_cone_work_at_cut[empty]:
   EVAL_TAC
 QED
 Resume inv_cone_work_at_cut[ordered]:
-  EVAL_TAC
+  simp_tac bool_ss
+    [inv_cone_cases_def, EVERY_DEF, pairTheory.pair_case_thm,
+     pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND] >>
+  rpt conj_tac >|
+    [EVAL_TAC, EVAL_TAC, EVAL_TAC,
+     EVAL_TAC, EVAL_TAC, EVAL_TAC,
+     EVAL_TAC, EVAL_TAC, EVAL_TAC,
+     EVAL_TAC, EVAL_TAC, EVAL_TAC]
 QED
 Finalise inv_cone_work_at_cut
 
