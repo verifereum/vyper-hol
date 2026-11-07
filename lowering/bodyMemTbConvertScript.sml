@@ -11,7 +11,7 @@ Ancestors
   bodyMemTbConvertDestMemory bodyMemTbConvertDestPath
   bodyMemTbConvertCopyMemory bodyMemTbConvertCastMemory
   bodyMemTbConvertLoweredSize bodyMemTbConvertSourceSizing bodyMemTbConvertSourceUnwrap
-  bodyMemTbConvertMarkedCompose
+  bodyMemTbConvertMarkedCompose bodyMemTbConvertDynamicLift
 
 Theorem body_type_builtin_convert_plain_mem_case:
   !cx v11 typ es.
