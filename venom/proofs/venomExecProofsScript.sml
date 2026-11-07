@@ -2569,9 +2569,12 @@ Proof
      AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   asm_rewrite_tac[] >>
-  rw[step_inst_def, step_inst_base_def] >>
+  qpat_x_assum `!m. _` (K ALL_TAC) >>
+  asm_simp_tac (srw_ss()) [step_inst_non_invoke] >>
+  asm_simp_tac behavior_ss [step_inst_base_for ``JNZ``] >>
   BasicProvers.EVERY_CASE_TAC >>
-  gvs[jump_to_def, eval_operand_def, lookup_var_def]
+  gvs[jump_to_def, eval_operand_def, lookup_var_def] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem run_block_jnz_condition:
