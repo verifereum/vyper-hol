@@ -107,7 +107,7 @@ Theorem initialized_entry_jmp_origins:
       (LENGTH (HD fn.fn_blocks).bb_instructions) qs
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all initialized_entry_jmp_preterminal >> strip_tac >>
+  drule_all initialized_entry_preterminal >> strip_tac >>
   drule_all ready_entry_static_boundary >> strip_tac >>
   `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
   `(HD fn.fn_blocks).bb_instructions <> []` by metis_tac[bb_well_formed_def] >>
@@ -176,4 +176,68 @@ Proof
         metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF] >>
       metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]) >>
   simp[]
+QED
+
+Theorem initialized_entry_exit_resources:
+  !fn dfg ch growth spill_base lbl_ctr ops qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      SOME (ops,qs) ==>
+    entry_boundary_resources fn (HD fn.fn_blocks)
+      (LENGTH (HD fn.fn_blocks).bb_instructions) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all initialized_entry_preterminal >> strip_tac >>
+  drule_all ready_entry_static_boundary >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `(HD fn.fn_blocks).bb_instructions <> []` by metis_tac[bb_well_formed_def] >>
+  Cases_on `(LAST (HD fn.fn_blocks).bb_instructions).inst_opcode = JMP`
+  >- (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        native_terminal_jmp_boundary_step >> simp[]) >>
+  `SUC (PRE (LENGTH (HD fn.fn_blocks).bb_instructions)) =
+    LENGTH (HD fn.fn_blocks).bb_instructions /\
+    PRE (LENGTH (HD fn.fn_blocks).bb_instructions) <
+    LENGTH (HD fn.fn_blocks).bb_instructions` by
+    (Cases_on `(HD fn.fn_blocks).bb_instructions` >> gvs[]) >>
+  `EL (PRE (LENGTH (HD fn.fn_blocks).bb_instructions))
+    (HD fn.fn_blocks).bb_instructions = LAST (HD fn.fn_blocks).bb_instructions` by
+    metis_tac[LAST_EL] >>
+  `~is_param_opcode (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode /\
+    (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode <> PHI` by
+    (qpat_x_assum `bb_well_formed _` mp_tac >>
+     simp_tac bool_ss [bb_well_formed_def] >> strip_tac >>
+     qpat_x_assum `is_terminator _` mp_tac >>
+     Cases_on `(LAST (HD fn.fn_blocks).bb_instructions).inst_opcode` >>
+     simp_tac (srw_ss()) [is_terminator_def, is_param_opcode_def]) >>
+  drule_at (Pat `entry_boundary_resources _ _ _ _`)
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] entry_inst_boundary_step) >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem initialized_entry_exit_origins:
+  !fn dfg ch growth spill_base lbl_ctr ops qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      SOME (ops,qs) ==>
+    prefix_inventory_origins (HD fn.fn_blocks)
+      (LENGTH (HD fn.fn_blocks).bb_instructions) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all initialized_entry_exit_resources >> simp[entry_boundary_resources_def]
+QED
+
+Theorem initialized_entry_exit_live_boundary:
+  !fn dfg ch growth spill_base lbl_ctr ops qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      SOME (ops,qs) ==>
+    native_live_boundary fn (HD fn.fn_blocks)
+      (LENGTH (HD fn.fn_blocks).bb_instructions) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all initialized_entry_exit_resources >>
+  simp[entry_boundary_resources_def, native_live_boundary_def]
 QED

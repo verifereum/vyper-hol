@@ -916,10 +916,9 @@ Proof
   qexists_tac `HD fn.fn_blocks` >> simp[]
 QED
 
-Theorem initialized_entry_jmp_preterminal:
+Theorem initialized_entry_preterminal:
   !fn dfg ch growth spill_base lbl_ctr ops qs.
     codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
-    (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode = JMP /\
     generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
       SOME (ops,qs) ==>
@@ -944,7 +943,11 @@ Proof
   `non_param_insts (HD fn.fn_blocks) <> []` by
     (`MEM (LAST (HD fn.fn_blocks).bb_instructions)
         (non_param_insts (HD fn.fn_blocks))` suffices_by metis_tac[MEM] >>
-     simp[non_param_insts_def, MEM_FILTER, is_param_opcode_def] >>
+     `~is_param_opcode (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode` by
+       (gvs[bb_well_formed_def] >>
+        Cases_on `(LAST (HD fn.fn_blocks).bb_instructions).inst_opcode` >>
+        gvs[is_terminator_def, is_param_opcode_def]) >>
+     simp[non_param_insts_def, MEM_FILTER] >>
      `(HD fn.fn_blocks).bb_instructions <> []` by metis_tac[bb_well_formed_def] >>
      Cases_on `(HD fn.fn_blocks).bb_instructions` >> gvs[MEM_LAST]) >>
   `?before chunk.
@@ -1011,7 +1014,7 @@ Theorem initialized_entry_jmp_residual_zero:
       LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH targets) qs.ps_stack) = 0
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all initialized_entry_jmp_preterminal >> strip_tac >>
+  drule_all initialized_entry_preterminal >> strip_tac >>
   drule_all ready_entry_static_boundary >> strip_tac >>
   `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
   `inst_wf (LAST (HD fn.fn_blocks).bb_instructions)` by
