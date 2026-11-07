@@ -8,7 +8,7 @@
  *)
 Theory bodyPtrTypeBuiltins
 Ancestors
-  exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
+  bodyPtrTypeBuiltinsResidual exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
