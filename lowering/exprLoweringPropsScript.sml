@@ -2506,7 +2506,7 @@ Proof
   simp[builtinSimpleTheory.compile_builtin_len_def, ci_mono_compile_ptr_load]
 QED
 
-Theorem ci_mono_compile_bytestring_hash[local]:
+Theorem ci_mono_compile_bytestring_hash:
   ∀ ptr_op sa. ci_mono sa (SND (compile_bytestring_hash ptr_op sa))
 Proof
   rpt gen_tac >>

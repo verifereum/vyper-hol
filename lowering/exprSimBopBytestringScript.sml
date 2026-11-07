@@ -25,72 +25,6 @@ Ancestors
   vyperTyping vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   vyperStatePreservation
 
-Theorem comparison_hash_run[local]:
-  compile_bytestring_hash ptr_op sa = (op, sb) /\
-  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
-  eval_operand ptr_op s = SOME (n2w b) /\
-  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
-  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
-  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME
-      (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    (t with vs_vars := s.vs_vars) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
-Proof
-  simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def] >>
-  simp[mk_inst_def] >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  simp_tac std_ss [instruction_accfupds, instruction_accessors] >>
-  ASM_SIMP_TAC std_ss [exec_pure2_def, eval_operand_def, bind_outputs_def] >>
-  `eval_operand ptr_op
-     (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w) s) =
-     SOME (n2w b)` by
-    (Cases_on `ptr_op` >> gvs[eval_operand_def, lookup_var_update_var] >>
-     gvs[not_fresh_at_def]) >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, exec_read1_def] >>
-  `mload b s = n2w (LENGTH bs)` by
-    gvs[mload_def, mem_word_at_def] >>
-  simp[mload_def, update_var_def] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, eval_operand_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE, toString_inj] >>
-  gvs[mload_def, word_add_n2w, GSYM mem_bytes_at_def,
-      run_inst_seq_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-      toString_inj] >>
-  rpt strip_tac >> gvs[not_fresh_at_def] >>
-  first_assum (qspec_then `sa.cs_next_var + 2` assume_tac) >>
-  first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >>
-  first_assum (qspec_then `sa.cs_next_var` assume_tac) >> gvs[]
-QED
-
-Theorem comparison_hash_shape[local]:
-  compile_bytestring_hash p sa = (op, sb) ==>
-  sb.cs_current_bb = sa.cs_current_bb /\
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb) /\
-  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
-  sa.cs_next_var <= sb.cs_next_var /\
-  sa.cs_next_id <= sb.cs_next_id /\ cs_extends sa sb /\
-  (!x. op = Var x ==> not_fresh_at sb x)
-Proof
-  simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
-       cs_extends_def, rich_listTheory.IS_PREFIX_APPEND, not_fresh_at_def,
-       toString_inj] >> rpt strip_tac >> gvs[toString_inj]
-QED
-
 Theorem comparison_hash_counted[local]:
   compile_bytestring_hash ptr_op sa = (op, sb) /\
   (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
@@ -111,8 +45,8 @@ Theorem comparison_hash_counted[local]:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
 Proof
-  strip_tac >> drule_all comparison_hash_run >> strip_tac >>
-  drule comparison_hash_shape >> strip_tac >>
+  strip_tac >> drule_all (SIMP_RULE std_ss [byteTheory.word_of_bytes_be_def] compile_bytestring_hash_run_nofresh) >> strip_tac >>
+  drule (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >> strip_tac >>
   drule_all hash_run_path >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
@@ -542,12 +476,12 @@ Proof
      >- (qpat_x_assum `case bytestring_literal_hash e1 of NONE => ?p sm. lower_value _ _ _ e1 sa = _ /\ _ | SOME h => _` mp_tac >>
          Cases_on `bytestring_literal_hash e1` >> simp_tac (srw_ss()) [] >>
          strip_tac >> imp_res_tac (cj 2 compile_expr_grows) >>
-         imp_res_tac comparison_hash_shape >>
+         imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
          metis_tac[cs_extends_trans, cs_extends_refl]) >>
      qpat_x_assum `case bytestring_literal_hash e2 of NONE => ?p sm. lower_value _ _ _ e2 sh1 = _ /\ _ | SOME h => _` mp_tac >>
      Cases_on `bytestring_literal_hash e2` >> simp_tac (srw_ss()) [] >>
      strip_tac >> imp_res_tac (cj 2 compile_expr_grows) >>
-     imp_res_tac comparison_hash_shape >>
+     imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
      metis_tac[cs_extends_trans, cs_extends_refl]) >>
   `fn_has_code sa sh1 func /\ fn_has_code sh1 sh2 func /\
    fn_has_code sh2 sb func` by
@@ -557,7 +491,7 @@ Proof
      Cases_on `bytestring_literal_hash e1` >>
      Cases_on `bytestring_literal_hash e2` >> gvs[] >>
      imp_res_tac (cj 2 compile_expr_grows) >>
-     imp_res_tac comparison_hash_shape >> decide_tac) >>
+     imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >> decide_tac) >>
   `local_ptrs_reserved cenv sh1 /\ local_ptrs_reserved cenv sh2` by
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] exprBopSimPropsTheory.eval_expr_bop_bind] >>
@@ -566,7 +500,7 @@ Proof
       qpat_x_assum `?p sm. lower_value _ _ _ e1 sa = _ /\ _` strip_assume_tac >>
       `fn_has_code sa sm func /\ fn_has_code sm sh1 func` by
         (imp_res_tac (cj 2 compile_expr_grows) >>
-         imp_res_tac comparison_hash_shape >>
+         imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
          metis_tac[fn_has_code_mid, cs_extends_refl]) >>
       irule comparison_operand_outcome_suffix >>
       qpat_assum `expr_sim _ _ _ _ _ e1 _` (irule_at Any) >>
@@ -627,7 +561,7 @@ Proof
           qpat_x_assum `?p sm. lower_value _ _ _ e2 sh1 = _ /\ _` strip_assume_tac >>
           `fn_has_code sh1 sm' func /\ fn_has_code sm' sh2 func` by
             (imp_res_tac (cj 2 compile_expr_grows) >>
-             imp_res_tac comparison_hash_shape >>
+             imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
              metis_tac[fn_has_code_mid, cs_extends_refl]) >>
           irule expr_sim_suffix >>
           qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
@@ -656,7 +590,7 @@ Proof
           disch_then (qx_choose_then `d2` (qx_choose_then `u`
             (map_every assume_tac o CONJUNCTS))) >>
           `!x. h1 = Var x ==> not_fresh_at sh1 x` by
-            metis_tac[comparison_hash_shape] >>
+            metis_tac[(SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape)] >>
           `!x. h1 = Var x ==> not_fresh_at sm' x` by
             (imp_res_tac (cj 2 compile_expr_grows) >>
              metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
@@ -676,7 +610,7 @@ Proof
              reverse conj_tac >- (goal_assum (drule_at Any)) >>
              qexistsl_tac [`ee`, `sh1`, `t'`] >>
              simp[] >> imp_res_tac (cj 2 compile_expr_grows) >>
-             imp_res_tac comparison_hash_shape >>
+             imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
              metis_tac[exprSimWordArgsTheory.expr_post_frame,
                        arithmeticTheory.LESS_EQ_TRANS]) >>
           `wb_frame cenv es sa s0 u` by
@@ -771,7 +705,7 @@ Proof
       qpat_x_assum `?p sm. lower_value _ _ _ e2 sa = _ /\ _` strip_assume_tac >>
       `fn_has_code sa sm func /\ fn_has_code sm sh2 func` by
         (imp_res_tac (cj 2 compile_expr_grows) >>
-         imp_res_tac comparison_hash_shape >>
+         imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
          metis_tac[fn_has_code_mid, cs_extends_refl]) >>
       irule expr_sim_suffix >>
       qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
