@@ -1,9 +1,9 @@
 (* Pointer execution of the bytestring encoder phases. *)
 Theory abiEncoderBytesPtr
 Ancestors
-  abiEncoderBytesCode abiEncoderRounding typedCopyPtr decoderNavigationPtr
+  abiEncoderBytesCode abiEncoderRounding abiEncoderMemory typedCopyPtr decoderNavigationPtr
   bodyPtrDefs fragExecPtr ghostPcTransportPtr emitHelperProps exprLoweringProps ptrDiscipline venomState
-  venomExecSemantics finite_map pred_set words arithmetic venomInst codegenRel context emitHelper compileEnv
+  venomExecSemantics finite_map pred_set words arithmetic list rich_list venomInst codegenRel context emitHelper compileEnv
 
 Theorem abi_encode_round_frag_ptr:
   !sa sb len out s cnt G tn cx ctx PG R.
@@ -452,4 +452,114 @@ Proof
   qpat_x_assum `!x. not_fresh_at sa x ==> _ /\ FLOOKUP g2 x = _ /\ _`
     (qspec_then `x` mp_tac) >>
   simp[lookup_var_def, update_var_def, mstore_def, op_taint_def, FLOOKUP_UPDATE]
+QED
+
+Theorem abi_encode_bytes_prefix_shape:
+  abi_encode_bytes_prefix dst src sa = ((len,last),sb) ==>
+  sb.cs_next_var = sa.cs_next_var + 4 /\
+  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+  len = Var (STRING #"%" (toString sa.cs_next_var)) /\ inst_extends sa sb
+Proof
+  simp[abi_encode_bytes_prefix_def, abi_encode_round_def, comp_bind_def,
+    comp_return_def, comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[inst_extends_def, emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND]
+QED
+
+Theorem compile_abi_encode_bytestring_frag_ptr:
+  !sa sb src dst maxlen out s p d cnt G tn cx ctx PG R.
+    compile_abi_encode_to_buf (Var dst) (Var src) (AbiBytestring maxlen) sa = (out,sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME (n2w p) /\ lookup_var dst s = SOME (n2w d) /\
+    mload p s = n2w cnt /\ ptr_covers G tn src s (32+cnt) /\
+    ptr_covers G tn dst s (32+contractABI$ceil32 cnt) /\
+    cnt+31 < dimword(:256) /\ 32+contractABI$ceil32 cnt < dimword(:256) /\
+    p+32+cnt < dimword(:256) /\ d+32+contractABI$ceil32 cnt < dimword(:256) /\
+    (p+32+cnt <= d \/ d+32+contractABI$ceil32 cnt <= p) /\
+    (!i. p <= i /\ i < p+32+cnt ==> i NOTIN tn.t_mem) ==>
+    ?H u t.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g=G /\ z=tn /\ v=s)
+        (\g z v. g=H /\ z=u /\ v=t) R /\
+      eval_operand out t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
+      op_taint u out = {} /\
+      (!i. d <= i /\ i < d+32+contractABI$ceil32 cnt ==> i NOTIN u.t_mem) /\
+      t.vs_memory = (mcopy d p (32+cnt) (mstore (d+contractABI$ceil32 cnt) 0w s)).vs_memory /\
+      u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `_ \/ _` kall_tac >>
+  drule abi_encode_bytes_trace >> strip_tac >> PairCases_on `ops` >> gvs[] >>
+  rename1 `abi_encode_bytes_prefix _ _ sa = ((len,last),ready)` >>
+  `p < dimword(:256)` by decide_tac >>
+  `ptr_covers G tn src s 32` by (fs[ptr_covers_def] >> metis_tac[DECIDE ``32 <= 32+cnt``]) >>
+  `!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem` by
+    (rpt strip_tac >> qpat_x_assum `!i. p <= i /\ _ ==> _` (qspec_then `i` mp_tac) >> simp[]) >>
+  `cnt+31 < dimword(:256) /\
+   ptr_covers G tn dst s (32+contractABI$ceil32 cnt)` by
+    (mp_tac abi_encoder_ceil32_bounds >> simp[] >> decide_tac) >>
+  `d+32+contractABI$ceil32 cnt < dimword(:256)` by decide_tac >>
+  drule_all abi_encode_bytes_prefix_frag_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`]
+    (qx_choose_then `g1` (qx_choose_then `t1` (qx_choose_then `s1` (qx_choose_then `q` strip_assume_tac))))) >>
+  gvs[] >>
+  drule abi_encode_bytes_prefix_shape >> strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at ready x` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `lookup_var src s1 = SOME (n2w p) /\ lookup_var dst s1 = SOME (n2w d) /\
+   ptr_covers g1 t1 src s1 (32+cnt) /\ ptr_covers g1 t1 dst s1 (32+cnt)` by
+    (conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+     `lookup_var src s1 = lookup_var src s /\ FLOOKUP g1 src = FLOOKUP G src /\
+      op_taint t1 (Var src) = op_taint tn (Var src) /\
+      lookup_var dst s1 = lookup_var dst s /\ FLOOKUP g1 dst = FLOOKUP G dst /\
+      op_taint t1 (Var dst) = op_taint tn (Var dst)` by metis_tac[] >>
+     gvs[ptr_covers_def] >> mp_tac abi_encoder_ceil32_bounds >> decide_tac) >>
+  `32+cnt < dimword(:256) /\ p < dimword(:256) /\
+   d+32+contractABI$ceil32 cnt < dimword(:256)` by
+    (mp_tac abi_encoder_ceil32_bounds >> decide_tac) >>
+  `!i. p <= i /\ i < p+32+cnt ==> i NOTIN t1.t_mem` by simp[] >>
+  `not_fresh_at ready src /\ not_fresh_at ready dst` by metis_tac[] >>
+  drule_all abi_encode_bytes_copy_frag_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`]
+    (qx_choose_then `g2` (qx_choose_then `t2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  `not_fresh_at ready (STRING #"%" (toString sa.cs_next_var))` by
+    simp[not_fresh_at_def] >>
+  `eval_operand len s2 = SOME (n2w cnt) /\ op_taint t2 len = {}` by
+    (qpat_x_assum `!x. not_fresh_at ready x ==> _`
+       (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >>
+     gvs[eval_operand_def]) >>
+  `cnt+31 < dimword(:256)` by decide_tac >>
+  drule_all abi_encode_bytes_suffix_frag_ptr >>
+  disch_then (qspecl_then [`g2`,`cx`,`ctx`,`PG`,`R`]
+    (qx_choose_then `g3` (qx_choose_then `t3` (qx_choose_then `s3` strip_assume_tac)))) >>
+  `cs_extends sa ready /\ cs_extends ready copied /\ cs_extends copied sb` by
+    (drule abi_encode_bytes_copy_shape >> drule abi_encode_bytes_suffix_shape >>
+     rpt strip_tac >> fs[inst_extends_def, cs_extends_def] >>
+     rpt conj_tac >> qexists_tac `[]` >> simp[]) >>
+  qexistsl_tac [`g3`,`t3`,`s3`] >> conj_tac >-
+    (irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ sa ready _ _ _` (irule_at Any) >> simp[] >>
+     conj_tac >- metis_tac[cs_extends_trans] >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ ready copied _ _ _` (irule_at Any) >> simp[]) >>
+  simp[] >>
+  conj_tac >-
+    (rpt gen_tac >> disch_tac >>
+     mp_tac abi_encoder_ceil32_bounds >>
+     simp[] >> decide_tac) >>
+  conj_tac >-
+    (irule (SIMP_RULE arith_ss [] abi_encoder_bytes_write_memory_cong) >> simp[]) >>
+  drule abi_encode_bytes_copy_shape >> strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at copied x` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  gen_tac >> strip_tac >> metis_tac[]
 QED
