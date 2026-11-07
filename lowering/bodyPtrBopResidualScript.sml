@@ -214,5 +214,15 @@ Theorem bop_bytestring_expr_ptr_residual:
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) ==>
     body_expr_ptr_ok cx (Builtin ty (Bop bop) [e1;e2])
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `body_expr_ptr_ok cx e1 /\
+   ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv,t) /\
+      read_result cx tv s1 = (INL v,t1)) ==> body_expr_ptr_ok cx e2)` by
+    (qpat_x_assum `builtin_args_length_ok _ _ ==> _` mp_tac >>
+     simp[builtin_args_length_ok_def, body_exprs_ptr_ok_def] >> metis_tac[]) >>
+  simp[body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  `expr_sim_ptr d ctx PG func cenv cx ty' (Builtin ty (Bop bop) [e1;e2]) es` by
+    (irule bop_bytestring_forced_ptr >> simp[] >> metis_tac[]) >>
+  gvs[] >> irule exprPtrUnwrapTheory.expr_vv_sim_ptr_stack >>
+  simp[compile_bop_stack] >> metis_tac[eval_expr_builtin_value]
 QED
