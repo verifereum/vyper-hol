@@ -11,7 +11,7 @@ Ancestors
   venomExecSemantics venomWf unitShapeDefs ptrDiscipline finite_map list rich_list arithmetic
 
 Theorem ptr_paired_control_fields[local]:
-  MEM inst.inst_opcode [JMP; JNZ] /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
   step_inst fuel C inst s = OK t ==>
   t.vs_params = s.vs_params /\ t.vs_allocas = s.vs_allocas
 Proof
@@ -24,7 +24,7 @@ QED
 Theorem ptr_paired_block_prefix_normalize[local]:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  MEM a.po_inst.inst_opcode [JMP; JNZ] /\
+  MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP] /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
   EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
@@ -79,7 +79,7 @@ Proof
      metis_tac[]) >>
   `at.po_inst = a.po_inst` by
     (fs[MEM] >> simp[concretize_positions_terminator, is_terminator_def]) >>
-  `MEM at.po_inst.inst_opcode [JMP; JNZ]` by metis_tac[] >>
+  `MEM at.po_inst.inst_opcode [JMP; JNZ; DJMP]` by metis_tac[] >>
   `t_jump.vs_params = at.po_state.vs_params` by
     metis_tac[ptr_paired_control_fields] >>
   `s_jump.vs_params = a.po_state.vs_params /\
@@ -186,7 +186,9 @@ Resume ptr_paired_block_prefix_normalize[alignment]:
    t_entry.vs_params = t_jump.vs_params` by
     (fs[enters_block_def] >>
      imp_res_tac eval_phis_only_updates_vs_vars >>
-     gvs[venom_state_component_equality]) >>
+     qpat_x_assum `s_phi' = _` (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_params`) >>
+     qpat_x_assum `s_phi = _` (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_params`) >>
+     simp[]) >>
   qpat_x_assum `b = _` mp_tac >> qpat_x_assum `bt = _` mp_tac >>
   simp[ptr_observe_def, ptr_observation_component_equality] >>
   rpt strip_tac >> gvs[ptr_paired_params_def]
@@ -238,7 +240,7 @@ Theorem ptr_paired_jump_prefix_normalize:
     (ptr_gap_scan bb n b).po_taint = b.po_taint
 Proof
   strip_tac >> drule_all ptr_paired_jump_entry >> strip_tac >>
-  `MEM a.po_inst.inst_opcode [JMP; JNZ]` by simp[] >>
+  `MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP]` by simp[] >>
   drule_all ptr_paired_block_prefix_normalize >> simp[]
 QED
 
@@ -283,6 +285,50 @@ Theorem ptr_paired_jnz_prefix_normalize:
     (ptr_gap_scan bb n b).po_taint = b.po_taint
 Proof
   strip_tac >> drule_all ptr_paired_jnz_entry >> strip_tac >>
-  `MEM a.po_inst.inst_opcode [JMP; JNZ]` by simp[] >>
+  `MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP]` by simp[] >>
+  drule_all ptr_paired_block_prefix_normalize >> simp[]
+QED
+
+Theorem ptr_paired_djmp_prefix_normalize:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+  opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = DJMP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  EVERY bb_well_formed a.po_fn.fn_blocks /\
+  ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
+  (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP (lp a.po_fn) (Allocation inst.inst_id))) /\
+  active_inst at.po_fn at.po_inst at.po_state /\
+  is_terminator at.po_inst.inst_opcode /\
+  step_inst fuel Ct at.po_inst at.po_state = OK t_jump /\
+  ~t_jump.vs_halted /\ enters_block at.po_fn t_jump t_entry /\
+  active_inst at.po_fn it t_entry /\
+  bt = ptr_observe at.po_stack at.po_params
+    (entry_prov at.po_fn t_jump at.po_prov)
+    (entry_taint_vars at.po_fn t_jump at.po_taint) at.po_fn it t_entry ==>
+  ?s_jump b B TG' bb n delta snapshots.
+    step_inst fuel C a.po_inst a.po_state = OK s_jump /\
+    ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT TG' saved /\
+    b.po_fn = a.po_fn /\ b.po_stack = a.po_stack /\
+    TG' = entry_prov a.po_fn s_jump TG /\
+    B = ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births /\
+    lookup_block b.po_state.vs_current_bb b.po_fn.fn_blocks = SOME bb /\
+    LENGTH delta = n /\ LENGTH snapshots = n /\
+    ptr_paired_prefix R lp positions lo vs0 C Ct
+      ((h ++ [b]) ++ delta) (ptr_gap_scan bb n b) (ht ++ [bt]) bt
+      (done ++ [LENGTH h - 1]) tokens registry B PT TG' saved entries
+      ((H ++ [(tokens,registry,B,PT,TG',saved,entries)]) ++ snapshots) calls ws /\
+    (ptr_gap_scan bb n b).po_inst.inst_opcode <> NOP /\
+    bt.po_inst = concretize_inst_with_positions (lp a.po_fn)
+      (ptr_gap_scan bb n b).po_inst /\
+    (ptr_gap_scan bb n b).po_prov = b.po_prov /\
+    (ptr_gap_scan bb n b).po_taint = b.po_taint
+Proof
+  strip_tac >> drule_all ptr_paired_djmp_entry >> strip_tac >>
+  `MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP]` by simp[] >>
   drule_all ptr_paired_block_prefix_normalize >> simp[]
 QED

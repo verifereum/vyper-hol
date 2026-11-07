@@ -18,8 +18,8 @@ Theorem ptr_owned_jnz_scalar:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
-  opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = JNZ /\
-  a.po_inst.inst_operands = [cond; Label yes; Label no] ==>
+  opaque_use_ok a.po_fn /\ MEM a.po_inst.inst_opcode [JNZ; DJMP] /\
+  MEM cond a.po_inst.inst_operands ==>
   ptr_nonopaque_operand a.po_fn cond /\ op_prov TG cond = NONE /\
   op_taint a.po_taint cond = {}
 Proof
@@ -37,19 +37,19 @@ Proof
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  conj_tac
-  >- (`~MEM a.po_inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET]` by simp[] >>
-      drule_all ptr_nonopaque_instruction_operands >> simp[]) >>
+  (conj_tac
+  >- (`~MEM a.po_inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET]` by fs[MEM] >>
+      drule_all ptr_nonopaque_instruction_operands >> simp[EVERY_MEM]) >>
   reverse conj_tac
-  >- (gvs[taint_ok_def] >> metis_tac[]) >>
+  >- (fs[MEM] >> gvs[taint_ok_def] >> metis_tac[]) >>
   Cases_on `cond` >> simp[op_prov_def] >>
   rename1 `FLOOKUP TG v = NONE` >>
   Cases_on `FLOOKUP TG v` >> simp[] >>
   `v IN fn_pv P a.po_fn` by metis_tac[ptr_source_tagged_var_support] >>
   `ptr_use_ok P (fn_pv P a.po_fn) a.po_inst` by
     (fs[fn_ptr_ok_def] >> metis_tac[]) >>
-  gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
-      mem_write_ops_def, mem_read_ops_def]
+  fs[MEM] >> gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+      mem_write_ops_def, mem_read_ops_def] >> metis_tac[])
 QED
 
 Theorem ptr_paired_selected_jump_entry[local]:
@@ -262,4 +262,72 @@ Proof
      rpt strip_tac >> gvs[jump_to_def]) >>
   `se.vs_allocas = sj.vs_allocas` by metis_tac[enters_block_allocas] >>
   gvs[ptr_observe_def, ptr_activation_tokens_def]
+QED
+
+Theorem ptr_paired_djmp_entry:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+  opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = DJMP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  EVERY bb_well_formed a.po_fn.fn_blocks /\
+  ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
+  (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP (lp a.po_fn) (Allocation inst.inst_id))) /\
+  active_inst at.po_fn at.po_inst at.po_state /\
+  is_terminator at.po_inst.inst_opcode /\
+  step_inst fuel Ct at.po_inst at.po_state = OK t_jump /\
+  ~t_jump.vs_halted /\ enters_block at.po_fn t_jump t_entry /\
+  active_inst at.po_fn it t_entry /\
+  bt = ptr_observe at.po_stack at.po_params
+    (entry_prov at.po_fn t_jump at.po_prov)
+    (entry_taint_vars at.po_fn t_jump at.po_taint) at.po_fn it t_entry ==>
+  ?s_jump s_entry b bb.
+    step_inst fuel C a.po_inst a.po_state = OK s_jump /\
+    ~s_jump.vs_halted /\ enters_block a.po_fn s_jump s_entry /\
+    lookup_block s_jump.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
+    active_inst a.po_fn b.po_inst s_entry /\
+    b = ptr_observe a.po_stack a.po_params
+      (entry_prov a.po_fn s_jump a.po_prov)
+      (entry_taint_vars a.po_fn s_jump a.po_taint) a.po_fn b.po_inst s_entry /\
+    ptr_paired_cursor lp b bt /\
+    ptr_mixed_vars births positions (entry_prov a.po_fn s_jump TG)
+      b.po_taint a.po_fn at.po_fn s_entry t_entry /\
+    ptr_core_shared s_entry t_entry
+Proof
+  strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `at.po_inst = a.po_inst` by
+    simp[concretize_positions_terminator, is_terminator_def] >>
+  `?cond ops idx labels. a.po_inst.inst_operands = cond::ops /\
+    eval_operand cond at.po_state = SOME idx /\ extract_labels ops = SOME labels /\
+    w2n idx < LENGTH labels /\ t_jump = jump_to (EL (w2n idx) labels) at.po_state` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[step_inst_def, step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
+  `ptr_source_ownership vs0 C h a tokens registry births PT TG saved` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_ownership >> simp[]) >>
+  `ptr_nonopaque_operand a.po_fn cond /\ op_prov TG cond = NONE /\
+    op_taint a.po_taint cond = {}` by
+    (`MEM a.po_inst.inst_opcode [JNZ; DJMP] /\ MEM cond a.po_inst.inst_operands` by simp[] >>
+     drule_all ptr_owned_jnz_scalar >> simp[]) >>
+  `a.po_state.vs_labels = at.po_state.vs_labels` by
+    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+    a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
+  drule_all ptr_mixed_vars_eval >>
+  simp[ptr_lookup_transport_def, ptr_value_transport_def] >> strip_tac >>
+  `eval_operand cond a.po_state = eval_operand cond at.po_state` by
+    (Cases_on `eval_operand cond a.po_state` >>
+     Cases_on `eval_operand cond at.po_state` >>
+     gvs[word_agree_except_bits, fcpTheory.CART_EQ]) >>
+  qabbrev_tac `sj = jump_to (EL (w2n idx) labels) a.po_state` >>
+  `step_inst fuel C a.po_inst a.po_state = OK sj` by
+    simp[step_inst_def, step_inst_base_def, Abbr `sj`] >>
+  `sj = jump_to (EL (w2n idx) labels) a.po_state` by simp[Abbr `sj`] >>
+  drule_all ptr_paired_selected_jump_entry >> strip_tac >>
+  qexists_tac `sj` >> metis_tac[]
 QED
