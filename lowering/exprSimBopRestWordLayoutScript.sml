@@ -361,10 +361,11 @@ Proof
   qpat_x_assum `ct.cs_blocks = _` kall_tac >>
   qpat_x_assum `cl.cs_blocks = _` kall_tac >>
   qpat_x_assum `cl.cs_current_insts = _` kall_tac >>
+  rename1 `mk_inst c0 GT _ [capacity_inv]` >>
   simp[rest_word_loop_layout_safe_def, APPEND_ASSOC] >>
   qexistsl [`j0'`, `j1'`, `j2'`, `j3'`, `j4'`, `j5'`, `j6'`, `j7'`, `j8`,
             `j0`, `j1`, `j2`, `j3`, `j4`, `j5`, `j6`, `j7`,
-            `c0`, `c1`, `c2`, `inv'`, `valid`,
+            `c0`, `c1`, `c2`, `capacity_inv`, `valid`,
             `done`, `mul'`, `total'`, `match`, `next`, `outvar`] >>
   simp[get_instruction_def, EL_APPEND_EQN, DISJ_IMP_THM, FORALL_AND_THM]
 QED
@@ -375,9 +376,10 @@ Theorem rest_word_loop_layout_safe_forget:
 Proof
   simp[rest_word_loop_layout_safe_def, rest_word_loop_layout_def] >>
   rpt strip_tac >>
+  rename1 `mk_inst c0 GT _ [capacity_inv]` >>
   qexistsl [`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`,
             `b0`, `b1`, `b2`, `b3`, `b4`, `b5`, `b6`, `b7`,
-            `c0`, `c1`, `c2`, `inv'`, `valid`,
+            `c0`, `c1`, `c2`, `capacity_inv`, `valid`,
             `done`, `mul'`, `total'`, `addr`, `match`, `next`, `outvar`,
             `v`, `caller`, `exitbb`] >> simp[]
 QED
@@ -672,6 +674,7 @@ Theorem rest_word_loop_layout_safe_entry:
     valid <> h.rw_idx /\ valid <> h.rw_result
 Proof
   simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >>
-  qexistsl [`a1`, `a2`, `a3`, `c0`, `c1`, `c2`, `inv'`, `valid`] >>
+  rename1 `mk_inst c0 GT _ [capacity_inv]` >>
+  qexistsl [`a1`, `a2`, `a3`, `c0`, `c1`, `c2`, `capacity_inv`, `valid`] >>
   simp[] >> metis_tac[]
 QED
