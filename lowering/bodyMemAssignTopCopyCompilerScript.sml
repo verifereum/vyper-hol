@@ -327,5 +327,5 @@ Proof
   gvs[same_blocks_def, emitted_insts_def, IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >>
   rpt conj_tac >> rpt strip_tac >>
   `j=0 \/ j=1 \/ j=2 \/ j=3 \/ j=4 \/ j=5 \/ j=6 \/ j=7` by decide_tac >>
-  gvs[]
+  FIRST [gvs[]]
 QED
