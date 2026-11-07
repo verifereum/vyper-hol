@@ -121,3 +121,60 @@ Proof
   disch_then (qspec_then `lo` mp_tac) >>
   fs[ptr_discipline_def]
 QED
+
+Theorem ld_frame_reachable_allocas_floor:
+  !vs0 C stk PG G tn fn i s.
+    frame_reachable vs0 C stk PG G tn fn i s ==>
+    !lo. allocas_from lo vs0 /\ lo <= vs0.vs_alloca_next ==>
+      allocas_from lo s /\ EVERY (\f. allocas_from lo f.cf_state) stk
+Proof
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_frame_reachable_allocas_floor[entry]:
+  rpt strip_tac >>
+  drule ld_enters_block_allocation_fields >> strip_tac >>
+  gvs[allocas_from_def] >> first_assum ACCEPT_TAC
+QED
+
+Resume ld_frame_reachable_allocas_floor[next]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  drule ld_frame_reachable_frontier_floor >>
+  disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
+  drule_all ld_step_floor_total >> strip_tac >>
+  gvs[allocas_from_def] >> first_assum ACCEPT_TAC
+QED
+
+Resume ld_frame_reachable_allocas_floor[block]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  drule ld_frame_reachable_frontier_floor >>
+  disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
+  drule_all ld_step_floor_total >> strip_tac >>
+  drule_all ld_enters_block_floor >> simp[]
+QED
+
+Resume ld_frame_reachable_allocas_floor[call]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  drule ld_frame_reachable_frontier_floor >>
+  disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
+  drule ld_setup_callee_floor >> strip_tac >>
+  drule ld_enters_block_allocation_fields >> strip_tac >>
+  gvs[allocas_from_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Resume ld_frame_reachable_allocas_floor[ret]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  drule ld_bind_outputs_allocas >> strip_tac >>
+  gvs[allocas_from_def] >> metis_tac[]
+QED
+
+Finalise ld_frame_reachable_allocas_floor
