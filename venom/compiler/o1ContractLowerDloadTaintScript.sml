@@ -10,7 +10,7 @@
 Theory o1ContractLowerDloadTaint
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
-  lowerDloadDefs venomPassSchedule list calleeTransport
+  lowerDloadDefs venomPassSchedule list calleeTransport lowerDloadRequestObservation
 
 (* Agreement of the complete step_taint adoption guard; request streams
    themselves may differ, only their change indicators must agree. *)
@@ -133,22 +133,6 @@ Theorem merge_callee_alloca_frontier:
   (merge_callee_state caller callee).vs_alloca_next = caller.vs_alloca_next
 Proof
   simp[venomExecSemanticsTheory.merge_callee_state_def]
-QED
-
-Theorem dead_stor_taint_transport:
-  dead_wf D /\ storage_agree_except (D.d_stor a st) st st' /\
-  X SUBSET D.d_stor a st /\ Y SUBSET X ==>
-  Y SUBSET D.d_stor a st'
-Proof
-  rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
-QED
-
-Theorem dead_trans_taint_transport:
-  dead_wf D /\ storage_agree_except (D.d_trans a st) st st' /\
-  X SUBSET D.d_trans a st /\ Y SUBSET X ==>
-  Y SUBSET D.d_trans a st'
-Proof
-  rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
 QED
 
 Theorem dead_imm_taint_transport:
