@@ -31,7 +31,7 @@
 
 Theory exprSimPop
 Ancestors
-  exprSimProps
+  exprSimProps exprSimSource exprBopSimProps
   exprSimHypsDefs
   exprSimDefs
   loweringPosts
