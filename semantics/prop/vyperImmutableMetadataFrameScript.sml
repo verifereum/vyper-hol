@@ -373,7 +373,7 @@ fun METADATA_IH_TAC (asl,w) =
     (print ("METADATA candidates " ^ Int.toString (length candidates) ^
       " goal " ^ term_to_string w ^ "\n"); raise HOL_ERR e)) end;
 
-val METADATA_FRAME_STEP = FIRST [
+val METADATA_STRUCTURAL_STEP = FIRST [
   first_assum ACCEPT_TAC,
   (fn g as (_,w) => FIRST (Net.match w metadata_frame_net) g),
   CONV_TAC (HO_REWR_CONV FORALL_PROD),
@@ -383,7 +383,8 @@ val METADATA_FRAME_STEP = FIRST [
   CONV_TAC (RAND_CONV ETA_CONV),
   CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
     (pair_case_thm :: UNCURRY :: List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-  METADATA_CASE_TAC, METADATA_IH_TAC];
+  METADATA_CASE_TAC];
+val METADATA_FRAME_STEP = FIRST [METADATA_STRUCTURAL_STEP, METADATA_IH_TAC];
 val METADATA_FRAME_TAC = rpt METADATA_FRAME_STEP;
 
 Theorem metadata_frame_create[local]:
@@ -443,6 +444,28 @@ val METADATA_CONSTRUCTOR_TAC =
        RULE_ASSUM_TAC (SIMP_RULE bool_ss
          [create_kind_11, create_kind_distinct, COND_CLAUSES])) >>
   rpt METADATA_EVAL_STEP;
+
+(* Shared recursive-call leaf solver.  Closing c42 directly avoids accumulating
+   three or more obligations under one markerLib suspension label. *)
+val intcall_frames_tac =
+  (fn g as (asl,w) =>
+    let
+      fun terminal tm = if is_forall tm then terminal (snd (dest_forall tm))
+        else if is_imp tm then terminal (snd (dest_imp tm)) else tm
+      val candidates = List.mapPartial
+        (total (fn a => PART_MATCH terminal (ASSUME a) w)) (List.filter is_forall asl)
+    in FIRST (map (irule o SIMP_RULE bool_ss
+      [oneTheory.one, FST, SND, pair_case_thm, UNCURRY, ignore_bind_def]) candidates) g end) >>
+  (fn (asl,w) => simp_tac (bool_ss ++ SFY_ss ++ CONJ_ss)
+    (oneTheory.one :: FST :: SND :: pair_case_thm :: UNCURRY ::
+     List.map ASSUME (List.filter (not o is_forall) asl)) (asl,w)) >>
+  POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
+  fs[oneTheory.one, FST, SND, ignore_bind_def] >>
+  rpt conj_tac >>
+  simp[SF SFY_ss] >>
+  FIRST [metis_tac[],
+    qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+      (irule_at Any) >> simp[SF SFY_ss]];
 
 Theorem eval_metadata_frame_with_results:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> immutable_metadata_frame st st') /\
@@ -586,7 +609,17 @@ Resume eval_metadata_frame_with_results[c41]:
   METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
 QED
 Resume eval_metadata_frame_with_results[c42]:
-  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+  rpt strip_tac >>
+  qpat_assum `_ = (res,st')` (fn th =>
+    let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
+      irule (INST_TYPE [alpha |-> type_of result] metadata_frame_at) >>
+      exists_tac (rator (lhs (concl th))) >> exists_tac result
+    end) >>
+  asm_simp_tac bool_ss [] >>
+  simp_tac bool_ss [Once evaluate_def, lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  (* Solve recursive-call leaves without the expensive speculative IH pass. *)
+  rpt METADATA_STRUCTURAL_STEP >> intcall_frames_tac
 QED
 Resume eval_metadata_frame_with_results[c43]:
   METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
@@ -647,25 +680,7 @@ Resume eval_metadata_frame_with_results[c61]:
 QED
 
 Resume eval_metadata_frame_with_results[IntCallFrames]:
-  markerLib.RESUME_TAC >>
-  (fn g as (asl,w) =>
-    let
-      fun terminal tm = if is_forall tm then terminal (snd (dest_forall tm))
-        else if is_imp tm then terminal (snd (dest_imp tm)) else tm
-      val candidates = List.mapPartial
-        (total (fn a => PART_MATCH terminal (ASSUME a) w)) (List.filter is_forall asl)
-    in FIRST (map (irule o SIMP_RULE bool_ss
-      [oneTheory.one, FST, SND, pair_case_thm, UNCURRY, ignore_bind_def]) candidates) g end) >>
-  (fn (asl,w) => simp_tac (bool_ss ++ SFY_ss ++ CONJ_ss)
-    (oneTheory.one :: FST :: SND :: pair_case_thm :: UNCURRY ::
-     List.map ASSUME (List.filter (not o is_forall) asl)) (asl,w)) >>
-  POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
-  fs[oneTheory.one, FST, SND, ignore_bind_def] >>
-  rpt conj_tac >>
-  simp[SF SFY_ss] >>
-  FIRST [metis_tac[],
-    rename1 `type_check (LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts) _ _ = _` >>
-    qexistsl [`args`,`dflts`] >> simp[SF SFY_ss]]
+  markerLib.RESUME_TAC >> intcall_frames_tac
 QED
 
 Finalise eval_metadata_frame_with_results
