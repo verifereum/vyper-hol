@@ -5,6 +5,16 @@ Ancestors
   bodyPtrMakeArrayExternalUnwrap bodyPtrMakeArrayUnwrapIdentity
   bodyPtrMakeArrayLayoutTransport exprPtrUnwrapMarked exprSimProps
   bodyPtrDefs loweringPosts exprLowering context compileEnv bodyPtrMakeArrayMemoryFrame
+  fragGasPathPtr fragGasPath
+
+Theorem unwrapped_old_pointer_coverage:
+  ghost_kept ce es' sn G tn s H tm /\
+  (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s) /\
+  not_fresh_at sn root /\ ptr_covers G tn root s n ==>
+  ptr_covers H tm root z n
+Proof
+  gvs[ghost_kept_def, ptr_covers_def] >> metis_tac[]
+QED
 
 Theorem literal_nonword_unwrap:
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -31,7 +41,11 @@ Theorem literal_nonword_unwrap:
     ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok ce e op H z /\
     ptr_mem_ok cx (lowered_value_type ce e) v op H tm z /\
     ghost_inv d ce cx es' H tm z /\ ghost_kept ce es' sn G tn s H tm /\
-    stmt_state_rel ctx func ce cx es' z
+    stmt_state_rel ctx func ce cx es' z /\
+    (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s) /\
+    ~z.vs_halted /\
+    (!x n. not_fresh_at sn x /\ ptr_covers G tn x s n ==>
+      ptr_covers H tm x z n)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!s H tm. ptr_val_ok cx (expr_type e) v op H tm s ==>
@@ -52,17 +66,11 @@ Proof
       qexistsl [`s`, `G`, `tn`] >> simp[ghost_kept_def]) >>
   drule_all external_nonword_unwrap >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  gvs[] >> qexistsl [`z`, `H`, `tm`] >> simp[]
-QED
-
-Theorem unwrapped_old_pointer_coverage:
-  expr_post ctx func ce cx e esi si sb s0 es' v op z /\
-  ghost_kept ce es' sn G tn s H tm /\
-  not_fresh_at si root /\ not_fresh_at sn root /\
-  lookup_var root s0 = lookup_var root s /\ ptr_covers G tn root s n ==>
-  ptr_covers H tm root z n
-Proof
-  gvs[expr_post_def, ghost_kept_def, ptr_covers_def] >> metis_tac[]
+  gvs[] >> qexistsl [`z`, `H`, `tm`] >> simp[] >>
+  (conj_tac >- metis_tac[gas_path_ptr_erase, gas_path_normal] >>
+   rpt strip_tac >>
+   drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`) unwrapped_old_pointer_coverage >>
+   disch_then (qspecl_then [`z`, `x`, `n`] mp_tac) >> simp[])
 QED
 
 Theorem unwrapped_old_allocation_robust:

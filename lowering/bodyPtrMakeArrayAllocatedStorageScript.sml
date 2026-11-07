@@ -36,6 +36,7 @@ Theorem allocated_storage_loop_endpoint_frame:
     lookup_var dst z = SOME (n2w b) /\ ptr_covers H tm dst z (32*n) /\
     (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> val_in_memory tv v b m) /\
     ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm /\
+    (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
     (!esi si e raw vv base.
       vv_post ctx func cenv cx e esi si sa base es raw vv s /\
       read_result cx raw es = (INL v,es) /\

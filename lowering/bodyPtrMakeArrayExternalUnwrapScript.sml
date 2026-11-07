@@ -31,7 +31,8 @@ Theorem external_storage_one_unwrap:
     expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
     ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
     ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z
+    stmt_state_rel ctx func cenv cx es' z /\
+    (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
   drule_all external_consumer_compile_frame >> strip_tac >>
@@ -109,7 +110,8 @@ Theorem external_storage_loop_unwrap:
     expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
     ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
     ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z
+    stmt_state_rel ctx func cenv cx es' z /\
+    (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
   drule_all external_consumer_compile_frame >> strip_tac >>
@@ -185,7 +187,8 @@ Theorem external_code_unwrap:
     expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
     ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
     ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z
+    stmt_state_rel ctx func cenv cx es' z /\
+    (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
   drule_all external_consumer_compile_frame >> strip_tac >>
@@ -252,7 +255,8 @@ Theorem external_nonword_unwrap:
     expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
     ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
     ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z
+    stmt_state_rel ctx func cenv cx es' z /\
+    (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
   drule unwrap_external_calldata_excluded >> strip_tac >>
