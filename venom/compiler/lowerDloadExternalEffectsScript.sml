@@ -294,3 +294,22 @@ Proof
   simp[ld_shared_state_def, step_taint_def, update_var_def] >>
   strip_tac >> gvs[]
 QED
+
+Theorem ld_consume_call_vars:
+  consume_call_outcome rq ro rs s = (w,r) ==> r.vs_vars = s.vs_vars
+Proof
+  simp[consume_call_outcome_eq] >> strip_tac >> gvs[]
+QED
+
+Theorem ld_consume_create_vars:
+  consume_create_outcome rq s = (w,r) ==> r.vs_vars = s.vs_vars
+Proof
+  simp[consume_create_outcome_eq] >> strip_tac >> gvs[]
+QED
+
+Theorem ld_extract_result_vars:
+  extract_venom_result s v ro rs rr = SOME (w,r) ==> r.vs_vars = s.vs_vars
+Proof
+  strip_tac >> drule ld_extract_concrete_shape >>
+  disch_then (mp_tac o Q.AP_TERM `\s. s.vs_vars`) >> simp[]
+QED
