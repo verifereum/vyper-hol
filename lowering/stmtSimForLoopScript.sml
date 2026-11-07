@@ -1227,7 +1227,10 @@ Theorem for_loop_alloca:
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                FLOOKUP s.vs_allocas a = SOME b))
+                FLOOKUP s.vs_allocas a = SOME b) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+            frame_start.cs_next_id <= sb0.cs_next_id ==>
+            alloca_frame cenv esk frame_start cc cenv ee s))
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1241,12 +1244,18 @@ Proof
     FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\
     (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
        lookup_var x t = SOME v) /\
-    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` >>
+    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+    (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+       frame_start.cs_next_id <= sb0.cs_next_id ==>
+       alloca_frame cenv esk frame_start cc cenv ee t)` >>
   qabbrev_tac `Done = \ee t.
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     stmt_state_rel ctx func cenv cx ee t /\
     (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x t = SOME v) /\
-    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` >>
+    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+    (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+       frame_start.cs_next_id <= sb0.cs_next_id ==>
+       alloca_frame cenv esk frame_start cc cenv ee t)` >>
   qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
   `(!j es s.
       j < LENGTH (GENLIST (\j. IntV (n1 + &(k+j))) m) /\ Inv j es s /\
@@ -1265,7 +1274,8 @@ Proof
   drule eval_for_rounds >>
   disch_then (qspecl_then [`0`, `esk`, `cc`] mp_tac) >>
   simp[Abbr `Inv`] >>
-  (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >> simp[arithmeticTheory.ADD_COMM])) >>
+  (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
+     simp[arithmeticTheory.ADD_COMM] >> rpt strip_tac >> irule alloca_frame_same >> simp[])) >>
   strip_tac >> drule gas_outcome_exec_conseq >> disch_then irule >>
   simp[Abbr `Done`, Abbr `R`] >> metis_tac[]
 QED
@@ -1295,6 +1305,11 @@ Resume for_loop_alloca[round]:
   drule gas_outcome_exec_conseq >> disch_then irule >>
   reverse conj_tac >- simp[Abbr `R`] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
+  `!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+     frame_start.cs_next_id <= sb0.cs_next_id ==>
+     alloca_frame cenv esk frame_start cc cenv mid t` by
+    (rpt strip_tac >> irule alloca_frame_trans >>
+     qexistsl_tac [`cenv`, `es`, `s`, `frame_start`] >> simp[]) >>
   conj_tac
   >- (strip_tac >> simp[Abbr `Done`]) >>
   strip_tac >> gvs[] >>
@@ -1324,6 +1339,13 @@ Resume for_loop_alloca[last]:
   `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
     (jump_to exit_lbl (update_var dv 1w s))` by
     (simp[stmt_state_rel_jump_to] >> irule stmt_state_rel_update_var >> simp[]) >>
+  `!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+     frame_start.cs_next_id <= sb0.cs_next_id ==>
+     alloca_frame cenv esk frame_start cc cenv es
+       (jump_to exit_lbl (update_var dv 1w s))` by
+    (rpt strip_tac >> irule alloca_frame_same_state >>
+     qexists_tac `update_var dv 1w s` >> simp[jump_to_def] >>
+     irule alloca_frame_update_var >> simp[]) >>
   qexists_tac `jump_to exit_lbl (update_var dv 1w s)` >>
   simp[Abbr `Done`] >>
   simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -1390,7 +1412,9 @@ Theorem for_loop:
                 FLOOKUP s.vs_allocas a = SOME b))
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >> simp[]
+  rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >>
+  disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
+  disch_then irule >> simp[]
 QED
 
 (* A pointer variable handed out at or after st is no local's pointer. *)

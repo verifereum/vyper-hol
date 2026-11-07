@@ -365,3 +365,12 @@ Proof
   `p <> q` by (fs[not_local_ptr_def] >> metis_tac[]) >>
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED
+
+Theorem alloca_frame_gas_obs[simp]:
+  (alloca_frame c0 (es with gas_obs := gs) sa s0 c ee t =
+   alloca_frame c0 es sa s0 c ee t) /\
+  (alloca_frame c0 es sa s0 c (ee with gas_obs := gs) t =
+   alloca_frame c0 es sa s0 c ee t)
+Proof
+  simp[alloca_frame_def]
+QED
