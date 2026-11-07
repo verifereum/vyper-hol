@@ -7,7 +7,7 @@ Ancestors
   venomExecSemantics rich_list list words venomMemDefs instMemFrontier
   fragExec fragGasSeqMem fragGasMode allocaHistoryFragment bodyMemBiSha256Compose
   exprSimDefs loweringPosts varsExt freshWrites venomInstProofs valueCopyBytes
-  exprSimBufferStore
+  exprSimBufferStore bodyMemEcArithPrefix
 
 Theorem convert_alloc_copy_insts_split[local]:
   compile_alloc_buffer d sm = (buf,mid) /\
@@ -61,7 +61,6 @@ Theorem convert_widen_copy_mem_ok:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated sm /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  fresh_vars_wrt sm s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next ==>
   run_inst_seq_mem_ok (emitted_insts sm sb) s
@@ -86,7 +85,7 @@ Proof
      qpat_x_assum `!aid base sz. FLOOKUP t.vs_allocas aid = SOME (base,sz) ==> _`
        drule >> simp[]) >>
   `run_inst_seq_mem_ok (emitted_insts sm mid) s` by
-    (irule compile_alloc_buffer_body_mem_ok >> metis_tac[]) >>
+    (irule ec_alloc_buffer_mem_ok >> metis_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts mid sb) t` by
     (drule emitted_insts_emit_void >> strip_tac >>
      gvs[run_inst_seq_mem_ok_last, below_frontier_MCOPY, eval_operand_def] >>
@@ -103,7 +102,7 @@ Theorem convert_widen_copy_path_mem:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated sm /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  fresh_vars_wrt sm s /\ alloca_history func s /\ alloca_inv s /\
+  alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -145,7 +144,7 @@ Theorem convert_widen_copy_owned_mem:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated sm /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  fresh_vars_wrt sm s /\ alloca_history func s /\ alloca_inv s /\
+  alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
   ~is_word_type (expr_type e) /\
@@ -200,7 +199,7 @@ Theorem convert_widen_cont_mem:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
-  ~block_is_terminated sm /\ fresh_vars_wrt sm s /\
+  ~block_is_terminated sm /\
   alloca_history func s /\ alloca_inv s /\
   (!p. eval_operand x s = SOME p ==>
     w2n p + type_memory_bytes cenv (lowered_value_type cenv e1) <= s.vs_alloca_next) /\
