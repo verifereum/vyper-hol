@@ -19,16 +19,16 @@ Proof
   strip_tac >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def] >>
   conj_tac
-  >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-           mk_inst_def, source_memory_write_ranges_def,
+  >- (simp[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def] >>
+      simp[access_ok_def, taint_ok_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
            step_inst_base_def, exec_read0_def, update_var_def]) >>
   simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
        exec_read0_def, is_terminator_def, ghost_step_def] >>
   simp[Once ptr_safe_block_def, update_var_def, arithmeticTheory.ADD1] >>
   conj_tac
-  >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-           mk_inst_def, source_memory_write_ranges_def,
+  >- (simp[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def] >>
+      simp[access_ok_def, taint_ok_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
            step_inst_base_def, exec_pure1_def, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE, step_taint_def, op_taint_def,
@@ -41,8 +41,8 @@ Proof
   simp[Once ptr_safe_block_def] >>
   simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       mk_inst_def, source_memory_write_ranges_def,
+  simp[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def] >>
+  simp[access_ok_def, taint_ok_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke, step_inst_base_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        Abbr `tn2`, step_taint_def, op_taint_def, out_taint_def,

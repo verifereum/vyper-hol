@@ -18,9 +18,9 @@ Proof
       comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   `!j. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + j) = 0` by decide_tac >>
   simp[emitted_insts_def, DROP_APPEND] >>
-  simp[Once run_inst_seq_mem_ok_cons, below_frontier_MLOAD, mk_inst_def,
-       inst_dload_in_section_def, step_inst_base_def, exec_read1_def,
-       eval_operands_def] >>
+  simp[Once run_inst_seq_mem_ok_cons] >>
+  simp[below_frontier_MLOAD, mk_inst_def, inst_dload_in_section_def,
+       step_inst_base_opcode_eqs, exec_read1_def, eval_operands_def] >>
   `!n z. sa.cs_next_var <= n ==>
      eval_operand v (update_var (STRING #"%" (toString n)) z s) = SOME w` by
     metis_tac[eval_operand_update_not_fresh] >>
