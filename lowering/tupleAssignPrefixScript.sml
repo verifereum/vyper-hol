@@ -31,7 +31,10 @@ Theorem mcopy_alloca_framed_path[local]:
       (!q. lookup_var q t = lookup_var q s) /\ t.vs_allocas = s.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      (!aid off len. FLOOKUP s.vs_allocas aid = SOME (off,len) /\
+         aid <> inst.inst_id ==>
+         mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)
 Proof
   rpt strip_tac >>
   `stmt_state_rel ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
@@ -50,9 +53,17 @@ Proof
    LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
     gvs[emit_void_def, emit_inst_def, comp_bind_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `!aid off len. FLOOKUP s.vs_allocas aid = SOME (off,len) /\
+     aid <> inst.inst_id ==>
+     mem_bytes_at off len (mcopy (w2n dw) (w2n sw) sz s).vs_memory =
+     mem_bytes_at off len s.vs_memory` by
+    (rpt strip_tac >> irule mcopy_mem_bytes_at_disjoint >>
+     `allocas_non_overlapping s` by fs[stmt_state_rel_def, alloca_inv_def] >>
+     fs[allocas_non_overlapping_def] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexists `mcopy (w2n dw) (w2n sw) sz s with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx] >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  fs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >> gvs[]
 QED
 
 Theorem tuple_stage_copy_path[local]:
@@ -78,7 +89,8 @@ Theorem tuple_stage_copy_path[local]:
       (!x. staged = Var x ==> not_fresh_at sb x) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      alloca_frame cenv es sa s cenv es t
 Proof
   rpt strip_tac >> drule_all tuple_stage_copy_parts >>
   disch_then (qx_choosel_then [`sx`, `sm`, `p`] strip_assume_tac) >>
@@ -98,12 +110,23 @@ Proof
       (!q. lookup_var q t = lookup_var q s1) /\ t.vs_allocas = s1.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s1 0 (OK t)` by
-    (irule mcopy_alloca_framed_path >> simp[] >>
-     qexists `mk_inst sx.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
+      gas_marked_path F ctx func s1 0 (OK t) /\
+      (!aid off len. FLOOKUP s1.vs_allocas aid = SOME (off,len) /\
+         aid <> sx.cs_next_id ==>
+         mem_bytes_at off len t.vs_memory = mem_bytes_at off len s1.vs_memory)` by
+    (irule (mcopy_alloca_framed_path |> SPEC_ALL |>
+       Q.INST [`inst` |-> `mk_inst sx.cs_next_id ALLOCA [Lit (n2w sz)] [p]`] |>
+       SIMP_RULE (srw_ss()) [mk_inst_def]) >> simp[] >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> gvs[mk_inst_def]) >>
   `gas_marked_path F ctx func s (0 + 0) (OK t)` by
     (irule gas_marked_path_then >> qexists `s1` >> simp[]) >>
+  `alloca_frame cenv es sa s cenv es t` by
+    (irule alloca_frame_of_mem_frame >> simp[] >>
+     conj_tac >- (rpt strip_tac >> `x <> p` by metis_tac[] >> metis_tac[]) >>
+     reverse conj_tac >- (qexistsl [`ctx`, `cx`, `func`] >> simp[]) >>
+     rpt strip_tac >>
+     `aid <> sx.cs_next_id` by (simp[] >> decide_tac) >>
+     metis_tac[]) >>
   qexistsl [`t`, `w`] >> simp[eval_operand_def] >>
   conj_tac >- gvs[] >>
   conj_tac >- (rpt strip_tac >> `x <> p` by metis_tac[] >> simp[]) >>
@@ -145,7 +168,8 @@ Theorem optional_tuple_stage_path:
         w2n w + type_memory_size_list tvs <= b + sz /\
         ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
          (?name. local_region cenv es.scopes t name b sz))) /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      alloca_frame cenv es sa s cenv es t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all expr_tuple_memory_owned >>
@@ -163,7 +187,9 @@ Proof
       qexistsl [`t`, `w`] >> simp[] >>
       conj_tac >- gvs[val_in_memory_def] >>
       qexistsl [`w2n w`, `type_memory_size_list tvs`] >> simp[] >> metis_tac[]) >>
-  gvs[comp_return_def] >> qexistsl [`s`, `sw`] >> simp[] >>
+  gvs[comp_return_def] >>
+  `alloca_frame cenv es sa s cenv es s` by (irule alloca_frame_same >> simp[]) >>
+  qexistsl [`s`, `sw`] >> simp[] >>
   conj_tac >- metis_tac[] >>
   simp[gas_marked_path_def, cj 1 fragGasPathTheory.gas_path_rules] >>
   qexistsl [`b`, `sz`] >> simp[] >> metis_tac[]
@@ -299,7 +325,8 @@ Theorem tuple_assignment_prefix_path:
          lookup_var x t = SOME v) /\
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
          FLOOKUP t.vs_allocas aid = SOME entry) /\
-      gas_marked_path F ctx func sv 0 (OK t)
+      gas_marked_path F ctx func sv 0 (OK t) /\
+      alloca_frame cenv es1 su sv cenv es1 t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LIST_REL (\t tv. evaluate_type (get_tenv cx) t = SOME tv) tys tvs` by
@@ -326,6 +353,11 @@ Proof
   drule_all compile_tuple_load_all_typed_path >> strip_tac >>
   `EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems` by
     (simp[EVERY_MEM] >> metis_tac[]) >>
+  `alloca_frame cenv es1 su sv cenv es1 t` by
+    (pure_rewrite_tac[alloca_frame_def] >>
+     asm_rewrite_tac[] >>
+     qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+     simp[alloca_frame_def]) >>
   asm_rewrite_tac[] >> qexistsl [`t`, `w`, `b`, `sz`] >>
   asm_rewrite_tac[] >>
   conj_tac
