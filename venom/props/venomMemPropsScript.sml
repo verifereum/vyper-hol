@@ -225,7 +225,12 @@ Proof
   `inst.inst_opcode = ALLOCA` by
     (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
   `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  pop_assum mp_tac >> simp[step_inst_base_def] >>
+  pop_assum mp_tac >> (let
+    val th = valOf (List.find (fn th =>
+      let val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+      in aconv (rhs guard) (Parse.Term `ALLOCA`) end)
+      (CONJUNCTS step_inst_base_opcode_eqs))
+  in simp[th] end) >>
   Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
   Cases_on `t` >> simp[] >>
   Cases_on `h` >> simp[] >>
@@ -253,7 +258,12 @@ Proof
     (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
   `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
   pop_assum mp_tac >>
-  simp[step_inst_base_def] >>
+  (let
+    val th = valOf (List.find (fn th =>
+      let val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+      in aconv (rhs guard) (Parse.Term `ALLOCA`) end)
+      (CONJUNCTS step_inst_base_opcode_eqs))
+  in simp[th] end) >>
   Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
   Cases_on `t` >> simp[] >>
   Cases_on `h` >> simp[] >>
