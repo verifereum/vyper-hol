@@ -2,7 +2,7 @@
 Theory whitelistForIterImmFrame
 Ancestors
   vyperBareGlobalName vyperPlaceFrames vyperState vyperTypeSystem
-  stmtSimForArrayFrame vyperStatePreservation
+  stmtSimForArrayFrame vyperStatePreservation supportedExprs supportedExprForms
   vyperTypeInvariants vyperInterpreter vyperAST list finite_map alist
 
 Theorem lookup_immutable_set_other:
@@ -137,3 +137,108 @@ Proof
   drule_at (Pat `type_place_target env target`) typed_guarded_array_root >>
   simp[] >> metis_tac[]
 QED
+
+Theorem supported_pure_immutable_mutual:
+  (!tops e. supported_pure_expr tops e ==>
+    !cx es res es' src name. eval_expr cx e es = (res,es') ==>
+      lookup_immutable cx es' src name = lookup_immutable cx es src name) /\
+  (!tops exprs. supported_pure_exprs tops exprs ==>
+    !cx es res es' src name. eval_exprs cx exprs es = (res,es') ==>
+      lookup_immutable cx es' src name = lookup_immutable cx es src name) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    !cx es res es' src name. eval_exprs cx (MAP SND fields) es = (res,es') ==>
+      lookup_immutable cx es' src name = lookup_immutable cx es src name) /\
+  (!tops e. supported_place_expr tops e ==>
+    !cx es res es' src name. eval_expr cx e es = (res,es') ==>
+      lookup_immutable cx es' src name = lookup_immutable cx es src name)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >> rpt conj_tac >>
+  simp[supported_pure_expr_def] >> rpt strip_tac
+  >>~- ([`eval_expr _ (Name _ _) _ = _`],
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, lift_option_type_def,
+          return_def, raise_def, AllCaseEqs()])
+  >>~- ([`eval_expr _ (Literal _ _) _ = _`],
+      gvs[Once evaluate_def, return_def])
+  >>~- ([`eval_expr _ (TopLevelName _ _) _ = _`],
+      rename1 `eval_expr cx (TopLevelName ty nsid) es = _` >>
+      PairCases_on `nsid` >> gvs[Once evaluate_def] >>
+      drule lookup_global_state >> simp[])
+  >>~- ([`eval_expr _ (IfExp _ _ _ _) _ = _`], suspend "ifexp")
+  >>~- ([`eval_expr _ (StructLit _ _ _) _ = _`], suspend "struct")
+  >~ [`eval_expr _ (Subscript _ _ _) _ = _`] >- suspend "subscript1"
+  >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`], suspend "subscript2")
+  >~ [`eval_expr _ (Attribute _ _ _) _ = _`] >- suspend "attribute1"
+  >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`], suspend "attribute2")
+  >>~- ([`eval_expr _ (Builtin _ _ _) _ = _`], suspend "builtin")
+  >>~- ([`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`], suspend "typebuiltin")
+  >>~- ([`eval_exprs _ [] _ = _`], gvs[Once evaluate_def, return_def])
+  >> gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def]
+  >> imp_res_tac read_result_state >> gvs[]
+  >> rename1 `lookup_immutable cx es' protected_src protected_name = _`
+  >> first_x_assum drule
+  >> disch_then (qspecl_then [`protected_src`, `protected_name`] assume_tac)
+  >> first_x_assum drule
+  >> disch_then (qspecl_then [`protected_src`, `protected_name`] assume_tac)
+  >> gvs[]
+QED
+
+Resume supported_pure_immutable_mutual[ifexp]:
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, switch_BoolV_def,
+      AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >> gvs[] >>
+  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[]
+QED
+
+Resume supported_pure_immutable_mutual[struct]:
+  rename1 `eval_expr cx (StructLit ty nsid fields) es = _` >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  metis_tac[]
+QED
+
+Resume supported_pure_immutable_mutual[subscript1]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume supported_pure_immutable_mutual[subscript2]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume supported_pure_immutable_mutual[attribute1]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+QED
+
+Resume supported_pure_immutable_mutual[attribute2]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+QED
+
+Resume supported_pure_immutable_mutual[builtin]:
+  `blt <> Len` by
+    (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
+  Cases_on `blt = Env MsgGas` >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
+  imp_res_tac next_gas_reading_state >>
+  imp_res_tac lift_sum_state >>
+  imp_res_tac precompile_call_success_state >> gvs[]
+  >>~- ([`lookup_immutable cx (es with gas_obs := gobs) src name = _`],
+         simp[lookup_immutable_def]) >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`src`, `name`] mp_tac) >>
+  simp[lookup_immutable_def]
+QED
+
+Resume supported_pure_immutable_mutual[typebuiltin]:
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+QED
+
+Finalise supported_pure_immutable_mutual
