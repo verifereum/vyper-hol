@@ -78,7 +78,7 @@ Proof
   fs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
-Theorem MEM_remove_block_iff[local]:
+Theorem MEM_remove_block_iff:
   !bb lbl bbs.
     MEM bb (remove_block lbl bbs) <=> MEM bb bbs /\ bb.bb_label <> lbl
 Proof

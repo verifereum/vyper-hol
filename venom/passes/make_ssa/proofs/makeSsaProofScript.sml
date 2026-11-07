@@ -20,55 +20,10 @@ val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* ===== Definitions and main theorem ===== *)
 
-(* ssa_sim preservation through update_var with fresh output *)
-Triviality ssa_sim_update_fresh[local]:
-  !sigma s1 s2 base out w.
-    ssa_sim sigma s1 s2 /\
-    lookup_var base s1 = SOME w /\
-    (!x. x <> base ==> sigma x <> out) ==>
-    ssa_sim ((base =+ out) sigma) s1 (update_var out w s2)
-Proof
-  rw[ssa_sim_def, update_var_def, lookup_var_def, combinTheory.UPDATE_def,
-     FLOOKUP_UPDATE] >>
-  metis_tac[optionTheory.SOME_11]
-QED
-
 (* Single PHI step: execute one PHI instruction, updating ssa_sim.
    The PHI reads via resolve_phi, evaluates in s2, writes to fresh output.
    After: ssa_sim sigma' s1 s2' where sigma'(bv) = out, rest unchanged.
    Also: exec_block errors because PHI is not in the non-PHI suffix. *)
-Triviality phi_step_sim[local]:
-  !bb' fuel ctx s1 s2 sigma bv out w prev_bb.
-    s2.vs_inst_idx < LENGTH bb'.bb_instructions /\
-    s2.vs_prev_bb = SOME prev_bb /\
-    ssa_sim sigma s1 s2 /\
-    (EL s2.vs_inst_idx bb'.bb_instructions).inst_opcode = PHI /\
-    (EL s2.vs_inst_idx bb'.bb_instructions).inst_outputs = [out] /\
-    resolve_phi prev_bb
-      (EL s2.vs_inst_idx bb'.bb_instructions).inst_operands =
-      SOME (Var (sigma bv)) /\
-    lookup_var bv s1 = SOME w /\
-    lookup_var (sigma bv) s2 = SOME w /\
-    (!x. x <> bv ==> sigma x <> out) ==>
-    let s2' = update_var out w s2 in
-    ssa_sim ((bv =+ out) sigma) s1 s2' /\
-    (s2'.vs_halted <=> s2.vs_halted) /\
-    s2'.vs_current_bb = s2.vs_current_bb /\
-    s2'.vs_prev_bb = s2.vs_prev_bb /\
-    exec_block fuel ctx bb' s2 = Error "phi outside prefix"
-Proof
-  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  conj_tac >- (
-    irule ssa_sim_update_fresh >>
-    rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  (conj_tac >- (simp[update_var_def])) >>
-  (conj_tac >- (simp[update_var_def])) >>
-  (conj_tac >- (simp[update_var_def])) >>
-  qpat_x_assum `(EL s2.vs_inst_idx bb'.bb_instructions).inst_opcode = PHI`
-    mp_tac >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  gvs[get_instruction_def, step_inst_def, step_inst_base_def]
-QED
 
 (* The root of the dom tree maps to the initial rename state *)
 Triviality block_rename_states_root:

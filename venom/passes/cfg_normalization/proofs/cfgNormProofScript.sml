@@ -693,14 +693,6 @@ Proof
      venomInstTheory.is_terminator_def, get_labels_subst_label_ops]
 QED
 
-(* bb_succs when instructions are non-empty *)
-Theorem bb_succs_nonempty[local]:
-  !bb. bb.bb_instructions <> [] ==>
-    bb_succs bb = nub (REVERSE (get_successors (LAST bb.bb_instructions)))
-Proof
-  rw[bb_succs_def] >> Cases_on `bb.bb_instructions` >> fs[]
-QED
-
 (* LAST of subst_label_terminator instructions *)
 Theorem LAST_subst_label_terminator[local]:
   !old_lbl new_lbl bb.
@@ -764,19 +756,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-(* bb_succs of split_bb: just [target_bb.bb_label] *)
-Theorem bb_succs_split_bb[local]:
-  !pred_bb target_bb id_base split_bb var_repls.
-    build_split_block pred_bb target_bb id_base = (split_bb, var_repls) ==>
-    bb_succs split_bb = [target_bb.bb_label]
-Proof
-  rw[cfgNormDefsTheory.build_split_block_def, LET_THM] >>
-  pairarg_tac >> fs[] >> rw[] >>
-  simp[bb_succs_nonempty, rich_listTheory.LAST_APPEND_NOT_NIL,
-       get_successors_def, venomInstTheory.is_terminator_def,
-       venomStateTheory.get_label_def, listTheory.nub_def]
-QED
-
 (* num_succs of split_bb = 1 *)
 Theorem num_succs_split_bb[local]:
   !pred_bb target_bb id_base split_bb var_repls.
@@ -785,70 +764,6 @@ Theorem num_succs_split_bb[local]:
 Proof
   rw[cfgTransformTheory.num_succs_def] >>
   imp_res_tac bb_succs_split_bb >> simp[]
-QED
-
-(* split_bb is well-formed *)
-Theorem bb_well_formed_split_bb[local]:
-  !pred_bb target_bb id_base split_bb var_repls.
-    build_split_block pred_bb target_bb id_base = (split_bb, var_repls) ==>
-    bb_well_formed split_bb
-Proof
-  rw[cfgNormDefsTheory.build_split_block_def, LET_THM] >>
-  pairarg_tac >> fs[] >> rw[] >>
-  simp[bb_well_formed_def, rich_listTheory.LAST_APPEND,
-       venomInstTheory.is_terminator_def] >>
-  rpt conj_tac >-
-  (rw[] >>
-   imp_res_tac cfgNormSimTheory.build_forwarding_assigns_insts >>
-   Cases_on `i < LENGTH fwd_insts` >-
-   (fs[rich_listTheory.EL_APPEND1] >>
-    `(EL i fwd_insts).inst_opcode = ASSIGN` by simp[] >>
-    fs[venomInstTheory.is_terminator_def]) >>
-   fs[rich_listTheory.EL_APPEND2] >>
-   `i - LENGTH fwd_insts = 0` by DECIDE_TAC >>
-   fs[venomInstTheory.is_terminator_def]) >>
-  rw[] >>
-  imp_res_tac cfgNormSimTheory.build_forwarding_assigns_insts >>
-  Cases_on `j < LENGTH fwd_insts` >-
-  (`(EL j fwd_insts).inst_opcode = ASSIGN` by simp[] >>
-   fs[rich_listTheory.EL_APPEND1]) >>
-  `j = LENGTH fwd_insts` by DECIDE_TAC >>
-  fs[rich_listTheory.EL_APPEND2]
-QED
-
-(* bb_well_formed preserved by subst_label_terminator *)
-Theorem bb_well_formed_map_opcode_preserving[local]:
-  !f bb. (!inst. (f inst).inst_opcode = inst.inst_opcode) ==>
-    bb_well_formed bb ==>
-    bb_well_formed (bb with bb_instructions := MAP f bb.bb_instructions)
-Proof
-  rw[bb_well_formed_def] >>
-  `!n. n < LENGTH bb.bb_instructions ==>
-    (MAP f bb.bb_instructions)❲n❳.inst_opcode =
-    bb.bb_instructions❲n❳.inst_opcode` by
-    simp[listTheory.EL_MAP] >>
-  res_tac >> fs[]
-QED
-
-Theorem bb_well_formed_subst_label_terminator[local]:
-  !old_lbl new_lbl bb.
-    bb_well_formed bb ==>
-    bb_well_formed (subst_label_terminator old_lbl new_lbl bb)
-Proof
-  rw[cfgTransformTheory.subst_label_terminator_def] >>
-  irule bb_well_formed_map_opcode_preserving >> rw[] >>
-  Cases_on `is_terminator inst.inst_opcode` >>
-  simp[cfgTransformTheory.subst_label_inst_def]
-QED
-
-(* bb_well_formed preserved by update_phis_for_split *)
-Theorem bb_well_formed_update_phis[local]:
-  !old_lbl new_lbl var_repls bb.
-    bb_well_formed bb ==>
-    bb_well_formed (update_phis_for_split old_lbl new_lbl var_repls bb)
-Proof
-  rw[cfgNormDefsTheory.update_phis_for_split_def] >>
-  irule bb_well_formed_map_opcode_preserving >> rw[]
 QED
 
 (* Label substitution does not change DRET's literal/count envelope. *)
@@ -1400,31 +1315,6 @@ Proof
   BasicProvers.every_case_tac >> fs[]
 QED
 
-(* insert_split preserves fn_entry_label *)
-Theorem fn_entry_label_insert_split:
-  !func pred_bb target_bb id_base.
-    func.fn_blocks <> [] ==>
-    fn_entry_label (insert_split func pred_bb target_bb id_base) =
-    fn_entry_label func
-Proof
-  rw[cfgNormDefsTheory.insert_split_def, LET_THM] >>
-  pairarg_tac >> fs[] >>
-  simp[venomInstTheory.fn_entry_label_def,
-       venomInstTheory.entry_block_def] >>
-  `replace_block target_bb.bb_label
-     (update_phis_for_split pred_bb.bb_label split_bb.bb_label var_repls
-        target_bb)
-     (replace_block pred_bb.bb_label
-        (subst_label_terminator target_bb.bb_label split_bb.bb_label pred_bb)
-        func.fn_blocks) <> []` by
-    simp[cfgTransformTheory.replace_block_def] >>
-  simp[rich_listTheory.HD_APPEND_NOT_NIL] >>
-  fs[listTheory.NULL_EQ] >>
-  irule hd_label_two_replace_blocks >>
-  simp[cfgNormSimTheory.subst_label_terminator_bb_label,
-       cfgNormSimTheory.update_phis_for_split_bb_label]
-QED
-
 Theorem mem_block_mem_fn_labels:
   !bb func. MEM bb func.fn_blocks ==>
     MEM bb.bb_label (fn_labels func)
@@ -1744,7 +1634,7 @@ Proof
       rw[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM] >> rw[])
   (* fn_has_entry *)
   >- (`func.fn_blocks <> []` by fs[venomWfTheory.fn_has_entry_def] >>
-      imp_res_tac fn_entry_label_insert_split >>
+      imp_res_tac insert_split_entry >>
       `(insert_split func pred_bb target_bb id_base).fn_blocks <> []` by (
         simp[insert_split_def, LET_THM] >> pairarg_tac >> simp[]) >>
       fs[venomWfTheory.fn_has_entry_def] >>
@@ -2530,20 +2420,6 @@ Proof
     (impl_tac >- simp[]) >>
     DISCH_THEN (qspecl_then [`pred_bb.bb_label`,
       `target_bb.bb_label`] mp_tac) >> simp[])
-QED
-
-(* Re-prove locally: inst output is in fn_all_vars *)
-Theorem inst_output_in_fn_all_vars:
-  !func bb inst out.
-    MEM bb func.fn_blocks /\ MEM inst bb.bb_instructions /\
-    MEM out inst.inst_outputs ==>
-    MEM out (fn_all_vars func)
-Proof
-  rpt strip_tac >>
-  simp[cfgTransformTheory.fn_all_vars_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
-       listTheory.MEM_APPEND, PULL_EXISTS] >>
-  qexistsl_tac [`bb`, `inst`] >> simp[] >>
-  DISJ1_TAC >> simp[]
 QED
 
 (* If Var v appears in update_phi_ops output, either it was in original ops

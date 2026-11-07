@@ -1210,15 +1210,6 @@ Proof
   simp[] >> first_x_assum irule >> simp[]
 QED
 
-Triviality sccp_transfer_phi_bottom_local[local]:
-  !f inst lat y.
-    inst.inst_opcode = PHI /\ MEM y inst.inst_outputs ==>
-    FLOOKUP (sccp_transfer_inst f inst lat).sl_vals y = SOME CL_Bottom
-Proof
-  rpt strip_tac >> simp[sccp_transfer_inst_def] >>
-  metis_tac[cj 1 foldl_fupdate_bottom]
-QED
-
 Triviality sccp_phi_prefix_df_phi_bottom[local]:
   !idx f bb k y.
     wf_function f /\ wf_ssa f /\ MEM bb f.fn_blocks /\
@@ -1242,7 +1233,7 @@ Proof
   Cases_on `k = idx`
   >- (
     `((EL idx bb.bb_instructions).inst_opcode = PHI)` by gvs[] >>
-    metis_tac[sccp_transfer_phi_bottom_local]) >>
+    metis_tac[sccp_transfer_phi_bottom]) >>
   `k < idx` by simp[] >>
   first_x_assum (qspecl_then [`f`, `bb`, `k`, `y`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -1822,20 +1813,8 @@ Proof
       gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK s_phi` >> strip_tac >>
       qabbrev_tac `idx = phi_prefix_length bb.bb_instructions` >>
       `idx <= PRE (LENGTH bb.bb_instructions)` by (
-        `idx < LENGTH bb.bb_instructions` by (
-          qunabbrev_tac `idx` >>
-          CCONTR_TAC >>
-          `LENGTH bb.bb_instructions <= phi_prefix_length bb.bb_instructions` by simp[] >>
-          `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
-            simp[phi_prefix_length_le] >>
-          `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by decide_tac >>
-          fs[bb_well_formed_def] >>
-          `~is_terminator PHI` by simp[is_terminator_def] >>
-          `is_terminator (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode` by
-            metis_tac[LAST_EL] >>
-          `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
-            (Cases_on `bb.bb_instructions` >> fs[]) >>
-          metis_tac[phi_prefix_length_el_phi]) >>
+        `idx < LENGTH bb.bb_instructions` by
+          (qunabbrev_tac `idx` >> irule phi_prefix_length_lt_wf >> simp[]) >>
         decide_tac) >>
       `!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
              SOME (CL_Const c) /\

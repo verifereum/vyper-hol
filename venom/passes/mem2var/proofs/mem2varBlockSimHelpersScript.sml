@@ -1,6 +1,6 @@
 Theory mem2varBlockSimHelpers
 Ancestors
-  venomCallOracleDefs venomCallOracleProps
+  venomFnInstsProofs venomCallOracleDefs venomCallOracleProps
   oracleExecProps
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
   opcodeClass
@@ -284,45 +284,6 @@ Theorem step_inst_idx_indep_local:
       (step_inst fuel ctx inst s)
 Proof
   rw[step_inst_non_invoke, step_inst_inst_idx_indep]
-QED
-
-(* Skip prefix: if run_insts returns OK, exec_block can skip ahead *)
-Theorem exec_block_skip_prefix:
-  !prefix fuel ctx bb s j s'.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==>
-         EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = OK s' ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) =
-    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
-Proof
-  Induct >> rw[run_insts_def] >>
-  rename1 `h :: prefix` >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  Cases_on `step_inst fuel ctx h s` >> gvs[exec_result_map_def] >>
-  rename1 `step_inst _ _ h s = OK s1` >>
-  `s1.vs_inst_idx = s.vs_inst_idx` by
-    metis_tac[step_inst_preserves_inst_idx] >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`,
-    `SUC j`, `s'`] mp_tac) >>
-  simp[arithmeticTheory.ADD_CLAUSES] >>
-  impl_tac >- (rw[] >>
-    first_x_assum (qspec_then `SUC k` mp_tac) >>
-    simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[]
 QED
 
 (* Error propagation: if run_insts returns Error, exec_block does too *)
@@ -1138,14 +1099,6 @@ Finalise m2v_step_nonpromoted
    PER-INSTRUCTION SIMULATION (promoted MSTORE case)
    MSTORE [Var ao; val_op] -> ASSIGN [val_op] output [pvar]
    ================================================================ *)
-
-Theorem len_word_to_bytes_256:
-  LENGTH (word_to_bytes (w:bytes32) be) = 32
-Proof
-  rw[byteTheory.LENGTH_word_to_bytes,
-     fcpTheory.index_bit0, fcpTheory.index_bit1, fcpTheory.index_one,
-     fcpTheory.finite_bit0, fcpTheory.finite_bit1, fcpTheory.finite_one]
-QED
 
 (* General: EL outside a splice is unchanged *)
 Theorem EL_splice_outside:
@@ -4229,20 +4182,6 @@ Proof
   rw[m2v_non32_ok_def, lookup_var_def]
 QED
 
-(* eval_operands agreement from operand agreement *)
-Theorem eval_operands_agrees:
-  !ops s1 s2.
-    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by simp[] >>
-  Cases_on `eval_operand h s1` >> simp[] >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> simp[]) >>
-  simp[]
-QED
-
 (* For FIND=NONE easy terminators (not RETURN/REVERT), step_inst on s1
    and s2 produce lift_result-related outputs. *)
 Theorem m2v_step_easy_terminator:
@@ -4274,7 +4213,7 @@ Proof
         m2v_inv_noix_eval_agrees) >> simp[]) >>
   SUBGOAL_THEN ``eval_operands inst.inst_operands s1 =
     eval_operands inst.inst_operands s2`` assume_tac
-  >- (irule eval_operands_agrees >> simp[]) >>
+  >- (irule eval_operands_agree >> simp[]) >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
   >- (with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
@@ -4639,14 +4578,6 @@ Proof
   rw[mstore_def, LET_THM, len_word_to_bytes_256]
 QED
 
-Theorem take_append_pad:
-  !n (l:'a list) a b x. n <= LENGTH l + a /\ n <= LENGTH l + b ==>
-    TAKE n (l ++ REPLICATE a x) = TAKE n (l ++ REPLICATE b x)
-Proof
-  rw[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_APPEND, LENGTH_REPLICATE] >>
-  rw[EL_TAKE, EL_APPEND_EQN, EL_REPLICATE, LENGTH_REPLICATE]
-QED
-
 Theorem return_data_mstore_roundtrip:
   !off (pval:bytes32) s1 s2 k.
     pval = mload off s1 /\ k <= 32 ==>
@@ -4753,93 +4684,7 @@ QED
    Chain passes step_inst result on s2 side to ih_cont,
    allowing pvars_set derivation for IH application. *)
 
-(* step_inst_base can't Halt or IntRet for non-terminators *)
-Triviality exec_result_helpers_no_halt_abort[simp]:
-  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
-  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
-  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_result_helpers_not_intret[simp]:
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_not_intret[simp]:
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_no_halt_abort[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem step_inst_base_no_halt:
-  !inst s s'.
-    step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >> drule step_inst_base_halt_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_no_intret:
-  !inst s vs s'.
-    step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >> drule step_inst_base_intret_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 
 (* Abort: both sides run same non-promoted instruction *)
 Theorem step_inst_base_abort_input_equiv:

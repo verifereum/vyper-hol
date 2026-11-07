@@ -428,24 +428,6 @@ Proof
   simp[] >> first_x_assum irule >> metis_tac[]
 QED
 
-(* Helper: ASSIGN [op] [out] gives update_var *)
-Theorem step_assign_result[local]:
-  !fuel ctx inst src_op dst s s'.
-    inst.inst_opcode = ASSIGN /\
-    inst.inst_operands = [src_op] /\
-    inst.inst_outputs = [dst] /\
-    step_inst fuel ctx inst s = OK s' ==>
-    ?val. eval_operand src_op s = SOME val /\
-          s' = update_var dst val s
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
-  pop_assum mp_tac >>
-  asm_simp_tac sccp_step_ss [sccp_step_for ``ASSIGN``] >>
-  Cases_on `eval_operand src_op s` >> simp[]
-QED
-
 (* Bridge: exec_pureN with MAP-known operand values gives update_var *)
 Theorem exec_pure1_map_result[local]:
   !f inst v out s s'.

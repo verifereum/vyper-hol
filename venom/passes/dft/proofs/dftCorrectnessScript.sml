@@ -20,7 +20,7 @@
 
 Theory dftCorrectness
 Ancestors
-  venomFnInstsProofs
+  venomInstProofs venomExecProofs venomFnInstsProofs
   dftFrontEquiv dftTopoSort dftWf dftDefs dftHelpers stateEquiv stateEquivProps passSimulationDefs
   venomExecSemantics venomWf venomState finite_map venomInst
   analysisSimDefs analysisSimProofsBase dftPermSim dftCompleteness dftPipelineInvar
@@ -689,7 +689,7 @@ Proof
     fs[bi_independent_def] >>
   `step_inst_base y s = OK sy` by fs[step_inst_non_invoke] >>
   `sx.vs_prev_bb = s.vs_prev_bb` by
-    metis_tac[step_inst_preserves_prev_bb, step_inst_non_invoke] >>
+    metis_tac[step_preserves_prev_bb, step_inst_non_invoke] >>
   `sx.vs_params = s.vs_params` by
     metis_tac[step_preserves_params, step_inst_non_invoke] >>
   qspecl_then [`y`,`s`,`sy`,`sx`] mp_tac step_inst_base_ok_transfer >>
@@ -823,7 +823,7 @@ Proof
       (* Get state field preservation *)
       `s'.vs_prev_bb = s.vs_prev_bb` by
         (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
-           step_inst_preserves_prev_bb >> simp[]) >>
+           step_preserves_prev_bb >> simp[]) >>
       `s'.vs_params = s.vs_params` by
         (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
            step_preserves_params >> simp[]) >>
@@ -2549,13 +2549,6 @@ Proof
   Induct >> simp[fn_insts_blocks_def]
 QED
 
-(* block body instructions have ALL_DISTINCT inst_ids *)
-Triviality all_distinct_flat_mem:
-  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 Triviality all_distinct_flat_map_filter[local]:
   !f P l. ALL_DISTINCT (FLAT (MAP f l)) ==>
           ALL_DISTINCT (FLAT (MAP f (FILTER P l)))
@@ -2665,18 +2658,6 @@ Proof
   qexists `MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks` >>
   gvs[wf_function_def, fn_inst_ids_distinct_def] >>
   simp[MEM_MAP] >> qexists `bb` >> simp[]
-QED
-
-Triviality flip_operands_is_terminator:
-  !i. is_terminator (flip_operands i).inst_opcode = is_terminator i.inst_opcode
-Proof
-  rw[flip_operands_def] >>
-  Cases_on `i.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[LET_THM] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `i.inst_opcode` >> gvs[] >>
-  EVAL_TAC
 QED
 
 (* Forward: for j in block_body bb, matching instruction in block_body bb' *)
@@ -3405,42 +3386,6 @@ QED
 (* Helper: element in prefix of FILTER is not at last position of original list.
    Used to show that a barrier appearing before y in the non-pseudo filter
    cannot be the terminator (which is always last in bi). *)
-Triviality filter_prefix_not_last:
-  !P l pre y sfx e.
-    ALL_DISTINCT l /\ FILTER P l = pre ++ [y] ++ sfx /\
-    MEM e pre /\ P e /\ MEM e l /\
-    (!k. k < LENGTH l /\ is_terminator (EL k l).inst_opcode ==>
-         k = PRE (LENGTH l)) /\
-    l <> [] /\ is_terminator e.inst_opcode ==>
-    F
-Proof
-  rpt strip_tac >>
-  (* e is in pre, hence at index n < LENGTH pre in the filter *)
-  `?n. n < LENGTH pre /\ EL n pre = e` by metis_tac[MEM_EL] >>
-  (* y is at index LENGTH pre in the filter *)
-  `n < LENGTH (FILTER P l)` by
-    (pop_assum kall_tac >>
-     qpat_assum `FILTER P l = _` (fn th => rewrite_tac[th]) >>
-     rewrite_tac[LENGTH_APPEND, LENGTH] >> decide_tac) >>
-  `LENGTH pre < LENGTH (FILTER P l)` by
-    (qpat_assum `FILTER P l = _` (fn th => rewrite_tac[th]) >>
-     rewrite_tac[LENGTH_APPEND, LENGTH] >> decide_tac) >>
-  (* EL n (FILTER P l) = e, and EL (LENGTH pre) (FILTER P l) = y *)
-  `EL n (FILTER P l) = e /\
-   EL (LENGTH pre) (FILTER P l) = y` by
-    (asm_rewrite_tac[] >> conj_tac >>
-     simp[EL_APPEND_EQN]) >>
-  (* filter_el_mono: n < LENGTH pre, so positions in l satisfy i' < j' *)
-  drule_all filter_el_mono >>
-  disch_then (qx_choosel_then [`ne`, `ny`] strip_assume_tac) >>
-  (* ne is the position of e in l, ny is the position of y in l *)
-  (* l[ne] = e, so ne = PRE(LENGTH l) since e is terminator *)
-  `ne = PRE (LENGTH l)` by
-    (first_x_assum irule >> gvs[]) >>
-  (* But ny > ne and ny < LENGTH l => PRE(LENGTH l) < ny < LENGTH l.
-     That means LENGTH l <= ny, contradiction. *)
-  decide_tac
-QED
 
 Resume barrier_tc_connected[mem_b'_body]:
   (* b' = LAST(h::t) is in FILTER is_barrier pre_y, hence in pre_y.
@@ -9191,13 +9136,6 @@ Proof
   Induct >> simp[fn_insts_blocks_def]
 QED
 
-(* MEM in FILTER implies in_np_body *)
-Triviality mem_filter_in_np_body_local[local]:
-  !bi x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==> in_np_body bi x
-Proof
-  simp[in_np_body_def, MEM_MAP, MEM_FILTER, PULL_EXISTS] >> metis_tac[]
-QED
-
 (* Original block's non-pseudo filter is topo_sorted(canonical_dep).
    Direct proof: in program order, no earlier instruction can depend on
    a later one via canonical_dep (data deps need def before use,
@@ -9218,7 +9156,7 @@ Proof
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi))` by
     metis_tac[ssa_block_outputs_all_distinct, fn_insts_def, ssa_form_def, wf_ssa_def] >>
   `in_np_body bi (EL i fl) /\ in_np_body bi (EL j fl)` by
-    metis_tac[mem_filter_in_np_body_local] >>
+    metis_tac[mem_np_filter_in_np_body] >>
   Cases_on `data_dep_body bi (EL i fl) (EL j fl)`
   >- (fs[data_dep_body_def] >> metis_tac[orig_data_dep_contra_filtered]) >>
   Cases_on `from_barrier_dep bi (EL i fl) (EL j fl)`
@@ -10114,32 +10052,6 @@ Proof
   metis_tac[full_dep_right_cong_local]
 QED
 
-(* FILTER decomposition: dft_block non-pseudo instructions = schedule output *)
-Triviality dft_block_filter_nonpseudo[local]:
-  !order bb.
-    FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions =
-    schedule_from_entries bb.bb_instructions order (build_eda bb.bb_instructions)
-      (build_offspring_map bb.bb_instructions order)
-      (entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions))
-Proof
-  simp[dft_block_def, LET_THM, FILTER_APPEND_DISTRIB, FILTER_FILTER,
-       FILTER_EQ_NIL, FILTER_EQ_ID, EVERY_MEM] >>
-  rpt strip_tac >>
-  metis_tac[sched_output_nonpseudo, build_eda_wf, entry_instructions_mem]
-QED
-
-
-(* Extracted by-block: ALL_DISTINCT inst_outputs for perm-of block *)
-Triviality block_perm_inst_outputs_local[local]:
-  !fn bb_orig bb_cur.
-    wf_ssa fn /\ wf_function fn /\
-    MEM bb_orig fn.fn_blocks /\
-    block_perm_of fn bb_cur /\ bb_cur.bb_label = bb_orig.bb_label ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb_cur.bb_instructions))
-Proof
-  metis_tac[block_perm_of_inst_outputs_distinct_local]
-QED
-
 (* Schedule output lemma pack — avoid irule on multi-antecedent theorems in by-blocks *)
 Triviality sched_output_distinct_local[local]:
   !bi order eda om entries.
@@ -10910,7 +10822,7 @@ Proof
   (* Step 1: dft_block filter decomposition *)
   `FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb_cur).bb_instructions = sched`
     by (simp[Abbr `bi`, Abbr `sched`, Abbr `eda`, Abbr `om`,
-             Abbr `entries`, dft_block_filter_nonpseudo]) >>
+             Abbr `entries`, dft_block_non_pseudos]) >>
   (* Step 2: Pre-conditions for scheduler lemmas *)
   `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by fs[dft_inv_def, Abbr `bi`] >>
   `eda_wf eda bi` by simp[Abbr `eda`, Abbr `bi`, build_eda_wf] >>
@@ -10927,7 +10839,7 @@ Proof
   `np_defs_before_uses bi`
     by gvs[dft_inv_def, non_pseudo_defs_before_uses_def, Abbr `bi`] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi))`
-    by metis_tac[block_perm_inst_outputs_local] >>
+    by metis_tac[block_perm_of_inst_outputs_distinct_local] >>
   (* Step 3: Schedule output properties — all via extracted Trivialities *)
   `ALL_DISTINCT (MAP (\j. j.inst_id) sched)`
     by metis_tac[sched_output_distinct_local] >>

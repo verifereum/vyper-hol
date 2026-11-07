@@ -7,7 +7,7 @@
  * then extends to arbitrary permutations via PERM induction.
  *
  * TOP-LEVEL: run_insts_perm_ok, run_insts_perm_ok_ext,
- *   run_insts_topo_equiv, run_insts_append, run_insts_bubble_to_front,
+ *   run_insts_topo_equiv, run_insts_bubble_to_front,
  *   run_insts_bubble_to_front_ext, flip_operands_step_inst,
  *   flip_operands_step_inst_base, step_inst_nofail_not_halt_abort
  * Helper: bi_independent, bi_independent_iff_ext, ext_bi_independent,
@@ -19,7 +19,7 @@
 
 Theory dftPermSim
 Ancestors
-  dftBlockSim dftCommutation dftDefs
+  passSharedFrame dftBlockSim dftCommutation dftDefs
   analysisSimDefs analysisSimProofsBase
   passSharedDefs passSharedProps passSharedTransfer passSharedField
   passSimulationDefs stateEquiv
@@ -39,20 +39,6 @@ QED
 
 
 (* ===== run_insts append decomposition ===== *)
-
-(* run_insts distributes over append: run the first list to get an
-   intermediate state, then continue with the second list. *)
-Theorem run_insts_append:
-  !fuel ctx l1 l2 s.
-    run_insts fuel ctx (l1 ++ l2) s =
-    case run_insts fuel ctx l1 s of
-      OK s' => run_insts fuel ctx l2 s'
-    | other => other
-Proof
-  Induct_on `l1` >> rpt strip_tac >>
-  simp[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
 
 (* ===== Bilateral independence ===== *)
 
@@ -311,13 +297,6 @@ Triviality all_effects_univ:
   all_effects = UNIV
 Proof
   PURE_REWRITE_TAC [all_effects_def, EXTENSION] >> Cases >> simp[]
-QED
-
-(* Filter by the call classifier before evaluating the five effect entries. *)
-Triviality empty_write_not_ext_call:
-  !op. write_effects op = {} ==> ~is_ext_call_op op
-Proof
-  Cases >> PURE_REWRITE_TAC [is_ext_call_op_def] >> simp[] >> EVAL_TAC
 QED
 
 (* effects_independent with INVOKE implies the other op has empty effects *)

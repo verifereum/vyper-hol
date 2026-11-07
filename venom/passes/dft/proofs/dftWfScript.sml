@@ -417,22 +417,11 @@ Finalise schedule_terminator_last
    Section 3: eda_topo_compatible for original blocks
    ================================================================ *)
 
-(* ALL_DISTINCT of FLAT (MAP f l) implies ALL_DISTINCT of f x for MEM x l *)
-Triviality all_distinct_flat_map_el:
-  !f l x. ALL_DISTINCT (FLAT (MAP f l)) /\ MEM x l ==>
-           ALL_DISTINCT (f x)
-Proof
-  gen_tac >> Induct >> simp[] >>
-  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 Theorem wf_fn_block_inst_ids_distinct:
   !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
 Proof
-  rpt strip_tac >>
-  gvs[wf_function_def, fn_inst_ids_distinct_def] >>
-  drule_all all_distinct_flat_map_el >> simp[]
+  rw[wf_function_def] >> metis_tac[fn_inst_ids_block_distinct]
 QED
 
 (* wf_ssa orders ordinary uses within a block.  PHI operands are edge uses,
@@ -464,26 +453,15 @@ Proof
   `prod = def_inst` by metis_tac[ssa_unique_output] >>
   gvs[] >>
   (* Step 4: Same block: def_bb = bb *)
-  `def_bb = bb` by (
-    qspecl_then [`fn.fn_blocks`,
-                 `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-                 `def_bb`, `bb`, `def_inst.inst_id`]
-      mp_tac all_distinct_flat_map_unique >>
-    impl_tac >- (
-      gvs[fn_inst_ids_distinct_def] >>
-      simp[MEM_MAP] >> metis_tac[]) >>
-    simp[]) >>
+  `def_bb = bb` by metis_tac[inst_in_unique_block] >>
   gvs[] >>
   (* Step 5: same-block ordering gives i < j' with EL j' bi = EL j bi *)
   first_x_assum (K ALL_TAC) >> (* drop dominance *)
   rename1 `i' < j'` >>
   (* j' = j since inst IDs distinct within block *)
   `j' = j` by (
-    `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by (
-      qspecl_then [`\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-                   `fn.fn_blocks`, `bb`]
-        mp_tac all_distinct_flat_map_el >>
-      gvs[fn_inst_ids_distinct_def]) >>
+    `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+      metis_tac[fn_inst_ids_block_distinct] >>
     `(EL j' bb.bb_instructions).inst_id =
      (EL j bb.bb_instructions).inst_id` by gvs[] >>
     `EL j' (MAP (\i. i.inst_id) bb.bb_instructions) =

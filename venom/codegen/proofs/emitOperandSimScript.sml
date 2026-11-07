@@ -63,12 +63,6 @@ Proof
   simp[execute_plan_def, asm_steps_def]
 QED
 
-Theorem stack_get_depth_push[local]:
-  !op stk. stack_get_depth op (stack_push op stk) = SOME 0
-Proof
-  simp[stack_get_depth_def, stack_push_def, REVERSE_SNOC, stack_find_def]
-QED
-
 Theorem emit_one_input_var_spilled_plan:
   !opc nl v ps off.
     FLOOKUP ps.ps_spilled (Var v) = SOME off ==>

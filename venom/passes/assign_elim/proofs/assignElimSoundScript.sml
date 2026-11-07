@@ -10,7 +10,7 @@
 
 Theory assignElimSound
 Ancestors
-  assignElimDefs passSharedDefs passSharedProps
+  venomExecProofs assignElimDefs passSharedDefs passSharedProps
   analysisSimDefs analysisSimProps passSimulationDefs passSimulationProps
   stateEquiv stateEquivProps
   execEquivParamDefs execEquivParamProps
@@ -302,24 +302,6 @@ QED
 
 (* Terminator OK preserves vars. JMP/JNZI/DJMP only modify
    vs_current_bb/vs_prev_bb/vs_inst_idx, not vs_vars. *)
-(* ASSIGN step semantics *)
-Theorem step_assign_result[local]:
-  !fuel ctx inst src_op dst s s'.
-    inst.inst_opcode = ASSIGN /\
-    inst.inst_operands = [src_op] /\
-    inst.inst_outputs = [dst] /\
-    step_inst fuel ctx inst s = OK s' ==>
-    ?val. eval_operand src_op s = SOME val /\
-          s' = update_var dst val s
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
-  pop_assum mp_tac >>
-  simp_tac std_ss [Once step_inst_base_def] >>
-  Cases_on `eval_operand src_op s` >> simp[]
-QED
-
 (* Copy-propagation transfer function preserves copy_sound *)
 Theorem copy_prop_transfer_sound:
   !pv. transfer_sound copy_sound_opt

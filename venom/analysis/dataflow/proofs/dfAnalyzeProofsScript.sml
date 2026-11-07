@@ -231,7 +231,7 @@ Proof
 QED
 
 (* Helper: df_populate_inst doesn't change ds_boundary *)
-Theorem df_populate_inst_boundary[local]:
+Theorem df_populate_inst_boundary:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
     (df_populate_inst dir bottom join transfer edge_transfer
        ctx entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary

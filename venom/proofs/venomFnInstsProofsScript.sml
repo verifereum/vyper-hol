@@ -112,6 +112,19 @@ Proof
 QED
 
 (* An instruction lies in at most one block. *)
+(* fn_inst_ids_distinct gives per-block ALL_DISTINCT on inst_ids *)
+Theorem fn_inst_ids_block_distinct:
+  !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  simp[venomWfTheory.fn_inst_ids_distinct_def] >>
+  rpt strip_tac >>
+  ntac 2 (pop_assum mp_tac) >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[] >>
+  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MAP_APPEND, FLAT_APPEND]
+QED
+
 Theorem inst_in_unique_block:
   !fn bb1 bb2 inst.
     fn_inst_ids_distinct fn /\

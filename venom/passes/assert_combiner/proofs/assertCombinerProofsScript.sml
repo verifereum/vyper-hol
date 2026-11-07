@@ -7,7 +7,7 @@
 
 Theory assertCombinerProofs
 Ancestors
-  venomFnInstsProofs
+  instIdxIndep venomFnInstsProofs
   acAbortProofs acSimPrecondProofs acChainProofs acBaseProofs assertCombinerDefs
   passSimulationDefs passSimulationProps
   stateEquiv stateEquivProps execEquivProps execEquivParamProps venomInstProps venomExecProps
@@ -404,19 +404,6 @@ Triviality dfg_def_in_fn_blocks[local]:
 Proof
   rpt strip_tac >> imp_res_tac dfg_build_function_correct >>
   fs[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts_blocks_rev]
-QED
-
-(* fn_inst_ids_distinct gives per-block ALL_DISTINCT on inst_ids *)
-Triviality fn_inst_ids_block_distinct[local]:
-  !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
-Proof
-  simp[venomWfTheory.fn_inst_ids_distinct_def] >>
-  rpt strip_tac >>
-  ntac 2 (pop_assum mp_tac) >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[] >>
-  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MAP_APPEND, FLAT_APPEND]
 QED
 
 Triviality ssa_no_self_reference[local]:
@@ -1151,13 +1138,6 @@ Proof
   )
 QED
 
-(* ALL_DISTINCT (FLAT ls) ∧ MEM l ls ⟹ ALL_DISTINCT l *)
-Triviality all_distinct_flat_mem[local]:
-  !ls (l:'a list). ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 (* state_equiv V s1 s2 ∧ x ∉ V ⟹ lookup_var x s1 = lookup_var x s2 *)
 Triviality state_equiv_lookup_var[local]:
   !V x s1 s2. state_equiv V s1 s2 /\ x NOTIN V ==>
@@ -1442,18 +1422,12 @@ Proof
       metis_tac[lift_result_weaken_UNIV])
 QED
 
-Triviality eval_operand_update_inst_idx:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases_on `op` >> rw[eval_operand_def, lookup_var_def]
-QED
-
 Triviality ac_inv_update_inst_idx:
   !fn dfg s n.
     ac_inv fn dfg s ==> ac_inv fn dfg (s with vs_inst_idx := n)
 Proof
   rw[ac_inv_def, ac_dfg_inv_def, lookup_var_def,
-     eval_operand_update_inst_idx] >> metis_tac[]
+     eval_op_inst_idx] >> metis_tac[]
 QED
 
 Triviality ac_apply_merge_step_no_phi:

@@ -757,12 +757,6 @@ Proof
   Cases_on `P h` >> gvs[FILTER, LAST_DEF]
 QED
 
-Triviality terminator_not_phi:
-  !op. is_terminator op ==> op <> PHI
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
 Theorem transform_insts_last:
   !dfg insts.
     insts <> [] /\
@@ -782,7 +776,7 @@ Proof
     (irule filter_last_when_last_passes >> simp[]) >>
   `transform_inst dfg (LAST insts) = LAST insts` by
     (irule transform_inst_non_phi >>
-     fs[is_phi_inst_def] >> metis_tac[terminator_not_phi]) >>
+     fs[is_phi_inst_def] >> metis_tac[terminator_opcode_not_phi]) >>
   simp[LAST_APPEND_NOT_NIL]
 QED
 
@@ -848,7 +842,7 @@ Proof
      qspecl_then [`insts'`] mp_tac filter_terminator_singleton >> simp[] >>
      simp[Abbr `insts'`, LAST_MAP] >>
      `transform_inst dfg (LAST insts) = LAST insts` by
-       (irule transform_inst_non_phi >> fs[is_phi_inst_def] >> metis_tac[terminator_not_phi]) >>
+       (irule transform_inst_non_phi >> fs[is_phi_inst_def] >> metis_tac[terminator_opcode_not_phi]) >>
      simp[]) >>
   qabbrev_tac `prefix = pseudos ++ regulars` >>
   `pseudos ++ regulars ++ terms = prefix ++ [LAST insts]` by
