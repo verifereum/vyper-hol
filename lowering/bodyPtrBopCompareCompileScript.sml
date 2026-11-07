@@ -2,6 +2,7 @@ Theory bodyPtrBopCompareCompile
 Ancestors
   bodyPtrBopCompare emitHelper emitHelperProps exprLoweringProps fragExec
   compileEnv arithmetic rich_list instIdxIndep venomInst venomState
+  venomExecSemantics
 
 Theorem bop_compare_emit_placement:
   emit_op opc ops sc = (op,sd) /\ fn_has_code sc sd fn /\
@@ -108,4 +109,32 @@ Proof
   drule run_inst_seq_inst_idx >>
   disch_then (qspecl_then [`s`, `idx`] mp_tac) >>
   simp[exec_result_map_def]
+QED
+
+(* These scalar runs do not require whole-state freshness. *)
+Theorem bop_eq_emit_run:
+  emit_op EQ [left;right] sc = (op,sd) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b ==>
+  ?t. run_inst_seq (emitted_insts sc sd) s = OK t /\
+      eval_operand op t = SOME (bool_to_word (a = b))
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+    exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem bop_iszero_emit_run:
+  emit_op ISZERO [arg] sc = (op,sd) /\ eval_operand arg s = SOME a ==>
+  ?t. run_inst_seq (emitted_insts sc sd) s = OK t /\
+      eval_operand op t = SOME (bool_to_word (a = 0w))
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+    exec_pure1_def, eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE]
 QED
