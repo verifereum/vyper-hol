@@ -204,7 +204,8 @@ Proof
   disch_then (qspec_then `PG` mp_tac) >>
   simp[mk_inst_def, is_terminator_def] >> simp[GSYM mk_inst_def] >>
   simp[typed_copy_loop_arith_ghost, update_var_def,
-       step_prov_def, set_prov_def, out_prov_def, mk_inst_def] >>
+       step_prov_def, set_prov_def, out_prov_def, mk_inst_def,
+       ptrDisciplineTheory.out_taint_def] >>
   strip_tac >> drule (cj 2 gas_path_ptr_rules) >>
   disch_then (qspec_then `0` mp_tac) >> simp[] >>
   disch_then irule >>
