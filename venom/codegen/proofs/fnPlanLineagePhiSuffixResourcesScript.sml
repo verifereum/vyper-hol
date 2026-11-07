@@ -1,6 +1,6 @@
 Theory fnPlanLineagePhiSuffixResources
 Ancestors
-  fnPlanLineagePhiSchedule fnPlanLineageNativeTargets fnPlanLineagePhiTemporal
+  fnPlanLineageNativeTargets fnPlanLineagePhiTemporal removeUnusedSsaProofs
 
 (* Physical value counts, unlike origin-class counts, include PHI writes. *)
 Theorem phi_origin_write_value_count_le:
@@ -199,4 +199,31 @@ Proof
     (live_vars_at (liveness_analyze fn) lbl 0)))` by
     (irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[]) >>
   metis_tac[fnPlanLineageInventoryTheory.all_distinct_elem_count_le_one]
+QED
+
+Theorem analyzed_phi_schedule_value_count_le_one:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MAP (phi_cell_value T) cells = MAP Var
+    (input_vars_from p bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  phi_origin_schedule_ready
+    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+      (collect_phis bb.bb_instructions)) prefixP prefixQ cells cells_end ==>
+  LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1
+Proof
+  strip_tac >> drule phi_origin_schedule_value_count_le >>
+  disch_then (qspecl_then [`T`, `Var v`] mp_tac) >>
+  simp[indexedListsTheory.MAP_MAPi, combinTheory.o_DEF] >>
+  `MAP (\inst. Var (HD inst.inst_outputs)) (collect_phis bb.bb_instructions) =
+    MAP Var (MAP (\inst. HD inst.inst_outputs) (collect_phis bb.bb_instructions))` by
+    simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  simp[rich_listTheory.LIST_ELEM_COUNT_DEF, rich_listTheory.FILTER_MAP,
+       combinTheory.o_DEF] >>
+  pure_rewrite_tac[GSYM rich_listTheory.LIST_ELEM_COUNT_DEF] >>
+  drule_all ready_phi_initial_write_count_budget >>
+  disch_then (qspecl_then [`v`, `p`] mp_tac) >>
+  simp[rich_listTheory.LIST_ELEM_COUNT_DEF, rich_listTheory.FILTER_MAP,
+       combinTheory.o_DEF] >> decide_tac
 QED

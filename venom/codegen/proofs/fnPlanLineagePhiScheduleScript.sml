@@ -4,7 +4,7 @@ Ancestors
   fnPlanLineagePhiRealization fnPlanLineagePhiSlots fnPlanLineageEdge
   fnPlanLineagePhiActivation fnPlanLineagePhiMaps venomExecProps venomWf stackPlanGen
   codegenReadyCompute livenessTransferProofs fnPlanLineageCallers
-  livenessDefs venomInst list fnPlanLineageLiveness
+  livenessDefs venomInst list fnPlanLineageLiveness fnPlanLineagePhiSuffixResources
 
 Theorem reachable_native_phi_cells_coverage:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
@@ -283,7 +283,8 @@ Theorem analyzed_native_slot_schedule_extinction:
     MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) lbl
         (LENGTH (collect_phis bb.bb_instructions))) ==>
-      MEM (Var v) (MAP (phi_cell_value T) cells_end))
+      MEM (Var v) (MAP (phi_cell_value T) cells_end)) /\
+    (!v. LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1)
 Proof
   strip_tac >>
   `phi_origin_tagged (native_phi_class p (collect_phis bb.bb_instructions)) cells` by
@@ -293,8 +294,11 @@ Proof
   drule_all analyzed_native_phi_schedule_ready >>
   disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
   qexists_tac `cells_end` >> simp[] >> reverse conj_tac
-  >- (rpt strip_tac >> irule analyzed_native_phi_schedule_live_member >>
-      rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  >- (conj_tac
+      >- (rpt strip_tac >> irule analyzed_native_phi_schedule_live_member >>
+          rpt (goal_assum (drule_at Any)) >> simp[]) >>
+      gen_tac >> irule analyzed_phi_schedule_value_count_le_one >>
+      rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
   irule phi_origin_tagged_schedule_projection >>
   goal_assum (drule_at Any) >>
   qexistsl_tac [`native_phi_class p (collect_phis bb.bb_instructions)`, `0`] >>
@@ -344,12 +348,20 @@ Theorem analyzed_native_slot_state_replay:
         (collect_phis bb.bb_instructions)) qs =
       (ops, qs with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>) /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) lbl
-        (LENGTH (collect_phis bb.bb_instructions))) ==> MEM (Var v) suffix)
+        (LENGTH (collect_phis bb.bb_instructions))) ==> MEM (Var v) suffix) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (collect_phis bb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)
 Proof
   strip_tac >> drule_all analyzed_native_slot_schedule_extinction >>
   disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
   drule_all phi_origin_schedule_state_replay >> strip_tac >>
-  qexistsl_tac [`MAP (phi_cell_value T) cells_end`, `ops`, `al`] >> metis_tac[]
+  qexistsl_tac [`MAP (phi_cell_value T) cells_end`, `ops`, `al`] >>
+  simp[] >> rpt strip_tac >>
+  `MEM (Var v) (MAP (phi_cell_value T) cells_end)` by metis_tac[] >>
+  `LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1` by metis_tac[] >>
+  gvs[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM] >>
+  first_x_assum (qspec_then `v` mp_tac) >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp[] >> decide_tac
 QED
 
 Theorem successful_join_edges_phi_schedule_ready:
@@ -495,7 +507,9 @@ Theorem successful_join_edges_phi_common_suffix_rebased:
         (collect_phis sb.bb_instructions)) rsQ =
       (ops, rsQ with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>) /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) succ
-        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix)
+        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)
 Proof
   rpt gen_tac >> strip_tac >>
   `?cells prefixP prefixQ.
@@ -552,7 +566,9 @@ Theorem successful_join_edges_phi_common_suffix:
         (collect_phis sb.bb_instructions)) psQ =
       (ops, psQ with <|ps_stack := prefixQ ++ suffix; ps_alloc := al|>) /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) succ
-        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix)
+        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)
 Proof
   rpt strip_tac >> irule successful_join_edges_phi_common_suffix_rebased >>
   rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
