@@ -205,14 +205,27 @@ QED
 
 (* The builtins other than the binary operators: exprSimMain's
    compile_builtin_case, from the operands' body_expr_ok (a len's one
-   operand's), but for body_make_array_case's and
+   operand's; for slice(x.code, start, length), start's and length's,
+   then x's), but for body_make_array_case's and
    body_builtin_residual_case's. *)
 Theorem body_builtin_rest_case:
   !cx ty bt es.
     (!bop. bt <> Bop bop) /\
+    (!s'' x t v code_ty addr s3 tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
+       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
+       body_exprs_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
+       body_exprs_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = NONE ==>
        body_exprs_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -224,15 +237,16 @@ Proof
   >- (gvs[] >> irule body_make_array_case >> strip_tac >>
       first_x_assum irule >> gvs[type_check_def, assert_def]) >>
   Cases_on `bt = ECAdd \/ bt = ECMul`
-  >- (irule body_builtin_residual_case >> simp[] >> strip_tac >>
-      first_x_assum irule >> gvs[type_check_def, assert_def]) >>
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      (irule body_builtin_residual_case >> simp[] >> strip_tac >>
+       first_x_assum irule >> gvs[type_check_def, assert_def])) >>
   irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  `exprs_case F ctx func cenv cx es` by
-    (Cases_on `bt = Len`
+  `code_slice_source bt es = NONE ==> exprs_case F ctx func cenv cx es` by
+    (strip_tac >> Cases_on `bt = Len`
      >- (gvs[builtin_args_length_ok_def, listTheory.LENGTH_EQ_NUM_compute] >>
          `body_expr_ok cx h` by
            (first_x_assum irule >> simp[type_check_def, assert_def]) >>
@@ -242,6 +256,12 @@ Proof
         >- gvs[builtin_args_length_ok_def, body_exprs_ok_def] >>
         first_x_assum irule >> simp[type_check_def, assert_def]) >>
      metis_tac[body_exprs_ok_case]) >>
+  `!m. bt = Slice m ==> slice_extcode_case F ctx func cenv cx es` by
+    (rw[exprSimSliceSelfCodeTheory.slice_extcode_case_def] >>
+     gvs[type_check_def, assert_def, builtin_args_length_ok_def]
+     >- metis_tac[body_exprs_ok_case] >>
+     first_x_assum drule >> rw[body_exprs_ok_def] >>
+     metis_tac[body_expr_ok_case]) >>
   irule compile_builtin_case >> gvs[]
 QED
 
@@ -264,9 +284,21 @@ QED
 
 Theorem body_builtin_case:
   !cx ty bt es.
+    (!s'' x t v code_ty addr s3 tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
+       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
+       body_exprs_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
+       body_exprs_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = NONE ==>
        body_exprs_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
