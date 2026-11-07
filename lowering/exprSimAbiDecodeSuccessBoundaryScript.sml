@@ -45,6 +45,7 @@ Proof
   `locals_kept ce es1 s t` by
     (drule_all abi_decode_success_locals_kept >> simp[]) >>
   simp[vv_post_def, expr_type_def] >> rpt conj_tac
+  >- simp[contextTheory.mk_ptr_def]
   >- (rpt strip_tac >>
       `not_fresh_at start x` by metis_tac[not_fresh_at_mono] >>
       `lookup_var x s = SOME w` by metis_tac[expr_post_def] >>
