@@ -4,6 +4,8 @@ Ancestors
   rawCallFinishPathMemory exprSimRawCall fragExecMem instMemFrontier
   exprSafeOperand freshWrites emitHelper context compileEnv exprLoweringProps fragExec memSafeRun venomExecSemantics venomState
   venomInst words finite_map rich_list list
+  exprSimRawCallCalldata allocaFootprint bodyMemEcArithPrefix valueCopy venomMemDefs
+  abiDecoderIndexInit arithmeticProps emitHelperProps loweringHalt
 
 Theorem raw_call_tuple_copy_seq_mem_ok[local]:
   emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
@@ -30,3 +32,75 @@ Proof
   rpt strip_tac >> gvs[eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE, w2n_n2w]
 QED
+
+Theorem raw_call_tuple_tail_mem_ok[local]:
+  compile_alloc_buffer (32 + sz) sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand;ok] sm = ((),sb) /\
+  emit_op ADD [buf.buf_operand;Lit 32w] sb = (dst,sc) /\
+  emit_void MCOPY [dst;src;Lit (n2w sz)] sc = ((),sd) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ 32 + sz < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + sz))]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+  safe_operand sa src /\ safe_operand sa ok /\
+  eval_operand src s = SOME a /\ eval_operand ok s = SOME flag /\
+  w2n a + sz <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sd) s
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
+  drule_all raw_call_alloc_buffer_run >> strip_tac >>
+  `!p. safe_operand sa p ==> eval_operand p t = eval_operand p s` by
+    (Cases >> simp[safe_operand_def, eval_operand_def]) >>
+  `eval_operand ok t = SOME flag` by simp[] >>
+  drule_all emit_mstore_run >> strip_tac >>
+  `s.vs_alloca_next <= t.vs_alloca_next` by
+    (drule_all ec_alloc_buffer_frontier >> simp[]) >>
+  `w2n w + (32 + sz) <= t.vs_alloca_next` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ (t with vs_fmp := _)` mp_tac >>
+     simp[NoAsms, stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
+     strip_tac >>
+     qpat_x_assum `!aid base len. FLOOKUP t.vs_allocas aid = SOME (base,len) ==> _`
+       (drule_then mp_tac) >> simp[]) >>
+  suspend "compose"
+QED
+
+Resume raw_call_tuple_tail_mem_ok[compose]:
+  `emitted_insts sa sd = emitted_insts sa sm ++
+     (emitted_insts sm sb ++ emitted_insts sb sd)` by
+    (`inst_extends sa sm` by (drule abi_decode_alloc_buffer_inst_extends >> simp[]) >>
+     `inst_extends sm sb` by metis_tac[inst_extends_emit_void] >>
+     `inst_extends sb sc` by (drule inst_extends_emit_op >> simp[]) >>
+     `inst_extends sc sd` by metis_tac[inst_extends_emit_void] >>
+     `inst_extends sb sd /\ inst_extends sm sd` by metis_tac[inst_extends_trans] >>
+     `emitted_insts sa sd = emitted_insts sa sm ++ emitted_insts sm sd` by
+       (irule emitted_insts_prefix_split >> fs[inst_extends_def] >> metis_tac[]) >>
+     `emitted_insts sm sd = emitted_insts sm sb ++ emitted_insts sb sd` by
+       (irule emitted_insts_prefix_split >> fs[inst_extends_def] >> metis_tac[]) >>
+     simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac
+  >- (irule ec_alloc_buffer_mem_ok >> goal_assum (drule_at Any)) >>
+  rpt strip_tac >> gvs[] >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac
+  >- (irule emit_mstore_mem_ok >> goal_assum (drule_at Any) >>
+      qexists_tac `ok` >> simp[] >> decide_tac) >>
+  rpt strip_tac >> gvs[] >>
+  irule raw_call_tuple_copy_seq_mem_ok >>
+  goal_assum (drule_at (Pat `emit_void MCOPY _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  qexistsl_tac [`a`,`w`] >>
+  simp[mstore_def, write_memory_with_expansion_def, eval_operand_def, lookup_var_def] >>
+  conj_tac
+  >- (`w2n w + 32 < dimword (:256)` by decide_tac >>
+      simp[w2n_add_2, w2n_n2w]) >>
+  conj_tac >- gvs[eval_operand_def, lookup_var_def] >>
+  `sa.cs_next_var <= sm.cs_next_var` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  irule safe_operand_mono >> qexists_tac `sa` >> simp[] >> decide_tac
+QED
+
+Finalise raw_call_tuple_tail_mem_ok

@@ -3473,7 +3473,7 @@ Proof
   gvs[AllCaseEqs()] >> drule raw_call_alloca_saved_fmp >> simp[]
 QED
 
-Theorem raw_call_alloc_buffer_run[local]:
+Theorem raw_call_alloc_buffer_run:
   !func cenv cx es sa sm buf sz s ctx saved.
   compile_alloc_buffer sz sa = (buf,sm) /\
   stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
