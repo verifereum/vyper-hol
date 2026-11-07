@@ -1,5 +1,5 @@
 Theory bodyPtrStructLitOwnershipConcatFrame
-Ancestors bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitOwnershipInterfaces bodyPtrStructLitOwnershipScratchFrame
+Ancestors bodyPtrStructLitEmitterFrame bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitOwnershipInterfaces bodyPtrStructLitOwnershipScratchFrame
   bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
   loweringShapeProps loweringShapeDefs loweringShapeRules context compileEnv
   exprLowering list unitShapeDefs stackPlanTypes venomInst
@@ -9,16 +9,10 @@ Theorem alloc_run_concat_op_frame:
   alloc_run (\s. shape_state s /\ R s /\ EVERY (plain_operand s) ops)
     (emit_op opc ops) (\v s. shape_state s /\ R s /\ plain_operand s v)
 Proof
-  strip_tac >> irule alloc_run_conseq >>
-  irule_at Any (Q.INST [`internal` |-> `F`] alloc_run_fresh_shape_frame) >>
-  irule_at Any shape_step_emit_op_pre >> irule_at Any alloc_run_emit_op_fresh >>
-  qexistsl [`R`, `\s. EVERY (plain_operand s) ops`] >>
-  gvs[lowered_inst_ok_def, mk_inst_def, label_or_plain_def,
-    raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-    is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
-    is_terminator_def, EVERY_MEM, plain_operand_def] >>
-  rpt strip_tac >> rpt (CASE_TAC >> gvs[EVERY_MEM, is_label_operand_def]) >>
-  metis_tac[is_label_operand_def]
+  strip_tac >> irule alloc_run_op_frame >> simp[] >>
+  rpt strip_tac >>
+  drule_at Any plain_data_inst_ok >> simp[] >>
+  disch_then irule >> gvs[]
 QED
 
 Theorem alloc_run_concat_void_frame:
@@ -26,16 +20,10 @@ Theorem alloc_run_concat_void_frame:
   alloc_run (\s. shape_state s /\ R s /\ EVERY (plain_operand s) ops)
     (emit_void opc ops) (\u s. shape_state s /\ R s)
 Proof
-  strip_tac >> irule alloc_run_conseq >>
-  irule_at Any (Q.INST [`internal` |-> `F`] alloc_run_fresh_shape_frame) >>
-  irule_at Any shape_step_emit_void_pre >> irule_at Any alloc_run_emit_void_fresh >>
-  qexistsl [`R`, `\s. EVERY (plain_operand s) ops`] >>
-  gvs[lowered_inst_ok_def, mk_inst_def, label_or_plain_def,
-    raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
-    is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
-    is_terminator_def, EVERY_MEM, plain_operand_def] >>
-  rpt strip_tac >> rpt (CASE_TAC >> gvs[EVERY_MEM, is_label_operand_def]) >>
-  metis_tac[is_label_operand_def]
+  strip_tac >> irule alloc_run_void_frame >> simp[] >>
+  rpt strip_tac >>
+  drule_at Any plain_data_inst_ok >> simp[] >>
+  disch_then irule >> gvs[]
 QED
 
 Theorem alloc_run_concat_op_bind:
