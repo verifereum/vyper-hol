@@ -114,16 +114,26 @@ Proof
   simp[run_inst_seq_def, inst_seq_ptr_def] >>
   conj_tac
   >- (gen_tac >> conj_tac
-      >- (irule ptr_inst_ok_istore >> qexists_tac `a` >>
+      >- (irule ptr_inst_ok_istore >>
           fs[instIdxIndepTheory.eval_op_inst_idx, allocas_from_def,
-             allocas_below_fmp_def]) >>
+             allocas_below_fmp_def] >> metis_tac[]) >>
       fs[step_inst_inst_idx_indep, exec_result_map_def, mk_inst_def,
-         is_terminator_def]) >>
-  simp[step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,
-       mk_inst_def, FLOOKUP_DRESTRICT, allocas_from_def,
-       allocas_below_fmp_def, ptr_covers_def, istore_def, mstore_def,
-       lookup_var_def] >>
-  fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
+         is_terminator_def] >> metis_tac[]) >>
+  qabbrev_tac `I0 = mk_inst id ISTORE [arg;v] []` >>
+  qabbrev_tac `t = istore (w2n a) value s` >>
+  `!p. FLOOKUP (step_prov PG G I0 t) p = FLOOKUP G p /\
+       op_taint (step_taint I0 s t tn) (Var p) = op_taint tn (Var p)` by
+    simp[Abbr `I0`, step_prov_other_output, step_taint_other_output,
+         mk_inst_def] >>
+  `!p n. ptr_covers G tn p s n ==>
+     ptr_covers (step_prov PG G I0 t) (step_taint I0 s t tn) p t n` by
+    (rpt strip_tac >> irule ptr_covers_step_frame >>
+     simp[Abbr `I0`, Abbr `t`, mk_inst_def, istore_def, mstore_def,
+          lookup_var_def]) >>
+  `allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (fs[Abbr `t`, allocas_from_def, allocas_below_fmp_def, istore_def,
+        mstore_def] >> metis_tac[]) >>
+  simp[]
 QED
 
 (* ADD [region; dst]; ISTORE [addr; v]: the region base is zero. *)
@@ -173,7 +183,9 @@ Proof
      (ctx_has_dalloca ctx ==> allocas_below_fmp (update_var tmp a s)) /\
      (!p n. (P p \/ v = Var p) /\ ptr_covers G tn p s n ==>
        ptr_covers G1 tn1 p (update_var tmp a s) n)` by
-    (irule ctor_base_add_segment >> simp[] >> metis_tac[]) >>
+    (irule (BETA_RULE (INST [``P:string -> bool`` |->
+              ``\p:string. P p \/ v = Var p``] ctor_base_add_segment)) >>
+     simp[] >> metis_tac[]) >>
   `op_taint tn1 v = op_taint tn v` by
     (Cases_on `v` >> fs[op_taint_def] >> metis_tac[]) >>
   `eval_operand (Var tmp) (update_var tmp a s) = SOME a /\
@@ -310,14 +322,14 @@ Proof
   drule_all (SRULE [] (Q.INST [`opc` |-> `MLOAD`]
     (SPEC_ALL immutable_emit_read_frame))) >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
+  gvs[] >>
   `!q. not_fresh_at sa q ==>
      q <> STRING #"%" (toString sa.cs_next_var)` by simp[not_fresh_at_def] >>
-  gvs[] >>
   drule_all (Q.INST [`P` |-> `not_fresh_at sa`] ctor_mload_segment) >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl [`Gf`, `tnf`, `s'`] >>
   simp[immutable_execution_frame_def, mk_inst_def] >>
-  simp[copy_old_operand_def, not_fresh_at_def]
+  fs[copy_old_operand_def, not_fresh_at_def, mk_inst_def]
 QED
 
 (* The source word: an offset into the value buffer, then MLOAD. *)
@@ -346,17 +358,21 @@ Proof
   strip_tac >>
   `copy_old_operand sa (Var root) /\ eval_operand (Var root) s = SOME b /\
    op_taint tn (Var root) = {}` by
-    fs[copy_old_operand_def, eval_operand_def, ptr_covers_def] >>
+    (gvs[copy_old_operand_def, eval_operand_def, ptr_covers_def] >>
+     metis_tac[optionTheory.SOME_11]) >>
   drule_all code_copy_source_offset >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `copy_runtime_frame sa s sm t1` >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sm) s Gf tnf` by
-    (qpat_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
-      (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+    (qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+      (qspec_then `s.vs_inst_idx` mp_tac) >>
+     `s with vs_inst_idx := s.vs_inst_idx = s` by
+       simp[venom_state_component_equality] >>
+     simp[]) >>
   drule_all code_copy_destination_coverage >> strip_tac >> gvs[] >>
   drule_all immutable_offset_frame >> strip_tac >>
   `s' = t1` by fs[immutable_execution_frame_def, copy_runtime_frame_def] >>
-  gvs[] >>
+  pop_assum SUBST_ALL_TAC >>
   `lookup_var p t1 = SOME (b + n2w off)` by fs[eval_operand_def] >>
   `fresh_vars_wrt sm t1` by
     fs[immutable_execution_frame_def, immutable_operand_frame_def] >>
@@ -377,7 +393,7 @@ Proof
   >- (irule emitted_inst_seq_ptr_uniform_compose >>
       qexistsl [`Gf`, `sm`, `t1`, `tnf`] >>
       fs[immutable_execution_frame_def, inst_extends_def, store_word_insts])
-  >- simp[EVERY_APPEND]
+  >- fs[EVERY_APPEND]
   >> metis_tac[]
 QED
 
@@ -419,7 +435,10 @@ Proof
       drule_all (SRULE [] (Q.INST [`opc` |-> `ISTORE`]
         (SPEC_ALL immutable_emit_store_frame))) >> strip_tac >>
       drule emitted_insts_emit_void >> strip_tac >>
-      drule_all (Q.INST [`id` |-> `sa.cs_next_id`] ctor_istore_segment) >>
+      qspecl_then [`dst`, `v`, `a`, `value`] mp_tac
+        (Q.GENL [`arg`, `v`, `a`, `value`]
+           (Q.INST [`id` |-> `sa.cs_next_id`] ctor_istore_segment)) >>
+      impl_tac >- simp[] >>
       disch_then (strip_assume_tac o SPEC_ALL) >>
       qexistsl [`Gf`, `tnf`, `t`] >>
       gvs[immutable_execution_frame_def, mk_inst_def, istore_def, mstore_def] >>
@@ -434,6 +453,10 @@ Proof
       mk_inst (sa.cs_next_id + 1) ISTORE
         [Var ("%" ++ toString sa.cs_next_var); v] []]` by
     simp[emitted_insts_def, DROP_APPEND] >>
+  `!p. not_fresh_at sa p ==>
+     p <> STRING #"%" (toString sa.cs_next_var)` by simp[not_fresh_at_def] >>
+  `!x. v = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+    (rpt strip_tac >> gvs[]) >>
   drule_all (Q.INST [`P` |-> `not_fresh_at sa`, `id` |-> `sa.cs_next_id`,
                      `tmp` |-> `STRING #"%" (toString sa.cs_next_var)`]
     ctor_word_store_seq) >>
@@ -476,7 +499,7 @@ Proof
   rename1 `copy_runtime_frame sa s sm t1` >>
   drule_all immutable_offset_frame >> strip_tac >>
   `s' = t1` by fs[immutable_execution_frame_def, copy_runtime_frame_def] >>
-  gvs[] >>
+  pop_assum SUBST_ALL_TAC >>
   `fresh_vars_wrt sm t1` by
     fs[immutable_execution_frame_def, immutable_operand_frame_def] >>
   `copy_old_operand sm v /\ eval_operand v t1 = SOME value /\
@@ -505,7 +528,7 @@ Proof
   >- (irule emitted_inst_seq_ptr_uniform_compose >>
       qexistsl [`Gf`, `sm`, `t1`, `tnf`] >>
       fs[immutable_execution_frame_def, inst_extends_def, store_word_insts])
-  >- simp[EVERY_APPEND]
+  >- fs[EVERY_APPEND]
   >> metis_tac[]
 QED
 
@@ -539,6 +562,7 @@ Theorem code_ctor_store_one_ptr:
 Proof
   simp[immutable_store_one_def, immutable_comp_bind_cases] >> strip_tac >>
   rename1 `emit_op MLOAD [sop] sm = (v,sr)` >>
+  `w2n b + off < dimword(:256)` by simp[] >>
   drule_all code_ctor_store_read_prefix >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   rename1 `immutable_execution_frame sa s sr t1` >>
@@ -559,6 +583,8 @@ Proof
      >- (irule copy_old_operand_mono >> metis_tac[])
      >- metis_tac[old_operand_taint_frame, copy_old_operand_def]
      >> metis_tac[old_operand_prov_frame]) >>
+  `fresh_vars_wrt sr t1` by
+    fs[immutable_execution_frame_def, immutable_operand_frame_def] >>
   drule_all code_ctor_store_write_suffix >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   rename1 `immutable_execution_frame sr t1 sb t2` >>
@@ -571,7 +597,7 @@ Proof
   >- (irule emitted_inst_seq_ptr_uniform_compose >>
       qexistsl [`Gf`, `sr`, `t1`, `tnf`] >>
       fs[immutable_execution_frame_def, inst_extends_def, store_word_insts])
-  >- simp[EVERY_APPEND]
+  >- fs[EVERY_APPEND]
   >- (gen_tac >>
       mp_tac (Q.INST [`M` |-> `tn.t_mem`, `c` |-> `w2n (a + n2w off : bytes32)`,
                       `d` |-> `w2n (b + n2w off : bytes32)`] store_word_taint_pointwise) >>
@@ -653,7 +679,8 @@ Proof
     fs[MULT_SUC] >>
   qpat_x_assum `!off sa sb s G tn. _` drule_all >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
-  qexistsl [`Gf'`, `tnf'`, `t'`] >>
+  rename1 `immutable_execution_frame sm t1 sb t2` >>
+  qexistsl [`Gf'`, `tnf'`, `t2`] >>
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
     (irule emitted_insts_append >> fs[immutable_execution_frame_def]) >>
   rpt conj_tac
@@ -662,7 +689,7 @@ Proof
   >- (irule emitted_inst_seq_ptr_uniform_compose >>
       qexistsl [`Gf`, `sm`, `t1`, `tnf`] >>
       fs[immutable_execution_frame_def, inst_extends_def, store_word_insts])
-  >- simp[EVERY_APPEND]
+  >- fs[EVERY_APPEND]
   >- (qspecl_then [`w2n b`, `w2n a`, `off`, `n`, `tn.t_mem`, `tnf.t_mem`,
                     `tnf'.t_mem`] mp_tac copy_word_taint_compose >>
       impl_tac
@@ -699,6 +726,9 @@ Proof
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tnf` by
     (qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
-      (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+      (qspec_then `s.vs_inst_idx` mp_tac) >>
+     `s with vs_inst_idx := s.vs_inst_idx = s` by
+       simp[venom_state_component_equality] >>
+     simp[]) >>
   drule_all run_inst_seq_gas_path_ptr >> simp[]
 QED
