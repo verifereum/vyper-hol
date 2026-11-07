@@ -15,11 +15,11 @@ Theorem alloc_run_compile_builtin_dispatch_body_cases:
       (cfn ce t e) (\v s. value_shape_ok s v) /\
     alloc_run (\s. shape_state s /\ cenv_shape_ok s ce) (cfn ce t e) (\v s. T)) /\
   (!av a b elems e t.
-    HD (TL args) = Builtin av (MakeArray a b) elems /\ MEM e elems ==>
+    1 < LENGTH args /\ HD (TL args) = Builtin av (MakeArray a b) elems /\ MEM e elems ==>
     shape_step F compiler_label (\s. cenv_shape_ok s ce)
       (cfn ce t e) (\v s. value_shape_ok s v) /\
     alloc_run (\s. shape_state s /\ cenv_shape_ok s ce) (cfn ce t e) (\v s. T)) /\
-  (is_extcode (HD args) ==>
+  (0 < LENGTH args /\ is_extcode (HD args) ==>
     shape_step F compiler_label (\s. cenv_shape_ok s ce)
       (cfn ce ty (extcode_addr_expr (HD args))) (\v s. value_shape_ok s v) /\
     alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
