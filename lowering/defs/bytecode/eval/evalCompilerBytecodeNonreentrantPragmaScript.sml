@@ -3,7 +3,7 @@ Theory evalCompilerBytecodeNonreentrantPragma
 Ancestors
   evalCompilerBytecodeNonreentrantMulti compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
-  evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib
+  evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib evalCompilerBoundedLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -37,10 +37,33 @@ Proof
   entry_stage "run_pipeline_stages" >> entry_admin >> entry_stage "fcg_analyze" >> simp[] >>
   entry_stage "prune_unit_fcg_unreachable" >> entry_stage "reachable_fcg_acyclic" >> simp[] >> entry_stage "fcg_postorder" >>
   entry_open_schedule >> entry_stage "ir_supply_covers_unit" >>
-  entry_stage "lookup_unique_function" >> simp[venomPassScheduleTheory.o1_fn_passes_def] >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
+  entry_stage "lookup_unique_function" >> simp[venomPassScheduleTheory.o1_fn_passes_def] >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >>
+  entry_dft_start >> entry_dft_cfg >> entry_dft_live >> simp_tac pure_ss [LET_THM] >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_finish >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
+  entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >>
+  entry_guard "ir_supply_covers_unit" >> entry_admin >>
   entry_stage "run_configured_fn_pass_fold" >> entry_admin >> entry_stage "replace_unique_function" >> entry_admin >>
   entry_stage "apply_unit_label_map" >> entry_admin >> entry_guard "unit_labels_wf" >> entry_guard "list_subset" >>
   entry_guard "ir_supply_covers_unit" >> entry_guard "unit_global_inst_ids_distinct" >> entry_admin >>
@@ -57,8 +80,51 @@ Proof
    entry_stage "cleanup_caller_height" >> entry_plan_admin >> entry_analysis_stage "liveness_analyze" >>
    entry_analysis_stage "dfg_build_function" >> entry_analysis_stage "cfg_analyze" >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
-   entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
+   entry_plan_control >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >>
+   entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
-   entry_plan_finish >> CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
+   entry_plan_finish >> entry_guard "spill_plan_in_region" >> entry_plan_spine_admin >>
+   entry_stage "OPTION_MAP" >> entry_admin >>
+   CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED

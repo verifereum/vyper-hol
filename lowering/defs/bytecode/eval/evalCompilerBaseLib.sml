@@ -234,63 +234,113 @@ in CONV_TAC (LAND_CONV (base_first_conv selected
 val base_ml_cs = entry_plan_readonly_cs [``:ir_function``, ``:cfg_analysis``]
   |> (fn cs => computeLib.set_skip cs boolSyntax.conditional (SOME 1))
   |> computeLib.add_thms [optionTheory.option_case_lazily]
+val base_ml_iterators = ["ml_iterate_fuel", "ml_ordered_iter"]
+val base_ml_scans = ["ml_one_pass_liveat", "ml_one_pass_used", "ml_ordered_pass"]
 fun base_ml_pause tm = let
   fun stop t = is_const t andalso List.exists
     (fn name => #Name (dest_thy_const t) = name)
-    ["ml_iterate_fuel", "ml_one_pass_liveat", "ml_one_pass_used"]
+    (base_ml_iterators @ base_ml_scans)
 in Lib.with_flag (computeLib.stoppers,SOME stop)
      (computeLib.WEAK_CBV_CONV base_ml_cs) tm end
 (* Normalize shared inputs before the block scans duplicate their lookups. *)
 fun base_ml_input i = let
-  fun argument n cv = if n = 8 then RAND_CONV cv
-    else RATOR_CONV (argument (n + 1) cv)
+  fun argument n last cv = if n = last then RAND_CONV cv
+    else RATOR_CONV (argument (n + 1) last cv)
   fun normalize tm = let
     val th = computeLib.EVAL_CONV tm
   in TRANS th (Conv.QCONV entry_compact_maps (rhs (concl th))) end
-in base_eval_stage (argument i normalize) "ml_iterate_fuel" end
+  fun prepare tm = argument i (List.length (snd (strip_comb tm)) - 1) normalize tm
+in CONV_TAC (LAND_CONV (base_first_conv
+  (fn tm => List.exists (fn name => flow_call name tm) base_ml_iterators)
+  prepare)) end
 fun base_ml_begin_conv tm = let
+  val (head,args) = strip_comb tm
+  val count = List.length args
+  val definition = case #Name (dest_thy_const head) of
+      "ml_iterate_fuel" => concretizeMemLocDefsTheory.ml_iterate_fuel_def
+    | "ml_ordered_iter" => concretizeMemLocDefsTheory.ml_ordered_iter_def
+    | _ => raise Fail "unexpected memory-liveness iterator"
   fun argument i n cv = if i = n - 1 then RAND_CONV cv
     else RATOR_CONV (argument i (n - 1) cv)
-  val prepared = argument 0 9 computeLib.EVAL_CONV tm
+  val prepared = argument 0 count computeLib.EVAL_CONV tm
   val body = rhs (concl prepared)
   val fuel = hd (snd (strip_comb body))
   val opened = if numSyntax.dest_numeral fuel = Arbnum.zero then
-      REWR_CONV (cj 1 concretizeMemLocDefsTheory.ml_iterate_fuel_def) body
-    else (argument 0 9 numLib.num_CONV THENC
-      REWR_CONV (cj 2 concretizeMemLocDefsTheory.ml_iterate_fuel_def) THENC
+      REWR_CONV (cj 1 definition) body
+    else (argument 0 count numLib.num_CONV THENC
+      REWR_CONV (cj 2 definition) THENC
       RAND_CONV base_ml_pause) body
 in TRANS prepared opened end
 fun base_ml_begin g =
-  if entry_has_call ["ml_iterate_fuel"] (lhs (snd g)) then
-    entry_eval_stage base_ml_begin_conv "ml_iterate_fuel" g
+  if entry_has_call base_ml_iterators (lhs (snd g)) then
+    entry_eval_stage_names base_ml_begin_conv base_ml_iterators g
   else ALL_TAC g
 fun base_ml_part name g =
   if entry_has_call [name] (lhs (snd g)) then
     base_eval_stage (fn tm => let
       val th = computeLib.WEAK_CBV_CONV base_ml_cs tm
-      val (changed,_) = pairSyntax.dest_pair (rhs (concl th))
-    in if aconv changed boolSyntax.T orelse aconv changed boolSyntax.F then th
+      val (changed,rest) = pairSyntax.dest_pair (rhs (concl th))
+      val complete = if name = "ml_ordered_pass" then can listSyntax.dest_list rest
+        else aconv changed boolSyntax.T orelse aconv changed boolSyntax.F
+    in if complete then th
        else raise Fail ("incomplete memory-liveness scan: " ^ name)
     end) name g
   else ALL_TAC g
 fun base_ml_binding tm =
-  if flow_call "LET" tm then let
-    val (_,args) = strip_comb tm
+  let
+    val (head,args) = strip_comb tm
+    val name = if is_const head then #Name (dest_thy_const head) else ""
+    val binding = case (name,List.length args) of
+        ("LET",2) => SOME (hd args,List.nth(args,1))
+      | ("UNCURRY",2) => SOME (hd args,List.nth(args,1))
+      | ("pair_CASE",2) => SOME (List.nth(args,1),hd args)
+      | _ => NONE
     fun iterator t = let val h = fst (strip_comb t) in
-      is_const h andalso #Name (dest_thy_const h) = "ml_iterate_fuel" end
-  in case total pairSyntax.dest_prod (type_of (List.nth(args,1))) of
-       SOME (flag,rest) => flag = ``:bool`` andalso
-         can pairSyntax.dest_prod rest andalso can (find_term iterator) (hd args)
-     | NONE => false
-  end else false
+      is_const h andalso List.exists
+        (fn name => #Name (dest_thy_const h) = name) base_ml_iterators end
+  in case binding of
+      NONE => false
+    | SOME (body,value) => List.null (free_vars tm) andalso
+        can pairSyntax.dest_prod (type_of value) andalso
+        can (find_term iterator) body
+  end
 fun base_ml_resume g =
   if can (find_term base_ml_binding) (lhs (snd g)) then
     flow_transform base_ml_binding base_ml_pause g
   else ALL_TAC g
-fun base_ml_finish g =
-  if can (find_term base_ml_binding) (lhs (snd g)) then
-    raise Fail "memory-liveness result binding remains"
-  else entry_ml_finish g
+fun base_ml_finish g = let
+  fun pending tm = is_const tm andalso List.exists
+    (fn name => #Name (dest_thy_const tm) = name)
+    (base_ml_iterators @ base_ml_scans)
+in
+  if can (find_term pending) (lhs (snd g)) then
+    raise Fail "memory liveness needs more finite iteration boundaries"
+  else ALL_TAC g
+end
+(* Fold one address through the ordered live-key filter at each boundary. *)
+fun base_ml_keys_fold tm = let
+  val (head,args) = strip_comb tm
+  fun lookup t = is_const t andalso #Name (dest_thy_const t) = "ml_lookup"
+in is_const head andalso #Name (dest_thy_const head) = "FOLDL" andalso
+   List.length args = 3 andalso can (find_term lookup) (hd args)
+end
+fun base_ml_keys_tick g = let
+  fun selected tm = base_ml_keys_fold tm andalso List.null (free_vars tm)
+  fun advance tm =
+    if listSyntax.is_nil (rand tm) then REWR_CONV (cj 1 listTheory.FOLDL) tm
+    else (REWR_CONV (cj 2 listTheory.FOLDL) THENC
+      RATOR_CONV (RAND_CONV computeLib.EVAL_CONV)) tm
+in if can (find_term selected) (lhs (snd g)) then
+     flow_transform selected advance g
+   else ALL_TAC g
+end
+fun base_ml_keys_finish g = let
+  fun raw tm = is_const tm andalso #Name (dest_thy_const tm) = "ml_ordered_keys"
+in if can (find_term base_ml_keys_fold) (lhs (snd g)) orelse
+      can (find_term raw) (lhs (snd g)) then
+     raise Fail "ordered memory keys need more finite fold boundaries"
+   else ALL_TAC g
+end
 val base_rename_cs = entry_plan_readonly_cs [``:ir_supply``]
   |> (fn cs => computeLib.set_skip cs boolSyntax.conditional (SOME 1))
   |> computeLib.add_thms [optionTheory.option_case_lazily]
@@ -325,9 +375,13 @@ fun base_dfg_tick g =
 
 (* Preserve the original DFT fuel while exposing its three expensive block
    operations at separate proof boundaries. *)
+val base_dft_open_cs = entry_plan_readonly_cs
+  [``:ir_function``, ``:dft_loop_state``]
+  |> (fn cs => computeLib.set_skip cs boolSyntax.conditional (SOME 1))
+  |> computeLib.add_thms [optionTheory.option_case_lazily]
 fun base_dft_open_conv tm = let
   val prepared = (RATOR_CONV (RAND_CONV computeLib.EVAL_CONV) THENC
-    RAND_CONV computeLib.EVAL_CONV) tm
+    RAND_CONV (computeLib.WEAK_CBV_CONV base_dft_open_cs)) tm
   val body = rhs (concl prepared)
   val (_,args) = strip_comb body
   val (_,rest) = pairSyntax.dest_pair (List.nth (args,2))
@@ -339,14 +393,16 @@ fun base_dft_open_conv tm = let
       REWR_CONV (cj 1 dftDefsTheory.dft_loop_run_fuel_def) body
     else (RATOR_CONV (RAND_CONV numLib.num_CONV) THENC
       REWR_CONV (cj 2 dftDefsTheory.dft_loop_run_fuel_def) THENC
-      RATOR_CONV (RATOR_CONV (RAND_CONV computeLib.EVAL_CONV)) THENC
+      RATOR_CONV (RATOR_CONV (RAND_CONV
+        (computeLib.WEAK_CBV_CONV base_dft_open_cs))) THENC
       PURE_REWRITE_CONV [COND_CLAUSES]) body
 in TRANS prepared opened end
 fun base_dft_open g =
   if entry_has_call ["dft_loop_run_fuel"] (lhs (snd g)) then
     base_eval_stage base_dft_open_conv "dft_loop_run_fuel" g
   else ALL_TAC g
-val base_dft_cs = entry_plan_readonly_cs [``:ir_function``]
+val base_dft_cs = entry_plan_readonly_cs
+  [``:ir_function``, ``:dft_loop_state``]
   |> (fn cs => computeLib.set_skip cs boolSyntax.conditional (SOME 1))
   |> computeLib.add_thms [optionTheory.option_case_lazily]
 fun base_dft_state_conv tm = let
@@ -471,6 +527,9 @@ val allocation_finish_open = simp_tac pure_ss [LET_THM]
 
 (* Open one block without checking all its instructions at once. Subsequent
    boundaries check one instruction; the final guard folds the proved Ts. *)
+val base_dominance_cs = entry_plan_readonly_cs
+  [``:cfg_analysis``, ``:dom_analysis``, ``:ir_function``]
+  |> (fn cs => computeLib.set_skip cs boolSyntax.conditional (SOME 1))
 fun base_dominance_conv tm = let
   val prepared = RAND_CONV computeLib.EVAL_CONV tm
   val body = rhs (concl prepared)
@@ -482,7 +541,7 @@ fun base_dominance_conv tm = let
     else if element_type = ``:basic_block`` then
       LAND_CONV (TRY_CONV BETA_CONV) (rhs (concl opened))
     else LAND_CONV (fn t => let
-      val th = computeLib.EVAL_CONV t
+      val th = computeLib.WEAK_CBV_CONV base_dominance_cs t
       val result = rhs (concl th)
     in if aconv result boolSyntax.T orelse aconv result boolSyntax.F then th
        else raise Fail "incomplete instruction dominance check"
@@ -495,6 +554,35 @@ fun base_dominance_tick g =
 
 (* Two finite planner transitions per timed boundary. The shared analysis
    records are abbreviated before replay, as in the multi-default fixture. *)
+(* Keep the cleanup graph scans and block summaries at separate boundaries. *)
+val base_cleanup_cs = entry_plan_readonly_cs
+  [``:venom_context``, ``:cfg_analysis``, ``:ir_function``]
+val base_cleanup_equation = ref (NONE : thm option)
+fun base_cleanup_begin g = let
+  val target = find_term (flow_call "cleanup_region_growth") (lhs (snd g))
+  val equation = REWR_CONV stackPlanGenTheory.cleanup_region_growth_def target
+in base_cleanup_equation := SOME equation; ALL_TAC g end
+fun base_cleanup_part name g = let
+  val equation = valOf (!base_cleanup_equation)
+  fun selected tm = flow_call name tm andalso List.null (free_vars tm)
+  val target = find_term selected (rhs (concl equation))
+  val checked = computeLib.WEAK_CBV_CONV base_cleanup_cs target
+  val next = TRANS equation (ONCE_DEPTH_CONV
+    (fn tm => if aconv tm target then checked else NO_CONV tm)
+    (rhs (concl equation)))
+in base_cleanup_equation := SOME next; ALL_TAC g end
+fun base_cleanup_finish g = let
+  val equation = valOf (!base_cleanup_equation)
+  val checked = TRANS equation
+    (computeLib.WEAK_CBV_CONV base_cleanup_cs (rhs (concl equation)))
+  val result = rhs (concl checked)
+  val () = if optionSyntax.is_some result orelse optionSyntax.is_none result then ()
+    else raise Fail "cleanup growth remained symbolic"
+  val target = lhs (concl checked)
+  val lifted = CONV_TAC (LAND_CONV
+    (base_first_conv (aconv target) (K checked))) g
+in base_cleanup_equation := NONE; lifted end
+
 (* Normalize one changing instruction input, preserving the original order
    4..9 when the six-input boundary needs finer timing. *)
 fun base_plan_input i = let
@@ -508,6 +596,58 @@ fun base_plan_input i = let
   in argument i evaluate tm end
 in CONV_TAC (LAND_CONV (TRY_CONV
   (entry_plan_active ["generate_inst_plan"] normalize))) end
+
+(* Keep opcode dispatch separate from the selected regular instruction. *)
+val base_plan_instruction_open = CONV_TAC (LAND_CONV (TRY_CONV
+  (entry_plan_active ["generate_inst_plan"]
+    (fn tm => let
+      fun stop t = is_const t andalso
+        #Name (dest_thy_const t) = "generate_regular_inst_plan"
+    in Lib.with_flag (computeLib.stoppers,SOME stop)
+      (computeLib.WEAK_CBV_CONV (entry_plan_instruction_cs tm)) tm end))))
+val base_plan_instruction_equation = ref (NONE : thm option)
+fun base_plan_regular tm = let val (h,args) = strip_comb tm in
+  is_const h andalso #Name (dest_thy_const h) = "generate_regular_inst_plan"
+  andalso List.length args = entry_function_arity (type_of h)
+  andalso entry_plan_closed tm
+end
+fun base_plan_instruction_begin g =
+  (base_plan_instruction_equation :=
+     Option.map REFL (total (find_term base_plan_regular) (lhs (snd g)));
+   ALL_TAC g)
+fun base_plan_instruction_phase stops g =
+  case !base_plan_instruction_equation of NONE => ALL_TAC g
+  | SOME th => let
+      fun evaluate tm = let
+        fun stop t = is_const t andalso
+          List.exists (fn name => #Name (dest_thy_const t) = name) stops
+      in Lib.with_flag (computeLib.stoppers,SOME stop)
+        (computeLib.WEAK_CBV_CONV (entry_plan_instruction_cs tm)) tm end
+      val partial = Conv.QCONV evaluate (rhs (concl th))
+      val completed = entry_plan_compute evaluate (rhs (concl partial))
+      val next = TRANS th (TRANS partial completed)
+    in base_plan_instruction_equation := SOME next; ALL_TAC g end
+val base_plan_instruction_inputs = base_plan_instruction_phase
+  ["reorder_plan", "generate_emit_ops", "optimistic_swap_plan", "release_dead_spills"]
+val base_plan_instruction_reorder = base_plan_instruction_phase
+  ["generate_emit_ops", "optimistic_swap_plan", "release_dead_spills"]
+val base_plan_instruction_emit = base_plan_instruction_phase
+  ["optimistic_swap_plan", "release_dead_spills"]
+val base_plan_instruction_outputs = base_plan_instruction_phase ["release_dead_spills"]
+fun base_plan_instruction_finish g =
+  case !base_plan_instruction_equation of NONE => ALL_TAC g
+  | SOME th => let
+      val evaluate = computeLib.WEAK_CBV_CONV
+        (entry_plan_instruction_cs (lhs (concl th)))
+      val partial = Conv.QCONV evaluate (rhs (concl th))
+      val completed = entry_plan_compute evaluate (rhs (concl partial))
+      val result = TRANS th (TRANS partial completed)
+      val () = if pairSyntax.is_pair (rhs (concl result)) then ()
+        else raise Fail "regular instruction planning remained symbolic"
+      val target = lhs (concl result)
+      val lifted = CONV_TAC (LAND_CONV (base_first_conv
+        (fn tm => aconv tm target) (K result))) g
+    in base_plan_instruction_equation := NONE; lifted end
 
 val base_plan_pair =
   plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >>
