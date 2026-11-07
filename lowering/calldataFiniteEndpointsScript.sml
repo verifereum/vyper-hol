@@ -91,7 +91,9 @@ Resume calldata_valid_bytes_owned_endpoint[sequence]:
      asm_rewrite_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts st last) initial` by
     (irule run_inst_seq_mem_ok_of_prefix_safe >> reverse conj_tac
-     >- (fs[EVERY_MEM] >> metis_tac[]) >>
+     >- (qpat_x_assum `EVERY _ (emitted_insts st last)`
+           (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+         rpt (pop_assum kall_tac) >> simp[EVERY_MEM]) >>
      drule calldata_bytes_prefix_live >>
      disch_then (qspecl_then [`initial`, `n2w sb`, `d`] mp_tac) >>
      asm_rewrite_tac[]) >>
