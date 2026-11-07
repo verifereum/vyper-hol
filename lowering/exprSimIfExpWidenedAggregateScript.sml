@@ -70,42 +70,25 @@ Resume changed_aggregate_post_frag[post]:
     (rpt strip_tac >> irule local_region_frame >>
      conj_tac >- (qexists_tac `func` >> asm_rewrite_tac[]) >>
      qexistsl_tac [`sa`, `ee.scopes`, `q`] >> simp[] >> metis_tac[]) >>
-  `expr_val_at ce cx (expr_type e) origin sb ee v buf.buf_operand q` by
-    (simp[expr_val_at_def] >> rpt strip_tac >> gvs[] >>
-     disj1_tac >>
-     qexistsl_tac [`sa.cs_next_id`, `w2n w`, `type_memory_size dtv`] >>
-     simp[] >> rpt strip_tac >>
-     `local_region ce ee.scopes s n lb lsz` by metis_tac[] >>
-     qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
-     simp[regions_disjoint_def]) >>
-  drule normalized_expr_post_frame >> disch_then irule >>
+  drule allocated_result_expr_post_frame >> disch_then irule >>
   simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
-  suspend "frames"
-QED
-
-Resume changed_aggregate_post_frag[frames]:
-  markerLib.RESUME_TAC >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >>
+  conj_tac >- (rpt strip_tac >> irule local_region_frame_fwd >>
+    qexistsl_tac [`s0`, `origin`, `es.scopes`] >>
+    qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> asm_rewrite_tac[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `FLOOKUP s.vs_allocas aid = SOME (off,len)` by metis_tac[] >>
-      `aid < sa.cs_next_id` by decide_tac >>
-      qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >>
-      simp[regions_disjoint_def] >> strip_tac >>
-      qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ q.vs_memory = _`
-        (qspecl_then [`off`, `len`] mp_tac) >> simp[]) >>
-  irule locals_kept_regions_tail >>
-  goal_assum (drule_at (Pat `locals_kept _ _ _ _`)) >>
+  qexistsl_tac [`type_memory_size dtv`, `sa.cs_next_id`, `w2n w`] >>
+  simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
+    simp[regions_disjoint_def]) >>
+  conj_tac >- (rpt strip_tac >>
+    `old < sa.cs_next_id` by decide_tac >>
+    qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >>
+    simp[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
   rpt strip_tac >>
-  `local_region ce ee.scopes s n b sz` by
-    (irule local_region_frame_fwd >>
-     qexistsl_tac [`s0`, `origin`, `es.scopes`] >> asm_rewrite_tac[]) >>
-  qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
-  simp[regions_disjoint_def] >> strip_tac >>
   qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ q.vs_memory = _`
-    (qspecl_then [`b`, `sz`] mp_tac) >> simp[]
+    (qspecl_then [`off`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise changed_aggregate_post_frag

@@ -160,7 +160,12 @@ Resume compile_bytes_ifexp_post_frag[frames]:
         (qpat_x_assum `!aid off sz a k. _ ==> _`
           (qspecl_then [`aid`, `off`, `sz`, `off`, `sz`] mp_tac) >> simp[] >>
          impl_tac >- metis_tac[] >> simp[]) >>
-      metis_tac[]) >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ u.vs_memory = _`
+        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >> simp[] >>
+      disch_then irule >>
+      qpat_assum `!n b sz'. local_region ce es.scopes s0 _ _ _ ==> _`
+        MATCH_ACCEPT_TAC) >>
   fs[locals_kept_def] >> rpt strip_tac >>
   `local_region ce ee.scopes u n b sz` by
     (irule local_region_frame_fwd >>
