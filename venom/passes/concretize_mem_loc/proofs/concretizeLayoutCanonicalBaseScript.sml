@@ -14,7 +14,13 @@ Ancestors concretizeLayoutCanonicalDriver concretizeLayoutCanonicalIndex frameRe
   concretizeLayoutReaderContext concretizeLayoutPhaseStorage
   concretizeLayoutPhaseIndexedContext concretizeLayoutLocalIndexedContextReaders
   concretizeLayoutPhaseReturndataSize concretizeLayoutPhaseResidual
+  concretizeLayoutPhaseAccountReaders concretizeLayoutPhaseInitialFmp
+  concretizeLayoutLocalBalanceReaders
+  concretizeLayoutPhaseParam concretizeLayoutPhaseRetpc
+  concretizeLayoutPhaseCodeData concretizeLayoutLocalCodeDataReaders
+  concretizeLayoutPhaseStore concretizeLayoutLocalReturn
   frameRelocationCleanValueSteps frameRelocationScalarSteps concretizeLayoutPhaseAffine concretizeLayoutPhaseCompare
+  frameRelocationBinding
 
 Theorem layout_annotation_update_ordinary_unique:
   ev = SOME (OriginOrdinary fuel post) /\
@@ -446,8 +452,11 @@ Theorem layout_canonical_ordinary_nonterm_success:
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
     q n i s j t (INL g) /\
   layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
-      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE] \/ context_read0_opcode i.inst_opcode \/
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
     (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
   step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
@@ -520,6 +529,31 @@ Proof
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
          simp[] >> metis_tac[MEM]) >>
+     Cases_on `MEM i.inst_opcode [MSTORE; MSTORE8]`
+     >- (`?opd opv. i.inst_operands = [opd;opv] /\ i.inst_outputs = []` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+         `ALL_DISTINCT (fn_labels fn)` by
+           fs[o1_fn_shape_def, wf_function_def] >>
+         `active_inst fn i s` by fs[decoration_at_def] >>
+         `~in_revert_forward fn s` by
+           (irule active_inst_not_revert_forward >> simp[] >> qexists `i` >> fs[MEM]) >>
+         `~joint_read_exempt (EL g.lop_cursor (q0::MAP SND path))` by
+           (fs[layout_ordinary_trace_def, joint_read_exempt_def]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_memory_store_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `names`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = BUMP`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?v w. i.inst_outputs = [v;w]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+         drule_all layout_bump_trace_step >> metis_tac[]) >>
      `?v. i.inst_outputs = [v]` by
        (qpat_x_assum `inst_wf i` mp_tac >>
         fs[MEM, context_read0_opcode_def, clean_value_shape_def, scalar_binary_opcode_def] >>
@@ -608,6 +642,59 @@ Proof
          simp[] >>
          disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `anns`, `P`] mp_tac) >>
          simp[] >> metis_tac[MEM]) >>
+     Cases_on `MEM i.inst_opcode [CODESIZE; DLOAD]`
+     >- (`code_data_reader_shape i` by
+           (fs[MEM] >> gvs[code_data_reader_shape_def] >>
+            qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_code_data_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = PARAM`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_param_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = RETPC_PARAM`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_retpc_param_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = INITIAL_FMP`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_initial_fmp_trace_step >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [BALANCE; SELFBALANCE]`
+     >- (`balance_reader_shape i` by
+           (fs[MEM] >> gvs[balance_reader_shape_def] >>
+            qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_balance_reader_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = EXTCODESIZE`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?arg. i.inst_operands = [arg]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_all layout_extcodesize_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = EXTCODEHASH`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?arg. i.inst_operands = [arg]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_all layout_extcodehash_trace_step >> metis_tac[]) >>
      Cases_on `i.inst_opcode = RETURNDATASIZE`
      >- (gvs[] >>
          `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
