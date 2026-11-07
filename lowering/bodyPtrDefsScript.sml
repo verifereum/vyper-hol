@@ -68,6 +68,7 @@ QED
 Definition dead_lo_ok_def:
   dead_lo_ok D lo cenv cx <=>
     dead_sub (cx_dead cx) D /\
+    (cenv.ce_is_ctor ==> !im. D.d_imm im = UNIV) /\
     lo = (if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0)
 End
 
@@ -316,6 +317,7 @@ Definition ptr_vv_ok_def:
          ptr_val_ok cx t v op G tn s) /\
   (ptr_vv_ok cx t tv (LocatedValue t' p) es G tn s <=>
      op_taint tn p.ptr_operand = {} /\
+     (p.ptr_location = LocCode ==> op_prov G p.ptr_operand = NONE) /\
      (p.ptr_location = LocMemory ==>
       ?v. read_result cx tv es = (INL v, es) /\
           ptr_mem_ok cx t v p.ptr_operand G tn s) /\
