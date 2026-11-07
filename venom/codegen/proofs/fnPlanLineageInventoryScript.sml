@@ -3318,7 +3318,10 @@ Proof
   drule do_restore_inventory_count >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   rpt conj_tac
-  >- metis_tac[]
+  >- (gen_tac >>
+      rpt (qpat_x_assum `!x. LIST_ELEM_COUNT _ _ + _ = _`
+             (qspec_then `x` assume_tac)) >>
+      asm_rewrite_tac[])
   >- (rpt strip_tac >> gvs[SUBSET_DEF] >> metis_tac[])
   >> metis_tac[SUBSET_TRANS]
 QED
