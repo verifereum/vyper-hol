@@ -10,8 +10,8 @@
  *   - AsmPushLabel: push resolved byte offset onto stack
  *   - JUMP/JUMPI: pop byte offset, map back to asm index via offset_to_pc
  *
- * CALL/STATICCALL and CREATE/CREATE2 use the shared gas-free outcome oracle.
- * DELEGATECALL retains its concrete Verifereum execution bridge.
+ * CALL/STATICCALL/DELEGATECALL and CREATE/CREATE2 use the shared gas-free
+ * outcome oracle.
  *
  * TOP-LEVEL:
  *   asm_state, asm_result    — execution state and result types
@@ -651,25 +651,18 @@ Definition asm_gas_def:
     | reading :: rest => asm_push_val reading (s with as_gas_readings := rest)
 End
 
-(* DELEGATECALL: pop [gas, addr, argsOff, argsSize, retOff, retSize] *)
+(* DELEGATECALL: pop [gas, addr, argsOff, argsSize, retOff, retSize].
+ * Uses the shared outcome oracle, as CALL does: no value, and the caller's
+ * static flag. *)
 Definition asm_exec_delegatecall_def:
   asm_exec_delegatecall s =
     case s.as_stack of
-      gas :: addr_w :: ao :: as_ :: ro :: rs :: stk =>
-        let aoff = w2n ao in
-        let asz = w2n as_ in
-        let mem = asm_expand_memory (aoff + asz) s.as_memory in
-        let calldata = TAKE asz (DROP aoff mem) in
-        let target : address = w2w addr_w in
-        let code = (lookup_account target s.as_accounts).code in
-        let evm_s = make_asm_delegatecall_state s target
-                      (w2n gas) calldata code
-                      s.as_call_ctx.cc_static in
-        (case extract_asm_result s 1w (w2n ro) (w2n rs)
-                (run evm_s) of
-           SOME (output, s') =>
-             AsmOK (asm_next (s' with as_stack := output :: stk))
-         | NONE => AsmError "delegatecall: non-terminating")
+      gas :: addr :: ao :: asz :: ro :: rs :: stk =>
+        let rq = asm_call_request s addr 0w (w2n ao) (w2n asz) F with
+                   cr_kind := DelegateMessageCall in
+        asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
+          (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
+                                (w2n ro) (w2n rs) s.as_memory)
     | _ => AsmError "delegatecall: stack underflow"
 End
 
