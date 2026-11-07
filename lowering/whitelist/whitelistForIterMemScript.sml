@@ -101,6 +101,153 @@ Definition keep_stable_def:
       Q s'
 End
 
+(* Control changes and fresh register writes do not disturb the snapshot. *)
+Theorem for_keep_jump[local]:
+  keep_stable Q caller b z /\ Q s ==> Q (jump_to lbl s)
+Proof
+  simp[keep_stable_def] >> strip_tac >> first_x_assum irule >>
+  qexists_tac `s` >> simp[jump_to_def, lookup_var_def]
+QED
+
+Theorem for_keep_update[local]:
+  keep_stable Q caller b z /\ Q s /\ ~not_fresh_at caller x ==>
+  Q (update_var x w s)
+Proof
+  simp[keep_stable_def] >> strip_tac >> first_x_assum irule >>
+  qexists_tac `s` >> simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem for_keep_alloca[local]:
+  inst.inst_outputs = [out] /\ exec_alloca inst s amount = OK t /\
+  keep_stable Q caller b z /\ Q s /\ ~not_fresh_at caller out /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) ==>
+  Q t /\ FLOOKUP t.vs_allocas aid = SOME (b,z)
+Proof
+  strip_tac >>
+  gvs[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()] >>
+  `inst.inst_id <> aid \/ FLOOKUP s.vs_allocas inst.inst_id <> NONE` by
+    (Cases_on `inst.inst_id = aid` >> gvs[]) >>
+  simp[update_var_def, FLOOKUP_UPDATE] >>
+  qpat_x_assum `keep_stable _ _ _ _` mp_tac >>
+  simp[keep_stable_def] >> strip_tac >> first_x_assum irule >>
+  qexists_tac `s` >> simp[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+(* Both layouts use the same EQ/JNZ condition; only rhs differs. *)
+Theorem for_condition_keep[local]:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst j1 EQ [lhs; rhs] [dv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst j2 JNZ [Var dv; Label yes; Label no] []) /\
+  ~s.vs_halted /\ eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME d /\
+  keep_stable Q caller b z /\ Q s /\ ~not_fresh_at caller dv /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\
+    FLOOKUP t.vs_allocas aid = SOME (b,z) /\
+    t = jump_to (if a = d then yes else no)
+          (update_var dv (bool_to_word (a = d)) s)
+Proof
+  strip_tac >> drule_all stmtSimForArrayLoopTheory.eq_branch_zero_path >> strip_tac >>
+  qexists_tac `jump_to (if a = d then yes else no)
+                 (update_var dv (bool_to_word (a = d)) s)` >>
+  `Q (update_var dv (bool_to_word (a = d)) s)` by
+    (drule_all for_keep_update >> simp[]) >>
+  `Q (jump_to (if a = d then yes else no)
+        (update_var dv (bool_to_word (a = d)) s))` by
+    (drule_all for_keep_jump >> simp[]) >>
+  simp[jump_to_def, update_var_def]
+QED
+
+Theorem for_increment_keep[local]:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions =
+    [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+     mk_inst i2 ASSIGN [Var nv] [idx]; mk_inst i3 JMP [Label cond] []] /\
+  ~s.vs_halted /\ lookup_var idx s = SOME w /\
+  keep_stable Q caller b z /\ Q s /\
+  ~not_fresh_at caller idx /\ ~not_fresh_at caller nv /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\
+    FLOOKUP t.vs_allocas aid = SOME (b,z) /\
+    t = jump_to cond (update_var idx (w + 1w) (update_var nv (w + 1w) s))
+Proof
+  strip_tac >>
+  `run_inst_seq [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+                mk_inst i2 ASSIGN [Var nv] [idx]] s =
+    OK (update_var idx (w + 1w) (update_var nv (w + 1w) s))` by
+    simp[run_inst_seq_def,
+         venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+         venomExecSemanticsTheory.exec_pure2_def,
+         venomInstTheory.mk_inst_def,
+         eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  `Q (update_var nv (w + 1w) s)` by (drule_all for_keep_update >> simp[]) >>
+  `Q (update_var idx (w + 1w) (update_var nv (w + 1w) s))` by
+    (metis_tac[for_keep_update]) >>
+  `Q (jump_to cond (update_var idx (w + 1w) (update_var nv (w + 1w) s)))` by
+    (drule_all for_keep_jump >> simp[]) >>
+  qexists_tac `jump_to cond (update_var idx (w + 1w) (update_var nv (w + 1w) s))` >>
+  conj_tac
+  >- (irule stmtSimForArrayLoopTheory.inst_seq_jump_zero_path >>
+      goal_assum (drule_at Any) >>
+      qexistsl_tac [`bb`, `[mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+                       mk_inst i2 ASSIGN [Var nv] [idx]]`, `i3`] >>
+      simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  simp[jump_to_def, update_var_def]
+QED
+
+(* This is the framing part of the element copy interface.  It uses the
+   allocation witness, not a claim that all source locals are disjoint. *)
+Theorem for_keep_copy_frame[local]:
+  keep_stable Q caller b z /\ Q s /\
+  alloca_inv s /\ aid <> dstid /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) /\
+  FLOOKUP s.vs_allocas dstid = SOME (dst,sz) /\ bytes <= sz /\
+  (!x. not_fresh_at caller x ==> lookup_var x t = lookup_var x s) /\
+  (!a len. a + len <= dst \/ dst + bytes <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) ==>
+  Q t
+Proof
+  strip_tac >>
+  `b + z <= dst \/ dst + sz <= b` by
+    metis_tac[venomMemDefsTheory.alloca_inv_def,
+              venomMemDefsTheory.allocas_non_overlapping_def] >>
+  `mem_bytes_at b z t.vs_memory = mem_bytes_at b z s.vs_memory` by
+    (first_x_assum irule >> decide_tac) >>
+  gvs[keep_stable_def] >> first_x_assum irule >>
+  qexists_tac `s` >> simp[]
+QED
+
+Theorem for_iter_copy_keep[local]:
+  compile_iter_elem_copy cenv src dst tybytes LocMemory F ty ty sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  val_in_memory tv v (w2n sw) s.vs_memory /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  keep_stable Q caller b z /\ Q s /\ alloca_inv s /\ aid <> dstid /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) /\
+  FLOOKUP s.vs_allocas dstid = SOME (w2n dw,sz) /\ type_memory_size tv <= sz /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sa x) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      val_in_memory tv v (w2n dw) t.vs_memory /\ Q t /\
+      t.vs_allocas = s.vs_allocas /\
+      (!x. not_fresh_at caller x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `!x. src = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  `!x. dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all stmtSimForArrayTheory.array_iter_copy_run >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  `!x. not_fresh_at caller x ==> lookup_var x t = lookup_var x s` by metis_tac[] >>
+  `Q t` by
+    (drule_all for_keep_copy_frame >> simp[]) >>
+  simp[] >>
+  qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+  simp[venom_state_component_equality]
+QED
+
 (* The snapshot is well formed only in the successful array-type branch. *)
 Theorem mem_iter_snapshot_wf[local]:
   expr_type e = ArrayT et bd /\
