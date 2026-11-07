@@ -191,7 +191,12 @@ Theorem compile_slice_calldata_semantic:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?s1 s2 s3 s4 data limit t v q z zf w G2 tn2 r p.
+  ?s1 s2 s3 s4 data limit u t v q z zf w G2 tn2 r p.
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]) s = OK u /\
+    lookup_var r u = SOME w /\
+    t = (update_var p (w + 32w) u) with vs_inst_idx := s.vs_inst_idx + 2 /\
+    v = update_var (STRING #"%" (toString s1.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) t /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK t) /\
     out = Var r /\ data = Var p /\
     ptr_covers G2 tn2 r t N /\ ptr_covers G2 tn2 p t (N - 32) /\
@@ -358,7 +363,7 @@ Resume compile_slice_calldata_semantic[finish]:
       (z with vs_inst_idx := LENGTH sb.cs_current_insts) name b len <=>
     local_region cenv es.scopes z name b len` by
     simp_tac (srw_ss()) [local_region_def, lookup_var_def] >>
-  qexistsl_tac [`s1`,`s2`,`s3`,`s4`,`data`,`limit`,`t`,`v`,`q`,`z`,
+  qexistsl_tac [`s1`,`s2`,`s3`,`s4`,`data`,`limit`,`u`,`t`,`v`,`q`,`z`,
     `z with vs_inst_idx := LENGTH sb.cs_current_insts`,`w`,`G2`,`tn2`,`r`,`p`] >>
   simp[eval_operand_def, stmt_state_rel_inst_idx, locals_kept_inst_idx] >>
   rpt conj_tac >> rpt strip_tac >>

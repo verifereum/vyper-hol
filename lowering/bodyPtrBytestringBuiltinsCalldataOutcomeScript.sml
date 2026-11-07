@@ -5,6 +5,7 @@ Ancestors
   vyperTyping valueEncoding words integer compileEnv vyperValue loweringSlice
   allocationPtr bodyMemoryDefs exprSimBuffer venomExecSemantics venomInst
   ptrDiscipline venomState finite_map exprLoweringProps venomMemDefs
+  bodyPtrBytestringBuiltinsCalldataFrame
 
 (* The marked operand evidence fixes both the source integer and its actual
    runtime word; no independent existential execution is introduced. *)
@@ -86,4 +87,16 @@ Proof
   irule external_slice_allocated_ghost_kept >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `new_site_bytes s u` >> simp[] >> metis_tac[]
+QED
+
+(* Counted replay advances the PC after each write.  The raw semantic run
+   leaves it unchanged; these endpoints differ only in the final PC. *)
+Theorem slice_copy_store_pc_normalization:
+  r = q with vs_inst_idx := kr /\
+  v = (write_memory_with_expansion dst bytes r) with vs_inst_idx := kv /\
+  t = (mstore root len v) with vs_inst_idx := kt ==>
+  t = (mstore root len (write_memory_with_expansion dst bytes q)) with vs_inst_idx := kt
+Proof
+  strip_tac >> gvs[] >>
+  simp_tac (srw_ss()) [mstore_def, LET_THM]
 QED
