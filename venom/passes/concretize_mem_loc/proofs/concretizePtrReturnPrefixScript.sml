@@ -16,7 +16,8 @@ Proof
        concretizePtrChronologicalHistoryTheory.ptr_observe_def] >>
   rpt strip_tac >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[Once run_defs, step_inst_base_def, AllCaseEqs()] >> strip_tac >>
+  simp[Once step_inst_def, step_inst_base_opcode_eqs,
+       AllCaseEqs()] >> strip_tac >>
   gvs[] >>
   qspec_then `(\s. s.vs_params)` mp_tac venomInstProofs1Theory.bind_outputs_preserves >>
   simp[update_var_def] >> disch_then drule >>
@@ -99,12 +100,12 @@ Resume ptr_paired_ret_prefix_immediate[alignment]:
   qpat_assum `ptr_paired_alignment _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ptr_paired_alignment_def] >>
   disch_then (qspec_then `r` mp_tac) >>
-  `r < LENGTH ht` by (fs[ptr_paired_samples_def] >> decide_tac) >>
+  `r < LENGTH ht` by (fs[ptr_paired_samples_def, ptr_sample_list_def] >> decide_tac) >>
   simp[EL_APPEND_EQN] >> strip_tac >>
   qabbrev_tac `snap = EL q H` >> PairCases_on `snap` >>
   `snap3 = PTc /\ snap4 = TGc` by
     fs[ptr_paired_saved_tags_def] >>
-  `q < LENGTH h` by (fs[ptr_paired_samples_def, EVERY_EL] >> metis_tac[]) >>
+  `q < LENGTH h` by (fs[ptr_paired_samples_def, ptr_sample_list_def, EVERY_EL] >> metis_tac[]) >>
   `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
     (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!key site. FLOOKUP snap2 key = SOME site ==> FLOOKUP B' key = SOME site` by
@@ -112,7 +113,7 @@ Resume ptr_paired_ret_prefix_immediate[alignment]:
      qpat_assum `ptr_structural_transcript _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac ptr_transcript_birth_retained) >>
      disch_then (qspecl_then [`LENGTH h`, `q`] mp_tac) >>
-     `LENGTH H = LENGTH h` by fs[ptr_paired_samples_def] >>
+     `LENGTH H = LENGTH h` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
      simp[EL_APPEND_EQN]) >>
   gvs[markerTheory.Abbrev_def] >>
   qpat_x_assum `(_,_,_,_,_,_,_) = EL _ H` (assume_tac o SYM) >>
@@ -140,7 +141,7 @@ Resume ptr_paired_ret_prefix_immediate[callers]:
     (Cases_on `a.po_stack` >> Cases_on `at.po_stack` >> Cases_on `saved` >> gvs[]) >>
   simp[] >> irule ptr_paired_call_retained >>
   goal_assum (drule_at Any) >>
-  fs[ptr_paired_call_def, ptr_paired_samples_def, EVERY_EL] >>
+  fs[ptr_paired_call_def, ptr_paired_samples_def, ptr_sample_list_def, EVERY_EL] >>
   metis_tac[]
 QED
 
@@ -158,7 +159,7 @@ Resume ptr_paired_ret_prefix_immediate[writes]:
      simp[EL_APPEND_EQN] >> decide_tac) >>
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM listTheory.APPEND_NIL))) >>
   irule ptr_paired_writes_pair >>
-  fs[ptr_paired_samples_def, is_terminator_def]
+  fs[ptr_paired_samples_def, ptr_sample_list_def, is_terminator_def]
 QED
 
 Finalise ptr_paired_ret_prefix_immediate
