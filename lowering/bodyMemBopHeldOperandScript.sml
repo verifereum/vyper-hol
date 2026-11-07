@@ -14,7 +14,7 @@ Libs
   pairLib
 
 Theorem held_lower_value_compare:
-  (bop = Eq \/ bop = NotEq) /\
+  (bop = vyperAST$Eq \/ bop = NotEq) /\
   is_bytestring_type (expr_type e1) /\ expr_type e2 = expr_type e1 ==>
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa =
   (let (h1,s1) =
@@ -27,7 +27,7 @@ Theorem held_lower_value_compare:
         SOME h => (Lit h,s1)
       | NONE => let (p,sm) = lower_value compile_expr cenv (expr_type e2) e2 s1 in
                 compile_bytestring_hash p sm) in
-   if bop = Eq then emit_op EQ [h1;h2] s2
+   if bop = vyperAST$Eq then emit_op EQ [h1;h2] s2
    else let (q,sm) = emit_op EQ [h1;h2] s2 in emit_op ISZERO [q] sm)
 Proof
   strip_tac >>
@@ -74,11 +74,11 @@ Proof
 QED
 
 Theorem held_compare_tail_compiler:
-  (if bop = Eq then emit_op EQ [h1;h2] sa
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
   ci_mono sa sb
 Proof
-  Cases_on `bop = Eq` >> simp[]
+  Cases_on `bop = vyperAST$Eq` >> simp[]
   >- metis_tac[ci_mono_emit_op, pairTheory.SND] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   `ci_mono sa sm` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
@@ -114,7 +114,7 @@ Theorem held_compare_cuts:
      SOME w => (Lit w,s1)
    | NONE => let (p,sm) = lower_value compile_expr cenv (expr_type e2) e2 s1 in
              compile_bytestring_hash p sm) = (h2,s2) /\
-  (if bop = Eq then emit_op EQ [h1;h2] s2
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] s2
    else let (q,sm) = emit_op EQ [h1;h2] s2 in emit_op ISZERO [q] sm) = (op,sb) /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
   ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sb /\
@@ -276,15 +276,15 @@ QED
 Finalise held_digest_operand_outcome
 
 Theorem held_compare_run_nofresh:
-  (if bop = Eq then emit_op EQ [h1;h2] sa
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
   eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME (bool_to_word (if bop = Eq then w1 = w2 else w1 <> w2)) /\
+    eval_operand op t = SOME (bool_to_word (if bop = vyperAST$Eq then w1 = w2 else w1 <> w2)) /\
     (t with vs_vars := s.vs_vars) = s /\
     (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
 Proof
-  Cases_on `bop = Eq` >>
+  Cases_on `bop = vyperAST$Eq` >>
   simp[emit_op_def, fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
   `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
@@ -298,7 +298,7 @@ Proof
 QED
 
 Theorem held_compare_shape:
-  (if bop = Eq then emit_op EQ [h1;h2] sa
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
   same_blocks sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
   LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
@@ -308,7 +308,7 @@ Theorem held_compare_shape:
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
-  Cases_on `bop = Eq` >>
+  Cases_on `bop = vyperAST$Eq` >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def,
        emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
   strip_tac >> gvs[] >>
@@ -321,7 +321,7 @@ Proof
 QED
 
 Theorem held_compare_counted_nofresh:
-  (if bop = Eq then emit_op EQ [h1;h2] sa
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
   eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
@@ -330,7 +330,7 @@ Theorem held_compare_counted_nofresh:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
-    eval_operand op t = SOME (bool_to_word (if bop = Eq then w1 = w2 else w1 <> w2)) /\
+    eval_operand op t = SOME (bool_to_word (if bop = vyperAST$Eq then w1 = w2 else w1 <> w2)) /\
     stmt_state_rel ctx func cenv cx es t /\
     (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
