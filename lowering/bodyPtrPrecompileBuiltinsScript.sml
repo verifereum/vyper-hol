@@ -8,6 +8,8 @@
  *)
 Theory bodyPtrPrecompileBuiltins
 Ancestors
+  bodyPtrPrecompileBuiltinsECAddRunner bodyPtrPrecompileBuiltinsECMulRunner
+  bodyPtrPrecompileBuiltinsRecoveryRunner
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
@@ -19,5 +21,10 @@ Theorem precompile_builtin_expr_ptr_ok:
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty' (Builtin ty bt es) es'` by
+    (gvs[] >> metis_tac[recovery_expr_vv_sim_ptr, ecadd_expr_vv_sim_ptr,
+                        ecmul_expr_vv_sim_ptr]) >>
+  metis_tac[expr_sim_ptr_of_vv]
 QED
