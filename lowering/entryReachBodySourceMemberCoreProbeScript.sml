@@ -35,7 +35,7 @@ Proof
   first_x_assum irule >> goal_assum (drule_at Any)
 QED
 
-Theorem source_probe_cursor_offsets[local]:
+Theorem source_probe_cursor_offsets:
   entry_source_probe_cursor ce env sf fulltys fulltvs fullavs fullvs sb d pre tys st s ==>
   SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre) =
   SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pre))
@@ -66,7 +66,7 @@ QED
 (* Typechecked instantiation of the engine with source-only semantic input.
    The callback is deliberately left as a premise: recursive closure is a
    later obligation, not something this probe assumes has been established. *)
-Theorem source_probe_execution[local]:
+Theorem source_probe_execution:
   entry_members_callback
     (entry_source_probe_cursor ce env sf tys tvs avs vs sb d)
     cert sf ce ctx fn oid root extent sites b cap site limit_st dst src sb d outsz /\
