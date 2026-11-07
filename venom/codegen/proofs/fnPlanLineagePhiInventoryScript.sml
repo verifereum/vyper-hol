@@ -146,3 +146,11 @@ Proof
       metis_tac[popmany_plan_inventory_subset]) >>
   strip_tac >> gvs[]
 QED
+
+Theorem generate_phi_plan_no_selection:
+  !inst next halting ps.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = NONE ==>
+    generate_phi_plan inst next halting ps = ([],ps)
+Proof
+  simp[generate_phi_plan_def]
+QED
