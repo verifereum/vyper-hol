@@ -2066,3 +2066,35 @@ Resume selective_cases_circuit_lineage[return]:
   metis_tac[listTheory.MEM]
 QED
 Finalise selective_cases_circuit_lineage
+
+(* Intermediate native-site inspection for C3.native_shadow_loss. *)
+Theorem selective_phase_two_stack:
+  (selective_phase 2).ps_stack =
+    REVERSE (MAP Var (FRONT (selective_names 17))) ++ [Var "v16"; Var "hold"]
+Proof
+  `2 = SUC 1` by decide_tac >> pop_assum (fn th => pure_rewrite_tac[th]) >>
+  pure_once_rewrite_tac[selective_phase_def] >>
+  rewrite_tac[selective_phase_phi, selective_entry_cache] >>
+  CONV_TAC (eval_def_occurrences selective_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_cg_def) >> EVAL_TAC
+QED
+
+Theorem selective_phase_three_liveness:
+  live_vars_at selective_lv "H" 3 =
+    REVERSE (FRONT (selective_names 17)) ++ ["v16"; "hold"]
+Proof
+  rewrite_tac[selective_lv_def] >> EVAL_TAC
+QED
+
+(* In the existing forward fixture every pressure-name consuming ADD has
+   dead outputs.  Thus none can expose a selective spill by an optimistic
+   query in that same instruction, regardless of its internal reorder. *)
+Theorem selective_pressure_outputs_dead:
+  EVERY (\i.
+    FILTER (\out. MEM out (live_vars_at selective_lv "H" (SUC i)))
+      (EL i (EL 1 (selective_fn 17 F F).fn_blocks).bb_instructions).inst_outputs = [])
+    (GENLIST (\i. i + 2) 16)
+Proof
+  CONV_TAC (eval_def_occurrences selective_lv_def) >> EVAL_TAC
+QED
