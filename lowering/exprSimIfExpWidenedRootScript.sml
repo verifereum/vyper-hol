@@ -157,6 +157,10 @@ Proof
   rewrite_tac[ifexp_forced_source] >>
   irule gas_outcome_bind_value >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  suspend "condition_outcome"
+QED
+
+Resume widened_ifexp_vv_sim[condition_outcome]:
   reverse conj_tac >-
     (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >>
      metis_tac[expr_exit_INR_type]) >>
@@ -196,6 +200,10 @@ Proof
     (drule (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
   `stmt_state_rel ctx func ce cx (mid with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
+  suspend "selected_branch"
+QED
+
+Resume widened_ifexp_vv_sim[selected_branch]:
   Cases_on `sel` >> gvs[] >>
   drule_at (Pat `expr_vv_sim _ _ _ _ _ _ _`) selected_ifexp_arm_outcome >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
@@ -221,3 +229,5 @@ Proof
   goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
+
+Finalise widened_ifexp_vv_sim
