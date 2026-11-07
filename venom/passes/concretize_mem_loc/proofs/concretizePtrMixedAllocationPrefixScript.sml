@@ -1,5 +1,5 @@
 Theory concretizePtrMixedAllocationPrefix
-Ancestors
+Ancestors concretizePtrRequestHistory
   concretizePtrMixedAllocationTransport concretizePtrAllocationTransport concretizePtrPairedPrefix
   concretizePtrPairedFields concretizePtrSharedFields venomState
   unitLabelMapIdentity venomExecProofs concretizePtrLedgerAlignment concretizePtrDeletedGaps
@@ -121,7 +121,7 @@ Theorem ptr_paired_prefix_alloca_success:
     B = ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births /\
     (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP B owner = SOME site) /\
     ptr_mixed_vars B positions TG' b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
-    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt
+    ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt
 Proof
   strip_tac >> drule_all ptr_paired_prefix_alloca_inputs >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
@@ -243,12 +243,16 @@ Resume ptr_paired_prefix_alloca_success[core_cursor]:
   >- (qpat_x_assum `exec_alloca _ _ _ = OK _` mp_tac >>
       qpat_x_assum `ptr_paired_sample _ _ _ _` mp_tac >>
       qpat_x_assum `a.po_inst.inst_outputs = _` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >>
-      rpt strip_tac >>
+      qpat_x_assum `a.po_inst.inst_operands = _` mp_tac >>
+      qpat_x_assum `a.po_inst.inst_opcode = ALLOCA` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
       qpat_x_assum `exec_alloca _ _ _ = OK _` mp_tac >>
       simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-      fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def,
-         update_var_def]) >>
+      fs[ptr_paired_sample_def] >>
+      simp[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,
+           imm_taint_def, set_var_taint_def, GSYM update_var_def] >>
+      irule ptr_history_content_masks >>
+      qexists_tac `a.po_taint` >> simp[]) >>
   suspend "cursor"
 QED
 Resume ptr_paired_prefix_alloca_success[cursor]:
@@ -362,7 +366,7 @@ Theorem ptr_paired_prefix_alloca_immediate:
     B = ptr_birth_overlay (HD tokens) b.po_state.vs_allocas births /\
     (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP B owner = SOME site) /\
     ptr_mixed_vars B positions TG' b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
-    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
     ptr_paired_prefix R lp positions lo vs C C'
       (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
       tokens registry B PT TG' saved entries
@@ -393,7 +397,8 @@ Resume ptr_paired_prefix_alloca_immediate[certificate]:
       fs[ptr_paired_prefix_def, ptr_paired_sample_def])
   >- suspend "alignment"
   >- (irule ptr_paired_callers_retained >>
-      fs[ptr_paired_prefix_def, ptr_paired_samples_def] >> metis_tac[])
+      fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def] >>
+      qexistsl_tac [`LAST h`, `at`] >> simp[])
   >> suspend "writes"
 QED
 Resume ptr_paired_prefix_alloca_immediate[fields]:
@@ -450,6 +455,7 @@ Resume ptr_paired_prefix_alloca_immediate[writes]:
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM listTheory.APPEND_NIL))) >>
   irule ptr_paired_writes_pair >>
   simp[step_writes_def, source_memory_write_ranges_def, fixed_source_write_range_def,
-       range_bytes_def] >> fs[ptr_paired_prefix_def, ptr_paired_samples_def]
+       range_bytes_def] >>
+  fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def]
 QED
 Finalise ptr_paired_prefix_alloca_immediate

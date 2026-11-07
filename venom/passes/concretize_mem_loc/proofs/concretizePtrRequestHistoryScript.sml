@@ -178,6 +178,16 @@ Proof
   simp[ptr_history_content_def, ptr_taint_content_def]
 QED
 
+Theorem ptr_history_content_allocations[simp]:
+  ptr_history_content tn
+    (s with <|vs_allocas := aa; vs_alloca_next := n|>) t <=>
+  ptr_history_content tn s t
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def,
+       contract_storage_def, contract_transient_def]
+QED
+
 Theorem ptr_history_content_setup:
   ptr_history_content tn s t /\
   (NULL f.fn_blocks <=> NULL g.fn_blocks) /\
