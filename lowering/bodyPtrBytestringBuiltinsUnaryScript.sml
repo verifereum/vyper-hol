@@ -1,7 +1,9 @@
 Theory bodyPtrBytestringBuiltinsUnary
 Ancestors
   bodyPtrBytestringBuiltinsInterfaces exprSimSource gasSummaryComposePtr
-  gasExemptCert exprSimHash stmtSimProps
+  gasExemptCert exprSimHash stmtSimProps bodyPtrBytestringBuiltinsPrefix
+  vyperInterpreter
+Libs monadsyntax
 
 Theorem unary_builtin_operand_sim_ptr:
   body_inv tops ctx cenv cx /\
@@ -62,7 +64,8 @@ Theorem expr_sim_ptr_suffix:
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (expr_type e) v op G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
       (k v) (ee, t, G, tn) Q R) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
@@ -73,6 +76,7 @@ Proof
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.expr_sim_ptr_def]) >>
   disch_then drule_all >> strip_tac >>
+  drule forced_operand_outcome_scopes >> disch_tac >>
   irule gas_outcome_ptr_value_bind >>
   first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
   conj_tac
@@ -104,7 +108,8 @@ Theorem compile_unary_builtin_rel_vv_sim_ptr:
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (expr_type e) v x G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G t) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (\vst. ((case builtin_result cx vst.accounts ann bt [expr_type e] [v] of
          INL w => INL (Value w) | INR exc => INR exc), vst))
