@@ -117,3 +117,17 @@ it does not canonicalize intermediate stacks. This proves this bounded native
 transition only, not global reachability, ASSIGN-region shielding, join
 provenance, or the frozen theorem.
 Evidence: TO_lineage_after_fix-20261106T221649Z_m12922_t001.
+
+## Fresh live-output last-use transition checked
+
+`physical_live_native_live_lastuse_assign` proves the native step from
+`physical_live (a::FILTER (\v. v <> y) nl) ps`, with a absent from nl and y
+present in nl, to `physical_live nl`. Exact last-use consumption is reused,
+then a fresh output extends the physical core. Optimistic swap preserves
+inventory via the existing Setup core-permutation boundary; this makes no
+claim about query residency. `native_assign_prepare_state` now factors the
+common native emission/reorder/consume/push equation, and the earlier dead
+state identity reuses it. No duplicate implementation proof was retained.
+`physical_live_push_fresh` and `optimistic_swap_plan_lineage_inventory` are
+exported general boundaries. Arbitrary persistent spills remain allowed.
+Evidence: TO_lineage_after_fix-20261106T221649Z_m12946_t001.

@@ -199,3 +199,16 @@ Proof
     metis_tac[doSwapSimTheory.do_swap_stack_result, pairTheory.SND] >>
   gvs[stack_swap_def, stack_peek_def, EL_LUPDATE]
 QED
+
+Theorem optimistic_swap_plan_lineage_inventory:
+  !S dfg inst live term ps.
+    lineage_inventory S ps ==>
+    lineage_inventory S (SND (optimistic_swap_plan dfg inst live term ps))
+Proof
+  rpt gen_tac >> simp[lineage_inventory_def, lineage_core_def] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `qs.ps_stack` >>
+  `qs = SND (optimistic_swap_plan dfg inst live term ps)` by simp[Abbr `qs`] >>
+  drule_all fnPlanLineageSetupTheory.optimistic_swap_plan_core_inventory >>
+  strip_tac >> qexistsl [`m`, `rest`] >> simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED

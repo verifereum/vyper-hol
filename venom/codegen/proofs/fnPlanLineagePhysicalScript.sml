@@ -132,6 +132,23 @@ Proof
   simp[physical_live_def]
 QED
 
+Theorem native_assign_prepare_state:
+  !dfg a y nl ps.
+    SND (lineage_regular_prepare dfg (canonical_assign a y) nl ps) =
+      (SND (reorder_plan dfg [Var a]
+        (SND (emit_one_input ASSIGN nl (Var a) ps)))) with ps_stack :=
+          stack_pop 1 (SND (reorder_plan dfg [Var a]
+            (SND (emit_one_input ASSIGN nl (Var a) ps)))).ps_stack ++ [Var y]
+Proof
+  rpt gen_tac >>
+  simp[lineage_regular_prepare_def, canonical_assign_def, mk_inst_def,
+    compute_operands_def, python_stack_operands_def, emit_input_plan_one] >>
+  Cases_on `emit_one_input ASSIGN nl (Var a) ps` >> simp[] >>
+  Cases_on `reorder_plan dfg [Var a] r` >> simp[] >>
+  simp[stack_push_def, SNOC_APPEND, generate_emit_ops_def] >>
+  Cases_on `venom_to_evm_name ASSIGN` >> simp[]
+QED
+
 Theorem native_dead_assign_state:
   !liveness dfg cfg fn lbl a y nl term ps.
     ~MEM y nl ==>
@@ -144,14 +161,10 @@ Theorem native_dead_assign_state:
 Proof
   rpt strip_tac >>
   simp[assign_region_step_postprocess, canonical_assign_observe_def,
-    lineage_regular_prepare_def, canonical_assign_def, mk_inst_def,
-    compute_operands_def, python_stack_operands_def, emit_input_plan_one] >>
-  Cases_on `emit_one_input ASSIGN nl (Var a) ps` >> simp[] >>
-  Cases_on `reorder_plan dfg [Var a] r` >> simp[] >>
-  simp[stack_push_def, generate_emit_ops_def] >>
-  Cases_on `venom_to_evm_name ASSIGN` >> simp[] >>
-  simp[popmany_plan_top_singleton, stack_get_depth_def, REVERSE_SNOC, REVERSE_APPEND,
-    stack_find_def, stack_pop_def, SNOC_APPEND, rich_listTheory.TAKE_APPEND, rich_listTheory.TAKE_TAKE]
+    native_assign_prepare_state, canonical_assign_def, mk_inst_def] >>
+  simp[popmany_plan_top_singleton, stack_get_depth_def, REVERSE_APPEND,
+    stack_find_def, stack_pop_def, rich_listTheory.TAKE_APPEND,
+    rich_listTheory.TAKE_TAKE]
 QED
 
 Theorem physical_live_release_dead_spills:
@@ -175,4 +188,55 @@ Proof
   conj_tac
   >- (drule_all physical_live_emit_dead_source_available >> strip_tac >> simp[]) >>
   simp[physical_live_emit_dead_source]
+QED
+
+Theorem physical_live_push_fresh:
+  !live y ps.
+    ~MEM y live /\ physical_live live ps ==>
+    physical_live (y::live) (ps with ps_stack := stack_push (Var y) ps.ps_stack)
+Proof
+  rpt gen_tac >> simp[physical_live_explicit] >> rpt strip_tac >>
+  `~MEM y names /\ Var y NOTIN FDOM ps.ps_spilled` by
+    ( `Var y NOTIN set (MAP Var live)` by simp[MEM_MAP] >>
+      `Var y NOTIN FDOM ps.ps_spilled` by ASM_SET_TAC[] >>
+      `~MEM (Var y) (MAP Var names)` by ASM_SET_TAC[] >>
+      gvs[MEM_MAP]) >>
+  qexistsl [`m`, `names ++ [y]`] >>
+  simp[stack_push_def, SNOC_APPEND, APPEND_ASSOC, MAP_APPEND,
+    ALL_DISTINCT_APPEND, DISJOINT_DEF, EXTENSION] >>
+  ASM_SET_TAC[]
+QED
+
+Theorem physical_live_native_live_lastuse_assign:
+  !liveness dfg cfg fn lbl a y nl term ps.
+    ~MEM a nl /\ MEM y nl /\
+    physical_live (a::FILTER (\v. v <> y) nl) ps ==>
+    physical_live nl
+      (assign_region_step liveness dfg cfg fn lbl a y nl term ps)
+Proof
+  rpt strip_tac >>
+  `~MEM a (FILTER (\v. v <> y) nl)` by simp[MEM_FILTER] >>
+  `emit_one_input ASSIGN nl (Var a) ps =
+    emit_one_input ASSIGN (FILTER (\v. v <> y) nl) (Var a) ps` by
+    simp[emit_one_input_def, is_var_operand_def, MEM_FILTER] >>
+  `physical_live (FILTER (\v. v <> y) nl)
+    ((SND (reorder_plan dfg [Var a]
+      (SND (emit_one_input ASSIGN nl (Var a) ps)))) with ps_stack :=
+      stack_pop 1 (SND (reorder_plan dfg [Var a]
+        (SND (emit_one_input ASSIGN nl (Var a) ps)))).ps_stack)` by
+    (asm_rewrite_tac[] >> irule physical_live_consume_dead_source >> simp[] >>
+     conj_tac
+     >- (drule_all physical_live_emit_dead_source_available >> strip_tac >> simp[]) >>
+     simp[physical_live_emit_dead_source]) >>
+  drule_at (Pat `physical_live _ _`) physical_live_push_fresh >>
+  disch_then (qspec_then `y` mp_tac) >> simp[MEM_FILTER] >> strip_tac >>
+  `set (MAP Var (y::FILTER (\v. v <> y) nl)) = set (MAP Var nl)` by
+    (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  `physical_live nl (SND (lineage_regular_prepare dfg (canonical_assign a y) nl ps))` by
+    gvs[physical_live_def, native_assign_prepare_state, stack_push_def, SNOC_APPEND] >>
+  simp[assign_region_step_postprocess, canonical_assign_observe_def,
+    canonical_assign_def, mk_inst_def, popmany_plan_def] >>
+  irule physical_live_release_dead_spills >>
+  simp[physical_live_def] >> irule optimistic_swap_plan_lineage_inventory >>
+  gvs[physical_live_def, canonical_assign_def, mk_inst_def]
 QED
