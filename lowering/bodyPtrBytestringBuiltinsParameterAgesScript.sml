@@ -79,10 +79,9 @@ Proof
   Cases_on `h1` >> simp[]
   >- (Cases_on `FLOOKUP ce.ce_vars h0` >> simp[]
       >- metis_tac[] >>
-      Cases_on `x` >> simp[] >>
-      simp[comp_bind_def, comp_ignore_bind_def] >>
+      Cases_on `x` >> simp[]
+      >- (simp[comp_bind_def, comp_ignore_bind_def] >>
       rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-      TRY (first_x_assum drule_all >> simp[] >> NO_TAC) >>
       drule emit_op_safe_operand >> strip_tac >>
       gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
@@ -94,6 +93,7 @@ Proof
       fs[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
       first_x_assum drule >> strip_tac >>
       irule safe_operand_mono >> goal_assum (drule_at Any) >> simp[]) >>
+      rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
   rpt strip_tac >> first_x_assum irule >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[env_operand_age_update]
