@@ -4,7 +4,7 @@ Ancestors
   whitelistForIterImmLoop whitelistForIterDynFrag stmtSimForArrayFrag
   loweringPosts stmtLowering stmtSimProps context emitHelper compileEnv exprLoweringProps
   localPtrsProps emitHelperProps fragExec venomInst list finite_map arithmetic
-  allocationPtr stmtSimForArrayLoop words
+  allocationPtr stmtSimForArrayLoop stmtSimDeclCompose words
 Libs
   monadsyntax
 
@@ -130,4 +130,78 @@ Theorem immutable_entry_allocation_bound:
 Proof
   strip_tac >> gvs[array_loop_inv_def, mk_inst_def] >>
   drule_all (SRULE [mk_inst_def] stmt_state_rel_alloca_site_bound) >> simp[]
+QED
+
+(* Convert the loop invariant to the copy boundary once, so the fragment
+   consumer supplies only the semantic immutable-element observation. *)
+Theorem immutable_prepared_entry:
+  compile_iter_elem_copy cenv (Var ep) (Var p) stride LocCode F et et sa = ((),sb0) /\
+  stride = type_memory_size tv /\ 0 < stride /\ stride <= sz /\
+  sz < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
+  declare_local cenv id et st1 = (bc,sd) /\ cenv.ce_alloca_locals /\
+  FLOOKUP cenv.ce_vars id = NONE /\ local_ptrs_reserved bc sa /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  (!scs. not_local_ptr bc (FEMPTY :: scs) p /\
+    not_local_ptr cenv scs ov /\ not_local_ptr cenv scs tot /\
+    not_local_ptr cenv scs ep) /\
+  ALL_DISTINCT [p;idx;ov;ep] /\ p <> tot /\ idx <> tot /\ ov <> tot /\
+  not_fresh_at sa ep /\ not_fresh_at sa idx /\
+  ainst = mk_inst aid ALLOCA [Lit (n2w sz)] [p] /\
+  MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
+  sa.cs_current_insts =
+    [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+    (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+    [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]] /\
+  lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  sb0.cs_current_bb = bod /\
+  (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) \/
+         cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  (!s. ret_pc_ok cenv st s ==> ret_pc_ok bc sb0 s) /\
+  (!x. not_fresh_at caller x ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  (!ei s k. P ei /\ stmt_state_rel ctx func cenv cx ei s /\ k < LENGTH vs ==>
+    immutable_holds cenv cx et (Value (EL k vs))
+      (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) ei s) ==>
+  !k ei s. array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off))
+      (n2w off) p dst sz ainst bod st k ei s /\ k < LENGTH vs ==>
+    ?s2. s2.vs_current_bb = sb0.cs_current_bb /\
+      s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
+      stmt_state_rel ctx func bc cx
+        (ei with scopes := (FEMPTY |+ (id,
+          <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes) s2 /\
+      ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
+      lookup_var idx s2 = SOME (n2w k) /\ lookup_var p s2 = SOME dst /\
+      FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+      array_caller_frame caller s s2 /\ gas_marked_path F ctx func s 0 (OK s2)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `w2n dst + sz < dimword (:256)` by
+    (drule_all immutable_entry_allocation_bound >> simp[]) >>
+  qpat_x_assum `stride = type_memory_size tv` SUBST_ALL_TAC >>
+  fs[array_loop_inv_def] >>
+  `cenv_top_ext cenv bc (FEMPTY :: ei.scopes)` by
+    (`!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?p sz. l = PtrVar p sz` by simp[] >>
+     drule_all cenv_top_ext_declare_local >> simp[]) >>
+  `immutable_holds cenv cx et (Value (EL k vs))
+    (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei s` by
+    (qpat_assum `!ei s k. _ ==> immutable_holds _ _ _ _ _ _ _`
+       (qspecl_then [`ei`, `s`, `k`] mp_tac) >>
+     asm_simp_tac std_ss [ADD_COMM]) >>
+  `w2n dst + type_memory_size tv < dimword (:256)` by decide_tac >>
+  `ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p]` by simp[mk_inst_def] >>
+  `ret_pc_ok bc sb0 s` by metis_tac[] >>
+  `not_local_ptr bc (FEMPTY :: ei.scopes) p /\
+   not_local_ptr cenv ei.scopes ov /\ not_local_ptr cenv ei.scopes tot /\
+   not_local_ptr cenv ei.scopes ep` by metis_tac[] >>
+  fs[ALL_DISTINCT] >>
+  gvs[] >>
+  irule (SRULE [ADD_COMM] immutable_array_entry_run) >>
+  asm_simp_tac std_ss [] >>
+  qpat_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `sa.cs_current_insts = _` (irule_at Any) >>
+  asm_rewrite_tac [] >>
+  asm_simp_tac (srw_ss()) [mk_inst_def] >>
+  decide_tac
 QED
