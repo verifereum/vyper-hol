@@ -937,6 +937,8 @@ Definition check_toplevel_decl_def:
         EVERY (\(fn,args,ret,mut).
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
+        LENGTH (FILTER SND fields) <= 3 /\
+        ALL_DISTINCT (MAP (FST o FST) fields) /\
         EVERY (\((_,ty),indexed). assignable_type tenv ty /\
                                   (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args

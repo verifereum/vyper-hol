@@ -812,22 +812,22 @@ in assert_some (check p03_constructor_modules);
    assert_none (check p15x_constructor_modules)
 end) [false,true];
 
-(* Event declaration regressions: indexed aggregates and duplicate event names
-   are rejected; field-name duplication and four indexed fields remain legal. *)
+(* Event declaration regressions: indexed aggregates, duplicate event names,
+   duplicate field names and more than three indexed fields are rejected. *)
 Theorem event_declaration_regressions:
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
             EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
-  IS_SOME (check_contract F [] 0w
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
                           (("b",BaseT (UintT 256)),T);
                           (("c",BaseT (UintT 256)),T);
-                          (("d",BaseT (UintT 256)),T)]])]) /\
-  IS_SOME (check_contract F [] 0w
+                          (("d",BaseT (UintT 256)),T)]])] = NONE /\
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
-                          (("a",BaseT BoolT),F)]])]) /\
+                          (("a",BaseT BoolT),F)]])] = NONE /\
   IS_SOME (check_contract F [] 0w
     [(NONE,[FlagDecl "F" ["A";"B"];
             EventDecl "E" [(("a",FlagT (NONE,"F")),T);
@@ -840,6 +840,14 @@ val event_decl_rejections =
   [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
       : (num option # toplevel list) list)``,
    ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
+                            (("b",BaseT (UintT 256)),T);
+                            (("c",BaseT (UintT 256)),T);
+                            (("d",BaseT (UintT 256)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
+                            (("a",BaseT BoolT),F)]])]
       : (num option # toplevel list) list)``];
 val () = List.app (fn mods =>
   let val th = vyperCheckContractLib.check_contract_conv
