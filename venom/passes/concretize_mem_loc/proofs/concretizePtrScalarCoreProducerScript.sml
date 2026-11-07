@@ -5,7 +5,7 @@ Ancestors concretizePtrReturnTransport concretizePtrTaggedSupport concretizePtrV
   concretizePtrOpaqueRetpc concretizePtrSourceOwnership
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape
-  concretizePtrOperationalOpcodes
+  concretizePtrOperationalOpcodes opcodeClass
   concretizePtrParamProducer concretizePtrOrdinaryNext concretizePtrPairedPrefix
   concretizePtrPairedFields concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrChronologicalHistory concretizePtrAllocationSize concretizePtrDeletedGapHistory
@@ -22,7 +22,7 @@ Theorem ptr_scalar_core_operand_discipline[local]:
   (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P fn) /\
   MEM inst.inst_opcode
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
-     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE] ==>
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] ==>
   EVERY (\op. ptr_nonopaque_operand fn op /\ op_prov TG op = NONE /\
               op_taint tn op = {}) inst.inst_operands
 Proof
@@ -51,7 +51,7 @@ QED
 Theorem ptr_scalar_core_execution[local]:
   MEM inst.inst_opcode
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
-     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE] /\
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
   inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
@@ -73,7 +73,7 @@ Theorem ptr_mixed_scalar_core_execution[local]:
               op_taint tn op = {}) inst.inst_operands /\
   MEM inst.inst_opcode
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
-     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE] /\
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   inst.inst_outputs = [out] /\ ~retpc_var f out /\
   step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
@@ -98,6 +98,7 @@ Proof
   gvs[FLOOKUP_UPDATE]
 QED
 
+(* Ordinary scalar-family production, including OFFSET. *)
 Theorem ptr_paired_prefix_scalar_core:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -114,7 +115,7 @@ Theorem ptr_paired_prefix_scalar_core:
   max_live_eom C' = SOME eom /\
   MEM a.po_inst.inst_opcode
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
-     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE] /\
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   ptr_chrono_step C' at zt ==>
   ?z TG'.
     TG' = step_prov PT TG a.po_inst z.po_state /\
@@ -165,10 +166,9 @@ Proof
   simp[ptr_observe_def, ptr_observation_component_equality] >>
   strip_tac >> gvs[Excl "MEM"] >>
   IF (qpat_assum `step_inst _ _ _ _ = OK _` (K all_tac)) all_tac
-    (fs[MEM] >> qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
-     simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
-     ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >>
-     simp[exec_pure1_def, exec_pure2_def, exec_pure3_def, AllCaseEqs()]) >>
+    (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+     simp[step_inst_non_invoke] >> strip_tac >>
+     drule step_inst_base_intret_opcodes >> fs[MEM]) >>
   `?v. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
      s' = update_var out v at.po_state /\
      ptr_mixed_vars births positions
@@ -178,7 +178,7 @@ Proof
     (fs[ptr_paired_sample_def] >>
      `MEM a.po_inst.inst_opcode
        [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
-        ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE]` by simp[] >>
+        ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]` by simp[] >>
      `a.po_state.vs_labels = at.po_state.vs_labels` by
        fs[ptr_core_shared_def, ptr_shared_fields_def] >>
      drule_all ptr_mixed_scalar_core_execution >>
@@ -271,7 +271,7 @@ Theorem ptr_paired_scalar_core_prefix_normalize:
   ptr_chrono_step C' at zt /\
   MEM a.po_inst.inst_opcode
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
-     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE] ==>
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] ==>
   ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
     delta <> [] /\ LENGTH snapshots = LENGTH delta /\
     ptr_paired_prefix R lp positions lo vs C C'
