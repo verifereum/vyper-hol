@@ -117,19 +117,14 @@ Theorem dead_bytes_dynarray_shorten:
 Proof
   rpt gen_tac >> strip_tac >> simp[dead_bytes_def] >> rpt strip_tac >>
   qexists_tac `i` >> simp[] >>
-  Cases_on `i < w2n (lookup_storage (n2w bs) st')`
-  >- (`i < w2n (lookup_storage (n2w bs) st)` by decide_tac >>
-      gvs[] >>
-      `dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
-       dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b` suffices_by simp[] >>
-      irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
-      first_x_assum irule >>
-      `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
-        (qpat_x_assum `i < n` (strip_assume_tac o MATCH_MP arithmeticTheory.LESS_ADD_1) >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]) >>
-      decide_tac) >>
-  gvs[] >> Cases_on `i < w2n (lookup_storage (n2w bs) st)` >> gvs[] >>
-  drule (cj 1 dead_bytes_range) >> simp[]
+  `dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
+   dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b` suffices_by simp[] >>
+  irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+  first_x_assum irule >>
+  `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
+    (qpat_x_assum `i < n` (strip_assume_tac o MATCH_MP arithmeticTheory.LESS_ADD_1) >>
+     simp[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]) >>
+  decide_tac
 QED
 
 Theorem dead_bytes_pop_header:
@@ -264,11 +259,11 @@ Proof
   rpt strip_tac >> qpat_x_assum `!k b. _` irule >>
   reverse conj_tac >- decide_tac >> strip_tac >>
   qpat_x_assum `~dead_bytes _ _ _ _ _` mp_tac >>
+  qpat_x_assum `len = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
   irule dyn_array_elem_dead >>
-  conj_tac >- simp[] >>
-  conj_tac >- decide_tac >>
-  conj_tac >- decide_tac >> qexists_tac `n` >> simp[]
+  simp[arithmeticTheory.MULT_COMM] >>
+  qexists_tac `n` >> simp[] >> decide_tac
 QED
 
 Theorem storage_range_agree_frame:
