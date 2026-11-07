@@ -3054,3 +3054,103 @@ Proof
   simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM,
                     arithmeticTheory.MULT_COMM]
 QED
+
+Theorem immutable_default_path_pop_empty:
+  !path tv vs.
+    mutable_place_path tv path /\
+    evaluate_subscripts tv (default_value tv) path = INL (ArrayV (DynArrayV vs)) ==>
+    vs = []
+Proof
+  Induct_on `path`
+  >- (Cases_on `tv` >>
+      simp[evaluate_subscripts_def, vyperValueTheory.default_value_def,
+           vyperValueTheory.default_value_tuple_MAP,
+           vyperValueTheory.default_value_struct_MAP] >>
+      TRY (rename1 `BaseTV bt` >> Cases_on `bt` >>
+           simp[vyperValueTheory.default_value_def] >>
+           rename1 `BytesT bd` >> Cases_on `bd` >>
+           simp[vyperValueTheory.default_value_def] >> NO_TAC) >>
+      Cases_on `b` >> simp[vyperValueTheory.default_value_def]) >>
+  rpt gen_tac >> strip_tac >> Cases_on `h`
+  >- (rename1 `ValueSubscript key` >> Cases_on `key` >> Cases_on `tv` >>
+      gvs[vyperPlaceWriteSoundnessTheory.mutable_place_path_def] >>
+      rename1 `ArrayTV ct bd` >> Cases_on `bd` >>
+      gvs[vyperValueTheory.default_value_def, evaluate_subscripts_def,
+          vyperValueOperationTheory.array_index_def, listTheory.oEL_def,
+          AllCaseEqs()] >>
+      first_x_assum drule_all >> simp[]) >>
+  Cases_on `tv` >>
+  gvs[vyperPlaceWriteSoundnessTheory.mutable_place_path_def, AllCaseEqs()] >>
+  Cases_on `ALOOKUP l s` >> gvs[] >>
+  gvs[vyperValueTheory.default_value_def,
+      vyperValueTheory.default_value_struct_MAP, evaluate_subscripts_def,
+      alistTheory.ALOOKUP_MAP, AllCaseEqs()] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+(* Diagnostic: insert_sarray's early insertion needs ordered keys, not
+   merely distinct keys. This is a probe of the proposed helper interface. *)
+Theorem immutable_sparse_insert_order_diagnostic[local]:
+  ALL_DISTINCT (MAP FST [(2,IntV 0); (1,IntV 0)]) /\
+  ~ALL_DISTINCT
+    (MAP FST (insert_sarray 1 (IntV 1) [(2,IntV 0); (1,IntV 0)]))
+Proof
+  EVAL_TAC
+QED
+
+Theorem immutable_fields_admissible_update[local]:
+  !fs vals id ct child.
+    immutable_fields_admissible fs vals /\ ALOOKUP fs id = SOME ct /\
+    immutable_value_admissible ct child ==>
+    immutable_fields_admissible fs (AFUPDKEY id (K child) vals)
+Proof
+  Induct_on `fs` >- simp[immutable_value_admissible_def] >>
+  Cases >> Cases_on `vals` >> simp[immutable_value_admissible_def] >>
+  PairCases_on `h` >>
+  simp[immutable_value_admissible_def, alistTheory.AFUPDKEY_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `h0 = id` >> gvs[immutable_value_admissible_def]
+QED
+
+Theorem immutable_sparse_entries_insert[local]:
+  !al i child ct n.
+    EVERY (\(j,x). j < n /\ immutable_value_admissible ct x) al /\
+    i < n /\ immutable_value_admissible ct child ==>
+    EVERY (\(j,x). j < n /\ immutable_value_admissible ct x)
+      (insert_sarray i child al)
+Proof
+  Induct_on `al` >- simp[vyperValueOperationTheory.insert_sarray_def] >>
+  Cases >> rpt gen_tac >> strip_tac >>
+  simp[Once vyperValueOperationTheory.insert_sarray_def] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Theorem immutable_sparse_admissible_insert[local]:
+  !al i child ct n.
+    SORTED $< (MAP FST al) /\
+    immutable_value_admissible (ArrayTV ct (Fixed n)) (ArrayV (SArrayV al)) /\
+    i < n /\ immutable_value_admissible ct child ==>
+    immutable_value_admissible (ArrayTV ct (Fixed n))
+      (ArrayV (SArrayV (insert_sarray i child al)))
+Proof
+  rpt strip_tac >> simp[immutable_value_admissible_def] >> conj_tac
+  >- (irule vyperTypingTheory.SORTED_lt_ALL_DISTINCT >>
+      irule vyperAssignPreservesTypeTheory.insert_sarray_SORTED >> simp[]) >>
+  irule immutable_sparse_entries_insert >>
+  gvs[immutable_value_admissible_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem immutable_sparse_admissible_delete[local]:
+  !al i ct n.
+    SORTED $< (MAP FST al) /\
+    immutable_value_admissible (ArrayTV ct (Fixed n)) (ArrayV (SArrayV al)) ==>
+    immutable_value_admissible (ArrayTV ct (Fixed n))
+      (ArrayV (SArrayV (ADELKEY i al)))
+Proof
+  rpt strip_tac >> simp[immutable_value_admissible_def] >> conj_tac
+  >- (irule vyperTypingTheory.SORTED_lt_ALL_DISTINCT >>
+      irule vyperAssignPreservesTypeTheory.ADELKEY_SORTED >> simp[]) >>
+  gvs[immutable_value_admissible_def, alistTheory.ADELKEY_def,
+      listTheory.EVERY_MEM, listTheory.MEM_FILTER] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
