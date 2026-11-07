@@ -815,6 +815,213 @@ Proof
   drule_all fragGasModeTheory.gas_marked_path_then >> simp[]
 QED
 
+Theorem dynarray_body_finish_counted_keep[local]:
+  whitelistForIterDynLoop$dynarray_for_code func cenv bc ty stmts id et tv stride saved_base
+    p sz ainst idx dv ov tot ep nv lv cond_lbl exit_lbl stmts_lbl incr_lbl
+    j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\ k < LENGTH vs /\
+  gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (entry,s2) marks res ee (OK t) /\
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+    res (ee with gas_obs := []) t /\ Q t /\
+  cenv_top_ext cenv bc entry.scopes /\
+  (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
+  lookup_var idx s2 = SOME (n2w k) /\ lookup_var p s2 = SOME dst /\
+  eval_operand saved_base s2 = SOME arr_base /\
+  FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+  ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
+  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+  (!x. saved_base = Var x ==> not_fresh_at sb0 x) /\
+  (!l. saved_base <> Label l) /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  stmtSimForArrayLoop$array_caller_frame caller cc s2 /\
+  keep_stable Q caller b z /\ FLOOKUP s2.vs_allocas aid = SOME (b,z) /\
+  ~not_fresh_at caller idx /\ ~not_fresh_at caller nv ==>
+  ?rest u. ee.scopes <> [] /\ rest = TL ee.scopes /\
+    gas_marked_path F ctx func t 0 (OK u) /\
+    stmtSimForArrayLoop$array_caller_frame caller cc u /\
+    Q u /\ FLOOKUP u.vs_allocas aid = SOME (b,z) /\
+    ((res = INR BreakException /\ u.vs_current_bb = exit_lbl /\
+      u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+      stmt_state_rel ctx func cenv cx
+        (ee with <|scopes := rest; gas_obs := []|>) u) \/
+     ((res = INL () \/ res = INR ContinueException) /\
+      stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+        ainst cond_lbl st (SUC k) (ee with <|scopes := rest; gas_obs := []|>) u))
+Proof
+  strip_tac >> drule_all stmtSimForArrayLoopTheory.array_body_counted_post >> strip_tac >>
+  `stmtSimForArrayLoop$array_caller_frame caller cc t` by
+    (fs[stmtSimForArrayLoopTheory.array_caller_frame_def] >> metis_tac[]) >>
+  `FLOOKUP t.vs_allocas aid = SOME (b,z)` by metis_tac[] >>
+  Cases_on `res = INR BreakException`
+  >- (qexistsl_tac [`rest`, `t`] >>
+      fs[stmt_lands_def, fragGasModeTheory.gas_marked_path_def,
+         fragGasPathTheory.gas_path_rules]) >>
+  `res = INL () \/ res = INR ContinueException` by fs[stmt_lands_def] >>
+  drule_all stmtSimForArrayLoopTheory.array_body_runtime_frame >> strip_tac >>
+  `stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst t.vs_current_bb st k (ee with <|scopes := rest; gas_obs := []|>)
+    (t with vs_inst_idx := 0)` by
+      (fs[stmtSimForArrayLoopTheory.array_loop_inv_def, stmt_state_rel_inst_idx,
+          lookup_var_def, ret_pc_ok_def] >>
+       Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def]) >>
+  drule whitelistForIterDynLoopTheory.dynarray_for_code_iteration_static >> strip_tac >>
+  drule whitelistForIterDynLoopTheory.dynarray_for_code_entry_inputs >> strip_tac >>
+  qhdtm_x_assum `whitelistForIterDynLoop$dynarray_for_code` kall_tac >>
+  `?next. stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+     ainst cond_lbl st (SUC k) (ee with <|scopes := rest; gas_obs := []|>) next /\
+     Q next /\ FLOOKUP next.vs_allocas aid = SOME (b,z) /\
+     (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x t) /\
+     next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next)` by
+    (irule mem_body_continue_iteration_keep >> simp[] >>
+     conj_tac >- (qexists_tac `caller` >> simp[]) >>
+     goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
+     goal_assum (drule_at (Pat `stmt_lands _ _ _ _`)) >>
+     qexists_tac `sj` >> simp[]) >>
+  qexistsl_tac [`rest`, `next`] >> simp[] >>
+  fs[stmtSimForArrayLoopTheory.array_caller_frame_def] >> metis_tac[]
+QED
+
+Theorem dynarray_for_round_counted_keep[local]:
+  whitelistForIterDynLoop$dynarray_for_code func cenv bc ty stmts id et tv stride saved_base
+    p sz ainst idx dv ov tot ep nv lv cond_lbl exit_lbl stmts_lbl incr_lbl
+    j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
+  stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst cond_lbl st k es cc /\
+  lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
+  k < LENGTH vs /\ LENGTH vs < dimword (:256) /\
+  evaluate_type tenv et = SOME tv /\ value_has_type tv (EL k vs) /\
+  val_wf tv (EL k vs) /\ w2n arr_base + 32 + k * stride < dimword (:256) /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  (!s. stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+     ainst stmts_lbl st k es s /\ Q s ==>
+     val_in_memory tv (EL k vs) (w2n arr_base + 32 + k * stride) s.vs_memory /\
+     ret_pc_ok bc sb0 s) /\
+  (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  (!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  (!x. not_fresh_at caller x ==>
+    not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+  (!x. saved_base = Var x ==> not_fresh_at sb0 x) /\ (!l. saved_base <> Label l) /\
+  keep_stable Q caller b z /\ Q cc /\ FLOOKUP cc.vs_allocas aid = SOME (b,z) /\
+  aid <> ainst.inst_id /\ ~not_fresh_at caller idx /\ ~not_fresh_at caller nv /\
+  entry = es with <|scopes := (FEMPTY |+ (id,
+    <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
+    gas_obs := []|> /\
+  stmt_frag_keep Q ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts) entry /\
+  (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (do push_scope_with_var id tv (EL k vs);
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od) (es,cc)
+    (\res ee t. ?broke. res = INL broke /\
+      stmtSimForArrayLoop$array_caller_frame caller cc t /\
+      Q t /\ FLOOKUP t.vs_allocas aid = SOME (b,z) /\
+      (broke ==> t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+        stmt_state_rel ctx func cenv cx ee t) /\
+      (~broke ==> stmtSimForArrayLoop$array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base
+        p dst sz ainst cond_lbl st (SUC k) ee t))
+    (\res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+Proof
+  strip_tac >>
+  `gas_admissible (eval_stmts cx stmts)
+    (stmt_res_ok (InLoop exit_lbl incr_lbl)) entry` by
+    (qpat_x_assum `!gs r es2. _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[gasContextTheory.gas_admissible_def] >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `gas_outcome F (cx_tops cx) (ctx,func) round (es,cc) Post R` >>
+  drule_all dynarray_round_prepare_keep >> strip_tac >>
+  qhdtm_x_assum `stmt_frag_keep` kall_tac >>
+  qhdtm_x_assum `gas_outcome` mp_tac >> rewrite_tac[gas_outcome_def] >> strip_tac
+  >- suspend "ordinary"
+  >> suspend "exempt"
+QED
+
+Resume dynarray_for_round_counted_keep[exempt]:
+  `?sc rest. ee.scopes = sc :: rest` by
+    (drule gasExemptCertTheory.gas_exempt_cert_execution >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[ignore_bind_def, bind_def, return_def, AllCaseEqs()] >> strip_tac >>
+     qpat_x_assum `!gs r es2. _`
+       (qspec_then `gas_explicit marks s2.vs_gas_readings` mp_tac) >>
+     gvs[] >> strip_tac >> goal_assum (drule_at Any)) >>
+  gvs[] >>
+  drule_all stmtSimForArrayLoopTheory.loop_round_exempt_cert >> strip_tac >>
+  qexists_tac `marks` >> disj2_tac >>
+  simp[Abbr `round`] >> goal_assum (drule_at Any)
+QED
+
+Resume dynarray_for_round_counted_keep[ordinary]:
+  qhdtm_x_assum `gas_summary_at` mp_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  disch_then (qx_choose_then `res` (qx_choose_then `ee`
+    (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+  `?sc rest. ee.scopes = sc :: rest` by
+    (qhdtm_assum `gas_marked_exec` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` assume_tac) >>
+     qpat_x_assum `!gs r es2. _`
+       (qspec_then `gas_explicit marks s2.vs_gas_readings` mp_tac) >>
+     gvs[] >> strip_tac >> goal_assum (drule_at Any)) >>
+  drule_all stmtSimForArrayLoopTheory.loop_body_cleanup_exec >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_marked_exec F (ctx,func) cleanup _ _ wrapped fin r` >>
+  `gas_marked_exec F (ctx,func) round (es,cc) marks wrapped fin r` by
+    (simp[Abbr `round`, ignore_bind_def] >>
+     irule (SRULE [] (Q.INST [`left` |-> `[]`] gasSummaryComposeTheory.gas_marked_exec_bind_normal)) >>
+     goal_assum (drule_at Any) >> gvs[]) >>
+  strip_tac >- suspend "normal_finish" >> suspend "exit_finish"
+QED
+
+Resume dynarray_for_round_counted_keep[exit_finish]:
+  fs[] >>
+  `res <> INL () /\ res <> INR BreakException /\ res <> INR ContinueException` by
+    (qpat_x_assum `!tail. stmt_exit _ _ _ _` (qspec_then `[]` mp_tac) >>
+     metis_tac[stmt_exit_loop_ctl]) >>
+  Cases_on `res` >- gvs[] >>
+  qexists_tac `marks` >> disj1_tac >>
+  qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >> disj2_tac >>
+  gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def]
+QED
+
+Resume dynarray_for_round_counted_keep[normal_finish]:
+  fs[] >>
+  `cenv_top_ext cenv bc entry.scopes` by
+    (drule whitelistForIterDynLoopTheory.dynarray_for_code_scope_frame >>
+     fs[stmtSimForArrayLoopTheory.array_loop_inv_def, cenv_top_ext_def] >> metis_tac[]) >>
+  `!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)` by
+    (qpat_x_assum `!gs r es2. _` mp_tac >> rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  drule_all dynarray_body_finish_counted_keep >> strip_tac >>
+  `gas_marked_exec F (ctx,func) round (es,cc) marks wrapped fin (OK u)` by
+    (qhdtm_x_assum `gas_marked_path` mp_tac >>
+     qpat_x_assum `gas_marked_exec _ _ round _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[gas_marked_exec_def] >>
+     rpt strip_tac >> simp[] >>
+     qpat_x_assum `gas_marked_path _ _ _ cc _ _` mp_tac >>
+     disch_then (mp_then Any mp_tac fragGasModeTheory.gas_marked_path_then) >>
+     disch_then drule >> simp[]) >>
+  qexists_tac `marks` >> disj1_tac >>
+  qexistsl_tac [`wrapped`, `fin`, `OK u`] >> simp[] >> disj1_tac >>
+  simp[Abbr `Post`, Abbr `fin`, Abbr `wrapped`] >> gvs[]
+QED
+Finalise dynarray_for_round_counted_keep
+
 Theorem dynarray_loop_initialize_keep[local]:
   ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
   MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
