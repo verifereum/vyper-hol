@@ -281,7 +281,8 @@ Theorem array_alloca_frame[local]:
   ainst.inst_outputs = [p] ==>
   (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-    FLOOKUP s1.vs_allocas aid = SOME b)
+    FLOOKUP s1.vs_allocas aid = SOME b) /\
+  s1.vs_memory = s0.vs_memory
 Proof
   strip_tac >> Cases_on `FLOOKUP s0.vs_allocas ainst.inst_id`
   >- (gvs[exec_alloca_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -345,11 +346,13 @@ Theorem array_loop_initialize_framed:
   lookup_scopes id es.scopes = NONE /\ name <> id /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar saved_base arr_sz) /\
   eval_operand saved_base s0 = SOME array_base /\ ret_pc_ok cenv st s0 /\
-  (!x. not_fresh_at caller x ==> x <> p /\ x <> idx) ==>
+  (!x. not_fresh_at caller x ==> x <> p /\ x <> idx) /\
+  local_ptrs_reserved cenv caller ==>
   ?dst s.
     array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es s /\ array_caller_frame caller s0 s /\
-    gas_marked_path F ctx func s0 0 (OK s)
+    gas_marked_path F ctx func s0 0 (OK s) /\
+    alloca_frame cenv es caller s0 cenv es s
 Proof
   strip_tac >>
   `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
@@ -369,6 +372,13 @@ Proof
   >- (simp[array_caller_frame_def, jump_to_def, update_var_def,
            lookup_var_def, FLOOKUP_UPDATE] >>
       rpt strip_tac >> metis_tac[lookup_var_def]) >>
+  reverse conj_tac
+  >- (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+      simp[jump_to_def, update_var_def] >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `x <> p /\ x <> idx` by metis_tac[] >>
+      simp[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[lookup_var_def]) >>
   `step_inst_base ainst s0 = OK s1` by
     simp[step_inst_base_def, eval_operand_def] >>
   drule array_prefix_continuation >> simp[] >> metis_tac[]
