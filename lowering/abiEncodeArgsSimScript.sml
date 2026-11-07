@@ -12,7 +12,7 @@ Definition abi_args_post_def:
       expr_val_rel cx (expr_type (FST ev)) (SND ev) op s /\
       expr_val_at ce cx (expr_type (FST ev)) sa sb es' (SND ev) op s)
       ops (ZIP (args,vs)) /\
-    wb_frame ce es sa s0 s
+    wb_frame ce es es' sa s0 s
 End
 
 Definition abi_args_ready_def:
