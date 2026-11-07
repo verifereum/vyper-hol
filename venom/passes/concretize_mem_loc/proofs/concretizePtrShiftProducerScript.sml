@@ -1,7 +1,7 @@
 Theory concretizePtrShiftProducer
-Ancestors concretizePtrScalarCoreProducer concretizePtrReturnTransport
+Ancestors concretizePtrRequestHistory concretizePtrScalarCoreProducer concretizePtrReturnTransport
   concretizePtrTaggedSupport concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
-  concretizePtrStructuralDispatch concretizePtrEnvironmentReadProducer
+
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks concretizeStageShape
   concretizePtrOperationalOpcodes concretizePtrParamProducer concretizePtrOrdinaryNext
   concretizePtrPairedPrefix concretizePtrPairedFields concretizePtrStructuralTranscript
@@ -186,7 +186,7 @@ Proof
     (fs[ptr_paired_sample_def] >>
      `MEM a.po_inst.inst_opcode [SHL; SHR; SAR]` by simp[] >>
      `a.po_state.vs_labels = at.po_state.vs_labels` by
-       fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+       (drule ptr_history_content_labels >> simp[]) >>
      `EVERY (\op. ptr_nonopaque_operand a.po_fn op /\ op_prov TG op = NONE)
        a.po_inst.inst_operands` by simp[] >>
      drule_all ptr_mixed_shift_execution >>
@@ -211,7 +211,11 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+      >- (fs[ptr_paired_sample_def] >>
+          simp[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,
+               imm_taint_def, set_var_taint_def, GSYM update_var_def] >>
+          irule ptr_history_content_masks >>
+          qexists_tac `a.po_taint` >> simp[]) >>
       gvs[step_prov_def, out_prov_def] >>
       irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
       simp[update_var_def])) >>
