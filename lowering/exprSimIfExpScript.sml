@@ -244,7 +244,7 @@ Proof
   qexists_tac `LENGTH s'` >> simp[exprSimPropsTheory.val_store_size_def]
 QED
 
-Theorem ifexp_copy_source_bounds[local]:
+Theorem ifexp_copy_source_bounds:
   !cx ty tv v op s.
     is_bytestring_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v /\ expr_val_rel cx ty v op s ==>
@@ -303,7 +303,7 @@ Proof
   qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]
 QED
 
-Theorem ifexp_bytestring_adapter_parts[local]:
+Theorem ifexp_bytestring_adapter_parts:
   !cenv t arm_ty vv sa op sb.
     ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
     is_bytestring_type t /\ compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
@@ -447,7 +447,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_alloc_preserves_post[local]:
+Theorem ifexp_alloc_preserves_post:
   !ctx func cenv cx e es origin sa sm buf sz s0 es' raw vv s.
     compile_alloc_buffer sz sa = (buf,sm) /\
     vv_post ctx func cenv cx e es origin sa s0 es' raw vv s /\
@@ -1011,7 +1011,7 @@ Proof
   metis_tac[cj 2 gas_path_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_root_eval_forced[local]:
+Theorem ifexp_root_eval_forced:
   eval_expr cx (IfExp t c a b) =
   vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
     (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
@@ -1028,7 +1028,7 @@ Proof
   simp[raise_def, vyperStateTheory.bind_def]
 QED
 
-Theorem ifexp_root_condition_admissible[local]:
+Theorem ifexp_root_condition_admissible:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
   gas_admissible (vyperState$bind (eval_expr cx c) (read_result cx)) expr_res_ok es
 Proof
@@ -1040,7 +1040,7 @@ Proof
   fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
 QED
 
-Theorem ifexp_root_branch_admissible[local]:
+Theorem ifexp_root_branch_admissible:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
@@ -1055,7 +1055,7 @@ Proof
   Cases_on `sel` >> gvs[]
 QED
 
-Theorem ifexp_root_condition_bool[local]:
+Theorem ifexp_root_condition_bool:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := gs) = (INL v,mid) ==>
@@ -1070,7 +1070,7 @@ Proof
   simp[vyperStateTheory.bind_def, raise_def, expr_vv_res_ok_def]
 QED
 
-Theorem ifexp_root_condition_cert[local]:
+Theorem ifexp_root_condition_cert:
   gas_exempt_cert memory tops (ctx,func)
     (vyperState$ignore_bind
       (vyperState$bind (eval_expr cx c) (read_result cx)) (return ()))
@@ -1201,7 +1201,7 @@ Proof
   simp[]
 QED
 
-Theorem ifexp_root_code_layout[local]:
+Theorem ifexp_root_code_layout:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
   fn_has_code st st' func /\ local_ptrs_reserved cenv st /\
   (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op,sb) ==>
@@ -1920,7 +1920,7 @@ Proof
   simp[bind_def, expr_vv_res_ok_def]
 QED
 
-Theorem ifexp_arm_conditional_read[local]:
+Theorem ifexp_arm_conditional_read:
   read_result cx raw ee = (INL v,ee) /\
   conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
   ?tv. res = INL tv /\ ss = ee /\
@@ -1934,7 +1934,7 @@ Proof
   gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
 QED
 
-Theorem ifexp_arm_conditional_gas_obs[local]:
+Theorem ifexp_arm_conditional_gas_obs:
   conditional_result cx raw ee = (INL tv,ee) ==>
   !tail. conditional_result cx raw (ee with gas_obs := tail) =
     (INL tv,ee with gas_obs := tail)
@@ -1951,7 +1951,8 @@ Proof
          gvs[place_type_value_def, get_scopes_def, get_immutables_def,
              get_address_immutables_def, bind_def, return_def,
              lift_option_type_def, raise_def, AllCaseEqs()] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+         rpt gen_tac >>
+         rpt (CASE_TAC >> gvs[return_def, raise_def])) >>
       simp[] >> Cases_on `pr` >> simp[] >>
       IF_CASES_TAC >> simp[return_def] >>
       Cases_on `read_place cx p ee` >>
@@ -2273,7 +2274,7 @@ Proof
   simp[jump_to_def]
 QED
 
-Theorem ifexp_root_condition_scopes[local]:
+Theorem ifexp_root_condition_scopes:
   vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := gs) = (INL v,mid) ==>
   MAP FDOM es.scopes = MAP FDOM mid.scopes
