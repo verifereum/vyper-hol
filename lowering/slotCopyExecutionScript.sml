@@ -33,13 +33,7 @@ Definition slot_copy_body_result_def:
     in jump_to (slot_copy_cond cs) s7
 End
 
-Theorem slot_copy_operand_update[simp]:
-  eval_operand op (update_var name value s) =
-    if op = Var name then SOME value else eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
-QED
+val _ = export_rewrites ["emitHelperProps.slot_copy_operand_update"];
 
 Theorem slot_copy_load_update[simp]:
   slot_copy_word load (update_var name value s) key = slot_copy_word load s key

@@ -1,13 +1,11 @@
 Theory immutableCopyExecution
 Ancestors
   bytestringCopyExecution fragExec stmtSimStoreCopy
-  fragGasPath fragGasMode fragGasSeq placeCopyControlPath slotCopyExecution immutableWordExecution immutableMemoryFrame emitHelperProps
+  fragGasPath fragGasMode fragGasSeq placeCopyControlPath immutableWordExecution immutableMemoryFrame emitHelperProps
   context compileEnv emitHelper exprLoweringProps venomState venomExecSemantics venomInst
   mmCopyEquiv venomMemProps mmInterval
 Libs
   stepInstBaseLib
-
-val _ = temp_delsimps ["slot_copy_operand_update", "slot_copy_operand_mstore"];
 
 (* The offset helper either folds a literal or emits a single ADD.  Its
    semantic frame is the interface needed to keep the copy's root operands

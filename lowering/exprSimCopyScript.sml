@@ -1079,13 +1079,9 @@ Proof
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   gvs[update_var_def] >>
-  Cases_on `dst` >>
-  gvs[mstore_def, write_memory_with_expansion_def, copy_static_def,
-      eval_operand_def, lookup_var_def, update_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> IF_CASES_TAC >> gvs[] >>
-  rpt strip_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  IF_CASES_TAC >> gvs[]
+  simp[mstore_def, write_memory_with_expansion_def, copy_static_def,
+       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
 
 Theorem copy_ctor_frag:
