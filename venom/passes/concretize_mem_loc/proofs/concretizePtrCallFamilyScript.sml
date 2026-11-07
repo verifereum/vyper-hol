@@ -4,7 +4,8 @@
 Theory concretizePtrCallFamily
 Ancestors
   concretizePtrStorageReadProducer concretizePtrMloadRecovery
-  concretizePtrRequestCompletionProbe copyFwdEquiv
+  concretizePtrRequestCompletionProbe copyFwdEquiv venomInstProofs1
+  concretizePtrLedgerProbe concretizePtrPrefixLedger
   concretizePtrBufferCopyContent venomCallOracleDefs venomExecSemantics
   concretizePtrRequestHistory concretizePtrTaggedSupport
   concretizePtrSourceOwnership concretizePtrAllocationSize concretizeStepStructure
@@ -163,8 +164,6 @@ Proof
 QED
 
 Theorem ptr_paired_call_step:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -175,11 +174,54 @@ Theorem ptr_paired_call_step:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [CALL; STATICCALL] ==>
-  ?post. step_inst 0 C a.po_inst a.po_state = OK post /\
-    ptr_history_content (step_taint a.po_inst a.po_state post a.po_taint)
-      post zt.po_state
+  ?post TG' ops (x:256 word) (y:256 word) (n:256 word) k.
+    step_inst 0 C a.po_inst a.po_state = OK post /\
+    at.po_inst = a.po_inst /\
+    active_inst a.po_fn a.po_inst a.po_state /\
+    frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+      a.po_fn a.po_inst a.po_state /\
+    ~in_revert_forward a.po_fn a.po_state /\
+    post.vs_allocas = a.po_state.vs_allocas /\
+    post.vs_current_bb = a.po_state.vs_current_bb /\
+    post.vs_prev_bb = a.po_state.vs_prev_bb /\
+    zt.po_stack = at.po_stack /\ zt.po_fn = at.po_fn /\
+    zt.po_state.vs_current_bb = at.po_state.vs_current_bb /\
+    zt.po_state.vs_prev_bb = at.po_state.vs_prev_bb /\
+    zt.po_state.vs_inst_idx = SUC at.po_state.vs_inst_idx /\
+    active_inst zt.po_fn zt.po_inst zt.po_state /\
+    ptr_history_content (step_taint a.po_inst a.po_state post a.po_taint) post zt.po_state /\
+    post.vs_returndata = zt.po_state.vs_returndata /\
+    mem_write_ops a.po_inst = SOME ops /\
+    MEM ops.iao_ofst a.po_inst.inst_operands /\
+    eval_operand ops.iao_ofst a.po_state = SOME x /\
+    eval_operand ops.iao_ofst at.po_state = SOME y /\
+    ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) /\
+    MEM (w2n x,w2n n) (source_memory_write_ranges a.po_inst a.po_state) /\
+    k = MIN (w2n n) (LENGTH post.vs_returndata) /\
+    (!q. q IN range_bytes (step_writes a.po_inst a.po_state post) <=>
+      w2n x <= q /\ q < w2n x + k) /\
+    (!q. q IN range_bytes (step_writes at.po_inst at.po_state zt.po_state) <=>
+      w2n y <= q /\ q < w2n y + k) /\
+    (!j. j < k ==> read_byte (w2n x+j) post.vs_memory =
+      read_byte (w2n y+j) zt.po_state.vs_memory) /\
+    (!i. ptr_tagged_step (HD tokens) PT TG a.po_inst (ptr_ledger_next a i post).po_state = TG' /\
+      ptr_paired_sample positions (ptr_ledger_next a i post) zt
+        (tokens,registry,births,PT,TG',saved,entries) /\
+      ptr_paired_params positions (ptr_ledger_next a i post) zt
+        (tokens,registry,births,PT,TG',saved,entries))
 Proof
   strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
@@ -288,14 +330,67 @@ Proof
   disch_then drule >> simp[] >>
   disch_then (drule_at (Pos last)) >> simp[] >>
   disch_then (qspecl_then [`sr`,`gas`] strip_assume_tac) >>
-  qexists_tac `update_var out w u` >> simp[] >>
-  qpat_x_assum `ptr_history_content (step_taint _ _ _ _) _ _` mp_tac >>
-  simp[ptr_history_content_def,
-       concretizePtrTaintContentTheory.ptr_taint_content_def,
-       concretizePtrTaintContentTheory.ptr_taint_control_def,
-       ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def,
-       contract_storage_def, contract_transient_def] >>
-  strip_tac >> gvs[]
+  `ptr_history_content (step_taint a.po_inst a.po_state (update_var out w u) a.po_taint)
+    (update_var out w u) zt.po_state` by
+    (simp[] >>
+     qpat_x_assum `ptr_history_content (step_taint _ _ _ _) _ _` mp_tac >>
+     simp[ptr_history_content_def,
+          concretizePtrTaintContentTheory.ptr_taint_content_def,
+          concretizePtrTaintContentTheory.ptr_taint_control_def,
+          ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def,
+          contract_storage_def, contract_transient_def] >> strip_tac >> gvs[]) >>
+  qexistsl_tac [`update_var out w u`, `step_prov PT TG a.po_inst (update_var out w u)`,
+    `<|iao_ofst := ro_op; iao_size := NONE; iao_max_size := SOME rs_op|>`,
+    `sr`, `ro`, `rs`] >>
+  simp[] >> (
+  `u.vs_allocas = a.po_state.vs_allocas /\
+   u.vs_current_bb = a.po_state.vs_current_bb /\
+   u.vs_prev_bb = a.po_state.vs_prev_bb /\
+   u.vs_params = a.po_state.vs_params /\
+   (!x. x <> out ==> lookup_var x u = lookup_var x a.po_state) /\
+   u.vs_return_pc_token = a.po_state.vs_return_pc_token` by
+    (qpat_x_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
+     strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
+  `v.vs_current_bb = at.po_state.vs_current_bb /\
+   v.vs_prev_bb = at.po_state.vs_prev_bb /\
+   v.vs_params = at.po_state.vs_params /\
+   (!x. x <> out ==> lookup_var x v = lookup_var x at.po_state) /\
+   v.vs_return_pc_token = at.po_state.vs_return_pc_token` by
+    (qpat_x_assum `exec_ext_call _ at.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
+     strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
+  gvs[Excl "MEM"] >>
+  simp[mem_write_ops_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, memory_range_of_operands_def,
+       eval_operands_def, step_writes_def, range_bytes_def] >>
+  gen_tac >> conj_tac
+  >- simp[ptr_tagged_step_def, ptr_ledger_next_def, ptr_observe_def,
+          step_prov_def, out_prov_def] >>
+  reverse conj_tac
+  >- (qpat_x_assum `ptr_paired_params _ _ _ _` mp_tac >>
+      simp[concretizePtrPairedFieldsTheory.ptr_paired_params_def, ptr_ledger_next_def, ptr_observe_def,
+           update_var_def]) >>
+  simp[ptr_paired_sample_def, ptr_ledger_next_def, ptr_observe_def] >>
+  `ssa_form a.po_fn` by metis_tac[EVERY_MEM] >>
+  `~retpc_var a.po_fn out` by
+    (irule frameViewFactsTheory.noncopy_output_not_retpc >>
+     simp[] >> qexists_tac `a.po_inst` >> simp[]) >>
+  qpat_x_assum `ptr_mixed_vars births positions TG _ _ _ _ _` mp_tac >>
+  simp[ptr_mixed_vars_pointwise] >> strip_tac >>
+  `~retpc_var at.po_fn out` by metis_tac[] >>
+  gen_tac >>
+  Cases_on `x = out`
+  >- simp[FLOOKUP_DRESTRICT, word_agree_except_def, step_prov_def, out_prov_def, set_prov_def, step_taint_def,
+          out_taint_def, set_var_taint_def, op_taint_def,
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+          ptr_lookup_transport_def, ptr_value_transport_def] >>
+  simp[step_prov_def, out_prov_def, set_prov_def, step_taint_def,
+       out_taint_def, set_var_taint_def, op_taint_def,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  qpat_x_assum `!x. if retpc_var _ x then _ else _`
+    (qspec_then `x` mp_tac) >>
+  gvs[lookup_var_def, op_taint_def, FLOOKUP_DRESTRICT])
 QED
 
 Theorem ptr_paired_call_prefix_normalize:
