@@ -9,6 +9,7 @@ Ancestors
   emitHelper fragExec fragExecPtr fragGasSeqPtr fragGasPathPtr
   bodyPtrBopHashSuffix abiDecodePtrHead instSeqComposePtr assignTuplePtrLocalBytesCopy
   words arithmetic rich_list exprSimAccounts abiDecodePtrNormalized venomInst instIdxIndep
+  abiDecodePtrContinuation assignTuplePtrCopyLen
 
 Theorem abi_decode_clamp_scalar:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\ value IN A /\
@@ -92,27 +93,36 @@ Proof
   drule_all scalar_seq_abort_replay_ptr >> simp[]
 QED
 
-Theorem abi_decode_word_success_ptr:
+(* Compilation structure is independent of the runtime clamp outcome. *)
+Theorem abi_decode_word_phases:
   compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
-    (DecPrimWord clamp) sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  not_fresh_at sa src /\ not_fresh_at sa dst /\
-  abi_decode_ptr_window G tn s src b h /\
-  lookup_var dst s = SOME d /\ ptr_covers G tn dst s 32 /\
-  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
-  p+32 <= h /\ w2n b+h < dimword(:256) /\
-  (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
-  run_inst_seq (emitted_insts sa sb) s = OK u ==>
-  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
-    abi_decode_ptr_window G' tn' u dst d 32 /\
-    abi_decode_ptr_window G' tn' u src b h /\
-    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
-      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+    (DecPrimWord clamp) sa = ((),sb) ==>
+  ?addr value c1 c2 c3 B.
+    compile_abi_dec_addr (Var src) pos sa = (addr,c1) /\
+    emit_op ADD [Var src;pos] sa = (addr,c1) /\
+    emit_op MLOAD [addr] c1 = (value,c2) /\
+    compile_abi_clamp_basetype value clamp c2 = ((),c3) /\
+    emit_void MSTORE [Var dst;value] c3 = ((),sb) /\
+    cs_extends sa c1 /\ cs_extends c1 c2 /\
+    cs_extends c2 c3 /\ cs_extends c3 sb /\
+    cs_extends sa c2 /\ cs_extends c2 sb /\
+    sa.cs_next_var <= c1.cs_next_var /\
+    c1.cs_next_var <= c2.cs_next_var /\
+    c2.cs_next_var <= c3.cs_next_var /\
+    c3.cs_next_var <= sb.cs_next_var /\
+    bop_scalar_seq {x | not_fresh_at c2 x} ({value} UNION IMAGE Lit UNIV)
+      (emitted_insts c2 c3) B /\
+    c2.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa c2 /\
+    c3.cs_current_insts = c2.cs_current_insts ++ emitted_insts c2 c3 /\
+    sb.cs_current_insts = c3.cs_current_insts ++ emitted_insts c3 sb /\
+    same_blocks c2 c3 /\
+    emitted_insts sa sb = emitted_insts sa c2 ++
+      emitted_insts c2 c3 ++ emitted_insts c3 sb /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa c2) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c2 c3) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c3 sb)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  strip_tac >>
   Cases_on `compile_abi_dec_addr (Var src) pos sa` >>
   rename1 `compile_abi_dec_addr (Var src) pos sa = (addr,c1)` >>
   Cases_on `emit_op MLOAD [addr] c1` >>
@@ -124,10 +134,10 @@ Proof
     (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[Once compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
           comp_bind_def, comp_ignore_bind_def]) >>
-  suspend "word_phases"
+  suspend "structure"
 QED
 
-Resume abi_decode_word_success_ptr[word_phases]:
+Resume abi_decode_word_phases[structure]:
   `emit_op ADD [Var src;pos] sa = (addr,c1)` by
     fs[compile_abi_dec_addr_def] >>
   `cs_extends sa c1 /\ sa.cs_next_var <= c1.cs_next_var /\
@@ -153,18 +163,10 @@ Resume abi_decode_word_success_ptr[word_phases]:
     (irule cs_extends_same_block >> fs[same_blocks_def] >>
      simp[IS_PREFIX_APPEND]) >>
   `cs_extends sa c2 /\ cs_extends c2 sb` by metis_tac[cs_extends_trans] >>
-  drule_all fn_has_code_split >> strip_tac >>
-  drule_all (abi_decode_ptr_relative_load |> Q.INST [`D` |-> `D`, `PG` |-> `PG`]) >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `value = Var out` >>
-  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
-    (emitted_insts sa c2) s H tm` >>
-  qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa c2) s =
-    OK (t with vs_inst_idx := _)` >>
-  suspend "word_clamp"
+  suspend "code"
 QED
 
-Resume abi_decode_word_success_ptr[word_clamp]:
+Resume abi_decode_word_phases[code]:
   `c2.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa c2` by
     (qpat_assum `emit_op ADD _ _ = _`
        (mp_then Any strip_assume_tac emit_op_extends) >>
@@ -194,24 +196,54 @@ Resume abi_decode_word_success_ptr[word_clamp]:
      `emitted_insts sa c2 = emitted_insts sa c1 ++ emitted_insts c1 c2` by
        (irule emitted_insts_append >> simp[]) >>
      fs[EVERY_APPEND, EVERY_CONJ, mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`addr`, `value`, `c1`, `c2`, `c3`, `B`] >> simp[]
+QED
+
+Finalise abi_decode_word_phases
+
+Theorem abi_decode_word_success_ptr:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecPrimWord clamp) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  abi_decode_ptr_window G tn s src b h /\
+  lookup_var dst s = SOME d /\ ptr_covers G tn dst s 32 /\
+  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
+  p+32 <= h /\ w2n b+h < dimword(:256) /\
+  (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
+  run_inst_seq (emitted_insts sa sb) s = OK u ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    abi_decode_ptr_window G' tn' u dst d 32 /\
+    abi_decode_ptr_window G' tn' u src b h /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decode_word_phases >>
+  disch_then (qx_choose_then `addr` (qx_choose_then `value`
+    (qx_choose_then `c1` (qx_choose_then `c2` (qx_choose_then `c3`
+      (qx_choose_then `B` strip_assume_tac)))))) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all (abi_decode_ptr_relative_load |> Q.INST [`D` |-> `D`, `PG` |-> `PG`]) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `value = Var out` >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
+    (emitted_insts sa c2) s H tm` >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa c2) s =
+    OK (t with vs_inst_idx := _)` >>
+  suspend "word_clamp"
+QED
+
+Resume abi_decode_word_success_ptr[word_clamp]:
   `run_inst_seq (emitted_insts c2 c3 ++ emitted_insts c3 sb) t =
     OK (u with vs_inst_idx := t.vs_inst_idx)` by
-    (`run_inst_seq (emitted_insts c2 c3 ++ emitted_insts c3 sb)
-       (t with vs_inst_idx := s.vs_inst_idx) = OK u` by
-       (drule run_inst_seq_append >>
-        disch_then (qspec_then `emitted_insts c2 c3 ++ emitted_insts c3 sb` mp_tac) >>
-        qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = _` mp_tac >>
-        qpat_x_assum `emitted_insts sa sb = _` mp_tac >>
-        POP_ASSUM_LIST (K ALL_TAC) >>
-        pure_rewrite_tac[APPEND_ASSOC] >> metis_tac[]) >>
-     `t with vs_inst_idx := t.vs_inst_idx = t` by
-       simp_tac (srw_ss()) [NoAsms, venom_state_component_equality] >>
-     qspec_then `emitted_insts c2 c3 ++ emitted_insts c3 sb` mp_tac
-       run_inst_seq_inst_idx >>
-     disch_then (qspecl_then [`t with vs_inst_idx := s.vs_inst_idx`,
-       `t.vs_inst_idx`] mp_tac) >>
-     simp_tac (srw_ss()) [NoAsms, exec_result_map_def] >>
-     asm_rewrite_tac[exec_result_map_def] >> BETA_TAC >> rewrite_tac[]) >>
+    (irule abi_decode_run_continue_normalized >>
+     reverse conj_tac >- simp[EVERY_APPEND] >>
+     qexistsl_tac [`s`, `emitted_insts sa c2`] >>
+     simp[] >> metis_tac[]) >>
   `?v. v.vs_inst_idx = t.vs_inst_idx + LENGTH (emitted_insts c2 c3) /\
     run_inst_seq (emitted_insts c2 c3) t = OK (v with vs_inst_idx := t.vs_inst_idx) /\
     run_inst_seq (emitted_insts c3 sb) v = OK (u with vs_inst_idx := v.vs_inst_idx)` by
@@ -268,21 +300,16 @@ Resume abi_decode_word_success_ptr[word_store]:
   rename1 `run_inst_seq (emitted_insts c3 sb) v = OK (z with vs_inst_idx := _)` >>
   qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG Gc tk
      (emitted_insts c3 sb) v Gc tz` >>
-  `t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa c2) /\
-   z.vs_inst_idx = v.vs_inst_idx + LENGTH (emitted_insts c3 sb)` by simp[] >>
-  `inst_seq_ptr D 0 ctx func PG G tn
-    (emitted_insts sa c2 ++ emitted_insts c2 c3) s Gc tk /\
-   run_inst_seq (emitted_insts sa c2 ++ emitted_insts c2 c3) s =
-     OK (v with vs_inst_idx := s.vs_inst_idx) /\
-   v.vs_inst_idx = s.vs_inst_idx +
-     LENGTH (emitted_insts sa c2 ++ emitted_insts c2 c3)` by
-     metis_tac[inst_seq_ptr_append_normalized] >>
+  qpat_assum `run_inst_seq (emitted_insts sa c2) s = _`
+    (mp_then (Pat `run_inst_seq (emitted_insts sa sb) s = _`)
+      mp_tac emitted_insts_join_normalized_ptr) >>
+  disch_then drule_all >> strip_tac >>
   `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s Gc tz /\
    run_inst_seq (emitted_insts sa sb) s = OK (z with vs_inst_idx := s.vs_inst_idx)` by
-    (`EVERY (\i. ~is_terminator i.inst_opcode)
-      (emitted_insts sa c2 ++ emitted_insts c2 c3)` by simp[] >>
-     drule_all inst_seq_ptr_append_normalized >> strip_tac >>
-     pure_rewrite_tac[APPEND_ASSOC] >> metis_tac[APPEND_ASSOC]) >>
+    (qpat_assum `run_inst_seq (emitted_insts sa c3) s = _`
+      (mp_then (Pat `run_inst_seq (emitted_insts sa sb) s = _`)
+        mp_tac emitted_insts_join_normalized_ptr) >>
+     disch_then drule_all >> simp[]) >>
   `u = z with vs_inst_idx := s.vs_inst_idx` by
     (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK u` mp_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK (z with vs_inst_idx := _)`
