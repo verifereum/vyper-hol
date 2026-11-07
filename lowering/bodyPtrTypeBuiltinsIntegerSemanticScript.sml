@@ -100,50 +100,46 @@ Proof
   goal_assum (drule_at Any) >> qexistsl_tac [`tv`,`x`] >> simp[]
 QED
 
-(* Remaining scalar coverage inventory (semantic / actual / pointer / summary):
-   ConvIdentity: ScalarSemantic.scalar_identity_semantic_packet and
-     ScalarContinue.scalar_identity_continuation complete the Bool->Int/Uint case.
-   ConvToFlag: ScalarSemantic.scalar_flag_semantic_actual and
-     ScalarContinue.scalar_flag_continuation complete the Uint256->Flag case.
-   ConvBytesToInt: ScalarSemantic.scalar_fixed_int_all_typed_actual and
-     ScalarContinue.scalar_fixed_int_continuation complete all fixed lengths/signs.
-   ConvBytesMToDecimal: scalar_fixed_decimal_all_typed_actual and the decimal
-     continuation in those same theories are complete, including Fixed0.
-   ConvIntToInt: this leaf supplies integer-source actual typed semantics;
-     ScalarChecks.convert_int_counted_certificate and its abort/filter/frame
-     boundaries exist. Full continuation remains; Address/Flag sources that
-     dispatch to ConvIntToInt still need their own typed interpretation adapter.
-   ConvToBool: BoolContinue.convert_bool_run_actual is an actual word run;
-     Bool has counted pointer certificates. Scalar source encoding/convert_result
-     adapter and full scalar continuation remain (bytestring continuation is not it).
-   Integer-to-Address: IntegerAddressContinue supplies direct-clamp actual replay
-     and typed success/revert semantics for both integer signs. Signed sources
-     use ConvToAddress; unsigned sources use ConvIntToInt F bi F 160.
-     scalar_integer_address_continuation supplies the full counted pointer summary.
-     Do not import Outputs (broken aggregate).
-   ConvBytesToAddress: BytesRun.scalar_bytes_address_run_ok/abort supply fresh
-     semantics; ScalarArithmetic.convert_bytes_address_eq reduces pointer code
-     to unsigned160. Actual semantic packet and summary remain.
-   ConvBytesMToBytesM: BytesRun.scalar_bytes_narrow_run_ok/abort and Encoding
-     supply raw narrow/widen facts; ScalarChecks supplies counted/frame/filter
-     boundaries. All-length typed actual semantics and summary remain.
-   ConvIntToBytesM: Outputs.scalar_int_bytes_run requires bits<=8*m (no clamp);
-     CheckedArithmetic supplies full success/abort counted/filter/frame boundary.
-     General typed actual success/abort semantics and full continuation remain.
-   ConvIntToDecimal: IntegerDecimalContinue supplies actual typed success/revert
-     semantics and scalar_integer_decimal_continuation for both integer signs.
-     It reuses DecimalRun and CheckedArithmetic directly, without Outputs.
-   ConvDecimalToInt: DecimalIntegerContinue supplies typed actual success/revert
-     semantics and scalar_decimal_integer_continuation for all destination widths,
-     including the capped Uint256 compiler case. No aggregate imports needed.
-   ConvBoolToDecimal: ScalarArithmetic has pointer facts, but valid_conversion
-     forbids this pair; discharge by scalar source/destination typing partition.
-   int_convert_pair is NOT just integer-to-integer: exprSimConvert defines it
-     to include Bool->Int/Uint (identity, completed) and Int/Uint->Bool
-     (ToBool adapter/summary outstanding), as well as this leaf's four sign pairs.
-   S1 leaf signatures/ancestry inspected: exprSimConvert.convert_int_run,
-     convertScalarBytesRun, convertScalarOutputs (Bytes/Props dependencies),
-     convertScalarDecimalRun (Checks/Decimal dependencies). Do not import
-     convertScalarTyping, convertScalarDispatch or convertScalarBridge to obtain
-     an adapter: their aggregate typing route is unavailable in this task tree.
-   This inventory records missing work only; it introduces no dispatcher claim. *)
+(* Scalar partition inventory (current valid_conversion; dynamic Bytes/String
+   sources belong to the separate bytestring continuation family).
+
+   Source -> destination       compiler operation        complete continuation
+   Bool -> Int/Uint            Identity                  ScalarContinue.scalar_identity_continuation
+   Int/Uint -> Int/Uint         IntToInt                  IntegerContinue.scalar_integer_continuation
+   Int/Uint -> Bool            ToBool                    IntegerBoolContinue.scalar_integer_bool_continuation
+   Int/Uint -> Address         ToAddress/IntToInt        IntegerAddressContinue.scalar_integer_address_continuation
+   Int/Uint -> fixed bytes     IntToBytesM               IntegerBytesContinue.scalar_integer_bytes_continuation
+   Int/Uint -> Decimal         IntToDecimal              IntegerDecimalContinue.scalar_integer_decimal_continuation
+   Decimal -> Int/Uint         DecimalToInt              DecimalIntegerContinue.scalar_decimal_integer_continuation
+   fixed bytes -> Int/Uint     BytesToInt                ScalarContinue.scalar_fixed_int_continuation
+   fixed bytes -> Decimal      BytesMToDecimal           ScalarContinue.scalar_fixed_decimal_continuation
+   fixed bytes -> Address      BytesToAddress            FixedAddressContinue.scalar_fixed_address_continuation
+   fixed bytes -> fixed bytes  BytesMToBytesM            FixedBytesContinue.scalar_fixed_fixed_continuation
+   Uint256 -> Flag             ToFlag (cenv dispatch)    ScalarContinue.scalar_flag_continuation
+
+   MISSING typed adapters and full continuations:
+   fixed bytes -> Bool: ToBool; BoolContinue.convert_bool_run_actual and
+     IntegerBoolContinue.scalar_bool_counted_success are reusable. Need
+     typed fixed-word zero iff EVERY zero byte, including Fixed0.
+   Address -> Uint: IntToInt F 160 F bits. Address is represented by BytesV
+     of length 20, NOT IntV. IntegerSemantic.scalar_integer_actual_run and
+     IntegerContinue.scalar_integer_counted_success provide raw/count support;
+     need decoding to unsigned160, typed semantic guard and result encoding.
+   Address -> fixed bytes: IntToBytesM F 160 m, valid only 20<=m<=32.
+     IntegerBytesRun.integer_bytes_actual_run and
+     IntegerBytesContinue.scalar_integer_bytes_counted_success apply to code.
+     Need evaluate_convert_from's PAD_LEFT address rule (not scalar IntV's DROP).
+   Flag -> Uint256: IntToInt F 256 F 256; Flag -> fixed32: IntToBytesM F 256 32.
+     Need FlagTV/FlagV typing and n2w encoding adapters and full summaries.
+     Encoding.scalar_flag_encoding/scalar_flag_to_bytes32 support them; integer raw/count
+     certificates alone do not prove source interpretation.
+
+   Exhaustiveness is by vyperTypeSystem.valid_conversion_def: Bool has ONLY
+   Int/Uint destinations, Decimal ONLY Int/Uint; Address ONLY Uint/fixed bytes;
+   Flag ONLY Uint256/fixed32. Fixed->fixed excludes equal lengths. Int/Uint to
+   fixed requires bits<=8*m; hence no typed narrowing and no m=0 with positive
+   integer widths. BoolToDecimal and Bool/Decimal->fixed compiler constructors
+   exist but are typing-invalid. No Address->Int or Flag->Int is valid either.
+   int_convert_pair includes Bool->Int/Uint and Int/Uint->Bool, all completed.
+   This inventory does not claim a complete dispatcher; do not import broken
+   convertScalarOutputs/Typing/Dispatch/Bridge aggregates to fill these gaps. *)
