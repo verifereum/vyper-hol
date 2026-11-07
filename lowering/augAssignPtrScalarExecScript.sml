@@ -23,7 +23,7 @@ Theorem scalar_exec_result:
 Proof
   simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
        LENGTH_EQ_NUM_compute] >> strip_tac >>
-  fs[step_inst_base_opcode_eqs] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
   simp[exec_pure1_def, exec_pure2_def, AllCaseEqs()] >> metis_tac[]
 QED
 
