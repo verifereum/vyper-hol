@@ -971,12 +971,13 @@ Proof
 QED
 
 (* Turn a selector's write decomposition into its child storage interface. *)
-Theorem copy_selected_storage[local]:
+Theorem copy_selected_storage_outside[local]:
   !writes pre child post k st d tv total j b.
     writes = pre ++ MAP (\(i,w). (i+d,w)) child ++ post /\
     d <= j /\ j < d+type_slot_size tv /\
     d+type_slot_size tv <= total /\ w2n k+total <= dimword (:256) /\
-    (!i. MEM i (MAP FST post) ==> d+type_slot_size tv <= i /\ i < total) /\
+    (!i. MEM i (MAP FST post) ==>
+      i < total /\ (i < d \/ d+type_slot_size tv <= i)) /\
     ~dead_bytes (apply_writes k writes st) (w2n k+d) tv (w2n k+j) b ==>
     ?st0.
       (!x. w2n k+d <= x /\ x < w2n k+d+type_slot_size tv ==>
@@ -994,6 +995,25 @@ Proof
       first_x_assum drule >> strip_tac >> decide_tac) >>
   drule (cj 1 dead_bytes_frame) >>
   disch_then (qspecl_then [`w2n k+j`, `b`] mp_tac) >> simp[]
+QED
+
+Theorem copy_selected_storage[local]:
+  !writes pre child post k st d tv total j b.
+    writes = pre ++ MAP (\(i,w). (i+d,w)) child ++ post /\
+    d <= j /\ j < d+type_slot_size tv /\
+    d+type_slot_size tv <= total /\ w2n k+total <= dimword (:256) /\
+    (!i. MEM i (MAP FST post) ==> d+type_slot_size tv <= i /\ i < total) /\
+    ~dead_bytes (apply_writes k writes st) (w2n k+d) tv (w2n k+j) b ==>
+    ?st0.
+      (!x. w2n k+d <= x /\ x < w2n k+d+type_slot_size tv ==>
+        lookup_storage (n2w x) (apply_writes k writes st) =
+        lookup_storage (n2w x) (apply_writes (n2w (w2n k+d)) child st0)) /\
+      ~dead_bytes (apply_writes (n2w (w2n k+d)) child st0)
+        (w2n k+d) tv (w2n k+j) b
+Proof
+  rpt strip_tac >> rename1 `w2n k+cap <= dimword (:256)` >>
+  irule copy_selected_storage_outside >>
+  simp[] >> qexistsl_tac [`post`, `pre`, `cap`] >> simp[]
 QED
 
 Theorem copy_tuple_member[local]:
