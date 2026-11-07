@@ -282,13 +282,14 @@ Theorem scfg_ctrl_delegatecall:
   exec_result_map (scfg_ctrl c p n)
     (exec_delegatecall i s gas addr ao az ro rz)
 Proof
-  simp[exec_delegatecall_def, scfg_ctrl_extract_result] >>
+  Cases_on `consume_call_outcome
+    (venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall)
+    (w2n ro) (w2n rz) s` >>
+  drule scfg_ctrl_consume_outcome >> strip_tac >>
+  simp[exec_delegatecall_def, scfg_ctrl_call_request] >>
   rpt (PURE_TOP_CASE_TAC >>
     asm_simp_tac (pure_ss ++ boolSimps.BOOL_ss)
-      [list_case_def, pairTheory.pair_case_thm,
-       pairTheory.FST, pairTheory.SND, optionTheory.OPTION_MAP_DEF,
-       optionTheory.option_case_def, exec_result_map_def, scfg_ctrl_update_var]) >>
-  gvs[optionTheory.OPTION_MAP_DEF]
+      [list_case_def, exec_result_map_def, scfg_ctrl_update_var])
 QED
 
 Theorem scfg_ctrl_create_request[simp]:

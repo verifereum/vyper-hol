@@ -173,7 +173,7 @@ QED
    oracles.  The adopted account snapshot includes the creator nonce when the
    observer recorded it; logs and deletion queues are not adopted on failure. *)
 Theorem observed_failed_create_adoption:
-  kind <> MessageCall /\
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
   HD (FST (HD post.contexts)).stack = 0w ==>
   let rq = create_outcome_request kind value initcode st;
       outcome = outcome_of kind post n m;
