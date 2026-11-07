@@ -468,40 +468,62 @@ Theorem eval_range_compare_sound:
               | _ => ARB)
 Proof
   rpt gen_tac >> strip_tac
-  (* Resolve comparison dispatch before multiplying goals by range cases. *)
   >> qpat_x_assum `op = _` SUBST_ALL_TAC
   >> PURE_ONCE_REWRITE_TAC [venomInstTheory.opcode_case_def]
   >> Cases_on `r1` >> Cases_on `r2`
-  >> fs[eval_range_compare_def, in_range_def, LET_THM,
-        vr_spans_sign_boundary_def, vr_lo_def, vr_hi_def,
-        vr_constant_def, vr_bool_range_def]
-  >> rw[in_range_def, in_range_bool_result]
-  >> TRY (simp w2i_simp >> NO_TAC)
-  >> TRY (simp[in_range_bool_result] >> NO_TAC)
-  (* Remaining: contradictions. Evaluate w2i 0w/1w to get goal = F. *)
-  >> simp[integer_wordTheory.word_0_w2i, integer_wordTheory.w2i_1, dim256]
-  (* (a) Pure integer contradictions *)
-  >> TRY intLib.ARITH_TAC
-  (* (b) Cross-sign: w2i signs differ ⇒ w2n strictly ordered *)
-  >> TRY (
-    mp_tac (Q.SPECL [`w1`,`w2`] cross_sign_w2n) >>
-    (impl_tac >- intLib.ARITH_TAC) >> intLib.ARITH_TAC)
-  >> TRY (
-    mp_tac (Q.SPECL [`w2`,`w1`] cross_sign_w2n) >>
-    (impl_tac >- intLib.ARITH_TAC) >> intLib.ARITH_TAC)
-  (* (c) Same-sign interval separation implies unsigned order. *)
-  >> TRY (
-    FIRST [
-      drule_all signed_bounds_w2n_lt_contra,
-      drule_all signed_bounds_w2n_lt_false,
-      drule_all signed_bounds_w2n_gt_contra,
-      drule_all signed_bounds_w2n_gt_false] >>
-    simp[])
-  (* (d) Constant bounds: UINT256_MAX vs INT256_MIN/MAX *)
+  >> fs[in_range_def]
+  >> simp[eval_range_compare_def, LET_THM, vr_spans_sign_boundary_def,
+          vr_lo_def, vr_hi_def, in_range_bool_result]
+  >~ [`if w2n w1 < w2n w2 then _ else _`]
+  >- (IF_CASES_TAC >- simp[in_range_bool_result] >>
+      IF_CASES_TAC
+      >- (`w2i w1 < 0 /\ 0 <= w2i w2` by intLib.ARITH_TAC >>
+          drule_all cross_sign_w2n >> strip_tac >>
+          simp[in_range_constant, integer_wordTheory.word_0_w2i,
+               arithmeticTheory.LESS_TRANS, arithmeticTheory.LESS_ANTISYM]) >>
+      IF_CASES_TAC
+      >- (`w2i w2 < 0 /\ 0 <= w2i w1` by intLib.ARITH_TAC >>
+          drule_all cross_sign_w2n >> strip_tac >>
+          simp[in_range_constant, integer_wordTheory.w2i_1, dim256]) >>
+      IF_CASES_TAC
+      >- (`w2n w1 < w2n w2` by
+            (spose_not_then assume_tac >> drule_all signed_bounds_w2n_lt_contra >> simp[]) >>
+          simp[in_range_constant, integer_wordTheory.w2i_1, dim256]) >>
+      IF_CASES_TAC
+      >- (`~(w2n w1 < w2n w2)` by
+            (strip_tac >> drule_all signed_bounds_w2n_lt_false >> simp[]) >>
+          simp[in_range_constant, integer_wordTheory.word_0_w2i]) >>
+      simp[in_range_bool_result])
+  >~ [`if w2n w1 > w2n w2 then _ else _`]
+  >- (IF_CASES_TAC >- simp[in_range_bool_result] >>
+      IF_CASES_TAC
+      >- (`w2i w1 < 0 /\ 0 <= w2i w2` by intLib.ARITH_TAC >>
+          drule_all cross_sign_w2n >> strip_tac >>
+          simp[in_range_constant, integer_wordTheory.w2i_1, dim256,
+               arithmeticTheory.GREATER_DEF]) >>
+      IF_CASES_TAC
+      >- (`w2i w2 < 0 /\ 0 <= w2i w1` by intLib.ARITH_TAC >>
+          drule_all cross_sign_w2n >> strip_tac >>
+          simp[in_range_constant, integer_wordTheory.word_0_w2i,
+               arithmeticTheory.GREATER_DEF,
+               arithmeticTheory.LESS_ANTISYM]) >>
+      IF_CASES_TAC
+      >- (`w2n w1 > w2n w2` by
+            (spose_not_then assume_tac >> drule_all signed_bounds_w2n_gt_contra >> simp[]) >>
+          simp[in_range_constant, integer_wordTheory.w2i_1, dim256]) >>
+      IF_CASES_TAC
+      >- (`~(w2n w1 > w2n w2)` by
+            (strip_tac >> drule_all signed_bounds_w2n_gt_false >> simp[]) >>
+          simp[in_range_constant, integer_wordTheory.word_0_w2i]) >>
+      simp[in_range_bool_result])
   >> assume_tac int256_min_neg >> assume_tac int256_max_pos
   >> assume_tac uint256_gt_int256
   >> assume_tac (Q.SPEC `w1` w2i_le_256) >> assume_tac (Q.SPEC `w2` w2i_le_256)
   >> assume_tac (Q.SPEC `w1` w2i_ge_256) >> assume_tac (Q.SPEC `w2` w2i_ge_256)
+  >> rw[in_range_bool_result, in_range_constant,
+        integer_wordTheory.word_0_w2i, integer_wordTheory.w2i_1, dim256]
+  >> simp[vr_bool_range_def, in_range_def,
+          integer_wordTheory.word_0_w2i, integer_wordTheory.w2i_1, dim256]
   >> intLib.ARITH_TAC
 QED
 
