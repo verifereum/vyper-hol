@@ -1,0 +1,72 @@
+Theory bodyPtrStructLitOwnershipConstructorRegistration
+Ancestors
+  bodyPtrStructLitOwnershipModuleRegistration ctorRegisterShape
+  bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
+  moduleLowering compileEnv bodyPtrStructLitOwnershipPrimitives
+  loweringShapeDefs bodyPtrStructLitOwnershipShape
+
+Theorem alloc_run_compile_register_constructor_args:
+  !args ce offset data_size.
+    alloc_run fresh_outputs
+      (compile_register_constructor_args ce args offset data_size)
+      (\ce' s. fresh_outputs s)
+Proof
+  Induct
+  >- simp[compile_register_constructor_args_def, comp_return_def,
+          alloc_run_def, alloc_frame_refl] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_register_constructor_args_def] >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
+  Cases_on `var_location_memory_size x` >> simp[] >>
+  simp[comp_ignore_bind_def] >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac
+    >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_alloc_buffer,
+            SRULE [SF ETA_ss] alloc_run_compile_decode_args] >>
+        simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+    gen_tac >> simp[]) >>
+  fs[SF ETA_ss]
+QED
+
+Theorem compile_register_constructor_args_alloca_locals:
+  !args ce offset data_size st ce' st'.
+    compile_register_constructor_args ce args offset data_size st = (ce',st') ==>
+    ce'.ce_alloca_locals = ce.ce_alloca_locals
+Proof
+  Induct
+  >- simp[compile_register_constructor_args_def, comp_return_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_register_constructor_args_def] >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[]
+  >- metis_tac[] >>
+  Cases_on `var_location_memory_size x` >> simp[]
+  >- metis_tac[] >>
+  simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem alloc_run_compile_register_constructor_args_mode[local]:
+  alloc_run fresh_outputs
+    (compile_register_constructor_args ce args offset data_size)
+    (\ce' s. fresh_outputs s /\ ce'.ce_alloca_locals = ce.ce_alloca_locals)
+Proof
+  mp_tac (Q.SPECL [`args`, `ce`, `offset`, `data_size`]
+    alloc_run_compile_register_constructor_args) >>
+  simp[alloc_run_def] >>
+  metis_tac[compile_register_constructor_args_alloca_locals]
+QED
+
+Theorem alloc_run_compile_register_constructor_args_shape:
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_register_constructor_args ce args offset data_size)
+    (\ce' s. shape_state s /\ cenv_shape_ok s ce' /\
+      ce'.ce_return_pc = ce.ce_return_pc /\
+      ce'.ce_alloca_locals = ce.ce_alloca_locals)
+Proof
+  irule alloc_run_conseq >>
+  irule_at Any alloc_run_shape_join >>
+  irule_at Any compile_register_constructor_args_shape >>
+  irule_at Any alloc_run_compile_register_constructor_args_mode >>
+  simp[shape_state_def] >> metis_tac[shape_base_fresh_outputs]
+QED
