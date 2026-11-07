@@ -91,7 +91,11 @@ Theorem abi_encode_nonword_relabel_observer:
     abi_decode_sim ctx obs (s with vs_current_bb := L) actual /\
     stmt_state_rel ctx func ce cx es' actual /\
     abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
-    LENGTH s.vs_memory <= LENGTH actual.vs_memory
+    LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)
 Proof
   strip_tac >>
   drule_all abi_encode_nonword_observer_entry >>
@@ -240,6 +244,20 @@ Resume abi_encode_nonword_relabel_observer[transport]:
        (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
   `abi_decode_sim ctx obs rs actual` by
     (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
+  `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w)` by
+    (drule abi_encode_caller_phase_registers >>
+     disch_then drule >>
+     disch_then (qspec_then `actual` mp_tac) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def,
+       not_fresh_at_def, lookup_var_def,
+       abi_decoder_operand_live_def, abi_decoder_older_vars_def]) >>
+  `(!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)` by
+    (drule_all abi_encode_caller_phase_allocations >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     simp_tac (srw_ss()) [Abbr `rs`]) >>
   qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []
@@ -256,6 +274,20 @@ Resume abi_encode_nonword_relabel_observer[transport_positive]:
        (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
   `abi_decode_sim ctx obs rs actual` by
     (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
+  `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w)` by
+    (drule abi_encode_caller_phase_registers >>
+     disch_then drule >>
+     disch_then (qspec_then `actual` mp_tac) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def,
+       not_fresh_at_def, lookup_var_def,
+       abi_decoder_operand_live_def, abi_decoder_older_vars_def]) >>
+  `(!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)` by
+    (drule_all abi_encode_caller_phase_allocations >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     simp_tac (srw_ss()) [Abbr `rs`]) >>
   qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []

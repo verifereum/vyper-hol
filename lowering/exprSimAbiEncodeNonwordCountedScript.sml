@@ -56,7 +56,11 @@ Theorem abi_encode_nonword_counted_suffix:
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     actual.vs_fmp = s.vs_fmp /\ actual.vs_call_ctx = s.vs_call_ctx /\
     actual.vs_data_section = s.vs_data_section /\
-    abi_encode_semantic_obs actual = abi_encode_semantic_obs s
+    abi_encode_semantic_obs actual = abi_encode_semantic_obs s /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
@@ -66,6 +70,10 @@ Proof
     actual.vs_fmp = s.vs_fmp /\ actual.vs_call_ctx = s.vs_call_ctx /\
     actual.vs_data_section = s.vs_data_section /\
     abi_encode_semantic_obs actual = abi_encode_semantic_obs s /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row) /\
     ?p. eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) +
       (case mid of NONE => 0 | SOME _ => 4)) /\
