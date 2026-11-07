@@ -726,8 +726,7 @@ Theorem literal_ptr_nonmemory_step[local]:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  asm_simp_tac bool_ss [] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
   simp[exec_alloca_def, exec_pure2_def, exec_write2_def, AllCaseEqs(),
        update_var_def, mstore_def] >>
   rpt strip_tac >> gvs[]

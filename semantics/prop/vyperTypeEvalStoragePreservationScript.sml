@@ -3482,7 +3482,7 @@ Proof
   qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
 QED
 
-Theorem contract_storage_well_formed_stk[local]:
+Theorem contract_storage_well_formed_stk:
   contract_storage_well_formed (cx with stk updated_by f) st <=>
   contract_storage_well_formed cx st
 Proof
@@ -3519,7 +3519,7 @@ Proof
 QED
 
 
-Theorem intcall_defaults_runtime_storage_consistent[local]:
+Theorem intcall_defaults_runtime_storage_consistent:
   runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   env_body.current_src = src_id_opt /\

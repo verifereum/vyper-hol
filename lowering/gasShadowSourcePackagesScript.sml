@@ -44,7 +44,8 @@ Theorem gas_shadow_package_external_fn:
     (m,n,r,f,a,MAP gas_shadow_expr d,t,MAP gas_shadow_stmt b) =
   gas_shadow_external_package (package_external_fn tops tr keys (m,n,r,f,a,d,t,b))
 Proof
-  simp[package_external_fn_def, gas_shadow_external_package_def]
+  simp[package_external_fn_def, gas_shadow_external_package_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem gas_shadow_package_internal_fn:
@@ -100,7 +101,7 @@ Theorem gas_shadow_package_constructor:
     (mut,nr,rr,name,args,MAP gas_shadow_expr defaults,ret,MAP gas_shadow_stmt body) =
   (let (ce,args,pay,nr,key,tr,body,ret) =
      package_constructor tops trans keys (mut,nr,rr,name,args,defaults,ret,body) in
-   (ce,args,pay,nr,key,tr,MAP gas_shadow_stmt body,ret))
+   (gas_shadow_cenv ce,args,pay,nr,key,tr,MAP gas_shadow_stmt body,ret))
 Proof
   simp[package_constructor_def]
 QED
@@ -108,10 +109,10 @@ QED
 Theorem gas_shadow_set_constructor_package_target:
   !ce args pay nr key tr body ret target.
   set_constructor_package_target target
-    (ce,args,pay,nr,key,tr,MAP gas_shadow_stmt body,ret) =
+    (gas_shadow_cenv ce,args,pay,nr,key,tr,MAP gas_shadow_stmt body,ret) =
   (let (ce',args',pay',nr',key',tr',body',ret') =
      set_constructor_package_target target (ce,args,pay,nr,key,tr,body,ret) in
-   (ce',args',pay',nr',key',tr',MAP gas_shadow_stmt body',ret'))
+   (gas_shadow_cenv ce',args',pay',nr',key',tr',MAP gas_shadow_stmt body',ret'))
 Proof
   simp[set_constructor_package_target_def]
 QED

@@ -116,7 +116,7 @@ Resume compile_expr_open_general[builtin]:
   rename1 `compile_expr cenv aty (Builtin ann bi args) sa = (vv,sb)` >>
   `!arg rest. args = arg::rest ==>
      !cty v st. lower_value
-       (expr_child_callback (list_size expr_size args) compile_expr)
+       (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) compile_expr)
        cenv cty arg sa = (v,st) ==> ~block_is_terminated st` by
     (rpt gen_tac >> strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
      drule_at (Pat `lower_value _ _ _ _ _ = _`) lower_value_child_open >>

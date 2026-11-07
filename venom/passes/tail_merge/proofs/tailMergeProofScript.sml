@@ -19,7 +19,7 @@ Theorem tail_merge_inst_wf_outputs[local]:
   !i. inst_wf i ==> is_output_opcode i.inst_opcode \/ i.inst_outputs = []
 Proof
   gen_tac >> Cases_on `i.inst_opcode` >>
-  simp[inst_wf_def, is_output_opcode_def] >> metis_tac[]
+  FIRST_PROVE [simp[inst_wf_def, is_output_opcode_def] >> metis_tac[]]
 QED
 
 Theorem tail_merge_block_inst_wf[local]:

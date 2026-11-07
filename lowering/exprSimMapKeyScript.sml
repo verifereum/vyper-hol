@@ -582,7 +582,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   qpat_x_assum `lower_value cb cenv ity idx sm = _` mp_tac >>
   `lower_value
-     (expr_child_callback (expr_size idx + (expr_size obj + (type_size ann + 1)))
+     (expr_child_callback (expr_size idx + (expr_size obj + (type_size ann + 1)) + cenv_defaults_size cenv)
         compile_expr) cenv (expr_type idx) idx =
    lower_value compile_expr cenv (expr_type idx) idx` by
     (irule exprCallbackContractsTheory.lower_value_callback_contract >>

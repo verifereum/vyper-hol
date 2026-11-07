@@ -97,6 +97,8 @@ Definition cenv_shape_ok_def:
     (!b. cenv.ce_imm_alloca = SOME b ==> plain_operand st b) /\
     (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
          jump_label_ok l) /\
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      cenv.ce_func_defaults /\
     case cenv.ce_return_pc of
       NONE => T
     | SOME (PtrVar op sz) => retpc_operand st op
@@ -120,7 +122,9 @@ Definition cenv_static_ok_def:
     (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
     cenv.ce_imm_alloca = NONE /\
     (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
-         jump_label_ok l)
+         jump_label_ok l) /\
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      cenv.ce_func_defaults
 End
 
 Definition value_shape_ok_def:
@@ -209,6 +213,28 @@ Proof
   >- (res_tac >> Cases_on `loc` >> gvs[static_loc_def, loc_shape_ok_def])
   >- (res_tac >> gvs[loc_shape_ok_def])
   >> Cases_on `cenv.ce_return_pc` >> simp[] >> res_tac >> gvs[]
+QED
+
+(* An internal call compiles the callee's omitted defaults in the env
+   without the callee's defaults; both keep the env's shape. *)
+Theorem cenv_shape_ok_without_defaults:
+  !st cenv name. cenv_shape_ok st cenv ==>
+    cenv_shape_ok st (cenv_without_defaults cenv name)
+Proof
+  simp[cenv_shape_ok_def, cenv_without_defaults_def] >> rpt strip_tac >>
+  gvs[EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem cenv_shape_ok_omitted_defaults:
+  !st cenv name n. cenv_shape_ok st cenv ==>
+    ~supported_exprs_exists expr_shape_root (omitted_defaults cenv name n)
+Proof
+  rw[cenv_shape_ok_def, omitted_defaults_def] >>
+  Cases_on `ALOOKUP cenv.ce_func_defaults name` >>
+  gvs[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
+  rpt strip_tac >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  first_x_assum drule >> simp[] >>
+  metis_tac[rich_listTheory.MEM_DROP_IMP]
 QED
 
 (* ===== Expression and statement lowering ===== *)
@@ -3387,7 +3413,7 @@ QED
 
 Theorem expr_child_callback_shape[local]:
   (!ce t e internal.
-     expr_size e < bound /\ ~supported_expr_exists expr_shape_root e ==>
+     expr_size e + cenv_defaults_size ce < bound /\ ~supported_expr_exists expr_shape_root e ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (f ce t e) (\v st. value_shape_ok st v)) ==>
   !ce t e internal.
@@ -3397,11 +3423,11 @@ Theorem expr_child_callback_shape[local]:
 Proof
   rpt strip_tac >>
   `expr_child_callback bound f ce t e =
-     if expr_size e < bound then f ce t e
+     if expr_size e + cenv_defaults_size ce < bound then f ce t e
      else invalid_expr_call (expr_type e)` by
-    (Cases_on `expr_size e < bound` >>
+    (Cases_on `expr_size e + cenv_defaults_size ce < bound` >>
      simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def]) >>
-  pop_assum SUBST1_TAC >> Cases_on `expr_size e < bound` >> simp[] >>
+  pop_assum SUBST1_TAC >> Cases_on `expr_size e + cenv_defaults_size ce < bound` >> simp[] >>
   match_mp_tac shape_step_conseq >>
   qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
   simp[invalid_expr_call_shape]
@@ -3409,7 +3435,7 @@ QED
 
 Theorem builtin_child_callback_shape[local]:
   (!ce rt t bi args internal.
-     list_size expr_size args < bound /\
+     list_size expr_size args + cenv_defaults_size ce < bound /\
      builtin_arity bi <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -3423,12 +3449,12 @@ Theorem builtin_child_callback_shape[local]:
 Proof
   rpt strip_tac >>
   `builtin_child_callback bound f ce rt t bi args =
-     if list_size expr_size args < bound then f ce rt t bi args
+     if list_size expr_size args + cenv_defaults_size ce < bound then f ce rt t bi args
      else invalid_expr_call rt` by
-    (Cases_on `list_size expr_size args < bound` >>
+    (Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >>
      simp[FUN_EQ_THM, exprCallBoundsTheory.builtin_child_callback_def]) >>
   pop_assum SUBST1_TAC >>
-  Cases_on `list_size expr_size args < bound` >> simp[] >>
+  Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >> simp[] >>
   match_mp_tac shape_step_conseq >>
   qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
   simp[invalid_expr_call_shape]
@@ -3436,7 +3462,7 @@ QED
 
 Theorem type_child_callback_shape[local]:
   (!ce vt t tb rt args internal.
-     list_size expr_size args < bound /\
+     list_size expr_size args + cenv_defaults_size ce < bound /\
      type_builtin_arity tb <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -3450,12 +3476,12 @@ Theorem type_child_callback_shape[local]:
 Proof
   rpt strip_tac >>
   `type_child_callback bound f ce vt t tb rt args =
-     if list_size expr_size args < bound then f ce vt t tb rt args
+     if list_size expr_size args + cenv_defaults_size ce < bound then f ce vt t tb rt args
      else invalid_expr_call vt` by
-    (Cases_on `list_size expr_size args < bound` >>
+    (Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >>
      simp[FUN_EQ_THM, exprCallBoundsTheory.type_child_callback_def]) >>
   pop_assum SUBST1_TAC >>
-  Cases_on `list_size expr_size args < bound` >> simp[] >>
+  Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >> simp[] >>
   match_mp_tac shape_step_conseq >>
   qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
   simp[invalid_expr_call_shape]
@@ -7070,7 +7096,25 @@ Proof
   qexists_tac `\vs st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st) vs` >> reverse conj_tac
   >- (shape_under_tac compile_multi_vvs_shape `\st. cenv_shape_ok st cenv` >>
       simp[cenv_shape_ok_stable]) >>
-  qx_gen_tac `vals` >> simp[] >>
+  qx_gen_tac `vals0` >> simp[] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\ds st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st) (vals0 ++ ds)` >>
+  reverse conj_tac
+  >- (qmatch_goalsub_abbrev_tac `compile_multi_vvs cfn cenv' dflts` >>
+      Cases_on `supported_exprs_exists expr_shape_root dflts`
+      >- (simp[shape_step_def] >>
+          metis_tac[cenv_shape_ok_omitted_defaults, markerTheory.Abbrev_def]) >>
+      shape_under_tac compile_multi_vvs_shape
+        `\st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st) vals0` >>
+      simp[Abbr `cenv'`, cenv_shape_ok_without_defaults] >>
+      ho_match_mp_tac shape_stable_conj >> conj_tac
+      >- simp[cenv_shape_ok_stable] >>
+      simp[shape_stable_def, EVERY_MEM] >> rpt strip_tac >>
+      rename1 `shape_extends i LP st st'` >>
+      mp_tac (Q.SPEC `e` value_shape_ok_stable) >> simp[shape_stable_def] >>
+      disch_then (qspecl_then [`i`, `LP`, `st`, `st'`] mp_tac) >> simp[]) >>
+  qx_gen_tac `dvals` >> BETA_TAC >>
+  qabbrev_tac `vals = vals0 ++ dvals` >> simp[] >>
   Cases_on `info0 > 0` >> simp[]
   >- suspend "stack_returns" >>
   Cases_on `info1 > 0` >> simp[]
@@ -8726,9 +8770,9 @@ Theorem compile_expr_shape_pointwise[local]:
 Proof
   ho_match_mp_tac compile_expr_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac
   >- (rpt gen_tac >> strip_tac >> mp_tac (Q.INST [
-        `cfn` |-> `expr_child_callback (expr_size e) compile_expr`,
-        `bfn` |-> `builtin_child_callback (expr_size e) compile_builtin_dispatch`,
-        `tfn` |-> `type_child_callback (expr_size e) compile_type_builtin_dispatch`,
+        `cfn` |-> `expr_child_callback (expr_size e + cenv_defaults_size ce) compile_expr`,
+        `bfn` |-> `builtin_child_callback (expr_size e + cenv_defaults_size ce) compile_builtin_dispatch`,
+        `tfn` |-> `type_child_callback (expr_size e + cenv_defaults_size ce) compile_type_builtin_dispatch`,
         `cenv` |-> `ce`] compile_expr_body_shape) >>
       impl_tac
       >- (rpt conj_tac
@@ -8740,7 +8784,7 @@ Proof
       qpat_x_assum `compile_expr ce ty e st = _` mp_tac >>
       simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[])
   >- (rpt gen_tac >> strip_tac >>
-      mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args) compile_expr`,
+      mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr`,
                      `cenv` |-> `ce`, `ret_ty` |-> `rt`] compile_builtin_dispatch_body_shape) >>
       impl_tac
       >- (conj_tac
@@ -8750,7 +8794,7 @@ Proof
       qpat_x_assum `compile_builtin_dispatch ce rt ty bi args st = _` mp_tac >>
       simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args) compile_expr`,
+  mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr`,
                  `cenv` |-> `ce`, `vv_ty` |-> `vt`, `ret_ty` |-> `rt`] compile_type_builtin_dispatch_body_shape) >>
   impl_tac
   >- (conj_tac
@@ -13181,20 +13225,36 @@ Proof
 QED
 
 (* The runtime unit lowers every function but the constructor. *)
+(* Internal calls compile the defaults of every non-external function. *)
 Definition runtime_bodies_shape_ok_def:
   runtime_bodies_shape_ok tops <=>
     !vis mut nr rr name args dflts ret body.
-      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
-      vis <> Deploy ==>
-      ~supported_stmts_expr_exists expr_shape_root body
+      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops ==>
+      (vis <> Deploy ==>
+       ~supported_stmts_expr_exists expr_shape_root body) /\
+      (vis <> External ==>
+       ~supported_exprs_exists expr_shape_root dflts)
 End
 
 Theorem supported_program_runtime_bodies_shape_ok:
   !tops. supported_program tops ==> runtime_bodies_shape_ok tops
 Proof
-  rw[runtime_bodies_shape_ok_def] >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> simp[]
+  rw[runtime_bodies_shape_ok_def]
+  >- (drule_all supported_program_function >> strip_tac >>
+      drule supported_function_body_shape >> simp[]) >>
+  drule_all supported_program_declaration >>
+  simp[supported_declaration_body_def] >> metis_tac[supported_pure_shape]
+QED
+
+Theorem runtime_bodies_shape_ok_func_defaults:
+  !tops. runtime_bodies_shape_ok tops ==>
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      (build_func_defaults tops)
+Proof
+  simp[runtime_bodies_shape_ok_def] >> Induct >>
+  simp[compileVyperTheory.build_func_defaults_def] >>
+  rpt strip_tac >> CASE_TAC >> gvs[] >>
+  rw[] >> metis_tac[]
 QED
 
 Theorem add_module_var_locations_static:
@@ -13225,6 +13285,8 @@ QED
 
 Theorem build_compile_env_static:
   !tops vis mut fname args ret body use_trans.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      (build_func_defaults tops) ==>
     cenv_static_ok
       (build_compile_env tops vis mut fname args ret body use_trans)
 Proof
@@ -13328,6 +13390,8 @@ Proof
   rpt CASE_TAC >>
   fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
      cenv_static_ok_def, build_compile_env_external_no_return_pc] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -13346,6 +13410,8 @@ Proof
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -13368,6 +13434,8 @@ Proof
   simp[package_fallback_fn_def, set_fallback_package_target_def,
        fallback_shape_ok_def, build_compile_env_external_no_return_pc] >>
   simp[cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 

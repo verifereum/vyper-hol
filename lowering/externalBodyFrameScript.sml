@@ -95,7 +95,7 @@ Theorem collect_locals_supported_bindings_mem:
 Proof
   recInduct collect_locals_ind >>
   simp[collect_locals_def, supported_stmt_bindings_def] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> FIRST_PROVE [metis_tac[]]
 QED
 
 Theorem supported_function_arg_not_collect_locals:

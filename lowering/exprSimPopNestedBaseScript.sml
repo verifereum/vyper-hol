@@ -101,7 +101,7 @@ Theorem nested_pop_step_load:
                        else sload (THE (eval_operand hdr s)) s) s)
 Proof
   Cases_on `tr` >> Cases_on `eval_operand hdr s` >>
-  simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+  simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 Theorem nested_pop_step_store:
@@ -112,7 +112,7 @@ Theorem nested_pop_step_store:
         else sstore (THE (eval_operand hdr s)) (THE (lookup_var x s)) s)
 Proof
   Cases_on `tr` >> Cases_on `eval_operand hdr s` >> Cases_on `lookup_var x s` >>
-  simp[step_inst_base_def, exec_write2_def, mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def, eval_operand_def]
 QED
 
 Theorem nested_pop_step_add:
@@ -356,7 +356,7 @@ QED
 
 Theorem nested_pop_target_callback_cong:
   !bt f g cenv.
-    (!e. MEM e (target_indices bt) ==> !ce t st. f ce t e st = g ce t e st) ==>
+    (!e. MEM e (target_indices bt) ==> !t st. f cenv t e st = g cenv t e st) ==>
     compile_get_target_ptr f cenv bt = compile_get_target_ptr g cenv bt
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
@@ -389,7 +389,7 @@ QED
 
 Theorem nested_pop_target_guard_erasure:
   compile_get_target_ptr
-    (expr_child_callback (expr_size (Pop ann bt)) f) cenv bt =
+    (expr_child_callback (expr_size (Pop ann bt) + cenv_defaults_size cenv) f) cenv bt =
   compile_get_target_ptr f cenv bt
 Proof
   irule nested_pop_target_callback_cong >> rpt strip_tac >>
@@ -410,13 +410,13 @@ Proof
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        expr_type_def, SRULE [expr_size_def] nested_pop_target_guard_erasure,
        SF ETA_ss] >>
-  `compile_get_target_ptr
-     (expr_child_callback (base_assignment_target_size bt + (type_size ann + 1)) compile_expr)
-       cenv bt = compile_get_target_ptr compile_expr cenv bt` by
-    (irule nested_pop_target_callback_cong >> rpt strip_tac >>
+  `!m. base_assignment_target_size bt + cenv_defaults_size cenv < m ==>
+       compile_get_target_ptr (expr_child_callback m compile_expr) cenv bt =
+       compile_get_target_ptr compile_expr cenv bt` by
+    (rpt strip_tac >> irule nested_pop_target_callback_cong >> rpt strip_tac >>
      irule exprCallBoundsTheory.expr_child_callback_valid >>
      drule nested_pop_index_size >> simp[]) >>
-  asm_rewrite_tac[]
+  simp[]
 QED
 
 Theorem nested_pop_compile_storage_eq:

@@ -257,7 +257,10 @@ Proof
   `lowered_value_type c e = lowered_value_type cenv e` by metis_tac[] >>
   drule_all compile_annassign_memory_parts >>
   disch_then (qx_choosel_then [`sA`, `sV`, `sB`, `vv`, `op`] strip_assume_tac) >>
-  `fn_has_code st sf func` by gvs[fn_has_code_def, emitted_blocks_def] >>
+  `fn_has_code st sf func` by
+    (qpat_x_assum `fn_has_code sa sf func` mp_tac >>
+     qpat_x_assum `st = _` SUBST1_TAC >>
+     simp_tac (srw_ss()) [fn_has_code_def, emitted_blocks_def]) >>
   `cs_extends sA sB /\ cs_extends sB sf` by
     metis_tac[compile_assign_memory_widen_appends, cs_appends_def] >>
   `cs_extends sA sf` by metis_tac[cs_extends_trans] >>

@@ -578,7 +578,7 @@ Theorem word_child_grows[local]:
   expr_child_callback bound compile_expr ce ty e sa = (vv,sb) ==>
   sa.cs_next_var <= sb.cs_next_var
 Proof
-  Cases_on `expr_size e < bound` >> simp[expr_child_callback_def]
+  Cases_on `expr_size e + cenv_defaults_size ce < bound` >> simp[expr_child_callback_def]
   >- metis_tac[cj 1 compile_expr_grows] >>
   simp[invalid_expr_call_def, emit_inst_def, fresh_id_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -589,7 +589,7 @@ Theorem word_lower_value_child_grows[local]:
   lower_value (expr_child_callback bound compile_expr) ce ty e sa = (op,sb) ==>
   sa.cs_next_var <= sb.cs_next_var
 Proof
-  Cases_on `expr_size e < bound` >-
+  Cases_on `expr_size e + cenv_defaults_size ce < bound` >-
     (`lower_value (expr_child_callback bound compile_expr) ce ty e sa =
       lower_value compile_expr ce ty e sa` by
        simp[lower_value_def, comp_bind_def] >>
@@ -601,12 +601,12 @@ QED
 
 Theorem word_lower_value_child_safe[local]:
   lower_value (expr_child_callback bound cfn) ce ty e sa = (op,sb) ==>
-  (!e ce ty s vv s'. expr_size e < bound /\ cfn ce ty e s = (vv,s') /\
+  (!e ce ty s vv s'. expr_size e + cenv_defaults_size ce < bound /\ cfn ce ty e s = (vv,s') /\
       well_typed_expr env e /\ is_word_type (expr_type e) ==> word_result_ok s' vv) ==>
   well_typed_expr env e ==> is_word_type (expr_type e) ==>
   safe_operand sb op
 Proof
-  Cases_on `expr_size e < bound` >>
+  Cases_on `expr_size e + cenv_defaults_size ce < bound` >>
   simp[lower_value_def, comp_bind_def, invalid_expr_call_def,
        unwrap_value_def, comp_return_def, LET_THM] >>
   rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >-
@@ -648,12 +648,12 @@ Resume compile_expr_word_result[expr]:
   simp[] >> conj_tac >-
     (rpt gen_tac >> simp[builtin_child_callback_def] >>
      Cases_on `list_size expr_size args < expr_size e` >> simp[] >-
-       metis_tac[] >>
+       metis_tac[arithmeticTheory.LT_ADD_RCANCEL] >>
      simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
      rpt (pairarg_tac >> gvs[word_result_ok_def])) >>
   rpt gen_tac >> simp[type_child_callback_def] >>
   Cases_on `list_size expr_size args < expr_size e` >> simp[] >-
-    metis_tac[] >>
+    metis_tac[arithmeticTheory.LT_ADD_RCANCEL] >>
   simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
@@ -669,7 +669,7 @@ Resume compile_expr_word_result[builtin]:
   (impl_tac >-
      (conj_tac >- (qx_gen_tac `arg` >> rpt gen_tac >> strip_tac >>
                    qpat_x_assum `!e cenv ty sa. _` (qspec_then `arg` mp_tac) >>
-                   simp[] >> disch_then drule_all >> simp[]) >>
+                   simp[] >> disch_then (qspecl_then [`ce`, `ty'`, `s''`] mp_tac) >> impl_tac >- decide_tac >> disch_then drule_all >> simp[]) >>
       simp[])) >> simp[]
 QED
 Resume compile_expr_word_result[type_builtin]:
@@ -683,7 +683,7 @@ Resume compile_expr_word_result[type_builtin]:
      (impl_tac >-
         (conj_tac >- (qx_gen_tac `arg` >> rpt gen_tac >> strip_tac >>
                       qpat_x_assum `!e cenv ty sa. _` (qspec_then `arg` mp_tac) >>
-                      simp[] >> disch_then drule_all >> simp[]) >>
+                      simp[] >> disch_then (qspecl_then [`ce`, `ty'`, `s''`] mp_tac) >> impl_tac >- decide_tac >> disch_then drule_all >> simp[]) >>
          simp[])) >> simp[]) >>
   first_assum ACCEPT_TAC
 QED

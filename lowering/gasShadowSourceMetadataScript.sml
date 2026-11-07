@@ -1,6 +1,6 @@
 Theory gasShadowSourceMetadata
 Ancestors
-  gasShadow compileVyper vyperContext moduleLowering
+  gasShadow gasShadowCenv compileVyper vyperContext moduleLowering
 
 Theorem gas_shadow_type_env_for_module[simp]:
   !tops src. type_env_for_module src (MAP gas_shadow_toplevel tops) =
@@ -159,11 +159,40 @@ Proof
   Cases_on `v` >> simp[gas_shadow_stmt_def, collect_locals_def]
 QED
 
+Theorem gas_shadow_build_func_defaults[simp]:
+  !tops. build_func_defaults (MAP gas_shadow_toplevel tops) =
+         MAP (I ## MAP gas_shadow_expr) (build_func_defaults tops)
+Proof
+  Induct >> simp[build_func_defaults_def] >> Cases_on `h` >>
+  rw[gas_shadow_toplevel_def, build_func_defaults_def]
+QED
+
 Theorem gas_shadow_build_compile_env[simp]:
   !tops vis mut name args ret body trans.
   build_compile_env (MAP gas_shadow_toplevel tops) vis mut name args ret
     (MAP gas_shadow_stmt body) trans =
-  build_compile_env tops vis mut name args ret body trans
+  gas_shadow_cenv (build_compile_env tops vis mut name args ret body trans)
 Proof
-  simp[build_compile_env_def]
+  rpt strip_tac >> simp[build_compile_env_def, gas_shadow_cenv_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem gas_shadow_cenv_packaging[simp]:
+  (!c args. build_positional_args (gas_shadow_cenv c) args =
+            build_positional_args c args) /\
+  (!c args n. min_calldata_size (gas_shadow_cenv c) args n =
+              min_calldata_size c args n) /\
+  (!c ret. update_cenv_ret_abi (gas_shadow_cenv c) ret =
+           gas_shadow_cenv (update_cenv_ret_abi c ret)) /\
+  (!c nr key trans view.
+     update_cenv_nonreentrant (gas_shadow_cenv c) nr key trans view =
+     gas_shadow_cenv (update_cenv_nonreentrant c nr key trans view))
+Proof
+  rpt conj_tac
+  >- (simp[build_positional_args_def] >> rpt gen_tac >>
+      irule listTheory.MAP_CONG >> simp[pairTheory.FORALL_PROD] >>
+      simp[build_positional_arg_def])
+  >- simp[min_calldata_size_def]
+  >- simp[update_cenv_ret_abi_def] >>
+  simp[update_cenv_nonreentrant_def]
 QED

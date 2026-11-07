@@ -246,7 +246,7 @@ QED
 
 Theorem expr_child_callback_labels:
   !bound f P.
-    (!ce ty e s. expr_size e < bound ==>
+    (!ce ty e s. expr_size e + cenv_defaults_size ce < bound ==>
       cs_extends s (SND (f ce ty e s)) /\
       EVERY P (added_labels s (SND (f ce ty e s)))) ==>
     !ce ty e s.
@@ -254,12 +254,12 @@ Theorem expr_child_callback_labels:
       EVERY P (added_labels s (SND (expr_child_callback bound f ce ty e s)))
 Proof
   rpt gen_tac >> disch_tac >> rpt gen_tac >>
-  Cases_on `expr_size e < bound` >> simp[invalid_expr_call_labels]
+  Cases_on `expr_size e + cenv_defaults_size ce < bound` >> simp[invalid_expr_call_labels]
 QED
 
 Theorem builtin_child_callback_labels:
   !bound f P.
-    (!ce rt ty bi args s. list_size expr_size args < bound ==>
+    (!ce rt ty bi args s. list_size expr_size args + cenv_defaults_size ce < bound ==>
       cs_extends s (SND (f ce rt ty bi args s)) /\
       EVERY P (added_labels s (SND (f ce rt ty bi args s)))) ==>
     !ce rt ty bi args s.
@@ -268,12 +268,12 @@ Theorem builtin_child_callback_labels:
         (SND (builtin_child_callback bound f ce rt ty bi args s)))
 Proof
   rpt gen_tac >> disch_tac >> rpt gen_tac >>
-  Cases_on `list_size expr_size args < bound` >> simp[invalid_expr_call_labels]
+  Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >> simp[invalid_expr_call_labels]
 QED
 
 Theorem type_child_callback_labels:
   !bound f P.
-    (!ce vt ty tb rt args s. list_size expr_size args < bound ==>
+    (!ce vt ty tb rt args s. list_size expr_size args + cenv_defaults_size ce < bound ==>
       cs_extends s (SND (f ce vt ty tb rt args s)) /\
       EVERY P (added_labels s (SND (f ce vt ty tb rt args s)))) ==>
     !ce vt ty tb rt args s.
@@ -282,7 +282,7 @@ Theorem type_child_callback_labels:
         (SND (type_child_callback bound f ce vt ty tb rt args s)))
 Proof
   rpt gen_tac >> disch_tac >> rpt gen_tac >>
-  Cases_on `list_size expr_size args < bound` >> simp[invalid_expr_call_labels]
+  Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >> simp[invalid_expr_call_labels]
 QED
 
 (* Label-only sequencing interfaces used by compiler body proofs. *)
@@ -2759,6 +2759,8 @@ Proof
   rename1 `cenv.ce_func_info _ = (n, p)` >> PairCases_on `p` >>
   once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
   ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule compile_multi_vvs_labels >> simp[]) >>
+  rpt gen_tac >> ho_match_mp_tac pair_case_labels >> conj_tac
   >- (irule compile_multi_vvs_labels >> simp[]) >>
   rpt gen_tac >> ho_match_mp_tac pair_case_labels >> conj_tac
   >- (reverse IF_CASES_TAC

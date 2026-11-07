@@ -1083,12 +1083,12 @@ Resume reason_compile_uniform[expr]:
   conj_tac >-
     (rpt gen_tac >> simp[builtin_child_callback_def] >>
      Cases_on `list_size expr_size args < expr_size e` >> simp[]
-     >- metis_tac[] >>
+     >- metis_tac[DECIDE ``!a b c:num. a < b ==> a + c < b + c``] >>
      simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
      rpt (pairarg_tac >> gvs[reason_result_shape_def])) >>
   rpt gen_tac >> simp[type_child_callback_def] >>
   Cases_on `list_size expr_size args < expr_size e` >> simp[]
-  >- metis_tac[] >>
+  >- metis_tac[DECIDE ``!a b c:num. a < b ==> a + c < b + c``] >>
   simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[reason_result_shape_def])
 QED

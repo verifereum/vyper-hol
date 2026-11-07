@@ -42,7 +42,10 @@ End
 Definition supported_declaration_body_def:
   supported_declaration_body tops (FunctionDecl vis mut nr rr name args defaults ret body) =
     (supported_function_body tops vis args body /\
-     supported_return_layouts ret body) /\
+     supported_return_layouts ret body /\
+     (* omitted defaults are compiled into each caller's body *)
+     supported_pure_exprs tops defaults /\
+     ~supported_exprs_exists expr_nonmain_type_root defaults) /\
   supported_declaration_body tops (VariableDecl vis mut name ty slot) = T /\
   supported_declaration_body tops (HashMapDecl vis trans name kt vt slot) = T /\
   supported_declaration_body tops (StructDecl name fields) = T /\
@@ -59,8 +62,8 @@ End
 
 (* Exact target-type occurrence (not just a dynamic boolean): needed by the
    existential in unspecified_behaviour_exempt. Traverse unsupported expressions,
-   targets, iterators and reasons too. Only FUNCTION BODIES, as PLAN 5.5 says;
-   defaults/constants are not bodies and are excluded by supported_program. *)
+   targets, iterators and reasons too. Function bodies and the defaults
+   compiled into callers; constants are excluded by supported_program. *)
 Definition expr_abi_decode_target_root_def:
   expr_abi_decode_target_root target
     (TypeBuiltin ty (AbiDecode unwrap) decoded es) = (decoded = target) /\
@@ -70,7 +73,8 @@ End
 Definition declaration_abi_decode_target_def:
   declaration_abi_decode_target target
     (FunctionDecl vis mut nr rr name args defaults ret body) =
-      supported_stmts_expr_exists (expr_abi_decode_target_root target) body /\
+      (supported_stmts_expr_exists (expr_abi_decode_target_root target) body \/
+       supported_exprs_exists (expr_abi_decode_target_root target) defaults) /\
   declaration_abi_decode_target target (VariableDecl vis mut name ty slot) = F /\
   declaration_abi_decode_target target (HashMapDecl vis trans name kt vt slot) = F /\
   declaration_abi_decode_target target (StructDecl name fields) = F /\
@@ -128,7 +132,8 @@ QED
 Theorem occurs_abi_decode_target_function:
   occurs_abi_decode_target target
     [FunctionDecl vis mut nr rr name args defaults ret stmts] <=>
-  supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts
+  supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts \/
+  supported_exprs_exists (expr_abi_decode_target_root target) defaults
 Proof
   simp[occurs_abi_decode_target_def, declaration_abi_decode_target_def]
 QED

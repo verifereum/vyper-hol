@@ -2,12 +2,14 @@
 Theory gasShadowRuntimeBodies
 Ancestors
   gasShadowModuleOps gasShadowInternal gasShadowRuntimeOps gasShadowModuleDefs gasShadowCompileStmt
+  gasShadowCenv gasShadowCenvStmt gasShadowCenvModule
   gasShadowCompileStmtBase gasShadowCompileStmtOps gasShadowCompileContext
   gasShadowState gasShadow moduleLowering compileEnv emitHelper stmtLowering list
 
 Theorem gas_shadow_compiles_compile_guarded_body:
   gas_shadow_compiles (compile_guarded_body ce nr key trans view stmts ret)
-    (compile_guarded_body ce nr key trans view (MAP gas_shadow_stmt stmts) ret)
+    (compile_guarded_body (gas_shadow_cenv ce) nr key trans view
+       (MAP gas_shadow_stmt stmts) ret)
 Proof
   rewrite_tac[compile_guarded_body_def, comp_ignore_bind_def] >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -25,17 +27,20 @@ QED
 Theorem gas_shadow_compiles_compile_external_function_body:
   gas_shadow_compiles
     (compile_external_function_body ce args nr key trans view stmts ret)
-    (compile_external_function_body ce args nr key trans view
+    (compile_external_function_body (gas_shadow_cenv ce) args nr key trans view
       (MAP gas_shadow_stmt stmts) ret)
 Proof
-  simp[compile_external_function_body_def, gas_shadow_compiles_bind,
+  simp[compile_external_function_body_def] >>
+  ho_match_mp_tac gas_shadow_compiles_bind_cenv >>
+  simp[gas_shadow_cenv_register_positional_args,
        gas_shadow_compiles_compile_register_positional_args,
        gas_shadow_compiles_compile_guarded_body]
 QED
 
 Theorem gas_shadow_compiles_compile_fallback_body:
   gas_shadow_compiles (compile_fallback_body ce pay nr key trans view stmts ret)
-    (compile_fallback_body ce pay nr key trans view (MAP gas_shadow_stmt stmts) ret)
+    (compile_fallback_body (gas_shadow_cenv ce) pay nr key trans view
+       (MAP gas_shadow_stmt stmts) ret)
 Proof
   Cases_on `pay` >>
   simp[compile_fallback_body_def, comp_ignore_bind_def,
