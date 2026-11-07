@@ -727,9 +727,14 @@ Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  asm_simp_tac bool_ss [] >>
-  simp[exec_alloca_def, exec_pure2_def, exec_write2_def, AllCaseEqs(),
-       update_var_def, mstore_def] >>
+  asm_simp_tac bool_ss []
+  (* One opcode per step, each with its own executor: one simp over all three
+     cases took 4.5 s. *)
+  >- (simp[exec_alloca_def, AllCaseEqs(), update_var_def, mstore_def] >>
+      rpt strip_tac >> gvs[])
+  >- (simp[exec_pure2_def, AllCaseEqs(), update_var_def, mstore_def] >>
+      rpt strip_tac >> gvs[]) >>
+  simp[exec_write2_def, AllCaseEqs(), update_var_def, mstore_def] >>
   rpt strip_tac >> gvs[]
 QED
 

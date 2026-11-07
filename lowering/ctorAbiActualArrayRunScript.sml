@@ -165,8 +165,13 @@ Proof
  `abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi` by
-   (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
-    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+   (* Only the operands' freshness premise matters; fs over the whole
+      context took 33 s for the 27 cases. *)
+   (qpat_x_assum `!x. src = Var x \/ dst = Var x \/ hi = Var x ==> _` mp_tac >>
+    POP_ASSUM_LIST (K all_tac) >>
+    simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+    strip_tac >> rpt conj_tac >> CASE_TAC >> simp[] >>
+    metis_tac[not_fresh_at_def]) >>
  `loop_st.cs_next_var <= limit_st.cs_next_var` by
    fs[abi_decoder_recursive_loop_compiled_def] >>
  `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\ d+32 <= D+N` by

@@ -47,7 +47,11 @@ Theorem typed_copy_forward_entry_run:
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  simp[typed_copy_forward_entry_def] >> metis_tac[]
+  (* Instantiate the definition directly; metis_tac[] took 3.3 s. *)
+  simp_tac std_ss [typed_copy_forward_entry_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`func`,`dst`,`src`,`sa`,`sb`,`s`,`dw`,`sw`]
+    mp_tac) >>
+  asm_rewrite_tac[]
 QED
 
 Theorem typed_copy_forward_offset_path:
