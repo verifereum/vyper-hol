@@ -131,7 +131,7 @@ Proof
      simp[vv_post_def]) >>
   `locals_kept ce es ee s0 u` by
     (irule locals_kept_trans >> goal_assum (drule_at Any) >>
-     qexistsl_tac [`sa`, `s`] >>
+     qexistsl_tac [`ee`, `s`] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
