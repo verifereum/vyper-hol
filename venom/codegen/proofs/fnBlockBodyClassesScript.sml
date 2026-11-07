@@ -693,7 +693,8 @@ Proof
   `ps_after.ps_spilled = ps_tdfs.ps_spilled` by
     (qpat_x_assum `ps_after.ps_spilled = ps_dfs_after.ps_spilled`
        SUBST1_TAC >>
-     irule dfs_edge_spilled >> simp[] >> metis_tac[]) >>
+     irule fnBlockPlanStaticRegionTheory.dfs_edge_spilled >> simp[] >>
+     metis_tac[]) >>
   `lineage_entry liveness dfg cfg fn
      (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label t
      (ps_tdfs with <| ps_stack := ps_after.ps_stack;

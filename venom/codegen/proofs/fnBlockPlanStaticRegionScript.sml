@@ -8,6 +8,7 @@ Ancestors
   dfgAnalysisProps dfgDefs allocaRemapSSA stackPlanOps planSpillBounds doSwapSim pair callLayoutDefs
   reorderSim stackPlanTypes fnFrameStepsRevertForward sorting planWf cleanOpsSim
   deepResidualSim deepResidualBudget genericInputReady fnAliasStep fnBlockPlanStaticRetRegion
+  fnLineageInvSupport fnLineageInvOwnerOrigin fnLineageInvEdgeFacts
   livenessConvergenceProofs livenessBlockProofs livenessDefs
   fnFrameStepsPhi
   removeUnusedProofs
@@ -297,30 +298,6 @@ Proof
   simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem regional_dfs_join_target_distinct:
-  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred pred_bb bb pin
-   ops pout ps_succ.
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
-    lookup_block pred fn.fn_blocks = SOME pred_bb /\
-    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
-    dfs_block_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred pin /\
-    generate_block_plan liveness dfg cfg fn pred_bb pin = SOME (ops,pout) /\
-    MEM bb.bb_label (cfg_succs_of cfg pred) /\
-    dfs_block_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_succ ==>
-    ALL_DISTINCT (MAP Var (input_vars_from pred bb.bb_instructions
-                            (live_vars_at liveness bb.bb_label 0)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `pout.ps_spilled = ps_succ.ps_spilled` by
-    (irule dfs_edge_spilled >> simp[] >> metis_tac[]) >>
-  drule_all dfs_edge_lineage_entry >>
-  strip_tac >> drule_all regional_lineage_join_target_distinct >> simp[]
-QED
-
 Theorem regional_ret_operand_support_empty:
   inst.inst_opcode = RET /\ inst.inst_outputs = [] /\
   ALL_DISTINCT ps.ps_stack /\
@@ -387,6 +364,96 @@ Proof
   qpat_x_assum `dfs_block_state _ _ _ _ _ _ _` mp_tac >>
   simp[dfs_block_state_def] >> rpt strip_tac >>
   drule (cj 1 dfs_call_reachable_mutual) >> simp[]
+QED
+
+(* At a join, every predecessor's DFS code leaves no spills: its JMP plan
+   restores every target. *)
+Theorem dfs_edge_spilled_join[local]:
+  codegen_ready_fn fn /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 pred pin /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb pin =
+    SOME (ops, pout) /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) ==>
+  pout.ps_spilled = FEMPTY
+Proof
+  strip_tac >>
+  `wf_function fn` by fs[codegen_ready_fn_def] >>
+  `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels,
+              venomInstTheory.fn_labels_def] >>
+  drule dfAnalyzeProofsTheory.lookup_block_exists >> strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    metis_tac[dfs_block_state_cfg_reachable] >>
+  metis_tac[analyzed_join_edge_block_spills_empty]
+QED
+
+(* Along a CFG edge, the spill map pred's DFS code leaves is succ's DFS
+   spill map.  At a join both are FEMPTY.  With a single predecessor,
+   succ's owner is pred itself, whose DFS state is pin once the planner
+   succeeded. *)
+Theorem dfs_edge_spilled:
+  !liveness dfg cfg fn ps0 pred pb pin ops pout succ ps_succ.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    dfs_block_state liveness dfg cfg fn ps0 pred pin /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    generate_block_plan liveness dfg cfg fn pb pin = SOME (ops, pout) /\
+    MEM succ (cfg_succs_of cfg pred) /\
+    dfs_block_state liveness dfg cfg fn ps0 succ ps_succ /\
+    (LENGTH (cfg_preds_of cfg succ) <> 1 \/
+     ?ch growth sb ctr fn_ops pend.
+       ps0 = init_cleanup_plan_state ch growth sb ctr /\
+       generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+         sb ctr = SOME (fn_ops, pend)) ==>
+    pout.ps_spilled = ps_succ.ps_spilled
+Proof
+  rpt gen_tac >>
+  Cases_on `LENGTH (cfg_preds_of cfg succ) = 1`
+  >- (strip_tac >> gvs[] >>
+      `fn_entry_label fn <> SOME succ` by metis_tac[ready_incoming_nonentry] >>
+      drule_all dfs_block_state_owner_origin >> strip_tac >>
+      `MEM pred (cfg_preds_of (cfg_analyze fn) succ) /\
+       MEM pred' (cfg_preds_of (cfg_analyze fn) succ)` by
+        metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+      gvs[LENGTH_EQ_NUM_compute] >>
+      `B = pin` by metis_tac[dfs_block_state_unique] >> gvs[]) >>
+  strip_tac >> gvs[] >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ)` by
+    (`MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
+       metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+     Cases_on `cfg_preds_of (cfg_analyze fn) succ` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  `fn_entry_label fn <> SOME succ` by metis_tac[ready_incoming_nonentry] >>
+  drule_all dfs_block_state_owner_origin >> strip_tac >>
+  `pout.ps_spilled = FEMPTY /\ A.ps_spilled = FEMPTY` by
+    metis_tac[dfs_edge_spilled_join] >>
+  gvs[]
+QED
+
+Theorem regional_dfs_join_target_distinct:
+  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred pred_bb bb pin
+   ops pout ps_succ.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred pin /\
+    generate_block_plan liveness dfg cfg fn pred_bb pin = SOME (ops,pout) /\
+    MEM bb.bb_label (cfg_succs_of cfg pred) /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_succ ==>
+    ALL_DISTINCT (MAP Var (input_vars_from pred bb.bb_instructions
+                            (live_vars_at liveness bb.bb_label 0)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `pout.ps_spilled = ps_succ.ps_spilled` by
+    (irule dfs_edge_spilled >> simp[] >> metis_tac[]) >>
+  drule_all dfs_edge_lineage_entry >>
+  strip_tac >> drule_all regional_lineage_join_target_distinct >> simp[]
 QED
 
 Theorem ret_region_dfs_params_unpromised:
@@ -4537,11 +4604,13 @@ Proof
     (drule_all dfs_block_state_cfg_reachable >>
      `wf_function fn` by gvs[codegen_ready_fn_def] >>
      metis_tac[fn_reachable_cfg_analyze]) >>
-  `pout.ps_spilled = ds.ps_spilled` by simp[] >>
-  drule_all dfs_edge_lineage_entry >> simp[] >> strip_tac >>
-  qpat_x_assum `ds.ps_stack = _` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `ds.ps_spilled = _` (SUBST_ALL_TAC o SYM) >>
-  gvs[] >> goal_assum (drule_at Any) >> simp[]
+  `lineage_entry lv dfg (cfg_analyze fn) fn ps0 pred succ ds` by
+    (`ds = ds with <| ps_stack := pout.ps_stack;
+                      ps_spilled := pout.ps_spilled |>` by
+       gvs[plan_state_component_equality] >>
+     pop_assum SUBST1_TAC >> irule dfs_edge_lineage_entry >> simp[] >>
+     metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem regional_lineage_single_successor_upper:

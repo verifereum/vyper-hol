@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
   stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec planWf
-  cleanOpsSim fnAliasStep fnFrameBoundaryGenRet
+  cleanOpsSim fnAliasStep fnFrameBoundaryGenRet fnPlanPrefix
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:

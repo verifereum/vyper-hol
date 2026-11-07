@@ -101,6 +101,7 @@ Theorem phi_lineage_entry_spill_support:
     MEM v (live_vars_at liveness pb.bb_label (LENGTH pb.bb_instructions))
 Proof
   simp[lineage_entry_def] >> rpt strip_tac >> gvs[] >>
+  `at IN FDOM ps_after.ps_spilled` by gvs[] >>
   drule_all phi_jmp_block_spill_support >> simp[]
 QED
 
@@ -136,7 +137,7 @@ Theorem phi_lineage_entry_spills_empty:
   ps.ps_spilled = FEMPTY
 Proof
   simp[lineage_entry_def] >> rpt strip_tac >> gvs[] >>
-  drule_all phi_jmp_block_spills_empty >> simp[]
+  drule_all phi_jmp_block_spills_empty >> gvs[]
 QED
 
 Theorem phi_cfg_entry_reachable[local]:

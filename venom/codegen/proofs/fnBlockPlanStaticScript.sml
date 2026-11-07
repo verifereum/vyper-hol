@@ -999,7 +999,8 @@ Proof
   `lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
     pred succ (sin with <|ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled|>)`
     by (`pout.ps_spilled = sin.ps_spilled` by
-          (irule dfs_edge_spilled >> simp[] >> metis_tac[]) >>
+          (irule fnBlockPlanStaticRegionTheory.dfs_edge_spilled >> simp[] >>
+           metis_tac[]) >>
         simp[lineage_entry_def] >>
         qexistsl_tac [`pin`, `pin`, `ops`, `pout`,
           `pin.ps_cleanup_height`, `pin.ps_cleanup_promised`, `pout`, `sin`] >>

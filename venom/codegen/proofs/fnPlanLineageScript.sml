@@ -19,8 +19,6 @@
  *                                 predecessor into its successor
  *   lineage_state_block_plan    — CHEATED successor transfer: a lineage
  *                                 state regenerates the block's DFS code
- *   dfs_edge_spilled            — CHEATED: pred's DFS code leaves succ's
- *                                 DFS spill map
  * Helper:
  *   lineage_state_dfs_fields    — a lineage state is a DFS state with its
  *                                 stack and spill map replaced
@@ -265,33 +263,6 @@ Theorem lineage_entry_lineage_state:
     lineage_state liveness dfg cfg fn ps0 succ ps
 Proof
   rw[lineage_entry_def] >> irule lineage_state_step >> metis_tac[]
-QED
-
-(* CHEATED leaf: along a CFG edge, the spill map pred's DFS code leaves is
-   succ's DFS spill map, which lineage_state_step requires.
-
-   Why it should hold: at a join (more than one predecessor) both maps are
-   FEMPTY, since every predecessor ends in a JMP whose plan restores every
-   target (fnLineageInvSupport$analyzed_join_edge_block_spills_empty, for
-   pin and for the owner's state that
-   fnLineageInvOwnerOrigin$dfs_block_state_owner_alloc_origin gives).  With
-   a single predecessor, the owner is pred itself; its DFS state is pin
-   (dfs_block_state is functional: fnBlockPlanStaticDfsTrace proves it
-   under plan success, and the ~sibling rule only admits calls that
-   returned SOME), and generate_block_plan is a function, so the owner's
-   output is pout.  The entry block has no predecessors. *)
-Theorem dfs_edge_spilled:
-  !liveness dfg cfg fn ps0 pred pb pin ops pout succ ps_succ.
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
-    dfs_block_state liveness dfg cfg fn ps0 pred pin /\
-    lookup_block pred fn.fn_blocks = SOME pb /\
-    generate_block_plan liveness dfg cfg fn pb pin = SOME (ops, pout) /\
-    MEM succ (cfg_succs_of cfg pred) /\
-    dfs_block_state liveness dfg cfg fn ps0 succ ps_succ ==>
-    pout.ps_spilled = ps_succ.ps_spilled
-Proof
-  cheat
 QED
 
 (* ===== Successor transfer ===== *)

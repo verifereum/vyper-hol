@@ -3,7 +3,7 @@ Ancestors
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst venomWf
   fnBlockPlanStaticRetRegion genericInputReady
-  fnBlockPlanStaticBalance fnFrameBoundaryGenRet generatedPrefixSim
+  fnBlockPlanStaticBalance fnFrameBoundaryGenRet generatedPrefixSim fnPlanPrefix
   fnFrameStepsPhi
 
 Theorem inventory_do_swap_promised:
