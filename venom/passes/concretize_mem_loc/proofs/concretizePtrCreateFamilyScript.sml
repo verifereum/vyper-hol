@@ -3,7 +3,118 @@
  *)
 Theory concretizePtrCreateFamily
 Ancestors
-  concretizePtrStorageReadProducer
+  concretizePtrStorageReadProducer concretizePtrRequestHistory
+  concretizePtrTaintContent ptrDiscipline venomState venomCallOracleDefs
+  concretizePtrOpaqueRetpc concretizePtrSharedFields extCallOracle venomExecSemantics list words pred_set
+
+Theorem ptr_create_family_current_stores[local]:
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    (fs[ptr_history_content_def, ptr_taint_content_def,
+        ptr_taint_control_def, concretizePtrOpaqueRetpcTheory.ptr_core_shared_def,
+        concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
+  `contract_storage s = contract_storage t /\
+   contract_transient s = contract_transient t` by
+    (fs[ptr_history_content_def, ptr_taint_content_def] >>
+     fs[storage_agree_except_def, key_taint_def, contract_storage_def,
+        contract_transient_def, word_agree_except_bits,
+        FUN_EQ_THM, fcpTheory.CART_EQ]) >>
+  fs[ptr_history_content_def, ptr_taint_content_def,
+     contract_storage_def, contract_transient_def,
+     vfmStateTheory.lookup_account_def] >>
+  conj_tac
+  >- (simp[FUN_EQ_THM] >> qx_gen_tac `addr` >>
+      ` (s.vs_accounts addr).storage = (t.vs_accounts addr).storage` by
+        (Cases_on `addr = s.vs_call_ctx.cc_address` >> gvs[]) >>
+      qpat_x_assum `!a. _ with storage := _ = _`
+        (qspec_then `addr` mp_tac) >>
+      simp[vfmStateTheory.account_state_component_equality]) >>
+  simp[FUN_EQ_THM] >> metis_tac[]
+QED
+
+Theorem ptr_create_family_request[local]:
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t ==>
+  venom_create_request s value off sz salt =
+  venom_create_request t value ot sz salt
+Proof
+  strip_tac >> drule_all ptr_create_family_current_stores >>
+  simp[venom_create_request_def]
+QED
+
+Theorem ptr_create_family_completion[local]:
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  consume_create_outcome rq s = (w,u) /\
+  consume_create_outcome rq t = (v,z) ==>
+  w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
+Proof
+  strip_tac >>
+  drule_all ptr_create_family_current_stores >> strip_tac >>
+  `ptr_request_history (record_request rq s.vs_requests)
+     (record_request rq t.vs_requests)` by
+    (irule ptr_request_record >> fs[ptr_history_content_def]) >>
+  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+     ptr_core_shared_def, ptr_shared_fields_def] >>
+  gvs[consume_create_outcome_eq] >>
+  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def,
+       contract_storage_def, contract_transient_def,
+       storage_agree_except_def, word_agree_except_def]
+QED
+
+Theorem ptr_create_family_delegate_state[local]:
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
+  make_venom_delegatecall_state s target gas data code static =
+  make_venom_delegatecall_state t target gas data code static
+Proof
+  strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
+  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+     ptr_core_shared_def, ptr_shared_fields_def] >>
+  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def]
+QED
+
+Theorem ptr_create_family_delegate_extract[local]:
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  extract_venom_result s output ro rz result = SOME (w,u) /\
+  extract_venom_result t output rt rz result = SOME (v,z) ==>
+  w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
+Proof
+  strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
+  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+     ptr_core_shared_def, ptr_shared_fields_def] >>
+  gvs[extract_venom_result_def, AllCaseEqs()] >>
+  Cases_on `result'`
+  >- (gvs[] >>
+      simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+           ptr_core_shared_def, ptr_shared_fields_def,
+           contract_storage_def, contract_transient_def,
+           storage_agree_except_def, word_agree_except_def]) >>
+  Cases_on `y` >> gvs[] >>
+  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def,
+       contract_storage_def, contract_transient_def,
+       storage_agree_except_def, word_agree_except_def]
+QED
+
+Theorem ptr_create_family_taint[local]:
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] ==>
+  tn.t_stor = {} /\ tn.t_trans = {} /\
+  (!off len j. MEM (off,len) (source_memory_read_ranges inst s) /\ j < len ==>
+     off + j NOTIN tn.t_mem) /\
+  (!op. MEM op inst.inst_operands ==> op_taint tn op = {})
+Proof
+  strip_tac >> fs[MEM] >>
+  gvs[taint_ok_def, about_to_revert_def] >>
+  (conj_tac
+   >- (rpt strip_tac >>
+       qpat_x_assum `!off len i. _`
+         (qspecl_then [`off`, `len`, `off+j`] mp_tac) >> simp[]) >>
+   rpt strip_tac >>
+   qpat_x_assum `!op. _` (qspec_then `op` mp_tac) >> simp[])
+QED
 
 Theorem ptr_paired_create_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
