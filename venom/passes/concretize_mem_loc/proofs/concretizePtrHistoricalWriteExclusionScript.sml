@@ -2,7 +2,7 @@ Theory concretizePtrHistoricalWriteExclusion
 Ancestors
   concretizePtrPairedPrefix concretizePtrHistoricalWriteClassification
   concretizePtrDemandWriteExclusion concretizePtrWritePurity
-  concretizePtrOpaqueRetpc concretizePtrChronologicalHistory
+  concretizePtrOpaqueRetpc concretizePtrChronologicalHistory concretizePtrRequestHistory
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrEventEmbedding concretizePtrLedgerAlignment concretizePtrPairedFields
   concretizePtrOperationalOpcodes concretizePtrHistoricalSupport concretizePtrValueTransport
@@ -111,7 +111,8 @@ Theorem ptr_paired_historical_event:
     ptr_mixed_vars bj positions TGj (EL (EL q done) h).po_taint
       (EL (EL q done) h).po_fn (EL q ht).po_fn
       (EL (EL q done) h).po_state (EL q ht).po_state /\
-    ptr_core_shared (EL (EL q done) h).po_state (EL q ht).po_state /\
+    ptr_history_content (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_state (EL q ht).po_state /\
     ptr_observation_reachable vs C (EL (EL q done) h) /\
     access_ok lo (EL (EL q done) h).po_prov (EL (EL q done) h).po_fn
       (EL (EL q done) h).po_inst (EL (EL q done) h).po_state /\
@@ -123,11 +124,11 @@ Theorem ptr_paired_historical_event:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule ptr_paired_prefix_samples >> strip_tac >>
-  `q < LENGTH ht` by fs[ptr_paired_samples_def] >>
+  `q < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   drule_all ptr_paired_prefix_alignment >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_paired_prefix_placements >> strip_tac >>
-  `SUC q < LENGTH ht` by fs[ptr_paired_samples_def] >>
+  `SUC q < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   `EL q (done ++ [LENGTH h - 1]) = EL q done` by
     simp[EL_APPEND_EQN] >>
   gvs[] >>
@@ -143,11 +144,11 @@ Proof
   `ptr_mixed_vars snapshot2 positions snapshot4 aa.po_taint aa.po_fn
       (EL q ht).po_fn aa.po_state (EL q ht).po_state` by
     (qpat_x_assum `ptr_paired_samples _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[ptr_paired_samples_def] >> strip_tac >>
+     pure_rewrite_tac[ptr_paired_samples_def, ptr_sample_list_def] >> strip_tac >>
      qpat_x_assum `!j. j < LENGTH ht ==> _` (qspec_then `q` mp_tac) >>
      simp[ptr_paired_sample_def, Abbr `aa`]) >>
-  `ptr_core_shared aa.po_state (EL q ht).po_state` by
-    (drule ptr_paired_samples_core >>
+  `ptr_history_content aa.po_taint aa.po_state (EL q ht).po_state` by
+    (drule ptr_paired_samples_history >>
      disch_then (qspec_then `q` mp_tac) >> simp[Abbr `aa`]) >>
   `ptr_observation_reachable vs C aa` by
     (drule ptr_structural_trace_source >>
@@ -390,7 +391,7 @@ Proof
   `aa.po_inst.inst_opcode <> DRET` by
     (drule_all ptr_discipline_no_dret >> simp[]) >>
   `aa.po_state.vs_labels = tat.po_state.vs_labels` by
-    fs[ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
+    metis_tac[ptr_history_content_labels] >>
 
   `(EL (SUC (EL q done)) h).po_state.vs_returndata =
     (EL (SUC q) ht).po_state.vs_returndata` by

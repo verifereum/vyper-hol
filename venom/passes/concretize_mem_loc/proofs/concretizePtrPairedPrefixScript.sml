@@ -2,7 +2,7 @@ Theory concretizePtrPairedPrefix
 Ancestors
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSharedFields
   concretizePtrValueSelection concretizePtrEventEmbedding concretizePtrPairedFields
-  concretizePtrOpaqueRetpc
+  concretizePtrOpaqueRetpc concretizePtrRequestHistory
   concretizePtrChronologicalHistory concretizePtrActivationChronology concretizePtrActivationBirths
   list rich_list arithmetic pair
 
@@ -13,7 +13,7 @@ Definition ptr_paired_sample_def:
       (tokens,registry,births,PT,TG,saved,entries) <=>
     ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
       a.po_state at.po_state /\
-    ptr_core_shared a.po_state at.po_state
+    ptr_history_content a.po_taint a.po_state at.po_state
 End
 
 Definition ptr_sample_list_def:
@@ -50,9 +50,10 @@ Proof
   first_x_assum drule >> simp[ptr_paired_sample_def]
 QED
 
-Theorem ptr_paired_samples_core:
+Theorem ptr_paired_samples_history:
   ptr_paired_samples positions h ht done H /\ j < LENGTH ht ==>
-  ptr_core_shared
+  ptr_history_content
+    (EL (EL j (done ++ [LENGTH h - 1])) h).po_taint
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_state (EL j ht).po_state
 Proof
   simp[ptr_paired_samples_def, ptr_sample_list_def] >> rpt strip_tac >>
@@ -70,8 +71,8 @@ Theorem ptr_paired_samples_post_returndata:
 Proof
   strip_tac >>
   `SUC q < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
-  drule_all ptr_paired_samples_core >>
-  simp[ptr_core_shared_def, ptr_shared_fields_def] >> strip_tac >>
+  drule_all ptr_paired_samples_history >> strip_tac >>
+  drule ptr_history_content_returndata >> strip_tac >>
   drule ptr_structural_trace_gap_returndata >>
   disch_then (qspec_then `q` mp_tac) >> simp[]
 QED
@@ -91,11 +92,10 @@ Theorem ptr_paired_samples_eval_operands:
     (eval_operands ops (EL j ht).po_state)
 Proof
   strip_tac >> drule_all ptr_paired_samples_mixed >> strip_tac >>
-  drule_all ptr_paired_samples_core >> strip_tac >>
+  drule_all ptr_paired_samples_history >> strip_tac >>
+  drule ptr_history_content_labels >> strip_tac >>
   irule ptr_mixed_vars_eval_operands >>
-  rpt (goal_assum (drule_at Any)) >>
-  fs[ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
-  metis_tac[]
+  rpt (goal_assum (drule_at Any))
 QED
 
 
