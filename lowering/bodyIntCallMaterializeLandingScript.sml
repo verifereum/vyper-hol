@@ -5,6 +5,8 @@ Ancestors
   exprSimAlloc exprSimPrecompiles placeMemoryPrimitiveForward context emitHelperProps
   exprLoweringProps compileEnv venomState venomInst fragGasMode instIdxIndep
   finite_map list rich_list words intCallFrame emitHelper entrySinkExtraction
+  immutableCopyExecution immutableConstructorRelation exprSimCopy
+  abiDecoderArrayInitExec stmtReasonMemory valueCopy valueEncodingProps valueEncoding
 
 Theorem materialization_alloc_landing:
   compile_alloc_buffer sz sa = (buf,sm) /\
@@ -60,4 +62,63 @@ Proof
   >- (rpt strip_tac >> Cases_on `q` >>
       gvs[eval_operand_def, lookup_var_def] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+(* The copy snapshot, value, allocation slot and frame belong to the same run.
+   Protected slices need not already be backed by the concrete memory list. *)
+Theorem runtime_materialization_copy_landing:
+  compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) /\
+  eval_operand src s = SOME (n2w a) /\
+  eval_operand dst s = SOME (n2w b) /\ fresh_vars_wrt sa s /\
+  0 < n /\ a + off + 32*n < dimword (:256) /\
+  b + off + 32*n < dimword (:256) /\
+  val_in_memory tv v (a+off) s.vs_data_section /\ val_wf tv v /\
+  type_memory_size tv = 32*n /\
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+  off + 32*n <= sz /\ b+sz < dimword (:256) /\ lo <= b /\
+  allocas_above lo s /\
+  (!p k. P p k ==> regions_disjoint p k (b+off) (32*n)) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    val_in_memory tv v (b+off) u.vs_memory /\
+    FLOOKUP u.vs_allocas aid = SOME (b,sz) /\
+    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+    allocas_above lo u /\
+    (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!q w. eval_operand q s = SOME w ==> eval_operand q u = SOME w) /\
+    u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all immutable_compile_runtime_snapshot >> strip_tac >>
+  rename1 `immutable_execution_frame sa s sb t` >>
+  drule code_copy_insts >> strip_tac >>
+  `emitted_insts sa sb = is` by
+    simp[emitted_insts_def, DROP_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+      ~is_alloca_op i.inst_opcode) is /\
+   EVERY (\i. i.inst_opcode <> GAS) is` by
+    (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+     gvs[is_terminator_def, is_alloca_op_def]) >>
+  fs[immutable_execution_frame_def, immutable_operand_frame_def] >>
+  drule_all abi_decoder_guard_sequence_fields >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  `gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule straight_line_zero_gas_path >>
+     simp[] >> qexistsl_tac [`is`, `sa`] >> fs[same_blocks_def]) >>
+  `allocas_above lo (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (fs[allocas_above_def] >> metis_tac[]) >>
+  `t.vs_current_bb = sb.cs_current_bb` by fs[same_blocks_def] >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  fs[eval_op_inst_idx] >>
+  conj_tac
+  >- (asm_rewrite_tac[GSYM mem_bytes_at_def] >>
+      irule immutable_copy_memory_value >> simp[]) >>
+  rpt strip_tac >> asm_rewrite_tac[GSYM mem_bytes_at_def] >>
+  irule mem_bytes_at_write_disjoint >> fs[regions_disjoint_def, mem_bytes_at_def]
 QED
