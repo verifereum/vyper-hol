@@ -1213,3 +1213,48 @@ Theorem typed_stmts_immutable_frame:
 Proof
   metis_tac[typed_immutable_frames_mutual]
 QED
+
+Theorem coherent_immutable_array_target_type[local]:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT elem bound) ==>
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound)))
+Proof
+  strip_tac >>
+  Cases_on `FLOOKUP env.bare_global_assignable (src,name)`
+  >- simp[well_typed_expr_def] >>
+  fs[env_context_consistent_def] >>
+  `x = ArrayT elem bound` by metis_tac[optionTheory.SOME_11] >>
+  gvs[well_typed_expr_def]
+QED
+
+Theorem immutable_array_body_observation:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT elem bound) /\
+  supported_stmts tops bindings stmts /\
+  type_stmts env ret_ty stmts = SOME env' /\
+  iterator_unmodified (Array (TopLevelName (ArrayT elem bound) (src,name))) stmts /\
+  ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+  eval_stmts cx stmts es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt strip_tac >>
+  drule_all coherent_immutable_array_target_type >> strip_tac >>
+  fs[iterator_unmodified_def, expr_place_def] >>
+  metis_tac[typed_stmts_immutable_frame]
+QED
+
+Theorem immutable_array_body_pop_observation:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT elem bound) /\
+  supported_stmts tops bindings stmts /\
+  type_stmts env ret_ty stmts = SOME env' /\
+  iterator_unmodified (Array (TopLevelName (ArrayT elem bound) (src,name))) stmts /\
+  ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+  finally (eval_stmts cx stmts) pop_scope es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt strip_tac >>
+  drule_at (Pat `finally _ _ _ = _`) finally_pop_immutable_frame >>
+  disch_then irule >> metis_tac[immutable_array_body_observation]
+QED
