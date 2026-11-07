@@ -43,3 +43,9 @@ c05_assign_empty_builtin_string
 method_id_lit
 p20_nested_pop
 w01_return_intcall_dynarray_bytes_widen
+p21_storage_field_append
+p22_memory_field_append
+p23_subscript_append
+p24_transient_field_append
+p25_complex_field_append
+p26_root_append

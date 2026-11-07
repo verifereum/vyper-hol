@@ -100,37 +100,6 @@ Termination
   WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
 End
 
-(* Declared type and DynArray capacity of the target's root variable: a
-   local's from the local tables, a module variable's from its own. *)
-Definition target_root_type_def:
-  target_root_type cenv (NameTarget id) = cenv.ce_var_type id ∧
-  target_root_type cenv (TopLevelNameTarget nsid) =
-    cenv.ce_module_var_type nsid ∧
-  target_root_type cenv (SubscriptTarget bt _) = target_root_type cenv bt ∧
-  target_root_type cenv (AttributeTarget bt _) = target_root_type cenv bt
-End
-
-Definition target_root_capacity_def:
-  target_root_capacity cenv (NameTarget id) = cenv.ce_dynarray_capacity id ∧
-  target_root_capacity cenv (TopLevelNameTarget nsid) =
-    cenv.ce_module_dynarray_capacity nsid ∧
-  target_root_capacity cenv (SubscriptTarget bt _) =
-    target_root_capacity cenv bt ∧
-  target_root_capacity cenv (AttributeTarget bt _) =
-    target_root_capacity cenv bt
-End
-
-(* Convert assignment target to expression for location inference *)
-Definition target_to_expr_def:
-  target_to_expr (NameTarget id) = Name NoneT id ∧
-  target_to_expr (TopLevelNameTarget nsid) =
-    TopLevelName NoneT nsid ∧
-  target_to_expr (SubscriptTarget bt idx) =
-    Subscript NoneT (target_to_expr bt) idx ∧
-  target_to_expr (AttributeTarget bt fld) =
-    Attribute NoneT (target_to_expr bt) fld
-End
-
 (* ===== Revert with Reason ===== *)
 (* Emit revert with Error(string) encoding.
    Error(string) selector: 0x08c379a0
@@ -1082,14 +1051,14 @@ Definition compile_stmt_def:
      Delegates to compile_dynarray_append for correct opcode dispatch.
      Mirrors Python: expr.py _lower_dynarray_append *)
   compile_stmt cenv lctx ty (Append target val_e) =
-    (let target_op = compile_target_base cenv target in
-     (* Use array element type, not threading ty.
-        Python: elem_typ = darray_typ.value_type *)
-     let elem_ty = (case target_root_type cenv target of
-                      SOME (ArrayT t _) => t | _ => ty) in
+    (do result <- compile_get_target_ptr compile_expr cenv target;
+     let target_op = FST result in
+     let loc = (case FST (SND result) of SOME l => l | NONE => LocMemory) in
+     let elem_ty = (case SND (SND result) of
+                      SOME (ValPT (ArrayT t _)) => t | _ => BaseT (UintT 256)) in
      let is_prim = is_word_type elem_ty in
-     let capacity = target_root_capacity cenv target in
-     let loc = infer_array_location cenv (target_to_expr target) in
+     let capacity = (case SND (SND result) of
+                        SOME (ValPT (ArrayT _ (Dynamic n))) => n | _ => 0) in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc elem_ty in
      let load_opc = load_opc_for loc in
@@ -1113,7 +1082,7 @@ Definition compile_stmt_def:
                                      elem_ty src_elem_ty
                                      capacity is_prim
                                      load_opc store_opc
-     od) ∧
+     od od) ∧
 
   (* Assign with TupleTarget: tuple unpacking.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_tuple_unpack

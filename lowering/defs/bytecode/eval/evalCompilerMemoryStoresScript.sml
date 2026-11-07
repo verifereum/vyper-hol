@@ -3,6 +3,7 @@ Theory evalCompilerMemoryStores
 Ancestors
   evalCompilerMemoryStoreControls
   evalCompilerMemoryStoreValues
+  evalCompilerNestedAppend
   evalCompilerMemoryStoreTuples
   evalCompilerMemoryStoreContexts
   evalCompilerMemoryConstruction

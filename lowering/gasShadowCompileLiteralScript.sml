@@ -69,14 +69,3 @@ Proof
   simp[compile_name_vv_def, comp_ignore_bind_def, gas_shadow_compiles_return,
        gas_shadow_compiles_bind, gas_shadow_compiles_emit_inst]
 QED
-
-Theorem gas_shadow_compile_target_base:
-  !cenv target. compile_target_base cenv (gas_shadow_target target) =
-    compile_target_base cenv target
-Proof
-  `(!e:expr. T) /\
-   (!target. !cenv. compile_target_base cenv (gas_shadow_target target) =
-      compile_target_base cenv target)` suffices_by metis_tac[] >>
-  ho_match_mp_tac expr_induction >>
-  simp[compile_target_base_def, gas_shadow_expr_def]
-QED

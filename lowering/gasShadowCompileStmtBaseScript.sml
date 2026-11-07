@@ -70,36 +70,6 @@ Proof
   Cases_on `t0` >> simp[is_empty_value_expr_def]
 QED
 
-Theorem gas_shadow_target_root_type[simp]:
-  !bt. target_root_type cenv (gas_shadow_target bt) = target_root_type cenv bt
-Proof
-  `(!e:expr. T) /\
-   (!bt. target_root_type cenv (gas_shadow_target bt) = target_root_type cenv bt)`
-    suffices_by simp[] >>
-  ho_match_mp_tac expr_induction >>
-  simp[gas_shadow_expr_def, target_root_type_def]
-QED
-
-Theorem gas_shadow_target_root_capacity[simp]:
-  !bt. target_root_capacity cenv (gas_shadow_target bt) = target_root_capacity cenv bt
-Proof
-  `(!e:expr. T) /\
-   (!bt. target_root_capacity cenv (gas_shadow_target bt) = target_root_capacity cenv bt)`
-    suffices_by simp[] >>
-  ho_match_mp_tac expr_induction >>
-  simp[gas_shadow_expr_def, target_root_capacity_def]
-QED
-
-Theorem gas_shadow_target_to_expr[simp]:
-  !bt. target_to_expr (gas_shadow_target bt) = gas_shadow_expr (target_to_expr bt)
-Proof
-  `(!e:expr. T) /\
-   (!bt. target_to_expr (gas_shadow_target bt) = gas_shadow_expr (target_to_expr bt))`
-    suffices_by simp[] >>
-  ho_match_mp_tac expr_induction >>
-  simp[gas_shadow_expr_def, target_to_expr_def]
-QED
-
 Theorem gas_shadow_compiles_declare_local:
   gas_shadow_compiles (declare_local cenv id ty) (declare_local cenv id ty)
 Proof

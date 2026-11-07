@@ -85,7 +85,13 @@
     "tup_unpack_local.vy": "b4f517f8665fb595310d0cd0db9f906d4aef3e8db2a2a793796a377d0e68c1d0",
     "w01_return_intcall_dynarray_bytes_widen.vy": "cef1ee002d71721b2f46d33002e1352f8d3c55fdaa870a08edd409128412509b",
     "x08_return_storage_string.vy": "3866d43be59e076c7e84ef94c6ddb2e522eadfc024e6006fb483047ef644b340",
-    "x09_ifexp_storage_string.vy": "87d70cf17720c6fe699dd3189dbf0fda5bee2ef7d0f19da02aad090386063808"
+    "x09_ifexp_storage_string.vy": "87d70cf17720c6fe699dd3189dbf0fda5bee2ef7d0f19da02aad090386063808",
+    "p21_storage_field_append.vy": "e3fb0c20ea712272a93ba6d379fe14f6b374f414fe47291a46223d2ac29981b7",
+    "p22_memory_field_append.vy": "403183f855899d0a250ca91bf6838fdb1636b7d5616a211f6f31c4695571c12f",
+    "p23_subscript_append.vy": "a1a56b075f3762833c72a40655d822768cd8eac25de22a265977d26360f1deba",
+    "p24_transient_field_append.vy": "2a5be78e2e2c8692a68a87a42ff0131f48103f56d584c9015c5ad55a72ae6f09",
+    "p25_complex_field_append.vy": "b3b4eb62017f88d1ececae21901448ebaf9e2f5727a02445e107fdcaa9cc020f",
+    "p26_root_append.vy": "da01e213c7ccbc169959a450c5996366f12420ac418f4b3f8e02ca8ba982fe8c"
   },
   "outputs": {
     "a01_str_local_reassign.hex": "9d13c78d67bbdd60211cf536465f8a81f5576bce6c2eec3a211070ebd583c3d2",
@@ -177,6 +183,18 @@
     "tup_nested_ret.hex": "4d80d88d293b02eed5152cb1b10dbfc7b0e5cfb90b74f5fbac938a6e1742d529",
     "tup_nested_ret.json": "7cc7e02438b5adda01df5b95cdff3f084abcd18cd19def89dfae3a436fc80ef3",
     "w01_return_intcall_dynarray_bytes_widen.hex": "ac82c3c45d9c9e944cae6e7802235e27535149e7804f361602e789a75f43c025",
-    "w01_return_intcall_dynarray_bytes_widen.json": "27b7b59f058b0f8f82bcfd613a4bec911429fec3d6231be86f1b06d7a9a3df2a"
+    "w01_return_intcall_dynarray_bytes_widen.json": "27b7b59f058b0f8f82bcfd613a4bec911429fec3d6231be86f1b06d7a9a3df2a",
+    "p21_storage_field_append.hex": "4ba65d6841eafcc7612ee7d526c9b7390cb4b5c09967fc94ae92e060cc773f6c",
+    "p21_storage_field_append.json": "32e8f09aeb38154502f33117c8295f9d90556d6164df24759afb337565119694",
+    "p22_memory_field_append.hex": "159f00cb724ec7bbc564fb51fd2e3745f22fb63676f9bf91acee35767f74025d",
+    "p22_memory_field_append.json": "7ae170e6a56b09bce6c197201b5400b2840f5e5df4d73e14a0b6f16682b61d40",
+    "p23_subscript_append.hex": "4a97b17916fc9ec82d6a60b518821994e7ba8fe6ee630ebf27d2cb1ffe156da2",
+    "p23_subscript_append.json": "820d836e4001f7a9ab472d206d36d0785b9200bdd52e876034c66ff1ff679275",
+    "p24_transient_field_append.hex": "119cb6d3fe9ac1938ada4a85cf49e710888f2f8aa974cd2cdfb317b38867e7c5",
+    "p24_transient_field_append.json": "4839d1e7de448a8f95d97844c2f714cc64de10a6f27be351bb619ae0129ab8d1",
+    "p25_complex_field_append.hex": "ac66330c1ecbc47f6631059c9705281940fb0338038ae668f609e1a02331776b",
+    "p25_complex_field_append.json": "beb5f44ef27785dddd43f6fd169d0eb02513ad1c2eb608ec340fbdb9f7b288aa",
+    "p26_root_append.hex": "61846fc02426d04136efefa72dfc6afbb8f5c0493fb9c613e685e18af5dbc9f2",
+    "p26_root_append.json": "80f3e237a5b43a1ffe9679c2a0347b4fae32c9898f1de85bad9e30f0be8a3a05"
   }
 }

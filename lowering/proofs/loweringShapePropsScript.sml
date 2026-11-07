@@ -3265,23 +3265,6 @@ Proof
   simp[]
 QED
 
-Theorem compile_target_base_shape[local]:
-  !bt cenv st. cenv_shape_ok st cenv ==>
-    plain_operand st (compile_target_base cenv bt)
-Proof
-  (* BETA_TAC and the `rpt strip_tac`s put the goal back in the shape plain
-     `Induct` produced; they go with the induction lemma above. *)
-  recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
-  simp[compile_target_base_def] >> rpt strip_tac >>
-  BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
-       operand_case_not_label] >>
-  rename1 `FLOOKUP _ _ = SOME vloc` >>
-  `loc_shape_ok st vloc` by
-    metis_tac[cenv_shape_ok_lookup, cenv_shape_ok_module_lookup] >>
-  Cases_on `vloc` >> gvs[loc_shape_ok_def, plain_operand_def,
-    stackPlanTypesTheory.is_label_operand_def]
-QED
-
 Theorem stmt_return_bind[local]:
   comp_bind (comp_return x) f = f x
 Proof
@@ -7608,7 +7591,7 @@ Theorem compile_get_target_ptr_cfn_shape:
       (compile_get_target_ptr cfn cenv bt)
       (\r st. plain_operand st (FST r))
 Proof
-  (* as in `compile_target_base_shape`: these steps only reproduce the goal
+  (* These steps only reproduce the goal
      shape plain `Induct` produced, and go with the induction lemma. *)
   recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
   rpt gen_tac >> TRY (DISCH_THEN ASSUME_TAC) >> rpt gen_tac >>
@@ -9913,43 +9896,48 @@ QED
 
 Theorem compile_append_shape:
   !bt e cenv lctx ty internal.
+    ~supported_target_exists expr_shape_root bt /\
     ~supported_expr_exists expr_shape_root e ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
       (compile_stmt cenv lctx ty (Append bt e)) (\u st. T)
 Proof
   rpt strip_tac >> simp[Once compile_stmt_def] >>
-  stmt_bind `\raw st. plain_operand st raw /\ cenv_shape_ok st cenv` `raw`
+  stmt_bind `\r st. plain_operand st (FST r) /\ cenv_shape_ok st cenv` `r`
     (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
-     simp[cenv_shape_ok_stable] >> irule lower_value_shape >> simp[]) >>
-  stmt_bind `\staged st. plain_operand st staged /\ cenv_shape_ok st cenv` `staged`
+     simp[cenv_shape_ok_stable] >> irule compile_get_target_ptr_plain_shape >> simp[]) >>
+  stmt_bind `\raw st. plain_operand st raw /\
+    (cenv_shape_ok st cenv /\ plain_operand st (FST r))` `raw`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj] >>
+     irule lower_value_shape >> simp[]) >>
+  stmt_bind `\staged st. plain_operand st staged /\ plain_operand st (FST r)` `staged`
     (suspend "stage") >>
   simp[stmt_return_bind] >>
-  qmatch_goalsub_abbrev_tac `load_opc_for loc` >>
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. plain_operand st (compile_target_base cenv bt) /\ plain_operand st staged`,
+    `\st. plain_operand st (FST r) /\ plain_operand st staged`,
     `\u st. T`] >>
-  simp[compile_dynarray_append_shape] >> metis_tac[compile_target_base_shape]
+  simp[compile_dynarray_append_shape]
 QED
 
 Resume compile_append_shape[stage]:
   IF_CASES_TAC
   >- (irule shape_step_return >> simp[]) >>
   stmt_bind `\buf st. plain_operand st buf.buf_operand /\
-       (plain_operand st raw /\ cenv_shape_ok st cenv)` `buf`
+       (plain_operand st raw /\ cenv_shape_ok st cenv /\ plain_operand st (FST r))` `buf`
        (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
         simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj,
              compile_alloc_buffer_shape]) >>
-     stmt_sequence `\u st. plain_operand st buf.buf_operand /\ cenv_shape_ok st cenv`
+     stmt_sequence `\u st. plain_operand st buf.buf_operand /\ plain_operand st (FST r)`
        (suspend "store") >>
   irule shape_step_return >> simp[]
 QED
 Resume compile_append_shape[store]:
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. (plain_operand st buf.buf_operand /\ cenv_shape_ok st cenv) /\
+    `\st. (plain_operand st buf.buf_operand /\ plain_operand st (FST r)) /\
            (plain_operand st buf.buf_operand /\ plain_operand st raw)`,
-    `\u st. (plain_operand st buf.buf_operand /\ cenv_shape_ok st cenv) /\ T`] >>
+    `\u st. (plain_operand st buf.buf_operand /\ plain_operand st (FST r)) /\ T`] >>
   rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
   ho_match_mp_tac shape_step_frame >>
   simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj,
@@ -13040,7 +13028,7 @@ Theorem supported_target_info_shape[local]:
     supported_target_info tops bindings target <> NONE ==>
     ~supported_target_exists expr_shape_root target
 Proof
-  (* as in `compile_target_base_shape`: `Induct` on `base_assignment_target`
+  (* `Induct` on `base_assignment_target`
      fails on the pinned HOL (#2115), so use the one-step principle above *)
   recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
   simp[supported_target_info_def, supported_expr_exists_def] >>

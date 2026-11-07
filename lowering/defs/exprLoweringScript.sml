@@ -1568,27 +1568,6 @@ End
 
 (* NOTE: nsid_to_string moved to compileEnv *)
 
-(* ===== Target Base Address ===== *)
-(* Get the base operand for an assignment target.
-   Returns the memory/storage address. *)
-Definition compile_target_base_def:
-  compile_target_base cenv (NameTarget id) =
-    (case FLOOKUP cenv.ce_vars id of
-       SOME (MemLoc offset _) => Lit (n2w offset)
-     | SOME (PtrVar ptr_op _) => ptr_op
-     | _ => Lit 0w) ∧
-  compile_target_base cenv (TopLevelNameTarget nsid) =
-    (case FLOOKUP cenv.ce_module_vars nsid of
-       SOME (StorageLoc slot) => Lit slot
-     | SOME (TransientLoc slot) => Lit slot
-     | SOME (ImmutableLoc offset) => Lit (n2w offset)
-     | _ => Lit 0w) ∧
-  compile_target_base cenv (SubscriptTarget bt _) =
-    compile_target_base cenv bt ∧
-  compile_target_base cenv (AttributeTarget bt _) =
-    compile_target_base cenv bt
-End
-
 (* ===== Type Conversion ===== *)
 (* Conversion operation descriptor. Encodes what the conversion does.
    Mirrors Python: builtins/convert.py lower_convert dispatch.

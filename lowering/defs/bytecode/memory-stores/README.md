@@ -1,10 +1,16 @@
 # Memory-store witnesses
 
 These sources exercise memory copies, empty initializers, tuple unpacking and
-assertion reasons. `parity-fixtures.txt` selects 45 exact bytecode comparisons;
+assertion reasons. `parity-fixtures.txt` selects 51 exact bytecode comparisons;
 the other sources retain the remaining issue witnesses and cross-area controls
 for diagnostic comparison.
 The existing 101-fixture corpus is unchanged.
+
+`p21`–`p26` cover append through storage and memory struct fields, a subscripted
+DynArray, a transient struct field, a field with fixed-array elements, and
+plain memory/storage roots. Append resolves the array's place before evaluating
+the element, taking its capacity and element type from that place rather than
+the root variable. `evalCompilerNestedAppendTheory` checks these fixtures.
 
 `oracle/` contains independently generated annotated AST/layout JSON and
 deployment/runtime bytecode. Its provenance records the pinned compiler,

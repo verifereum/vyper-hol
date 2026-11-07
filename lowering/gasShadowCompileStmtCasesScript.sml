@@ -220,9 +220,11 @@ Theorem gas_shadow_stmt_append:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Append target e))
     (compile_stmt cenv lctx ty (gas_shadow_stmt (Append target e)))
 Proof
-  simp[gas_shadow_stmt_def, compile_stmt_def, gas_shadow_compile_target_base,
+  simp[gas_shadow_stmt_def, compile_stmt_def,
        gas_shadow_lowered_value_type,
        comp_ignore_bind_def] >>
+  ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  >- simp[gas_shadow_stmt_get_target_ptr] >> gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- simp[gas_shadow_stmt_lower_value] >> gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac

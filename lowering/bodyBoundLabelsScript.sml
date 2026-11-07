@@ -2332,7 +2332,8 @@ Proof
     bound_labels_alloc_buffer, bound_labels_store_memory, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC]) >>
-  irule bound_labels_lower_value >> simp[bound_labels_expr_mutual]
+  FIRST [irule bound_labels_get_target_ptr, irule bound_labels_lower_value] >>
+  simp[bound_labels_expr_mutual]
 QED
 
 Theorem bound_labels_stmt_tuple_assign[local]:

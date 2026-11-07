@@ -2,7 +2,7 @@
 Theory stmtSimAppendStorageCompose
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
-  appendStorageRel stmtSimAppendStorage fragExec
+  appendStorageRel stmtSimAppendStorage stmtSimAssignStorage fragExec
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort list rich_list
   varsExt freshWrites stateFrame venomState finite_map 
@@ -18,6 +18,7 @@ Theorem append_storage_word_code_parts:
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
   is_word_type elem /\ type_memory_bytes cenv elem = 32 ==>
   c = cenv /\ ?sb op.
@@ -27,11 +28,10 @@ Theorem append_storage_word_code_parts:
       (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf)
 Proof
   strip_tac >>
+  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, Once compile_stmt_def,
-       target_root_type_def, target_root_capacity_def, target_to_expr_def,
-       compile_target_base_def, infer_array_location_def] >>
+       comp_ignore_bind_def, comp_return_def, Once compile_stmt_def] >>
   Cases_on `tr` >>
   simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def,
        load_opc_for_def, store_opc_for_def] >>
@@ -444,6 +444,7 @@ Theorem compile_append_storage_word_stmt_frag:
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
   is_word_type elem /\ type_memory_bytes cenv elem = 32 /\
   is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
