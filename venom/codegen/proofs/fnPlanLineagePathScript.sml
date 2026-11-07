@@ -432,3 +432,30 @@ Proof
   rpt strip_tac >> simp[listTheory.EVERY_MEM] >>
   metis_tac[current_output_not_demand_available]
 QED
+
+Theorem chronological_origin_output_fresh:
+  !fn visited bb i ps.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\
+    ~MEM bb.bb_label visited /\ i < LENGTH bb.bb_instructions /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+         MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE i bb.bb_instructions) /\ MEM v di.inst_outputs)) ==>
+    EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+      (EL i bb.bb_instructions).inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >> simp[listTheory.EVERY_MEM] >>
+  qx_gen_tac `v` >> strip_tac >>
+  `~(MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)` suffices_by metis_tac[] >>
+  disch_tac >>
+  qpat_x_assum `!v. _ ==> _` (qspec_then `v` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac
+  >- (`?j. j < LENGTH db.bb_instructions /\ EL j db.bb_instructions = di` by
+        metis_tac[listTheory.MEM_EL] >>
+      `db = bb /\ j = i` by metis_tac[ssa_form_position] >> gvs[]) >>
+  `?j. j < LENGTH (TAKE i bb.bb_instructions) /\
+       EL j (TAKE i bb.bb_instructions) = di` by metis_tac[listTheory.MEM_EL] >>
+  `j < i /\ j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = di` by
+    (gvs[listTheory.LENGTH_TAKE, listTheory.EL_TAKE] >> decide_tac) >>
+  `j = i` by metis_tac[ssa_form_position] >> decide_tac
+QED
