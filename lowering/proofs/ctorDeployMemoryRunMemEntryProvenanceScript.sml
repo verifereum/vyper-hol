@@ -1,0 +1,231 @@
+Theory ctorDeployMemoryRunMemEntryProvenance
+Ancestors
+ ctorDeployMemoryRunMemEntryPrefixWorld ctorDeployMemoryRunMemEntryTaskBound
+ ctorDeployMemoryRunMemEntryRegistrationBound ctorDeployMemoryRunMemEntryTaskActual
+ ctorDeployMemoryRunMemEntryTaskInitial ctorDeployMemoryRunMemEntryTaskInputs
+ ctorDeployMemoryRunMemEntryTaskRegistration ctorDeployMemoryRunMemEntrySupport
+ ctorDeployMemoryRunMemEntryFormalBound abiDecoderTypedContract abiDecoderCoherence
+ contextProps fragGasPathMem compileVyper compileEnv list rich_list words finite_map
+ ctorDeployMemoryRunMemEntryResources ctorDeployDefs e2eEntry o1PassContract
+ ctorDeployMemoryRunMemEntryImmutableFrame abiEncoderRegisteredEffect
+ ctorDeployMemoryRunMemEntrySourceWorld
+
+Theorem ctor_provenance_target_layout[local]:
+ !ce target ty env tv sf av v args func scopes s.
+ type_memory_bytes (ce with ce_target := target) ty = type_memory_bytes ce ty /\
+ type_to_abi_dec_info sf (ce with ce_target := target) ty = type_to_abi_dec_info sf ce ty /\
+ (abi_decoder_coherent (ce with ce_target := target) env sf ty tv <=>
+  abi_decoder_coherent ce env sf ty tv) /\
+ (abi_decoder_metadata (ce with ce_target := target) env ty tv
+    (type_to_abi_dec_info sf (ce with ce_target := target) ty) av v <=>
+  abi_decoder_metadata ce env ty tv (type_to_abi_dec_info sf ce ty) av v) /\
+ build_positional_args (ce with ce_target := target) args = build_positional_args ce args /\
+ (local_ptrs_rel func (ce with ce_target := target) scopes s <=>
+  local_ptrs_rel func ce scopes s)
+Proof
+ rpt gen_tac >>
+ `!ty. type_memory_bytes (ce with ce_target := target) ty = type_memory_bytes ce ty` by
+   (gen_tac >> AP_THM_TAC >> irule type_memory_bytes_frame >> simp[]) >>
+ `!sf ty. type_to_abi_dec_info sf (ce with ce_target := target) ty =
+    type_to_abi_dec_info sf ce ty` by
+   (rpt gen_tac >> irule exprLoweringTheory.type_to_abi_dec_info_layout_cong >> simp[]) >>
+ rpt conj_tac
+ >- metis_tac[]
+ >- (irule exprLoweringTheory.type_to_abi_dec_info_layout_cong >> simp[])
+ >- (irule abi_decoder_coherent_layout_cong >> simp[])
+ >- (`type_to_abi_dec_info sf (ce with ce_target := target) ty =
+        type_to_abi_dec_info sf ce ty` by
+       (irule exprLoweringTheory.type_to_abi_dec_info_layout_cong >> simp[]) >>
+     `type_to_abi_dec_info ce.ce_struct_fields (ce with ce_target := target) ty =
+        type_to_abi_dec_info ce.ce_struct_fields ce ty` by
+       (irule exprLoweringTheory.type_to_abi_dec_info_layout_cong >> simp[]) >>
+     fs[abi_decoder_metadata_def])
+ >- (irule build_positional_args_layout_cong >> simp[]) >>
+ simp[local_ptrs_rel_def, local_region_def]
+QED
+
+Theorem ctor_task_register_world_provenance:
+ !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+ body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func
+ mut am_c es0 lbl entry exts ints fb rr fname fargs dflts ret ce_pack pos_args
+ ce0 st_pay st1 ce1 st2 site.
+ deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+ gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ deploy_ctor_code tops rpolicy runtime_bc dunit
+   (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
+ deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+ lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
+ fn_entry_label func = SOME lbl /\
+ entry = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+ classify_functions tops = (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,body)) /\
+ package_constructor tops F (assign_nkeys tops 0) (mut,nr,rr,fname,fargs,dflts,ret,body) =
+   (ce_pack,pos_args,mut = Payable,nr,nkey,ut,body,ret) /\
+ ce0 = ((ce_pack with ce_target := rpolicy.rpol_target) with
+   ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)) /\
+ (if mut = Payable then comp_return () else
+   comp_bind (emit_op CALLVALUE []) (\cv.
+     comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv])))
+   (initial_compile_state "__deploy") = ((),st_pay) /\
+ (if imm_len tops > 0 then comp_bind (compile_fixed_region_with_id (imm_len tops))
+   (\r. comp_return (SND r).buf_operand) else comp_return (Lit 0w)) st_pay = (imm,st1) /\
+ compile_register_constructor_args ce0 pos_args 0 0 st1 = (ce1,st2) ==>
+ ?fixed actual scope.
+ bind_arguments (type_env tops) fargs tx.args = SOME scope /\
+ gas_path_mem dunit.cu_context func entry 0 (OK fixed) /\
+ eval_operand imm fixed = SOME 0w /\
+ fixed.vs_allocas = FEMPTY /\ fixed.vs_alloca_next = imm_len tops /\
+ fixed.vs_data_section = vs.vs_data_section /\
+ local_ptrs_rel func ce1 [scope] actual /\
+ abi_encoder_registered_effect (frag_ids st1 st2) [] fixed actual /\
+ alloca_inv actual /\
+ alloca_frontier_inv_from (imm_len tops) dunit.cu_context func site actual /\
+ fresh_vars_wrt st2 actual /\
+ (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
+ actual.vs_data_section = fixed.vs_data_section /\
+ actual.vs_call_ctx = fixed.vs_call_ctx /\ actual.vs_labels = fixed.vs_labels /\
+ (!x w. not_fresh_at st1 x /\ lookup_var x fixed = SOME w ==> lookup_var x actual = SOME w) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
+ actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
+ abi_decode_sim dunit.cu_context func fixed actual /\
+ gas_path_mem dunit.cu_context func fixed 0 (OK actual) /\
+ gas_path_mem dunit.cu_context func entry 0 (OK actual) /\
+ actual.vs_gas_readings = vs.vs_gas_readings /\ alloca_history func actual /\
+ actual.vs_tx_ctx = fixed.vs_tx_ctx /\ actual.vs_block_ctx = fixed.vs_block_ctx /\
+ actual.vs_outcomes = fixed.vs_outcomes /\
+ (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
+ fixed.vs_memory = vs.vs_memory /\ fixed.vs_accounts = vs.vs_accounts /\
+ fixed.vs_transient = vs.vs_transient /\ fixed.vs_logs = vs.vs_logs /\
+ fixed.vs_requests = vs.vs_requests /\
+ fixed.vs_pending_deletions = vs.vs_pending_deletions /\
+ fixed.vs_tx_ctx = vs.vs_tx_ctx /\ fixed.vs_block_ctx = vs.vs_block_ctx /\
+ fixed.vs_outcomes = vs.vs_outcomes
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all ctor_task_actual_phase_contracts >> strip_tac >>
+ drule_all ctor_task_registration_initial_world >> strip_tac >>
+ `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+   metis_tac[ctorDeployLoweringDefsTheory.deploy_ctor_code_def] >>
+ `nkey = assign_nkeys tops 0 fname /\ ut = F` by
+   (qpat_x_assum `package_constructor _ _ _ _ = _` mp_tac >>
+    simp[compileVyperTheory.package_constructor_def] >> metis_tac[]) >>
+ `!name p sz. FLOOKUP ce_pack.ce_vars name <> SOME (PtrVar p sz)` by
+   (drule ctor_bound_package_no_ptr >> simp[]) >>
+ drule_all ctor_task_actual_encoded_inputs >> strip_tac >>
+ drule ctor_task_checked_namespaces >> strip_tac >> gvs[] >>
+ drule_all (SRULE [] (Q.INST [
+   `ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
+   `immo` |-> `(if imm_len tops > 0 then SOME imm else NONE)`]
+   (Q.INST [`imm` |-> `immo`] ctor_task_registration_metadata))) >>
+ disch_then (qspec_then `imm` strip_assume_tac) >> gvs[] >>
+ `has_types (vyper_to_abi_types (type_env tops) (MAP SND fargs)) avs` by
+   (simp[contractABITheory.has_types_LIST_REL, abiDecoderMembersTheory.vyper_to_abi_types_MAP,
+      LIST_REL_EL_EQN] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+    gvs[abi_decoder_metadata_def, EL_MAP]) >>
+ `EVERY (\a. type_memory_bytes
+   (ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE))
+   (SND a) < dimword (:256)) fargs` by
+   (simp[EVERY_EL] >> qx_gen_tac `i` >> strip_tac >>
+    qpat_assum `!i. i < LENGTH fargs ==> ?entry. _` drule >> strip_tac >>
+    `MEM (FST (EL i fargs),SND (EL i fargs)) fargs` by metis_tac[MEM_EL, pairTheory.PAIR] >>
+    `evaluate_type (type_env tops) (SND (EL i fargs)) = SOME entry.type` by
+      fs[abi_decoder_metadata_def] >>
+    drule_all ctor_formal_type_memory_bound >> strip_tac >>
+    fs[abi_decoder_metadata_def, dimword_def] >> decide_tac) >>
+ `!aid. st1.cs_next_id <= aid ==> FLOOKUP fixed.vs_allocas aid = NONE` by simp[] >>
+ `mem_bytes_at 0 (LENGTH fixed.vs_data_section) fixed.vs_data_section = fixed.vs_data_section` by
+   simp[valueEncodingTheory.mem_bytes_at_def, TAKE_APPEND] >>
+ `!id b sz. local_region
+    (ce_pack with <|ce_target := rpolicy.rpol_target;
+      ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)|>)
+    [scope] fixed id b sz ==> imm_len tops <= b` by
+   (simp[local_region_def] >> metis_tac[]) >>
+ `build_positional_args
+    (ce_pack with <|ce_target := rpolicy.rpol_target;
+      ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)|>) fargs =
+  build_positional_args
+    (ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)) fargs` by
+   (irule build_positional_args_layout_cong >> simp[]) >>
+ qpat_assum `compile_register_constructor_args _ (build_positional_args _ fargs) _ _ _ = (ce1,st2)` mp_tac >>
+ qpat_x_assum `build_positional_args _ _ = build_positional_args _ _`
+   (fn th => once_rewrite_tac[GSYM th]) >> disch_tac >>
+ mp_tac ctor_checked_register_args_world_bound_from >>
+ disch_then (drule_at (Pat `compile_register_constructor_args _ _ _ _ _ = _`)) >>
+ disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+ disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+ disch_then (drule_at (Pat `has_types _ _`)) >>
+ disch_then (qspecl_then [`imm_len tops`, `imm_len tops`] mp_tac) >>
+ disch_then (qspecl_then [`type_env tops`, `fixed.vs_data_section`, `scope`,
+   `dunit.cu_context`, `site`] mp_tac) >>
+ (impl_tac >- (simp[ctor_provenance_target_layout] >> rpt strip_tac >> metis_tac[])) >>
+ strip_tac >> qexistsl [`fixed`, `actual`] >> simp[] >>
+ metis_tac[gas_path_mem_then, arithmeticTheory.ADD]
+QED
+
+Theorem ctor_task_entry_memory_empty:
+ gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+ vs.vs_memory = []
+Proof
+ simp[gas_variant_def] >> strip_tac >>
+ qpat_x_assum `_ = vs with vs_gas_readings := _`
+   (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_memory`) >>
+ simp[deploy_entry_state_def, entry_venom_state_def, venomStateTheory.init_venom_state_def]
+QED
+
+Theorem ctor_task_actual_zero_prefix:
+ gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ fixed.vs_memory = vs.vs_memory /\
+ abi_encoder_registered_effect ids [] fixed actual /\
+ (!id b sz. FLOOKUP actual.vs_allocas id = SOME (b,sz) ==> imm_len tops <= b) ==>
+ !p. p < imm_len tops ==>
+   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 []
+Proof
+ strip_tac >> drule ctor_task_entry_memory_empty >> strip_tac >>
+ `!p. p < imm_len tops ==>
+   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 fixed.vs_memory` by
+   (rpt strip_tac >> irule ctor_registered_immutable_byte_frame >>
+    goal_assum (drule_at Any) >> metis_tac[]) >>
+ gvs[]
+QED
+
+Theorem ctor_task_actual_world_frame:
+ abi_encoder_registered_effect ids [] fixed actual /\
+ fixed.vs_accounts = vs.vs_accounts /\ fixed.vs_transient = vs.vs_transient /\
+ fixed.vs_logs = vs.vs_logs /\ fixed.vs_requests = vs.vs_requests /\
+ fixed.vs_pending_deletions = vs.vs_pending_deletions /\
+ fixed.vs_tx_ctx = vs.vs_tx_ctx /\ fixed.vs_block_ctx = vs.vs_block_ctx /\
+ fixed.vs_outcomes = vs.vs_outcomes /\
+ actual.vs_tx_ctx = fixed.vs_tx_ctx /\ actual.vs_block_ctx = fixed.vs_block_ctx /\
+ actual.vs_outcomes = fixed.vs_outcomes ==>
+ actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
+ actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
+ actual.vs_pending_deletions = vs.vs_pending_deletions /\
+ actual.vs_tx_ctx = vs.vs_tx_ctx /\ actual.vs_block_ctx = vs.vs_block_ctx /\
+ actual.vs_outcomes = vs.vs_outcomes
+Proof
+ simp[abi_encoder_registered_effect_def]
+QED
+
+Theorem ctor_task_actual_source_projections:
+ deploy_state_rel tops deploy_bc am tx es /\
+ gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ abi_encoder_registered_effect ids [] fixed actual /\
+ fixed.vs_accounts = vs.vs_accounts /\ fixed.vs_transient = vs.vs_transient /\
+ fixed.vs_logs = vs.vs_logs /\ fixed.vs_requests = vs.vs_requests /\
+ fixed.vs_pending_deletions = vs.vs_pending_deletions /\
+ fixed.vs_tx_ctx = vs.vs_tx_ctx /\ fixed.vs_block_ctx = vs.vs_block_ctx /\
+ fixed.vs_outcomes = vs.vs_outcomes /\ fixed.vs_call_ctx = vs.vs_call_ctx /\
+ actual.vs_call_ctx = fixed.vs_call_ctx /\
+ actual.vs_tx_ctx = fixed.vs_tx_ctx /\ actual.vs_block_ctx = fixed.vs_block_ctx /\
+ actual.vs_outcomes = fixed.vs_outcomes ==>
+ actual.vs_accounts = accounts_after_transfer tx am.accounts /\
+ actual.vs_transient = am.tStorage /\ actual.vs_call_ctx.cc_address = tx.target /\
+ actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = [] /\
+ call_ctx_rel tx actual.vs_call_ctx actual.vs_tx_ctx actual.vs_block_ctx /\
+ ~actual.vs_call_ctx.cc_static /\ ~tx.is_static /\
+ (es0 with outcomes := SOME vs.vs_outcomes).outcomes = SOME actual.vs_outcomes
+Proof
+ strip_tac >> drule_all ctor_task_actual_world_frame >> strip_tac >>
+ drule_all ctor_source_entry_world_projections >> strip_tac >>
+ drule_all ctor_source_candidate_context >> simp[]
+QED
