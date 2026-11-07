@@ -17,7 +17,7 @@ Ancestors
   list finite_map
   fragExec  exprSimHyps exprSimOps exprSimBinopFrag
   exprSimUnop exprSimCompare
-  exprBopLowering exprWordOperand
+  exprBopLowering exprBopSimProps exprWordOperand
   loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
@@ -159,61 +159,6 @@ Proof
        vyperValueOperationTheory.evaluate_literal_def]
 QED
 
-Theorem comparison_digest_run[local]:
-  (bop = Eq \/ bop = NotEq) /\
-  (if bop = Eq then emit_op EQ [h1; h2] sa = (op, sb)
-   else ?q sq. emit_op EQ [h1; h2] sa = (q, sq) /\
-               emit_op ISZERO [q] sq = (op, sb)) /\
-  eval_operand h1 s = SOME d1 /\ eval_operand h2 s = SOME d2 ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME
-      (bool_to_word (if bop = Eq then d1 = d2 else d1 <> d2)) /\
-    (t with vs_vars := s.vs_vars) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
-Proof
-  strip_tac >> gvs[] >>
-  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      fresh_id_def, fresh_var_def, emit_def, emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def] >>
-  simp[mk_inst_def] >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  simp_tac std_ss [instruction_accfupds, instruction_accessors] >>
-  ASM_SIMP_TAC std_ss [exec_pure2_def] >>
-  simp[Once run_inst_seq_def] >>
-  ASM_SIMP_TAC std_ss [Once step_inst_base_def, instruction_accfupds,
-       instruction_accessors, exec_pure1_def,
-       eval_operand_def, lookup_var_update_var, toString_inj] >>
-  simp[run_inst_seq_def, bool_to_word_def, update_var_def, lookup_var_def,
-       eval_operand_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[not_fresh_at_def] >>
-  first_assum (qspec_then `sa.cs_next_var` assume_tac) >>
-  first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >> gvs[]
-QED
-
-Theorem comparison_digest_shape[local]:
-  (bop = Eq \/ bop = NotEq) /\
-  (if bop = Eq then emit_op EQ [h1; h2] sa = (op, sb)
-   else ?q sq. emit_op EQ [h1; h2] sa = (q, sq) /\
-               emit_op ISZERO [q] sq = (op, sb)) ==>
-  sb.cs_current_bb = sa.cs_current_bb /\
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb) /\
-  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
-  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
-  cs_extends sa sb /\ (!x. op = Var x ==> not_fresh_at sb x)
-Proof
-  strip_tac >> gvs[] >>
-  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      fresh_id_def, fresh_var_def, emit_def, emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
-       cs_extends_def, rich_listTheory.IS_PREFIX_APPEND, not_fresh_at_def,
-       toString_inj]
-QED
-
 Theorem comparison_digest_counted[local]:
   (bop = Eq \/ bop = NotEq) /\
   (if bop = Eq then emit_op EQ [h1; h2] sa = (op, sb)
@@ -234,8 +179,11 @@ Theorem comparison_digest_counted[local]:
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(if bop = Eq then emit_op EQ [h1; h2] sa
+    else let (q, sm) = emit_op EQ [h1; h2] sa in emit_op ISZERO [q] sm) =
+      (op, sb)` by (Cases_on `bop = Eq` >> gvs[]) >>
   drule_all comparison_digest_run >> strip_tac >>
-  drule_all comparison_digest_shape >> strip_tac >>
+  drule_all (SIMP_RULE std_ss [ci_mono_def] comparison_digest_shape) >> strip_tac >>
   drule_all hash_run_path >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
@@ -303,38 +251,6 @@ Proof
   qexists_tac `[]` >>
   simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def] >>
   qexistsl_tac [`INL bv`, `ee`, `OK z`] >> simp[]
-QED
-
-Theorem comparison_compile_cut[local]:
-  (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
-  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa =
-    (op, sb) ==>
-  ?h1 sh1 h2 sh2.
-    (case bytestring_literal_hash e1 of
-       SOME h => h1 = Lit h /\ sh1 = sa
-     | NONE => ?p sm. lower_value compile_expr cenv (expr_type e1) e1 sa =
-                       (p, sm) /\ compile_bytestring_hash p sm = (h1, sh1)) /\
-    (case bytestring_literal_hash e2 of
-       SOME h => h2 = Lit h /\ sh2 = sh1
-     | NONE => ?p sm. lower_value compile_expr cenv (expr_type e1) e2 sh1 =
-                       (p, sm) /\ compile_bytestring_hash p sm = (h2, sh2)) /\
-    (if bop = Eq then emit_op EQ [h1; h2] sh2 = (op, sb)
-     else ?q sq. emit_op EQ [h1; h2] sh2 = (q, sq) /\
-                 emit_op ISZERO [q] sq = (op, sb))
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `bop <> In /\ bop <> NotIn` by
-    (qpat_x_assum `bop = Eq \/ bop = NotEq` strip_assume_tac >> simp[]) >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[Once lower_value_def, comp_bind_def, compile_expr_bop] >>
-  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
-       compile_builtin_dispatch_body_def, lower_value_child_call,
-       vyperASTTheory.expr_type_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
-  Cases_on `bytestring_literal_hash e1` >>
-  Cases_on `bytestring_literal_hash e2` >> gvs[] >>
-  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> metis_tac[]
 QED
 
 Theorem comparison_operand_outcome_suffix[local]:
@@ -470,7 +386,10 @@ Proof
     (qpat_x_assum `bop = Eq \/ bop = NotEq` strip_assume_tac >> simp[]) >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   drule_all comparison_compile_cut >> strip_tac >>
-  drule_all comparison_digest_shape >> strip_tac >>
+  `(if bop = Eq then emit_op EQ [h1; h2] sh2
+    else let (q, sm) = emit_op EQ [h1; h2] sh2 in emit_op ISZERO [q] sm) =
+      (op, sb)` by (Cases_on `bop = Eq` >> gvs[]) >>
+  drule_all (SIMP_RULE std_ss [ci_mono_def] comparison_digest_shape) >> strip_tac >>
   `cs_extends sa sh1 /\ cs_extends sh1 sh2` by
     (conj_tac
      >- (qpat_x_assum `case bytestring_literal_hash e1 of NONE => ?p sm. lower_value _ _ _ e1 sa = _ /\ _ | SOME h => _` mp_tac >>
