@@ -9,7 +9,7 @@ Ancestors
   emitHelper fragExec fragExecPtr fragGasSeqPtr fragGasPathPtr
   bodyPtrBopHashSuffix abiDecodePtrHead instSeqComposePtr assignTuplePtrLocalBytesCopy
   words arithmetic rich_list exprSimAccounts abiDecodePtrNormalized venomInst instIdxIndep
-  abiDecodePtrContinuation assignTuplePtrCopyLen
+  abiDecodePtrContinuation assignTuplePtrCopyLen calldataWordLive abiDecoderReentry
 
 Theorem abi_decode_clamp_scalar:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\ value IN A /\
@@ -179,7 +179,7 @@ Resume abi_decode_word_phases[code]:
   `emitted_insts sa sb = emitted_insts sa c2 ++
      emitted_insts c2 c3 ++ emitted_insts c3 sb` by
     (`emitted_insts c2 sb = emitted_insts c2 c3 ++ emitted_insts c3 sb` by
-       (irule emitted_insts_append >> simp[]) >>
+       (qspecl_then [`c2`, `c3`, `sb`] mp_tac emitted_insts_append >> simp[]) >>
      `sb.cs_current_insts = c2.cs_current_insts ++ emitted_insts c2 sb` by
        simp[APPEND_ASSOC] >>
      `emitted_insts sa sb = emitted_insts sa c2 ++ emitted_insts c2 sb` by
@@ -328,3 +328,100 @@ Resume abi_decode_word_success_ptr[word_store]:
 QED
 
 Finalise abi_decode_word_success_ptr
+
+Theorem abi_decode_word_abort_ptr:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecPrimWord clamp) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  abi_decode_ptr_window G tn s src b h /\
+  lookup_var dst s = SOME d /\ ptr_covers G tn dst s 32 /\
+  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
+  p+32 <= h /\ w2n b+h < dimword(:256) /\
+  (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
+  run_inst_seq (emitted_insts sa sb) s = Abort a u ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decode_word_phases >>
+  disch_then (qx_choose_then `addr` (qx_choose_then `value`
+    (qx_choose_then `c1` (qx_choose_then `c2` (qx_choose_then `c3`
+      (qx_choose_then `B` strip_assume_tac)))))) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all (abi_decode_ptr_relative_load |> Q.INST [`D` |-> `D`, `PG` |-> `PG`]) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `value = Var out` >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
+    (emitted_insts sa c2) s H tm` >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa c2) s =
+    OK (t with vs_inst_idx := _)` >>
+  suspend "clamp_abort"
+QED
+
+Resume abi_decode_word_abort_ptr[clamp_abort]:
+  `abi_decoder_operand_live c2.cs_next_var value` by
+    metis_tac[abi_decoder_operand_live_emit] >>
+  `eval_operand value t = SOME (mload (w2n b+p) s)` by
+    simp[eval_operand_def] >>
+  drule_all calldata_clamp_repeat >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c2 c3) t =
+    if abi_clamp_ok clamp _ then OK v else Abort Revert_abort v` >>
+  `lookup_var dst t = SOME d` by metis_tac[] >>
+  `abi_decoder_operand_live c2.cs_next_var (Var dst)` by
+    (`not_fresh_at c2 dst` by metis_tac[not_fresh_at_mono] >>
+     fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `eval_operand (Var dst) v = SOME d /\
+   eval_operand value v = SOME (mload (w2n b+p) s)` by
+    (conj_tac >- metis_tac[eval_operand_def] >> metis_tac[]) >>
+  `~abi_clamp_ok clamp (mload (w2n b+p) s)` by
+    (strip_tac >>
+     `run_inst_seq (emitted_insts c3 sb) v =
+       OK (mstore (w2n d) (mload (w2n b+p) s) v)` by
+       (irule calldata_mstore_repeat >> qexistsl_tac [`Var dst`, `value`] >> simp[]) >>
+     `run_inst_seq (emitted_insts c2 c3 ++ emitted_insts c3 sb) t =
+       OK (mstore (w2n d) (mload (w2n b+p) s) v)` by
+       (`run_inst_seq (emitted_insts c2 c3) t = OK v` by simp[] >>
+        qpat_assum `run_inst_seq (emitted_insts c2 c3) t = OK v`
+          (mp_then Any (qspec_then `emitted_insts c3 sb` mp_tac) run_inst_seq_append) >>
+        simp[]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa c2) s = _`
+       (mp_then Any (qspec_then `emitted_insts c2 c3 ++ emitted_insts c3 sb` mp_tac)
+         run_inst_seq_append) >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+     gvs[ADD_COMM]) >>
+  suspend "replay"
+QED
+
+Resume abi_decode_word_abort_ptr[replay]:
+  `run_inst_seq (emitted_insts c2 c3) t = Abort Revert_abort v` by simp[] >>
+  qabbrev_tac `R0 = {x | not_fresh_at sa x}` >>
+  `!x. x IN R0 ==> not_fresh_at c2 x` by
+    (simp[Abbr `R0`] >> metis_tac[not_fresh_at_mono]) >>
+  drule_all (abi_decode_clamp_abort_ptr |> Q.INST [`R` |-> `R0`]) >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  suspend "join" 
+QED
+
+Resume abi_decode_word_abort_ptr[join]:
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG H tm
+    (emitted_insts c2 c3) t Gc tk` >>
+  drule_all abi_decode_compile_abort_suffix_ptr >> strip_tac >>
+  `sb.cs_current_insts = c2.cs_current_insts ++ emitted_insts c2 sb` by
+    (`emitted_insts c2 sb = emitted_insts c2 c3 ++ emitted_insts c3 sb` by
+       (qspecl_then [`c2`, `c3`, `sb`] mp_tac emitted_insts_append >> simp[]) >> simp[APPEND_ASSOC]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c2 sb)` by
+    (qspecl_then [`c2`, `c3`, `sb`] mp_tac emitted_insts_append >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> disch_then SUBST1_TAC >>
+     pure_rewrite_tac[EVERY_APPEND] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all abi_decode_compile_continue_abort_ptr >> strip_tac >>
+  qexistsl_tac [`Gc`, `tk`] >> simp[] >>
+  rpt strip_tac >> fs[Abbr `R0`, op_taint_def] >> metis_tac[]
+QED
+
+Finalise abi_decode_word_abort_ptr
