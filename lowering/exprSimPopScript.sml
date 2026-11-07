@@ -711,8 +711,10 @@ Proof
       >- fs[]
       >- gvs[pred_setTheory.ABSORPTION_RWT]
       >- fs[]
-      >- gvs[lookup_scopes_update]
-      >- gvs[lookup_scopes_update_other]
+      >- (qpat_x_assum `es'.scopes = _` SUBST1_TAC >>
+          irule lookup_scopes_update >> first_assum ACCEPT_TAC)
+      >- (rpt strip_tac >> asm_rewrite_tac[] >>
+          irule lookup_scopes_update_other >> strip_tac >> gvs[])
       >- simp[pop_name_entry_def]
       >- simp[pop_name_entry_def]
       >- fs[]
