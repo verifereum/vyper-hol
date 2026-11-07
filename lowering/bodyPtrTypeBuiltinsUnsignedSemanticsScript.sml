@@ -346,3 +346,21 @@ Proof
   `LENGTH (PAD_LEFT 0w 32 bs) <= 32` by simp[PAD_LEFT] >>
   drule unsigned_payload_zero >> simp[PAD_LEFT, EVERY_GENLIST]
 QED
+
+Theorem unsigned_payload_left_align:
+  LENGTH bs <= 32 ==>
+  word_lsl (word_lsr (word_of_bytes_be bs:bytes32) (8*(32-LENGTH bs)))
+    (8*(32-LENGTH bs)) = word_of_bytes_be bs
+Proof
+  strip_tac >>
+  `!i. i < 8*(32-LENGTH bs) ==> ~((word_of_bytes_be bs:bytes32) ' i)` by
+    (gen_tac >> disch_tac >>
+     qspec_then `8` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+     disch_then (qspec_then `i` strip_assume_tac) >>
+     `i < 256 /\ 31 - i DIV 8 < 32 /\ LENGTH bs <= 31 - i DIV 8` by intLib.ARITH_TAC >>
+     simp[unsigned_word_bit_byte, unsigned_get_byte_encoding,
+          wordsTheory.word_0, fcpTheory.FCP_BETA]) >>
+  simp[wordsTheory.word_lsl_def, wordsTheory.word_lsr_def,
+       fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >> Cases_on `i < 8*(32-LENGTH bs)` >> simp[]
+QED
