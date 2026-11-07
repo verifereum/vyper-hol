@@ -381,7 +381,6 @@ Proof
   >- (fs[immutables_rel_def, immutable_prefix_bound_def] >>
       simp[immutables_rel_def] >> rpt gen_tac >> strip_tac >>
       `immutable_value_admissible tv v /\
-       byte_offset + type_memory_size tv <= LENGTH s.vs_memory /\
        val_in_memory tv v byte_offset s.vs_memory /\
        immutable_value_bytes_rel tv v
          (mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory)` by
@@ -393,10 +392,7 @@ Proof
        mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by
         (irule mstore_mem_bytes_at_disjoint >> simp[]) >>
       `val_wf tv v` by metis_tac[immutable_admissible_val_wf] >>
-      simp[] >> conj_tac
-      >- (simp[immutable_mstore_capacity, arithmeticTheory.MAX_DEF] >>
-          IF_CASES_TAC >> DECIDE_TAC) >>
-      irule val_in_memory_mem_agree >> conj_tac >- simp[] >>
+      simp[] >> irule val_in_memory_mem_agree >> conj_tac >- simp[] >>
       qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >> simp[]) >>
   fs[immutables_rel_def, mstore_def, LET_THM] >> metis_tac[]
 QED

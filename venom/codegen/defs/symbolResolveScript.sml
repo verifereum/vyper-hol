@@ -171,7 +171,8 @@ End
 Definition build_offset_to_pc_def:
   build_offset_to_pc prog =
     FST (FOLDL (λ(m, off) (i, inst).
-      (m |+ (off, i), off + asm_inst_size inst))
+      ((case inst of AsmLabel _ => m |+ (off, i) | _ => m),
+       off + asm_inst_size inst))
     (FEMPTY : (num, num) fmap, 0n)
     (MAPi (λi inst. (i, inst)) prog))
 End

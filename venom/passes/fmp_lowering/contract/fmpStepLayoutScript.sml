@@ -2,7 +2,7 @@
 Theory fmpStepLayout
 Ancestors
   fmpLowerDefs fmpLowerProps fmpStepTraversal fmpStepReclaim
-  list rich_list finite_map venomInst arithmetic o1PassContract
+  list rich_list finite_map venomInst arithmetic o1PassContract irSupply
 
 Theorem split_fmp_entry_from_reconstruct:
   split_fmp_entry_from k acc insts = SOME (FmpEntryLayout users retpc suffix) ==>
@@ -171,7 +171,7 @@ Theorem fmp_lower_function_inst_ok:
 Proof
   simp[fmp_lower_function_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  drule_all fmpStepSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
+  drule_all irSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
   Cases_on `root_layout` >> gvs[] >>
   drule_all fmp_make_root_layout_inst_ok >> strip_tac >>
   drule_all fmpStepRewriteTheory.fmp_lower_blocks_supply >> strip_tac >>

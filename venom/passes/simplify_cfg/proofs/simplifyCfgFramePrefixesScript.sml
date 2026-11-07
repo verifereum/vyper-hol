@@ -4,7 +4,7 @@ Ancestors
   simplifyCfgFragments venomExecSemantics venomExecProofs venomInstProps
   venomWf venomInst venomState contextCodegenRel o1PassLift list
 
-Theorem scfg_active_lookup[local]:
+Theorem scfg_active_lookup:
   wf_function fn /\ active_inst fn i t /\
   lookup_block t.vs_current_bb fn.fn_blocks = SOME bb ==>
   get_instruction bb t.vs_inst_idx = SOME i
@@ -15,7 +15,7 @@ Proof
   drule_all MEM_lookup_block >> strip_tac >> gvs[get_instruction_def]
 QED
 
-Theorem scfg_prefix_terminator[local]:
+Theorem scfg_prefix_terminator:
   eval_phis s bb.bb_instructions = OK v /\
   a = v with vs_inst_idx := phi_prefix_length bb.bb_instructions /\
   scfg_iprefix C bb a t /\ get_instruction bb t.vs_inst_idx = SOME i /\

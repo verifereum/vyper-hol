@@ -119,10 +119,14 @@ Theorem compile_literal_word_body_vv_sim_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_sim_mem ctx func cenv cx ty (Literal ann l) es` by
-    (irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+    (irule expr_sim_mem_word_values >>
+     reverse conj_tac >- simp[vyperASTTheory.expr_type_def] >>
+     rpt gen_tac >> strip_tac >>
      qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >>
      irule body_literal_word_mem_prefix >> metis_tac[]) >>
-  irule body_expr_vv_sim_mem_stack >>
+  `is_word_type (expr_type (Literal ann l))` by
+    gvs[vyperASTTheory.expr_type_def] >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   simp[] >> conj_tac
   >- metis_tac[body_literal_word_compile] >>
   simp[Once evaluate_def, return_def] >> metis_tac[]

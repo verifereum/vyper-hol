@@ -21,6 +21,8 @@ Ancestors
   valueEncodingProps valueEncodingProofs venomExecSemantics byte words
   builtinStrings emitHelper fragExec exprSimLiteralBuffer immutableMemoryFrame
    exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
+  exprSimHypsDefs gasOutcome gasSummary gasContext fragGasMode fragGasPath
+  storageCopyGasPath
 Libs
   monadsyntax
 
@@ -399,7 +401,7 @@ Proof
 QED
 
 Theorem compile_uint2str_layout_eq:
-  compile_alloc_buffer sz sa = (ba,a) ==>
+  compile_alloc_buffer (sz + n) sa = (ba,a) ==>
   compile_uint2str op n sz sa =
     (Var (u2s_var a 2), u2s_end a op ba.buf_operand n)
 Proof
@@ -423,10 +425,10 @@ QED
 
 Theorem compile_uint2str_layout:
   compile_uint2str op n sz sa = (out,sb) ==>
-  ?ba a. compile_alloc_buffer sz sa = (ba,a) /\
+  ?ba a. compile_alloc_buffer (sz + n) sa = (ba,a) /\
          out = Var (u2s_var a 2) /\ u2s_layout a op ba.buf_operand n sb
 Proof
-  Cases_on `compile_alloc_buffer sz sa` >>
+  Cases_on `compile_alloc_buffer (sz + n) sa` >>
   drule compile_uint2str_layout_eq >> simp[u2s_layout_def] >>
   metis_tac[]
 QED
@@ -2088,7 +2090,473 @@ Proof
   qexistsl_tac [`op`, `a.cs_current_insts`] >> simp[]
 QED
 
-Theorem u2s_alloc_ready:
+(* ===== Counted target paths of the uint2str code =====
+
+   The fragment is GAS-free, so each block from the setup jump to the exit
+   label is a counted path with no readings. *)
+
+Theorem u2s_path_then[local]:
+  gas_marked_path F ctx fn s 0 (OK c) /\ gas_marked_path F ctx fn c 0 r ==>
+  gas_marked_path F ctx fn s 0 r
+Proof
+  metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]
+QED
+
+(* A straight-line block body ending in a jump: the multi-block runs below
+   are composed from these with gas_marked_path_then. *)
+Theorem u2s_block_path[local]:
+  !ctx fn s bb pre is j t lbl.
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++ is ++ [j] /\ s.vs_inst_idx = LENGTH pre /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is /\
+  EVERY (\i. i.inst_opcode <> GAS) is /\
+  (j.inst_opcode = JMP \/ j.inst_opcode = JNZ) /\
+  run_inst_seq is s = OK t /\ ~s.vs_halted /\ ~t.vs_halted /\
+  step_inst_base j (t with vs_inst_idx := LENGTH pre + LENGTH is) =
+    OK (jump_to lbl t) ==>
+  gas_marked_path F ctx fn s 0 (OK (jump_to lbl t))
+Proof
+  rpt strip_tac >>
+  `isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[DROP_APPEND, rich_listTheory.DROP_LENGTH_APPEND,
+         rich_listTheory.IS_PREFIX_APPEND] >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (drule_all exec_block_run_inst_seq >>
+     disch_then (qspecl_then [`0`, `ctx`] mp_tac) >>
+     disch_then (qspec_then `t` mp_tac o CONJUNCT1) >> simp[]) >>
+  `gas_marked_path F ctx fn s 0
+     (OK (t with vs_inst_idx := LENGTH pre + LENGTH is))` by
+    (qspecl_then [`is`, `s`, `t`, `F`, `ctx`, `fn`, `bb`] mp_tac
+       storage_copy_seq_path >> simp[]) >>
+  `get_instruction bb (LENGTH pre + LENGTH is) = SOME j` by
+    simp[venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+  `jump_to lbl (t with vs_inst_idx := LENGTH pre + LENGTH is) = jump_to lbl t` by
+    simp[venomStateTheory.jump_to_def] >>
+  `gas_marked_path F ctx fn (t with vs_inst_idx := LENGTH pre + LENGTH is) 0
+     (OK (jump_to lbl t))` by
+    (qpat_assum `jump_to _ _ = jump_to _ _` (SUBST1_TAC o SYM) >>
+     irule storage_copy_jump_path >> simp[] >>
+     qexists_tac `j` >> gvs[arithmeticTheory.ADD_COMM]) >>
+  irule u2s_path_then >>
+  qexists_tac `t with vs_inst_idx := LENGTH pre + LENGTH is` >> simp[]
+QED
+
+Theorem u2s_path_continue[local]:
+  gas_marked_path F ctx fn s n (OK t) ==>
+  !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+           ?fuel'. run_from fuel' ctx fn s = r
+Proof
+  metis_tac[gas_marked_path_exec, gas_path_normal]
+QED
+
+Theorem u2s_cond_path:
+  lookup_block (u2s_label a 1) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
+  s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
+  (?p. buf = Var p /\ not_fresh_at a p) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_digits a b n X x str t /\
+      t.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
+      t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  `lookup_var (u2s_var a 0) s = SOME (n2w x) /\ x < dimword (:256)` by
+    fs[u2s_digits_def] >>
+  qabbrev_tac `t = update_var (u2s_var a 4) (bool_to_word (x = 0)) s` >>
+  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+    (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
+  `u2s_digits a b n X x str t` by simp[Abbr `t`, u2s_digits_update] >>
+  `~t.vs_halted` by simp[Abbr `t`, u2s_update_control] >>
+  `run_inst_seq (TAKE 1 (u2s_cond a)) s = OK t` by
+    (mp_tac (Q.INST [`t` |-> `update_var (u2s_var a 4) (bool_to_word (x = 0)) s`]
+       u2s_cond_run) >> simp[Abbr `t`]) >>
+  `lookup_var (u2s_var a 4) (t with vs_inst_idx := 1) = SOME (bool_to_word (x = 0))` by
+    simp[Abbr `t`, venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `LENGTH (TAKE 1 (u2s_cond a)) = 1 /\
+   step_inst_base (LAST (u2s_cond a)) (t with vs_inst_idx := 1) =
+     OK (jump_to (u2s_label a (if x = 0 then 4 else 2)) t)` by
+    (simp_tac (srw_ss()) [u2s_cond_def, LAST_DEF] >>
+     drule u2s_jnz_step >>
+     disch_then (qspecl_then [`u2s_label a 4`, `u2s_label a 2`, `7`] mp_tac) >>
+     Cases_on `x = 0` >> simp[venomStateTheory.jump_to_def]) >>
+  `gas_marked_path F ctx fn s 0
+     (OK (jump_to (u2s_label a (if x = 0 then 4 else 2)) t))` by
+    (qspecl_then [`ctx`, `fn`, `s`,
+       `<|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|>`, `[]`,
+       `TAKE 1 (u2s_cond a)`, `LAST (u2s_cond a)`, `t`,
+       `u2s_label a (if x = 0 then 4 else 2)`] mp_tac u2s_block_path >>
+     impl_tac >- (simp[] >>
+       simp[u2s_cond_def, u2s_inst_def, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def]) >>
+     simp[]) >>
+  qexists_tac `jump_to (u2s_label a (if x = 0 then 4 else 2)) t` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[u2s_safe_jump, u2s_digits_jump, venomStateTheory.jump_to_def]
+QED
+
+Theorem u2s_check_path:
+  lookup_block (u2s_label a 0) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|> /\
+  s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\ x < dimword (:256) /\
+  local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      (!y str. u2s_digits a b n X y str t <=> u2s_digits a b n X y str s) /\
+      t.vs_current_bb = u2s_label a (if x = 0 then 3 else 1) /\
+      t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  qabbrev_tac `t = update_var (u2s_var a 3) (bool_to_word (x = 0)) s` >>
+  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+    (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
+  `!y str. u2s_digits a b n X y str t <=> u2s_digits a b n X y str s` by
+    simp[Abbr `t`, u2s_digits_update] >>
+  `~t.vs_halted` by simp[Abbr `t`, u2s_update_control] >>
+  `run_inst_seq (TAKE 1 (u2s_check a)) s = OK t` by
+    (mp_tac (Q.INST [`t` |-> `update_var (u2s_var a 3) (bool_to_word (x = 0)) s`]
+       u2s_check_run) >> simp[Abbr `t`]) >>
+  `lookup_var (u2s_var a 3) (t with vs_inst_idx := 1) = SOME (bool_to_word (x = 0))` by
+    simp[Abbr `t`, venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `LENGTH (TAKE 1 (u2s_check a)) = 1 /\
+   step_inst_base (LAST (u2s_check a)) (t with vs_inst_idx := 1) =
+     OK (jump_to (u2s_label a (if x = 0 then 3 else 1)) t)` by
+    (simp_tac (srw_ss()) [u2s_check_def, LAST_DEF] >>
+     drule u2s_jnz_step >>
+     disch_then (qspecl_then [`u2s_label a 3`, `u2s_label a 1`, `5`] mp_tac) >>
+     Cases_on `x = 0` >> simp[venomStateTheory.jump_to_def]) >>
+  `gas_marked_path F ctx fn s 0
+     (OK (jump_to (u2s_label a (if x = 0 then 3 else 1)) t))` by
+    (qspecl_then [`ctx`, `fn`, `s`,
+       `<|bb_label := u2s_label a 0; bb_instructions := u2s_check a|>`, `[]`,
+       `TAKE 1 (u2s_check a)`, `LAST (u2s_check a)`, `t`,
+       `u2s_label a (if x = 0 then 3 else 1)`] mp_tac u2s_block_path >>
+     impl_tac >- (simp[] >>
+       simp[u2s_check_def, u2s_inst_def, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def]) >>
+     simp[]) >>
+  qexists_tac `jump_to (u2s_label a (if x = 0 then 3 else 1)) t` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[u2s_safe_jump, u2s_digits_jump, venomStateTheory.jump_to_def]
+QED
+
+Theorem u2s_body_path:
+  lookup_block (u2s_label a 2) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
+  s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
+  local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  n+32 <= sz /\ b+sz < dimword (:256) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
+      t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  drule u2s_body_iteration >> simp[] >>
+  disch_then (qspecl_then [`x`, `str`, `n`, `X`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `gas_marked_path F ctx fn s 0 (OK (jump_to (u2s_label a 1) t))` by
+    (qspecl_then [`ctx`, `fn`, `s`,
+       `<|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|>`, `[]`,
+       `TAKE 9 (u2s_body a (Var p) n)`, `LAST (u2s_body a (Var p) n)`, `t`,
+       `u2s_label a 1`] mp_tac u2s_block_path >>
+     impl_tac >- (simp[] >>
+       simp[u2s_body_def, u2s_inst_def, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def, step_inst_base_def,
+            venomStateTheory.jump_to_def]) >>
+     simp[]) >>
+  qexists_tac `jump_to (u2s_label a 1) t` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[u2s_safe_jump, u2s_digits_jump, venomStateTheory.jump_to_def]
+QED
+
+Theorem u2s_final_path:
+  lookup_block (u2s_label a 4) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a buf n|> /\
+  s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_digits a b n X 0 str s /\ local_ptrs_reserved cenv a /\
+  (?p. buf = Var p /\ not_fresh_at a p) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  n+32 <= sz /\ b+sz < dimword (:256) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
+      val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
+      b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  drule u2s_final_result >> simp[] >>
+  disch_then (qspec_then `ty` mp_tac) >>
+  disch_then (qspecl_then [`str`, `n`, `X`] mp_tac) >> simp[] >> strip_tac >>
+  `gas_marked_path F ctx fn s 0 (OK (jump_to (u2s_label a 5) t))` by
+    (qspecl_then [`ctx`, `fn`, `s`,
+       `<|bb_label := u2s_label a 4; bb_instructions := u2s_final a (Var p) n|>`, `[]`,
+       `TAKE 4 (u2s_final a (Var p) n)`, `LAST (u2s_final a (Var p) n)`, `t`,
+       `u2s_label a 5`] mp_tac u2s_block_path >>
+     impl_tac >- (simp[] >>
+       simp[u2s_final_def, u2s_inst_def, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def, step_inst_base_def,
+            venomStateTheory.jump_to_def]) >>
+     simp[]) >>
+  qexists_tac `jump_to (u2s_label a 5) t` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  fs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def] >>
+  simp[u2s_safe_jump, venomStateTheory.jump_to_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem u2s_zero_path:
+  lookup_block (u2s_label a 3) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|> /\
+  s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  1 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1)) /\
+      val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
+      b <= b+n-1 /\ b+n-1+33 <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >> drule u2s_zero_result >> simp[] >>
+  disch_then (qspecl_then [`ty`, `n`] mp_tac) >> simp[] >> strip_tac >>
+  `gas_marked_path F ctx fn s 0 (OK (jump_to (u2s_label a 5) t))` by
+    (qspecl_then [`ctx`, `fn`, `s`,
+       `<|bb_label := u2s_label a 3; bb_instructions := u2s_zero a (Var p) n|>`, `[]`,
+       `TAKE 6 (u2s_zero a (Var p) n)`, `LAST (u2s_zero a (Var p) n)`, `t`,
+       `u2s_label a 5`] mp_tac u2s_block_path >>
+     impl_tac >- (simp[] >>
+       simp[u2s_zero_def, u2s_inst_def, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def, step_inst_base_def,
+            venomStateTheory.jump_to_def]) >>
+     simp[]) >>
+  qexists_tac `jump_to (u2s_label a 5) t` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  fs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def] >>
+  simp[u2s_safe_jump, venomStateTheory.jump_to_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem u2s_loop_path:
+  !x s str.
+  (!bb. MEM bb (u2s_blocks a op buf n) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+  s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
+  (?p. buf = Var p /\ not_fresh_at a p) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
+      val_in_memory ty (StringV (num_to_dec_string X))
+        (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
+      b <= b+n-LENGTH (num_to_dec_string X) /\
+      b+n-LENGTH (num_to_dec_string X)+32+LENGTH (num_to_dec_string X) <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
+  `?c. gas_marked_path F ctx fn s 0 (OK c) /\
+       u2s_safe ctx func cenv cx es a buf b sz inst s0 c /\
+       u2s_digits a b n X x str c /\
+       c.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
+       c.vs_inst_idx = 0 /\ ~c.vs_halted` by
+    (irule u2s_cond_path >> simp[] >>
+     first_x_assum (qspec_then
+       `<|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|>` mp_tac) >>
+     simp[u2s_blocks_def]) >>
+  Cases_on `x = 0`
+  >- suspend "zero_quotient"
+  >> suspend "positive_quotient"
+QED
+
+Resume u2s_loop_path[zero_quotient]:
+  gvs[] >>
+  `str = num_to_dec_string X` by gvs[u2s_digits_def] >>
+  `?t. gas_marked_path F ctx fn c 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
+      val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
+      b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted` by
+    (irule u2s_final_path >> simp[] >> conj_tac
+     >- (first_x_assum (qspec_then
+       `<|bb_label := u2s_label a 4; bb_instructions := u2s_final a (Var p) n|>` mp_tac) >>
+         simp[u2s_blocks_def]) >>
+     qexists_tac `X` >> gvs[]) >>
+  qexists_tac `t` >> gvs[] >>
+  irule u2s_path_then >> qexists_tac `c` >> simp[]
+QED
+
+Resume u2s_loop_path[positive_quotient]:
+  gvs[] >>
+  `0 < x /\ x DIV 10 < x` by simp[DIV_LESS] >>
+  `LENGTH str < n` by (irule u2s_digits_room >> metis_tac[]) >>
+  `?d. gas_marked_path F ctx fn c 0 (OK d) /\
+       u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 d /\
+       u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) d /\
+       d.vs_current_bb = u2s_label a 1 /\ d.vs_inst_idx = 0 /\ ~d.vs_halted` by
+    (irule u2s_body_path >> simp[] >>
+     first_x_assum (qspec_then
+       `<|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|>` mp_tac) >>
+     simp[u2s_blocks_def]) >>
+  qpat_x_assum `!m. m < x ==> _` (qspec_then `x DIV 10` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`d`, `CHR (48+x MOD 10)::str`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  irule u2s_path_then >> qexists_tac `d` >> simp[] >>
+  irule u2s_path_then >> qexists_tac `c` >> simp[]
+QED
+
+Finalise u2s_loop_path
+
+Theorem u2s_check_exit_path:
+  (!bb. MEM bb (u2s_blocks a op buf n) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+  s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  lookup_var (u2s_var a 0) s = SOME (n2w X) /\
+  lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
+  (?p. buf = Var p /\ not_fresh_at a p) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
+      val_in_memory ty (StringV (num_to_dec_string X))
+        (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
+      b <= b+n-LENGTH (num_to_dec_string X) /\
+      b+n-LENGTH (num_to_dec_string X)+32+LENGTH (num_to_dec_string X) <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  `?c. gas_marked_path F ctx fn s 0 (OK c) /\
+       u2s_safe ctx func cenv cx es a buf b sz inst s0 c /\
+       (!y str. u2s_digits a b n X y str c <=> u2s_digits a b n X y str s) /\
+       c.vs_current_bb = u2s_label a (if X = 0 then 3 else 1) /\
+       c.vs_inst_idx = 0 /\ ~c.vs_halted` by
+    (irule u2s_check_path >> simp[] >>
+     first_x_assum (qspec_then
+       `<|bb_label := u2s_label a 0; bb_instructions := u2s_check a|>` mp_tac) >>
+     simp[u2s_blocks_def]) >>
+  `?t. gas_marked_path F ctx fn c 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
+      val_in_memory ty (StringV (num_to_dec_string X))
+        (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
+      b <= b+n-LENGTH (num_to_dec_string X) /\
+      b+n-LENGTH (num_to_dec_string X)+32+LENGTH (num_to_dec_string X) <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted` by
+    (Cases_on `X = 0` >> fs[]
+     >- (`num_to_dec_string 0 = "0"` by EVAL_TAC >>
+         mp_tac (Q.INST [`s` |-> `c`] u2s_zero_path) >>
+         impl_tac >- (fs[] >> first_x_assum (qspec_then
+           `<|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|>` mp_tac) >>
+           simp[u2s_blocks_def]) >>
+         strip_tac >> qexists_tac `t` >> gvs[]) >>
+     qspecl_then [`X`, `c`, `[]`] mp_tac u2s_loop_path >>
+     impl_tac >- (simp[] >> irule u2s_digits_initial >> simp[]) >>
+     strip_tac >> qexists_tac `t` >> gvs[]) >>
+  qexists_tac `t` >> simp[] >>
+  irule u2s_path_then >> qexists_tac `c` >> simp[]
+QED
+
+Theorem u2s_setup_entry_path:
+  s.vs_current_bb = a.cs_current_bb /\
+  lookup_block a.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := a.cs_current_bb;
+      bb_instructions := a.cs_current_insts ++ u2s_setup a op buf|> /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\ ~s.vs_halted /\
+  (!bb. MEM bb (u2s_blocks a op buf n) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+  eval_operand op s = SOME (n2w X) /\
+  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
+      val_in_memory ty (StringV (num_to_dec_string X))
+        (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
+      b <= b+n-LENGTH (num_to_dec_string X) /\
+      b+n-LENGTH (num_to_dec_string X)+32+LENGTH (num_to_dec_string X) <= b+sz /\
+      t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  `eval_operand buf s = SOME (n2w b)` by gvs[u2s_safe_def] >>
+  qabbrev_tac `t = update_var (u2s_var a 2) (n2w b)
+    (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) (n2w X) s))` >>
+  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+    (simp[Abbr `t`] >> irule u2s_setup_safe >> gvs[]) >>
+  `lookup_var (u2s_var a 0) t = SOME (n2w X) /\
+   lookup_var (u2s_var a 1) t = SOME 0w /\ ~t.vs_halted` by
+    simp[Abbr `t`, u2s_update_control, venomStateTheory.lookup_var_def,
+         venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `run_inst_seq (TAKE 3 (u2s_setup a op buf)) s = OK t` by
+    (simp[Abbr `t`] >> irule u2s_setup_run >> gvs[]) >>
+  `gas_marked_path F ctx fn s 0 (OK (jump_to (u2s_label a 0) t))` by
+    (qspecl_then [`ctx`, `fn`, `s`,
+       `<|bb_label := a.cs_current_bb;
+          bb_instructions := a.cs_current_insts ++ u2s_setup a op buf|>`,
+       `a.cs_current_insts`, `TAKE 3 (u2s_setup a op buf)`,
+       `LAST (u2s_setup a op buf)`, `t`, `u2s_label a 0`] mp_tac u2s_block_path >>
+     impl_tac >- (simp[] >>
+       simp[u2s_setup_def, u2s_inst_def, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def, step_inst_base_def,
+            venomStateTheory.jump_to_def]) >>
+     simp[]) >>
+  `?u. gas_marked_path F ctx fn (jump_to (u2s_label a 0) t) 0 (OK u) /\
+      u2s_safe ctx func cenv cx es a buf b sz inst s0 u /\
+      eval_operand (Var (u2s_var a 2)) u = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
+      val_in_memory ty (StringV (num_to_dec_string X))
+        (b+n-LENGTH (num_to_dec_string X)) u.vs_memory /\
+      b <= b+n-LENGTH (num_to_dec_string X) /\
+      b+n-LENGTH (num_to_dec_string X)+32+LENGTH (num_to_dec_string X) <= b+sz /\
+      u.vs_current_bb = u2s_label a 5 /\ u.vs_inst_idx = 0 /\ ~u.vs_halted` by
+    (mp_tac (Q.INST [`s` |-> `jump_to (u2s_label a 0) t`] u2s_check_exit_path) >>
+     impl_tac >- (simp[u2s_safe_jump] >>
+       fs[venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def] >>
+       metis_tac[]) >>
+     strip_tac >> rename1 `gas_marked_path F ctx fn _ 0 (OK result)` >>
+     qexists_tac `result` >> simp[]) >>
+  qexists_tac `u` >> simp[] >>
+  irule u2s_path_then >> qexists_tac `jump_to (u2s_label a 0) t` >> simp[]
+QED
+
+Theorem u2s_alloc_path[local]:
+  !sz sa ba a fn s bb tail t ctx.
+  compile_alloc_buffer sz sa = (ba,a) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = a.cs_current_insts ++ tail /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  run_inst_seq (emitted_insts sa a) s = OK t ==>
+  gas_marked_path F ctx fn s 0
+    (OK (t with vs_inst_idx := LENGTH a.cs_current_insts))
+Proof
+  rpt strip_tac >> drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+  qspecl_then [`emitted_insts sa a`, `s`, `t`, `F`, `ctx`, `fn`, `bb`] mp_tac
+    storage_copy_seq_path >>
+  gvs[exprLoweringPropsTheory.emitted_insts_def, DROP_APPEND,
+      rich_listTheory.DROP_LENGTH_APPEND,
+      venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem u2s_alloc_ready_path:
   compile_alloc_buffer sz sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
@@ -2110,6 +2578,7 @@ Theorem u2s_alloc_ready:
       lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ b+sz < dimword (:256) /\
     (!fuel. run_from fuel ctx fn s = run_from fuel ctx fn ready) /\
+    gas_marked_path F ctx fn s 0 (OK ready) /\
     (!out. u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
       stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz))
@@ -2149,6 +2618,13 @@ Proof
           `u2s_setup a op ba.buf_operand`] >>
         simp_tac (srw_ss()) [] >> metis_tac[]) >>
      qexistsl_tac [`ba`, `sa`, `sz`] >> metis_tac[]) >>
+  `gas_marked_path F ctx fn s 0
+     (OK (t with vs_inst_idx := LENGTH a.cs_current_insts))` by
+    (qspecl_then [`sz`, `sa`, `ba`, `a`, `fn`, `s`,
+       `<|bb_label := a.cs_current_bb;
+          bb_instructions := a.cs_current_insts ++ u2s_setup a op ba.buf_operand|>`,
+       `u2s_setup a op ba.buf_operand`, `t`, `ctx`] mp_tac u2s_alloc_path >>
+     impl_tac >- (simp_tac (srw_ss()) [] >> metis_tac[]) >> simp[]) >>
   qexistsl_tac [`w2n w`, `t`, `t with vs_inst_idx := LENGTH a.cs_current_insts`, `inst`] >>
   simp_tac (srw_ss()) [u2s_safe_index] >>
   conj_tac >- metis_tac[u2s_safe_index] >>
@@ -2161,6 +2637,80 @@ Proof
   metis_tac[]
 QED
 
+Theorem u2s_alloc_ready:
+  compile_alloc_buffer sz sa = (ba,a) /\
+  u2s_layout a op ba.buf_operand n sb /\
+  fn_has_code sa sb func /\ fn_has_code sa sb fn /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
+  eval_operand op s = SOME (n2w X) /\ sz < dimword (:256) ==>
+  ?b s0 ready inst.
+    u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 ready /\
+    ready.vs_current_bb = a.cs_current_bb /\
+    ready.vs_inst_idx = LENGTH a.cs_current_insts /\ ~ready.vs_halted /\
+    eval_operand op ready = SOME (n2w X) /\ local_ptrs_reserved cenv a /\
+    (?p. ba.buf_operand = Var p /\ not_fresh_at a p) /\
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME
+      <|bb_label := a.cs_current_bb;
+        bb_instructions := a.cs_current_insts ++ u2s_setup a op ba.buf_operand|> /\
+    (!bb. MEM bb (u2s_blocks a op ba.buf_operand n) ==>
+      lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ b+sz < dimword (:256) /\
+    (!fuel. run_from fuel ctx fn s = run_from fuel ctx fn ready) /\
+    (!out. u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
+      stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es sa s out /\
+      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz))
+Proof
+  strip_tac >> drule_all u2s_alloc_ready_path >> metis_tac[]
+QED
+
+Theorem u2s_alloc_vv_path:
+  compile_uint2str op n sz sa = (out,sb) /\
+  fn_has_code sa sb func /\ fn_has_code sa sb fn /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
+  eval_operand op s = SOME (n2w X) /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  val_wf tv (StringV (num_to_dec_string X)) /\
+  val_footprint tv (StringV (num_to_dec_string X)) <= 32+LENGTH (num_to_dec_string X) ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+      vv_post ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
+        (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ~t.vs_halted
+Proof
+  strip_tac >> drule compile_uint2str_layout >> strip_tac >>
+  drule_all u2s_alloc_ready_path >> strip_tac >>
+  mp_tac (Q.INST [`s` |-> `ready`, `buf` |-> `ba.buf_operand`, `ty` |-> `tv`,
+                  `sz` |-> `sz + n`]
+    u2s_setup_entry_path) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  rename1 `val_in_memory tv _ _ t.vs_memory` >>
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz + n)` by metis_tac[] >>
+  `w2n (n2w (b+n-LENGTH (num_to_dec_string X)):bytes32) =
+    b+n-LENGTH (num_to_dec_string X)` by
+    (simp[wordsTheory.w2n_n2w] >> irule LESS_MOD >> decide_tac) >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (mp_tac (Q.SPECL [`sz + n`, `sa`] exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
+     simp[exprLoweringPropsTheory.ci_mono_def] >> strip_tac >>
+     gvs[u2s_layout_def, u2s_end_def]) >>
+  qexists_tac `t` >>
+  conj_tac >- (irule u2s_path_then >> qexists_tac `ready` >> simp[]) >>
+  reverse conj_tac >- gvs[u2s_layout_def, u2s_end_def] >>
+  irule vv_post_allocated_memory_intro >> simp[] >>
+  qexistsl_tac [`sa.cs_next_id`, `b`, `sz + n`] >> simp[] >>
+  qpat_x_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  simp_tac (srw_ss()) [u2s_safe_def] >> rpt strip_tac >>
+  first_x_assum drule >> decide_tac
+QED
+
 Theorem u2s_alloc_vv_exit:
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
@@ -2169,7 +2719,7 @@ Theorem u2s_alloc_vv_exit:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2181,26 +2731,9 @@ Theorem u2s_alloc_vv_exit:
       (!fuel r. run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
-  strip_tac >> drule compile_uint2str_layout >> strip_tac >>
-  drule_all u2s_alloc_ready >> strip_tac >>
-  drule_at (Pat `u2s_safe _ _ _ _ _ _ _ _ _ _ _ _`) u2s_setup_entry_exit >>
-  disch_then (qspecl_then [`tv`, `op`, `n`, `fn`, `X`] mp_tac) >> simp[] >> strip_tac >>
-  rename1 `val_in_memory tv _ _ t.vs_memory` >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz)` by metis_tac[] >>
-  `w2n (n2w (b+n-LENGTH (num_to_dec_string X)):bytes32) =
-    b+n-LENGTH (num_to_dec_string X)` by
-    (simp[wordsTheory.w2n_n2w] >> irule LESS_MOD >> decide_tac) >>
-  `sa.cs_next_id < sb.cs_next_id` by
-    (mp_tac (Q.SPECL [`sz`, `sa`] exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
-     simp[exprLoweringPropsTheory.ci_mono_def] >> strip_tac >>
-     gvs[u2s_layout_def, u2s_end_def]) >>
-  qexists_tac `t` >> reverse conj_tac
-  >- (gvs[u2s_layout_def, u2s_end_def] >> metis_tac[]) >>
-  irule vv_post_allocated_memory_intro >> simp[] >>
-  qexistsl_tac [`sa.cs_next_id`, `b`, `sz`] >> simp[] >>
-  qpat_x_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
-  simp_tac (srw_ss()) [u2s_safe_def] >> metis_tac[]
+  strip_tac >> mp_tac u2s_alloc_vv_path >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qexists_tac `t` >> simp[] >> metis_tac[u2s_path_continue]
 QED
 
 Theorem u2s_alloc_vv_frag:
@@ -2209,7 +2742,7 @@ Theorem u2s_alloc_vv_frag:
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2229,7 +2762,7 @@ Theorem compile_uint2str_singleton:
 Proof
   `~names_builtin (Uint2Str n) [e]` by
     (Cases_on `e` >> simp[names_builtin_def]) >>
-  simp[exprSimWordBuiltinsTheory.compile_expr_builtin_dispatch] >>
+  simp[exprSimHypsDefsTheory.compile_expr_builtin_dispatch] >>
   simp[Once (CONJUNCT1 (CONJUNCT2 exprLoweringTheory.compile_expr_raw_def)),
        exprLoweringTheory.compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -2255,6 +2788,8 @@ Proof
   simp[builtin_result_def, vyperContextTheory.evaluate_builtin_def]
 QED
 
+(* The suffix is an actual counted target path from every operand endpoint,
+   whose source reads may run under any replacement of the gas observations. *)
 Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx ty e es /\ expr_type e = BaseT bty /\
@@ -2263,55 +2798,73 @@ Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
     ?x sm. lower_value compile_expr cenv ty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v es' s.
+  (!sa sm sb x vv s0 v gs es' s.
     lower_value compile_expr cenv ty e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
     stmt_state_rel ctx func cenv cx es s0 /\
-    expr_post ctx func cenv cx e es sa sm s0 es' v x s ==>
-    frag_exec ctx sm sb (\t. t = s)
-      (\t. ?r. builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL r /\
-        vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es' (Value r) vv t)
-      (expr_exit (builtin_result cx es'.accounts ann bt [expr_type e] [v]))) ==>
+    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?n r. gas_marked_path F ctx func s n r /\
+      ((?t rv. r = OK t /\
+          builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
+          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+            (Value rv) vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\
+        expr_exit (builtin_result cx es'.accounts ann bt [expr_type e] [v]) r))) ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
-        (simp[FUN_EQ_THM] >> metis_tac[]) >>
-      simp[] >> irule frag_exec_false_pre) >>
+  `!k. bt <> Slice k` by
+    (strip_tac >> strip_tac >> gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >>
+    (drule exprSimSourceTheory.expr_body_pre_builtin_arg >>
      disch_then irule >> gvs[expr_body_pre_def]) >>
   qpat_x_assum `!sa sb vv. _` drule >> strip_tac >>
   `cs_appends (code x)` by simp[] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
-  `!ar es1. (do r <- eval_expr cx e; read_result cx r od) es = (ar,es1) ==>
-     expr_sim_inv cenv cx env es1 /\ expr_res_ok ar /\
-     !v. ar = INL v ==> value_has_type (BaseTV bty) v` by
-    (rpt strip_tac >> drule_all expr_body_pre_base_result >> simp[]) >>
-  drule_at (Pos last) eval_expr_unary_builtin_cases >> simp[] >> strip_tac
-  >- (gvs[] >> irule expr_sim_suffix >>
-      goal_assum (drule_at Any) >> simp[] >>
-      first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-      first_assum (irule_at (Pat `bind _ _ _ = _`)) >> simp[] >> rpt strip_tac >>
-      Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
-  Cases_on `builtin_result cx es'.accounts ann bt [expr_type e] [v]` >>
-  gvs[] >> irule expr_sim_suffix >>
-  goal_assum (drule_at Any) >> simp[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
+  `eval_expr cx (Builtin ann bt [e]) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
+                 INL w => INL (Value w) | INR exc => INR exc), es))` by
+    (irule eval_expr_unary_builtin_action >> simp[]) >>
+  qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
+    (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  irule expr_sim_suffix >>
+  first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `bind _ _ _ = _`)) >> simp[] >> rpt strip_tac >>
-  gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `!sa sm sb x vv s0 s. _` drule_all >> strip_tac >>
-  irule frag_exec_conseq >> first_x_assum (irule_at Any) >> simp[] >> rpt gen_tac >>
-  Cases_on `r` >> gvs[expr_exit_def] >>
-  rename1 `INR exc` >> Cases_on `exc` >> gvs[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
+  rpt strip_tac >>
+  drule_at (Pat `bind _ _ _ = _`)
+    (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
+  disch_then (qspecl_then [`env`, `cenv`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
+    (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[vyperStateTheory.bind_def] >>
+     Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+  qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qexists_tac `REPLICATE n F` >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
+                   INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
+  simp[expr_exit_success_map] >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
 QED
 
 Theorem vv_post_prefix_frag:
@@ -2358,7 +2911,7 @@ Theorem uint2str_numeric_suffix:
   local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz < dimword (:256) ==>
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   frag_exec ctx sm sb (\t. t = s)
     (\t. vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
@@ -2366,7 +2919,7 @@ Theorem uint2str_numeric_suffix:
 Proof
   strip_tac >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  drule_all exprSimOperatorsTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
+  drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
@@ -2412,7 +2965,7 @@ Theorem uint2str_typed_suffix:
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
+    (drule exprSimSourceTheory.expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
   `k <= 256` by gvs[vyperValueTheory.evaluate_type_def] >>
@@ -2435,6 +2988,108 @@ Proof
   qexists_tac `32 * ((n + 31) DIV 32) + 32` >> simp[] >> metis_tac[]
 QED
 
+Theorem uint2str_numeric_path:
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT k) /\
+  lower_value compile_expr cenv ty e sa = (x,sm) /\
+  compile_uint2str x n sz sm = (out,sb) /\ fn_has_code sm sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s0 /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+        es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
+        (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
+  drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
+    metis_tac[expr_body_pre_type_evaluates] >>
+  `eval_operand x s = SOME (n2w X)` by
+    (drule expr_post_word_operand >>
+     simp[vyperValueTheory.evaluate_type_def, is_word_type_def,
+          loweringSliceTheory.word_value_def, valueEncodingTheory.val_to_w256_def,
+          integer_wordTheory.i2w_pos]) >>
+  mp_tac (Q.INST [`X` |-> `X`, `n` |-> `n`] uint2str_result_memory_bounds) >>
+  simp[] >> strip_tac >>
+  `word_size n <= n` by (irule vyperArithTheory.word_size_le >> decide_tac) >>
+  mp_tac (u2s_alloc_vv_path |> Q.INST
+    [`e` |-> `Builtin (BaseT (StringT n)) (Uint2Str n) [e]`, `op` |-> `x`,
+     `sa` |-> `sm`, `fn` |-> `func`, `es` |-> `es'`, `tv` |-> `BaseTV (StringT n)`]
+    |> ONCE_REWRITE_RULE [vv_post_located_mk_ptr]
+    |> SRULE [vyperASTTheory.expr_type_def]) >>
+  impl_tac
+  >- (simp[is_word_type_def, vyperValueTheory.evaluate_type_def,
+           vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  strip_tac >> qexists_tac `t` >> simp[] >>
+  irule vv_post_prefix_frame >>
+  first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[expr_post_frame]
+QED
+
+Theorem uint2str_typed_path:
+  expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
+  expr_type e = BaseT (UintT k) /\ 78 <= n /\
+  lower_value compile_expr cenv ty e sa = (x,sm) /\
+  as_ptr_val (BaseT (StringT n)) LocMemory
+    (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,es') /\
+  value_has_type (BaseTV (UintT k)) v /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?m r. gas_marked_path F ctx func s m r /\
+    ((?t rv. r = OK t /\
+        builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n)
+          [expr_type e] [v] = INL rv /\
+        vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+          es sa sb s0 es' (Value rv) vv t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r /\
+      expr_exit (builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n)
+        [expr_type e] [v]) r))
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (drule exprSimSourceTheory.expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV) forced_eval_expr_preserves_scopes_dom) >>
+     simp[]) >>
+  `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
+    metis_tac[expr_body_pre_type_evaluates] >>
+  `k <= 256` by gvs[vyperValueTheory.evaluate_type_def] >>
+  drule_all exprSimWordBuiltinsTheory.uint_value_word_rep >> strip_tac >>
+  qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  qmatch_goalsub_abbrev_tac `IntV (&X)` >>
+  `X < dimword (:256)` by simp[Abbr `X`, wordsTheory.w2n_lt] >>
+  `?out. compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm =
+           (out,sb) /\
+         vv = LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)` by
+    (Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
+     gvs[exprLoweringTheory.as_ptr_val_def]) >>
+  `type_memory_bytes cenv (BaseT (StringT n)) < 2 ** 64` by
+    metis_tac[uint2str_body_capacity] >>
+  `n <= 32 * word_size n` by simp[le_word_size_mul] >>
+  mp_tac (Q.INST [`sz` |-> `type_memory_bytes cenv (BaseT (StringT n))`]
+    uint2str_numeric_path) >>
+  impl_tac
+  >- (gvs[type_memory_bytes_def, vfmConstantsTheory.word_size_def,
+          wordsTheory.dimword_def]) >>
+  strip_tac >> qexistsl_tac [`0`, `OK t`] >>
+  gvs[uint2str_source_result]
+QED
+
 Theorem compile_uint2str_typed_vv_sim:
   expr_body_pre cenv cx env (Builtin ann (Uint2Str n) [e]) es /\
   expr_sim ctx func cenv cx ty e es ==>
@@ -2452,7 +3107,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       qpat_assum `expr_type e = _`
-        (fn th => irule (REWRITE_RULE [th] uint2str_typed_suffix)) >>
+        (fn th => irule (REWRITE_RULE [th] uint2str_typed_path)) >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >>
