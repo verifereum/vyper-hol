@@ -7,7 +7,7 @@ Ancestors
   lowerDloadReachableDiscipline lowerDloadOperand lowerDloadProvenanceSupport
   lowerDloadVariableTransport lowerDloadTargetGeometry finite_map memLocDefs
   pointerConfinedDefs venomInst contextCodegenRel lowerDloadOpaqueExecution
-  lowerDloadCoverageInvariant lowerDloadPairedBoundary
+  lowerDloadCoverageInvariant lowerDloadPairedBoundary opcodeClass vfmState
 
 (* Terminal interface audit (not a proof of the quoted obligation).
 
@@ -213,3 +213,142 @@ Resume ld_normal_return_observation[execution]:
 QED
 
 Finalise ld_normal_return_observation
+
+Theorem ld_noninvoke_halt_persistent:
+  i.inst_opcode <> INVOKE /\ step_inst fuel C i s = Halt sh ==>
+  sh.vs_call_ctx = s.vs_call_ctx /\
+  (!a. (sh.vs_accounts a).storage = (s.vs_accounts a).storage) /\
+  sh.vs_transient = s.vs_transient /\ sh.vs_immutables = s.vs_immutables /\
+  (step_taint i s sh tn).t_stor = tn.t_stor /\
+  (step_taint i s sh tn).t_trans = tn.t_trans /\
+  (step_taint i s sh tn).t_imm = tn.t_imm
+Proof
+  strip_tac >> drule step_inst_halt_opcodes >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  simp[halt_state_def, set_returndata_def, lookup_account_def,
+       step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
+  rpt gen_tac >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem ld_normal_halt_observation:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  ~in_revert_forward fn s /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel CT i t = Halt th ==>
+  ?sh sn Rs. final_taint vs0 CS sh sn Rs /\
+    th.vs_call_ctx.cc_address = sh.vs_call_ctx.cc_address /\
+    storage_agree_except sn.t_stor
+      (sh.vs_accounts sh.vs_call_ctx.cc_address).storage
+      (th.vs_accounts th.vs_call_ctx.cc_address).storage /\
+    storage_agree_except sn.t_trans
+      (sh.vs_transient sh.vs_call_ctx.cc_address)
+      (th.vs_transient th.vs_call_ctx.cc_address) /\
+    FDOM sh.vs_immutables = FDOM th.vs_immutables /\
+    (!q. q IN FDOM sh.vs_immutables ==>
+      word_agree_except {b | (q,b) IN sn.t_imm}
+        (sh.vs_immutables ' q) (th.vs_immutables ' q)) /\
+    LENGTH sh.vs_returndata = LENGTH th.vs_returndata /\
+    (!q. q < LENGTH sh.vs_returndata /\ q NOTIN Rs ==>
+      EL q sh.vs_returndata = EL q th.vs_returndata) /\
+    (step_taint i t th un).t_stor SUBSET sn.t_stor /\
+    (step_taint i t th un).t_trans SUBSET sn.t_trans /\
+    (step_taint i t th un).t_imm SUBSET sn.t_imm /\
+    ret_taint un i t SUBSET Rs
+Proof
+  strip_tac >>
+  `ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `?sh. step_inst fuel CS i s = Halt sh /\
+    LENGTH sh.vs_returndata = LENGTH th.vs_returndata /\
+    (!q. q < LENGTH sh.vs_returndata /\ q NOTIN ret_taint tn i s ==>
+      EL q sh.vs_returndata = EL q th.vs_returndata) /\
+    ret_taint un i t SUBSET ret_taint tn i s` by
+    (Cases_on `i.inst_opcode = RETURN`
+     >- (drule_all ld_normal_return_observation >> simp[])
+     >> suspend "other_execution") >>
+  suspend "final"
+QED
+
+Resume ld_normal_halt_observation[other_execution]:
+  Cases_on `i.inst_opcode = STOP \/ i.inst_opcode = SINK`
+  >- (gvs[] >>
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[Once step_inst_non_invoke, SimpLHS] >>
+      asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+      strip_tac >> gvs[] >>
+      simp[Once step_inst_non_invoke, SimpLHS] >>
+      asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+      gvs[halt_state_def, set_returndata_def, ret_taint_def, ld_shared_state_def]) >>
+  `i.inst_opcode = SELFDESTRUCT` by metis_tac[step_inst_halt_opcodes] >>
+  suspend "selfdestruct"
+QED
+
+Resume ld_normal_halt_observation[selfdestruct]:
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) i.inst_operands ==> v IN {v | v IN V /\ ~retpc_var fn v}` by
+    (rpt strip_tac >> simp[] >>
+     irule ld_retpc_observable_operand >> simp[] >> qexists_tac `i` >> simp[]) >>
+  `ld_owned_vars {v | v IN V /\ ~retpc_var fn v} E AG BH tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule ld_owned_operand_clean >>
+     goal_assum (drule_at Any) >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (drule_all ld_annotated_taint_ok >> simp[taint_ok_def] >> metis_tac[]) >>
+     irule ld_annotated_scalar_prov >>
+     goal_assum (drule_at Any) >> simp[] >>
+     `fn_ptr_ok P fn` by metis_tac[ld_annotated_fn_member] >>
+     `ptr_use_ok P (fn_pv P fn) i` by (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+     qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+          mem_read_ops_def, mem_write_ops_def] >> metis_tac[]) >>
+  suspend "self_execution"
+QED
+
+Resume ld_normal_halt_observation[self_execution]:
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[ld_shared_state_environment] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  `eval_operand addr_op s = SOME addr` by metis_tac[MEM] >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+  gvs[eval_operands_def, halt_state_def, set_returndata_def, ret_taint_def]
+QED
+
+Resume ld_normal_halt_observation[final]:
+  `final_taint vs0 CS sh (step_taint i s sh tn) (ret_taint tn i s)` by
+    (drule ld_annotated_erasure >>
+     drule ld_annotated_active_inst >>
+     simp[final_taint_def] >> metis_tac[]) >>
+  qexistsl_tac [`sh`,`step_taint i s sh tn`,`ret_taint tn i s`] >>
+  simp[] >>
+  `sh.vs_call_ctx = s.vs_call_ctx /\
+   (!a. (sh.vs_accounts a).storage = (s.vs_accounts a).storage) /\
+   sh.vs_transient = s.vs_transient /\ sh.vs_immutables = s.vs_immutables /\
+   (step_taint i s sh tn).t_stor = tn.t_stor /\
+   (step_taint i s sh tn).t_trans = tn.t_trans /\
+   (step_taint i s sh tn).t_imm = tn.t_imm` by
+    (irule ld_noninvoke_halt_persistent >> metis_tac[]) >>
+  `th.vs_call_ctx = t.vs_call_ctx /\
+   (!a. (th.vs_accounts a).storage = (t.vs_accounts a).storage) /\
+   th.vs_transient = t.vs_transient /\ th.vs_immutables = t.vs_immutables /\
+   (step_taint i t th un).t_stor = un.t_stor /\
+   (step_taint i t th un).t_trans = un.t_trans /\
+   (step_taint i t th un).t_imm = un.t_imm` by
+    (irule ld_noninvoke_halt_persistent >> metis_tac[]) >>
+  gvs[ld_shared_state_def]
+QED
+
+Finalise ld_normal_halt_observation
