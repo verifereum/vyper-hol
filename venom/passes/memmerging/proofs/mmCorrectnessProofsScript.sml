@@ -639,7 +639,7 @@ Theorem step_mem_write_only_memory[local]:
     s' with vs_memory := s.vs_memory = s
 Proof
   rpt strip_tac >> gvs[] >> gvs[inst_wf_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def,
       exec_write2_def, mstore_def, mcopy_def, LET_THM] >>
   BasicProvers.every_case_tac >> gvs[wmexp_only_changes_memory] >>
   simp[venom_state_component_equality]
