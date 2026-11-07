@@ -2,6 +2,7 @@ Theory concretizeLayoutCallRunEntry
 Ancestors concretizeLayoutCallEntryAnnotations concretizeLayoutCallSetupMemory
   concretizeLayoutCallSetupFields concretizeLayoutPhaseInputs
   concretizeLayoutScopedRun concretizeLayoutPhaseOrigin concretizeLayoutArgumentRoots
+  concretizeLayoutCanonicalIndex
   concretizeLayoutBlockEntry concretizeLayoutCallControl
   concretizeLayoutFrameEnvironment frameResolvedCoherent frameActivationLifetime
   frameJointTransition frameJointTrace concretizeStepStructure venomWf venomInstProofs1
@@ -34,7 +35,7 @@ Theorem layout_selected_call_scoped_run:
     setup_callee target args' caller' = SOME ct /\
     h.lop_cursor = SUC n /\ h.lop_ids = SUC n::a.lop_ids /\
     h.lop_ids = EL (SUC n) (lifetime_annotations 0 [0] es) /\
-    ~h.lop_pending /\ layout_ordinary_trace vs0 C q0 es qs q h cs /\
+    layout_phase_canonical es h /\ ~h.lop_pending /\ layout_ordinary_trace vs0 C q0 es qs q h cs /\
     layout_ordinary_state D lo C' q0 es qs h cs ct /\
     layout_scoped_run D lo vs0 C C' q0 es qs q g callee target cs ct
 Proof
@@ -122,7 +123,7 @@ Proof
     layout_ordinary_state D lo C' q0 es qs h cs tc` by
     (simp[Abbr `h`, layout_ordinary_trace_def, layout_ordinary_state_def] >>
      fs[joint_trace_def] >> drule joint_chain_length >> simp[]) >>
-  qexists `h` >> simp[Abbr `h`] >>
+  qexists `h` >> simp[Abbr `h`, layout_phase_canonical_def] >>
   irule layout_scoped_run_intro >> goal_assum (drule_at Any) >> simp[]
 QED
 
