@@ -70,12 +70,12 @@ Proof
   `alloca_history func s` by fs[array_round_frame_def] >>
   drule array_condition_boundary_mem >> simp[] >>
   disch_then drule >> simp[] >> strip_tac >>
-  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> conj_tac
   >- simp[gas_marked_path_def] >>
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
-     rpt strip_tac >> metis_tac[]) >>
+     rpt strip_tac >> fs[Abbr `t`, jump_to_def] >> metis_tac[]) >>
   fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs]
 QED
 
@@ -102,10 +102,10 @@ Proof
   `alloca_history func s` by fs[array_round_frame_def] >>
   drule array_increment_boundary_mem >> simp[] >>
   disch_then drule >> simp[] >> strip_tac >>
-  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def, ADD1] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> fs[Abbr `t`, jump_to_def] >> metis_tac[]
 QED
 
 Theorem array_round_break:
@@ -172,10 +172,10 @@ Proof
   `alloca_history func s` by fs[array_round_frame_def] >>
   drule array_condition_boundary_mem >> simp[] >>
   disch_then drule >> simp[] >> strip_tac >>
-  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> fs[Abbr `t`, jump_to_def] >> metis_tac[]
 QED
 
 Theorem array_iter_copy_no_gas[local]:
