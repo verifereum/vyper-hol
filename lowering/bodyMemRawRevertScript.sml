@@ -10,7 +10,8 @@ Theorem body_raw_revert_mem_case:
   !cx v22 es v23.
     body_exprs_mem_ok cx es ==> body_expr_mem_ok cx (Call v22 RawRevert es v23)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> disch_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   drule raw_revert_pre_arg >> strip_tac >> gvs[] >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es'` by

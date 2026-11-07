@@ -26,7 +26,7 @@ Proof
   `!ty. expr_sim_mem ctx func cenv cx ty e es /\
         expr_vv_sim_mem ctx func cenv cx ty e es` by
     (gen_tac >>
-     qpat_x_assum `body_expr_mem_ok _ _` (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+     qpat_x_assum `body_expr_mem_ok _ _` (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
      disch_then irule >> metis_tac[]) >>
   irule compile_if_stmt_frag_mem >> simp[stmts_env_cs_mono] >>
   reverse conj_tac >- metis_tac[compile_expr_grows] >>
@@ -76,7 +76,7 @@ Proof
   `!ty. expr_sim_mem ctx func cenv cx ty e es /\
         expr_vv_sim_mem ctx func cenv cx ty e es` by
     (gen_tac >>
-     qpat_x_assum `body_expr_mem_ok _ _` (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+     qpat_x_assum `body_expr_mem_ok _ _` (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
      disch_then irule >> metis_tac[]) >>
   irule compile_if_stmt_frag_mem >> simp[stmts_env_cs_mono] >>
   conj_tac >- metis_tac[compile_expr_grows] >>

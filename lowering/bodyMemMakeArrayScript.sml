@@ -12,7 +12,8 @@ Theorem body_make_array_mem_case:
      body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Builtin ty (MakeArray t n) es)
 Proof
-  rpt strip_tac >> rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >>
+  rpt strip_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >> rpt gen_tac >>
   strip_tac >>
   Cases_on `!e. MEM e es ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`

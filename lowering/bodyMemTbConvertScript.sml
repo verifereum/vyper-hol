@@ -34,7 +34,8 @@ Theorem body_type_builtin_convert_mem_case:
        body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (TypeBuiltin v11 (Convert) typ es)
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   Cases_on `?e1 a f cargs d. es = [e1] /\ e1 = Call a (IntCall f) cargs d /\
                              lowered_value_type cenv e1 <> expr_type e1`

@@ -53,6 +53,23 @@ Proof
   simp[]
 QED
 
+(* Introduction form of body_expr_mem_ok, as bodySim's body_expr_ok_intro:
+   the array-literal clause first, then the simulation. *)
+Theorem body_expr_mem_ok_intro:
+  !cx e.
+    (!a t n elems.
+       e = Builtin a (MakeArray t n) elems /\
+       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+       body_exprs_mem_ok cx elems) /\
+    (!tops ctx func cenv env ty es.
+       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+       expr_sim_mem ctx func cenv cx ty e es /\
+       expr_vv_sim_mem ctx func cenv cx ty e es) ==>
+    body_expr_mem_ok cx e
+Proof
+  rpt strip_tac >> once_rewrite_tac[body_expr_mem_ok_def] >> metis_tac[]
+QED
+
 Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.

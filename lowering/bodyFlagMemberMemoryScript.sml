@@ -95,7 +95,8 @@ QED
 Theorem body_flag_member_mem_case:
   !cx ann nsid mid. body_expr_mem_ok cx (FlagMember ann nsid mid)
 Proof
-  rpt gen_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   metis_tac[compile_flag_member_body_sim_mem,
             compile_flag_member_body_vv_sim_mem]

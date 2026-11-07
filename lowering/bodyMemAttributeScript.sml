@@ -10,7 +10,10 @@ Ancestors
 Theorem body_attribute_mem_ok:
   !cx v9 e id. body_expr_mem_ok cx e ==> body_expr_mem_ok cx (Attribute v9 e id)
 Proof
-  rpt gen_tac >> rewrite_tac[body_expr_mem_ok_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> (match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
+  qpat_x_assum `body_expr_mem_ok _ _`
+    (assume_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
   rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
   `expr_vv_sim_mem ctx func cenv cx ty e es` by metis_tac[] >>
