@@ -4,6 +4,7 @@ Ancestors
   compileEnv exprLoweringProps emitHelper list exprSimSource exprSimHypsDefs exprSimDefs
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom gasSummary gasContext
   exprSimAggregateChildren emitHelperProps exprSimVVFrame fragGasMode
+  exprSimProps loweringPosts stmtSimDefs
   venomExecSemantics venomInstProofs venomInst venomState
 Libs
   monadsyntax
@@ -134,4 +135,18 @@ Proof
   gvs[gas_marked_path_def, update_var_def, eval_operand_def, lookup_var_def] >>
   gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
       fresh_var_def, fresh_id_def, emit_def]
+QED
+
+Theorem aggregate_body_tuple_local_region_backward:
+  !es es1 s0 s1 sa sb ctx func ce cx e tv vv name b sz.
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  vv_post ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
+  local_region ce es1.scopes s1 name b sz ==>
+  local_region ce es.scopes s0 name b sz
+Proof
+  rpt strip_tac >> irule local_region_frame >>
+  fs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
+  conj_tac >- (qexists_tac `func` >> simp[]) >>
+  qexistsl_tac [`sa`, `es1.scopes`, `s1`] >> simp[]
 QED
