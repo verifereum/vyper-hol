@@ -13,7 +13,7 @@ local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
   val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
   val p2 = ``\(cx:evaluation_context) (it:iterator). T``
-  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
+  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T``
   val p4 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
   val p5 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
   val p6 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
