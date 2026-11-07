@@ -4,7 +4,7 @@ Theory whitelistForIterImmLoop
 Ancestors
   whitelistForIterImmCopy whitelistForIterImmFrame whitelistForIterDynLoop
   exprSimTopLevelImmutable stmtLowering exprLoweringProps compileEnv context
-  vyperAST list finite_map
+  vyperAST list finite_map stmtSimForArrayParts stmtSimProps emitHelper
 Libs
   monadsyntax
 
@@ -75,4 +75,100 @@ Proof
   ntac 10 (pairarg_tac >> gvs[]) >>
   ntac 10 (pairarg_tac >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[]
+QED
+
+(* The prefix certificate starts after the optional immutable length load.
+   Fixed arrays reuse the MUL result; only dynamic arrays add a header. *)
+Theorem compile_for_immutable_prefix:
+  cenv.ce_alloca_locals /\
+  (do bc <- declare_local cenv id et;
+      emit_local_alloca bc id;
+      entry <- fresh_label "iter_entry";
+      cond <- fresh_label "iter_cond";
+      bod <- fresh_label "iter_body";
+      incr <- fresh_label "iter_incr";
+      exit <- fresh_label "iter_exit";
+      emit_inst JMP [Label entry] [];
+      new_block entry;
+      idx <- fresh_var;
+      emit_inst ASSIGN [Lit 0w] [idx];
+      (if dyn then
+         do invalid <- emit_op GT [lvo; Lit (n2w cap)];
+            valid <- emit_op ISZERO [invalid];
+            emit_void ASSERT [valid] od
+       else return ());
+      emit_inst JMP [Label cond] [];
+      new_block cond;
+      done <- emit_op EQ [Var idx; lvo];
+      emit_inst JNZ [done; Label exit; Label bod] [];
+      new_block bod;
+      offv <- emit_op MUL [Var idx;
+                 Lit (n2w (elem_size_in_location cenv LocCode et))];
+      tot <- (if dyn then emit_op ADD [Lit 32w; offv] else return offv);
+      ep <- emit_op ADD [Lit (n2w off); tot];
+      return (bc,entry,cond,bod,incr,exit,idx,offv,tot,ep)
+   od) st1 = ((bc,entry,cond,bod,incr,exit,idx,offo,toto,epo),sa) ==>
+  ?p dv ov ep h.
+    p = STRING #"%" (toString st1.cs_next_var) /\
+    idx = STRING #"%" (toString (st1.cs_next_var + 1)) /\
+    dv = STRING #"%" (toString (st1.cs_next_var + (if dyn then 4 else 2))) /\
+    ov = STRING #"%" (toString (st1.cs_next_var + (if dyn then 5 else 3))) /\
+    ep = STRING #"%" (toString (st1.cs_next_var + (if dyn then 7 else 4))) /\
+    h = st1.cs_next_id + (if dyn then 9 else 6) /\
+    offo = Var ov /\ epo = Var ep /\
+    (if dyn then ?tv. toto = Var tv else toto = Var ov) /\
+    entry = fresh_label_output "iter_entry" st1.cs_next_label /\
+    cond = fresh_label_output "iter_cond" (st1.cs_next_label + 1) /\
+    bod = fresh_label_output "iter_body" (st1.cs_next_label + 2) /\
+    incr = fresh_label_output "iter_incr" (st1.cs_next_label + 3) /\
+    exit = fresh_label_output "iter_exit" (st1.cs_next_label + 4) /\
+    declare_local cenv id et st1 =
+      (bc, st1 with cs_next_var := st1.cs_next_var + 1) /\
+    FLOOKUP bc.ce_vars id =
+      SOME (PtrVar (Var p) (type_memory_bytes cenv et)) /\
+    sa.cs_current_bb = bod /\
+    sa.cs_current_insts =
+      [mk_inst h MUL
+         [Var idx; Lit (n2w (elem_size_in_location cenv LocCode et))] [ov]] ++
+      (if dyn then [mk_inst (h + 1) ADD [Lit 32w; Var ov]
+                       [STRING #"%" (toString (st1.cs_next_var + 6))]] else []) ++
+      [mk_inst (h + (if dyn then 2 else 1)) ADD
+         [Lit (n2w off); toto] [ep]] /\
+    sa.cs_next_var = st1.cs_next_var + (if dyn then 8 else 5) /\
+    sa.cs_next_id = h + (if dyn then 3 else 2) /\
+    sa.cs_next_label = st1.cs_next_label + 5 /\
+      sa.cs_blocks =
+        [<|bb_label := cond; bb_instructions :=
+           [mk_inst (h - 2) EQ [Var idx; lvo] [dv];
+            mk_inst (h - 1) JNZ [Var dv; Label exit; Label bod] []]|>;
+         <|bb_label := entry; bb_instructions :=
+           [mk_inst (st1.cs_next_id + 2) ASSIGN [Lit 0w] [idx]] ++
+           (if dyn then
+             [mk_inst (st1.cs_next_id + 3) GT [lvo; Lit (n2w cap)]
+                [STRING #"%" (toString (st1.cs_next_var + 2))];
+              mk_inst (st1.cs_next_id + 4) ISZERO
+                [Var (STRING #"%" (toString (st1.cs_next_var + 2)))]
+                [STRING #"%" (toString (st1.cs_next_var + 3))];
+              mk_inst (st1.cs_next_id + 5) ASSERT
+                [Var (STRING #"%" (toString (st1.cs_next_var + 3)))] []]
+            else []) ++
+           [mk_inst (h - 3) JMP [Label cond] []]|>;
+         <|bb_label := st1.cs_current_bb; bb_instructions :=
+           st1.cs_current_insts ++
+           [mk_inst st1.cs_next_id ALLOCA
+              [Lit (n2w (type_memory_bytes cenv et))] [p];
+            mk_inst (st1.cs_next_id + 1) JMP [Label entry] []]|>] ++ st1.cs_blocks
+Proof
+  strip_tac >>
+  Cases_on `declare_local cenv id et st1` >>
+  rename1 `declare_local cenv id et st1 = (bc0,st2)` >>
+  drule_all declare_local_ptr >> strip_tac >>
+  qpat_x_assum `_ st1 = ((bc,entry,cond,bod,incr,exit,idx,offo,toto,epo),sa)` mp_tac >>
+  Cases_on `dyn` >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[emit_local_alloca_def, fresh_label_def, emit_inst_def, emit_op_def,
+       emit_void_def, fresh_id_def, emit_def, new_block_def, fresh_var_def,
+       comp_get_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       LET_THM] >> strip_tac >> gvs[] >>
+  simp[GSYM arithmeticTheory.ADD_ASSOC] >> metis_tac[]
 QED
