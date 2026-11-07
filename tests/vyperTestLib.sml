@@ -373,7 +373,8 @@ val () = holbuild_extra_deps [
   "semantics-build-constraints.txt",
   "../tools/vyper_test_exports.py",
   "../tools/vyper_test_export_plugin.py",
-  "../.github/actions/setup-vyper-test-exports/action.yml"
+  "../.github/actions/setup-vyper-test-exports/action.yml",
+  "vyper-regression"
 ];
 
 fun print_file_coverage json_path report = let
@@ -770,7 +771,7 @@ end
 
 fun check_export_provenance json_path = let
   fun find_repo dir =
-    if OS.FileSys.access (OS.Path.concat (dir, "holproject.toml"), []) andalso
+    if OS.FileSys.access (OS.Path.concat (dir, "VYPER_PIN"), []) andalso
        OS.FileSys.access
          (OS.Path.concat (dir, "tools/vyper_test_exports.py"), []) then dir
     else let val parent = OS.Path.getParent dir in
