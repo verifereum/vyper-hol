@@ -80,6 +80,8 @@ Theorem registration_resource_decoder_run:
     eval_operand buf.buf_operand t = SOME (n2w p) /\
     entry_loop_fields initial t /\
     initial.vs_alloca_next <= ready.vs_alloca_next /\ ready.vs_memory = initial.vs_memory /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op ready = eval_operand op initial) /\
     (!id entry. FLOOKUP initial.vs_allocas id = SOME entry ==>
       FLOOKUP ready.vs_allocas id = SOME entry) /\
     (!id. id <> st.cs_next_id ==>
