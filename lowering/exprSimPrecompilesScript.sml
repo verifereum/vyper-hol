@@ -2022,8 +2022,21 @@ Theorem wb_frame_readonly_input:
      local_region cenv es.scopes t name b sz) ==>
   wb_frame cenv es es sa s u
 Proof
-  simp[wb_frame_def, locals_kept_def, popped_kept_def] >> rpt strip_tac >> gvs[] >>
-  metis_tac[]
+  strip_tac >>
+  `!name b sz. local_region cenv es.scopes t name b sz <=>
+               local_region cenv es.scopes s name b sz` by metis_tac[] >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+  qpat_assum `!name b sz. _ <=> _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `t.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `t.vs_memory = _` (fn th => rewrite_tac[th]) >>
+  strip_tac >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> _`
+        drule_all >> strip_tac >>
+      qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x t = SOME w ==> _`
+        drule_all >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem precompile_write_immutables[local]:
