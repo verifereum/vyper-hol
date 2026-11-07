@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeFramedArrayBody
 Ancestors
   exprSimAbiEncodeFramedPhases exprSimAbiEncodeFramedBuiltin
+  exprSimAbiEncodeSemantic
   abiEncoderWindowArrayBody abiEncoderArrayBodyCode abiEncoderArrayCode
   abiEncoderWindowArrayInvariant abiEncoderWindowArrayLayout arithmetic
   abiEncoderAdmissible pred_set abiEncoderArrayTail abiEncoderRegisteredEffect
@@ -15,7 +16,10 @@ Theorem abi_encode_framed_ordinary_pure_sequence:
   window_pure_seq st en s t /\
   EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en) ==>
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en) ==>
   abi_encode_exec_frame func s t
 Proof
   strip_tac >>
@@ -28,6 +32,7 @@ Proof
      simp[window_pure_seq_def, window_seq_def] >>
      rpt strip_tac >> irule step_inst_base_preserves_fmp_ordinary >>
      qexists_tac `i` >> simp[] >> fs[EVERY_MEM]) >>
+  drule_all abi_encode_semantic_ordinary_sequence >> strip_tac >>
   gvs[window_pure_seq_def, abi_encode_exec_frame_def, pending_alloca_size_def]
 QED
 
@@ -35,7 +40,10 @@ Theorem abi_encode_framed_array_addresses_opcodes:
   abi_encode_array_addresses ip src dst asz msz st = (coords,en) ==>
   EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en)
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en)
 Proof
   simp[abi_encode_array_addresses_def, abi_decode_array_head_setup_def,
     abi_decode_indexed_coordinates_def, comp_bind_def, comp_ignore_bind_def,
@@ -248,7 +256,10 @@ Theorem abi_encode_framed_array_tail_opcodes:
   abi_encode_array_tail data_op dp st = (ops,en) ==>
   EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en)
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en)
 Proof
   simp[abi_encode_array_tail_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
@@ -381,7 +392,10 @@ Proof
   strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en)` by
     (drule emitted_insts_emit_op >>
      simp[mk_inst_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
   `abi_encode_exec_frame func s t` by

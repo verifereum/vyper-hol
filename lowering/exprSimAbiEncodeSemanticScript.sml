@@ -68,3 +68,40 @@ Theorem abi_encode_semantic_obs_storage_updates[simp]:
 Proof
   simp[abi_encode_semantic_obs_def]
 QED
+
+Theorem abi_encode_semantic_ordinary_step:
+  ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
+  ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+  i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+  i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+  i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2 /\
+  step_inst_base i s = OK t ==>
+  abi_encode_semantic_obs t = abi_encode_semantic_obs s
+Proof
+  strip_tac >> Cases_on `i.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def] >>
+  gvs[mstore_def, mstore8_def, mcopy_def, sstore_def, tstore_def,
+      write_memory_with_expansion_def, exec_gas_def, AllCaseEqs(), update_var_def]
+QED
+
+Theorem abi_encode_semantic_ordinary_sequence:
+  EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
+    ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) code /\
+  run_inst_seq code s = OK t ==>
+  abi_encode_semantic_obs t = abi_encode_semantic_obs s
+Proof
+  strip_tac >> irule run_inst_seq_preserves_field >>
+  qexists_tac `code` >> asm_simp_tac bool_ss [] >> rpt strip_tac >>
+  irule abi_encode_semantic_ordinary_step >> qexists_tac `i` >>
+  asm_simp_tac bool_ss [] >> fs[EVERY_MEM]
+QED
