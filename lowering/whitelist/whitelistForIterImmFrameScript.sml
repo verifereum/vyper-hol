@@ -850,3 +850,366 @@ Proof
     first_x_assum drule_all >> simp[]) >>
   gvs[raise_def]
 QED
+
+Theorem for_immutable_frame:
+  !cx id typ it n stmts src name es res es'.
+    (!s r t. eval_iterator cx it s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    (!s r t. eval_stmts cx stmts s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    eval_stmt cx (For id typ it n stmts) es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >> imp_res_tac lift_option_type_state >> imp_res_tac check_state >>
+  gvs[IgnAsm `!s r t. _`] >>
+  qpat_x_assum `!s r t. eval_iterator _ _ _ = _ ==> _` drule >> strip_tac
+  >~ [`eval_for _ _ _ _ _ _ = _`]
+  >- (drule_at (Pat `eval_for _ _ _ _ _ _ = _`) eval_for_immutable_frame >>
+      disch_then (qspecl_then [`src`,`name`] mp_tac) >>
+      (impl_tac >- simp[]) >> simp[]) >>
+  gvs[IgnAsm `!s r t. _`]
+QED
+
+Theorem annassign_immutable_frame:
+  !cx id typ e src name es res es'.
+    (!s r t. eval_expr cx e s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    eval_stmt cx (AnnAssign id typ e) es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac lift_option_type_state >> imp_res_tac read_result_state >>
+  gvs[IgnAsm `!s r t. _`] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  qpat_x_assum `new_variable _ _ _ _ = _` mp_tac >>
+  simp[new_variable_def, get_scopes_def, set_scopes_def, bind_def,
+       ignore_bind_def, type_check_def, assert_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> rename1 `lookup_scopes id mid.scopes = NONE` >>
+  Cases_on `mid.scopes` >>
+  gvs[set_scopes_def, return_def, raise_def, lookup_immutable_def]
+QED
+
+Theorem if_immutable_frame:
+  !cx e ss1 ss2 src name es res es'.
+    (!s r t. eval_expr cx e s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    (!s r t. eval_stmts cx ss1 s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    (!s r t. eval_stmts cx ss2 s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    eval_stmt cx (If e ss1 ss2) es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, ignore_bind_def, push_scope_def,
+       get_scopes_def, set_scopes_def, return_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule >> strip_tac
+  >~ [`v = INR exc`]
+  >- gvs[IgnAsm `!s r t. _`] >>
+  `!s r t. switch_BoolV cx tv (eval_stmts cx ss1) (eval_stmts cx ss2) s = (r,t) ==>
+     lookup_immutable cx t src name = lookup_immutable cx s src name` by
+    (rpt gen_tac >>
+     simp[switch_BoolV_def, bind_def, AllCaseEqs()] >> strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     rename1 `(if value = BoolV T then _ else _) _ = _` >>
+     Cases_on `value = BoolV T` >> Cases_on `value = BoolV F` >>
+     gvs[raise_def] >> first_x_assum drule >> simp[]) >>
+  drule_at (Pat `finally _ _ _ = _`) finally_pop_immutable_frame >>
+  disch_then (qspecl_then [`src`,`name`,`cx`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  `!f. lookup_immutable cx (s'' with scopes updated_by f) src name =
+       lookup_immutable cx s'' src name` by simp[NoAsms, lookup_immutable_def] >>
+  simp[]
+QED
+
+Theorem range_iterator_immutable_frame:
+  !cx a b src name es res es'.
+    (!s r t. eval_expr cx a s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    (!s r t. eval_expr cx b s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    eval_iterator cx (Range a b) es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
+  gvs[return_def] >> metis_tac[]
+QED
+
+Theorem array_iterator_immutable_frame:
+  !cx e src name es res es'.
+    (!s r t. eval_expr cx e s = (r,t) ==>
+      lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+    eval_iterator cx (Array e) es = (res,es') ==>
+    lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  gvs[return_def] >> metis_tac[]
+QED
+
+Theorem literal_immutable_frame[local]:
+  eval_expr cx (Literal ty lit) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem name_immutable_frame[local]:
+  eval_expr cx (Name ty id) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
+       ignore_bind_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem typed_immutable_frames_mutual:
+  (!tops bindings stmt. supported_stmt tops bindings stmt ==>
+    !env ret_ty env' src name elem bound cx es res es'.
+      (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+       type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+      type_stmt env ret_ty stmt = SOME env' /\
+      stmt_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) stmt /\
+      ~supported_stmt_expr_exists expr_internal_call_root stmt /\
+      eval_stmt cx stmt es = (res,es') ==>
+      lookup_immutable cx es' src name = lookup_immutable cx es src name) /\
+  (!tops bindings stmts. supported_stmts tops bindings stmts ==>
+    !env ret_ty env' src name elem bound cx es res es'.
+      (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+       type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+      type_stmts env ret_ty stmts = SOME env' /\
+      stmts_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) stmts /\
+      ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+      eval_stmts cx stmts es = (res,es') ==>
+      lookup_immutable cx es' src name = lookup_immutable cx es src name)
+Proof
+  ho_match_mp_tac supported_stmt_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  >>~- ([`eval_stmt _ Pass _ = _`], gvs[Once evaluate_def, return_def])
+  >>~- ([`eval_stmt _ Break _ = _`], gvs[Once evaluate_def, raise_def])
+  >>~- ([`eval_stmt _ Continue _ = _`], gvs[Once evaluate_def, raise_def])
+  >>~- ([`eval_stmt _ (Return NONE) _ = _`], gvs[Once evaluate_def, raise_def])
+  >>~- ([`eval_stmts _ [] _ = _`], gvs[Once evaluate_def, return_def])
+  >>~- ([`eval_stmt _ (Assign _ _) _ = _`], metis_tac[typed_assign_immutable_frame])
+  >>~- ([`eval_stmt _ (AugAssign _ _ _ _) _ = _`], metis_tac[typed_augassign_immutable_frame])
+  >>~- ([`eval_stmt _ (Append _ _) _ = _`], metis_tac[typed_append_immutable_frame])
+  >>~- ([`eval_stmt _ (AnnAssign _ _ _) _ = _`],
+      gvs[supported_stmt_def, stmt_writes_ok_def, supported_stmt_expr_exists_def] >>
+      irule annassign_immutable_frame >> goal_assum (drule_at Any) >>
+      metis_tac[supported_expr_immutable])
+  >>~- ([`eval_stmt _ (Expr _) _ = _`], suspend "expr")
+  >>~- ([`eval_stmt _ (Return (SOME _)) _ = _`], suspend "return")
+  >>~- ([`eval_stmt _ (If _ _ _) _ = _`], suspend "if")
+  >>~- ([`eval_stmt _ (For _ _ _ _ _) _ = _`], suspend "for")
+  >>~- ([`eval_stmt _ (Assert _ _) _ = _`], suspend "assert")
+  >>~- ([`eval_stmt _ (Raise _) _ = _`], suspend "raise")
+  >>~- ([`eval_stmt _ (Log _ _) _ = _`], suspend "log")
+  >> suspend "cons"
+QED
+
+Resume typed_immutable_frames_mutual[expr]:
+  markerLib.RESUME_TAC >>
+  gvs[supported_stmt_def, stmt_writes_ok_def, supported_stmt_expr_exists_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, type_check_def, assert_def,
+       ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac supported_expr_immutable >> gvs[]
+QED
+
+Resume typed_immutable_frames_mutual[return]:
+  markerLib.RESUME_TAC >>
+  gvs[supported_stmt_def, stmt_writes_ok_def, supported_expr_exists_def, supported_stmt_expr_exists_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac supported_expr_immutable >> imp_res_tac read_result_state >> gvs[]
+QED
+
+Resume typed_immutable_frames_mutual[if]:
+  rpt gen_tac >> strip_tac >>
+  gvs[IgnAsm `!env ret_ty env' src name elem bound cx es res es'. _`,
+      supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  fs[IgnAsm `!env ret_ty env' src name elem bound cx es res es'. _`,
+     optionTheory.IS_SOME_EXISTS] >>
+  (irule if_immutable_frame >> goal_assum (drule_at Any) >>
+   (conj_tac >- metis_tac[supported_pure_immutable_mutual]) >>
+   conj_tac >> rpt gen_tac >> strip_tac >> metis_tac[])
+QED
+Resume typed_immutable_frames_mutual[for]:
+  rpt gen_tac >> strip_tac >>
+  rename1 `eval_stmt cx (For id typ it n stmts) es = _` >>
+  gvs[IgnAsm `!env ret_ty env' src name elem bound cx es res es'. _`,
+      supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  (irule for_immutable_frame >> goal_assum (drule_at Any) >>
+   conj_tac
+   >- (rpt gen_tac >> strip_tac >> Cases_on `it`
+       >~ [`eval_iterator _ (Array _) _ = _`]
+       >- (drule supported_array_iterator_shape >> strip_tac >> gvs[] >>
+           irule array_iterator_immutable_frame >> goal_assum (drule_at Any) >>
+           metis_tac[name_immutable_frame]) >>
+       irule range_iterator_immutable_frame >> goal_assum (drule_at Any) >>
+       rename1 `supported_iterator tops typ (Range a b) n` >>
+       Cases_on `a`
+       >~ [`supported_iterator _ _ (Range (Literal aty alit) _) _`]
+       >- (Cases_on `b`
+           >~ [`supported_iterator _ _ (Range (Literal _ _) (Literal bty blit)) _`]
+           >- (Cases_on `alit` >> Cases_on `blit` >>
+               gvs[supported_iterator_def, supported_iterator_exists_def] >>
+               metis_tac[literal_immutable_frame, supported_pure_immutable_mutual]) >>
+           gvs[supported_iterator_def, supported_iterator_exists_def] >>
+           metis_tac[literal_immutable_frame, supported_pure_immutable_mutual]) >>
+       gvs[supported_iterator_def, supported_iterator_exists_def] >>
+       metis_tac[supported_pure_immutable_mutual]) >>
+   rpt gen_tac >> strip_tac >>
+   fs[IgnAsm `!env ret_ty env' src name elem bound cx es res es'. _`,
+      optionTheory.IS_SOME_EXISTS] >>
+   metis_tac[immutable_target_type_extend_local])
+QED
+Resume typed_immutable_frames_mutual[assert]:
+  markerLib.RESUME_TAC >> (  rename1 `eval_stmt cx (Assert cond reason) es = _` >>
+  Cases_on `reason` >> gvs[supported_stmt_def, supported_assert_reason_def,
+      supported_stmt_expr_exists_def, supported_assert_exists_def]
+  >~ [`eval_stmt _ (Assert _ AssertBare) _ = _`]
+  >- suspend "assert_bare"
+  >~ [`eval_stmt _ (Assert _ AssertUnreachable) _ = _`]
+  >- suspend "assert_unreachable"
+  >> suspend "assert_reason")
+QED
+Resume typed_immutable_frames_mutual[raise]:
+  markerLib.RESUME_TAC >> (  rename1 `eval_stmt cx (Raise reason) es = _` >>
+  Cases_on `reason` >>
+  gvs[supported_stmt_def, supported_raise_reason_def,
+      supported_stmt_expr_exists_def, supported_raise_exists_def]
+  >~ [`eval_stmt _ (Raise RaiseBare) _ = _`]
+  >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmt _ (Raise RaiseUnreachable) _ = _`]
+  >- gvs[Once evaluate_def, raise_def] >>
+  rename1 `supported_string_reason tops rhs` >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==>
+     lookup_immutable cx t src name = lookup_immutable cx s src name` by
+    (Cases_on `rhs` >> gvs[supported_string_reason_def] >>
+     metis_tac[literal_immutable_frame, supported_pure_immutable_mutual]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  gvs[IgnAsm `!s r t. _`] >> first_x_assum drule >> strip_tac >> gvs[])
+QED
+Resume typed_immutable_frames_mutual[log]:
+  markerLib.RESUME_TAC >>
+  gvs[supported_stmt_def, supported_log_def,
+      supported_stmt_expr_exists_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac supported_pure_exprs_immutable >> imp_res_tac read_results_state >>
+  imp_res_tac lift_option_state >> imp_res_tac push_log_immutables >>
+  gvs[] >> metis_tac[same_immutables_observation]
+QED
+Resume typed_immutable_frames_mutual[cons]:
+  markerLib.RESUME_TAC >>
+  rpt gen_tac >> strip_tac >>
+  fs[supported_stmt_def] >>
+  gvs[IgnAsm `!env ret_ty env' src name elem bound cx es res es'. _`,
+      stmt_writes_ok_def, supported_stmt_expr_exists_def,
+      Once type_stmt_def, AllCaseEqs()] >>
+  imp_res_tac immutable_target_type_stmt >>
+  qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, ignore_bind_def, bind_def, AllCaseEqs()] >>
+  strip_tac >>
+  `lookup_immutable cx s'' src name = lookup_immutable cx es src name` by
+    (qpat_assum `!env ret_ty env' src name elem bound cx es res es'.
+       _ /\ type_stmt _ _ _ = _ /\ _ ==> _` irule >>
+     goal_assum (drule_at Any) >>
+     conj_tac >- metis_tac[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  `lookup_immutable cx es' src name = lookup_immutable cx s'' src name`
+    suffices_by metis_tac[] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+Resume typed_immutable_frames_mutual[assert_bare]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac supported_pure_immutable_mutual >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  rename1 `(if v = BoolV T then _ else _) _ = _` >>
+  Cases_on `v = BoolV T` >> Cases_on `v = BoolV F` >>
+  gvs[return_def, raise_def]
+QED
+
+Resume typed_immutable_frames_mutual[assert_unreachable]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac supported_pure_immutable_mutual >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  rename1 `(if v = BoolV T then _ else _) _ = _` >>
+  Cases_on `v = BoolV T` >> Cases_on `v = BoolV F` >>
+  gvs[return_def, raise_def]
+QED
+
+Resume typed_immutable_frames_mutual[assert_reason]:
+  markerLib.RESUME_TAC >> (
+  rename1 `supported_string_reason tops rhs` >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==>
+     lookup_immutable cx t src name = lookup_immutable cx s src name` by
+    (Cases_on `rhs` >> gvs[supported_string_reason_def] >>
+     metis_tac[literal_immutable_frame, supported_pure_immutable_mutual]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  strip_tac >> imp_res_tac read_result_state >>
+  imp_res_tac supported_pure_immutable_mutual >>
+  gvs[IgnAsm `!s r t. _`, return_def, raise_def, AllCaseEqs()] >>
+  rename1 `(if v = BoolV T then _ else _) _ = _` >>
+  Cases_on `v = BoolV T`
+  >- (qpat_x_assum `!s r t. _` kall_tac >> gvs[return_def]) >>
+  Cases_on `v = BoolV F`
+  >- (gvs[IgnAsm `!s r t. _`, bind_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+      gvs[IgnAsm `!s r t. _`, raise_def] >>
+      first_x_assum drule >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!s r t. _` kall_tac >> gvs[raise_def])
+QED
+Finalise typed_immutable_frames_mutual
+
+Theorem typed_stmt_immutable_frame:
+  supported_stmt tops bindings stmt /\
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  type_stmt env ret_ty stmt = SOME env' /\
+  stmt_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) stmt /\
+  ~supported_stmt_expr_exists expr_internal_call_root stmt /\
+  eval_stmt cx stmt es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  metis_tac[typed_immutable_frames_mutual]
+QED
+
+Theorem typed_stmts_immutable_frame:
+  supported_stmts tops bindings stmts /\
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  type_stmts env ret_ty stmts = SOME env' /\
+  stmts_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) stmts /\
+  ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+  eval_stmts cx stmts es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  metis_tac[typed_immutable_frames_mutual]
+QED
