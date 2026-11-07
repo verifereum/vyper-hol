@@ -6221,3 +6221,75 @@ Proof
   qexistsl [`P`, `fuel`, `names`, `t'`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem ld_macro_opcode_not_halt[local]:
+  MEM j.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD] ==>
+  step_inst fuel CT j t <> Halt h
+Proof
+  simp[MEM] >> strip_tac >>
+  simp[step_inst_non_invoke] >>
+  pure_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
+  pure_rewrite_tac[opcode_case_def] >>
+  simp[exec_alloca_def, exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem ld_supply_halt_singleton:
+  lower_dload_inst_supply a i = (code,b) /\ MEM j code /\
+  j.inst_opcode <> INVOKE /\ step_inst fuel CT j t = Halt h ==>
+  code = [i] /\ j = i
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
+      simp[ld_macro_opcode_not_halt]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
+      simp[ld_macro_opcode_not_halt]) >>
+  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
+(* Same normal witness, strengthened only at its existential boundary. *)
+val ld_recursive_halt_zero =
+  let
+    val (args,body) = strip_abs ld_recursive_combined_candidate
+    val (g1,rest) = dest_conj body
+    val (g2,alts) = dest_conj rest
+    val (ws,b) = strip_exists (fst (dest_disj alts))
+    fun named s = hd (filter (fn v => fst(dest_var v) = s) (ws @ args))
+    val n = named "n" and code = named "code" and i = named "i"
+    val j = named "j" and t = named "t" and ta = named "ta"
+    val un = named "un" and ua = named "ua"
+  in list_mk_abs(args,list_mk_conj [g1,g2,list_mk_exists(ws,
+       list_mk_conj [b, ``^n = 0``, ``^code = [^i]``,
+         ``^j = ^i``, ``^t = ^ta``, ``^un = ^ua``])]) end;
+
+Theorem ld_recursive_combined_halt_anchor:
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t /\
+  j.inst_opcode <> INVOKE /\ step_inst fuel CT j t = Halt h ==>
+  (^ld_recursive_halt_zero) vs0 CT stk un gn j t
+Proof
+  BETA_TAC >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `(?astk gstk. _) \/ _`
+    (DISJ_CASES_THEN2 mp_tac strip_assume_tac)
+  >- (rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+      disch_then (fn th => mk_asm "halt_body" th >> strip_assume_tac th) >>
+      `MEM j code` by
+        (FIRST [qpat_x_assum `j = HD code` SUBST1_TAC >>
+                  Cases_on `code` >> fs[],
+                qpat_x_assum `j = EL n code` SUBST1_TAC >>
+                  irule EL_MEM >> simp[]]) >>
+      drule_all ld_supply_halt_singleton >> strip_tac >>
+      TRY (qpat_x_assum `0 < n` mp_tac >>
+           qpat_x_assum `n < LENGTH code` mp_tac >>
+           qpat_x_assum `code = [i]` SUBST1_TAC >> simp[] >> NO_TAC) >>
+      conj_tac >- asm "halt_body" ACCEPT_TAC >>
+      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+  drule_all ld_revert_pair_interval_step >>
+  disch_then (qspecl_then [`t`, `h`, `ARB`, `fuel`, `CT`] mp_tac) >> simp[]
+QED
