@@ -47,7 +47,8 @@ Theorem literal_bytes_store_counted:
     (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
-    (!x. not_fresh_at sa x ==> lookup_var x sf = lookup_var x s) /\
+    (!x. not_fresh_at sa x ==> lookup_var x sf = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x) /\
     (~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
