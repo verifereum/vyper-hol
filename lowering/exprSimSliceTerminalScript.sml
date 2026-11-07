@@ -138,7 +138,11 @@ Resume slice_data_bytes_outcome[success]:
        exprSimSliceSourceTheory.slice_bytes_nat] >>
   qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (qspec_then `t.vs_inst_idx` mp_tac) >>
-  qpat_x_assum `expr_type e = _` (fn th => rewrite_tac[th]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[compileEnvTheory.is_bytestring_type_def]) >>
+  pop_assum mp_tac >>
+  qpat_x_assum `expr_type e = _` (fn th => rewrite_tac[th] >> mp_tac th) >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[loweringPostsTheory.vv_post_def, contextTheory.mk_ptr_def,
        loweringPostsTheory.vv_holds_def,
@@ -224,7 +228,11 @@ Resume slice_data_string_outcome[success]:
        exprSimSliceSourceTheory.slice_string_nat] >>
   qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (qspec_then `t.vs_inst_idx` mp_tac) >>
-  qpat_x_assum `expr_type e = _` (fn th => rewrite_tac[th]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[compileEnvTheory.is_bytestring_type_def]) >>
+  pop_assum mp_tac >>
+  qpat_x_assum `expr_type e = _` (fn th => rewrite_tac[th] >> mp_tac th) >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[loweringPostsTheory.vv_post_def, contextTheory.mk_ptr_def,
        loweringPostsTheory.vv_holds_def,
