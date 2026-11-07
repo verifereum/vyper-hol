@@ -69,3 +69,27 @@ residual, NOT evidence that physical_live preservation or the frozen theorem
 is false. No new admitted theorem was retained.
 
 Evidence: tool output TO_lineage_after_fix-20261106T221649Z_m12801_t001.
+
+## Exact primitive boundaries now checked
+
+`fnPlanLineagePhysicalOps` now proves `reduce_depth_plan_lineage_inventory`
+for arbitrary fuel and all target parameters, with lineage_inventory as its
+only premise. The selected-variable peek-to-lookup inverse is proved once;
+its selector corollary explicitly requires a nonempty stack. This premise
+comes from the actual unfixed-depth hit in a mutating reduction branch.
+Do not remove it: selector [] may inspect HD [], an unspecified operand.
+
+`reorder_singleton_lineage_inventory` now proves exact inventory conservation
+for the actual singleton reorder, including restoration, selective spilling,
+early-stop/missing-hit cases, and both placement branches. The poke branch
+uses `stack_poke_top_exchange` to identify an ordinary swap using the actual
+source peek, never an assumption that operand_equiv means equality.
+`do_swap_lineage_inventory` preserves the exact marker-prefix distinct core
+and spill domain. Physical exports the alias corollary
+`physical_live_reorder_singleton` and imports PhysicalOps.
+
+These results discharge the primitive residual recorded above. They do NOT
+prove singleton target-reaching or the full dead-last-use ASSIGN transition.
+Consumption and native dead-output/release integration remain to be checked.
+No external theorem copies, allocator assumptions, or admissions were added.
+Evidence: TO_lineage_after_fix-20261106T221649Z_m12861_t001.

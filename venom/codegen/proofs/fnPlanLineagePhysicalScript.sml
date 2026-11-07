@@ -1,5 +1,5 @@
 Theory fnPlanLineagePhysical
-Ancestors fnPlanLineageAssignRegion fnPlanLineageInventory stackPlanTypes
+Ancestors fnPlanLineageAssignRegion fnPlanLineageInventory fnPlanLineagePhysicalOps stackPlanTypes
   stackPlanGen stackModel list pred_set finite_map
 
 (* Reuse the existing exact inventory rather than introduce a second copy.
@@ -61,4 +61,32 @@ Proof
   gvs[physical_live_def, emit_one_input_def, is_var_operand_def] >>
   Cases_on `do_restore (Var a) ps` >>
   gvs[] >> metis_tac[do_restore_lineage_inventory, pairTheory.SND]
+QED
+
+Theorem physical_live_reorder_singleton:
+  !live dfg a ps.
+    physical_live live ps ==>
+    physical_live live (SND (reorder_plan dfg [Var a] ps))
+Proof
+  simp[physical_live_def, reorder_singleton_lineage_inventory]
+QED
+
+Theorem physical_live_emit_dead_source_available:
+  !a nl ps.
+    ~MEM a nl /\ physical_live (a::nl) ps ==>
+    ?d. stack_get_depth (Var a)
+          (SND (emit_one_input ASSIGN nl (Var a) ps)).ps_stack = SOME d /\
+        FLOOKUP (SND (emit_one_input ASSIGN nl (Var a) ps)).ps_spilled
+          (Var a) = NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `FLOOKUP ps.ps_spilled (Var a)`
+  >- (`MEM (Var a) ps.ps_stack` by
+        (gvs[physical_live_explicit, FLOOKUP_DEF] >> ASM_SET_TAC[]) >>
+      `IS_SOME (stack_get_depth (Var a) ps.ps_stack)` by
+        simp[stack_get_depth_is_some] >>
+      simp[emit_one_input_def, is_var_operand_def] >>
+      Cases_on `stack_get_depth (Var a) ps.ps_stack` >> gvs[]) >>
+  simp[emit_one_input_def, is_var_operand_def, stackPlanOpsTheory.do_restore_def,
+    stack_push_def, stack_get_depth_def, REVERSE_SNOC, stack_find_def]
 QED
