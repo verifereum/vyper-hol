@@ -2590,7 +2590,8 @@ Resume calldata_owned_header_step[ownership_frame]:
   qpat_assum `Abbrev (Own = _)` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   pure_rewrite_tac[markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >> BETA_TAC >>
   ntac 8 disch_tac >>
-  ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)) >>
+  ho_match_mp_tac (GEN_ALL (SIMP_RULE (pure_ss ++ boolSimps.BOOL_ss) [LET_THM]
+    calldata_owned_interval_replace)) >>
   qexistsl_tac [`u`,`st1.cs_next_id`,`middle.cs_next_id`] >>
   asm_rewrite_tac[] >> decide_tac
 QED
