@@ -583,3 +583,55 @@ Proof
   >> `i - type_slot_size h1 + (off + type_slot_size h1) = i + off` by decide_tac
   >> simp[]
 QED
+
+Theorem encode_static_array_coverage:
+  !sparse tv off writes k j.
+    (!v ws j. encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_static_array tv off sparse = SOME writes /\
+    MEM k (MAP FST sparse) /\ j < type_slot_size tv ==>
+    MEM (off + k * type_slot_size tv + j) (MAP FST writes)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h`
+  >> simp[Once encode_value_def] >> rpt strip_tac
+  >> gvs[AllCaseEqs()]
+  >- (disj1_tac
+      >> `MEM j (MAP FST slots)` by metis_tac[]
+      >> gvs[listTheory.MEM_MAP] >> PairCases_on `y`
+      >> simp[listTheory.MEM_MAP]
+      >> qexists_tac `(off + (y0 + h0 * type_slot_size tv),y1)`
+      >> simp[] >> qexists_tac `(y0,y1)` >> simp[])
+  >> disj2_tac >> metis_tac[]
+QED
+
+Theorem encode_fixed_array_coverage:
+  !tv n v writes i.
+    (!v ws j. encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_value (ArrayTV tv (Fixed n)) v = SOME writes /\
+    i < n * type_slot_size tv ==> MEM i (MAP FST writes)
+Proof
+  rpt gen_tac >> Cases_on `v` >> simp[Once encode_value_def]
+  >> rename1 `ArrayV av` >> Cases_on `av` >> simp[Once encode_value_def]
+  >> rpt strip_tac >> gvs[AllCaseEqs()]
+  >> `0 < type_slot_size tv` by (Cases_on `type_slot_size tv` >> gvs[])
+  >> qabbrev_tac `k = i DIV type_slot_size tv`
+  >> qabbrev_tac `j = i MOD type_slot_size tv`
+  >> `j < type_slot_size tv` by simp[Abbr `j`]
+  >> `i = k * type_slot_size tv + j` by simp[Abbr `k`, Abbr `j`, DIVISION]
+  >> `k < n` by (simp[Abbr `k`, DIV_LT_X] >> metis_tac[MULT_COMM])
+  >> Cases_on `MEM k (MAP FST l)`
+  >- (disj2_tac
+      >> drule_all encode_static_array_coverage
+      >> simp[])
+  >> disj1_tac
+  >> `MEM j (MAP FST defaults)` by metis_tac[]
+  >> gvs[listTheory.MEM_MAP] >> PairCases_on `y`
+  >> simp[listTheory.MEM_MAP, listTheory.MEM_FLAT]
+  >> qexists_tac `(y0 + k * type_slot_size tv,y1)` >> simp[]
+  >> qexists_tac `MAP (\(off,s). (off + k * type_slot_size tv,s)) defaults`
+  >> conj_tac
+  >- (simp[listTheory.MEM_GENLIST] >> qexists_tac `k` >> simp[]
+      >> `~(?y. k = FST y /\ MEM y l)` by metis_tac[] >> simp[])
+  >> simp[listTheory.MEM_MAP] >> qexists_tac `(y0,y1)` >> simp[]
+QED
