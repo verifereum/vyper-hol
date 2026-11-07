@@ -41,7 +41,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_forced_source[local]:
+Theorem ifexp_forced_source:
   eval_expr cx (IfExp ann c a b) =
   vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
     (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
