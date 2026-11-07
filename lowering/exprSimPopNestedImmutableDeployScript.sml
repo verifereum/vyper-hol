@@ -291,6 +291,64 @@ Proof
   metis_tac[]
 QED
 
+(* ISTORE's finite map is bookkeeping, not the constructor representation. *)
+Theorem immutable_bookkeeping_stmt_frame[local]:
+  stmt_state_rel ctx func cenv cx es
+    (s with vs_immutables := im) =
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  `!op. eval_operand op (s with vs_immutables := im) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
+       storage_rel_def, transient_rel_def, accounts_rel_def, logs_rel_def,
+       contract_storage_def, contract_transient_def, immutables_rel_def,
+       immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def,
+       lookup_var_def, immutable_base_zero_def, eval_operand_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       alloca_room_def, fmp_room_def, pending_alloca_size_def,
+       local_backed_def]
+QED
+
+Theorem immutable_suffix_stmt_frame[local]:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  u = s with <|vs_vars := u.vs_vars; vs_immutables := u.vs_immutables;
+              vs_inst_idx := u.vs_inst_idx|> /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) ==>
+  stmt_state_rel ctx func cenv cx es u
+Proof
+  strip_tac >>
+  qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+  rewrite_tac[immutable_bookkeeping_stmt_frame] >>
+  irule stmt_state_rel_vars_frame >> simp[lookup_var_def] >>
+  gvs[local_ptrs_reserved_def, lookup_var_def,
+      immutable_bookkeeping_stmt_frame, stmt_state_rel_inst_idx] >> metis_tac[]
+QED
+
+Theorem immutable_ctor_pointer_post[local]:
+  stmt_state_rel ctx func cenv cx es' u /\
+  wb_frame cenv initial sa s0 u /\ cenv.ce_is_ctor /\
+  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+  ALOOKUP es'.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,updated) /\
+  off + type_memory_size tv < dimword (:256) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+  j + type_memory_size etv <= type_memory_size tv /\
+  val_in_memory etv v (off+j) u.vs_memory /\ value_has_type etv v /\
+  read_result cx result es' = (INL v,es') /\
+  eval_operand op u = SOME (n2w (off+j)) ==>
+  vv_post ctx func cenv cx e initial sa sb s0 es' result
+    (LocatedValue (expr_type e) (mk_ptr op LocCode)) u
+Proof
+  strip_tac >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
+  conj_tac
+  >- (rewrite_tac[immutable_holds_def] >>
+      qexistsl [`id`, `off`, `tv`, `updated`, `j`, `etv`, `v`] >> simp[]) >>
+  gvs[wb_frame_def] >> first_assum ACCEPT_TAC
+QED
+
 (* Pop on a member of an immutable in the constructor, which Python's
    checker accepts for a complex immutable (local.py skips the
    modification count when var_info is None), with pure indices.  The
