@@ -4,6 +4,7 @@ Ancestors bodyPtrTypeBuiltinsMemoryInterface bodyPtrTypeBuiltinsWidenSemantic
   bodyPtrTypeBuiltinsSourceTyping exprSimConvert vyperValueOperation
   vyperTyping vyperValue valueEncoding compileEnv arithmetic loweringPosts bodyPtrDefs
   ptrDiscipline bodyPtrTypeBuiltinsSourceFrame bodyPtrTypeBuiltinsCastSemantic
+  bodyPtrTypeBuiltinsWidenCounted fragExec
 Libs intLib
 
 Theorem memory_widen_length_bound:
@@ -322,7 +323,7 @@ Theorem memory_widen_counted_destination_post:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   convert_result cx (expr_type e) dst v = INL v' ==>
-  ?t H th.
+  ?t H th. t.vs_current_bb = s.vs_current_bb /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
     expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es sa sb s0 es1 v' op
@@ -346,6 +347,9 @@ Proof
   `eval_operand (Var src) s = SOME a` by simp[venomStateTheory.eval_operand_def] >>
   `!z. Var src = Var z ==> not_fresh_at sm z` by simp[] >>
   drule_all memory_widen_destination_post >> strip_tac >>
+  drule_all widen_copy_straight_code >> strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (drule_all exec_block_run_inst_seq >> strip_tac >> metis_tac[]) >>
   drule_all widen_copy_converted_counted_certificate >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   drule_all memory_conversion_layout >> strip_tac >>
@@ -378,7 +382,7 @@ Theorem memory_cast_counted_destination_post:
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) /\
   convert_result cx (expr_type e) dst v = INL v' ==>
-  ?t H th. out = Var src /\
+  ?t H th. out = Var src /\ t.vs_current_bb = s.vs_current_bb /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
     expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es sa sb s0 es1 v' out
@@ -396,6 +400,9 @@ Proof
     (qpat_assum `!m. mem_agree_outside _ _ m ==> _` irule >>
      simp[mem_agree_outside_def]) >>
   drule_all memory_cast_actual_destination_post >> simp[] >> strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `(t with vs_vars := _) = s` mp_tac >>
+     simp[venomStateTheory.venom_state_component_equality]) >>
   `is_bytestring_type (expr_type e) /\ is_bytestring_type dst` by
     (fs[is_bytestring_type_def] >> simp[is_bytestring_type_def]) >>
   drule_all convert_cast_converted_counted_certificate >>
