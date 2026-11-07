@@ -358,54 +358,6 @@ Proof
   simp[FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE]
 QED
 
-Theorem compile_assert_slice_bounds_counted_ok:
-  compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  fresh_vars_wrt sa s /\
-  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
-  eval_operand limit s = SOME wl /\
-  (!op. MEM op [a;n;limit] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sa sb) s = OK u ==>
-  ?G' tn'.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
-      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    u.vs_current_bb = sb.cs_current_bb /\
-    w2n wa + w2n wn <= w2n wl /\
-    u = s with vs_vars := u.vs_vars /\ fresh_vars_wrt sb u /\
-    (!op w. eval_operand op s = SOME w ==> eval_operand op u = SOME w) /\
-    (!x. not_fresh_at sa x ==>
-      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
-Proof
-  strip_tac >>
-  `!op. MEM op [a;n;limit] ==>
-    op_prov G op = NONE /\ op_taint tn op = {} /\
-    (!z. op = Var z ==> not_fresh_at sa z)` by
-    (fs[DISJ_IMP_THM, FORALL_AND_THM] >> rpt strip_tac >> simp[] >>
-     rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
-  qabbrev_tac `names = GENLIST (\j. STRING #"%" (toString (sa.cs_next_var + j))) 5` >>
-  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s
-    (FOLDL (\g x. DRESTRICT g (COMPL {x})) G names)
-    (tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names)` by
-    (irule compile_assert_slice_bounds_ghost_sequence >> metis_tac[]) >>
-  drule_all compile_assert_slice_bounds_code >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb)` by fs[EVERY_MEM] >>
-  drule_all run_inst_seq_gas_path_ptr >>
-  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
-    fs[FILTER_EQ_NIL, EVERY_MEM] >>
-  simp[] >> strip_tac >>
-  drule_all compile_assert_slice_bounds_normal_frame >> strip_tac >>
-  qexistsl_tac [`FOLDL (\g x. DRESTRICT g (COMPL {x})) G names`,
-    `tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names`] >>
-  simp[] >> conj_tac
-  >- (drule compile_assert_slice_bounds_layout >> strip_tac >>
-      qpat_x_assum `u = _` (mp_tac o Q.AP_TERM `\t. t.vs_current_bb`) >>
-      gvs[same_blocks_def]) >>
-  match_mp_tac slice_bounds_ghost_frame >> simp[Abbr `names`]
-QED
 
 Theorem compile_assert_slice_bounds_reserved_prefix_run:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
@@ -471,11 +423,11 @@ Proof
 QED
 
 
-Theorem compile_assert_slice_bounds_counted_abort:
+Theorem compile_assert_slice_bounds_reserved_counted_abort:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  fresh_vars_wrt sa s /\
+  (!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
   eval_operand limit s = SOME wl /\
   (!op. MEM op [a;n;limit] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
@@ -487,14 +439,15 @@ Theorem compile_assert_slice_bounds_counted_abort:
     u = revert_state (set_returndata [] p) /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (Abort Revert_abort (u with vs_inst_idx := j)) /\
-    (!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w) /\
+    (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+      eval_operand op p = eval_operand op s) /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
 Proof
   strip_tac >>
-  drule_all compile_assert_slice_bounds_prefix_run >> strip_tac >>
+  drule_all compile_assert_slice_bounds_reserved_prefix_run >> strip_tac >>
   `emitted_insts sa sb = TAKE 5 (emitted_insts sa sb) ++
     [EL 5 (emitted_insts sa sb)]` by
     (drule compile_assert_slice_bounds_layout >> simp[]) >>
@@ -512,9 +465,7 @@ Proof
   qpat_x_assum `emitted_insts _ _ = _` kall_tac >>
   `!op. MEM op [a;n;limit] ==>
     op_prov G op = NONE /\ op_taint tn op = {} /\
-    (!z. op = Var z ==> not_fresh_at sa z)` by
-    (fs[DISJ_IMP_THM, FORALL_AND_THM] >> rpt strip_tac >> simp[] >>
-     rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
+    (!z. op = Var z ==> not_fresh_at sa z)` by metis_tac[] >>
   qabbrev_tac `names = GENLIST (\j. STRING #"%" (toString (sa.cs_next_var + j))) 5` >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s
     (FOLDL (\g x. DRESTRICT g (COMPL {x})) G names)
@@ -601,4 +552,119 @@ Proof
   qspec_then `dimword (:256)` mp_tac slice_bounds_mod_overflow >>
   disch_then (qspecl_then [`w2n wa`, `w2n wn`, `w2n wl`] mp_tac) >>
   gvs[word_add_def, w2n_n2w, w2n_lt]
+QED
+
+Theorem compile_assert_slice_bounds_reserved_counted_ok:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z) /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl /\
+  (!op. MEM op [a;n;limit] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sa sb) s = OK u ==>
+  ?G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    w2n wa + w2n wn <= w2n wl /\
+    u = s with vs_vars := u.vs_vars /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sb u) /\
+    (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+      eval_operand op u = eval_operand op s) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `!op. MEM op [a;n;limit] ==>
+    op_prov G op = NONE /\ op_taint tn op = {} /\
+    (!z. op = Var z ==> not_fresh_at sa z)` by metis_tac[] >>
+  qabbrev_tac `names = GENLIST (\j. STRING #"%" (toString (sa.cs_next_var + j))) 5` >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s
+    (FOLDL (\g x. DRESTRICT g (COMPL {x})) G names)
+    (tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names)` by
+    (irule compile_assert_slice_bounds_ghost_sequence >> metis_tac[]) >>
+  drule_all compile_assert_slice_bounds_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  drule_all run_inst_seq_gas_path_ptr >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    fs[FILTER_EQ_NIL, EVERY_MEM] >>
+  simp[] >> strip_tac >>
+  drule_all compile_assert_slice_bounds_reserved_normal_frame >> strip_tac >>
+  `fresh_vars_wrt sa s ==> fresh_vars_wrt sb u` by
+    (strip_tac >> drule_all compile_assert_slice_bounds_normal_frame >> simp[]) >>
+  qexistsl_tac [`FOLDL (\g x. DRESTRICT g (COMPL {x})) G names`,
+    `tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names`] >>
+  simp[] >> conj_tac
+  >- (drule compile_assert_slice_bounds_layout >> strip_tac >>
+      qpat_x_assum `u = _` (mp_tac o Q.AP_TERM `\t. t.vs_current_bb`) >>
+      gvs[same_blocks_def]) >>
+  match_mp_tac slice_bounds_ghost_frame >> simp[Abbr `names`]
+QED
+
+(* Fresh callers retain the legacy unrestricted successful-operand frame. *)
+Theorem compile_assert_slice_bounds_counted_ok:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl /\
+  (!op. MEM op [a;n;limit] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sa sb) s = OK u ==>
+  ?G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    w2n wa + w2n wn <= w2n wl /\
+    u = s with vs_vars := u.vs_vars /\ fresh_vars_wrt sb u /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op u = SOME w) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `!op w z. eval_operand op s = SOME w /\ op = Var z ==> not_fresh_at sa z` by
+    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
+  `!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z` by
+    (simp[] >> metis_tac[]) >>
+  drule_all compile_assert_slice_bounds_reserved_counted_ok >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`G'`,`tn'`] >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_assert_slice_bounds_counted_abort:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl /\
+  (!op. MEM op [a;n;limit] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sa sb) s = Abort ab u ==>
+  ab = Revert_abort /\
+  ?p G' tn' j.
+    run_inst_seq (TAKE 5 (emitted_insts sa sb)) s = OK p /\
+    p = s with vs_vars := p.vs_vars /\
+    u = revert_state (set_returndata [] p) /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (Abort Revert_abort (u with vs_inst_idx := j)) /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `!op w z. eval_operand op s = SOME w /\ op = Var z ==> not_fresh_at sa z` by
+    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
+  `!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z` by
+    (simp[] >> metis_tac[]) >>
+  drule_all compile_assert_slice_bounds_reserved_counted_abort >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  simp[] >> qexistsl_tac [`G'`,`tn'`,`j`] >> simp[] >> metis_tac[]
 QED
