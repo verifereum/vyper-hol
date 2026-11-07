@@ -215,6 +215,8 @@ Theorem abi_decode_word_success_ptr:
   (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
   run_inst_seq (emitted_insts sa sb) s = OK u ==>
   ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    (abi_clamp_ok clamp (mload (w2n b+p) s) /\
+     mem_word_at (w2n d) u.vs_memory = mload (w2n b+p) s) /\
     ((u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
                vs_inst_idx := s.vs_inst_idx|>) = s /\
      LENGTH s.vs_memory <= LENGTH u.vs_memory /\
@@ -323,6 +325,7 @@ Resume abi_decode_word_success_ptr[word_store]:
        (fn th => rewrite_tac[th]) >> simp[]) >>
   qexistsl_tac [`Gc`, `tz`] >> conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `u = z with vs_inst_idx := _` SUBST1_TAC >>
+  conj_tac >- suspend "values" >>
   conj_tac >- suspend "exterior" >>
   conj_tac
   >- (qpat_x_assum `abi_decode_ptr_window Gc tz z dst d 32` mp_tac >>
@@ -359,6 +362,36 @@ Resume abi_decode_word_success_ptr[state_frame]:
   rpt strip_tac >> gvs[venom_state_component_equality]
 QED
 
+Resume abi_decode_word_success_ptr[values]:
+  `abi_decoder_operand_live c2.cs_next_var value` by
+    metis_tac[abi_decoder_operand_live_emit] >>
+  `eval_operand value t = SOME (mload (w2n b+p) s)` by
+    simp[eval_operand_def] >>
+  drule_all calldata_clamp_repeat >> strip_tac >>
+  suspend "value_join"
+QED
+
+Resume abi_decode_word_success_ptr[value_join]:
+  conj_tac
+  >- (qpat_x_assum `run_inst_seq (emitted_insts c2 c3) t = if _ then _ else _` mp_tac >>
+      qpat_x_assum `run_inst_seq (emitted_insts c2 c3) t = OK _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `abi_clamp_ok clamp (mload (w2n b+p) s)` >> simp[]) >>
+  `eval_operand (Var dst) v = SOME d /\
+   eval_operand value v = SOME (mload (w2n b+p) s)` by
+    (conj_tac >- simp[eval_operand_def] >>
+     qpat_assum `value = Var out` (fn th => rewrite_tac[th]) >> simp[eval_operand_def]) >>
+  `run_inst_seq (emitted_insts c3 sb) v =
+     OK (mstore (w2n d) (mload (w2n b+p) s) v)` by
+    (irule calldata_mstore_repeat >> qexistsl_tac [`Var dst`, `value`] >> simp[]) >>
+  qpat_x_assum `run_inst_seq (emitted_insts c3 sb) v = OK (z with vs_inst_idx := _)` mp_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts c3 sb) v = OK (mstore _ _ _)`
+    (fn th => rewrite_tac[th]) >>
+  POP_ASSUM_LIST (K all_tac) >> simp[] >> strip_tac >>
+  pop_assum (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
+  simp[] >> metis_tac[valueEncodingPropsTheory.mstore_mem_word_at_same]
+QED
+
 Finalise abi_decode_word_success_ptr
 
 Theorem abi_decode_word_abort_ptr:
@@ -375,6 +408,9 @@ Theorem abi_decode_word_abort_ptr:
   (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
   run_inst_seq (emitted_insts sa sb) s = Abort a u ==>
   ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+              vs_halted := s.vs_halted; vs_returndata := s.vs_returndata|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
@@ -452,8 +488,39 @@ Resume abi_decode_word_abort_ptr[join]:
      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> disch_then SUBST1_TAC >>
      pure_rewrite_tac[EVERY_APPEND] >> conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all abi_decode_compile_continue_abort_ptr >> strip_tac >>
-  qexistsl_tac [`Gc`, `tk`] >> simp[] >>
-  rpt strip_tac >> fs[Abbr `R0`, op_taint_def] >> metis_tac[]
+  qexistsl_tac [`Gc`, `tk`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "abort_frame" >>
+  conj_tac >- suspend "abort_vars" >>
+  simp[] >> rpt strip_tac >> fs[Abbr `R0`, op_taint_def] >> metis_tac[]
+QED
+
+Resume abi_decode_word_abort_ptr[abort_frame]:
+  drule_all scalar_seq_abort_runtime_frame >> strip_tac >>
+  `u = v with vs_inst_idx := s.vs_inst_idx` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = Abort a u` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts sa sb) s = Abort _ _`
+       (fn th => rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `state_frame t = _` mp_tac >>
+  qpat_x_assum `(v with <|vs_vars := _; vs_halted := _; vs_returndata := _|>) = t` mp_tac >>
+  qpat_x_assum `u = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[stateFrameTheory.state_frame_def] >> rpt strip_tac >>
+  gvs[venom_state_component_equality]
+QED
+
+Resume abi_decode_word_abort_ptr[abort_vars]:
+  drule_all scalar_seq_abort_runtime_frame >> strip_tac >>
+  `u = v with vs_inst_idx := s.vs_inst_idx` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = Abort a u` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts sa sb) s = Abort _ _`
+       (fn th => rewrite_tac[th]) >> simp[]) >>
+  simp[lookup_var_def] >> rpt strip_tac >>
+  `not_fresh_at c2 x` by metis_tac[not_fresh_at_mono] >>
+  qpat_x_assum `!x. x IN {x | not_fresh_at c2 x} ==> _` (qspec_then `x` mp_tac) >>
+  simp[] >>
+  `lookup_var x t = lookup_var x s` by metis_tac[] >>
+  gvs[lookup_var_def]
 QED
 
 Finalise abi_decode_word_abort_ptr
