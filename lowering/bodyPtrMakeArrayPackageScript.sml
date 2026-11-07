@@ -9,7 +9,8 @@ Ancestors
   finite_map bodyPtrMakeArrayConsInvariant allocationPtr compileEnv
   gasSummaryComposePtr exprLowering exprLoweringProps
   exprSimAggregateEncoding exprSimAggregateSource vyperState argsTailPtr
-  calldataReconstruction
+  calldataReconstruction exprSimAggregateLayout exprSimHyps vyperTypeSystem
+  exprSimHypsDefs allocLimits
 
 Theorem literal_memory_ptr_posts:
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -236,3 +237,4 @@ Proof
   goal_assum (drule_at Any) >> simp[type_memory_size_def] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
