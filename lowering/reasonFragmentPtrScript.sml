@@ -41,7 +41,8 @@ Theorem compile_raise_reason_path_frag_ptr:
   !d ctx PG func cx lctx RetQ cenv ty r es.
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_vv_sim_ptr d ctx PG func cenv cx (expr_type r) r es /\
-    (!sa vv sm sb s0 ee tv t G tn str.
+    (!sa vv sm sb s0 ee tv t G tn str gs.
+       eval_expr cx r (es with gas_obs := gs) = (INL tv,ee) /\
        compile_expr cenv (expr_type r) r sa = (vv,sm) /\
        compile_revert_with_reason cenv vv (expr_type r)
          (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
@@ -88,7 +89,8 @@ Resume compile_raise_reason_path_frag_ptr[normal]:
     fs[vv_post_def] >>
   drule_all raise_reason_endpoint_string >> strip_tac >>
   qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >> fs[] >>
-  qpat_x_assum `!sa vv sm sb s0 ee tv t G tn str. _`
+  qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` assume_tac) >> fs[] >>
+  qpat_x_assum `!sa vv sm sb s0 ee tv t G tn str gs. _`
     (drule_all_then strip_assume_tac) >>
   qexists `marks` >> disj1_tac >>
   qexistsl [`INR (AssertException str)`,`es_end`,`Gf`,`tnf`,`Abort Revert_abort z`] >>

@@ -155,3 +155,12 @@ Proof
   strip_tac >> irule forced_expr_admissible_raw >>
   drule raise_reason_forced_admissible >> simp[]
 QED
+
+Theorem eval_raise_string_literal_reason:
+  eval_stmt cx (Raise (RaiseReason (Literal ann (StringL str)))) es =
+    (INR (AssertException str),es)
+Proof
+  simp[eval_raise_reason_bind, Once evaluate_def, evaluate_literal_def,
+       bind_def, return_def, read_result_def, lift_option_type_def,
+       dest_StringV_def, raise_def]
+QED

@@ -4,7 +4,10 @@ Ancestors
   reasonFragmentPtr reasonMemoryConsumerPtr reasonStorageConsumerPtr
   reasonCodeConsumerPtr reasonLiteralConsumerPtr reasonEndpointResourcesPtr
   loweringPosts exprLoweringProps exprSimProps compileEnv context
-  bodyPtrDefs ptrDiscipline arithmetic list
+  bodyPtrDefs ptrDiscipline arithmetic list reasonTypingProps exprSimSource
+  reasonCompilerProps reasonSourceProps gasSummaryComposePtr gasSummary
+  gasExemptCert gasCount stmtSimDefs stmtSimProps exprSimDefs vyperAST
+  vyperInterpreter vyperState exprLowering stmtLowering fragGasPathPtr fragExec
 
 Theorem compile_revert_string_endpoint_ptr:
   compile_expr cenv (expr_type r) r sa = (vv,sm) /\
@@ -77,3 +80,58 @@ Resume compile_revert_string_endpoint_ptr[code]:
 QED
 
 Finalise compile_revert_string_endpoint_ptr
+
+Theorem compile_raise_typed_reason_frag_ptr:
+  (!mx str. r <> Literal (BaseT (StringT mx)) (StringL str)) /\
+  expr_body_pre cenv cx env r es /\
+  expr_vv_sim_ptr d ctx PG fn cenv cx (expr_type r) r es ==>
+  stmt_frag_ptr d ctx PG fn cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Raise (RaiseReason r)))
+    (eval_stmt cx (Raise (RaiseReason r))) es
+Proof
+  strip_tac >> irule compile_raise_reason_path_frag_ptr >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env r (es with gas_obs := gs)` by simp[] >>
+  drule_all reason_string_source_typing >> strip_tac >>
+  irule compile_revert_string_endpoint_ptr >> simp[] >>
+  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem compile_raise_literal_reason_frag_ptr:
+  expr_body_pre cenv cx env (Literal (BaseT (StringT mx)) (StringL str)) es ==>
+  stmt_frag_ptr d ctx PG fn cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Raise (RaiseReason (Literal (BaseT (StringT mx)) (StringL str)))))
+    (eval_stmt cx (Raise (RaiseReason (Literal (BaseT (StringT mx)) (StringL str))))) es
+Proof
+  strip_tac >> drule literal_reason_source_resources >> strip_tac >>
+  simp[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+  drule compile_raise_reason_parts >> strip_tac >>
+  drule_all raise_reason_compiler_code >> strip_tac >>
+  qpat_x_assum `compile_reason_message _ _ _ = _` mp_tac >>
+  simp[compile_reason_message_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[expr_type_def] >>
+  rename1 `compile_bytelike_literal _ _ sa = (buf,sm)` >>
+  `sa.cs_next_var <= sm.cs_next_var` by
+    (qspec_then `sa` mp_tac
+       (Q.SPECL [`MAP (n2w o ORD) str`,`mx`] ci_mono_compile_bytelike_literal) >>
+     gvs[ci_mono_def]) >>
+  `!k. k < 3 ==> not_local_ptr cenv es.scopes
+    (STRING #"%" (toString (sm.cs_next_var+k)))` by
+    (rpt strip_tac >> irule local_ptrs_reserved_fresh >>
+     goal_assum (drule_at Any) >> decide_tac) >>
+  `?z Gf tnf. gas_path_ptr (cx_dead cx) 0 ctx fn PG G0 tn0 s0 0 Gf tnf
+    (Abort Revert_abort z)` by
+    (irule (INST_TYPE [alpha |-> ``:type``] compile_literal_revert_path_ptr) >>
+     simp[] >> goal_assum (drule_at (Pat `compile_bytelike_literal _ _ _ = _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `compile_revert_with_reason _ _ _ _ _ = _`)) >>
+     simp[is_word_type_def, ADD_COMM] >>
+     qexistsl [`cx`,`es`] >> simp[] >> rpt strip_tac >>
+     qpat_x_assum `!k. k < 3 ==> not_local_ptr _ _ _` (qspec_then `k` mp_tac) >>
+     simp[ADD_COMM]) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists `[]` >> disj1_tac >>
+  simp[gas_summary_ptr_at_def, eval_raise_string_literal_reason] >>
+  qexistsl [`INR (AssertException str)`,`es`,`Gf`,`tnf`,`Abort Revert_abort z`] >>
+  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def]
+QED
