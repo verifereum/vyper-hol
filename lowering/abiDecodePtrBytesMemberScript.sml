@@ -6,6 +6,8 @@ Ancestors
   abiEncoder compileEnv emitHelper venomExecSemantics venomInst venomState
   words arithmetic arithmeticProps list rich_list pred_set
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq freshWrites
+  abiDecoderBytesPhases abiDecoderBytesPrefix abiDecodePtrNormalized
+  abiDecodePtrScalarAbort abiDecodePtrContinuation fragGasSeqPtr
 
 Theorem abi_decode_range_success_bounds:
   compile_abi_decode_range_check src e hi st = ((),st') /\
@@ -232,3 +234,129 @@ Proof
   drule_all abi_decode_le_guard_sequence >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
+
+(* The member's memory accesses are separated from its three scalar guards. *)
+Theorem abi_decode_bytes_member_phases:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecBytestring n) sa = ((),sb) /\ hi <> Lit 0w ==>
+  ?head addr cnt c1 c2 c3 c4 c5.
+    abi_decode_bytes_head pos hi sa = (head,c1) /\
+    compile_abi_dec_addr (Var src) pos c1 = (addr,c2) /\
+    emit_op MLOAD [addr] c2 = (cnt,c3) /\
+    abi_decode_le_guard cnt (Lit (n2w n)) c3 = ((),c4) /\
+    abi_decode_bytes_payload_guard head cnt hi c4 = ((),c5) /\
+    abi_decode_bytes_runtime_tail (Var dst) addr cnt c5 = ((),sb) /\
+    inst_extends sa c1 /\ inst_extends c1 c2 /\
+    inst_extends c2 c3 /\ inst_extends c3 c4 /\
+    inst_extends c4 c5 /\ inst_extends c5 sb /\
+    same_blocks sa c1 /\ same_blocks c1 c2 /\
+    same_blocks c2 c3 /\ same_blocks c3 c4 /\
+    same_blocks c4 c5 /\ same_blocks c5 sb /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_bytes_position_shape >> strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_position_phases, comp_bind_def,
+    comp_ignore_bind_def, LET_THM, operand_distinct] >>
+  pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  fs[abi_decode_count_guard_trace] >>
+  suspend "structure"
+QED
+
+Resume abi_decode_bytes_member_phases[structure]:
+  imp_res_tac abi_decode_bytes_head_fragment_shape >>
+  imp_res_tac abi_decode_le_guard_shape >>
+  imp_res_tac abi_decode_bytes_payload_guard_fragment_shape >>
+  imp_res_tac abi_decode_bytes_runtime_tail_shape >>
+  fs[compile_abi_dec_addr_def] >>
+  rename1 `emit_op ADD [Var src;pos] c1 = (addr,c2)` >>
+  rename1 `emit_op MLOAD [addr] c2 = (cnt,c3)` >>
+  rename1 `abi_decode_le_guard cnt (Lit (n2w n)) c3 = ((),c4)` >>
+  rename1 `abi_decode_bytes_payload_guard head cnt hi c4 = ((),c5)` >>
+  imp_res_tac emit_op_extends >>
+  imp_res_tac inst_extends_emit_op >>
+  `same_blocks c3 c4` by
+    (qpat_x_assum `abi_decode_le_guard _ _ c3 = _` mp_tac >>
+     simp[abi_decode_le_guard_def, comp_bind_def, comp_ignore_bind_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+       comp_return_def, emit_def] >>
+     strip_tac >> gvs[same_blocks_def]) >>
+  fs[same_blocks_def, EVERY_CONJ]
+QED
+
+Finalise abi_decode_bytes_member_phases
+
+(* Invert the whole member before replay: no validity premise is needed. *)
+Theorem abi_decode_bytes_member_success_bounds:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecBytestring n) sa = ((),sb) /\ hi <> Lit 0w /\
+  fresh_vars_wrt sa s /\ eval_operand pos s = SOME (n2w p) /\
+  eval_operand hi s = SOME (n2w h) /\
+  eval_operand (Var src) s = SOME b /\
+  p < dimword(:256) /\ h < dimword(:256) /\ n < dimword(:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  w2n (mload (w2n (b+n2w p)) s) <= n /\
+  p+32+w2n (mload (w2n (b+n2w p)) s) <= h
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decode_bytes_member_phases >> simp[] >> strip_tac >>
+  `inst_extends c1 sb /\ inst_extends c2 sb /\
+   inst_extends c3 sb /\ inst_extends c4 sb` by
+    metis_tac[inst_extends_trans] >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++ emitted_insts c1 sb` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `?s1. run_inst_seq (emitted_insts sa c1) s = OK s1 /\
+    run_inst_seq (emitted_insts c1 sb) s1 = OK t` by
+    (fs[] >> metis_tac[bodyPtrBopHashSuffixTheory.bop_run_inst_seq_append_ok]) >>
+  `p+32 <= h` by
+    (drule_all abi_decode_bytes_head_success_bound >> simp[]) >>
+  drule_all abi_decode_bytes_head_sequence >> strip_tac >>
+  rename1 `eval_operand head sh = SOME (n2w (p+32))` >>
+  `sh = s1` by metis_tac[venomExecSemanticsTheory.exec_result_11] >>
+  gvs[] >>
+  suspend "read"
+QED
+
+Resume abi_decode_bytes_member_success_bounds[read]:
+  `emit_op ADD [Var src;pos] c1 = (addr,c2)` by fs[compile_abi_dec_addr_def] >>
+  `eval_operand (Var src) s1 = SOME b /\ eval_operand pos s1 = SOME (n2w p)` by metis_tac[] >>
+  drule_all abi_decode_add_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_read >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c2 c3) s2 = OK s3` >>
+  `run_inst_seq (emitted_insts c3 sb) s3 = OK t` by
+    (`run_inst_seq (emitted_insts c2 sb) s2 = OK t` by
+      metis_tac[run_inst_seq_emit_extend] >>
+     metis_tac[run_inst_seq_emit_extend]) >>
+  `emitted_insts c3 sb = emitted_insts c3 c4 ++ emitted_insts c4 sb` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `?s4. run_inst_seq (emitted_insts c3 c4) s3 = OK s4 /\
+    run_inst_seq (emitted_insts c4 sb) s4 = OK t` by
+    (gvs[] >> metis_tac[bodyPtrBopHashSuffixTheory.bop_run_inst_seq_append_ok]) >>
+  suspend "count"
+QED
+
+Resume abi_decode_bytes_member_success_bounds[count]:
+  `eval_operand (Lit (n2w n)) s3 = SOME (n2w n)` by simp[eval_operand_def] >>
+  drule_all abi_decode_le_guard_success_bound >> strip_tac >>
+  `w2n (abi_decode_load MLOAD (b+n2w p) s2) <= n` by gvs[w2n_n2w] >>
+  drule_all abi_decode_le_guard_sequence >> strip_tac >>
+  rename1 `fresh_vars_wrt c4 sl` >>
+  `sl = s4` by gvs[] >>
+  qpat_x_assum `sl = s4` SUBST_ALL_TAC >>
+  `eval_operand head s4 = SOME (n2w (p+32)) /\
+   eval_operand hi s4 = SOME (n2w h) /\
+   eval_operand cnt s4 = SOME (abi_decode_load MLOAD (b+n2w p) s2)` by metis_tac[] >>
+  `emitted_insts c4 sb = emitted_insts c4 c5 ++ emitted_insts c5 sb` by
+    (irule emitted_insts_append >> metis_tac[inst_extends_def]) >>
+  `?s5. run_inst_seq (emitted_insts c4 c5) s4 = OK s5` by
+    (gvs[] >> metis_tac[bodyPtrBopHashSuffixTheory.bop_run_inst_seq_append_ok]) >>
+  drule_all abi_decode_bytes_payload_success_bound >> strip_tac >>
+  `p+32 < dimword(:256)` by decide_tac >>
+  gvs[w2n_n2w, abi_decode_load_def, mload_def] >> decide_tac
+QED
+
+Finalise abi_decode_bytes_member_success_bounds
