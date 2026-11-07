@@ -24,8 +24,7 @@
  * stmtSimForArrayFrag (array_allocate_ready, array_allocation_safe,
  * array_outcome_stmt_post, stmt_frag_start_gas_obs), the block lookups of
  * stmtSimForArrayParts, and the body callbacks of bodySimDeclCases
- * (array_body_scope_callback; array_body_fragment_callback is copied here
- * since that theory is frozen and keeps it local).
+ * (array_body_scope_callback and array_body_fragment_callback).
  *
  * 1. Local DynArray name (here).  The code loads the length word (MLOAD),
  *    asserts it is at most the capacity (GT/ISZERO/ASSERT), compares the
@@ -47,8 +46,10 @@
  *    internal call and no non-static external call; the premise is
  *    temporary, pending a source-semantics change that reads elements per
  *    iteration from their slots.
- * 4. Immutables and calldata.  Byte-addressed loads or a code/calldata
- *    copy per element; the snapshot is free, since both are read-only.
+ * 4. Immutables.  Byte-addressed loads or a code copy per element.  Runtime
+ *    immutables are read-only; constructor snapshots use iterator_unmodified.
+ *    Calldata-origin arguments are decoded to memory before the body and
+ *    belong to form (2); compile_expr has no raw LocCalldata producer.
  *
  * TOP-LEVEL:
  *   body_for_dynarray_name - iteration over a local DynArray
@@ -218,55 +219,6 @@ Proof
   qexistsl_tac [`entry`, `tv`, `dp`, `sz`, `vs`, `env_b`] >> simp[]
 QED
 
-(* A copy of bodySimDeclCases' local array_body_fragment_callback, which
-   that frozen theory doesn't export. *)
-Theorem dynarray_body_fragment_callback[local]:
-  !cx stmts tops ctx cenv bindings env ei id typ tv v env_b ret_ty
-   func RetQ st0 bc sd ex inc.
-    body_stmts_ok cx stmts /\ body_inv tops ctx cenv cx /\
-    supported_stmts tops bindings stmts /\
-    (!target. supported_stmts_expr_exists
-       (expr_abi_decode_target_root target) stmts ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env ei /\
-    ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
-    id NOTIN FDOM env.var_types /\
-    evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
-    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-    EVERY (stmt_exprs_ok cenv) stmts /\
-    type_memory_bytes cenv typ < 2 ** 64 /\
-    call_evaluation_safe cx (int_calls_stmts stmts) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    declare_local cenv id typ st0 = (bc,sd) ==>
-    stmt_frag ctx func cx (InLoop ex inc) RetQ bc
-      (stmts_env bc (InLoop ex inc) ret_ty stmts)
-      (eval_stmts cx stmts)
-      (ei with scopes :=
-        (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
-                          popped := []|>)) :: ei.scopes)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_vars id = NONE` by
-    (Cases_on `FLOOKUP cenv.ce_vars id` >> gvs[ce_locals_declared_def] >>
-     metis_tac[]) >>
-  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
-  `same_frame cenv bc` by
-    (drule_then irule declare_local_same_frame >> simp[]) >>
-  `body_inv tops ctx bc cx` by metis_tac[body_inv_same_frame] >>
-  qpat_x_assum `body_stmts_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_ok_def]) >>
-  simp[] >> rpt conj_tac
-  >- metis_tac[stmt_exprs_ok_same_frame]
-  >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
-  >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
-      `bc.ce_struct_fields = cenv.ce_struct_fields` by
-        metis_tac[same_frame_struct_fields] >>
-      conj_tac >- metis_tac[ce_locals_declared_declare_local] >>
-      conj_tac >- metis_tac[locals_alloc_ok_extend] >>
-      irule expr_sim_inv_for_scope >> metis_tac[]) >>
-  metis_tac[frame_ret_ok_same_frame]
-QED
-
 (* A local DynArray: the lowering loads the length word at the local's
    pointer, asserts it is at most the capacity c, and reads element k at
    base + 32 + k * size.  The source iterates the snapshot's elements; the
@@ -343,7 +295,7 @@ Proof
   >- (rpt strip_tac >>
       `body_stmts_ok cx stmts` by
         (fs[body_for_ok_def] >> Cases_on `vs` >> fs[]) >>
-      irule dynarray_body_fragment_callback >>
+      irule array_body_fragment_callback >>
       metis_tac[dynarray_elements_typed]) >>
   rpt gen_tac >> strip_tac >>
   drule_all dynarray_elements_typed >> strip_tac >>
