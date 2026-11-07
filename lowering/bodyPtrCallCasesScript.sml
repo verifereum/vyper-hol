@@ -76,7 +76,7 @@ Theorem body_raw_call_case_ptr:
     body_exprs_ptr_ok cx es ==>
     body_expr_ptr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> disch_tac >> simp[Once body_expr_ptr_ok_def] >>
   rpt gen_tac >> strip_tac >> conj_tac
   >- (irule raw_call_sim_ptr >> metis_tac[]) >>
   irule raw_call_vv_sim_ptr >> metis_tac[]
