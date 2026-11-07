@@ -13310,6 +13310,299 @@ Proof
   metis_tac[]
 QED
 
+Datatype:
+  alias_occ_command =
+    AliasOccDup num | AliasOccSwap num | AliasOccSpillTos |
+    AliasOccSpillAt num | AliasOccRestore operand |
+    AliasOccRestoreMany (operand list) | AliasOccPop num |
+    AliasOccRelease (string list)
+End
+
+Definition alias_occ_command_real_def:
+  (alias_occ_command_real (AliasOccDup d) ps = SND (do_dup d ps)) /\
+  (alias_occ_command_real (AliasOccSwap d) ps = SND (do_swap d ps)) /\
+  (alias_occ_command_real AliasOccSpillTos ps = SND (do_spill_tos ps)) /\
+  (alias_occ_command_real (AliasOccSpillAt d) ps = SND (do_spill_at d ps)) /\
+  (alias_occ_command_real (AliasOccRestore at) ps = SND (do_restore at ps)) /\
+  (alias_occ_command_real (AliasOccRestoreMany ats) ps =
+     SND (restore_spilled_plan ats ps)) /\
+  (alias_occ_command_real (AliasOccPop n) ps =
+     ps with ps_stack := stack_pop n ps.ps_stack) /\
+  (alias_occ_command_real (AliasOccRelease live) ps = release_dead_spills live ps)
+End
+
+Definition alias_occ_command_shadow_def:
+  (alias_occ_command_shadow (AliasOccDup d) s = alias_occ_dup_inventory d s) /\
+  (alias_occ_command_shadow (AliasOccSwap d) s = alias_occ_swap_inventory d s) /\
+  (alias_occ_command_shadow AliasOccSpillTos s = alias_occ_spill_tos_inventory s) /\
+  (alias_occ_command_shadow (AliasOccSpillAt d) s = alias_occ_spill_at_inventory d s) /\
+  (alias_occ_command_shadow (AliasOccRestore at) s = alias_occ_from_spill at s) /\
+  (alias_occ_command_shadow (AliasOccRestoreMany ats) s = alias_occ_restore_many ats s) /\
+  (alias_occ_command_shadow (AliasOccPop n) s =
+     s with alias_occs := stack_pop n s.alias_occs) /\
+  (alias_occ_command_shadow (AliasOccRelease live) s = alias_occ_release live s)
+End
+
+Definition alias_occ_command_logs_def:
+  (alias_occ_command_logs (AliasOccDup d) s = [alias_occ_dup_log d s]) /\
+  (alias_occ_command_logs (AliasOccSwap d) s = alias_occ_swap_logs d s) /\
+  (alias_occ_command_logs AliasOccSpillTos s = alias_occ_spill_tos_logs s) /\
+  (alias_occ_command_logs (AliasOccSpillAt d) s = alias_occ_spill_at_logs d s) /\
+  (alias_occ_command_logs (AliasOccRestore at) s = []) /\
+  (alias_occ_command_logs (AliasOccRestoreMany ats) s = []) /\
+  (alias_occ_command_logs (AliasOccPop n) s = []) /\
+  (alias_occ_command_logs (AliasOccRelease live) s = [])
+End
+
+Theorem alias_occ_command_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_command_shadow cmd s) (alias_occ_command_real cmd ps)
+Proof
+  Cases_on `cmd` >>
+  simp[alias_occ_command_shadow_def, alias_occ_command_real_def,
+       alias_occ_dup_inventory_align, alias_occ_swap_inventory_align,
+       alias_occ_spill_tos_align, alias_occ_spill_at_align,
+       alias_occ_from_spill_align, alias_occ_restore_many_align,
+       alias_occ_release_align] >>
+  simp[alias_occ_align_def, stack_pop_def, MAP_TAKE] >> strip_tac >>
+  qpat_x_assum `MAP FST _ = _` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem alias_occ_command_logs_valid:
+  EVERY alias_occ_read_log_ok (alias_occ_command_logs cmd s)
+Proof
+  Cases_on `cmd` >>
+  simp[alias_occ_command_logs_def, alias_occ_dup_inventory_log,
+       alias_occ_swap_logs_valid, alias_occ_spill_tos_logs_valid,
+       alias_occ_spill_at_logs_valid]
+QED
+
+Definition alias_occ_commands_real_def:
+  (alias_occ_commands_real [] ps = ps) /\
+  (alias_occ_commands_real (cmd::cmds) ps =
+    alias_occ_commands_real cmds (alias_occ_command_real cmd ps))
+End
+
+Definition alias_occ_commands_shadow_def:
+  (alias_occ_commands_shadow [] s = s) /\
+  (alias_occ_commands_shadow (cmd::cmds) s =
+    alias_occ_commands_shadow cmds (alias_occ_command_shadow cmd s))
+End
+
+Definition alias_occ_commands_logs_def:
+  (alias_occ_commands_logs [] s = []) /\
+  (alias_occ_commands_logs (cmd::cmds) s =
+    alias_occ_command_logs cmd s ++
+    alias_occ_commands_logs cmds (alias_occ_command_shadow cmd s))
+End
+
+Theorem alias_occ_commands_align:
+  !cmds s ps. alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_commands_shadow cmds s) (alias_occ_commands_real cmds ps)
+Proof
+  Induct >> simp[alias_occ_commands_shadow_def, alias_occ_commands_real_def,
+                alias_occ_command_align]
+QED
+
+Theorem alias_occ_commands_logs_valid:
+  !cmds s. EVERY alias_occ_read_log_ok (alias_occ_commands_logs cmds s)
+Proof
+  Induct >> simp[alias_occ_commands_logs_def, EVERY_APPEND,
+                alias_occ_command_logs_valid]
+QED
+
+Theorem alias_occ_command_next:
+  s.alias_next <= (alias_occ_command_shadow cmd s).alias_next
+Proof
+  Cases_on `cmd` >>
+  simp[alias_occ_command_shadow_def, alias_occ_dup_inventory_next,
+       alias_occ_swap_inventory_next, alias_occ_spill_tos_next,
+       alias_occ_spill_at_next, alias_occ_from_spill_next,
+       alias_occ_restore_many_next, alias_occ_release_fields]
+QED
+
+Theorem alias_occ_command_wf:
+  alias_occ_wf s ==> alias_occ_wf (alias_occ_command_shadow cmd s)
+Proof
+  Cases_on `cmd` >>
+  simp[alias_occ_command_shadow_def, alias_occ_dup_inventory_wf,
+       alias_occ_swap_inventory_wf, alias_occ_spill_tos_wf,
+       alias_occ_spill_at_wf, alias_occ_from_spill_wf,
+       alias_occ_restore_many_wf, alias_occ_release_wf] >>
+  simp[alias_occ_wf_def, alias_occ_ids_def, stack_pop_def, MAP_TAKE,
+       ALL_DISTINCT_APPEND, EVERY_APPEND] >> rpt strip_tac
+  >- metis_tac[listTheory.ALL_DISTINCT_TAKE]
+  >- metis_tac[rich_listTheory.MEM_TAKE]
+  >> metis_tac[rich_listTheory.EVERY_TAKE]
+QED
+
+Theorem alias_occ_commands_wf:
+  !cmds s. alias_occ_wf s ==> alias_occ_wf (alias_occ_commands_shadow cmds s)
+Proof
+  Induct >> simp[alias_occ_commands_shadow_def, alias_occ_command_wf]
+QED
+
+Theorem alias_occ_commands_next:
+  !cmds s. s.alias_next <= (alias_occ_commands_shadow cmds s).alias_next
+Proof
+  Induct >> simp[alias_occ_commands_shadow_def] >> rpt gen_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists_tac `(alias_occ_command_shadow h s).alias_next` >>
+  simp[alias_occ_command_next]
+QED
+
+Theorem alias_occ_command_old_origin:
+  alias_occ_wf s /\ id < s.alias_next /\
+  (at,id) IN alias_occ_residents (alias_occ_command_shadow cmd s) ==>
+  (at,id) IN alias_occ_residents s
+Proof
+  Cases_on `cmd` >>
+  simp[alias_occ_command_shadow_def, alias_occ_dup_inventory_residents,
+       alias_occ_from_spill_residents, alias_occ_restore_many_residents] >>
+  rpt strip_tac >> gvs[]
+  >- (drule_all alias_occ_swap_inventory_origin >> strip_tac >> gvs[])
+  >- (drule alias_occ_spill_tos_origin >> strip_tac >> gvs[])
+  >- (drule_all alias_occ_spill_at_origin >> strip_tac >> gvs[])
+  >- (gvs[alias_occ_residents_member, stack_pop_def] >>
+      metis_tac[rich_listTheory.MEM_TAKE])
+  >> metis_tac[alias_occ_release_origin]
+QED
+
+Theorem alias_occ_commands_old_origin:
+  !cmds s. alias_occ_wf s /\ id < s.alias_next /\
+  (at,id) IN alias_occ_residents (alias_occ_commands_shadow cmds s) ==>
+  (at,id) IN alias_occ_residents s
+Proof
+  Induct >> simp[alias_occ_commands_shadow_def] >> rpt strip_tac >>
+  irule alias_occ_command_old_origin >> simp[] >>
+  qexists_tac `h` >> first_x_assum irule >> simp[alias_occ_command_wf] >>
+  mp_tac (Q.SPECL [`s`,`h`] (GEN_ALL alias_occ_command_next)) >> simp[]
+QED
+
+Theorem alias_occ_commands_no_reappearance:
+  alias_occ_wf s /\ id < s.alias_next /\
+  ~(?at. (at,id) IN alias_occ_residents s) ==>
+  ~(?at. (at,id) IN alias_occ_residents (alias_occ_commands_shadow cmds s))
+Proof
+  metis_tac[alias_occ_commands_old_origin]
+QED
+
+Theorem alias_occ_deleted_no_reappearance:
+  alias_occ_wf (alias_occ_command_shadow cmd s) /\
+  id < (alias_occ_command_shadow cmd s).alias_next /\
+  id IN alias_occ_deleted s (alias_occ_command_shadow cmd s) ==>
+  ~(?at. (at,id) IN alias_occ_residents
+    (alias_occ_commands_shadow cmds (alias_occ_command_shadow cmd s)))
+Proof
+  simp[alias_occ_deleted_def, pred_setTheory.IN_IMAGE, pairTheory.EXISTS_PROD] >>
+  metis_tac[alias_occ_commands_no_reappearance]
+QED
+
+Definition alias_occ_command_birth_def:
+  alias_occ_command_birth cmd s at id <=>
+    (?site source parent.
+      MEM (AliasOccReadLog site source (AliasOccCopy parent id))
+        (alias_occ_command_logs cmd s) /\
+      (at,parent) IN alias_occ_residents s) \/
+    (?site source i.
+      MEM (AliasOccReadLog site source (AliasOccTotalRead i id at))
+        (alias_occ_command_logs cmd s))
+End
+
+Theorem alias_occ_dup_birth:
+  alias_occ_command_birth (AliasOccDup dist) s
+    (EL (LENGTH s.alias_occs - 1 - dist) (MAP FST s.alias_occs)) s.alias_next
+Proof
+  simp[alias_occ_command_birth_def, alias_occ_command_logs_def,
+       alias_occ_dup_log_def, alias_occ_read_def] >>
+  IF_CASES_TAC >> simp[] >>
+  simp[alias_occ_residents_member] >>
+  disj1_tac >>
+  qmatch_goalsub_abbrev_tac `EL ix _` >>
+  `ix < LENGTH s.alias_occs` by simp[Abbr `ix`] >>
+  `MEM (EL ix s.alias_occs) s.alias_occs` by simp[EL_MEM] >>
+  gvs[EL_MAP, pairTheory.PAIR]
+QED
+
+Theorem alias_occ_command_origin:
+  alias_occ_wf s /\
+  (at,id) IN alias_occ_residents (alias_occ_command_shadow cmd s) ==>
+  (at,id) IN alias_occ_residents s \/ alias_occ_command_birth cmd s at id
+Proof
+  Cases_on `cmd` >>
+  simp[alias_occ_command_shadow_def, alias_occ_dup_inventory_residents,
+       alias_occ_from_spill_residents, alias_occ_restore_many_residents] >>
+  rpt strip_tac >> gvs[]
+  >- (disj2_tac >> mp_tac (Q.SPECL [`s`,`n`] (GEN_ALL alias_occ_dup_birth)) >> simp[])
+  >- (drule_all alias_occ_swap_inventory_origin >>
+      simp[alias_occ_command_birth_def, alias_occ_command_logs_def] >> metis_tac[])
+  >- (drule alias_occ_spill_tos_origin >>
+      simp[alias_occ_command_birth_def, alias_occ_command_logs_def] >> metis_tac[])
+  >- (drule_all alias_occ_spill_at_origin >>
+      simp[alias_occ_command_birth_def, alias_occ_command_logs_def] >> metis_tac[])
+  >- (disj1_tac >> gvs[alias_occ_residents_member, stack_pop_def] >>
+      metis_tac[rich_listTheory.MEM_TAKE])
+  >> metis_tac[alias_occ_release_origin]
+QED
+
+Definition alias_occ_commands_steps_def:
+  (alias_occ_commands_steps [] s = []) /\
+  (alias_occ_commands_steps (cmd::cmds) s =
+    (cmd,s)::alias_occ_commands_steps cmds (alias_occ_command_shadow cmd s))
+End
+
+Theorem alias_occ_commands_origin:
+  !cmds s. alias_occ_wf s /\
+  (at,id) IN alias_occ_residents (alias_occ_commands_shadow cmds s) ==>
+  (at,id) IN alias_occ_residents s \/
+  ?cmd before. MEM (cmd,before) (alias_occ_commands_steps cmds s) /\
+               alias_occ_command_birth cmd before at id
+Proof
+  Induct >> simp[alias_occ_commands_shadow_def, alias_occ_commands_steps_def] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `alias_occ_command_shadow h s` mp_tac) >>
+  simp[alias_occ_command_wf] >> strip_tac
+  >- (drule_all alias_occ_command_origin >> strip_tac >> metis_tac[])
+  >> metis_tac[]
+QED
+
+Theorem alias_occ_resident_bound:
+  alias_occ_wf s /\ (at,id) IN alias_occ_residents s ==> id < s.alias_next
+Proof
+  simp[alias_occ_wf_def, alias_occ_ids_def, EVERY_APPEND, EVERY_MEM,
+       alias_occ_residents_member, MEM_MAP, pairTheory.FORALL_PROD,
+       alistTheory.MEM_pair_fmap_to_alist_FLOOKUP] >>
+  metis_tac[pairTheory.SND, alistTheory.MEM_pair_fmap_to_alist_FLOOKUP]
+QED
+
+Theorem alias_occ_commands_new_origin:
+  alias_occ_wf s /\ s.alias_next <= id /\
+  (at,id) IN alias_occ_residents (alias_occ_commands_shadow cmds s) ==>
+  ?cmd before. MEM (cmd,before) (alias_occ_commands_steps cmds s) /\
+               alias_occ_command_birth cmd before at id
+Proof
+  strip_tac >> drule_all alias_occ_commands_origin >> strip_tac
+  >- (drule_all alias_occ_resident_bound >> simp[]) >> metis_tac[]
+QED
+
+Theorem alias_occ_command_birth_evidence:
+  alias_occ_command_birth cmd s at id ==>
+    (?site source parent.
+      MEM (AliasOccReadLog site source (AliasOccCopy parent id))
+        (alias_occ_command_logs cmd s) /\
+      (at,parent) IN alias_occ_residents s) \/
+    (?site source i.
+      MEM (AliasOccReadLog site source (AliasOccTotalRead i id at))
+        (alias_occ_command_logs cmd s) /\
+      LENGTH source <= i /\ at = EL i source)
+Proof
+  simp[alias_occ_command_birth_def] >> strip_tac
+  >- metis_tac[] >>
+  mp_tac (Q.SPECL [`s`,`cmd`] (GEN_ALL alias_occ_command_logs_valid)) >>
+  simp[EVERY_MEM] >>
+  disch_then (drule_then mp_tac) >> simp[alias_occ_read_log_ok_def] >> metis_tac[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
