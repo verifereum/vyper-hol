@@ -100,5 +100,47 @@ Theorem overflow_bytes_tuple_supported:
     well_formed_type (type_env tops)
       (TupleT [BaseT (BytesT (Dynamic (dimword(:256)-32)))])
 Proof
-  gen_tac >> EVAL_TAC
+  gen_tac >> EVAL_TAC >> simp[wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
+(* The actual generated length operand, with the prefix's ghost transport.
+   This is still a local boundary: source realization is not asserted. *)
+Theorem bytestring_copy_zero_destination_prefix:
+  compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn src s 32 /\ mload (w2n a) s = 0w /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
+  FLOOKUP G dst = SOME (w2n b,0) ==>
+  ?count sm Gf tnf sf.
+    compile_bytestring_copy_len (Var src) sa = (count,sm) /\
+    emit_void MCOPY [Var dst;Var src;count] sm = ((),sb) /\
+    frag_exec_ptr cx ctx PG sa sm
+      (\g t v. g = G /\ t = tn /\ v = s)
+      (\g t v. g = Gf /\ t = tnf /\ v = sf) (\gr r. F) /\
+    eval_operand count sf = SOME 32w /\
+    lookup_var src sf = SOME a /\ lookup_var dst sf = SOME b /\
+    FLOOKUP Gf dst = SOME (w2n b,0) /\
+    (!func. ~in_revert_forward func sf ==>
+      ~access_ok 0 Gf func
+        (mk_inst sm.cs_next_id MCOPY [Var dst;Var src;count] []) sf)
+Proof
+  strip_tac >> drule bytestring_copy_final_instruction >> strip_tac >>
+  drule typedCopyAmbientFramePtrTheory.compile_bytestring_copy_len_ambient_frag_ptr >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `\gr r. F`, `G`, `tn`, `s`, `a`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `((0w + 31w && i2w (-32)) + 32w : 256 word) = 32w` by
+    (mp_tac empty_bytes_copy_count >>
+     `w2n (32w : 256 word) = 32` by simp[wordsTheory.dimword_def] >>
+     metis_tac[wordsTheory.w2n_11]) >>
+  qexistsl [`Gf`, `tnf`, `sf`] >> simp[] >>
+  `lookup_var src sf = SOME a /\ lookup_var dst sf = SOME b /\
+   FLOOKUP Gf dst = SOME (w2n b,0)` by metis_tac[] >>
+  simp[] >> gen_tac >> disch_tac >>
+  simp[ptrDisciplineTheory.access_ok_def] >> disj1_tac >>
+  qexistsl [`w2n b`, `32`] >>
+  simp[codegenRelTheory.source_memory_write_ranges_def,
+    venomStateTheory.eval_operand_def, memLocDefsTheory.mem_write_ops_def,
+    venomInstTheory.mk_inst_def, wordsTheory.dimword_def,
+    codegenRelTheory.sized_source_write_range_def]
 QED
