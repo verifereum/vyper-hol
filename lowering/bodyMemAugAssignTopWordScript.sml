@@ -458,11 +458,10 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  simp[gas_marked_path_def, stmt_state_rel_inst_idx] >>
-  conj_tac >- gvs[update_var_def, eval_operand_def, lookup_var_def,
-                  FLOOKUP_UPDATE] >>
-  conj_tac >- (irule stmt_state_rel_update_var >> simp[]) >>
+  simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
   gvs[update_var_def] >>
   simp[Abbr `out`, lookup_var_def, FLOOKUP_UPDATE] >>
   rw[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
