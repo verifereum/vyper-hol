@@ -67,18 +67,6 @@ Proof
   disj2_tac >> metis_tac[]
 QED
 
-Theorem build_phi_maps_matching:
-  !pred phis i v.
-    FLOOKUP (SND (build_phi_maps pred phis)) i = SOME v ==>
-    ?phi. MEM phi phis /\ MEM (pred,v) (phi_pairs phi.inst_operands)
-Proof
-  rpt gen_tac >> rewrite_tac[build_phi_maps_def] >>
-  simp[] >> strip_tac >> drule foldl_phi_maps_matching >>
-  simp[MEM_MAPi] >> strip_tac >> gvs[] >>
-  qexists_tac `EL i' phis` >> simp[MEM_EL] >>
-  qexists_tac `i'` >> simp[]
-QED
-
 Theorem input_vars_foldl_origin:
   !base acc placed op_map matching v.
     MEM v (FST (FOLDL (\(acc,placed) w.
@@ -125,7 +113,7 @@ Proof
       gvs[raw_phi_inputs_def, FLOOKUP_DEF]) >>
   disj2_tac >>
   qspecl_then [`pred`, `collect_phis instrs`, `i`, `v`]
-    mp_tac build_phi_maps_matching >> gvs[]
+    mp_tac livenessTransferProofsTheory.build_phi_maps_matching_mem >> gvs[]
 QED
 
 Definition demand_available_def:

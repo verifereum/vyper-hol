@@ -87,7 +87,7 @@ Proof
 QED
 
 
-Theorem all_distinct_flat_map_member[local]:
+Theorem all_distinct_flat_map_member:
   !f xs x.
     ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==>
     ALL_DISTINCT (f x)

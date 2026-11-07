@@ -55,21 +55,6 @@ Proof
   simp[popmany_plan_spilled_unchanged]
 QED
 
-(* Exact copy from reorderSim.stack_swap_mem_subset; importing that frame-level
-   theory here would invert the planner helper dependency boundary. *)
-Theorem stack_swap_mem_subset:
-  !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
-Proof
-  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
-  `LENGTH stk - 1 < LENGTH stk /\
-   LENGTH stk - (d + 1) < LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
-  `MEM (EL (LENGTH stk - 1) stk) stk /\
-   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
-    (conj_tac >> irule EL_MEM >> decide_tac) >>
-  simp[stack_swap_def, LET_THM] >> strip_tac >>
-  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
-QED
-
 Theorem dead_phi_stack_inventory:
   !inst next halting ps d x ops qs.
     stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
@@ -95,7 +80,7 @@ Proof
                   is_contiguous_top_def, QSORT_DEF, PARTITION_DEF, PART_DEF] >> simp[]) >>
          drule popmany_singleton_stack_projection >> simp[] >> strip_tac >>
          gvs[] >> rpt strip_tac >>
-         irule stack_swap_mem_subset >>
+         irule reorderSimTheory.stack_swap_mem_subset >>
          metis_tac[MEM_TAKE, stack_pop_def]) >>
       rpt strip_tac >>
       `MEM op st.ps_stack` by metis_tac[] >>

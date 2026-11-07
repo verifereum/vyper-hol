@@ -139,7 +139,7 @@ Proof
     (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
      metis_tac[EL_MEM]) >>
   `ALL_DISTINCT (EL i bb.bb_instructions).inst_outputs` by
-    metis_tac[codegen_ready_inst_outputs_distinct] >>
+    metis_tac[genBlockSimTheory.codegen_ready_inst_outputs_distinct] >>
   `LENGTH (compute_operands (EL i bb.bb_instructions)) <= 16` by
     (gvs[codegen_ready_fn_def, EVERY_MEM, codegen_ready_inst_def] >>
      metis_tac[EL_MEM]) >>

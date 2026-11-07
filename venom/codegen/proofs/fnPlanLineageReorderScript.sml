@@ -383,8 +383,6 @@ Proof
   drule_all emit_input_plan_materialised >> simp[]
 QED
 
-(* Exact copy from fnAliasStepScript.sml, authorized by TASK criterion 2.
-   Keep fnAliasStep unedited and outside the lineage dependency boundary. *)
 Theorem generate_emit_ops_slots:
   !inst ltc ps ops ps'.
     generate_emit_ops inst ltc ps = (ops, ps') ==>

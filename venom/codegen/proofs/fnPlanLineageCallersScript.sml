@@ -43,34 +43,6 @@ Proof
   metis_tac[compute_operands_inst_uses, livenessDefsTheory.MEM_ordered_inst_uses]
 QED
 
-(* Exact copies of genBlockSim's local helper and readiness boundary.
-   Importing that frame-level theory here would cross the planner boundary. *)
-Theorem all_distinct_flat_map_member[local]:
-  !f xs x.
-    ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==>
-    ALL_DISTINCT (f x)
-Proof
-  gen_tac >> Induct >> simp[ALL_DISTINCT_APPEND] >> metis_tac[]
-QED
-
-Theorem codegen_ready_inst_outputs_distinct:
-  !fn inst.
-    codegen_ready_fn fn /\ MEM inst (fn_insts fn) ==>
-    ALL_DISTINCT inst.inst_outputs
-Proof
-  rpt strip_tac >>
-  fs[codegen_ready_fn_def, ssa_form_def] >>
-  metis_tac[all_distinct_flat_map_member]
-QED
-
-(* Exact copy from unitShapeDefs, avoiding compiler-level imports. *)
-Theorem MEM_fn_insts_blocks_iff[local]:
-  !bbs inst. MEM inst (fn_insts_blocks bbs) <=>
-             ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Theorem ordinary_position_invariant:
   !fn bb i dfg cfg halting term lbl ps m core base ops qs.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
@@ -98,10 +70,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ssa_form fn /\ wf_function fn` by gvs[codegen_ready_fn_def] >>
   `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
-    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+    (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
      metis_tac[EL_MEM]) >>
   `ALL_DISTINCT (EL i bb.bb_instructions).inst_outputs` by
-    metis_tac[codegen_ready_inst_outputs_distinct] >>
+    metis_tac[genBlockSimTheory.codegen_ready_inst_outputs_distinct] >>
   `LENGTH (compute_operands (EL i bb.bb_instructions)) <= 16` by
     (gvs[codegen_ready_fn_def, EVERY_MEM, codegen_ready_inst_def] >>
      metis_tac[EL_MEM]) >>

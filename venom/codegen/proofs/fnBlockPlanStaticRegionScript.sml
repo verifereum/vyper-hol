@@ -11,8 +11,7 @@ Ancestors
   fnLineageInvSupport fnLineageInvOwnerOrigin fnLineageInvEdgeFacts
   livenessConvergenceProofs livenessBlockProofs livenessDefs
   fnFrameStepsPhi
-  removeUnusedProofs
-
+  removeUnusedProofs fnPlanLineageLiveness
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
     dfs_aux_call lv dfg cfg fn ps0 wl visited pg ==>
@@ -513,15 +512,7 @@ Proof
   simp[livenessDefsTheory.liveness_transfer_def, live_update_mem]
 QED
 
-Theorem regional_phi_later_uses[local]:
-  !phis i j v. phi_uses_disjoint phis /\
-    i < j /\ j < LENGTH phis /\ MEM v (inst_uses (EL i phis)) ==>
-    ~MEM v (inst_uses (EL j phis))
-Proof
-  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
-  Cases_on `i` >> Cases_on `j` >>
-  gvs[phi_uses_disjoint_def, EVERY_MEM] >> metis_tac[EL_MEM]
-QED
+Theorem regional_phi_later_uses[local] = fnPlanLineageLivenessTheory.phi_uses_disjoint_later
 
 Theorem regional_ready_phi_source_dead:
   !fn bb i v.

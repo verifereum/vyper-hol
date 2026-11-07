@@ -113,7 +113,7 @@ Proof
   >> disj2_tac >> metis_tac[]
 QED
 
-Theorem build_phi_maps_matching_mem[local]:
+Theorem build_phi_maps_matching_mem:
   !src phis i v.
     FLOOKUP (SND (build_phi_maps src phis)) i = SOME v ==>
     ?phi. MEM phi phis /\ MEM (src, v) (phi_pairs phi.inst_operands)

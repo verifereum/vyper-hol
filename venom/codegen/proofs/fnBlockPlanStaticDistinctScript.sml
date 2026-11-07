@@ -2,8 +2,7 @@ Theory fnBlockPlanStaticDistinct
 Ancestors
   fnLineageStatic indexedLists finite_map livenessDefs stackPlanGen
   cfgNormSupplyProofs venomInst list livenessTerminationProofs dfAnalyzeDefs dfHelperDefs
-  fnFrameStepsPhi
-
+  fnFrameStepsPhi fnLineageInvLivenessDistinct fnPlanLineagePhiMaps
 Definition distinct_phi_maps_acc_def:
   distinct_phi_maps_acc src n phis acc =
     FOLDL (\(om,mm) (i,phi).
@@ -108,19 +107,7 @@ Proof
   simp[FUN_EQ_THM, pairTheory.FORALL_PROD]
 QED
 
-Theorem input_vars_from_ALL_DISTINCT:
-  !src instrs live.
-    phi_uses_disjoint (collect_phis instrs) /\ ALL_DISTINCT live ==>
-    ALL_DISTINCT (input_vars_from src instrs live)
-Proof
-  rpt gen_tac >> strip_tac >> simp[input_vars_from_def] >>
-  Cases_on `NULL (collect_phis instrs)` >- simp[] >> simp[] >>
-  Cases_on `build_phi_maps src (collect_phis instrs)` >>
-  rename1 `build_phi_maps _ _ = (om,mm)` >> simp[] >>
-  rewrite_tac[distinct_pair_projection] >>
-  irule phi_input_fold_distinct >> simp[] >>
-  metis_tac[build_phi_maps_matching_consistent]
-QED
+Theorem input_vars_from_ALL_DISTINCT = fnPlanLineagePhiMapsTheory.input_vars_from_distinct
 
 Theorem distinct_list_union[local]:
   ALL_DISTINCT xs /\ ALL_DISTINCT ys ==> ALL_DISTINCT (list_union xs ys)
@@ -128,13 +115,7 @@ Proof
   simp[list_union_def, ALL_DISTINCT_APPEND, FILTER_ALL_DISTINCT, MEM_FILTER]
 QED
 
-Theorem distinct_fold_union[local]:
-  !ls acc. EVERY ALL_DISTINCT ls /\ ALL_DISTINCT acc ==>
-    ALL_DISTINCT (FOLDL list_union acc ls)
-Proof
-  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
-  simp[distinct_list_union]
-QED
+Theorem distinct_fold_union[local] = fnLineageInvLivenessDistinctTheory.foldl_list_union_distinct
 
 Theorem distinct_backward_fold[local]:
   !instrs idx acc im.

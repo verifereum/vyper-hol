@@ -97,7 +97,7 @@ Proof
   Cases_on `h.inst_opcode = PHI` >> gvs[] >> metis_tac[]
 QED
 
-Theorem phi_uses_disjoint_later[local]:
+Theorem phi_uses_disjoint_later:
   !phis i j v.
   phi_uses_disjoint phis /\ i < j /\ j < LENGTH phis /\
   MEM v (inst_uses (EL i phis)) ==> ~MEM v (inst_uses (EL j phis))

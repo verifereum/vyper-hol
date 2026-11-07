@@ -7,8 +7,7 @@ Ancestors
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
-  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady
-
+  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady fnPlanLineageInventory fnPlanLineageReorder fnPlanPrefix
 Theorem resolve_block_assigns_cong:
   !insts at h.
     (!inst v op. MEM inst insts /\ inst.inst_opcode = ASSIGN /\
@@ -932,35 +931,9 @@ Proof
   irule simple_prefix_spill_wf >> simp[]
 QED
 
-Theorem list_elem_count_dom_length:
-  !xs ys. (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
-    LENGTH xs <= LENGTH ys
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  `MEM h ys` by
-    (first_x_assum (qspec_then `h` mp_tac) >>
-     Cases_on `MEM h ys` >> simp[LIST_ELEM_COUNT_THM] >>
-     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
-  qpat_x_assum `MEM h ys` mp_tac >>
-  rewrite_tac[listTheory.MEM_SPLIT] >> strip_tac >> gvs[] >>
-  `!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (l1 ++ l2)` by
-    (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
-     simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
-     Cases_on `h = x` >> simp[] >> decide_tac) >>
-  first_x_assum drule >> simp[]
-QED
+Theorem list_elem_count_dom_length = fnPlanLineageReorderTheory.list_elem_count_dom_length
 
-Theorem available_input_plan_length:
-  !opc inputs nl ps input_ops ps1.
-    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
-    (!op. MEM op inputs /\ is_var_operand op ==>
-      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
-    LENGTH inputs <= LENGTH ps1.ps_stack
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule list_elem_count_dom_length >>
-  drule_all emit_input_plan_materialised >> simp[]
-QED
+Theorem available_input_plan_length = fnPlanLineageReorderTheory.available_input_plan_length
 
 Theorem available_preparation_prefix_wf:
   !opc inputs nl ps input_ops ps1 dfg reorder_ops ps2 lo.
@@ -1768,17 +1741,7 @@ Proof
   simp[plan_stack_sem_eq_refl]
 QED
 
-Theorem rf_release_stack[simp]:
-  (release_dead_spills nl ps).ps_stack = ps.ps_stack
-Proof
-  `!dead (ps0:plan_state).
-    (FOLDL (\ps' (op:operand,off:num).
-       ps' with <|ps_spilled := ps'.ps_spilled \\ op;
-                  ps_alloc := free_spill_slot off ps'.ps_alloc|>) ps0 dead).ps_stack =
-    ps0.ps_stack` by
-    (Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[]) >>
-  simp[release_dead_spills_def]
-QED
+Theorem rf_release_stack[simp] = fnPlanPrefixTheory.release_dead_spills_stack
 
 Theorem rf_assign_postfix_stack_frame:
   ps.ps_stack = stack_push (Var out) tail /\
@@ -3139,16 +3102,7 @@ Proof
   qspecl_then [`x`, `ps`] mp_tac do_swap_spilled_unchanged >> simp[]
 QED
 
-Theorem rf_popmany_spilled:
-  !items ps. (SND (popmany_plan items ps)).ps_spilled = ps.ps_spilled
-Proof
-  rpt gen_tac >> Cases_on `items` >> simp[popmany_plan_def] >>
-  rpt IF_CASES_TAC >>
-  simp[popmany_individual_def, LET_THM, SRULE [LET_THM] rf_popmany_fold_spilled] >>
-  pairarg_tac >> simp[] >>
-  qspec_then `SUC (LENGTH t)` (qspec_then `ps` mp_tac) do_swap_spilled_unchanged >>
-  simp[]
-QED
+Theorem rf_popmany_spilled = fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged
 
 Theorem rf_assign_plan_spill_lookup:
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\

@@ -3812,7 +3812,7 @@ Proof
   metis_tac[sortingTheory.PERM_MEM_EQ]
 QED
 
-Theorem reorder_restore_inventory_subset[local]:
+Theorem reorder_restore_inventory_subset:
   !op f n ps ops ps'.
     (case stack_get_unfixed_depth op f n ps.ps_stack of
        SOME _ => ([],ps)
@@ -3832,7 +3832,7 @@ Proof
   metis_tac[do_restore_inventory_subset]
 QED
 
-Theorem stack_poke_mem_subset[local]:
+Theorem stack_poke_mem_subset:
   !d op stk at. MEM at (stack_poke d op stk) ==> at = op \/ MEM at stk
 Proof
   simp[stack_poke_def, MEM_LUPDATE] >> metis_tac[EL_MEM]

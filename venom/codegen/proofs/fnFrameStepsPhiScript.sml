@@ -9,8 +9,7 @@ Ancestors
   planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
-  allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs dftCommutation fnFrameDeepInvoke
-
+  allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs dftCommutation fnFrameDeepInvoke fnPlanLineagePhiClasses
 Theorem phi_regular_plan_spill_support:
   !liveness dfg cfg fn inst next_live halting next_term lbl ps ops ps' at.
     generate_regular_inst_plan liveness dfg cfg fn inst next_live
@@ -117,12 +116,7 @@ Proof
 QED
 
 
-Theorem phi_codegen_uses_disjoint:
-  codegen_ready_fn fn /\ MEM bb fn.fn_blocks ==>
-  phi_uses_disjoint (collect_phis bb.bb_instructions)
-Proof
-  strip_tac >> drule_all phi_codegen_block_ready >> simp[phi_block_ready_def]
-QED
+Theorem phi_codegen_uses_disjoint = fnPlanLineagePhiClassesTheory.ready_block_phi_uses_disjoint
 
 
 Theorem phi_lineage_entry_spills_empty:
