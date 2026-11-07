@@ -12,6 +12,7 @@
 
 Theory bodyIntCallSeams
 Ancestors
+  bodyIntCallSource
   bodyIntCallSourceReturn bodyIntCallMetadata bodyIntCallReturnAdapters bodyIntCallCompilerBoundary bodyIntCallAssemblySource bodyIntCallAssemblyModes bodyIntCallAssembly bodyIntCallCompletedModes bodyIntCallCompletedFrame bodyIntCallCompletedFacts bodyIntCallCompletedSource bodyIntCallExemptReturn bodyIntCallStorePath bodyIntCallStoreRun bodyIntCallStorePost bodyIntCallEmitBoundary memoryLocalRhsProps supportedProgram supportedNames bodyIntCallReturnLayout bodyIntCallRestoreResults bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallCountedPath bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
   intCallCallee intCallFrame fragGasFocus gasOutcome gasContext
   compileVyper exprLowering exprLoweringProps compileEnv
@@ -470,6 +471,36 @@ QED
    compile_call's value has the return type, which vv_post can't describe
    until the posts describe values at their lowered type.  Seam 3's
    statement with the other side of the case split; not an alan seam. *)
+Theorem widened_call_return_type[local]:
+  body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (Call ann (IntCall (NONE,name)) es dflt) st /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,F,args,[],ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops ==>
+  cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret /\
+  type_widens_to (get_tenv cx) ret ann
+Proof
+  strip_tac >>
+  conj_tac >- (drule_all body_internal_decl_return_type >> simp[]) >>
+  drule_all body_intcall_source_selection >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  gvs[]
+QED
+
+Theorem widened_return_classification[local]:
+  type_widens_to tenv ret ann /\ ret <> ann ==>
+  ~is_word_type ann /\
+  (is_bytestring_type ann ==> is_bytestring_type ret)
+Proof
+  strip_tac >> conj_tac
+  >- metis_tac[compileEnvTheory.type_widens_to_word] >>
+  fs[vyperTypeSystemTheory.type_widens_to_def] >>
+  metis_tac[arg_type_fits_bytestring_source]
+QED
+
 Theorem intcall_return_widened:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
