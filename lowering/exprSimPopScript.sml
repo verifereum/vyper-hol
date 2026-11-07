@@ -849,8 +849,18 @@ Proof
         `(LENGTH vs - 1) * type_memory_size etv + type_memory_size etv =
          LENGTH vs * type_memory_size etv` by
           (Cases_on `vs` >> gvs[arithmeticTheory.MULT_CLAUSES]) >>
-        fs[snapshot_in_def, mem_path_offset_def, mem_step_offset_def] >>
-        decide_tac) >>
+        `LENGTH vs - 1 < n /\
+         LENGTH vs * type_memory_size etv <= n * type_memory_size etv` by
+          (Cases_on `vs` >> fs[]) >>
+        qpat_x_assum `val_in_memory etv (LAST vs) _ u.vs_memory` mp_tac >>
+        qpat_x_assum `u.vs_memory = _` (fn th => rewrite_tac[th]) >>
+        strip_tac >>
+        simp[snapshot_in_def, mem_path_offset_def, mem_step_offset_def] >>
+        qpat_x_assum `val_in_memory etv (LAST vs) _ _` mp_tac >>
+        `w2n w + (type_memory_size etv * (LENGTH vs - 1) + 32) =
+         w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv` by
+          (rpt (pop_assum kall_tac) >> simp[]) >>
+        pop_assum (fn th => rewrite_tac[th])) >>
       simp[]) >>
   (* the variables and allocations clauses simplified away; the memory
      frame is left *)
