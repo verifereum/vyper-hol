@@ -15,6 +15,7 @@ Ancestors
   concretizePtrSourceOwnership concretizePtrParamSupport
   o1PassContract unitShapeDefs venomExecSemantics concretizeStepStructure
   concretizePtrRequestHistory concretizePtrValueTransport
+  concretizePtrTaintContent concretizePtrSharedFields
 
 Theorem ptr_hash_log_nonrevert[local]:
   active_inst fn inst s /\ ALL_DISTINCT (fn_labels fn) /\
@@ -340,6 +341,55 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
+Theorem ptr_sha3_size_evaluation[local]:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ opaque_use_ok fn /\
+  inst.inst_opcode = SHA3 /\ inst.inst_operands = [addr;szop] /\
+  taint_ok fn tn inst src /\ ptr_ledger_erases births TG G /\
+  FDOM G SUBSET fn_pv P fn /\
+  ptr_mixed_vars births positions TG tn fn ft src tgt /\
+  src.vs_labels = tgt.vs_labels ==>
+  eval_operand szop src = eval_operand szop tgt
+Proof
+  strip_tac >>
+  `mem_read_ops inst = SOME
+    <|iao_ofst := addr; iao_size := SOME szop; iao_max_size := SOME szop|>` by
+    simp[mem_read_ops_def] >>
+  `!v. szop = Var v ==> v NOTIN fn_pv P fn` by
+    (qpat_assum `mem_read_ops inst = SOME _`
+       (mp_then Any mp_tac ptr_read_max_size_not_pointer) >> simp[]) >>
+  `op_prov G szop = NONE` by
+    (Cases_on `szop` >> gvs[op_prov_def] >>
+     metis_tac[flookup_thm, SUBSET_DEF]) >>
+  `EVERY (ptr_nonopaque_operand fn) inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> simp[]) >>
+  `op_taint tn szop = {}` by
+    (gvs[taint_ok_def] >> metis_tac[MEM]) >>
+  `ptr_nonopaque_operand fn szop` by gvs[] >>
+  irule ptr_mixed_scalar_eval >> rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
+Theorem ptr_hash_log_successful_read[local]:
+  inst_wf inst /\ MEM inst.inst_opcode [SHA3; LOG] /\
+  step_inst fuel C inst t = OK post ==>
+  ?off n. MEM (off,n) (source_memory_read_ranges inst t)
+Proof
+  strip_tac >> fs[MEM]
+  >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+      simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
+      asm_rewrite_tac[] >> simp[Once opcode_case_def, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      simp[source_memory_read_ranges_def, memory_range_of_operands_def]) >>
+  `?tc rest. inst.inst_operands = Lit tc::rest /\ LENGTH rest = w2n tc+2` by
+    gvs[inst_wf_def] >>
+  `?addr szop topics. REVERSE rest = addr::szop::topics` by
+    (Cases_on `REVERSE rest` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[] >> simp[Once opcode_case_def, AllCaseEqs()] >>
+  strip_tac >>
+  simp[source_memory_read_ranges_def, memory_range_of_operands_def] >> metis_tac[]
+QED
+
 Theorem ptr_sha3_execution[local]:
   inst.inst_opcode = SHA3 /\ inst.inst_operands = [addr;szop] /\
   inst.inst_outputs = [out] /\
@@ -405,6 +455,29 @@ Proof
   simp[] >> irule ptr_history_content_masks >>
   simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
   qexists_tac `tn` >> simp[]
+QED
+
+Theorem ptr_log_successor_relations[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
+  inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
+  ptr_mixed_vars births positions
+    (step_prov PT TG inst (s with vs_logs := s.vs_logs ++ [ev]))
+    (step_taint inst s (s with vs_logs := s.vs_logs ++ [ev]) tn)
+    f g (s with vs_logs := s.vs_logs ++ [ev])
+        (t with vs_logs := t.vs_logs ++ [ev]) /\
+  ptr_history_content (step_taint inst s (s with vs_logs := s.vs_logs ++ [ev]) tn)
+    (s with vs_logs := s.vs_logs ++ [ev])
+    (t with vs_logs := t.vs_logs ++ [ev])
+Proof
+  strip_tac >> conj_tac
+  >- (simp[step_prov_def, set_prov_def] >>
+      irule ptr_mixed_vars_fields >> qexistsl_tac [`s`,`t`,`tn`] >>
+      simp[step_taint_def, set_var_taint_def, DRESTRICT_UNIV]) >>
+  irule ptr_history_content_masks >> qexists_tac `tn` >>
+  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+     ptr_core_shared_def, ptr_shared_fields_def, contract_storage_def,
+     contract_transient_def] >> gvs[]
 QED
 
 Theorem ptr_paired_hash_log_prefix_normalize:
