@@ -20,9 +20,11 @@
  *                           roots, for pop_nested_immutable_deploy_pure_sim.
  *                           Admitted pending alan; provable as stated, no
  *                           invariant change needed.
- *   pop_nested_immutable_deploy_impure_index_case — RESIDUAL, FALSE as
- *                           stated: such a pop with an index that pops or
- *                           calls.
+ *   pop_nested_immutable_deploy_impure_index_case — RESIDUAL, admitted:
+ *                           such a pop with an index that is not
+ *                           pure_expr.  False as stated only when the
+ *                           index mutates the root immutable; see the
+ *                           comment at the theorem.
  *)
 
 Theory exprSimPopImmutableTarget
@@ -2961,22 +2963,42 @@ Proof
   Cases_on `0 <= i` >> simp[]
 QED
 
-(* RESIDUAL, FALSE as stated until ImmutablePlace reads get a popped
-   history as MemoryPlace's have (the semantics ledger item shared with
-   the array piece's ancestor-pop residual): a nested pop on an immutable
-   in the constructor with an index that pops or calls.  Such an index
-   can shorten an array on the target's own path after the lowering has
-   taken its pointer.  The source's extend_place re-reads the whole path,
-   and read_place on an ImmutablePlace has no popped history, so it
-   fails; the lowering reads the stale length word and goes on.
+(* RESIDUAL, admitted: a nested pop on an immutable in the constructor
+   with an index that is not pure_expr.
+
+   The premise ~EVERY pure_expr is wider than the trouble.  pure_expr is F
+   on msg.gas, on the precompile builtins (ecrecover, sha256, ...) and on
+   a pop of an unrelated root (a local array, a storage array); those
+   preserve es.immutables, and the statement holds for them by an
+   immutable frame step, the counterpart of exprSimPopNestedStorageFrame's
+   storage_frame_expr.  Only an index that mutates the root immutable
+   (src,id) itself, by popping it or by an internal call that does
+   (functions_well_typed types callee bodies with
+   bare_global_assignable_complete), falsifies it: such an index shortens
+   an array on the target's own path after the lowering has taken its
+   pointer, the source's extend_place re-reads the whole path and fails,
+   and the lowering reads the stale length word and goes on.
    Counterexample: s.a : DynArray[DynArray[DynArray[uint256,3],3],3] =
    [[[7]],[[8]]], target self.s.a[1][len(self.s.a.pop()) - 1], popped.
    The base place s.a[1] is in bounds; the index pops s.a to length 1 and
    gives 0; extend_place reads s.a[1], out of bounds: RuntimeError.  The
    lowering took a[1]'s pointer before the index, a[1]'s length word
-   still reads 1, 0 < 1, and the outer pop completes.  An internal call
-   in the index can do the same in the constructor (functions_well_typed
-   types callee bodies with bare_global_assignable_complete). *)
+   still reads 1, 0 < 1, and the outer pop completes.
+
+   Python Vyper rejects exactly that program at compile time: a subscript
+   whose index writes a variable its base references, or whose base
+   references variables while the index contains a risky call, is a
+   CompilerPanic ("risky overlap", read_write_overlap in codegen/core.py,
+   _subscript_read_write_overlap in codegen_venom/expr.py).  Target
+   evaluation keeps re-reading the path (the source semantics only
+   capture the base early for rvalue subscripts), so no semantics change
+   discharges this case.  Its discharge splits in two: (i) the immutable
+   frame step above for indices that do not touch the root, and (ii) the
+   shared target read/write overlap exclusion, the same one behind
+   pop_nested_storage_effectful_dead_case, pop_nested_local_popped_case
+   and targetPlaceSimCases' target_subscript_case; it belongs in
+   supported_program / target_pre, and in static target checking once
+   supported_program is gone. *)
 Theorem pop_nested_immutable_deploy_impure_index_case:
   !ctx func cenv cx env ann bt ty es src id.
     cx.in_deploy /\
