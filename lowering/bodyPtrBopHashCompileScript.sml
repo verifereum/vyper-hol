@@ -1,7 +1,7 @@
 Theory bodyPtrBopHashCompile
 Ancestors
   bodyPtrBopHashSemantic exprLowering exprLoweringProps emitHelper compileEnv
-  arithmetic rich_list fragExec
+  arithmetic rich_list fragExec venomExecSemantics venomInst venomState finite_map byte
 
 Theorem bop_hash_compile_emission:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p ==>
@@ -128,4 +128,27 @@ Proof
   gvs[] >> drule_all bop_string_hash_compile_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   metis_tac[]
+QED
+
+(* Runtime SHA3 needs only the live pointer lookup, not freshness of the
+   entire execution state's variable map. *)
+Theorem bop_hash_compile_run:
+  compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
+  lookup_var p s = SOME w ==>
+  ?t. run_inst_seq (emitted_insts sc sd) s = OK t /\
+    eval_operand op t = SOME (word_of_bytes_be (Keccak_256_w64
+      (TAKE (w2n (mload (w2n w) s))
+        (DROP (w2n (w + 32w)) s.vs_memory ++
+         REPLICATE (w2n (mload (w2n w) s)) 0w))))
+Proof
+  strip_tac >> drule_all bop_hash_compile_emission >> strip_tac >>
+  gvs[] >>
+  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+       exec_pure2_def, eval_operand_def] >>
+  `p <> q` by metis_tac[] >>
+  simp[Once step_inst_base_def, exec_read1_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE, mload_def] >>
+  fs[lookup_var_def] >>
+  simp[Once step_inst_base_def, eval_operand_def, lookup_var_def,
+       update_var_def, FLOOKUP_UPDATE, word_of_bytes_be_def]
 QED
