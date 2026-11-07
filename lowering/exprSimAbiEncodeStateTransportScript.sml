@@ -360,3 +360,15 @@ Proof
   `FLOOKUP actual.vs_allocas inst.inst_id = FLOOKUP initial.vs_allocas inst.inst_id`
     by metis_tac[] >> metis_tac[]
 QED
+
+Theorem abi_encode_caller_site_literal:
+  fn_inst_ids_distinct func /\
+  MEM allocation (fn_insts func) /\ allocation.inst_id = site /\
+  allocation.inst_operands = [Lit (n2w outsz)] /\ outsz < dimword (:256) ==>
+  !inst n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = site /\ inst.inst_operands = [Lit n] ==> outsz = w2n n
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `inst = allocation` by metis_tac[fn_inst_ids_distinct_inj] >>
+  gvs[] >> simp[]
+QED
