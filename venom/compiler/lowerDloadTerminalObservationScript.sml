@@ -3,6 +3,11 @@ Ancestors
   lowerDloadRecursiveInterface lowerDloadResidualRead lowerDloadRevertSuffix
   lowerDloadSharedState ptrDiscipline o1PassContract venomExecSemantics
   o1LowerDloadRangeTransport lowerDloadRelocation pred_set words list venomState
+  lowerDloadNormalData lowerDloadFrameCertificate lowerDloadOwnership
+  lowerDloadReachableDiscipline lowerDloadOperand lowerDloadProvenanceSupport
+  lowerDloadVariableTransport lowerDloadTargetGeometry finite_map memLocDefs
+  pointerConfinedDefs venomInst contextCodegenRel lowerDloadOpaqueExecution
+  lowerDloadCoverageInvariant lowerDloadPairedBoundary
 
 (* Terminal interface audit (not a proof of the quoted obligation).
 
@@ -96,3 +101,115 @@ Proof
       simp[ld_read_memory_element]) >>
   fs[ld_byte_rel_def, SUBSET_DEF] >> metis_tac[]
 QED
+
+Theorem ld_normal_return_observation:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  ~in_revert_forward fn s /\ i.inst_opcode = RETURN /\
+  step_inst fuel CT i t = Halt th ==>
+  ?sh. step_inst fuel CS i s = Halt sh /\
+    LENGTH sh.vs_returndata = LENGTH th.vs_returndata /\
+    (!q. q < LENGTH sh.vs_returndata /\ q NOTIN ret_taint tn i s ==>
+      EL q sh.vs_returndata = EL q th.vs_returndata) /\
+    ret_taint un i t SUBSET ret_taint tn i s
+Proof
+  strip_tac >>
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) i.inst_operands ==> v IN U` by
+    (rpt strip_tac >> simp[] >>
+     irule ld_retpc_observable_operand >> simp[] >> qexists_tac `i` >> simp[]) >>
+  `ld_owned_vars U E AG BH tn un s t /\
+   (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+   (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v))` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `?off sz q n. i.inst_operands = [off;sz] /\
+    eval_operand off t = SOME q /\ eval_operand sz t = SOME n` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[Once step_inst_non_invoke, SimpLHS] >>
+     asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+     simp[AllCaseEqs()] >> metis_tac[]) >>
+  `!op. MEM op i.inst_operands ==> op_taint tn op = {}` by
+    (drule_all ld_annotated_taint_ok >>
+     simp[taint_ok_def] >> metis_tac[]) >>
+  `ld_op_prov AG sz = NONE` by suspend "size_scalar" >>
+  `eval_operand sz s = eval_operand sz t` by
+    (irule ld_owned_operand_clean >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[MEM]) >>
+  `?p. eval_operand off s = SOME p` by
+    (Cases_on `eval_operand off s` >> simp[] >>
+     metis_tac[ld_owned_operand_defined, MEM, optionTheory.NOT_SOME_NONE]) >>
+  `eval_operand sz s = SOME n` by metis_tac[] >>
+  suspend "observation"
+QED
+
+Resume ld_normal_return_observation[size_scalar]:
+  `MEM fn CS.ctx_functions` by metis_tac[ld_annotated_fn_member] >>
+  `fn_ptr_ok P fn` by metis_tac[] >>
+  `ptr_use_ok P (fn_pv P fn) i` by (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `!v. sz = Var v ==> v NOTIN fn_pv P fn` by
+    (rpt strip_tac >>
+     qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+          mem_read_ops_def, mem_write_ops_def] >>
+     qexists_tac `v` >> Cases_on `off = Var v` >> gvs[]) >>
+  drule_all ld_annotated_scalar_prov >> simp[]
+QED
+
+Resume ld_normal_return_observation[observation]:
+  drule ld_normal_data_geometry >> strip_tac >>
+  `!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
+    owner IN live /\ bs+sz < dimword(:256)` by
+    (rpt strip_tac >> rename1 `FLOOKUP AG v = SOME(owner,(bs,cz))` >>
+     `owner IN live` by metis_tac[] >> simp[] >>
+     `?bt. ld_site_entry E owner bs bt cz` by
+       (qpat_x_assum `!v. ld_owned_selection E _ _` (qspec_then `v` mp_tac) >>
+        simp[ld_owned_selection_def] >> metis_tac[]) >> metis_tac[]) >>
+  `!j. j < w2n n ==>
+    ((w2n p+j = w2n q+j /\ w2n p+j < lo) \/
+      ld_site_bytes E live (w2n p+j) (w2n q+j))` by
+    (gen_tac >> strip_tac >> irule ld_owned_read_range_geometry >>
+     conj_tac >- metis_tac[] >>
+     goal_assum (drule_at (Pat `ld_owned_vars _ _ _ _ _ _ _ _`)) >>
+     qexistsl_tac [`fn`,`i`,`w2n n`,
+       `<|iao_ofst := off; iao_size := SOME sz; iao_max_size := SOME sz|>`] >>
+     simp[mem_read_ops_def, source_memory_read_ranges_def,
+          memory_range_of_operands_def] >>
+     metis_tac[ld_annotated_access_ok, MEM]) >>
+  `LENGTH (read_memory (w2n p) (w2n n) s) =
+     LENGTH (read_memory (w2n q) (w2n n) t) /\
+   (!j. j < w2n n /\ w2n p+j NOTIN tn.t_mem ==>
+     EL j (read_memory (w2n p) (w2n n) s) =
+     EL j (read_memory (w2n q) (w2n n) t)) /\
+   {j | j < w2n n /\ w2n q+j IN un.t_mem} SUBSET
+     {j | j < w2n n /\ w2n p+j IN tn.t_mem}` by
+    (irule ld_byte_rel_masked_slice >>
+     qexists_tac `(\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)` >>
+     conj_tac >- (BETA_TAC >> asm_rewrite_tac[]) >>
+     drule ld_normal_data_memory >> simp[]) >>
+  suspend "execution"
+QED
+
+Resume ld_normal_return_observation[execution]:
+  `th = halt_state (set_returndata (read_memory (w2n q) (w2n n) t) t)` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[Once step_inst_non_invoke, SimpLHS] >>
+     asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+     simp[read_memory_def]) >>
+  qexists_tac `halt_state (set_returndata (read_memory (w2n p) (w2n n) s) s)` >>
+  conj_tac
+  >- (simp[Once step_inst_non_invoke, SimpLHS] >>
+      asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+      simp[read_memory_def]) >>
+  gvs[halt_state_def, set_returndata_def, ret_taint_def,
+      ld_read_memory_length] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Finalise ld_normal_return_observation
