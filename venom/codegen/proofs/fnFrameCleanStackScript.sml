@@ -42,29 +42,6 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem clean_stack_plan_spilled:
-  !ps liveness cfg fn bb ops ps'.
-    clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
-    ps'.ps_spilled = ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[clean_stack_plan_def] >>
-  Cases_on `cfg_preds_of cfg bb.bb_label`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
-  Cases_on `t` >> simp[]
-  >- (IF_CASES_TAC
-      >- (simp[] >> rpt strip_tac >> gvs[]) >>
-      Cases_on `lookup_block h fn.fn_blocks`
-      >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
-      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
-      IF_CASES_TAC
-      >- (strip_tac >> gvs[]) >>
-      IF_CASES_TAC
-      >- (pairarg_tac >> strip_tac >> gvs[] >>
-          metis_tac[phi_popmany_spilled]) >>
-      metis_tac[phi_popmany_spilled]) >>
-  strip_tac >> gvs[]
-QED
-
 Theorem plan_stack_rel_forget_map:
   !lo vs stk astk f.
     plan_stack_rel lo vs stk astk /\
