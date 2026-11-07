@@ -478,6 +478,7 @@ Theorem compile_split_log_topics_run:
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     wb_frame cenv es sm s t /\
+    (t with vs_vars := s.vs_vars) = s /\
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>
