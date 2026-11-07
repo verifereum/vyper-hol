@@ -683,7 +683,7 @@ Resume assign_attr_local_frag_mem[normal]:
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      first_x_assum irule >> metis_tac[]) >>
-  drule vv_post_read_result >> strip_tac >> gvs[] >>
+  drule_all vv_post_read_result >> strip_tac >>
   `!tail. vyperState$bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
     (INL v, es_end with gas_obs := tail)` by
@@ -694,7 +694,6 @@ Resume assign_attr_local_frag_mem[normal]:
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (StructT _)`)) >>
   disch_then (drule_at (Pat `ALOOKUP _ _ = _`)) >>
   simp[] >> disch_then drule >> strip_tac >>
-  qpat_x_assum `!func cenv e es sa sb s0 vv s'' ctx. _` kall_tac >>
   qpat_x_assum `vv_store_bound _ _ _ _ tv _ _` kall_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>

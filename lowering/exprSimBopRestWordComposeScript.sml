@@ -413,12 +413,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   `?av. v2 = ArrayV av` by
     (Cases_on `v2` >> fs[vyperTypingTheory.value_has_type_def]) >>
   gnvs[] >>
-  `vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-      (fin with gas_obs := []) (Value (ArrayV av)) arr_vv u` by
-    (qpat_assum `!tail. read_result _ _ _ = _`
-       (qspec_then `[]` assume_tac) >>
-     drule exprSimUnwrapPropsTheory.vv_post_read_result >>
-     simp[] >> metis_tac[]) >>
+  qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >>
   `expr_body_pre cenv cx env e1
       (es with gas_obs := gas_explicit left s0.vs_gas_readings)` by simp[] >>
   `value_has_type et v1` by
@@ -459,7 +454,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
        q.vs_current_bb = sb.cs_current_bb /\
        q.vs_inst_idx = LENGTH sb.cs_current_insts /\
        vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-         (fin with gas_obs := []) (Value (ArrayV av)) arr_vv q /\
+         (fin with gas_obs := []) tv arr_vv q /\
        eval_operand op q = SOME (bool_to_word
          (if bop = In then evaluate_in_array (ArrayTV et bd) v1 av
           else ~evaluate_in_array (ArrayTV et bd) v1 av))` by
@@ -492,9 +487,6 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
         vyperValueOperationTheory.binop_negate_def]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
-  conj_tac
-  >- (qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >>
-      drule exprSimUnwrapPropsTheory.vv_post_read_result >> simp[] >> metis_tac[]) >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
        compileEnvTheory.is_word_type_def, vyperValueTheory.evaluate_type_def,
        valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def,

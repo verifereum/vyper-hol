@@ -5,15 +5,18 @@ Ancestors
   exprLowering compileEnv vyperAST vyperState valueEncoding
   valueEncodingProofs vyperTypeSystem venomInst venomState
 
+(* A located result's post holds of the value it reads to: vv_at pins only
+   memory places, and a value is not one. *)
 Theorem vv_post_read_result:
   !func cenv cx e es sa sb s0 es' tv v vv s ctx.
-    read_result cx tv es' = (INL v, es') ==>
-    (vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
-     vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
+    read_result cx tv es' = (INL v, es') /\
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s ==>
+    vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s
 Proof
   rpt strip_tac >> Cases_on `vv` >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
-       immutable_holds_def, read_result_def, return_def]
+  gvs[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
+      immutable_holds_def, read_result_def, return_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> metis_tac[]
 QED
 
 Theorem expr_post_of_vv_post_memory:
@@ -22,8 +25,12 @@ Theorem expr_post_of_vv_post_memory:
     p.ptr_location = LocMemory /\ ~is_word_type t ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
 Proof
-  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
-  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def] >>
+  rw[vv_post_def, expr_post_def] >>
+  drule_then assume_tac vv_at_memory_val_at >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` kall_tac >>
+  gvs[read_result_def, return_def] >>
+  gvs[vv_holds_def, read_result_def, return_def, expr_val_rel_def,
+      expr_val_at_def] >>
   metis_tac[]
 QED
 

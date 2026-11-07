@@ -460,6 +460,7 @@ QED
 
 (* Postcondition packaging stays independent of the header-write proof. *)
 Theorem pop_storage_vv_post:
+  (!id path. tv <> PlaceR (MemoryPlace id path)) /\
   stmt_state_rel ctx func cenv cx es' u /\
   storage_holds cx tr ann tv slot es' u /\
   lookup_var x u = SOME slot /\
@@ -787,6 +788,7 @@ Resume compile_pop_storage_normalized_sim[positive]:
      (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))
      u` by
     (irule pop_storage_vv_post >>
+     conj_tac >- simp[] >>
      conj_tac >- simp[] >>
      conj_tac >- (qpat_x_assum `u = _` mp_tac >> Cases_on `tr` >>
                  simp[sstore_def, tstore_def, venom_state_component_equality]) >>

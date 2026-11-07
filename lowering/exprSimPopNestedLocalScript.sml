@@ -207,6 +207,19 @@ Resume pop_nested_local_live_case[nonempty]:
     (simp[Abbr `scopes'`] >> metis_tac[lookup_scopes_update_other]) >>
   `k + 32 <= sz` by decide_tac >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+  `local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+     etv result` by
+    (`mem_step_offset (ArrayTV etv (Dynamic n'))
+        (ValueSubscript (IntV &(LENGTH vs - 1))) =
+      SOME (32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
+       (simp[loweringPostsTheory.mem_step_offset_def] >>
+        fs[valueEncodingTheory.val_wf_def] >> Cases_on `vs` >> gvs[]) >>
+     `mem_path_offset entry.type
+        (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]) =
+      SOME (k + 32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
+       (drule_all exprSimPropsTheory.mem_path_offset_snoc >> simp[]) >>
+     gvs[Abbr `result`, loweringPostsTheory.local_place_at_def] >>
+     metis_tac[]) >>
   qexistsl_tac [`INL result`, `(tend with gas_obs := []) with scopes := scopes'`,
     `OK (u with vs_inst_idx := LENGTH r.cs_current_insts)`] >>
   conj_tac

@@ -145,10 +145,21 @@ Proof
   conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
       qexistsl [`h.rw_cond`, `u`] >>
-      simp[rest_word_init_sequence, Abbr `u`, update_var_def,
-           mk_inst_def, step_inst_base_def, jump_to_def, is_terminator_def,
+      `run_inst_seq [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
+                     mk_inst b ASSIGN [Lit 0w] [h.rw_result]] s = OK u` by
+        simp[rest_word_init_sequence, Abbr `u`] >>
+      `~u.vs_halted /\ u.vs_current_bb = h.rw_entry` by
+        simp[Abbr `u`, update_var_def] >>
+      `step_inst_base (mk_inst c JMP [Label h.rw_cond] [])
+         (u with vs_inst_idx := 2) =
+       OK (jump_to h.rw_cond (u with vs_inst_idx := 2))` by
+        simp[mk_inst_def, step_inst_base_opcode_eqs] >>
+      `jump_to h.rw_cond u = jump_to h.rw_cond (u with vs_inst_idx := 2)` by
+        simp[jump_to_def] >>
+      simp[mk_inst_def, is_terminator_def,
            fragExecMemTheory.run_inst_seq_mem_ok_def] >>
-      rpt strip_tac >> simp[eval_operand_def] >>
+      rpt strip_tac >>
+      simp[step_inst_base_opcode_eqs, eval_operand_def] >>
       rpt conj_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `R (jump_to h.rw_cond u)` by metis_tac[] >>
   `rest_word_membership_inv h.rw_idx h.rw_result len needleval elem R 0 u` by
@@ -217,7 +228,7 @@ Proof
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
       qexistsl [`exit`, `u`] >>
       simp[exprLoweringPropsTheory.run_inst_seq_def, Abbr `u`, update_var_def,
-           mk_inst_def, step_inst_base_def, eval_operand_def, jump_to_def,
+           mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def, jump_to_def,
            is_terminator_def, fragExecMemTheory.run_inst_seq_mem_ok_def] >>
       strip_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `R (jump_to exit u)` by metis_tac[] >>
@@ -251,13 +262,13 @@ Proof
                  mk_inst b ASSIGN [Var next] [idx]] s = OK u` by
     (gvs[eval_operand_def, lookup_var_def] >>
      simp[exprLoweringPropsTheory.run_inst_seq_def, mk_inst_def,
-          step_inst_base_def, exec_pure2_def, Abbr `u`, eval_operand_def,
+          step_inst_base_opcode_eqs, exec_pure2_def, Abbr `u`, eval_operand_def,
           lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qexists `jump_to cond_lbl u` >> conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
       qexists `cond_lbl` >>
       simp[Abbr `u`, update_var_def, jump_to_def, mk_inst_def,
-           step_inst_base_def, is_terminator_def,
+           step_inst_base_opcode_eqs, is_terminator_def,
            fragExecMemTheory.run_inst_seq_mem_ok_def] >>
       strip_tac >> gvs[eval_operand_def, lookup_var_def] >>
       simp[exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
@@ -376,7 +387,7 @@ Proof
       simp[EVERY_APPEND, Abbr `u`, update_var_def, mk_inst_def, is_terminator_def] >>
       reverse conj_tac >- simp[jump_to_def] >>
       Cases_on `elem i = needle` >>
-      simp[step_inst_base_def, eval_operand_def, lookup_var_def,
+      simp[step_inst_base_opcode_eqs, eval_operand_def, lookup_var_def,
            FLOOKUP_UPDATE, bool_to_word_def]) >>
   `R (jump_to (if elem i = needle then found else incr) u)` by metis_tac[] >>
   `rest_word_membership_inv idx result len needle elem R i u` by

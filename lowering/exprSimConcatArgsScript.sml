@@ -1027,8 +1027,9 @@ Resume concat_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[] >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
+  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `y` >> rewrite_tac[] >>
+  qpat_x_assum `_ (INR y) (es_end with gas_obs := []) r` (mp_tac o BETA_RULE) >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
   TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
 QED

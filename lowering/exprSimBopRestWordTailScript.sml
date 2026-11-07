@@ -172,7 +172,8 @@ Theorem rest_word_located_search:
     (word_scale loc) (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc)
     (context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) is_in cs = (out,ct) /\
   fn_has_code cs ct fn /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  read_result cx tv es' = (INL (ArrayV av), es') /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
   expr_type e = ArrayT ty bd /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
@@ -191,7 +192,7 @@ Theorem rest_word_located_search:
   ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
       t.vs_current_bb = ct.cs_current_bb /\
       t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      vv_post ctx func cenv cx e es sa sm s0 es' tv vv t /\
       eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
       eval_operand (vv_operand vv) t = SOME baseword /\
       eval_operand out t = SOME (bool_to_word
@@ -217,7 +218,7 @@ Proof
       (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc) cs = (h,cl) /\
     context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc h.rw_addr cl = (v,cm) /\
     i < len /\
-    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop (typed_val_to_w256 et needle) lenop len p /\
     eval_operand (vv_operand vv) p = SOME baseword /\
     eval_operand h.rw_addr p = SOME (baseword + n2w
@@ -226,10 +227,13 @@ Proof
         eval_operand v q = SOME (elem i) /\
         (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)` by
     (rpt gen_tac >> simp[rest_word_search_rep_def] >> strip_tac >>
+     `vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv p` by
+       (irule exprSimUnwrapPropsTheory.vv_post_read_result >> qexists_tac `tv` >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
      `evaluate_type (get_tenv cx) (ArrayT ty bd) = SOME (ArrayTV et bd)` by metis_tac[] >>
      drule rest_word_located_element_run >> simp[Abbr `elem`] >>
      disch_then assume_tac >> metis_tac[]) >>
-  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop (typed_val_to_w256 et needle) lenop len s` by
     simp[rest_word_search_rep_def] >>
   drule_all rest_word_compiled_search >>
@@ -239,7 +243,8 @@ QED
 Theorem rest_word_fixed_tail:
   compile_var_array_membership cenv needleop vv (ArrayT ty (Fixed n)) is_in sm = (out,ct) /\
   fn_has_code sm ct fn /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  read_result cx tv es' = (INL (ArrayV av), es') /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
   expr_type e = ArrayT ty (Fixed n) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Fixed n)) /\
@@ -255,7 +260,7 @@ Theorem rest_word_fixed_tail:
   ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
       t.vs_current_bb = ct.cs_current_bb /\
       t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      vv_post ctx func cenv cx e es sa sm s0 es' tv vv t /\
       eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
       eval_operand (vv_operand vv) t = SOME baseword /\
       eval_operand out t = SOME (bool_to_word
@@ -640,7 +645,8 @@ QED
 Theorem rest_word_dynamic_tail:
   compile_var_array_membership cenv needleop vv (ArrayT ty (Dynamic cap)) is_in sm = (out,ct) /\
   fn_has_code sm ct fn /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  read_result cx tv es' = (INL (ArrayV av), es') /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
   expr_type e = ArrayT ty (Dynamic cap) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Dynamic cap)) /\
@@ -656,7 +662,7 @@ Theorem rest_word_dynamic_tail:
   ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
       t.vs_current_bb = ct.cs_current_bb /\
       t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      vv_post ctx func cenv cx e es sa sm s0 es' tv vv t /\
       eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
       eval_operand (vv_operand vv) t = SOME baseword /\
       eval_operand out t = SOME (bool_to_word
@@ -664,6 +670,9 @@ Theorem rest_word_dynamic_tail:
          else ~evaluate_in_array (ArrayTV et (Dynamic cap)) needle av))
 Proof
   strip_tac >>
+  `vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s` by
+    (irule exprSimUnwrapPropsTheory.vv_post_read_result >> qexists_tac `tv` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `elem_size_in_location cenv loc ty = word_scale loc` by metis_tac[rest_word_word_stride] >>
   qpat_x_assum `compile_var_array_membership _ _ _ _ _ _ = _` mp_tac >>
   simp[rest_word_dynamic_dispatch] >>
@@ -679,7 +688,7 @@ Proof
   `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
   `!z. vv_operand vv = Var z ==> not_fresh_at sm z` by metis_tac[] >>
   `!z. needleop = Var z ==> not_fresh_at sm z` by metis_tac[] >>
-  `vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv q /\
+  `vv_post ctx func cenv cx e es sa sm s0 es' tv vv q /\
    eval_operand needleop q = SOME (typed_val_to_w256 et needle) /\
    eval_operand (vv_operand vv) q = SOME baseword` by
     (irule rest_word_capture_load_frame >> goal_assum (drule_at Any) >>
@@ -708,7 +717,7 @@ Proof
     (Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def,
        vyperValueOperationTheory.array_length_def]) >>
   qabbrev_tac `p = q with vs_inst_idx := LENGTH ch.cs_current_insts` >>
-  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop (typed_val_to_w256 et needle) lenop
       (array_length (ArrayTV et (Dynamic cap)) av) p` by
     simp[Abbr `p`, rest_word_search_rep_control, rest_word_search_rep_def] >>
