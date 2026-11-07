@@ -6060,3 +6060,129 @@ Resume ld_recursive_member_next_clause[nonmacro]:
   rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC
 QED
 Finalise ld_recursive_member_next_clause
+
+(* Curry the complete witness as one premise; matching must not flatten its
+   saved certificates into a global premise search. *)
+val ld_pop_witness_first_goal =
+  let val (pre,res) = dest_imp (concl ld_recursive_paired_return_pop)
+      val rest = subst [ld_combined_return_witness |-> boolSyntax.T] pre
+      val heads = map (fn name =>
+        valOf (List.find (fn v => fst (dest_var v) = name) (free_vars rest)))
+        ["sf", "astail", "tf", "gtail"]
+  in mk_imp(ld_combined_return_witness,
+       list_mk_forall(heads,mk_imp(rest,res))) end;
+
+Theorem ld_pop_witness_first[local]:
+  ^ld_pop_witness_first_goal
+Proof
+  disch_tac >> rpt gen_tac >> disch_tac >>
+  mp_tac ld_recursive_paired_return_pop >>
+  pure_asm_rewrite_tac[AND_CLAUSES, IMP_CLAUSES] >>
+  simp_tac (srw_ss()) []
+QED
+
+val ld_restore_witness_first_goal =
+  let val (_,body) = strip_forall (concl ld_recursive_return_restore)
+      val (pre,res) = dest_imp body
+      val popbody = #1 (dest_conj (#2 (dest_conj pre)))
+      val rest = subst [ld_combined_return_witness |-> boolSyntax.T,
+                       popbody |-> boolSyntax.T] pre
+      val params = map (fn name =>
+        valOf (List.find (fn v => fst (dest_var v) = name) (free_vars rest)))
+        ["gtail", "D", "names"]
+  in mk_imp(ld_combined_return_witness,mk_imp(popbody,
+       list_mk_forall(params,mk_imp(rest,res)))) end;
+
+Theorem ld_restore_witness_first[local]:
+  ^ld_restore_witness_first_goal
+Proof
+  disch_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+  mp_tac (SPEC_ALL ld_recursive_return_restore) >>
+  (impl_tac >- (pure_asm_rewrite_tac[AND_CLAUSES, IMP_CLAUSES] >>
+    simp_tac (srw_ss()) [])) >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem ld_recursive_member_return_clause[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_return_goal
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
+    (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
+  CONV_TAC ld_member_beta_conv >>
+  conj_tac >- (qpat_assum `!f i st tv. MEM (f,i,st,tv) _ ==> MEM f _` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[MEM] >> metis_tac[]) >>
+  conj_tac >- (qpat_assum `!f i st tv. MEM (f,i,st,tv) _ ==> MEM f _` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[MEM] >> metis_tac[]) >>
+  drule_all ld_recursive_combined_return_anchor >> strip_tac >>
+  qpat_x_assum `(^ld_recursive_combined_return_zero) _ _ _ _ _ _ _`
+    (CONJUNCTS_THEN2 assume_tac
+      (CONJUNCTS_THEN2 assume_tac
+        (REPEAT_TCL CHOOSE_THEN (fn th =>
+          (mk_asm "return_body" th) >> strip_assume_tac th))) o BETA_RULE) >>
+  TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
+  namedCases_on `gstk` ["", "tf gtail"]
+  >- (qpat_x_assum `(_::_) = MAP _ []` mp_tac >>
+      simp_tac (srw_ss()) [MAP, NOT_CONS_NIL]) >>
+  namedCases_on `astk` ["", "sf astail"]
+  >- (qpat_x_assum `LENGTH [] = LENGTH (_::_)` mp_tac >>
+      simp_tac (srw_ss()) [LENGTH]) >>
+  qpat_x_assum `(_::_) = MAP _ (tf::gtail)` mp_tac >>
+  simp_tac (srw_ss()) [MAP, CONS_11, pairTheory.PAIR_EQ] >> strip_tac >>
+  qpat_x_assum `rinst = i` SUBST_ALL_TAC >>
+  qpat_x_assum `s_end = s` SUBST_ALL_TAC >>
+  qpat_x_assum `s = ta` SUBST_ALL_TAC >>
+  qpat_x_assum `caller = tf.lf_fn` SUBST_ALL_TAC >>
+  qpat_x_assum `inv' = tf.lf_inst` SUBST_ALL_TAC >>
+  qpat_x_assum `saved = tf.lf_state` SUBST_ALL_TAC >>
+  asm "return_body" (qspecl_then [`sf`, `astail`, `tf`, `gtail`]
+    (drule_at (Pat `bind_outputs _ _ _ = SOME _`)) o
+    MATCH_MP (BETA_RULE ld_pop_witness_first)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = IntRet _ _`)) >>
+  disch_then (qspecl_then [`names`, `D`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >> simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (fn th =>
+    mk_asm "return_pop" th >> strip_assume_tac th)) >>
+  asm "return_body" (fn th =>
+    asm "return_pop" (qspecl_then [`gtail`, `D`, `names`] mp_tac o MATCH_MP
+      (MATCH_MP (BETA_RULE ld_restore_witness_first) th))) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      simp_tac (srw_ss()) []) >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  strip_tac >>
+  qpat_assum `active_inst tf.lf_fn inst' _`
+    (fn th => simp_tac (srw_ss()) [th]) >>
+  first_x_assum irule >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_recursive_combined_coverage:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  !stk PG G un gn j t.
+    frame_reachable vs0 CT stk PG G un gn j t ==>
+    (^ld_recursive_combined_candidate) vs0 CT
+      (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) un gn j t
+Proof
+  disch_then (fn env =>
+    map_every (fn producer =>
+      assume_tac (CONV_RULE (REDEPTH_CONV BETA_CONV) (MATCH_MP producer env)))
+      [ld_recursive_member_entry_clause, ld_recursive_member_next_clause,
+       ld_recursive_member_block_clause, ld_recursive_member_call_clause,
+       ld_recursive_member_return_clause]) >>
+  qspec_then `\stk un gn j t.
+    (^ld_recursive_member_candidate) vs0 CT stk un gn j t`
+    mp_tac ld_frame_reachable_fixed_projected_ind >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn coverage =>
+    rpt gen_tac >>
+    disch_then (mp_tac o MATCH_MP (SPEC_ALL coverage))) >>
+  disch_then (ACCEPT_TAC o CONJUNCT2 o CONJUNCT2)
+QED
