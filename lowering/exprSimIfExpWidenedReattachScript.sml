@@ -60,7 +60,9 @@ Theorem unwrap_value_physical_framed_path:
     u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-      lookup_var x u = SOME w)
+      lookup_var x u = SOME w) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `vv_post ctx func ce cx e ee (origin with cs_next_var := sm.cs_next_var)
@@ -73,5 +75,7 @@ Proof
   conj_tac
   >- (irule vv_post_reattach_expr_post >> simp[] >>
       qexistsl_tac [`sm`, `tv`, `s`, `vv`] >> simp[]) >>
-  metis_tac[expr_post_rebased_lookup]
+  conj_tac >- metis_tac[expr_post_rebased_lookup] >>
+  qpat_assum `expr_post _ _ _ _ _ ee _ sn s _ _ _ u`
+    (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> simp[]
 QED
