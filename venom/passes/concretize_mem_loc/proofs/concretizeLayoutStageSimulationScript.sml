@@ -2,6 +2,10 @@ Theory concretizeLayoutStageSimulation
 Ancestors concretizeLayoutCanonicalContract concretizeLayoutStageEntry
   frameSelectedSimulation frameDecorationComplete frameResolvedCoherent
   frameFiniteJointDecoration frameJointTrace frameSelectedDecoration list
+  concretizePtrParamShape unitTransformDefs o1PassContract ptrDiscipline
+  venomExecSemantics passSimulationDefs frameFiniteExecution frameFiniteJointTrace
+  frameJointTransition venomWf contextCodegenRel o1ContractSimplifyCfg
+  concretizeStepStructure
 
 (* The generic selected driver is the only recursive simulation used here. *)
 Theorem layout_stage_selected_run:
@@ -82,6 +86,89 @@ Proof
   simp[selected_segment_def, joint_segment_def] >>
   rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >>
   simp[EL_MAP]
+QED
+
+Theorem layout_stage_terminating_context:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  terminates (run_context fuel C vs) ==>
+  ?fuel'. dead_result_rel D (run_context fuel C vs) (run_context fuel' C' vs)
+Proof
+  strip_tac >>
+  `vs.vs_allocas = FEMPTY` by
+    fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  drule o1_ctx_shape_instructions_wf >> strip_tac >>
+  `EVERY wf_function C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
+  qpat_assum `ptr_discipline lo C vs` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
+  Cases_on `C.ctx_entry` >>
+  gvs[run_context_def, passSimulationDefsTheory.terminates_def] >>
+  rename1 `C.ctx_entry = SOME name` >>
+  Cases_on `lookup_function name C.ctx_functions` >>
+  gvs[passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_function name C.ctx_functions = SOME fn` >>
+  Cases_on `fn_entry_label fn` >>
+  gvs[run_function_def, passSimulationDefsTheory.terminates_def] >>
+  rename1 `fn_entry_label fn = SOME lbl` >>
+  qmatch_goalsub_abbrev_tac `run_blocks fuel C fn s` >>
+  `finite_run C fn s (run_blocks fuel C fn s)` by
+    (irule (cj 3 finite_execution_complete) >>
+     Cases_on `run_blocks fuel C fn s` >> gvs[]) >>
+  drule finite_run_entry_active >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `dead_result_rel D r _` >>
+  qabbrev_tac `q0 = JointConfig [] [] FEMPTY entry_taint fn inst' p [] FEMPTY []
+    [OriginInitial s; OriginObserve (OriginSnapshot fn [] FEMPTY FEMPTY inst' p)]` >>
+  `joint_initial vs C q0` by
+    (simp[Abbr `q0`, Abbr `s`] >> metis_tac[joint_initial_entry]) >>
+  `decoration_entry fn p q0` by
+    (simp[decoration_entry_def, decoration_at_def, Abbr `q0`] >> metis_tac[]) >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `wf_function fn /\ fn.fn_eom = NONE` by fs[EVERY_MEM] >>
+  `ALL_DISTINCT (fn_labels fn) /\
+    EVERY (\f. ALL_DISTINCT (fn_labels f)) C.ctx_functions` by
+    fs[wf_function_def, EVERY_MEM] >>
+  drule_all layout_stage_source_decoration >> strip_tac >>
+  `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
+  `s.vs_allocas = FEMPTY` by simp[Abbr `s`] >>
+  `?fn' positions.
+     lookup_function name C'.ctx_functions = SOME fn' /\
+     layout_driver_row C' fn fn' positions /\
+     layout_canonical_run D lo vs C C' q0 (MAP FST path) (MAP SND path)
+       ass qe q0 0 fn s fn' s` by
+    (irule layout_stage_entry_initial >>
+     goal_assum (drule_at Any) >> simp[Abbr `q0`] >> metis_tac[]) >>
+  `activation_depth q0 = 0` by simp[Abbr `q0`, frameActivationCacheTheory.activation_depth_def] >>
+  `?r'. finite_run C' fn' s r' /\
+    layout_canonical_OutR D lo vs C C' q0 (MAP FST path) (MAP SND path)
+      ass qe q0 0 qe (0 + LENGTH path) fn s fn' s r r'` by
+    (irule layout_stage_selected_run >> metis_tac[]) >>
+  `!ret t. r <> IntRet ret t` by
+    (simp[Abbr `r`, Abbr `s`] >>
+     metis_tac[o1_ctx_shape_no_intret, run_context_def, run_function_def]) >>
+  `dead_result_rel D r r'` by
+    (fs[layout_canonical_OutR_def] >>
+     Cases_on `r` >> Cases_on `r'` >> gvs[layout_canonical_result_def]) >>
+  `C'.ctx_entry = SOME name` by fs[ctx_pass_stage_def] >>
+  `fn_entry_label fn' = SOME lbl` by
+    (fs[layout_driver_row_def, layout_stage_row_def,
+        apply_context_concretize_layout_def, apply_concretize_layout_def,
+        concretize_positions_entry_label]) >>
+  simp[] >>
+  drule (cj 3 finite_execution_realizable) >> strip_tac >>
+  qexists_tac `n` >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[Abbr `s`]
+
 QED
 
 val _ = export_theory();
