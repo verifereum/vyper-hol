@@ -3,7 +3,6 @@
  *)
 Theory concretizePtrCallFamily
 Ancestors
-  concretizePtrPrefixWriteAttach
   concretizePtrStorageReadProducer concretizePtrMloadRecovery
   concretizePtrPairedPrefixProbe concretizePtrOperationalOpcodes
   concretizePtrRequestCompletionProbe copyFwdEquiv venomInstProofs1
@@ -19,6 +18,7 @@ Ancestors
   list venomState contextCodegenRel codegenRel allocaRemapDefs
   pointerConfinedDefs memLocDefs concretizePtrOpaqueRetpc
   concretizePtrReturnTransport concretizePtrValueTransport finite_map pred_set
+  concretizePtrPrefixWriteAttach
 
 Theorem ptr_call_scalar_not_pointer[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

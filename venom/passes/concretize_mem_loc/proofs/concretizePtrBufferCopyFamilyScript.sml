@@ -3,7 +3,6 @@
  *)
 Theory concretizePtrBufferCopyFamily
 Ancestors
-  concretizePtrPrefixWriteAttach
   concretizePtrStorageReadProducer concretizePtrBufferCopyContent
   concretizePtrPairedPrefixProbe
   concretizePtrOpaqueRetpc ptrDiscipline memLocDefs list pointerConfinedDefs
@@ -23,6 +22,7 @@ Ancestors
   concretizePtrOperationalOpcodes finite_map concretizePtrAllocationSize
   contextCodegenRel unitLabelMapIdentity opcodeClass venomExecProps memSafeRun
   concretizePtrActivationChronology concretizePtrPlacementBounds
+  concretizePtrPrefixWriteAttach
 
 Theorem ptr_buffer_copy_operand_discipline[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
