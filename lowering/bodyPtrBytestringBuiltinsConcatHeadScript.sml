@@ -68,7 +68,8 @@ Theorem concat_operand_eval_suffix:
   (!v ee G tn t.
     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (expr_type e) v op G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
