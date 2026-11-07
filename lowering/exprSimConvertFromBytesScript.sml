@@ -288,7 +288,7 @@ QED
 
 Finalise dynamic_load_word_raw_exact
 
-Theorem dynamic_convert_typing_boundary[local]:
+Theorem dynamic_convert_typing_boundary:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es ==>
   valid_conversion (expr_type e) dst /\ ann = dst /\
   well_formed_type env.type_defs dst
@@ -640,7 +640,7 @@ Proof
   drule_all dynamic_local_region_bound >> decide_tac
 QED
 
-Theorem dynamic_convert_operand_typed[local]:
+Theorem dynamic_convert_operand_typed:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
   (do r <- eval_expr cx e1; read_result cx r od) es = (INL v, es1) ==>
   ?stv. evaluate_type (get_tenv cx) (expr_type e1) = SOME stv /\
@@ -2468,7 +2468,7 @@ Proof
   rpt strip_tac >> fs[] >> metis_tac[]
 QED
 
-Theorem dynamic_scalar_type[local]:
+Theorem dynamic_scalar_type:
   is_bytestring_type src /\ ~is_bytestring_type dst /\ valid_conversion src dst /\
   well_formed_type tenv dst ==>
   is_word_type dst /\ (!n. dst <> FlagT n)
