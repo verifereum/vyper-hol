@@ -1412,5 +1412,5 @@ Proof
   irule target_subscript_local_pop_continuation >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
+  qexistsl [`env`, `id`, `ix`, `nocalls`, `sn`] >> simp[]
 QED
