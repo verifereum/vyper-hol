@@ -2,6 +2,7 @@
 Theory bodyPtrTypeBuiltinsSourceTyping
 Ancestors memoryLocalRhsProps bodyPtrTypeBuiltinsLayoutProbe
   supportedExprs supportedExprForms vyperTypeSystem exprLowering exprSimHypsDefs compileEnv
+  bodyPtrTypeBuiltinsBodyTyping vyperTypeInvariants
 Libs monadsyntax
 
 Theorem internal_call_lowered_bytestring:
@@ -26,65 +27,27 @@ Proof
   metis_tac[type_widens_to_def, compileEnvTheory.arg_type_fits_bytestring_source]
 QED
 
-Theorem source_lowered_bytestring:
-  !cenv e tops cx env es.
-  supported_expr tops e /\ supported_program tops /\
-  get_module_code cx NONE = SOME tops /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
-  expr_body_pre cenv cx env e es /\ is_bytestring_type (expr_type e) ==>
-  is_bytestring_type (lowered_value_type cenv e)
-Proof
-  recInduct lowered_value_type_ind >>
-  rpt strip_tac >>
-  gvs[lowered_value_type_def, is_bytestring_type_def, vyperASTTheory.expr_type_def] >>
-  drule_all internal_call_lowered_bytestring >>
-  simp[lowered_value_type_def]
-QED
-
-Theorem source_read_lowered_layout:
-  supported_expr tops e /\ supported_program tops /\
-  get_module_code cx NONE = SOME tops /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
-  expr_body_pre cenv cx env e es /\ is_bytestring_type (expr_type e) /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
-  is_bytestring_type (lowered_value_type cenv e) /\
-  ?tv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
-       value_has_type tv v /\
-       type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size tv
-Proof
-  strip_tac >> conj_tac
-  >- (drule_all source_lowered_bytestring >> simp[]) >>
-  drule_all memory_rhs_read_lowered_typed >> strip_tac >>
-  gvs[expr_body_pre_def] >> drule_all memory_rhs_runtime_layout >> simp[]
-QED
-
 Theorem source_read_zero_bytes:
-  expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  body_inv tops ctx cenv cx /\ ~cx.in_deploy /\ expr_body_pre cenv cx env e es /\
   lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
   v = BytesV []
 Proof
-  strip_tac >> drule_all memory_rhs_read_lowered_typed >>
-  strip_tac >> gvs[expr_body_pre_def] >>
-  drule_all memory_rhs_runtime_layout >>
-  simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
+  strip_tac >> drule_all body_runtime_read_lowered_typed >>
+  strip_tac >> gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
+    vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
 
 Theorem source_read_zero_string:
-  expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  body_inv tops ctx cenv cx /\ ~cx.in_deploy /\ expr_body_pre cenv cx env e es /\
   lowered_value_type cenv e = BaseT (StringT 0) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
   v = StringV []
 Proof
-  strip_tac >> drule_all memory_rhs_read_lowered_typed >>
-  strip_tac >> gvs[expr_body_pre_def] >>
-  drule_all memory_rhs_runtime_layout >>
-  simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
+  strip_tac >> drule_all body_runtime_read_lowered_typed >>
+  strip_tac >> gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
+    vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
 
@@ -119,14 +82,12 @@ Proof
 QED
 
 Theorem source_lowered_nonzero_capacity:
-  supported_expr tops e /\ supported_program tops /\
-  get_module_code cx NONE = SOME tops /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
+  body_inv tops ctx cenv cx /\ ~cx.in_deploy /\
   expr_body_pre cenv cx env e es /\ is_bytestring_type (expr_type e) /\
   lowered_value_type cenv e <> BaseT (BytesT (Dynamic 0)) /\
   lowered_value_type cenv e <> BaseT (StringT 0) ==>
   64 <= type_memory_bytes cenv (lowered_value_type cenv e)
 Proof
-  strip_tac >> drule_all source_lowered_bytestring >> strip_tac >>
+  strip_tac >> drule_all body_runtime_source_lowered_bytestring >> strip_tac >>
   irule bytestring_nonzero_capacity >> simp[]
 QED

@@ -364,9 +364,7 @@ Theorem bytes_bool_continuation:
   well_formed_type tenv (BaseT BoolT) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   value_has_type stv v1 /\ expr_body_pre cenv cx env e es /\
-  supported_expr tops e /\ supported_program tops /\
-  get_module_code cx NONE = SOME tops /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
+  body_inv tops ctx cenv cx /\ ~cx.in_deploy /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v1,ee) /\
   (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
       lowered_value_type cenv e = BaseT (StringT 0)
