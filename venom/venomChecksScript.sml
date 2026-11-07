@@ -7,6 +7,8 @@ Ancestors
   asmCallActivationRegression contextReachabilityChecks asmEncodingRegression
   codegenFrameChecks codegenOracleRegression fnBoundaryRegression
   sourceMemoryRangeChecks
+  (* generated deep-DUP assembly at the spill/restore boundaries *)
+  deepDupChecks
   (* the compiler's unit-shape and unit-transform hypotheses *)
   unitShapeChecks unitTransformChecks
   (* passes: call-frame allocation, effect order in the dead-function walk *)
