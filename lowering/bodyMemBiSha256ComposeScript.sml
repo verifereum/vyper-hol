@@ -2,6 +2,7 @@
    task-permitted S1 overlay; all memory checks are proved here. *)
 Theory bodyMemBiSha256Compose
 Ancestors
+  exprSimHashBoundary
   bodyMemBiSha256Suffix bodyExprForceMemory exprSimHash exprSimMemDefs allocaHistoryFragment
   fragGasSeqMem exprSimProps exprLoweringProps exprOperandVar exprSimWordArgs
   venomMemDefs compileEnv vyperTypeSystem fragGasSeqAbort fragGasMode

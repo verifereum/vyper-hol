@@ -1,5 +1,6 @@
 Theory bodyMemBiECRecoverPaths
 Ancestors
+  exprSimHashBoundary
   bodyMemBiECRecoverMemory bodyMemBiECRecoverRun exprSimPrecompiles exprSimDefs
   exprSimProps exprLowering exprLoweringProps exprSimWordArgs exprSimHypsDefs
   vyperTyping vyperAST vyperTypeSystem compileEnv list rich_list builtinMisc

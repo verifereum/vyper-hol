@@ -1,6 +1,7 @@
 (* Compiler boundaries for sequential bytestring digest operands. *)
 Theory bodyMemBopHeldOperand
 Ancestors
+  exprSimHashBoundary
   bodyMemBopHeldHash bodyMemBopHeldFacts exprBopLowering
   exprLoweringProps exprOperandVar exprLowering compileEnv emitHelper
   list rich_list fragExec exprSimMemDefs exprSimSource gasSummary

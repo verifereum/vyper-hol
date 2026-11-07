@@ -1,6 +1,7 @@
 (* Memory checks for the straight-line selector suffix. *)
 Theory bodyMemBiMethodIdSuffix
 Ancestors
+  exprSimHashBoundary
   exprOperandVar venomMemProps fragGasSeqMem fragGasMode allocaHistoryFragment fragExec
   bodyAllocMemory allocaFootprint allocaSiteResource loweringHalt
   builtinHashing builtinBytesMemory builtinBytes exprSimHash

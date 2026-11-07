@@ -1,6 +1,7 @@
 (* Read bounds for the comparison hash (ADD, MLOAD, SHA3). *)
 Theory bodyMemBopHeldHash
 Ancestors
+  exprSimHashBoundary
   bodyMemBiKeccakBounds bodyMemBiKeccakSuffix bytestringHashProps
   fragGasSeqMem allocaHistoryFragment exprSimMemDefs exprSimHash
   exprLowering emitHelper emitHelperProps compileEnv venomMemDefs
