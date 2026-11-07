@@ -34,7 +34,7 @@ Proof
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   simp[encode_raw_event_values_def, encode_raw_event_def] >>
   conj_tac >- (irule raw_log_state_rel >> simp[]) >>
-  irule raw_log_wb_frame >> simp[]
+  irule raw_log_wb_frame >> simp[] >> qexists_tac `es` >> simp[]
 QED
 
 

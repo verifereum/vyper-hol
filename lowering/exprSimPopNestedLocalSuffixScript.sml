@@ -109,9 +109,11 @@ Proof
      impl_tac
      >- (fs[] >> rpt conj_tac
          >~ [`snapshot_in`]
-         >- (irule pop_path_snapshot_in >> simp[] >> metis_tac[])
+         >- (`k + w2n b = w2n b + k` by decide_tac >>
+             pop_assum (fn th => rewrite_tac[th]) >>
+             irule pop_path_snapshot_in >> simp[] >> metis_tac[])
          >~ [`EVERY`]
-         >- metis_tac[popped_keys_indexed_lookup_dead] >>
+         >- metis_tac[exprSimSourceTheory.popped_keys_indexed_lookup_dead] >>
          metis_tac[]) >>
      simp[]) >>
   `wb_frame cenv es (mid with scopes := scopes') sa s0 u` by

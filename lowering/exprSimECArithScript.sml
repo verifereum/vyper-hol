@@ -1614,7 +1614,9 @@ Proof
      metis_tac[]) >>
   `wb_frame cenv es (es with outcomes := SOME (DROP 1 st.vs_outcomes)) sf s0 t` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl [`es`,`sf`,`st`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl [`es`,`sf`,`st`] >> simp[] >>
+       qpat_x_assum `wb_frame cenv es (es with outcomes := _) sf st t` mp_tac >>
+       simp[]) >>
      qexistsl [`ctx`,`cx`,`func`] >> simp[]) >>
   `mem_bytes_at (w2n wo) 64 t.vs_memory =
     word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T` by

@@ -775,13 +775,13 @@ Proof
   qpat_x_assum `(\res ee t. _) _ _ _` mp_tac >>
   simp[] >> strip_tac >>
   rename1 `v = HashMapRef tr base_slot bkt bvt` >>
-  `wb_frame cenv es ee sa s0 t` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t` by
     (pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` kall_tac >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` kall_tac >>
   qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ t.vs_memory = _` kall_tac >>
-  qpat_x_assum `locals_kept cenv es ee s0 t` kall_tac >>
+  qpat_x_assum `locals_kept cenv es (mid with gas_obs := []) s0 t` kall_tac >>
   `expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
    ?s u. eval_expr cx obj s = (INL v,u)` by
     (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)

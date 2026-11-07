@@ -124,7 +124,6 @@ Resume pop_nested_local_sim[normal]:
      fs[expr_sim_inv_def]) >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
   qpat_x_assum `target_root _ = _` kall_tac >>
-  qpat_x_assum `!path entry err. _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
   qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
@@ -239,7 +238,9 @@ Resume pop_nested_local_sim[nonempty]:
   fs[record_pop_def] >>
   gvs[Abbr `scopes'`] >>
   drule exprSimMemorySourceTheory.read_result_gas_obs >>
-  disch_then (qspec_then `[]` mp_tac) >> simp[]
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >>
+  strip_tac >>
+  full_simp_tac std_ss [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
 QED
 
 Finalise pop_nested_local_sim

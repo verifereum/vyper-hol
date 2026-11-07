@@ -2257,7 +2257,7 @@ Resume imm_target_subscript_step[in_bounds]:
           wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w,
           arithmeticTheory.ADD_CLAUSES] >>
      simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
-  `wb_frame cenv es es sa s0 t` by
+  `wb_frame cenv es (es with gas_obs := []) sa s0 t` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      qexistsl_tac [`sn`, `t'`] >> simp[] >>
      fs[imm_target_post_frame] >> decide_tac) >>

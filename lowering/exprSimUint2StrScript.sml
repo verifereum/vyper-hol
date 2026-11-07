@@ -2935,7 +2935,7 @@ Proof
   simp[] >> strip_tac >>
   irule vv_post_prefix_frag >> simp[] >>
   qexistsl_tac [`es'`, `s`] >> simp[] >>
-  conj_tac >- metis_tac[expr_post_frame] >>
+  reverse conj_tac >- metis_tac[expr_post_frame] >>
   irule (u2s_alloc_vv_frag |> Q.INST
     [`e` |-> `Builtin (BaseT (StringT n)) (Uint2Str n) [e]`]
     |> ONCE_REWRITE_RULE [vv_post_located_mk_ptr]

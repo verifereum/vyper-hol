@@ -118,11 +118,15 @@ Proof
 QED
 
 Theorem raw_log_wb_frame:
-  wb_frame cenv es es sa s0 s ==>
-  wb_frame cenv es es sa s0 (s with vs_logs := logs)
+  wb_frame cenv es es' sa s0 s /\ es''.scopes = es'.scopes ==>
+  wb_frame cenv es es'' sa s0 (s with vs_logs := logs)
 Proof
-  simp[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> irule wb_frame_readonly_tail >>
+  qexistsl_tac [`sa`, `s`] >> simp[lookup_var_def] >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+  qpat_x_assum `es''.scopes = _` (fn th => pure_rewrite_tac[th]) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem raw_log_topics_lowering_bridge:
@@ -286,14 +290,14 @@ Proof
 QED
 
 Theorem raw_log_mstore_frame:
-  wb_frame cenv es0 es0 sa s0 s /\ local_ptrs_reserved cenv sa /\
+  wb_frame cenv es0 es' sa s0 s /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   (!aid b sz. aid < sa.cs_next_id /\
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint a 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
      regions_disjoint a 32 b sz) ==>
-  wb_frame cenv es0 es0 sa s0 (mstore a w s)
+  wb_frame cenv es0 es' sa s0 (mstore a w s)
 Proof
   strip_tac >> irule wb_frame_allocating_tail >> simp[] >>
   qexistsl_tac [`s`, `es.scopes`, `sa`] >>
@@ -376,7 +380,7 @@ Proof
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   simp[encode_raw_event_values_def, encode_raw_event_def] >>
   conj_tac >- (irule raw_log_state_rel >> simp[]) >>
-  irule raw_log_wb_frame >> simp[]
+  irule raw_log_wb_frame >> simp[] >> qexists_tac `es` >> simp[]
 QED
 
 Theorem raw_log_dynamic_tail_core:
@@ -447,8 +451,8 @@ Proof
      simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
   fs[mk_inst_def, run_inst_seq_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t'`] >>
+  simp[lookup_var_def]
 QED
 
 Theorem raw_log_fixed_store_run:
@@ -563,6 +567,6 @@ Proof
   fs[mk_inst_def] >>
   simp[run_inst_seq_def, Once step_inst_base_def, exec_write2_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
+  simp[lookup_var_def]
 QED
