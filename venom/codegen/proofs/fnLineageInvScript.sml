@@ -12,6 +12,7 @@
 
 Theory fnLineageInv
 Ancestors
+  fnLineageInvOutgoing fnLineageInvBoundary fnLineageInvDFSResources
   fnPlanPrefix fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs
 
 (* Used by fnPlanLineageJoin (the join entry stack) and fnLineageStatic
@@ -76,5 +77,14 @@ Theorem lineage_entry_inventory:
     !v. MEM v (live_vars_at liveness pred (LENGTH pred_bb.bb_instructions)) ==>
         MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all lineage_entry_exact_inventory >> strip_tac >>
+  reverse conj_tac
+  >- (irule lineage_inventory_live_membership >> simp[]) >>
+  gvs[lineage_entry_def] >>
+  drule_all dfs_block_state_resources >> strip_tac >>
+  drule lineage_inventory_splice_marked_iff >>
+  disch_then (qspecl_then [`ps_succ`, `spill_base`] mp_tac) >>
+  simp[planSpillBoundsTheory.plan_slots_bounded_def] >>
+  metis_tac[planSpillBoundsTheory.plan_slots_bounded_def]
 QED
