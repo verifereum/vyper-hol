@@ -1,6 +1,8 @@
 Theory concretizeLayoutCanonicalBaseJump
 Ancestors concretizeLayoutCanonicalBase concretizeLayoutCanonicalDriver
   concretizeLayoutSelectedBaseInterface concretizeLayoutCompletedJump
+  concretizeLayoutCompletedConditionalJump concretizeLayoutAlignedControl
+  concretizeStepStructure concretizeLayoutBlockPairing concretizeLayoutEntryFlags
   ptrDiscipline venomExecSemantics venomInst list
 
 (* Leaf of the exhaustive base certificate: a terminator that steps to OK
@@ -34,5 +36,35 @@ Theorem layout_canonical_jump_success:
     layout_completed_jump D lo vs0 C C' q0 es qs qend g i j s t post tpost /\
     control_agree post tpost
 Proof
-  cheat
+  strip_tac >>
+  `MEM i.inst_opcode [JMP; JNZ; DJMP]` by
+    (Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
+     qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
+     pure_once_rewrite_tac[step_inst_base_def] >>
+     asm_rewrite_tac[opcode_case_def] >>
+     simp[AllCaseEqs()] >> rpt strip_tac >>
+     pairarg_tac >> gvs[]) >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `i.inst_opcode <> ALLOCA /\ i.inst_opcode <> NOP` by
+    gvs[MEM] >>
+  `j = i` by gvs[concretize_positions_unchanged] >>
+  qpat_x_assum `j = i` SUBST_ALL_TAC >>
+  `get_instruction g.lop_origin.lbo_target t.vs_inst_idx = SOME i` by
+    (drule_all layout_block_pair_lookup >>
+     simp[concretize_positions_unchanged]) >>
+  `~vs0.vs_halted` by
+    fs[o1PassContractTheory.o1_run_state_ok_def,
+       unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  `?tpost. layout_completed_jump D lo vs0 C C' q0 es qs qend
+      g i i s t post tpost` by
+    (Cases_on `i.inst_opcode = JMP`
+     >- (drule_all layout_ordinary_entry_nonhalting >> strip_tac >>
+         drule_all layout_completed_jmp >> simp[]) >>
+     irule layout_completed_conditional_jump >> simp[MEM] >>
+     metis_tac[MEM]) >>
+  qexists `tpost` >>
+  `control_agree s t` by fs[layout_aligned_entry_def] >>
+  drule_all layout_aligned_jump_state >>
+  simp[layout_aligned_state_def] >> strip_tac >>
+  fs[layout_completed_jump_def]
 QED
