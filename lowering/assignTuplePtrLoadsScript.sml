@@ -111,7 +111,9 @@ Resume compile_tuple_load_all_offset_path_ptr[tail]:
     (rpt strip_tac >> fs[not_fresh_at_def] >>
      metis_tac[LESS_LESS_EQ_TRANS]) >>
   `not_fresh_at sh p /\ lookup_var p t = SOME w /\
-    op_taint tn' (Var p) = {} /\ FLOOKUP G' p = SOME (b,cap)` by metis_tac[] >>
+    op_taint tn' (Var p) = {} /\ FLOOKUP G' p = SOME (b,cap)` by
+    (qpat_assum `!p. not_fresh_at sa p ==> lookup_var p t = _ /\ _`
+       (qspec_then `p` mp_tac) >> simp[]) >>
   `local_ptrs_reserved cenv sh` by
     (irule local_ptrs_reserved_next_var >> metis_tac[]) >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sh x`
