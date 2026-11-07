@@ -69,6 +69,8 @@ Definition layout_canonical_block_witness_def:
   (layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend q n bb s bb' t (INL a) <=>
     layout_driver_indexed es ass a /\
     ?fn fn' positions. decoration_entry fn s q /\
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      MEM fn C.ctx_functions /\
       layout_driver_row C' fn fn' positions /\
       layout_paired_ordinary D lo vs0 C C' q0 es qs qend
         positions q n bb s bb' t a) /\
