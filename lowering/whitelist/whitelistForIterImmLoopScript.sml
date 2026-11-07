@@ -806,3 +806,82 @@ Proof
       simp[]) >>
   fs[ret_pc_ok_def, array_caller_frame_def, lookup_var_def] >> metis_tac[]
 QED
+
+(* The length operand is a literal for Fixed and an immutable load result for
+   Dynamic.  Condition execution does not depend on its origin. *)
+Theorem immutable_condition_boundary:
+  lookup_block cond_lbl func.fn_blocks =
+    SOME <|bb_label := cond_lbl; bb_instructions :=
+      [mk_inst j1 EQ [Var idx; lvo] [dv];
+       mk_inst j2 JNZ [Var dv; Label exit_lbl; Label bod] []]|> /\
+  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst cond_lbl st k es cc /\
+  eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\ LENGTH vs < dimword (:256) /\
+  not_local_ptr cenv es.scopes dv /\ dv <> idx /\ dv <> p /\
+  (!x. saved_base = Var x ==> x <> dv) ==>
+  ?next.
+    array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+      ainst (if k = LENGTH vs then exit_lbl else bod) st k es next /\
+    (!x. x <> dv ==> lookup_var x next = lookup_var x cc) /\
+    next.vs_allocas = cc.vs_allocas /\
+    gas_marked_path F ctx func cc 0 (OK next) /\
+    (!fuel rr. run_from fuel ctx func next = rr /\ (!e. rr <> Error e) ==>
+       ?fuel'. run_from fuel' ctx func cc = rr)
+Proof
+  strip_tac >>
+  `k <= LENGTH vs` by fs[array_loop_inv_def] >>
+  `(n2w k : bytes32) = n2w (LENGTH vs) <=> k = LENGTH vs` by
+    (`k < dimword (:256)` by decide_tac >> simp[n2w_11]) >>
+  qexists_tac `jump_to (if k = LENGTH vs then exit_lbl else bod)
+    (update_var dv (bool_to_word (k = LENGTH vs)) cc)` >>
+  conj_tac
+  >- (fs[array_loop_inv_def, lookup_var_def] >>
+      `stmt_state_rel ctx func cenv cx es
+         (update_var dv (bool_to_word (k = LENGTH vs)) cc)` by
+        (irule stmt_state_rel_update_var >> simp[]) >>
+      fs[stmt_state_rel_jump_to, jump_to_def, update_var_def,
+           lookup_var_def, FLOOKUP_UPDATE] >>
+      conj_tac
+      >- (Cases_on `saved_base` >>
+          gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+      fs[ret_pc_ok_def] >> rpt strip_tac >>
+      first_x_assum drule >> strip_tac >> simp[] >>
+      Cases_on `x = dv` >> gvs[lookup_var_def, FLOOKUP_UPDATE]) >>
+  conj_tac >- simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[jump_to_def, update_var_def] >>
+  conj_tac
+  >- (`gas_marked_path F ctx func cc 0
+        (OK (jump_to (if (n2w k : bytes32) = n2w (LENGTH vs) then exit_lbl else bod)
+          (update_var dv (bool_to_word ((n2w k : bytes32) = n2w (LENGTH vs))) cc)))`
+        suffices_by simp[] >>
+      irule eq_branch_zero_path >> fs[array_loop_inv_def] >>
+      simp[get_instruction_def, mk_inst_def, eval_operand_def]) >>
+  fs[array_loop_inv_def] >> drule eq_condition_block >>
+  simp[] >> disch_then (qspecl_then [`ctx`, `cc`, `n2w k`, `n2w (LENGTH vs)`] mp_tac) >>
+  simp[eval_operand_def] >> gvs[n2w_11]
+QED
+
+Theorem immutable_loop_last:
+  lookup_block cond_lbl func.fn_blocks =
+    SOME <|bb_label := cond_lbl; bb_instructions :=
+      [mk_inst j1 EQ [Var idx; lvo] [dv];
+       mk_inst j2 JNZ [Var dv; Label exit_lbl; Label bod] []]|> /\
+  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst cond_lbl st (LENGTH vs) es s /\
+  eval_operand lvo s = SOME (n2w (LENGTH vs)) /\ LENGTH vs < dimword (:256) /\
+  not_local_ptr cenv es.scopes dv /\ dv <> idx /\ dv <> p /\
+  (!x. saved_base = Var x ==> x <> dv) /\
+  (!x. not_fresh_at caller x ==> x <> dv) /\ array_caller_frame caller old s ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+    stmt_state_rel ctx func cenv cx (es with gas_obs := []) t /\
+    array_caller_frame caller old t
+Proof
+  strip_tac >> drule_all immutable_condition_boundary >> simp[] >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) next` by
+    (fs[array_loop_inv_def] >> drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[stmt_state_rel_inst_idx]) >>
+  qexists_tac `next` >> fs[array_loop_inv_def] >>
+  fs[array_caller_frame_def] >> metis_tac[]
+QED
