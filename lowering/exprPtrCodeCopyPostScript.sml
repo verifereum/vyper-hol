@@ -50,6 +50,8 @@ Theorem unwrap_code_same_endpoint_post:
   run_inst_seq (emitted_insts sm sb) s = OK z ==>
   expr_post ctx func cenv cx e es sa sb s0 ee v op z
 Proof
-  strip_tac >> drule_all runtime_code_copy_run_post >> strip_tac >>
+  strip_tac >>
+  `t = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>
+  gvs[] >> drule_all runtime_code_copy_run_post_physical >> strip_tac >>
   gvs[emitted_insts_def, DROP_APPEND]
 QED
