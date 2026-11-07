@@ -39,5 +39,6 @@ Theorem bop_operand_post_typed_word:
   eval_operand op t = SOME (typed_val_to_w256 tv v)
 Proof
   simp[bop_operand_post_def, expr_post_def] >> rpt strip_tac >>
+  fs[post_value_type_word] >>
   drule_all expr_val_rel_typed >> simp[]
 QED
