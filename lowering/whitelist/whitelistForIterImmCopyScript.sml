@@ -294,3 +294,51 @@ Proof
   drule_all immutable_iter_copy_state_frame >> strip_tac >>
   qexists_tac `z` >> gvs[] >> metis_tac[]
 QED
+
+Theorem immutable_array_elements_length[local]:
+  value_has_type (ArrayTV tv bd) (ArrayV av) ==>
+  LENGTH (array_elements (ArrayTV tv bd) av) = array_length (ArrayTV tv bd) av
+Proof
+  Cases_on `bd` >> Cases_on `av` >>
+  simp[vyperTypingTheory.value_has_type_def,
+       vyperValueOperationTheory.array_elements_def,
+       vyperValueOperationTheory.array_length_def]
+QED
+
+Theorem immutable_array_elements_index[local]:
+  value_has_type (ArrayTV tv bd) (ArrayV av) /\
+  i < LENGTH (array_elements (ArrayTV tv bd) av) ==>
+  array_index (ArrayTV tv bd) av (&i) =
+    SOME (EL i (array_elements (ArrayTV tv bd) av))
+Proof
+  strip_tac >> drule immutable_array_elements_length >> strip_tac >>
+  irule (iffLR (SPEC_ALL vyperArrayTheory.array_elements_index)) >>
+  simp[vyperArrayTheory.valid_index_def] >> gvs[]
+QED
+
+Theorem immutable_iter_element_ready:
+  immutable_holds cenv cx (ArrayT et bd) r w es s /\
+  read_result cx r es = (INL (ArrayV av),es) /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  evaluate_type (get_tenv cx) et = SOME etv /\
+  val_wf (ArrayTV etv bd) (ArrayV av) /\
+  value_has_type (ArrayTV etv bd) (ArrayV av) /\
+  well_formed_type_value (ArrayTV etv bd) /\
+  vs = array_elements (ArrayTV etv bd) av /\ i < LENGTH vs ==>
+  immutable_holds cenv cx et (Value (EL i vs))
+    (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+              i * type_memory_size etv)) es s /\
+  value_has_type etv (EL i vs) /\ 0 < type_memory_size etv
+Proof
+  strip_tac >> gvs[] >>
+  `well_formed_type_value etv` by
+    (Cases_on `bd` >> gvs[vyperTypingTheory.well_formed_type_value_def]) >>
+  drule_all immutable_array_elements_index >> strip_tac >>
+  `value_has_type etv (EL i (array_elements (ArrayTV etv bd) av))` by
+    (drule vyperAssignPreservesTypeTheory.array_index_has_type >> simp[]) >>
+  reverse conj_tac >- (simp[] >> metis_tac[immutable_array_element_size_positive]) >>
+  drule_at (Pos (el 6)) exprSimSubscriptArrayFramedTheory.immutable_holds_array_element >>
+  simp[vyperStateTheory.read_result_def] >>
+  disch_then irule >> simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  metis_tac[]
+QED
