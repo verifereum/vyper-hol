@@ -481,7 +481,11 @@ Theorem abi_encode_nonword_no_block_phases:
       ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
       actual.vs_inst_idx = LENGTH final.cs_current_insts /\
       abi_encode_exec_frame func s actual /\
-      stmt_state_rel ctx func ce cx es' actual
+      stmt_state_rel ctx func ce cx es' actual /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)
 Proof
   strip_tac >>
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\
@@ -533,6 +537,17 @@ Resume abi_encode_nonword_no_block_phases[caller]:
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
        (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+  `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w)` by
+    (drule abi_encode_caller_phase_registers >>
+     disch_then drule >>
+     disch_then (qspec_then `actual` mp_tac) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [not_fresh_at_def, abi_decoder_operand_live_def, abi_decoder_older_vars_def]) >>
+  `(!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)` by
+    (drule_all abi_encode_caller_phase_allocations >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   qexists `raw` >>
   qpat_x_assum `Abbrev (actual = _)`
     (fn th => rewrite_tac[GSYM (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
@@ -570,7 +585,11 @@ Theorem abi_encode_nonword_no_block_run:
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
     abi_encode_exec_frame func s actual /\
-    stmt_state_rel ctx func ce cx es' actual
+    stmt_state_rel ctx func ce cx es' actual /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)
 Proof
   strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
@@ -622,7 +641,11 @@ Theorem abi_encode_nonword_no_block_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
     abi_encode_exec_frame func s actual /\
-    stmt_state_rel ctx func ce cx es' actual
+    stmt_state_rel ctx func ce cx es' actual /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+      lookup_var x actual = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+      FLOOKUP actual.vs_allocas aid = SOME row)
 Proof
   strip_tac >> drule_all abi_encode_nonword_no_block_run >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
