@@ -59,7 +59,6 @@ Theorem convert_widen_copy_mem_ok:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~block_is_terminated sm /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next ==>
@@ -100,7 +99,6 @@ Theorem convert_widen_copy_path_mem:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~block_is_terminated sm /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
@@ -142,7 +140,6 @@ Theorem convert_widen_copy_owned_mem:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~block_is_terminated sm /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
@@ -199,7 +196,6 @@ Theorem convert_widen_cont_mem:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
-  ~block_is_terminated sm /\
   alloca_history func s /\ alloca_inv s /\
   (!p. eval_operand x s = SOME p ==>
     w2n p + type_memory_bytes cenv (lowered_value_type cenv e1) <= s.vs_alloca_next) /\

@@ -25,7 +25,6 @@ Theorem convert_bytestring_counted_cont_mem:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
-  ~block_is_terminated sm /\
   alloca_history func s /\ alloca_inv s /\
   (!p. eval_operand x s = SOME p ==>
     w2n p + type_memory_bytes cenv (lowered_value_type cenv e1) <= s.vs_alloca_next) /\
@@ -101,7 +100,6 @@ Theorem convert_bytestring_continuation_summary_mem:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
-  ~block_is_terminated sm /\
   alloca_history func s /\ alloca_inv s /\
   (!p. eval_operand x s = SOME p ==>
     w2n p + type_memory_bytes cenv (lowered_value_type cenv e1) <= s.vs_alloca_next) /\
