@@ -905,7 +905,7 @@ Resume literal_word_args_sim[tail_normal]:
     (irule literal_word_post_cons >>
      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      goal_assum (drule_at Any) >> simp[]) >>
-  disj1_tac >> gvs[]
+  disj1_tac >> gvs[wb_frame_gas_obs]
 QED
 Resume literal_word_args_sim[tail_exit]:
   Cases_on `res` >- gvs[wb_args_exit_def] >>
