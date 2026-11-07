@@ -21,6 +21,7 @@ Proof
 QED
 
 Theorem allocated_buffer_vv_post:
+  post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
   stmt_state_rel ctx func ce cx es' s /\
@@ -35,8 +36,9 @@ Theorem allocated_buffer_vv_post:
   vv_post ctx func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) s
 Proof
-  strip_tac >> irule vv_post_frame_intro >> simp[] >> conj_tac
-  >- (irule buffer_vv_holds >> goal_assum (drule_at Any) >> simp[] >>
+  strip_tac >> irule vv_post_frame_intro >> simp[] >> rpt conj_tac
+  >~ [`storage_read_live`] >- simp[contextTheory.base_ptr_def]
+  >~ [`vv_holds`] >- (irule buffer_vv_holds >> goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
   irule allocated_value_vv_at >>
   qexistsl_tac [`aid`,`b`,`sz`,`tv`,`w`] >>
@@ -49,6 +51,7 @@ QED
    endpoint.  This consumer uses the restored caller frame. *)
 Theorem void_invoke_return_post:
   emit_void INVOKE ops si = ((),sb) /\
+  post_value_type ce e = expr_type e /\
   expr_type e = NoneT /\ value_has_type NoneTV v /\
   stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es sa s0 s /\
   s.vs_current_bb = si.cs_current_bb /\
@@ -76,6 +79,7 @@ QED
    The callee has already filled the buffer; no caller stores follow. *)
 Theorem memory_invoke_return_post:
   emit_void INVOKE ops si = ((),sb) /\
+  post_value_type ce e = expr_type e /\
   t.vs_current_bb = si.cs_current_bb /\
   t.vs_inst_idx = LENGTH si.cs_current_insts /\
   s = (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) /\

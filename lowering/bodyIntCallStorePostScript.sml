@@ -36,6 +36,7 @@ Proof
 QED
 
 Theorem owned_buffer_result_post:
+  post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
   stmt_state_rel ctx func ce cx es' s /\
@@ -59,8 +60,9 @@ Theorem owned_buffer_result_post:
   vv_post ctx func ce cx e es0 sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) u
 Proof
-  strip_tac >> irule vv_post_frame_intro >> simp[] >> reverse conj_tac
-  >- (irule allocated_value_vv_at >>
+  strip_tac >> irule vv_post_frame_intro >> simp[] >> rpt conj_tac
+  >~ [`storage_read_live`] >- simp[contextTheory.base_ptr_def]
+  >~ [`vv_at`] >- (irule allocated_value_vv_at >>
       qexistsl_tac [`aid`,`b`,`sz`,`tv`,`w`] >>
       simp[contextTheory.base_ptr_def] >> reverse conj_tac
       >- metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
@@ -77,6 +79,7 @@ QED
 (* The result stores upgrade their representation post to an owned value
    post, retaining the frame from before the whole expression. *)
 Theorem stack_buffer_suffix_post:
+  post_value_type ce e = expr_type e /\
   store_multi_results buf.buf_operand results 0 si = ((),sb) /\
   local_ptrs_reserved ce si /\
   buf.buf_operand = Var p /\ not_fresh_at si p /\

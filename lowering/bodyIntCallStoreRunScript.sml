@@ -42,6 +42,7 @@ Proof
 QED
 
 Theorem stack_buffer_run_post:
+  post_value_type ce e = expr_type e /\
   store_multi_results buf.buf_operand results 0 si = ((),sb) /\
   local_ptrs_reserved ce si /\
   buf.buf_operand = Var p /\ not_fresh_at si p /\
@@ -104,6 +105,7 @@ Proof
      simp[] >> qexists_tac `ws` >> simp[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   irule owned_buffer_result_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac
   >- (simp[] >> irule buffer_vv_holds >> goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`aid`,`w2n w`,`s`,`si`,`32 * LENGTH results`,`tv`,`w`] >>

@@ -40,6 +40,7 @@ Proof
 QED
 
 Theorem void_completed_endpoint:
+  post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
   t.vs_inst_idx = LENGTH si.cs_current_insts /\
@@ -66,6 +67,7 @@ Proof
 QED
 
 Theorem memory_completed_endpoint:
+  post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
   t.vs_inst_idx = LENGTH si.cs_current_insts /\
@@ -250,6 +252,7 @@ QED
    bound-output state.  Buffer geometry and immutable separation are derived
    from its owned ALLOCA, not from a bound on constructor memory. *)
 Theorem stack_completed_endpoint:
+  post_value_type ce e = expr_type e /\
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered n (IntRet ir cs) /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\

@@ -6,6 +6,7 @@ Ancestors
   localPtrsProps emitHelper emitHelperProps intCallFrame words
 
 Theorem void_return_endpoint:
+  post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
   t.vs_inst_idx = LENGTH si.cs_current_insts /\
@@ -46,6 +47,7 @@ Proof
 QED
 
 Theorem memory_return_endpoint:
+  post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
   t.vs_inst_idx = LENGTH si.cs_current_insts /\
@@ -115,6 +117,7 @@ Proof
 QED
 
 Theorem stack_return_endpoint:
+  post_value_type ce e = expr_type e /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf.buf_operand results 0 sj = ((),sb) /\
   fn_has_code si sj func /\ fn_has_code sj sb func /\

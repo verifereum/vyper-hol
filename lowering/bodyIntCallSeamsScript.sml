@@ -387,6 +387,10 @@ Theorem intcall_return_restore:
       (\res ee r. expr_exit res r)
 Proof
   rpt strip_tac >>
+  `post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt) =
+   expr_type (Call ann (IntCall (NONE,name)) es dflt)` by
+    (qpat_assum `cenv.ce_func_return_type _ = ann` mp_tac >>
+     simp[post_value_type_def, lowered_value_type_def, expr_type_def]) >>
   `ret = ann` by (drule_all body_internal_decl_return_type >> simp[]) >>
   qpat_x_assum `ret = ann` SUBST_ALL_TAC >>
   `rc' = returns_stack_count
