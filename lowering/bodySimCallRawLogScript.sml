@@ -15,18 +15,6 @@ Ancestors
 Libs
   pairLib
 
-(* HELD for the post-16 bodySim child-closure wave: the elements of a
-   MakeArray operand (raw_log's topic list) are body_expr_ok in order.
-   s1-ops-widened-expr holds the same fact as body_make_array_children_ok. *)
-Theorem raw_log_make_array_children_ok:
-  !cx a t n elems.
-    body_expr_ok cx (Builtin a (MakeArray t n) elems) /\
-    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-    body_exprs_ok cx elems
-Proof
-  cheat
-QED
-
 Theorem raw_log_outcome_bind_core[local]:
   gas_outcome memory tops (ctx,func) a (es,s0) P E /\
   (!marks rr mid t.
@@ -72,7 +60,7 @@ Proof
   simp[ignore_bind_def, bind_assoc]
 QED
 
-Theorem raw_log_outcome_bind_values[local]:
+Theorem raw_log_outcome_bind_values:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> (value list) evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -93,7 +81,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_value[local]:
+Theorem raw_log_outcome_bind_value:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -114,7 +102,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_unit[local]:
+Theorem raw_log_outcome_bind_unit:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> unit evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -138,7 +126,7 @@ Proof
   gvs[]
 QED
 
-Theorem expr_body_pre_make_array_arg[local]:
+Theorem expr_body_pre_make_array_arg:
   expr_body_pre cenv cx env (Builtin ann (MakeArray t b) args) es /\
   MEM e args /\ expr_sim_inv cenv cx env es' ==>
   expr_body_pre cenv cx env e es'
@@ -176,7 +164,7 @@ Proof
   `body_exprs_ok cx topics` by
     (qpat_assum `body_exprs_ok cx [_;_]`
        (strip_assume_tac o REWRITE_RULE [body_exprs_ok_def]) >>
-     drule_all raw_log_make_array_children_ok >> simp[]) >>
+     drule_all body_make_array_children_ok >> simp[]) >>
   `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env arg s /\ expr_type arg = BaseT (BytesT (Fixed 32))` by
     (rpt gen_tac >> strip_tac >> conj_tac
@@ -309,7 +297,7 @@ Proof
   qexists_tac `t''` >> gvs[]
 QED
 
-Theorem raw_log_alloc_args_post[local]:
+Theorem raw_log_alloc_args_post:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
   stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 sa s0 u /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
@@ -356,7 +344,7 @@ Proof
   `body_exprs_ok cx topics` by
     (qpat_assum `body_exprs_ok cx [_;_]`
        (strip_assume_tac o REWRITE_RULE [body_exprs_ok_def]) >>
-     drule_all raw_log_make_array_children_ok >> simp[]) >>
+     drule_all body_make_array_children_ok >> simp[]) >>
   `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env arg s /\ expr_type arg = BaseT (BytesT (Fixed 32))` by
     (rpt gen_tac >> strip_tac >> conj_tac
@@ -542,7 +530,7 @@ Theorem raw_log_body_expr_ok:
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
   rpt gen_tac >> strip_tac >> irule body_expr_ok_intro >>
-  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   `expr_sim ctx func cenv cx ty (Call v20 RawLog es v21) es'` by
     (simp[expr_sim_def] >> rpt strip_tac >>
      drule_all raw_log_body_lower_value >> strip_tac >> gvs[] >>
