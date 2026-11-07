@@ -4,6 +4,7 @@ Ancestors
   loweringShapeProps loweringShapeDefs loweringShapeRules vyperCompiler venomInst
   entryBodyBoundLabels entryCompileIntervals entryInternalAppend entryLinearAppend
   entryPrefixRetention fragExec venomExecProofs
+  allocaFrontierBound venomWf removeUnusedSsaProofs
 
 Theorem compile_runtime_entry_intervals[local]:
   compile_generate_runtime sels exts ints fb Linear buckets meta dense info sa =
@@ -102,7 +103,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem run_lowering_retained_entry[local]:
+Theorem run_lowering_retained_entry:
   run_lowering sels exts ints fb rp bc mb db ei "__entry" = SOME u /\
   EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
@@ -136,7 +137,7 @@ Theorem runtime_selected_entry_code[local]:
   MEM (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt) exts /\
   (!bb. MEM bb (all_blocks se) ==>
     lookup_block bb.bb_label efn.fn_blocks = SOME bb) ==>
-  ?fl sf sd sc sk.
+  ?fl sf sd sc sk cenv sa sb.
     fresh_label "fallback" (initial_compile_state "__entry") = (fl,sf) /\
     compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
       fl sf = ((),sd) /\
@@ -144,7 +145,10 @@ Theorem runtime_selected_entry_code[local]:
     sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
     sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
     fn_has_code sf sd efn /\ fn_has_code sc sk efn /\ cs_extends sd sc /\
-    sd.cs_next_var <= sc.cs_next_var
+    sd.cs_next_var <= sc.cs_next_var /\
+    compile_register_positional_args ce pa 4 sk = (cenv,sa) /\
+    compile_guarded_body cenv nr key tr view stmts rt sa = ((),sb) /\
+    fn_has_code sa sb efn
 Proof
   strip_tac >> drule compile_runtime_entry_intervals >> strip_tac >>
   gvs[compile_internal_fn_bodies_def, comp_return_def] >>
@@ -157,9 +161,9 @@ Proof
     simp[comp_ignore_bind_def, comp_bind_def] >>
   drule (SRULE [cs_appends_def] cs_appends_runtime_fallback_suffix) >> strip_tac >>
   `cs_extends sd se /\ cs_extends sd' se` by metis_tac[cs_extends_trans] >>
-  qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sd'`] >> simp[] >>
-  `fn_has_code sf sd efn /\ fn_has_code sc sd' efn` by
-    (metis_tac[fn_has_code_retained_interval]) >>
+  qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sd'`, `cenv`, `sb`, `se'`] >> simp[] >>
+  `fn_has_code sf sd efn /\ fn_has_code sc sd' efn /\ fn_has_code sb se' efn` by
+    (metis_tac[fn_has_code_retained_interval, cs_extends_trans]) >>
   gvs[fresh_label_def, initial_compile_state_def]
 QED
 
@@ -169,7 +173,7 @@ Theorem run_lowering_selected_entry_code:
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
   lookup_function "__entry" u.cu_context.ctx_functions = SOME efn /\
   MEM (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt) exts ==>
-  ?fl sf sd sc sk.
+  ?fl sf sd sc sk cenv sa sb.
     fresh_label "fallback" (initial_compile_state "__entry") = (fl,sf) /\
     compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
       fl sf = ((),sd) /\
@@ -177,11 +181,21 @@ Theorem run_lowering_selected_entry_code:
     sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
     sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
     fn_has_code sf sd efn /\ fn_has_code sc sk efn /\ cs_extends sd sc /\
-    sd.cs_next_var <= sc.cs_next_var
+    sd.cs_next_var <= sc.cs_next_var /\
+    compile_register_positional_args ce pa 4 sk = (cenv,sa) /\
+    compile_guarded_body cenv nr key tr view stmts rt sa = ((),sb) /\
+    fn_has_code sa sb efn /\ fn_inst_ids_distinct efn
 Proof
-  strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
+  strip_tac >>
+  `fn_inst_ids_distinct efn` by
+    (drule run_lowering_static_integrity >> strip_tac >>
+     drule lookup_function_MEM >> strip_tac >>
+     drule_all ctx_inst_ids_distinct_fn >>
+     simp[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_flat,
+          MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+  drule_all run_lowering_retained_entry >> strip_tac >>
   drule_all runtime_selected_entry_code >> strip_tac >>
-  qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sk`] >> simp[]
+  qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sk`, `cenv`, `sa`, `sb`] >> simp[]
 QED
 
 Theorem runtime_initial_extends[local]:
