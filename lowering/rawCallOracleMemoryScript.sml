@@ -6,7 +6,7 @@ Ancestors
   emitHelper emitHelperProps compileEnv venomExecSemantics venomState venomInst
   rich_list list
 
-Theorem raw_call_outbuf_no_gas[local]:
+Theorem raw_call_outbuf_no_gas:
   compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\

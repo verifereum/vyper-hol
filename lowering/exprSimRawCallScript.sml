@@ -4618,7 +4618,7 @@ QED
 
 Finalise raw_call_outbuf_zero_tail_vv_path
 
-Theorem raw_call_outbuf_allocation_site[local]:
+Theorem raw_call_outbuf_allocation_site:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   fn_has_code sa sm func /\ local_ptrs_reserved cenv sa ==>
   ?alloc q. MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\

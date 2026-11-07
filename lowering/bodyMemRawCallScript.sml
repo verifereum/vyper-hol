@@ -2,7 +2,7 @@
    to a target. *)
 Theory bodyMemRawCall
 Ancestors
-  bodyMemoryPreds bodyMemRawCallRevert bodyMemRawCallBounds bodyMemRawCallFinish
+  rawCallAllocatedOracleMemory bodyMemoryPreds bodyMemRawCallRevert bodyMemRawCallBounds bodyMemRawCallFinish
   rawCallFinishPostMemory rawCallFinishPathMemory rawCallTupleMemory rawCallSuffixMemory rawCallArgumentMemory rawCallResultPathMemory rawCallPrefixMemory rawCallOracleMemory
 
 Theorem body_raw_call_mem_case:
