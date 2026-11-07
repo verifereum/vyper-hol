@@ -507,7 +507,7 @@ Proof
   qpat_x_assum `inst.inst_opcode = CALL /\ _ \/ _` strip_assume_tac >>
   gvs[] >> pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[opcode_case_def] >>
-  Cases_on `f.lf_tgt.vs_call_ctx.cc_static` >> gvs[]
+  Cases_on `f.lf_tgt.vs_call_ctx.cc_static` >> FIRST [gvs[]]
 QED
 
 Theorem ld_set_prov_selected:

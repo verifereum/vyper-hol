@@ -139,7 +139,9 @@ Proof
           emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
      strip_tac >> gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
   `w2n (32w:bytes32) = 32` by simp_tac (srw_ss()) [wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
-  fs[] >>
+  (* Only substitution with the assumptions is needed here; fs[] over this
+     context took 3.5 s. *)
+  full_simp_tac bool_ss [] >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, run_inst_seq_mem_ok_last,
        mk_inst_def, below_frontier_no_ranges] >>

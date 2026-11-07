@@ -271,9 +271,9 @@ Proof
        wordsTheory.dimword_def,
        eval_operand_def, lookup_var_update_var] >>
   pure_rewrite_tac[GSYM update_var_def] >>
-  simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+  FIRST [simp[step_inst_base_def, mk_inst_def, eval_operand_def,
        lookup_var_update_var, exec_ext_call_def, inst_dload_in_section_def,
-       Excl "consume_call_outcome_eq", pairTheory.UNCURRY_DEF] >>
+       Excl "consume_call_outcome_eq", pairTheory.UNCURRY_DEF]] >>
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
   simp[Excl "consume_call_outcome_eq"] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>

@@ -396,7 +396,8 @@ Proof
       simp[eval_operand_def]) >>
   rpt strip_tac >>
   `lookup_var counter t = SOME (n2w k)` by gvs[return_copy_frame_def] >>
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  simp[mk_inst_def] >> simp[step_inst_base_def] >>
+  simp[exec_pure2_def, eval_operand_def] >>
   simp[word_mul_n2w]
 QED
 

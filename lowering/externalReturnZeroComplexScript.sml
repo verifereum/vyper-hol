@@ -412,7 +412,7 @@ Resume zero_complex_strong_contract[dynamic]:
   `abi_encoder_window_pre ctx func ready load dst (Lit 0w) (AbiComplex infos) at
      (ListV avs) 0 0 d u` by
     (qpat_assum `abi_encoder_window_pre _ _ ready st' _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [abi_encoder_window_pre_def] >> strip_tac >>
+     PURE_REWRITE_TAC [abi_encoder_window_pre_def] >> strip_tac >>
      asm_rewrite_tac[] >>
      `cs_extends ready load /\ cs_extends load st' /\ load.cs_next_id <= st'.cs_next_id` by
        (qpat_assum `ci_mono ready load` mp_tac >>
