@@ -56,7 +56,10 @@ Theorem log_data_emit_suffix_path_ptr:
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc
           (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND data_ops))) (ListV avs)|>]) H tm t /\
-    ghost_kept ce es st G tn s H tm /\ inst_extends st sb
+    ghost_kept ce es st G tn s H tm /\ inst_extends st sb /\
+    ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts st sb) /\
+    (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w)
 Proof
   strip_tac >> Cases_on `data_ops = []`
   >- suspend "empty"
@@ -88,7 +91,10 @@ Resume log_data_emit_suffix_path_ptr[empty]:
   drule emitted_insts_emit_inst >> strip_tac >>
   qexistsl_tac [`t with vs_inst_idx := SUC s.vs_inst_idx`,`G`,`tn`] >>
   fs[mem_bytes_at_def, vyper_to_abi_type_def, enc_def,
-    ghost_kept_refl, mk_inst_def] >> simp[listTheory.REV_DEF]
+    ghost_kept_refl, mk_inst_def] >> simp[listTheory.REV_DEF] >>
+  qpat_x_assum `~s.vs_halted` mp_tac >>
+  qpat_x_assum `t with vs_logs := s.vs_logs = s`
+    (fn th => once_rewrite_tac[GSYM th]) >> simp[lookup_var_def]
 QED
 Resume log_data_emit_suffix_path_ptr[data]:
   markerLib.RESUME_TAC >>
@@ -169,7 +175,17 @@ Resume log_data_emit_suffix_path_ptr[data_post]:
      simp[FILTER_APPEND, mk_inst_def] >> decide_tac) >>
   qexistsl_tac [`t with vs_inst_idx := SUC v.vs_inst_idx`,`H`,`tm`] >>
   qpat_x_assum `v.vs_inst_idx = _` SUBST_ALL_TAC >>
-  full_simp_tac bool_ss [ADD_0]
+  full_simp_tac bool_ss [ADD_0] >>
+  `t.vs_halted = v.vs_halted /\ t.vs_current_bb = v.vs_current_bb /\
+   (!x. lookup_var x t = lookup_var x v)` by
+    (qpat_x_assum `t with vs_logs := v.vs_logs = v`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[lookup_var_def]) >>
+  simp[LENGTH_APPEND] >> rpt strip_tac >>
+  qpat_x_assum `!op w. abi_decoder_operand_live _ op /\ _ ==> _`
+    (qspec_then `Var x` mp_tac) >>
+  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       GSYM not_fresh_at_def, eval_operand_def] >>
+  strip_tac >> simp[lookup_var_def] >> fs[lookup_var_def]
 QED
 Finalise log_data_emit_suffix_path_ptr
 

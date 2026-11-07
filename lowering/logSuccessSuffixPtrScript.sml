@@ -56,7 +56,10 @@ Theorem log_success_suffix_path_ptr:
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
           (log_non_indexed_types flags (MAP SND xs)))) (ListV avs)|>]) H tm t /\
-    ghost_kept ce es sm G tn s H tm /\ inst_extends sm sb
+    ghost_kept ce es sm G tn s H tm /\ inst_extends sm sb /\
+    ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sm sb) /\
+    (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w)
 Proof
   strip_tac >>
   qmatch_asmsub_abbrev_tac `SUM (MAP (type_memory_bytes ce) data_tys) < dimword(:256)` >>
@@ -152,7 +155,10 @@ Resume log_success_suffix_path_ptr[post]:
      simp[FILTER_APPEND]) >>
   qexistsl_tac [`t'`,`H`,`tm`] >>
   qpat_x_assum `MAP SND (SND (split_log_ops xs flags)) = data_tys` SUBST_ALL_TAC >>
-  full_simp_tac bool_ss [ADD, ADD_0]
+  full_simp_tac bool_ss [ADD, ADD_0] >>
+  simp[LENGTH_APPEND] >> rpt strip_tac >>
+  `not_fresh_at st x` by metis_tac[not_fresh_at_mono] >>
+  metis_tac[]
 QED
 Finalise log_success_suffix_path_ptr
 
