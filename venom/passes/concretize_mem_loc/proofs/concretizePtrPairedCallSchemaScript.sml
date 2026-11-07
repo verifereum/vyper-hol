@@ -181,7 +181,7 @@ Resume ptr_paired_invoke_prefix_normalize[callers]:
     (`H <> []` by (Cases_on `H` >> gvs[]) >>
      gvs[LAST_EL, PRE_SUB1]) >>
   `at.po_inst.inst_opcode = INVOKE` by simp[concretize_positions_unchanged] >>
-  fs[ptr_paired_samples_def] >>
+  fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   rewrite_tac[ptr_paired_callers_def] >>
   fs[ptr_paired_callers_def] >> simp[ptr_observe_def] >>
   gen_tac >> strip_tac >> Cases_on `k`
@@ -205,6 +205,6 @@ Resume ptr_paired_invoke_prefix_normalize[writes]:
   drule ptr_structural_trace_source >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   irule (SRULE [] (Q.SPECL [`ws`,`[]`] ptr_paired_writes_pair)) >>
-  gvs[ptr_paired_samples_def]
+  gvs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
 Finalise ptr_paired_invoke_prefix_normalize
