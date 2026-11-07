@@ -1557,7 +1557,8 @@ Proof
       disj1_tac >> simp[stmt_post_def, stmt_lands_def] >>
       gvs[Abbr `ee`, Abbr `z`, cenv_top_ext_refl] >>
       Cases_on `tr` >>
-      gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]) >>
+      gvs[sstore_def, tstore_def, lookup_var_def, LET_THM] >>
+      irule alloca_frame_same >> simp[set_storage_def]) >>
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   rewrite_tac[gas_admissible_def] >>
   disch_then (qspec_then `[]` mp_tac) >>
