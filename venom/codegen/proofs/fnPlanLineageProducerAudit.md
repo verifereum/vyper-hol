@@ -264,3 +264,71 @@ actual predecessor setup to selected frontier, PHI-prefix frontier transport,
 and the ordinary endpoint to successful-DFS T+N closure. Unique-edge U and
 runtime query shielding S are unchanged unresolved obligations. No global
 induction or further conditional PHI lemma family was attempted here.
+
+## Native upper-budget diagnostic: partial measurements (2026-11-07)
+
+Scope: `C3.bridge.2.native_resource_probe`, new registered
+`fnPlanLineageResourceProbeTheory`. These are finite checked measurements;
+no universal resource invariant or runtime shielding theorem follows.
+
+### Reused native fixtures
+
+* Dead PHI: `dead_phi_native_entry/right/join` certifies the actual fresh
+  entry -> R -> J call. Readiness and analyzed whole-function SOME are
+  `phi_boundary_dead_ready/plan`. J has exactly one PHI at original index 0.
+  `phi_boundary_setup 2` is worker cut 0 (clean/params are identities), with
+  stack `[b]`, empty spills, ordinary union-live `[a;b]` and resource row
+  `[0;1]`. The L-side diagnostic row is `[1;0]`; it is not claimed to be the
+  fresh J call. Cut 1, after the PHI, has empty stack/spills/live set and row
+  `[]`. `dead_phi_native_origins` checks the pre-PHI name is defined in R.
+  The upper budget survives; ordinary pre-PHI coverage still does not.
+* Pressure join: readiness and analyzed SOME are inherited from
+  `residual_pressure_ready/plan_result`. Actual R -> J and saved sibling L
+  calls are `native_pressure_join_call`, `native_pressure_left_succs/call`.
+  Incoming J and post-setup are identical; prepare-params is independently
+  checked as identity (and is not actually invoked for this nonentry block).
+  Clean is identity by `residual_pressure_phi_boundary`. Original cut 0 has
+  resource row `REPLICATE 17 1 ++ [0;1]`; cut 1 after PHI has 18 ones; cut 2
+  after ADD x,1 has 17 ones. All spills are empty. The 17 values below the
+  PHI cell are entry-defined, and b is R-defined. Post-PHI x is from J:0.
+  Post-ADD inventory consists only of entry-defined pressure names.
+  `pressure_sibling_resource_rows` checks unit resources for the saved
+  entry inventory restored to L, separately from R-subtree output inventory.
+  The below-PHI prefix is nonempty, but it is part of the selected live
+  suffix; it is NOT evidence for arbitrary residual prefix exclusion.
+
+### One live-spill adaptation, still awaiting native linkage
+
+The existing SelectiveSpillProbe variants all have empty post-instruction
+spill maps (`selective_cases_spill_phase_table`), so they do not meet the
+live-spill diagnostic requirement. A first entry adaptation inserted a dead
+`deep` input below 17 ADD-defined pressure values. It did not spill: checked
+`resource_spill_obstruction` shows optimistic output placement kept `deep`
+at TOS, above the pressure values, at original cut 18. One replacement uses
+17 OFFSET pushes, which bypass that placement; no further fixture search
+has been done. Both adaptations pass readiness.
+
+For the replacement `resource_offset_fn`, original indices are:
+0 = define deep; 1..17 = OFFSET definitions v00..v16;
+18 = ADD deep,1 -> gone (dead); 19 = JNZ. No params are present.
+`resource_offset_phase` uses these original indices and analyzed liveness,
+with next-is-terminator read from the original next instruction.
+`resource_offset_cut_cache` checks cut 19 explicitly: stack is
+`[v16;v00;...;v13]`, spills are `{v15 -> 0, v14 -> 32}`, next offset 64.
+Both spilled names are live at cut 19 and absent from the stack. The
+resource row on all 17 live pressure names is exactly 17 ones. Strict
+original-prefix output origin support is checked separately for stack and
+spilled domain by `resource_offset_cut_origins`.
+
+**Limitation:** this replacement's analyzed whole-function SOME and exact
+`generate_block_insts_plan`/setup linkage to the recursive measurement are
+not yet certified. It is NOT counted as native spill evidence yet. Direct
+whole-function EVAL after evaluating lv/dfg/cfg timed out (2.5s); it was
+removed, not admitted. The smaller phase calculation required proving its
+`release_dead_spills` filtered list empty because EVAL stops on the unordered
+`SET_TO_LIST {Var "v14";Var "v15"}`. This normalization is local to the
+checked cut cache. Do not infer full function success from readiness.
+
+Remaining diagnostic work: certify that fixed replacement's successful
+native trace and worker linkage, extend stage measurements through restore,
+then formulate a recommendation. No global T/N or frozen proof is started.

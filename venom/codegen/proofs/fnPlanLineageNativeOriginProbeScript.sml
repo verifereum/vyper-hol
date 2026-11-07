@@ -6,7 +6,7 @@ Libs wordsLib
 val _ = computeLib.add_funs [listTheory.SET_TO_LIST_EMPTY];
 
 (* Native finite-call certificates. No arbitrary stack mutations. *)
-Theorem native_origin_first_branch[local]:
+Theorem native_origin_first_branch:
   dfs_aux_call lv dg cg fn ps0 [lbl] visited ps /\
   ~MEM lbl visited /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   generate_block_plan lv dg cg fn bb ps = SOME (ops,after) /\
