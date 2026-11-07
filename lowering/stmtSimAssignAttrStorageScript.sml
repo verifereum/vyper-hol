@@ -408,7 +408,8 @@ Proof
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
   gvs[expr_post_def, expr_val_at_def, expr_val_own_def, lookup_var_def,
-      locals_kept_def, not_fresh_at_def] >> rpt strip_tac >> metis_tac[]
+      locals_kept_def, popped_kept_def, not_fresh_at_def] >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem assign_attr_path_nonhalting[local]:
