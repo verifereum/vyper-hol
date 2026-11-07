@@ -235,22 +235,36 @@ Theorem layout_canonical_nop_success:
   layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
   i.inst_opcode = NOP /\ step_inst_base i s = OK post ==>
   step_inst_base j t = OK t /\
-  layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post t
+  layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post t /\
+  ?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ layout_driver_indexed es ass k /\
+    layout_aligned_entry D lo vs0 C C' q0 es qs qend k post t
 Proof
   strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
-  `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
+  `j = i` by gvs[concretize_positions_unchanged] >> gnvs[] >>
   `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
     simp[is_terminator_def] >>
   drule layout_canonical_ordinary_edge >>
   disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`post`, `i`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> disch_then strip_assume_tac >>
   `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
   drule_all layout_nop_trace_step >> strip_tac >>
-  conj_tac >- simp[] >>
-  drule layout_canonical_ordinary_success >>
-  disch_then (qspecl_then [`t`, `EL g.lop_cursor (MAP SND path)`, `post`, `k`, `i`] mp_tac) >>
-  simp[] >> metis_tac[]
+  `layout_driver_indexed (MAP FST path) ass k` by
+    (irule layout_driver_indexed_ordinary >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `layout_ordinary_entry D lo vs0 C C' q0 (MAP FST path) (MAP SND path) qend k post t` by
+    fs[layout_phase_ok_abort_def, layout_phase_entry_def, layout_phase_origin_def] >>
+  `step_inst 0 C' i t = OK t` by simp[step_inst_non_invoke] >>
+  `layout_aligned_entry D lo vs0 C C' q0 (MAP FST path) (MAP SND path) qend k post t` by
+    (irule layout_aligned_step >> goal_assum (drule_at Any) >>
+     simp[step_inst_non_invoke] >> metis_tac[]) >>
+  `layout_canonical_success D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend
+     g.lop_cursor F (INL g) post t` by
+    (simp[layout_canonical_success_def] >> qexists `INL k` >>
+     simp[layout_phase_origin_def] >>
+     metis_tac[layout_ordinary_entry_halted_agree]) >>
+  metis_tac[]
 QED
 
 Theorem layout_canonical_assign_success:
@@ -271,7 +285,7 @@ Theorem layout_canonical_assign_success:
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
 Proof
   strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
-  `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
+  `j = i` by gvs[concretize_positions_unchanged] >> gnvs[] >>
   `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
     simp[is_terminator_def] >>
   drule layout_canonical_ordinary_edge >>
