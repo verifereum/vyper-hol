@@ -218,14 +218,21 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+(* Concat lowers to a bytestring buffer, so the size needs bt <> Concat. *)
 Theorem ec_builtin_buffer_size:
+  (!c. bt <> Concat c) ==>
   type_memory_bytes cenv
     (lowered_value_type cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args)) = 64
 Proof
-  simp[lowered_value_type_def, expr_type_def, type_memory_bytes_def, type_slot_size_def]
+  strip_tac >>
+  `lowered_value_type cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args) =
+   ArrayT (BaseT (UintT 256)) (Fixed 2)` by
+    (Cases_on `bt` >> fs[lowered_value_type_def, expr_type_def]) >>
+  simp[type_memory_bytes_def, type_slot_size_def]
 QED
 
 Theorem ec_builtin_result_ptr_ok:
+  (!c. bt <> Concat c) /\
   eval_operand (Var dst) s = SOME w /\ ptr_covers G tn dst s 64 /\
   (!i. w2n w <= i /\ i < w2n w+64 ==> i NOTIN tn.t_mem) /\
   s.vs_memory = (write_memory_with_expansion (w2n w)
@@ -256,6 +263,7 @@ QED
 
 (* Common ordinary and pointer posts for the arithmetic memory result. *)
 Theorem ec_builtin_result_posts:
+  (!c. bt <> Concat c) /\
   stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es sa s0 t /\
   eval_operand (Var dst) t = SOME w /\ ptr_covers G tn dst t 64 /\
   (!i. w2n w <= i /\ i < w2n w+64 ==> i NOTIN tn.t_mem) /\

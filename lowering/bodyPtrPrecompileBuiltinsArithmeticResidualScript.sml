@@ -142,8 +142,9 @@ Resume ecmul_residual_success[result]:
       regions_disjoint (w2n c) 64 b sz` by
     (simp[NoAsms] >> qpat_assum `!name b sz. local_region _ _ q _ _ _ ==> _`
       (ACCEPT_TAC o SRULE [wordsTheory.dimword_def])) >>
+  `!c. ECMul <> Concat c` by simp[] >>
   drule_all ec_builtin_result_posts >>
-  disch_then (qspecl_then [`ECMul`,`args`] strip_assume_tac) >>
+  disch_then (qspec_then `args` strip_assume_tac) >>
   qexistsl [`q`,`G2`,`tn2`,`c`,`aid`] >>
   qpat_x_assum `res = Var dst` SUBST_ALL_TAC >>
   simp[] >> irule ec_result_pointer_vv_ok >> first_assum ACCEPT_TAC
@@ -276,8 +277,9 @@ Resume ecadd_residual_success[result]:
       regions_disjoint (w2n c) 64 b sz` by
     (simp[NoAsms] >> qpat_assum `!name b sz. local_region _ _ q _ _ _ ==> _`
       (ACCEPT_TAC o SRULE [wordsTheory.dimword_def])) >>
+  `!c. ECAdd <> Concat c` by simp[] >>
   drule_all ec_builtin_result_posts >>
-  disch_then (qspecl_then [`ECAdd`,`args`] strip_assume_tac) >>
+  disch_then (qspec_then `args` strip_assume_tac) >>
   qexistsl [`q`,`G2`,`tn2`,`c`,`aid`] >>
   qpat_x_assum `res = Var dst` SUBST_ALL_TAC >> simp[] >>
   irule ec_result_pointer_vv_ok >> first_assum ACCEPT_TAC
