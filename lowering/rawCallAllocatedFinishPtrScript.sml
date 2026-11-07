@@ -256,6 +256,8 @@ Theorem raw_call_allocated_positive_reverting_outcome:
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
     (\res ee H un t. ?v u J jn.
       res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic n))) v result H un t /\
+      expr_val_rel cx (BaseT (BytesT (Dynamic n))) v result t /\
+      expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sa sc ee v result t /\
       ptr_buf_ok cenv e result H t /\ stmt_state_rel ctx func cenv cx ee t /\
       ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
@@ -310,8 +312,41 @@ Proof
     Cases_on `flags.rcf_is_static` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[]
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  suspend "semantic"
 QED
+
+Resume raw_call_allocated_positive_reverting_outcome[semantic]:
+  conj_tac
+  >- (simp[loweringPostsTheory.expr_val_rel_def, venomStateTheory.eval_operand_def,
+        compileEnvTheory.is_word_type_def] >>
+      fs[bodyPtrDefsTheory.ptr_val_ok_def, bodyPtrDefsTheory.ptr_mem_ok_def,
+        compileEnvTheory.is_word_type_def, venomStateTheory.eval_operand_def] >>
+      qpat_x_assum `!tv w. _ /\ lookup_var x t = SOME w ==> _` mp_tac >>
+      simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
+      first_x_assum (qspec_then `t.vs_memory` mp_tac) >>
+      simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  simp[loweringPostsTheory.expr_val_at_def, vyperValueTheory.evaluate_type_def,
+    compileEnvTheory.is_word_type_def] >>
+  conj_tac
+  >- (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+      mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
+      simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+  simp[venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w] >>
+  disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `ob`, `32 * ((flags.rcf_max_outsize+31) DIV 32)+32`] >>
+  simp[loweringPostsTheory.val_footprint_def] >> conj_tac
+  >- (`ci_mono sb sc` by
+        (qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         metis_tac[exprLoweringPropsTheory.ci_mono_compile_raw_call_finish, pairTheory.SND]) >>
+      fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_def] >> decide_tac) >>
+  conj_tac
+  >- (mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
+      simp[listTheory.LENGTH_TAKE_EQ, vfmConstantsTheory.word_size_def] >> decide_tac) >>
+  fs[compileEnvTheory.regions_disjoint_def]
+QED
+
+Finalise raw_call_allocated_positive_reverting_outcome
 
 Theorem raw_call_allocated_positive_nonreverting_outcome:
   compile_raw_call_outbuf n sa = ((ov,op),sb) /\
@@ -347,6 +382,8 @@ Theorem raw_call_allocated_positive_nonreverting_outcome:
     (\res ee H un t. ?v u J jn.
       res = INL (Value v) /\
       ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) v result H un t /\
+      expr_val_rel cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) v result t /\
+      expr_val_at cenv cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) sa sc ee v result t /\
       ptr_buf_ok cenv e result H t /\ stmt_state_rel ctx func cenv cx ee t /\
       ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
@@ -402,5 +439,37 @@ Proof
     Cases_on `flags.rcf_is_static` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[]
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  suspend "semantic"
 QED
+
+Resume raw_call_allocated_positive_nonreverting_outcome[semantic]:
+  conj_tac
+  >- (simp[loweringPostsTheory.expr_val_rel_def] >>
+      simp[compileEnvTheory.is_word_type_def] >>
+      qpat_x_assum `ptr_val_ok _ (TupleT _) _ _ _ _ _` mp_tac >>
+      simp[bodyPtrDefsTheory.ptr_val_ok_def, bodyPtrDefsTheory.ptr_mem_ok_def,
+        compileEnvTheory.is_word_type_def] >>
+      strip_tac >> qpat_x_assum `!mem. _ ==> val_in_memory _ _ _ mem`
+        (qspec_then `t.vs_memory` mp_tac) >>
+      simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  simp[loweringPostsTheory.expr_val_at_def, vyperValueTheory.evaluate_type_def,
+    compileEnvTheory.is_word_type_def] >> conj_tac
+  >- (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+      mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
+      simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+  `b' < dimword(:256)` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ ee t` mp_tac >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
+     `t.vs_alloca_next < dimword(:256)` by
+       (irule exprLoweringPropsTheory.alloca_room_next_lt >> goal_assum (drule_at Any)) >>
+     fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     qpat_x_assum `!aid base sz. FLOOKUP _ _ = SOME _ ==> _` drule >> decide_tac) >>
+  simp[wordsTheory.w2n_n2w] >> disj1_tac >>
+  qexistsl_tac [`ai`, `b'`, `32 * ((flags.rcf_max_outsize+31) DIV 32)+64`] >>
+  simp[loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
+  fs[vfmConstantsTheory.word_size_def, compileEnvTheory.regions_disjoint_def] >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
+Finalise raw_call_allocated_positive_nonreverting_outcome
