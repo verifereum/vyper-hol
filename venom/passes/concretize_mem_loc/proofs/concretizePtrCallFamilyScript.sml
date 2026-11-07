@@ -493,7 +493,7 @@ Proof
     gvs[ptr_tagged_step_def, step_prov_def, out_prov_def] >>
   Cases_on `k = 0`
   >- (`range_bytes (step_writes a.po_inst a.po_state z.po_state) = {}` by
-        (simp[EXTENSION] >> metis_tac[DECIDE ``~(m <= q /\ q < m)``]) >>
+        (simp[EXTENSION] >> metis_tac[DECIDE ``~(m <= q /\ q < (m:num))``]) >>
       qexistsl_tac [`z`,`TG'`,`ws`] >> simp[] >>
       drule concretizePtrPairedNextAttachTheory.ptr_paired_prefix_nonwrite_attach >> disch_then irule >> gns[]) >>
   `w2n n <> 0` by (strip_tac >> fs[]) >>
