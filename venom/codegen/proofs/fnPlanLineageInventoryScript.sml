@@ -6225,3 +6225,58 @@ Proof
   simp[mark_dead_stack_other_elem_count, dead_stack_marker_def] >>
   metis_tac[popmany_plan_other_elem_count]
 QED
+
+(* A conditional shadow boundary, not a native-state invariant.  Initial
+   spill-map contents are unrestricted: only physical stack counts matter.
+   do_spill_at_bottom_frame transports the core calculation past an untouched
+   residual prefix.  Native replay still needs a producer fact excluding a
+   demanded prefix name with exactly one occurrence in this core. *)
+Theorem do_spill_at_shadow_iff:
+  !d ps ops qs demand prefix.
+    d < LENGTH ps.ps_stack /\ d <= 16 /\
+    do_spill_at d ps = (ops,qs) /\
+    (!x. MEM x demand /\ MEM x prefix ==> MEM x ps.ps_stack)
+    ==>
+    ((!x. MEM x demand /\ MEM x prefix ==> MEM x qs.ps_stack) <=>
+     (MEM (stack_peek d ps.ps_stack) demand /\
+      MEM (stack_peek d ps.ps_stack) prefix ==>
+      1 < LIST_ELEM_COUNT (stack_peek d ps.ps_stack) ps.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >> eq_tac
+  >- (strip_tac >> strip_tac >>
+      `MEM (stack_peek d ps.ps_stack) qs.ps_stack` by metis_tac[] >>
+      drule_all do_spill_at_stack_count >>
+      disch_then (qspec_then `stack_peek d ps.ps_stack` mp_tac) >>
+      simp[LIST_ELEM_COUNT_THM] >>
+      `0 < LIST_ELEM_COUNT (stack_peek d ps.ps_stack) qs.ps_stack` by
+        (qpat_x_assum `MEM _ qs.ps_stack` mp_tac >>
+         pure_rewrite_tac[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >> decide_tac) >>
+  strip_tac >> qx_gen_tac `x` >> strip_tac >>
+  `MEM x ps.ps_stack` by metis_tac[] >>
+  drule_all do_spill_at_stack_count >>
+  disch_then (qspec_then `x` mp_tac) >>
+  Cases_on `x = stack_peek d ps.ps_stack` >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM, LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+(* Selection need not imply an in-bounds offset on the empty stack (EL is
+   unspecified there).  In that case initial shadow coverage is vacuous,
+   and so is this boundary; for nonempty stacks use the checked bounds. *)
+Theorem select_spill_candidate_shadow_iff:
+  !ps forbidden target_dist target_len d ops qs demand prefix.
+    select_spill_candidate ps.ps_stack forbidden target_dist target_len = SOME d /\
+    do_spill_at d ps = (ops,qs) /\
+    (!x. MEM x demand /\ MEM x prefix ==> MEM x ps.ps_stack)
+    ==>
+    ((!x. MEM x demand /\ MEM x prefix ==> MEM x qs.ps_stack) <=>
+     (MEM (stack_peek d ps.ps_stack) demand /\
+      MEM (stack_peek d ps.ps_stack) prefix ==>
+      1 < LIST_ELEM_COUNT (stack_peek d ps.ps_stack) ps.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ps.ps_stack = []`
+  >- (gvs[] >> metis_tac[]) >>
+  `1 <= LENGTH ps.ps_stack` by (Cases_on `ps.ps_stack` >> gvs[]) >>
+  drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
+  irule do_spill_at_shadow_iff >> metis_tac[]
+QED
