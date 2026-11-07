@@ -47,15 +47,6 @@ Proof
   gvs[phi_prefix_length_def, mk_inst_def]
 QED
 
-Theorem abi_decode_fresh_region_entry_bound:
-  (u.vs_current_bb,u.vs_inst_idx) IN
-    frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
-  LENGTH ids = LENGTH sa.cs_current_insts ==>
-  (u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)
-Proof
-  simp[frag_observer_region_def, start_relabel_def] >> metis_tac[]
-QED
-
 Theorem abi_decode_fresh_off_cut_opcodes:
   abi_decode_fresh_context sa sb L ids fn /\
   (u.vs_current_bb,u.vs_inst_idx) IN
@@ -68,20 +59,9 @@ Theorem abi_decode_fresh_off_cut_opcodes:
 Proof
   strip_tac >> fs[abi_decode_fresh_context_def] >>
   `(u.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= u.vs_inst_idx)` by
-    metis_tac[abi_decode_fresh_region_entry_bound] >>
+    metis_tac[frag_relabel_region_entry_bound] >>
   drule_all frag_relabel_code_provenance >> strip_tac >>
   fs[frag_ops_free_def, EVERY_MEM]
-QED
-
-Theorem abi_decode_fresh_successful_terminator_jump[local]:
-  step_inst 0 ctx inst s = OK middle /\ ~middle.vs_halted /\
-  is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-  inst.inst_opcode <> STOP /\ inst.inst_opcode <> RETURN ==>
-  MEM inst.inst_opcode [JMP; JNZ; DJMP]
-Proof
-  strip_tac >> Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
-  pairarg_tac >> gvs[]
 QED
 
 Theorem abi_decode_fresh_region_closed:
@@ -96,10 +76,10 @@ Proof
   >- (drule_all step_preserves_control_flow >> strip_tac >>
       gvs[frag_observer_region_def] >> metis_tac[LESS_EQ_SUC_REFL, LESS_EQ_TRANS]) >>
   `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
-    metis_tac[abi_decode_fresh_successful_terminator_jump] >>
+    metis_tac[frag_successful_terminator_jump] >>
   `middle.vs_current_bb <> L` by
     (`(s.vs_current_bb = L ==> LENGTH sa.cs_current_insts <= s.vs_inst_idx)` by
-       (fs[abi_decode_fresh_context_def] >> metis_tac[abi_decode_fresh_region_entry_bound]) >>
+       (fs[abi_decode_fresh_context_def] >> metis_tac[frag_relabel_region_entry_bound]) >>
      `step_inst_base inst s = OK middle` by metis_tac[step_inst_non_invoke] >>
      fs[abi_decode_fresh_context_def, EVERY_MEM] >>
      metis_tac[frag_relabel_jump_no_reentry, MEM]) >>

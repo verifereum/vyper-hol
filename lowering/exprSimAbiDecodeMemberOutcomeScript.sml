@@ -42,7 +42,7 @@ Proof
   qexists_tac `t` >> gvs[word_add_n2w] >> metis_tac[]
 QED
 
-Theorem abi_decode_member_setup_shape:
+Theorem abi_decode_member_mload_setup_shape:
   abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,middle) ==>
   middle.cs_blocks = st.cs_blocks /\ middle.cs_current_bb = st.cs_current_bb /\
   inst_extends st middle /\
@@ -70,7 +70,7 @@ Theorem abi_decode_member_setup_sequence_effect:
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   t.vs_halted = s.vs_halted
 Proof
-  strip_tac >> drule abi_decode_member_setup_shape >> strip_tac >>
+  strip_tac >> drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `EVERY (\i. abi_bytes_opcode i.inst_opcode) (emitted_insts st middle)`
     by fs[EVERY_MEM] >>
   drule_all abi_bytes_sequence_static >> strip_tac >>
@@ -101,7 +101,7 @@ Proof
   strip_tac >> drule_all abi_decode_member_setup_sequence >> strip_tac >>
   drule_all abi_decode_member_setup_sequence_effect >>
   disch_then (qspecl_then [`writes`,`next`] strip_assume_tac) >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
@@ -175,7 +175,7 @@ Theorem abi_decode_bytes_member_fetched_outcome:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   drule_all abi_decode_bytes_position_shape >> strip_tac >>
   `cs_extends st middle /\ cs_extends middle end_st` by
     fs[inst_extends_def, cs_extends_def] >>
@@ -265,7 +265,7 @@ Proof
   strip_tac >> drule_all abi_decode_static_member_setup_sequence >> strip_tac >>
   drule_all abi_decode_member_setup_sequence_effect >>
   disch_then (qspecl_then [`writes`,`next`] strip_assume_tac) >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
@@ -303,7 +303,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_scalar_child_readable >> strip_tac >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   drule_all abi_decoder_word_inst_extends >> strip_tac >>
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `cs_extends st middle /\ cs_extends middle end_st` by

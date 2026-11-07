@@ -1,7 +1,7 @@
 (* The actual runtime-indexed element setup, not a static tuple member. *)
 Theory exprSimAbiDecodeArrayRuntimeSetup
 Ancestors
-  exprSimAbiDecodeArrayInvariant abiDecoderDynamicLoopSetup
+  exprSimAbiDecodeArraySetup exprSimAbiDecodeArrayInvariant abiDecoderDynamicLoopSetup
   exprSimAbiDecodeAbortReentry abiDecoderVarExtend abiDecoderContract
   exprSimAbiDecodeArrayFetched abiDecoderWordOutcome instIdxIndep
   abiDecoderSiteEffect exprSimAbiDecodeSiteProvenance
@@ -495,7 +495,7 @@ Proof
   strip_tac >>
   drule abi_array_element_setup_straight >> strip_tac >>
   drule abi_array_element_setup_static_opcodes >> strip_tac >>
-  drule_all abi_decode_array_bulk_sequence_static >> strip_tac >>
+  drule_all abi_decode_array_setup_sequence_static >> strip_tac >>
   `decode_site_resources ctx func u` by
     (irule decode_site_resources_fields >> qexists_tac `s` >>
      fs[abi_decoder_address_frame_def, venom_state_component_equality]) >>

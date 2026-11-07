@@ -103,33 +103,6 @@ Proof
   gvs[DROP_LENGTH_APPEND, mk_inst_def, abi_bytes_opcode_def, abi_word_opcode_def]
 QED
 
-Theorem abi_decode_array_bulk_step_static[local]:
-  (abi_bytes_opcode inst.inst_opcode \/ inst.inst_opcode = MUL) /\
-  step_inst_base inst s = OK t ==>
-  t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>
-Proof
-  disch_then (CONJUNCTS_THEN2 strip_assume_tac assume_tac)
-  >- (drule_all abi_bytes_step_static >> simp[]) >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[update_var_def] >> simp[venom_state_component_equality]
-QED
-
-Theorem abi_decode_array_bulk_sequence_static:
-  !insts s t. EVERY (\i. abi_bytes_opcode i.inst_opcode \/ i.inst_opcode = MUL) insts /\
-  run_inst_seq insts s = OK t ==>
-  t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  `v = s with <|vs_vars := v.vs_vars; vs_memory := v.vs_memory|>` by
-    metis_tac[abi_decode_array_bulk_step_static] >>
-  first_x_assum drule_all >> strip_tac >>
-  fs[venom_state_component_equality]
-QED
-
 Theorem abi_decode_array_bulk_success_effect:
   compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
@@ -161,7 +134,7 @@ Proof
   (impl_tac >- (simp[] >> disj2_tac >> qexists `h` >>
     simp[] >> once_rewrite_tac[MULT_COMM] >> decide_tac)) >> strip_tac >>
   drule_all abi_decode_array_bulk_memory_opcodes >> strip_tac >>
-  drule_all abi_decode_array_bulk_sequence_static >> strip_tac >>
+  drule_all abi_decode_array_setup_sequence_static >> strip_tac >>
   `decode_static_frame s t` by
     fs[decode_static_frame_def, venom_state_component_equality] >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\

@@ -49,13 +49,6 @@ Proof
   qexists_tac `a` >> fs[ci_mono_def] >> decide_tac
 QED
 
-Theorem abi_decode_coverage_front_append[local]:
-  ys <> [] ==> FRONT (xs ++ ys) = xs ++ FRONT ys
-Proof
-  Cases_on `ys` >- simp[] >>
-  strip_tac >> MATCH_ACCEPT_TAC FRONT_APPEND
-QED
-
 Theorem abi_decode_coverage_sub_add[local]:
   !a b:num. a - (b + a) = 0
 Proof
@@ -82,9 +75,9 @@ Proof
     (irule emitted_blocks_append >> simp[APPEND_ASSOC]) >>
   Cases_on `new = []` >> Cases_on `new' = []` >>
   gvs[frag_code_def, NULL_EQ, emitted_insts_def, LAST_APPEND_NOT_NIL,
-      abi_decode_coverage_front_append, MEM_APPEND, MEM_FLAT, MEM_MAP, IS_PREFIX_APPEND,
+      abi_decode_front_append, MEM_APPEND, MEM_FLAT, MEM_MAP, IS_PREFIX_APPEND,
       DROP_APPEND, APPEND_ASSOC, SUB_EQ_0] >>
-  simp[abi_decode_coverage_front_append, abi_decode_coverage_sub_add,
+  simp[abi_decode_front_append, abi_decode_coverage_sub_add,
        abi_decode_coverage_drop_long, MEM_APPEND, MEM_FLAT, MEM_MAP]
   >- metis_tac[] >>
   `MEM (LAST (emitted_blocks b c)) (emitted_blocks b c)` by

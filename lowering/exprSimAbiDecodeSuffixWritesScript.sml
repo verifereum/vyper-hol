@@ -4,7 +4,7 @@ Ancestors
   exprSimAbiGasBridge fragExec exprLoweringProps compileEnv emitHelper context venomInst
   arithmetic pair list rich_list sorting
 
-Theorem abi_decode_front_append[local]:
+Theorem abi_decode_front_append:
   ys <> [] ==> FRONT (xs ++ ys) = xs ++ FRONT ys
 Proof
   Cases_on `ys` >- simp[] >>

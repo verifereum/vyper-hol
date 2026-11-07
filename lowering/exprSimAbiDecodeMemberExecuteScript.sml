@@ -1,7 +1,7 @@
 (* Member setup reaches a recursive child without changing allocation sites. *)
 Theory exprSimAbiDecodeMemberExecute
 Ancestors
-  exprSimAbiDecodeMemberOutcome exprSimAbiDecodeSiteProvenance
+  exprSimAbiDecodeAbortReentry exprSimAbiDecodeMemberOutcome exprSimAbiDecodeSiteProvenance
   abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderFiniteControl
   abiDecoderSequenceReach abiDecoderContract abiEncoder compileEnv emitHelper
   emitHelperProps exprLoweringProps venomState venomInst instIdxIndep
@@ -12,7 +12,7 @@ Ancestors
   abiDecoderVarSequence abiDecoderVarExtend execEquivParamProps stateEquiv venomExecSemantics
   finite_map pred_set words list arithmetic
 
-Theorem abi_decode_member_setup_reach:
+Theorem abi_decode_member_mload_setup_reach:
   abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,middle) /\
   eval_operand src s = SOME(n2w p) /\ eval_operand dst s = SOME(n2w d) /\
   (dyn ==> eval_operand base_op s = SOME(n2w B) /\
@@ -40,7 +40,7 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st middle)` by fs[EVERY_MEM] >>
   `EVERY (\i. abi_bytes_opcode i.inst_opcode) (emitted_insts st middle)`
@@ -77,7 +77,7 @@ Theorem abi_decode_member_setup_wrap_abort:
   ?u. Dabort ctx fn s Revert_abort u
 Proof
   strip_tac >> drule_all abi_decode_member_setup_revert >> strip_tac >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all abi_decoder_run_sequence_abort >> strip_tac >>
@@ -321,7 +321,7 @@ Theorem abi_decode_member_child_pre:
     (p+if is_dynamic (vyper_to_abi_type env ty) then delta else ao) (d+vo) t
 Proof
   simp_tac bool_ss [abi_decode_member_pre_def] >> strip_tac >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `st.cs_next_var <= middle.cs_next_var` by
     (drule abi_decode_member_setup_counters >> simp[]) >>
   `abi_decoder_operand_live middle.cs_next_var base_op /\
@@ -356,26 +356,6 @@ Proof
 QED
 
 
-(* The rejecting instruction in a member prefix is ASSERT; successful
-   instructions already have a general variable-extension interface. *)
-Theorem abi_decode_assert_extend_abort[local]:
-  abi_decoder_vars_extend extras s t /\ inst.inst_opcode = ASSERT /\
-  step_inst_base inst s = Abort Revert_abort u ==>
-  ?v. step_inst_base inst t = Abort Revert_abort v
-Proof
-  strip_tac >>
-  `abi_decoder_inputs_defined inst s` by
-    (gvs[abi_decoder_inputs_defined_def, step_inst_base_def, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[eval_operand_def]) >>
-  drule abi_decoder_vars_extend_inputs >> disch_then drule >> strip_tac >>
-  mp_tac (Q.SPECL [`abi_decoder_vars_extend extras`,
-    `\s t. vsr_term_frame s = vsr_term_frame t`, `0`, `ARB`, `inst`, `s`, `t`]
-    step_inst_preserves_R) >>
-  (impl_tac >- simp[abi_decoder_vars_extend_valid]) >>
-  asm_simp_tac (srw_ss()) [step_inst_non_invoke] >>
-  Cases_on `step_inst_base inst t` >> simp[lift_result_def] >> metis_tac[]
-QED
-
 Theorem abi_decode_member_abort_opcode[local]:
   MEM inst.inst_opcode [ADD; LT; ISZERO; MLOAD; ASSERT] /\
   step_inst_base inst s = Abort a u ==> inst.inst_opcode = ASSERT /\ a = Revert_abort
@@ -407,7 +387,7 @@ Proof
       qexists_tac `v''` >> simp[run_inst_seq_def]) >>
   `MEM inst.inst_opcode [ADD; LT; ISZERO; MLOAD; ASSERT]` by simp[] >>
   drule_all abi_decode_member_abort_opcode >> strip_tac >>
-  drule_all abi_decode_assert_extend_abort >> strip_tac >>
+  drule_all abi_decode_assert_vars_extend_abort >> strip_tac >>
   qexists_tac `v` >> simp[run_inst_seq_def]
 QED
 
@@ -467,7 +447,7 @@ Theorem abi_decode_member_setup_wrap_abort_reentry:
   ?u. Dabort ctx fn s Revert_abort u
 Proof
   strip_tac >> drule_all abi_decode_member_setup_revert_reentry >> strip_tac >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all abi_decoder_run_sequence_abort >> strip_tac >>
@@ -492,7 +472,7 @@ Theorem abi_decode_member_conditional_outcome:
       (DROP ao (DROP p bs))) env ty (d+vo) s
 Proof
   strip_tac >>
-  drule abi_decode_member_setup_shape >> strip_tac >>
+  drule abi_decode_member_mload_setup_shape >> strip_tac >>
   `cs_extends st middle` by
     (irule cs_extends_same_block >> fs[inst_extends_def]) >>
   `cs_extends middle last` by (irule cs_extends_abi_decode >> metis_tac[]) >>
@@ -547,7 +527,7 @@ Proof
      abi_decode_load MLOAD (n2w(B+(p+ao)):bytes32) s = n2w delta /\
      p+delta < dimword(:256)` by (strip_tac >> fs[] >> decide_tac) >>
   qhdtm_assum `abi_decode_entry` (strip_assume_tac o REWRITE_RULE [abi_decode_entry_def]) >>
-  drule_all abi_decode_member_setup_reach >>
+  drule_all abi_decode_member_mload_setup_reach >>
   disch_then (qspecl_then [`writes`, `abi_decode_sites st.cs_next_id last.cs_next_id`]
     strip_assume_tac) >>
   `abi_decode_entry middle t` by simp[abi_decode_entry_def] >>

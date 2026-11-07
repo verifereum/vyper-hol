@@ -1,6 +1,6 @@
 Theory exprSimAbiDecodeImmutableFrame
 Ancestors
-  exprSimAbiDecodeSuccessPrefix exprSimAbiDecodeAllocaErasePrefix
+  exprSimAbiDecodeResources exprSimAbiDecodeSuccessPrefix exprSimAbiDecodeAllocaErasePrefix
   exprSimAbiDecodeProtection exprSimAbiDecodeAllocaErase
   abiEncoderPrefixSafety exprSimAbiDecodeRegionFrame
   exprSimAbiDecodeQuantifiedLift exprSimAbiDecodeEndpointFrame
@@ -33,27 +33,6 @@ Proof
   conj_tac >- decide_tac >>
   goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
   goal_assum (drule_at Any) >> asm_rewrite_tac []
-QED
-
-Theorem abi_decode_frame_code_member[local]:
-  cs_extends a z /\ fn_has_code a z fn ==>
-  !i. MEM i (frag_code a z) ==> MEM i (fn_insts fn)
-Proof
-  strip_tac >> gen_tac >>
-  Cases_on `NULL (emitted_blocks a z)`
-  >- (simp[frag_code_def, emitted_insts_def] >> strip_tac >>
-      fs[fn_has_code_def, IS_PREFIX_APPEND] >>
-      irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
-      metis_tac[MEM_DROP_IMP, MEM_APPEND]) >>
-  simp[frag_code_def, MEM_APPEND, MEM_FLAT, MEM_MAP] >> strip_tac
-  >- (irule lookup_block_fn_insts >> qexists_tac `LAST (emitted_blocks a z)` >>
-      fs[fn_has_code_def] >> metis_tac[MEM_LAST_NOT_NIL, NULL_EQ, MEM_DROP_IMP])
-  >- (irule lookup_block_fn_insts >> fs[fn_has_code_def] >>
-      `emitted_blocks a z = FRONT (emitted_blocks a z) ++
-          [LAST (emitted_blocks a z)]` by fs[NULL_EQ, APPEND_FRONT_LAST] >>
-      metis_tac[MEM_APPEND]) >>
-  fs[fn_has_code_def, IS_PREFIX_APPEND] >>
-  irule lookup_block_fn_insts >> goal_assum (drule_at Any) >> simp[MEM_APPEND]
 QED
 
 Theorem abi_decode_prefix_region_frame:
@@ -95,7 +74,7 @@ Proof
   `abi_builtin_decode_output_site start (abi_static_size ce.ce_struct_fields ty)
       (abi_size_bound ce.ce_struct_fields ty) IN abi_decode_alloca_ids func` by
     (`!i. MEM i (frag_code start final) ==> MEM i (fn_insts fn)` by
-       metis_tac[abi_decode_frame_code_member] >>
+       metis_tac[abi_decode_resources_code_member] >>
      drule abi_decode_lower_output_allocation >> strip_tac >>
      metis_tac[]) >>
   drule_all abi_decode_clean_builtin_resources >> strip_tac >>

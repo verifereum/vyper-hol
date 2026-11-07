@@ -81,7 +81,7 @@ Theorem abi_decode_member_setup_mono:
   ci_mono st prepared
 Proof
   strip_tac >>
-  drule exprSimAbiDecodeMemberOutcomeTheory.abi_decode_member_setup_shape >> strip_tac >>
+  drule exprSimAbiDecodeMemberOutcomeTheory.abi_decode_member_mload_setup_shape >> strip_tac >>
   `cs_extends st prepared` by
     fs[cs_extends_def, inst_extends_def] >>
   qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>

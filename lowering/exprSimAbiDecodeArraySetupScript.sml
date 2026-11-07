@@ -169,7 +169,7 @@ Proof
   fs[regions_disjoint_def] >> decide_tac
 QED
 
-Theorem abi_decode_array_setup_step_static[local]:
+Theorem abi_decode_array_setup_step_static:
   (abi_bytes_opcode inst.inst_opcode \/ inst.inst_opcode = MUL) /\
   step_inst_base inst s = OK t ==>
   t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>
@@ -182,7 +182,7 @@ Proof
   gvs[update_var_def] >> simp[venom_state_component_equality]
 QED
 
-Theorem abi_decode_array_setup_sequence_static[local]:
+Theorem abi_decode_array_setup_sequence_static:
   !insts s t.
   EVERY (\i. abi_bytes_opcode i.inst_opcode \/ i.inst_opcode = MUL) insts /\
   run_inst_seq insts s = OK t ==>

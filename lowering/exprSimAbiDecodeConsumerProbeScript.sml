@@ -4,15 +4,6 @@ Ancestors
   finite_map vyperTypeABI vyperTyping abiBoundaryChecks
   valueTypingMemoryProps exprSimProps
 
-Theorem abi_decode_local_region_transport:
-  (!name entry p sz. lookup_scopes name scopes = SOME entry /\
-    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-    lookup_var p t = lookup_var p s) ==>
-  (local_region ce scopes t name lo sz <=> local_region ce scopes s name lo sz)
-Proof
-  rw[local_region_def] >> metis_tac[]
-QED
-
 Theorem abi_decode_immutable_separation_frame:
   immutable_alloca_sep func ce cx es s /\
   abi_decode_allocation_floor s.vs_alloca_next s.vs_allocas t /\

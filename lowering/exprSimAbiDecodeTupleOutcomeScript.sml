@@ -78,7 +78,7 @@ Theorem abi_decode_complex_elems_child_context:
 Proof
   strip_tac >>
   `cs_extends st prepared` by
-    (drule abi_decode_member_setup_shape >>
+    (drule abi_decode_member_mload_setup_shape >>
      simp[inst_extends_def, cs_extends_def]) >>
   `cs_extends prepared child_end` by metis_tac[cs_extends_abi_decode] >>
   `cs_extends child_end last` by metis_tac[abi_decode_complex_elems_extends] >>

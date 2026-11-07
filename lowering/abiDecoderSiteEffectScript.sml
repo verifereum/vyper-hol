@@ -112,17 +112,6 @@ Proof
   simp[decode_protects_def, IN_UNION] >> metis_tac[]
 QED
 
-Theorem decode_site_protected_allocation:
-  inst.inst_outputs = [out] /\ exec_alloca inst s (n:bytes32) = OK t /\
-  q + len <= s.vs_alloca_next /\
-  (!b sz. FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-    sz = w2n n /\ venomMemDefs$regions_disjoint (q,len) (b,sz)) /\
-  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,w2n n) ==>
-  venomMemDefs$regions_disjoint (q,len) (b,w2n n)
-Proof
-  metis_tac[allocaSiteResourceTheory.alloca_site_execute_protected]
-QED
-
 Theorem decode_memory_frame_write:
   {a | dst <= a /\ a < dst + LENGTH bs} SUBSET writes ==>
   decode_memory_frame writes s (write_memory_with_expansion dst bs s)

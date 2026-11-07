@@ -49,7 +49,7 @@ Theorem abi_decode_reserved_local_region:
   (local_region ce scopes (t with <|vs_returndata := rd; vs_prev_bb := prev|>) name lo sz <=>
    local_region ce scopes s name lo sz)
 Proof
-  strip_tac >> irule abi_decode_local_region_transport >>
+  strip_tac >> irule local_region_lookup_cong >>
   metis_tac[abi_decode_reserved_local_lookup]
 QED
 

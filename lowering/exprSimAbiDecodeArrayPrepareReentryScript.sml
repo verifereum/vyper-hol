@@ -191,7 +191,7 @@ Theorem abi_decode_dynarray_prepare_site_effect:
   decode_site_effect ctx func st.cs_next_var {a | d <= a /\ a < d+32} s t
 Proof
   strip_tac >> drule_all abi_decode_array_prepare_reentry_opcodes >> strip_tac >>
-  drule_all abi_decode_array_bulk_sequence_static >> strip_tac >>
+  drule_all abi_decode_array_setup_sequence_static >> strip_tac >>
   `decode_site_resources ctx func t` by
     (irule decode_site_resources_fields >> qexists `s` >>
       fs[venom_state_component_equality]) >>

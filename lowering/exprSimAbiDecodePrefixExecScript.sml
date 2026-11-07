@@ -21,14 +21,6 @@ Proof
   simp[Once run_from_def]
 QED
 
-Theorem abi_decode_drop_cons[local]:
-  !l n i rest. DROP n l = i::rest ==>
-  n < LENGTH l /\ EL n l = i /\ DROP (SUC n) l = rest
-Proof
-  Induct >> rw[] >> Cases_on `n` >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem abi_decode_contiguous_prefix_fetch:
   isPREFIX (i::xs) (DROP n bb.bb_instructions) ==>
   get_instruction bb n = SOME i /\
@@ -37,7 +29,9 @@ Proof
   strip_tac >>
   `?rest. DROP n bb.bb_instructions = i::rest /\ isPREFIX xs rest` by
     (Cases_on `DROP n bb.bb_instructions` >> gvs[]) >>
-  drule abi_decode_drop_cons >> simp[get_instruction_def]
+  `n < LENGTH bb.bb_instructions` by
+    (CCONTR_TAC >> gvs[arithmeticTheory.NOT_LESS, DROP_LENGTH_TOO_LONG]) >>
+  gvs[DROP_CONS_EL, get_instruction_def]
 QED
 
 Theorem abi_decode_run_prefix_inversion:

@@ -40,7 +40,7 @@ Theorem abi_decode_owned_member_conditional_outcome:
       (DROP ao (DROP p bs))) env ty (d+vo) s
 Proof
   strip_tac >>
-  drule exprSimAbiDecodeMemberOutcomeTheory.abi_decode_member_setup_shape >> strip_tac >>
+  drule exprSimAbiDecodeMemberOutcomeTheory.abi_decode_member_mload_setup_shape >> strip_tac >>
   `cs_extends st middle` by
     (irule cs_extends_same_block >> fs[inst_extends_def]) >>
   `cs_extends middle last` by (irule cs_extends_abi_decode >> metis_tac[]) >>
@@ -95,7 +95,7 @@ Proof
      abi_decode_load MLOAD (n2w(B+(p+ao)):bytes32) s = n2w delta /\
      p+delta < dimword(:256)` by (strip_tac >> fs[] >> decide_tac) >>
   qhdtm_assum `abi_decode_entry` (strip_assume_tac o REWRITE_RULE [abi_decode_entry_def]) >>
-  drule_all exprSimAbiDecodeMemberExecuteTheory.abi_decode_member_setup_reach >>
+  drule_all exprSimAbiDecodeMemberExecuteTheory.abi_decode_member_mload_setup_reach >>
   disch_then (qspecl_then
     [`scratch UNION {a | d+vo <= a /\ a < d+vo+type_memory_bytes ce ty}`,
      `abi_decode_sites st.cs_next_id last.cs_next_id`] strip_assume_tac) >>

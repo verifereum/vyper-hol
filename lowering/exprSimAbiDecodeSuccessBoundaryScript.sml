@@ -12,7 +12,7 @@ Ancestors
 
 (* Compose the decoder frames with the actual post of the unwrapped child.
    The value-specific clauses are discharged by the two callers below. *)
-Theorem abi_decode_caller_frames[local]:
+Theorem abi_decode_caller_frames:
   expr_post ctx func ce cx e es sa start s0 es1 child data s /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= start.cs_next_var /\ sa.cs_next_id <= start.cs_next_id /\
