@@ -520,7 +520,7 @@ Proof
   res_tac >> decide_tac
 QED
 
-Theorem concat_head_typed[local]:
+Theorem concat_head_typed:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
     bind (eval_expr cx e) (read_result cx) es = (INL v, es') ==>
@@ -810,7 +810,7 @@ QED
 
 Finalise concat_head_arm
 
-Theorem concat_cons_mono[local]:
+Theorem concat_cons_mono:
   !cenv e args dv ov sa sb op s1.
     compile_concat compile_expr cenv (e::args) (Var dv) (MAP (\e. let ety = expr_type e in
                 if is_bytestring_type ety then (T, 0:num)
@@ -1112,7 +1112,9 @@ Resume concat_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[]
+  disj2_tac >>
+  qpat_x_assum `(\rr ee r. _) _ _ _` mp_tac >>
+  qpat_x_assum `exit_result r` mp_tac >> simp[]
 QED
 
 Resume concat_args_sim[tail_exempt]:
