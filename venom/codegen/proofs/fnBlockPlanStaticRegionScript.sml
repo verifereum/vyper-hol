@@ -115,11 +115,17 @@ Theorem dfs_lineage_branch[local]:
   lookup_block lbl fn.fn_blocks = SOME bb /\
   generate_block_plan lv dfg cfg fn bb pin = SOME (bops,pout) /\
   MEM succ (cfg_succs_of cfg lbl) /\
-  dfs_block_state lv dfg cfg fn ps0 succ pg ==>
+  dfs_block_state lv dfg cfg fn ps0 succ
+    (pg with <| ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled |>) ==>
   lineage_state lv dfg cfg fn ps0 succ
     (pg with <| ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled |> )
 Proof
-  strip_tac >> irule lineage_state_step >> simp[] >>
+  strip_tac >>
+  `pg with <| ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled |> =
+   (pg with <| ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled |>)
+     with <| ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled |>`
+    by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >> simp[] >>
   goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
@@ -275,7 +281,8 @@ Theorem dfs_edge_lineage_entry:
   lookup_block pred fn.fn_blocks = SOME pred_bb /\
   generate_block_plan lv dfg cfg fn pred_bb pin = SOME (ops,pout) /\
   MEM succ (cfg_succs_of cfg pred) /\
-  dfs_block_state lv dfg cfg fn ps0 succ ps_succ ==>
+  dfs_block_state lv dfg cfg fn ps0 succ ps_succ /\
+  pout.ps_spilled = ps_succ.ps_spilled ==>
   lineage_entry lv dfg cfg fn ps0 pred succ
     (ps_succ with <| ps_stack := pout.ps_stack;
                     ps_spilled := pout.ps_spilled |>)
@@ -307,7 +314,10 @@ Theorem regional_dfs_join_target_distinct:
     ALL_DISTINCT (MAP Var (input_vars_from pred bb.bb_instructions
                             (live_vars_at liveness bb.bb_label 0)))
 Proof
-  rpt gen_tac >> strip_tac >> drule_all dfs_edge_lineage_entry >>
+  rpt gen_tac >> strip_tac >>
+  `pout.ps_spilled = ps_succ.ps_spilled` by
+    (irule dfs_edge_spilled >> simp[] >> metis_tac[]) >>
+  drule_all dfs_edge_lineage_entry >>
   strip_tac >> drule_all regional_lineage_join_target_distinct >> simp[]
 QED
 
@@ -4527,6 +4537,7 @@ Proof
     (drule_all dfs_block_state_cfg_reachable >>
      `wf_function fn` by gvs[codegen_ready_fn_def] >>
      metis_tac[fn_reachable_cfg_analyze]) >>
+  `pout.ps_spilled = ds.ps_spilled` by simp[] >>
   drule_all dfs_edge_lineage_entry >> simp[] >> strip_tac >>
   qpat_x_assum `ds.ps_stack = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `ds.ps_spilled = _` (SUBST_ALL_TAC o SYM) >>

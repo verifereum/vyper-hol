@@ -505,6 +505,7 @@ Theorem block_step_prefix:
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
         SOME (block_ops, ps_after) /\
       ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
       block_plan_state liveness dfg cfg fn bb
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
         (phi_prefix_length bb.bb_instructions) ps1 /\
