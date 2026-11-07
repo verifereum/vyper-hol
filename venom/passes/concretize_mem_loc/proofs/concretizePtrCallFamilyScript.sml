@@ -393,6 +393,222 @@ Proof
   gvs[lookup_var_def, op_taint_def, FLOOKUP_DRESTRICT])
 QED
 
+Theorem ptr_paired_prefix_write_attach:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_structural_transcript R vs C C' (h ++ [b]) b (ht ++ [bt]) bt
+    (done ++ [LENGTH h - 1]) tokens registry births PT TG' saved entries
+    (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) /\
+  ptr_paired_sample positions b bt (tokens,registry,births,PT,TG',saved,entries) /\
+  ptr_paired_code R lp positions b.po_fn bt.po_fn /\
+  ptr_paired_cursor lp b bt /\
+  ptr_paired_params positions b bt (tokens,registry,births,PT,TG',saved,entries) /\
+  b.po_stack = a.po_stack /\ bt.po_stack = at.po_stack /\
+  (extra = [] \/ ?rho. extra = [(LENGTH h - 1,LENGTH done,rho)]) /\
+  EVERY (ptr_paired_write lo positions C C' (h ++ [b]) (ht ++ [bt])
+    (done ++ [LENGTH h - 1])
+    (H ++ [(tokens,registry,births,PT,TG',saved,entries)])) extra /\
+  (~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE /\
+   range_bytes (step_writes a.po_inst a.po_state b.po_state) <> {} ==>
+   ?rho. MEM (LENGTH h - 1,LENGTH done,rho) extra) ==>
+  ptr_paired_prefix R lp positions lo vs C C'
+    (h ++ [b]) b (ht ++ [bt]) bt (done ++ [LENGTH h - 1])
+    tokens registry births PT TG' saved entries
+    (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls (ws ++ extra)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  `LAST h = a` by metis_tac[ptr_chrono_history_end] >>
+  `EVERY (\n. SUC n < LENGTH h) done` by
+    (qpat_assum `ptr_structural_transcript _ _ _ _ (h ++ _) _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     disch_then (strip_assume_tac o MATCH_MP ptr_structural_transcript_erasure) >>
+     drule ptr_structural_trace_embedding >>
+     simp[concretizePtrEventEmbeddingTheory.ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
+     gen_tac >> strip_tac >>
+     qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
+     simp[EL_APPEND_EQN] >> fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def] >> decide_tac) >>
+  gns[ptr_paired_prefix_def] >>
+  conj_tac >- (irule ptr_paired_samples_pair >> simp[]) >>
+  conj_tac >- (irule ptr_paired_alignment_pair >> simp[]) >>
+  conj_tac >- (irule concretizePtrPairedFieldsTheory.ptr_paired_callers_retained >> simp[] >>
+               fs[ptr_paired_samples_def, ptr_sample_list_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
+  irule concretizePtrPairedFieldsTheory.ptr_paired_writes_pair >> simp[] >>
+  fs[ptr_paired_samples_def, ptr_sample_list_def]
+QED
+
+Theorem ptr_paired_call_prefix_step:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [CALL; STATICCALL] ==>
+  ?z TG' ws'. TG' = step_prov PT TG a.po_inst z.po_state /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws'
+Proof
+  strip_tac >>
+  drule_all ptr_paired_call_step >> strip_tac >>
+  `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
+    (gvs[is_terminator_def]) >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `EVERY bb_well_formed a.po_fn.fn_blocks /\
+   ALL_DISTINCT (fn_labels a.po_fn)` by
+    (qpat_x_assum `EVERY (\f. fn_inst_wf f /\ _) _` mp_tac >>
+     simp[EVERY_MEM] >> disch_then (qspec_then `a.po_fn` mp_tac) >> simp[]) >>
+  `?i. active_inst a.po_fn i (post with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
+    (irule concretizePtrOrdinaryNextTheory.ptr_ordinary_next_active >> simp[] >>
+     qexists_tac `a.po_inst` >> simp[]) >>
+  qmatch_assum_abbrev_tac `active_inst a.po_fn i nextstate` >>
+  qabbrev_tac `z = ptr_ledger_next a i post` >>
+  `z.po_fn = a.po_fn /\ z.po_stack = a.po_stack /\
+   z.po_state.vs_allocas = a.po_state.vs_allocas` by
+    simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def, Abbr `nextstate`] >>
+  `active_inst z.po_fn z.po_inst z.po_state` by
+    simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def, Abbr `nextstate`] >>
+  `ptr_tagged_step (HD tokens) PT TG a.po_inst z.po_state = TG' /\
+   ptr_paired_sample positions z zt (tokens,registry,births,PT,TG',saved,entries) /\
+   ptr_paired_params positions z zt (tokens,registry,births,PT,TG',saved,entries)` by
+    metis_tac[] >>
+  `ptr_tagged_step (HD tokens) PT TG a.po_inst post = TG'` by
+    gvs[Abbr `z`, ptr_ledger_next_def, ptr_observe_def,
+        ptr_tagged_step_def, step_prov_def, out_prov_def, lookup_var_def] >>
+  `ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG' saved` by
+    (`active_inst a.po_fn i (post with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
+       fs[Abbr `nextstate`] >>
+     drule_all (cj 1 ptr_tagged_chrono_step_rules) >> strip_tac >>
+     `ptr_observe a.po_stack a.po_params a.po_prov a.po_taint
+       a.po_fn a.po_inst a.po_state = a` by
+       simp[NoAsms, ptr_observe_def, ptr_observation_component_equality] >>
+     fs[Abbr `z`, ptr_ledger_next_def, Abbr `nextstate`] >> metis_tac[]) >>
+  `ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+     (done ++ [LENGTH h - 1]) tokens registry births PT TG' saved entries
+     (H ++ [(tokens,registry,births,PT,TG',saved,entries)])` by
+    (drule ptr_ownership_overlay_fixed >> strip_tac >>
+     drule (cj 3 ptr_structural_transcript_rules) >>
+     disch_then drule >> disch_then drule >>
+     simp[concretizePtrActivationChronologyTheory.ptr_activation_tokens_def,
+          concretizePtrActivationChronologyTheory.ptr_activation_registry_def]) >>
+  `ALL_DISTINCT (fn_labels at.po_fn)` by
+    (qpat_x_assum `ptr_paired_code _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[concretizePtrPairedFieldsTheory.ptr_paired_code_def] >> strip_tac >>
+     gns[fn_labels_def] >>
+     metis_tac[concretizeStepStructureTheory.concretize_positions_labels, fn_labels_def]) >>
+  `!ai. MEM ai (fn_insts a.po_fn) /\ ai.inst_opcode = ALLOCA ==>
+    ?p. FLOOKUP (lp a.po_fn) (Allocation ai.inst_id) = SOME p` by
+    (qpat_x_assum `EVERY (\f. fn_inst_wf f /\ _) _` mp_tac >>
+     simp[EVERY_MEM] >> disch_then (qspec_then `a.po_fn` mp_tac) >>
+     simp[] >> strip_tac >> rpt strip_tac >>
+     first_x_assum drule >> simp[] >>
+     Cases_on `FLOOKUP (lp a.po_fn) (Allocation ai.inst_id)` >> simp[]) >>
+  `ptr_paired_cursor lp z zt` by
+    (drule concretizePtrOrdinaryNextTheory.ptr_ordinary_next_cursor >> disch_then irule >>
+     simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def, Abbr `nextstate`]) >>
+  `z.po_state.vs_memory = post.vs_memory /\
+   step_writes a.po_inst a.po_state z.po_state = step_writes a.po_inst a.po_state post` by
+    simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def, Abbr `nextstate`, step_writes_def] >>
+  `TG' = step_prov PT TG a.po_inst z.po_state` by
+    gvs[ptr_tagged_step_def, step_prov_def, out_prov_def] >>
+  Cases_on `k = 0`
+  >- (`range_bytes (step_writes a.po_inst a.po_state z.po_state) = {}` by
+        (simp[EXTENSION] >> metis_tac[DECIDE ``~(m <= q /\ q < m)``]) >>
+      qexistsl_tac [`z`,`TG'`,`ws`] >> simp[] >>
+      drule concretizePtrPairedNextAttachTheory.ptr_paired_prefix_nonwrite_attach >> disch_then irule >> gns[]) >>
+  `w2n n <> 0` by (strip_tac >> fs[]) >>
+  drule_at (Pat `ptr_lookup_transport _ _ _ _ _ _`)
+    concretizePtrMloadEndpointTheory.ptr_paired_current_range_classification >>
+  disch_then (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`rpolicy`,`names`,`w2n n`,`eom`] mp_tac) >>
+  simp[] >> disch_tac >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
+    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `k <= w2n n` by simp[] >>
+  `?rho. (!j. j < k ==> rho (w2n x + j) = w2n y + j) /\
+    concretizePtrPairedFields$ptr_paired_write_owner lo positions rho
+      (range_bytes (step_writes a.po_inst a.po_state post))
+      (tokens,registry,births,PT,TG',saved,entries)` by
+    (qexists_tac `\q. w2n y + (q - w2n x)` >> conj_tac
+     >- simp[] >>
+     qpat_x_assum `_ \/ ?v token aid b sz pa. _` strip_assume_tac
+     >- (simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
+         rpt strip_tac >> disj1_tac >>
+         Cases_on `w2n n < LENGTH post.vs_returndata` >>
+         gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+     `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
+     simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
+     rpt strip_tac >> disj2_tac >>
+     qexistsl_tac [`token`,`aid`,`b`,`sz`,`pa`,`q - b`] >>
+     Cases_on `w2n n < LENGTH post.vs_returndata` >>
+     gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  rename1 `concretizePtrPairedFields$ptr_paired_write_owner lo positions reloc _ _` >>
+  `ptr_ledger_write_pair C C' reloc a z at zt` by
+    (simp[ptr_ledger_write_pair_def] >>
+     conj_tac >- metis_tac[ptr_tagged_chrono_step_projection] >>
+     conj_tac
+     >- (rpt strip_tac >> rename1 `w2n x <= q` >>
+         `q = w2n x + (q - w2n x) /\ q - w2n x < k` by
+           (Cases_on `w2n n < LENGTH post.vs_returndata` >>
+            gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+         `reloc q = w2n y + (q - w2n x)` by metis_tac[] >>
+         simp[] >> gns[] >> decide_tac) >>
+     simp[concretizePtrBytesTheory.ptr_bytes_agree_def] >>
+     rpt strip_tac >> rename1 `read_byte q _ = _` >>
+     `q = w2n x + (q - w2n x) /\ q - w2n x < k` by
+       (Cases_on `w2n n < LENGTH post.vs_returndata` >>
+        gns[arithmeticTheory.MIN_DEF] >> decide_tac) >> metis_tac[]) >>
+  `LENGTH H = LENGTH h /\ 0 < LENGTH h /\ LENGTH ht = SUC (LENGTH done)` by
+    fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def] >>
+  `EL (LENGTH h - 1) h = a /\ EL (LENGTH done) ht = at` by
+    (drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_structural_trace_target >> strip_tac >>
+     `h <> [] /\ LAST h = a` by metis_tac[ptr_chrono_history_end] >>
+     `ht <> [] /\ LAST ht = at` by metis_tac[ptr_chrono_history_end] >>
+     conj_tac
+     >- (qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, arithmeticTheory.PRE_SUB1]) >>
+     qpat_x_assum `LAST ht = at` mp_tac >> simp[LAST_EL]) >>
+  `range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {}` by
+    (`w2n x IN range_bytes (step_writes a.po_inst a.po_state post)` by
+       (qpat_assum `!q. q IN range_bytes (step_writes a.po_inst a.po_state post) <=> _`
+          (qspec_then `w2n x` (fn th => pure_rewrite_tac[th])) >>
+        decide_tac) >>
+     metis_tac[NOT_IN_EMPTY]) >>
+  `ptr_paired_write lo positions C C' (h ++ [z]) (ht ++ [zt])
+    (done ++ [LENGTH h - 1])
+    (H ++ [(tokens,registry,births,PT,TG',saved,entries)])
+    (LENGTH h - 1,LENGTH done,reloc)` by
+    (`SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
+     simp[concretizePtrPairedFieldsTheory.ptr_paired_write_def, EL_APPEND_EQN] >>
+     gns[]) >>
+  qexistsl_tac [`z`,`ws ++ [(LENGTH h - 1,LENGTH done,reloc)]`] >> simp[] >>
+  irule ptr_paired_prefix_write_attach >> gns[] >>
+  qexistsl_tac [`TG`,`a`,`at`] >> simp[]
+QED
+
 Theorem ptr_paired_call_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
