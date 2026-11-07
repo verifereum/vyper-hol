@@ -2,6 +2,8 @@
 Theory bodyPtrTypeBuiltinsScalarSemantic
 Ancestors exprSimConvert exprLowering exprLoweringProps exprSimDefs
   vyperTypeSystem vyperValue compileEnv vyperAST exprSimHyps
+  vyperTyping vyperValueOperation valueEncoding integer_word venomExecSemantics
+  bodyPtrTypeBuiltinsUintClampSemantics venomState fragExec words arithmetic
 
 (* Unlike scalar_conversion_word_types this includes int_convert_pair and
    derives the non-bytestring destination from valid_conversion itself. *)
@@ -111,3 +113,56 @@ QED
      is required; the signed dynamic-bytestring residual cannot cover it.
    No scalar coverage conclusion depends on the retained counterexample or
    the authorized dynamic-bytestring residual. *)
+
+Theorem scalar_identity_source_partition:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  (case dst of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+   | _ => mk_convert_op src dst) = ConvIdentity ==>
+  src = BaseT BoolT /\ ((?n. dst = BaseT (IntT n)) \/ (?n. dst = BaseT (UintT n)))
+Proof
+  Cases_on `src` >> Cases_on `dst` >>
+  gvs[valid_conversion_def, is_bytestring_type_def, mk_convert_op_def] >>
+  Cases_on `b` >>
+  gvs[valid_conversion_def, is_bytestring_type_def, mk_convert_op_def] >>
+  rpt (FIRST [Cases_on `b'`, Cases_on `b''`, Cases_on `b`] >>
+       gvs[valid_conversion_def, is_bytestring_type_def, mk_convert_op_def]) >>
+  simp[type_bounds_def, type_bits_def, is_signed_type_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem scalar_identity_semantic_packet:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  (case dst of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+   | _ => mk_convert_op src dst) = ConvIdentity /\
+  evaluate_type (get_tenv cx) src = SOME tv /\ value_has_type tv v1 /\
+  evaluate_type (get_tenv cx) dst = SOME tout ==>
+  ?v. convert_result cx src dst v1 = INL v /\
+      typed_val_to_w256 tout v = typed_val_to_w256 tv v1
+Proof
+  strip_tac >> drule_all scalar_identity_source_partition >> strip_tac >> gvs[] >>
+  Cases_on `v1` >> gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
+  rename1 `BoolV b` >> Cases_on `b` >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
+       typed_val_to_w256_def, val_to_w256_def, bool_to_word_def, i2w_def]
+QED
+
+Theorem scalar_flag_raw_exact:
+  compile_type_convert op (ConvToFlag n) sa = (r,sb) /\
+  eval_operand op ss = SOME w /\ fresh_vars_wrt sa ss ==>
+  if w2n w < 2 ** n then
+    ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+         eval_operand r sf = SOME w
+  else ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  strip_tac >> Cases_on `n < 256`
+  >- (`compile_int_clamp F n op sa = (r,sb)` by fs[compile_type_convert_def] >>
+      `n <= 256` by decide_tac >>
+      `w2n w <= w2n (n2w (2 ** n-1):bytes32) <=> w2n w < 2 ** n` by
+        (simp[uint_clamp_test, within_int_bound_def] >> decide_tac) >>
+      drule_all uint_clamp_raw_exact >>
+      Cases_on `w2n w < 2 ** n` >> simp[] >> metis_tac[]) >>
+  `w2n w < 2 ** n` by
+    (irule LESS_LESS_EQ_TRANS >> qexists_tac `dimword(:256)` >>
+     simp[w2n_lt, dimword_def]) >>
+  gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl, run_inst_seq_def]
+QED
