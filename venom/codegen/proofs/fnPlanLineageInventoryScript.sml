@@ -2708,7 +2708,7 @@ QED
 
 (* Pointwise upper transport; unlike the reserve bound this needs no
    availability premise and charges a variable copy only when it is live. *)
-Theorem emit_one_input_inventory_upper[local]:
+Theorem emit_one_input_inventory_upper:
   !opc nl op ps x.
     LIST_ELEM_COUNT x (SND (emit_one_input opc nl op ps)).ps_stack +
       (if x IN FDOM (SND (emit_one_input opc nl op ps)).ps_spilled then 1 else 0) <=

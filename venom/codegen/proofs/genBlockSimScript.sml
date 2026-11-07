@@ -6888,7 +6888,7 @@ Proof
   simp[do_dup_def, LET_THM] >> rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem bump_emit_one_input_spilled_shape[local]:
+Theorem bump_emit_one_input_spilled_shape:
   !opc nl op ps ops ps'.
     emit_one_input opc nl op ps = (ops,ps') ==>
     ps'.ps_spilled = ps.ps_spilled \/
