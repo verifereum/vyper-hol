@@ -310,3 +310,67 @@ Proof
   simp[] >> rpt strip_tac >>
   metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, LESS_EQ_TRANS]
 QED
+
+Theorem source_array_static_suffix_counted_ptr:
+  source_array_static_suffix (Var ip) (Var ev) sa = (out,se) /\
+  fn_has_code sa se fn /\ not_fresh_at sa ip /\ not_fresh_at sa ev /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ lookup_var ip s = SOME a /\
+  ptr_covers G tn ip s 32 /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  lookup_var ev s = SOME w /\ op_taint tn (Var ev) = {} ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = se.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH se.cs_current_insts /\ ~sf.vs_halted /\
+    eval_operand out sf = SOME (mload (w2n a) s + w) /\
+    op_taint tnf out = {} /\ op_prov Gf out = NONE /\
+    sf.vs_memory = (mstore (w2n a) (mload (w2n a) s + w) s).vs_memory /\
+    tnf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ tnf.t_imm = tn.t_imm /\
+    sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+    sf.vs_call_ctx = s.vs_call_ctx /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all source_array_static_suffix_code >> strip_tac >> gvs[] >>
+  drule_all emit_mload_clean_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `eval_operand (Var old) sf = SOME (mload (w2n a) s) /\
+   eval_operand (Var ev) sf = SOME w /\ op_taint tnf (Var ev) = {}` by
+    simp[eval_operand_def] >>
+  drule_all (emit_copy_len_binop_ambient_counted_ptr |>
+    Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`, `Gf`, `D`] strip_assume_tac) >>
+  rename1 `lookup_var sumvar sf' = SOME (mload (w2n a) s + w)` >>
+  `lookup_var ip sf' = SOME a /\ ptr_covers Gf' tnf' ip sf' 32 /\
+   eval_operand (Var sumvar) sf' = SOME (mload (w2n a) s + w)` by
+    (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  drule_all emit_mstore_clean_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `lookup_var ip sf'' = SOME a /\ ptr_covers Gf' tnf'' ip sf'' 32 /\
+   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnf''.t_mem)` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  drule_all emit_mload_clean_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `lookup_var ov laststate = SOME (mload (w2n a) sf'')` >>
+  rename1 `gas_path_ptr D 0 ctx fn PG Gf' tnf'' sf'' 0 lastG lasttn (OK laststate)` >>
+  qexistsl_tac [`lastG`, `lasttn`, `laststate`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf''`, `tnf''`] >> simp[]) >>
+  `mload (w2n a) sf'' = mload (w2n a) s + w` by
+    (qspec_then `w2n a` mp_tac venomMemPropsTheory.mload_mstore_same >>
+     disch_then (qspecl_then [`mload (w2n a) s + w`, `sf'`] mp_tac) >>
+     simp[mload_def]) >>
+  simp[eval_operand_def] >>
+  simp[mstore_def, write_memory_with_expansion_def]
+QED
