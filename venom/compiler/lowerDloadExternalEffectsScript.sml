@@ -313,3 +313,22 @@ Proof
   strip_tac >> drule ld_extract_concrete_shape >>
   disch_then (mp_tac o Q.AP_TERM `\s. s.vs_vars`) >> simp[]
 QED
+
+Theorem ld_consume_call_labels:
+  consume_call_outcome rq ro rs s = (w,r) ==> r.vs_labels = s.vs_labels
+Proof
+  simp[consume_call_outcome_eq] >> strip_tac >> gvs[]
+QED
+
+Theorem ld_consume_create_labels:
+  consume_create_outcome rq s = (w,r) ==> r.vs_labels = s.vs_labels
+Proof
+  simp[consume_create_outcome_eq] >> strip_tac >> gvs[]
+QED
+
+Theorem ld_extract_result_labels:
+  extract_venom_result s v ro rs rr = SOME (w,r) ==> r.vs_labels = s.vs_labels
+Proof
+  strip_tac >> drule ld_extract_concrete_shape >>
+  disch_then (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >> simp[]
+QED
