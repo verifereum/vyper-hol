@@ -141,7 +141,8 @@ Proof
   `step_taint (mk_inst id opc [left;right] [out]) s
     (update_var out (f a b) s) tn = tn with t_var := tn.t_var |+ (out,{})` by
     (Cases_on `opc = MUL` >-
-       gvs[typed_copy_loop_arith_ghost, update_var_def] >>
+       gvs[typed_copy_loop_arith_ghost, update_var_def, mk_inst_def,
+           ptrDisciplineTheory.out_taint_def] >>
      gvs[scalar_add_taint, update_var_def]) >>
   qexists_tac `step_prov PG G (mk_inst id opc [left;right] [out])
     (update_var out (f a b) s)` >>
