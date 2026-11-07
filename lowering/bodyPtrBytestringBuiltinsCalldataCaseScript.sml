@@ -6,7 +6,9 @@ Ancestors
   exprSimWordArgs loweringPosts bodyPtrDefs exprOperandVar
   exprLoweringProps stmtLoweringMono allocLimits valueEncoding
   valueEncodingProps vfmConstants words vyperAST vyperTyping vyperValue
-  immutableEncodingProofs
+  immutableEncodingProofs vyperTypeInvariants vyperLoweringCorrect vyperTypeContractSoundness
+  vyperInterpreter bodyPtrBytestringBuiltinsPrefix gasSummaryComposePtr
+  exprSimCalldataSlice wordArgsPtr stmtFragPtr
   vyperContext exprSimSource exprLowering exprBopLowering list
 
 (* Expose the actual lowered operand from the conditional body hypothesis.
@@ -106,4 +108,69 @@ Proof
   simp[expr_type_def, is_word_type_def, evaluate_type_def, lowered_value_type_def,
     type_memory_size_def, type_slot_size_def, type_memory_bytes_def,
     word_size_def, val_wf_def, dimword_def] >> decide_tac
+QED
+
+Theorem calldata_slice_operand_source_outcome:
+  expr_body_pre cenv cx env
+    (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es /\
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT 256) /\
+  0 < n /\ n < dimword (:256) /\
+  lower_value compile_expr cenv cty e sa = (op,sm) /\
+  compile_slice_calldata op (Lit (n2w n))
+    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm = (out,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
+  ghost_inv d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
+    (\vst. ((case builtin_result cx vst.accounts (BaseT (BytesT (Dynamic n)))
+      (CalldataSlice n) [expr_type e] [v] of
+      INL w => INL (Value w) | INR exc => INR exc), vst)) (ee,t,G,tn)
+    (\res ef H tm u. ?w. res = INL (Value w) /\
+      vv_post ctx func cenv cx
+        (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) ee sm sb t ef (Value w)
+        (LocatedValue (BaseT (BytesT (Dynamic n)))
+          <|ptr_operand := out; ptr_location := LocMemory|>) u /\
+      ptr_vv_ok cx (BaseT (BytesT (Dynamic n))) (Value w)
+        (LocatedValue (BaseT (BytesT (Dynamic n)))
+          <|ptr_operand := out; ptr_location := LocMemory|>) ef H tm u /\
+      ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) out H u /\
+      ghost_inv d cenv cx ef H tm u /\ ghost_kept cenv ee sm G tn t H tm /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted)
+    (\res ef gt r. expr_exit res r)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all calldata_slice_operand_endpoint >> strip_tac >> gvs[] >>
+  drule_all calldata_slice_operand_static_cut >> strip_tac >>
+  drule expr_post_state >> strip_tac >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+    metis_tac[not_fresh_at_mono] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+    metis_tac[not_fresh_at_mono] >>
+  `op_prov G op = NONE /\ op_taint tn op = {}` by
+    fs[ptr_val_ok_def, is_word_type_def] >>
+  `cx.txn.calldata = t.vs_call_ctx.cc_calldata` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
+    fs[expr_sim_inv_def, context_well_typed_def, dimword_def] >>
+  irule (SRULE [expr_type_def] (Q.INST
+    [`e` |-> `Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]`]
+    compile_slice_calldata_source_outcome)) >>
+  simp[is_word_type_def] >>
+  qexistsl_tac [`type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))`,
+    `a`, `n`, `op`] >>
+  simp[builtin_result_def, evaluate_builtin_def, dimword_def] >>
+  conj_tac >- (Cases_on `evaluate_calldata_slice t.vs_call_ctx.cc_calldata (IntV (&a)) n` >> simp[]) >>
+  mp_tac (Q.INST [`N` |-> `type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))`,
+    `a` |-> `a`, `bs` |-> `t.vs_call_ctx.cc_calldata`, `args` |-> `[e]`] calldata_slice_result_requirements) >>
+  simp[expr_type_def, dimword_def] >> metis_tac[]
 QED
