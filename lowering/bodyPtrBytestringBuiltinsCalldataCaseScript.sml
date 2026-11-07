@@ -2,6 +2,8 @@ Theory bodyPtrBytestringBuiltinsCalldataCase
 Ancestors
   bodyPtrBytestringBuiltinsEval bodyPtrBytestringBuiltinsExternalSlice
   bodyPtrPreds exprPtrUnwrap vyperTypeSystem exprSimHypsDefs
+  emitHelperProps compileEnv fragExec bodyPtrBytestringBuiltinsCalldataOutcome
+  exprSimWordArgs loweringPosts bodyPtrDefs
   vyperContext exprSimSource exprLowering exprBopLowering list
 
 (* Expose the actual lowered operand from the conditional body hypothesis.
@@ -49,3 +51,15 @@ Proof
   simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def] >>
   pairarg_tac >> simp[] >> strip_tac >> metis_tac[]
 QED
+
+Theorem calldata_slice_code_appends:
+  cs_appends (\sm. as_ptr_val ann LocMemory
+    (compile_slice_calldata x (Lit (n2w n)) N sm))
+Proof
+  rw[cs_appends_def] >>
+  Cases_on `compile_slice_calldata x (Lit (n2w n)) N sm` >>
+  gvs[as_ptr_val_def] >>
+  drule compile_slice_calldata_stages >> strip_tac >>
+  metis_tac[cs_extends_trans]
+QED
+
