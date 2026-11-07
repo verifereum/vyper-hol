@@ -40,7 +40,7 @@ Theorem literal_child_add_unwrap:
     ptr_mem_ok cx (lowered_value_type ce e) v op H tm z /\
     ghost_inv d ce cx es' H tm z /\ ghost_kept ce esi si G0 tn0 s0 H tm /\
     stmt_state_rel ctx func ce cx es' z /\ ~z.vs_halted /\
-    ptr_covers H tm out z n
+    ptr_covers H tm out z n /\ lookup_var out z = SOME (a+n2w off)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `(!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\

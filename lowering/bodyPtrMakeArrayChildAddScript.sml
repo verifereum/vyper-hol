@@ -40,7 +40,7 @@ Theorem literal_child_add_endpoint:
     tm.t_mem = tn.t_mem /\
     ghost_inv d ce cx es' H tm z /\
     ghost_kept ce esi si G0 tn0 s0 H tm /\
-    ptr_covers H tm out z n
+    ptr_covers H tm out z n /\ lookup_var out z = SOME (a+n2w off)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all emit_op_fetch_boundary >> strip_tac >> fs[] >>
@@ -68,6 +68,7 @@ Proof
   conj_tac >- simp[typedCopyPtrTheory.copy_len_binop_ghost_frame] >>
   conj_tac >- (irule emit_binop_ghost_inv >> metis_tac[]) >>
   conj_tac >- (irule emit_binop_ghost_kept >> metis_tac[]) >>
+  reverse conj_tac >- simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   drule add_destination_coverage >>
   simp[arithmeticTheory.ADD_COMM] >>
   disch_then (qspecl_then [`off`, `n`, `PG`, `sm.cs_next_id`, `out`] mp_tac) >>
