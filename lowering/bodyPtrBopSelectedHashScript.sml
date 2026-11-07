@@ -8,6 +8,28 @@ Ancestors
   bodyPtrDefs venomState exprOperandVar bodyPtrBopHashCompile vyperTyping loweringPosts vyperInterpreter vyperValue vyperAST compileEnv exprLowering list
 Libs pairLib
 
+Theorem bop_selected_hash_grows:
+  (case bytestring_literal_hash e of
+     NONE => (\(m,sm). compile_bytestring_hash m sm)
+       (lower_value compile_expr cenv ty e sa)
+   | SOME h => (Lit h,sa)) = (op,sb) ==>
+  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id
+Proof
+  Cases_on `bytestring_literal_hash e` >> simp[]
+  >- (pairarg_tac >> strip_tac >> gvs[] >>
+      drule (CONJUNCT2 compile_expr_grows) >> strip_tac >>
+      drule bop_hash_compile_layout >> strip_tac >>
+      `sb.cs_next_id = sm.cs_next_id + 3` by
+        (qpat_x_assum `compile_bytestring_hash _ _ = _` mp_tac >>
+         simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+           emit_def] >> strip_tac >> gvs[]) >>
+      metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS,
+        arithmeticTheory.LESS_EQ_ADD]) >>
+  strip_tac >> gvs[cs_extends_refl]
+QED
+
 Theorem bop_selected_hash_dynamic_success[local]:
   bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
   bop_operand_post d ctx func cenv cx e es ca cb m s G tn v ee t H un /\
