@@ -50,11 +50,13 @@ Proof
   `vs.vs_vars = FEMPTY` by
     gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `!ht at. ptr_chrono_history vs C' ht at ==>
-     ?h a done tokens registry births PT TG saved entries H calls ws.
-       ptr_paired_prefix R lp positions lo vs C C'
-         h a ht at done tokens registry births PT TG saved entries H calls ws /\
+     (?h a done tokens registry births PT TG saved entries H calls ws.
+       ptr_paired_prefix R lp positions lo vs C C' h a ht at done tokens registry births PT TG saved entries H calls ws /\
        a.po_inst.inst_opcode <> NOP /\
-       at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst` by (
+       at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) \/
+     (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+       revert_forward_pair bb i j /\
+       i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)` by (
     match_mp_tac ptr_paired_history_coverage >>
     rpt conj_tac
     >~ [`ptr_chrono_step`]

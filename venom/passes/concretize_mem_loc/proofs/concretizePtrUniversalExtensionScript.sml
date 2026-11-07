@@ -363,6 +363,7 @@ Theorem ptr_paired_universal_extension:
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ~in_revert_forward a.po_fn a.po_state /\
   ptr_chrono_step C' at zt ==>
   ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
     delta <> [] /\ LENGTH snapshots = LENGTH delta /\

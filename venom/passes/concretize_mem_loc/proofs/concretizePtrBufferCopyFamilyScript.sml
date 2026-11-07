@@ -28,6 +28,7 @@ Theorem ptr_paired_buffer_copy_prefix_normalize:
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ~in_revert_forward a.po_fn a.po_state /\
   ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] ==>
   ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
     delta <> [] /\ LENGTH snapshots = LENGTH delta /\
