@@ -4,7 +4,7 @@ Theory bodyPtrTypeBuiltinsLoweredRepresentation
 Ancestors
   valueCopyBytes bodyPtrDefs memoryLocalRhsProps exprSimHypsDefs
   exprSimHyps exprLoweringProps valueEncoding valueTypingMemoryProps
-  vyperTypeExprSoundness
+  vyperTypeExprSoundness bodyPtrTypeBuiltinsBodyTyping
 Libs
   monadsyntax
 
@@ -20,12 +20,8 @@ Proof
 QED
 
 Theorem bytestring_read_lowered_layout:
-  expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-  cenv.ce_func_return_type = build_func_return_type tops /\
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
-  expr_sim_inv cenv cx env es /\
-  is_bytestring_type (expr_type e) /\
-  is_bytestring_type (lowered_value_type cenv e) /\
+  body_inv tops ctx cenv cx /\ ~cx.in_deploy /\
+  expr_body_pre cenv cx env e es /\ is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
   (!m. mem_agree_outside bad mem m ==> val_in_memory tv v off m) ==>
@@ -35,8 +31,8 @@ Theorem bytestring_read_lowered_layout:
     val_footprint tv v <= type_memory_bytes cenv (lowered_value_type cenv e) /\
     (!m. mem_agree_outside bad mem m ==> val_in_memory ltv v off m)
 Proof
-  strip_tac >> drule_all memory_rhs_read_lowered_typed >> strip_tac >>
-  drule_all memory_rhs_runtime_layout >> strip_tac >>
+  strip_tac >> drule_all body_runtime_source_read_lowered_layout >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   drule_all memory_rhs_read_annotation_typed >> strip_tac >>
   drule_all memory_rhs_runtime_layout >> strip_tac >>
   qexists_tac `tv'` >> gvs[] >> conj_tac
