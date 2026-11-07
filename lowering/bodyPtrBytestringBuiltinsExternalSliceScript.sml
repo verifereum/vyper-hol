@@ -482,6 +482,163 @@ Proof
   qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[op_taint_def]
 QED
 
+Theorem reserved_operand_ghost_frame:
+  t.vs_labels = s.vs_labels /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+    FLOOKUP H x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)) ==>
+  !op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+    eval_operand op t = eval_operand op s /\ op_prov H op = op_prov G op /\
+    op_taint tm op = op_taint tn op
+Proof
+  strip_tac >> Cases >> simp[eval_operand_def, op_prov_def, op_taint_def]
+QED
+
+Theorem external_query_bounds_reserved_counted_abort:
+  step_inst_base
+    (mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var)) wl s) ==>
+  emit_op opc ops sa = (limit,sc) /\ fn_has_code sa sc fn /\
+  MEM opc [CALLDATASIZE; CODESIZE; EXTCODESIZE] /\ LENGTH ops <= 1 /\
+  (!arg. MEM arg ops ==> op_taint tn arg = {}) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\ fn_has_code sc sd fn /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString sa.cs_next_var)) wl s) with
+      vs_inst_idx := SUC s.vs_inst_idx) = Abort ab u ==>
+  ab = Revert_abort /\ ?H tm j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+      (Abort Revert_abort (u with vs_inst_idx := j)) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  ntac 2 strip_tac >> drule_all emit_external_size_counted >>
+  disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts sc sd) t = Abort ab u` by gvs[] >>
+  `!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+    eval_operand op t = eval_operand op s /\ op_prov G' op = op_prov G op /\
+    op_taint tn' op = op_taint tn op` by
+    (gen_tac >> disch_tac >> irule reserved_operand_ghost_frame >>
+     reverse conj_tac >- simp[update_var_def] >>
+     qexists_tac `sa` >> metis_tac[]) >>
+  `eval_operand start t = SOME wa /\ eval_operand len t = SOME wn` by
+    (fs[MEM] >> metis_tac[]) >>
+  `!op z. MEM op [start;len;limit] /\ op = Var z ==> not_fresh_at sc z` by
+    (rpt strip_tac >> Cases_on `op = limit`
+     >- (gvs[] >> simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+     `op = start \/ op = len` by fs[] >> fs[MEM] >> metis_tac[]) >>
+  `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
+    (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
+     `op = start \/ op = len` by fs[] >>
+     `?v. eval_operand op s = SOME v` by metis_tac[] >> fs[] >> metis_tac[]) >>
+  drule_all compile_assert_slice_bounds_reserved_counted_abort >> strip_tac >>
+  qpat_x_assum `!PG D. _` (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn''
+    (Abort Revert_abort (u with vs_inst_idx := j))` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  simp[] >> qexistsl_tac [`G''`,`tn''`,`j`] >> gvs[] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem external_query_bounds_reserved_counted_ok:
+  step_inst_base
+    (mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var)) wl s) ==>
+  emit_op opc ops sa = (limit,sc) /\ fn_has_code sa sc fn /\
+  MEM opc [CALLDATASIZE; CODESIZE; EXTCODESIZE] /\ LENGTH ops <= 1 /\
+  (!arg. MEM arg ops ==> op_taint tn arg = {}) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\ fn_has_code sc sd fn /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString sa.cs_next_var)) wl s) with
+      vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
+  ?r H tm.
+    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK r) /\
+    r.vs_current_bb = sd.cs_current_bb /\ r.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    ~r.vs_halted /\ (fresh_vars_wrt sa s ==> fresh_vars_wrt sd r) /\
+    w2n wa + w2n wn <= w2n wl /\
+    (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+      eval_operand op r = eval_operand op s /\
+      op_prov H op = op_prov G op /\ op_taint tm op = op_taint tn op) /\
+    (!p cap. not_fresh_at sa p /\ ptr_covers G tn p s cap ==>
+      ptr_covers H tm p r cap) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    r.vs_accounts = s.vs_accounts /\ r.vs_memory = s.vs_memory /\
+    r.vs_code = s.vs_code /\ r.vs_call_ctx = s.vs_call_ctx /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  ntac 2 strip_tac >> drule_all emit_external_size_counted >>
+  disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts sc sd) t = OK u` by gvs[] >>
+  `!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+    eval_operand op t = eval_operand op s /\ op_prov G' op = op_prov G op /\
+    op_taint tn' op = op_taint tn op` by
+    (gen_tac >> disch_tac >> irule reserved_operand_ghost_frame >>
+     reverse conj_tac >- simp[update_var_def] >>
+     qexists_tac `sa` >> metis_tac[]) >>
+  `eval_operand start t = SOME wa /\ eval_operand len t = SOME wn` by
+    (fs[MEM] >> metis_tac[]) >>
+  `!op z. MEM op [start;len;limit] /\ op = Var z ==> not_fresh_at sc z` by
+    (rpt strip_tac >> Cases_on `op = limit`
+     >- (gvs[] >> simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+     `op = start \/ op = len` by fs[] >> fs[MEM] >> metis_tac[]) >>
+  `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
+    (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
+     `op = start \/ op = len` by fs[] >>
+     `?v. eval_operand op s = SOME v` by metis_tac[] >> fs[] >> metis_tac[]) >>
+  drule_all compile_assert_slice_bounds_reserved_counted_ok >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qabbrev_tac `r = u with vs_inst_idx := LENGTH sd.cs_current_insts` >>
+  `!op. eval_operand op r = eval_operand op u` by
+    (Cases >> simp[Abbr `r`, eval_operand_def, lookup_var_def]) >>
+  suspend "reserved_frames"
+QED
+
+Resume external_query_bounds_reserved_counted_ok[reserved_frames]:
+  `!op. (!z. op = Var z ==> not_fresh_at sc z) ==>
+    eval_operand op r = eval_operand op t /\ op_prov G'' op = op_prov G' op /\
+    op_taint tn'' op = op_taint tn' op` by
+    (gen_tac >> disch_tac >> simp[] >>
+     Cases_on `op` >> simp[op_prov_def, op_taint_def] >> metis_tac[]) >>
+  `!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+    eval_operand op r = eval_operand op s /\ op_prov G'' op = op_prov G op /\
+    op_taint tn'' op = op_taint tn op` by metis_tac[] >>
+  `!x. not_fresh_at sa x ==> FLOOKUP G'' x = FLOOKUP G x /\
+    op_taint tn'' (Var x) = op_taint tn (Var x)` by metis_tac[] >>
+  `!p cap. not_fresh_at sa p /\ ptr_covers G tn p s cap ==>
+    ptr_covers G'' tn'' p r cap` by
+    (rpt gen_tac >> simp[ptr_covers_def] >> strip_tac >>
+     qpat_assum `!op. (!z. op = Var z ==> not_fresh_at sa z) ==> _`
+       (qspec_then `Var p` mp_tac) >>
+     simp[eval_operand_def, op_prov_def] >> strip_tac >> simp[]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn'' (OK r)` by
+    (drule_all gas_path_ptr_then >> simp[Abbr `r`]) >>
+  `~u.vs_halted /\ u.vs_accounts = s.vs_accounts /\ u.vs_memory = s.vs_memory /\
+    u.vs_code = s.vs_code /\ u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `u = t with vs_vars := _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_halted,z.vs_accounts,z.vs_memory,z.vs_code,z.vs_call_ctx)`) >>
+     simp[update_var_def]) >>
+  qexistsl_tac [`r`,`G''`,`tn''`] >>
+  simp[Abbr `r`, fresh_vars_wrt_def] >> fs[fresh_vars_wrt_def]
+QED
+
+
+Finalise external_query_bounds_reserved_counted_ok
+
+(* Compatibility at fresh entry points; reserved callers use the boundaries above. *)
 Theorem external_query_bounds_counted_abort:
   step_inst_base
     (mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]) s =
@@ -506,22 +663,13 @@ Theorem external_query_bounds_counted_abort:
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
-  ntac 2 strip_tac >> drule_all emit_external_size_counted >>
-  disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
-  `run_inst_seq (emitted_insts sc sd) t = Abort ab u` by gvs[] >>
-  `fresh_vars_wrt sc t /\ eval_operand start t = SOME wa /\
-   eval_operand len t = SOME wn` by metis_tac[] >>
-  `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
-    (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
-     `op = start \/ op = len` by fs[] >>
-     `?v. eval_operand op s = SOME v` by metis_tac[] >> fs[] >> metis_tac[]) >>
-  drule_all compile_assert_slice_bounds_counted_abort >> strip_tac >>
-  qpat_x_assum `!PG D. _` (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn''
-    (Abort Revert_abort (u with vs_inst_idx := j))` by
-    (drule_all gas_path_ptr_then >> simp[]) >>
-  simp[] >> qexistsl_tac [`G''`,`tn''`,`j`] >> gvs[] >>
-  rpt strip_tac >> metis_tac[]
+  ntac 2 strip_tac >>
+  `!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z` by
+    (fs[MEM] >> rpt strip_tac >> rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+  qpat_assum `step_inst_base _ s = _`
+    (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
 
 Theorem external_query_bounds_counted_ok:
@@ -555,43 +703,20 @@ Theorem external_query_bounds_counted_ok:
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
-  ntac 2 strip_tac >> drule_all emit_external_size_counted >>
-  disch_then (qspecl_then [`G`,`D`,`PG`] strip_assume_tac) >>
-  `run_inst_seq (emitted_insts sc sd) t = OK u` by gvs[] >>
-  `fresh_vars_wrt sc t /\ eval_operand start t = SOME wa /\
-   eval_operand len t = SOME wn` by metis_tac[] >>
-  `!op. MEM op [start;len;limit] ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
-    (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
-     `op = start \/ op = len` by fs[] >>
-     `?v. eval_operand op s = SOME v` by metis_tac[] >> fs[] >> metis_tac[]) >>
-  drule_all compile_assert_slice_bounds_counted_ok >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  qabbrev_tac `r = u with vs_inst_idx := LENGTH sd.cs_current_insts` >>
-  `!op. eval_operand op r = eval_operand op u` by
-    (Cases >> simp[Abbr `r`, eval_operand_def, lookup_var_def]) >>
-  `!op v. eval_operand op t = SOME v ==> eval_operand op r = SOME v` by metis_tac[] >>
-  `!op v. eval_operand op t = SOME v ==> eval_operand op r = SOME v /\
-    op_prov G'' op = op_prov G' op /\ op_taint tn'' op = op_taint tn' op` by
-    (rpt gen_tac >> disch_tac >> irule successful_operand_ghost_frame >>
-     qexistsl_tac [`t`,`sc`] >> simp[]) >>
-  `!op v. eval_operand op s = SOME v ==> eval_operand op r = SOME v /\
-    op_prov G'' op = op_prov G op /\ op_taint tn'' op = op_taint tn op` by metis_tac[] >>
-  `!x. not_fresh_at sa x ==> FLOOKUP G'' x = FLOOKUP G x /\
-    op_taint tn'' (Var x) = op_taint tn (Var x)` by metis_tac[] >>
-  `!p cap. ptr_covers G tn p s cap ==> ptr_covers G'' tn'' p r cap` by
-    (match_mp_tac ptr_covers_successful_transport >> simp[] >>
-     metis_tac[eval_operand_def]) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn'' (OK r)` by
-    (drule_all gas_path_ptr_then >> simp[Abbr `r`]) >>
-  `~u.vs_halted /\ u.vs_accounts = s.vs_accounts /\ u.vs_memory = s.vs_memory /\
-    u.vs_code = s.vs_code /\ u.vs_call_ctx = s.vs_call_ctx` by
-    (qpat_assum `u = t with vs_vars := _`
-       (mp_tac o Q.AP_TERM `\z. (z.vs_halted,z.vs_accounts,z.vs_memory,z.vs_code,z.vs_call_ctx)`) >>
-     simp[update_var_def]) >>
-  qexistsl_tac [`r`,`G''`,`tn''`] >>
-  simp[Abbr `r`, fresh_vars_wrt_def] >> fs[fresh_vars_wrt_def]
+  ntac 2 strip_tac >>
+  `!op w z. eval_operand op s = SOME w /\ op = Var z ==> not_fresh_at sa z` by
+    (rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+  `!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z` by
+    (fs[MEM] >> metis_tac[]) >>
+  qpat_assum `step_inst_base _ s = _`
+    (mp_then Any mp_tac external_query_bounds_reserved_counted_ok) >>
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `!p cap. ptr_covers G tn p s cap ==> ptr_covers H tm p r cap` by
+    (rpt strip_tac >> `not_fresh_at sa p` by
+       (fs[ptr_covers_def] >> metis_tac[eval_operand_def]) >> metis_tac[]) >>
+  qexistsl_tac [`r`,`H`,`tm`] >> gvs[] >> metis_tac[]
 QED
-
 
 Theorem external_slice_fragment_counted_ok:
   emit_op sizeopc sizeops sa = (limit,sc) /\
