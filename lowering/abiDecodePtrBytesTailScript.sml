@@ -3,7 +3,7 @@ Theory abiDecodePtrBytesTail
 Ancestors
   abiDecoderBytesRuntime abiDecoderRange abiDecodeStaticProps abiDecodePtrRead abiDecodePtrNormalized
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopScalarOutcome
-  abiDecodePtrMemberFrame assignTuplePtrCopyLen
+  abiDecodePtrMemberFrame assignTuplePtrCopyLen fragGasSeqPtr
   emitHelperProps exprLoweringProps compileEnv emitHelper freshWrites
   venomState venomExecSemantics venomInst ptrDiscipline typedCopyPtr bodyPtrDefs
   list pred_set finite_map words arithmetic
@@ -160,4 +160,74 @@ Proof
   simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def,
        op_prov_def, mk_inst_def, FLOOKUP_UPDATE] >>
   qexistsl_tac [`b'`, `sz'`] >> simp[] >> decide_tac
+QED
+
+(* The output ADD exposes the exact ghosts needed by the following store. *)
+Theorem abi_decode_ptr_output_address:
+  emit_op ADD [Var dst;pos] sa = (addr,sb) /\
+  ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
+  eval_operand pos s = SOME (n2w q) /\
+  op_taint tn (Var dst) = {} /\ op_taint tn pos = {} /\
+  ~ctx_has_dalloca ctx /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  !out. addr = Var out ==>
+  let u = update_var out (b+n2w q) s;
+      t = u with vs_inst_idx := LENGTH sb.cs_current_insts;
+      H = step_prov PG G (mk_inst sa.cs_next_id ADD [Var dst;pos] [out]) u;
+      tm = step_taint (mk_inst sa.cs_next_id ADD [Var dst;pos] [out]) s u tn
+  in run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tm /\
+     ptr_covers H tm out t k /\ lookup_var out t = SOME (b+n2w q) /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+     (!x. not_fresh_at sa x ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+       op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `!out. ptr_inst_ok D 0 0 ctx func G tn
+    (mk_inst sa.cs_next_id ADD [Var dst;pos] [out]) s` by
+    (gen_tac >> irule ptr_inst_ok_copy_len_binop >> simp[eval_operand_def]) >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id ADD [Var dst;pos] [out]) s =
+    OK (update_var out (b+n2w q) s)` by
+    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  rpt strip_tac >> gvs[] >> simp[] >>
+  conj_tac >- simp[run_inst_seq_def, update_var_def, venom_state_component_equality] >>
+  conj_tac >- simp[inst_seq_ptr_def] >>
+  conj_tac
+  >- (irule (abi_decode_ptr_output_address_covers
+        |> SRULE [ghostPcTransportPtrTheory.ptr_covers_inst_idx]) >>
+      simp[] >> qexists_tac `cap` >> simp[]) >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       copy_len_binop_ghost_frame] >>
+  conj_tac >- simp[step_taint_def, imm_taint_def, mk_inst_def] >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString sa.cs_next_var)` by
+    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
+  pure_rewrite_tac[GSYM update_var_def, GSYM mk_inst_def] >>
+  simp[FLOOKUP_UPDATE, copy_len_binop_ghost_frame]
+QED
+
+(* The copy covers the header and payload; the zero store covers the
+   remaining padding.  Their windows may overlap, including when c=0. *)
+Theorem abi_decode_bytes_tail_initialized:
+  (!i. d+32*((c+31) DIV 32) <= i /\
+       i < d+32*((c+31) DIV 32)+32 ==> i NOTIN tm.t_mem) /\
+  (!i. d <= i /\ i < d+32+c ==> i NOTIN tf.t_mem) /\
+  (!i. ~(d <= i /\ i < d+32+c) ==>
+       (i IN tf.t_mem <=> i IN tm.t_mem)) ==>
+  !i. d <= i /\ i < d+32+32*((c+31) DIV 32) ==> i NOTIN tf.t_mem
+Proof
+  strip_tac >> rpt strip_tac >>
+  Cases_on `i < d+32+c`
+  >- gvs[] >>
+  `32*((c+31) DIV 32) < c+32` by
+    simp[abi_decode_bytes_round_bounds] >>
+  `d+32*((c+31) DIV 32) <= i /\
+   i < d+32*((c+31) DIV 32)+32` by decide_tac >>
+  `i NOTIN tm.t_mem` by (first_x_assum irule >> simp[]) >>
+  `~(d <= i /\ i < d+32+c)` by decide_tac >>
+  metis_tac[]
 QED
