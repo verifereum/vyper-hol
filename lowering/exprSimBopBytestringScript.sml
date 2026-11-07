@@ -372,11 +372,6 @@ Proof
   `bop <> In /\ bop <> NotIn` by
     (qpat_x_assum `bop = Eq \/ bop = NotEq` strip_assume_tac >> simp[]) >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `lower_value _ _ _ (Builtin _ _ _) _ = _` mp_tac >>
-  simp[Once lower_value_def, comp_bind_def, compile_expr_bop] >>
-  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
-       compile_builtin_dispatch_body_def, lower_value_child_call,
-       vyperASTTheory.expr_type_def, as_stack_val_pair,
-       unwrap_value_def, comp_return_def] >>
+  drule_all comparison_compile_cut >> strip_tac >>
   cheat
 QED
