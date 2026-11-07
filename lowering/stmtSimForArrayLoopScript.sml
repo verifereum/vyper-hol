@@ -561,7 +561,9 @@ Theorem array_copy_run_declare:
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tv; value := v; popped := []|>)) :: rest) t /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!b len. b + len <= w2n dw \/ w2n dw + type_memory_size tv <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==> not_fresh_at sa q` by
@@ -572,7 +574,8 @@ Proof
   drule_all array_iter_copy_run >> strip_tac >>
   drule_all array_iter_copy_declare_rel >>
   disch_then (qspec_then `a` assume_tac) >>
-  qexists_tac `t` >> simp[]
+  qexists_tac `t` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
 QED
 
 Theorem array_seq_prefix_result:
@@ -657,7 +660,15 @@ Theorem array_for_body_entry_run:
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
       lookup_var x t = lookup_var x s) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-      (emitted_insts sa sb0)
+      (emitted_insts sa sb0) /\
+    (!b len. b + len <= w2n dst \/ w2n dst + stride <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!caller. caller.cs_next_id <= sa.cs_next_id /\
+      caller.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es caller s bc
+        (es with scopes :=
+          (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+            :: es.scopes) t)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `s1 = update_var ep (n2w (w2n arr_base + k * stride))
@@ -703,9 +714,64 @@ Proof
       simp[Abbr `s1`, update_var_def] >>
       POP_ASSUM_LIST (K all_tac) >>
       simp[venom_state_component_equality] >> strip_tac >> gvs[]) >>
-  rpt strip_tac >> first_x_assum drule >>
-  simp[Abbr `s1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >>
+      simp[Abbr `s1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` mp_tac >>
+      simp[Abbr `s1`, update_var_def] >>
+      disch_then irule >> decide_tac) >>
+  gen_tac >> strip_tac >> suspend "entry_frame"
 QED
+
+Resume array_for_body_entry_run[entry_frame]:
+  `alloca_frame bc (es with scopes := FEMPTY :: es.scopes) caller s1 bc
+     (es with scopes :=
+       (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+         :: es.scopes) t` by
+    (irule stmtSimDeclComposeTheory.alloca_frame_declare_store >>
+     qexistsl_tac [`ainst.inst_id`,
+       `<|assignable := F; type := tv; value := v; popped := []|>`,
+       `es with scopes := FEMPTY :: es.scopes`, `id`, `p`, `es.scopes`,
+       `s1`, `sa`, `sa`, `FEMPTY`, `dst`, `sz`] >>
+     simp[alloca_frame_same] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         `aid <> ainst.inst_id` by decide_tac >>
+         `off + z' <= w2n dst \/ w2n dst + sz <= off` by
+           (`allocas_non_overlapping s1` by
+              fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+            qpat_x_assum `allocas_non_overlapping s1` mp_tac >>
+            rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def] >>
+            disch_then (qspecl_then
+              [`aid`, `ainst.inst_id`, `off`, `z'`, `w2n dst`, `sz`] mp_tac) >>
+            simp[]) >>
+         first_x_assum irule >> decide_tac) >>
+     fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+  `alloca_frame cenv es caller s1 bc
+     (es with scopes :=
+       (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+         :: es.scopes) t` by
+    (irule stmtSimDeclComposeTheory.alloca_frame_cenv_pre >>
+     qexists_tac `bc` >> simp[GSYM alloca_frame_push_pre] >>
+     rpt strip_tac >> spose_not_then assume_tac >>
+     fs[cenv_top_ext_def, lookup_scopes_def] >>
+     qpat_x_assum `!n'. FLOOKUP bc.ce_vars n' <> _ ==> _`
+       (qspec_then `n` mp_tac) >>
+     qpat_x_assum `IS_SOME _` mp_tac >>
+     qpat_x_assum `FLOOKUP cenv.ce_vars n <> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[optionTheory.IS_SOME_EXISTS, optionTheory.NOT_SOME_NONE]) >>
+  irule alloca_frame_trans >> goal_assum (drule_at Any) >>
+  simp[] >> conj_tac >- simp[Abbr `s1`, update_var_def] >>
+  simp[Abbr `s1`] >> irule alloca_frame_trans >>
+  irule_at Any alloca_frame_update_var >>
+  qexistsl_tac [`ov`, `n2w (k * type_memory_size tv)`, `caller`] >>
+  simp[update_var_def, alloca_frame_update_var]
+QED
+
+Finalise array_for_body_entry_run
 
 Theorem array_body_prefix_continuation:
   !ctx func cenv cx es s t sb bb insts.
@@ -722,6 +788,7 @@ Theorem array_body_prefix_continuation:
     s2.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~s2.vs_halted /\
     stmt_state_rel ctx func cenv cx es s2 /\
     s2.vs_vars = t.vs_vars /\ s2.vs_allocas = s.vs_allocas /\
+    s2.vs_memory = t.vs_memory /\
     gas_marked_path F ctx func s 0 (OK s2) /\
     (!fuel. run_from fuel ctx func s = run_from fuel ctx func s2)
 Proof
@@ -793,7 +860,15 @@ Theorem array_for_body_entry:
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
       lookup_var x s2 = lookup_var x s) /\
     gas_marked_path F ctx func s 0 (OK s2) /\
-    (!fuel. run_from fuel ctx func s = run_from fuel ctx func s2)
+    (!fuel. run_from fuel ctx func s = run_from fuel ctx func s2) /\
+    (!b len. b + len <= w2n dst \/ w2n dst + stride <= b ==>
+      mem_bytes_at b len s2.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!caller. caller.cs_next_id <= sa.cs_next_id /\
+      caller.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es caller s bc
+        (es with scopes :=
+          (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+            :: es.scopes) s2)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all array_for_body_entry_run >>
@@ -813,7 +888,11 @@ Proof
   `!x. lookup_var x s2 = lookup_var x t` by simp[lookup_var_def] >>
   conj_tac
   >- (fs[ret_pc_ok_def] >> metis_tac[]) >>
-  metis_tac[]
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  rpt strip_tac >> irule alloca_frame_same_state >>
+  qexists_tac `t` >> simp[]
 QED
 
 Theorem push_scope_with_var_zero_exec:
@@ -1041,10 +1120,17 @@ End
 Theorem array_entry_inputs_run:
   array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
     idx saved_base arr_base k stride ov ep j3 j4 bb st ==>
-  ?s2. array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2
+  ?s2. array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2 /\
+    (!caller. caller.cs_next_id <= sa.cs_next_id /\
+      caller.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es caller s bc
+        (es with scopes :=
+          (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+            :: es.scopes) s2)
 Proof
   pure_rewrite_tac[array_entry_inputs_def, array_entry_ready_def] >>
-  MATCH_ACCEPT_TAC array_for_body_entry
+  strip_tac >> drule_all array_for_body_entry >> strip_tac >>
+  qexists_tac `s2` >> simp[]
 QED
 
 Theorem array_round_body_prepare:
@@ -1066,7 +1152,13 @@ Theorem array_round_body_prepare:
           :: es.scopes) (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
       (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (!caller. caller.cs_next_id <= sa.cs_next_id /\
+      caller.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es caller s bc
+        (es with scopes :=
+          (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+            :: es.scopes) s2)
 Proof
   strip_tac >> drule_all array_entry_inputs_run >> strip_tac >>
   qexists_tac `s2` >> (conj_tac >- simp[]) >>
@@ -1074,6 +1166,7 @@ Proof
     (fs[array_entry_ready_def] >>
      drule_all gas_marked_path_then >> simp[]) >>
   (conj_tac >- (irule push_scope_with_var_zero_exec >> simp[])) >>
+  reverse conj_tac >- simp[] >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   disch_then irule >> simp[] >>

@@ -1,13 +1,24 @@
 (* Fixed-array compiler boundary: dynamic length/check code is absent. *)
 Theory stmtSimForArrayParts
 Ancestors
-  loweringPosts stmtSimDefs stmtSimProps
+  loweringPosts stmtSimDefs stmtSimProps stmtSimDeclCompose
   stmtSimForArray stmtSimForParts stmtLowering exprLowering compileEnv
   emitHelper finite_map vyperAST fragExec venomExecSemantics
   venomExecProofs venomInst venomState context  loweringSlice
   exprLoweringProps emitHelperProps list rich_list
 Libs
   monadsyntax
+
+(* Address temporaries do not change the allocation frame of live locals. *)
+Theorem alloca_frame_update_var:
+  not_local_ptr cenv es.scopes x ==>
+  alloca_frame cenv es sa s cenv es (update_var x w s)
+Proof
+  rw[alloca_frame_def, update_var_def] >>
+  first_x_assum irule >>
+  fs[local_region_def, not_local_ptr_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
 
 Theorem compile_for_fixed_array:
   !cenv lctx ty id et n name stmts.
