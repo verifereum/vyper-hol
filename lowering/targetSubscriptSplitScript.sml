@@ -1218,14 +1218,97 @@ Proof
 QED
 
 (* target_subscript_base_continuation for a local root whose indices may
-   pop.  The index runs after the base, so a pop in it can shrink the local
-   the base's place is in.  Where the base's place is still live in the
-   local's value after the index (x[y.pop()] = v, or a pop that leaves the
-   base's element in place), the local's memory still holds it
-   (locals_kept, local_ptrs_rel) and the base's pointer reads what the
-   source reads.  Where the index pops the base's own place out of the
-   local's value, the target overlaps its own index, which upstream rejects
-   ("risky overlap"). *)
+   pop, when every successful run of the index (for any gas observations)
+   leaves the base's place live in the local's value: x[y.pop()] = v, or a
+   pop that leaves the base's element in place.  The local's memory still
+   holds the place (locals_kept, local_ptrs_rel), so the base's pointer
+   reads what the source reads. *)
+Theorem target_subscript_local_live_continuation:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e) /\
+  target_root bt = NameTarget id /\
+  type_place_target env bt = SOME bvt /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!gs key ee. bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
+     (INL key,ee) ==>
+     ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+       lookup_scopes id ee.scopes = SOME entry /\
+       evaluate_subscripts entry.type entry.value path = INL v) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key)))
+    (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  cheat
+QED
+
+(* RESIDUAL (self-overlap): a run of the index pops the base's own place
+   out of the local's value, so the target overlaps its own index.
+   Upstream rejects such targets (CompilerPanic "risky overlap"), so this
+   stays admitted for the target read/write overlap exclusion. *)
+Theorem target_subscript_local_popped_case:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e) /\
+  target_root bt = NameTarget id /\
+  type_place_target env bt = SOME bvt /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
+    (INL key0,fin) /\
+  ~(?path entry v. pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id fin.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key)))
+    (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  cheat
+QED
+
+(* target_subscript_base_continuation for a local root whose indices may
+   pop: split on whether the base's place is still live after the index. *)
 Theorem target_subscript_local_pop_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -1258,7 +1341,16 @@ Theorem target_subscript_local_pop_continuation:
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `!gs key ee.
+    bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
+      (INL key,ee) ==>
+    ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id ee.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v`
+  >- (drule_all target_subscript_local_live_continuation >> simp[]) >>
+  pop_assum (strip_assume_tac o SIMP_RULE pure_ss [NOT_FORALL_THM, NOT_IMP]) >>
+  drule_all target_subscript_local_popped_case >> simp[]
 QED
 
 (* An element of an array or a mapping, when no index can shrink an array
@@ -1412,5 +1504,5 @@ Proof
   irule target_subscript_local_pop_continuation >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl [`env`, `id`, `ix`, `nocalls`, `sn`] >> simp[]
+  qexistsl [`env`, `id`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
