@@ -5,7 +5,8 @@ Ancestors
   vyperTyping valueEncoding words integer compileEnv vyperValue loweringSlice
   allocationPtr bodyMemoryDefs exprSimBuffer venomExecSemantics venomInst
   ptrDiscipline venomState finite_map exprLoweringProps venomMemDefs
-  bodyPtrBytestringBuiltinsCalldataFrame
+  bodyPtrBytestringBuiltinsCalldataFrame bodyPtrBytestringBuiltinsBounds
+  bodyPtrBytestringBuiltinsExternalSlice instIdxIndep fragExec
 
 (* The marked operand evidence fixes both the source integer and its actual
    runtime word; no independent existential execution is introduced. *)
@@ -100,3 +101,94 @@ Proof
   strip_tac >> gvs[] >>
   simp_tac (srw_ss()) [mstore_def, LET_THM]
 QED
+
+Theorem slice_bounds_run_pc:
+  compile_assert_slice_bounds start len limit sa = ((),sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := k) =
+    OK (t with vs_inst_idx := k)
+Proof
+  strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (drule compile_assert_slice_bounds_layout >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def]
+QED
+
+Theorem compile_slice_calldata_shared_success:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
+  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  op_prov G start = NONE /\ op_taint tn start = {} ==>
+  ?zf w H tm root u.
+    out = Var root /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK zf) /\
+    stmt_state_rel ctx fn cenv cx es zf /\
+    val_in_memory (BaseTV (BytesT (Dynamic bound)))
+      (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) (w2n w) zf.vs_memory /\
+    eval_operand out zf = SOME w /\ ptr_covers H tm root zf N /\
+    zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~zf.vs_halted /\ locals_kept cenv es s zf /\
+    (!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
+      lookup_var x zf = SOME val) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP zf.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+      mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u)
+      DIFF {i | w2n w + 32 <= i /\ i < w2n w + 32 + n})
+      DIFF {i | w2n w <= i /\ i < w2n w + 32} /\
+    w2n w + N < dimword (:256)
+Proof
+  strip_tac >> drule_all compile_slice_calldata_semantic >>
+  disch_then (qspecl_then [`tn`,`bound`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts s2 s3) (v with vs_inst_idx := SUC t.vs_inst_idx) =
+    OK (q with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule slice_bounds_run_pc >> metis_tac[]) >>
+  `32 <= N /\ w2n (n2w n : 256 word) <= N - 32` by simp[] >>
+  `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
+  `!op. MEM op [start;Lit (n2w n)] ==> op_prov G op = NONE /\ op_taint tn op = {}` by
+    (rpt strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
+  suspend "counted"
+QED
+
+Resume compile_slice_calldata_shared_success[counted]:
+  qpat_x_assum `out = Var r` SUBST_ALL_TAC >>
+  qpat_x_assum `data = Var p` SUBST_ALL_TAC >>
+  `run_inst_seq (emitted_insts s2 s3)
+    ((update_var (STRING #"%" (toString s1.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) t) with
+      vs_inst_idx := SUC t.vs_inst_idx) = OK (q with vs_inst_idx := SUC t.vs_inst_idx)` by
+    metis_tac[] >>
+  drule_all compile_slice_calldata_counted_ok >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `w2n (w + 32w) = w2n w + 32` by
+    (`w2n w + 32 < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w]) >>
+  `TAKE n (DROP a s.vs_call_ctx.cc_calldata ++ REPLICATE n 0w) =
+    TAKE n (DROP a s.vs_call_ctx.cc_calldata)` by
+    (irule listTheory.TAKE_APPEND1 >> simp[]) >>
+  `n MOD dimword (:256) = n /\ a MOD dimword (:256) = a` by simp[] >>
+  fs[] >>
+  `SUC v'.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (qpat_assum `t'.vs_inst_idx = _` mp_tac >>
+     qpat_assum `t' = _` SUBST1_TAC >> simp[]) >>
+  `t' = zf` by
+    (qpat_assum `r'' = _` (mp_then Any mp_tac slice_copy_store_pc_normalization) >>
+     disch_then drule_all >> simp[]) >>
+  qpat_x_assum `t' = zf` SUBST_ALL_TAC >>
+  qexistsl_tac [`zf`,`w`,`H`,`tm`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise compile_slice_calldata_shared_success
