@@ -151,7 +151,7 @@ QED
 Theorem ifexp_materialize_single_frames:
   MEM opc [SLOAD;TLOAD] /\ eval_operand src s = SOME a /\
   (!x. not_fresh_at sa x ==> x <> out) /\
-  ghost_inv d ce cx es G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv d ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -167,18 +167,18 @@ Theorem ifexp_materialize_single_frames:
       off+sz <= p \/ p+len <= off) ==> off+sz <= w2n p \/ w2n p+32 <= off) /\
   (!name b len. local_region ce es.scopes s0 name b len ==>
     b+len <= w2n p \/ w2n p+32 <= b) /\
-  (!name entry b sz v. lookup_scopes name es.scopes = SOME entry /\
+  (!name entry b sz v. lookup_scopes name ee.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var b) sz) /\ lookup_var b s1 = SOME v ==>
     val_wf entry.type entry.value /\
     (w2n v+type_memory_size entry.type <= w2n p \/ w2n p+32 <= w2n v)) ==>
-  ghost_inv d ce cx es G2 tn2 (u with vs_inst_idx := j) /\
+  ghost_inv d ce cx ee G2 tn2 (u with vs_inst_idx := j) /\
   ghost_kept ce es sa G0 tn0 s0 G2 tn2
 Proof
   strip_tac >>
   `MEM opc [SLOAD;TLOAD;DLOAD]` by gvs[] >>
-  `ghost_inv d ce cx es G1 tn1 (update_var out w s)` by
+  `ghost_inv d ce cx ee G1 tn1 (update_var out w s)` by
     (gvs[] >> irule ifexp_materialize_load_inv >> simp[] >> metis_tac[]) >>
-  `ghost_inv d ce cx es G1 tn1 s1` by gvs[] >>
+  `ghost_inv d ce cx ee G1 tn1 s1` by gvs[] >>
   `ghost_kept ce es sa G0 tn0 s0 G1 tn1` by
     (gvs[] >> irule ifexp_materialize_load_kept >> simp[] >> metis_tac[]) >>
   `op_taint tn1 (Var out) SUBSET count 32` by
