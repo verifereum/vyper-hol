@@ -167,6 +167,8 @@ Theorem code_reason_alloc_copy_path_ptr:
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf t /\
     32 + 32*word_size (LENGTH str) <= 32*n /\ b+32*n < dimword(:256) /\
     FLOOKUP t.vs_allocas cc.cs_next_id = SOME (b,32*n) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
     (!aid off len. aid < cc.cs_next_id /\
       FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
@@ -227,6 +229,8 @@ Theorem code_reason_unwrap_path_ptr:
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf t /\
     32 + 32*word_size (LENGTH str) <= 32*n /\ b+32*n < dimword(:256) /\
     FLOOKUP t.vs_allocas cc.cs_next_id = SOME (b,32*n) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
     (!aid off len. aid < cc.cs_next_id /\
       FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
