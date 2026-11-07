@@ -8,6 +8,9 @@ open HolKernel boolLib bossLib cv_transLib wordsLib intLib
      jsonASTLib jsonToVyperTheory
 open JSONDecode
 
+(* Translation evaluates constants with EVAL. *)
+local open vyperConstEvalLib in end
+
 (* Decode exported traces through the same portable implementation used by the
    standalone entrypoint; only logical AST translation is HOL-specific. *)
 structure TraceDecode = JsonTraceDecodeFn (

@@ -2,7 +2,7 @@ Theory jsonFrontendCVBenchmark
 Ancestors
   jsonToVyperCV jsonToVyperExprCV jsonToVyperExpr vyperAST
 Libs
-  jsonASTLib cv_transLib wordsLib intLib
+  jsonASTLib vyperConstEvalLib cv_transLib wordsLib intLib
 
 (* These are committed compiler outputs already used by frontend regressions;
    neither Vyper, exported execution traces nor the native runner is required. *)

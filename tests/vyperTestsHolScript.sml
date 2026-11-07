@@ -4,7 +4,7 @@
 Theory vyperTestsHol
 Ancestors
   e2eSourceBoundaryCVTest
-  jsonConstEvalWitness
+  vyperConstEvalWitness
   livenessProofIntegrity
   vyperAccountCodehashTest
   vyperAssignmentOrderAudit
