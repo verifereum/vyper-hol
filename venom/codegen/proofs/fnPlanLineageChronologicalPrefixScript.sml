@@ -115,3 +115,113 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM] >>
   disch_then irule >> first_assum ACCEPT_TAC
 QED
+
+Theorem native_phi_prefix_inventory_origins:
+  !k insts ps qs P lv dfg cfg fn lbl halt n total.
+    EVERY (\inst. inst.inst_opcode = PHI /\ inst.inst_outputs <> [])
+      (TAKE k insts) /\ k <= LENGTH insts /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==> P v) /\
+    native_inst_prefix lv dfg cfg fn lbl halt n total insts ps k qs ==>
+    !v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      P v \/ ?di. MEM di (TAKE k insts) /\ MEM v di.inst_outputs
+Proof
+  Induct_on `k`
+  >- (simp[native_inst_prefix_zero] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[Once native_inst_prefix_cases] >> strip_tac >> gvs[] >>
+  `k < LENGTH insts` by decide_tac >>
+  `inst = EL k insts` by
+    (qpat_x_assum `DROP k insts = _` mp_tac >>
+     simp[DROP_CONS_EL] >> strip_tac >> gvs[]) >>
+  `TAKE (SUC k) insts = TAKE k insts ++ [inst]` by
+    simp[rich_listTheory.TAKE_SUC] >>
+  `EVERY (\inst. inst.inst_opcode = PHI /\ inst.inst_outputs <> [])
+      (TAKE k insts) /\ inst.inst_opcode = PHI /\ inst.inst_outputs <> []` by
+    gvs[listTheory.EVERY_APPEND] >>
+  `!v. MEM (Var v) ps'.ps_stack \/ Var v IN FDOM ps'.ps_spilled ==>
+    P v \/ ?di. MEM di (TAKE k insts) /\ MEM v di.inst_outputs` by
+    (qpat_x_assum `!insts ps qs P lv dfg cfg fn lbl halt n total. _` mp_tac >>
+     disch_then (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     disch_then (qspec_then `P` mp_tac) >> simp[] >> metis_tac[]) >>
+  gvs[generate_inst_plan_def] >>
+  drule fnPlanLineagePhiInventoryTheory.generate_phi_plan_inventory_origins >>
+  strip_tac >> rpt strip_tac >>
+  first_x_assum (qspec_then `Var v` mp_tac) >> simp[] >>
+  Cases_on `(EL k insts).inst_outputs` >> gvs[] >>
+  metis_tac[listTheory.MEM_APPEND, listTheory.MEM]
+QED
+
+Theorem native_phi_worker_chronological_origins:
+  !fn bb visited ps qs k lv dfg cfg lbl halt n total.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    k <= LENGTH (collect_phis bb.bb_instructions) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) /\
+    native_inst_prefix lv dfg cfg fn lbl halt n total (non_param_insts bb) ps k qs ==>
+    !v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE k bb.bb_instructions) /\ MEM v di.inst_outputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `bb` (qx_choose_then `tail` assume_tac) non_param_insts_phi_prefix >>
+  qspec_then `bb.bb_instructions` (qx_choose_then `rest` assume_tac)
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  `TAKE k (non_param_insts bb) = TAKE k (collect_phis bb.bb_instructions) /\
+   TAKE k bb.bb_instructions = TAKE k (collect_phis bb.bb_instructions)` by
+    metis_tac[listTheory.TAKE_APPEND1] >>
+  `k <= LENGTH (non_param_insts bb)` by
+    (qpat_x_assum `non_param_insts bb = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `EVERY (\inst. inst.inst_opcode = PHI /\ inst.inst_outputs <> [])
+    (TAKE k (non_param_insts bb))` by
+    (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     `MEM inst (collect_phis bb.bb_instructions)` by metis_tac[rich_listTheory.MEM_TAKE] >>
+     `inst.inst_opcode = PHI /\ MEM inst bb.bb_instructions` by
+       metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+     `inst_wf inst` by
+       (gvs[codegen_ready_fn_def, fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+     gvs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[]) >>
+  drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)
+    native_phi_prefix_inventory_origins >>
+  disch_then (qspec_then `\v. ?db di. MEM db fn.fn_blocks /\
+    MEM di db.bb_instructions /\ MEM v di.inst_outputs /\ MEM db.bb_label visited` mp_tac) >>
+  simp[] >> disch_tac >> gen_tac >> disch_tac >>
+  first_x_assum irule >> conj_tac >- first_assum ACCEPT_TAC >> simp[]
+QED
+
+Theorem native_phi_worker_output_fresh:
+  !fn bb visited ps qs k lv dfg cfg lbl halt n total.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    ~MEM bb.bb_label visited /\ k < LENGTH (collect_phis bb.bb_instructions) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) /\
+    native_inst_prefix lv dfg cfg fn lbl halt n total (non_param_insts bb) ps k qs ==>
+    EVERY (\v. ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled)
+      (EL k (non_param_insts bb)).inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k <= LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `!v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE k bb.bb_instructions) /\ MEM v di.inst_outputs)` by
+    (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)
+       native_phi_worker_chronological_origins >>
+     disch_then (qspec_then `visited` mp_tac) >> simp[] >>
+     disch_tac >> gen_tac >> disch_tac >> first_x_assum irule >>
+     conj_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  qspec_then `bb` (qx_choose_then `tail` assume_tac) non_param_insts_phi_prefix >>
+  qspec_then `bb.bb_instructions` (qx_choose_then `rest` assume_tac)
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  `EL k (non_param_insts bb) = EL k bb.bb_instructions` by
+    metis_tac[listTheory.EL_APPEND_EQN] >>
+  `k < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  simp[] >> irule chronological_origin_output_fresh >> metis_tac[]
+QED
