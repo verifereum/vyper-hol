@@ -120,6 +120,45 @@ Proof
   gvs[regions_disjoint_def] >> decide_tac
 QED
 
+Theorem immutable_store_frame_bytes[local]:
+  !ctx func cenv cx env es s imms id off tv a k word.
+    expr_sim_inv cenv cx env es /\
+    stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,a) /\
+    k + 32 <= type_memory_size tv ==>
+    !base sz.
+      ((?aid. FLOOKUP s.vs_allocas aid = SOME (base,sz)) \/
+       (?name. local_region cenv es.scopes s name base sz)) ==>
+      mem_bytes_at base sz (mstore (off+k) word s).vs_memory =
+      mem_bytes_at base sz s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?ty. cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
+        evaluate_type (get_tenv cx) ty = SOME tv` by
+    (gvs[exprSimHypsDefsTheory.expr_sim_inv_def,
+         exprSimHypsDefsTheory.bare_globals_layout_def,
+         env_consistent_def, env_immutables_consistent_def] >>
+     qpat_assum `!src id off. _ ==> ?ty. _` drule_all >>
+     disch_then (qx_choose_then `ty` assume_tac) >>
+     qexists `ty` >> conj_tac
+     >- (qpat_assum `!src id ty. _ ==> _ = SOME ty` drule_all >> simp[]) >>
+     qpat_assum `!src id ty tv v. _ /\ _ ==> _` irule >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `immutable_decl_sep cenv cx es.scopes s.vs_vars s.vs_allocas s.vs_alloca_next` by
+    gvs[stmt_state_rel_def, immutable_alloca_sep_def] >>
+  qpat_x_assum `immutable_decl_sep _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[immutable_decl_sep_alt] >>
+  disch_then drule_all >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_rename_tac `mem_bytes_at b n` >>
+  `regions_disjoint off (type_memory_size tv) b n` by
+    metis_tac[] >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  gvs[regions_disjoint_def] >> decide_tac
+QED
+
 (* Pop on a member of an immutable in the constructor, which Python's
    checker accepts for a complex immutable (local.py skips the
    modification count when var_info is None), with pure indices.  The
