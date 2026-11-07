@@ -308,6 +308,23 @@ Proof
   rpt strip_tac >> irule immutable_transfers_memory_frame >> simp[])
 QED
 
+(* Both compiler copy suffixes use the same word-transfer boundary. *)
+Theorem immutable_store_suffix_words:
+  (if copy_size <= 32 then
+     (do loaded <- emit_op MLOAD [src];
+         compile_imm_store_word imm dst loaded od)
+   else compile_imm_store_words imm src dst ((copy_size+31) DIV 32) 0) sa = ((),sb) ==>
+  compile_imm_store_words imm src dst
+    (if copy_size <= 32 then 1 else (copy_size+31) DIV 32) 0 sa = ((),sb)
+Proof
+  Cases_on `copy_size <= 32` >> simp[] >>
+  pure_rewrite_tac[arithmeticTheory.ONE] >>
+  simp[compile_imm_store_words_def, compile_lit_byte_offset_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `emit_op MLOAD [src] sa` >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
 Theorem immutable_direct_composite_old_path:
   compile_assign_value cenv dst LocCode src F src_loc dty sty da mem_size sa = ((),sb) /\
   cenv.ce_imm_alloca = imm /\
@@ -343,12 +360,8 @@ Proof
   (qmatch_asmsub_abbrev_tac `copybytes <= 32` >>
    Cases_on `copybytes <= 32` >> gvs[]
    >- (`compile_imm_store_words cenv.ce_imm_alloca src dst 1 0 sa = ((),sb)` by
-         (pure_rewrite_tac[arithmeticTheory.ONE] >>
-          qpat_x_assum `(do loaded <- _; _ od) sa = _` mp_tac >>
-          simp[compile_imm_store_words_def, compile_lit_byte_offset_def,
-               comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-          Cases_on `emit_op MLOAD [src] sa` >> simp[] >>
-          pairarg_tac >> simp[]) >>
+         (irule (SRULE [] (Q.INST [`copy_size` |-> `0`] immutable_store_suffix_words)) >>
+          first_assum ACCEPT_TAC) >>
        irule (SRULE [arithmeticTheory.ADD_COMM]
          (Q.INST [`n` |-> `1`] immutable_words_old_prefix_path)) >>
        simp[] >> metis_tac[]) >>

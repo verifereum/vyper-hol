@@ -31,7 +31,10 @@ QED
 Theorem immutable_normalized_composite_path:
   compile_alloc_buffer (type_memory_size dtv) sa = (buf,mid) /\
   compile_store_memory_typed cenv buf.buf_operand dty src sty mid = ((),sm) /\
-  compile_imm_store_words (SOME region) buf.buf_operand dst n 0 sm = ((),sb) /\
+  (if L <= 32 then
+     (do loaded <- emit_op MLOAD [buf.buf_operand];
+         compile_imm_store_word imm dst loaded od)
+   else compile_imm_store_words imm buf.buf_operand dst ((L+31) DIV 32) 0) sm = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -55,19 +58,20 @@ Theorem immutable_normalized_composite_path:
      w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  cenv.ce_imm_alloca = SOME region /\
-  (!x. region = Var x ==> not_fresh_at sa x) /\
-  eval_operand region s = SOME 0w /\ cenv.ce_is_ctor /\
+  cenv.ce_imm_alloca = imm /\
+  (!region x. imm = SOME region /\ region = Var x ==> not_fresh_at sa x) /\
+  (!region. imm = SOME region ==> eval_operand region s = SOME 0w) /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME dty /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
-  dw = n2w off /\ L = type_memory_size dtv /\ L = 32*n /\
+  dw = n2w off /\ L = type_memory_size dtv /\ L = 32*n /\ 0 < L /\
   off+L < dimword (:256) ==>
   ?r q pw.
     gas_marked_path F ctx func s 0 (OK r) /\
     stmt_state_rel ctx func cenv cx es r /\
     eval_operand buf.buf_operand r = SOME pw /\
-    eval_operand dst r = SOME (n2w off) /\ eval_operand region r = SOME 0w /\
+    eval_operand dst r = SOME (n2w off) /\
+    (!region. imm = SOME region ==> eval_operand region r = SOME 0w) /\
     val_in_memory dtv v (w2n pw) r.vs_memory /\
     w2n pw+L < dimword (:256) /\ regions_disjoint (w2n pw) L off L /\
     gas_marked_path F ctx func r 0 (OK q) /\
@@ -86,6 +90,15 @@ Theorem immutable_normalized_composite_path:
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
+  `n = (if L <= 32 then 1 else (L+31) DIV 32)` by
+    (Cases_on `L <= 32`
+     >- (fs[] >> decide_tac) >>
+     qpat_assum `L = 32*n` (fn th => rewrite_tac[th]) >>
+     simp[arithmeticTheory.MULT_COMM, arithmeticTheory.ADD_DIV_ADD_DIV]) >>
+  `compile_imm_store_words imm buf.buf_operand dst n 0 sm = ((),sb)` by
+    (drule immutable_store_suffix_words >> metis_tac[]) >>
+  qpat_x_assum `(if _ then _ else _) sm = _` kall_tac >>
+  qpat_x_assum `n = if _ then _ else _` kall_tac >>
   `cs_extends sa mid` by metis_tac[compile_alloc_buffer_extends] >>
   `cs_extends mid sm` by
     metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
@@ -111,13 +124,14 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
   qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
   `eval_operand src u = SOME sw /\ eval_operand dst u = SOME dw /\
-   eval_operand region u = SOME 0w` by
+   (!region. imm = SOME region ==> eval_operand region u = SOME 0w)` by
     (conj_tac >- (Cases_on `src` >> gvs[venomStateTheory.eval_operand_def]) >>
      conj_tac >- (Cases_on `dst` >> gvs[venomStateTheory.eval_operand_def]) >>
-     Cases_on `region` >> gvs[venomStateTheory.eval_operand_def]) >>
+     rpt strip_tac >> Cases_on `region` >> gvs[venomStateTheory.eval_operand_def] >>
+     metis_tac[]) >>
   `(!x. src = Var x ==> not_fresh_at mid x) /\
    (!x. dst = Var x ==> not_fresh_at mid x) /\
-   (!x. region = Var x ==> not_fresh_at mid x) /\
+   (!region x. imm = SOME region /\ region = Var x ==> not_fresh_at mid x) /\
    (!x. buf.buf_operand = Var x ==> not_fresh_at mid x)` by
     (simp[] >> rpt conj_tac >> rpt strip_tac >>
      qpat_x_assum `!y. not_fresh_at sa y ==> not_fresh_at mid y` irule >>
@@ -145,15 +159,16 @@ Proof
     (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
      qexists_tac `u` >> simp[gas_marked_path_def]) >>
   `eval_operand buf.buf_operand t = SOME w /\
-   eval_operand dst t = SOME dw /\ eval_operand region t = SOME 0w` by
+   eval_operand dst t = SOME dw /\
+   (!region. imm = SOME region ==> eval_operand region t = SOME 0w)` by
     (conj_tac >-
        (drule typed_copy_state_frame_operand >>
         disch_then (qspec_then `buf.buf_operand` mp_tac) >> simp[]) >>
      conj_tac >-
        (drule typed_copy_state_frame_operand >>
         disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
-     drule typed_copy_state_frame_operand >>
-     disch_then (qspec_then `region` mp_tac) >> simp[]) >>
+     rpt strip_tac >> drule typed_copy_state_frame_operand >>
+     disch_then (qspec_then `region` mp_tac) >> simp[] >> metis_tac[]) >>
   `t.vs_allocas = u.vs_allocas` by
     (qpat_assum `typed_copy_state_frame _ _ _ _ _`
        (strip_assume_tac o SRULE [typed_copy_state_frame_def,
@@ -173,7 +188,7 @@ Proof
   `mid.cs_next_var <= sm.cs_next_var` by
     metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
   `(!x. dst = Var x ==> not_fresh_at sm x) /\
-   (!x. region = Var x ==> not_fresh_at sm x) /\
+   (!region x. imm = SOME region /\ region = Var x ==> not_fresh_at sm x) /\
    (!x. buf.buf_operand = Var x ==> not_fresh_at sm x)` by
     (rpt conj_tac >> rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `mid` >> simp[]) >>
