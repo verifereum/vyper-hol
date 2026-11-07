@@ -32,8 +32,8 @@
  *     has no PARAM, no function has its FMP convention set
  *   lower_vyper_runtime_unit_fn_ptr_ok -- the lowered functions and their
  *     reachable parts are pointer-confined (fn_ptr_ok)
- *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
- *     every use is written on every path to it
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b: every use is written
+ *     on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
@@ -936,18 +936,6 @@ Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
 QED
 
-(* S2b, planned admission: every variable a use in the lowering's code
-   reads is written on every path to the use.  SimplifyCFG's pre-walk
-   needs it. *)
-Theorem lower_vyper_runtime_unit_defs_reach_uses:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    immutable_free_program tops
-    ==> unit_defs_reach_uses unit
-Proof
-  cheat
-QED
-
 (* The runtime unit reserves no global memory. *)
 Theorem lower_vyper_runtime_unit_global_reserved:
   !tops rpolicy unit.
@@ -989,6 +977,21 @@ Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
   strip_tac >> metis_tac[]
+QED
+
+(* S2b: every variable a use in the lowering's code reads is written on
+   every path to the use.  SimplifyCFG's pre-walk needs it.  run_lowering
+   decides it on the unit (lowering_context_ok). *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit_defs_reach_uses unit
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule lowering_context_ok_defs_reach_uses >>
+  simp[unit_defs_reach_uses_def]
 QED
 
 (* run_lowering builds every function with mk_raw_function, which leaves

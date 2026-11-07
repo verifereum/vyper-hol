@@ -323,8 +323,9 @@ Proof
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>
-  `c.ce_event_info = cenv.ce_event_info` by
-    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
+  `alloc_env_agree cenv c` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >>
+     simp[alloc_env_agree_def]) >>
   `alloc_limits_stmt c = alloc_limits_stmt cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_stmt_struct_fields) >>
      simp[]) >>
@@ -510,7 +511,8 @@ Proof
          SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
       `(place_map_tables_agree_on_defined c (extend_local env id typ T) <=>
         place_map_tables_agree_on_defined cenv env) /\
-       (extend_local env id typ T).bare_globals = env.bare_globals` by
+       (extend_local env id typ T).bare_globals = env.bare_globals /\
+       (extend_local env id typ T).fn_sigs = env.fn_sigs` by
         (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
          simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`

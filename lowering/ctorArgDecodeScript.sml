@@ -11,22 +11,16 @@ Ancestors
   exprLowering compileEnv abiEncoder context emitHelper fragExec
   abiDecoderAppend abiDecoderCounters abiDecoderCode exprLoweringProps
   ctorAbiActualSites abiDecoderReentryAddress abiDecoderReentry
-  abiDecoderLoop instIdxIndep ctorAbiActualMemory
+  abiDecoderLoop instIdxIndep ctorAbiActualMemory abiDecoderMembers
 Libs
   monadsyntax
-
-Theorem ctor_arg_abi_types_map[local]:
-  !tys. vyper_to_abi_types env tys = MAP (vyper_to_abi_type env) tys
-Proof
-  Induct >> simp[vyper_to_abi_type_def]
-QED
 
 Theorem ctor_arg_selected_type[local]:
   i < LENGTH fargs /\ EL i fargs = (name,ty) /\
   atys = vyper_to_abi_types env (MAP SND fargs) ==>
   LENGTH atys = LENGTH fargs /\ EL i atys = vyper_to_abi_type env ty
 Proof
-  simp[ctor_arg_abi_types_map, MAP_COMPOSE, EL_MAP]
+  simp[vyper_to_abi_types_MAP, MAP_COMPOSE, EL_MAP]
 QED
 
 Theorem ctor_arg_tuple_member[local]:
@@ -111,7 +105,7 @@ Proof
   gvs[abi_decode_source_def, Excl "enc_def"]
 QED
 
-Theorem ctor_arg_word_descriptor[local]:
+Theorem ctor_arg_word_descriptor:
   is_word_type ty ==>
   ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp
 Proof

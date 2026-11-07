@@ -1,45 +1,15 @@
 (* Guard boundary for actual-site tuple and struct decoding. *)
 Theory ctorAbiActualComplex
 Ancestors
-  ctorAbiActualMemberRun ctorAbiActualObservations ctorAbiActualWorld
-  ctorAbiActualNarrow ctorAbiActualChildFrame ctorAbiActualLabelEmpty
-  abiDecoderComplexExecute abiDecoderComplexGuard abiDecoderComplexHead
-  abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderVarSequence
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv
+  ctorAbiActualMemberRun ctorAbiActualChildFrame ctorAbiActualLabelEmpty
+  abiDecoderComplexExecute abiDecoderComplexHead
+  abiDecoderReentry abiDecoderDynamicLoopSetup
+  abiDecoderContract abiDecoderLoop fragExec compileEnv
   abiEncoderRegisteredEffect venomState venomExecSemantics venomInst words list arithmetic
   abiDecoderMembers abiDecoderMemberInfos abiDecodeRanges contractABI vyperABI
   allocaFrontierBound allocaBudgetProps venomMemDefs pred_set exprLowering ctorAbiActualFrame abiEncoderProps
   abiDecoderTupleInputs abiDecoderTypedContract abiDecoderCoherence valueEncodingProps
   abiDecoderStruct abiStaticDynarrayLayout vyperTyping finite_map valueEncoding valueEncodingTyping
-
-Theorem ctor_actual_complex_guard_labels:
-  abi_decode_complex_head_guard src hi head_sz st = ((),st') /\
-  eval_operand src initial = SOME (n2w sb) /\
-  (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
-    sb + head_sz <= hb /\ hb < dimword (:256)) /\
-  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var hi /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
-  frag_exec ctx st st' (\s. s = initial)
-    (\t. fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var initial t /\
-      abi_encoder_registered_effect {} [] initial t /\ t.vs_labels = initial.vs_labels) (K F)
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_decoder_complex_guard_code >> strip_tac >>
-  drule abi_decode_complex_head_guard_shape >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts st st')` by fs[EVERY_CONJ] >>
-  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
-    (emitted_insts st st')` by fs[EVERY_CONJ] >>
-  irule frag_exec_run_inst_seq >> simp[] >>
-  drule_all abi_decoder_complex_guard_reentry >> strip_tac >>
-  drule_all ctor_actual_sequence_labels >> strip_tac >>
-  drule_all ctor_actual_sequence_world >> strip_tac >>
-  `abi_encoder_registered_effect {} [] initial actual` by
-    (irule ctor_actual_empty_effect >> gvs[abi_decoder_address_frame_def]) >>
-  qexists `actual` >>
-  gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, eval_op_inst_idx,
-      abi_encoder_registered_effect_def]
-QED
 
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
@@ -134,7 +104,7 @@ Proof
   drule ctor_actual_complex_head_bound >> strip_tac >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
     `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]
-    ctor_actual_complex_guard_labels) >>
+    ctor_actual_complex_guard_labels_fragment) >>
   (impl_tac >- (qpat_x_assum `LIST_REL _ _ _` kall_tac >>
     asm_simp_tac bool_ss [] >>
     Cases_on `hi = Lit 0w` >- simp[] >>

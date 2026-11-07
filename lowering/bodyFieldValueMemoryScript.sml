@@ -1,11 +1,11 @@
 (* Counted memory simulation of a struct field on a local Name. *)
 Theory bodyFieldValueMemory
 Ancestors
-  bodyFieldMemoryProps bodyNameValueMemory bodyNameMemoryFacts
+  bodyFieldMemoryProps bodyNameValueMemory bodyNameMemoryFacts exprSimNameValue
   exprSimFieldLayout exprSimAttributeProps exprSimVVFrame exprSimProps
   exprSimSource exprSimHypsDefs exprSimMemDefs exprSimDefs loweringPosts
   exprSimMemoryStack exprSimMemoryValues exprSimMemoryPath exprSimUnwrapProps
-  gasNormalPrefix gasSummary gasSummaryCompose gasContext gasCount fragGasMode
+  gasNormalPrefix gasSummary gasSummaryCompose gasContext gasCount fragGasMode gasOutcome
   fragGasPathMem fragGasSeqMem gasExemptCert
   bodyMemoryDefs emitHelperProps fragExecMem instMemFrontier allocaHistoryFragment
   exprLoweringProps emitHelper venomInst venomState words list rich_list finite_map
@@ -14,80 +14,107 @@ Ancestors
   freshWrites varsExt vyperTyping vyperTypeSystem vyperTypeInvariants
   allocLimits context vyperInterpreter vyperTypeExprSoundness
 
+Theorem body_attribute_name_counted_prefix:
+  expr_body_pre cenv cx env (Attribute ann (Name (StructT sid) id) fld) es /\
+  compile_expr cenv ty (Attribute ann (Name (StructT sid) id) fld) sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  alloca_history func s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?tv v t ftv p fw.
+    vv = LocatedValue ann (mk_ptr p LocMemory) /\
+    (!tail. read_result cx tv (es with gas_obs := tail) =
+      (INL v, es with gas_obs := tail)) /\
+    gas_marked_exec T (ctx,func)
+      (eval_expr cx (Attribute ann (Name (StructT sid) id) fld))
+      (es,s0) [] (INL tv) es (OK t) /\
+    vv_post ctx func cenv cx (Attribute ann (Name (StructT sid) id) fld)
+      es sa sb s0 (es with gas_obs := []) tv vv t /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    evaluate_type (get_tenv cx) ann = SOME ftv /\
+    eval_operand p t = SOME fw /\ w2n fw + type_memory_size ftv <= t.vs_alloca_next /\
+    vv_store_bound cx ann ann (es with gas_obs := []) tv vv t
+Proof
+  strip_tac >> drule body_attribute_name_pre >> strip_tac >>
+  `expr_sim_pre cenv cx env (Name (StructT sid) id) es` by
+    simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  drule_all body_attribute_name_source >> strip_tac >>
+  drule_all body_name_source_region >> strip_tac >>
+  `cenv.ce_var_type id = SOME (StructT sid)` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  drule body_attribute_name_compile >> strip_tac >>
+  drule compile_name_value_ptr >>
+  disch_then (qspecl_then [`ty`, `sa`, `StructT sid`] assume_tac) >> gvs[] >>
+  `vv_post ctx func cenv cx (Name (StructT sid) id) es sa sa s0
+     (es with gas_obs := []) (PlaceR (MemoryPlace id []))
+     (LocatedValue (StructT sid) (mk_ptr (Var p) LocMemory)) s0` by
+    (irule name_value_post >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand (vv_operand (LocatedValue (StructT sid)
+      (mk_ptr (Var p) LocMemory))) s0 = SOME w` by
+    simp[vv_operand_def, mk_ptr_def, eval_operand_def] >>
+  `sa.cs_next_var <= sa.cs_next_var` by simp[] >>
+  drule_all attr_add_counted_post >> strip_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ (Attribute _ _ _) _` kall_tac >>
+  qpat_x_assum `compile_expr _ _ (Attribute _ _ _) _ = _` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ (Name _ _) _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ s0` kall_tac >>
+  qpat_x_assum `val_in_memory _ _ _ _` kall_tac >>
+  qpat_x_assum `local_region _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `val_wf _ _` kall_tac >>
+  `read_result cx (PlaceR (MemoryPlace id [])) (es with gas_obs := []) =
+      (INL (StructV vals), es with gas_obs := [])` by
+    simp[read_result_def, read_place_def, read_memory_path_def,
+         evaluate_subscripts_def, bind_def, get_scopes_def,
+         lift_option_type_def, lift_sum_def, return_def] >>
+  `vv_post ctx func cenv cx (Attribute ann (Name (StructT sid) id) fld)
+      es sa sb s0 (es with gas_obs := [])
+      (PlaceR (MemoryPlace id [AttrSubscript fld]))
+      (LocatedValue ann (mk_ptr p' LocMemory)) t` by
+    (`vv_loc (LocatedValue (StructT sid) (mk_ptr (Var p) LocMemory)) = LocMemory`
+       by simp[vv_loc_def, vv_location_def, mk_ptr_def] >>
+     pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
+     irule body_attr_memory_vv_post >>
+     simp[expr_type_def, vv_loc_def, vv_location_def, mk_ptr_def] >>
+     qexists_tac `PlaceR (MemoryPlace id [])` >> simp[] >>
+     fs[mk_ptr_def]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (`stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
+       fs[vv_post_def] >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `es.gas_obs`] mp_tac) >>
+     simp[stmt_state_rel_inst_idx]) >>
+  `?fw. eval_operand p' t = SOME fw /\
+      w2n fw + type_memory_size ftv <= t.vs_alloca_next` by
+    (`eval_operand p' t = SOME (w + n2w (struct_field_offset
+        (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))` by
+       fs[attr_offset_def, vv_loc_def, vv_location_def, mk_ptr_def] >>
+     drule_all body_attribute_name_capacity >> simp[]) >>
+  qexistsl_tac [`PlaceR (MemoryPlace id [AttrSubscript fld])`, `fv`, `t`, `p'`, `fw`] >>
+  `vv_store_bound cx ann ann (es with gas_obs := [])
+     (PlaceR (MemoryPlace id [AttrSubscript fld]))
+     (LocatedValue ann (mk_ptr p' LocMemory)) t` by
+    (`ann = expr_type (Attribute ann (Name (StructT sid) id) fld)` by
+       simp[expr_type_def] >>
+     pop_assum (fn th => CONV_TAC (RATOR_CONV (ONCE_REWRITE_CONV [th]))) >>
+     irule vv_store_bound_capacity >> simp[expr_type_def, mk_ptr_def] >>
+     fs[mk_ptr_def] >> metis_tac[]) >>
+  simp[vv_loc_def, vv_location_def, mk_ptr_def, gas_marked_exec_def,
+       gas_marked_path_def] >> fs[mk_ptr_def]
+QED
+
 Theorem compile_attribute_name_body_vv_sim_mem:
   !ctx func cenv cx env ty ann sid id fld es.
     expr_body_pre cenv cx env (Attribute ann (Name (StructT sid) id) fld) es ==>
     expr_vv_sim_mem ctx func cenv cx ty
       (Attribute ann (Name (StructT sid) id) fld) es
 Proof
+  rpt gen_tac >> strip_tac >> simp[expr_vv_sim_mem_def] >>
   rpt gen_tac >> strip_tac >>
-  drule body_attribute_name_pre >> strip_tac >>
-  `expr_sim_pre cenv cx env (Name (StructT sid) id) es` by
-    simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  drule compile_name_body_vv_sim_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `ty`] assume_tac) >>
-  simp[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
-  drule body_attribute_name_compile >> strip_tac >> gvs[] >>
-  rename1 `compile_expr cenv ty (Name (StructT sid) id) sa = (bvv, sm)` >>
-  drule attr_extends >> strip_tac >>
-  drule compile_expr_extends >> strip_tac >>
-  drule_all fn_has_code_split >> strip_tac >>
-  gvs[body_attribute_name_eval, bind_def] >>
-  Cases_on `eval_expr cx (Name (StructT sid) id) es` >>
-  rename1 `_ = (er, es1)` >>
-  `expr_vv_res_ok er` by
-    (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
-  `er <> INR (Error (RuntimeError "convert empty bytes to signed"))` by
-    (Cases_on `er` >> gvs[]) >>
-  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ (Name _ _) _` mp_tac >>
-  simp[expr_vv_sim_mem_def] >>
-  disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
-  Cases_on `er` >> gvs[]
-  >- (rename1 `eval_expr cx (Name (StructT sid) id) es = (INL btv, es1)` >>
-      drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[expr_type_def] >>
-      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-      drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-      drule_all attribute_type_evaluates >> strip_tac >>
-      `~popped_at_field btv fld es1` by
-        (irule popped_keys_indexed_not_at_field >>
-         drule_all expr_body_pre_eval_result >> simp[expr_sim_inv_def]) >>
-      `!m. res <> INR (Error (TypeError m))` by
-        (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
-      `vv_loc bvv = LocMemory` by
-        (`?ptr sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var ptr) sz)` by
-           gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
-         gvs[compile_expr_def, compile_name_vv_def, comp_return_def,
-             vv_loc_def, vv_location_def, mk_ptr_def]) >>
-      irule frag_exec_mem_seq_pointwise >>
-      qexistsl [`\s. vv_post ctx func cenv cx (Name (StructT sid) id)
-                   es sa sm s0 es1 btv bvv s /\
-                   s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s`,
-                `sm`] >> simp[] >> reverse conj_tac
-      >- (irule frag_exec_mem_conseq >> goal_assum (drule_at Any) >>
-          simp[expr_exit_def]) >>
-      gen_tac >> strip_tac >>
-      qmatch_asmsub_abbrev_tac `emit_op ADD [_; Lit (n2w off)] sm = _` >>
-      drule_all attr_add_frag_mem_at >>
-      disch_then (qspecl_then [`btv`, `s0`, `es1`, `es`] mp_tac) >>
-      disch_then (qspecl_then [`t`, `cx`, `ctx`, `expr_exit res`] assume_tac) >>
-      qpat_x_assum `frag_exec_mem ctx sa sm _ _ _` kall_tac >>
-      qpat_x_assum `compile_expr _ _ (Attribute _ _ _) _ = _` kall_tac >>
-      irule frag_exec_mem_conseq >> goal_assum (drule_at Any) >> simp[] >>
-      rpt strip_tac >>
-      qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac >>
-      `?v. read_result cx btv es1 = (INL v, es1)` by
-        (drule body_base_memory_post_read_struct >> simp[expr_type_def] >>
-         disch_then drule_all >> simp[]) >>
-      `value_has_type (StructTV fs) v` by metis_tac[] >>
-      `?vals. v = StructV vals /\ struct_has_type fs vals` by
-        (Cases_on `v` >> gvs[value_has_type_def] >>
-         rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]) >>
-      gvs[] >>
-      drule_all select_attr_read >> strip_tac >> gvs[] >>
-      qpat_assum `vv_loc bvv = LocMemory`
-        (fn th => pure_once_rewrite_tac[GSYM th]) >>
-      irule body_attr_memory_vv_post >> simp[expr_type_def, Abbr `off`] >>
-      goal_assum (drule_at Any) >> simp[] >>
-      rpt strip_tac >> gvs[]) >>
-  irule frag_exec_mem_exit_prefix >> goal_assum (drule_at Any) >> simp[]
+  drule_all body_attribute_name_counted_prefix >> strip_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL tv`, `es`, `OK t`] >>
+  gvs[expr_type_def, exprLoweringTheory.lowered_value_type_def]
 QED

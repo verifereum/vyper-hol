@@ -1434,6 +1434,35 @@ Proof
   simp[]
 QED
 
+Theorem compiler_abi_encode_args_reserved_cong:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_abi_encode_args f ce args sa =
+  compile_abi_encode_args g ce args sa
+Proof
+  qid_spec_tac `sa` >> Induct_on `args` >>
+  simp[compile_abi_encode_args_def, comp_return_def] >> rpt strip_tac >>
+  `f ce (expr_type h) h sa = g ce (expr_type h) h sa` by simp[] >>
+  simp[comp_bind_def] >> asm_rewrite_tac[] >>
+  Cases_on `g ce (expr_type h) h sa` >> simp[] >>
+  rename1 `g ce (expr_type h) h sa = (vv,sb)` >>
+  `local_ptrs_reserved ce sb` by
+    (irule compiler_ci_mono_reserved >> qexists `sa` >>
+     metis_tac[pairTheory.SND]) >>
+  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce args` >> simp[]
+  >- (Cases_on `compile_materialize_vv ce (expr_type h) vv sb` >> simp[] >>
+      `local_ptrs_reserved ce r` by
+        (irule compiler_ci_mono_reserved >> qexists `sb` >>
+         metis_tac[ci_mono_compile_materialize_vv, pairTheory.SND]) >>
+      simp[]) >>
+  Cases_on `unwrap_value ce vv sb` >> simp[] >>
+  `local_ptrs_reserved ce r` by
+    (irule compiler_ci_mono_reserved >> qexists `sb` >>
+     metis_tac[ci_mono_unwrap_value, pairTheory.SND]) >>
+  simp[]
+QED
+
 Theorem compiler_reserved_bind_cong:
   (!s. local_ptrs_reserved ce s ==> a s = b s) /\
   (!s. ci_mono s (SND (a s))) /\
@@ -2067,6 +2096,8 @@ Proof
     (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
   `!es. compile_multi_exprs f ce es sa = compile_multi_exprs g ce es sa` by
     (gen_tac >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
+  `!es. compile_abi_encode_args f ce es sa = compile_abi_encode_args g ce es sa` by
+    (gen_tac >> irule compiler_abi_encode_args_reserved_cong >> simp[]) >>
   Cases_on `tb` >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM]
   >- (Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
@@ -2157,7 +2188,7 @@ QED
 Resume compiler_builtin_reserved_cong[concat]:
   rename1 `Concat maxlen` >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  Cases_on `compile_alloc_buffer (32 * ((maxlen + 31) DIV 32) + 32) sa` >>
+  Cases_on `compile_alloc_buffer (concat_alloc_size (MAP expr_type args)) sa` >>
   simp[] >> rename1 `compile_alloc_buffer _ sa = (alloc,sb)` >>
   `local_ptrs_reserved ce sb` by
     (irule compiler_ci_mono_reserved >> qexists `sa` >>

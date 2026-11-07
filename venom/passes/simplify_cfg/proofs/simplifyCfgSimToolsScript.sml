@@ -23,13 +23,6 @@ Proof
   simp[mem_corr_def]
 QED
 
-Theorem mem_corr_trans:
-  mem_corr i1 s1 i2 s2 /\ mem_corr i2 s2 i3 s3 ==>
-  mem_corr i1 s1 i3 s3
-Proof
-  simp[mem_corr_def] >> metis_tac[]
-QED
-
 Theorem call_corr_trans:
   call_corr i1 s1 i2 s2 /\ call_corr i2 s2 i3 s3 ==>
   call_corr i1 s1 i3 s3

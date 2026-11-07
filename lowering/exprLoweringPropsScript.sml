@@ -2020,6 +2020,21 @@ Proof
   first_x_assum (qspecl_then [`cfn`, `cenv`, `r`] mp_tac) >> simp[]
 QED
 
+Theorem compile_abi_encode_args_length:
+  !es cfn cenv sa.
+    LENGTH (FST (compile_abi_encode_args cfn cenv es sa)) = LENGTH es
+Proof
+  Induct >> simp[compile_abi_encode_args_def, comp_return_def,
+                comp_bind_def, LET_THM] >>
+  rpt gen_tac >>
+  Cases_on `cfn cenv (expr_type h) h sa` >> simp[] >>
+  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate cenv es` >> simp[] >>
+  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
+  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
+  first_x_assum (qspecl_then [`cfn`, `cenv`, `cs'`] mp_tac) >>
+  asm_simp_tac (srw_ss()) []
+QED
+
 Theorem ci_mono_compile_multi_exprs:
   ∀ cfn cenv es sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -3045,7 +3060,7 @@ QED
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
-Theorem ci_mono_compile_materialize_vv[local]:
+Theorem ci_mono_compile_materialize_vv:
   ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
 Proof
   rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
@@ -4578,6 +4593,22 @@ Proof
   simp[ci_mono_as_stack_val, ci_mono_compile_clamp_basetype]
 QED
 
+Theorem ci_mono_compile_abi_encode_args[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀args cenv st. ci_mono st (SND (compile_abi_encode_args f cenv args st))
+Proof
+  strip_tac >> Induct >> rpt gen_tac >>
+  rewrite_tac[compile_abi_encode_args_def] >>
+  simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (IF_CASES_TAC >>
+      simp[ci_mono_compile_materialize_vv, ci_mono_unwrap_value]) >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[] >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_type_builtin_abi_encode[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty
@@ -4587,7 +4618,7 @@ Proof
   (* Split singleton/no-wrap from tuple staging, then word from pointer. *)
   rpt IF_CASES_TAC >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_multi_exprs,
+       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_abi_encode_args,
                ci_mono_compile_alloc_buffer, ci_mono_compile_store_abi_tuple,
                ci_mono_emit_void, ci_mono_unwrap_value]
        >> rpt gen_tac >> BETA_TAC) >>

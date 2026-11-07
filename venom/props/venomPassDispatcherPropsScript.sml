@@ -43,7 +43,7 @@ Theorem sue_blocks_invoke_labels_eq_scan[local]:
     MAP FST (get_invoke_targets (fn_insts_blocks bbs))
 Proof
   Induct_on `bbs` >>
-  simp[venomInstTheory.fn_insts_blocks_def, sue_get_invoke_targets_append,
+  simp[venomInstTheory.fn_insts_blocks_def, fcgDefsTheory.cfg_invoke_labels_append,
        fcgDefsTheory.get_invoke_targets_def]
 QED
 

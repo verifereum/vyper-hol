@@ -31,7 +31,7 @@
  *)
 Theory abiDecodeStaticProps
 Ancestors
-  arithmetic list rich_list words finite_map
+  exprSimProps arithmetic list rich_list words finite_map
   entryDecodeProps moduleLoweringProps
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   valueEncoding valueEncodingProps valueEncodingProofs fragExec
