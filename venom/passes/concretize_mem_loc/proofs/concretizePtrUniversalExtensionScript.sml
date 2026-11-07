@@ -12,6 +12,9 @@ Ancestors
   pointerConfinedDefs venomInst list o1PassContract unitLabelMapIdentity
   concretizeStepStructure venomExecSemantics concretizePtrDeletedGapHistory
   contextCodegenRel concretizePtrPairedJumpEntry concretizePtrPairedCallSchema
+  concretizePtrPairedPrefixProbe concretizePtrMloadProducer
+  concretizePtrMstoreProducer concretizePtrMcopyProducer
+  concretizePtrAssignProducer concretizePtrParamProducer
 
 Theorem current_retpc_parse[local]:
   retpc_shape_ok = frameRel$retpc_shape_ok
@@ -235,6 +238,108 @@ Proof
     `(LENGTH h - 1,LENGTH ht - 1)::calls`, `ws`] >>
   qpat_x_assum `zt = ptr_observe _ _ _ _ _ _ _` kall_tac >>
   gvs[APPEND_ASSOC, ptr_gap_scan_fields, ptr_observe_def]
+QED
+
+Theorem ptr_paired_universal_excluded[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ~MEM a.po_inst.inst_opcode
+    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DALLOCA; DRET; RETFMP;
+     PHI; NOP; RETURN; REVERT; STOP; SINK; SELFDESTRUCT; INVALID]
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_chrono_history_reachable >>
+  simp[ptr_observation_reachable_def] >> strip_tac >>
+  drule ptr_frame_context_membership >> strip_tac >>
+  drule concretizePtrChronologicalDemandTheory.ptr_frame_operand_instructions >>
+  strip_tac >>
+  `~MEM a.po_inst.inst_opcode
+    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DALLOCA; DRET; RETFMP; NOP]` by
+    (fs[ptr_discipline_def, EVERY_MEM, fn_ptr_ok_def,
+        ctx_has_dalloca_def, EXISTS_MEM, MEM] >> metis_tac[]) >>
+  simp[MEM] >> rpt strip_tac >> gvs[] >>
+  `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
+  qpat_x_assum `at.po_inst = concretize_inst_with_positions _ _` kall_tac >>
+  qpat_x_assum `ptr_chrono_step C' at zt` mp_tac >>
+  simp[Once ptr_chrono_step_cases, ptr_observe_def,
+       ptr_observation_component_equality, is_terminator_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Theorem ptr_paired_universal_normalize_immediate[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+    tokens registry births PT TG saved entries (H ++ [snapshot]) calls ws /\
+  EVERY fn_inst_wf C.ctx_functions ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  strip_tac >>
+  `fn_inst_wf b.po_fn` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >>
+     simp[ptr_observation_reachable_def] >> strip_tac >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all ptr_paired_prefix_normalize >> strip_tac >>
+  qexistsl_tac [`[b] ++ delta`, `ptr_gap_scan bb n b`,
+    `tokens`, `registry`, `births`, `PT`, `TG`, `saved`, `entries`,
+    `[snapshot] ++ snapshots`, `calls`, `ws`] >>
+  gvs[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+
+Theorem ptr_paired_universal_immediate_extension[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_chrono_step C' at zt /\
+  MEM a.po_inst.inst_opcode [MLOAD; MSTORE; MCOPY; ASSIGN; PARAM] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[MEM]
+  >- (drule_all ptr_paired_prefix_mload >> strip_tac >>
+      drule_all ptr_paired_universal_normalize_immediate >> simp[])
+  >- (drule_all ptr_paired_prefix_mstore >> strip_tac >>
+      drule_all ptr_paired_universal_normalize_immediate >> simp[])
+  >- (drule_all ptr_paired_prefix_mcopy >> strip_tac >>
+      drule_all ptr_paired_universal_normalize_immediate >> simp[])
+  >- (drule_all ptr_paired_prefix_assign >> strip_tac >>
+      drule_all ptr_paired_universal_normalize_immediate >> simp[])
+  >> drule_all ptr_paired_prefix_param >> strip_tac >>
+  drule_all ptr_paired_universal_normalize_immediate >> simp[]
 QED
 
 Theorem ptr_paired_universal_extension:
