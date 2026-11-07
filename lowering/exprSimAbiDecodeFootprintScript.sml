@@ -49,7 +49,14 @@ Theorem abi_decode_bytes_post_footprint:
           b <= p /\ p + 32 + LENGTH bs <= b + sz /\
           local_val_at ce cx name (p-b) (BaseTV (BytesT (Dynamic n))) (BytesV bs)))
 Proof
-  strip_tac >> irule abi_decode_bytes_footprint >>
+  strip_tac >>
+  `is_bytestring_type (expr_type e)` by
+    (Cases_on `expr_type e` >>
+     gvs[Once vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+         optionTheory.IF_EQUALS_OPTION, LET_THM] >>
+     gvs[compileEnvTheory.is_bytestring_type_def]) >>
+  `post_value_type ce e = expr_type e` by simp[post_value_type_bytestring] >>
+  irule abi_decode_bytes_footprint >>
   gvs[expr_post_def] >> metis_tac[]
 QED
 
