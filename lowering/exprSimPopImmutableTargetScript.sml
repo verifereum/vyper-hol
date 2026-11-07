@@ -28,7 +28,7 @@
 Theory exprSimPopImmutableTarget
 Ancestors
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
-  abiEncoderMemory immutableValue immutableEncoding
+  abiEncoderMemory immutableValue immutableEncoding ctorDeployLoweringNoCtor
   exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
   exprOperandVar exprSimWordArgs exprBopSimProps
@@ -2502,6 +2502,15 @@ Proof
       immutable_mask_fit_def, immutable_fit_def, rich_listTheory.TAKE_APPEND,
       byteTheory.LENGTH_word_to_bytes, listTheory.TAKE_LENGTH_TOO_LONG,
       immutable_mask_same_bytes, valueEncodingTheory.typed_val_to_w256_def]
+QED
+
+Theorem immutable_default_zero_bytes:
+  !tv. immutable_value_bytes_rel tv (default_value tv)
+    (REPLICATE (type_memory_size tv) (0w:word8))
+Proof
+  gen_tac >>
+  once_rewrite_tac[GSYM (cj 1 ctorDeployLoweringNoCtorTheory.no_ctor_default_encoding)] >>
+  simp[]
 QED
 
 Theorem immutable_none_memory_bytes:
