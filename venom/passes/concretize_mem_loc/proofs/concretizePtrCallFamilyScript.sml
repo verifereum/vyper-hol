@@ -128,10 +128,10 @@ Theorem ptr_call_history_execution:
    (inst.inst_opcode = STATICCALL /\ st)) /\
   inst.inst_outputs = [out] /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
-  exec_ext_call inst t gt addr value at az rt rz st = OK target ==>
+  exec_ext_call inst t (gt:256 word) addr value at az (rt:256 word) (rz:256 word) st = OK target ==>
   ?w u v.
     target = update_var out w v /\
-    exec_ext_call inst s gas addr value ao az ro rz st = OK (update_var out w u) /\
+    exec_ext_call inst s (gas:256 word) addr value ao az (ro:256 word) rz st = OK (update_var out w u) /\
     u.vs_returndata = v.vs_returndata /\
     ptr_history_content (step_taint inst s (update_var out w u) tn)
       (update_var out w u) target /\
@@ -162,7 +162,6 @@ Proof
   irule ptr_payload_write_content >> simp[LENGTH_TAKE_EQ]
 QED
 
-(* Endpoint proof under construction, reactivated in C1.2.2.
 Theorem ptr_paired_call_step:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -286,10 +285,18 @@ Proof
   `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
     metis_tac[ptr_history_content_call_ctx] >>
   drule_at (Pos last) ptr_call_history_execution >>
-  simp[] >>
-  FAIL_TAC "completion"
+  disch_then drule >> simp[] >>
+  disch_then (drule_at (Pos last)) >> simp[] >>
+  disch_then (qspecl_then [`sr`,`gas`] strip_assume_tac) >>
+  qexists_tac `update_var out w u` >> simp[] >>
+  qpat_x_assum `ptr_history_content (step_taint _ _ _ _) _ _` mp_tac >>
+  simp[ptr_history_content_def,
+       concretizePtrTaintContentTheory.ptr_taint_content_def,
+       concretizePtrTaintContentTheory.ptr_taint_control_def,
+       ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def,
+       contract_storage_def, contract_transient_def] >>
+  strip_tac >> gvs[]
 QED
-*)
 
 Theorem ptr_paired_call_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
