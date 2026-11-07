@@ -9,7 +9,7 @@ Ancestors
   exprBopSimProps bodyMemBiKeccakBounds vyperTyping
   vyperEvalExprPreservesScopesDom venomExecSemantics venomInst
   emitHelperProps valueEncoding fragExecMem instMemFrontier venomMemDefs
-  fragGasSeqMem allocaHistoryFragment rich_list
+  fragGasSeqMem allocaHistoryFragment
 Libs
   pairLib
 

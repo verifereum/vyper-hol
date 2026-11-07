@@ -3,7 +3,7 @@ Theory bodyMemBopHeldPost
 Ancestors
   exprBopSimProps exprLoweringProps compileEnv loweringPosts vyperAST
   exprSimProps valueEncoding localPtrsProps emitHelperProps
-  loweringSlice freshWrites venomExecSemantics
+  loweringSlice freshWrites venomExecSemantics exprSimWordArgs
 
 Theorem held_digest_compare_post:
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -38,38 +38,19 @@ Theorem held_digest_compare_post:
     es sa sb s0 ee (BoolV b) op ss
 Proof
   strip_tac >>
-  `bool_to_word b = if b then 1w else 0w` by
-    (Cases_on `b` >> simp[bool_to_word_def]) >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-    expr_type_def, is_word_type_def, typed_val_to_w256_word_value,
-    word_value_def, val_to_w256_def, bool_to_word_def] >>
-  conj_tac
-  >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>
-      `not_fresh_at s1 z` by
-        (irule not_fresh_at_mono >> qexists_tac `sa` >> asm_rewrite_tac[]) >>
-      `not_fresh_at s2 z` by
-        (irule not_fresh_at_mono >> qexists_tac `s1` >> asm_rewrite_tac[]) >>
-      metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
-        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-      disch_then (fn th => rewrite_tac [GSYM th]) >>
-      qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
-        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-      disch_then irule >> rpt conj_tac
-      >- (rpt strip_tac >>
-          qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
-          qexists_tac `n` >> irule local_region_frame >>
-          conj_tac >- (qexists_tac `func` >>
-            gvs[stmt_state_rel_def, state_rel_def]) >>
-          qexistsl_tac [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
-      >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-          qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
-      qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
-      first_assum ACCEPT_TAC) >>
-  irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
-  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  `wb_frame cenv es sa s0 t` by
+    (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es1 s1 t u` by
+    (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es sa s0 u` by
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`,
+       `es1`, `s1`, `t`, `u`, `ctx`] wb_frame_trans) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `wb_frame cenv es sa s0 ss` by
+    (mp_tac (Q.SPECL [`cenv`, `es`, `sa`, `s0`, `u`, `s2`, `ss`]
+       wb_frame_readonly_tail) >>
+     impl_tac >- (simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]) >>
+  irule expr_post_word_intro >>
+  simp[expr_type_def, is_word_type_def, word_value_def, val_to_w256_def,
+       bool_to_word_def] >> Cases_on `b` >> simp[bool_to_word_def]
 QED
