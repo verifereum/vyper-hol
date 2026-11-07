@@ -10,10 +10,10 @@ output, using the same `memoryStoreWitnessLib` as the other compiler witnesses.
 literal controls, which the HOL checker accepts. `typecheck-rejected/` holds 12
 controls that the pinned Vyper's type checker rejects (`_convert_rules.py`), so
 their annotated AST/layout JSON comes from Vyper `9362e36b`, the last pin that
-accepted them: the seven inconsistent width conversions must fail the HOL
-checker, while five conversions where HOL lowering and source semantics agree
-are still accepted by it. The same theory checks these verdicts on the exported
-ASTs in both modes.
+accepted them: the ten conversions outside Vyper's input sets or inconsistent in
+width must fail the HOL checker, while the two conversions where HOL lowering
+and source semantics agree are still accepted by it. The same theory checks
+these verdicts on the exported ASTs in both modes.
 
 The default CI builds the theory and reproduces both sets of independent inputs
 with pinned Vyper, experimental codegen, Prague, `-O none`, and no metadata.
