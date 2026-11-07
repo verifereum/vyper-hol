@@ -94,3 +94,86 @@ Ancestors fnLineageInvSuffixCompare
    equality has not been used to cancel unequal cleanup/suffix chunks.
    These arbitrary query-table examples do not refute the frozen theorem.
 *)
+
+(* Complete-trace audit (not a proof of rigidity).
+
+   Candidate consumer: PL is the lineage input after cleanup override, PD the
+   predecessor DFS input, AL/AD their successful outputs. Given analyzed
+   readiness/reachability, exact incoming inventories, a common incoming core
+   (or native PHI correspondence), incoming spill and non-cleanup bookkeeping
+   agreement, and generate_block_plan ... PL = SOME (ops,AL) together with
+   generate_block_plan ... PD = SOME (ops,AD), seek
+     (!x off. FLOOKUP AL.ps_spilled x = SOME off ==>
+        ?y. FLOOKUP AD.ps_spilled y = SOME off)
+   plus injectivity of AL.ps_spilled. These are desired obligations, not
+   established implications. lineage_step supplies the same block/whole ops
+   and two successes. Exact inventories, common core and incoming spill
+   agreement remain induction producers; lineage_state_dfs_fields gives
+   only the other DFS fields.
+
+   Existing interfaces inspected (reuse, do not copy):
+   - planAlign.apply_prefix_ops_append composes over APPEND;
+     do_restore_ss_align needs nonoverlapping offsets; emit_one_input_ss_align
+     also needs stack length<=15 and excludes INVOKE label input;
+     do_swap_align covers only dist<=16.
+   - mixedPrefixSim.apply_prefix_op records SOSpill ownership from TOS and
+     chooses a mapped owner on SORestore. But SOEmit/SOPoke delegate to
+     apply_simple_op, which ignores them. It is NOT a full source-output
+     ownership observer. These theories have simulation/codegenRel ancestry;
+     no new import or copied theorem is proposed. No frame theorem is used.
+   - fnPlanPrefix.phi_release_dead_spills_domain restricts keys by live NAME.
+     fnPlanLineageReplay.release_dead_spills_live_domain makes release identity
+     only if every current key is already next-live. Exact pre-instruction
+     inventory does not imply that: last-use inputs may die at this boundary.
+   - fnPlanLineageInventory/Setup subset and resource preservation do not
+     provide final same-trace occupied-address equality.
+
+   Constructor/update accounting:
+   SOSpill off says where TOS is written, not its source variable name.
+   SORestore removes durable ownership in do_restore; deep do_swap instead
+   uses temporary spills/restores while preserving the durable map. All
+   written addresses therefore do not determine final durable occupancy.
+   SOPoke includes PHI output names and generate_phi_plan updates the model;
+   apply_simple_op ignores it. OFFSET emits label+offset but pushes Var output.
+   Regular planning silently pops inputs/pushes named outputs before emission;
+   SOEmit carries an opcode, not output names. INVOKE emits return/target
+   labels and JUMP, with label-counter changes, not source output names.
+
+   Silent release discriminator, checked by scratch computation: maps
+   {live|->0} and {dead|->0}, same empty stack and allocator next=32/free=[],
+   released with next=[live], leave respectively the first map/free list
+   unchanged and the second map empty/free=[0]. They began with the same
+   occupied address. Thus an address-only relation is not preserved through
+   release. This is NOT a counterexample to the target or actual same-block
+   consumer: the second map lacks exact live inventory. Boundary coverage
+   tracks stack OR spill; it alone does not relate names at each address.
+
+   Missing APPEND-compositional boundary: a source-aware relation must track
+   stack cells and address owners, commute with explicit trace operations,
+   identify matching next-live owners at silent deletion, and account for
+   output creation/PHI renaming at source checkpoints. Required obligations:
+   (1) initial ownership correspondence; (2) source-checkpoint alignment in
+   equal complete code; (3) preservation through temporaries and release;
+   (4) final occupied-address inclusion and injectivity. Incoming common core
+   and spills may supply (1); equal whole code does not yet supply (2).
+   No inspected theorem supplies (2)-(4) with unequal cleanup chunks. No
+   interpreter is defined: that route needs approved interface probes, not
+   another normalization wrapper or cancellation of unequal APPEND prefixes.
+
+   Height discriminator: assuming safe nontruncating full-trace alignment,
+   equal traces preserve the difference of initial stack lengths. Raw prefix
+   semantics does not supply full alignment at SOEmit. Even if available,
+   exact distinct inventory gives final length = marker_count + live_count
+   - spill_domain_cardinality. Unequal marker prefixes and unknown final
+   spill cardinalities prevent deriving equal live-stack lengths or excluding
+   opposite decisions. This accounting establishes no branch exclusion.
+
+   Successor transport is separate: dfs_block_state_owner_alloc_origin gives
+   successor D's map equal to SOME owner's output A, same free list/base and
+   monotone highwater. unique_predecessor_owner_origin identifies its LABEL,
+   not its input/run with AD. Use of the desired inclusion above also needs
+   comparison of AD's occupied addresses with actual owner's A (e.g. input
+   uniqueness plus determinism). Only then can occupied-address transport
+   splice AL into D. Existing join empty-spill transport avoids this issue.
+   Do not conflate the owner comparison with the two same-code lineage runs.
+*)
