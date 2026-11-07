@@ -1,6 +1,6 @@
 Theory fnLineageInvActualReplay
 Ancestors fnPlanLineageInventory fnPlanLineageReplay fnPlanLineageSetup planWf
-  reorderSim
+  reorderSim fnPlanLineagePhiTemporal
   fnLineageInvCleanupCoherence stackPlanGen
   stackPlanOps stackPlanTypes stackModel list rich_list
 
@@ -328,3 +328,112 @@ Resume generate_regular_plan_bottom_frame[reconstruction]:
 QED
 
 Finalise generate_regular_plan_bottom_frame
+
+Theorem stack_get_phi_depth_bottom_dead:
+ !inst stk m.
+ stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+   (REPLICATE m dead_stack_marker ++ stk) =
+ stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) stk
+Proof
+ rpt gen_tac >>
+ simp[stack_get_phi_depth_def, REVERSE_APPEND, stack_find_append_excluded,
+   EVERY_MEM, MEM_FILTER, dead_stack_marker_def, is_var_operand_def]
+QED
+
+Theorem popmany_singleton_bottom_dead_frame:
+ !ret ps m ops qs.
+ ret <> dead_stack_marker /\ popmany_plan [ret] ps = (ops,qs) ==>
+ popmany_plan [ret] (ps with ps_stack := REPLICATE m dead_stack_marker ++ ps.ps_stack) =
+ (ops,qs with ps_stack := REPLICATE m dead_stack_marker ++ qs.ps_stack)
+Proof
+ rpt gen_tac >> strip_tac >>
+ qmatch_goalsub_abbrev_tac `popmany_plan [ret] ext` >>
+ `stack_get_depth ret ext.ps_stack = stack_get_depth ret ps.ps_stack` by
+   simp[Abbr `ext`, stack_get_depth_bottom_dead] >>
+ `ext.ps_alloc = ps.ps_alloc` by simp[Abbr `ext`] >>
+ drule_all popmany_singleton_observation_frame >> strip_tac >>
+ Cases_on `stack_get_depth ret ps.ps_stack`
+ >- (gvs[popmany_plan_def, popmany_individual_def, sortingTheory.QSORT_DEF,
+          sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF, Abbr `ext`]) >>
+ `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_props] >>
+ mp_tac (Q.SPECL [`ret`, `ps`, `x`] popmany_singleton_stack_projection) >>
+ mp_tac (Q.SPECL [`ret`, `ext`, `x`] popmany_singleton_stack_projection) >>
+ mp_tac (Q.SPECL [`ret`, `ps`] popmany_singleton_state_frame) >>
+ mp_tac (Q.SPECL [`ret`, `ext`] popmany_singleton_state_frame) >>
+ simp[] >> rpt strip_tac >>
+ ` (SND (popmany_plan [ret] ext)).ps_stack =
+   REPLICATE m dead_stack_marker ++ qs.ps_stack` by
+   (gvs[Abbr `ext`, stack_swap_bottom_extension, stack_pop_bottom_extension]) >>
+ Cases_on `popmany_plan [ret] ext` >>
+ gvs[Abbr `ext`, plan_state_component_equality]
+QED
+
+Theorem generate_phi_plan_bottom_frame:
+ !inst nl halt ps ops qs m.
+ generate_phi_plan inst nl halt ps = (ops,qs) ==>
+ generate_phi_plan inst nl halt
+   (ps with ps_stack := REPLICATE m dead_stack_marker ++ ps.ps_stack) =
+ (ops,qs with ps_stack := REPLICATE m dead_stack_marker ++ qs.ps_stack)
+Proof
+ rpt gen_tac >> strip_tac >>
+ Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+ >- gvs[generate_phi_plan_def, stack_get_phi_depth_bottom_dead] >>
+ `x < LENGTH ps.ps_stack` by
+   (qpat_x_assum `stack_get_phi_depth _ _ = SOME _` mp_tac >>
+    simp[stack_get_phi_depth_def] >> metis_tac[planWfTheory.stack_find_bound, LENGTH_REVERSE]) >>
+ `stack_peek x (REPLICATE m dead_stack_marker ++ ps.ps_stack) = stack_peek x ps.ps_stack` by
+   simp[stack_peek_def, EL_APPEND2] >>
+ qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
+ simp[generate_phi_plan_def, stack_get_phi_depth_bottom_dead] >>
+ Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) nl`
+ >- suspend "dup" >>
+ simp[stack_poke_bottom_extension] >>
+ Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl`
+ >- suspend "rename_pop" >> simp[] >> strip_tac >> gvs[]
+QED
+
+Resume generate_phi_plan_bottom_frame[dup]:
+ Cases_on `do_dup x ps` >>
+ drule_all do_dup_bottom_frame >>
+ disch_then (qspec_then `REPLICATE m dead_stack_marker` assume_tac) >>
+ simp[] >>
+ `0 < LENGTH r.ps_stack` by
+   (mp_tac (Q.SPECL [`x`, `ps`] doSwapSimTheory.do_dup_stack_exact) >> simp[] >>
+    simp[stack_dup_def]) >>
+ simp[stack_poke_bottom_extension] >>
+ Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl`
+ >- suspend "dup_pop" >> simp[] >> strip_tac >> gvs[]
+QED
+
+Resume generate_phi_plan_bottom_frame[rename_pop]:
+ Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+   (ps with ps_stack := stack_poke x (Var (HD inst.inst_outputs)) ps.ps_stack)` >>
+ drule_at (Pat `popmany_plan _ _ = _`) popmany_singleton_bottom_dead_frame >>
+ disch_then (qspec_then `m` mp_tac) >>
+ simp[dead_stack_marker_def] >> strip_tac >> simp[] >> strip_tac >> gvs[]
+QED
+
+Resume generate_phi_plan_bottom_frame[dup_pop]:
+ Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+   (r with ps_stack := stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack)` >>
+ drule_at (Pat `popmany_plan _ _ = _`) popmany_singleton_bottom_dead_frame >>
+ disch_then (qspec_then `m` mp_tac) >>
+ simp[dead_stack_marker_def] >> strip_tac >> simp[] >> strip_tac >> gvs[]
+QED
+
+Finalise generate_phi_plan_bottom_frame
+
+Theorem generate_phi_plan_released_bottom_frame:
+ !inst nl halt ps ops qs m.
+ generate_phi_plan inst nl halt ps = (ops,qs) ==>
+ (FST (generate_phi_plan inst nl halt
+     (ps with ps_stack := REPLICATE m dead_stack_marker ++ ps.ps_stack)),
+  release_dead_spills nl (SND (generate_phi_plan inst nl halt
+     (ps with ps_stack := REPLICATE m dead_stack_marker ++ ps.ps_stack)))) =
+ (ops,(release_dead_spills nl qs) with ps_stack :=
+   REPLICATE m dead_stack_marker ++ (release_dead_spills nl qs).ps_stack)
+Proof
+ rpt gen_tac >> strip_tac >> drule generate_phi_plan_bottom_frame >>
+ disch_then (qspec_then `m` assume_tac) >>
+ simp[release_dead_spills_stack_update, fnPlanPrefixTheory.release_dead_spills_stack]
+QED
