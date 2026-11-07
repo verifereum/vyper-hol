@@ -7,6 +7,7 @@ Ancestors
   ptrDiscipline venomState finite_map exprLoweringProps venomMemDefs
   bodyPtrBytestringBuiltinsCalldataFrame bodyPtrBytestringBuiltinsBounds
   bodyPtrBytestringBuiltinsExternalSlice instIdxIndep fragExec
+  exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer
 
 (* The marked operand evidence fixes both the source integer and its actual
    runtime word; no independent existential execution is introduced. *)
@@ -149,7 +150,9 @@ Theorem compile_slice_calldata_shared_success:
     tm.t_mem = ((tn.t_mem UNION new_site_bytes s u)
       DIFF {i | w2n w + 32 <= i /\ i < w2n w + 32 + n})
       DIFF {i | w2n w <= i /\ i < w2n w + 32} /\
-    w2n w + N < dimword (:256)
+    w2n w + N < dimword (:256) /\
+    ghost_kept cenv es sa G tn s H tm /\
+    (!i. w2n w <= i /\ i < w2n w + 32 + n ==> i NOTIN tm.t_mem)
 Proof
   strip_tac >> drule_all compile_slice_calldata_semantic >>
   disch_then (qspecl_then [`tn`,`bound`,`PG`,`G`,`D`] strip_assume_tac) >>
@@ -188,6 +191,25 @@ Resume compile_slice_calldata_shared_success[counted]:
     (qpat_assum `r'' = _` (mp_then Any mp_tac slice_copy_store_pc_normalization) >>
      disch_then drule_all >> simp[]) >>
   qpat_x_assum `t' = zf` SUBST_ALL_TAC >>
+  suspend "protected"
+QED
+
+Resume compile_slice_calldata_shared_success[protected]:
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]) (fn_insts fn)` by
+    (drule compile_slice_calldata_stages >> strip_tac >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     `fn_has_code sa sm fn` by
+       metis_tac[fn_has_code_split, cs_extends_trans] >>
+     drule_all buffer_alloc_code >> strip_tac >>
+     drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
+  `tm.t_mem SUBSET (tn.t_mem UNION new_site_bytes s u)` by
+    (qpat_assum `tm.t_mem = _` SUBST1_TAC >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `N < dimword (:256)` by decide_tac >>
+  `ghost_kept cenv es sa G tn s H tm` by
+    (drule_all alloca_slice_suffix_ghost_kept >> simp[]) >>
+  `!i. w2n w <= i /\ i < n + (w2n w + 32) ==> i NOTIN tm.t_mem` by
+    (qpat_assum `tm.t_mem = _` SUBST1_TAC >> simp[] >> rpt strip_tac >> decide_tac) >>
   qexistsl_tac [`zf`,`w`,`H`,`tm`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
