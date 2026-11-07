@@ -41,23 +41,41 @@ Proof
   simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES, optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >>
   entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES, COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >>
-  simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> entry_begin_mapped_stage >> entry_pass_emit >> entry_pass_check >> entry_install_function >>
-  entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_emit >> entry_pass_check >>
-  entry_install_function >> entry_begin_mapped_stage >> entry_pass_emit >> entry_pass_check >> entry_install_function >>
-  entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_emit >> entry_pass_check >>
+  simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> entry_begin_mapped_stage >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_install_function >>
+  entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_install_function >> entry_begin_mapped_stage >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >>
+  entry_admin >> entry_pass_check >> entry_install_function >>
+  entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
   entry_install_function >> entry_stage "run_pipeline_stages" >> entry_admin >> entry_stage "fcg_analyze" >> simp[] >>
   entry_stage "prune_unit_fcg_unreachable" >> entry_stage "reachable_fcg_acyclic" >> simp[] >> entry_stage "fcg_postorder" >>
   entry_open_schedule >>
   entry_stage "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> simp[venomPassScheduleTheory.o1_fn_passes_def] >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >>
-  entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_stage "run_configured_fn_pass_fold" >> entry_admin >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >>
+  entry_pass_check >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_stage "run_configured_fn_pass_fold" >> entry_admin >>
   entry_stage "replace_unique_function" >> entry_admin >> entry_stage "apply_unit_label_map" >> entry_admin >> entry_guard "unit_labels_wf" >>
   entry_guard "list_subset" >> entry_guard "ir_supply_covers_unit" >> entry_guard "unit_global_inst_ids_distinct" >> entry_admin >>
-  entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >>
-  entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_stage "run_configured_fn_pass_fold" >> entry_admin >> entry_stage "replace_unique_function" >>
+  entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_pass_begin >>
+  entry_stage "execute_configured_fn_pass" >> entry_admin >>
+  entry_pass_check >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_stage "run_configured_fn_pass_fold" >> entry_admin >> entry_stage "replace_unique_function" >>
   entry_admin >> entry_stage "apply_unit_label_map" >> entry_admin >> entry_guard "unit_labels_wf" >> entry_guard "list_subset" >>
   entry_guard "ir_supply_covers_unit" >> entry_guard "unit_global_inst_ids_distinct" >> entry_admin >> entry_stage "run_pipeline_stages" >>
   entry_admin >> entry_guard "unit_wf" >> entry_guard "unit_labels_wf" >> entry_guard "context_target_safe" >>

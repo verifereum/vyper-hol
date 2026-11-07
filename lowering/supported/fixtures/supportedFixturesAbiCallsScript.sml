@@ -12,8 +12,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem internal_struct_call_supported_program:
-  supported_program evalCompilerSubsetAbiInternalCalls$task090_internal_struct_call_program
+(* An internal call returning a struct is outside the whitelist
+   (supported_effect_expr). *)
+Theorem internal_struct_call_not_supported_program:
+  ~supported_program evalCompilerSubsetAbiInternalCalls$task090_internal_struct_call_program
 Proof
   EVAL_TAC
 QED

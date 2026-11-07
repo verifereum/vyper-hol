@@ -2,8 +2,8 @@
  * Cross-Block Simulation — Proofs
  *
  * TOP-LEVEL:
- *   resolves_to_mono_proof             — monotonicity of resolves_to
- *   resolving_block_sim_function_proof — the main lifting theorem
+ *   resolves_to_mono             — monotonicity of resolves_to
+ *   resolving_block_sim_function — the main lifting theorem
  *)
 
 Theory crossBlockSimProofs
@@ -16,7 +16,7 @@ Ancestors
 
 (* ===== resolves_to_mono ===== *)
 
-Theorem resolves_to_mono_proof:
+Theorem resolves_to_mono:
   !R_ok R_term bbs1 bbs2 n m r1 r2.
     n <= m /\
     resolves_to R_ok R_term bbs1 bbs2 n r1 r2 ==>
@@ -1251,7 +1251,7 @@ Proof
       `resolves_to R_ok R_term fn1.fn_blocks fn2.fn_blocks nn
          (OK s1) (OK s2)` by (
         qspecl_then [`R_ok`, `R_term`, `fn1.fn_blocks`, `fn2.fn_blocks`,
-          `0`, `nn`] mp_tac resolves_to_mono_proof >>
+          `0`, `nn`] mp_tac resolves_to_mono >>
         simp[resolves_to_def, lift_result_def]) >>
       first_assum (qspecl_then [`ctx`, `s1`, `s2`] mp_tac) >> simp[]
     )
@@ -1521,7 +1521,31 @@ QED
 
 (* ===== Main theorem ===== *)
 
-Theorem resolving_block_sim_function_proof:
+(*
+ * Per-block resolving_block_sim lifts to function-level pass_correct.
+ *
+ * Preconditions:
+ *   1. valid_state_rel: R_ok/R_term satisfy closure conditions
+ *   2. Transitivity of R_ok, R_term
+ *   3. Label preservation by bt
+ *   4. Per-block resolving_block_sim (core simulation assumption)
+ *   5. Operand agreement under R_ok (for state equiv propagation)
+ *   6. Fuel monotonicity for both functions
+ *
+ * Conclusion: pass_correct (termination equiv + result equiv)
+ *
+ * Proof strategy:
+ *   Forward termination: induction on fuel. At each block step,
+ *     resolving_block_sim gives either OK/OK (IH applies) or
+ *     cross-result (resolving side terminates within n extra steps;
+ *     other side already terminal).
+ *   Backward termination: symmetric.
+ *   Result equiv: align fuels via fuel_mono, prove lift_result by
+ *     induction. OK/OK case: triangle via exec_block_preserves_R +
+ *     block sim. Cross-result case: resolution produces matching
+ *     terminal result.
+ *)
+Theorem resolving_block_sim_function:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn bt.
     let fn' = function_map_transform bt fn in
@@ -1584,86 +1608,6 @@ Proof
   (* Termination equivalence *)
   >- (eq_tac >> strip_tac >> res_tac >> metis_tac[]) >>
   (* lift_result at arbitrary fuels *)
-  rpt strip_tac >>
-  `?fuel_f. terminates (run_blocks fuel_f ctx
-              (function_map_transform bt fn) s) /\
-     lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
-       (run_blocks fuel_f ctx (function_map_transform bt fn) s)` by (
-    qpat_x_assum `!fuel ctx s.
-      s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-      terminates (run_blocks fuel ctx fn s) ==> _`
-      (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
-    simp[]
-  ) >>
-  `run_blocks fuel' ctx (function_map_transform bt fn) s =
-   run_blocks fuel_f ctx (function_map_transform bt fn) s` by (
-    irule fuel_mono_eq >> simp[] >> metis_tac[]
-  ) >>
-  metis_tac[]
-QED
-
-(* Version with weaker per-block sim: only requires non-halted states.
-   Strictly stronger conclusion-wise (same conclusion, weaker precondition).
-   Used by RTA and other passes where per-block sim fails for halted states. *)
-Theorem resolving_block_sim_function_v2:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) fn bt.
-    let fn' = function_map_transform bt fn in
-    valid_state_rel R_ok R_term /\
-    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
-    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    (!bb. (bt bb).bb_label = bb.bb_label) /\
-    (!bb fuel ctx s.
-       MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-       resolving_block_sim R_ok R_term fn.fn_blocks fn'.fn_blocks
-         (run_block fuel ctx bb s)
-         (run_block fuel ctx (bt bb) s)) /\
-    (!bb inst x.
-       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var x) inst.inst_operands ==>
-       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
-    (!fuel k ctx s.
-       terminates (run_blocks fuel ctx fn s) ==>
-       run_blocks (fuel + k) ctx fn s = run_blocks fuel ctx fn s) /\
-    (!fuel k ctx s.
-       terminates (run_blocks fuel ctx fn' s) ==>
-       run_blocks (fuel + k) ctx fn' s = run_blocks fuel ctx fn' s)
-  ==>
-    !ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-    ((?fuel. terminates (run_blocks fuel ctx fn s)) <=>
-     (?fuel'. terminates (run_blocks fuel' ctx fn' s))) /\
-    (!fuel fuel'.
-       terminates (run_blocks fuel ctx fn s) /\
-       terminates (run_blocks fuel' ctx fn' s) ==>
-       lift_result R_ok R_term R_term
-         (run_blocks fuel ctx fn s)
-         (run_blocks fuel' ctx fn' s))
-Proof
-  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  `!fuel ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-     terminates (run_blocks fuel ctx fn s) ==>
-     ?fuel'. terminates (run_blocks fuel' ctx
-                (function_map_transform bt fn) s) /\
-       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
-         (run_blocks fuel' ctx (function_map_transform bt fn) s)` by (
-    mp_tac
-      (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] fwd_lift)) >>
-    impl_tac >- (rpt conj_tac >> rpt (first_x_assum ACCEPT_TAC)) >>
-    simp[]
-  ) >>
-  `!fuel ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-     terminates (run_blocks fuel ctx (function_map_transform bt fn) s) ==>
-     ?fuel'. terminates (run_blocks fuel' ctx fn s) /\
-       lift_result R_ok R_term R_term (run_blocks fuel' ctx fn s)
-         (run_blocks fuel ctx (function_map_transform bt fn) s)` by (
-    mp_tac
-      (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] bwd_lift)) >>
-    impl_tac >- (rpt conj_tac >> rpt (first_x_assum ACCEPT_TAC)) >>
-    simp[]
-  ) >>
-  conj_tac
-  >- (eq_tac >> strip_tac >> res_tac >> metis_tac[]) >>
   rpt strip_tac >>
   `?fuel_f. terminates (run_blocks fuel_f ctx
               (function_map_transform bt fn) s) /\

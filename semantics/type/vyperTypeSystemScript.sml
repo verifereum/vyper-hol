@@ -508,10 +508,10 @@ End
 (* ===== Type builtin/conversion checks ===== *)
 
 (* Bytes[N]/String[N] targets accept only Bytes/String sources
-   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and no
-   conversion takes a source that is a subtype of its target: same-class
-   bytestrings must narrow, bytesM must change width
-   (vyper/builtins/functions.py: Convert.infer_arg_types). *)
+   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and a
+   bytestring or bytesM conversion may not take a source that is a subtype
+   of its target: same-class bytestrings must narrow, bytesM must change
+   width (vyper/builtins/functions.py: Convert.infer_arg_types). *)
 Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
@@ -947,7 +947,13 @@ End
 
    A place is compared by VarAccess (base.py): its variable and its
    attribute path up to the first subscript, which is an analysis barrier.
-   place_access tgt [] gives both. *)
+   place_access tgt [] gives both.
+
+   Known gap: Vyper also counts the state variables an internal callee
+   writes, directly or through further internal calls (local.py, the
+   func_type.is_internal case of the call visitor).  Here a call counts
+   only its arguments, so a loop whose body writes the iterated array
+   through an internal call still type-checks. *)
 Definition place_access_def:
   place_access (NameTarget id) attrs = (NameTarget id, attrs) /\
   place_access (TopLevelNameTarget n) attrs = (TopLevelNameTarget n, attrs) /\

@@ -333,6 +333,22 @@ Proof
   metis_tac[read_place_no_control, no_control_exc_def]
 QED
 
+Theorem array_iterator_results_no_control:
+  array_iterator_results cx ty res st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> gvs[no_control_exc_def] >>
+  metis_tac[read_result_no_control, no_control_exc_def]
+QED
+
 Theorem read_results_no_control:
   !results cx st exc st'.
     read_results cx results st = (INR exc,st') ==> no_control_exc exc

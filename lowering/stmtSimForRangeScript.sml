@@ -64,7 +64,7 @@ Theorem eval_iterator_range_forced[local]:
     do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
        v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
        rl <- lift_sum (get_range_limits v1 v2);
-       return (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+       return (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))
     od
 Proof
   rpt gen_tac >> simp[Once evaluate_def, FUN_EQ_THM, bind_def] >>
@@ -89,7 +89,7 @@ Definition range_outcome_def:
     (n1 <= n2 /\ bound < Num (n2 - n1) /\
      res = INR (Error (RuntimeError "For too long")) /\ es' = es2) \/
     (n1 <= n2 /\ Num (n2 - n1) <= bound /\
-     eval_for cx tyv id body (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+     eval_for cx tyv id body (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
        es2 = (res, es'))
 End
 

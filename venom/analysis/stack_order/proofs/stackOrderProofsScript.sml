@@ -5,19 +5,19 @@
  *
  * Internal lemmas:
  *   so_handle_inst_stack_top_proof  — operands on top after handle_inst
- *   so_analyze_block_needed_distinct_proof — needed list has no duplicates
+ *   so_analyze_block_needed_distinct — needed list has no duplicates
  *   so_needed_are_live_proof        — needed vars are live at block entry
  *
- * API proofs (consumed by stackOrderProps via ACCEPT_TAC):
- *   so_get_stack_sound_proof
- *   so_merge_prefix_proof
- *   so_from_to_includes_live_proof
- *   so_from_to_includes_base_proof
+ * API proofs:
+ *   so_get_stack_sound
+ *   so_merge_prefix
+ *   so_from_to_includes_live
+ *   so_from_to_includes_base
  *)
 
 Theory stackOrderProofs
 Ancestors
-  stackOrderDefs cfgAnalysisProps
+  stackOrderDefs cfgAnalysisProps cfgCorrectnessProof
 Libs
   rich_listTheory listTheory arithmeticTheory pred_setTheory finite_mapTheory
   venomInstTheory stackOrderInternalDefsTheory stackOrderDefsTheory
@@ -91,7 +91,7 @@ QED
    ========================================================================== *)
 
 (* Merge is a prefix of every input order *)
-Theorem so_merge_prefix_proof:
+Theorem so_merge_prefix:
   ∀orders n. MEM n orders ⇒
     isPREFIX (so_merge orders) n
 Proof
@@ -104,7 +104,7 @@ Proof
 QED
 
 (* from_to query includes base *)
-Theorem so_from_to_includes_base_proof:
+Theorem so_from_to_includes_base:
   ∀lr fn from_to origin succ v needed.
     FLOOKUP from_to (origin, succ) = SOME needed ∧
     MEM v needed ⇒
@@ -117,7 +117,7 @@ Proof
 QED
 
 (* from_to query includes live input vars *)
-Theorem so_from_to_includes_live_proof:
+Theorem so_from_to_includes_live:
   ∀lr fn from_to origin succ v succ_bb.
     lookup_block succ fn.fn_blocks = SOME succ_bb ∧
     MEM v (input_vars_from origin succ_bb.bb_instructions
@@ -566,7 +566,7 @@ Proof
   first_x_assum irule >> simp[so_step_needed_distinct]
 QED
 
-Theorem so_analyze_block_needed_distinct_proof:
+Theorem so_analyze_block_needed_distinct:
   ∀cfg lr from_to lbl insts needed stack.
     (needed, stack) = so_analyze_block cfg lr from_to lbl insts ⇒
     ALL_DISTINCT needed
@@ -576,8 +576,8 @@ Proof
   irule foldl_step_distinct >> simp[]
 QED
 
-(* so_needed_are_live_proof: DROPPED — FALSE without single_use_form.
-   See stackOrderCexScript.sml for counterexample. *)
+(* so_needed_are_live_proof: DROPPED — FALSE without single_use_form;
+   see docs/deleted-counterexamples.md. *)
 
 (* ==========================================================================
    so_get_stack_sound — ALL_DISTINCT preservation through the analysis
@@ -652,7 +652,7 @@ Proof
   qexists_tac `needed` >> conj_tac >-
   (irule foldl_update_mem_writes >> simp[]) >>
   qpat_x_assum `so_analyze_block _ _ _ _ _ = _` (assume_tac o GSYM) >>
-  metis_tac[so_analyze_block_needed_distinct_proof]
+  metis_tac[so_analyze_block_needed_distinct]
 QED
 
 Theorem foldl_update_value[local]:
@@ -693,7 +693,7 @@ Proof
   pairarg_tac >> gvs[] >>
   drule_all so_record_from_to_value >> strip_tac >> gvs[] >>
   qpat_x_assum `so_analyze_block _ _ _ _ _ = _` (assume_tac o GSYM) >>
-  metis_tac[so_analyze_block_needed_distinct_proof]
+  metis_tac[so_analyze_block_needed_distinct]
 QED
 
 Theorem foldl_succ_values[local]:
@@ -706,7 +706,7 @@ Proof
   metis_tac[so_analyze_succ_writes_distinct]
 QED
 
-Theorem so_get_stack_sound_proof:
+Theorem so_get_stack_sound:
   ∀fn cfg lr from_to lbl merged from_to'.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
@@ -721,7 +721,7 @@ Proof
     (strip_tac >> irule prefix_all_distinct >>
      qexists_tac `case FLOOKUP (FOLDL (so_analyze_succ (cfg_analyze fn) lr fn)
        from_to (h::t)) (lbl,h) of NONE => [] | SOME n => n` >>
-     simp[] >> match_mp_tac so_merge_prefix_proof >> simp[MEM]) >>
+     simp[] >> match_mp_tac so_merge_prefix >> simp[MEM]) >>
   Cases_on `FLOOKUP (FOLDL (so_analyze_succ (cfg_analyze fn) lr fn) from_to
               (h::t)) (lbl,h)` >> simp[] >>
   qpat_x_assum `FLOOKUP (FOLDL _ _ (h::t)) _ = _`

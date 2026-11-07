@@ -29,7 +29,7 @@ Theory literalsCodesizeProofs
 Ancestors
   literalsCodesizeDefs passSimulationDefs passSimulationProps venomWf
   venomExecSemantics venomExecProofs stateEquiv stateEquivProps crossBlockSimProps
-  option list
+  option list passSimulationProofs
 Libs
   fcpLib
 
@@ -255,7 +255,7 @@ Proof
   rw[lit_codesize_inst_def]
 QED
 
-Theorem lit_codesize_inst_phi_opcode_preserving[local]:
+Theorem lit_codesize_inst_phi_opcode_preserving:
   !inst.
     inst.inst_opcode = PHI ==>
     (lit_codesize_inst inst).inst_opcode = PHI
@@ -263,7 +263,7 @@ Proof
   rw[lit_codesize_inst_def]
 QED
 
-Theorem lit_codesize_inst_non_phi_opcode_preserving[local]:
+Theorem lit_codesize_inst_non_phi_opcode_preserving:
   !inst.
     inst.inst_opcode <> PHI ==>
     (lit_codesize_inst inst).inst_opcode <> PHI
@@ -348,16 +348,6 @@ Proof
        eval_phis_lit_codesize_inst2]
 QED
 
-(* Bridge: run_block equality implies run_block_entry equality (overloads) *)
-Theorem lit_codesize_run_block_entry_eq:
-  !fuel ctx bb s.
-    EVERY inst_wf bb.bb_instructions ==>
-    run_block_entry fuel ctx (block_map_transform lit_codesize_inst bb) s =
-    run_block_entry fuel ctx bb s
-Proof
-  metis_tac[lit_codesize_run_block_eq6]
-QED
-
 
 (* Per-block run_block_entry equality for lit_codesize_inst,
    instantiated from fn_inst_wf. *)
@@ -368,7 +358,7 @@ Theorem lit_codesize_rbe_from_fnwf:
     run_block_entry fuel' ctx bb s'
 Proof
   rpt strip_tac >>
-  irule lit_codesize_run_block_entry_eq >>
+  irule lit_codesize_run_block_eq6 >>
   qpat_x_assum `fn_inst_wf fn` mp_tac >>
   simp[fn_inst_wf_def, EVERY_MEM] >>
   strip_tac >> first_x_assum drule >> simp[EVERY_MEM]
@@ -400,7 +390,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       simp[block_map_transform_label]) >>
   rpt gen_tac >> strip_tac >>
-  irule lit_codesize_run_block_entry_eq >>
+  irule lit_codesize_run_block_eq6 >>
   qpat_x_assum `fn_inst_wf fn` mp_tac >>
   simp[fn_inst_wf_def, EVERY_MEM] >>
   strip_tac >> first_x_assum drule >> simp[EVERY_MEM]
@@ -414,7 +404,7 @@ Theorem lit_codesize_fn_eq:
 Proof
   rpt strip_tac >>
   PURE_REWRITE_TAC[lit_codesize_function_def] >>
-  irule passSimulationPropsTheory.run_blocks_fmap_xform_eq >>
+  irule passSimulationProofsTheory.run_blocks_fmap_xform_eq >>
   qspecl_then [`fn`,`ctx`] drule lit_codesize_fmap_xform_ante >>
   strip_tac >>
   metis_tac[]

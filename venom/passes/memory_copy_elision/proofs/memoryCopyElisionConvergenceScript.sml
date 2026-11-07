@@ -366,7 +366,7 @@ Theorem cf_init_state_inv[local]:
 Proof
   simp[cf_state_inv_def, init_df_state_def, FDOM_FEMPTY] >>
   rpt strip_tac >>
-  imp_res_tac dfAnalyzeProofsTheory.foldl_fupdate_const >> gvs[]
+  imp_res_tac dfAnalyzeProofsTheory.foldl_fempty_val >> gvs[]
 QED
 
 Theorem cf_init_state_inv_entry[local]:
@@ -379,19 +379,10 @@ Theorem cf_init_state_inv_entry[local]:
 Proof
   simp[cf_state_inv_def, init_df_state_def, FLOOKUP_UPDATE, FDOM_FEMPTY] >>
   rpt strip_tac >> Cases_on `lbl = lbl'` >> gvs[] >>
-  imp_res_tac dfAnalyzeProofsTheory.foldl_fupdate_const >> gvs[]
+  imp_res_tac dfAnalyzeProofsTheory.foldl_fempty_val >> gvs[]
 QED
 
 (* ===== Measure boundedness ===== *)
-
-Triviality sum_map_le_bound[local]:
-  !f bound l. EVERY (\x. f x <= bound) l ==>
-    SUM (MAP f l) <= bound * LENGTH l
-Proof
-  Induct_on `l` >> simp[MULT_CLAUSES] >> rpt strip_tac >>
-  `SUM (MAP f l) <= bound * LENGTH l` by (first_x_assum irule >> fs[]) >>
-  DECIDE_TAC
-QED
 
 Triviality cf_val_measure_boundary_le[local]:
   !bp fn st lbl.
@@ -534,28 +525,6 @@ Proof
   simp[LE_SUB_LCANCEL]
 QED
 
-(* ===== SUM helpers ===== *)
-
-Triviality sum_map_le[local]:
-  !f g l. EVERY (\x. f x <= g x) l ==> SUM (MAP f l) <= SUM (MAP g l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >> DECIDE_TAC
-QED
-
-Triviality sum_map_lt[local]:
-  !f g l.
-    EVERY (\x. f x <= g x) l /\
-    (?y. MEM y l /\ f y < g y) ==>
-    SUM (MAP f l) < SUM (MAP g l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (`SUM (MAP f l) <= SUM (MAP g l)` by
-        (irule sum_map_le >> fs[]) >> DECIDE_TAC)
-  >- (`f h <= g h` by fs[] >>
-      `SUM (MAP f l) < SUM (MAP g l)` by metis_tac[] >> DECIDE_TAC)
-QED
-
 (* ===== Boundary strict increase ===== *)
 
 Triviality boundary_measure_strict[local]:
@@ -590,21 +559,6 @@ Proof
 QED
 
 
-(* ===== Weighted inequality helper ===== *)
-
-Triviality weighted_lt_cancel[local]:
-  !w (a:num) a' c. a < a' /\ c <= w ==> (w + 1) * a + c < (w + 1) * a'
-Proof
-  rpt strip_tac >>
-  `(w + 1) * a + c <= (w + 1) * a + w` by simp[] >>
-  `(w + 1) * a + w < (w + 1) * (a + 1)` by simp[LEFT_ADD_DISTRIB] >>
-  `a + 1 <= a'` by simp[] >>
-  `(w + 1) * (a + 1) <= (w + 1) * a'` by simp[LE_MULT_LCANCEL] >>
-  simp[]
-QED
-
-(* ===== cf_joined boundary equality ===== *)
-
 (* ===== Invariant preservation ===== *)
 
 (* df_fold_block preserves FDOM bound for inst slots — via df_fold_block_forward_invariant *)
@@ -636,13 +590,6 @@ Triviality find_mem[local]:
 Proof
   Induct_on `l` >> simp[FIND_thm] >> rpt gen_tac >>
   IF_CASES_TAC >> simp[] >> metis_tac[]
-QED
-
-Triviality fn_insts_blocks_mem[local]:
-  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
 QED
 
 (* Helper: boundary FDOM preserved after join update *)
@@ -695,7 +642,7 @@ Proof
       | SOME bb => bb.bb_instructions)` by (
     simp[EVERY_MEM] >> rpt strip_tac >>
     Cases_on `lookup_block lbl fn.fn_blocks` >> fs[] >>
-    simp[fn_insts_def] >> irule fn_insts_blocks_mem >>
+    simp[fn_insts_def] >> irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
     fs[lookup_block_def] >> imp_res_tac find_mem >> metis_tac[]) >>
   drule_all cf_fold_fdom >> strip_tac >>
   simp[cf_state_inv_def] >> rpt conj_tac
@@ -797,7 +744,7 @@ Proof
       qunabbrev_tac `instrs` >>
       Cases_on `lookup_block lbl fn.fn_blocks` >> simp[EVERY_MEM] >>
       rpt strip_tac >> simp[fn_insts_def] >>
-      irule fn_insts_blocks_mem >>
+      irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
       fs[lookup_block_def] >> metis_tac[find_mem]) >>
     `cf_state_inv ctx.ce_bp fn st` by fs[cf_measure_inv_def] >>
     `case joined of NONE => T
@@ -884,6 +831,6 @@ Proof
       metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond])
   >- simp[EVERY_MEM]
   >- (rpt strip_tac >> fs[] >>
-      imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+      imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
       fs[EVERY_MEM])
 QED

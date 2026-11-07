@@ -2,10 +2,8 @@
  * Assign Elimination — Function-Level Proofs
  *
  * Composes per-instruction soundness (assignElimSound) with
- * convergence (assignElimConvergence) to prove full function-level
- * correctness: assign_elim_function_correct_proof.
- *
- * TOP-LEVEL: assign_elim_function_correct_proof
+ * convergence (assignElimConvergence): the lemmas behind
+ * assignElimCorrectness.assign_elim_function_correct.
  *)
 
 Theory assignElimProofs
@@ -21,7 +19,7 @@ Ancestors
   dfAnalyzeDefs dfAnalyzeProofs
   cfgHelpers worklistDefs
   cfgAnalysisProps
-  finite_map list pred_set arithmetic
+  finite_map list pred_set arithmetic analysisSimProofsSound cfgCorrectnessProof
 
 (* ===== Copy-prop specific: function-level simulation ===== *)
 
@@ -206,7 +204,7 @@ Proof
     >- (rpt strip_tac >> fs[] >>
         metis_tac[copy_prop_measure_monotone])
     >- (rpt strip_tac >> fs[] >>
-        imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+        imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
         fs[EVERY_MEM])
     >- simp[EVERY_MEM]
     >- (mp_tac (SPEC_ALL copy_prop_measure_inv_initial) >>
@@ -303,7 +301,7 @@ Proof
   rpt strip_tac >>
   drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >> strip_tac >>
   `cfg_reachable_of (cfg_analyze fn) lbl` by (fs[EXTENSION] >> metis_tac[]) >>
-  drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >> strip_tac >>
+  drule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >> strip_tac >>
   fs[fn_labels_def, MEM_MAP] >>
   metis_tac[venomExecPropsTheory.MEM_lookup_block, wf_function_def, fn_labels_def]
 QED
@@ -558,7 +556,7 @@ Proof
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    (imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >> gvs[EVERY_MEM]) >>
+    (imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> gvs[EVERY_MEM]) >>
   `MEM bb.bb_label (cfg_preds_of (cfg_analyze fn) v.vs_current_bb)` by
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   (* Step 6: Successor entry via inter-block transfer (no lookup_block needed) *)
@@ -638,66 +636,6 @@ Proof
     simp_tac std_ss [copy_prop_analyze_def, LET_THM, th]) >>
   simp[copy_prop_joined_def, LET_THM] >>
   gvs[copy_prop_join_FEMPTY, copy_sound_opt_fempty]
-QED
-
-(* Index in PHI prefix has opcode PHI *)
-Triviality phi_prefix_length_el_phi[local]:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
-QED
-
-Triviality phi_prefix_length_lt_wf[local]:
-  !bb. bb_well_formed bb ==>
-       phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
-Proof
-  rpt strip_tac >> fs[bb_well_formed_def] >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
-    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
-  CCONTR_TAC >>
-  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by
-    decide_tac >>
-  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[]) >>
-  `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[phi_prefix_length_el_phi] >>
-  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
-  gvs[is_terminator_def]
-QED
-
-(* Direct indexed variant of eval_phis_flookup_not_phi_output.
-   Uses the indexed condition that df_at_phi_prefix_no_phi_output_at_end
-   already provides directly, avoiding the need for bb_well_formed bridge. *)
-Theorem eval_phis_flookup_idx[local]:
-  !s insts x.
-    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
-    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
-Proof
-  Induct_on `insts` >> simp[eval_phis_def] >>
-  rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
-  (* Derive IH hypothesis for recursive case *)
-  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
-    rpt strip_tac >>
-    first_x_assum (qspec_then `SUC i` mp_tac) >>
-    simp[phi_prefix_length_def]
-  ) >>
-  (* IH gives FLOOKUP preserved through recursive eval_phis *)
-  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by (
-    first_x_assum drule >> simp[]
-  ) >>
-  (* out is not x (not written by this PHI) *)
-  `~MEM x h.inst_outputs` by (
-    last_x_assum (fn th =>
-      mp_tac (Q.SPEC `0` th) >> simp[phi_prefix_length_def])
-  ) >>
-  `MEM out h.inst_outputs` by (
-    drule eval_one_phi_output_mem >> simp[]
-  ) >>
-  `out <> x` by (CCONTR_TAC >> fs[]) >>
-  gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 
 (* Corollary of eval_phis_flookup_idx for Var-valued copy map entries.
@@ -1138,7 +1076,7 @@ Proof
     metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
-  imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
   gvs[EVERY_MEM]
 QED
 
@@ -1247,7 +1185,7 @@ Proof
 QED
 
 (* Phase 1 function-level: use df_analysis_pass_correct_sound framework *)
-Theorem assign_subst_function_eq[local]:
+Theorem assign_subst_function_eq:
   !fuel ctx fn s.
     let result = copy_prop_analyze fn in
     let fn_subst = analysis_function_transform NONE result
@@ -1284,7 +1222,7 @@ Proof
        ``copy_sound_opt``,
        ``\v inst. [assign_subst_inst v inst]``]
      (SIMP_RULE std_ss [LET_THM]
-       analysisSimPropsTheory.df_analysis_pass_correct_sound))
+       analysisSimProofsSoundTheory.df_analysis_pass_correct_sound))
   \\ rpt conj_tac
   >- (rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def])
   >- (rpt strip_tac >> rpt conj_tac
@@ -1327,14 +1265,7 @@ Proof
   >- (irule assign_subst_inst_simulates)
 QED
 
-(* ===== Combined: function-level correctness ===== *)
-
-Triviality find_some_mem_local[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rpt strip_tac >>
-  Cases_on `P h` >> fs[] >> metis_tac[]
-QED
+(* ===== Terminator, phi and well-formedness facts ===== *)
 
 Triviality assign_elim_inst_terminator[local]:
   !pv v inst.
@@ -1356,7 +1287,7 @@ Proof
   Cases_on `inst.inst_opcode` >> fs[]
 QED
 
-Triviality assign_elim_analysis_blocks_wf[local]:
+Theorem assign_elim_analysis_blocks_wf:
   !fn result bb.
     wf_function fn /\
     MEM bb (analysis_function_transform NONE result
@@ -1374,159 +1305,3 @@ Proof
   fs[assign_elim_inst_terminator, assign_elim_inst_phi]
 QED
 
-Triviality lookup_block_clear_nops_local[local]:
-  !lbl bbs. lookup_block lbl (MAP clear_nops_block bbs) =
-            OPTION_MAP clear_nops_block (lookup_block lbl bbs)
-Proof
-  gen_tac >> Induct >>
-  simp[lookup_block_def, listTheory.FIND_thm, clear_nops_block_def] >>
-  rw[] >> fs[lookup_block_def, clear_nops_block_def]
-QED
-
-Triviality clear_nops_function_correct_blocks_wf[local]:
-  !fuel ctx fn s.
-    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\ s.vs_inst_idx = 0 ==>
-    result_equiv {}
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (clear_nops_function fn) s)
-Proof
-  Induct_on `fuel` >- (
-    rpt strip_tac >> simp[run_blocks_def, result_equiv_def]) >>
-  rpt strip_tac >>
-  once_rewrite_tac[run_blocks_unfold] >>
-  simp[clear_nops_function_def, lookup_block_clear_nops_local] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >-
-    simp[result_equiv_def] >>
-  rename1 `SOME bb` >>
-  `bb_well_formed bb` by (
-    fs[lookup_block_def] >> drule find_some_mem_local >> metis_tac[]) >>
-  `result_equiv {} (run_block fuel ctx bb s)
-     (run_block fuel ctx (clear_nops_block bb) s)` by
-    simp[clear_nops_run_block_equiv] >>
-  Cases_on `run_block fuel ctx bb s`
-  >- (
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def] >>
-    TRY (imp_res_tac state_equiv_empty_eq >> gvs[result_equiv_def]) >>
-    imp_res_tac state_equiv_empty_eq >> gvs[] >>
-    imp_res_tac run_block_OK_inst_idx_0 >>
-    Cases_on `v.vs_halted` >> gvs[result_equiv_def]
-    >- simp[result_equiv_def, execution_equiv_def] >>
-    once_rewrite_tac[GSYM clear_nops_function_def] >>
-    first_x_assum irule >> simp[] >>
-    rpt strip_tac >>
-    gvs[clear_nops_function_def, MEM_MAP] >>
-    irule clear_nops_block_preserves_wf >> metis_tac[])
-  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-      gvs[result_equiv_def])
-  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-      gvs[result_equiv_def])
-  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-      gvs[result_equiv_def]) >>
-  Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-  gvs[result_equiv_def]
-QED
-
-(* Monotonicity: lift_result for stronger relation implies lift_result for weaker *)
-Theorem lift_result_weaken[local]:
-  !R1_ok R2_ok R1_term R2_term r1 r2.
-    (!s1 s2. R1_ok s1 s2 ==> R2_ok s1 s2) /\
-    (!s1 s2. R1_term s1 s2 ==> R2_term s1 s2) /\
-    lift_result R1_ok R1_term R1_term r1 r2 ==>
-    lift_result R2_ok R2_term R2_term r1 r2
-Proof
-  rpt strip_tac >>
-  Cases_on `r1` >> Cases_on `r2` >> fs[lift_result_def]
-QED
-
-Theorem assign_elim_function_correct_proof:
-  !fuel ctx fn s.
-    let elim = assign_elim_eliminated_vars fn in
-    let result = copy_prop_analyze fn in
-    let fn_subst = analysis_function_transform NONE result
-                     (\v inst. [assign_subst_inst v inst]) fn in
-    wf_function fn /\
-    fn_inst_wf fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb /\
-    (!bb. MEM bb fn.fn_blocks ==>
-      !i. i < LENGTH bb.bb_instructions - 1 ==>
-        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    (!bb inst x.
-       MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var x) inst.inst_operands ==> x NOTIN elim)
-    ==>
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (assign_elim_function fn) s)
-Proof
-  rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
-  (* Phase 1: fn → fn_subst gives state_equiv {} (or fn errors) *)
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-    (ISPECL [``fuel:num``, ``ctx:venom_context``,
-             ``fn:ir_function``, ``s:venom_state``]
-     assign_subst_function_eq)) >>
-  impl_tac >- (fs[wf_function_def]) >>
-  strip_tac >- (
-    simp[]
-  ) >>
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-    (ISPECL [``fuel:num``, ``ctx:venom_context``,
-             ``fn:ir_function``, ``s:venom_state``]
-     assign_nop_dead_writes_correct)) >>
-  impl_tac >- (simp[] >> metis_tac[]) >>
-  strip_tac >- (
-    Cases_on `run_blocks fuel ctx fn s` >>
-    fs[lift_result_def]
-  ) >>
-  DISJ2_TAC >>
-  (* Phase 3: clear_nops gives result_equiv {} *)
-  qabbrev_tac `fn_elim = analysis_function_transform NONE
-     (copy_prop_analyze fn)
-     (\v inst. [assign_elim_inst (phi_used_vars fn) v inst]) fn` >>
-  `assign_elim_function fn = clear_nops_function fn_elim` by
-    simp[assign_elim_function_def, Abbr `fn_elim`] >>
-  `!bb. MEM bb fn_elim.fn_blocks ==> bb_well_formed bb` by
-    (simp[Abbr `fn_elim`] >> metis_tac[assign_elim_analysis_blocks_wf]) >>
-  `result_equiv {}
-     (run_blocks fuel ctx fn_elim s)
-     (run_blocks fuel ctx (assign_elim_function fn) s)` by (
-    qpat_x_assum `assign_elim_function fn = clear_nops_function fn_elim`
-      (fn th => REWRITE_TAC [th]) >>
-    irule clear_nops_function_correct_blocks_wf >> simp[]) >>
-  fs[result_equiv_is_lift_result] >>
-  `lift_result (state_equiv (assign_elim_eliminated_vars fn))
-     (execution_equiv (assign_elim_eliminated_vars fn))
-                  (execution_equiv (assign_elim_eliminated_vars fn))
-     (run_blocks fuel ctx fn s)
-     (run_blocks fuel ctx
-        (analysis_function_transform NONE (copy_prop_analyze fn)
-           (\v inst. [assign_subst_inst v inst]) fn) s)` by (
-    irule lift_result_weaken >>
-    qexistsl_tac [`state_equiv {}`, `execution_equiv {}`] >>
-    simp[] >> rpt strip_tac >>
-    metis_tac[state_equiv_subset, execution_equiv_subset, EMPTY_SUBSET]
-  ) >>
-  `lift_result (state_equiv (assign_elim_eliminated_vars fn))
-     (execution_equiv (assign_elim_eliminated_vars fn))
-                  (execution_equiv (assign_elim_eliminated_vars fn))
-     (run_blocks fuel ctx fn s)
-     (run_blocks fuel ctx fn_elim s)` by (
-    irule lift_result_trans >>
-    conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
-    conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>
-    qexists_tac `run_blocks fuel ctx
-      (analysis_function_transform NONE (copy_prop_analyze fn)
-         (\v inst. [assign_subst_inst v inst]) fn) s` >>
-    simp[]) >>
-  irule lift_result_trans >>
-  conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
-  conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>
-  qexists_tac `run_blocks fuel ctx fn_elim s` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  irule lift_result_weaken >>
-  qexistsl_tac [`state_equiv {}`, `execution_equiv {}`] >>
-  simp[] >> rpt strip_tac >>
-  metis_tac[state_equiv_subset, execution_equiv_subset, EMPTY_SUBSET]
-QED

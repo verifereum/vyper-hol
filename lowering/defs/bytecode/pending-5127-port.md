@@ -4,7 +4,7 @@ Vyper `v0.5.0b1` (`VYPER_PIN`) changed the bytecode of the fixtures below,
 mostly through vyperlang/vyper#5127, which rewrote ABI encoding and
 allocation. Their oracles are regenerated at the pin, but the HOL compiler
 still produces the previous bytes, so they are out of the bytecode-parity
-checks (the `*_matches_python_oracle` theorems and the corpora's
+checks (the native runner and the corpora's
 `parity-fixtures.txt`) until the change that restores each is ported. Each port
 puts its fixtures back and removes them from this list.
 

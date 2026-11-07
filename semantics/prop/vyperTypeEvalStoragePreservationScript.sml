@@ -380,7 +380,7 @@ QED
 
 Theorem eval_for_preserves_runtime_consistent[local]:
   evaluate_type env.type_defs ty = SOME tyv /\
-  EVERY (value_has_type tyv) vs /\
+  EVERY (iterator_result_typed tyv) vs /\
   id NOTIN FDOM env.var_types /\
   type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
   runtime_consistent env cx st /\
@@ -1033,7 +1033,7 @@ Theorem eval_scc_storage_preservation_results_mutual:
     contract_storage_well_formed cx st') /\
   (!cx tyv id body vs. !env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\
-    EVERY (value_has_type tyv) vs /\
+    EVERY (iterator_result_typed tyv) vs /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     runtime_storage_consistent env cx st /\
@@ -1465,15 +1465,8 @@ Resume eval_scc_storage_preservation_results_mutual[Iterator_Array]:
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (expr_res,st1)` >>
   first_x_assum drule_all >> strip_tac >>
-  Cases_on `expr_res` >> gvs[bind_def, return_def]
-  >- (
-    Cases_on `read_result cx x st1` >>
-    rename1 `read_result cx x st1 = (mat_res,stm)` >>
-    imp_res_tac read_result_state >> gvs[] >>
-    Cases_on `mat_res` >> gvs[bind_def, return_def] >>
-    strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-    imp_res_tac lift_option_type_state >> gvs[]) >>
-  rpt strip_tac >> gvs[]
+  Cases_on `expr_res` >> gvs[bind_def, return_def] >>
+  strip_tac >> imp_res_tac array_iterator_results_state >> gvs[]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[Expr_Attribute]:
@@ -2880,7 +2873,7 @@ Theorem eval_iterator_success_values_typed[local]:
   call_evaluation_safe cx (int_calls_iterator it) /\
   eval_iterator cx it st = (INL vs,st') ==>
   ?tyv. evaluate_type env.type_defs ty = SOME tyv /\
-        EVERY (value_has_type tyv) vs
+        EVERY (iterator_result_typed tyv) vs
 Proof
   simp[runtime_consistent_def] >> rpt strip_tac >>
   drule_all (cj 3 eval_scc_type_sound_mutual) >> simp[]
@@ -3062,8 +3055,20 @@ QED
 
 Resume eval_scc_storage_preservation_results_mutual[For_cons]:
   rpt gen_tac >> strip_tac >>
+  rename1 `eval_for _ _ _ _ (r::vs) _ = _` >>
+  `iterator_result_typed tyv r /\ EVERY (iterator_result_typed tyv) vs` by fs[] >>
+  Cases_on `read_result cx r st` >> rename1 `read_result cx r st = (rd,s_rd)` >>
+  `s_rd = st /\ (!v. rd = INL v ==> value_has_type tyv v)` by
+    (drule_all iterator_result_read_typed >> Cases_on `rd` >> simp[]) >>
+  qpat_x_assum `s_rd = st` SUBST_ALL_TAC >>
+  reverse (Cases_on `rd`)
+  >- (qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
+      drule eval_for_cons_read_error >> disch_then (fn th => rewrite_tac[th]) >>
+      rw[] >> metis_tac[runtime_storage_consistent_storage]) >>
+  rename1 `read_result cx r st = (INL v,st)` >>
   qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+  drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
+  simp_tac(srw_ss())[bind_def, ignore_bind_def,
                        push_scope_with_var_def, return_def] >>
   qmatch_goalsub_abbrev_tac `finally loop_body pop_scope stp` >>
   Cases_on `finally loop_body pop_scope stp` >>
@@ -3090,9 +3095,9 @@ Resume eval_scc_storage_preservation_results_mutual[For_cons]:
     conj_tac >- (qpat_assum `id NOTIN FDOM env.var_types` ACCEPT_TAC) >>
     qexistsl_tac [`st`, `tyv`, `v`] >>
     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `!s'' x t. push_scope_with_var id tyv v s'' = (INL x,t) ==> _`
-    (qspecl_then [`st`, `()`, `stp`] mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!s0 v s1 s'' x t. read_result _ _ _ = _ /\ push_scope_with_var _ _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `v`, `st`, `st`, `()`, `stp`] mp_tac) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qspecl_then [`extend_local env id ty F`, `ret_ty`, `env_after`,
                            `stp`, `res_body`, `st_body`] mp_tac) >>
   ORACLE_STORAGE_TAC >>
@@ -3104,10 +3109,11 @@ Resume eval_scc_storage_preservation_results_mutual[For_cons]:
     qexists_tac `st_body` >> simp[] >>
     gen_tac >> Cases_on `b` >>
     simp[vyperStorageBackendTheory.get_storage_def]) >>
-  `eval_for cx tyv id body' [v] st =
+  `eval_for cx tyv id body' [r] st =
      ((case loop_res of INL broke => INL () | INR e => INR e), st_after)` by (
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                         push_scope_with_var_def, return_def, Abbr`stp`] >>
+    drule eval_for_cons_read >>
+    disch_then (fn th => simp_tac(srw_ss())[th, bind_def, ignore_bind_def,
+                         push_scope_with_var_def, return_def, Abbr`stp`]) >>
     qpat_assum `finally _ _ stp = (loop_res,st_after)`
       (fn th => rewrite_tac[th]) >>
     Cases_on `loop_res` >>
@@ -3119,11 +3125,11 @@ Resume eval_scc_storage_preservation_results_mutual[For_cons]:
     conj_tac >- (qpat_assum `functions_well_typed cx` ACCEPT_TAC) >>
     qexistsl_tac [`body'`, `env_after`, `id`,
       `case loop_res of INL broke => INL () | INR e => INR e`,
-      `ret_ty`, `st`, `ty`, `tyv`, `[v]`] >>
+      `ret_ty`, `st`, `ty`, `tyv`, `[r]`] >>
     conj_tac >- (qpat_assum `id NOTIN FDOM env.var_types` ACCEPT_TAC) >>
     conj_tac >- (qpat_assum `evaluate_type env.type_defs ty = SOME tyv` ACCEPT_TAC) >>
     conj_tac >- (qpat_assum `type_stmts _ _ _ = SOME env_after` ACCEPT_TAC) >>
-    conj_tac >- (qpat_assum `eval_for cx tyv id body' [v] st = _` ACCEPT_TAC) >>
+    conj_tac >- (qpat_assum `eval_for cx tyv id body' [r] st = _` ACCEPT_TAC) >>
     conj_tac >- simp[] >>
     conj_tac >- (qpat_assum `call_evaluation_safe cx (int_calls_stmts body')` ACCEPT_TAC) >>
     qpat_assum `runtime_consistent env cx st` ACCEPT_TAC) >>
@@ -3142,9 +3148,10 @@ Resume eval_scc_storage_preservation_results_mutual[For_cons]:
         `eval_for cx tyv id body' vs st_after = (res,st')` by (
           qpat_x_assum `(case (INL F,st_after) of _ => _ | _ => _) = (res,st')` mp_tac >>
           simp[return_def]) >>
-        qpat_x_assum `!s'' x t s''' broke t'. _`
-          (qspecl_then [`st`, `()`, `stp`, `stp`, `F`, `st_after`] mp_tac) >>
+        qpat_x_assum `!s0 v s1 s'' x t s''' broke t'. _`
+          (qspecl_then [`st`, `v`, `st`, `st`, `()`, `stp`, `stp`, `F`, `st_after`] mp_tac) >>
         impl_tac >- (
+          conj_tac >- (qpat_assum `read_result cx r st = (INL v,st)` ACCEPT_TAC) >>
           conj_tac >- (qpat_assum `push_scope_with_var id tyv v st = (INL (),stp)` ACCEPT_TAC) >>
           conj_tac >- (rewrite_tac[ignore_bind_def] >> first_assum ACCEPT_TAC) >>
           simp[]) >>

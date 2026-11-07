@@ -318,6 +318,36 @@ Proof
   strip_tac >> simp[extract_asm_result_def]
 QED
 
+Theorem delegatecall_short_returndata_keeps_memory_suffix:
+  (SND (THE (extract_asm_result
+    (s with as_memory := REPLICATE 32 (9w:byte)) 1w 2 8
+    (SOME (INR NONE, es with contexts :=
+      [(ctxt with returnData := [77w;88w], rb)]))))).as_memory =
+    REPLICATE 2 9w ++ [77w;88w] ++ REPLICATE 28 9w
+Proof
+  simp[extract_asm_result_def, asm_expand_memory_def] >> EVAL_TAC
+QED
+
+Theorem delegatecall_empty_returndata_keeps_memory:
+  (SND (THE (extract_asm_result
+    (s with as_memory := REPLICATE 32 (9w:byte)) 1w 2 8
+    (SOME (INR NONE, es with contexts :=
+      [(ctxt with returnData := [], rb)]))))).as_memory =
+    REPLICATE 32 9w
+Proof
+  simp[extract_asm_result_def, asm_expand_memory_def] >> EVAL_TAC
+QED
+
+Theorem delegatecall_short_returndata_expands_requested_range:
+  (SND (THE (extract_asm_result
+    (s with as_memory := REPLICATE 4 (9w:byte)) 1w 2 36
+    (SOME (INR NONE, es with contexts :=
+      [(ctxt with returnData := [77w;88w], rb)]))))).as_memory =
+    REPLICATE 2 9w ++ [77w;88w] ++ REPLICATE 60 0w
+Proof
+  simp[extract_asm_result_def, asm_expand_memory_def] >> EVAL_TAC
+QED
+
 (* Both creation opcodes consume the same queued completion as Venom,
    including the returned address and failure-side account rollback. *)
 Theorem creation_consumes_recorded_outcome:

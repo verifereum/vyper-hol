@@ -513,7 +513,9 @@ Remaining work, roughly in dependency order (all future):
 **Owner: Milestone 5 / vyperLoweringCorrect S2/S3 and o1PipelineCorrect S5.**
 These producers exist as ADMITTED statements; this milestone proves them.
 Actual memory API is
-[unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml).
+[unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
+older compat `lowering_memory_safe` interface, which was deleted: its proof
+was a `cheat`, and it would not have established S3's raw-unit contract.
 
 | Handoff | Exact current input/contract | Concrete deferred proof |
 |---|---|---|

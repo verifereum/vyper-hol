@@ -13,11 +13,12 @@ val typed_var_rules =
    compiler_vars_mono_with_byte_offset, compiler_vars_mono_store_bytestring];
 
 fun typed_var_step goal = FIRST
-  [CHANGED_TAC (asm_simp_tac (srw_ss()) typed_var_rules), gen_tac,
-   irule compiler_vars_mono_bind >> conj_tac,
+  [CHANGED_TAC (simp_tac (srw_ss()) typed_var_rules), gen_tac,
+   irule compiler_vars_mono_bind >> conj_tac >> rpt gen_tac,
    irule compiler_vars_mono_ignore_bind >> conj_tac,
-   IF_CASES_TAC, BasicProvers.TOP_CASE_TAC,
-   first_assum (fn ih => irule (SRULE [ADD_COMM] ih) >> fs[ADD_COMM] >> NO_TAC)] goal;
+   IF_CASES_TAC,
+   BasicProvers.PURE_TOP_CASE_TAC >> simp_tac (srw_ss()) typed_var_rules,
+   first_assum (fn ih => irule ih >> fs[] >> NO_TAC)] goal;
 
 Theorem compiler_vars_mono_typed_copy:
   (!cenv dst dst_ty src src_ty.
@@ -33,7 +34,7 @@ Theorem compiler_vars_mono_typed_copy:
 Proof
   ho_match_mp_tac compile_store_memory_typed_ind >> rpt conj_tac >> rpt strip_tac >>
   simp_tac bool_ss [Once compile_store_memory_typed_def, LET_THM] >>
-  NTAC 4 (TRY typed_var_step) >> NTAC 4 (TRY typed_var_step) >> rpt typed_var_step
+  rpt typed_var_step
 QED
 
 Theorem compile_store_memory_typed_next_var:

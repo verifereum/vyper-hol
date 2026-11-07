@@ -103,6 +103,7 @@ Theorem outcomes_frame_reads[simp]:
   outcomes_frame (lookup_flag_mem cx nsid mid) /\
   outcomes_frame (read_storage_slot cx b slot ty) /\
   outcomes_frame (result_array_length cx tv) /\
+  outcomes_frame (array_iterator_results cx arr_ty tv) /\
   outcomes_frame (lift_option_type x msg) /\
   outcomes_frame (lift_option y msg) /\
   outcomes_frame (lift_sum z) /\ outcomes_frame (lift_sum_runtime zr)
@@ -114,7 +115,8 @@ Proof
     drule_all get_transient_storage_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
     drule_all read_storage_slot_state,
-    drule_all result_array_length_state, drule_all lift_option_type_state,
+    drule_all result_array_length_state, drule_all array_iterator_results_state,
+    drule_all lift_option_type_state,
     drule_all lift_option_state, drule_all lift_sum_state,
     drule_all lift_sum_runtime_state] >> simp[]
 QED

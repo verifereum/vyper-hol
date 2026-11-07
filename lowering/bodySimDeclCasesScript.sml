@@ -637,14 +637,15 @@ Proof
   `!k. well_typed_literal typ (IntL k) ==> value_has_type tyv (IntV k)` by
     (rpt strip_tac >> drule_all well_typed_literal_sound >>
      simp[vyperValueOperationTheory.evaluate_literal_def]) >>
-  `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)) <> [] ==>
+  `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)) <> [] ==>
    body_stmts_ok cx stmts` by
     (strip_tac >>
      first_x_assum (qspecl_then [`get_tenv cx`, `es`, `tyv`, `es`, `es`,
-       `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))`, `es`, `es`, `()`,
+       `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))`, `es`, `es`, `()`,
        `es`] mp_tac) >>
      simp[lift_option_type_def, return_def, eval_iterator_range_lit,
-          check_def, assert_def, compatible_bound_def, body_for_ok_def]) >>
+          check_def, assert_def, compatible_bound_def, body_for_ok_def] >>
+     Cases_on `Num (n2 - n1)` >> fs[GENLIST_CONS, read_result_def, return_def]) >>
   `Num (n2 - n1) < dimword (:256)` by metis_tac[range_end_words] >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
   `lookup_scopes id es.scopes = NONE` by

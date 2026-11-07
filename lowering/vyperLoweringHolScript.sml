@@ -41,6 +41,7 @@ Ancestors
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
   configuredE2ECorrectness
+  finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
