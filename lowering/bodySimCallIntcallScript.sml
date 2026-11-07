@@ -4,7 +4,7 @@ Theory bodySimCallIntcall
 Ancestors
   bodyIntCallSeams bodyIntCallSource bodySimExprCases exprSimHypsDefs exprSimDefs
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
-  vyperContext vyperTypeCallGraph
+  vyperContext vyperTypeCallGraph exprSimSend intCallStep exprLowering context
 
 (* The IHs at a supported callee (body_intcall_source_selection): not
    nonreentrant, no defaults, as many arguments as parameters. *)
@@ -84,6 +84,19 @@ Proof
        Once evaluate_def] >>
   qexistsl_tac [`penv`,`results`,`s1`,`s2`,`s2`,`t1`,`t2`,`s2`,`vs`] >>
   simp[return_def]
+QED
+
+Theorem compile_expr_intcall_location[local]:
+  !cenv ty ann src name args dflt sa vv sb.
+    compile_expr cenv ty (Call ann (IntCall (src,name)) args dflt) sa =
+      (vv,sb) ==>
+    ((?t op. vv = StackValue t op) \/
+     (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))
+Proof
+  rpt gen_tac >> simp[compile_expr_call, compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[AllCaseEqs(), base_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
 (* Held with intcall_return_widened: a widened internal call's value is
