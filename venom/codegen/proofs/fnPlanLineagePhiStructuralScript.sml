@@ -1,6 +1,8 @@
 Theory fnPlanLineagePhiStructural
 Ancestors
-  fnPlanLineageSetup fnPlanLineagePhiResources reorderSim planSpillBounds
+  fnPlanLineageSetup fnPlanLineagePhiResources fnPlanLineagePhiInventory
+  fnPlanLineageInventory
+  reorderSim planSpillBounds
   stackModel stackPlanTypes stackPlanGen pred_set list rich_list
 
 Theorem fresh_poke_residual_budget:
@@ -145,4 +147,56 @@ Proof
            simp[Abbr `ret`, DISJOINT_DEF, EXTENSION, dead_stack_marker_def])) >>
       metis_tac[]) >>
   qexists_tac `core ++ [Var (HD inst.inst_outputs)]` >> simp[]
+QED
+
+Theorem selected_phi_marker_core_resource:
+  !S ps m core base inst d v next halting ops qs.
+    lineage_inventory S ps /\ lineage_core m core ps /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    stack_peek d ps.ps_stack = Var v /\
+    Var (HD inst.inst_outputs) NOTIN S /\
+    generate_phi_plan inst next halting ps = (ops,qs) ==>
+    ?rest. lineage_core m rest qs /\
+      residual_budget_wf base [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM (Var (HD inst.inst_outputs)) ps.ps_stack` by
+    (drule lineage_inventory_stack_subset >>
+     simp[SUBSET_DEF, dead_stack_marker_def] >>
+     disch_then (qspec_then `Var (HD inst.inst_outputs)` mp_tac) >> simp[]) >>
+  `Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled` by
+    (drule lineage_inventory_spilled_subset >> simp[SUBSET_DEF] >> metis_tac[]) >>
+  Cases_on `MEM v next`
+  >- (drule_all (REWRITE_RULE [GSYM lineage_core_def] live_phi_marker_core_resource) >>
+      simp[]) >>
+  drule_all (REWRITE_RULE [GSYM lineage_core_def] dead_phi_marker_core_resource) >> simp[]
+QED
+
+Theorem selected_phi_next_demand_coverage:
+  !S ps inst d v next halting ops qs.
+    lineage_inventory S ps /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    stack_peek d ps.ps_stack = Var v /\
+    Var (HD inst.inst_outputs) NOTIN S /\
+    generate_phi_plan inst next halting ps = (ops,qs) /\
+    set (MAP Var next) SUBSET S UNION {Var (HD inst.inst_outputs)} ==>
+    set (MAP Var next) SUBSET set qs.ps_stack UNION FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all generate_phi_plan_lineage_inventory >> strip_tac >>
+  rename1 `lineage_inventory inventory ps` >>
+  `set (MAP Var next) SUBSET
+    (((if MEM v next then inventory else inventory DELETE (Var v)) UNION
+      {Var (HD inst.inst_outputs)}) DIFF
+      (if ~halting /\ ~MEM (HD inst.inst_outputs) next
+       then {Var (HD inst.inst_outputs)} else {}))` by
+    (gvs[SUBSET_DEF, MEM_MAP] >> rpt strip_tac >>
+     qpat_x_assum `!x. _ ==> x IN inventory \/ _`
+       (qspec_then `Var y` mp_tac) >> simp[] >>
+     Cases_on `MEM v next` >>
+     Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next` >>
+     gvs[] >> metis_tac[]) >>
+  fs[lineage_inventory_def, lineage_core_def] >>
+  ASM_SET_TAC[]
 QED
