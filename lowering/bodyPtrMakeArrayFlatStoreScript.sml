@@ -3,6 +3,7 @@
 Theory bodyPtrMakeArrayFlatStore
 Ancestors
   annAssignPtrScratch bodyPtrDefs context compileEnv exprSimProps
+  bodyPtrMakeArrayStoreFrame placeMemoryTypedPrimitive
   venomState pred_set
 
 Theorem literal_flat_store_counted:
@@ -18,6 +19,7 @@ Theorem literal_flat_store_counted:
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s k /\ ptr_covers G tn dst s k /\
   stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  local_ptrs_reserved ce sa /\
   ghost_kept ce es fr G0 tn0 s0 G tn /\
   (!name p n i. local_region ce es.scopes s name p n /\
     p <= i /\ i < p+n ==> ~(w2n b <= i /\ i < w2n b+k)) /\
@@ -36,7 +38,12 @@ Theorem literal_flat_store_counted:
       mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tf.t_mem <=> i IN tn.t_mem)) /\
     (!m. mem_agree_outside tf.t_mem sf.vs_memory m ==>
-      val_in_memory tv v (w2n b) m)
+      val_in_memory tv v (w2n b) m) /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    (!x. not_fresh_at sa x ==> lookup_var x sf = lookup_var x s) /\
+    (~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf)
 Proof
   strip_tac >> gvs[compile_store_memory_def] >>
   `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
@@ -58,6 +65,17 @@ Proof
     (irule annassign_ghost_kept_exterior_ptr >>
      qexistsl [`tn`, `{i | w2n b <= i /\ i < w2n b + type_memory_bytes ce ty}`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es s'` by
+    (strip_tac >> irule literal_store_runtime_frame >> simp[] >>
+     qexistsl [`w2n b`, `type_memory_bytes ce ty`, `s`, `sa`] >>
+     simp[] >> conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac
+     >- (Cases_on `type_memory_bytes ce ty = 0` >> simp[mcopy_memory_length]) >>
+     qpat_x_assum `(s' with <|vs_memory := _; vs_inst_idx := _|>) = s`
+       mp_tac >> simp[venom_state_component_equality]) >>
   qexistsl [`s'`, `tn'`] >> simp[] >>
-  rpt strip_tac >> irule annassign_coverage_var_frame_ptr >> metis_tac[]
+  conj_tac >- (metis_tac[annassign_coverage_var_frame_ptr]) >>
+  qpat_x_assum `(s' with <|vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
+  simp[venom_state_component_equality]
 QED

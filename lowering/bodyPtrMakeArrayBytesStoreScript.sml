@@ -2,6 +2,7 @@
 Theory bodyPtrMakeArrayBytesStore
 Ancestors
   annAssignPtrExterior annAssignPtrBytestring bodyPtrMakeArrayBytesTransport
+  bodyPtrMakeArrayStoreFrame placeMemoryTypedPrimitive
   bodyPtrDefs context compileEnv exprSimProps venomState pred_set
 
 Theorem literal_bytes_store_counted:
@@ -42,7 +43,12 @@ Theorem literal_bytes_store_counted:
       mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tf.t_mem <=> i IN tn.t_mem)) /\
     (!m. mem_agree_outside tf.t_mem sf.vs_memory m ==>
-      val_in_memory tv v (w2n b) m)
+      val_in_memory tv v (w2n b) m) /\
+    (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_inst_idx := s.vs_inst_idx|>) = s /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    (!x. not_fresh_at sa x ==> lookup_var x sf = lookup_var x s) /\
+    (~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_store_bytestring (Var src) (Var dst) sa = ((),sb)` by
@@ -64,6 +70,15 @@ Proof
     (irule annassign_ghost_kept_vars_exterior_ptr >>
      qexistsl [`G`, `tn`, `{i | w2n b <= i /\ i < w2n b+n}`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf` by
+    (strip_tac >> irule literal_store_runtime_frame >> simp[] >>
+     qexistsl [`w2n b`, `n`, `s`, `sa`] >> simp[mcopy_memory_length] >>
+     conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     qpat_x_assum `(sf with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+       mp_tac >> simp[venom_state_component_equality]) >>
   qexistsl [`Gf`, `tnf`, `sf`] >> simp[] >>
-  rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]
+  conj_tac >- (rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
+  qpat_x_assum `(sf with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+    mp_tac >> simp[venom_state_component_equality]
 QED
