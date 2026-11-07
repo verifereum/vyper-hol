@@ -297,7 +297,8 @@ Theorem array_condition_boundary:
     next.vs_allocas = cc.vs_allocas /\
     gas_marked_path F ctx func cc 0 (OK next) /\
     (!fuel rr. run_from fuel ctx func next = rr /\ (!e. rr <> Error e) ==>
-       ?fuel'. run_from fuel' ctx func cc = rr)
+       ?fuel'. run_from fuel' ctx func cc = rr) /\
+    alloca_frame cenv es st cc cenv es next
 Proof
   rpt gen_tac >> strip_tac >>
   `k <= n` by fs[array_loop_inv_def] >>
@@ -328,6 +329,11 @@ Proof
       irule eq_branch_zero_path >>
       fs[array_loop_inv_def] >>
       simp[get_instruction_def, mk_inst_def, eval_operand_def]) >>
+  reverse conj_tac
+  >- (irule alloca_frame_same_state >>
+      irule_at Any alloca_frame_update_var >>
+      qexistsl_tac [`dv`, `bool_to_word (k = n)`] >>
+      simp[jump_to_def, update_var_def]) >>
   fs[array_loop_inv_def] >> drule array_condition_block >>
   simp[] >> disch_then (qspecl_then [`ctx`, `cc`, `n2w k`] mp_tac) >>
   gvs[n2w_11]
@@ -416,7 +422,8 @@ Theorem array_increment_boundary:
     next.vs_allocas = dd.vs_allocas /\
     gas_marked_path F ctx func dd 0 (OK next) /\
     (!fuel rr. run_from fuel ctx func next = rr /\ (!e. rr <> Error e) ==>
-       ?fuel'. run_from fuel' ctx func dd = rr)
+       ?fuel'. run_from fuel' ctx func dd = rr) /\
+    alloca_frame cenv es st dd cenv es next
 Proof
   rpt gen_tac >> strip_tac >>
   qexists_tac `jump_to cond_lbl
@@ -447,6 +454,11 @@ Proof
       simp[run_inst_seq_def] >>
       simp[mk_inst_def, is_terminator_def, step_inst_base_def,
            eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  reverse conj_tac
+  >- (simp[alloca_frame_def, jump_to_def, update_var_def] >>
+      rpt strip_tac >> first_x_assum irule >>
+      fs[local_region_def, not_local_ptr_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[]) >>
   fs[array_loop_inv_def] >> drule stmtSimForPartsTheory.for_incr_block >>
   simp[] >> disch_then (qspecl_then [`ctx`, `dd`, `n2w k`] mp_tac) >> simp[]
 QED
@@ -946,7 +958,8 @@ Theorem array_condition_exit_framed:
       FLOOKUP next.vs_allocas aid = SOME b) /\
     gas_marked_path F ctx func cc 0 (OK next) /\
     (!fuel rr. run_from fuel ctx func next = rr /\ (!e. rr <> Error e) ==>
-      ?fuel'. run_from fuel' ctx func cc = rr)
+      ?fuel'. run_from fuel' ctx func cc = rr) /\
+    alloca_frame cenv es st cc cenv es next
 Proof
   rpt gen_tac >> strip_tac >>
   `LENGTH vs = LENGTH vs` by simp[] >>
@@ -1046,6 +1059,7 @@ Theorem array_body_to_increment:
   ?dd. dd.vs_current_bb = incr_lbl /\ dd.vs_inst_idx = 0 /\ ~dd.vs_halted /\
     stmt_state_rel ctx func cenv cx es dd /\
     dd.vs_vars = s.vs_vars /\ dd.vs_allocas = s.vs_allocas /\
+    dd.vs_memory = s.vs_memory /\
     gas_marked_path F ctx func s 0 (OK dd) /\
     (!fuel rr. run_from fuel ctx func dd = rr /\ (!e. rr <> Error e) ==>
       ?fuel'. run_from fuel' ctx func s = rr)

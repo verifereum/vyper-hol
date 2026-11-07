@@ -309,7 +309,7 @@ Theorem array_iter_copy_static:
   ~block_is_terminated sa /\
   compile_iter_elem_copy cenv src dst stride LocMemory F et et sa = ((),sb) ==>
   same_blocks sa sb /\ cs_extends sa sb /\
-  sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   ~block_is_terminated sb
 Proof
@@ -403,6 +403,7 @@ Theorem compile_for_array_parts:
          [Var idx; Lit (n2w (elem_size_in_location cenv LocMemory et))] [ov];
        mk_inst (st.cs_next_id + 7) ADD [arr_op; Var ov] [ep]] /\
     sa.cs_next_var = st.cs_next_var + 5 /\
+    sa.cs_next_id = st.cs_next_id + 8 /\ sa.cs_next_id <= sb0.cs_next_id /\
     compile_iter_elem_copy cenv (Var ep) (Var p)
       (elem_size_in_location cenv LocMemory et) LocMemory F et et sa = ((),sb0) /\
     sb0.cs_current_bb = bod /\ same_blocks sa sb0 /\
