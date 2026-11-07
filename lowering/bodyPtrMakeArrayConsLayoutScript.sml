@@ -41,10 +41,13 @@ Theorem literal_bytes_runtime_slot:
     ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
      (?str. v = StringV str /\ len = LENGTH str)) /\
     val_footprint tv v <= 32+32*((len+31) DIV 32) /\
+    val_footprint tv v <> 0 /\
+    val_store_size tv v = 32+32*((len+31) DIV 32) /\
     32+32*((len+31) DIV 32) <= type_memory_size tv
 Proof
   strip_tac >> drule_all bytestring_type_value >> strip_tac >>
-  Cases_on `v` >> gvs[value_has_type_def, val_footprint_def, type_memory_size_def] >>
+  Cases_on `v` >> gvs[value_has_type_def, val_footprint_def, type_memory_size_def,
+    exprSimPropsTheory.val_store_size_def, word_size_def] >>
   metis_tac[word_size_monotone, le_word_size_mul, word_size_def,
     arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_MONO_MULT]
 QED
