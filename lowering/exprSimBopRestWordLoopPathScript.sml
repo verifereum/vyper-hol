@@ -250,8 +250,14 @@ Proof
   `run_inst_seq [mk_inst a ADD [Var idx; Lit 1w] [next];
                  mk_inst b ASSIGN [Var next] [idx]] s = OK u` by
     (gvs[eval_operand_def, lookup_var_def] >>
-     simp[exprLoweringPropsTheory.run_inst_seq_def, mk_inst_def,
-          step_inst_base_def, exec_pure2_def, Abbr `u`, eval_operand_def,
+     simp_tac (srw_ss()) [Once exprLoweringPropsTheory.run_inst_seq_def] >>
+     once_rewrite_tac [step_inst_base_def] >>
+     simp_tac (srw_ss()) [mk_inst_def] >>
+     simp[exec_pure2_def, eval_operand_def, lookup_var_def] >>
+     simp_tac (srw_ss()) [Once exprLoweringPropsTheory.run_inst_seq_def] >>
+     once_rewrite_tac [step_inst_base_def] >>
+     simp_tac (srw_ss()) [mk_inst_def] >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def, Abbr `u`, eval_operand_def,
           lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qexists `jump_to cond_lbl u` >> conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>

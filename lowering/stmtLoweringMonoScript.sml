@@ -344,17 +344,42 @@ Resume compile_stmt_ci_mono[range]:
   range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
   range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
   range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
-  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step
+  range_ci_step >- irule ci_mono_emit_inst >>
+  match_mp_tac ci_mono_bind >> conj_tac
+  >- (gen_tac >> Cases_on `start_e` >>
+      simp[ci_mono_emit_op, ci_mono_comp_return] >>
+      Cases_on `end_e` >> simp[ci_mono_emit_op, ci_mono_comp_return] >>
+      rpt BasicProvers.TOP_CASE_TAC >> simp[ci_mono_emit_op, ci_mono_comp_return]) >>
+  rpt gen_tac >> BETA_TAC >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (gen_tac >> Cases_on `start_e` >>
+      simp[ci_mono_stmt_helpers, ci_mono_comp_return] >>
+      Cases_on `end_e` >> simp[ci_mono_stmt_helpers, ci_mono_comp_return] >>
+      rpt BasicProvers.TOP_CASE_TAC >> simp[ci_mono_stmt_helpers, ci_mono_comp_return]) >>
+  rpt gen_tac >>
+  match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> BETA_TAC >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >>
+  match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> BETA_TAC >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (gen_tac >> rpt BasicProvers.TOP_CASE_TAC >> simp[ci_mono_emit_void]) >>
+  gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (rpt gen_tac >> first_x_assum MATCH_ACCEPT_TAC) >>
+  gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_stmt_helpers] >>
+  gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_new_block] >>
+  gen_tac >> match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> BETA_TAC >>
+  match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >>
+  gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >>
+  gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >>
+  simp[ci_mono_comp_return]
 QED
 
 Finalise compile_stmt_ci_mono
