@@ -6,7 +6,7 @@ Ancestors
   venomExecSemantics venomInst venomState valueEncoding
 Libs monadsyntax
 
-Theorem alloc_copy_memory_framed_path:
+Theorem alloc_copy_memory_framed_capacity_path:
   !ctx func cenv cx es sa sm sb s0 p src capacity nbytes sw tv v.
     emit_inst ALLOCA [Lit (n2w capacity)] [p] sa = ((),sm) /\
     emit_void MCOPY [Var p;src;Lit (n2w nbytes)] sm = ((),sb) /\

@@ -185,7 +185,7 @@ Resume annassign_relayout_store_post_path[staged]:
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
   `type_memory_bytes cenv sty <= type_memory_bytes cenv sty /\
    val_footprint stv v <= type_memory_bytes cenv sty` by simp[] >>
-  drule_all alloc_copy_memory_framed_path >>
+  drule_all alloc_copy_memory_framed_capacity_path >>
   disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
   `lookup_var p u = SOME w /\
    FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,sz)` by simp[] >>
