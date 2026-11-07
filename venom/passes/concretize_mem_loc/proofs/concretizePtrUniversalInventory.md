@@ -47,7 +47,7 @@ of h/H appends to match HistoryCoverage's extension conclusion.
 | N15 CALL/STATICCALL | Content boundaries only; no complete prefix supplier; full request bytes and shared-state equality not free consequences of masked equality |
 | N16 DELEGATECALL/CREATE/CREATE2 | Complete prefix supplier missing; cannot rename CALL content facts |
 | N17 ALLOCA | ptr_paired_prefix_alloca_immediate plus ptr_paired_structural_prefix_normalize; explicit universal-schema code/shape premises; target ASSIGN handled separately from N4 |
-| N18 ASSERT/ASSERT_UNREACHABLE | Complete supplier missing; true-condition transition requires scalar untainted equality |
+| N18 ASSERT/ASSERT_UNREACHABLE | AssertionProducer supplies ptr_paired_prefix_assertion and ptr_paired_assertion_prefix_normalize for both opcodes from target success; scalar untainted nonopaque operands and actual source success are derived from the frozen antecedent and paired prefix. |
 | J JMP/JNZ/DJMP | ptr_paired_jump_prefix_normalize requires inverted target block step/entry and local shape; ptr_paired_jnz_prefix_normalize additionally requires [cond;Label yes;Label no], ptr_nonopaque_operand, op_prov TG cond=NONE and op_taint cond={}. These must be supplied from discipline. DJMP complete supplier missing |
 | C INVOKE | ptr_paired_invoke_prefix_normalize (PairedCallSchema) requires actual target decode/eval/lookup/setup/entry/active cursor and exact bt observation; derive by target call inversion, with opaque_use_ok and fixed code/shape environment |
 | R RET | ptr_paired_ret_prefix_immediate (ReturnPrefix) plus structural normalization; target ret inversion and successor_births antecedent still must match full dispatch |
