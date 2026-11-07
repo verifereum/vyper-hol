@@ -4,11 +4,13 @@ Ancestors
   exprPtrUnwrapIdentity exprPtrUnwrapLoad exprPtrUnwrapStorage
   exprPtrUnwrapStorageMarked exprPtrUnwrapCode exprPtrUnwrapCodeCopyMarked
   exprPtrUnwrapStorageShape exprPtrUnwrapStorageSource
-  bodyPtrDefs loweringPosts compileEnv context
+  bodyPtrDefs loweringPosts compileEnv context valueCopyBytes
 
 Theorem vv_post_located_type:
   vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s ==>
-  t = expr_type e
+  t = post_value_type cenv e \/
+  p.ptr_location = LocMemory /\ is_bytestring_type (post_value_type cenv e) /\
+  is_bytestring_type t
 Proof
   simp[vv_post_def, vv_holds_def]
 QED
@@ -25,7 +27,7 @@ Theorem vv_post_slot_input[local]:
   p.ptr_location = slot_loc tr /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s ==>
   ?w. eval_operand p.ptr_operand s = SOME w /\
-    storage_holds cx tr (expr_type e) tv w ee s /\
+    storage_holds cx tr (post_value_type cenv e) tv w ee s /\
     op_taint tn p.ptr_operand = {}
 Proof
   Cases_on `tr` >> strip_tac >>
@@ -34,6 +36,7 @@ Proof
 QED
 
 Theorem unwrap_value_marked_read_ptr:
+  post_value_type cenv e = expr_type e /\
   compile_expr cenv ty e sa = (vv,sm) /\
   unwrap_value cenv vv sm = (op,sb) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -71,10 +74,19 @@ Theorem unwrap_value_marked_read_ptr:
     ghost_kept cenv es sa Gi ti s0 H tf
 Proof
   strip_tac >> Cases_on `vv`
-  >- (irule unwrap_stack_marked_read_ptr >> simp[] >>
+  >- (qpat_assum `post_value_type cenv e = expr_type e`
+        (fn th => rewrite_tac[GSYM th]) >>
+      irule unwrap_stack_marked_read_ptr >> simp[] >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   rename1 `LocatedValue t p` >>
-  `t = expr_type e` by metis_tac[vv_post_located_type] >>
+  reverse (Cases_on `t = expr_type e`)
+  >- (`p.ptr_location = LocMemory /\ is_bytestring_type t` by
+        metis_tac[vv_post_located_type] >>
+      `~is_word_type t` by metis_tac[is_bytestring_word_type] >>
+      qpat_assum `post_value_type cenv e = expr_type e`
+        (fn th => rewrite_tac[GSYM th]) >>
+      irule unwrap_memory_marked_read_ptr >> simp[] >>
+      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   `p.ptr_location <> LocCalldata` by metis_tac[vv_post_not_calldata] >>
   Cases_on `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
   >- suspend "slot" >>
@@ -89,12 +101,16 @@ Proof
 QED
 
 Resume unwrap_value_marked_read_ptr[memory_word]:
+  qpat_assum `post_value_type cenv e = expr_type e`
+    (fn th => rewrite_tac[GSYM th]) >>
   irule unwrap_memory_word_marked_read_ptr >> simp[] >>
   goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[]
 QED
 
 Resume unwrap_value_marked_read_ptr[memory_aggregate]:
+  qpat_assum `post_value_type cenv e = expr_type e`
+    (fn th => rewrite_tac[GSYM th]) >>
   irule unwrap_memory_marked_read_ptr >> simp[] >>
   goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
 QED
@@ -104,7 +120,9 @@ Resume unwrap_value_marked_read_ptr[slot]:
     (simp[slot_loc_def] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   Cases_on `is_word_type t`
-  >- (irule unwrap_storage_word_marked_read_ptr >> simp[] >>
+  >- (qpat_assum `post_value_type cenv e = expr_type e`
+        (fn th => rewrite_tac[GSYM th]) >>
+      irule unwrap_storage_word_marked_read_ptr >> simp[] >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       qexists `tr` >> simp[]) >>
   `lowered_value_type cenv e = expr_type e` by
@@ -118,7 +136,9 @@ Resume unwrap_value_marked_read_ptr[slot]:
 QED
 Resume unwrap_value_marked_read_ptr[code]:
   Cases_on `is_word_type t`
-  >- (irule unwrap_code_word_marked_read_ptr >> simp[] >>
+  >- (qpat_assum `post_value_type cenv e = expr_type e`
+        (fn th => rewrite_tac[GSYM th]) >>
+      irule unwrap_code_word_marked_read_ptr >> simp[] >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   `lowered_value_type cenv e = expr_type e` by
     (drule compile_nonmemory_lowered_value_type >> simp[] >> disch_then irule >> simp[]) >>

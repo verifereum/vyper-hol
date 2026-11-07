@@ -37,7 +37,10 @@ Theorem unwrap_storage_marked_read_ptr:
     ghost_kept cenv es sa Gi ti s0 H tf
 Proof
   strip_tac >>
-  `t = expr_type e` by fs[vv_post_def, vv_holds_def] >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_lowered] >>
+  `t = expr_type e` by
+    (Cases_on `tr` >> fs[vv_post_def, vv_holds_def, slot_loc_def]) >>
   drule unwrap_storage_evaluated_type >> strip_tac >>
   `type_memory_bytes cenv t = type_memory_size tv' /\
    type_memory_size tv' < 2**64` by metis_tac[] >>
@@ -47,6 +50,8 @@ Proof
     metis_tac[unwrap_typed_buffer_count] >>
   `type_slot_size tv' < 2**256` by metis_tac[unwrap_typed_buffer_count_bound] >>
   `type_memory_bytes cenv t < dimword (:256)` by (fs[dimword_def] >> decide_tac) >>
+  qpat_assum `post_value_type cenv e = expr_type e`
+    (fn th => rewrite_tac[GSYM th]) >>
   irule unwrap_storage_ensure_marked_read_ptr >> simp[] >>
   goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `storage_holds _ _ _ _ _ _ _`)) >>

@@ -14,9 +14,10 @@ Theory exprPtrUnwrap
 Ancestors
   bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs exprSimHyps loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv vyperInterpreter vyperState
-  exprPtrUnwrapMarked gasOutcomeMarkedPtr exprSimSource exprLoweringProps
+  exprPtrUnwrapMarked exprPtrUnwrapIdentity gasOutcomeMarkedPtr exprSimSource exprLoweringProps
   exprOperandVar exprSimUnwrap fragExec pair gasSummaryComposePtr
   fragGasSeqPtr vyperEvalExprPreservesScopesDom
+  exprSimAggregateChildren typedMemoryCopy exprSimHypsDefs valueCopyBytes
 Libs
   pairLib
 
@@ -31,8 +32,8 @@ Theorem expr_stack_outcome_ptr:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn u /\
-      ptr_val_ok cx (expr_type e) v op G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
@@ -41,8 +42,8 @@ Theorem expr_stack_outcome_ptr:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn u /\
-      ptr_vv_ok cx (expr_type e) tv (StackValue t op) ee G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_vv_ok cx (post_value_type cenv e) tv (StackValue t op) ee G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -54,7 +55,7 @@ Proof
               disch_then (qspec_then `es with gas_obs :=
                 gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
               simp[]) >>
-          gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+          gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
               ptr_vv_ok_def, read_result_def, return_def] >>
           first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
@@ -141,14 +142,32 @@ Resume expr_sim_ptr_of_vv[normal]:
      expr_post ctx func cenv cx e es sa sb s0 (mid with gas_obs := []) v op z /\
      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
      ghost_inv d cenv cx (mid with gas_obs := []) H tf z /\
-     ptr_val_ok cx (expr_type e) v op H tf z /\
-     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op H z) /\
+     ptr_val_ok cx (post_value_type cenv e) v op H tf z /\
+     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op H z) /\
      ghost_kept cenv es sa G0 tn0 s0 H tf` by
-    (irule unwrap_value_marked_read_ptr >> simp[] >>
+    (Cases_on `post_value_type cenv e = expr_type e`
+     >- (qpat_assum `post_value_type cenv e = expr_type e`
+           (fn th => fs[th] >> assume_tac th) >>
+         irule unwrap_value_marked_read_ptr >> simp[] >>
      conj_tac >- (strip_tac >>
        drule_all expr_body_pre_copy_ok >> simp[]) >>
      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      qexists `ty` >> simp[]) >>
+     `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
+       (irule post_value_type_widens >>
+        fs[expr_body_pre_def] >> qexistsl_tac [`cx`, `es`] >> simp[]) >>
+     `~is_word_type (post_value_type cenv e)` by
+       metis_tac[return_source_word_widens_eq] >>
+     Cases_on `vv`
+     >- (irule exprPtrUnwrapIdentityTheory.unwrap_stack_marked_read_ptr >> simp[] >>
+         goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+     rename1 `LocatedValue tag p` >>
+     `p.ptr_location = LocMemory` by
+       metis_tac[aggregate_unequal_post_result_location] >>
+     `~is_word_type tag` by
+       (fs[vv_post_def, vv_holds_def] >> metis_tac[is_bytestring_word_type]) >>
+     irule exprPtrUnwrapIdentityTheory.unwrap_memory_marked_read_ptr >> simp[] >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   pop_assum strip_assume_tac >>
   rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
   qexists `[]` >> disj1_tac >>

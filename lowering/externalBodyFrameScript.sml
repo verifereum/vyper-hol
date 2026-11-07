@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  externalBodySupport
+  externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
@@ -1083,6 +1083,25 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem external_signature_return[local]:
+  supported_program tops /\ fn_sigs_consistent fs cx /\ ~cx.in_deploy /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops) /\
+  cenv.ce_func_return_type = build_func_return_type tops /\
+  FLOOKUP fs fid = SOME sig ==>
+  cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty
+Proof
+  strip_tac >> PairCases_on `fid` >>
+  fs[fn_sigs_consistent_def] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    metis_tac[supported_program_names, supported_declaration_names_unique] >>
+  simp[nsid_to_string_def] >>
+  irule build_func_return_type_distinct >>
+  simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem external_source_no_flags:
   supported_program tops /\ source_deployment_rel tops am tx /\
   get_module_code
@@ -1400,6 +1419,13 @@ Proof
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
   >- (rpt strip_tac >> irule external_entry_target_param_type >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >>
+      irule external_signature_return >>
+      qexistsl [`initial_evaluation_context am.sources am.layouts tx NONE`,
+                `art.cta_fn_sigs`, `tops`] >> simp[] >>
+      gvs[env_context_consistent_def, body_inv_def,
+          source_deployment_rel_def, get_module_code_def,
+          initial_evaluation_context_def])
   >- (rpt strip_tac >> drule_all external_source_no_flags >>
       disch_then (qspecl_then [`ls`, `fid`] mp_tac) >> simp[])
   >- gvs[dec_cenv_agrees_def]

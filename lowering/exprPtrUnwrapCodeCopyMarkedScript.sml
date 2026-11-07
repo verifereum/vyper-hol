@@ -35,7 +35,10 @@ Theorem unwrap_code_marked_read_ptr:
     ptr_val_ok cx (expr_type e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
     ghost_kept cenv es sa Gi ti s0 H tf
 Proof
-  strip_tac >> drule_all vv_post_code_source >> strip_tac >>
+  strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_lowered] >>
+  drule_all vv_post_code_source >> strip_tac >>
   `?ty. evaluate_type (get_tenv cx) t = SOME ty /\ val_wf ty v` by
     (fs[immutable_holds_def, read_result_def, return_def] >>
      metis_tac[value_has_type_val_wf]) >>
@@ -60,7 +63,9 @@ Proof
     ghost_inv ret cenv cx ee H tf z /\
     ptr_val_ok cx (expr_type e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
     ghost_kept cenv es sa Gi ti s0 H tf` by
-    (irule unwrap_code_ensure_marked_read_ptr >> ntac 10 (conj_tac >- simp[]) >>
+    (qpat_assum `post_value_type cenv e = expr_type e`
+       (fn th => rewrite_tac[GSYM th]) >>
+     irule unwrap_code_ensure_marked_read_ptr >> ntac 10 (conj_tac >- simp[]) >>
      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      qexistsl [`cenv.ce_imm_alloca`, `((type_memory_bytes cenv t+31) DIV 32)`,
        `type_memory_bytes cenv t`, `ty`] >> gvs[]) >>

@@ -39,17 +39,17 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst (cs.cs_next_id+8) MSTORE
      [Var (slot_copy_var cs 5);Var (slot_copy_var cs 3)] []) s = OK u` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_write2_def]) >>
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]) >>
   `op_taint tm (Var (slot_copy_var cs 0)) = {}` by
     (gvs[] >> simp[step_taint_other_output, mk_inst_def]) >>
   `step_inst_base (mk_inst (cs.cs_next_id+9) ADD
      [Var (slot_copy_var cs 0);Lit 1w] [slot_copy_var cs 6]) w = OK v` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
                   mstore_def, eval_operand_def]) >>
   `step_inst_base (mk_inst (cs.cs_next_id+10) ASSIGN
      [Var (slot_copy_var cs 6)] [slot_copy_var cs 0]) z =
      OK (update_var (slot_copy_var cs 0) (k+1w) z)` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_pure1_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
                   eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst (cs.cs_next_id+8) MSTORE
      [Var (slot_copy_var cs 5);Var (slot_copy_var cs 3)] []) s` by
@@ -129,10 +129,10 @@ Theorem copy_generated_store_execution:
        (update_var (slot_copy_var cs 6) (k+1w) (mstore (w2n a) value s)))
 Proof
   strip_tac >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_write2_def] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, mstore_def] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure1_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 

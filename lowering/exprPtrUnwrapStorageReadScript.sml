@@ -11,9 +11,9 @@ Theorem unwrap_storage_ensure_marked_read_ptr:
   compile_ensure_in_memory p.ptr_operand (slot_loc tr) nb n ctor imm sm = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
-  storage_holds cx tr (expr_type e) tv w ee s /\
+  storage_holds cx tr (post_value_type cenv e) tv w ee s /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME w /\
-  ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
+  ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   op_taint tn p.ptr_operand = {} /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -22,8 +22,8 @@ Theorem unwrap_storage_ensure_marked_read_ptr:
   sm.cs_next_id < sb.cs_next_id /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\ n = type_slot_size ty /\
+  ~is_word_type (post_value_type cenv e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\ n = type_slot_size ty /\
   type_memory_size ty <= nb /\ 32*n <= nb /\ nb < dimword (:256) /\ n < 2**256 /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\
   ghost_inv ret cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
@@ -35,7 +35,7 @@ Theorem unwrap_storage_ensure_marked_read_ptr:
     expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx ee H tf z /\
-    ptr_val_ok cx (expr_type e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
+    ptr_val_ok cx (post_value_type cenv e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
     ghost_kept cenv es sa Gi ti s0 H tf
 Proof
   strip_tac >>
@@ -73,7 +73,7 @@ Proof
   `?v. read_result cx tv ee = (INL v,ee) /\
     expr_post ctx func cenv cx e es sa sb s0 ee v (Var root) z /\
     ghost_inv ret cenv cx ee Gf tnf z /\
-    ptr_val_ok cx (expr_type e) v (Var root) Gf tnf z /\
+    ptr_val_ok cx (post_value_type cenv e) v (Var root) Gf tnf z /\
     ptr_buf_ok cenv e (Var root) Gf z /\ ghost_kept cenv es sa Gi ti s0 Gf tnf` by
     (irule unwrap_storage_endpoint_post >>
      ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>

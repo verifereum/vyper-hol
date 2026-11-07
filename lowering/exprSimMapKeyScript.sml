@@ -812,8 +812,18 @@ Proof
          simp[]) >>
      gvs[] >> qexists_tac `s` >>
      simp[emitted_insts_def, run_inst_seq_def] >>
+     `post_value_type cenv e = expr_type e` by
+       (irule loweringPostsTheory.post_value_type_word >>
+        Cases_on `expr_type e` >> gvs[hashmap_key_type_def, is_word_type_def] >>
+        rename1 `BaseT bt` >> Cases_on `bt` >>
+        gvs[hashmap_key_type_def, is_word_type_def, is_bytestring_type_def] >>
+        rename1 `BytesT bd` >> Cases_on `bd` >>
+        gvs[is_bytestring_type_def, is_word_type_def, evaluate_type_def,
+            AllCaseEqs()]) >>
      irule expr_val_rel_hashmap_scalar >> simp[] >>
-     qexistsl_tac [`cx`, `tv`] >> gvs[loweringPostsTheory.expr_post_def]) >>
+     qexistsl_tac [`cx`, `tv`] >>
+     qpat_x_assum `post_value_type _ _ = _`
+       (fn th => fs[loweringPostsTheory.expr_post_def, th])) >>
   `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id /\
    sp.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sp /\
    (!x. hashed = Var x ==> not_fresh_at sp x)` by

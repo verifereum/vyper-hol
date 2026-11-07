@@ -28,14 +28,14 @@ Proof
 QED
 
 Theorem clean_buffer_pointer_posts:
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+  ~is_word_type (post_value_type cenv e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\
   expr_post ctx func cenv cx e es sa sb s0 ee v (Var root) z /\
   eval_operand (Var root) z = SOME w /\ ptr_covers G tn root z nb /\
   val_wf ty v /\ type_memory_size ty <= nb /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\
   (!i. w2n w <= i /\ i < w2n w+nb ==> i NOTIN tn.t_mem) ==>
-  ptr_val_ok cx (expr_type e) v (Var root) G tn z /\
+  ptr_val_ok cx (post_value_type cenv e) v (Var root) G tn z /\
   ptr_buf_ok cenv e (Var root) G z
 Proof
   strip_tac >> irule unwrap_storage_pointer_posts >> (conj_tac >- simp[]) >>

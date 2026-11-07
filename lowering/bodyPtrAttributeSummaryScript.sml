@@ -11,7 +11,7 @@ Ancestors
    changing the destination variable. Code locations need no slot bound. *)
 Theorem attribute_nonmemory_endpoint_ptr:
   vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
-  expr_type obj = StructT sid /\ vv_loc bvv <> LocMemory /\
+  post_value_type cenv obj = StructT sid /\ vv_loc bvv <> LocMemory /\
   ptr_vv_ok cx (StructT sid) btv bvv ee G tn s /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   evaluate_type (get_tenv cx) ann = SOME ftv /\
@@ -59,6 +59,8 @@ Theorem attribute_selected_ptr:
     (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst H t)
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
+  `post_value_type cenv obj = StructT sid` by
+    (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >> gvs[]) >>
   Cases_on `vv_loc bvv = LocMemory`
   >- (`w2n (w + n2w (struct_field_offset
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) =
@@ -84,8 +86,11 @@ Theorem attribute_selected_vv_post:
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
   drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
-  irule attr_vv_post >> goal_assum (drule_at Any) >> simp[] >>
+  irule attr_vv_post >> conj_tac >- gs[] >>
+  goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `btv` >> simp[] >> rpt strip_tac >> gvs[]
 QED
 
@@ -120,7 +125,7 @@ Proof
        bodyPtrDefsTheory.ptr_val_ok_def, vv_operand_def]) >>
   `?v w. read_result cx btv ee = (INL v,ee) /\
     eval_operand (vv_operand bvv) s = SOME w` by
-    (`vv_holds cenv cx (expr_type obj) btv bvv ee s` by fs[vv_post_def] >>
+    (`vv_holds cenv cx (post_value_type cenv obj) btv bvv ee s` by fs[vv_post_def] >>
      drule attribute_vv_holds_read_operand >> simp[]) >>
   drule_all attribute_add_path_post_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

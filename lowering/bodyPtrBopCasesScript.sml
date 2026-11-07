@@ -25,7 +25,8 @@ Proof
   rev_drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   drule compile_binop_shape >> strip_tac >>
   pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
-  irule (REWRITE_RULE [bop_operand_post_def] bop_word_pair_outcome_ptr) >>
+  irule (REWRITE_RULE [bop_operand_post_def,
+    loweringPostsTheory.post_value_type_def] bop_word_pair_outcome_ptr) >>
   simp[bop_operand_entry_def] >>
   reverse conj_tac >- metis_tac[] >>
   qexistsl_tac [`s1`, `s2`, `expr_type e1`, `expr_type e1`, `x`, `y`] >> simp[]

@@ -54,7 +54,7 @@ Theorem raw_log_dynamic_tail_frag:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  expr_type e = NoneT ==>
+  expr_type e = NoneT /\ post_value_type cenv e = expr_type e ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
@@ -85,7 +85,8 @@ Theorem raw_log_fixed_tail_frag:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT ==>
+     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT /\
+  post_value_type cenv e = expr_type e ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++

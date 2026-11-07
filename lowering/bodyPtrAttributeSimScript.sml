@@ -13,6 +13,8 @@ Theorem attribute_vv_sim_ptr:
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Attribute ann obj fld) es
 Proof
   rpt gen_tac >> strip_tac >> drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   simp[expr_vv_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
   drule compile_expr_attribute >> strip_tac >> gvs[] >>
   rename1 `compile_expr cenv ty obj sa = (bvv,sm)` >>
