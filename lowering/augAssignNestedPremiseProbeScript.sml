@@ -195,3 +195,90 @@ Proof
   simp[nested_premise_initial_basic] >> EVAL_TAC >> simp[]
 QED
 
+Theorem nested_initial_type_value:
+  evaluate_type FEMPTY nested_reach_outer_ty =
+    SOME (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (Dynamic 1)) (Dynamic 1))
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_initial_backend:
+  get_storage_backend nested_initial_cx F nested_premise_es =
+    (INL (\k:bytes32. if k = 0w then 1w else if k = 1w then 1w
+      else if k = 2w then 7w else 0w), nested_premise_es)
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_initial_slots:
+  slots_in_range
+    (\k:bytes32. if k = 0w then 1w else if k = 1w then 1w
+      else if k = 2w then 7w else 0w) 0
+    (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (Dynamic 1)) (Dynamic 1))
+Proof
+  EVAL_TAC >> simp[SF wordsLib.SIZES_ss, vyperValueTheory.type_slot_size_def]
+QED
+
+Theorem nested_initial_decl:
+  get_module_code nested_initial_cx mid = SOME code /\
+  find_var_decl_by_name n code = SOME (decl,id) ==>
+  mid = NONE /\ n = "a" /\ id = "a" /\
+  decl = StorageVarDecl F nested_reach_outer_ty
+Proof
+  EVAL_TAC >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  gvs[find_var_decl_by_name_def, nested_reach_outer_ty_def,
+      nested_reach_inner_ty_def, nested_reach_fixed_ty_def, AllCaseEqs()] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem nested_initial_region:
+  declared_storage_region nested_initial_cx mid n subs = SOME (b,slot,tv) ==>
+  mid = NONE /\ n = "a" /\ subs = [] /\ b = F /\ slot = 0w /\
+  tv = ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (Dynamic 1)) (Dynamic 1)
+Proof
+  strip_tac >> drule vyperStorageLayoutSafetyTheory.declared_storage_region_backend >>
+  strip_tac >> drule_all nested_initial_decl >> strip_tac >> gvs[] >>
+  `declared_storage_region nested_initial_cx NONE "a" [] =
+    SOME (F,0w,ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (Dynamic 1)) (Dynamic 1))` by EVAL_TAC >>
+  gvs[]
+QED
+
+Theorem nested_initial_var_info:
+  storage_var_info nested_initial_cx mid n = SOME (b,off,tv) ==>
+  mid = NONE /\ n = "a" /\ b = F /\ off = 0 /\
+  tv = ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (Dynamic 1)) (Dynamic 1)
+Proof
+  simp[vyperLookupStorageTheory.storage_var_info_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all nested_initial_decl >> strip_tac >> gvs[] >>
+  `lookup_var_slot_from_layout nested_initial_cx F NONE "a" = SOME 0` by EVAL_TAC >>
+  `get_tenv nested_initial_cx = FEMPTY` by EVAL_TAC >>
+  gvs[nested_initial_type_value]
+QED
+
+Theorem nested_initial_storage_wf:
+  contract_storage_well_formed nested_initial_cx nested_premise_es
+Proof
+  rewrite_tac[vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def] >>
+  conj_tac
+  >- (rewrite_tac[vyperLookupStorageTheory.well_formed_storage_def,
+        vyperLookupStorageTheory.storage_var_in_range_def] >>
+      rpt strip_tac >> drule nested_initial_var_info >> strip_tac >>
+      gvs[nested_initial_backend] >> ACCEPT_TAC nested_initial_slots) >>
+  rpt strip_tac >> drule nested_initial_region >> strip_tac >>
+  gvs[nested_initial_backend] >> ACCEPT_TAC nested_initial_slots
+QED
+
+Theorem nested_initial_layout_safe:
+  storage_layout_safe nested_initial_cx
+Proof
+  EVAL_TAC >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  gvs[find_var_decl_by_name_def, AllCaseEqs()] >>
+  gvs[GSYM nested_reach_outer_ty_def, GSYM nested_reach_inner_ty_def,
+      GSYM nested_reach_fixed_ty_def, nested_initial_type_value] >> EVAL_TAC >> simp[]
+QED
