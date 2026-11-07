@@ -12888,6 +12888,76 @@ Definition alias_occ_spill_tos_logs_def:
     else []
 End
 
+Theorem alias_occ_remove_spill_wf:
+  alias_occ_wf shadow ==>
+  alias_occ_wf (shadow with alias_spill_ids := shadow.alias_spill_ids \\ key)
+Proof
+  Cases_on `FLOOKUP shadow.alias_spill_ids key`
+  >- (gvs[finite_mapTheory.FLOOKUP_DEF] >>
+      simp[finite_mapTheory.DOMSUB_NOT_IN_DOM]) >>
+  drule alias_occ_fmap_extract_perm >>
+  disch_then (assume_tac o MATCH_MP
+    (Q.ISPEC `(SND : operand # num -> num)` sortingTheory.PERM_MAP)) >>
+  strip_tac >>
+  `sorting$PERM (alias_occ_ids shadow)
+    (MAP SND shadow.alias_occs ++ x::MAP SND (fmap_to_alist (shadow.alias_spill_ids \\ key)))` by
+    fs[alias_occ_ids_def, sortingTheory.PERM_APPEND_IFF] >>
+  gvs[alias_occ_wf_def] >>
+  `ALL_DISTINCT (MAP SND shadow.alias_occs ++ x::MAP SND (fmap_to_alist (shadow.alias_spill_ids \\ key))) /\
+   EVERY (\id. id < shadow.alias_next)
+     (MAP SND shadow.alias_occs ++ x::MAP SND (fmap_to_alist (shadow.alias_spill_ids \\ key)))` by
+    metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_EVERY] >>
+  gvs[alias_occ_ids_def, ALL_DISTINCT_APPEND, EVERY_APPEND]
+QED
+
+Theorem alias_occ_fmap_update_ids_perm:
+  sorting$PERM (MAP SND (fmap_to_alist ((fm : operand |-> num) |+ (key,id))))
+    (id::MAP SND (fmap_to_alist (fm \\ key)))
+Proof
+  `FLOOKUP (fm |+ (key,id)) key = SOME id` by simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  drule alias_occ_fmap_extract_perm >>
+  disch_then (mp_tac o MATCH_MP
+    (Q.ISPEC `(SND : operand # num -> num)` sortingTheory.PERM_MAP)) >>
+  simp[]
+QED
+
+Theorem alias_occ_spill_last_wf:
+  alias_occ_wf (shadow with alias_occs := SNOC (key,id) rest) ==>
+  alias_occ_wf (shadow with <| alias_occs := rest;
+    alias_spill_ids := shadow.alias_spill_ids |+ (key,id) |> )
+Proof
+  strip_tac >> drule alias_occ_remove_spill_wf >> disch_then (qspec_then `key` mp_tac) >>
+  simp[] >> strip_tac >>
+  irule alias_occ_wf_perm >>
+  qexists_tac `shadow with <| alias_occs := SNOC (key,id) rest;
+    alias_spill_ids := shadow.alias_spill_ids \\ key |>` >>
+  simp[alias_occ_ids_def, MAP_SNOC, rich_listTheory.SNOC_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+  irule sortingTheory.PERM_TRANS >>
+  qexists_tac `id::MAP SND (fmap_to_alist (shadow.alias_spill_ids \\ key))` >>
+  simp[alias_occ_fmap_update_ids_perm, sortingTheory.PERM_CONS_IFF]
+QED
+
+Theorem alias_occ_spill_tos_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_spill_tos_inventory shadow)
+Proof
+  strip_tac >> Cases_on `shadow.alias_occs = []`
+  >- (
+    drule alias_occ_insert_wf >>
+    disch_then (qspec_then `EL 0 ([] : operand list)` assume_tac) >>
+    fs[alias_occ_insert_def] >>
+    drule alias_occ_spill_last_wf >>
+    simp[alias_occ_spill_tos_inventory_def] >>
+    simp[alias_occ_wf_def, alias_occ_ids_def]) >>
+  `?key id rest. shadow.alias_occs = SNOC (key,id) rest` by
+    metis_tac[listTheory.SNOC_CASES, pairTheory.PAIR] >>
+  `alias_occ_wf (shadow with alias_occs := SNOC (key,id) rest)` by
+    fs[alias_occ_wf_def, alias_occ_ids_def] >>
+  drule alias_occ_spill_last_wf >>
+  simp[alias_occ_spill_tos_inventory_def, LAST_SNOC, LENGTH_SNOC,
+       rich_listTheory.TAKE_SNOC]
+QED
+
 Theorem alias_occ_spill_tos_align:
   alias_occ_align shadow ps ==>
   alias_occ_align (alias_occ_spill_tos_inventory shadow) (SND (do_spill_tos ps))
@@ -12941,6 +13011,158 @@ Theorem alias_occ_spill_tos_logs_valid:
 Proof
   simp[alias_occ_spill_tos_logs_def] >> IF_CASES_TAC >>
   simp[alias_occ_read_log_ok_def]
+QED
+
+Definition alias_occ_spill_tos_key_def:
+  alias_occ_spill_tos_key shadow =
+    if shadow.alias_occs = [] then EL 0 ([] : operand list)
+    else FST (LAST shadow.alias_occs)
+End
+
+Theorem alias_occ_spill_tos_residents:
+  (at,id) IN alias_occ_residents (alias_occ_spill_tos_inventory shadow) <=>
+  MEM (at,id) shadow.alias_occs \/
+  (at <> alias_occ_spill_tos_key shadow /\
+   FLOOKUP shadow.alias_spill_ids at = SOME id) \/
+  (shadow.alias_occs = [] /\ at = alias_occ_spill_tos_key shadow /\
+   id = shadow.alias_next)
+Proof
+  Cases_on `shadow.alias_occs = []`
+  >- (simp[alias_occ_spill_tos_inventory_def, alias_occ_spill_tos_key_def,
+           alias_occ_residents_member, finite_mapTheory.FLOOKUP_UPDATE] >>
+      Cases_on `at = HD ([] : operand list)` >> simp[]) >>
+  `?key moved rest. shadow.alias_occs = SNOC (key,moved) rest` by
+    metis_tac[listTheory.SNOC_CASES, pairTheory.PAIR] >>
+  simp[alias_occ_spill_tos_inventory_def, alias_occ_spill_tos_key_def,
+       alias_occ_residents_member, LAST_SNOC, LENGTH_SNOC,
+       rich_listTheory.TAKE_SNOC, MEM_SNOC, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `at = key` >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_occ_spill_tos_deleted:
+  id IN alias_occ_deleted shadow (alias_occ_spill_tos_inventory shadow) <=>
+  FLOOKUP shadow.alias_spill_ids (alias_occ_spill_tos_key shadow) = SOME id /\
+  ~MEM id (MAP SND shadow.alias_occs) /\
+  (!at. at <> alias_occ_spill_tos_key shadow ==>
+        FLOOKUP shadow.alias_spill_ids at <> SOME id) /\
+  (shadow.alias_occs = [] ==> id <> shadow.alias_next)
+Proof
+  simp[alias_occ_deleted_def, pred_setTheory.IN_IMAGE,
+       pairTheory.EXISTS_PROD, alias_occ_residents_member,
+       alias_occ_spill_tos_residents, MEM_MAP, pairTheory.FORALL_PROD] >>
+  metis_tac[]
+QED
+
+Definition alias_occ_spill_at_pre_def:
+  alias_occ_spill_at_pre dist shadow =
+    shadow with alias_occs := stack_swap dist shadow.alias_occs
+End
+
+Definition alias_occ_spill_at_inventory_def:
+  alias_occ_spill_at_inventory dist shadow =
+    alias_occ_spill_tos_inventory (alias_occ_spill_at_pre dist shadow)
+End
+
+Definition alias_occ_spill_at_logs_def:
+  alias_occ_spill_at_logs dist shadow =
+    alias_occ_spill_tos_logs (alias_occ_spill_at_pre dist shadow)
+End
+
+Theorem alias_occ_spill_at_pre_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_spill_at_pre dist shadow)
+    (ps with ps_stack := stack_swap dist ps.ps_stack)
+Proof
+  simp[alias_occ_align_def, alias_occ_spill_at_pre_def,
+       alias_occ_stack_swap_erases]
+QED
+
+Theorem alias_occ_spill_at_pre_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_spill_at_pre dist shadow)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP SND shadow.alias_occs)` by
+    gvs[alias_occ_wf_def, alias_occ_ids_def, ALL_DISTINCT_APPEND] >>
+  drule alias_occ_stack_swap_distinct >>
+  disch_then (qspec_then `dist` strip_assume_tac) >>
+  gvs[alias_occ_wf_def, alias_occ_ids_def, alias_occ_spill_at_pre_def,
+      alias_occ_stack_swap_erases, ALL_DISTINCT_APPEND, EVERY_APPEND,
+      EVERY_MEM, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem alias_occ_spill_at_pre_residents:
+  alias_occ_wf shadow ==>
+  alias_occ_residents (alias_occ_spill_at_pre dist shadow) = alias_occ_residents shadow
+Proof
+  strip_tac >>
+  `ALL_DISTINCT shadow.alias_occs` by
+    (gvs[alias_occ_wf_def, alias_occ_ids_def, ALL_DISTINCT_APPEND] >>
+     metis_tac[ALL_DISTINCT_MAP]) >>
+  drule alias_occ_stack_swap_distinct >>
+  disch_then (qspec_then `dist` strip_assume_tac) >>
+  gvs[alias_occ_spill_at_pre_def, alias_occ_residents_def,
+      pred_setTheory.EXTENSION]
+QED
+
+Theorem alias_occ_spill_at_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_spill_at_inventory dist shadow)
+    (SND (do_spill_at dist ps))
+Proof
+  strip_tac >> Cases_on `dist = 0`
+  >- simp[alias_occ_spill_at_inventory_def, alias_occ_spill_at_pre_def,
+          alias_occ_stack_swap_zero, do_spill_at_def, alias_occ_spill_tos_align] >>
+  drule alias_occ_spill_at_pre_align >>
+  disch_then (qspec_then `dist` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP alias_occ_spill_tos_align) >>
+  simp[alias_occ_spill_at_inventory_def, do_spill_at_def, LET_THM] >>
+  pairarg_tac >> simp[]
+QED
+
+Theorem alias_occ_spill_at_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_spill_at_inventory dist shadow)
+Proof
+  simp[alias_occ_spill_at_inventory_def, alias_occ_spill_tos_wf,
+       alias_occ_spill_at_pre_wf]
+QED
+
+Theorem alias_occ_spill_at_logs_valid:
+  EVERY alias_occ_read_log_ok (alias_occ_spill_at_logs dist shadow)
+Proof
+  simp[alias_occ_spill_at_logs_def, alias_occ_spill_tos_logs_valid]
+QED
+
+Theorem alias_occ_spill_at_next:
+  shadow.alias_next <= (alias_occ_spill_at_inventory dist shadow).alias_next
+Proof
+  mp_tac (Q.SPEC `alias_occ_spill_at_pre dist shadow` (GEN_ALL alias_occ_spill_tos_next)) >>
+  simp[alias_occ_spill_at_inventory_def, alias_occ_spill_at_pre_def]
+QED
+
+Theorem alias_occ_spill_at_origin:
+  alias_occ_wf shadow /\
+  (at,id) IN alias_occ_residents (alias_occ_spill_at_inventory dist shadow) ==>
+  (at,id) IN alias_occ_residents shadow \/
+  (id = shadow.alias_next /\
+   MEM (AliasOccReadLog 0 [] (AliasOccTotalRead 0 id at))
+       (alias_occ_spill_at_logs dist shadow))
+Proof
+  strip_tac >>
+  qpat_x_assum `(at,id) IN _` mp_tac >>
+  simp[alias_occ_spill_at_inventory_def] >>
+  disch_then (mp_tac o MATCH_MP alias_occ_spill_tos_origin) >>
+  simp[alias_occ_spill_at_logs_def, alias_occ_spill_at_pre_residents,
+       alias_occ_spill_at_pre_def]
+QED
+
+Theorem alias_occ_spill_at_deleted:
+  alias_occ_wf shadow ==>
+  alias_occ_deleted shadow (alias_occ_spill_at_inventory dist shadow) =
+  alias_occ_deleted (alias_occ_spill_at_pre dist shadow)
+    (alias_occ_spill_tos_inventory (alias_occ_spill_at_pre dist shadow))
+Proof
+  simp[alias_occ_deleted_def, alias_occ_spill_at_inventory_def,
+       alias_occ_spill_at_pre_residents]
 QED
 
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
