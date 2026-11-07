@@ -4,6 +4,7 @@ Ancestors
   exprSimAbiEncodeChargeTransfer exprSimAbiEncodeExecFrame localPtrsProps loweringSlice
   compileEnv exprLoweringProps venomState finite_map pred_set list arithmetic
   abiEncoderWindowContract abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderReentry
+  exprSimAbiEncodeSiteRecovery exprSimAbiEncodeSiteEncoder abiEncoderProps words
 
 Theorem abi_encode_caller_local_reads:
   local_ptrs_rel func cenv scopes initial /\
@@ -318,4 +319,44 @@ Proof
     (fs[immutable_base_zero_alt, lookup_var_def] >>
      qpat_x_assum `!base. _` (qspec_then `Var x` mp_tac) >> simp[]) >>
   qpat_x_assum `!x v. _` drule_all >> simp[]
+QED
+
+Theorem abi_encode_caller_body_literal:
+  compile_abi_encode_to_buf dst src ei ready = (len,body_end) /\
+  (!j. MEM j (frag_code ready body_end) ==> MEM j (fn_insts func)) /\
+  ALL_DISTINCT (MAP (\j. j.inst_id) (fn_insts func)) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_id IN frag_ids ready body_end ==>
+  inst.inst_operands = [Lit 32w]
+Proof
+  strip_tac >> drule abi_encode_body_site_step >> strip_tac >>
+  fs[frag_ids_def] >> drule_all site_interval_alloca >> strip_tac >> simp[]
+QED
+
+Theorem abi_encode_caller_phase_row_sizes:
+  (!inst n base sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\ FLOOKUP initial.vs_allocas inst.inst_id = SOME(base,sz)
+    ==> sz = w2n n) /\
+  (!i. i <> site /\ i NOTIN window_alloca_sites func (frag_ids ready body_end) ==>
+    FLOOKUP actual.vs_allocas i = FLOOKUP initial.vs_allocas i) /\
+  FLOOKUP actual.vs_allocas site = SOME(p,outsz) /\
+  (!inst n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = site /\ inst.inst_operands = [Lit n] ==> outsz = w2n n) /\
+  (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids ready body_end ==> inst.inst_operands = [Lit 32w]) /\
+  (!i b sz. i IN window_alloca_sites func (frag_ids ready body_end) /\
+    FLOOKUP actual.vs_allocas i = SOME(b,sz) ==> sz = 32) ==>
+  !inst n base sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\ FLOOKUP actual.vs_allocas inst.inst_id = SOME(base,sz)
+    ==> sz = w2n n
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `inst.inst_id = site`
+  >- (gvs[] >> metis_tac[]) >>
+  Cases_on `inst.inst_id IN window_alloca_sites func (frag_ids ready body_end)`
+  >- (`inst.inst_id IN frag_ids ready body_end` by
+        fs[window_alloca_sites_def] >>
+      `inst.inst_operands = [Lit 32w]` by metis_tac[] >>
+      `w2n (32w:256 word) = 32` by simp[NoAsms, dimword_def] >> gvs[] >> metis_tac[]) >>
+  `FLOOKUP actual.vs_allocas inst.inst_id = FLOOKUP initial.vs_allocas inst.inst_id`
+    by metis_tac[] >> metis_tac[]
 QED
