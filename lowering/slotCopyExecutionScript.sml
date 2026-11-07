@@ -1,7 +1,7 @@
 Theory slotCopyExecution
 Ancestors
   copyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
-  exprLoweringProps venomExecSemantics venomMemProps
+  exprLoweringProps venomExecSemantics venomInstProofs venomMemProps
   compileEnv emitHelper venomInst venomState list rich_list words
 Libs
   wordsLib
@@ -218,7 +218,7 @@ Proof
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
   simp[slot_copy_cond_insts_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   simp[slot_copy_cond_result_def, eval_operand_lit_local,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def] >>
