@@ -79,8 +79,8 @@ Theorem bop_compare_state_frame:
 Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure2_def, exec_pure1_def] >>
+  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, exec_pure1_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), update_var_def]
 QED
 
