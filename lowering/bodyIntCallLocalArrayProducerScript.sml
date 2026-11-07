@@ -525,6 +525,7 @@ Proof
   reverse conj_tac >- (irule local_selection_provenance >> simp[] >>
     goal_assum (drule_at Any) >> simp[]) >>
   irule vv_post_frame_intro >> simp[expr_type_def] >>
+  conj_tac >- simp[contextTheory.mk_ptr_def] >>
   drule expr_post_frame >> strip_tac >>
   irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
   qexists_tac `sm` >> simp[]
