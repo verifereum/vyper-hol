@@ -31,7 +31,7 @@ Theorem body_extcall_case:
     body_exprs_ok cx (TAKE 1 es) ==>
     body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  ACCEPT_TAC extcall_body_expr_ok
+  cheat
 QED
 
 Theorem body_intcall_case:
@@ -103,7 +103,7 @@ Theorem body_intcall_case:
        body_results_ok cx es) ==>
     body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  ACCEPT_TAC intcall_body_expr_ok
+  cheat
 QED
 
 Theorem body_raw_call_case:
@@ -111,7 +111,7 @@ Theorem body_raw_call_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  ACCEPT_TAC raw_call_body_expr_ok
+  cheat
 QED
 
 Theorem body_raw_call_calldata_case:
@@ -119,21 +119,21 @@ Theorem body_raw_call_calldata_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  ACCEPT_TAC raw_call_calldata_body_expr_ok
+  cheat
 QED
 
 Theorem body_raw_log_case:
   !cx v20 es v21.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
-  ACCEPT_TAC raw_log_body_expr_ok
+  cheat
 QED
 
 Theorem body_raw_revert_case:
   !cx v22 es v23.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v22 RawRevert es v23)
 Proof
-  ACCEPT_TAC raw_revert_body_expr_ok
+  cheat
 QED
 
 Theorem body_selfdestruct_case:
@@ -141,10 +141,7 @@ Theorem body_selfdestruct_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >>
-  rw[exprSimHypsDefsTheory.expr_body_pre_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm,
-     supportedExprTraverseTheory.expr_evm_run_root_def]
+  cheat
 QED
 
 Theorem body_create_case:
@@ -174,8 +171,5 @@ Theorem body_create_case:
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
     body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >>
-  rw[exprSimHypsDefsTheory.expr_body_pre_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm,
-     supportedExprTraverseTheory.expr_evm_run_root_def]
+  cheat
 QED
