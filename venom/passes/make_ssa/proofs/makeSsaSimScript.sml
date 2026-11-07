@@ -8,7 +8,7 @@
 
 Theory makeSsaSim
 Ancestors
-  makeSsaHelper ssaSimDefs ssaRenamedSim ssaPipeline makeSsaDefs stateEquiv stateEquivProps
+  venomInstProofs makeSsaHelper ssaSimDefs ssaRenamedSim ssaPipeline makeSsaDefs stateEquiv stateEquivProps
   venomExecSemantics venomExecProofs venomWf venomState venomInst
   cfgTransform cfgTransformProps passSimulationDefs passSimulationProps
   execEquivParamDefs execEquivParamProofs execEquivProofs
@@ -539,7 +539,7 @@ Proof
          r.vs_prev_bb = s1.vs_prev_bb` by (
       rpt strip_tac >>
       `~is_terminator inst.inst_opcode` by gvs[is_terminator_def] >>
-      metis_tac[step_inst_preserves_prev_bb]) >>
+      metis_tac[step_preserves_prev_bb]) >>
     Cases_on `step_inst fuel ctx inst s1` >>
     Cases_on `step_inst fuel ctx inst s2` >>
     gvs[result_equiv_def] >>
@@ -567,7 +567,7 @@ Proof
         fs[state_equiv_def]) >>
     (* prev_bb preserved by non-terminator step_inst *)
     `v.vs_prev_bb = s1.vs_prev_bb` by
-      metis_tac[step_inst_preserves_prev_bb] >>
+      metis_tac[step_preserves_prev_bb] >>
     first_x_assum irule >> simp[] >>
     gvs[] >>
     fs[state_equiv_def, execution_equiv_def] >>
@@ -884,28 +884,6 @@ in
   val bb_lbl_tm = ``^bb.bb_label``
 end;
 val univ_str_tm = ``UNIV : string set``;
-
-(* Wrapper for exec_block_OK_not_halted via run_block *)
-Triviality run_block_OK_not_halted:
-  !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==> ~v.vs_halted
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
-  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
-  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
-  imp_res_tac exec_block_OK_not_halted >> fs[]
-QED
-
-(* Wrapper for exec_block_ok_sets_prev_bb via run_block *)
-Triviality run_block_ok_sets_prev_bb:
-  !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==> v.vs_prev_bb <> NONE
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
-  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
-  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
-  imp_res_tac exec_block_ok_sets_prev_bb >> fs[]
-QED
 
 (* OK/OK branch of the fuel induction — extracted as standalone Triviality
    to avoid rich-context issues. All facts are explicit

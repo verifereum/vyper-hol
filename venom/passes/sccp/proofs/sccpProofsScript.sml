@@ -50,54 +50,8 @@ Proof
 QED
 
 (* eval_phis_preserves_current_bb is now in venomExecProofsTheory *)
-(* eval_one_phi returns an output that is a member of inst.inst_outputs *)
-Triviality eval_one_phi_output_mem[local]:
-  !s inst out v. eval_one_phi s inst = SOME (out,v) ==> MEM out inst.inst_outputs
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_outputs` >> gvs[eval_one_phi_def] >>
-  Cases_on `t` >> gvs[eval_one_phi_def] >>
-  Cases_on `s.vs_prev_bb` >> gvs[eval_one_phi_def] >>
-  gvs[AllCaseEqs()]
-QED
 (* eval_phis preserves lookup for variables that are not PHI outputs
    of any instruction in the list. *)
-Triviality eval_phis_flookup_not_phi_output[local]:
-  !s insts x s'.
-    eval_phis s insts = OK s' /\
-    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
-    FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
-Proof
-  Induct_on `insts`
-  >- (rpt strip_tac >> fs[eval_phis_def])
-  >> rpt strip_tac >> fs[eval_phis_def]
-  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
-  >> Cases_on `eval_one_phi s h` >> fs[]
-  >> PairCases_on `x'` >> fs[]
-  >> Cases_on `eval_phis s insts` >> fs[update_var_def, FLOOKUP_UPDATE]
-  >> `FLOOKUP v.vs_vars x = FLOOKUP s.vs_vars x`
-     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒
-           FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x`
-         >- metis_tac[] >> metis_tac[])
-  >> `x'0 ≠ x` by (
-       CCONTR_TAC >> fs[] >>
-       first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
-       metis_tac[eval_one_phi_output_mem])
-  >> `s' = v with vs_vars := v.vs_vars⟨x'0 ↦ x'1⟩` by metis_tac[]
-  >> fs[FLOOKUP_UPDATE]
-QED
-(* eval_phis preserves FDOM for variables that are not PHI outputs *)
-Triviality eval_phis_fdom_not_phi_output[local]:
-  !s insts x s'.
-    eval_phis s insts = OK s' /\
-    x IN FDOM s.vs_vars /\
-    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
-    x IN FDOM s'.vs_vars
-Proof
-  rpt strip_tac >>
-  imp_res_tac eval_phis_flookup_not_phi_output >>
-  fs[TO_FLOOKUP]
-QED
 
 (* The old sccp_function_lift_result theorem was removed after the eval_phis
    refactor. It was unused, and its original statement no longer matched the

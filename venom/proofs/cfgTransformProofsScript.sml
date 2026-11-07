@@ -43,13 +43,6 @@ Proof
   rw[remove_block_def, MEM_FILTER]
 QED
 
-Theorem MEM_remove_block_iff:
-  !bb lbl bbs.
-    MEM bb (remove_block lbl bbs) <=> MEM bb bbs /\ bb.bb_label <> lbl
-Proof
-  rw[remove_block_def, MEM_FILTER] >> metis_tac[]
-QED
-
 Theorem LENGTH_remove_block:
   !lbl bbs.
     LENGTH (remove_block lbl bbs) <= LENGTH bbs

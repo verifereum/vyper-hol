@@ -138,6 +138,12 @@ Proof
   metis_tac[stack_peek_eq_EL_REVERSE]
 QED
 
+Theorem stack_get_depth_push:
+  !op stk. stack_get_depth op (stack_push op stk) = SOME 0
+Proof
+  simp[stack_get_depth_def, stack_push_def, REVERSE_SNOC, stack_find_def]
+QED
+
 (* Find the shallowest matching operand whose depth is not in the protected
    interval (f,n).  Reorder uses this to avoid selecting target slots that
    have already been finalized. *)

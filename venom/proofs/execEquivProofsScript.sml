@@ -454,13 +454,6 @@ Proof
   irule jump_to_preserves >> simp[]
 QED
 
-(* Helper: resolve_phi result is a member of the operand list *)
-Triviality resolve_phi_MEM:
-  !prev_bb ops op. resolve_phi prev_bb ops = SOME op ==> MEM op ops
-Proof
-  ho_match_mp_tac resolve_phi_ind >> rw[resolve_phi_def] >> rw[] >> metis_tac[]
-QED
-
 (* SSA: PHI, ASSIGN, NOP *)
 Triviality step_inst_ssa_equiv:
   !vars inst s1 s2.
@@ -479,7 +472,7 @@ Proof
       Cases_on `s2.vs_prev_bb` >> gvs[result_equiv_def, revert_equiv_def] >>
       Cases_on `resolve_phi x inst.inst_operands` >> gvs[result_equiv_def, revert_equiv_def] >>
       rename1 `resolve_phi _ _ = SOME phi_op` >>
-      `MEM phi_op inst.inst_operands` by metis_tac[resolve_phi_MEM] >>
+      `MEM phi_op inst.inst_operands` by metis_tac[resolve_phi_MEM_el] >>
       `eval_operand phi_op s1 = eval_operand phi_op s2` by (
         qspecl_then [`vars`, `phi_op`, `inst.inst_operands`, `s1`, `s2`]
           mp_tac eval_operand_mem_equiv >> simp[]) >>
@@ -521,20 +514,6 @@ Proof
   gvs[revert_state_def, set_returndata_def, lookup_var_def] >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def,
      halt_state_def]
-QED
-
-Triviality eval_operands_equiv:
-  !vars ops s1 s2.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct_on `ops` >> rw[eval_operands_def] >>
-  `eval_operand h s1 = eval_operand h s2` by (
-    irule eval_operand_equiv >> simp[] >> metis_tac[]) >>
-  `eval_operands ops s1 = eval_operands ops s2` by (
-    first_x_assum irule >> simp[] >> metis_tac[]) >>
-  simp[]
 QED
 
 (* Hash: SHA3 *)
@@ -1479,7 +1458,7 @@ Triviality step_inst_retfmp_equiv:
 Proof
   rpt strip_tac >>
   `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
-    metis_tac[eval_operands_equiv] >>
+    metis_tac[eval_operands_state_equiv] >>
   step_inst_base_opcode_tac >> simp[] >>
   Cases_on `eval_operands inst.inst_operands s2` >>
   gvs[result_equiv_def, revert_equiv_def] >>
@@ -1497,7 +1476,7 @@ Triviality step_inst_dret_equiv:
 Proof
   rpt strip_tac >>
   `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
-    metis_tac[eval_operands_equiv] >>
+    metis_tac[eval_operands_state_equiv] >>
   `s1.vs_call_entry_fmp = s2.vs_call_entry_fmp` by
     gvs[state_equiv_def, execution_equiv_def] >>
   step_inst_base_opcode_tac >> simp[] >>
@@ -1574,6 +1553,50 @@ Proof
       step_inst_base_opcode_tac >>
       simp[result_equiv_def, revert_equiv_def]
   ]
+QED
+
+(* Extends step_inst_result_equiv to step_inst, INVOKE included. *)
+Theorem step_inst_result_equiv_full:
+  !vars fuel ctx inst s1 s2.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+    ~is_terminator inst.inst_opcode ==>
+    result_equiv vars (step_inst fuel ctx inst s1)
+                      (step_inst fuel ctx inst s2)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    simp[step_inst_def] >>
+    Cases_on `decode_invoke inst` >> gvs[result_equiv_def] >>
+    PairCases_on `x` >> gvs[] >>
+    rename1 `SOME (callee_name, arg_ops)` >>
+    `inst.inst_operands = Label callee_name :: arg_ops`
+      by gvs[decode_invoke_def, AllCaseEqs()] >>
+    `eval_operands arg_ops s1 = eval_operands arg_ops s2` by (
+      irule eval_operands_state_equiv >> qexists_tac `vars` >> gvs[] >>
+      rpt strip_tac >> first_x_assum irule >> gvs[]) >>
+    Cases_on `lookup_function callee_name ctx.ctx_functions`
+    >> gvs[result_equiv_def] >>
+    Cases_on `eval_operands arg_ops s2` >> gvs[result_equiv_def] >>
+    rename1 `SOME args` >>
+    `setup_callee x args s1 = setup_callee x args s2`
+      by (irule setup_callee_state_equiv >> metis_tac[]) >>
+    Cases_on `setup_callee x args s2` >> gvs[result_equiv_def] >>
+    Cases_on `run_blocks fuel ctx x x'` >> simp[] >>
+    gvs[result_equiv_def, execution_equiv_refl] >>
+    `state_equiv vars (merge_callee_state s1 v)
+                      (merge_callee_state s2 v)` by
+      (irule merge_callee_state_equiv >> gvs[]) >>
+    simp[bind_outputs_def] >>
+    IF_CASES_TAC >> gvs[result_equiv_def]
+    >- (`state_equiv vars
+          (adopt_return_fmp i (merge_callee_state s1 v))
+          (adopt_return_fmp i (merge_callee_state s2 v))` by
+          (irule adopt_return_fmp_state_equiv >> gvs[]) >>
+        irule foldl_update_var_state_equiv >> gvs[])
+    >> irule adopt_return_fmp_state_equiv >> gvs[])
+  >> (gvs[step_inst_non_invoke] >> irule step_inst_result_equiv >> gvs[])
 QED
 
 (* ==========================================================================
@@ -1747,7 +1770,7 @@ Proof
   )
   >- simp[result_equiv_def]
 QED
-Triviality run_block_OK_eq_exec_block:
+Theorem run_block_OK_eq_exec_block:
   !fuel ctx bb s s_phi.
     eval_phis s bb.bb_instructions = OK s_phi ==>
     run_block fuel ctx bb s =
@@ -1755,23 +1778,13 @@ Triviality run_block_OK_eq_exec_block:
 Proof
   rw[run_block_def]
 QED
-Triviality run_block_Error_eq:
+Theorem run_block_Error_eq:
   !fuel ctx bb s e.
     eval_phis s bb.bb_instructions = Error e ==>
     run_block fuel ctx bb s = Error e
 Proof
   rw[run_block_def]
 QED
-Triviality run_block_OK_inst_idx_0:
-    run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  rw[run_block_def] >>
-  qspecl_then [`s`,`bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >>
-  strip_tac >>
-  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
-  metis_tac[exec_block_OK_inst_idx_0]
-QED
-
 Triviality run_block_current_bb_in_succs:
   !fuel ctx bb s v.
     run_block fuel ctx bb s = OK v /\

@@ -9,7 +9,7 @@
 
 Theory analysisSimProofsSound
 Ancestors
-  analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
+  venomExecProofs analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
   analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
@@ -116,9 +116,9 @@ val sound_OK_tac =
   qpat_assum `run_block fuel run_ctx bb s1 = OK v1`
     (fn th =>
       assume_tac (MATCH_MP
-        analysisSimProofsTheory.run_block_OK_not_halted th) >>
+        venomExecProofsTheory.run_block_OK_not_halted th) >>
       assume_tac (MATCH_MP
-        analysisSimProofsTheory.run_block_OK_inst_idx_0 th)) >>
+        venomExecProofsTheory.run_block_OK_inst_idx_0 th)) >>
   mp_tac (Q.SPECL [`R_ok`, `R_term`, `v1`, `v2`] vsr_R_ok_fields) >>
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   qpat_x_assum `!v. OK v1 = OK v ==> _`

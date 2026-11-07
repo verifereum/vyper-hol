@@ -13,7 +13,7 @@
 
 Theory memoryCopyElisionProofs
 Ancestors
-  venomFnInstsProofs allocaRemapSSA
+  analysisSimProofs instIdxIndep dfAnalyzeProofs venomFnInstsProofs allocaRemapSSA
   memoryCopyElisionSound memoryCopyElisionConvergence memoryCopyElisionDefs
   analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
@@ -27,6 +27,8 @@ Ancestors
   memAliasDefs memAliasProofs memLocDefs
   cfgDefs cfgHelpers cfgAnalysisProps
   finite_map list pred_set arithmetic words pair
+Libs
+  stepInstBaseLib
 
 (* ===== Arithmetic helpers ===== *)
 
@@ -69,53 +71,10 @@ QED
 
 (* ===== Stage 1: analysis_function_transform correctness ===== *)
 
-Triviality copy_opcode_not_term[local]:
-  !op. is_copy_opcode op ==> ~is_terminator op
-Proof
-  Cases >> simp[is_copy_opcode_def, is_terminator_def]
-QED
-
-Triviality copy_opcode_not_invoke[local]:
-  !op. is_copy_opcode op ==> op ≠ INVOKE
-Proof
-  Cases >> simp[is_copy_opcode_def]
-QED
-
 Triviality copy_opcode_not_phi[local]:
   !op. is_copy_opcode op ==> op ≠ PHI
 Proof
   Cases >> simp[is_copy_opcode_def]
-QED
-
-(* Re-prove inst_transform_structural (local in SoundScript) *)
-Triviality cei_structural[local]:
-  !bp dfg.
-    inst_transform_structural (\v inst. [copy_elision_inst bp dfg v inst])
-Proof
-  rpt gen_tac >>
-  simp[inst_transform_structural_def] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  simp[copy_elision_inst_def, LET_THM] >>
-  TRY (Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >> NO_TAC) >>
-  TRY (fs[] >> NO_TAC) >>
-  TRY (
-    qexists `inst` >> simp[] >>
-    Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >> NO_TAC) >>
-  TRY (
-    qexists `inst` >> simp[] >>
-    Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
-  rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
-  imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
-  imp_res_tac copy_opcode_not_phi >>
-  fs[]
 QED
 
 (* NOTE: dfg_assigns_sound IS per-instruction preserved under SSA.
@@ -125,33 +84,6 @@ QED
    since neither v nor op's variables are in inst.inst_outputs.
    See transfer_sound_exit_block_inv below. *)
 
-
-(* Terminator step_inst_base is idx-independent *)
-Triviality term_step_base_idx_0[local]:
-  !inst s v.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK v ==>
-    step_inst_base inst (s with vs_inst_idx := 0) = OK v
-Proof
-  rpt strip_tac >>
-  `v.vs_inst_idx = 0` by
-    metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0] >>
-  qabbrev_tac `f = \st:venom_state. st with vs_inst_idx := 0` >>
-  `exec_result_map f (step_inst_base inst (s with vs_inst_idx := 0)) =
-   exec_result_map f (step_inst_base inst s)` by
-    (unabbrev_all_tac >>
-     metis_tac[instIdxIndepTheory.terminator_step_inst_base_idx_norm0]) >>
-  `exec_result_map f (step_inst_base inst s) = OK v` by
-    (simp[Abbr `f`, instIdxIndepTheory.exec_result_map_def] >>
-     `v with vs_inst_idx := 0 = v` by
-       simp[venom_state_component_equality] >> fs[]) >>
-  fs[] >>
-  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >>
-  gvs[instIdxIndepTheory.exec_result_map_def, Abbr `f`] >>
-  `v'.vs_inst_idx = 0` by
-    metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0] >>
-  simp[venom_state_component_equality]
-QED
 
 (* transfer_sound_exit_block_inv: exit soundness with state_inv threading.
    Like transfer_sound_exit_wf but uses transfer_sound_block_inv.
@@ -1043,16 +975,6 @@ Proof
     (simp[fn_insts_def] >> metis_tac[mem_fn_insts_blocks]) >>
   `inst = inst'` by metis_tac[ssa_unique_output] >>
   gvs[is_ptr_opcode_def]
-QED
-
-(* inst_wf + inst_output SOME ⟹ singleton outputs *)
-Triviality inst_wf_outputs_some[local]:
-  !inst out. inst_wf inst /\ inst_output inst = SOME out ==>
-    inst.inst_outputs = [out]
-Proof
-  rw[inst_output_def] >>
-  Cases_on `inst.inst_outputs` >> gvs[] >>
-  Cases_on `t` >> gvs[]
 QED
 
 (* Pointer-producing opcodes have exactly one output, so NONE excludes them. *)
@@ -2889,44 +2811,6 @@ QED
 
 (* --- Helpers for cf_keys_ok through transfer --- *)
 
-(* cf_keys_ok preserved under DRESTRICT *)
-Triviality cf_keys_ok_drestrict[local]:
-  !bp cfl S. cf_keys_ok bp cfl ==> cf_keys_ok bp (DRESTRICT cfl S)
-Proof
-  rw[cf_keys_ok_def, FLOOKUP_DRESTRICT] >> rpt strip_tac >> gvs[] >>
-  res_tac
-QED
-
-(* cf_keys_ok of FEMPTY *)
-Triviality cf_keys_ok_fempty[local]:
-  !bp. cf_keys_ok bp FEMPTY
-Proof
-  simp[cf_keys_ok_def]
-QED
-
-(* cf_keys_ok preserved by FUPDATE when new entry satisfies conditions *)
-Triviality cf_keys_ok_fupdate[local]:
-  !bp cfl ml cf.
-    cf_keys_ok bp cfl /\ cf_key_size_ok bp ml cf /\ ml_is_fixed ml /\
-    (cf.cf_opcode = MCOPY ==>
-     ml_is_fixed (ce_memloc_from_ops bp cf.cf_source cf.cf_size)) ==>
-    cf_keys_ok bp (cfl |+ (ml, cf))
-Proof
-  rw[cf_keys_ok_def] >> rpt strip_tac >>
-  fs[FLOOKUP_UPDATE] >> BasicProvers.every_case_tac >> gvs[] >> res_tac
-QED
-
-(* cf_keys_ok preserved by copy_fact_invalidate *)
-Triviality cf_keys_ok_invalidate[local]:
-  !bp aliases cfl wl.
-    cf_keys_ok bp cfl ==>
-    cf_keys_ok bp (copy_fact_invalidate aliases bp cfl wl)
-Proof
-  rw[copy_fact_invalidate_def]
-  >- simp[cf_keys_ok_fempty]
-  >> irule cf_keys_ok_drestrict >> simp[]
-QED
-
 (* cf_keys_ok preserved by copy_fact_prune_vars *)
 Triviality cf_keys_ok_prune_vars[local]:
   !bp dfg killed cfl.
@@ -3778,22 +3662,6 @@ QED
 
 (* --- cf_keys_ok_opt boundary invariant through analysis --- *)
 
-(* df_populate_inst does not change ds_boundary *)
-Triviality df_populate_inst_boundary_eq[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
-    (df_populate_inst dir bottom join transfer edge_transfer
-       ctx entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
-Proof
-  rpt gen_tac >>
-  simp[df_populate_inst_def, LET_THM] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `FOLDL ff _ lbls` >>
-  `!st'. (FOLDL ff st' lbls).ds_boundary = st'.ds_boundary`
-    suffices_by simp[] >>
-  qunabbrev_tac `ff` >>
-  Induct_on `lbls` >> simp[]
-QED
-
 (* df_process_block changed ⟺ state changed (reprove of local lemma) *)
 Triviality cf_process_changed[local]:
   !ctx fn lbl st.
@@ -3860,22 +3728,6 @@ Proof
     disch_then irule >> metis_tac[])
   >>
   metis_tac[]
-QED
-
-(* df_populate_inst preserves boundary *)
-Triviality df_populate_inst_boundary[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
-    (df_populate_inst dir bottom join transfer edge_transfer ctx
-       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
-Proof
-  simp[df_populate_inst_def, LET_THM] >>
-  rpt gen_tac >>
-  qmatch_goalsub_abbrev_tac `FOLDL ff _ lbls` >>
-  `!st'. (FOLDL ff st' lbls).ds_boundary = st'.ds_boundary`
-    suffices_by simp[] >>
-  qunabbrev_tac `ff` >>
-  Induct_on `lbls` >> simp[] >> rw[] >>
-  pairarg_tac >> simp[]
 QED
 
 (* Initial state satisfies cf_measure_inv *)
@@ -4036,26 +3888,6 @@ QED
 
 (* --- SSA structural helpers for bp_ptr_sound_exec_block --- *)
 
-(* ALL_DISTINCT of inst_ids within a block: from fn_inst_ids_distinct *)
-Triviality block_inst_ids_distinct[local]:
-  !(bbs : basic_block list) bb (f : instruction -> 'b).
-    ALL_DISTINCT (FLAT (MAP (\b. MAP f b.bb_instructions) bbs)) /\
-    MEM bb bbs ==>
-    ALL_DISTINCT (MAP f bb.bb_instructions)
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
-(* ALL_DISTINCT preserved through FILTER *)
-Triviality all_distinct_map_filter[local]:
-  !l (f:'a -> 'b) P.
-    ALL_DISTINCT (MAP f l) ==>
-    ALL_DISTINCT (MAP f (FILTER P l))
-Proof
-  Induct >> simp[FILTER] >> rpt strip_tac >>
-  IF_CASES_TAC >> gvs[ALL_DISTINCT, MEM_MAP, MEM_FILTER]
-QED
-
 (* MEM v (operand_vars ops) ==> MEM (Var v) ops
    NB: must use venomInst operand_vars to match inst_uses_def *)
 Triviality mem_operand_vars_var[local]:
@@ -4097,17 +3929,10 @@ Proof
   `def_inst = inst` by metis_tac[ssa_unique_output] >>
   gvs[] >>
   `fn_inst_ids_distinct fn` by fs[wf_function_def] >>
-  fs[fn_inst_ids_distinct_def] >>
-  `def_bb = bb` by (
-    qspecl_then [`fn.fn_blocks`,
-      `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-      `def_bb`, `bb`, `def_inst.inst_id`]
-      mp_tac all_distinct_flat_map_unique >>
-    simp[MEM_MAP] >> metis_tac[]) >>
+  `def_bb = bb` by metis_tac[inst_in_unique_block] >>
   gvs[] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    (irule block_inst_ids_distinct >>
-     qexists `fn.fn_blocks` >> simp[]) >>
+    metis_tac[fn_inst_ids_block_distinct] >>
   `i < LENGTH bb.bb_instructions` by simp[] >>
   qspecl_then [`MAP (\i. i.inst_id) bb.bb_instructions`, `i`, `j`]
     mp_tac ALL_DISTINCT_EL_IMP >>
@@ -4194,14 +4019,6 @@ Proof
     (drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
      strip_tac >> pop_assum SUBST_ALL_TAC >> simp[]) >>
   gvs[cf_entry_sound_def]
-QED
-
-Triviality cf_alloca_ok_allocas_eq[local]:
-  !bp cfl s s'. s'.vs_allocas = s.vs_allocas ==>
-    (cf_alloca_ok bp cfl s' <=> cf_alloca_ok bp cfl s)
-Proof
-  rw[cf_alloca_ok_def] >> eq_tac >> rpt strip_tac >> res_tac >>
-  gvs[memloc_within_alloca_def]
 QED
 
 Triviality cf_alloca_ok_prune_vars[local]:
@@ -4654,7 +4471,7 @@ Proof
 QED
 
 (* load_store_elim_block preserves instruction count *)
-Triviality lse_length[local]:
+Theorem lse_length:
   !aliases bp uc bb.
     LENGTH (load_store_elim_block aliases bp uc bb).bb_instructions =
     LENGTH bb.bb_instructions
@@ -4666,7 +4483,7 @@ Proof
 QED
 
 (* Each load_store_step either preserves the instruction or NOPs it *)
-Triviality lse_step_inst_or_nop[local]:
+Theorem lse_step_inst_or_nop:
   !aliases bp uc lf inst.
     SND (load_store_step aliases bp uc (lf, inst)) = inst \/
     SND (load_store_step aliases bp uc (lf, inst)) = mk_nop_inst inst
@@ -4676,7 +4493,7 @@ Proof
 QED
 
 (* load_store_elim_block preserves the label *)
-Triviality lse_label[local]:
+Theorem lse_label:
   !aliases bp uc bb.
     (load_store_elim_block aliases bp uc bb).bb_label = bb.bb_label
 Proof
@@ -5981,7 +5798,7 @@ Proof
       write_effects_def, empty_effects_def]
 QED
 
-Triviality lse_phi_identity[local]:
+Theorem lse_phi_identity:
   !aliases bp uc bb i.
     i < LENGTH bb.bb_instructions /\
     (EL i bb.bb_instructions).inst_opcode = PHI ==>
@@ -5994,7 +5811,7 @@ Proof
        empty_effects_def]
 QED
 
-Triviality lse_phi_reverse[local]:
+Theorem lse_phi_reverse:
   !aliases bp uc bb i.
     i < LENGTH bb.bb_instructions /\
     (EL i (load_store_elim_block aliases bp uc bb).bb_instructions).inst_opcode = PHI ==>
@@ -6040,7 +5857,7 @@ Proof
   irule lse_phi_identity >> simp[]
 QED
 
-Triviality lse_block_wf[local]:
+Theorem lse_block_wf:
   !aliases bp uc bb.
     bb_well_formed bb ==>
     bb_well_formed (load_store_elim_block aliases bp uc bb)
@@ -6084,7 +5901,7 @@ Proof
       gvs[])
 QED
 
-Triviality lse_block_succs[local]:
+Theorem lse_block_succs:
   !aliases bp uc bb.
     bb_well_formed bb ==>
     bb_succs (load_store_elim_block aliases bp uc bb) = bb_succs bb
@@ -6119,7 +5936,7 @@ Proof
   simp[] >> strip_tac >> gvs[mk_nop_inst_def]
 QED
 
-Triviality lse_fmt_preserves_ids_distinct[local]:
+Theorem lse_fmt_preserves_ids_distinct:
   !aliases bp uc fn.
     fn_inst_ids_distinct fn ==>
     fn_inst_ids_distinct
@@ -6135,7 +5952,7 @@ Proof
   simp[]
 QED
 
-Triviality copy_elision_inst_wf_props[local]:
+Theorem copy_elision_inst_wf_props:
   (!bp dfg v inst. (copy_elision_inst bp dfg v inst).inst_id = inst.inst_id) /\
   (!bp dfg v inst. is_terminator inst.inst_opcode ==>
      copy_elision_inst bp dfg v inst = inst) /\
@@ -6244,12 +6061,10 @@ Proof
   `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >> simp[] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       fs[jump_to_def, halt_state_def, revert_state_def,
-          set_returndata_def, lookup_var_def, contract_storage_def]) >>
-  rpt strip_tac >> gvs[]
+  stepInstBaseLib.with_opcode_clause (fn ths => simp ths) >>
+  simp[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[jump_to_def, halt_state_def, revert_state_def,
+      set_returndata_def, lookup_var_def, contract_storage_def]
 QED
 
 (* Successful terminators preserve load-fact soundness.  DRET may change
@@ -6594,26 +6409,6 @@ Proof
   (* Case: i >= LENGTH — lf_at (SUC i) = lf_at i, trivial from IH *)
   >> first_x_assum drule >> strip_tac >>
   qexists `j` >> simp[]
-QED
-
-Triviality lf_at_opcode_inv[local]:
-  !i aliases bp uc insts v lfact.
-    FLOOKUP (lf_at aliases bp uc insts i) v = SOME lfact ==>
-    is_load_fact_opcode lfact.lf_opcode
-Proof
-  Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
-  rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
-  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
-  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> gvs[] >> res_tac
 QED
 
 (* A PHI of a block of fn1 is a PHI of a block of fn: copy elision keeps

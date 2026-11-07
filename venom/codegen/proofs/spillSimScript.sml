@@ -479,14 +479,14 @@ QED
    MSTORE dispatch chain: asm_step (AsmOp "MSTORE") evaluates to asm_mstore
    ========================================================================= *)
 
-Theorem asm_step_op_mstore[local]:
+Theorem asm_step_op_mstore:
   !o2pc st. asm_step_op o2pc "MSTORE" st = asm_mstore st
 Proof
   simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
        asm_step_bitwise_def, asm_step_memory_def]
 QED
 
-Theorem asm_step_op_mload[local]:
+Theorem asm_step_op_mload:
   !o2pc st. asm_step_op o2pc "MLOAD" st = asm_mload st
 Proof
   simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
@@ -589,16 +589,6 @@ QED
 (* =========================================================================
    memory_rel through MSTORE in spill region
    ========================================================================= *)
-
-(* memory_rel through asm_expand_memory *)
-Theorem memory_rel_expand[local]:
-  !alloc vm am n.
-    memory_rel alloc vm am ==>
-    memory_rel alloc vm (asm_expand_memory n am)
-Proof
-  rw[memory_rel_def] >> rpt strip_tac >>
-  res_tac >> simp[read_byte_expand]
-QED
 
 (* =========================================================================
    SOSpill preserves venom_asm_rel

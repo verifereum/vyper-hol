@@ -9,7 +9,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSimDefs analysisSimProofsBase instIdxIndep finite_map list
+  venomInstProofs phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSimDefs analysisSimProofsBase instIdxIndep finite_map list
 Libs
   pairLib
 
@@ -198,7 +198,7 @@ Proof
   `step_inst 0 ARB inst s = step_inst_base inst s` by
     (irule step_inst_non_invoke >> simp[]) >>
   mp_tac (Q.SPECL [`0`, `ARB`, `inst`, `s`, `s'`]
-    step_inst_preserves_prev_bb) >>
+    step_preserves_prev_bb) >>
   ASM_REWRITE_TAC[]
 QED
 
@@ -222,12 +222,6 @@ QED
    Uses lift_result for direct integration with block_sim_function_pointwise_reachable.
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
-
-Triviality all_distinct_flat_mem:
-  !ls (l:'a list). ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
 
 Triviality ssa_form_block_outputs_distinct:
   !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
@@ -263,20 +257,6 @@ Proof
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
     metis_tac[ssa_form_block_outputs_distinct] >>
   metis_tac[all_distinct_outputs_not_mem_other]
-QED
-
-Triviality run_insts_append:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
 QED
 
 Triviality param_insts_nonterm_noninvoke:
@@ -461,15 +441,6 @@ Proof
   simp[]
 QED
 
-Triviality step_param_ok_or_error:
-  !inst fuel ctx s.
-    is_param_opcode inst.inst_opcode ==>
-    (?s'. step_inst fuel ctx inst s = OK s') \/
-    (?e. step_inst fuel ctx inst s = Error e)
-Proof
-  metis_tac[step_inst_param_ok_or_error]
-QED
-
 Triviality run_insts_params_ok_or_error:
   !params fuel ctx s.
     EVERY (\inst. is_param_opcode inst.inst_opcode) params ==>
@@ -479,7 +450,7 @@ Proof
   Induct >> simp[run_insts_def] >> rpt strip_tac >>
   `(?s1. step_inst fuel ctx h s = OK s1) \/
    (?e. step_inst fuel ctx h s = Error e)` by
-    (irule step_param_ok_or_error >> gvs[]) >>
+    (irule step_inst_param_ok_or_error >> gvs[]) >>
   gvs[run_insts_def] >>
   first_x_assum (qspecl_then [`fuel`, `ctx`, `s1`] mp_tac) >> simp[]
 QED

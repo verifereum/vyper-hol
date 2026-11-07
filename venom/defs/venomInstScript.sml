@@ -319,10 +319,24 @@ Proof
   Induct_on `ops` >> simp[operand_vars_def] >>
   Cases_on `operand_var h` >> simp[operand_vars_def] >> metis_tac[]
 QED
+
+Theorem mem_var_operand_vars:
+  !ops x. MEM (Var x) ops ==> MEM x (operand_vars ops)
+Proof
+  Induct >> rw[operand_vars_def] >>
+  Cases_on `operand_var h` >> gvs[operand_var_def]
+QED
+
 (* Variables used (read) by an instruction. *)
 Definition inst_uses_def:
   inst_uses inst = operand_vars inst.inst_operands
 End
+
+Theorem operand_var_in_inst_uses:
+  !inst v. MEM (Var v) inst.inst_operands ==> MEM v (inst_uses inst)
+Proof
+  rw[inst_uses_def] >> irule mem_var_operand_vars >> gvs[]
+QED
 
 (* Variables defined (written) by an instruction. *)
 Definition inst_defs_def:

@@ -454,6 +454,16 @@ Proof
   Cases_on `t` >> gvs[]
 QED
 
+(* inst_wf + inst_output = SOME out ⇒ inst_outputs = [out] *)
+Theorem inst_wf_outputs_some:
+  ∀inst out. inst_wf inst ∧ inst_output inst = SOME out ⇒
+    inst.inst_outputs = [out]
+Proof
+  rw[venomInstTheory.inst_output_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
+QED
+
 (* The function has an entry block (fn_blocks is non-empty). *)
 Definition fn_has_entry_def:
   fn_has_entry fn <=> fn.fn_blocks <> []

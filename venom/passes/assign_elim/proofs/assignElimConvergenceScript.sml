@@ -7,7 +7,7 @@
  * TOP-LEVEL: copy_val_measure_def, copy_prop_measure_inv_def,
  *   copy_prop_measure_def, copy_prop_measure_bound_def,
  *   copy_prop_joined_def
- * EXPORTED: cfg_edge_symmetry, copy_prop_join_absorption,
+ * EXPORTED: copy_prop_join_absorption,
  *   copy_prop_measure_bounded, copy_prop_measure_monotone,
  *   copy_prop_measure_inv_preserved, copy_prop_measure_inv_initial
  *)
@@ -258,28 +258,6 @@ Proof
      copy_agree_def, EXTENSION] >>
   rw[FLOOKUP_DRESTRICT] >>
   Cases_on `FLOOKUP m x` >> fs[FLOOKUP_DEF]
-QED
-
-(* Unconditional CFG symmetry: succs and preds are inverses by construction.
-   Does NOT require wf_function — follows from mem_build_preds + fdom_build_succs. *)
-Theorem cfg_edge_symmetry:
-  !fn a b. MEM b (cfg_succs_of (cfg_analyze fn) a) <=>
-           MEM a (cfg_preds_of (cfg_analyze fn) b)
-Proof
-  rpt gen_tac >>
-  simp[cfgHelpersTheory.cfg_analyze_succs, cfgHelpersTheory.cfg_analyze_preds,
-       cfgHelpersTheory.mem_build_preds] >>
-  eq_tac >> rpt strip_tac
-  >- (
-    `?blk. MEM blk fn.fn_blocks /\ blk.bb_label = a` by (
-      spose_not_then strip_assume_tac >>
-      `~MEM a (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (
-        simp[MEM_MAP] >> metis_tac[]) >>
-      `fmap_lookup_list (build_succs fn.fn_blocks) a = []` by
-        metis_tac[cfgHelpersTheory.cfg_succs_of_not_in_labels] >>
-      fs[]) >>
-    qexists_tac `blk` >> fs[])
-  >- metis_tac[]
 QED
 
 (* copy_prop_join absorption: join(join(a,b), b) = join(a,b) *)

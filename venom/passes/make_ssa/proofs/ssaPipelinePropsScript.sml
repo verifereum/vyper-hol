@@ -799,33 +799,6 @@ QED
 
 (* ===== Helpers for phi_coverage and phi_operands ===== *)
 
-(* General form: resolve_phi after update_phi_for_pred for the SAME label *)
-Triviality resolve_phi_update_same_gen:
-  !rs lbl ops.
-    resolve_phi lbl (update_phi_for_pred rs lbl ops) =
-    OPTION_MAP (renamed_operand (latest_version rs)) (resolve_phi lbl ops)
-Proof
-  ho_match_mp_tac update_phi_for_pred_ind >>
-  rw[venomExecSemanticsTheory.resolve_phi_def,
-     update_phi_for_pred_def, renamed_operand_def] >>
-  Cases_on `x` >>
-  rw[venomExecSemanticsTheory.resolve_phi_def, renamed_operand_def]
-QED
-
-(* resolve_phi after update_phi_for_pred for a DIFFERENT label *)
-Triviality resolve_phi_update_other:
-  !rs lbl ops lbl'.
-    lbl' <> lbl ==>
-    resolve_phi lbl' (update_phi_for_pred rs lbl ops) =
-    resolve_phi lbl' ops
-Proof
-  ho_match_mp_tac update_phi_for_pred_ind >>
-  rw[venomExecSemanticsTheory.resolve_phi_def,
-     update_phi_for_pred_def] >>
-  Cases_on `x` >>
-  rw[venomExecSemanticsTheory.resolve_phi_def]
-QED
-
 (* ===== Helpers for phi_operands ===== *)
 
 (* resolve_phi on build_phi_inst operands *)
@@ -880,7 +853,7 @@ Proof
     simp[lookup_block_replace_eq, EL_MAP] >>
     rpt strip_tac
     >- (COND_CASES_TAC >> simp[])
-    >- gvs[resolve_phi_update_other])
+    >- gvs[resolve_phi_update_phi_for_pred_other])
   >>
   qexists_tac `bb` >> simp[lookup_block_replace_neq]
 QED
@@ -1002,7 +975,7 @@ Proof
    conj_tac >- (
      irule update_succ_phis_unchanged_block >> simp[] >>
      simp[lookup_block_replace_eq]) >>
-   simp[EL_MAP, resolve_phi_update_same_gen] >>
+   simp[EL_MAP, resolve_phi_update_phi_for_pred] >>
    rpt strip_tac >> COND_CASES_TAC >> simp[],
    (* MEM lbl_s succs *)
    first_x_assum irule >> simp[] >>
@@ -1236,22 +1209,6 @@ Triviality block_rename_states_root_alookup:
 Proof
   rpt gen_tac >> ONCE_REWRITE_TAC[block_rename_states_def] >>
   Cases_on `lookup_block lbl bbs` >> simp[pairTheory.UNCURRY]
-QED
-
-Triviality bbs_outputs_agree_rename_blocks:
-  !dtree rs bbs succ_map labels.
-    (!l. MEM l labels ==> ~MEM l (dom_tree_labels dtree)) /\
-    (!l. MEM l labels ==> ?b. lookup_block l bbs = SOME b) ==>
-    bbs_outputs_agree labels bbs (SND (rename_blocks rs bbs succ_map dtree))
-Proof
-  rpt strip_tac >> simp[bbs_outputs_agree_def] >>
-  rpt conj_tac >> rpt strip_tac
-  >- metis_tac[rename_blocks_lookup_exists]
-  >> (`~MEM l (dom_tree_labels dtree)` by res_tac >>
-      mp_tac (CONJUNCT1 rename_blocks_preserves_outside) >>
-      disch_then (qspecl_then [`dtree`, `rs`, `bbs`, `succ_map`, `l`, `b1`]
-        mp_tac) >>
-      simp[])
 QED
 
 (* ===== Helper: rename_blocks UPDATES resolve_phi for blocks IN the tree ===== *)
@@ -1525,7 +1482,7 @@ Proof
     simp[ALOOKUP_APPEND] >> strip_tac >>
     (* Bridge: bbs_outputs_agree + children_rename_states bbs = bbs' *)
     mp_tac (Q.SPECL [`dtree`, `(ctrs,stacks)`, `bbs`, `succ_map`,
-      `FLAT (MAP dom_tree_labels children)`] bbs_outputs_agree_rename_blocks) >>
+      `FLAT (MAP dom_tree_labels children)`] rename_blocks_bbs_outputs_agree) >>
     impl_tac >- (
       conj_tac >> rpt strip_tac
       >- (qpat_x_assum `ALL_DISTINCT (FLAT (MAP dom_tree_labels (_ :: _)))` mp_tac >>

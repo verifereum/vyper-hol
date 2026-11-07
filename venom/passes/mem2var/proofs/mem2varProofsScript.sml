@@ -1,6 +1,6 @@
 Theory mem2varProofs
 Ancestors
-  mem2varDefs mem2varFrame basePtrProps pointerConfinedDefs passSimulationProps
+  venomFnInstsProofs mem2varDefs mem2varFrame basePtrProps pointerConfinedDefs passSimulationProps
   memLocDefs venomExecProofs venomInstProofs venomMemDefs venomMemProps
   basePtrDefs
   passSimulationDefs
@@ -319,23 +319,6 @@ QED
    P-PRESERVATION: original execution preserves m2v_fresh_undef
    ================================================================ *)
 
-(* fn_insts membership *)
-Theorem MEM_fn_insts_blocks:
-  !bbs inst bb.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
-QED
-
-Theorem MEM_fn_insts:
-  !fn inst bb.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  rw[fn_insts_def] >> metis_tac[MEM_fn_insts_blocks]
-QED
-
 (* General list lemma: ALL_DISTINCT (MAP f l) implies f is injective on l *)
 Theorem ALL_DISTINCT_MAP_IMP:
   !f l x y. ALL_DISTINCT (MAP f l) /\ MEM x l /\ MEM y l /\ (f x = f y) ==>
@@ -481,19 +464,11 @@ Proof
   metis_tac[ALL_DISTINCT_FLAT_MAP_unique, ssa_form_def]
 QED
 
-(* fn_inst_wf + membership in fn_insts → inst_wf *)
-Theorem MEM_fn_insts_blocks_rev[local]:
-  !bbs inst. MEM inst (fn_insts_blocks bbs) ==>
-    ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Theorem fn_inst_wf_MEM:
   !fn inst. fn_inst_wf fn /\ MEM inst (fn_insts fn) ==> inst_wf inst
 Proof
   rw[fn_inst_wf_def, fn_insts_def] >>
-  drule MEM_fn_insts_blocks_rev >> metis_tac[]
+  drule mem_fn_insts_blocks_rev >> metis_tac[]
 QED
 
 (* General: ALL_DISTINCT on MAP FST means same key → same value *)
@@ -1048,12 +1023,6 @@ Proof
   >> metis_tac[alloca_bridge_step_non_alloca]
 QED
 
-
-Triviality is_terminator_not_INVOKE:
-  !opc. is_terminator opc ==> opc <> INVOKE
-Proof
-  strip_tac >> CCONTR_TAC >> gvs[EVAL ``is_terminator INVOKE``]
-QED
 
 Triviality ptr_matches_var_inst_idx[simp]:
   ptr_matches_var p v (s with vs_inst_idx := n) = ptr_matches_var p v s

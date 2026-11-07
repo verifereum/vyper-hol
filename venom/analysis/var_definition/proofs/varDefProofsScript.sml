@@ -6,7 +6,7 @@
 
 Theory varDefProofs
 Ancestors
-  varDefDefs cfgAnalysisProps dfAnalyzeProps venomWf cfgCorrectnessProof dfHelperProofs dfHelperDefs
+  dfAnalyzeProofs varDefDefs cfgAnalysisProps dfAnalyzeProps venomWf cfgCorrectnessProof dfHelperProofs dfHelperDefs
 
 (* ===== Convergence infrastructure ===== *)
 
@@ -964,18 +964,6 @@ QED
    
    Proof via wl_iterate_invariant with P = vardef_state_inv ∧ entry_boundary = []. *)
 
-(* df_populate_inst preserves ds_boundary *)
-Triviality populate_inst_ds_boundary[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
-    (df_populate_inst dir bottom join transfer edge_transfer ctx
-       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
-Proof
-  rpt gen_tac >>
-  simp[dfAnalyzeDefsTheory.df_populate_inst_def] >>
-  irule dfAnalyzeProofsTheory.foldl_inst_only_boundary >>
-  simp[LET_THM] >> rpt gen_tac >> pairarg_tac >> simp[]
-QED
-
 Triviality vardef_entry_boundary_empty[local]:
   !fn.
     wf_function fn /\
@@ -990,7 +978,7 @@ Proof
   >> qmatch_goalsub_abbrev_tac `wl_iterate changed process deps wl0 st0'`
   >> `FLOOKUP (SND (wl_iterate changed process deps wl0 st0')).ds_boundary
         (HD fn.fn_blocks).bb_label = SOME ([] : string list)`
-       suffices_by simp[populate_inst_ds_boundary]
+       suffices_by simp[df_populate_inst_boundary]
   >> `(\st. vardef_state_inv fn st /\
        FLOOKUP st.ds_boundary (HD fn.fn_blocks).bb_label = SOME ([] : string list))
       (SND (wl_iterate changed process deps wl0 st0'))` suffices_by simp[]

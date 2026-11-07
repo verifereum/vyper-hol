@@ -1,6 +1,6 @@
 Theory mem2varBlockSim
 Ancestors
-  mem2varBlockSimHelpers
+  venomFnInstsProofs opcodeClass mem2varBlockSimHelpers
   mem2varDefs mem2varProofs mem2varFrame
   passSharedTransfer passSharedField
   venomExecSemantics venomState venomWf

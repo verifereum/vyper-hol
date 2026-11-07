@@ -324,7 +324,7 @@ Proof
 QED
 
 (* rename_inst preserves opcode *)
-Triviality rename_inst_opcode_preserved:
+Theorem rename_inst_opcode_preserved:
   !rs inst. (SND (rename_inst rs inst)).inst_opcode = inst.inst_opcode
 Proof
   rw[rename_inst_def, LET_THM] >> pairarg_tac >> gvs[]
@@ -423,21 +423,6 @@ QED
 (* ==========================================================================
    Part 4: Lookup helpers
    ========================================================================== *)
-
-Theorem lookup_block_label[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
-Proof
-  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >> gvs[] >>
-  first_x_assum irule >> gvs[lookup_block_def]
-QED
-
-Theorem lookup_block_MEM[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >> gvs[] >>
-  disj2_tac >> first_x_assum irule >> gvs[lookup_block_def] >>
-  metis_tac[]
-QED
 
 Theorem lookup_block_EL[local]:
   !bbs n.

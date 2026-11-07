@@ -446,7 +446,7 @@ QED
    ========================================================================= *)
 
 (* sa_spill_base is unchanged by any prefix op *)
-Theorem apply_prefix_op_spill_base[local]:
+Theorem apply_prefix_op_spill_base:
   !lo op ps.
     (apply_prefix_op initial_fmp lo op ps).ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
 Proof
@@ -457,7 +457,7 @@ Proof
   TRY (Cases_on `o'` >> simp[apply_simple_op_def])
 QED
 
-Theorem apply_prefix_ops_spill_base[local]:
+Theorem apply_prefix_ops_spill_base:
   !lo ops ps.
     (apply_prefix_ops initial_fmp lo ops ps).ps_alloc.sa_spill_base =
     ps.ps_alloc.sa_spill_base
@@ -779,36 +779,6 @@ QED
 (* =========================================================================
    do_swap ops: EVERY is_prefix_op
    ========================================================================= *)
-
-Theorem do_swap_every_prefix_op[local]:
-  !dist ps ops ps'.
-    do_swap dist ps = (ops, ps') ==>
-    EVERY is_prefix_op ops
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `dist = 0`
-  >- gvs[do_swap_def]
-  >> Cases_on `dist <= 16`
-  >- (gvs[do_swap_def] >>
-      simp[prefixSimTheory.is_prefix_op_def, is_simple_stack_op_def])
-  >> fs[do_swap_def] >>
-  qabbrev_tac `fres = FOLDL
-    (\(ops,offs,al) item.
-       (\(off,al'). (ops ++ [SOSpill off], SNOC off offs, al'))
-         (alloc_spill_slot al))
-    ([],[],ps.ps_alloc)
-    (top_n (dist + 1) ps.ps_stack)` >>
-  PairCases_on `fres` >> fs[] >>
-  (* Derive: spill ops = MAP SOSpill offsets *)
-  qspecl_then [`top_n (dist + 1) ps.ps_stack`, `[]`, `[]`, `ps.ps_alloc`]
-    mp_tac spill_foldl_ops_eq_map >>
-  simp[] >> strip_tac >>
-  (* fres0 = MAP SOSpill fres1, so all are is_prefix_op *)
-  simp[EVERY_APPEND, EVERY_MAP, EVERY_MEM, MEM_MAP] >>
-  rpt strip_tac >> gvs[] >>
-  TRY (simp[prefixSimTheory.is_prefix_op_def] >> NO_TAC) >>
-  fs[MEM_MAP] >> gvs[] >> simp[prefixSimTheory.is_prefix_op_def]
-QED
 
 (* =========================================================================
    do_swap dist > 16: via mixed_prefix_venom_asm_rel
@@ -2623,12 +2593,6 @@ Proof
   (impl_tac >- simp[raw_spill_dimindex_256, dividesTheory.divides_def]) >>
   simp[wordsTheory.w2n_n2w]
 QED
-Theorem raw_spill_asm_step_op_mstore[local]:
-  !o2pc st. asm_step_op o2pc "MSTORE" st = asm_mstore st
-Proof
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def]
-QED
 
 Theorem raw_spill_asm_steps[local]:
   !lo o2pc prog off st.
@@ -2654,7 +2618,7 @@ Proof
   simp[asm_step_def, raw_spill_push_encode_num_roundtrip, asm_next_def] >>
   SUBST1_TAC (DECIDE ``1 = SUC 0``) >>
   simp[Once asm_steps_def] >>
-  simp[asm_step_def, raw_spill_asm_step_op_mstore, asm_mstore_def,
+  simp[asm_step_def, asm_step_op_mstore, asm_mstore_def,
        asm_next_def, asm_steps_def, mem_write32_def]
 QED
 
@@ -2869,14 +2833,6 @@ Proof
   conj_tac >- simp[] >> first_assum ACCEPT_TAC
 QED
 
-(* Raw SORestore execution; the memory expansion is exposed explicitly. *)
-Theorem raw_restore_asm_step_op_mload[local]:
-  !o2pc st. asm_step_op o2pc "MLOAD" st = asm_mload st
-Proof
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def]
-QED
-
 Theorem raw_restore_asm_steps:
   !lo o2pc prog off st.
     off < dimword(:256) /\
@@ -2900,7 +2856,7 @@ Proof
   simp[asm_step_def, raw_spill_push_encode_num_roundtrip, asm_next_def] >>
   SUBST1_TAC (DECIDE ``1 = SUC 0``) >>
   simp[Once asm_steps_def] >>
-  simp[asm_step_def, raw_restore_asm_step_op_mload, asm_mload_def,
+  simp[asm_step_def, asm_step_op_mload, asm_mload_def,
        asm_next_def, asm_steps_def, word_of_bytes_take_drop_expand]
 QED
 

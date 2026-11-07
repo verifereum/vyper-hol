@@ -268,34 +268,7 @@ Proof
   metis_tac[]
 QED
 
-(* apply_groups_inst/apply_memzero_inst identity when not in nop_set/rep_map *)
-Theorem apply_groups_inst_identity[local]:
-  !mode nop_set rep_map inst.
-    ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = NONE ==>
-    apply_groups_inst mode nop_set rep_map inst = [inst]
-Proof
-  simp[apply_groups_inst_def]
-QED
-
-Theorem apply_memzero_inst_identity[local]:
-  !nop_set rep_map inst.
-    ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = NONE ==>
-    apply_memzero_inst nop_set rep_map inst = [inst]
-Proof
-  simp[apply_memzero_inst_def]
-QED
-
 (* ===== Non-terminator bridge lemmas ===== *)
-
-Theorem is_zero_store_not_term[local]:
-  !inst. is_zero_store inst ==> ~is_terminator inst.inst_opcode
-Proof rw[is_zero_store_def] >> EVAL_TAC
-QED
-
-Theorem is_cds_copy_not_term[local]:
-  !dfg inst. is_calldatasize_copy dfg inst ==> ~is_terminator inst.inst_opcode
-Proof rw[is_calldatasize_copy_def] >> EVAL_TAC
-QED
 
 Theorem mode_load_not_term[local]:
   !mode. ~is_terminator (mode_load_opcode mode)
@@ -310,12 +283,6 @@ QED
 Theorem mstore_not_term[local]:
   ~is_terminator MSTORE
 Proof EVAL_TAC
-QED
-
-Theorem terminator_no_outputs[local]:
-  !inst. inst_wf inst /\ is_terminator inst.inst_opcode ==> inst.inst_outputs = []
-Proof
-  rw[inst_wf_def] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
 QED
 
 (* IDs in sort_ids_by_block come from the input ids list *)
@@ -517,15 +484,6 @@ Proof
   simp[scan_has_id_def, invalidate_loads_def]
 QED
 
-Theorem add_copy_has_id[local]:
-  !copies new_cg id.
-    (?cg. MEM cg (add_copy copies new_cg) /\ MEM id cg.cg_inst_ids) <=>
-    MEM id new_cg.cg_inst_ids \/
-    (?cg. MEM cg copies /\ MEM id cg.cg_inst_ids)
-Proof
-  simp[add_copy_ids]
-QED
-
 Theorem scan_has_id_loads_irrel[local]:
   !ss x id. scan_has_id (ss with ss_loads := x) id <=> scan_has_id ss id
 Proof
@@ -555,7 +513,7 @@ Theorem scan_has_id_add_copy[local]:
     scan_has_id (ss with ss_copies := add_copy ss.ss_copies new_cg) id <=>
     MEM id new_cg.cg_inst_ids \/ scan_has_id ss id
 Proof
-  simp[scan_has_id_def, add_copy_has_id] >> metis_tac[]
+  simp[scan_has_id_def, add_copy_ids] >> metis_tac[]
 QED
 
 Theorem scan_store_has_id[local]:
@@ -759,23 +717,42 @@ Definition memzero_has_id_def:
     (?cg. MEM cg mz.mz_flushed /\ MEM id cg.cg_inst_ids)
 End
 
+Theorem memzero_has_id_barrier[local]:
+  !mz id. memzero_has_id (memzero_barrier mz) id <=> memzero_has_id mz id
+Proof
+  simp[memzero_has_id_def, memzero_barrier_def, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem memzero_has_id_add_copy[local]:
+  !mz d l ids id.
+    memzero_has_id
+      (mz with mz_copies := add_copy mz.mz_copies (copy_memzero d l ids)) id <=>
+    MEM id ids \/ memzero_has_id mz id
+Proof
+  simp[memzero_has_id_def, add_copy_ids, copy_memzero_def] >> metis_tac[]
+QED
+
+(* scan_inst_memzero: direct adds have specific opcodes *)
+Theorem scan_inst_memzero_has_id_strong[local]:
+  !dfg mz inst id.
+    memzero_has_id (scan_inst_memzero dfg mz inst) id ==>
+    memzero_has_id mz id \/
+    (inst.inst_id = id /\
+     (inst.inst_opcode = MSTORE \/ inst.inst_opcode = CALLDATACOPY))
+Proof
+  rw[scan_inst_memzero_def] >> BasicProvers.every_case_tac >>
+  gvs[memzero_has_id_barrier, memzero_has_id_add_copy, LET_THM] >>
+  gvs[is_zero_store_def, is_calldatasize_copy_def]
+QED
+
 Theorem scan_inst_memzero_has_id[local]:
   !dfg mz inst id.
     memzero_has_id (scan_inst_memzero dfg mz inst) id ==>
     memzero_has_id mz id \/
     (inst.inst_id = id /\ ~is_terminator inst.inst_opcode)
 Proof
-  rpt gen_tac >> simp[scan_inst_memzero_def, memzero_has_id_def] >>
-  rpt IF_CASES_TAC >> gvs[] >>
-  rpt (CASE_TAC >> gvs[memzero_barrier_def, MEM_APPEND]) >>
-  gvs[add_copy_def] >>
-  strip_tac >> gvs[] >>
-  TRY (imp_res_tac insert_sorted_ids >> gvs[copy_memzero_def] >>
-       metis_tac[is_zero_store_not_term, is_cds_copy_not_term]) >>
-  TRY (imp_res_tac merge_adjacent_ids >> gvs[] >>
-       imp_res_tac insert_sorted_ids >> gvs[copy_memzero_def] >>
-       metis_tac[is_zero_store_not_term, is_cds_copy_not_term]) >>
-  gvs[memzero_barrier_def, MEM_APPEND] >> metis_tac[]
+  rpt strip_tac >> drule scan_inst_memzero_has_id_strong >>
+  rw[] >> simp[is_terminator_def]
 QED
 
 (* Memzero scan invariant (simpler: no dfg_get_def).
@@ -1264,7 +1241,7 @@ Proof
   mp_tac (Q.SPECL [`dfg`, `bb`] term_id_not_in_memzero_scan_weak) >>
   simp[LET_THM] >> rpt strip_tac >>
   simp[last_flat_map_singleton, apply_memzero_inst_nonempty,
-       apply_memzero_inst_identity]
+       apply_memzero_unchanged]
 QED
 
 (* Mode LAST preservation using weak preconditions *)
@@ -1285,7 +1262,7 @@ Proof
           term_id_not_in_mode_scan_weak) >>
   simp[LET_THM] >> rpt strip_tac >>
   simp[last_flat_map_singleton, apply_groups_inst_nonempty,
-       apply_groups_inst_identity]
+       apply_groups_unchanged]
 QED
 
 (* Memzero FLAT MAP preserves term_unique *)
@@ -1305,9 +1282,9 @@ Proof
   simp[LET_THM] >> rpt strip_tac
   >- metis_tac[flat_map_nonempty, apply_memzero_inst_nonempty]
   >- simp[last_flat_map_singleton, apply_memzero_inst_nonempty,
-          apply_memzero_inst_identity]
+          apply_memzero_unchanged]
   >> gvs[MEM_FLAT, MEM_MAP] >>
-     metis_tac[apply_memzero_ids, apply_memzero_inst_identity, MEM]
+     metis_tac[apply_memzero_ids, apply_memzero_unchanged, MEM]
 QED
 
 (* Mode FLAT MAP preserves term_unique *)
@@ -1332,9 +1309,9 @@ Proof
   simp[LET_THM] >> rpt strip_tac
   >- metis_tac[flat_map_nonempty, apply_groups_inst_nonempty]
   >- simp[last_flat_map_singleton, apply_groups_inst_nonempty,
-          apply_groups_inst_identity]
+          apply_groups_unchanged]
   >> gvs[MEM_FLAT, MEM_MAP] >>
-     metis_tac[apply_groups_ids, apply_groups_inst_identity, MEM]
+     metis_tac[apply_groups_ids, apply_groups_unchanged, MEM]
 QED
 
 Theorem transform_block_succs[local]:
@@ -1504,27 +1481,6 @@ Proof
   >- metis_tac[]
   >> (imp_res_tac dfg_build_function_correct >>
       gvs[empty_scan_state_def, FDOM_FEMPTY] >> metis_tac[])
-QED
-
-(* scan_inst_memzero: direct adds have specific opcodes *)
-Theorem scan_inst_memzero_has_id_strong[local]:
-  !dfg mz inst id.
-    memzero_has_id (scan_inst_memzero dfg mz inst) id ==>
-    memzero_has_id mz id \/
-    (inst.inst_id = id /\
-     (inst.inst_opcode = MSTORE \/ inst.inst_opcode = CALLDATACOPY))
-Proof
-  rpt gen_tac >> simp[scan_inst_memzero_def, memzero_has_id_def] >>
-  rpt IF_CASES_TAC >> gvs[] >>
-  rpt (CASE_TAC >> gvs[memzero_barrier_def, MEM_APPEND]) >>
-  gvs[add_copy_def] >>
-  strip_tac >> gvs[] >>
-  TRY (imp_res_tac insert_sorted_ids >> gvs[copy_memzero_def] >>
-       metis_tac[is_zero_store_def, is_calldatasize_copy_def]) >>
-  TRY (imp_res_tac merge_adjacent_ids >> gvs[] >>
-       imp_res_tac insert_sorted_ids >> gvs[copy_memzero_def] >>
-       metis_tac[is_zero_store_def, is_calldatasize_copy_def]) >>
-  gvs[memzero_barrier_def, MEM_APPEND] >> metis_tac[]
 QED
 
 (* FOLDL version for memzero *)
@@ -1786,7 +1742,7 @@ Proof
        (rep_map_of_groups bb.bb_instructions
           (scan_block_memzero dfg bb).mz_flushed)
        inst = [inst]` suffices_by simp[EVERY_DEF] >>
-    irule apply_memzero_inst_identity >> conj_tac >| [
+    irule apply_memzero_unchanged >> conj_tac >| [
       rpt strip_tac >> imp_res_tac nop_ids_mem >>
       metis_tac[phi_id_not_in_memzero_scan],
       Cases_on `ALOOKUP
@@ -1796,7 +1752,7 @@ Proof
       imp_res_tac rep_map_mem >>
       metis_tac[phi_id_not_in_memzero_scan]
     ],
-    rpt strip_tac >> irule apply_memzero_inst_identity >>
+    rpt strip_tac >> irule apply_memzero_unchanged >>
     imp_res_tac term_id_not_in_memzero_scan_weak >> gvs[LET_THM]
   ]
 QED
@@ -1879,7 +1835,7 @@ Proof
        (rep_map_of_groups bb.bb_instructions
           (scan_block (dfg_build_function fn) mode bb).ss_flushed)
        inst = [inst]` suffices_by simp[EVERY_DEF] >>
-    irule apply_groups_inst_identity >>
+    irule apply_groups_unchanged >>
     (conj_tac >| [
       rpt strip_tac >> imp_res_tac nop_ids_mem >>
       imp_res_tac mode_phi_exclusion >> metis_tac[],
@@ -1891,7 +1847,7 @@ Proof
       imp_res_tac mode_phi_exclusion >> metis_tac[]
     ]),
     (* 5: terminator identity *)
-    rpt strip_tac >> irule apply_groups_inst_identity >>
+    rpt strip_tac >> irule apply_groups_unchanged >>
     imp_res_tac term_id_not_in_mode_scan_weak >> gvs[LET_THM]
   ]
 QED
@@ -2010,7 +1966,7 @@ Theorem apply_memzero_inst_phi_identity[local]:
          (scan_block_memzero dfg bb).mz_flushed)
       inst = [inst]
 Proof
-  rpt strip_tac >> irule apply_memzero_inst_identity >>
+  rpt strip_tac >> irule apply_memzero_unchanged >>
   conj_tac >| [
     rpt strip_tac >> imp_res_tac nop_ids_mem >>
     metis_tac[phi_id_not_in_memzero_scan],
@@ -2057,7 +2013,7 @@ Theorem apply_groups_inst_phi_identity[local]:
          (scan_block (dfg_build_function fn) mode bb).ss_flushed)
       inst = [inst]
 Proof
-  rpt strip_tac >> irule apply_groups_inst_identity >>
+  rpt strip_tac >> irule apply_groups_unchanged >>
   conj_tac >| [
     rpt strip_tac >> imp_res_tac nop_ids_mem >>
     imp_res_tac mode_phi_exclusion >> metis_tac[],

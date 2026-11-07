@@ -7,7 +7,7 @@
 
 Theory dominatorProofs
 Ancestors
-  dominatorDefs cfgAnalysisProps dfAnalyzeProps cfgCorrectnessProof cfgHelpers dfHelperProofs dfHelperDefs
+  dfAnalyzeProofs dominatorDefs cfgAnalysisProps dfAnalyzeProps cfgCorrectnessProof cfgHelpers dfHelperProofs dfHelperDefs
 Libs
   listTheory finite_mapTheory pred_setTheory pairTheory
 
@@ -919,19 +919,6 @@ val df_process_deps_complete_fwd' =
   |> Q.SPEC `Forward`
   |> SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def];
 
-(* df_populate_inst preserves ds_boundary *)
-Triviality populate_inst_ds_boundary[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
-    (df_populate_inst dir bottom join transfer edge_transfer ctx
-       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
-Proof
-  rpt gen_tac >>
-  simp[dfAnalyzeDefsTheory.df_populate_inst_def] >>
-  irule dfAnalyzeProofsTheory.foldl_inst_only_boundary >>
-  simp[LET_THM] >>
-  rpt gen_tac >> pairarg_tac >> simp[]
-QED
-
 (* dom_extra_inv only depends on ds_boundary *)
 Triviality dom_extra_inv_boundary_only[local]:
   !fn s1 s2. s1.ds_boundary = s2.ds_boundary ==>
@@ -1028,7 +1015,7 @@ Proof
        (cfg_analyze fn) fn.fn_blocks
        (MAP (\bb. bb.bb_label) fn.fn_blocks)
        wl_res).ds_boundary = wl_res.ds_boundary`
-    by simp[populate_inst_ds_boundary] >>
+    by simp[df_populate_inst_boundary] >>
   metis_tac[dom_state_inv_bdy_boundary_only, dom_extra_inv_boundary_only]
 QED
 
@@ -1077,19 +1064,6 @@ QED
    Bridge lemmas: connect public API to internal fixpoint state
    ======================================================================== *)
 
-(* cfg_dfs_pre membership implies fn_labels membership *)
-Triviality cfg_dfs_pre_mem_fn_labels:
-  !fn lbl. wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
-           MEM lbl (fn_labels fn)
-Proof
-  rpt strip_tac >>
-  irule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >>
-  `set (cfg_analyze fn).cfg_dfs_pre =
-   {lbl | cfg_reachable_of (cfg_analyze fn) lbl}` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_sets] >>
-  fs[pred_setTheory.EXTENSION, pred_setTheory.GSPECIFICATION]
-QED
-
 (* Bridge: fmap_lookup_list on da_dominators = df_boundary at fixpoint *)
 Triviality dom_lookup_boundary:
   !fn cfg lbl.
@@ -1118,7 +1092,7 @@ Theorem dom_fixpoint_boundary_subset[local]:
     set (dom_joined fn (dom_fixpoint fn) lbl)
 Proof
   rpt strip_tac >>
-  `MEM lbl (fn_labels fn)` by metis_tac[cfg_dfs_pre_mem_fn_labels] >>
+  `MEM lbl (fn_labels fn)` by metis_tac[cfg_dfs_pre_subset_fn_labels] >>
   (* Get fixpoint equation: process lbl st = st *)
   `is_fixpoint
      (df_process_block Forward (fn_labels fn) list_intersect
@@ -1283,7 +1257,7 @@ Triviality dom_fixpoint_bdy_eq_joined:
     set (dom_joined fn (dom_fixpoint fn) lbl)
 Proof
   rpt strip_tac >>
-  `MEM lbl (fn_labels fn)` by metis_tac[cfg_dfs_pre_mem_fn_labels] >>
+  `MEM lbl (fn_labels fn)` by metis_tac[cfg_dfs_pre_subset_fn_labels] >>
   irule pred_setTheory.SUBSET_ANTISYM >> conj_tac
   >- metis_tac[dom_fixpoint_boundary_subset]
   >> (* joined ⊆ bdy: from dom_extra_inv E3 *)
@@ -1301,7 +1275,7 @@ Triviality reachable_mem_fn_labels:
     wf_function fn /\ cfg_reachable_of (cfg_analyze fn) lbl ==>
     MEM lbl (fn_labels fn)
 Proof
-  metis_tac[cfg_dfs_pre_mem_fn_labels,
+  metis_tac[cfg_dfs_pre_subset_fn_labels,
             cfgCorrectnessProofTheory.cfg_analyze_reachable_sets_proof,
             pred_setTheory.EXTENSION, pred_setTheory.IN_GSPEC_IFF,
             listTheory.MEM, pred_setTheory.SPECIFICATION]
@@ -1576,7 +1550,7 @@ Proof
        (cfg_analyze fn) fn.fn_blocks
        (MAP (\bb. bb.bb_label) fn.fn_blocks)
        wl_res).ds_boundary = wl_res.ds_boundary`
-    by simp[populate_inst_ds_boundary] >>
+    by simp[df_populate_inst_boundary] >>
   `!c'. df_boundary (fn_labels fn)
           (df_populate_inst Forward (fn_labels fn) list_intersect
              dom_transfer_inst dom_edge_transfer ()

@@ -17,13 +17,13 @@ Libs
    Commutation helpers for vs_prev_bb
    ================================================================ *)
 
-Theorem eval_op_prev_bb[local]:
+Theorem eval_op_prev_bb:
   !op s p. eval_operand op (s with vs_prev_bb := p) = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
 QED
 
-Theorem eval_ops_prev_bb[local]:
+Theorem eval_ops_prev_bb:
   !ops s p.
     eval_operands ops (s with vs_prev_bb := p) = eval_operands ops s
 Proof
@@ -114,7 +114,7 @@ Proof
   simp[tstore_def, contract_transient_def, LET_THM]
 QED
 
-Theorem mcopy_prev_bb[local]:
+Theorem mcopy_prev_bb:
   !dst src sz s p.
     mcopy dst src sz (s with vs_prev_bb := p) =
     (mcopy dst src sz s) with vs_prev_bb := p

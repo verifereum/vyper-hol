@@ -455,21 +455,6 @@ Proof
   irule map_block_sim_err_ind >> simp[]
 QED
 
-(* run_insts on appended lists *)
-Theorem run_insts_append[local]:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
-
 (* Generic FLAT MAP instruction simulation combinator.
    Given a per-instruction simulation property (inst_sim), proves the
    list-level simulation for run_insts vs run_insts on FLAT MAP transform.
@@ -639,9 +624,9 @@ Theorem step_mem_write_only_memory[local]:
     step_inst fuel ctx inst s = OK s' ==>
     s' with vs_memory := s.vs_memory = s
 Proof
-  rpt strip_tac >> gvs[] >> gvs[inst_wf_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
-      exec_write2_def, mstore_def, mcopy_def, LET_THM] >>
+  rpt strip_tac >> gvs[] >> gvs[inst_wf_def, step_inst_non_invoke, is_terminator_def] >>
+  stepInstBaseLib.with_opcode_clause (fn ths => gvs (ths @
+    [exec_write2_def, mstore_def, mcopy_def, LET_THM])) >>
   BasicProvers.every_case_tac >> gvs[wmexp_only_changes_memory] >>
   simp[venom_state_component_equality]
 QED
@@ -2233,13 +2218,6 @@ Proof
   qpat_x_assum `exec_block _ _ bb _ = _` (fn th => REWRITE_TAC [th]) >>
   qpat_x_assum `exec_block _ _ bb' _ = _` (fn th => REWRITE_TAC [th]) >>
   irule terminator_step_equiv >> simp[]
-QED
-
-(* execution_equiv is symmetric (not in shared Props, so proved locally) *)
-Theorem execution_equiv_sym[local]:
-  !vars s1 s2. execution_equiv vars s1 s2 ==> execution_equiv vars s2 s1
-Proof
-  simp[execution_equiv_def]
 QED
 
 (* Reusable: lift_result symmetry *)
