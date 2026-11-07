@@ -5207,3 +5207,206 @@ Resume ld_recursive_return_restore[revert_successor]:
 QED
 
 Finalise ld_recursive_return_restore
+
+(* Fixed-environment specialization of the provenance-forgetting induction.
+   Unlike the raw five clause quotations, these premises quantify neither
+   initial state nor context. No constructor closure is assumed implicitly. *)
+Theorem ld_frame_reachable_fixed_projected_ind:
+  !P.
+  (!name fn lbl inst s1.
+    CT.ctx_entry = SOME name /\
+    lookup_function name CT.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    enters_block fn (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+      vs_inst_idx := 0|>) s1 /\ active_inst fn inst s1 ==>
+    P [] entry_taint fn inst s1) /\
+  (!stk tn fn inst inst' s s' fuel.
+    P stk tn fn inst s /\ active_inst fn inst s /\
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst fuel CT inst s = OK s' /\
+    active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+    P stk (step_taint inst s s' tn) fn inst'
+      (s' with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  (!stk tn fn inst inst' s s' s1 fuel.
+    P stk tn fn inst s /\ active_inst fn inst s /\
+    is_terminator inst.inst_opcode /\ step_inst fuel CT inst s = OK s' /\
+    ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+    P stk (entry_taint_vars fn s' tn) fn inst' s1) /\
+  (!stk tn caller inv s nm ops callee args cs s1 inst.
+    P stk tn caller inv s /\ active_inst caller inv s /\
+    inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME (nm,ops) /\
+    lookup_function nm CT.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+    enters_block callee cs s1 /\ active_inst callee inst s1 ==>
+    P ((caller,inv,s,tn.t_var)::stk) (tn with t_var := FEMPTY) callee inst s1) /\
+  (!caller inv saved T stk tn fn rinst s ret s_end s' inst' fuel.
+    P ((caller,inv,saved,T)::stk) tn fn rinst s /\ active_inst fn rinst s /\
+    step_inst fuel CT rinst s = IntRet ret s_end /\
+    bind_outputs inv.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state saved s_end)) = SOME s' /\
+    active_inst caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx) ==>
+    P stk (tn with t_var := DRESTRICT T (COMPL (set inv.inst_outputs)))
+      caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx)) ==>
+  !stk PG G tn fn inst s.
+    frame_reachable vs0 CT stk PG G tn fn inst s ==>
+    P (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) tn fn inst s
+Proof
+  gen_tac >> strip_tac >>
+  qspec_then `\v c stk tn fn inst s.
+    v = vs0 /\ c = CT ==> P stk tn fn inst s`
+    mp_tac ld_frame_reachable_projected_ind >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> rpt gen_tac >>
+    strip_tac >> gvs[] >> metis_tac[])) >>
+  simp[]
+QED
+
+fun ld_fix_combined_environment clause =
+  let val (v0::ct::rest,b) = strip_forall clause
+  in subst [v0 |-> mk_var("vs0",type_of v0),
+            ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
+val ld_recursive_combined_fixed_clauses =
+  list_mk_conj (map ld_fix_combined_environment ld_recursive_combined_clause_goals);
+
+Theorem ld_recursive_combined_coverage_conditional:
+  ^ld_recursive_combined_fixed_clauses ==>
+  !stk PG G un gn j t.
+    frame_reachable vs0 CT stk PG G un gn j t ==>
+    (^ld_recursive_combined_candidate) vs0 CT
+      (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) un gn j t
+Proof
+  qspec_then `\stk un gn j t.
+    (^ld_recursive_combined_candidate) vs0 CT stk un gn j t`
+    mp_tac ld_frame_reachable_fixed_projected_ind >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> disch_then ACCEPT_TAC
+QED
+
+(* Exact syntactic complement of the ordinary producer for successful NEXT.
+   This is an opcode audit only, not a semantic closure producer. *)
+val ld_audited_ordinary_opcodes =
+  let val (_,b) = dest_forall (concl ld_normal_ordinary_next_backward)
+      val (pre,_) = dest_imp b
+      val ordinary = hd (filter
+        (can (match_term ``MEM (ii:instruction).inst_opcode ops``))
+        (strip_conj pre))
+  in find_term listSyntax.is_list ordinary end;
+
+Theorem ld_recursive_next_opcode_partition:
+  ~is_terminator opc /\ opc <> INVOKE ==>
+  (MEM opc ^ld_audited_ordinary_opcodes <=>
+   ~MEM opc [ALLOCA; DLOAD; DLOADBYTES; CALL; STATICCALL; DELEGATECALL;
+             CREATE; CREATE2; MEMTOP; FMP_PARAM; PHI; DALLOCA; GETFMP; SETFMP])
+Proof
+  Cases_on `opc` >> simp[is_terminator_def]
+QED
+
+(* GLOBAL CONSTRUCTOR AUDIT -- supersedes the unfinished constructor ledger
+   above, but does not alter any accepted result or assert global coverage.
+
+   CHECKED ASSEMBLY INTERFACE:
+   ld_frame_reachable_fixed_projected_ind fixes vs0 and CT before requiring
+   the five clauses. ld_recursive_combined_coverage_conditional substitutes
+   the CURRENT combined quotation, with no candidate unfolding in its proof.
+   Its antecedent is exactly the conjunction of ENTRY, NEXT, BLOCK, CALL,
+   RETURN generated at those fixed environments; its conclusion is combined
+   coverage of every frame_reachable vs0 CT state at the projected actual
+   target stack. In particular the quotation names for clauses are not proofs
+   and no arbitrary-context induction premise is silently specialized.
+
+   EXISTING CONSTRUCTOR MAPPING:
+   ENTRY: ld_recursive_combined_entry_clause.
+   BLOCK: ld_recursive_combined_block_clause.
+   CALL: ld_recursive_combined_call_clause.
+   RETURN: ld_recursive_return_restore (accepted E0499), including normal and
+     exceptional restored callers. Its conclusion universally supplies the
+     combined candidate at every actual resumed active j'. It consumes the
+     paired-pop inputs of ld_recursive_paired_return_pop, so the remaining
+     rule-5 specialization must chain that existing prefix/pop interface,
+     not assume a completed source run. Do not reopen restoration itself.
+   ENTRY/BLOCK/CALL use the frozen environmental antecedent and
+   lo=vs0.vs_alloca_next. RETURN needs the described prefix/pop specialization;
+   NEXT is not yet a full constructor theorem.
+
+   NEXT PARTITION:
+   First split the candidate's exceptional interval from its normal witness.
+   In the normal witness, n+1 < LENGTH code is the strict-progress restriction
+   ld_recursive_combined_inside, closed by ld_recursive_combined_prefix_next.
+   This includes the FIRST macro step at n=0; inside is not merely n>0.
+   At the last step n+1=LENGTH code, DLOAD has four instructions and n=3,
+   DLOADBYTES has two and n=1. Use ld_recursive_combined_load_next and
+   ld_recursive_combined_bytes_next respectively. All other instructions
+   have singleton code and n=0: use ld_recursive_combined_alloca_next for
+   ALLOCA, or ld_recursive_combined_ordinary_next on its exact opcode list.
+   Each restriction retains the same saved witnesses, rather than recovering
+   strengthened geometry from a forgetting theorem. The configured segment
+   equations and active position in the candidate supply this split; the
+   unrestricted dispatcher implementing the split is still unproved.
+
+   ld_recursive_next_opcode_partition checks the exact remaining opcode list
+   after excluding terminators and INVOKE. Its non-macro/nonordinary members
+   are CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2, MEMTOP, FMP_PARAM, PHI,
+   DALLOCA, GETFMP, SETFMP. Of these:
+   - MEMTOP and FMP_PARAM are EXCLUDED by source fn_ptr_ok_def (not by
+     o1_ctx_shape or a conjectured raw_opcode_ok).
+   - DALLOCA/GETFMP/SETFMP are excluded by fmp_free_ctx/no_raw_fmp_ops and
+     is_raw_fmp_opcode_def. DRET/RETFMP are already terminators, and are also
+     forbidden. INITIAL_FMP and BUMP are NOT raw-FMP opcodes; they are in the
+     ordinary producer. RETPC_PARAM is ordinary, unlike FMP_PARAM.
+   - PHI has step_inst = Error "phi outside prefix", not a successful NEXT.
+   - The five EXTERNAL opcodes are genuine uncovered successful NEXT cases.
+     Their semantic backward producers/combined packaging are NOT supplied
+     by the ordinary list. No shape assumption in the frozen task excludes
+     them. MEMTOP is therefore not a semantic residual; external calls are.
+
+   EXCEPTIONAL NEXT:
+   ld_recursive_geometry_exceptional_next currently returns the geometry
+   candidate, not the combined candidate. However ld_refine_saved leaves
+   the exceptional disjunct literally unchanged (checked by its ML guard),
+   and ld_refine_geometry adds only current/saved alloca_inv and the normal
+   anchor property. Thus exceptional arms of geometry and combined are the
+   SAME; no saved slice has to be invented there. A combined wrapper/dispatcher
+   must select this arm, retain the two outer geometry facts, and reuse the
+   interval successor certificate. A geometry-to-combined implication for
+   the normal disjunct is NOT available. At a normal phase-zero anchor in
+   in_revert_forward, ordinary_next's ~in_revert_forward premise fails: enter
+   the configured exceptional interval using the existing configured revert
+   entry certificate, with combined packaging still to be checked. These are
+   packaging/dispatch residuals, not new ordinary backward semantics.
+
+   ENVIRONMENTAL PREMISE LEDGER:
+   o1_src_inv_def supplies both mem_inv dload_offset_ok CS vs0 and
+   mem_inv dload_headroom_ok CS vs0 directly. Ordinary and ALLOCA use the
+   headroom one; bytes uses offset; load uses BOTH. No implication between
+   these memory invariants is needed. o1_run_state_ok and o1_ctx_shape are
+   literal frozen hypotheses, and callee_first names CS.ctx_functions is
+   literal as well. opaque_use_ok fn follows from shape and source function
+   membership; configured stage, segment, original support, current source
+   annotation, prefix, account and saved geometry come from normal witnesses.
+   Annotated erasure and mem_inv_raw_reachable specialize memory invariants
+   at the source anchor. These are local premises, not target provenance.
+
+   The common P in !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g is available
+   from ONE existential witness in ptr_discipline_def and EVERY_MEM; choose
+   that witness once. It is not a separate P chosen independently per fn.
+   o1_src_inv gives ?l. fixed_region_reserved l CS /\ ptr_discipline l CS vs0.
+   Its ptr_discipline only implies l <= vs0.vs_alloca_next, NOT equality.
+   The present full constructor interfaces fix lo=vs0.vs_alloca_next, and
+   the normal NEXT interfaces require ptr_discipline at their same lo.
+   Consequently raising that existential discipline to the fixed initial
+   frontier remains an environmental transport residual: no such lemma has
+   been identified or proved here. access_ok becomes weaker as its lo grows,
+   but allocas_from becomes stronger, so substitution by arithmetic alone is
+   invalid. Initial empty allocas and reachable allocation-frontier geometry
+   may establish the missing transport; this audit does not assume it.
+
+   OWNERSHIP FOR STRATEGY REVIEW:
+   allocation.closure's local macro/account/geometry work is represented by
+   the accepted combined ALLOCA/load/bytes/prefix producers; remaining work
+   is their exhaustive NEXT dispatch and the common floor transport, not a
+   duplicate allocation producer. external.closure still owns the five
+   external NEXT cases and later external/request observations. return.close
+   restoration is covered by ld_recursive_return_restore; no new RETURN
+   producer is required. coverage.close owns unconditional five-clause
+   assembly, including opcode exclusions, exceptional packaging and environment
+   discharge. Terminal/Halt/dead-set consumers and frozen final taint assembly
+   remain outside this diagnostic; conditional coverage proves none of them.
+*)
