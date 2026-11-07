@@ -214,7 +214,6 @@ Proof
       gvs[Once dead_bytes_def] >>
       rename1 `a < n'` >> pure_once_rewrite_tac[compileEnvTheory.dead_bytes_def] >>
       qexists `a` >> simp[] >>
-      Cases_on `a < w2n (lookup_storage (n2w off) st)` >> gvs[] >>
       Cases_on `a = Num i`
       >- (gvs[] >> first_x_assum irule >>
           goal_assum (drule_at Any) >> simp[] >> conj_tac
@@ -357,10 +356,8 @@ Proof
   gvs[Once dead_bytes_def] >>
   `w2n w + (i * type_slot_size elem + 1) <= j /\
    j < w2n w + ((i + 1) * type_slot_size elem + 1)` by
-    (Cases_on `i < w2n (lookup_storage w st)` >> gvs[]
-     >- (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >>
-     gvs[arithmeticTheory.MULT_COMM]) >>
+    (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
+     simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >>
   `i = k` suffices_by (strip_tac >> gvs[]) >>
   Cases_on `i < k`
   >- (`(i + 1) * type_slot_size elem <= k * type_slot_size elem` by
