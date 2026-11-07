@@ -5,7 +5,7 @@ Ancestors
   exprSimIfExp exprSimProps exprOperandVar exprLowering context compileEnv
   loweringPosts vyperState vyperAST vyperTypeArgFits vyperTypeSystem exprSimDefs
 
-Theorem nocopy_ifexp_post_annotated[local]:
+Theorem nocopy_ifexp_post_annotated:
   expr_body_pre ce cx env e es /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   (is_word_type (expr_type e) \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
@@ -40,6 +40,41 @@ Proof
   fs[expr_post_def, expr_type_def] >> metis_tac[]
 QED
 
+Theorem nocopy_ifexp_physical_bound:
+  expr_body_pre ce cx env e es /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
+  (is_word_type (expr_type e) \/
+   same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
+  !tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+    ~is_word_type (post_value_type ce e) ==>
+    type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >> strip_tac >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[] >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
+    metis_tac[post_value_type_word, post_value_type_bytestring] >>
+  `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
+    (spose_not_then assume_tac >>
+     `post_value_type ce e = expr_type e` by
+       (irule post_value_type_not_int_call >> metis_tac[]) >> gvs[]) >>
+  gvs[expr_type_def] >>
+  drule_all ifexp_intcall_copy_source >> strip_tac >>
+  drule_all ifexp_body_pre_read_typed >> strip_tac >>
+  `!t tv. evaluate_type (get_tenv cx) t = SOME tv ==>
+    type_memory_bytes ce t = type_memory_size tv` by
+    (rpt strip_tac >> irule expr_sim_inv_memory_size >>
+     goal_assum (drule_at Any) >> fs[expr_body_pre_def] >> metis_tac[]) >>
+  fs[expr_type_def] >>
+  `type_memory_size tvt = type_memory_size tvt'` by
+    (irule evaluated_layout_size >>
+     qexistsl [`ce`, `ann`, `lowered_value_type ce (Call ann (IntCall fid) args drv)`, `get_tenv cx`] >>
+     fs[same_memory_layout_def]) >>
+  drule expr_body_pre_copy_ok >>
+  disch_then (qspec_then `tvt'` mp_tac) >> simp[expr_type_def]
+QED
+
 Theorem compile_nocopy_ifexp_post_frag:
   expr_body_pre ce cx env e es /\
   eval_expr cx e es = (INL tvv,ee) /\
@@ -68,29 +103,8 @@ Proof
     ~is_word_type (post_value_type ce e) ==>
     type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
     type_memory_size tvt < 2 ** 64` by
-    (gen_tac >> strip_tac >>
-     Cases_on `post_value_type ce e = expr_type e`
-     >- (gvs[] >> drule_all expr_body_pre_copy_ok >> simp[]) >>
-     `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
-       metis_tac[post_value_type_word, post_value_type_bytestring] >>
-     `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
-       (spose_not_then assume_tac >>
-        `post_value_type ce e = expr_type e` by
-          (irule post_value_type_not_int_call >> metis_tac[]) >> gvs[]) >>
-     gvs[expr_type_def] >>
-     drule_all ifexp_intcall_copy_source >> strip_tac >>
-     drule_all ifexp_body_pre_read_typed >> strip_tac >>
-     `!t tv. evaluate_type (get_tenv cx) t = SOME tv ==>
-       type_memory_bytes ce t = type_memory_size tv` by
-       (rpt strip_tac >> irule expr_sim_inv_memory_size >>
-        goal_assum (drule_at Any) >> fs[expr_body_pre_def] >> metis_tac[]) >>
-     fs[expr_type_def] >>
-     `type_memory_size tvt = type_memory_size tvt'` by
-       (irule evaluated_layout_size >>
-        qexistsl [`ce`, `ann`, `lowered_value_type ce (Call ann (IntCall fid) args drv)`, `get_tenv cx`] >>
-        fs[same_memory_layout_def]) >>
-     drule expr_body_pre_copy_ok >>
-     disch_then (qspec_then `tvt'` mp_tac) >> simp[expr_type_def]) >>
+    (drule nocopy_ifexp_physical_bound >> simp[] >>
+     disch_then (qspec_then `v` mp_tac) >> simp[]) >>
   drule_all unwrap_value_materialise_physical_sim >>
   disch_then (qspecl_then [`ctx`, `s0`, `R`] mp_tac) >>
   disch_then (mp_then Any mp_tac fragExecTheory.frag_exec_conseq) >>
