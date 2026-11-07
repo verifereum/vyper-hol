@@ -5162,6 +5162,42 @@ Proof
   metis_tac[alias_prepare_params_holds_output, alias_entry_live_param_output]
 QED
 
+Theorem alias_prepare_params_mass_bound:
+  alias_var_mass x (SND (prepare_params_plan live fn ps)) <=
+  alias_var_mass x ps + LIST_ELEM_COUNT x
+    (MAP (\inst. HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  simp[prepare_params_plan_def, parameter_stack_fold] >>
+  IF_CASES_TAC >- simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  `alias_var_mass x ps''' <= alias_var_mass x ps''` by
+    metis_tac[alias_var_mass_optimistic_swap, pairTheory.SND] >>
+  qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `popmany_plan to_delete prepared` >>
+  strip_tac >>
+  `alias_var_mass x ps'' <= alias_var_mass x prepared` by
+    metis_tac[alias_var_mass_popmany, pairTheory.SND] >>
+  gvs[Abbr `prepared`, alias_var_mass_def, elem_count_append,
+      LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_MAP, GSYM MAP_FILTER,
+      MAP_MAP_o, combinTheory.o_DEF] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem alias_prepare_params_parameter_provenance:
+  ps.ps_stack = [] /\ ps.ps_spilled = FEMPTY /\
+  plan_holds (SND (prepare_params_plan live fn ps)) (Var x) ==>
+  MEM x (MAP (\inst. HD inst.inst_outputs)
+    (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  mp_tac (Q.INST [`live` |-> `live`] alias_prepare_params_mass_bound) >>
+  gvs[alias_var_mass_def, LIST_ELEM_COUNT_THM,
+      GSYM LIST_ELEM_COUNT_MEM, plan_holds_def] >>
+  Cases_on `Var x IN FDOM (SND (prepare_params_plan live fn ps)).ps_spilled` >>
+  gvs[] >> decide_tac
+QED
+
 Theorem stack_poke_retains_other:
   MEM at stk /\ stack_peek d stk <> at ==>
   MEM at (stack_poke d ret stk)
@@ -5859,6 +5895,39 @@ Proof
   Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
   >- (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
   first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Theorem alias_ready_parameter_names_distinct:
+  codegen_ready_fn fn ==>
+  ALL_DISTINCT (MAP (\inst. HD inst.inst_outputs)
+    (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  strip_tac >>
+  `param_insts_from 0 (get_params (HD fn.fn_blocks).bb_instructions)` by
+    (drule canonical_get_params_layout >> simp[]) >>
+  drule param_insts_flat_outputs >> disch_then (SUBST1_TAC o SYM) >>
+  qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  Cases_on `fn.fn_blocks`
+  >- gvs[codegen_ready_fn_def, callLayoutDefsTheory.canonical_param_prefix_def] >>
+  gvs[ssa_form_def, fn_insts_def, fn_insts_blocks_def, MAP_APPEND, FLAT_APPEND] >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  qpat_x_assum `h.bb_instructions = _` (fn th =>
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+  simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
+QED
+
+Theorem alias_prepare_params_entry_budget:
+  codegen_ready_fn fn /\ ps.ps_stack = [] /\ ps.ps_spilled = FEMPTY ==>
+  alias_var_budget [] (SND (prepare_params_plan (liveness_analyze fn) fn ps))
+Proof
+  strip_tac >> simp[alias_var_budget_def] >> gen_tac >>
+  drule alias_ready_parameter_names_distinct >> strip_tac >>
+  drule alias_distinct_output_count >> disch_then (qspec_then `x` mp_tac) >>
+  mp_tac (Q.INST [`live` |-> `liveness_analyze fn`]
+    alias_prepare_params_mass_bound) >>
+  simp[alias_var_mass_def, LIST_ELEM_COUNT_THM] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem alias_regular_plan_budget:
@@ -6778,8 +6847,16 @@ Theorem alias_spill_probe_clean_and_phi:
     ([], alias_spill_probe_clean) /\
   ~plan_holds alias_spill_probe_clean (Var "p")
 Proof
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >> EVAL_TAC
+  `alias_spill_probe_clean = alias_spill_probe_after` by
+    (rewrite_tac[alias_spill_probe_clean_def] >>
+     CONV_TAC (DEPTH_CONV (fn tm =>
+       if same_const tm ``alias_spill_probe_after`` then EVAL tm else NO_CONV tm)) >>
+     EVAL_TAC) >>
+  simp[] >> conj_tac
+  >- (CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+        if same_const (fst (strip_comb tm)) ``live_vars_at`` then EVAL tm else NO_CONV tm)) >>
+      EVAL_TAC) >>
+  EVAL_TAC
 QED
 
 Definition alias_spill_probe_assign_def:
@@ -8137,6 +8214,13 @@ Proof
   EVAL_TAC
 QED
 
+Theorem alias_diamond_e_state:
+  SND alias_diamond_e =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "seed"])
+Proof
+  EVAL_TAC
+QED
+
 Definition alias_diamond_h_def:
   alias_diamond_h = THE (alias_diamond_plan 1 (SND alias_diamond_e))
 End
@@ -8146,14 +8230,15 @@ Theorem alias_diamond_h_fields:
   (SND alias_diamond_h).ps_stack = [Var "r"; Var "c"] /\
   (SND alias_diamond_h).ps_spilled = FEMPTY
 Proof
-  EVAL_TAC
+  rewrite_tac[alias_diamond_h_def, alias_diamond_e_state] >>
+  rpt conj_tac >> EVAL_TAC
 QED
 
 Theorem alias_diamond_h_state:
   SND alias_diamond_h =
     (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "r"; Var "c"])
 Proof
-  EVAL_TAC
+  rewrite_tac[alias_diamond_h_def, alias_diamond_e_state] >> EVAL_TAC
 QED
 
 Definition alias_diamond_l_def:
@@ -8204,7 +8289,17 @@ Theorem alias_diamond_joins:
   (SND alias_diamond_jr).ps_spilled = FEMPTY
 Proof
   rewrite_tac[alias_diamond_jl_def, alias_diamond_jr_def, alias_diamond_branch_states] >>
-  rpt conj_tac >> EVAL_TAC
+  rpt conj_tac >> simp[alias_diamond_plan_def] >>
+  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+    if same_const (fst (strip_comb tm)) ``liveness_analyze`` andalso is_comb tm
+    then CHANGED_CONV EVAL tm else NO_CONV tm)) >>
+  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+    if same_const (fst (strip_comb tm)) ``dfg_build_function`` andalso is_comb tm
+    then CHANGED_CONV EVAL tm else NO_CONV tm)) >>
+  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+    if same_const (fst (strip_comb tm)) ``cfg_analyze`` andalso is_comb tm
+    then CHANGED_CONV EVAL tm else NO_CONV tm)) >>
+  EVAL_TAC
 QED
 
 Theorem alias_diamond_join_state:
@@ -9166,6 +9261,72 @@ Proof
     (drule_all alias_ready_phi_suffix >> simp[]) >>
   drule_all alias_ready_param_partition >> strip_tac >>
   gvs[EVERY_MEM, non_param_insts_def, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem alias_prepare_params_entry_fresh:
+  codegen_ready_fn fn /\ ps.ps_stack = [] /\ ps.ps_spilled = FEMPTY /\
+  MEM inst (non_param_insts (HD fn.fn_blocks)) /\ MEM x inst.inst_outputs ==>
+  ~plan_holds (SND (prepare_params_plan (liveness_analyze fn) fn ps)) (Var x)
+Proof
+  strip_tac >> strip_tac >>
+  `MEM x (MAP (\inst. HD inst.inst_outputs)
+    (get_params (HD fn.fn_blocks).bb_instructions))` by
+    (irule alias_prepare_params_parameter_provenance >> simp[] >> metis_tac[]) >>
+  `param_insts_from 0 (get_params (HD fn.fn_blocks).bb_instructions)` by
+    (drule canonical_get_params_layout >> simp[]) >>
+  drule param_insts_flat_outputs >> disch_then (SUBST_ALL_TAC o SYM) >>
+  Cases_on `fn.fn_blocks`
+  >- gvs[codegen_ready_fn_def, callLayoutDefsTheory.canonical_param_prefix_def] >>
+  rename1 `fn.fn_blocks = entry::rest` >> gvs[] >>
+  `lookup_block entry.bb_label fn.fn_blocks = SOME entry` by
+    simp[lookup_block_def, FIND_thm] >>
+  drule_all alias_ready_param_partition >> strip_tac >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  qpat_x_assum `ssa_form fn` mp_tac >>
+  simp[ssa_form_def, fn_insts_def, fn_insts_blocks_def] >>
+  qpat_x_assum `entry.bb_instructions = _` (fn th =>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+  simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND] >>
+  `MEM x (FLAT (MAP (\i. i.inst_outputs) (non_param_insts entry)))` by
+    (simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem alias_prepare_params_initialized_budget:
+  codegen_ready_fn fn ==>
+  alias_var_budget []
+    (SND (prepare_params_plan (liveness_analyze fn) fn
+      ((init_cleanup_plan_state ch growth spill_base lbl_ctr) with
+        <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)))
+Proof
+  strip_tac >> irule alias_prepare_params_entry_budget >>
+  simp[init_cleanup_plan_state_def, init_plan_state_def]
+QED
+
+Theorem alias_prepare_params_initialized_provenance:
+  plan_holds
+    (SND (prepare_params_plan live fn
+      ((init_cleanup_plan_state ch growth spill_base lbl_ctr) with
+        <| ps_cleanup_height := h; ps_cleanup_promised := promised |>))) (Var x) ==>
+  MEM x (MAP (\inst. HD inst.inst_outputs)
+    (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  strip_tac >> irule alias_prepare_params_parameter_provenance >>
+  goal_assum (drule_at Any) >>
+  simp[init_cleanup_plan_state_def, init_plan_state_def]
+QED
+
+Theorem alias_prepare_params_initialized_fresh:
+  codegen_ready_fn fn /\
+  MEM inst (non_param_insts (HD fn.fn_blocks)) /\ MEM x inst.inst_outputs ==>
+  ~plan_holds
+    (SND (prepare_params_plan (liveness_analyze fn) fn
+      ((init_cleanup_plan_state ch growth spill_base lbl_ctr) with
+        <| ps_cleanup_height := h; ps_cleanup_promised := promised |>))) (Var x)
+Proof
+  strip_tac >> irule alias_prepare_params_entry_fresh >>
+  simp[init_cleanup_plan_state_def, init_plan_state_def] >>
+  metis_tac[]
 QED
 
 Theorem alias_phi_prefix_plan_state:
