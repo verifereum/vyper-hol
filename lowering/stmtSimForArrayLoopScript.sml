@@ -1936,7 +1936,7 @@ Resume array_for_loop_counted[round_post]:
   markerLib.RESUME_TAC >> gvs[] >>
   `array_caller_frame caller old t` by
     (irule array_caller_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
-  `alloca_frame cenv origin_es caller old cenv (es_end with gas_obs := []) t` by
+  `alloca_frame cenv origin_es caller old cenv es_end t` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
   simp[]
