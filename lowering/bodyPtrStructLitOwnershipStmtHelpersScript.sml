@@ -3,6 +3,7 @@ Ancestors bodyPtrStructLitOwnershipConsumers bodyPtrStructLitOwnershipLoops
   bodyPtrStructLitOwnershipLiterals bodyPtrStructLitOwnershipFreshness
   bodyPtrStructLitOwnershipSteps bodyPtrStructLitCompilerOwnership
   bodyPtrStructLitOwnershipMemory bodyPtrStructLitOwnershipLocations
+  bodyPtrStructLitOwnershipPrimitives bodyPtrStructLitOwnershipTyped
   context compileEnv stmtLowering
 
 Theorem alloc_run_compile_range_bound_checks:
@@ -138,4 +139,71 @@ Proof
     gen_tac >> simp[]) >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_internal_return] >>
   simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
+
+Theorem alloc_run_compile_dynarray_to_storage:
+  alloc_run fresh_outputs
+    (compile_dynarray_to_storage src dst ew ems transient)
+    (\u s. fresh_outputs s)
+Proof
+  simp[compile_dynarray_to_storage_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac >- simp[alloc_run_emit_op_fresh] >> gen_tac >> simp[] >>
+  ntac 3 (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac >- simp[SF ETA_ss,
+      SRULE [SF ETA_ss] alloc_run_fresh_label_fresh] >> gen_tac >> simp[]) >>
+  irule alloc_run_bind >>
+  qexists `\x s. fresh_outputs s /\ not_fresh_at s x /\ ~alloc_owned s x` >>
+  reverse conj_tac >- simp[SF ETA_ss, alloc_run_fresh_var_fresh] >>
+  qx_gen_tac `counter` >> simp[comp_ignore_bind_def] >>
+  Cases_on `ew = 1` >> Cases_on `transient` >> simp[comp_ignore_bind_def] >>
+  rpt (irule alloc_run_bind >>
+    qexists `\v s. fresh_outputs s /\ not_fresh_at s counter /\
+                      ~alloc_owned s counter` >>
+    reverse conj_tac
+    >- FIRST [simp[alloc_run_assign_reserved] >> NO_TAC,
+        ho_match_mp_tac alloc_run_frame_reserved >>
+        simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+          SRULE [SF ETA_ss] alloc_run_emit_empty_fresh,
+          SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+          SRULE [SF ETA_ss] alloc_run_new_block_fresh,
+          SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop] >> NO_TAC] >>
+    gen_tac >> simp[comp_ignore_bind_def]) >>
+  irule alloc_run_conseq >> irule_at Any alloc_run_emit_void_fresh >> simp[]
+QED
+
+Theorem alloc_run_compile_assign_value:
+  alloc_run fresh_outputs
+    (compile_assign_value ce dst loc src prim src_loc dt st da bytes)
+    (\u s. fresh_outputs s)
+Proof
+  Cases_on `loc` >> Cases_on `prim` >>
+  Cases_on `src_loc = SOME LocMemory` >> Cases_on `dt = st` >>
+  Cases_on `is_bytestring_type dt` >> Cases_on `is_bytestring_type st` >>
+  Cases_on `da` >> simp[compile_assign_value_def, comp_ignore_bind_def,
+    comp_bind_assoc] >>
+  rpt (pairarg_tac >> simp[]) >>
+  rpt IF_CASES_TAC >> simp[comp_ignore_bind_def, comp_bind_assoc] >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac
+    >- (simp[SF ETA_ss,
+        SRULE [SF ETA_ss] alloc_run_compile_alloc_buffer,
+        SRULE [SF ETA_ss] alloc_run_compile_copy_memory,
+        SRULE [SF ETA_ss] alloc_run_compile_store_memory_typed,
+        SRULE [SF ETA_ss] alloc_run_compile_memory_to_storage,
+        SRULE [SF ETA_ss] alloc_run_compile_memory_to_transient,
+        SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+        SRULE [SF ETA_ss] alloc_run_emit_empty_fresh] >>
+        simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>
+    gen_tac >> simp[comp_ignore_bind_def, comp_bind_assoc] >>
+    rpt IF_CASES_TAC >> simp[comp_ignore_bind_def, comp_bind_assoc]) >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory,
+    SRULE [SF ETA_ss] alloc_run_compile_dynarray_to_storage,
+    SRULE [SF ETA_ss] alloc_run_compile_imm_store_word,
+    SRULE [SF ETA_ss] alloc_run_compile_imm_store_words,
+    SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
+  TRY (rename1 `alloc_run _ (comp_return _) _` >>
+    simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>
+  PairCases_on `x` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_dynarray_to_storage]
 QED
