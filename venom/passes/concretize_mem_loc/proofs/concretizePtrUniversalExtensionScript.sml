@@ -15,6 +15,10 @@ Ancestors
   concretizePtrPairedPrefixProbe concretizePtrMloadProducer
   concretizePtrMstoreProducer concretizePtrMcopyProducer
   concretizePtrAssignProducer concretizePtrParamProducer
+  concretizePtrScalarCoreProducer concretizePtrShiftProducer
+  concretizePtrRetpcProducer concretizePtrInitialFmpProducer concretizePtrBumpProducer
+  concretizePtrEnvironmentReadProducer concretizePtrUnaryEnvironmentReadProducer
+  concretizePtrAssertionProducer concretizePtrStructuralDispatch
 
 Theorem current_retpc_parse[local]:
   retpc_shape_ok = frameRel$retpc_shape_ok
@@ -375,6 +379,90 @@ Theorem ptr_paired_universal_extension:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_universal_excluded >> strip_tac >>
+  `EVERY fn_inst_wf C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    EVERY bb_well_formed f.fn_blocks /\ ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\f. first_block_no_phi f /\ fn_inst_wf f /\ opaque_use_ok f /\
+    EVERY bb_well_formed f.fn_blocks /\ ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\f. fn_inst_wf f /\ unitShapeDefs$retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def,
+        EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [ADD; SUB]`
+  >- (drule_all ptr_paired_affine_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [EQ; LT; GT]`
+  >- (drule_all ptr_paired_comparison_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [MLOAD; MSTORE; MCOPY; ASSIGN; PARAM]`
+  >- (drule_all ptr_paired_universal_immediate_extension >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP]`
+  >- (drule_all ptr_paired_universal_jump_extension >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = INVOKE`
+  >- (drule_all ptr_paired_universal_invoke_extension >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = ALLOCA \/ a.po_inst.inst_opcode = RET`
+  >- (drule_all ptr_paired_structural_prefix_normalize >> simp[]) >>
+  suspend "families"
 QED
+
+Resume ptr_paired_universal_extension[families]:
+  Cases_on `MEM a.po_inst.inst_opcode [ILOAD]`
+  >- (drule_all ptr_paired_iload_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [MSTORE8; ISTORE]`
+  >- (drule_all ptr_paired_byte_store_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY]`
+  >- (drule_all ptr_paired_buffer_copy_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [EXTCODECOPY]`
+  >- (drule_all ptr_paired_extcodecopy_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [SLOAD; TLOAD]`
+  >- (drule_all ptr_paired_storage_read_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [SSTORE; TSTORE]`
+  >- (drule_all ptr_paired_storage_write_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [SHA3; LOG]`
+  >- (drule_all ptr_paired_hash_log_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [CALL; STATICCALL]`
+  >- (drule_all ptr_paired_call_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]`
+  >- (drule_all ptr_paired_create_prefix_normalize >> simp[]) >>
+  suspend "remaining"
+QED
+
+Resume ptr_paired_universal_extension[remaining]:
+  Cases_on `MEM a.po_inst.inst_opcode
+    [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]`
+  >- (drule_all ptr_paired_scalar_core_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [SHL; SHR; SAR]`
+  >- (drule_all ptr_paired_shift_prefix_normalize >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = RETPC_PARAM`
+  >- (drule_all ptr_paired_retpc_param_prefix_normalize >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = INITIAL_FMP`
+  >- (drule_all ptr_paired_initial_fmp_prefix_normalize >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = BUMP`
+  >- (drule_all ptr_paired_bump_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE]`
+  >- (drule_all ptr_paired_assertion_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode
+    [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID; COINBASE;
+     TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; CALLDATASIZE;
+     RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE]`
+  >- (drule_all ptr_paired_environment_read_prefix_normalize >> simp[]) >>
+  Cases_on `MEM a.po_inst.inst_opcode
+    [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD; DLOAD]`
+  >- (drule_all ptr_paired_unary_environment_read_prefix_normalize >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = GAS`
+  >- (drule_all ptr_paired_gas_prefix_normalize >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode` >> gvs[MEM]
+QED
+Finalise ptr_paired_universal_extension
 
