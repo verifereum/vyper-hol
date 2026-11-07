@@ -9,6 +9,7 @@ Ancestors
   bodyPtrBytestringBuiltinsExternalSlice instIdxIndep fragExec
   exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer
   bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
+  bodyPtrBytestringBuiltinsCalldataRuntime
   exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
   venomMemProofs list loweringPosts context emitHelper exprSimHash
 
@@ -401,4 +402,47 @@ Proof
       qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
       simp[compileEnvTheory.regions_disjoint_def]) >>
   simp[]
+QED
+
+Theorem compile_slice_calldata_revert:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  (dimword (:256) <= a + n \/ LENGTH s.vs_call_ctx.cc_calldata < a + n) /\
+  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  op_prov G start = NONE /\ op_taint tn start = {} ==>
+  ?zf H tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (Abort Revert_abort zf) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all compile_slice_calldata_runtime >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  qpat_x_assum `out = Var r` SUBST_ALL_TAC >>
+  qpat_x_assum `data = Var p` SUBST_ALL_TAC >>
+  `run_inst_seq (emitted_insts s2 s3) v =
+    Abort Revert_abort (revert_state (set_returndata [] q))` by simp[] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s2 s3)` by
+    (drule compile_assert_slice_bounds_layout >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq (emitted_insts s2 s3) (v with vs_inst_idx := SUC t.vs_inst_idx) =
+    Abort Revert_abort ((revert_state (set_returndata [] q)) with
+      vs_inst_idx := SUC t.vs_inst_idx)` by
+    simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def] >>
+  `!op. MEM op [start;Lit (n2w n)] ==>
+    op_prov G op = NONE /\ op_taint tn op = {}` by
+    (rpt gen_tac >> simp[] >>
+     strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
+  `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
+  qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  drule_all compile_slice_calldata_bounds_abort >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
+    (irule_at Any) >> simp[]
 QED
