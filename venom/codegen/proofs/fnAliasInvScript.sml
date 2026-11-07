@@ -9859,6 +9859,34 @@ Proof
   metis_tac[plan_holds_def]
 QED
 
+(* Universal block-end lower coverage is alias_lineage_block_liveout above;
+   retain that general theorem rather than add an equivalent initialized copy. *)
+Theorem alias_lineage_entry_input_coverage:
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lineage_entry liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  !x. MEM x (input_vars_from pred bb.bb_instructions
+    (live_vars_at liveness lbl 0)) ==> plan_holds ps (Var x)
+Proof
+  strip_tac >>
+  gvs[lineage_entry_def] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    metis_tac[alias_lineage_reachable] >>
+  `!y. MEM y (live_vars_at (liveness_analyze fn) pred
+      (LENGTH bb'.bb_instructions)) ==> plan_holds ps_after (Var y)` by
+    (drule alias_lineage_block_liveout >>
+     disch_then (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM x (live_vars_at (liveness_analyze fn) pred (LENGTH bb'.bb_instructions))` by
+    (irule alias_selected_input_liveout >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  simp[plan_holds_def] >> metis_tac[plan_holds_def]
+QED
+
 Theorem alias_run_without_predecessor_no_phis:
   s.vs_prev_bb = NONE /\ run_block fuel ctx bb s = OK s' ==>
   collect_phis bb.bb_instructions = []
