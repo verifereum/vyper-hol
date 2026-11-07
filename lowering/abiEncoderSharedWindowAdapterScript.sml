@@ -3,7 +3,7 @@ Theory abiEncoderSharedWindowAdapter
 Ancestors
   abiEncoderSharedContract abiEncoderProps abiDecoderAllocation abiDecoderFootprint
   abiDecoderFrame abiDecoderReentry exprLoweringProps venomMemDefs venomState
-  compileEnv venomInst valueEncoding finite_map pred_set list arithmetic words
+  compileEnv venomInst venomWf localPtrsProps valueEncoding finite_map pred_set list arithmetic words
 
 Definition abi_encoder_alloca_sites_def:
   abi_encoder_alloca_sites func =
@@ -77,7 +77,8 @@ Proof
     abi_encoder_alloca_missing_charge) >> strip_tac >>
   `s.vs_alloca_next + 32 * CARD (abi_sites_decoder_missing
      (abi_encoder_alloca_sites func) st.cs_next_id st'.cs_next_id s) < dimword (:256)` by
-    (fs[alloca_room_def] >> decide_tac) >>
+    (qpat_x_assum `alloca_room ctx func s` mp_tac >>
+     pure_rewrite_tac[alloca_room_def] >> strip_tac >> decide_tac) >>
   pure_rewrite_tac[abi_sites_decoder_budget_def] >>
   simp_tac bool_ss [arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ZERO_LESS_EQ,
     arithmeticTheory.LESS_EQ_REFL] >>
@@ -152,4 +153,111 @@ Proof
   simp_tac bool_ss [abi_sites_encoder_shared_input_def] >>
   asm_rewrite_tac[] >>
   fs[abi_decoder_prune_vars_def, abi_decoder_child_scratch_def]
+QED
+
+(* Split a pending sum, counting the constant-weight selected entries. *)
+Theorem abi_encoder_charge_split[local]:
+  !ls P Q f c.
+    (!i. MEM i ls /\ P i /\ Q i ==> f i = c) ==>
+    SUM (MAP f (FILTER P ls)) =
+      c * LENGTH (FILTER (\i. P i /\ Q i) ls) +
+      SUM (MAP f (FILTER (\i. P i /\ ~Q i) ls))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`P`, `Q`, `f`, `c`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  Cases_on `P h` >> Cases_on `Q h` >> simp[] >>
+  `f h = c` by metis_tac[] >> simp[MULT_SUC]
+QED
+
+Theorem abi_encoder_alloca_pending_partition:
+  fn_inst_ids_distinct func ==>
+  pending_alloca_size func s =
+    32 * CARD (abi_sites_decoder_missing (abi_encoder_alloca_sites func) first last s) +
+    SUM (MAP alloca_lit_size
+      (FILTER (\inst. inst.inst_opcode = ALLOCA /\
+        inst.inst_id NOTIN FDOM s.vs_allocas /\
+        inst.inst_id NOTIN abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last)
+        (fn_insts func)))
+Proof
+  strip_tac >>
+  qabbrev_tac `ids = abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last` >>
+  qabbrev_tac `pending = FILTER (\i:instruction. i.inst_opcode = ALLOCA /\
+    i.inst_id NOTIN FDOM s.vs_allocas /\ i.inst_id IN ids) (fn_insts func)` >>
+  `!i. MEM i (fn_insts func) /\ i.inst_id IN ids ==>
+       i.inst_opcode = ALLOCA /\ i.inst_operands = [Lit 32w]` by
+    (simp[Abbr `ids`, abi_sites_decoder_ids_def, abi_encoder_alloca_sites_def] >>
+     rpt strip_tac >>
+     `i = inst` by metis_tac[fn_inst_ids_distinct_inj] >> gvs[]) >>
+  `set (MAP (\i:instruction. i.inst_id) pending) =
+    abi_sites_decoder_missing (abi_encoder_alloca_sites func) first last s` by
+    (simp[EXTENSION, MEM_MAP, MEM_FILTER, Abbr `pending`, Abbr `ids`,
+      abi_sites_decoder_missing_def, abi_sites_decoder_ids_def, abi_encoder_alloca_sites_def] >>
+     metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i:instruction. i.inst_id) (fn_insts func))` by
+    (`!bbs. MAP (\i:instruction. i.inst_id) (fn_insts_blocks bbs) =
+       FLAT (MAP (\bb. MAP (\i:instruction. i.inst_id) bb.bb_instructions) bbs)` by
+       (Induct >> simp[fn_insts_blocks_def, MAP_APPEND]) >>
+     fs[fn_inst_ids_distinct_def, fn_insts_def]) >>
+  `ALL_DISTINCT (MAP (\i:instruction. i.inst_id) pending)` by
+    (irule ALL_DISTINCT_MAP_INJ >> conj_tac
+     >- (simp[Abbr `pending`, MEM_FILTER] >> metis_tac[fn_inst_ids_distinct_inj]) >>
+     unabbrev_all_tac >> irule FILTER_ALL_DISTINCT >> metis_tac[ALL_DISTINCT_MAP]) >>
+  `CARD (abi_sites_decoder_missing (abi_encoder_alloca_sites func) first last s) =
+    LENGTH pending` by metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET, LENGTH_MAP] >>
+  mp_tac (Q.ISPECL [`fn_insts func`,
+    `\i:instruction. i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM s.vs_allocas`,
+    `\i:instruction. i.inst_id IN ids`, `alloca_lit_size`, `32`] abi_encoder_charge_split) >>
+  (impl_tac >- (rpt strip_tac >> fs[] >> first_x_assum drule_all >>
+     simp[alloca_lit_size_def, dimword_def])) >>
+  simp[pending_alloca_size_def, Abbr `pending`, GSYM CONJ_ASSOC]
+QED
+
+Theorem abi_encoder_alloca_room_from_budget:
+  fn_inst_ids_distinct func /\ alloca_room ctx func s /\
+  abi_encoder_registered_effect
+    (abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last) outs s t /\
+  abi_sites_decoder_budget (abi_encoder_alloca_sites func) first last 0
+    (s.vs_alloca_next + 32 * CARD (abi_sites_decoder_missing
+      (abi_encoder_alloca_sites func) first last s)) t ==>
+  alloca_room ctx func t
+Proof
+  strip_tac >>
+  `!i. i NOTIN abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last ==>
+    FLOOKUP t.vs_allocas i = FLOOKUP s.vs_allocas i` by
+    (qpat_x_assum `abi_encoder_registered_effect _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `FILTER (\inst:instruction. inst.inst_opcode = ALLOCA /\
+        inst.inst_id NOTIN FDOM t.vs_allocas /\
+        inst.inst_id NOTIN abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last)
+        (fn_insts func) =
+   FILTER (\inst:instruction. inst.inst_opcode = ALLOCA /\
+        inst.inst_id NOTIN FDOM s.vs_allocas /\
+        inst.inst_id NOTIN abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last)
+        (fn_insts func)` by
+    (AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM] >> gen_tac >>
+     Cases_on `inst.inst_id IN abi_sites_decoder_ids (abi_encoder_alloca_sites func) first last`
+     >- simp[] >>
+     first_x_assum drule >> simp[FLOOKUP_DEF] >>
+     Cases_on `inst.inst_id IN FDOM t.vs_allocas` >>
+     Cases_on `inst.inst_id IN FDOM s.vs_allocas` >> simp[]) >>
+  drule abi_encoder_alloca_pending_partition >>
+  disch_then (qspecl_then [`s`, `last`, `first`] assume_tac) >>
+  drule abi_encoder_alloca_pending_partition >>
+  disch_then (qspecl_then [`t`, `last`, `first`] assume_tac) >>
+  qpat_x_assum `abi_sites_decoder_budget _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[abi_sites_decoder_budget_def] >> strip_tac >>
+  qpat_x_assum `alloca_room ctx func s` mp_tac >>
+  pure_rewrite_tac[alloca_room_def] >> strip_tac >>
+  simp_tac bool_ss [alloca_room_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `fn_inst_ids_distinct _` kall_tac >>
+  qpat_x_assum `abi_encoder_registered_effect _ _ _ _` kall_tac >>
+  qpat_x_assum `!i. _ ==> FLOOKUP _ _ = FLOOKUP _ _` kall_tac >>
+  qpat_x_assum `!i j p q. _` kall_tac >>
+  qpat_x_assum `!id off sz. _` kall_tac >>
+  full_simp_tac bool_ss [] >> decide_tac
 QED
