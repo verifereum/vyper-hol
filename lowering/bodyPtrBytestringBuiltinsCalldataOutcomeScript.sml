@@ -10,7 +10,7 @@ Ancestors
   exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer
   bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
   exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
-  venomMemProofs list loweringPosts
+  venomMemProofs list loweringPosts context emitHelper exprSimHash
 
 Theorem covered_clean_memory_result:
   evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv value /\
@@ -315,4 +315,90 @@ Proof
   qexistsl_tac [`N`,`BaseTV (BytesT (Dynamic bound))`,`w`] >>
   simp[val_footprint_def] >>
   drule exprSimPropsTheory.val_store_size_le >> decide_tac
+QED
+
+Theorem compile_slice_calldata_id_range:
+  compile_slice_calldata start len N sa = (out,sb) ==>
+  sa.cs_next_id < sb.cs_next_id
+Proof
+  strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
+  drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+  drule compile_assert_slice_bounds_layout >> strip_tac >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op CALLDATASIZE _ _ = _` mp_tac >>
+  qpat_x_assum `emit_void CALLDATACOPY _ _ = _` mp_tac >>
+  qpat_x_assum `emit_void MSTORE _ _ = _` mp_tac >>
+  simp[compile_alloc_buffer_def, emit_op_def, emit_void_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
+  qpat_x_assum `_ = sb` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `_ = s4` (SUBST1_TAC o SYM) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_x_assum `s3.cs_next_id = _` SUBST1_TAC >>
+  qpat_x_assum `_ = s2` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `_ = s1` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `_ = sm` (SUBST1_TAC o SYM) >>
+  simp_tac (srw_ss()) [] >> decide_tac
+QED
+
+Theorem compile_slice_calldata_success_posts:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
+  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  op_prov G start = NONE /\ op_taint tn start = {} /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  ~is_word_type (expr_type e) /\
+  val_wf (BaseTV (BytesT (Dynamic bound)))
+    (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) /\
+  type_memory_size (BaseTV (BytesT (Dynamic bound))) <= N /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= N ==>
+  ?zf H tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK zf) /\
+    vv_post ctx fn cenv cx e es sa sb s es
+      (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))
+      (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) zf /\
+    ptr_vv_ok cx (expr_type e)
+      (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))
+      (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) es H tm zf /\
+    ptr_buf_ok cenv e out H zf /\ ghost_inv d cenv cx es H tm zf /\
+    ghost_kept cenv es sa G tn s H tm /\
+    zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~zf.vs_halted
+Proof
+  strip_tac >> drule_all compile_slice_calldata_shared_success >>
+  disch_then (qspecl_then [`bound`,`PG`,`D`] strip_assume_tac) >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (drule compile_slice_calldata_id_range >> simp[]) >>
+  `wb_frame cenv es sa s zf` by
+    (simp[wb_frame_def] >> metis_tac[]) >>
+  `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) <= n` by simp[] >>
+  qpat_x_assum `out = Var root` SUBST_ALL_TAC >>
+  `!i. w2n w <= i /\ i < w2n w + 32 +
+    LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) ==> i NOTIN tm.t_mem` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!i. _ ==> i NOTIN _` irule >> decide_tac) >>
+  drule_all calldata_bytes_result_posts >> strip_tac >>
+  `val_footprint (BaseTV (BytesT (Dynamic bound)))
+    (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) <= N` by
+    (simp[val_footprint_def] >> decide_tac) >>
+  qexistsl_tac [`zf`,`H`,`tm`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (irule vv_post_allocated_memory_intro >> simp[] >>
+      qexistsl_tac [`sa.cs_next_id`,`w2n w`,`N`] >>
+      simp[] >> rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
+      simp[compileEnvTheory.regions_disjoint_def]) >>
+  simp[]
 QED
