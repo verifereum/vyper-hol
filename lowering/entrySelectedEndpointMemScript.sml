@@ -702,7 +702,12 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `~t.vs_halted` by simp[] >>
   drule_all entry_compiled_jnz_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >> suspend "branch"
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `st.cs_current_insts = [] ==>
+   ?bb. lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+        eval_phis ss bb.bb_instructions = OK ss /\
+        phi_prefix_length bb.bb_instructions = 0` by suspend "no_phi" >>
+  suspend "branch"
 QED
 
 Resume compile_selector_dispatch_linear_endpoint[branch]:
@@ -747,8 +752,7 @@ Resume compile_selector_dispatch_linear_endpoint[short_input_safety]:
   rpt strip_tac >>
   `!n. mem_safe_run n ctx fn ss` by metis_tac[] >>
   simp[] >>
-  irule mem_safe_blocks_no_phi >> reverse conj_tac
-  >- suspend "short_no_phi" >> simp[]
+  irule mem_safe_blocks_no_phi >> gvs[]
 QED
 
 Resume compile_selector_dispatch_linear_endpoint[long_input_safety]:
@@ -756,32 +760,20 @@ Resume compile_selector_dispatch_linear_endpoint[long_input_safety]:
   rpt strip_tac >>
   `!n. mem_safe_run n ctx fn ss` by metis_tac[] >>
   simp[] >>
-  irule mem_safe_blocks_no_phi >> reverse conj_tac
-  >- suspend "long_no_phi" >> simp[]
+  irule mem_safe_blocks_no_phi >> gvs[]
 QED
 
-Resume compile_selector_dispatch_linear_endpoint[short_no_phi]:
+Resume compile_selector_dispatch_linear_endpoint[no_phi]:
+  strip_tac >>
   `cs_extends a1 a3` by metis_tac[cs_extends_trans] >>
   qspecl_then [`st`, `a1`, `a3`, `fn`] mp_tac fn_has_code_split >>
   simp[] >> strip_tac >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
   `a1.cs_current_bb = st.cs_current_bb` by fs[same_blocks_def] >>
-  qspecl_then [`st`, `a1`, `fn`] mp_tac fn_has_code_same_block >>
+  qspecl_then [`st`, `a1`, `fn`, `emitted_insts st a1`]
+    mp_tac fn_has_code_same_block >>
   simp[] >> strip_tac >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `bb.bb_instructions` >>
-  gvs[get_instruction_def, eval_phis_def, phi_prefix_length_def, mk_inst_def]
-QED
-
-Resume compile_selector_dispatch_linear_endpoint[long_no_phi]:
-  `cs_extends a1 a3` by metis_tac[cs_extends_trans] >>
-  qspecl_then [`st`, `a1`, `a3`, `fn`] mp_tac fn_has_code_split >>
-  simp[] >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
-  `a1.cs_current_bb = st.cs_current_bb` by fs[same_blocks_def] >>
-  qspecl_then [`st`, `a1`, `fn`] mp_tac fn_has_code_same_block >>
-  simp[] >> strip_tac >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `bb` >> simp[] >>
   Cases_on `bb.bb_instructions` >>
   gvs[get_instruction_def, eval_phis_def, phi_prefix_length_def, mk_inst_def]
 QED
