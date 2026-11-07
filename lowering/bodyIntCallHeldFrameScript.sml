@@ -93,3 +93,60 @@ Proof
      metis_tac[]) >>
   gvs[arithmeticTheory.ADD_COMM]
 QED
+
+Theorem intcall_memory_holds_frame:
+  vv_holds ce cx ty raw vv es s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  ((?sty op. vv = StackValue sty op) \/
+   (?sty p. vv = LocatedValue sty p /\ p.ptr_location = LocMemory)) /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm ==>
+  vv_holds ce cx ty raw vv es t
+Proof
+  strip_tac >> Cases_on `vv` >>
+  gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]
+  >- (rpt strip_tac >> Cases_on `is_word_type ty`
+      >- gvs[] >> gvs[] >>
+      irule intcall_provenance_memory_value >> metis_tac[])
+  >> (rpt strip_tac
+      >- (irule intcall_provenance_memory_value >> metis_tac[])
+      >> irule exprSimPropsTheory.val_in_memory_word_type >>
+      simp[] >> conj_tac >- metis_tac[] >>
+      irule intcall_provenance_memory_value >> metis_tac[])
+QED
+
+Theorem intcall_held_holds_frame:
+  vv_holds ce cx ty raw vv es s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  vv_storage_live cx vv es s /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm /\ stmt_state_rel ctx func ce cx es t ==>
+  vv_holds ce cx ty raw vv es t
+Proof
+  strip_tac >> Cases_on `vv`
+  >- (irule intcall_memory_holds_frame >> metis_tac[]) >>
+  rename1 `LocatedValue sty p` >> Cases_on `p.ptr_location = LocMemory`
+  >- (irule intcall_memory_holds_frame >> metis_tac[]) >>
+  gvs[vv_holds_def, vv_operand_def] >>
+  Cases_on `p.ptr_location` >> gvs[]
+  >- (irule storage_holds_live_endpoint >> goal_assum (drule_at Any) >>
+      gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+          vyperStorageBackendTheory.get_storage_def,
+          vfmStateTheory.lookup_account_def] >> metis_tac[])
+  >- (irule storage_holds_live_endpoint >> goal_assum (drule_at Any) >>
+      gvs[stmt_state_rel_def, state_rel_def, transient_rel_def,
+          vyperStorageBackendTheory.get_storage_def,
+          vfmStateTheory.lookup_account_def] >> metis_tac[]) >>
+  gvs[intcall_vv_provenance_def, immutable_holds_def] >>
+  metis_tac[]
+QED
