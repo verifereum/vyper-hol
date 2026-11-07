@@ -156,7 +156,9 @@ Theorem entry_compiled_selector_clause_endpoint[local]:
       eval_operand mid t = SOME m /\ ~t.vs_halted /\
       t.vs_current_bb = (if m = n2w sel then lbl else s7.cs_current_bb) /\
       t.vs_inst_idx = 0 /\
-      ((!n. mem_safe_blocks n ctx fn t) ==> !n. mem_safe_run n ctx fn ss)
+      ((!n. mem_safe_blocks n ctx fn t) ==> !n. mem_safe_run n ctx fn ss) /\
+      (st.cs_current_insts = [] ==>
+       (!n. mem_safe_blocks n ctx fn t) ==> !n. mem_safe_blocks n ctx fn ss)
 Proof
   strip_tac >>
   imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
@@ -192,20 +194,177 @@ QED
 Resume entry_compiled_selector_clause_endpoint[resources]:
   qmatch_asmsub_abbrev_tac `vars_pc_only ss t` >>
   qexists_tac `t` >> simp[] >>
-  suspend "fresh"
+  conj_tac >- suspend "fresh" >>
+  conj_tac >- suspend "old_vars" >>
+  conj_tac >- suspend "selector" >>
+  suspend "blocks"
 QED
 
 Resume entry_compiled_selector_clause_endpoint[fresh]:
   Cases_on `m = n2w sel` >>
   simp[Abbr `t`, control_moves_keep_vars] >>
-  (conj_tac
-   >- (irule fresh_vars_wrt_advance >>
-       qexistsl_tac [`st.cs_next_var`, `st`] >> simp[]) >>
-   conj_tac
-   >- (rw[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-       gvs[not_fresh_at_def]) >>
-   irule eval_operand_update_fresh >> simp[] >>
-   qexists_tac `st` >> simp[])
+  irule fresh_vars_wrt_advance >>
+  qexistsl_tac [`st.cs_next_var`, `st`] >> simp[]
+QED
+
+Resume entry_compiled_selector_clause_endpoint[old_vars]:
+  Cases_on `m = n2w sel` >>
+  simp[Abbr `t`, control_moves_keep_vars] >>
+  rw[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[not_fresh_at_def]
+QED
+
+Resume entry_compiled_selector_clause_endpoint[selector]:
+  Cases_on `m = n2w sel` >>
+  simp[Abbr `t`, control_moves_keep_vars] >>
+  irule eval_operand_update_fresh >> simp[] >>
+  qexists_tac `st` >> simp[]
+QED
+
+Resume entry_compiled_selector_clause_endpoint[blocks]:
+  rpt strip_tac >>
+  irule mem_safe_blocks_no_phi >>
+  reverse conj_tac
+  >- (qexists_tac `bb` >>
+      simp[Abbr `bb`, eval_phis_def, phi_prefix_length_def, mk_inst_def]) >>
+  simp[]
 QED
 
 Finalise entry_compiled_selector_clause_endpoint
+
+Theorem entry_selector_checks_endpoint[local]:
+  !sels mid st st' fn ss m ctx.
+  compile_selector_checks mid sels st = ((), st') /\
+  fn_has_code st st' fn /\ eval_operand mid ss = SOME m /\
+  fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. vars_pc_only ss t /\ fresh_vars_wrt st' t /\
+      (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x ss) /\
+      eval_operand mid t = SOME m /\ ~t.vs_halted /\
+      (case selector_hit m sels of
+         SOME lbl => t.vs_current_bb = lbl /\ t.vs_inst_idx = 0
+       | NONE => t.vs_current_bb = st'.cs_current_bb /\
+                 t.vs_inst_idx = LENGTH st'.cs_current_insts) /\
+      ((case selector_hit m sels of
+          SOME lbl => (!n. mem_safe_blocks n ctx fn t)
+        | NONE => ((!n. mem_safe_run n ctx fn t) /\
+                   (st'.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn t))) ==>
+       (!n. mem_safe_run n ctx fn ss) /\
+       (st.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss))
+Proof
+  Induct
+  >- (simp[compile_selector_checks_def, comp_return_def, selector_hit_def] >>
+      rpt strip_tac >> qexists_tac `ss` >> simp[vars_pc_only_refl]) >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_selector_checks _ _ _ = _` mp_tac >>
+  simp[Once compile_selector_checks_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >>
+  rename1 `new_block next s6 = (_, s7)` >>
+  rename1 `emit_inst JMP _ _ s5 = (_, s6)` >>
+  rename1 `new_block yes s4 = (_, s5)` >>
+  rename1 `emit_inst JNZ _ _ s3 = (_, s4)` >>
+  rename1 `fresh_label "next" s2 = (_, s3)` >>
+  rename1 `fresh_label "match" s1 = (_, s2)` >>
+  rename1 `emit_op EQ _ st = (_, s1)` >>
+  rename1 `emit_inst JNZ _ _ s3 = (u, s4)` >> Cases_on `u` >>
+  rename1 `emit_inst JMP _ _ s5 = (u, s6)` >> Cases_on `u` >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  `cs_extends st s7` by metis_tac[cs_extends_trans] >>
+  `fn_has_code st s7 fn /\ fn_has_code s7 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  drule_all entry_compiled_selector_clause_endpoint >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  suspend "selected"
+QED
+
+Resume entry_selector_checks_endpoint[selected]:
+  Cases_on `m = n2w h0`
+  >- (qexists_tac `t` >> simp[selector_hit_def] >>
+      irule fresh_vars_wrt_mono >> qexists_tac `s7` >> simp[] >>
+      drule compile_selector_checks_next_var >> simp[]) >>
+  `s7.cs_current_insts = []` by (drule new_block_props >> simp[]) >>
+  qpat_x_assum `!mid st st' fn ss m ctx. _` drule >>
+  disch_then (qspecl_then [`fn`, `t`, `m`, `ctx`] mp_tac) >>
+  simp[] >> strip_tac >>
+  suspend "miss"
+QED
+
+Resume entry_selector_checks_endpoint[miss]:
+  `vars_pc_only ss t'` by metis_tac[vars_pc_only_trans] >>
+  `!x. not_fresh_at st x ==> lookup_var x t' = lookup_var x ss` by
+    (rpt strip_tac >>
+     `not_fresh_at s7 x` by
+       (irule not_fresh_at_mono >> qexists_tac `st` >>
+        imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_inst_extends >>
+        imp_res_tac fresh_label_props >> imp_res_tac new_block_props >> simp[]) >>
+     metis_tac[]) >>
+  qexists_tac `t'` >> simp[selector_hit_def] >>
+  strip_tac >>
+  `!n. mem_safe_blocks n ctx fn t` by metis_tac[] >>
+  simp[]
+QED
+
+Finalise entry_selector_checks_endpoint
+
+Theorem entry_selector_tail_endpoint[local]:
+  compile_selector_checks mid sels a8 = ((),a9) /\
+  emit_inst JMP [Label fallback] [] a9 = ((),st') /\
+  fn_has_code a8 st' fn /\ eval_operand mid ss = SOME m /\
+  fresh_vars_wrt a8 ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = a8.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH a8.cs_current_insts ==>
+  ?t. vars_pc_only ss t /\ fresh_vars_wrt st' t /\
+      (!x. not_fresh_at a8 x ==> lookup_var x t = lookup_var x ss) /\
+      ~t.vs_halted /\
+      t.vs_current_bb = (case selector_hit m sels of SOME l => l | NONE => fallback) /\
+      t.vs_inst_idx = 0 /\
+      ((!n. mem_safe_blocks n ctx fn t) ==>
+       (!n. mem_safe_run n ctx fn ss) /\
+       (a8.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss))
+Proof
+  strip_tac >> imp_res_tac emit_inst_extends >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  `fn_has_code a8 a9 fn /\ fn_has_code a9 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  drule_all entry_selector_checks_endpoint >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `fresh_vars_wrt st' t` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `a9` >> simp[]) >>
+  Cases_on `selector_hit m sels`
+  >- suspend "fallback" >>
+  qexists_tac `t` >> gvs[]
+QED
+
+Resume entry_selector_tail_endpoint[fallback]:
+  qexists_tac `jump_to fallback t` >>
+  simp[control_moves_keep_vars, vars_pc_only_jump_to, jump_to_def] >>
+  strip_tac >> fs[] >>
+  qpat_x_assum `(_ /\ _) ==> _` irule >>
+  suspend "fallback_safety"
+QED
+
+Resume entry_selector_tail_endpoint[fallback_safety]:
+  qpat_x_assum `fn_has_code a9 st' fn` mp_tac >>
+  simp[fn_has_code_def, IS_PREFIX_APPEND] >> strip_tac >>
+  `get_instruction bb t.vs_inst_idx =
+    SOME (mk_inst a9.cs_next_id JMP [Label fallback] [])` by
+    simp[get_instruction_def, listTheory.EL_APPEND_EQN, listTheory.APPEND_ASSOC] >>
+  `!n. mem_safe_run n ctx fn t` by
+    (gen_tac >> irule entry_terminator_endpoint_safe >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     simp[mk_inst_def, is_terminator_def, step_jmp_behavior,
+          inst_dload_in_section_def, jump_to_def] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  simp[] >> strip_tac >>
+  irule mem_safe_blocks_no_phi >> reverse conj_tac
+  >- (qexists_tac `bb` >>
+      simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]) >>
+  `t with vs_inst_idx := 0 = t` by
+    simp[venom_state_component_equality] >> simp[]
+QED
+
+Finalise entry_selector_tail_endpoint
