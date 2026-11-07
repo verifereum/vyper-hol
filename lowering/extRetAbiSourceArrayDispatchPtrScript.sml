@@ -269,3 +269,44 @@ Proof
   rpt conj_tac >> rpt strip_tac >> metis_tac[]
 QED
 
+
+Theorem source_array_static_suffix_code:
+  source_array_static_suffix (Var ip) (Var ev) sa = (out,se) /\
+  fn_has_code sa se fn /\ not_fresh_at sa ip /\ not_fresh_at sa ev ==>
+  ?old total ov sb sc sd.
+    emit_op MLOAD [Var ip] sa = (Var old,sb) /\
+    emit_op ADD [Var old;Var ev] sb = (Var total,sc) /\
+    emit_void MSTORE [Var ip;Var total] sc = ((),sd) /\
+    emit_op MLOAD [Var ip] sd = (Var ov,se) /\ out = Var ov /\
+    fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
+    fn_has_code sc sd fn /\ fn_has_code sd se fn /\
+    not_fresh_at sb ev /\ not_fresh_at sb ip /\
+    not_fresh_at sc ip /\ not_fresh_at sd ip /\
+    (!p. not_fresh_at sa p ==>
+      not_fresh_at sb p /\ not_fresh_at sc p /\ not_fresh_at sd p)
+Proof
+  simp[source_array_static_suffix_def, comp_bind_def, comp_ignore_bind_def] >>
+  ntac 3 (pairarg_tac >> simp[]) >> rpt strip_tac >>
+  rename1 `emit_op MLOAD [Var ip] sa = (oldop,sb)` >>
+  rename1 `emit_op ADD [oldop; Var ev] sb = (totalop,sc)` >>
+  `?old total ov. oldop = Var old /\ totalop = Var total /\ out = Var ov` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def] >> metis_tac[]) >>
+  gvs[] >> rename1 `emit_void MSTORE _ sc = ((),sd)` >>
+  `cs_extends sa sb /\ cs_extends sb sc /\ cs_extends sc sd /\ cs_extends sd se` by
+    metis_tac[cj 2 fragExecTheory.cs_appends_emit_helpers,
+              cj 3 fragExecTheory.cs_appends_emit_helpers,
+              fragExecTheory.cs_appends_def] >>
+  `fn_has_code sa sb fn /\ fn_has_code sb se fn` by
+    (irule fn_has_code_split >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sb sc fn /\ fn_has_code sc se fn` by
+    (irule fn_has_code_split >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sc sd fn /\ fn_has_code sd se fn` by
+    (irule fn_has_code_split >> simp[]) >>
+  `sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var /\
+   sc.cs_next_var <= sd.cs_next_var` by
+    gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
+  simp[] >> rpt strip_tac >>
+  metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, LESS_EQ_TRANS]
+QED
