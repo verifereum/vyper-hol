@@ -693,11 +693,13 @@ Theorem array_code_loop_counted[local]:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst cond st 0 es cc /\ array_caller_frame st s0 cc /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es /\
+  st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= ainst.inst_id /\
+  st.cs_next_id <= sb0.cs_next_id /\ alloca_frame cenv es st s0 cenv es cc ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_for cx tv id stmts vs) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
-      array_caller_frame st s0 t)
+      array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
@@ -728,7 +730,7 @@ Proof
         ((r = INL () \/ r = INR ContinueException) ==>
           P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE))` by
     suspend "callback" >>
-  drule_all (SRULE [DROP_0] (Q.INST [`k` |-> `0`] array_for_loop_counted)) >> simp[]
+  drule_all (SRULE [DROP_0] (Q.INST [`k` |-> `0`, `caller` |-> `st`] array_for_loop_counted)) >> simp[]
 QED
 
 Resume array_code_loop_counted[callback]:
@@ -806,7 +808,7 @@ Theorem array_outcome_stmt_post[local]:
   gas_outcome F tops (ctx,func) source (es,s0)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
-      array_caller_frame st s0 t)
+      array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) ==>
   gas_outcome F tops (ctx,func) source (es,s0)
@@ -905,10 +907,13 @@ Proof
         val_in_memory tv (EL k vs) (w2n addr + k * type_memory_bytes cenv et) t.vs_memory /\
         w2n addr + k * type_memory_bytes cenv et < dimword (:256))` by
     (rpt strip_tac >> qpat_assum `!ei s. _` drule_all >> simp[]) >>
+  `st.cs_next_id <= ainst.inst_id` by simp[] >>
   drule_all array_code_loop_counted >> strip_tac >>
   drule_all stmtSimDeclComposeTheory.gas_outcome_zero_prefix >> strip_tac >>
   drule_all (SRULE [] (Q.INST [`n` |-> `LENGTH (vs : value list)`] array_for_source_prefix)) >> strip_tac >>
-  irule array_outcome_stmt_post >> simp[] >> goal_assum (drule_at Any)
+  irule array_outcome_stmt_post >> simp[] >>
+  qpat_x_assum `gas_outcome _ _ _ (eval_stmt _ _) _ _ _` mp_tac >>
+  simp[alloca_frame_def]
 QED
 
 
