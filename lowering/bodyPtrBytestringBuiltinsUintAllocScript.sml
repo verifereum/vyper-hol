@@ -89,3 +89,28 @@ Proof
   irule (SRULE [] alloca_union_ghost_kept) >> simp[] >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem alloca_step_state_fields:
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [q]) s = OK u ==>
+  u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_current_bb = s.vs_current_bb /\ u.vs_halted = s.vs_halted
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
+    venomExecSemanticsTheory.exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
+  >- (strip_tac >> gvs[update_var_def]) >>
+  rename1 `SOME site` >> PairCases_on `site` >>
+  strip_tac >> gvs[update_var_def]
+QED
+
+Theorem old_local_region_transport:
+  local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) ==>
+  !name b n. local_region cenv scopes u name b n <=>
+             local_region cenv scopes s name b n
+Proof
+  simp[local_region_def] >> rpt strip_tac >> eq_tac >> strip_tac >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  metis_tac[]
+QED
