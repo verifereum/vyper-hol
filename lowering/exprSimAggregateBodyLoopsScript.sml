@@ -8,7 +8,7 @@ Ancestors
   compileEnv exprLowering valueEncoding valueEncodingProps valueEncodingProofs
   gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath fragExec
   vyperInterpreter vyperState vyperImmutableMetadataFrame
-  vyperEvalExprPreservesScopesDom exprBopSimProps
+  vyperEvalExprPreservesScopesDom exprBopSimProps exprSimMemDefs
 Libs
   monadsyntax
 
@@ -288,3 +288,86 @@ Resume aggregate_body_make_tuple_sim[locals_frame]:
 QED
 
 Finalise aggregate_body_make_tuple_sim
+
+Theorem aggregate_body_make_array_elems_sim:
+  !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx.
+  EVERY (\e. expr_type e = elem_ty) args /\
+  evaluate_type (get_tenv cx) elem_ty = SOME tv /\
+  type_memory_bytes ce elem_ty = type_memory_size tv /\
+  off = (if header then 32 else 0) + idx * type_memory_size tv /\
+  compile_make_array_elems compile_expr ce args elem_ty
+    (type_memory_bytes ce elem_ty) header (Var x) idx sa = (out,sb) /\
+  expr_sim_inv ce cx env es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st /\ (F ==> int_calls_expr e = [])) /\
+  exprs_case F ctx func ce cx args /\
+  (!e. MEM e args ==> (int_calls_expr e <> [] /\
+    lowered_value_type ce e <> expr_type e ==>
+    acyclic_struct_metadata ce.ce_struct_fields)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
+  inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
+  (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
+  not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
+  FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
+  off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) (b+off)
+       (LENGTH args * type_memory_size tv)) /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  out = Var x /\
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
+    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+      r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
+      stmt_state_rel ctx func ce cx es' r /\
+      elems_in_memory vs (b+off) tv r.vs_memory /\
+      (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+        lookup_var z r = SOME w) /\
+      (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+        FLOOKUP r.vs_allocas aid = SOME a) /\
+      (!p n. b <= p /\ p+n <= b+asz /\
+        (p+n <= b+off \/ b+off+LENGTH args * type_memory_size tv <= p) ==>
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+        aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
+        (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+          p+n <= lo \/ lo+sz <= p) ==>
+        mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      locals_kept ce es s0 r)
+    (\res es' exit. ?exc. res = INR exc /\
+      expr_exit (INR exc : eval_result + exception) exit)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
+    (drule compile_make_array_elems_as_tuple >> simp[] >> metis_tac[]) >>
+  `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
+    SOME (REPLICATE (LENGTH args) tv)` by
+    (irule OPT_MMAP_uniform_map >> metis_tac[]) >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_body_make_tuple_sim >>
+  disch_then (drule_at (Pat `OPT_MMAP _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`env`, `inst`, `b`, `asz`] mp_tac) >>
+  simp[type_memory_size_list_replicate] >>
+  (impl_tac >-
+    (conj_tac >- (qpat_x_assum `!e. MEM e args ==> _` mp_tac >> simp[]) >>
+     conj_tac >- (gvs[] >> decide_tac) >>
+     qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
+  strip_tac >> simp[] >>
+  drule gas_outcome_source_invariant >>
+  disch_then (qspec_then `\res. !vs. res = INL vs ==> LENGTH vs = LENGTH args` mp_tac) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >> gvs[] >> drule eval_exprs_length >> simp[])) >>
+  strip_tac >>
+  irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
+  rpt gen_tac >> disch_then assume_tac >>
+  gvs[SF CONJ_ss] >>
+  fs[GSYM tuple_in_memory_replicate_elems] >>
+  metis_tac[]
+QED
+
