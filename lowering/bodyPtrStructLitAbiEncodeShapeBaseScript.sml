@@ -53,13 +53,13 @@ Proof
   irule (SRULE [SF ETA_ss] shape_step_new_block) >> simp[]
 QED
 
-Theorem abi_encode_plain_stable[local,simp]:
+Theorem abi_encode_plain_stable[simp]:
   shape_stable (\s. plain_operand s op)
 Proof
   mp_tac (Q.SPEC `[op]` shape_stable_plain_operands) >> simp[]
 QED
 
-Theorem abi_encode_void_bind[local]:
+Theorem abi_encode_void_bind:
   shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
   (!s id. R s ==> lowered_inst_ok F (mk_inst id opc ops [])) /\
   (!s. R s ==> EVERY (label_or_plain s) ops) /\
@@ -72,7 +72,7 @@ Proof
   qexistsl [`R`, `R`, `compiler_label`] >> simp[] >> metis_tac[]
 QED
 
-Theorem abi_encode_literal_plain[local,simp]:
+Theorem abi_encode_literal_plain[simp]:
   plain_operand s (Lit w)
 Proof
   simp[plain_operand_def, is_label_operand_def]
