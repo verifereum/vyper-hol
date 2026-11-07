@@ -6773,6 +6773,7 @@ Proof
     if same_const (fst (strip_comb tm)) ``cfg_analyze`` then EVAL tm else NO_CONV tm)) >>
   CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
     if same_const tm ``alias_spill_probe_live`` then EVAL tm else NO_CONV tm)) >>
+  simp[finite_mapTheory.FUNION_FUPDATE_1, finite_mapTheory.FUPDATE_LIST_THM] >>
   EVAL_TAC
 QED
 
@@ -12041,6 +12042,205 @@ Proof
   strip_tac >> rewrite_tac[alias_occ_dup_erases] >>
   Cases_on `dist <= 15` >> simp[do_dup_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+(* The shadow records identities, never allocator addresses. *)
+Datatype:
+  alias_occ_inventory = <|
+    alias_occs : (operand # num) list;
+    alias_spill_ids : operand |-> num;
+    alias_next : num
+  |>
+End
+
+Definition alias_occ_align_def:
+  alias_occ_align inv ps <=>
+    MAP FST inv.alias_occs = ps.ps_stack /\
+    FDOM inv.alias_spill_ids = FDOM ps.ps_spilled
+End
+
+Definition alias_occ_ids_def:
+  alias_occ_ids inv =
+    MAP SND inv.alias_occs ++ MAP SND (fmap_to_alist inv.alias_spill_ids)
+End
+
+Definition alias_occ_wf_def:
+  alias_occ_wf inv <=>
+    ALL_DISTINCT (alias_occ_ids inv) /\
+    EVERY (\id. id < inv.alias_next) (alias_occ_ids inv)
+End
+
+Definition alias_occ_residents_def:
+  alias_occ_residents inv =
+    {occ | MEM occ inv.alias_occs} UNION
+    {(at,id) | FLOOKUP inv.alias_spill_ids at = SOME id}
+End
+
+Definition alias_occ_deleted_def:
+  alias_occ_deleted old new =
+    IMAGE SND (alias_occ_residents old) DIFF
+    IMAGE SND (alias_occ_residents new)
+End
+
+Definition alias_occ_empty_def:
+  alias_occ_empty = <| alias_occs := []; alias_spill_ids := FEMPTY;
+                       alias_next := 0 |>
+End
+
+(* A read log retains its selected list, rather than treating an absent
+   selected location as an absent global stack. *)
+Datatype:
+  alias_occ_read_log = AliasOccReadLog num (operand list) alias_occ_read_event
+End
+
+Definition alias_occ_read_log_ok_def:
+  (alias_occ_read_log_ok (AliasOccReadLog site source (AliasOccCopy p c)) = T) /\
+  (alias_occ_read_log_ok
+     (AliasOccReadLog site source (AliasOccTotalRead i c at)) =
+     (LENGTH source <= i /\ at = EL i source))
+End
+
+Theorem alias_occ_empty_wf:
+  alias_occ_wf alias_occ_empty /\
+  alias_occ_residents alias_occ_empty = EMPTY
+Proof
+  simp[alias_occ_wf_def, alias_occ_ids_def, alias_occ_empty_def,
+       alias_occ_residents_def, alistTheory.fmap_to_alist_FEMPTY,
+       pred_setTheory.EXTENSION]
+QED
+
+Theorem alias_occ_empty_align:
+  alias_occ_align alias_occ_empty ps <=>
+  ps.ps_stack = [] /\ ps.ps_spilled = FEMPTY
+Proof
+  simp[alias_occ_align_def, alias_occ_empty_def, finite_mapTheory.FDOM_EQ_EMPTY]
+QED
+
+Theorem alias_occ_read_log_valid:
+  alias_occ_read_log_ok
+    (AliasOccReadLog site (MAP FST occs) (SND (alias_occ_read i fresh occs)))
+Proof
+  simp[alias_occ_read_def] >> IF_CASES_TAC >>
+  simp[alias_occ_read_log_ok_def]
+QED
+
+Theorem alias_occ_residents_member:
+  (at,id) IN alias_occ_residents shadow <=>
+  MEM (at,id) shadow.alias_occs \/ FLOOKUP shadow.alias_spill_ids at = SOME id
+Proof
+  simp[alias_occ_residents_def]
+QED
+
+Theorem alias_occ_pop_residents:
+  alias_occ_residents (shadow with alias_occs := TL shadow.alias_occs)
+    SUBSET alias_occ_residents shadow
+Proof
+  simp[pred_setTheory.SUBSET_DEF, pairTheory.FORALL_PROD,
+       alias_occ_residents_member] >>
+  Cases_on `shadow.alias_occs` >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_occ_remove_spill_residents:
+  (at,id) IN alias_occ_residents
+    (shadow with alias_spill_ids := shadow.alias_spill_ids \\ key) <=>
+  MEM (at,id) shadow.alias_occs \/
+    (at <> key /\ FLOOKUP shadow.alias_spill_ids at = SOME id)
+Proof
+  simp[alias_occ_residents_member, finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  metis_tac[]
+QED
+
+Theorem alias_occ_replace_spill_residents:
+  (at,id) IN alias_occ_residents
+    (shadow with alias_spill_ids := shadow.alias_spill_ids |+ (key,fresh)) <=>
+  MEM (at,id) shadow.alias_occs \/
+    (at = key /\ id = fresh) \/
+    (at <> key /\ FLOOKUP shadow.alias_spill_ids at = SOME id)
+Proof
+  simp[alias_occ_residents_member, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `at = key` >> simp[] >> metis_tac[]
+QED
+
+Definition alias_occ_to_spill_def:
+  alias_occ_to_spill shadow =
+    case shadow.alias_occs of
+      [] => shadow
+    | (at,id)::rest =>
+        shadow with <| alias_occs := rest;
+          alias_spill_ids := shadow.alias_spill_ids |+ (at,id) |>
+End
+
+Definition alias_occ_from_spill_def:
+  alias_occ_from_spill key shadow =
+    case FLOOKUP shadow.alias_spill_ids key of
+      NONE => shadow
+    | SOME id =>
+        shadow with <| alias_occs := SNOC (key,id) shadow.alias_occs;
+          alias_spill_ids := shadow.alias_spill_ids \\ key |>
+End
+
+Definition alias_occ_insert_def:
+  alias_occ_insert at shadow =
+    shadow with <| alias_occs := SNOC (at,shadow.alias_next) shadow.alias_occs;
+                   alias_next := SUC shadow.alias_next |>
+End
+
+Theorem alias_occ_to_spill_residents:
+  shadow.alias_occs = (key,moved)::rest ==>
+  ((at,id) IN alias_occ_residents (alias_occ_to_spill shadow) <=>
+   MEM (at,id) rest \/ (at = key /\ id = moved) \/
+   (at <> key /\ FLOOKUP shadow.alias_spill_ids at = SOME id))
+Proof
+  strip_tac >> simp[alias_occ_to_spill_def, alias_occ_residents_member,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `at = key` >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_occ_to_spill_no_new:
+  alias_occ_residents (alias_occ_to_spill shadow)
+    SUBSET alias_occ_residents shadow
+Proof
+  Cases_on `shadow.alias_occs` >- simp[alias_occ_to_spill_def] >>
+  PairCases_on `h` >>
+  simp[pred_setTheory.SUBSET_DEF, pairTheory.FORALL_PROD,
+       alias_occ_to_spill_def, alias_occ_residents_member,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_occ_from_spill_residents:
+  alias_occ_residents (alias_occ_from_spill key shadow) =
+  alias_occ_residents shadow
+Proof
+  Cases_on `FLOOKUP shadow.alias_spill_ids key` >>
+  simp[alias_occ_from_spill_def, pred_setTheory.EXTENSION,
+       pairTheory.FORALL_PROD, alias_occ_residents_member, MEM_SNOC,
+       finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  map_every qx_gen_tac [`at`,`id`] >>
+  Cases_on `at = key` >> gvs[] >> metis_tac[]
+QED
+
+Theorem alias_occ_insert_residents:
+  (at,id) IN alias_occ_residents (alias_occ_insert key shadow) <=>
+  (at = key /\ id = shadow.alias_next) \/
+  (at,id) IN alias_occ_residents shadow
+Proof
+  simp[alias_occ_insert_def, alias_occ_residents_member, MEM_SNOC] >>
+  metis_tac[]
+QED
+
+Theorem alias_occ_insert_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_insert at shadow)
+Proof
+  strip_tac >>
+  `~MEM shadow.alias_next (alias_occ_ids shadow)` by
+    (strip_tac >> gvs[alias_occ_wf_def, EVERY_MEM] >>
+     first_x_assum drule >> simp[]) >>
+  gvs[alias_occ_wf_def, alias_occ_ids_def, alias_occ_insert_def,
+      MAP_SNOC, ALL_DISTINCT_APPEND, ALL_DISTINCT_SNOC,
+      EVERY_APPEND, EVERY_SNOC, EVERY_MEM, MEM_SNOC] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!id. _ ==> id < _` (qspec_then `id` mp_tac) >> simp[]
 QED
 
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
