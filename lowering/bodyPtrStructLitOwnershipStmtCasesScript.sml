@@ -10,7 +10,8 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipRecursio
   bodyPtrStructLitOwnershipIfexpFrame context emitHelper unitShapeDefs
   venomInst stackPlanTypes bodyPtrStructLitOwnershipMemory
   bodyPtrStructLitOwnershipTyped bodyPtrStructLitOwnershipPrimitives
-  bodyPtrStructLitOwnershipAbiEncode
+  bodyPtrStructLitOwnershipAbiEncode bodyPtrStructLitOwnershipPop
+  bodyPtrStructLitEmitterFrame bodyPtrStructLitOwnershipScalar
 
 Theorem alloc_run_stmt_nonannassign_route:
   (!id vt e. s <> AnnAssign id vt e) /\
@@ -292,4 +293,99 @@ Proof
         SRULE [SF ETA_ss] alloc_run_compile_abi_encode_to_buf] >> NO_TAC) >>
     gen_tac >> simp[loop_comp_return_bind, comp_ignore_bind_def]) >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]
+QED
+
+Theorem alloc_run_stmt_assign_tuple:
+  ~supported_expr_exists expr_shape_root e /\
+  (!bt. MEM bt bts ==> ~supported_target_exists expr_shape_root bt) ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_stmt ce lctx ty (Assign (TupleTarget (MAP BaseTarget bts)) e))
+    (\u s. shape_state s /\ cenv_shape_ok s ce)
+Proof
+  strip_tac >> simp[compile_stmt_def] >> irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ value_shape_ok s v` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_struct_child_frame >>
+      qexistsl [`F`, `ce`, `\s. T`] >>
+      simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape]) >>
+  qx_gen_tac `vv` >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_unwrap_value_frame >>
+      qexists `\s. cenv_shape_ok s ce` >> simp[cenv_shape_ok_stable]) >>
+  gen_tac >> simp[] >> irule alloc_run_conseq >>
+  irule_at Any alloc_run_compile_tuple_unpack_frame >>
+  qexistsl [`F`, `\s. T`] >>
+  simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape]
+QED
+
+Theorem alloc_run_stmt_assign_base:
+  ~supported_expr_exists expr_shape_root e /\
+  ~supported_target_exists expr_shape_root bt ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_stmt ce lctx ty (Assign (BaseTarget bt) e))
+    (\u s. fresh_outputs s)
+Proof
+  strip_tac >> simp[compile_stmt_def] >> IF_CASES_TAC
+  >- (irule alloc_run_bind >> qexists `\r s. fresh_outputs s` >>
+      reverse conj_tac
+      >- (irule alloc_run_conseq >> irule_at Any alloc_run_target_prefix_frame >>
+          qexistsl [`F`, `\s. T`] >>
+          simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape,
+            shape_state_def, shape_base_fresh_outputs]) >>
+      simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_at_loc]) >>
+  irule alloc_run_bind >>
+  qexists `\vv s. shape_state s /\ cenv_shape_ok s ce /\ value_shape_ok s vv` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_struct_child_frame >>
+      qexistsl [`F`, `ce`, `\s. T`] >>
+      simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape]) >>
+  qx_gen_tac `vv` >> simp[] >> irule alloc_run_bind >>
+  qexists `\r s. shape_state s /\ cenv_shape_ok s ce /\ value_shape_ok s vv` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_target_prefix_frame >>
+      qexistsl [`F`, `\s. value_shape_ok s vv`] >>
+      simp[value_shape_ok_stable, alloc_run_compile_expr, cj 1 compile_expr_shape]) >>
+  qx_gen_tac `r` >> simp[loop_comp_return_bind] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_unwrap_value_frame >>
+      qexists `\s. T` >> simp[shape_stable_def, shape_state_def,
+        shape_base_fresh_outputs]) >>
+  gen_tac >> simp[] >> Cases_on `FST (SND r)` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_assign_value,
+    SRULE [SF ETA_ss] alloc_run_emit_void_fresh]
+QED
+
+Theorem alloc_run_stmt_augassign:
+  ~supported_expr_exists expr_shape_root e /\
+  ~supported_target_exists expr_shape_root bt ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_stmt ce lctx ty (AugAssign ety bt bop e))
+    (\u s. fresh_outputs s)
+Proof
+  strip_tac >> simp[compile_stmt_def] >> irule alloc_run_bind >>
+  qexists `\r s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s (FST r)` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_target_prefix_frame >>
+      qexistsl [`F`, `\s. T`] >>
+      simp[shape_stable_def, alloc_run_compile_expr, cj 1 compile_expr_shape]) >>
+  qx_gen_tac `r` >> simp[loop_comp_return_bind] >> Cases_on `FST (SND r)`
+  >- (simp[] >> irule alloc_run_conseq >>
+      irule_at Any alloc_run_emit_void_fresh >>
+      simp[shape_state_def, shape_base_fresh_outputs]) >>
+  simp[loop_comp_return_bind] >> irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_op_frame >>
+      qexists `\s. cenv_shape_ok s ce` >>
+      simp[cenv_shape_ok_stable] >> Cases_on `x` >>
+      simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+        inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+        label_positions_ok_def, is_terminator_def, plain_operand_def]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_stmt_lower_value >>
+      simp[shape_state_def, shape_base_fresh_outputs]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_binop,
+    SRULE [SF ETA_ss] alloc_run_emit_void_fresh]
 QED
