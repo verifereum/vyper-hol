@@ -1,7 +1,7 @@
 (* Local robustness needs no new taint in the window, not global taint equality. *)
 Theory bodyPtrBytestringBuiltinsWindowGhost
 Ancestors
-  robustCopyTransportPtr exprSimPtrLiteralBuffer exprSimProps bodyPtrDefs
+  robustCopyTransportPtr exprSimProps bodyPtrDefs
   compileEnv venomMemProofs venomState valueEncodingProofs list pred_set
   finite_map words exprSimMemoryTransport
 
@@ -46,8 +46,10 @@ Theorem ghost_inv_local_window_transport:
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x. not_fresh_at sa x ==> lookup_var x s' = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+    lookup_var x s' = SOME w) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)) /\
   (!name b len. local_region cenv es.scopes s name b len ==>
     mem_bytes_at b len s'.vs_memory = mem_bytes_at b len s.vs_memory /\
     (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
@@ -63,6 +65,8 @@ Proof
       `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
       conj_tac >- metis_tac[] >>
       rpt gen_tac >> strip_tac >>
+      `ptr_covers G tn p s sz` by metis_tac[] >>
+      `?w0. lookup_var p s = SOME w0` by fs[ptr_covers_def] >>
       `lookup_var p s = SOME w` by metis_tac[] >>
       `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
         (fs[local_ptrs_rel_def] >> metis_tac[]) >>

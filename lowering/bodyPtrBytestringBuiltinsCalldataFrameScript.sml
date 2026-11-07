@@ -7,6 +7,19 @@ Ancestors
   bodyPtrBytestringBuiltinsExternalSlice venomExecSemantics venomInst
   exprSimProps varsExt exprSimAlloc fragExec loweringHalt
 
+(* Allocation changes only variables and the allocation book-keeping. *)
+Theorem alloca_storage_projections:
+  step_inst_base (mk_inst id ALLOCA [Lit szw] [out]) s = OK u ==>
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
+  >- (strip_tac >> gvs[] >> simp[update_var_def]) >>
+  rename1 `SOME site` >> PairCases_on `site` >>
+  strip_tac >> gvs[] >> simp[update_var_def]
+QED
+
 Theorem allocated_bytes_write_state_rel:
   stmt_state_rel ctx fn cenv cx es s /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
@@ -44,6 +57,20 @@ Resume allocated_bytes_write_state_rel[immutable]:
   fs[regions_disjoint_def] >> decide_tac
 QED
 Finalise allocated_bytes_write_state_rel
+
+Theorem allocated_bytes_write_local_windows:
+  LENGTH data = n /\ 32 + n <= N /\
+  (!name p len. local_region cenv es.scopes s name p len ==>
+    regions_disjoint b N p len) ==>
+  !name p len. local_region cenv es.scopes s name p len ==>
+    mem_bytes_at p len
+      (mstore b (n2w n) (write_memory_with_expansion (b + 32) data s)).vs_memory =
+    mem_bytes_at p len s.vs_memory
+Proof
+  strip_tac >> gvs[] >> rpt strip_tac >> irule bytes_buffer_write_frame >>
+  qpat_x_assum `!name p len. _` drule >>
+  simp[regions_disjoint_def] >> decide_tac
+QED
 
 Theorem allocated_bytes_write_locals_kept:
   LENGTH data = n /\ 32 + n <= N /\
@@ -229,6 +256,10 @@ Theorem compile_slice_calldata_semantic:
       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
       mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
     locals_kept cenv es s zf /\
+    zf.vs_accounts = s.vs_accounts /\ zf.vs_transient = s.vs_transient /\
+    zf.vs_call_ctx = s.vs_call_ctx /\
+    (!name b len. local_region cenv es.scopes s name b len ==>
+      mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
     (!name b len. local_region cenv es.scopes zf name b len ==>
       regions_disjoint (w2n w) N b len)
 Proof
@@ -338,6 +369,30 @@ Resume compile_slice_calldata_semantic[old_frame]:
      qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
        mp_tac bytes_buffer_write_frame >>
      simp[] >> disch_then irule >> fs[regions_disjoint_def] >> decide_tac) >>
+  `!name b len. local_region cenv es.scopes s name b len ==>
+    mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes q name b len` by metis_tac[] >>
+     qpat_assum `z = _` SUBST1_TAC >>
+     qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
+       mp_tac bytes_buffer_write_frame >>
+     simp[] >> disch_then irule >>
+     `regions_disjoint (w2n w) N b len` by metis_tac[] >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  suspend "projections"
+QED
+
+Resume compile_slice_calldata_semantic[projections]:
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_call_ctx = s.vs_call_ctx` by
+    (drule alloca_storage_projections >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+    z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `z = _` SUBST1_TAC >>
+     qpat_assum `q = t with vs_vars := _` SUBST1_TAC >>
+     simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, update_var_def, LET_THM] >>
+     qpat_assum `t = update_var _ _ u with vs_inst_idx := _` SUBST1_TAC >>
+     simp_tac (srw_ss()) [update_var_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "finish"
 QED
 

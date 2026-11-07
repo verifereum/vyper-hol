@@ -8,6 +8,44 @@ Ancestors
   bodyPtrBytestringBuiltinsCalldataFrame bodyPtrBytestringBuiltinsBounds
   bodyPtrBytestringBuiltinsExternalSlice instIdxIndep fragExec
   exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer
+  bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
+  exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
+  venomMemProofs list
+
+Theorem covered_clean_memory_result:
+  evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv value /\
+  ptr_covers G tn p s N /\ eval_operand (Var p) s = SOME w /\
+  val_in_memory tv value (w2n w) s.vs_memory /\
+  val_store_size tv value <= N /\
+  (!i. w2n w <= i /\ i < w2n w + val_footprint tv value ==> i NOTIN tn.t_mem) /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= N ==>
+  ptr_mem_ok cx ty value (Var p) G tn s /\
+  ptr_buf_ok cenv e (Var p) G s /\
+  ptr_vv_ok cx ty (Value value)
+    (LocatedValue ty <|ptr_operand := Var p; ptr_location := LocMemory|>) es G tn s
+Proof
+  strip_tac >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv value (w2n w) mem` by
+    (rpt strip_tac >> irule val_in_memory_relocate_footprint >>
+     conj_tac >- simp[] >> qexistsl_tac [`s.vs_memory`,`w2n w`] >> simp[] >>
+     irule LIST_EQ >> simp[] >> rpt strip_tac >>
+     rename1 `j < val_footprint tv value` >>
+     `w2n w + j NOTIN tn.t_mem` by
+       (qpat_x_assum `!i. _ ==> i NOTIN _` irule >> decide_tac) >>
+     `mem_bytes_at (w2n w+j) 1 s.vs_memory = mem_bytes_at (w2n w+j) 1 mem` by
+       metis_tac[mem_agree_outside_def] >>
+     pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
+  `ptr_mem_ok cx ty value (Var p) G tn s` by
+    (simp[ptr_mem_ok_def] >> rpt strip_tac >> gvs[] >>
+     fs[ptr_covers_def, eval_operand_def] >>
+     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+  `ptr_buf_ok cenv e (Var p) G s` by
+    (simp[ptr_buf_ok_def] >> rpt strip_tac >>
+     fs[ptr_covers_def, eval_operand_def] >> gvs[] >>
+     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+  fs[ptr_vv_ok_def, ptr_covers_def, read_result_def, vyperStateTheory.return_def]
+QED
 
 (* The marked operand evidence fixes both the source integer and its actual
    runtime word; no independent existential execution is introduced. *)
@@ -91,6 +129,38 @@ Proof
   qexists_tac `new_site_bytes s u` >> simp[] >> metis_tac[]
 QED
 
+Theorem alloca_slice_suffix_ghost_inv:
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w N)] [out]) (fn_insts fn) /\
+  N < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w N)] [out]) s = OK u /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x z = SOME w) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)) /\
+  (!name b len. local_region cenv es.scopes s name b len ==>
+    mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory) /\
+  tm.t_mem SUBSET (tn.t_mem UNION new_site_bytes s u) /\
+  tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+  z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+  z.vs_call_ctx = s.vs_call_ctx ==>
+  ghost_inv d cenv cx es H tm z
+Proof
+  strip_tac >> drule_all alloca_new_bytes_protected_regions >> strip_tac >>
+  `local_ptrs_rel fn cenv es.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `stor_taint_ok cx tm z` by fs[ghost_inv_def, stor_taint_ok_def] >>
+  `!name b len. local_region cenv es.scopes s name b len ==>
+    mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory /\
+    (!i. b <= i /\ i < b + len /\ i IN tm.t_mem ==> i IN tn.t_mem)` by
+    (rpt strip_tac >> simp[] >>
+     qpat_x_assum `tm.t_mem SUBSET _` mp_tac >>
+     simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  drule_all ghost_inv_local_window_transport >> simp[]
+QED
+
 (* Counted replay advances the PC after each write.  The raw semantic run
    leaves it unchanged; these endpoints differ only in the final PC. *)
 Theorem slice_copy_store_pc_normalization:
@@ -127,7 +197,10 @@ Theorem compile_slice_calldata_shared_success:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  op_prov G start = NONE /\ op_taint tn start = {} ==>
+  op_prov G start = NONE /\ op_taint tn start = {} /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?zf w H tm root u.
     out = Var root /\
     step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u /\
@@ -136,6 +209,9 @@ Theorem compile_slice_calldata_shared_success:
     val_in_memory (BaseTV (BytesT (Dynamic bound)))
       (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) (w2n w) zf.vs_memory /\
     eval_operand out zf = SOME w /\ ptr_covers H tm root zf N /\
+    FLOOKUP zf.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
+    (!name b len. local_region cenv es.scopes zf name b len ==>
+      regions_disjoint (w2n w) N b len) /\
     zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~zf.vs_halted /\ locals_kept cenv es s zf /\
     (!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
@@ -152,6 +228,11 @@ Theorem compile_slice_calldata_shared_success:
       DIFF {i | w2n w <= i /\ i < w2n w + 32} /\
     w2n w + N < dimword (:256) /\
     ghost_kept cenv es sa G tn s H tm /\
+    ghost_inv d cenv cx es H tm zf /\
+    zf.vs_accounts = s.vs_accounts /\ zf.vs_transient = s.vs_transient /\
+    zf.vs_call_ctx = s.vs_call_ctx /\
+    (!name b len. local_region cenv es.scopes s name b len ==>
+      mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
     (!i. w2n w <= i /\ i < w2n w + 32 + n ==> i NOTIN tm.t_mem)
 Proof
   strip_tac >> drule_all compile_slice_calldata_semantic >>
@@ -208,6 +289,8 @@ Resume compile_slice_calldata_shared_success[protected]:
   `N < dimword (:256)` by decide_tac >>
   `ghost_kept cenv es sa G tn s H tm` by
     (drule_all alloca_slice_suffix_ghost_kept >> simp[]) >>
+  `ghost_inv d cenv cx es H tm zf` by
+    (drule_all alloca_slice_suffix_ghost_inv >> simp[]) >>
   `!i. w2n w <= i /\ i < n + (w2n w + 32) ==> i NOTIN tm.t_mem` by
     (qpat_assum `tm.t_mem = _` SUBST1_TAC >> simp[] >> rpt strip_tac >> decide_tac) >>
   qexistsl_tac [`zf`,`w`,`H`,`tm`] >>

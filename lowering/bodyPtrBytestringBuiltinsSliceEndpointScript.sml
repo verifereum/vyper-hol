@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsSliceEndpoint
 Ancestors
   bodyPtrBytestringBuiltinsExternalSlice bodyPtrBytestringBuiltinsCalldataCopy
-  exprSimPtrLiteralBuffer bodyPtrDefs ptrDiscipline words pred_set
+  bodyPtrDefs ptrDiscipline words pred_set
 
 Theorem external_slice_written_taint:
   32 <= N /\ w2n (a:bytes32) + N < dimword (:256) /\

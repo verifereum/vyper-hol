@@ -3,7 +3,7 @@ Ancestors
   bodyPtrBytestringBuiltinsAllocation loweringHalt emitHelperProps
   context emitHelper compileEnv fragExec venomInst list
   normalizationAllocPtr loweringPosts builtinBytes bodyPtrDefs
-  exprSimLiteralBuffer exprSimPtrLiteralBuffer exprLoweringProps venomState
+  exprSimLiteralBuffer exprLoweringProps venomState
   fragGasPathPtr fragGasSeqPtr typedCopyPtr bodyPtrAttributeAdd
   venomExecSemantics words ptrDiscipline
 
