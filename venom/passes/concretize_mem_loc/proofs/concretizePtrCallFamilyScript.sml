@@ -5,6 +5,8 @@ Theory concretizePtrCallFamily
 Ancestors
   concretizePtrStorageReadProducer concretizePtrMloadRecovery
   concretizePtrRequestCompletionProbe copyFwdEquiv
+  concretizePtrBufferCopyContent venomCallOracleDefs venomExecSemantics
+  concretizePtrRequestHistory
   concretizePtrPairedPrefix concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrDeletedGapHistory
   concretizePtrChronologicalHistory ptrDiscipline
@@ -115,6 +117,43 @@ Proof
   irule LIST_EQ >> simp[read_memory_def, LENGTH_TAKE_EQ] >>
   rpt strip_tac >>
   simp[take_drop_replicate_el, GSYM read_byte_def, mem_byte_at_def]
+QED
+
+Theorem ptr_call_history_execution:
+  ptr_history_content tn s t /\
+  ((inst.inst_opcode = CALL /\ st = s.vs_call_ctx.cc_static) \/
+   (inst.inst_opcode = STATICCALL /\ st)) /\
+  inst.inst_outputs = [out] /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t ==>
+  ?w u v.
+    exec_ext_call inst s gas addr value ao az ro rz st = OK (update_var out w u) /\
+    exec_ext_call inst t gt addr value at az rt rz st = OK (update_var out w v) /\
+    u.vs_returndata = v.vs_returndata /\
+    ptr_history_content (step_taint inst s (update_var out w u) tn)
+      (update_var out w u) (update_var out w v) /\
+    (!i. i < MIN (w2n rz) (LENGTH u.vs_returndata) ==>
+      read_byte (w2n ro+i) u.vs_memory = read_byte (w2n rt+i) v.vs_memory)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+    (w2n ro) (w2n rz) s` >>
+  Cases_on `consume_call_outcome (venom_call_request t addr value at az st)
+    (w2n rt) (w2n rz) t` >>
+  drule_all ptr_history_call_completion >> strip_tac >>
+  qexistsl_tac [`q`,`r`,`r'`] >>
+  simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
+  conj_tac
+  >- (irule ptr_history_content_masks >>
+      goal_assum (drule_at Any) >>
+      fs[step_taint_def, store_taint_def, adopt_reset_def,
+         imm_taint_def, ptr_call_adopted_def, update_var_def,
+         Excl "consume_call_outcome_eq"] >>
+      simp[SF CONJ_ss]) >>
+  qpat_x_assum `consume_call_outcome _ _ _ s = _` mp_tac >>
+  qpat_x_assum `consume_call_outcome _ _ _ t = _` mp_tac >>
+  simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule ptr_payload_write_content >> simp[LENGTH_TAKE_EQ]
 QED
 
 Theorem ptr_paired_call_prefix_normalize:
