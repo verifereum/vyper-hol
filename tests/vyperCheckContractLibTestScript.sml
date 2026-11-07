@@ -1725,3 +1725,118 @@ val () = check_rejects empty_layouts (iterated_write_function
        ^(op_lit u256 2)]``)
 val () = check_accepts "loop without iterated array write" false empty_layouts
   (iterated_write_function ``[] : stmt list``)
+
+(* Like Vyper (IteratorException "Cannot iterate over the result of a
+   function call"), a loop doesn't iterate over a call's result: self.g(),
+   xss.pop(), ecadd(xs, ys), empty(uint256[2]).  A list literal, a staticcall
+   and a ternary over calls are not calls and are accepted.
+     @internal
+     @view
+     def g() -> uint256[2]: return [1, 2]
+     @external
+     def f(c: bool, i: I) -> uint256:
+         xs: uint256[2] = [1, 2]
+         ys: uint256[2] = [3, 4]
+         xss: DynArray[DynArray[uint256, 2], 2] = [[1]]
+         out: uint256 = 0
+         for x: uint256 in <iterable>:
+             <writes>
+             out = x
+         return out *)
+val iter_arr = ``ArrayT (BaseT (UintT 256)) (Fixed 2)``
+val iter_dyn = ``ArrayT (BaseT (UintT 256)) (Dynamic 2)``
+val iter_dyn2 = ``ArrayT ^iter_dyn (Dynamic 2)``
+fun iter_lit a b =
+  ``Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+      [^(op_lit u256 a); ^(op_lit u256 b)]``
+fun iter_name id = ``Name ^iter_arr ^(stringSyntax.fromMLstring id)``
+val iter_g = ``Call ^iter_arr (IntCall (NONE, "g")) [] NONE``
+fun iter_ifexp a b = ``IfExp ^iter_arr (Name (BaseT BoolT) "c") ^a ^b``
+fun iterator_function iterator writes =
+  ``[(NONE,
+      [FunctionDecl Internal View F F "g" [] [] ^iter_arr
+         [Return (SOME ^(iter_lit 1 2))];
+       FunctionDecl External Nonpayable F F "f"
+         [("c", BaseT BoolT); ("i", BaseT AddressT)] [] ^u256
+         [AnnAssign "xs" ^iter_arr ^(iter_lit 1 2);
+          AnnAssign "ys" ^iter_arr ^(iter_lit 3 4);
+          AnnAssign "xss" ^iter_dyn2
+            (Builtin ^iter_dyn2 (MakeArray (SOME ^iter_dyn) (Dynamic 2))
+               [Builtin ^iter_dyn (MakeArray (SOME ^u256) (Dynamic 2))
+                  [^(op_lit u256 1)]]);
+          AnnAssign "out" ^u256 ^(op_lit u256 0);
+          For "x" ^u256 ^iterator 2
+            (^writes ++
+             [Assign (BaseTarget (NameTarget "out")) (Name ^u256 "x")]);
+          Return (SOME (Name ^u256 "out"))]])]
+    : (num option # toplevel list) list``
+fun iterable_function iterable writes =
+  iterator_function ``Array ^iterable`` writes
+val no_writes = ``[] : stmt list``
+val () = List.app (fn iterable =>
+    check_rejects empty_layouts (iterable_function iterable no_writes))
+  [iter_g,
+   ``Pop ^iter_dyn (NameTarget "xss")``,
+   ``Builtin ^iter_arr ECAdd [^(iter_name "xs"); ^(iter_name "ys")]``,
+   ``TypeBuiltin ^iter_arr Empty ^iter_arr []``]
+val () = List.app (fn (label, iterable) =>
+    check_accepts label false empty_layouts
+      (iterable_function iterable no_writes))
+  [("iterate over a local", iter_name "xs"),
+   ("iterate over a list literal", iter_lit 5 6),
+   ("iterate over a staticcall",
+    ``Call ^iter_arr (ExtCall T F ("g", [], ^iter_arr) [])
+        [Name (BaseT AddressT) "i"] NONE``),
+   ("iterate over an extcall",
+    ``Call ^iter_arr (ExtCall F F ("g", [], ^iter_arr) [])
+        [Name (BaseT AddressT) "i"] NONE``),
+   ("iterate over a ternary of calls", iter_ifexp iter_g iter_g)]
+
+(* Like Vyper (StateAccessViolation "May not call state modifying function
+   within a range expression or for loop iterator"), a pop() anywhere in an
+   iterator is rejected: [xss[0].pop(), 1], xss[xss[0].pop()],
+   (xss.pop() if c else xss[0]), range(0, xss[0].pop()). *)
+val xss0 = ``Subscript ^iter_dyn (Name ^iter_dyn2 "xss") ^(op_lit u256 0)``
+val pop_xss0 =
+  ``Pop ^u256 (SubscriptTarget (NameTarget "xss") ^(op_lit u256 0))``
+val () = List.app (fn iterator =>
+    check_rejects empty_layouts (iterator_function iterator no_writes))
+  [``Array (Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+             [^pop_xss0; ^(op_lit u256 1)])``,
+   ``Array (Subscript ^iter_dyn (Name ^iter_dyn2 "xss") ^pop_xss0)``,
+   ``Array (IfExp ^iter_dyn (Name (BaseT BoolT) "c")
+             (Pop ^iter_dyn (NameTarget "xss")) ^xss0)``,
+   ``Range ^(op_lit u256 0) ^pop_xss0``]
+val () = List.app (fn (label, iterator) =>
+    check_accepts label false empty_layouts
+      (iterator_function iterator no_writes))
+  [("iterate over a subscript", ``Array ^xss0``),
+   ("range to a local", ``Range ^(op_lit u256 0) (Name ^u256 "out")``)]
+
+(* Stricter than Vyper, which accepts these: the body may not write an arm
+   of a ternary it iterates over, directly or through a subscript, since the
+   compiled ternary uses an arm's memory in place.
+     for x: uint256 in (xs if c else ys):
+         xs[1] = 99
+     for x: uint256 in (xss if c else xss)[0]:
+         xss[0][0] = 99 *)
+val xs_write =
+  ``[Assign (BaseTarget (SubscriptTarget (NameTarget "xs") ^(op_lit u256 1)))
+       ^(op_lit u256 99)]``
+val xss_write =
+  ``[Assign (BaseTarget (SubscriptTarget
+       (SubscriptTarget (NameTarget "xss") ^(op_lit u256 0))
+       ^(op_lit u256 0))) ^(op_lit u256 99)]``
+val xss_ifexp_head =
+  ``Subscript ^iter_dyn
+      (IfExp ^iter_dyn2 (Name (BaseT BoolT) "c")
+         (Name ^iter_dyn2 "xss") (Name ^iter_dyn2 "xss"))
+      ^(op_lit u256 0)``
+val () = check_rejects empty_layouts
+  (iterable_function (iter_ifexp (iter_name "ys") (iter_name "xs")) xs_write)
+val () = check_rejects empty_layouts
+  (iterable_function xss_ifexp_head xss_write)
+val () = check_accepts "ternary arms not written" false empty_layouts
+  (iterable_function (iter_ifexp (iter_name "ys") (iter_name "ys")) xs_write)
+val () = check_accepts "subscripted ternary not written" false empty_layouts
+  (iterable_function xss_ifexp_head xs_write)
