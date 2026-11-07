@@ -1,5 +1,5 @@
 Theory concretizePtrReturnProduction
-Ancestors concretizePtrUniversalStepSchema concretizePtrReturnTransport
+Ancestors concretizePtrReturnTransport
   concretizePtrOpaqueRetpc concretizePtrHistoricalPlacement
   concretizePtrPairedPrefix contextCodegenRel unitLabelMapIdentity
   concretizePtrSourceOwnership concretizePtrTaggedSupport concretizePtrParamSupport concretizePtrStructuralTrace
@@ -403,7 +403,7 @@ Theorem ptr_paired_ret_successor:
     b.po_stack = TL a.po_stack /\
     ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PTc
       (DRESTRICT TGc (COMPL (set outs))) (TL saved) /\
-    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
     ptr_mixed_vars births positions (DRESTRICT TGc (COMPL (set outs)))
       b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
     B' = ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births /\
@@ -616,7 +616,7 @@ Theorem ptr_paired_ret_successor_births:
     b.po_stack = TL a.po_stack /\
     ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PTc
       (DRESTRICT TGc (COMPL (set outs))) (TL saved) /\
-    ptr_core_shared b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
+    ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt /\
     ptr_mixed_vars B' positions (DRESTRICT TGc (COMPL (set outs)))
       b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
     B' = ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births /\
