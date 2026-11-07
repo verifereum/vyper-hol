@@ -133,14 +133,13 @@ Inductive lineage_state:
                      ps_spilled := ps_after.ps_spilled |>)
 End
 
-(* Helper: every field but the stack and the spill map is a DFS state's. *)
+(* Helper: every field but the stack is a DFS state's. *)
 Theorem lineage_state_dfs_fields:
   !liveness dfg cfg fn ps0 lbl ps.
     lineage_state liveness dfg cfg fn ps0 lbl ps ==>
     ?ps_dfs.
       dfs_block_state liveness dfg cfg fn ps0 lbl ps_dfs /\
-      ps = ps_dfs with <| ps_stack := ps.ps_stack;
-                          ps_spilled := ps.ps_spilled |>
+      ps = ps_dfs with ps_stack := ps.ps_stack
 Proof
   rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
   ho_match_mp_tac lineage_state_ind >> rpt strip_tac
@@ -283,7 +282,7 @@ Theorem lineage_state_actual_dfs_fields:
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
   dfs_block_state lv dfg cfg fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
-  ps = psD with <| ps_stack := ps.ps_stack; ps_spilled := ps.ps_spilled |>
+  ps = psD with ps_stack := ps.ps_stack
 Proof
   rpt strip_tac >>
   drule lineage_state_has_entry >> strip_tac >>
@@ -305,6 +304,19 @@ Theorem lineage_state_actual_dfs_alloc:
   dfs_block_state lv dfg cfg fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
   ps.ps_alloc = psD.ps_alloc
+Proof
+  strip_tac >> drule_all lineage_state_actual_dfs_fields >>
+  simp[plan_state_component_equality]
+QED
+
+Theorem lineage_state_actual_dfs_spilled:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn
+    spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
+  ps.ps_spilled = psD.ps_spilled
 Proof
   strip_tac >> drule_all lineage_state_actual_dfs_fields >>
   simp[plan_state_component_equality]
