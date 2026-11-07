@@ -721,7 +721,8 @@ Theorem array_body_prefix_continuation:
   ?s2. s2.vs_current_bb = sb.cs_current_bb /\
     s2.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~s2.vs_halted /\
     stmt_state_rel ctx func cenv cx es s2 /\
-    s2.vs_vars = t.vs_vars /\ s2.vs_allocas = s.vs_allocas /\
+    s2.vs_vars = t.vs_vars /\ s2.vs_memory = t.vs_memory /\
+    s2.vs_allocas = s.vs_allocas /\
     gas_marked_path F ctx func s 0 (OK s2) /\
     (!fuel. run_from fuel ctx func s = run_from fuel ctx func s2)
 Proof
