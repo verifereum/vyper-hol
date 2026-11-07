@@ -26,6 +26,34 @@ Definition popped_keys_indexed_def:
                        (MAP FST entry.popped)) scs
 End
 
+(* Every immutable location belongs to a bare global. An assignable
+   immutable exists only in the constructor, lowered
+   with the constructor's compile env; every immutable has its
+   declared type in ce_module_var_type, where compile_get_target_ptr
+   reads a place type; and distinct immutables' regions are disjoint,
+   as the section layout places them. *)
+Definition bare_globals_layout_def:
+  bare_globals_layout is_ctor module_var_type
+      (module_vars:nsid |-> var_location) cx
+      (globals:nsid |-> type) (assignable:nsid |-> type) <=>
+    (!src id off. FLOOKUP module_vars (src,id) = SOME (ImmutableLoc off) ==>
+       ?ty. FLOOKUP globals (src,id) = SOME ty) /\
+    (!src id ty. FLOOKUP assignable (src,id) = SOME ty ==>
+       (is_ctor <=> cx.in_deploy)) /\
+    (!src id ty. FLOOKUP globals (src,id) = SOME ty ==>
+       module_var_type (src,id) = SOME ty) /\
+    (!src id1 id2 ty1 ty2 off1 off2 tv1 tv2.
+       id1 <> id2 /\
+       FLOOKUP globals (src,id1) = SOME ty1 /\
+       FLOOKUP globals (src,id2) = SOME ty2 /\
+       FLOOKUP module_vars (src,id1) = SOME (ImmutableLoc off1) /\
+       FLOOKUP module_vars (src,id2) = SOME (ImmutableLoc off2) /\
+       evaluate_type (get_tenv cx) ty1 = SOME tv1 /\
+       evaluate_type (get_tenv cx) ty2 = SOME tv2 ==>
+       compileEnv$regions_disjoint off1 (type_memory_size tv1)
+         off2 (type_memory_size tv2))
+End
+
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -77,8 +105,18 @@ Definition expr_sim_inv_def:
        src = cenv.ce_module /\
        ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
              !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
-                  off + type_memory_size tv < dimword (:256))
+                  off + type_memory_size tv < dimword (:256)) /\
+    bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
+      cenv.ce_module_vars cx env.bare_globals env.bare_global_assignable
 End
+
+Theorem extend_local_bare_globals[simp]:
+  (extend_local env id typ a).bare_globals = env.bare_globals /\
+  (extend_local env id typ a).bare_global_assignable =
+    env.bare_global_assignable
+Proof
+  simp[extend_local_def]
+QED
 
 Definition word_value_type_def:
   word_value_type t <=> is_numeric_type t \/ is_bool_type t \/ is_flag_type t

@@ -21,7 +21,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
-  bodyExprPreFacts bodySimExprCases
+  bodyExprPreFacts bodySimExprCases bodyImmutableAugAssignCompose
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
 
 Theorem supported_word_type_is_word:
@@ -114,7 +114,7 @@ Theorem immutable_deploy_augassign_case:
       (stmt_env cenv lctx ret_ty (AugAssign ty (TopLevelNameTarget nsid) bop e))
       (eval_stmt cx (AugAssign ty (TopLevelNameTarget nsid) bop e)) es
 Proof
-  cheat
+  ACCEPT_TAC immutable_deploy_augassign_frag
 QED
 
 (* ADMITTED: x op= e at a storage place whose indices have effects, as
