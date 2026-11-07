@@ -3,7 +3,7 @@
 Theory whitelistForIterImmCopy
 Ancestors
   stmtLowering context compileEnv exprSimTopLevelImmutable exprSimCopy
-  immutableCopyExecution vyperValue valueEncodingProps
+  immutableCopyExecution vyperValue valueEncodingProps emitHelper venomInst venomExecSemantics
 Libs
   monadsyntax
 
@@ -163,4 +163,134 @@ Theorem immutable_iter_copy_static_frame:
   copy_runtime_frame sa s sb z ==> copy_static z = copy_static s
 Proof
   simp[copy_runtime_frame_def]
+QED
+
+Theorem immutable_offset_opcodes[local]:
+  compile_lit_byte_offset op off sa = (r,sb) ==>
+  ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\
+    EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code
+Proof
+  Cases_on `off = 0` >> Cases_on `op` >>
+  simp[compile_lit_byte_offset_def, comp_return_def, emit_op_def,
+       comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >> rpt strip_tac >> gvs[] >>
+  simp[mk_inst_def] >> metis_tac[listTheory.EVERY_DEF, listTheory.APPEND_NIL]
+QED
+
+Theorem immutable_load_opcodes[local]:
+  compile_imm_load_word ctor imm op sa = (r,sb) ==>
+  ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\
+    EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code
+Proof
+  Cases_on `ctor` >> Cases_on `imm` >>
+  simp[compile_imm_load_word_def, comp_return_def, emit_op_def,
+       comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >> rpt strip_tac >> gvs[] >>
+  simp[mk_inst_def] >>
+  metis_tac[listTheory.EVERY_DEF, listTheory.APPEND_ASSOC]
+QED
+
+Theorem immutable_store_opcodes[local]:
+  emit_void MSTORE ops sa = ((),sb) ==>
+  ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\
+    EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code
+Proof
+  simp[emit_void_def, emit_def, comp_bind_def, fresh_id_def,
+       comp_return_def] >> rpt strip_tac >> gvs[] >> simp[mk_inst_def] >>
+  metis_tac[listTheory.EVERY_DEF]
+QED
+
+Theorem immutable_transfers_opcodes[local]:
+  !n off sa sb. compile_imm_copy_to_memory ctor imm src dst n off sa = ((),sb) ==>
+  ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\
+    EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code
+Proof
+  Induct >> simp[Once compile_imm_copy_to_memory_def, comp_return_def] >>
+  rpt gen_tac >> simp[comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule immutable_offset_opcodes >> strip_tac >>
+  drule immutable_load_opcodes >> strip_tac >>
+  drule immutable_store_opcodes >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `compile_lit_byte_offset src off sa = _`
+    (mp_then Any strip_assume_tac immutable_offset_opcodes) >>
+  gvs[] >> metis_tac[listTheory.EVERY_APPEND, listTheory.APPEND_ASSOC]
+QED
+
+Theorem immutable_iter_copy_opcodes[local]:
+  compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) ==>
+  ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\
+    EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code
+Proof
+  Cases_on `bytes <= 32` >> strip_tac
+  >- (gvs[immutable_iter_small_copy, comp_bind_def] >>
+      pairarg_tac >> gvs[] >>
+      drule immutable_load_opcodes >> strip_tac >>
+      drule immutable_store_opcodes >> strip_tac >>
+      gvs[] >> metis_tac[listTheory.EVERY_APPEND, listTheory.APPEND_ASSOC]) >>
+  `32 < bytes` by decide_tac >> gvs[immutable_iter_large_copy] >>
+  drule immutable_transfers_opcodes >> simp[]
+QED
+
+Theorem immutable_copy_opcode_control[local]:
+  MEM inst.inst_opcode [ADD; ILOAD; DLOAD; MSTORE] /\
+  step_inst_base inst s = OK z ==>
+  z.vs_prev_bb = s.vs_prev_bb /\ z.vs_current_bb = s.vs_current_bb /\
+  z.vs_inst_idx = s.vs_inst_idx
+Proof
+  simp[] >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, exec_read1_def,
+      exec_write2_def, AllCaseEqs(), venomStateTheory.update_var_def,
+      venomStateTheory.mstore_def]
+QED
+
+Theorem immutable_copy_sequence_control[local]:
+  !code s z.
+  EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code /\
+  run_inst_seq code s = OK z ==>
+  z.vs_prev_bb = s.vs_prev_bb /\ z.vs_current_bb = s.vs_current_bb /\
+  z.vs_inst_idx = s.vs_inst_idx
+Proof
+  Induct >> simp[exprLoweringPropsTheory.run_inst_seq_def] >> rpt gen_tac >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule_at (Pos (el 2)) immutable_copy_opcode_control >> simp[] >>
+  strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem immutable_iter_copy_state_frame:
+  compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) /\
+  copy_runtime_frame sa s sb z ==>
+  (z with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
+Proof
+  strip_tac >> drule immutable_iter_copy_opcodes >> strip_tac >>
+  gvs[copy_runtime_frame_def, exprLoweringPropsTheory.emitted_insts_def,
+      listTheory.DROP_APPEND] >>
+  drule_at (Pos (el 2)) immutable_copy_sequence_control >> strip_tac >>
+  gvs[exprSimStorageCopyTheory.copy_static_def,
+      venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem immutable_iter_copy_typed_run_full:
+  compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) /\
+  bytes = type_memory_size tv /\ 0 < bytes /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx ty (Value v) a es s /\
+  copy_old_operand sa src /\ copy_old_operand sa dst /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  w2n b + bytes < dimword (:256) /\
+  (cenv.ce_is_ctor ==> regions_disjoint (w2n a) bytes (w2n b) bytes) /\
+  (!region. cenv.ce_is_ctor /\ cenv.ce_imm_alloca = SOME region ==>
+    eval_operand region s = SOME 0w /\ copy_old_operand sa region) ==>
+  ?z. copy_runtime_frame sa s sb z /\
+      val_wf tv v /\ val_in_memory tv v (w2n b) z.vs_memory /\
+      val_footprint tv v <= bytes /\
+      LENGTH s.vs_memory <= LENGTH z.vs_memory /\
+      (!off len. off + len <= w2n b \/ w2n b + bytes <= off ==>
+        mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
+      (z with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
+Proof
+  strip_tac >> drule_all immutable_iter_copy_typed_run >> strip_tac >>
+  drule_all immutable_iter_copy_state_frame >> strip_tac >>
+  qexists_tac `z` >> gvs[] >> metis_tac[]
 QED
