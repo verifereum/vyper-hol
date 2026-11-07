@@ -467,12 +467,12 @@ Proof
     ((mstore slot (n2w (off+n)) t2) with vs_inst_idx := LENGTH en.cs_current_insts)` by
     (irule window_cursor_store_phase >> asm_rewrite_tac[] >> metis_tac[]) >>
   `abi_encode_exec_frame func s t1` by
-    simp[Abbr `t1`, abi_encode_exec_frame_def, pending_alloca_size_def,
-      mstore_def, write_memory_with_expansion_def] >>
+    simp_tac (srw_ss()) [Abbr `t1`, abi_encode_exec_frame_mstore,
+      abi_encode_exec_frame_inst_idx] >>
   `abi_encode_exec_frame func t2
     ((mstore slot (n2w (off+n)) t2) with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    simp[abi_encode_exec_frame_def, pending_alloca_size_def,
-      mstore_def, write_memory_with_expansion_def] >>
+    simp_tac (srw_ss()) [abi_encode_exec_frame_mstore,
+      abi_encode_exec_frame_inst_idx] >>
   `abi_encode_exec_frame func s t2` by
     (irule abi_encode_exec_frame_trans >> qexists_tac `t1` >> asm_rewrite_tac[]) >>
   `abi_encode_exec_frame func s

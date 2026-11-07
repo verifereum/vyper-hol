@@ -20,8 +20,11 @@ Theorem abi_encode_framed_array_backedge:
   abi_encode_exec_frame func s
     (jump_to hdr (mstore islot w (update_var nv w s)))
 Proof
-  simp[abi_encode_exec_frame_def, pending_alloca_size_def,
-    jump_to_def, mstore_def, write_memory_with_expansion_def, update_var_def]
+  qspecl_then [`func`, `islot`, `w`, `update_var nv w s`]
+    mp_tac abi_encode_exec_frame_mstore >>
+  pure_rewrite_tac[abi_encode_exec_frame_def] >>
+  simp[pending_alloca_size_def, jump_to_def, update_var_def,
+    exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_def]
 QED
 
 Theorem abi_encode_framed_array_loop_run:

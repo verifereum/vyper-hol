@@ -189,7 +189,8 @@ Proof
         qexists_tac `i` >> simp[] >> fs[EVERY_MEM]) >>
      drule_all abi_encode_semantic_ordinary_sequence >> strip_tac >>
      fs[window_pure_seq_def, abi_encode_exec_frame_def, pending_alloca_size_def,
-        mstore_def, write_memory_with_expansion_def]) >>
+        mstore_def, write_memory_with_expansion_def, LET_THM, LENGTH_TAKE, LENGTH_DROP] >>
+     IF_CASES_TAC >> simp[] >> decide_tac) >>
   suspend "effect"
 QED
 
@@ -319,8 +320,8 @@ Proof
      qexistsl_tac [`{st.cs_next_id}`, `[]`, `mid`, `{st.cs_next_id}`, `[]`, `t`] >> simp[]) >>
   qmatch_asmsub_abbrev_tac `window_phase ctx func st en {st.cs_next_id} [] s u` >>
   `abi_encode_exec_frame func t u` by
-    simp[Abbr `u`, abi_encode_exec_frame_def, pending_alloca_size_def,
-      mstore_def, write_memory_with_expansion_def] >>
+    simp_tac (srw_ss()) [Abbr `u`, abi_encode_exec_frame_mstore,
+      abi_encode_exec_frame_inst_idx] >>
   `abi_encode_exec_frame func s u` by
     (irule abi_encode_exec_frame_trans >> qexists_tac `t` >> asm_rewrite_tac[]) >>
   `u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next` by
@@ -405,8 +406,8 @@ Proof
      qexistsl_tac [`{}`, `[]`, `mid`, `{}`, `[(d,32)]`, `t`] >> simp[]) >>
   qmatch_asmsub_abbrev_tac `window_phase ctx func st en {} [(d,32)] s u` >>
   `abi_encode_exec_frame func t u` by
-    simp[Abbr `u`, abi_encode_exec_frame_def, pending_alloca_size_def,
-      mstore_def, write_memory_with_expansion_def] >>
+    simp_tac (srw_ss()) [Abbr `u`, abi_encode_exec_frame_mstore,
+      abi_encode_exec_frame_inst_idx] >>
   `abi_encode_exec_frame func s u` by
     (irule abi_encode_exec_frame_trans >> qexists_tac `t` >> asm_rewrite_tac[]) >>
   `!R. window_sizes32 R s ==> window_sizes32 R u` by

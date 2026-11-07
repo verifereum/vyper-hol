@@ -71,3 +71,16 @@ Theorem abi_encode_exec_frame_memory_length:
 Proof
   simp[abi_encode_exec_frame_def]
 QED
+
+Theorem abi_encode_exec_frame_mstore[simp]:
+  !fn b w s. abi_encode_exec_frame fn s (mstore b w s)
+Proof
+  rpt gen_tac >> rewrite_tac[abi_encode_exec_frame_def] >>
+  rpt conj_tac
+  >- simp[pending_alloca_size_def, mstore_def]
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- simp[abi_encode_semantic_obs_def, mstore_def]
+  >> irule abi_encode_mstore_memory_length
+QED
