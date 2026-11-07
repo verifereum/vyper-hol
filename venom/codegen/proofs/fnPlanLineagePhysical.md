@@ -31,3 +31,41 @@ interface as a refutation of physical preservation. This is a search finding,
 not yet a checked preservation residual. The authorized next action is to
 inspect/attempt the singleton physical conservation step or report its exact
 residual, not redesign native reachability or start the frozen theorem.
+
+## Bounded singleton inspection (2026-11-07)
+
+A temporary symbolic theorem (removed after inspection) unfolded the exact
+singleton reorder, under physical_live live ps, an actual unfixed source hit
+`stack_get_unfixed_depth (Var a) 0 1 ps.ps_stack = SOME d`, and
+`FLOOKUP ps.ps_spilled (Var a) = NONE`. The verified simplification prefix
+reduced the restoration branch to no-op. The first nontrivial intermediate
+state is exactly
+
+```
+SND (if d > 16 then
+       reduce_depth_plan (LENGTH ps.ps_stack) [Var a] (Var a) 0 1 ps
+     else ([],ps))
+```
+
+The needed primitive interface is exact lineage_inventory preservation by
+this reduction, including marker-prefix shape, distinct variable core,
+stack/spill disjointness and equality of the union. Existing
+`reduce_depth_plan_inventory_mono` requires residual_budget_wf;
+`reduce_depth_plan_live_reserve` proves only lower multiplicity bounds;
+`reduce_depth_plan_stack_support` proves only support inclusion. None
+supplies this exact structural invariant from physical_live alone.
+`do_spill_at_lineage_inventory` is the relevant one-step boundary, but it
+requires a stack_get_depth equality for the chosen variable; the selector
+returns a distance/peek and variable-ness instead. Connecting these requires
+uniqueness of the variable in the marker core, then induction over the
+actual reduction fuel. This interface has not been proved here.
+
+After reduction, the placement branch still needs exact marker-core
+preservation through the two stack_poke operations (equivalent-operand
+branch) or do_swap dist' followed by do_swap 0. `do_swap_core` supplies the
+latter once the hit is shown to lie in the variable core. No allocator
+premise was added. This is a missing primitive interface / bounded proof
+residual, NOT evidence that physical_live preservation or the frozen theorem
+is false. No new admitted theorem was retained.
+
+Evidence: tool output TO_lineage_after_fix-20261106T221649Z_m12801_t001.
