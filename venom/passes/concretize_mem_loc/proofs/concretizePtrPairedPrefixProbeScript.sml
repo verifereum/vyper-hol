@@ -4,6 +4,7 @@ Ancestors
   concretizePtrStructuralTrace concretizePtrActivationChronology concretizePtrActivationBirths
   concretizePtrValueTransport concretizePtrOpaqueRetpc
   concretizePtrValueSelection concretizePtrAffineTransport concretizePtrRequestHistory
+  concretizePtrTaintContent
   concretizePtrOwnedAssignPrefix concretizePtrSharedFields
   concretizePtrChronologicalHistory concretizePtrRuntimeTotality
   concretizePtrLayoutOutput staticLayoutCompletionProofs staticLayoutAllocatorProofs
@@ -153,7 +154,9 @@ Proof
   conj_tac
   >- (simp[ptr_gap_scan_fields] >> irule ptr_mixed_vars_fields >>
       goal_assum (drule_at Any) >> simp[ptr_gap_scan_fields]) >>
-  gvs[ptr_gap_scan_fields, ptr_core_shared_def, ptr_shared_fields_def]
+  gvs[ptr_gap_scan_fields, ptr_history_content_def, ptr_taint_content_def,
+      ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
+      contract_storage_def, contract_transient_def]
 QED
 
 Theorem ptr_paired_cursor_nop_next:
