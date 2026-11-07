@@ -1737,6 +1737,8 @@ Theorem raw_call_tuple_head_stage:
     stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
     result = Var x /\ not_fresh_at sb x /\
     lookup_var x t = SOME (n2w b) /\ FLOOKUP H x = SOME (b,capacity) /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,capacity) /\
+    sa.cs_next_id < sb.cs_next_id /\
     op_taint un (Var x) = {} /\ b+capacity < dimword(:256) /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
@@ -1868,6 +1870,8 @@ Resume raw_call_tuple_head_stage[compose]:
   `!i. ~(b <= i /\ i < b+capacity) ==> (i IN vn.t_mem <=> i IN tn.t_mem)` by
     (fs[Abbr `vn`, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
      `i NOTIN dirty` by metis_tac[] >> simp[] >> decide_tac) >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
   qexistsl_tac [`H`, `vn`, `v`, `x`, `b`] >>
   simp[] >> metis_tac[]
 QED
@@ -1902,6 +1906,11 @@ Theorem raw_call_tuple_construct_stage:
   type_memory_bytes cenv (lowered_value_type cenv e) <= 32+ncopy ==>
   ?H un t x. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
     result = Var x /\
+    (?b. lookup_var x t = SOME (n2w b) /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,32+ncopy) /\
+      sa.cs_next_id < sb.cs_next_id /\
+      (!name off len. local_region cenv es.scopes t name off len ==>
+        regions_disjoint b (32+ncopy) off len)) /\
     ptr_val_ok cx ty (ArrayV (TupleV [BoolV flag;tv])) result H un t /\
     ptr_buf_ok cenv e result H t /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un /\
@@ -2021,6 +2030,9 @@ Resume raw_call_tuple_construct_stage[copy_apply]:
     suspend "frames" >>
   `b+32 < dimword(:256) /\ ncopy < dimword(:256)` by decide_tac >>
   qexistsl_tac [`H'`, `un''`, `t'`, `x`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- suspend "metadata" >>
   fs[arithmeticTheory.LESS_MOD] >> metis_tac[]
 QED
 
@@ -2081,8 +2093,10 @@ Resume raw_call_tuple_construct_stage[frame_compose]:
   `local_ptrs_rel func cenv es.scopes s` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
   `ghost_kept cenv es sa G tn s H' un'` by
-    (fs[exprLoweringPropsTheory.ci_mono_def] >>
-     metis_tac[wordOperandsPtrTheory.ghost_kept_trans]) >>
+    (irule wordOperandsPtrTheory.ghost_kept_trans >>
+     first_assum (irule_at (Pat `ghost_kept _ _ _ G tn s _ _`)) >>
+     qexists_tac `func` >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
   `wb_frame cenv es sa s u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
      first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
@@ -2094,6 +2108,20 @@ Resume raw_call_tuple_construct_stage[frame_compose]:
      qexistsl_tac [`u`, `sa`, `es`] >> simp[]) >>
   `ghost_kept cenv es sa G tn s H' un''` by
     metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >> simp[]
+QED
+
+Resume raw_call_tuple_construct_stage[metadata]:
+  `t'.vs_allocas = u.vs_allocas` by
+    fs[venomExecSemanticsTheory.mcopy_def,
+      venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def] >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  qexists_tac `b` >> simp[] >>
+  rpt strip_tac >>
+  `local_region cenv es.scopes s name off' len'` by
+    (fs[compileEnvTheory.local_region_def, compileEnvTheory.local_ptrs_reserved_def,
+      loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise raw_call_tuple_construct_stage
@@ -2142,6 +2170,11 @@ Theorem raw_call_tuple_suffix_stage:
   type_memory_bytes cenv (lowered_value_type cenv e) <= 32+ncopy ==>
   ?H un t x. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
     result = Var x /\
+    (?b aid. lookup_var x t = SOME (n2w b) /\
+      FLOOKUP t.vs_allocas aid = SOME (b,32+ncopy) /\
+      sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+      (!name off len. local_region cenv es.scopes t name off len ==>
+        regions_disjoint b (32+ncopy) off len)) /\
     ptr_val_ok cx ty (ArrayV (TupleV [BoolV flag;BytesV bs])) result H un t /\
     ptr_buf_ok cenv e result H t /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
@@ -2258,7 +2291,9 @@ Resume raw_call_tuple_suffix_stage[compose]:
     metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
   `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK t')` by
     (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
-  qexistsl_tac [`H'`, `un'`, `t'`, `x`] >> simp[]
+  qexistsl_tac [`H'`, `un'`, `t'`, `x`] >> simp[] >>
+  qexistsl_tac [`b`, `s4.cs_next_id`] >>
+  fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]
 QED
 
 Finalise raw_call_tuple_suffix_stage

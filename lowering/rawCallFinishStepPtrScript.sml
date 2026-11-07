@@ -210,6 +210,10 @@ Theorem raw_call_allocated_suffix_ready:
   (!i. ob+32 <= i /\ i < ob+32+LENGTH (TAKE cap rd) ==> i NOTIN un.t_mem) /\
   eval_operand (Var out) u = SOME (val_to_w256 (BoolV flag)) /\ u.vs_returndata = rd /\
   (!name a len. local_region cenv ee.scopes u name a len ==>
+    regions_disjoint ob capacity a len) /\
+  (!id a len. id < protected.cs_next_id /\ FLOOKUP u.vs_allocas id = SOME (a,len) ==>
+    regions_disjoint ob capacity a len) /\
+  (!name a len. local_region cenv ee.scopes u name a len ==>
     regions_disjoint ob 32 a len) /\
   (!id a len. id < protected.cs_next_id /\ FLOOKUP u.vs_allocas id = SOME (a,len) ==>
     regions_disjoint ob 32 a len)
