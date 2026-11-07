@@ -1369,7 +1369,7 @@ Resume ld_recursive_ordinary_next_witness[revert_successor]:
     simp[] >>
   `get_instruction gb (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j'` by
     (simp[get_instruction_def, EL_APPEND2] >>
-     Cases_on `nextcode` >- metis_tac[] >> simp[]) >>
+     Cases_on `nextcode` >- fs[] >> simp[]) >>
   disj2_tac >>
   irule (BETA_RULE ld_recursive_configured_revert_exceptional) >>
   goal_assum (drule_at Any) >>
@@ -2608,7 +2608,9 @@ Theorem ld_recursive_geometry_forget[local]:
 Proof
   BETA_TAC >> disch_then (mp_tac o CONJUNCT2 o CONJUNCT2) >>
   ho_match_mp_tac MONO_OR >> reverse conj_tac >- simp[] >>
-  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >> simp[]
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 val ld_recursive_geometry_block_goal =
@@ -3041,11 +3043,11 @@ Proof
     (qpat_assum `active_inst gn j' _`
        (mp_then (Pat `active_inst _ _ _`) mp_tac ld_active_lookup_el) >>
      disch_then (qspec_then `gb` mp_tac) >>
-     (impl_tac >- (qpat_x_assum `saved :- _` kall_tac >> gvs[])) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
      qpat_assum `active_inst gn (HD nextcode) _`
        (mp_then (Pat `active_inst _ _ _`) mp_tac ld_active_lookup_el) >>
      disch_then (qspec_then `gb` mp_tac) >>
-     (impl_tac >- (qpat_x_assum `saved :- _` kall_tac >> gvs[])) >> metis_tac[]) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> metis_tac[]) >>
   `nextcode <> []` by metis_tac[o1ContractLowerDloadTheory.lower_dload_inst_supply_nonempty] >>
   `active_inst fn i' (zs with vs_inst_idx := SUC s.vs_inst_idx)` by
     metis_tac[lowerDloadProvenanceSupportTheory.ld_annotated_active_inst] >>
@@ -3101,7 +3103,9 @@ Resume ld_recursive_geometry_load_next_witness[revert_successor]:
      simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]) >>
   `get_instruction gb (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j'` by
     (simp[get_instruction_def, EL_APPEND2] >>
-     Cases_on `nextcode` >- metis_tac[] >> simp[EL_APPEND2, EL_APPEND1]) >>
+     Cases_on `nextcode`
+     >- (qpat_x_assum `[] <> []` mp_tac >> simp[]) >>
+     simp[EL_APPEND2, EL_APPEND1]) >>
   `EVERY (\v. MEM v fa.irs_used_vars) (FLAT (MAP inst_ir_vars bb.bb_instructions))` by
     (`MEM bb fn.fn_blocks` by simp[] >>
      qpat_assum `ir_supply_covers_unit fa observed` mp_tac >>
@@ -4904,3 +4908,302 @@ Resume ld_recursive_return_normal_prefix[normal_clauses]:
 QED
 
 Finalise ld_recursive_return_normal_prefix
+
+Theorem ld_normal_data_inst_idx:
+  !CS fn V U lo E L H AP BP AG BH tn un sx tx n m astk live keys d A suspended gstk f.
+    ld_normal_data CS fn V U lo E L H AP BP AG BH tn un
+      (sx with vs_inst_idx := n) (tx with vs_inst_idx := m)
+      astk live keys d A suspended gstk f =
+    ld_normal_data CS fn V U lo E L H AP BP AG BH tn un
+      sx tx astk live keys d A suspended gstk f
+Proof
+  simp[NoAsms, ld_normal_data_def,
+    lowerDloadCoverageInvariantTheory.ld_frame_data_def,
+    lowerDloadFrameCertificateTheory.ld_frame_embedding_def,
+    lowerDloadSharedStateTheory.ld_shared_state_def,
+    lowerDloadPairedBoundaryTheory.ld_owned_vars_def,
+    venomStateTheory.lookup_var_def,
+    lowerDloadAllocationTheory.ld_alloc_account_def, allocas_from_def,
+    venomStateTheory.read_memory_def]
+QED
+
+Theorem ld_recursive_return_restore:
+  ^ld_proposed_combined_return_restore
+Proof
+  rpt gen_tac >> disch_tac >>
+  first_assum (mp_tac o MATCH_MP ld_recursive_return_normal_prefix) >>
+  simp_tac bool_ss [LET_THM] >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  disch_then (qx_choose_then `floor` strip_assume_tac) >>
+  qexists_tac `floor` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `_ /\ _` mp_tac >> strip_tac >>
+  TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
+  qpat_x_assum `astk = sf::astail` SUBST_ALL_TAC >>
+  qpat_x_assum `gstk = tf::gtail` SUBST_ALL_TAC >>
+  qpat_assum `!q. q < LENGTH (sf::astail) ==> ld_saved_embedded _ _ _ _ _ _ _ /\ _`
+    (qspec_then `0` mp_tac) >>
+  simp_tac (srw_ss()) [LENGTH, prim_recTheory.LESS_0, EL, DROP, HD, TL] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?sk' stn. _`
+    (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  `wf_function sf.lf_fn` by
+    (qpat_x_assum `o1_ctx_shape CS` mp_tac >>
+     simp[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!e. _ ==> o1_fn_shape CS e`
+       (qspec_then `sf.lf_fn` mp_tac) >>
+     simp[o1PassContractTheory.o1_fn_shape_def]) >>
+  `active_inst sf.lf_fn sf.lf_inst sf.lf_state` by
+    (irule lowerDloadProvenanceSupportTheory.ld_annotated_active_inst >>
+     goal_assum (drule_at Any)) >>
+  `?next. active_inst sf.lf_fn next
+    (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx)` by
+    (irule o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_successor >>
+     conj_tac >- asm_rewrite_tac [] >>
+     qexistsl [`sf.lf_inst`, `ret`, `s`] >> simp[adopt_return_fmp_def]) >>
+  qpat_assum `bind_outputs sf.lf_inst.inst_outputs _ _ = SOME s'`
+    (strip_assume_tac o MATCH_MP o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control) >>
+  qpat_assum `bind_outputs tf.lf_inst.inst_outputs _ _ = SOME t'`
+    (strip_assume_tac o MATCH_MP o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control) >>
+  `post' <> []` by
+    (strip_tac >>
+     qpat_x_assum `active_inst sf.lf_fn next _`
+       (strip_assume_tac o REWRITE_RULE [active_inst_def]) >>
+     `ALL_DISTINCT (MAP (\bb. bb.bb_label) sf.lf_fn.fn_blocks)` by
+       (qpat_assum `wf_function sf.lf_fn` mp_tac >>
+        simp_tac bool_ss [wf_function_def, fn_labels_def] >>
+        metis_tac[]) >>
+     `lookup_block sf.lf_state.vs_current_bb sf.lf_fn.fn_blocks = SOME bb'` by
+       (irule MEM_lookup_block >> simp[]) >>
+     `bb' = bs` by metis_tac[optionTheory.SOME_11] >>
+     qpat_x_assum `bb' = bs` SUBST_ALL_TAC >>
+     qpat_x_assum `_ < LENGTH bs.bb_instructions` mp_tac >>
+     simp[]) >>
+  Cases_on `post'` >- fs[] >>
+  rename1 `bs.bb_instructions = pre' ++ [sf.lf_inst] ++ ni::rest` >>
+  Cases_on `lower_dload_inst_supply d ni` >>
+  rename1 `lower_dload_inst_supply d ni = (nextcode,nd)` >>
+  Cases_on `lower_dload_insts_supply nd rest` >>
+  rename1 `lower_dload_insts_supply nd rest = (nexttail,nb)` >>
+  `tail' = nextcode ++ nexttail /\ nb = b` by
+    (qpat_x_assum `lower_dload_insts_supply d (ni::rest) = _` mp_tac >>
+     simp[lower_dload_insts_supply_def]) >>
+  `nextcode <> []` by
+    (irule o1ContractLowerDloadTheory.lower_dload_inst_supply_nonempty >>
+     goal_assum (drule_at Any)) >>
+  `active_inst tf.lf_fn (HD nextcode)
+     (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx)` by
+    (rewrite_tac[active_inst_def] >> qexists_tac `bt` >>
+     `MEM bt tf.lf_fn.fn_blocks /\ bt.bb_label = tf.lf_state.vs_current_bb` by
+       (conj_tac
+        >- (irule lookup_block_MEM >> goal_assum (drule_at Any)) >>
+        irule lookup_block_label >> goal_assum (drule_at Any)) >>
+     simp[EL_APPEND2] >>
+     Cases_on `nextcode`
+     >- (qpat_x_assum `[] <> []` mp_tac >> simp[]) >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[NoAsms, EL_APPEND2]) >>
+  conj_tac >- (qexists_tac `HD nextcode` >> first_assum ACCEPT_TAC) >>
+  gen_tac >> disch_tac >>
+  conj_tac
+  >- (qpat_x_assum `alloca_inv t'` mp_tac >>
+      simp[venomMemDefsTheory.alloca_inv_def,
+           venomMemDefsTheory.allocas_non_overlapping_def,
+           venomMemDefsTheory.alloca_next_valid_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!f i st tv. MEM (f,i,st,tv) projected_stk ==> _` irule >>
+      simp[] >> qexistsl_tac [`f'`, `i'`, `tv`] >>
+      disj2_tac >> first_assum ACCEPT_TAC) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) tf.lf_fn.fn_blocks)` by
+    (qpat_assum `lower_dload_function_supply sa sf.lf_fn = _`
+       (strip_assume_tac o MATCH_MP
+          o1ContractLowerDloadTheory.lower_dload_function_supply_labels) >>
+     qpat_assum `wf_function sf.lf_fn` mp_tac >>
+     simp_tac bool_ss [wf_function_def] >> strip_tac >>
+     fs[GSYM fn_labels_def]) >>
+  `lookup_block (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx).vs_current_bb
+       tf.lf_fn.fn_blocks = SOME bt` by
+    (simp_tac (srw_ss()) [] >>
+     qpat_assum `t'.vs_current_bb = _` (fn th => rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  `j' = HD nextcode` by
+    (qpat_assum `active_inst tf.lf_fn j' _`
+       (mp_then Any mp_tac ld_active_lookup_el) >>
+     simp[] >> Cases_on `nextcode` >- fs[] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[NoAsms, EL_APPEND2]) >>
+  `active_inst sf.lf_fn ni (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx)` by
+    (rewrite_tac[active_inst_def] >> qexists_tac `bs` >>
+     conj_tac >- (irule lookup_block_MEM >> goal_assum (drule_at Any)) >>
+     `bs.bb_label = sf.lf_state.vs_current_bb` by
+       (irule lookup_block_label >> goal_assum (drule_at Any)) >>
+     simp[EL_APPEND2] >> simp[NoAsms, arithmeticTheory.ADD1]) >>
+  `lower_dload_insts_supply a (pre' ++ [sf.lf_inst]) =
+       (p' ++ [tf.lf_inst],d)` by
+    (irule lowerDloadSupplySegmentTheory.lower_dload_insts_supply_append_forward >>
+     goal_assum (drule_at Any) >> simp[lower_dload_insts_supply_def]) >>
+  Cases_on `in_revert_forward sf.lf_fn
+    (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx)`
+  >- suspend "revert_successor" >>
+  disj1_tac >>
+  qexistsl_tac [`astail`, `gtail`, `k`, `sf.lf_local`, `sf.lf_params`,
+    `DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))`,
+    `tn with t_var := DRESTRICT sf.lf_tvar (COMPL (set sf.lf_inst.inst_outputs))`,
+    `sf.lf_fn`, `ni`, `s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx`,
+    `t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx`,
+    `un with t_var := DRESTRICT tf.lf_tvar (COMPL (set tf.lf_inst.inst_outputs))`,
+    `DRESTRICT E {owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+      (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,bs,sz)}`,
+    `tf.lf_local`, `tf.lf_params`,
+    `DRESTRICT tf.lf_prov (COMPL (set tf.lf_inst.inst_outputs))`,
+    `{owner | ?bs sz. ld_live astail sf.lf_local sf.lf_params
+      (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,bs,sz)}`,
+    `HD suspended`, `TL suspended`, `floor`, `sa`, `sb`, `bs`, `bt`,
+    `a`, `d`, `nd`, `b`, `pre' ++ [sf.lf_inst]`, `rest`,
+    `p' ++ [tf.lf_inst]`, `nextcode`, `nexttail`, `bpre'`, `bpost'`, `gp`, `gt`,
+    `TL supports`, `TL savedkeys`, `origin`, `0`] >>
+  conj_tac
+  >- (qpat_x_assum `!inst'. active_inst sf.lf_fn inst' _ ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "normal_data_position" >>
+  conj_tac
+  >- (qexistsl_tac [`cpre'`, `cpost'`, `gpre'`, `gpost'`, `observed'`, `out'`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (asm_rewrite_tac[] >> simp_tac (srw_ss()) [GSYM APPEND_ASSOC]) >>
+  ntac 3 (conj_tac >- asm_rewrite_tac[]) >>
+  conj_tac >- (asm_rewrite_tac[] >> simp_tac (srw_ss()) [GSYM APPEND_ASSOC]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (simp_tac (srw_ss()) [] >>
+      qpat_assum `s'.vs_current_bb = _` (fn th => rewrite_tac[th]) >>
+      first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  ntac 7 (conj_tac >- simp[]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- suspend "tail_caps" >>
+  conj_tac >- fs[] >>
+  conj_tac >- (qpat_x_assum `LENGTH supports = _` mp_tac >>
+               POP_ASSUM_LIST (K ALL_TAC) >> simp[LENGTH_TL]) >>
+  conj_tac >- (qpat_x_assum `LENGTH savedkeys = _` mp_tac >>
+               POP_ASSUM_LIST (K ALL_TAC) >> simp[LENGTH_TL]) >>
+  conj_tac >- (qpat_x_assum `LENGTH suspended = _` mp_tac >>
+               POP_ASSUM_LIST (K ALL_TAC) >> simp[LENGTH_TL]) >>
+  conj_tac >- suspend "tail_saved" >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `alloca_inv t'` mp_tac >>
+  simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Resume ld_recursive_return_restore[normal_data_position]:
+  rewrite_tac[ld_normal_data_inst_idx] >>
+  qpat_x_assum `ld_normal_data CS sf.lf_fn _ _ _ _ _ _ _ _ _ _ _ _ s' t' _ _ _ _ _ _ _ _`
+    mp_tac >>
+  qpat_x_assum `HD supports = _` mp_tac >>
+  qpat_x_assum `HD savedkeys = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> simp[]
+QED
+
+Resume ld_recursive_return_restore[tail_caps]:
+  qpat_x_assum `LIST_REL _ (A::suspended) _` mp_tac >>
+  qpat_x_assum `LENGTH suspended = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `suspended` >> simp[]
+QED
+
+Resume ld_recursive_return_restore[tail_saved]:
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!q. q < LENGTH (sf::astail) ==> ld_saved_embedded _ _ _ _ _ _ _ /\ _`
+    (qspec_then `SUC q` mp_tac) >>
+  simp_tac std_ss [LENGTH, prim_recTheory.LESS_MONO_EQ, EL, HD, TL, prim_recTheory.PRE, DROP] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `DROP (SUC (SUC q)) suspended = DROP (SUC q) (TL suspended)` by
+    (Cases_on `suspended` >> simp[DROP]) >>
+  conj_tac
+  >- (irule ld_return_tail_table >>
+      conj_tac
+      >- (qexistsl [`astail`, `COMPL (set sf.lf_inst.inst_outputs)`, `sf`] >>
+          simp[] >> metis_tac[EL_MEM]) >>
+      qpat_x_assum `ld_saved_embedded _ E _ _ _ _ _` mp_tac >>
+      qpat_x_assum `DROP (SUC (SUC q)) suspended = _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `?sk stn origin sa sb cpre cpost gpre gpost observed out bs bt bpre bpost gp gt a b pre post p tail c d. _`
+    mp_tac >>
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `(_ /\ _ /\ _ /\ entry_fn_no_params _) \/ _` mp_tac >>
+  (disch_then DISJ_CASES_TAC)
+  >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+  disj2_tac >>
+  pop_assum (map_every assume_tac o CONJUNCTS) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  gen_tac >> disch_tac >> irule ld_return_parameter_values >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`astail`,`COMPL (set sf.lf_inst.inst_outputs)`,`sf`] >>
+  conj_tac >- REFL_TAC >> disj2_tac >>
+  qexists_tac `EL q astail` >> simp[EL_MEM]
+QED
+
+Resume ld_recursive_return_restore[revert_successor]:
+  `lower_dload_insts_supply a
+     (TAKE (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx).vs_inst_idx
+       bs.bb_instructions) = (p' ++ [tf.lf_inst],d)` by
+    (`TAKE (SUC sf.lf_state.vs_inst_idx) bs.bb_instructions =
+       pre' ++ [sf.lf_inst]` by
+       (asm_rewrite_tac[] >>
+        simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, arithmeticTheory.ADD1]) >>
+     simp_tac (srw_ss()) [] >>
+     pop_assum (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+  `get_instruction bt (SUC tf.lf_state.vs_inst_idx) = SOME j'` by
+    (qpat_x_assum `bt.bb_instructions = _` mp_tac >>
+     qpat_x_assum `tf.lf_state.vs_inst_idx = LENGTH p'` mp_tac >>
+     qpat_x_assum `tail' = nextcode ++ nexttail` mp_tac >>
+     qpat_x_assum `j' = HD nextcode` mp_tac >>
+     qpat_x_assum `nextcode <> []` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     Cases_on `nextcode` >> gvs[get_instruction_def, EL_APPEND_EQN]) >>
+  qpat_assum `in_revert_forward sf.lf_fn _`
+    (mp_then Any mp_tac ld_recursive_configured_revert_exceptional) >>
+  disch_then (fn th =>
+    qpat_assum `fn_pass_step _ _ observed' sa sf.lf_fn out'`
+      (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `lower_dload_block_supply a bs = (bt,b)`
+      (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `lower_dload_blocks_supply sa bpre' = (gp,a)`
+      (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `lower_dload_insts_supply a (TAKE _ _) = _`
+      (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `lookup_block (t' with vs_inst_idx := _).vs_current_bb _ = _`
+      (mp_then (Pat `lookup_block t.vs_current_bb gn.fn_blocks = SOME gb`) mp_tac th)) >>
+  disch_then (qspecl_then [`vs0`,`un`,`[]`,`j'`,`bpost'`,`CT`] mp_tac) >>
+  (impl_tac >-
+    (conj_tac >- asm_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     conj_tac >-
+       (simp_tac (srw_ss()) [] >>
+        qpat_assum `s'.vs_current_bb = _` (fn th => rewrite_tac[th]) >>
+        first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (simp_tac (srw_ss()) [LENGTH_APPEND, LENGTH, arithmeticTheory.ADD1] >>
+        qpat_assum `tf.lf_state.vs_inst_idx = LENGTH p'`
+          (fn th => rewrite_tac[th])) >>
+     simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC)) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  disj2_tac >> qexistsl [`gb'`,`copypos`,`endpos`] >>
+  simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise ld_recursive_return_restore

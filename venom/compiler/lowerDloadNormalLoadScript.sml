@@ -55,8 +55,39 @@ Proof
   `t0.vs_code = s.vs_code` by
     (drule ld_shared_state_environment >> simp[]) >>
   qpat_assum `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any (drule_all_then mp_tac) ld_load_certificate_backward) >>
-  disch_then (qspec_then `fuel` (qx_choose_then `z` strip_assume_tac)) >>
+    (mp_then Any mp_tac ld_load_certificate_backward) >>
+  disch_then (fn th =>
+    qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `ld_frame_embedding _ _ _ _ _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `ld_owned_vars _ _ _ _ _ _ _ _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `ld_alloc_account _ _ _ _ _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `ptr_discipline _ _ _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn`
+      (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `LIST_REL (ld_owned_selection E) AP BP` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `!v. v IN V ==> _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `ld_stack_bound _ gstk` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `allocas_from f t0` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `inst.inst_operands = [off]` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `inst.inst_outputs = [out]` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `a.inst_outputs = [av]` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `b.inst_outputs = [bv]` (mp_then Any mp_tac th)) >>
+  disch_then (qspecl_then [`live`,`fuel`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `z` strip_assume_tac) >>
   qexists_tac `z` >> asm_rewrite_tac[] >>
   irule ld_normal_data_assemble >> asm_rewrite_tac[] >>
   rpt conj_tac
