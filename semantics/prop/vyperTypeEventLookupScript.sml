@@ -100,10 +100,10 @@ Proof
 QED
 
 Theorem function_entry_env_event_fields[simp]:
-  (function_entry_env art mods src args).event_fields = art.cta_event_fields
+  (function_entry_env art mods src vis args).event_fields = art.cta_event_fields
 Proof
   simp[function_entry_env_def] >>
-  `!env. (FOLDL (\env (id,ty). extend_local env id ty T) env args).event_fields =
+  `!env. (FOLDL (\env (id,ty). extend_local env id ty (vis = Internal)) env args).event_fields =
           env.event_fields` suffices_by simp[artifact_env_def] >>
   Induct_on `args` >> simp[] >> Cases_on `h` >> simp[]
 QED

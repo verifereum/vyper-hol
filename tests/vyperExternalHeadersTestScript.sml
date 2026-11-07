@@ -89,7 +89,9 @@ val () = both "constructor_value_return" false
     [] [] ^uint256 [Return (SOME ^one)]``] base_dom1);
 val () = both "constructor_guard_with_lock_layout" true (mutate ctor 2 ``T``);
 val () = both "nested_nonreentrant_calls" true (mutate external_f 2 ``T``);
-val () = both "internal_raw_return_bytes" true (mutate internal_h 3 ``T``);
+(* Vyper rejects @raw_return on non-external functions
+   (vyper/semantics/types/function.py:539 at VYPER_PIN). *)
+val () = both "internal_raw_return_bytes" false (mutate internal_h 3 ``T``);
 val () = both "private_x_function_name" true (mutate burn 4 ``"x"``);
 val () = both "internal_external_same_name" true (mutate pure_fn 4 ``"h"``);
 (* Constructor mutability is checked in both runtime and deployment modes. *)
