@@ -407,21 +407,21 @@ Proof
   match_mp_tac slice_bounds_ghost_frame >> simp[Abbr `names`]
 QED
 
-Theorem compile_assert_slice_bounds_prefix_run:
-  compile_assert_slice_bounds a n limit sa = ((),sb) /\ fresh_vars_wrt sa s /\
+Theorem compile_assert_slice_bounds_reserved_prefix_run:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  (!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
   eval_operand limit s = SOME wl ==>
   ?p. run_inst_seq (TAKE 5 (emitted_insts sa sb)) s = OK p /\
     p = s with vs_vars := p.vs_vars /\
-    (!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w) /\
+    (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+      eval_operand op p = eval_operand op s) /\
     step_inst_base (EL 5 (emitted_insts sa sb)) p =
       if w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn) then
         Abort Revert_abort (revert_state (set_returndata [] p))
       else OK p
 Proof
   strip_tac >>
-  `!z op w. eval_operand op s = SOME w /\ op = Var z ==> not_fresh_at sa z` by
-    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
   `!j w ss. sa.cs_next_var <= j ==>
     eval_operand a (update_var (STRING #"%" (toString j)) w ss) = eval_operand a ss /\
     eval_operand limit (update_var (STRING #"%" (toString j)) w ss) = eval_operand limit ss` by
@@ -447,6 +447,27 @@ Proof
     eval_operand op (update_var (STRING #"%" (toString j)) v ss) = eval_operand op ss` by
     (rpt strip_tac >> irule eval_operand_update_not_fresh >>
      qexists_tac `sa` >> simp[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem compile_assert_slice_bounds_prefix_run:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\ fresh_vars_wrt sa s /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl ==>
+  ?p. run_inst_seq (TAKE 5 (emitted_insts sa sb)) s = OK p /\
+    p = s with vs_vars := p.vs_vars /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w) /\
+    step_inst_base (EL 5 (emitted_insts sa sb)) p =
+      if w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn) then
+        Abort Revert_abort (revert_state (set_returndata [] p))
+      else OK p
+Proof
+  strip_tac >>
+  `!op w z. eval_operand op s = SOME w /\ op = Var z ==> not_fresh_at sa z` by
+    (rw[not_fresh_at_def] >> metis_tac[fresh_vars_wrt_eval_operand, GREATER_EQ]) >>
+  `!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z` by
+    (simp[] >> metis_tac[]) >>
+  drule_all compile_assert_slice_bounds_reserved_prefix_run >> strip_tac >>
+  qexists_tac `p` >> simp[] >> metis_tac[]
 QED
 
 
@@ -509,4 +530,75 @@ Proof
     `tn with t_var := tn.t_var |++ MAP (\x. (x,{})) names`, `j`] >>
   simp[] >> conj_tac >- metis_tac[] >>
   match_mp_tac slice_bounds_ghost_frame >> simp[Abbr `names`]
+QED
+
+Theorem slice_bounds_reserved_runtime:
+  compile_assert_slice_bounds start len limit sa = ((),sb) /\
+  (!op z. MEM op [start;len;limit] /\ op = Var z ==> not_fresh_at sa z) /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  eval_operand limit s = SOME wl ==>
+  ?p. p = s with vs_vars := p.vs_vars /\
+    (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+      eval_operand op p = eval_operand op s) /\
+    (!x. not_fresh_at sa x ==> lookup_var x p = lookup_var x s) /\
+    run_inst_seq (emitted_insts sa sb) s =
+      if w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn) then
+        Abort Revert_abort (revert_state (set_returndata [] p))
+      else OK p
+Proof
+  strip_tac >> drule_all compile_assert_slice_bounds_reserved_prefix_run >> strip_tac >>
+  `emitted_insts sa sb = TAKE 5 (emitted_insts sa sb) ++
+    [EL 5 (emitted_insts sa sb)]` by
+    (drule compile_assert_slice_bounds_layout >> simp[]) >>
+  qexists_tac `p` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!op. _` (qspec_then `Var x` mp_tac) >>
+      simp[eval_operand_def] >> metis_tac[]) >>
+  qpat_assum `run_inst_seq (TAKE 5 _) _ = OK _`
+    (mp_then Any mp_tac run_inst_seq_append) >>
+  disch_then (qspec_then `[EL 5 (emitted_insts sa sb)]` mp_tac) >>
+  simp[run_inst_seq_def] >>
+  Cases_on `w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn)` >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem slice_bounds_reserved_natural_runtime:
+  compile_assert_slice_bounds start len limit sa = ((),sb) /\
+  (!op z. MEM op [start;len;limit] /\ op = Var z ==> not_fresh_at sa z) /\
+  eval_operand start s = SOME (n2w a) /\ eval_operand len s = SOME (n2w n) /\
+  eval_operand limit s = SOME (n2w cap) /\
+  a < dimword (:256) /\ n < dimword (:256) /\ cap < dimword (:256) ==>
+  ?p. p = s with vs_vars := p.vs_vars /\
+    (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+      eval_operand op p = eval_operand op s) /\
+    (!x. not_fresh_at sa x ==> lookup_var x p = lookup_var x s) /\
+    run_inst_seq (emitted_insts sa sb) s =
+      if dimword (:256) <= a + n \/ cap < a + n then
+        Abort Revert_abort (revert_state (set_returndata [] p))
+      else OK p
+Proof
+  strip_tac >> drule_all slice_bounds_reserved_runtime >> strip_tac >>
+  qexists_tac `p` >> simp[] >>
+  `((a + n) MOD dimword (:256) < a \/ cap < (a + n) MOD dimword (:256)) <=>
+    dimword (:256) <= a + n \/ cap < a + n` by
+    (irule slice_bounds_mod_overflow >> simp[]) >>
+  gvs[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w]
+QED
+
+Theorem compile_assert_slice_bounds_reserved_normal_frame:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  (!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z) /\
+  eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+  eval_operand limit s = SOME wl /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  w2n wa + w2n wn <= w2n wl /\ t = s with vs_vars := t.vs_vars /\
+  (!op. (!z. op = Var z ==> not_fresh_at sa z) ==>
+    eval_operand op t = eval_operand op s) /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all slice_bounds_reserved_runtime >> strip_tac >>
+  Cases_on `w2n (wa + wn) < w2n wa \/ w2n wl < w2n (wa + wn)` >> gvs[] >>
+  qspec_then `dimword (:256)` mp_tac slice_bounds_mod_overflow >>
+  disch_then (qspecl_then [`w2n wa`, `w2n wn`, `w2n wl`] mp_tac) >>
+  gvs[word_add_def, w2n_n2w, w2n_lt]
 QED
