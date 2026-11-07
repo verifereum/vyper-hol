@@ -1,6 +1,6 @@
 Theory fnPlanLineageEntryProduction
 Ancestors
-  fnPlanLineageJoinEntry fnPlanLineageNativeResources fnPlanLineageNativeOrigins
+  fnPlanLineageLiveness fnPlanLineageJoinEntry fnPlanLineageNativeResources fnPlanLineageNativeOrigins
   fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix
   stackPlanGen venomWf venomInst passSharedDefs removeUnusedProofs removeUnusedSsaProofs list rich_list finite_map bag
 
@@ -1264,4 +1264,34 @@ Proof
   `?tail. non_param_insts bb = collect_phis bb.bb_instructions ++ tail` by
     metis_tac[non_param_insts_phi_prefix] >>
   drule_all ready_native_phi_prefix_selection >> simp[]
+QED
+
+Theorem analyzed_join_live_through_physical_seed:
+  !fn pred pb lbl bb after incoming v.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    phi_block_ready (liveness_analyze fn) bb /\
+    native_live_boundary fn pb (LENGTH pb.bb_instructions) after /\
+    incoming.ps_stack = after.ps_stack /\ incoming.ps_spilled = after.ps_spilled /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions))) /\
+    EVERY (\inst. ~MEM v (inst_defs inst)) (collect_phis bb.bb_instructions) ==>
+    (MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled) /\
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_label = lbl /\ pb.bb_label = pred` by
+    metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))` by
+    metis_tac[analyzed_ready_phi_live_through_edge] >>
+  drule_all analyzed_live_out_edge_subset >>
+  simp[pred_setTheory.SUBSET_DEF] >> disch_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+    metis_tac[] >>
+  metis_tac[native_live_boundary_coverage, native_live_boundary_count]
 QED
