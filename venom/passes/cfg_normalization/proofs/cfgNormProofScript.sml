@@ -912,7 +912,7 @@ Proof
   rw[cfgTransformTheory.subst_label_terminator_def, listTheory.MAP_MAP_o,
      combinTheory.o_DEF] >>
   irule listTheory.MAP_CONG >> rw[] >>
-  rw[cfgTransformProofsTheory.subst_label_inst_fields]
+  rw[cfgTransformPropsTheory.subst_label_inst_fields]
 QED
 
 Theorem inst_ids_update_phis[local]:
@@ -1415,38 +1415,6 @@ Proof
   >> first_x_assum irule >> simp[]
 QED
 
-(* General per-block lifting lemma for insert_split.
-   Factors out the MEM_insert_split 4-way case split once and for all. *)
-Theorem insert_split_block_lift[local]:
-  !func pred_bb target_bb id_base P.
-    MEM pred_bb func.fn_blocks /\
-    MEM target_bb func.fn_blocks /\
-    pred_bb.bb_label <> target_bb.bb_label /\
-    ALL_DISTINCT (fn_labels func) /\
-    (!bb. MEM bb func.fn_blocks /\ bb.bb_label <> pred_bb.bb_label /\
-          bb.bb_label <> target_bb.bb_label ==> P bb) /\
-    P (subst_label_terminator target_bb.bb_label
-         (split_block_name pred_bb.bb_label target_bb.bb_label) pred_bb) /\
-    P (update_phis_for_split pred_bb.bb_label
-         (split_block_name pred_bb.bb_label target_bb.bb_label)
-         (SND (build_split_block pred_bb target_bb id_base)) target_bb) /\
-    (let (split_bb, var_repls) = build_split_block pred_bb target_bb id_base
-     in P split_bb) ==>
-    !bb. MEM bb (insert_split func pred_bb target_bb id_base).fn_blocks ==>
-      P bb
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`bb`, `func`, `pred_bb`, `target_bb`, `id_base`]
-    MEM_insert_split) >>
-  simp[LET_THM] >> pairarg_tac >> fs[] >>
-  imp_res_tac cfgNormSimTheory.build_split_block_label >>
-  strip_tac
-  >- fs[]  (* split_bb case *)
-  >- fs[cfgNormSimTheory.subst_label_terminator_bb_label]  (* pred case *)
-  >- fs[cfgNormSimTheory.update_phis_for_split_bb_label]  (* target case *)
-  >> first_x_assum irule >> simp[]  (* original case *)
-QED
-
 (* C7: label origin preserved by insert_split *)
 Theorem insert_split_label_origin:
   !func func0 pred_bb target_bb id_base lbl.
@@ -1793,37 +1761,6 @@ Proof
 QED
 
 (* Stronger version: PHI in update_phis_for_split output with wf context *)
-(* Gives original inst0, inst_wf, phi_well_formed, ALL_DISTINCT phi_pairs *)
-Theorem target_phi_wf[local]:
-  !func bb old new repls inst.
-    MEM bb func.fn_blocks /\
-    fn_inst_wf func /\
-    fn_phi_labels_distinct func /\
-    MEM inst (update_phis_for_split old new repls bb).bb_instructions /\
-    inst.inst_opcode = PHI ==>
-    ?inst0. MEM inst0 bb.bb_instructions /\ inst0.inst_opcode = PHI /\
-            inst.inst_operands = update_phi_ops old new repls inst0.inst_operands /\
-            inst.inst_outputs = inst0.inst_outputs /\
-            inst.inst_id = inst0.inst_id /\
-            inst_wf inst0 /\
-            phi_well_formed inst0.inst_operands /\
-            ALL_DISTINCT (MAP FST (phi_pairs inst0.inst_operands))
-Proof
-  rpt strip_tac >>
-  (* Use def-expansion directly instead of imp_res_tac to avoid double witnesses *)
-  fs[cfgNormDefsTheory.update_phis_for_split_def, listTheory.MEM_MAP] >>
-  Cases_on `inst'.inst_opcode = PHI` >> fs[]
-  >- (
-    qexists_tac `inst'` >> simp[] >>
-    `inst_wf inst'` by (
-      fs[venomWfTheory.fn_inst_wf_def] >> res_tac >> res_tac) >>
-    `phi_well_formed inst'.inst_operands` by (
-      imp_res_tac inst_wf_phi_well_formed >> fs[]) >>
-    `ALL_DISTINCT (MAP FST (phi_pairs inst'.inst_operands))` by (
-      fs[cfgNormBaseTheory.fn_phi_labels_distinct_def] >> res_tac) >>
-    simp[])
-  >- (qpat_x_assum `inst = _` SUBST_ALL_TAC >> fs[])
-QED
 
 (* Key lemma: phi pair labels are in fn_labels (derived from preds_closed) *)
 Theorem phi_pair_labels_in_fn_labels[local]:
@@ -2585,7 +2522,7 @@ Proof
        metis_tac[inst_output_in_fn_all_vars,
                  cfgNormBaseTheory.inst_operand_var_in_fn_all_vars] >> NO_TAC) >>
   (* Terminator outputs: use subst_label_inst_fields *)
-  TRY (gvs[cfgTransformProofsTheory.subst_label_inst_fields] >>
+  TRY (gvs[cfgTransformPropsTheory.subst_label_inst_fields] >>
        metis_tac[inst_output_in_fn_all_vars] >> NO_TAC) >>
   (* Terminator operands: trace through subst_label_op *)
   gvs[cfgTransformTheory.subst_label_inst_def, listTheory.MEM_MAP] >>

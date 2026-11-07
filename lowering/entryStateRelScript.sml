@@ -22,6 +22,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
   compileEnv compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
+  structFieldsProps
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
   venomState
@@ -51,6 +52,20 @@ Proof
   first_x_assum drule >> reverse strip_tac >- metis_tac[] >- metis_tac[] >>
   pop_assum mp_tac >> BasicProvers.every_case_tac >> simp[FLOOKUP_UPDATE] >>
   rw[] >> metis_tac[]
+QED
+
+(* Where an entry of add_immutable_locations comes from. *)
+Theorem add_immutable_locations_cases:
+  !sft tops off vars k loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) k = SOME loc ==>
+    FLOOKUP vars k = SOME loc \/
+    ?vis name ty slot.
+      MEM (VariableDecl vis Immutable name ty slot) tops /\ k = (NONE, name)
+Proof
+  gen_tac >> Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >> simp[add_immutable_locations_def] >>
+  rpt (CASE_TAC >> simp[]) >> strip_tac >> first_x_assum drule >>
+  rw[FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 (* A declaration's own name is untouched by the other declarations. *)
@@ -373,16 +388,6 @@ QED
 
 (* ===== The compiler's env for an external function ===== *)
 
-Theorem type_mem_bytes_type_memory_bytes:
-  !cenv ty.
-    type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty =
-    type_memory_bytes cenv ty
-Proof
-  ho_match_mp_tac type_memory_bytes_ind >>
-  rw[type_mem_bytes_def, type_memory_bytes_def] >>
-  AP_TERM_TAC >> irule MAP_CONG >> simp[]
-QED
-
 Theorem allocate_args_lookup:
   !args sft off vars.
     ALL_DISTINCT (MAP FST args) ==>
@@ -502,7 +507,7 @@ QED
 
 (* ===== The selected function's parameters ===== *)
 
-Theorem source_typing_ok_type_def_keys_distinct[local]:
+Theorem source_typing_ok_type_def_keys_distinct:
   !tops am tx.
     source_typing_ok tops am tx ==>
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
@@ -519,7 +524,7 @@ QED
 
 (* With no public variables, an external function lookup_function selects
    is a declared function, not a getter. *)
-Theorem lookup_function_external_decl[local]:
+Theorem lookup_function_external_decl:
   !tops tops0 name mut nr args dflts ret fbody.
     EVERY (supported_declaration_header tops0) tops /\
     lookup_function NONE name External tops =
@@ -554,7 +559,7 @@ Proof
   simp[check_function_body_def, type_env_all_modules_one]
 QED
 
-Theorem build_positional_args_names[local]:
+Theorem build_positional_args_names:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>

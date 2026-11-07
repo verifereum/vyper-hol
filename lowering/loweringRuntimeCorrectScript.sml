@@ -39,9 +39,6 @@
  *     premises at the body's start (#637)
  *   externalFrameRetOk: external_frame_ret_ok -- the frame's returns
  *     (#640)
- *   externalBodyRevertData: external_body_revert_data_reverts -- a failed
- *     external call reverts: expr_exit allows any Abort for RevertData,
- *     external_call_result_rel asks a revert
  *   stmtsEnvRetTy: stmts_env_ret_ty -- a supported body without a valued
  *     return compiles the same at every return type
  *
@@ -63,7 +60,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
   gasContext gasSummary gasOutcome gasExemptCert fragGasPath fragGasMode
-  externalBodySourceOk externalEntryValueRevert externalEntryReachesBody externalBodyFrame externalFrameRetOk externalBodyRevertData stmtsEnvRetTy
+  externalBodySourceOk externalEntryValueRevert externalEntryReachesBody externalBodyFrame externalFrameRetOk stmtsEnvRetTy
 
 val _ = Parse.hide "body";
 
@@ -533,13 +530,7 @@ Proof
             mp_tac expr_exit_external_result >>
           impl_tac
           >- (conj_tac >- first_assum ACCEPT_TAC >>
-              rpt strip_tac >> gvs[] >>
-              qspecl_then [`cx_tops cx`, `bindings`, `unit.cu_context`, `func`,
-                           `cenv`, `cx`, `env_t`, `env'`, `ret`, `RetQ`,
-                           `fbody`, `es0`, `sa`, `sb`, `cenv'`, `s0`,
-                           `marks`, `d`, `es_end`, `a`, `t`]
-                mp_tac external_body_revert_data_reverts >>
-              impl_tac >- gvs[ret_pc_ok_def] >> simp[]) >>
+              rpt strip_tac >> gvs[expr_exit_def]) >>
           simp[]) >>
       (* a return *)
       gvs[Abbr`RetQ`, Abbr`es'`, abstract_machine_from_state_def]) >>

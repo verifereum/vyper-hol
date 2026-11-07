@@ -2285,6 +2285,22 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem compile_abi_encode_args_labels:
+  !cfn cenv es s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_abi_encode_args cfn cenv es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_encode_args cfn cenv es s)))
+Proof
+  Induct_on `es`
+  >- simp[compile_abi_encode_args_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_abi_encode_args_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       TRY IF_CASES_TAC >>
+       simp[comp_return_labels, compile_materialize_vv_labels, unwrap_value_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem compile_concat_labels:
   !cfn cenv es data_ptr infos offset_op s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -3045,6 +3061,15 @@ Proof
        compile_raw_create_labels]
 QED
 
+Theorem compile_raw_revert_labels:
+  !ptr s P. cs_extends s (SND (compile_raw_revert ptr s)) /\
+    EVERY P (added_labels s (SND (compile_raw_revert ptr s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinSystemTheory.compile_raw_revert_def] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels, emit_inst_labels]
+QED
+
 Theorem compile_call_labels:
   !cfn cenv ret_ty ty target args default_ret s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -3057,7 +3082,43 @@ Proof
   >- (irule compile_extcall_labels >> simp[])
   >- (irule compile_send_labels >> simp[])
   >- (irule compile_raw_call_target_labels >> simp[])
-  >- (irule compile_raw_call_calldata_labels >> simp[]) >>
+  >- (irule compile_raw_call_calldata_labels >> simp[])
+  >~ [`RawLog`]
+  >- (once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
+      Cases_on `args` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      Cases_on `t` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      reverse (Cases_on `t'`) >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      ho_match_mp_tac application_labels >>
+      simp[compile_multi_exprs_labels] >> rpt gen_tac >>
+      Cases_on `expr_type h' = BaseT (BytesT (Fixed 32))` >> simp[] >>
+      rpt (FIRST [CHANGED_TAC (simp[emit_inst_labels, emit_op_labels,
+                    emit_void_labels, compile_alloc_buffer_labels,
+                    lower_value_labels, cs_extends_refl]),
+                  ho_match_mp_tac application_labels, gen_tac]) >>
+      simp[added_labels_def, DROP_LENGTH_TOO_LONG])
+  >~ [`RawRevert`]
+  >- (once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
+      Cases_on `args` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
+      rpt gen_tac >> ho_match_mp_tac application_labels >>
+      simp[compile_raw_revert_labels, cs_extends_refl, added_labels_def,
+           DROP_LENGTH_TOO_LONG]) >>
   once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
   ho_match_mp_tac application_labels >>
   simp[emit_inst_labels, compile_create_call_labels, as_stack_val_labels,
@@ -3263,7 +3324,8 @@ Proof
   disch_tac >> once_rewrite_tac[compile_type_builtin_dispatch_body_def] >> simp[LET_THM] >>
   rpt IF_CASES_TAC >>
   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
-       simp[lower_value_labels, compile_multi_exprs_labels, compile_alloc_buffer_labels,
+       simp[lower_value_labels, compile_multi_exprs_labels,
+            compile_abi_encode_args_labels, compile_alloc_buffer_labels,
             compile_store_abi_tuple_labels, emit_void_labels, unwrap_value_labels]) >>
   irule as_ptr_val_labels >> simp[lower_abi_encode_labels]
 QED
@@ -3733,8 +3795,12 @@ Theorem compile_assign_value_labels:
       (SND (compile_assign_value cenv d l v p sl dt st da m s)))
 Proof
   rpt gen_tac >> Cases_on `l` >>
-  once_rewrite_tac[compile_assign_value_def] >>
-  stmt_labels_chain stmt_labels_rws
+  once_rewrite_tac[compile_assign_value_def]
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >> stmt_labels_chain stmt_labels_rws
 QED
 
 Theorem compile_store_at_loc_labels:
@@ -3776,8 +3842,13 @@ Proof
   rpt conj_tac >> rpt gen_tac >>
   once_rewrite_tac[compile_revert_with_reason_def, compile_range_bound_checks_def,
     compile_iter_elem_copy_def, declare_local_def, emit_local_alloca_def,
-    emit_jmp_if_not_terminated_def] >>
-  stmt_labels_chain stmt_labels_rws
+    emit_jmp_if_not_terminated_def]
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >- stmt_labels_chain stmt_labels_rws
+  >> stmt_labels_chain stmt_labels_rws
 QED
 
 Theorem declare_stmt_local_labels:
@@ -3838,18 +3909,73 @@ Theorem stmt_return_helpers_labels:
 Proof
   rpt conj_tac >> rpt gen_tac >>
   once_rewrite_tac[compile_internal_return_def, compile_internal_return_from_env_def,
-    compile_external_return_def, compile_tuple_unpack_def] >>
-  stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws) >>
-  once_rewrite_tac[compile_internal_return_def] >>
-  stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws)
+    compile_external_return_def, compile_tuple_unpack_def]
+  >- (stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws) >>
+      once_rewrite_tac[compile_internal_return_def] >>
+      stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws))
+  >- (stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws) >>
+      once_rewrite_tac[compile_internal_return_def] >>
+      stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws))
+  >- (stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws) >>
+      once_rewrite_tac[compile_internal_return_def] >>
+      stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws))
+  >> (stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws) >>
+      once_rewrite_tac[compile_internal_return_def] >>
+      stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws))
 QED
 
 val stmt_labels_rws = stmt_return_helpers_labels :: stmt_list_helpers_labels :: stmt_labels_rws;
 
-val stmt_labels_case =
-  rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-  stmt_labels_chain stmt_labels_rws >>
-  simp[pairTheory.ELIM_UNCURRY] >> stmt_labels_chain stmt_labels_rws;
+(* The literal-endpoint case splits of a range loop's entry, as rewrites
+   rather than a split over every pair of expression forms. *)
+Theorem range_literal_case_pred:
+  !Q start_e end_e f g.
+    (!i j. Q (f i j)) /\ Q g ==>
+    Q (case (start_e, end_e) of
+             (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+           | _ => g)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `start_e` >> simp[] >>
+  Cases_on `end_e` >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+Theorem range_literal_case_extends:
+  !start_e end_e f g s.
+    (!i j s. cs_extends s (SND (f i j s))) /\
+    (!s. cs_extends s (SND (g s))) ==>
+    cs_extends s (SND ((case (start_e, end_e) of
+             (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+           | _ => g) s))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`\a. !s. cs_extends s (SND (a s))`, `start_e`, `end_e`, `f`, `g`]
+    mp_tac range_literal_case_pred >>
+  simp[]
+QED
+
+Theorem range_literal_case_labels:
+  !start_e end_e f g P s.
+    (!i j s. EVERY P (added_labels s (SND (f i j s)))) /\
+    (!s. EVERY P (added_labels s (SND (g s)))) ==>
+    EVERY P (added_labels s (SND ((case (start_e, end_e) of
+             (Literal _ (IntL i), Literal _ (IntL j)) => f i j
+           | _ => g) s)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`\a. !s. EVERY P (added_labels s (SND (a s)))`, `start_e`, `end_e`,
+               `f`, `g`]
+    mp_tac range_literal_case_pred >>
+  simp[]
+QED
+
+(* Simp has already reduced the pair case in the goals, so the rewrites
+   are taken in that form. *)
+val for_labels_rws =
+  map (SIMP_RULE bool_ss [pairTheory.pair_case_thm])
+    [range_literal_case_extends, range_literal_case_labels] @ stmt_labels_rws;
 
 Theorem compile_stmt_labels:
   (!cenv lctx ty st s. cs_extends s (SND (compile_stmt cenv lctx ty st s)) /\
@@ -3859,81 +3985,133 @@ Theorem compile_stmt_labels:
 Proof
   ho_match_mp_tac compile_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
   TRY (disch_then strip_assume_tac)
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
   >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >>
       rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-      simp (comp_return_labels :: stmt_labels_rws) >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws >>
-      stmt_labels_step stmt_labels_rws)
-  >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_labels_case)
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
-  >- stmt_labels_case
+      simp (comp_return_labels :: for_labels_rws) >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws >>
+      stmt_labels_step for_labels_rws)
+  >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws))
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
   >> qpat_x_assum `!cs cenv. _ ==> !s. cs_extends _ (SND (compile_stmt _ _ _ _ _)) /\ _`
        (qspec_then `ARB with cs_current_insts := []`
          (assume_tac o SIMP_RULE (srw_ss()) [block_is_terminated_def]))
   >> qpat_x_assum `!cs cenv. _ ==> !s. cs_extends _ (SND (compile_stmts _ _ _ _ _)) /\ _`
        (qspec_then `ARB with cs_current_insts := []`
          (assume_tac o SIMP_RULE (srw_ss()) [block_is_terminated_def]))
-  >> stmt_labels_case
+  >> (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
 QED
 
 Theorem compile_decode_args_labels:
@@ -3945,6 +4123,10 @@ Proof
   gen_tac >> Induct >> rpt gen_tac
   >- simp[compile_decode_args_def, comp_return_labels] >>
   PairCases_on `h` >> once_rewrite_tac[compile_decode_args_def] >>
+  IF_CASES_TAC
+  >- stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws) >>
+  IF_CASES_TAC
+  >- stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws) >>
   stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws)
 QED
 

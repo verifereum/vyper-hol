@@ -12,7 +12,7 @@
 Theory o1ContractSimplifyCfgStep
 Ancestors
   o1PassContract simplifyCfgCorrectness simplifyCfgCallChecks simplifyCfgLabelProps
-  simplifyCfgDefs simplifyCfgInvariant simplifyCfgCollapseShape
+  simplifyCfgDefs simplifyCfgInvariant simplifyCfgCollapseShape simplifyCfgRetpc
   simplifyCfgOpaque unitShapeDefs cfgTransform venomPassDispatcher venomWf
   venomInst list
 
@@ -129,7 +129,7 @@ Theorem simplify_cfg_retpc_shape_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   retpc_shape_ok (simplify_cfg_fn fn)
 Proof
-  cheat
+  MATCH_ACCEPT_TAC simplify_cfg_preserves_retpc_shape
 QED
 
 Theorem simplify_cfg_fn_shape:

@@ -64,13 +64,6 @@ Proof
   simp[abi_static_flag_layout]
 QED
 
-Theorem mem_bytes_at_bounded:
-  off + n <= LENGTH mem ==>
-  mem_bytes_at off n mem = TAKE n (DROP off mem)
-Proof
-  simp[mem_bytes_at_def, rich_listTheory.TAKE_APPEND, listTheory.LENGTH_DROP]
-QED
-
 Theorem mem_bytes_at_child_slice:
   off + (LENGTH pre + LENGTH child + LENGTH post) <= LENGTH mem /\
   mem_bytes_at off (LENGTH pre + LENGTH child + LENGTH post) mem =
