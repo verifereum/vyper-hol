@@ -5,6 +5,10 @@ Ancestors
   whitelistForIterImmCopy whitelistForIterImmFrame whitelistForIterDynLoop
   exprSimTopLevelImmutable stmtLowering exprLoweringProps compileEnv context
   vyperAST list finite_map stmtSimForArrayParts stmtSimProps emitHelper venomInst fragExec
+  stmtSimForArrayLoop stmtSimDefs venomState venomExecSemantics
+  venomExecProofs loweringPosts fragGasMode fragGasPath
+  fragGasSeq gasCount gasSummary gasExemptCert gasContext gasOutcome
+  gasSummaryCompose stmtSimForRounds vyperInterpreter vyperState
 Libs
   monadsyntax
 
@@ -312,3 +316,190 @@ Proof
   qexistsl_tac [`suffix_blocks`, `sj`, `st'`] >>
   simp[Abbr `suffix_blocks`]
 QED
+
+(* Body cleanup depends on the increment block, not on the source location. *)
+Theorem counted_array_body_finish:
+  k < LENGTH vs /\
+  (~block_is_terminated sb1 ==>
+    sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+    sj.cs_current_insts = sb1.cs_current_insts ++
+      [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func) /\
+  lookup_block incr_lbl func.fn_blocks =
+    SOME <|bb_label := incr_lbl; bb_instructions :=
+      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+       mk_inst i2 ASSIGN [Var nv] [idx];
+       mk_inst i3 JMP [Label cond_lbl] []]|> /\
+  (!scopes. not_local_ptr cenv scopes idx /\ not_local_ptr cenv scopes nv) /\
+  p <> idx /\ p <> nv /\
+  (!x. saved_base = Var x ==> x <> idx /\ x <> nv) /\
+  gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (entry,s2) marks res ee (OK t) /\
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+    res (ee with gas_obs := []) t /\
+  cenv_top_ext cenv bc entry.scopes /\
+  (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
+  lookup_var idx s2 = SOME (n2w k) /\ lookup_var p s2 = SOME dst /\
+  eval_operand saved_base s2 = SOME arr_base /\
+  FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+  ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
+  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+  (!x. saved_base = Var x ==> not_fresh_at sb0 x) /\
+  (!l. saved_base <> Label l) /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  array_caller_frame caller cc s2 ==>
+  ?rest u. ee.scopes <> [] /\ rest = TL ee.scopes /\
+    gas_marked_path F ctx func t 0 (OK u) /\ array_caller_frame caller cc u /\
+    ((res = INR BreakException /\ u.vs_current_bb = exit_lbl /\
+      u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+      stmt_state_rel ctx func cenv cx
+        (ee with <|scopes := rest; gas_obs := []|>) u) \/
+     ((res = INL () \/ res = INR ContinueException) /\
+      array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+        ainst cond_lbl st (SUC k) (ee with <|scopes := rest; gas_obs := []|>) u))
+Proof
+  strip_tac >> drule_all array_body_counted_post >> strip_tac >>
+  `array_caller_frame caller cc t` by
+    (fs[array_caller_frame_def] >> metis_tac[]) >>
+  Cases_on `res = INR BreakException`
+  >- (qexistsl_tac [`rest`, `t`] >>
+      fs[stmt_lands_def, gas_marked_path_def, gas_path_rules]) >>
+  `res = INL () \/ res = INR ContinueException` by fs[stmt_lands_def] >>
+  drule_all array_body_runtime_frame >> strip_tac >>
+  `~t.vs_halted /\ stmt_state_rel ctx func cenv cx
+      (ee with <|scopes := rest; gas_obs := []|>) t` by fs[] >>
+  `array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+    ainst t.vs_current_bb st k (ee with <|scopes := rest; gas_obs := []|>)
+    (t with vs_inst_idx := 0)` by
+      (fs[array_loop_inv_def, stmt_state_rel_inst_idx, lookup_var_def,
+           ret_pc_ok_def] >>
+       Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def]) >>
+  `?next. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+     ainst cond_lbl st (k+1) (ee with <|scopes := rest; gas_obs := []|>) next /\
+     (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x t) /\
+     next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next)` by
+    (irule array_body_continue_iteration_framed >> simp[] >>
+     goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
+     goal_assum (drule_at (Pat `stmt_lands _ _ _ _`)) >>
+     qexists_tac `sj` >> simp[]) >>
+  qexistsl_tac [`rest`, `next`] >> simp[arithmeticTheory.ADD1] >>
+  fs[array_caller_frame_def] >> metis_tac[]
+QED
+
+(* Gas cleanup consumes a prepared body and its ordinary finishing callback.
+   Neither preparation nor finishing here assumes a memory-valued source. *)
+Theorem counted_array_round_from_body:
+  entry = es with <|scopes := (FEMPTY |+ (id,
+    <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
+    gas_obs := []|> /\
+  gas_marked_exec F (ctx,func) (push_scope_with_var id tv (EL k vs))
+    (es,cc) [] (INL ())
+    (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
+    (OK s2) /\
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
+    (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+  (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
+  (!marks res ee t.
+    gas_marked_exec F (ctx,func) (eval_stmts cx stmts)
+      (entry,s2) marks res ee (OK t) /\
+    stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+      res (ee with gas_obs := []) t ==>
+    ?rest u. ee.scopes <> [] /\ rest = TL ee.scopes /\
+      gas_marked_path F ctx func t 0 (OK u) /\ array_caller_frame caller cc u /\
+      ((res = INR BreakException /\ u.vs_current_bb = exit_lbl /\
+        u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+        stmt_state_rel ctx func cenv cx
+          (ee with <|scopes := rest; gas_obs := []|>) u) \/
+       ((res = INL () \/ res = INR ContinueException) /\
+        array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+          ainst cond_lbl st (SUC k) (ee with <|scopes := rest; gas_obs := []|>) u))) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (do push_scope_with_var id tv (EL k vs);
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od) (es,cc)
+    (\res ee t. ?broke. res = INL broke /\ array_caller_frame caller cc t /\
+      (broke ==> t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+        stmt_state_rel ctx func cenv cx ee t) /\
+      (~broke ==> array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base
+        p dst sz ainst cond_lbl st (SUC k) ee t))
+    (\res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome F (cx_tops cx) (ctx,func) round (es,cc) Q R` >>
+  qhdtm_x_assum `gas_outcome` mp_tac >> rewrite_tac[gas_outcome_def] >> strip_tac
+  >- suspend "ordinary"
+  >> suspend "exempt"
+QED
+
+Resume counted_array_round_from_body[exempt]:
+  `?sc rest. ee.scopes = sc :: rest` by
+    (drule gas_exempt_cert_execution >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[ignore_bind_def, bind_def, return_def, AllCaseEqs()] >> strip_tac >>
+     qpat_x_assum `!gs r es2. _`
+       (qspec_then `gas_explicit marks s2.vs_gas_readings` mp_tac) >>
+     gvs[] >> strip_tac >> goal_assum (drule_at Any)) >>
+  gvs[] >>
+  drule_all loop_round_exempt_cert >> strip_tac >>
+  qexists_tac `marks` >> disj2_tac >>
+  simp[Abbr `round`] >> goal_assum (drule_at Any)
+QED
+
+Resume counted_array_round_from_body[ordinary]:
+  qhdtm_x_assum `gas_summary_at` mp_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  disch_then (qx_choose_then `res` (qx_choose_then `ee`
+    (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+  `?sc rest. ee.scopes = sc :: rest` by
+    (qhdtm_assum `gas_marked_exec` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` assume_tac) >>
+     qpat_x_assum `!gs r es2. _`
+       (qspec_then `gas_explicit marks s2.vs_gas_readings` mp_tac) >>
+     gvs[] >> strip_tac >> goal_assum (drule_at Any)) >>
+  drule_all loop_body_cleanup_exec >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_marked_exec F (ctx,func) cleanup _ _ wrapped fin r` >>
+  `gas_marked_exec F (ctx,func) round (es,cc) marks wrapped fin r` by
+    (simp[Abbr `round`, ignore_bind_def] >>
+     irule (SRULE [] (Q.INST [`left` |-> `[]`] gas_marked_exec_bind_normal)) >>
+     goal_assum (drule_at Any) >> gvs[]) >>
+  strip_tac >- suspend "normal_finish" >> suspend "exit_finish"
+QED
+
+Resume counted_array_round_from_body[exit_finish]:
+  fs[] >>
+  `res <> INL () /\ res <> INR BreakException /\ res <> INR ContinueException` by
+    (qpat_x_assum `!tail. stmt_exit _ _ _ _` (qspec_then `[]` mp_tac) >>
+     metis_tac[stmt_exit_loop_ctl]) >>
+  Cases_on `res` >- gvs[] >>
+  qexists_tac `marks` >> disj1_tac >>
+  qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >> disj2_tac >>
+  gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def]
+QED
+
+Resume counted_array_round_from_body[normal_finish]:
+  fs[] >>
+  qpat_x_assum `!marks res ee t. _` drule_all >> strip_tac >>
+  `gas_marked_exec F (ctx,func) round (es,cc) marks wrapped fin (OK u)` by
+    (qhdtm_x_assum `gas_marked_path` mp_tac >>
+     qpat_x_assum `gas_marked_exec _ _ round _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[gas_marked_exec_def] >>
+     rpt strip_tac >> simp[] >>
+     qpat_x_assum `gas_marked_path _ _ _ cc _ _` mp_tac >>
+     disch_then (mp_then Any mp_tac gas_marked_path_then) >>
+     disch_then drule >> simp[]) >>
+  qexists_tac `marks` >> disj1_tac >>
+  qexistsl_tac [`wrapped`, `fin`, `OK u`] >> simp[] >> disj1_tac >>
+  simp[Abbr `Q`, Abbr `fin`, Abbr `wrapped`] >> gvs[]
+QED
+Finalise counted_array_round_from_body
