@@ -73,7 +73,7 @@ Proof
   irule shape_step_return >> simp[]
 QED
 
-Theorem structlit_param_op_shape[local]:
+Theorem structlit_param_op_shape:
   shape_step T compiler_label (\st. T)
     (emit_op PARAM [Lit (n2w idx)]) (\op st. plain_operand st op)
 Proof
