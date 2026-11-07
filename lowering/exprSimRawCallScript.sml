@@ -261,7 +261,7 @@ QED
 
 Finalise raw_call_tuple_build_no_restore_run
 
-Theorem raw_call_nonrevert_finish_code[local]:
+Theorem raw_call_nonrevert_finish_code:
   compile_raw_call_finish to_op dp dl gas val call_ty n F ov op sa = (result,sb) ==>
   ?ok sc. (case call_ty of
       DelegateCall => emit_op DELEGATECALL [gas;to_op;dp;dl;op;Lit (n2w n)]
@@ -1021,7 +1021,7 @@ Proof
   strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem raw_call_outbuf_positive_id_growth[local]:
+Theorem raw_call_outbuf_positive_id_growth:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) ==>
   sa.cs_next_id < sm.cs_next_id
 Proof
