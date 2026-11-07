@@ -3,7 +3,7 @@ Ancestors bodyPtrPopStatementControl bodyPtrPopStatementGuards
   bodyPtrPopCompilerBoundary bodyPtrPopArithmeticBoundary bodyPtrPopMaterialization
   bodyPtrPopAllocationBoundary bodyPtrPopMutualBoundary bodyPtrPopCompileDomain
   bodyPtrPopFiniteProducerBoundary bodyPtrPopBaseExprBoundary
-  stmtLowering compileEnv exprLowering emitHelper supportedStmts venomInst
+  stmtLowering compileEnv exprLowering emitHelper supportedStmts venomInst vyperAST
 
 Theorem pop_loop_endpoint_boundary[local]:
   (supported_pure_expr tops e \/ (?ty n. e = Literal ty (IntL n))) /\
@@ -98,5 +98,52 @@ Proof
      drule_all (SRULE [] pop_range_rounds_boundary) >> simp[],
      drule_all (SRULE [] pop_range_check_boundary) >> simp[],
      drule_all (SRULE [] pop_range_variable_store_boundary) >> simp[],
+     gvs[comp_return_def]]
+QED
+
+Theorem pop_array_variable_copy_boundary[local]:
+  pop_comp_boundary sa /\
+  (case dest of
+    SOME (MemLoc off _) => compile_iter_elem_copy ce src (Lit (n2w off)) sz loc slot fty ety
+  | SOME (PtrVar dst _) => compile_iter_elem_copy ce src dst sz loc slot fty ety
+  | _ => emit_void INVALID []) sa = (r,sb) ==> pop_comp_boundary sb
+Proof
+  Cases_on `dest`
+  >- (simp[] >> rpt strip_tac >>
+      drule_at (Pat `emit_void _ _ _ = _`) pop_emit_void_boundary >> simp[]) >>
+  Cases_on `x` >> simp[] >> rpt strip_tac >> FIRST_PROVE
+    [drule_all pop_compile_iter_elem_copy_boundary >> simp[],
+     drule_at (Pat `emit_void _ _ _ = _`) pop_emit_void_boundary >> simp[]]
+QED
+
+Theorem pop_stmt_for_array_boundary:
+  (!ce' exit incr s r t. pop_comp_boundary s /\
+    compile_stmts ce' (InLoop exit incr) ty loop_body s = (r,t) ==> pop_comp_boundary t) /\
+  supported_iterator tops fty (Array e) bound /\ pop_comp_boundary sa /\
+  compile_stmt ce lc ty (For id fty (Array e) bound loop_body) sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  strip_tac >> drule supported_array_iterator_shape >> strip_tac >> gvs[] >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  simp[compile_stmt_def, expr_type_def, comp_ignore_bind_def] >> strip_tac >>
+  rpt (dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+       disch_then irule >> simp[] >> conj_tac >> rpt gen_tac >> strip_tac) >>
+  FIRST_PROVE
+    [(qpat_x_assum `compile_expr _ _ (Name _ _) _ = _` mp_tac >>
+      simp[Once compile_expr_def] >> strip_tac >>
+      drule_all pop_compile_name_vv_boundary >> simp[]),
+     drule_all pop_declare_local_boundary >> simp[],
+     drule_all pop_emit_local_alloca_boundary >> simp[],
+     drule_all pop_fresh_label_boundary >> simp[],
+     drule_all pop_fresh_var_boundary >> simp[],
+     drule_all pop_comp_boundary_new_block >> simp[],
+     drule_all pop_emit_jmp_if_not_terminated_boundary >> simp[],
+     drule_at (Pat `emit_inst _ _ _ _ = _`) pop_emit_inst_boundary >> simp[],
+     drule_at (Pat `emit_op _ _ _ = _`) pop_emit_op_boundary >> simp[],
+     first_x_assum drule_all >> simp[],
+     drule_all (SRULE [] pop_array_variable_copy_boundary) >> simp[],
+     (qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+      IF_CASES_TAC >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+      drule_at (Pat `emit_op _ _ _ = _`) pop_emit_op_boundary >> simp[]),
      gvs[comp_return_def]]
 QED
