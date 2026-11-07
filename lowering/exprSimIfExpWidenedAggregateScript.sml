@@ -84,6 +84,7 @@ Resume changed_aggregate_post_frag[post]:
     simp[regions_disjoint_def]) >>
   conj_tac >- (rpt strip_tac >>
     `old < sa.cs_next_id` by decide_tac >>
+    `FLOOKUP s.vs_allocas old = SOME (off,len)` by fs[expr_post_def] >>
     qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >>
     simp[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
   rpt strip_tac >>
