@@ -59,3 +59,12 @@ Proof
   goal_assum (drule_at Any) >>
   gvs[EVERY_MEM, log_encode_safe_opcode_def] >> metis_tac[]
 QED
+
+Theorem abi_encode_semantic_obs_storage_updates[simp]:
+  abi_encode_semantic_obs (s with vs_memory := mem) = abi_encode_semantic_obs s /\
+  abi_encode_semantic_obs (s with vs_vars := vars) = abi_encode_semantic_obs s /\
+  abi_encode_semantic_obs (s with vs_allocas := allocas) = abi_encode_semantic_obs s /\
+  abi_encode_semantic_obs (s with vs_alloca_next := next) = abi_encode_semantic_obs s
+Proof
+  simp[abi_encode_semantic_obs_def]
+QED

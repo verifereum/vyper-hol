@@ -49,6 +49,7 @@ Proof
   `abi_encode_exec_frame func s t` by
     (`run_inst_seq (emitted_insts st en) s = OK t` by
        gvs[window_pure_seq_def, window_seq_def] >>
+     drule_all abi_encode_leaf_sequence_semantic >> strip_tac >>
      drule_all abi_encode_leaf_sequence_fmp >>
      gvs[window_pure_seq_def, abi_encode_exec_frame_def, pending_alloca_size_def]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at en) i.inst_outputs)

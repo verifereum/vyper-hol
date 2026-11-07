@@ -89,13 +89,6 @@ Proof
   drule window_strong_result_public >> simp[abi_encoder_window_result_def]
 QED
 
-Theorem abi_encode_exec_frame_bridge_updates:
-  abi_encode_exec_frame func s t ==>
-  abi_encode_exec_frame func s (t with vs_returndata := rd) /\
-  abi_encode_exec_frame func s (t with vs_prev_bb := prev)
-Proof
-  simp[abi_encode_exec_frame_def, pending_alloca_size_def]
-QED
 
 (* Exact integration target for the next phase:
    abi_encode_window_phases_open in exprSimAbiEncodeExecution, with precisely

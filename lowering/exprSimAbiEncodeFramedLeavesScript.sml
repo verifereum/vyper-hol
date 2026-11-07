@@ -9,7 +9,7 @@ Ancestors
   abiEncoderRegisteredEffect valueEncodingProofs valueEncodingProps
   emitHelperProps exprLoweringProps localPtrsProps
   emitHelper compileEnv venomState venomExecSemantics venomInst words list
-  abiEncoderWindowLookup
+  abiEncoderWindowLookup exprSimAbiEncodeSemantic stmtSimLogExecFields
 
 Theorem abi_encode_framed_copy_observed:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
@@ -156,6 +156,16 @@ Proof
   rw[abi_encode_framed_contract_def] >> metis_tac[abi_encode_framed_word_observed]
 QED
 
+Theorem abi_encode_leaf_sequence_semantic:
+  run_inst_seq code s = OK t /\
+  EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) code ==>
+  abi_encode_semantic_obs t = abi_encode_semantic_obs s
+Proof
+  strip_tac >> irule abi_encode_semantic_sequence >>
+  goal_assum (drule_at Any) >>
+  gvs[EVERY_MEM, log_encode_safe_opcode_def] >> metis_tac[]
+QED
+
 Theorem abi_encode_leaf_sequence_fmp:
   run_inst_seq code s = OK t /\
   EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) code ==>
@@ -212,6 +222,9 @@ Proof
   `!x. dst = Var x \/ src = Var x ==> not_fresh_at st x` by metis_tac[] >>
   drule_all window_bytes_sequence >> strip_tac >>
   rename1 `window_seq st st' s actual` >>
+  `abi_encode_semantic_obs actual = abi_encode_semantic_obs s` by
+    (irule abi_encode_leaf_sequence_semantic >>
+     qexists_tac `emitted_insts st st'` >> fs[window_seq_def]) >>
   `actual.vs_fmp = s.vs_fmp` by
     (irule abi_encode_leaf_sequence_fmp >> qexists_tac `emitted_insts st st'` >>
      fs[window_seq_def]) >>
