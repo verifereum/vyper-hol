@@ -88,5 +88,7 @@ Proof
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_finish >> entry_stage "generate_context_regions" >> entry_admin >>
+   entry_guard "spill_plan_in_region" >> entry_plan_spine_admin >>
+   entry_stage "OPTION_MAP" >> entry_admin >>
    CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
