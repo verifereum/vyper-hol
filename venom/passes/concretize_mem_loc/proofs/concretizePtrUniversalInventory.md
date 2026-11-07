@@ -2358,3 +2358,53 @@ use same-contract context equality and current callee masks. Exact external
 request history is a real unresolved candidate-interface obstruction even
 if common outcomes reset current storage. Do not weaken ptr_core_shared or
 rewrite paired samples until the strategist resolves that history boundary.
+
+## Snapshot-insensitive CALL completion and request-consumer audit (2026-11-07)
+
+Scope: C1.5.90.67.requestCompletion. No existing paired sample, core
+predicate, observational contract, or executable definition is changed.
+
+Checked boundaries in concretizePtrRequestCompletionProbeTheory:
+- `ptr_history_call_shell`: actual venom_call_request construction from
+  content-related states and equal input bytes gives related shells, even
+  with different input offsets and different current storage snapshots.
+- `ptr_call_completion_adopted`: the exact source step_taint guard reduces
+  to nonstatic source context, noncomputed request, nonempty outcome list,
+  and successful head. It deliberately does not include the explicit
+  STATICCALL flag, since the frozen step_taint guard itself does not.
+- `ptr_history_completion_guard`: source/target guards agree.
+- `ptr_history_call_completion`: arbitrary paired actual completions return
+  equal words and returndata and preserve history-content. Storage masks
+  clear iff `~st /\ ptr_call_adopted s u`. Thus st=F is CALL's guard;
+  st=T preserves masks for STATICCALL even if the guard alone is true.
+  Empty oracle, recorded success/failure, and computed precompile
+  success/failure are all checked branches. Computed success re-adopts
+  each request's own stores, not equal stores from the oracle.
+- `ptr_request_store_call_overwrite_probe`: unequal 1w/2w stores masked
+  by all 32 bytes, followed by noncomputed MessageCall with empty oracle,
+  actually append both requests. The subsequent common zero overwrite
+  clears the current key mask and leaves both histories untouched.
+  `ptr_history_sstore` supplies the quotient-aware write boundary. No
+  equality of old snapshots is needed or concluded.
+
+| Consumer | Source / behavior | Required relation / migration verdict |
+| --- | --- | --- |
+| Instruction operand evaluation | venomStateScript.sml:430-440 | Requests are ignored by eval_operand/eval_operands. No snapshot observer. |
+| CALL/STATICCALL completion | venomCallOracleDefsScript.sml:11-68; extCallOracleScript.sml:87-148 | Selectors depend on kind/value/target/data and common outcomes, not historical vs_requests. failed_outcome embeds the *new request* snapshots; computed-success adoption is of the same run's original stores. The checked boundary covers this dependency, not full outcome equality. |
+| Request recording | extCallOracleScript.sml:124-126 | Preserve prior histories or append shell-related requests. Length and within-run change are synchronized by RequestHistory algebra. |
+| Internal call/return | venomExecSemanticsScript.sml:1468-1502; ptrDisciplineScript.sml:483-508 | Setup carries the current history; merge copies the callee's current history. Neither uses old snapshot contents to choose execution. Saved caller history is not restored on successful return. Same-contract content and FMP interfaces still need their own closure proofs. |
+| Source taint transition | ptrDisciplineScript.sml:408-420 | Observes within-run request change only, jointly with outcome change, source static context, and head success. Checked equivalent guards suffice; cross-run history equality is unnecessary here. |
+| Frame reachability | ptrDisciplineScript.sml:456-509 | Carries concrete states and invokes step_taint; no extra direct request observer in the five rules. The quotient must coexist with actual state witnesses, not replace them. |
+| Taint-to-deadness | ptrDisciplineScript.sml:862-879; ptrSafeRunScript.sml:143 | Tests request length increase; shell histories synchronize lengths. This obligation belongs to the stronger deadness contract, not the static-memory conclusion. |
+| Static-memory target | unitMemInvScript.sml:41-66,104-110; contextRawReachableScript.sml | static_mem_ok observes evaluated memory ranges or revert-forward status. Neither mem_inv nor raw reachability directly examines old request snapshots. Execution still must be transported, including every snapshot-dependent *new-request* effect described above. |
+| Observational contracts | stateEquivScript.sml:77-86; ptrDisciplineScript.sml:817-840 | observable_equiv demands exact request history; dead_result_rel demands shell *and* snapshot agreement outside D. The new quotient proves neither. Do not silently weaken these frozen contracts. |
+| Existing exact proof boundaries | concretizePtrSharedFieldsScript.sml:5-27; concretizePtrOpaqueRetpcScript.sml (ptr_core_shared); concretizePtrExternalCallContentScript.sml:6-103; concretizeOracleSimScript.sml | These explicitly require cross-run request equality; old exact external-call helpers also require exact stores. Keep as stronger restricted boundaries. A migration must not pass the new quotient as their premises. |
+| Existing paired certificates | ptr_paired_sample consumers in UnaryEnvironmentReadProducer, ScalarCoreProducer, ParamProducer, AssignProducer, ObservationInterface, ReturnProduction; UniversalStepSchema; HistoricalWriteExclusion | They carry or project ptr_core_shared. A global change has broad callers and remains unauthorized. This local completion result does not establish their universal closure. |
+
+Audit conclusion: no execution rule found reads an accumulated historical
+request's account/transient snapshot to make a future step decision. The
+full newly built request is used in take_outcome, which is why failed and
+computed outcomes needed explicit analysis. The stronger observational
+relations really do inspect snapshots and cannot use this quotient.
+Global migration and CREATE/DELEGATECALL remain separate strategist gates;
+no universal source-prefix coverage or TASK completion is claimed here.
