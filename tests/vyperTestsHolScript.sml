@@ -15,6 +15,7 @@ Ancestors
   vyperCalldataSliceTest
   vyperCheckContractFrontendLibTest
   vyperCheckContractLibTest
+  rawReturnDeclarationTest
   vyperCheckContractTraceLibTest
   vyperCreateSelfdestruct
   vyperCreateStorageTest
@@ -67,3 +68,5 @@ Ancestors
   vyperPlaceProbesTest vyperPlaceSanityTest
   (* events declared in imported modules *)
   vyperImportedEventRegression
+  (* typing of raw/system builtins, pop receivers and argument writes *)
+  vyperRawSystemTypingTest vyperPopTypingTest vyperArgWriteTypingTest

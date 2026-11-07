@@ -1006,27 +1006,41 @@ End
 val () = cv_auto_trans ext_call_precheck_ok_def;
 
 (* Shared execution after raw_call operands have been evaluated and decoded.
-   Both input forms retain the same static/revert/output and state effects. *)
+   Both input forms retain the same static/revert/output and state effects.
+   A call or staticcall takes its outcome from the external-call oracle when
+   st.outcomes is SOME, as extcall does (eval_ext_call_effects); a delegate
+   call, and any call without the oracle, runs the callee. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
       "raw_call flags/value";
-    accounts <- get_accounts;
-    tStorage <- get_transient_storage;
-    result <- lift_option
-      (run_raw_call cx flags target_addr calldata amount gas accounts tStorage)
-      "raw_call run failed";
-    success <<- FST result; result1 <<- SND result;
-    returnData <<- FST result1; result2 <<- SND result1;
-    accounts' <<- FST result2; result3 <<- SND result2;
-    tStorage' <<- FST result3; result4 <<- SND result3;
-    emitted_logs <<- FST result4; deletions <<- SND result4;
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    update_pending_deletions (APPEND deletions);
+    outcomes <- (λst. return st.outcomes st);
+    (success, returnData) <-
+      if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
+        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
+          (if flags.rcf_is_static then NONE else SOME amount);
+        vyperCallOutcome$adopt_call_outcome rq outcome;
+        return (call_outcome_success outcome, call_outcome_return_data outcome)
+      od else do
+        accounts <- get_accounts;
+        tStorage <- get_transient_storage;
+        result <- lift_option
+          (run_raw_call cx flags target_addr calldata amount gas accounts
+             tStorage)
+          "raw_call run failed";
+        success <<- FST result; result1 <<- SND result;
+        returnData <<- FST result1; result2 <<- SND result1;
+        accounts' <<- FST result2; result3 <<- SND result2;
+        tStorage' <<- FST result3; result4 <<- SND result3;
+        emitted_logs <<- FST result4; deletions <<- SND result4;
+        update_accounts (K accounts');
+        update_transient (K tStorage');
+        append_logs emitted_logs;
+        update_pending_deletions (APPEND deletions);
+        return (success, returnData)
+      od;
     if flags.rcf_revert_on_failure then do
       (* Vyper re-raises the callee's whole returndata (lower_raw_call) *)
       if success then return () else raise $ Error $ RevertData returnData;
@@ -1040,7 +1054,7 @@ Definition eval_raw_call_def:
 End
 
 val () = eval_raw_call_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY,
             COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
             option_CASE_rator, type_check_def, assert_def, update_pending_deletions_def]
   |> cv_auto_trans;
@@ -1049,21 +1063,15 @@ Theorem eval_raw_call_preserves_non_accounts:
   eval_raw_call cx flags target_addr calldata amount gas st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  Cases_on `¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
-    ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0)` >>
-  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-     assert_def, return_def, raise_def, get_accounts_def,
-     get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
-  PairCases_on `call_result` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  rpt strip_tac >> gvs[]
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       UNCURRY, COND_RATOR,
+       option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
+  gvs[evaluation_state_component_equality]
 QED
 
 (* ===== extcall / staticcall / send after operand evaluation ===== *)

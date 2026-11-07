@@ -314,14 +314,6 @@ Proof
 QED
 
 
-Theorem outcomes_frame_raw_call[simp]:
-  outcomes_frame (eval_raw_call cx flags target_addr calldata amount gas)
-Proof
-  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
-  rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
-              ASSIGN_OUTCOMES_FRAME_STEP])
-QED
-
 (* Lock primitives retain the residual outcome field, on success and error. *)
 Theorem lock_outcomes_preserved:
   (acquire_nonreentrant_lock addr slot is_view st = (res,st') ==>
@@ -540,7 +532,7 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_return, outcomes_frame_raise,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
-       outcomes_frame_adopt, outcomes_frame_raw_call,
+       outcomes_frame_adopt,
        outcomes_frame_places, outcomes_frame_write_place,
        outcomes_frame_get_place, outcomes_frame_append_place,
        outcomes_frame_pop_place]));
@@ -605,8 +597,17 @@ Proof
   rpt (outcomes_suffix_step outcomes_suffix_base_facts)
 QED
 
+(* In oracle mode a call or staticcall consumes an outcome, as extcall does. *)
+Theorem outcomes_suffix_raw_call:
+  outcomes_suffix (eval_raw_call cx flags target_addr calldata amount gas)
+Proof
+  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
+
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
+  (outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
 
 Theorem outcomes_suffix_create:
   outcomes_suffix (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
@@ -616,7 +617,8 @@ Proof
 QED
 
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
+  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
 val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 

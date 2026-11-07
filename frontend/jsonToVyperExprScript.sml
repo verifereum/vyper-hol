@@ -1262,11 +1262,18 @@ Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (Literal var_ty (IntL (integer$int_of_num 0)))) /\
-  (translate_iter ctx var_ty (JIter_Range [e] _) =
+  (* Without bound=, a range's endpoints are compile-time values, which the
+     type checker requires to be literals. *)
+  (translate_iter ctx var_ty (JIter_Range [e] bound) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
-          (translate_expr ctx e)) /\
-  (translate_iter ctx var_ty (JIter_Range (s::e::_) _) =
-    Range (translate_expr ctx s) (translate_expr ctx e)) /\
+          (case bound of
+             NONE => fold_constant (translate_expr ctx e)
+           | SOME _ => translate_expr ctx e)) /\
+  (translate_iter ctx var_ty (JIter_Range (s::e::_) bound) =
+    case bound of
+      NONE => Range (fold_constant (translate_expr ctx s))
+                    (fold_constant (translate_expr ctx e))
+    | SOME _ => Range (translate_expr ctx s) (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Array e _) =
     Array (translate_expr ctx e))
 End
