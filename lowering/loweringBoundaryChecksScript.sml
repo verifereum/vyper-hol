@@ -139,10 +139,9 @@ QED
 
 Theorem lowering_decode_exemption_narrow:
   unspecified_behaviour_exempt tops e ==>
-  (e = RuntimeError "abi_decode invalid" /\
-   ?ty. occurs_abi_decode_target ty tops /\
-        is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
-  e = RuntimeError "convert empty bytes to signed"
+  e = RuntimeError "abi_decode invalid" /\
+  ?ty. occurs_abi_decode_target ty tops /\
+       is_dynamic (vyper_to_abi_type (type_env tops) ty)
 Proof
   simp[unspecified_behaviour_exempt_def]
 QED
