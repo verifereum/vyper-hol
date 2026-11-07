@@ -437,3 +437,307 @@ Proof
  disch_then (qspec_then `m` assume_tac) >>
  simp[release_dead_spills_stack_update, fnPlanPrefixTheory.release_dead_spills_stack]
 QED
+
+(* Instruction execution does not inspect the block-cleanup bookkeeping. *)
+Theorem do_dup_cleanup_frame:
+  !d ps ch promised.
+    do_dup d (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (do_dup d ps), SND (do_dup d ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[do_dup_def] >>
+  Cases_on `d <= 15` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[plan_state_component_equality]
+QED
+
+Theorem do_swap_cleanup_frame:
+  !d ps ch promised.
+    do_swap d (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (do_swap d ps), SND (do_swap d ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[do_swap_def] >>
+  Cases_on `d = 0` >> simp[] >> Cases_on `d <= 16` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[plan_state_component_equality]
+QED
+
+Theorem do_restore_cleanup_frame:
+  !op ps ch promised.
+    do_restore op (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (do_restore op ps), SND (do_restore op ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[plan_state_component_equality]
+QED
+
+Theorem do_spill_at_cleanup_frame:
+  !d ps ch promised.
+    do_spill_at d (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (do_spill_at d ps), SND (do_spill_at d ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[do_spill_at_def, do_spill_tos_def] >>
+  Cases_on `d = 0` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[plan_state_component_equality]
+QED
+
+Theorem reduce_depth_plan_cleanup_frame:
+  !fuel targets op f len ps ch promised.
+    reduce_depth_plan fuel targets op f len
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (reduce_depth_plan fuel targets op f len ps),
+     SND (reduce_depth_plan fuel targets op f len ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  Induct >> rpt gen_tac >> simp[reduce_depth_plan_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[do_spill_at_cleanup_frame]) >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem restore_spilled_plan_cleanup_frame:
+  !targets ps ch promised.
+    restore_spilled_plan targets
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (restore_spilled_plan targets ps),
+     SND (restore_spilled_plan targets ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  Induct >> rpt gen_tac >> simp[restore_spilled_plan_def, do_restore_cleanup_frame] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem reorder_one_cleanup_frame:
+  !dfg targets idx op ps ch promised.
+    reorder_one dfg targets idx op
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (reorder_one dfg targets idx op ps),
+     SND (reorder_one dfg targets idx op ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >>
+  Cases_on `do_restore op ps` >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - 1 - idx) (LENGTH targets) ps.ps_stack` >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  gvs[reorder_one_def, do_restore_cleanup_frame] >>
+  BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  rename1 `stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets) st.ps_stack = SOME dist` >>
+  Cases_on `dist > 16` >> simp[reduce_depth_plan_cleanup_frame] >>
+  TRY (Cases_on `reduce_depth_plan (LENGTH st.ps_stack) targets op
+         (LENGTH targets - (idx + 1)) (LENGTH targets) st` >> gvs[]) >>
+  BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  rename1 `stack_get_unfixed_depth op (LENGTH targets - (idx + 1)) (LENGTH targets) rs.ps_stack = SOME final` >>
+  Cases_on `final = LENGTH targets - 1 - idx` >> simp[] >>
+  Cases_on `LENGTH targets - 1 - idx < LENGTH rs.ps_stack` >> simp[] >>
+  TRY (Cases_on `operand_equiv dfg op (stack_peek (LENGTH targets - 1 - idx) rs.ps_stack)` >>
+       simp[plan_state_component_equality]) >>
+  Cases_on `do_swap final rs` >> simp[do_swap_cleanup_frame] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem reorder_fold_cleanup_frame[local]:
+  !xs ops ps dfg targets ch promised.
+    FOLDL (\(ops,ps) (idx,op).
+      let r = reorder_one dfg targets idx op ps in (ops ++ FST r,SND r))
+      (ops,ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) xs =
+    let r = FOLDL (\(ops,ps) (idx,op).
+      let r = reorder_one dfg targets idx op ps in (ops ++ FST r,SND r)) (ops,ps) xs in
+    (FST r,SND r with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  Induct >> rpt gen_tac >> simp[] >> PairCases_on `h` >>
+  simp[reorder_one_cleanup_frame] >>
+  Cases_on `reorder_one dfg targets h0 h1 ps` >> gvs[]
+QED
+
+Theorem reorder_plan_cleanup_frame:
+  !dfg targets ps ch promised.
+    reorder_plan dfg targets
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (reorder_plan dfg targets ps), SND (reorder_plan dfg targets ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >>
+  simp[reorder_plan_def, pairTheory.UNCURRY] >>
+  irule (SRULE [LET_THM] reorder_fold_cleanup_frame)
+QED
+
+Theorem popmany_fold_cleanup_frame[local]:
+  !xs ops ps ch promised.
+    FOLDL (\(ops,ps) v.
+      case stack_get_depth v ps.ps_stack of NONE => (ops,ps)
+      | SOME d =>
+        let r = if d = 0 then ([],ps) else do_swap d ps in
+        (ops ++ FST r ++ [SOPop 1], SND r with ps_stack := stack_pop 1 (SND r).ps_stack))
+      (ops,ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) xs =
+    let r = FOLDL (\(ops,ps) v.
+      case stack_get_depth v ps.ps_stack of NONE => (ops,ps)
+      | SOME d =>
+        let r = if d = 0 then ([],ps) else do_swap d ps in
+        (ops ++ FST r ++ [SOPop 1], SND r with ps_stack := stack_pop 1 (SND r).ps_stack))
+      (ops,ps) xs in
+    (FST r,SND r with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  Induct >> rpt gen_tac >> simp[] >>
+  Cases_on `stack_get_depth h ps.ps_stack` >> gvs[LET_THM] >>
+  Cases_on `x = 0`
+  >- (gvs[] >> first_x_assum (qspecl_then
+        [`ops ++ [SOPop 1]`, `ps with ps_stack := stack_pop 1 ps.ps_stack`, `ch`, `promised`] mp_tac) >> simp[]) >>
+  gvs[do_swap_cleanup_frame] >>
+  Cases_on `do_swap x ps` >> gvs[] >>
+  first_x_assum (qspecl_then
+    [`ops ++ q ++ [SOPop 1]`, `r with ps_stack := stack_pop 1 r.ps_stack`, `ch`, `promised`] mp_tac) >> simp[]
+QED
+
+Theorem popmany_individual_cleanup_frame:
+  !targets ps ch promised.
+    popmany_individual targets
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (popmany_individual targets ps), SND (popmany_individual targets ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[popmany_individual_def, pairTheory.UNCURRY] >>
+  irule (SRULE [LET_THM] popmany_fold_cleanup_frame)
+QED
+
+Theorem popmany_plan_cleanup_frame:
+  !targets ps ch promised.
+    popmany_plan targets
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (popmany_plan targets ps), SND (popmany_plan targets ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  Cases >> rpt gen_tac >> simp[popmany_plan_def] >>
+  Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) (h::t))` >>
+  gvs[popmany_individual_cleanup_frame] >>
+  Cases_on `is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) (h::t)))` >>
+  gvs[popmany_individual_cleanup_frame, do_swap_cleanup_frame] >>
+  Cases_on `do_swap (SUC (LENGTH t)) ps` >> gvs[plan_state_component_equality] >>
+  BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+Theorem emit_one_input_cleanup_frame:
+  !opc nl op ps ch promised.
+    emit_one_input opc nl op
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (emit_one_input opc nl op ps), SND (emit_one_input opc nl op ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> Cases_on `do_restore op ps` >>
+  simp[emit_one_input_def, do_restore_cleanup_frame] >>
+  Cases_on `is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)` >> simp[] >>
+  Cases_on `op` >> simp[] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[do_dup_cleanup_frame] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[plan_state_component_equality]
+QED
+
+Theorem emit_input_plan_cleanup_frame:
+  !targets opc nl ps ch promised.
+    emit_input_plan opc targets nl
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (emit_input_plan opc targets nl ps), SND (emit_input_plan opc targets nl ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  Induct >> rpt gen_tac >> simp[emit_input_plan_def, emit_one_input_cleanup_frame] >>
+  Cases_on `emit_one_input opc (operand_vars targets ++ nl) h ps` >> simp[] >>
+  Cases_on `emit_input_plan opc targets nl r` >> simp[]
+QED
+
+Theorem generate_emit_ops_cleanup_frame:
+  !inst tc ps ch promised.
+    generate_emit_ops inst tc
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (generate_emit_ops inst tc ps), SND (generate_emit_ops inst tc ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >>
+  Cases_on `inst.inst_opcode = INITIAL_FMP` >- simp[generate_emit_ops_def] >>
+  Cases_on `inst.inst_opcode = BUMP` >- simp[generate_emit_ops_def] >>
+  simp[generate_emit_ops_def] >>
+  Cases_on `venom_to_evm_name inst.inst_opcode` >> simp[] >>
+  Cases_on `inst.inst_opcode = JNZ`
+  >- (simp[] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
+  Cases_on `inst.inst_opcode = JMP`
+  >- (simp[] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
+  Cases_on `inst.inst_opcode = DJMP` >- simp[] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (simp[] >> Cases_on `HD inst.inst_operands` >>
+      simp[fresh_label_def, plan_state_component_equality]) >>
+  Cases_on `inst.inst_opcode = RET` >- simp[] >>
+  Cases_on `inst.inst_opcode = ASSERT` >- simp[] >>
+  Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE`
+  >- simp[fresh_label_def, plan_state_component_equality] >>
+  Cases_on `inst.inst_opcode = LOG` >- simp[] >>
+  Cases_on `inst.inst_opcode = ISTORE` >> simp[]
+QED
+
+Theorem optimistic_swap_plan_cleanup_frame:
+  !dfg inst nl term ps ch promised.
+    optimistic_swap_plan dfg inst nl term
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (optimistic_swap_plan dfg inst nl term ps), SND (optimistic_swap_plan dfg inst nl term ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[optimistic_swap_plan_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[do_swap_cleanup_frame])
+QED
+
+Theorem generate_phi_plan_cleanup_frame:
+  !inst nl halt ps ch promised.
+    generate_phi_plan inst nl halt
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (generate_phi_plan inst nl halt ps), SND (generate_phi_plan inst nl halt ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) nl` >> simp[do_dup_cleanup_frame] >>
+  Cases_on `do_dup x ps` >> simp[] >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl` >> simp[popmany_plan_cleanup_frame] >>
+  rpt (pairarg_tac >> gvs[])
+  >- (qspecl_then [`[Var (HD inst.inst_outputs)]`,
+        `r with ps_stack := stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack`,
+        `ch`, `promised`] mp_tac popmany_plan_cleanup_frame >> simp[]) >>
+  qspecl_then [`[Var (HD inst.inst_outputs)]`,
+    `ps with ps_stack := stack_poke x (Var (HD inst.inst_outputs)) ps.ps_stack`,
+    `ch`, `promised`] mp_tac popmany_plan_cleanup_frame >> simp[]
+QED
+
+Theorem generate_offset_plan_cleanup_frame:
+  !inst ps ch promised.
+    generate_offset_plan inst
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (generate_offset_plan inst ps), SND (generate_offset_plan inst ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >> simp[generate_offset_plan_def] >>
+  Cases_on `EL 1 inst.inst_operands` >> simp[plan_state_component_equality]
+QED
+
+Theorem release_fold_cleanup_frame[local]:
+  !xs ps ch promised.
+    FOLDL (\ps (op,off). ps with <|ps_spilled := ps.ps_spilled \\ op;
+      ps_alloc := free_spill_slot off ps.ps_alloc|>)
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) xs =
+    (FOLDL (\ps (op,off). ps with <|ps_spilled := ps.ps_spilled \\ op;
+      ps_alloc := free_spill_slot off ps.ps_alloc|>) ps xs) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>
+Proof
+  Induct >> rpt gen_tac >> simp[] >> PairCases_on `h` >> simp[] >>
+  first_x_assum (qspecl_then [`ps with <|ps_spilled := ps.ps_spilled \\ h0;
+    ps_alloc := free_spill_slot h1 ps.ps_alloc|>`, `ch`, `promised`] mp_tac) >> simp[]
+QED
+
+Theorem release_dead_spills_cleanup_frame:
+  !nl ps ch promised.
+    release_dead_spills nl
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (release_dead_spills nl ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>
+Proof
+  simp[release_dead_spills_def, release_fold_cleanup_frame]
+QED
