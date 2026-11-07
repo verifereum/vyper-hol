@@ -12870,6 +12870,79 @@ Proof
   simp[alias_occ_deleted_def, alias_occ_from_spill_residents]
 QED
 
+Definition alias_occ_spill_tos_inventory_def:
+  alias_occ_spill_tos_inventory shadow =
+    if shadow.alias_occs = [] then
+      shadow with <| alias_spill_ids := shadow.alias_spill_ids |+
+                       (EL 0 ([] : operand list), shadow.alias_next);
+                     alias_next := SUC shadow.alias_next |>
+    else
+      shadow with <| alias_occs := TAKE (LENGTH shadow.alias_occs - 1) shadow.alias_occs;
+        alias_spill_ids := shadow.alias_spill_ids |+ (LAST shadow.alias_occs) |>
+End
+
+Definition alias_occ_spill_tos_logs_def:
+  alias_occ_spill_tos_logs shadow =
+    if shadow.alias_occs = [] then
+      [AliasOccReadLog 0 [] (AliasOccTotalRead 0 shadow.alias_next (EL 0 []))]
+    else []
+End
+
+Theorem alias_occ_spill_tos_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_spill_tos_inventory shadow) (SND (do_spill_tos ps))
+Proof
+  strip_tac >>
+  `LENGTH shadow.alias_occs = LENGTH ps.ps_stack` by
+    (gvs[alias_occ_align_def] >> metis_tac[LENGTH_MAP]) >>
+  Cases_on `shadow.alias_occs = []`
+  >- (gvs[alias_occ_align_def, alias_occ_spill_tos_inventory_def] >>
+      simp[do_spill_tos_def, LET_THM] >> pairarg_tac >>
+      simp[alias_occ_align_def, stack_pop_def, stack_peek_def]) >>
+  simp[alias_occ_spill_tos_inventory_def, do_spill_tos_def, LET_THM] >>
+  pairarg_tac >> simp[alias_occ_align_def, MAP_TAKE, stack_pop_def] >>
+  gvs[alias_occ_align_def] >>
+  `ps.ps_stack <> []` by metis_tac[MAP_EQ_NIL] >>
+  `FST (LAST shadow.alias_occs) = LAST ps.ps_stack` by
+    metis_tac[LAST_MAP] >>
+  Cases_on `LAST shadow.alias_occs` >>
+  gvs[finite_mapTheory.FDOM_FUPDATE, stack_peek_def, LAST_EL,
+      arithmeticTheory.PRE_SUB1]
+QED
+
+Theorem alias_occ_spill_tos_origin:
+  (at,id) IN alias_occ_residents (alias_occ_spill_tos_inventory shadow) ==>
+  (at,id) IN alias_occ_residents shadow \/
+  (id = shadow.alias_next /\
+   MEM (AliasOccReadLog 0 [] (AliasOccTotalRead 0 id at))
+       (alias_occ_spill_tos_logs shadow))
+Proof
+  Cases_on `shadow.alias_occs = []`
+  >- (simp[alias_occ_spill_tos_inventory_def, alias_occ_spill_tos_logs_def,
+           alias_occ_residents_member, finite_mapTheory.FLOOKUP_UPDATE] >>
+      Cases_on `at = HD ([] : operand list)` >> gvs[]) >>
+  Cases_on `LAST shadow.alias_occs` >>
+  simp[alias_occ_spill_tos_inventory_def, alias_occ_spill_tos_logs_def,
+       alias_occ_residents_member, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `at = q` >> gvs[] >> strip_tac
+  >- (disj1_tac >> drule rich_listTheory.MEM_TAKE >> simp[]) 
+  >- (disj1_tac >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL])
+  >- (disj1_tac >> drule rich_listTheory.MEM_TAKE >> simp[]) >> simp[]
+QED
+
+Theorem alias_occ_spill_tos_next:
+  shadow.alias_next <= (alias_occ_spill_tos_inventory shadow).alias_next
+Proof
+  simp[alias_occ_spill_tos_inventory_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_occ_spill_tos_logs_valid:
+  EVERY alias_occ_read_log_ok (alias_occ_spill_tos_logs shadow)
+Proof
+  simp[alias_occ_spill_tos_logs_def] >> IF_CASES_TAC >>
+  simp[alias_occ_read_log_ok_def]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
