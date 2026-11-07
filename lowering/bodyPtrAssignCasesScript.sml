@@ -12,6 +12,9 @@
  *)
 Theory bodyPtrAssignCases
 Ancestors
+  assignBasePtrWordBody assignBasePtrLocalBody assignBasePtrLocalBodyFacts
+  assignBasePtrTopWordBody assignBasePtrStorageBody
+  assignBasePtrAttrLocal assignBasePtrAttrStorage
   annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts
   assignTuplePtrBodyLocals assignTuplePtrBodyTargets
   bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
@@ -60,7 +63,40 @@ Theorem body_assign_case_ptr:
     body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (Assign (BaseTarget t) e)
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\ is_word_type ty`
+  >- (gvs[] >> irule body_assign_local_word_ptr >> metis_tac[]) >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+    ~is_word_type ty /\ (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+      is_bytestring_type ty \/ has_length_word (expr_type e) /\ is_empty_value_expr e)`
+  >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
+          0 < type_memory_bytes cenv ty` by
+        (rpt strip_tac >> gvs[] >> metis_tac[assign_base_local_memory_bytes_pos]) >>
+      Cases_on `lowered_value_type cenv e = expr_type e \/
+        is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type cenv e) /\
+        arg_type_fits (lowered_value_type cenv e) (expr_type e)`
+      >- (gvs[] >> irule body_assign_local_memory_ptr >> metis_tac[]) >>
+      gvs[] >> irule body_assign_widened_aggregate_call_ptr >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_assign_toplevel_word_ptr >> metis_tac[]) >>
+  Cases_on `?nsid mut ty slot. t = TopLevelNameTarget nsid /\
+    supported_variable_decl tops nsid = SOME (Private,mut,ty,SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\ ~is_word_type ty /\
+    (!elem n. ty <> ArrayT elem (Dynamic n)) /\ 0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+  >- (gvs[] >> irule body_assign_toplevel_copy_ptr >> metis_tac[]) >>
+  Cases_on `?id fld sid fty. t = AttributeTarget (NameTarget id) fld /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    attribute_type env.type_defs (StructT sid) fld = SOME fty /\ is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_local_ptr >> metis_tac[]) >>
+  Cases_on `?nsid fld fty. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+    supported_storage_field_write tops nsid fld /\
+    type_place_target env t = SOME (Type fty) /\ is_word_type fty`
+  >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      irule body_assign_attr_storage_ptr >> metis_tac[]) >>
+  irule body_assign_other_ptr >> simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> fs[] >> metis_tac[]
 QED
 
 (* ADMITTED: a piece of the body induction. *)
