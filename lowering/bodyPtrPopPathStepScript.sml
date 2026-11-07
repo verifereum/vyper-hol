@@ -1,5 +1,5 @@
 Theory bodyPtrPopPathStep
-Ancestors bodyPtrDefs robustCopyTransportPtr normalizationPrefixPtr pred_set typedCopyLayoutPtr exprSimProps loweringPosts valueEncoding
+Ancestors bodyPtrPopSpatialSplit bodyPtrDefs robustCopyTransportPtr normalizationPrefixPtr pred_set typedCopyLayoutPtr exprSimProps loweringPosts valueEncoding
   valueEncodingProofs exprSimAggregateEncoding vyperState vyperTyping
   vyperValueOperation tupleMemoryLayout vyperPlaceStatePreservation
 
@@ -174,4 +174,64 @@ Proof
      strip_tac >> irule elems_in_memory_EL >>
      goal_assum (drule_at Any) >> simp[]) >>
   drule_all pop_array_sibling_robust_frame >> simp[]
+QED
+
+Theorem pop_robust_header_frame:
+  !base w dirty mem mem' writes.
+  (!x. x IN writes ==> base+32 <= x) /\
+  mem_agree_outside writes mem' mem /\
+  (!m. mem_agree_outside dirty mem m ==> mem_word_at base m = w) ==>
+  !m. mem_agree_outside dirty mem' m ==> mem_word_at base m = w
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `!m. mem_agree_outside dirty mem' m ==> mem_word_at addr m = w` >>
+  `!i. addr <= i /\ i < addr+32 ==> i NOTIN dirty` by
+    (drule representationCleanPtrTheory.robust_mem_word_at_clean >> simp[]) >>
+  `!i. addr <= i /\ i < addr+32 ==> i NOTIN writes` by
+    (rpt strip_tac >> spose_not_then assume_tac >>
+     qpat_x_assum `!x. x IN writes ==> _` drule >> decide_tac) >>
+  `mem_word_at addr mem = w` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `mem_word_at addr mem = mem_word_at addr mem'` by
+    (irule pop_clean_word_agreement >> qexists_tac `writes` >> simp[]) >>
+  rpt strip_tac >>
+  `mem_word_at addr m = mem_word_at addr mem'` by
+    (irule pop_clean_word_agreement >> qexists_tac `dirty` >> simp[]) >> metis_tac[]
+QED
+
+Theorem pop_dynarray_robust_replace:
+  !vs tv cap j new addr dirty mem mem' writes.
+  elems_val_wf vs tv /\ j < LENGTH vs /\
+  (!x. x IN writes ==>
+    addr+32+j*type_memory_size tv <= x /\
+    x < addr+32+j*type_memory_size tv+type_memory_size tv) /\
+  mem_agree_outside writes mem' mem /\
+  (!m. mem_agree_outside dirty mem m ==>
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) addr m) /\
+  (!m. mem_agree_outside dirty mem' m ==>
+    val_in_memory tv new (addr+32+j*type_memory_size tv) m) ==>
+  !m. mem_agree_outside dirty mem' m ==>
+    val_in_memory (ArrayTV tv (Dynamic cap))
+      (ArrayV (DynArrayV (LUPDATE new j vs))) addr m
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!m. mem_agree_outside dirty mem m ==>
+    mem_word_at addr m = n2w (LENGTH vs)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!m. _ ==> val_in_memory (ArrayTV _ _) _ _ _` drule >>
+     simp[val_in_memory_def]) >>
+  `!m. mem_agree_outside dirty mem' m ==>
+    mem_word_at addr m = n2w (LENGTH vs)` by
+    (rpt strip_tac >> irule pop_robust_header_frame >>
+     qexistsl_tac [`dirty`, `mem`, `mem'`, `writes`] >> simp[] >> rpt strip_tac >>
+     qpat_x_assum `!x. x IN writes ==> _` drule >> decide_tac) >>
+  `!m. mem_agree_outside dirty mem m ==> elems_in_memory vs (addr+32) tv m` by
+    (rpt strip_tac >>
+     qpat_x_assum `!m. _ ==> val_in_memory (ArrayTV _ _) _ _ _` drule >>
+     simp[val_in_memory_def]) >>
+  `!m. mem_agree_outside dirty mem' m ==>
+    elems_in_memory (LUPDATE new j vs) (addr+32) tv m` by
+    (rpt strip_tac >> irule pop_elems_robust_replace >> simp[] >>
+     qexistsl_tac [`dirty`, `mem`, `mem'`, `writes`] >>
+     fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  simp[val_in_memory_def]
 QED

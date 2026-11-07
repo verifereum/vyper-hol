@@ -4,7 +4,7 @@ Ancestors bodyPtrPopHistoryStore normalizationPrefixPtr abiStaticAggregateProps
   valueEncodingProps exprSimMemoryTransport pred_set list bodyPtrDefs venomMemProofs
   bodyPtrPopMemoryHeader exprSimAggregateEncoding robustCopyTransportPtr valueEncodingProofs typedCopyPtr exprSimPop
 
-Theorem pop_clean_word_agreement[local]:
+Theorem pop_clean_word_agreement:
   (!i. p <= i /\ i < p + 32 ==> i NOTIN dirty) /\
   mem_agree_outside dirty mem mem' ==>
   mem_word_at p mem' = mem_word_at p mem
