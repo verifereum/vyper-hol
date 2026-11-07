@@ -25,12 +25,6 @@ Proof
   qx_gen_tac `info` >> PairCases_on `info` >> simp[abi_encoder_empty_def] >> metis_tac[]
 QED
 
-Theorem abi_encoder_empty_nested_probe:
-  abi_encoder_empty (AbiComplex [(AbiComplex [(AbiCopy 0,0,19,F)],0,23,F)])
-Proof
-  simp[abi_encoder_empty_def]
-QED
-
 Theorem abi_encoder_window_empty:
   !ei at av sb cap mem. abi_encoder_window_input ei at av sb cap mem ==>
   LENGTH (enc at av) = 0 ==> abi_encoder_empty ei
@@ -75,13 +69,6 @@ Proof
     (gvs[LIST_REL_EL_EQN, abi_encoder_layout_valid_def] >>
      metis_tac[LENGTH_NIL]) >>
   metis_tac[LENGTH_NIL]
-QED
-
-(* A zero-byte copy can still expand the concrete memory list. *)
-Theorem abi_encoder_empty_copy_expansion_probe:
-  !s. s.vs_memory = [] ==> LENGTH (mcopy 1 0 0 s).vs_memory = 1
-Proof
-  simp[mcopy_def, write_memory_with_expansion_def]
 QED
 
 Theorem abi_encoder_empty_copy_observation:

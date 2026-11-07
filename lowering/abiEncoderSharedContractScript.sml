@@ -127,16 +127,6 @@ Proof
   drule abi_encoder_input_open >> simp[abi_encoder_open_input_window]
 QED
 
-Theorem abi_encoder_shared_input_typed:
-  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,output_size) (first,last,b,cap) s /\
-  abi_encoder_input ei at av sb source_cap s.vs_memory /\
-  source_cap <> 0 /\
-  (sb+source_cap <= d \/ d+output_size <= sb) ==>
-  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap s
-Proof
-  simp[abi_encoder_shared_input_def, abi_scratch_input_def]
-QED
-
 Theorem abi_encoder_shared_endpoint_bytes:
   abi_sites_encoder_shared_endpoint sites (ctx,func) (start,end_st,out,limit_st) (first,last,b,cap) (at,av,d) initial actual ==>
   mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av

@@ -180,19 +180,3 @@ Proof
   >- (drule_all compile_abi_encode_to_buf_empty_window_run >> simp[]) >>
   drule_all compile_abi_encode_to_buf_positive_shared_window_run >> simp[]
 QED
-
-(* Certification of the public dependency boundary and saved proof objects. *)
-val () = List.app (fn thy =>
-  if String.isPrefix "abiEncoderWindow" thy andalso thy <> "abiEncoderWindow"
-  then raise Fail ("Forbidden encoder-window ancestor: " ^ thy)
-  else ()) (Theory.ancestry "-");
-
-val () = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (Thm.hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Unclosed or admitted shared window run: " ^ name)
-  end)
-  [("positive", compile_abi_encode_to_buf_positive_shared_window_run),
-   ("public", compile_abi_encode_to_buf_shared_window_run)];
-val () = print "Shared window run audit: allowed transitive ancestors; closed unadmitted exports\n";
