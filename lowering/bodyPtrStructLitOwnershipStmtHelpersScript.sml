@@ -6,7 +6,8 @@ Ancestors bodyPtrStructLitOwnershipConsumers bodyPtrStructLitOwnershipLoops
   bodyPtrStructLitOwnershipPrimitives bodyPtrStructLitOwnershipTyped
   bodyPtrStructLitOwnershipAbiEncode bodyPtrStructLitOwnershipInterfaces
   context compileEnv stmtLowering loweringShapeDefs loweringShapeRules
-  bodyPtrStructLitOwnershipFrame
+  bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipPop
+  loweringShapeProps supportedExprTraverse
 
 Theorem alloc_run_compile_range_bound_checks:
   alloc_run fresh_outputs
@@ -320,3 +321,44 @@ Proof
       simp[shape_state_def, shape_base_fresh_outputs]) >>
   simp[comp_return_def, alloc_run_def, alloc_frame_refl]
 QED
+
+Theorem alloc_run_compile_tuple_store_one:
+  (!env ty child. supported_target_exists (\e. e = child) bt /\
+      ~supported_expr_exists expr_shape_root child ==>
+    shape_step internal compiler_label (\s. cenv_shape_ok s env)
+      (compile_expr env ty child) (\v s. value_shape_ok s v) /\
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s env)
+      (compile_expr env ty child) (\v s. T)) /\
+  ~supported_target_exists expr_shape_root bt ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_tuple_store_all ce [src_ty] [BaseTarget bt] [value]) (\u s. T)
+Proof
+  strip_tac >> simp[compile_tuple_store_all_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >>
+      irule_at Any (Q.INST [`R` |-> `\s. T`] alloc_run_target_prefix_frame) >>
+      simp[shape_stable_def, shape_state_def, shape_base_fresh_outputs] >>
+      metis_tac[]) >>
+  gen_tac >> simp[] >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac >- (simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>
+    gen_tac >> simp[]) >>
+  rpt IF_CASES_TAC >> simp[] >>
+  (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+   reverse conj_tac >- simp[SF ETA_ss,
+     SRULE [SF ETA_ss] alloc_run_compile_store_at_loc,
+     SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+     SRULE [SF ETA_ss] alloc_run_compile_assign_value] >>
+   simp[comp_return_def, alloc_run_def, alloc_frame_refl])
+QED
+
+Theorem compile_tuple_store_all_cons:
+  compile_tuple_store_all ce (ty::tys) (t::ts) (v::vs) =
+  comp_ignore_bind (compile_tuple_store_all ce [ty] [t] [v])
+    (compile_tuple_store_all ce tys ts vs)
+Proof
+  Cases_on `t` >> simp[compile_tuple_store_all_def, comp_ignore_bind_def,
+    comp_bind_assoc, FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
