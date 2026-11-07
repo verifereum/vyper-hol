@@ -97,7 +97,13 @@ Theorem abi_encode_nonword_relabel_observer:
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
       FLOOKUP actual.vs_allocas aid = SOME row) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
-      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >>
   drule_all abi_encode_nonword_observer_entry >>
@@ -240,10 +246,20 @@ Resume abi_encode_nonword_relabel_observer[transport]:
   `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by
     (simp_tac (srw_ss()) [Abbr `rst`, Abbr `rr`, Abbr `re`,
       start_relabel_def, abi_encode_start_swap_resource_fields] >> decide_tac) >>
-  `stmt_state_rel ctx func ce cx es' actual` by
+  `stmt_state_rel ctx func ce cx es' actual /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
-       (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+       (SPEC_ALL abi_encode_phases_caller_state))) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def,
+       local_region_def, lookup_var_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `abi_decode_sim ctx obs rs actual` by
     (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
   `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -282,10 +298,20 @@ Resume abi_encode_nonword_relabel_observer[transport_positive]:
   `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by
     (simp_tac (srw_ss()) [Abbr `rst`, Abbr `rr`, Abbr `re`,
       start_relabel_def, abi_encode_start_swap_resource_fields] >> decide_tac) >>
-  `stmt_state_rel ctx func ce cx es' actual` by
+  `stmt_state_rel ctx func ce cx es' actual /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
-       (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+       (SPEC_ALL abi_encode_phases_caller_state))) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def,
+       local_region_def, lookup_var_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `abi_decode_sim ctx obs rs actual` by
     (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
   `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>

@@ -487,7 +487,13 @@ Theorem abi_encode_nonword_no_block_phases:
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
       FLOOKUP actual.vs_allocas aid = SOME row) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
-      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >>
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\
@@ -535,10 +541,16 @@ Resume abi_encode_nonword_no_block_phases[caller]:
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_encoder_counters >> strip_tac >>
   `sa.cs_next_var <= ready.cs_next_var /\ sa.cs_next_var <= body_end.cs_next_var` by decide_tac >>
-  `stmt_state_rel ctx func ce cx es' actual` by
+  `stmt_state_rel ctx func ce cx es' actual /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
-       (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+       (SPEC_ALL abi_encode_phases_caller_state))) >> asm_rewrite_tac[]) >>
   `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w)` by
     (drule abi_encode_caller_phase_registers >>
@@ -604,7 +616,13 @@ Theorem abi_encode_nonword_no_block_run:
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
       FLOOKUP actual.vs_allocas aid = SOME row) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
-      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
@@ -624,7 +642,7 @@ Proof
   drule_all abi_encode_nonword_no_block_phases >>
   disch_then (qx_choose_then `p` (qspec_then `sb` mp_tac)) >>
   impl_tac >- (asm_rewrite_tac[] >> simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL]) >>
-  strip_tac >> qexistsl_tac [`p`, `raw`] >> gvs[] >> first_assum ACCEPT_TAC
+  strip_tac >> qexistsl_tac [`p`, `raw`] >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_encode_nonword_no_block_observer:
@@ -662,12 +680,18 @@ Theorem abi_encode_nonword_no_block_observer:
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
       FLOOKUP actual.vs_allocas aid = SOME row) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
-      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >> drule_all abi_encode_nonword_no_block_run >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all lower_abi_encode_no_blocks_safe >> strip_tac >>
   drule_all lower_abi_encode_no_block_run_reach >> strip_tac >>
   qexistsl_tac [`p`, `raw with vs_inst_idx := LENGTH sb.cs_current_insts`] >> gvs[LET_THM] >>
-  first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

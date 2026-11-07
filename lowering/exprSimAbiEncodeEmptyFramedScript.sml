@@ -316,7 +316,7 @@ Proof
     (qpat_assum `outsz = _` (fn th => rewrite_tac [th]) >>
      qpat_assum `m = _` (fn th => rewrite_tac [th])) >>
   `stmt_state_rel ctx func ce cx vs actual` by
-    (drule_all abi_encode_phases_caller_state >> simp[]) >>
+    (drule_all (cj 1 abi_encode_phases_caller_state) >> strip_tac) >>
   `abi_decode_sim ctx obs initial actual` by
     (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
   qexistsl [`prepared`, `body_state`, `actual`] >>

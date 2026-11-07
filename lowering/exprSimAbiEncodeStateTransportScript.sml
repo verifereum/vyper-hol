@@ -451,7 +451,11 @@ Theorem abi_encode_phases_caller_state:
  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
    FLOOKUP initial.vs_allocas st.cs_next_id = SOME(p,outsz)) /\
  actual.vs_labels = initial.vs_labels ==>
- stmt_state_rel ctx func ce cx vs actual
+ stmt_state_rel ctx func ce cx vs actual /\
+ (!name b n. local_region ce vs.scopes initial name b n ==>
+   mem_bytes_at b n actual.vs_memory = mem_bytes_at b n initial.vs_memory) /\
+ FLOOKUP actual.vs_allocas st.cs_next_id = SOME(p,outsz) /\
+ p+outsz <= actual.vs_alloca_next /\ actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >> (
   drule_all abi_encode_caller_phase_allocations >> strip_tac >>
@@ -579,6 +583,15 @@ Proof
     inst.inst_id = st.cs_next_id /\ inst.inst_operands = [Lit n] ==> outsz = w2n n` by
     (rpt gen_tac >> strip_tac >>
      `inst = allocation` by metis_tac[fn_inst_ids_distinct_inj] >> gvs[] >> simp[]) >>
+  reverse conj_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac
+      >- (qpat_assum `alloca_inv actual` mp_tac >>
+          simp_tac bool_ss [alloca_inv_def, alloca_next_valid_def] >>
+          metis_tac[]) >>
+      qpat_assum `alloca_room ctx func actual` mp_tac >>
+      simp_tac bool_ss [alloca_room_def] >> strip_tac >> decide_tac) >>
   simp_tac bool_ss [stmt_state_rel_def] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_id = st.cs_next_id`

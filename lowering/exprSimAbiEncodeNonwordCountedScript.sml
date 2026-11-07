@@ -62,7 +62,13 @@ Theorem abi_encode_nonword_counted_suffix:
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
       FLOOKUP actual.vs_allocas aid = SOME row) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
-      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
@@ -78,7 +84,13 @@ Proof
       FLOOKUP actual.vs_allocas aid = SOME row) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
-    ?p. eval_operand out actual = SOME (n2w p) /\
+    (!name b n. local_region ce es'.scopes s name b n ==>
+      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    ?p. FLOOKUP actual.vs_allocas sa.cs_next_id =
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+    actual.vs_alloca_next < dimword (:256) /\
+    eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) +
       (case mid of NONE => 0 | SOME _ => 4)) /\
     mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4))
@@ -115,7 +127,7 @@ Resume abi_encode_nonword_counted_suffix[no_blocks]:
       qexists `actual` >> conj_tac
       >- (fs[abi_encode_exec_frame_def] >>
           simp_tac bool_ss [Abbr `Q`] >>
-          ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+          ntac 10 (conj_tac >- first_assum ACCEPT_TAC) >>
           qexists `p` >> asm_rewrite_tac[]) >>
       gvs[]
 QED
@@ -139,7 +151,7 @@ Resume abi_encode_nonword_counted_suffix[blocks]:
       qexists `actual` >> conj_tac
       >- (fs[abi_encode_exec_frame_def] >>
           simp_tac bool_ss [Abbr `Q`] >>
-          ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+          ntac 10 (conj_tac >- first_assum ACCEPT_TAC) >>
           qexists `p` >> asm_rewrite_tac[]) >>
       gvs[]
 QED
